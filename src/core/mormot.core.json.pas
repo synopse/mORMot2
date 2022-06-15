@@ -4686,7 +4686,8 @@ var
   A, P: PtrInt;
   F, FDeb: PUtf8Char;
   isParam: AnsiChar;
-  toquote: TTempUtf8;
+  tmp: TTempUtf8;
+  wasString: boolean;
   temp: TTextWriterStackBuffer;
 begin
   if (Format = '') or
@@ -4743,22 +4744,13 @@ begin
           else
           begin
             Add(':', '('); // markup for SQL parameter binding
-            case Params[P].VType of
-              vtBoolean,
-              vtInteger,
-              vtInt64
-              {$ifdef FPC} , vtQWord {$endif},
-              vtCurrency,
-              vtExtended:
-                Add(Params[P]) // numbers or boolean don't need any SQL quoting
+            VarRecToTempUtf8(Params[P], tmp, @wasString);
+            if wasString then
+              AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
             else
-              begin
-                VarRecToTempUtf8(Params[P], toquote);
-                AddQuotedStr(toquote.Text, toquote.Len, ''''); // double quote
-                if toquote.TempRawUtf8 <> nil then
-                  RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
-              end;
-            end;
+              AddNoJsonEscape(tmp.Text, tmp.Len); // numbers
+            if tmp.TempRawUtf8 <> nil then
+              RawUtf8(tmp.TempRawUtf8) := '';  // release temp memory
             Add(')', ':');
           end;
           inc(P);

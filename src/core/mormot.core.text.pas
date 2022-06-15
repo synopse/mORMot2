@@ -1825,6 +1825,12 @@ type
 
 { ************ Text Formatting functions }
 
+const
+  /// which TVarRec.VType are numbers, i.e. don't need to be quoted
+  // - vtVariant is a number by default, unless detected e.g. by VariantToUtf8()
+  vtNotString = [vtBoolean, vtInteger, vtInt64, {$ifdef FPC} vtQWord, {$endif}
+                 vtCurrency, vtExtended, vtVariant];
+
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
 // - note that, due to a Delphi compiler limitation, cardinal values should be
@@ -1853,7 +1859,8 @@ type
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): PtrInt;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8;
+  wasString: PBoolean = nil): PtrInt;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
@@ -5600,8 +5607,8 @@ end;
 procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 var
   direct: PtrInt;
-  comma: boolean;
   D: PUtf8Char;
+  comma: boolean;
 begin
   if (P <> nil) and
      (Len > 0) then
@@ -5610,7 +5617,7 @@ begin
       repeat
         D := B + 1;
         direct := BEnd - D; // guess biggest size available in fTempBuf at once
-        if direct > 0 then // 0..-15 may happen because Add up to BEnd + 16
+        if direct > 0 then  // 0..-15 may happen because Add up to BEnd + 16
         begin
           if Len < direct then
             direct := Len;
@@ -9242,12 +9249,14 @@ begin
   end;
 end;
 
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): PtrInt;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8;
+  wasString: PBoolean): PtrInt;
 var
   i: PtrInt;
   v64: Int64;
   isString: boolean;
 begin
+  isString := true;
   Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V.VType of
     vtString:
@@ -9288,6 +9297,7 @@ begin
       ToTempUtf8(@V.VWideChar, 1, Res);
     vtBoolean:
       begin
+        isString := false;
         if V.VBoolean then // normalize
           Res.Text := pointer(SmallUInt32Utf8[1])
         else
@@ -9296,6 +9306,7 @@ begin
       end;
     vtInteger:
       begin
+        isString := false;
         i := V.VInteger;
         if PtrUInt(i) <= high(SmallUInt32Utf8) then
         begin
@@ -9309,27 +9320,37 @@ begin
         end;
       end;
     vtInt64:
-      ToTempUtf8(V.VInt64, Res);
+      begin
+        isString := false;
+        ToTempUtf8(V.VInt64, Res);
+      end;
     {$ifdef FPC}
     vtQWord:
-      if V.VQWord^ <= high(SmallUInt32Utf8) then
       begin
-        Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V.VQWord)^]);
-        Res.Len := PStrLen(Res.Text - _STRLEN)^;
-      end
-      else
-      begin
-        Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V.VQWord^));
-        Res.Len := @Res.Temp[23] - Res.Text;
+        isString := false;
+        if V.VQWord^ <= high(SmallUInt32Utf8) then
+        begin
+          Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V.VQWord)^]);
+          Res.Len := PStrLen(Res.Text - _STRLEN)^;
+        end
+        else
+        begin
+          Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V.VQWord^));
+          Res.Len := @Res.Temp[23] - Res.Text;
+        end;
       end;
-    {$endif FPC}
+      {$endif FPC}
     vtCurrency:
       begin
+        isString := false;
         Res.Text := @Res.Temp;
         Res.Len := Curr64ToPChar(V.VInt64^, Res.Temp);
       end;
     vtExtended:
-      ToTempUtf8(V.VExtended^, Res);
+      begin
+        isString := false;
+        ToTempUtf8(V.VExtended^, Res);
+      end;
     vtPointer, vtInterface:
       begin
         Res.Text := @Res.Temp;
@@ -9354,7 +9375,10 @@ begin
       end;
     vtVariant:
       if VariantToInt64(V.VVariant^, v64) then
-        ToTempUtf8(@v64, Res)
+      begin
+        isString := false;
+        ToTempUtf8(@v64, Res);
+      end
       else
       begin
         VariantToUtf8(V.VVariant^, RawUtf8(Res.TempRawUtf8), isString);
@@ -9365,6 +9389,8 @@ begin
     Res.Len := 0;
   end;
   result := Res.Len;
+  if wasString <> nil then
+    wasString^ := isString;
 end;
 
 procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8; wasString: PBoolean);
