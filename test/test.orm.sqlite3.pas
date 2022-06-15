@@ -2151,6 +2151,10 @@ begin
       {$ifdef ORMGENERICS}
       T.ToNewIList(TOrmPeople, Peoples);
       CheckPeoples;
+      {$ifndef FPC} // disabled on FPC because generates internal compiler errors :(
+      Peoples := T.ToIList<TOrmPeople>;
+      CheckPeoples;
+      {$endif FPC}
       {$endif ORMGENERICS}
     finally
       T.Free;

@@ -2903,14 +2903,17 @@ type
     procedure ToObjectList(DestList: TObjectList;
       RecordType: TOrmClass = nil); overload;
     {$ifdef ORMGENERICS}
+    {$ifndef FPC}
     /// create a IList<TOrm*> with TOrm instances corresponding to this resultset
     // - always returns an IList<> instance, even if the TOrmTable is nil or void
+    // - is disabled on FPC because it generates internal compiler errors :(
+    function ToIList<T: TOrm>: IList<T>;
+    {$endif FPC}
+    /// create a IList<TOrm> with TOrm instances corresponding to this resultset
+    // - weak typed result - rather use the ToIList<T> function on Delphi
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
     // executables than Generics.Collections, and need no try..finally Free: a
     // single TIList<TOrm> class will be reused for all IList<>
-    function ToIList<T: TOrm>: IList<T>;
-    /// create a IList<TOrm> with TOrm instances corresponding to this resultset
-    // - weak typed result - rather use the ToIList<T> function (which calls it)
     procedure ToNewIList(Item: TOrmClass; var IListOrm);
     {$endif ORMGENERICS}
     /// fill an existing T*ObjArray variable with TOrm instances
@@ -5365,10 +5368,12 @@ begin
   FillOrms(list.First, Item);
 end;
 
+{$ifndef FPC} // disabled on FPC because generates internal compiler errors :(
 function TOrmTable.ToIList<T>: IList<T>;
 begin
   ToNewIList(T, result);
 end;
+{$endif FPC}
 {$endif ORMGENERICS}
 
 function TOrmTable.ToObjArray(var ObjArray; RecordType: TOrmClass): boolean;
