@@ -397,6 +397,11 @@ type
   end;
 
 
+resourcestring
+  sErrorTOrmTableToGridNoData = '%s didn''t receive any data for %s';
+  sPutMarkedRowFirst = 'Sort marked rows first';
+
+
 {************ Fill a TStringGrid from ORM results }
 
 /// fill TStringGrid.Cells[] with the supplied data
@@ -415,13 +420,10 @@ procedure FillStringGrid(Source: TOrmTable; Dest: TStringGrid;
 implementation
 
 
-
 {************ TOrmTableToGrid wrapper to manage a TDrawGrid from a TOrmTable }
 
 { TOrmTableToGrid }
 
-resourcestring
-  sErrorTOrmTableToGridNoData = '%s didn''t receive any data for %s';
 
 constructor TOrmTableToGrid.Create(aGrid: TDrawGrid; aTable: TOrmTable;
   aClient: TRestClientURI);
@@ -732,9 +734,6 @@ begin
     end;
   TDrawGrid(Owner).Invalidate;
 end;
-
-resourcestring
-  sPutMarkedRowFirst = 'Sort marked rows first';
 
 procedure TOrmTableToGrid.DrawGridMouseMove(Sender: TObject; Shift: TShiftState;
   X, Y: Integer);

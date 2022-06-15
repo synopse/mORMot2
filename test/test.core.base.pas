@@ -6829,6 +6829,14 @@ begin
   finally
     ObjArrayClear(arr);
   end;
+  r1 := TOrmArrayTest.Create;
+  r2 := TOrmArrayTest.Create;
+  try
+    check(r1.SameValues(r2));
+  finally
+    r2.Free;
+    r1.Free;
+  end;
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TComplexNumberObjArray), TComplexNumber);
   {$endif HASDYNARRAYTYPE}
