@@ -1009,7 +1009,6 @@ type
   end;
 
 
-
 { TSChannelNetTls }
 
 procedure TSChannelNetTls.ESChannelRaiseLastError(res: cardinal);

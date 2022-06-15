@@ -1446,14 +1446,23 @@ begin
   if (Source = nil) or
      (Dest = nil) then
     exit; // avoid GPF
-  Dest.ColCount := Source.FieldCount;
-  Dest.RowCount := Source.RowCount + 1;
-  for row := 0 to Source.RowCount + 1 do
-    for col := 0 to Source.FieldCount-1 do
-    begin
-      Source.ExpandAsString(row, col, Model, s); // will do all the magic
-      Dest.Cells[col, row] := s;
-    end;
+  {$ifdef FPC}
+  Dest.BeginUpdate;
+  try
+  {$endif FPC}
+    Dest.ColCount := Source.FieldCount;
+    Dest.RowCount := Source.RowCount + 1;
+    for row := 0 to Source.RowCount + 1 do
+      for col := 0 to Source.FieldCount-1 do
+      begin
+        Source.ExpandAsString(row, col, Model, s); // will do all the magic
+        Dest.Cells[col, row] := s;
+      end;
+  {$ifdef FPC}
+  finally
+    Dest.EndUpdate;
+  end;
+  {$endif FPC}
 end;
 
 
