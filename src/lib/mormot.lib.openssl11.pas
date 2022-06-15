@@ -8090,7 +8090,7 @@ begin
   EOpenSslNetTls.Check(self, 'AfterConnection connect',
     SSL_connect(fSsl), @Context.LastError, fSsl);
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-  Context.CipherName := fSsl.CurrentCipher.Description;
+  Context.CipherName := GetCipherName;
   // writeln(Context.CipherName);
   // peer validation
   if Assigned(Context.OnPeerValidate) then
@@ -8202,14 +8202,14 @@ begin
   EOpenSslNetTls.Check(self, 'AfterAccept accept',
     SSL_accept(fSsl), LastError, fSsl);
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-  fCipherName := fSsl.CurrentCipher.Description;
-  // writeln(fCipherName);
   if CipherName <> nil then
-    CipherName^ := fCipherName;
+    CipherName^ := GetCipherName;
 end;
 
 function TOpenSslNetTls.GetCipherName: RawUtf8;
 begin
+  if fCipherName = '' then
+    fCipherName := fSsl.CurrentCipher.Description;
   result := fCipherName;
 end;
 

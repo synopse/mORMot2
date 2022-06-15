@@ -406,37 +406,55 @@ type
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
+    // - ignored on SChannel
     WithPeerInfo: boolean;
-    /// input: if TLS 1.0 or TLS 1.1 are allowed (default is TLS 1.2+ only)
+    /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
+    // - default is TLS 1.2+ only, and SSL 2/3 are always disabled
     AllowDeprecatedTls: boolean;
-    /// input: PEM file name containing a certificate to be loaded
+    /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
-    // - on OpenSSL, calls the SSL_CTX_use_certificate_file() API
+    // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
+    // - not used on SChannel client
+    // - on SChannel server, expects a .pfx / PKCS#12 file format including
+    // the certificate and the private key:
+    // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    // - on OpenSSL client or server, calls SSL_CTX_use_PrivateKey_file() API
+    // - not used on SChannel
     PrivateKeyFile: RawUtf8;
     /// input: optional password to load the PrivateKey file
     // - see also OnPrivatePassword callback
+    // - on OpenSSL client or server, calls SSL_CTX_set_default_passwd_cb_userdata() API
+    // - not used on SChannel
     PrivatePassword: RawUtf8;
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL, calls the SSL_CTX_load_verify_locations() API
+    // - not used on SChannel
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
+    // - not used on SChannel
     CipherList: RawUtf8;
     /// input: a CSV list of host names to be validated
     // - e.g. 'smtp.example.com,example.com'
+    // - not used on SChannel
     HostNamesCsv: RawUtf8;
     /// output: the cipher description, as used for the current connection
-    // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
+    // - text format depends on the used TLS library e.g. on OpenSSL may be e.g.
+    // 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
+    // or 'TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256_P256 TLSv1.2' with SChannel
+    // (or less complete 'ECDHE256-AES128-SHA256 TLSv1.2' information on XP)
     CipherName: RawUtf8;
     /// output: the connected Peer issuer name
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
+    // - not populated on SChannel, always on OpenSSL
     PeerIssuer: RawUtf8;
     /// output: the connected Peer subject name
     // - e.g. 'CN=synopse.info'
+    // - not populated on SChannel, always on OpenSSL
     PeerSubject: RawUtf8;
     /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()
@@ -446,16 +464,22 @@ type
     // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
     /// called by INetTls.AfterConnection to fully customize peer validation
+    // - not used on SChannel
     OnPeerValidate: TOnNetTlsPeerValidate;
     /// called by INetTls.AfterConnection for each peer validation
     // - allow e.g. to verify CN or DNSName fields of each peer certificate
+    // - not used on SChannel
     OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
+    // - not used on SChannel
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
     /// called by INetTls.AfterConnection to retrieve a private password
+    // - not used on SChannel
     OnPrivatePassword: TOnNetTlsGetPassword;
-    /// opaque pointer used by INetTls.AfterBind/AfterAccept
+    /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
+    // bound server certificate context into each accepted connection
+    // - so that certificates are decoded only once in AfterBind
     AcceptCert: pointer;
   end;
 
@@ -3082,7 +3106,7 @@ begin
   begin
     // aServer='unix:/path/to/myapp.socket'
     OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUnix);
-    fServer := aServer; // keep the full server name if reused
+    fServer := aServer; // keep the full server name if reused after Close
   end
   else
   {$endif OSPOSIX}
@@ -3494,6 +3518,7 @@ end;
 { $define SYNCRTDEBUGLOW2}
 
 procedure TCrtSocket.Close;
+// notice: sequential Close + OpenBind sets should work with the same instance
 {$ifdef SYNCRTDEBUGLOW2}
 var // closesocket() or shutdown() are slow e.g. on Windows with wrong Linger
   start, stop: int64;

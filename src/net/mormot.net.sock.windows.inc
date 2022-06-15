@@ -1097,7 +1097,7 @@ begin
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
-  Context.CipherName := fCipherName;
+  Context.CipherName := GetCipherName;
 end;
 
 procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);
@@ -1152,11 +1152,13 @@ begin
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
   if CipherName <> nil then
-    CipherName^ := fCipherName;
+    CipherName^ := GetCipherName;
 end;
 
 function TSChannelNetTls.GetCipherName: RawUtf8;
 begin
+  if fCipherName = '' then
+    fCipherName := TlsConnectionInfo(fCtxt);
   result := fCipherName;
 end;
 
@@ -1212,7 +1214,6 @@ procedure TSChannelNetTls.HandshakeLoop;
 
 var
   res: cardinal;
-  nfo: TSecPkgConnectionInfo;
 begin
   repeat
     inc(fDataCount, CheckSocket(
@@ -1226,9 +1227,7 @@ begin
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK(res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
-  if QueryContextAttributesW(
-      @fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
-    fCipherName := nfo.ToText;
+  fCipherName := ''; // will be retrieved if needed 
   if fInputSize = 0 then
   begin
     // retrieve the TLS field sizes during first handshake
