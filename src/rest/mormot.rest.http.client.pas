@@ -173,6 +173,16 @@ type
     /// optional custom HTTP "User Agent:" header value
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
+    /// allows to ignore untrusted SSL certificates
+    // - similar to adding a security exception for a domain in the browser
+    property IgnoreTlsCertificateErrors: boolean
+      read fExtendedOptions.TLS.IgnoreCertificateErrors
+      write fExtendedOptions.TLS.IgnoreCertificateErrors;
+    {$ifndef PUREMORMOT2}
+    property IgnoreSslCertificateErrors: boolean
+      read fExtendedOptions.TLS.IgnoreCertificateErrors
+      write fExtendedOptions.TLS.IgnoreCertificateErrors;
+    {$endif PUREMORMOT2}
   published
     /// the Server IP address
     property Server: RawUtf8
@@ -238,11 +248,6 @@ type
     // - will return either a TWinINet, a TWinHttp or a TCurlHttp class instance
     property Request: THttpRequest
       read fRequest;
-    /// allows to ignore untrusted SSL certificates
-    // - similar to adding a security exception for a domain in the browser
-    property IgnoreSSLCertificateErrors: boolean
-      read fExtendedOptions.IgnoreSSLCertificateErrors
-      write fExtendedOptions.IgnoreSSLCertificateErrors;
     /// optional Authentication Scheme
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme
@@ -647,7 +652,7 @@ begin
   Definition.ServerName := FormatUtf8('%%:%',
     [Definition.ServerName, fServer, fPort]);
   Definition.DatabaseName := UrlEncode([
-    'IgnoreSSLCertificateErrors', ord(fExtendedOptions.IgnoreSSLCertificateErrors),
+    'IgnoreTlsCertificateErrors', ord(fExtendedOptions.TLS.IgnoreCertificateErrors),
     'ConnectTimeout', fConnectTimeout,
     'SendTimeout', fSendTimeout,
     'ReceiveTimeout', fReceiveTimeout,
@@ -678,8 +683,9 @@ begin
       fProxyName := CurrentAnsiConvert.Utf8ToAnsi(tmp)
     else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
       fProxyByPass := CurrentAnsiConvert.Utf8ToAnsi(tmp);
-    if UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @P) then
-      fExtendedOptions.IgnoreSSLCertificateErrors := boolean(V);
+    if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @P) or
+       UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @P) then
+      fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
   end;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;

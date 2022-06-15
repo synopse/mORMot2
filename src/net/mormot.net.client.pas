@@ -495,9 +495,8 @@ type
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
   // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
-    /// let HTTPS be less paranoid about SSL certificates
-    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHttp
-    IgnoreSSLCertificateErrors: boolean;
+    /// customize HTTPS process
+    TLS: TNetTlsContext;
     /// allow HTTP authentication to take place at connection
     // - Auth.Scheme and UserName/Password properties are handled
     // by the TWinHttp class only by now
@@ -522,16 +521,16 @@ type
     fLayer: TNetLayer;
     fHttps: boolean;
     fKeepAlive: cardinal;
-    fExtendedOptions: THttpRequestExtendedOptions;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
     fCompressAcceptEncoding: RawUtf8;
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
     fCompressAcceptHeader: THttpSocketCompressSet;
+    fExtendedOptions: THttpRequestExtendedOptions;
     fTag: PtrInt;
     class function InternalREST(const url, method: RawUtf8; const data:
-      RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
+      RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
@@ -569,7 +568,7 @@ type
     constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
       const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
-      aIgnoreSSLCertificateErrors: boolean = false); overload;
+      aIgnoreTlsCertificateErrors: boolean = false); overload;
 
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
@@ -587,7 +586,7 @@ type
     // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
     // TCurlHttp.Get() methods
     class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
+      aIgnoreTlsCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -599,7 +598,7 @@ type
     // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
     // TCurlHttp.Post() methods
     class function Post(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
+      const aHeader: RawUtf8 = ''; aIgnoreTlsCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -611,7 +610,7 @@ type
     // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
     // TCurlHttp.Put() methods
     class function Put(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
+      const aHeader: RawUtf8 = ''; aIgnoreTlsCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -621,7 +620,7 @@ type
     // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
     // TCurlHttp.Delete() methods
     class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
+      aIgnoreTlsCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
 
     /// will register a compression algorithm
@@ -637,9 +636,14 @@ type
 
     /// allows to ignore untrusted SSL certificates
     // - similar to adding a security exception for a domain in the browser
-    property IgnoreSSLCertificateErrors: boolean
-      read fExtendedOptions.IgnoreSSLCertificateErrors
-      write fExtendedOptions.IgnoreSSLCertificateErrors;
+    property IgnoreTlsCertificateErrors: boolean
+      read fExtendedOptions.TLS.IgnoreCertificateErrors
+      write fExtendedOptions.TLS.IgnoreCertificateErrors;
+    {$ifndef PUREMORMOT2}
+    property IgnoreSslCertificateErrors: boolean
+      read fExtendedOptions.TLS.IgnoreCertificateErrors
+      write fExtendedOptions.TLS.IgnoreCertificateErrors;
+    {$endif PUREMORMOT2}
     /// optional Authentication Scheme
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme
@@ -657,7 +661,7 @@ type
       read fExtendedOptions.UserAgent
       write fExtendedOptions.UserAgent;
     /// internal structure used to store extended options
-    // - will be replicated by IgnoreSSLCertificateErrors and Auth* properties
+    // - will be replicated by TLS.IgnoreCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions
       read fExtendedOptions
       write fExtendedOptions;
@@ -1013,7 +1017,7 @@ type
     property UserAgent: RawUtf8
       read fUserAgent write fUserAgent;
     /// allows to customize HTTPS connection and allow weak certificates
-    property IgnoreSSLCertificateErrors: boolean
+    property IgnoreTlsCertificateErrors: boolean
       read fSocketTLS.IgnoreCertificateErrors write fSocketTLS.IgnoreCertificateErrors;
     /// set the timeout value for RawRequest/Request, in milliseconds
     property TimeOut: integer
@@ -2104,7 +2108,7 @@ end;
 { THttpRequest }
 
 class function THttpRequest.InternalREST(const url, method: RawUtf8;
-  const data: RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
+  const data: RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
   outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 var
   uri: TUri;
@@ -2117,7 +2121,7 @@ begin
     try
       with self.Create(Server, Port, Https, '', '', 0, 0, 0, Layer) do
       try
-        IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+        IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
         status := Request(Address, method, 0, header, data, '', outh, result);
         if outStatus <> nil then
           outStatus^ := status;
@@ -2161,13 +2165,13 @@ end;
 
 constructor THttpRequest.Create(const aUri: RawUtf8; const aProxyName: RawUtf8;
   const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
-  ReceiveTimeout: cardinal; aIgnoreSSLCertificateErrors: boolean);
+  ReceiveTimeout: cardinal; aIgnoreTlsCertificateErrors: boolean);
 var
   uri: TUri;
 begin
   if not uri.From(aUri) then
     raise EHttpSocket.CreateUtf8('%.Create: invalid url=%', [self, aUri]);
-  IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+  IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
   Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
 end;
@@ -2229,34 +2233,34 @@ begin
 end;
 
 class function THttpRequest.Get(const aUri: RawUtf8; const aHeader: RawUtf8;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+  aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aUri, 'GET', '', aHeader, aIgnoreSSLCertificateErrors,
+  result := InternalREST(aUri, 'GET', '', aHeader, aIgnoreTlsCertificateErrors,
     outHeaders, outStatus);
 end;
 
 class function THttpRequest.Post(const aUri: RawUtf8; const aData: RawByteString;
-  const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
+  const aHeader: RawUtf8; aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
   result := InternalREST(aUri, 'POST', aData, aHeader,
-    aIgnoreSSLCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
 end;
 
 class function THttpRequest.Put(const aUri: RawUtf8; const aData: RawByteString;
-  const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders:
+  const aHeader: RawUtf8; aIgnoreTlsCertificateErrors: boolean; outHeaders:
   PRawUtf8; outStatus: PInteger): RawByteString;
 begin
   result := InternalREST(aUri, 'PUT', aData, aHeader,
-    aIgnoreSSLCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
 end;
 
 class function THttpRequest.Delete(const aUri: RawUtf8; const aHeader: RawUtf8;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
+  aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
   result := InternalREST(aUri, 'DELETE', '', aHeader,
-    aIgnoreSSLCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
 end;
 
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
@@ -2523,7 +2527,7 @@ begin
         RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
   if fHTTPS and
-     IgnoreSSLCertificateErrors then
+     IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
@@ -2533,7 +2537,7 @@ begin
     exit; // success
   if fHTTPS and
      (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
-     IgnoreSSLCertificateErrors and
+     IgnoreTlsCertificateErrors and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
@@ -2956,7 +2960,7 @@ begin
   if fProxyName <> '' then
     curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
   if fHttps then
-    if IgnoreSSLCertificateErrors then
+    if IgnoreTlsCertificateErrors then
     begin
       curl.easy_setopt(fHandle, coSSLVerifyPeer, 0);
       curl.easy_setopt(fHandle, coSSLVerifyHost, 0);
@@ -3120,7 +3124,7 @@ begin
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
         Uri.Server, Uri.Port, Uri.Https, Proxy, '', fTimeOut, fTimeOut, fTimeOut);
-      fHttps.IgnoreSSLCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
+      fHttps.IgnoreTlsCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
       if fUserAgent <> '' then
         fHttps.UserAgent := fUserAgent;
     end;
