@@ -155,7 +155,7 @@ type
   /// pointer to SSPI supported algorithm
   PSecPkgCred_SupportedAlgs = ^TSecPkgCred_SupportedAlgs;
 
-  /// information about a SSPI connection
+  /// information about a SSPI connection (XP's SECPKG_ATTR_CONNECTION_INFO)
   {$ifdef USERECORDWITHMETHODS}
   TSecPkgConnectionInfo = record
   {$else}
@@ -169,9 +169,34 @@ type
     aiExch: ALG_ID;
     dwExchStrength: cardinal;
     /// retrieve some decoded text representation of this raw information
+    // - typically 'ECDHE256-AES128-SHA256 TLSv1.2'
     function ToText: RawUtf8;
   end;
   PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
+
+  TSecPkgCipherInfoText = array[0..63] of WideChar;
+
+  /// information about a SSPI connection (Vista+ SECPKG_ATTR_CIPHER_INFO)
+  TSecPkgCipherInfo = record
+    /// should be set to SECPKGCONTEXT_CIPHERINFO_V1
+    dwVersion: cardinal;
+    dwProtocol: cardinal;
+    dwCipherSuite: cardinal;
+    dwBaseCipherSuite: cardinal;
+    /// fully qualified connection name
+    // - e.g. 'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384_P384'
+    szCipherSuite: TSecPkgCipherInfoText;
+    szCipher: TSecPkgCipherInfoText;
+    dwCipherLen: cardinal;
+    dwCipherBlockLen: cardinal;    // in bytes
+    szHash: TSecPkgCipherInfoText;
+    dwHashLen: cardinal;
+    szExchange: TSecPkgCipherInfoText;
+    dwMinExchangeLen: cardinal;
+    dwMaxExchangeLen: cardinal;
+    szCertificate: TSecPkgCipherInfoText;
+    dwKeyType: cardinal;
+  end;
 
   /// information about SSPI Authority Identify
   TSecWinntAuthIdentityW = record
@@ -207,6 +232,9 @@ const
   SECPKG_ATTR_STREAM_SIZES     = 4;
   SECPKG_ATTR_NEGOTIATION_INFO = 12;
   SECPKG_ATTR_CONNECTION_INFO  = $5a;
+  SECPKG_ATTR_CIPHER_INFO      = $64; // Vista+ new API
+
+  SECPKGCONTEXT_CIPHERINFO_V1 = 1;
 
   SECURITY_NETWORK_DREP = 0;
   SECURITY_NATIVE_DREP  = $10;
@@ -356,16 +384,16 @@ type
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
-  SP_PROT_TLS1 = $0C0;
-  SP_PROT_TLS1_SERVER = $040;
-  SP_PROT_TLS1_CLIENT = $080;
-  SP_PROT_TLS1_1 = $300;
+  SP_PROT_TLS1          = $0C0;
+  SP_PROT_TLS1_SERVER   = $040;
+  SP_PROT_TLS1_CLIENT   = $080;
+  SP_PROT_TLS1_1        = $300;
   SP_PROT_TLS1_1_SERVER = $100;
   SP_PROT_TLS1_1_CLIENT = $200;
-  SP_PROT_TLS1_2 = $C00;
+  SP_PROT_TLS1_2        = $C00;
   SP_PROT_TLS1_2_SERVER = $400;
   SP_PROT_TLS1_2_CLIENT = $800;
-  SP_PROT_TLS1_3 = $3000; // Windows Server 2022 ;)
+  SP_PROT_TLS1_3        = $3000; // Windows Server 2022 ;)
   SP_PROT_TLS1_3_SERVER = $1000;
   SP_PROT_TLS1_3_CLIENT = $2000 ;
 
@@ -436,6 +464,8 @@ function SecEncrypt(var aSecContext: TSecContext;
 function SecDecrypt(var aSecContext: TSecContext;
   var aEncrypted: RawByteString): RawByteString;
 
+/// retrieve the connection information text of a given TLS connection
+function TlsConnectionInfo(Ctxt: TCtxtHandle): RawUtf8;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -621,10 +651,7 @@ end;
 
 { TSecPkgConnectionInfo }
 
-function TSecPkgConnectionInfo.ToText: RawUtf8;
-var
-  h: byte;
-  alg, hsh, xch: string[5];
+procedure FixProtocol(var dwProtocol: cardinal);
 begin
   if dwProtocol and SP_PROT_TLS1 <> 0 then
     dwProtocol := 0
@@ -634,6 +661,14 @@ begin
     dwProtocol := 2
   else if dwProtocol and SP_PROT_TLS1_3 <> 0 then
     dwProtocol := 3;
+end;
+
+function TSecPkgConnectionInfo.ToText: RawUtf8;
+var
+  h: byte;
+  alg, hsh, xch: string[5];
+begin
+  FixProtocol(dwProtocol);
   if aiCipher and $1f in [14..17] then
     alg := 'AES'
   else
@@ -674,7 +709,7 @@ begin
     xch := 'ECDSA'
   else
     str(aiExch, xch);
-  result := RawUtf8(format('%s_%d-%s_%d-%s_%d TLSv1.%d ',
+  result := RawUtf8(format('%s%d-%s%d-%s%d TLSv1.%d ',
     [xch, dwExchStrength, alg, dwCipherStrength, hsh, dwHashStrength, dwProtocol]));
 end;
 
@@ -823,6 +858,29 @@ begin
   FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
+function TlsConnectionInfo(Ctxt: TCtxtHandle): RawUtf8;
+var
+  nfo: TSecPkgConnectionInfo;
+  cip: TSecPkgCipherInfo; // Vista+ attribute
+begin
+  result := '';
+  FillCharFast(nfo, SizeOf(nfo), 0);
+  if QueryContextAttributesW(
+      @Ctxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) <> SEC_E_OK then
+    exit;
+  FillCharFast(cip, SizeOf(cip), 0);
+  cip.dwVersion := SECPKGCONTEXT_CIPHERINFO_V1;
+  if (OSVersion >= wVista) and
+     (QueryContextAttributesW(
+        @Ctxt, SECPKG_ATTR_CIPHER_INFO, @cip) = SEC_E_OK) and
+     (cip.szCipherSuite[0] <> #0) then
+  begin
+    FixProtocol(nfo.dwProtocol); // cip.dwProtocol seems incorrect :(
+    result := RawUtf8(format('%s TLSv1.%d ', [@cip.szCipherSuite, nfo.dwProtocol]));
+  end
+  else
+    result := nfo.ToText; // fallback on XP
+end;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
