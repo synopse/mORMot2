@@ -9170,6 +9170,9 @@ end;
 function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 begin
   // caller ensured that P1<>nil, P2<>nil and L>0 -> aggressively inlined asm
+  result := 0;
+  if L < 0 then
+    exit;
   inc(PtrUInt(P1), PtrUInt(L));
   inc(PtrUInt(P2), PtrUInt(L));
   L := -L;
@@ -9179,7 +9182,6 @@ begin
     inc(L);
     if L <> 0 then
       continue;
-    result := 0;
     exit;
   until false;
   result := P1[L] - P2[L];
