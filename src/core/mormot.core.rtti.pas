@@ -1630,7 +1630,7 @@ function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
 /// create a dynamic array from another one
 // - same as RTTI_MANAGEDCOPY[rkDynArray] but with an optional external source count
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
-  SourceExtCount: PInteger);
+  SourceExtCount: PInteger = nil);
 
 
 { ************* Managed Types Finalization, Random or Copy }
