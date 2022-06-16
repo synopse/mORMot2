@@ -5590,7 +5590,7 @@ var
 label
   raw;
 begin
-  iteminfo := Info^.DynArrayItemType(itemsize);
+  iteminfo := Info^.DynArrayItemType(itemsize); // nil for unmanaged items
   n := DynArrayLoadHeader(Source, Info, iteminfo);
   if PPointer(Data)^ <> nil then
     FastDynArrayClear(pointer(Data), iteminfo);
@@ -6757,7 +6757,7 @@ bin: // fast binary comparison with length
      result := MemCmp(A, B, fInfo.Cache.ItemSize)
   else
   begin
-    rtti := fInfo.Cache.ItemInfo;
+    rtti := fInfo.Cache.ItemInfo; // <> nil for managed items
     comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
     if Assigned(comp) then
       comp(A, B, rtti, result)
@@ -8098,7 +8098,7 @@ bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
     begin
       rtti := fInfo.Cache.ItemInfo;
       if rtti = nil then
-        goto bin;
+        goto bin; // unmanaged items
       cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
       if Assigned(cmp) then
         result := IndexFind(fValue^, @Item, cmp, rtti, n)
@@ -8189,7 +8189,7 @@ begin
       minLength := OldLength;
       if minLength > NewLength then
         minLength := NewLength;
-      if fInfo.Cache.ItemInfo = nil then
+      if fInfo.Cache.ItemInfo = nil then // unmanaged items
       begin
         GetMem(p, NeededSize);
         MoveFast(fValue^^, PByteArray(p)[SizeOf(TDynArrayRec)],
@@ -8415,7 +8415,7 @@ end;
 function TDynArray.ItemLoadMem(Source, SourceMax: PAnsiChar): RawByteString;
 begin
   if (Source <> nil) and
-     (fInfo.Cache.ItemInfo = nil) then
+     (fInfo.Cache.ItemInfo = nil) then // unmanaged items
     FastSetRawByteString(result, Source, fInfo.Cache.ItemSize)
   else
   begin
@@ -8461,7 +8461,7 @@ begin
   if (Source = nil) or
      (fInfo.Cache.ItemSize > SizeOf(tmp)) then
     exit;
-  if fInfo.Cache.ItemInfo = nil then
+  if fInfo.Cache.ItemInfo = nil then // nil for unmanaged items
     data := Source
   else
   begin

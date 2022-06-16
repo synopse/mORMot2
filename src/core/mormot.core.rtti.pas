@@ -685,9 +685,9 @@ type
         EnumList: PShortString);
       rkDynArray,
       rkArray: (
-        ItemInfo: PRttiInfo;
+        ItemInfo: PRttiInfo; // = nil for unmanaged types
         ItemSize: integer;
-        ItemCount: integer; // rkArray only
+        ItemCount: integer;  // rkArray only
       );
   end;
 
@@ -3502,7 +3502,7 @@ begin
       end;
     rkDynArray:
       begin
-        Cache.ItemInfo := DynArrayItemType(siz);
+        Cache.ItemInfo := DynArrayItemType(siz); // nil for unmanaged items
         Cache.ItemSize := siz;
       end;
     rkArray:
@@ -5494,7 +5494,7 @@ label
   raw;
 begin
   if SourceCount > 0 then
-    if ItemInfo = nil then
+    if ItemInfo = nil then // unmanaged items
 raw:  MoveFast(Source^, Dest^, ItemSize * SourceCount)
     else if ItemInfo^.Kind in rkRecordTypes then
       // retrieve record/object RTTI once for all items
@@ -5544,7 +5544,7 @@ var
   n, itemsize: PtrInt;
   iteminfo: PRttiInfo;
 begin
-  iteminfo := Info^.DynArrayItemType(itemsize);
+  iteminfo := Info^.DynArrayItemType(itemsize); // nil for unmanaged items
   if Dest^ <> nil then
     FastDynArrayClear(Dest, iteminfo);
   Source := Source^;
@@ -7452,7 +7452,7 @@ begin
     rkDynArray:
       begin
         item := fCache.ItemInfo;
-        if item = nil then // =nil for unmanaged types
+        if item = nil then // unmanaged types
         begin
           // try to guess the actual type, e.g. a TGUID or an integer
           item := aInfo^.DynArrayItemTypeExtended; // FPC or Delphi 2010+

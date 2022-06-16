@@ -1553,7 +1553,7 @@ begin
     fValues.Count := n;
     p := fValues.Value^;
     info := fValues.Info.Cache.ItemInfo;
-    if info <> nil then
+    if info <> nil then // nil for unmanaged items
     begin
       load := RTTI_BINARYLOAD[info^.Kind];
       if Assigned(load) then
@@ -1605,7 +1605,7 @@ begin
     if info <> nil then
       sav := RTTI_BINARYSAVE[info^.Kind]
     else
-      sav := nil;
+      sav := nil; // unmanaged items
     if fFirst <= fLast then
       WriteItems(fFirst, fLast - fFirst + 1)
     else
