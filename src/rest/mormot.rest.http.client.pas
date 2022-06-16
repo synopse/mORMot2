@@ -173,7 +173,7 @@ type
     /// optional custom HTTP "User Agent:" header value
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
-    /// allows to ignore untrusted SSL certificates
+    /// allows to ignore untrusted TLS certificates
     // - similar to adding a security exception for a domain in the browser
     property IgnoreTlsCertificateErrors: boolean
       read fExtendedOptions.TLS.IgnoreCertificateErrors

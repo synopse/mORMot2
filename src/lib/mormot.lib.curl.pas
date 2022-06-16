@@ -322,7 +322,7 @@ type
     ciConnectTimeT          = 6291508, // (2) connect time
     ciPreTransferTimeT      = 6291509, // (4)
     ciStartTransferTimeT    = 6291510, // (5) Time to first byte
-    ciAppConnectTimeT       = 6291512  // (3) SSL handshake
+    ciAppConnectTimeT       = 6291512  // (3) TLS handshake
   );
 
   /// low-level parameter for CURL_OPT_USE_SSL

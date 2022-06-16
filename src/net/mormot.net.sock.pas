@@ -375,7 +375,7 @@ type
     Context: PNetTlsContext; TLS, Peer: pointer) of object;
 
   /// callback raised by INetTls.AfterConnection for each peer verification
-  // - wasok=true if the SSL library did validate the incoming certificate
+  // - wasok=true if the TLS library did validate the incoming certificate
   // - should process the supplied peer information, and return true to continue
   // and accept the connection, or false to abort the connection
   // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
@@ -409,7 +409,7 @@ type
     // - ignored on SChannel
     WithPeerInfo: boolean;
     /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
-    // - default is TLS 1.2+ only, and SSL 2/3 are always disabled
+    // - default is TLS 1.2+ only, and deprecated SSL 2/3 are always disabled
     AllowDeprecatedTls: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName

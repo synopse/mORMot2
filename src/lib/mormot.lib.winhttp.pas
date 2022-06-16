@@ -471,7 +471,7 @@ type
     EntityChunkCount: word;
     pEntityChunks: pointer;
     RawConnectionId: HTTP_RAW_CONNECTION_ID;
-    // SSL connection information
+    // TLS connection information
     pSslInfo: PHTTP_SSL_INFO;
     { beginning of HTTP_REQUEST_V2 structure - manual padding is needed :( }
     {$ifdef CPU32}
@@ -1069,12 +1069,12 @@ type
       pEntityChunks: pointer; var pBytesSent: cardinal; pReserved1: Pointer = nil;
       pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
       pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
-    /// set specified data, such as IP addresses or SSL Certificates, from the
+    /// set specified data, such as IP addresses or TLS Certificates, from the
     // HTTP Server API configuration store
     SetServiceConfiguration: function(ServiceHandle: THandle;
       ConfigId: THttpServiceConfigID; pConfigInformation: pointer;
       ConfigInformationLength: ULONG; pOverlapped: pointer = nil): HRESULT; stdcall;
-    /// deletes specified data, such as IP addresses or SSL Certificates, from the
+    /// deletes specified data, such as IP addresses or TLS Certificates, from the
     // HTTP Server API configuration store
     DeleteServiceConfiguration: function(ServiceHandle: THandle; ConfigId:
       THttpServiceConfigID; pConfigInformation: pointer;
@@ -1293,7 +1293,7 @@ const
 
   WINHTTP_FLAG_BYPASS_PROXY_CACHE = $00000100; // add "pragma: no-cache" request header
   WINHTTP_FLAG_REFRESH = WINHTTP_FLAG_BYPASS_PROXY_CACHE;
-  WINHTTP_FLAG_SECURE = $00800000; // use SSL if applicable (HTTPS)
+  WINHTTP_FLAG_SECURE = $00800000; // use TLS if applicable (HTTPS)
   WINHTTP_ADDREQ_FLAG_COALESCE = $40000000;
   WINHTTP_QUERY_FLAG_NUMBER = $20000000;
 

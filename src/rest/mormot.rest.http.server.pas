@@ -116,7 +116,7 @@ type
 
   /// available security options for TRestHttpServer.Create() constructor
   // - default secNone will use plain HTTP connection
-  // - secSSL will use HTTPS secure connection
+  // - secTLS will use HTTPS secure connection
   // - secSynShaAes will use our proprietary SHA-256 / AES-256-CTR encryption
   // identified as 'synshaaes' as ACCEPT-ENCODING: header parameter - but since
   // encodings are optional in HTTP, it is not possible to rely on it for securing
@@ -124,7 +124,7 @@ type
   // encrypted WebSockets instead
   TRestHttpServerSecurity = (
     secNone,
-    secSSL
+    secTLS
     {$ifndef PUREMORMOT2} ,
     secSynShaAes
     {$endif PUREMORMOT2}
@@ -166,6 +166,10 @@ const
   // - i.e. the THttpServerGeneric classes with CanNotifyCallback=true
   HTTP_BIDIR = [useBidirSocket, useBidirAsync];
 
+  /// HTTP/HTTPS security flags for TRestHttpServer.Create() constructor
+  HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
+    secNone,
+    secTLS);
 
 type
   TRestHttpOneServer = record
@@ -266,7 +270,7 @@ type
     // - the aThreadPoolCount parameter will set the number of threads
     // to be initialized to handle incoming connections (default is 32, which
     // may be sufficient for most cases, maximum is 256)
-    // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
+    // - the aHttpServerSecurity can be set to secTLS to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD pdf)
     // - optional aAdditionalUrl parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TRestHttpServer.Request
@@ -291,7 +295,7 @@ type
     // specify the public server address to bind to: e.g. '1.2.3.4:1234' - even
     // for http.sys, the public address could be used for TRestServer.SetPublicUri()
     // - aDomainName is the Urlprefix to be used for HttpAddUrl API call
-    // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
+    // - the aHttpServerSecurity can be set to secTLS to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD pdf)
     // - optional aAdditionalUrl parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TRestHttpServer.Request
@@ -334,7 +338,7 @@ type
     // - an optional aRestAccessRights parameter is available to override the
     // default HTTP_DEFAULT_ACCESS_RIGHTS access right setting - but you shall
     // better rely on the authentication feature included in the framework
-    // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
+    // - the aHttpServerSecurity can be set to secTLS to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD pdf)
     // - return true on success, false on error (e.g. duplicated Root value)
     function AddServer(aServer: TRestServer;
@@ -371,7 +375,7 @@ type
     // localhost:port/RedirectedUri
     // - for http.sys server, would try to register '/' if aRegisterUri is TRUE
     // - by default, will redirect http://localhost:port unless you set
-    // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
+    // aHttpServerSecurity=secTLS so that it would redirect https://localhost:port
     procedure RootRedirectToUri(const aRedirectedUri: RawUtf8;
       aRegisterUri: boolean = true; aHttps: boolean = false);
     /// defines the WebSockets protocols used by useBidirSocket/useBidirAsync
@@ -512,6 +516,9 @@ type
   TSQLHTTPServer = TRestHttpServer;
   TSQLHTTPRemoteLogServer = TRestHttpRemoteLogServer;
 
+const
+  secSSL = secTLS;
+
 {$endif PUREMORMOT2}
 
 
@@ -607,7 +614,7 @@ begin
       {$ifdef USEHTTPSYS}
         if fHttpServer.InheritsFrom(THttpApiServer) then
           if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,
-             fPublicPort, fDBServers[i].Security = secSSL,
+             fPublicPort, fDBServers[i].Security = secTLS,
              fDomainName) <> NO_ERROR then
             log.Log(sllLastError, '%.RemoveUrl(%)',
               [self, aServer.Model.Root], self);
@@ -733,7 +740,7 @@ begin
     include(hso, hsoIncludeDateHeader);
   if rsoNoXPoweredHeader in fOptions then
     include(hso, hsoNoXPoweredHeader);
-  if aSecurity = secSSL then
+  if aSecurity = secTLS then
     include(hso, hsoEnableTls);
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
@@ -917,8 +924,6 @@ end;
 const
   HTTPS_TEXT: array[boolean] of string[1] = (
     '', 's');
-  HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
-    secNone, secSSL);
 
 procedure TRestHttpServer.RootRedirectToUri(const aRedirectedUri: RawUtf8;
   aRegisterUri: boolean; aHttps: boolean);
@@ -944,7 +949,7 @@ begin
   result := '';
   if not fHttpServer.InheritsFrom(THttpApiServer) then
     exit;
-  https := aSecurity = secSSL;
+  https := aSecurity = secTLS;
   fLog.Add.Log(sllHttp, 'http.sys registration of http%://%:%/%',
     [HTTPS_TEXT[https], aDomainName, fPublicPort, aRoot], self);
   // try to register the URL to http.sys
@@ -1074,7 +1079,7 @@ begin
         // optimized for the most common case of a single DB server
         with fDBSingleServer^ do
         begin
-          if (Security = secSSL) = tls then
+          if (Security = secTLS) = tls then
           begin
             match := Server.Model.UriMatch(call.Url, matchcase);
             if match = rmNoMatch then
@@ -1096,7 +1101,7 @@ begin
         try
           for i := 0 to length(fDBServers) - 1 do
             with fDBServers[i] do
-              if (Security = secSSL) = tls then
+              if (Security = secTLS) = tls then
               begin
                 // registered for http or https
                 match := Server.Model.UriMatch(call.Url, matchcase);

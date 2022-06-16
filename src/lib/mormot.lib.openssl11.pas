@@ -1,4 +1,4 @@
-/// low-level access to the Open SSL 1.1.1 / 3.x Library
+/// low-level access to the OpenSSL 1.1.1 / 3.x Library
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.openssl11;

@@ -1209,7 +1209,7 @@ type
   /// authentication using HTTP Basic scheme
   // - match TRestClientAuthenticationHttpBasic on Client side
   // - this protocol send both name and password as clear (just Base64 encoded)
-  // so should only be used over SSL / HTTPS, or for compatibility reasons
+  // so should only be used over TLS / HTTPS, or for compatibility reasons
   // - will rely on TRestServerAuthenticationNone for authorization
   // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:

@@ -276,7 +276,7 @@ type
 
   /// authentication using HTTP Basic scheme
   // - this protocol send both name and password as clear (just Base64 encoded)
-  // so should only be used over SSL / HTTPS, or for compatibility reasons
+  // so should only be used over TLS / HTTPS, or for compatibility reasons
   // - match TRestServerAuthenticationHttpBasic class on server side
   // - will rely on TRestClientAuthenticationNone for authorization
   // - on client side, this scheme is not called by TRestClientUri.SetUser()

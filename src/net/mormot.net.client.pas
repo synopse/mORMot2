@@ -581,7 +581,7 @@ type
     /// wrapper method to retrieve a resource via an HTTP GET
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
-    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
+    // - aIgnoreTlsCertificateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
     // TCurlHttp.Get() methods
@@ -591,7 +591,7 @@ type
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
-    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
+    // - aIgnoreTlsCertificateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is POSTed to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
@@ -603,7 +603,7 @@ type
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
-    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
+    // - aIgnoreTlsCertificateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is PUT to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
@@ -615,7 +615,7 @@ type
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
-    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
+    // - aIgnoreTlsCertificateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
     // TCurlHttp.Delete() methods
@@ -634,7 +634,7 @@ type
     function RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer = 1024): boolean;
 
-    /// allows to ignore untrusted SSL certificates
+    /// allows to ignore untrusted TLS certificates
     // - similar to adding a security exception for a domain in the browser
     property IgnoreTlsCertificateErrors: boolean
       read fExtendedOptions.TLS.IgnoreCertificateErrors
@@ -940,7 +940,7 @@ type
       Header, Encoding, AcceptEncoding: RawUtf8;
       Data: RawByteString;
     end;
-    fSSL: record
+    fTls: record
       CertFile, CACertFile, KeyName, PassPhrase: RawUtf8;
     end;
     procedure InternalConnect(
@@ -962,7 +962,7 @@ type
     /// allow to set a CA certification file without touching the client certification
     property CACertFile: RawUtf8
       read GetCACertFile write SetCACertFile;
-    /// set the client SSL certification details
+    /// set the client TLS certification details
     // - see CACertFile if you don't want to change the whole client cert info
     // - used e.g. as
     // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
@@ -2930,21 +2930,21 @@ end;
 
 function TCurlHttp.GetCACertFile: RawUtf8;
 begin
-  result := fSSL.CACertFile;
+  result := fTls.CACertFile;
 end;
 
 procedure TCurlHttp.SetCACertFile(const aCertFile: RawUtf8);
 begin
-  fSSL.CACertFile := aCertFile;
+  fTls.CACertFile := aCertFile;
 end;
 
 procedure TCurlHttp.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
   aPassPhrase: RawUtf8);
 begin
-  fSSL.CertFile := aCertFile;
-  fSSL.CACertFile := aCACertFile;
-  fSSL.KeyName := aKeyName;
-  fSSL.PassPhrase := aPassPhrase;
+  fTls.CertFile := aCertFile;
+  fTls.CACertFile := aCACertFile;
+  fTls.KeyName := aKeyName;
+  fTls.PassPhrase := aPassPhrase;
 end;
 
 procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -2970,19 +2970,19 @@ begin
     else
     begin
       // see https://curl.haxx.se/libcurl/c/simplessl.html
-      if fSSL.CertFile <> '' then
+      if fTls.CertFile <> '' then
       begin
         curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
-        curl.easy_setopt(fHandle, coSSLCert, pointer(fSSL.CertFile));
-        if fSSL.PassPhrase <> '' then
-          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fSSL.PassPhrase));
+        curl.easy_setopt(fHandle, coSSLCert, pointer(fTls.CertFile));
+        if fTls.PassPhrase <> '' then
+          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fTls.PassPhrase));
         curl.easy_setopt(fHandle, coSSLKeyType, nil);
-        curl.easy_setopt(fHandle, coSSLKey, pointer(fSSL.KeyName));
-        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+        curl.easy_setopt(fHandle, coSSLKey, pointer(fTls.KeyName));
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
         curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
       end
-      else if fSSL.CACertFile <> '' then
-        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+      else if fTls.CACertFile <> '' then
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
     end;
   curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
