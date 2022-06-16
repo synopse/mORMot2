@@ -401,7 +401,7 @@ type
   // $   Free;
   // $ end;
   TNetTlsContext = record
-    /// output: set by TCrtSocket.OpenBind() method if TLS was established
+    /// output: set by TCrtSocket.OpenBind() method once TLS is established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;

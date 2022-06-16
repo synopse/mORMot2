@@ -1067,10 +1067,10 @@ type
   // entities entrusted to issue certificates that assert that the recipient
   // individual, computer, or organization requesting the certificate fulfills
   // the conditions of an established policy
-  // - scsMY holds certificates with associated private keys
+  // - scsMY holds certificates with associated private keys (Windows only)
   // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
   // which are the root of the whole certificates trust tree
-  // - scsSpc contains Software Publisher Certificates
+  // - scsSpc contains Software Publisher Certificates (Windows only)
   TSystemCertificateStore = (
     scsCA,
     scsMY,
@@ -1097,6 +1097,14 @@ var
 function GetSystemStoreAsPem(
   CertStores: TSystemCertificateStores = [scsCA, scsRoot];
   FlushCache: boolean = false): RawUtf8; overload;
+
+/// retrieve all certificates of a given system store as PEM text
+// - will only generate PEM files from the system Registry (Windows), or
+// from the system known folders (POSIX - for scsCA and scsRoot only) - ignoring
+// GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment variable
+// - an internal cache is refreshed every 4 minutes unless FlushCache is set
+function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean = false; now: cardinal = 0): RawUtf8; overload;
 
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
@@ -1456,12 +1464,6 @@ function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
 const
   WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
     'CA', 'MY', 'ROOT', 'SPC');
-
-/// retrieve all certificates of a given system store as PEM text
-// - will maintain an internal cache refreshed about every 4 minutes unless
-// FlushCache is set to true to force retrieval from the Windows API
-function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false): RawUtf8; overload;
 
 /// this global procedure should be called from each thread needing to use OLE
 // - it is called e.g. by TOleDBConnection.Create when an OleDb connection
@@ -5742,6 +5744,82 @@ begin // just return the address as hexadecimal
     inc(b);
   end;
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
+
+var
+  _SystemStoreAsPem: array[0..ord(high(TSystemCertificateStore)) + 1] of record
+    Tix: cardinal;
+    Pem: RawUtf8;
+  end;
+
+function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean; now: cardinal): RawUtf8;
+begin
+  if now = 0 then
+    now := GetTickCount64 shr 18; // div 262.144 seconds = refresh every 4.4 min
+  with _SystemStoreAsPem[ord(CertStore) + 1] do
+  begin
+    if not FlushCache then
+      if Tix = now then
+      begin
+        result := Pem; // quick retrieved from cache
+        exit;
+      end;
+    // fallback search depending on the POSIX / Windows specific OS
+    result := _GetSystemStoreAsPem(CertStore);
+    Tix := now;
+    Pem := result;
+  end;
+end;
+
+function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
+  FlushCache: boolean): RawUtf8;
+var
+  now: cardinal;
+  s: TSystemCertificateStore;
+  v: RawUtf8;
+label
+  notfound;
+begin
+  result := '';
+  now := GetTickCount64 shr 18;
+  // first search if bounded within the application
+  with _SystemStoreAsPem[0] do // cached in slot [0]
+  begin
+    if not FlushCache then
+      if Tix = now then
+        if Pem = '' then
+          goto notfound
+        else
+        begin
+          result := Pem; // quick retrieved from cache
+          exit;
+        end;
+    if GetSystemStoreAsPemLocalFile <> '' then
+      {$ifdef OSPOSIX}
+      if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
+      {$else}
+      if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
+      {$endif OSPOSIX}
+        result := StringFromFile(GetSystemStoreAsPemLocalFile)
+      else
+        result := StringFromFile(
+          Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+    if result = '' then
+      result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
+    Tix := now;
+    Pem := result;
+  end;
+notfound:
+  if result = '' then
+    // fallback to search depending on the POSIX / Windows specific OS
+    for s := low(s) to high(s) do
+      if s in CertStores then
+      begin
+        v := GetSystemStoreAsPem(s, FlushCache, now);
+        if v <> '' then
+          result := result + #13#10 + v;
+      end;
+end;
 
 
 { **************** TSynLocker Threading Features }
