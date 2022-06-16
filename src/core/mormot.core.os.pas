@@ -1600,7 +1600,7 @@ type
   protected
     icu, icudata, icui18n: pointer;
     Loaded: boolean;
-    procedure DoLoad(const LibName: TFileName = ''; const Version: string = '');
+    procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
   public
     /// Initialize an ICU text converter for a given encoding

@@ -203,7 +203,7 @@ begin
   end;
 end;
 
-procedure TIcuLibrary.DoLoad(const LibName: TFileName; const Version: string);
+procedure TIcuLibrary.DoLoad(const LibName: TFileName; Version: string);
 const
   NAMES: array[0..12] of string = (
     'ucnv_open',
@@ -221,18 +221,20 @@ const
     'u_init');
   {$ifdef OSANDROID}
   // from https://developer.android.com/guide/topics/resources/internationalization
-  ICU_VER: array[1..13] of string = (
+  ICU_VER: array[1..15] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
-    '_56', '_58', '_60', '_63');
+    '_56', '_58', '_60', '_63', '_66', '_68');
   SYSDATA: PAnsiChar = '/system/usr/icu';
   {$else}
+  ICU_MAX = 80;
+  ICU_MIN = 44;
   SYSDATA: PAnsiChar = '';
   {$endif OSANDROID}
 var
   i: integer;
   err: SizeInt;
   P: PPointer;
-  v, vers: string;
+  so, v, vers: string;
   data: PAnsiChar;
 begin
   GlobalLock;
@@ -256,15 +258,37 @@ begin
       {$else}
       // libicudata should be loaded first because other two depend on it
       icudata := dlopen('libicudata.so', RTLD_LAZY);
+      {$ifndef OSANDROID}
+      if icudata = nil then
+      begin
+        // there is no link to the library -> try e.g. 'libicudata.so.67'
+        if Version <> '' then
+          icudata := dlopen(pointer('libicudata.so.' + Version), RTLD_LAZY);
+        if icudata = nil then
+          for i := ICU_MAX downto ICU_MIN do
+          begin
+            str(i, v);
+            icudata := dlopen(pointer('libicudata.so.' + v), RTLD_LAZY);
+            if icudata <> nil then
+            begin
+              Version := v;
+              break;
+            end;
+          end;
+        if icudata <> nil then
+          so := '.' + Version;
+      end;
+      {$endif OSANDROID}
       if icudata <> nil then
       begin
-        icu := dlopen('libicuuc.so', RTLD_LAZY);
+        icu := dlopen(pointer('libicuuc.so' + so), RTLD_LAZY);
         if icu <> nil then
-          icui18n := dlopen('libicui18n.so', RTLD_LAZY);
+          icui18n := dlopen(pointer('libicui18n.so' + so), RTLD_LAZY);
       end;
       {$endif OSDARWIN}
       if icui18n = nil then
       begin
+        // we did not find any ICU installed -> ensure iconv/RTL fallback is ok
         if not IsWideStringManagerProperlyInstalled then
           DisplayFatalError('ICU ' + CPU_ARCH_TEXT + ' is not available',
             'Either install it or put cwstring in your uses clause as fallback');
@@ -275,7 +299,7 @@ begin
     // ICU append a version prefix to all its functions e.g. ucnv_open_66
     if (Version <> '') and
        (dlsym(icu, pointer('ucnv_open_' + Version)) <> nil) then
-      vers := '_' + Version
+      vers := '_' + Version // matched the explicit version
     else
     begin
       {$ifdef OSANDROID}
@@ -290,7 +314,7 @@ begin
       if vers <> '' then
       {$endif OSANDROID}
       if dlsym(icu, 'ucnv_open') = nil then
-        for i := 80 downto 44 do
+        for i := ICU_MAX downto ICU_MIN do
         begin
           str(i, v);
           if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
