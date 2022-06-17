@@ -1199,6 +1199,24 @@ type
   /// exception class raised by our High-Level Certificates Process
   ECryptCert = class(ESynException);
 
+  /// the known asymmetric algorithms, e.g. as published by OpenSSL
+  // - is an exact match of TCryptAsymAlgo enumerate in mormot.crypt.openssl.pas
+  // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
+  // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
+  // accessible via CryptAsymOpenSsl[] and CryptCertAlgoOpenSsl[] factories
+  TCryptAsymAlgo = (
+    caaES256,
+    caaES384,
+    caaES512,
+    caaES256K,
+    caaRS256,
+    caaRS384,
+    caaRS512,
+    caaPS256,
+    caaPS384,
+    caaPS512,
+    caaEdDSA);
+
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
   // - stored as a 16-bit memory block, with CERTIFICATE_USAGE_ALL = 65535
@@ -1523,7 +1541,7 @@ type
     /// main factory to create a new Store instance with this engine
     function New: ICryptStore; virtual; abstract;
     /// main factory to create a new Store instance from saved Binary
-    function NewFrom(const Binary: RawByteString): ICryptStore;
+    function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
 const
@@ -1637,7 +1655,7 @@ function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
 function Cert(const name: RawUtf8): ICryptCert;
 
 /// main resolver for Certificates Store engines
-// - mormot.crypt.ecc.pas defines 'syn-store' or 'syn-store-nocache" for our
+// - mormot.crypt.ecc.pas defines 'syn-store' or 'syn-store-nocache' for our
 // TEccCertificateChain proprietary format (safe and efficient)
 // - mormot.crypt.openssl.pas will define 'x509-store'
 // - the shared TCryptStoreAlgo of this algorithm is returned: caller should
@@ -1646,6 +1664,29 @@ function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
 
 /// main factory of Certificates Store engines as returned by StoreAlgo()
 function Store(const name: RawUtf8): ICryptStore;
+
+var
+  /// direct access to the mormot.crypt.ecc.pas 'syn-store' algorithm
+  // - may be nil if this unit was not included
+  CryptStoreAlgoSyn: TCryptStoreAlgo;
+
+  /// direct access to the mormot.crypt.ecc.pas 'syn-store-nocache' algorithm
+  // - may be nil if this unit was not included
+  CryptStoreAlgoSynNoCache: TCryptStoreAlgo;
+
+  /// direct access to the mormot.crypt.openssl.pas 'x509-store' algorithm
+  // - may be nil if this unit was not included or if OpenSSL is not available
+  // - is currently nil because TCryptStoreOpenSsl is not stable yet
+  CryptStoreAlgoOpenSsl: TCryptStoreAlgo;
+
+  /// direct access to the mormot.crypt.openssl.pas TCryptAsym factories
+  // - may be nil if this unit was not included or if OpenSSL is not available
+  CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
+
+  /// direct access to the mormot.crypt.openssl.pas  ICryptCert factories
+  // - may be nil if this unit was not included or if OpenSSL is not available
+  CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
 
 
 { ************************** Minimal PEM/DER Encoding/Decoding }

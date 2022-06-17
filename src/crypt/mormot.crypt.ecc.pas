@@ -5401,6 +5401,8 @@ begin
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
   TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
+  CryptStoreAlgoSyn := StoreAlgo('syn-store');
+  CryptStoreAlgoSynNoCache := StoreAlgo('syn-store-nocache');
 end;
 
 

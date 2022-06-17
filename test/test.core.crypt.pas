@@ -1419,7 +1419,7 @@ begin
       end;
   end;
   siz := FileSize(WorkDir + 'People.json');
-  if siz <> 0 then
+  if siz <> 0 then // need a first run to have the file
   begin
     AesPkcs7File(WorkDir + 'People.json', WorkDir + 'people.encrypt', true, 'Thomas');
     CheckEqual(AesPkcs7File(WorkDir + 'people.encrypt',
@@ -2374,6 +2374,7 @@ begin
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
+    //writeln(str.AlgoName);
     st1 := str.New;
     CheckEqual(st1.Count, 0);
     // set c1 as self-signed root certificate (in v1 format)
@@ -2383,7 +2384,7 @@ begin
     CheckEqual(st1.Count, 1);
     Check(st1.IsValid(c1) = cvValidSelfSigned);
     Check(c1.HasPrivateSecret, 'priv1');
-    CheckEqual(c1.Sign(pointer(r), length(r)), '');
+    Check(c1.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 1');
     // set c2 as itermediate CA, signed by c1 root CA
     c2 := nil;
     Check(not st1.Add(c2), 'no priv');
@@ -2399,7 +2400,7 @@ begin
     Check(st1.Add(c2));
     CheckEqual(st1.Count, 2);
     Check(st1.IsValid(c2) = cvValidSigned, 'c2');
-    CheckEqual(c2.Sign(pointer(r), length(r)), '', 'no cuDigitalSignature');
+    Check(c2.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 2');
     // set c3 as signing authority
     c3 := st1.CertAlgo.New;
     c3.Generate([cuDigitalSignature], '', c2);
@@ -2480,7 +2481,7 @@ end;
 
 initialization
   {$ifdef USE_OPENSSL}
-  // don't try OpenSSL on Windows which is a PITA to get the right libraries
+  // warning: OpenSSL on Windows requires to download the right libraries
   RegisterOpenSsl;
   {$endif USE_OPENSSL}
 

@@ -428,74 +428,45 @@ type
       override;
   end;
 
-  /// most used asymmetric algorithms published by OpenSSL
-  // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
-  // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert
-  TOpenSslAsym = (
-    osaES256,
-    osaES384,
-    osaES512,
-    osaES256K,
-    osaRS256,
-    osaRS384,
-    osaRS512,
-    osaPS256,
-    osaPS384,
-    osaPS512,
-    osaEdDSA);
-
 const
-  OSA_JWT: array[TOpenSslAsym] of RawUtf8 = (
-    'ES256',              // osaES256
-    'ES384',              // osaES384
-    'ES512',              // osaES512
-    'ES256K',             // osaES256K
-    'RS256',              // osaRS256
-    'RS384',              // osaRS384
-    'RS512',              // osaRS512
-    'PS256',              // osaPS256
-    'PS384',              // osaPS384
-    'PS512',              // osaPS512
-    'EdDSA');             // osaEdDSA
+  CAA_HASH: array[TCryptAsymAlgo] of RawUtf8 = (
+    '',       // caaES256 will recognize '' as SHA-256 hash
+    'SHA384', // caaES384
+    'SHA512', // caaES512
+    '',       // caaES256K
+    '',       // caaRS256
+    'SHA384', // caaRS384
+    'SHA512', // caaRS512
+    '',       // caaPS256
+    'SHA384', // caaPS384
+    'SHA512', // caaPS512
+    'null');  // caaEdDSA Ed25519 includes its own SHA-512
 
-  OSA_HASH: array[TOpenSslAsym] of RawUtf8 = (
-    '',                   // osaES256 will recognize '' as SHA-256 hash
-    'SHA384',             // osaES384
-    'SHA512',             // osaES512
-    '',                   // osaES256K
-    '',                   // osaRS256
-    'SHA384',             // osaRS384
-    'SHA512',             // osaRS512
-    '',                   // osaPS256
-    'SHA384',             // osaPS384
-    'SHA512',             // osaPS512
-    'null');              // osaEdDSA Ed25519 includes its own SHA-512
+  CAA_EVPTYPE: array[TCryptAsymAlgo] of integer = (
+    EVP_PKEY_EC,          // caaES256
+    EVP_PKEY_EC,          // caaES384
+    EVP_PKEY_EC,          // caaES512
+    EVP_PKEY_EC,          // caaES256K
+    EVP_PKEY_RSA,         // caaRS256
+    EVP_PKEY_RSA,         // caaRS384
+    EVP_PKEY_RSA,         // caaRS512
+    EVP_PKEY_RSA_PSS,     // caaPS256
+    EVP_PKEY_RSA_PSS,     // caaPS384
+    EVP_PKEY_RSA_PSS,     // caaPS512
+    EVP_PKEY_ED25519);    // caaEdDSA
 
-  OSA_EVPTYPE: array[TOpenSslAsym] of integer = (
-    EVP_PKEY_EC,          // osaES256
-    EVP_PKEY_EC,          // osaES384
-    EVP_PKEY_EC,          // osaES512
-    EVP_PKEY_EC,          // osaES256K
-    EVP_PKEY_RSA,         // osaRS256
-    EVP_PKEY_RSA,         // osaRS384
-    EVP_PKEY_RSA,         // osaRS512
-    EVP_PKEY_RSA_PSS,     // osaPS256
-    EVP_PKEY_RSA_PSS,     // osaPS384
-    EVP_PKEY_RSA_PSS,     // osaPS512
-    EVP_PKEY_ED25519);    // osaEdDSA
-
-  OSA_BITSORCURVE: array[TOpenSslAsym] of integer = (
-    NID_X9_62_prime256v1, // osaES256
-    NID_secp384r1,        // osaES384
-    NID_secp521r1,        // osaES512
-    NID_secp256k1,        // osaES256K
-    2048,                 // osaRS256
-    2048,                 // osaRS384
-    2048,                 // osaRS512
-    2048,                 // osaPS256
-    2048,                 // osaPS384
-    2048,                 // osaPS512
-    0);                   // osaEdDSA
+  CAA_BITSORCURVE: array[TCryptAsymAlgo] of integer = (
+    NID_X9_62_prime256v1, // caaES256
+    NID_secp384r1,        // caaES384
+    NID_secp521r1,        // caaES512
+    NID_secp256k1,        // caaES256K
+    2048,                 // caaRS256
+    2048,                 // caaRS384
+    2048,                 // caaRS512
+    2048,                 // caaPS256
+    2048,                 // caaPS384
+    2048,                 // caaPS512
+    0);                   // caaEdDSA
 
 
 { ************** JWT Implementation using any OpenSSL Algorithm }
@@ -550,7 +521,7 @@ type
   // $ 100 EdDSA in 11.55ms i.e. 8.4K/s, aver. 115us
   TJwtAbstractOsl = class(TJwtOpenSsl)
   protected
-    fAsym: TOpenSslAsym;
+    fAsym: TCryptAsymAlgo;
     procedure SetAlgorithms; virtual; // set fHashAlgo+fHashAlgorithm
     procedure SetAlgorithm; virtual; abstract; // set fAsym
   public
@@ -646,14 +617,6 @@ type
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
-
-var
-  /// direct access to the OpenSSL TCryptAsym factories
-  CryptAsymOpenSsl: array[TOpenSslAsym] of TCryptAsym;
-
-  /// direct access to the OpenSSL ICryptCert factories
-  CryptCertAlgoOpenSsl: array[TOpenSslAsym] of TCryptCertAlgo;
-
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
@@ -1538,10 +1501,10 @@ end;
 procedure TJwtAbstractOsl.SetAlgorithms;
 begin
   SetAlgorithm;
-  fAlgorithm := OSA_JWT[fAsym];
-  fHashAlgorithm := OSA_HASH[fAsym];
-  fGenEvpType := OSA_EVPTYPE[fAsym];
-  fGenBitsOrCurve := OSA_BITSORCURVE[fAsym];
+  fAlgorithm := CAA_JWT[fAsym];
+  fHashAlgorithm := CAA_HASH[fAsym];
+  fGenEvpType := CAA_EVPTYPE[fAsym];
+  fGenBitsOrCurve := CAA_BITSORCURVE[fAsym];
 end;
 
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
@@ -1573,77 +1536,77 @@ end;
 
 procedure TJwtES256Osl.SetAlgorithm;
 begin
-  fAsym := osaES256;
+  fAsym := caaES256;
 end;
 
 { TJwtES384Osl }
 
 procedure TJwtES384Osl.SetAlgorithm;
 begin
-  fAsym := osaES384;
+  fAsym := caaES384;
 end;
 
 { TJwtES512Osl }
 
 procedure TJwtES512Osl.SetAlgorithm;
 begin
-  fAsym := osaES512;
+  fAsym := caaES512;
 end;
 
 { TJwtES256KOsl }
 
 procedure TJwtES256KOsl.SetAlgorithm;
 begin
-  fAsym := osaES256K;
+  fAsym := caaES256K;
 end;
 
 { TJwtRS256Osl }
 
 procedure TJwtRS256Osl.SetAlgorithm;
 begin
-  fAsym := osaRS256;
+  fAsym := caaRS256;
 end;
 
 { TJwtRS384Osl }
 
 procedure TJwtRS384Osl.SetAlgorithm;
 begin
-  fAsym := osaRS384;
+  fAsym := caaRS384;
 end;
 
 { TJwtRS512Osl }
 
 procedure TJwtRS512Osl.SetAlgorithm;
 begin
-  fAsym := osaRS512;
+  fAsym := caaRS512;
 end;
 
 { TJwtPS256Osl }
 
 procedure TJwtPS256Osl.SetAlgorithm;
 begin
-  fAsym := osaPS256;
+  fAsym := caaPS256;
 end;
 
 { TJwtPS384Osl }
 
 procedure TJwtPS384Osl.SetAlgorithm;
 begin
-  fAsym := osaPS384;
+  fAsym := caaPS384;
 end;
 
 { TJwtPS512Osl }
 
 procedure TJwtPS512Osl.SetAlgorithm;
 begin
-  fAsym := osaPS512;
+  fAsym := caaPS512;
 end;
 
 { TJwtEdDSAOsl }
 
 procedure TJwtEdDSAOsl.SetAlgorithm;
 begin
-  fAsym := osaEdDSA;
+  fAsym := caaEdDSA;
 end;
 
 
@@ -1652,14 +1615,14 @@ end;
 type
   TCryptAsymOsl = class(TCryptAsym)
   protected
-    fOsa: TOpenSslAsym;
+    fOsa: TCryptAsymAlgo;
     fDefaultHashAlgorithm: RawUtf8;
     fEvpType: integer;
     fBitsOrCurve: integer;
     function Algo(hasher: TCryptHasher): RawUtf8;
   public
     constructor Create(const name: RawUtf8); overload; override;
-    constructor Create(osa: TOpenSslAsym); reintroduce; overload; 
+    constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -1682,16 +1645,16 @@ end;
 
 constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
-  fDefaultHashAlgorithm := OSA_HASH[fOsa];
-  fEvpType := OSA_EVPTYPE[fOsa];
-  fBitsOrCurve := OSA_BITSORCURVE[fOsa];
+  fDefaultHashAlgorithm := CAA_HASH[fOsa];
+  fEvpType := CAA_EVPTYPE[fOsa];
+  fBitsOrCurve := CAA_BITSORCURVE[fOsa];
   inherited Create(name); // also register it to GlobalCryptAlgo main list
 end;
 
-constructor TCryptAsymOsl.Create(osa: TOpenSslAsym);
+constructor TCryptAsymOsl.Create(osa: TCryptAsymAlgo);
 begin
   fOsa := osa;
-  Create(OSA_JWT[osa]);
+  Create(CAA_JWT[osa]);
 end;
 
 procedure TCryptAsymOsl.GeneratePem(out pub, priv: RawUtf8;
@@ -1732,7 +1695,7 @@ type
     fEvpType: integer;
     fBitsOrCurve: integer;
   public
-    constructor Create(osa: TOpenSslAsym); reintroduce; overload;
+    constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
   end;
@@ -1801,19 +1764,19 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    // return our favorite osaES256 algorithm for signing Certificates
+    // return our favorite caaES256 algorithm for signing Certificates
     function CertAlgo: TCryptCertAlgo; override;
   end;
 
 
 { TCryptCertAlgoOpenSsl }
 
-constructor TCryptCertAlgoOpenSsl.Create(osa: TOpenSslAsym);
+constructor TCryptCertAlgoOpenSsl.Create(osa: TCryptAsymAlgo);
 begin
-  fHash := OpenSslGetMd(OSA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
-  fEvpType := OSA_EVPTYPE[osa];
-  fBitsOrCurve := OSA_BITSORCURVE[osa];
-  Create('x509-' + LowerCase(OSA_JWT[osa]));
+  fHash := OpenSslGetMd(CAA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
+  fEvpType := CAA_EVPTYPE[osa];
+  fBitsOrCurve := CAA_BITSORCURVE[osa];
+  Create('x509-' + LowerCase(CAA_JWT[osa]));
 end;
 
 function TCryptCertAlgoOpenSsl.NewPrivateKey: PEVP_PKEY;
@@ -2404,13 +2367,13 @@ end;
 
 function TCryptStoreOpenSsl.CertAlgo: TCryptCertAlgo;
 begin
-  result := CryptCertAlgoOpenSsl[osaES256];
+  result := CryptCertAlgoOpenSsl[caaES256];
 end;
 
 
 procedure RegisterOpenSsl;
 var
-  osa: TOpenSslAsym;
+  osa: TCryptAsymAlgo;
 begin
   if (TAesFast[mGcm] = TAesGcmOsl) or
      not OpenSslIsAvailable then
@@ -2437,7 +2400,7 @@ begin
   @Ecc256r1Verify := @ecdsa_verify_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
-  TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with osaES256
+  TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for osa := low(osa) to high(osa) do
   begin
     CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);

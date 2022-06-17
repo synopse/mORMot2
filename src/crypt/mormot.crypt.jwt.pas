@@ -340,6 +340,21 @@ const
     'jti',    // jrcJwtID
     'data');  // jrcData
 
+  /// the JWT algorithm names according to our known asymmetric algorithms
+  // - as implemented e.g. by TJwtAbstractOsl
+  CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
+    'ES256',  // caaES256
+    'ES384',  // caaES384
+    'ES512',  // caaES512
+    'ES256K', // caaES256K
+    'RS256',  // caaRS256
+    'RS384',  // caaRS384
+    'RS512',  // caaRS512
+    'PS256',  // caaPS256
+    'PS384',  // caaPS384
+    'PS512',  // caaPS512
+    'EdDSA'); // caaEdDSA
+
 
 function ToText(res: TJwtResult): PShortString; overload;
 function ToCaption(res: TJwtResult): string; overload;
