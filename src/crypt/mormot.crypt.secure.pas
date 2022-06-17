@@ -911,12 +911,17 @@ type
     CryptNonce: cardinal;
     /// used when Generate() has TimeOutMinutes=0
     // - if equals 0, one month delay is used as "never expire"
-    DefaultTimeOutMinutes: cardinal;
+    DefaultTimeOutMinutes: word;
+    /// 32-bit checksum algorithm used for digital signature
+    CrcAlgo: TCrc32Algo;
+    /// padding byte for backward compatibility
+    Padding: byte;
     /// private random secret, used for encryption of the cookie content
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
     procedure Init(const Name: RawUtf8 = 'mORMot';
-      DefaultSessionTimeOutMinutes: cardinal = 0);
+      DefaultSessionTimeOutMinutes: cardinal = 0;
+      SignAlgo: TCrc32Algo = caCrc32c);
     /// will initialize a new Base64Uri-encoded session cookie
     // - with an optional record data
     // - will return the 32-bit internal session ID and a Base64Uri cookie
@@ -3199,9 +3204,8 @@ end;
 { TBinaryCookieGenerator }
 
 procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
-  DefaultSessionTimeOutMinutes: cardinal);
+  DefaultSessionTimeOutMinutes: cardinal; SignAlgo: TCrc32Algo);
 begin
-  DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   CookieName := Name;
   // initial random session ID, small enough to remain 31-bit > 0
   SessionSequence := Random32 and $07ffffff;
@@ -3210,7 +3214,16 @@ begin
   Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
-  MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt)); // cryptographic randomness
+  // expiration
+  DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
+  // default algorithm is 0, i.e. crc32c()
+  if not Assigned(CryptCrc32(SignAlgo)) then
+    raise ECrypt.CreateUtf8(
+      'Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
+  CrcAlgo := SignAlgo;
+  Padding := 0;
+  // cryptographic randomness
+  MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt));
 end;
 
 type
@@ -3218,15 +3231,13 @@ type
   TCookieContent = packed record
     head: packed record
       cryptnonce: cardinal; // ctr to cipher following bytes
-      crc: cardinal;        // = 32-bit digital signature (crc32c)
+      crc: cardinal;        // = 32-bit digital signature (CrcAlgo)
       session: integer;     // = jti claim
       issued: cardinal;     // = iat claim (from UnixTimeUtc-UNIXTIME_MINIMAL)
       expires: cardinal;    // = exp claim
     end;
     data: array[0..2047] of byte; // optional record binary serialization
   end;
-  // we use crc32c and not DefaultHasher, because it needs to be consistent
-  // after restart (which AesNiHash is not) for Save/Load to be usable
 
 function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
   TimeOutMinutes: cardinal; PRecordData: pointer;
@@ -3258,7 +3269,7 @@ begin
     if tmp.len > 0 then
       MoveFast(tmp.buf^, cc.data, tmp.len);
     inc(tmp.len, SizeOf(cc.head));
-    cc.head.crc := crc32c(Secret, @cc.head.session, tmp.len - 8);
+    cc.head.crc := CryptCrc32(CrcAlgo)(Secret, @cc.head.session, tmp.len - 8);
     XorMemoryCtr(@cc.head.crc, tmp.len - 4,
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     Cookie := BinToBase64Uri(@cc, tmp.len);
@@ -3289,7 +3300,7 @@ begin
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     if (cardinal(cc.head.session) >= cardinal(SessionSequenceStart)) and
        (cardinal(cc.head.session) <= cardinal(SessionSequence)) and
-       (crc32c(Secret, @cc.head.session, len - 8) = cc.head.crc) then
+       (CryptCrc32(CrcAlgo)(Secret, @cc.head.session, len - 8) = cc.head.crc) then
     begin
       if PExpires <> nil then
         PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
@@ -3322,6 +3333,9 @@ function TBinaryCookieGenerator.Load(const Saved: RawUtf8): boolean;
 begin
   result := RecordLoadBase64(pointer(Saved), length(Saved),
     self, TypeInfo(TBinaryCookieGenerator), {uri=}true);
+  if not Assigned(CryptCrc32(CrcAlgo)) then
+    raise ECrypt.CreateUtf8(
+      'Unsupported TBinaryCookieGenerator.Load(%)', [ToText(CrcAlgo)^]);
 end;
 
 
