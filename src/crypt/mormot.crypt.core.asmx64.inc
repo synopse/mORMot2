@@ -56,41 +56,41 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         movzx   r8d, al
         movzx   r9d, cl
         movzx   r10d, bl
-        mov     r8d, dword ptr [r14 + r8*4]
-        mov     r9d, dword ptr [r14 + r9*4]
-        mov     r10d, dword ptr [r14 + r10*4]
+        mov     r8d, dword ptr [r14 + r8 * 4]
+        mov     r9d, dword ptr [r14 + r9 * 4]
+        mov     r10d, dword ptr [r14 + r10 * 4]
         shr     esi, 16
         shr     edi, 16
         movzx   ebp, bh
-        xor     r8d, dword ptr [r14 + rbp*4 + 400H]
+        xor     r8d, dword ptr [r14 + rbp * 4 + 400H]
         movzx   ebp, dh
-        xor     r9d, dword ptr [r14 + rbp*4 + 400H]
+        xor     r9d, dword ptr [r14 + rbp * 4 + 400H]
         movzx   ebp, ch
-        xor     r10d, dword ptr [r14 + rbp*4 + 400H]
+        xor     r10d, dword ptr [r14 + rbp * 4 + 400H]
         shr     ebx, 16
         shr     ecx, 16
         movzx   ebp, dl
-        mov     edx, dword ptr [r14 + rbp*4]
+        mov     edx, dword ptr [r14 + rbp * 4]
         movzx   ebp, cl
-        xor     r8d, dword ptr [r14 + rbp*4 + 800H]
+        xor     r8d, dword ptr [r14 + rbp * 4 + 800H]
         movzx   ebp, sil
-        xor     r9d, dword ptr [r14 + rbp*4 + 800H]
+        xor     r9d, dword ptr [r14 + rbp * 4 + 800H]
         movzx   r11, dil
         movzx   eax, ah
         shr     edi, 8
         movzx   ebp, bh
         shr     esi, 8
-        xor     r10d, dword ptr [r14 + r11*4 + 800H]
-        xor     edx, dword ptr [r14 + rax*4 + 400H]
-        xor     r8d, dword ptr [r14 + rdi*4 + 0C00H]
-        xor     r9d, dword ptr [r14 + rbp*4 + 0C00H]
-        xor     r10d, dword ptr [r14 + rsi*4 + 0C00H]
+        xor     r10d, dword ptr [r14 + r11 * 4 + 800H]
+        xor     edx, dword ptr [r14 + rax * 4 + 400H]
+        xor     r8d, dword ptr [r14 + rdi * 4 + 0C00H]
+        xor     r9d, dword ptr [r14 + rbp * 4 + 0C00H]
+        xor     r10d, dword ptr [r14 + rsi * 4 + 0C00H]
         movzx   ebp, bl
-        xor     edx, dword ptr [r14 + rbp*4 + 800H]
+        xor     edx, dword ptr [r14 + rbp * 4 + 800H]
         mov     rbx, r10
         mov     rax, r8
         movzx   ebp, ch
-        xor     edx, dword ptr [r14 + rbp*4 + 0C00H]
+        xor     edx, dword ptr [r14 + rbp * 4 + 0C00H]
         mov     rcx, r9
         xor     eax, dword ptr [r12]
         xor     ebx, dword ptr [r12 + 4H]
@@ -4846,7 +4846,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     movups  xmm15, dqword ptr [rdi]
         movups  xmm14, xmm15
-        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r10d, dword ptr [rdi + 0] // fMac.encrypted
         crc32   r11d, dword ptr [rdi + 4]
         crc32   r12d, dword ptr [rdi + 8]
         crc32   r13d, dword ptr [rdi + 12]
@@ -4864,7 +4864,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pxor    xmm15, xmm7
         movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
         movups  xmm7, xmm14              // fIV := fIn
-        crc32   eax, dword ptr [rsi + 0]
+        crc32   eax, dword ptr [rsi + 0] // fMac.plain
         crc32   ebx, dword ptr [rsi + 4]
         crc32   r8d, dword ptr [rsi + 8]
         crc32   r9d, dword ptr [rsi + 12]
@@ -4955,7 +4955,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm7, dqword ptr [rdx].TAesCfc.fIV  // xmm7 = IV
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfc.fAes
-        crc32   eax, dword ptr [rdi + 0]
+        crc32   eax, dword ptr [rdi + 0]  // fMac.plain
         crc32   ebx, dword ptr [rdi + 4]
         crc32   r8d, dword ptr [rdi + 8]
         crc32   r9d, dword ptr [rdi + 12]
@@ -4976,9 +4976,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         aesenclast xmm7, xmm15
         movups  xmm15, dqword ptr [rdi]
         pxor    xmm15, xmm7
-        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
-        movups  xmm7, xmm15              // fIV := fOut
-        crc32   r10d, dword ptr [rsi + 0]
+        movups  dqword ptr [rsi], xmm15    // fOut := fIn xor IV
+        movups  xmm7, xmm15                // fIV := fOut
+        crc32   r10d, dword ptr [rsi + 0]  // fMac.encrypted
         crc32   r11d, dword ptr [rsi + 4]
         crc32   r12d, dword ptr [rsi + 8]
         crc32   r13d, dword ptr [rsi + 12]
@@ -5070,7 +5070,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     movups  xmm14, dqword ptr [rdx + 16 * 13].TAesCfc.fAes
         movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfc.fAes
-        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r10d, dword ptr [rdi + 0]   // fMac.encrypted
         crc32   r11d, dword ptr [rdi + 4]
         crc32   r12d, dword ptr [rdi + 8]
         crc32   r13d, dword ptr [rdi + 12]
@@ -5092,9 +5092,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm15, dqword ptr [rdi]
         movups  xmm14, xmm15
         pxor    xmm15, xmm7
-        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
-        movups  xmm7, xmm14              // fIV := fIn
-        crc32   eax, dword ptr [rsi + 0]
+        movups  dqword ptr [rsi], xmm15   // fOut := fIn xor IV
+        movups  xmm7, xmm14               // fIV := fIn
+        crc32   eax, dword ptr [rsi + 0]  // fMac.plain
         crc32   ebx, dword ptr [rsi + 4]
         crc32   r8d, dword ptr [rsi + 8]
         crc32   r9d, dword ptr [rsi + 12]

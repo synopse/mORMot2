@@ -920,10 +920,11 @@ type
   /// AEAD (authenticated-encryption with associated-data) abstract class
   // - perform AES encryption and on-the-fly MAC computation, i.e. computes
   // a proprietary 256-bit MAC during AES cyphering, as 128-bit CRC of the
-  // encrypted data and 128-bit CRC of the plain data, seeded from a Key
-  // - the 128-bit CRC of the plain text is then encrypted using the current AES
-  // engine, so returned 256-bit MAC value has cryptographic level, and ensure
-  // data integrity, authenticity, and check against transmission errors
+  // encrypted data and 128-bit CRC of the plain data, seeded from a Key, then
+  // encrypted using the current AES engine
+  // - returned 256-bit MAC value has cryptographic level, and ensures data
+  // integrity, authenticity, and transmission issues - it therefore avoids
+  // the https://moxie.org/2011/12/13/the-cryptographic-doom-principle.html
   TAesAbstractAead = class(TAesAbstractEncryptOnly)
   protected
     fMac: TAesMac256;
