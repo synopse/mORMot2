@@ -5746,6 +5746,7 @@ begin
     exit;
   crc := fMac.encrypted;
   crcblocks(@crc, Encrypted, (Count shr 4) - 2);
+  // the encrypted text crc is EncryptMac.Hi, i.e. stored last in the stream
   result := IsEqual(crc, PHash128(@PByteArray(Encrypted)[Count - SizeOf(crc)])^);
 end;
 

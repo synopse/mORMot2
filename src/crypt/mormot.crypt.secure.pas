@@ -76,7 +76,7 @@ type
       CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
-    // - may trigger a ESynException if the password was stored using hardened
+    // - may trigger a ECrypt if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
     class function ComputePlainPassword(const CypheredPassword: SpiUtf8;
@@ -86,7 +86,7 @@ type
     property Key: cardinal
       read GetKey write fKey;
     /// access to the associated unencrypted Password value
-    // - may trigger a ESynException if the password was stored using hardened
+    // - may trigger a ECrypt if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
     property PasswordPlain: SpiUtf8
@@ -694,10 +694,27 @@ type
   end;
 
 
+  /// the known 32-bit crc algorithms as returned by CryptCrc32()
+  // - ccaCrc32 and ccaAdler32 require mormot.lib.z.pas to be included
+  // - AesNiHash() is not part of it, because it is not cross-platform, and
+  // randomly seeded at process startup
+  TCrc32Algo = (
+    caCrc32c,
+    caCrc32,
+    caAdler32,
+    caxxHash32,
+    caFnv32);
+
+/// returns the 32-bit crc function for a given algorithm
+// - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
+function CryptCrc32(algo: TCrc32Algo): THasher;
+
+
 
 
 function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
+function ToText(algo: TCrc32Algo): PShortString; overload;
 
 
 /// compute the hexadecimal hash of any (big) file
@@ -2015,7 +2032,7 @@ const
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
 var
   h: TRawUtf8DynArray;
-  efn, fn: string;
+  efn, fn: TFileName;
   a: THashAlgo;
   n: PtrInt;
 begin
@@ -2324,6 +2341,12 @@ begin
   result := GetEnumName(TypeInfo(THashAlgo), ord(algo));
 end;
 
+function ToText(algo: TCrc32Algo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
+end;
+
+
 
 { ***************** TSyn***Password and TSynConnectionDefinition Classes }
 
@@ -2443,7 +2466,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      raise ESynException.CreateUtf8('%.GetPassWordPlain unable to retrieve the ' +
+      raise ECrypt.CreateUtf8('%.GetPassWordPlain unable to retrieve the ' +
         'stored value: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;
@@ -2554,12 +2577,12 @@ end;
 
 procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUtf8);
 begin
-  raise ESynException.CreateUtf8('%.AuthenticateUser() is not implemented', [self]);
+  raise ECrypt.CreateUtf8('%.AuthenticateUser() is not implemented', [self]);
 end;
 
 procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUtf8);
 begin
-  raise ESynException.CreateUtf8('%.DisauthenticateUser() is not implemented', [self]);
+  raise ECrypt.CreateUtf8('%.DisauthenticateUser() is not implemented', [self]);
 end;
 
 function TSynAuthenticationAbstract.CheckCredentials(const UserName: RawUtf8;
@@ -3221,7 +3244,7 @@ begin
       BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
       if tmp.len > SizeOf(cc.data) then
         // all cookies storage should be < 4K so a single 2K cookie seems huge
-        raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
+        raise ECrypt.Create('TBinaryCookieGenerator: Too Big Too Fat');
     end;
     cc.head.cryptnonce := Random32;
     cc.head.session := result;
@@ -3660,14 +3683,10 @@ end;
 
 
 
-{ TCryptCrcerInternal }
-
 type
-  TCryptCrc32Algo = (aCrc32, aCrc32c, axxHash32, aAdler32, aFnv32);
-
   TCryptCrc32Internal = class(TCryptHasher)
   protected
-    fAlgo: TCryptCrc32Algo;
+    fAlgo: TCrc32Algo;
   public
     constructor Create(const name: RawUtf8); override;
     function New: ICryptHash; override;
@@ -3683,13 +3702,16 @@ type
     function Update(buf: pointer; buflen: PtrInt): ICryptHash; override;
   end;
 
+
+{ TCryptCrc32Internal }
+
 const
-  /// CSV text of TCryptCrc32Algo items
+  /// CSV text of TCrc32Algo items
   CrcAlgosText: PUtf8Char = 'CRC32,CRC32C,XXHASH32,ADLER32,FNV32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin
-  fAlgo := TCryptCrc32Algo(InternalResolve(name, CrcAlgosText));
+  fAlgo := TCrc32Algo(InternalResolve(name, CrcAlgosText));
   inherited Create(name); // should be done after InternalResolve()
 end;
 
@@ -3701,21 +3723,28 @@ end;
 
 { TCryptCrcInternal }
 
+function CryptCrc32(algo: TCrc32Algo): THasher;
+begin
+  case algo of
+    caCrc32c:
+      result := crc32c;
+    caCrc32:
+      result := crc32;   // maybe from mormot.lib.z
+    caAdler32:
+      result := adler32; // maybe from mormot.lib.z
+    caxxHash32:
+      result := @xxHash32;
+    caFnv32:
+      result := @fnv32;
+  else
+    result := nil;
+  end;
+end;
+
 constructor TCryptCrcInternal.Create(algo: TCryptCrc32Internal);
 begin
   // resolve fFunc in New/Create, since crc32/adler functions may be set later
-  case algo.fAlgo of
-    aCrc32:
-      fFunc := crc32; // maybe from mormot.lib.z
-    aCrc32c:
-      fFunc := crc32c;
-    axxHash32:
-      fFunc := @xxHash32;
-    aAdler32:
-      fFunc := adler32; // maybe from mormot.lib.z
-    aFnv32:
-      fFunc := @fnv32;
-  end;
+  fFunc := CryptCrc32(algo.fAlgo);
   if not Assigned(fFunc) then
     raise ECrypt.CreateUtf8('%.New: unavailable ''%'' function', [self, algo.fName]);
   inherited Create(algo);
