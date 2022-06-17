@@ -2190,7 +2190,7 @@ begin
   if self = nil then
     result := ecvUnknownAuthority
   else if not (cuDigitalSignature in GetUsage) then
-    result := ecvNotSupported
+    result := ecvWrongUsage
   else
     result := Signature.Verify(hash, fContent);
 end;
@@ -2777,7 +2777,8 @@ end;
 function TEccCertificateSecret.SignToBinary(Data: pointer; Len: integer): RawByteString;
 begin
   if (Data = nil) or
-     (Len < 0) then
+     (Len < 0) or
+     not (cuDigitalSignature in GetUsage) then
     result := ''
   else
     result := SignToBinary(Sha256Digest(Data, Len));
@@ -5230,7 +5231,7 @@ begin
 end;
 
 type
-  /// 'syn-store' ICryptStore algorithm
+  /// 'syn-store' / 'syn-store-nocache' ICryptStore algorithm
   TCryptStoreAlgoInternal = class(TCryptStoreAlgo)
   public
     function New: ICryptStore; override; // = TCryptStoreInternal.Create(self)
