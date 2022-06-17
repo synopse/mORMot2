@@ -3195,13 +3195,15 @@ type
   TCookieContent = packed record
     head: packed record
       cryptnonce: cardinal; // ctr to cipher following bytes
-      crc: cardinal;        // = 32-bit digital signature (DefaultHasher)
+      crc: cardinal;        // = 32-bit digital signature (crc32c)
       session: integer;     // = jti claim
       issued: cardinal;     // = iat claim (from UnixTimeUtc-UNIXTIME_MINIMAL)
       expires: cardinal;    // = exp claim
     end;
     data: array[0..2047] of byte; // optional record binary serialization
   end;
+  // we use crc32c and not DefaultHasher, because it needs to be consistent
+  // after restart (which AesNiHash is not) for Save/Load to be usable
 
 function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
   TimeOutMinutes: cardinal; PRecordData: pointer;
@@ -3218,7 +3220,7 @@ begin
     begin
       BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
       if tmp.len > SizeOf(cc.data) then
-        // all cookies storage should be < 4K
+        // all cookies storage should be < 4K so a single 2K cookie seems huge
         raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
     end;
     cc.head.cryptnonce := Random32;
@@ -3233,7 +3235,7 @@ begin
     if tmp.len > 0 then
       MoveFast(tmp.buf^, cc.data, tmp.len);
     inc(tmp.len, SizeOf(cc.head));
-    cc.head.crc := DefaultHasher(Secret, @cc.head.session, tmp.len - 8);
+    cc.head.crc := crc32c(Secret, @cc.head.session, tmp.len - 8);
     XorMemoryCtr(@cc.head.crc, tmp.len - 4,
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     Cookie := BinToBase64Uri(@cc, tmp.len);
@@ -3264,7 +3266,7 @@ begin
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     if (cardinal(cc.head.session) >= cardinal(SessionSequenceStart)) and
        (cardinal(cc.head.session) <= cardinal(SessionSequence)) and
-       (DefaultHasher(Secret, @cc.head.session, len - 8) = cc.head.crc) then
+       (crc32c(Secret, @cc.head.session, len - 8) = cc.head.crc) then
     begin
       if PExpires <> nil then
         PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;

@@ -2490,7 +2490,7 @@ const
     'CryptGenRandom');
 var
   P: PPointer;
-  i: integer;
+  i: PtrInt;
 begin
   Tested := true;
   Handle := GetModuleHandle('advapi32.dll');
