@@ -6195,7 +6195,7 @@ var
   s: PtrUInt;
 begin
   // we don't check "if @self = nil" because may be called without EVP_PKEY
-  result := ''; // on error
+  result := ''; // '' on error
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestSign()
@@ -7368,6 +7368,8 @@ begin
 end;
 
 function X509.HasUsage(u: TX509Usage): boolean;
+var
+  f: integer;
 begin
   if @self = nil then
     result := false
@@ -7375,11 +7377,17 @@ begin
   if u = kuCA then
     result := IsCA
   else if (u >= low(KU)) and
-     (u <= high(KU)) then
-    result := (X509_get_key_usage(@self) and KU[u]) <> 0
+          (u <= high(KU)) then
+  begin
+    f := X509_get_key_usage(@self); // -1 if not present
+    result := (f >= 0) and ((f and KU[u]) <> 0);
+  end
   else if (u >= low(XU)) and
           (u <= high(XU)) then
-    result := (X509_get_extended_key_usage(@self) and XU[u]) <> 0
+  begin
+    f := X509_get_extended_key_usage(@self);
+    result := (f >= 0) and ((f and XU[u]) <> 0);
+  end
   else
     result := false;
 end;

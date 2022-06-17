@@ -1866,7 +1866,7 @@ begin
         with Fields^ do
           name.AddEntries(
             Country, State, Locality, Organization, OrgUnit, CommonName);
-      EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer := subject
+      EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer = subject
       EOpenSslCert.Check(X509_set_pubkey(x, key));
       if x.Sign(key, GetMD) = 0 then
         RaiseErrorGenerate('Self Sign');
@@ -1885,7 +1885,8 @@ begin
         with Fields^ do
           name.AddEntries(
             Country, State, Locality, Organization, OrgUnit, CommonName);
-      EOpenSslCert.Check(X509_REQ_sign(req, key, GetMD));
+      if X509_REQ_sign(req, key, GetMD) = 0 then
+        RaiseErrorGenerate('Req Sign');
       EOpenSslCert.Check(X509_set_issuer_name(x, X509_get_subject_name(auth.fX509)));
       EOpenSslCert.Check(X509_set_subject_name(x, name));
       pub := X509_REQ_get_pubkey(req);
@@ -2064,7 +2065,8 @@ end;
 
 function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;
 begin
-  if HasPrivateSecret then
+  if HasPrivateSecret and
+     fX509.HasUsage(kuDigitalSignature) then
     result := fPrivKey.Sign(GetMD, Data, Len)
   else
     result := '';
@@ -2080,6 +2082,8 @@ begin
      (SignLen <= 0) or
      (DataLen <= 0) then
     result := cvBadParameter
+  else if not fX509.HasUsage(kuDigitalSignature) then
+    result := cvWrongUsage
   else if (now >= fX509.NotAfter) or
           (now < fX509.NotBefore) then
     result := cvDeprecatedAuthority
@@ -2324,16 +2328,15 @@ begin
       result := cvInvalidDate;
     X509_V_ERR_CERT_REVOKED:
       result := cvRevoked;
-    X509_V_ERR_INVALID_CA:
+    X509_V_ERR_INVALID_CA,
+    X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
+    X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT, // self-signed cert not in chain
+    X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:   // root not in chain
       result := cvUnknownAuthority;
   else
     // X509_V_ERR_OUT_OF_MEM,
-    // X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT,
-    // X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN,
-    // X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
     // X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE,
     // X509_V_ERR_CERT_CHAIN_TOO_LONG,
-    // X509_V_ERR_INVALID_CA,
     result := cvWrongUsage;
   end;
 end;
@@ -2406,6 +2409,8 @@ begin
     CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
     CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
   end;
+  // not stable enough yet
+  //CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
 end;
 
 procedure FinalizeUnit;
