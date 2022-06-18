@@ -1620,7 +1620,7 @@ begin
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (PrivateKeyFile <> '') and
+     (CertificateFile <> '') and
      (fSock <> nil) and // may be nil at first
      not fSock.TLS.Enabled then
   begin

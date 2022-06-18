@@ -1117,6 +1117,8 @@ begin
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     fAcceptCertStore := PFXImportCertStore(@blob, nil,
       PKCS12_INCLUDE_EXTENDED_PROPERTIES);
+    if fAcceptCertStore = nil then
+      ESChannelRaiseLastError(SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store
   fAcceptCert := CertFindCertificateInStore(fAcceptCertStore, 0, 0,

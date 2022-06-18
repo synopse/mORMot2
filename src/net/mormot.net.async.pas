@@ -1354,7 +1354,13 @@ begin
            not (fFirstRead in connection.fFlags) then
         begin
           include(connection.fFlags, fFirstRead);
-          fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadDoTls
+          try
+            fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadDoTls
+          except
+            // TLS error -> abort
+            UnlockAndCloseConnection(false, connection, 'ProcessRead OnFirstRead');
+            exit;
+          end;
         end;
         repeat
           if fRead.Terminated or
@@ -2608,6 +2614,7 @@ begin
   end;
   // TAsyncServer.Execute made Accept(async=false) from acoEnableTls
   Sender.fSecure := NewNetTls;  // should work since DoTlsAfter() was fine
+  Sender.fSocket.MakeBlocking;
   Sender.fSecure.AfterAccept(Sender.fSocket, fServer.TLS, nil, nil);
   Sender.fSocket.MakeAsync;     // as expected by our asynchronous code
 end;
