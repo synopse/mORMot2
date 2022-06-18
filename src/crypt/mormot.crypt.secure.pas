@@ -2090,7 +2090,7 @@ begin
   for a := low(a) to high(a) do
     if a in aAlgos then
     begin
-      FormatString('%.%', [efn, ALGO_EXT[a]], fn);
+      fn := FormatString('%.%', [efn, ALGO_EXT[a]]);
       FileFromString(FormatUtf8('% *%', [h[n], efn]), fn);
       inc(n);
     end;
