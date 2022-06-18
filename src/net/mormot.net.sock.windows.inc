@@ -1103,6 +1103,8 @@ procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);
 var
   certblob: RawByteString;
   blob: TCryptDataBlob;
+  pass: SynUnicode;
+  flags: integer;
 begin
   if Context.CertificateFile = '' then
     // Load certificate from Windows certificate store
@@ -1114,9 +1116,18 @@ begin
     blob.pbData := pointer(certblob);
     // Load certificate from file. You can use Let's Encrypt certificate,
     // converted to PFX:
-    // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
-    fAcceptCertStore := PFXImportCertStore(@blob, nil,
-      PKCS12_INCLUDE_EXTENDED_PROPERTIES);
+    //   openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
+    // or using mormot.core.secure on OpenSSL:
+    //   c := Cert('x509-es256');
+    //   c.Generate([cuTlsServer], '127.0.0.1', nil, 3650);
+    //   FileFromString(c.Save('pass', ccfBinary), WorkDir + 'privkeycert.pfx');
+    pass := SynUnicode(Context.PrivatePassword);
+    flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
+    if OSVersion < wVista then
+      flags := 0;
+    fAcceptCertStore := PFXImportCertStore(@blob, pointer(pass), flags);
+    if pass <> '' then
+      FillCharFast(pointer(pass)^, length(pass), 0); // anti forensic
     if fAcceptCertStore = nil then
       ESChannelRaiseLastError(SEC_E_CERT_UNKNOWN);
   end;
