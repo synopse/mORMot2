@@ -170,6 +170,8 @@ type
 
     /// returns 'Server:Port' current value
     function HostName: RawUtf8;
+    /// low-level access to the HTTP request TLS options
+    function TLS: PNetTlsContext;
     /// optional custom HTTP "User Agent:" header value
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
@@ -715,6 +717,11 @@ begin
     result := '';
 end;
 
+function TRestHttpClientGeneric.TLS: PNetTlsContext;
+begin
+  result := @fExtendedOptions.TLS;
+end;
+
 
 { ************ TRestHttpClientSocket REST Client Class over Sockets }
 
@@ -730,7 +737,7 @@ begin
   if fSocketClass = nil then
     fSocketClass := THttpClientSocket;
   fSocket := fSocketClass.Open(
-    fServer, fPort, nlTcp, fConnectTimeout, fHttps);
+    fServer, fPort, nlTcp, fConnectTimeout, fHttps, @fExtendedOptions.TLS);
   {$ifdef VERBOSECLIENTLOG}
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
