@@ -1621,12 +1621,14 @@ begin
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
      (PrivateKeyFile <> '') and
+     (fSock <> nil) and // may be nil at first
      not fSock.TLS.Enabled then
   begin
     StringToUtf8(CertificateFile, fSock.TLS.CertificateFile);
     StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
     fSock.TLS.PrivatePassword := PrivateKeyPassword;
     InitializeTlsAfterBind; // validate TLS certificate(s) now
+    sleep(1); // let some warmup happen
   end;
 end;
 
