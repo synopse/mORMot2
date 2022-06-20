@@ -4997,7 +4997,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    EncodeInsert(W, BatchOptions, {Firebird=}false);
+    EncodeInsertPrefix(W, BatchOptions, dSQLite);
     W.AddString(Props.SqlTableName);
     if FieldCount = 0 then
       W.AddShort(' default values')

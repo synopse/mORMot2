@@ -3427,7 +3427,7 @@ begin
         end;
       ooInsert:
         begin
-          EncodeInsert(W, BatchOptions, {firebird=}false);
+          EncodeInsertPrefix(W, BatchOptions, dSQLite);
           W.AddString(TableName);
           if Decoder.FieldCount = 0 then
             W.AddShort(' default values')

@@ -1451,7 +1451,8 @@ begin
          (props.RecordVersionField <> nil) then
         fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
           props.RecordVersionField);
-      sql := fJsonDecoder.EncodeAsSql('INSERT INTO ', sql, {update=}false, nil, false);
+      sql := fJsonDecoder.EncodeAsSql(
+        'INSERT INTO ', sql, {update=}false, nil, dSQLite);
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -2058,7 +2059,7 @@ begin
          (fOwner <> nil) then
         fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
           fJsonDecoder, props.RecordVersionField);
-      sql := fJsonDecoder.EncodeAsSql('', '', {update=}true, nil, false);
+      sql := fJsonDecoder.EncodeAsSql('', '', {update=}true, nil, dSQLite);
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -2458,8 +2459,8 @@ begin
          (fOwner <> nil) then
         fOwner.RecordVersionHandle(
           ooInsert, b^.TableIndex, fJsonDecoder, props.RecordVersionField);
-      sql := fJsonDecoder.EncodeAsSql('', props.SqlTableName, {update=}false,
-        @b^.Options, {Firebird=}false);
+      sql := fJsonDecoder.EncodeAsSql(
+        '', props.SqlTableName, {update=}false, @b^.Options, dSQLite);
       if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(

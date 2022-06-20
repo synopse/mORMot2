@@ -293,26 +293,6 @@ const
 { ************ Define Database Engine Specific Behavior }
 
 type
-  /// the supported SQL database dialects
-  // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate(), or
-  // for OleDB/ODBC/ZDBC tuning according to the connected database engine
-  TSqlDBDefinition = (
-    dUnknown,
-    dDefault,
-    dOracle,
-    dMSSQL,
-    dJet,
-    dMySQL,
-    dSQLite,
-    dFirebird,
-    dNexusDB,
-    dPostgreSQL,
-    dDB2,
-    dInformix);
-
-  /// set of the available database definitions
-  TSqlDBDefinitions = set of TSqlDBDefinition;
-
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSqlDBDefinitionLimitClause and SqlLimitClause() method
   TSqlDBDefinitionLimitPosition = (
@@ -5073,7 +5053,7 @@ var
             p := 0;
             for r := 1 to rowcount do
             begin
-              EncodeInsert(W, BatchOptions, {Firebird=}true);
+              EncodeInsertPrefix(W, BatchOptions, dFirebird);
               W.AddString(TableName);
               W.Add(' ', '(');
               for f := 0 to maxf do
@@ -5128,7 +5108,7 @@ var
         begin
           //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
           // INSERT .. VALUES (..),(..),(..),..
-          EncodeInsert(W, BatchOptions, false); // Firebird is done above
+          EncodeInsertPrefix(W, BatchOptions, Props.fDbms);
           W.AddString(TableName);
           W.Add(' ', '(');
           for f := 0 to maxf do
@@ -5285,7 +5265,7 @@ begin
           inc(sqllen, length(FieldValues[f, r]));
         if sqllen + PtrInt(W.TextLength) > 30000 then
           break;
-        EncodeInsert(W, BatchOptions, {Firebird=}true);
+        EncodeInsertPrefix(W, BatchOptions, dFirebird);
         W.AddString(TableName);
         W.Add(' ', '(');
         for f := 0 to maxf do

@@ -1095,11 +1095,31 @@ procedure SetID(const U: RawByteString; var result: TID); overload;
 { ************ JSON Object Decoder and SQL Generation }
 
 type
+  /// the supported SQL database dialects
+  // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate(), or
+  // for OleDB/ODBC/ZDBC tuning according to the connected database engine
+  TSqlDBDefinition = (
+    dUnknown,
+    dDefault,
+    dOracle,
+    dMSSQL,
+    dJet,
+    dMySQL,
+    dSQLite,
+    dFirebird,
+    dNexusDB,
+    dPostgreSQL,
+    dDB2,
+    dInformix);
+
+  /// set of the available database definitions
+  TSqlDBDefinitions = set of TSqlDBDefinition;
+
   /// the available options for TRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
-  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
-  // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
-  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
+  // plain 'INSERT' - supported only by SQLite3
+  // - boInsertOrUpdate will create 'REPLACE' statements instead of
+  // plain 'INSERT' - supported only by SQLite3, Firebird and MySQL
   // - boExtendedJson will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
   // - boPostNoSimpleFields (client-side only) will avoid to send a
@@ -1224,7 +1244,7 @@ type
     // 'COL1=:("VAL1"):, COL2=:(VAL2):'
     // - called by GetJsonObjectAsSql() function or TRestStorageExternal
     function EncodeAsSql(const Prefix1, Prefix2: RawUtf8; Update: boolean;
-      Prefix1Batch: PRestBatchOptions; Firebird: boolean): RawUtf8;
+      Prefix1Batch: PRestBatchOptions; DB: TSqlDBDefinition): RawUtf8;
     /// encode the FieldNames/FieldValues[] as a JSON object
     procedure EncodeAsJson(out result: RawUtf8);
     /// set the specified array to the fields names
@@ -1295,11 +1315,14 @@ function JsonGetObject(var P: PUtf8Char; ExtractID: PID;
 // - returns TRUE if a ID/RowID>0 has been found, and set ID with the value
 function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
 
-/// append "insert [or replace/or ignore] into ' text into W
+/// append "insert / insert or ignore / replace into ' text into W
 // - depending on boInsertOrIgnore/boInsertOrReplace presence in BatchOptions
-// - Firebird has its "UPDATE OR INSERT INTO" strange syntax
-procedure EncodeInsert(W: TTextWriter; BatchOptions: TRestBatchOptions;
-  Firebird: boolean);
+// - SQLite3 and MySQL should understand "REPLACE INTO"
+// - Firebird has its "UPDATE OR INSERT INTO" own syntax
+// - other databases are not supported, because they require a much more complex
+// SQL statement to produce the same effect - a prefix is not enough
+procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition);
 
 
 
@@ -3526,7 +3549,7 @@ begin
 end;
 
 function TJsonObjectDecoder.EncodeAsSql(const Prefix1, Prefix2: RawUtf8;
-  Update: boolean; Prefix1Batch: PRestBatchOptions; Firebird: boolean): RawUtf8;
+  Update: boolean; Prefix1Batch: PRestBatchOptions; DB: TSqlDBDefinition): RawUtf8;
 var
   f: PtrInt;
   W: TJsonWriter;
@@ -3550,7 +3573,7 @@ begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
     if Prefix1Batch <> nil then
-      EncodeInsert(W, Prefix1Batch^, Firebird)
+      EncodeInsertPrefix(W, Prefix1Batch^, DB)
     else
       W.AddString(Prefix1);
     W.AddString(Prefix2);
@@ -3658,7 +3681,7 @@ var
   Decoder: TJsonObjectDecoder;
 begin
   Decoder.Decode(P, Fields, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql('', '', Update, nil, false);
+  result := Decoder.EncodeAsSql('', '', Update, nil, dUnknown);
 end;
 
 function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
@@ -3667,7 +3690,7 @@ var
   Decoder: TJsonObjectDecoder;
 begin
   Decoder.Decode(Json, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql('', '', Update, nil, false);
+  result := Decoder.EncodeAsSql('', '', Update, nil, dUnknown);
 end;
 
 function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
@@ -3810,16 +3833,23 @@ begin
   end;
 end;
 
-procedure EncodeInsert(W: TTextWriter; BatchOptions: TRestBatchOptions;
-  Firebird: boolean);
+procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition);
 begin
   if boInsertOrIgnore in BatchOptions then
-    W.AddShort('insert or ignore into ')
-  else if boInsertOrReplace in BatchOptions then
-    if Firebird then
-      W.AddShort('update or insert into ') // weird syntax
+    case DB of
+      dMySQL:
+        W.AddShort('insert ignore into ')
     else
-      W.AddShort('insert or replace into ')
+      W.AddShort('insert or ignore into '); // SQlite3
+    end
+  else if boInsertOrReplace in BatchOptions then
+    case DB of
+      dFirebird:
+        W.AddShort('update or insert into ');
+    else
+      W.AddShort('replace into '); // SQlite3 and MySQL
+    end
   else
     W.AddShort('insert into ');
 end;
