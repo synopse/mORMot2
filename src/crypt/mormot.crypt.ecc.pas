@@ -5129,16 +5129,23 @@ begin
   if fEcc = nil then
     result := ''
   else if not (Format in [ccfBinary, ccfPem]) then
+    // hexa or base64 encoding of the binary output
     result := inherited Save(PrivatePassword, Format)
   else
   begin
     if fEcc.InheritsFrom(TEccCertificateSecret) and
        (PrivatePassword <> '') then
-      result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword)
+    begin
+      result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword);
+      if Format = ccfPem then
+        result := DerToPem(result, pemSynopsePrivateKeyAndCertificate);
+    end
     else
+    begin
       result := fEcc.SaveToBinary({publickeyonly=}true);
-    if Format = ccfPem then
-      result := DerToPem(result, pemSynopseCertificate);
+      if Format = ccfPem then
+        result := DerToPem(result, pemSynopseCertificate);
+    end;
   end;
 end;
 
@@ -5152,7 +5159,7 @@ begin
   if IsPem(Saved) then
   begin
     bin := PemToDer(Saved, @k);
-    if k <> pemSynopseCertificate then
+    if not (k in [pemSynopseCertificate, pemSynopsePrivateKeyAndCertificate]) then
       bin := '';
   end
   else

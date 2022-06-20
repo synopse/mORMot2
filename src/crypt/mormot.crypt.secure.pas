@@ -709,13 +709,9 @@ type
 // - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
-
-
-
 function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
 function ToText(algo: TCrc32Algo): PShortString; overload;
-
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -1352,7 +1348,7 @@ type
     // - after Generate, will contain the public and private key, so
     // PrivatePassword is needed to secure its content - if PrivatePassword is
     // left to '' then only the generated public key will be serialized
-    // - will use PEM by default, but you can export to another formats,
+    // - will use binary by default, but you can export to another formats,
     // depending on the underlying TCryptCertAlgo
     function Save(const PrivatePassword: RawUtf8 = '';
       Format: TCryptCertFormat = ccfBinary): RawByteString;
@@ -1693,7 +1689,8 @@ var
 
 type
   /// the DerToPem() supported contents of a PEM text instance
-  // - pemSynopseSignature and pemSynopseCertificate follow our proprietary
+  // - pemSynopseSignature, pemSynopseCertificate and
+  // pemSynopseCertificateAndPrivateKey follow our proprietary
   // mormot.crypt.ecc format, so are not compatible with other libraries
   TPemKind = (
     pemUnspecified,
@@ -1711,11 +1708,13 @@ type
     pemSsh2EncryptedPrivateKey,
     pemSsh2PublicKey,
     pemSynopseSignature,
-    pemSynopseCertificate);
+    pemSynopseCertificate,
+    pemSynopsePrivateKeyAndCertificate);
   PPemKind = ^TPemKind;
 
 const
   /// the supported trailer markers of a PEM text instance
+  // - only the first 10 chars after -----BEGIN will be used for recognition
   PEM_BEGIN: array[TPemKind] of RawUtf8 = (
     '-----BEGIN PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----BEGIN CERTIFICATE-----'#13#10,
@@ -1732,7 +1731,8 @@ const
     '-----BEGIN SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN SSH2 PUBLIC KEY-----'#13#10,
     '-----BEGIN SYNECC SIGNATURE-----'#13#10,
-    '-----BEGIN SYNECC CERTIFICATE-----'#13#10);
+    '-----BEGIN SYNECC CERTIFICATE-----'#13#10,
+    '-----BEGIN SYNECC PRIVATE KEY AND CERTIFICATE-----'#13#10);
 
   /// the supported ending markers of a PEM text instance
   PEM_END: array[TPemKind] of RawUtf8 = (
@@ -1751,7 +1751,8 @@ const
     '-----END SSH2 ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END SSH2 PUBLIC KEY-----'#13#10,
     '-----END SYNECC SIGNATURE-----'#13#10,
-    '-----END SYNECC CERTIFICATE-----'#13#10);
+    '-----END SYNECC CERTIFICATE-----'#13#10,
+    '-----END SYNECC PRIVATE KEY AND CERTIFICATE-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
@@ -4320,13 +4321,14 @@ end;
 function TCryptCert.Save(const PrivatePassword: RawUtf8;
   Format: TCryptCertFormat): RawByteString;
 begin
+  result := Save(PrivatePassword, ccfBinary);
   case Format of
     ccfHexa:
-      result := BinToHex(Save(PrivatePassword, ccfBinary));
+      result := BinToHex(result);
     ccfBase64:
-      result := BinToBase64(Save(PrivatePassword, ccfBinary));
+      result := BinToBase64(result);
     ccfBase64Uri:
-      result := BinToBase64uri(Save(PrivatePassword, ccfBinary));
+      result := BinToBase64uri(result);
   else
     result := '';
   end;
