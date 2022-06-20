@@ -1988,6 +1988,24 @@ begin
 end;
 
 
+function CryptCrc32(algo: TCrc32Algo): THasher;
+begin
+  case algo of
+    caCrc32c:
+      result := crc32c;
+    caCrc32:
+      result := crc32;   // maybe from mormot.lib.z
+    caAdler32:
+      result := adler32; // maybe from mormot.lib.z
+    caxxHash32:
+      result := @xxHash32;
+    caFnv32:
+      result := @fnv32;
+  else
+    result := nil;
+  end;
+end;
+
 
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 var
@@ -3286,6 +3304,7 @@ function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
   PRecordTypeInfo: PRttiInfo): TBinaryCookieGeneratorSessionID;
 var
   cc: TCookieContent; // local working buffer
+  crc: THasher;
   tmp: TSynTempBuffer;
 begin
   tmp.Init(0);
@@ -3311,7 +3330,8 @@ begin
     if tmp.len > 0 then
       MoveFast(tmp.buf^, cc.data, tmp.len);
     inc(tmp.len, SizeOf(cc.head));
-    cc.head.crc := CryptCrc32(CrcAlgo)(Secret, @cc.head.session, tmp.len - 8);
+    crc := CryptCrc32(CrcAlgo); // in 2 steps for Delphi 7/2007
+    cc.head.crc := crc(Secret, @cc.head.session, tmp.len - 8);
     XorMemoryCtr(@cc.head.crc, tmp.len - 4,
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     Cookie := BinToBase64Uri(@cc, tmp.len);
@@ -3327,6 +3347,7 @@ var
   clen, len: integer;
   now: cardinal;
   ccend: PAnsiChar;
+  crc: THasher;
   cc: TCookieContent;
 begin
   result := 0; // parsing/crc/timeout error
@@ -3338,11 +3359,12 @@ begin
      (len <= SizeOf(cc)) and
      Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
+    crc := CryptCrc32(CrcAlgo); // in 2 steps for Delphi 7/2007
     XorMemoryCtr(@cc.head.crc, len - SizeOf(cc.head.cryptnonce),
       {ctr=}CryptNonce xor cc.head.cryptnonce, @Crypt);
     if (cardinal(cc.head.session) >= cardinal(SessionSequenceStart)) and
        (cardinal(cc.head.session) <= cardinal(SessionSequence)) and
-       (CryptCrc32(CrcAlgo)(Secret, @cc.head.session, len - 8) = cc.head.crc) then
+       (crc(Secret, @cc.head.session, len - 8) = cc.head.crc) then
     begin
       if PExpires <> nil then
         PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
@@ -3778,24 +3800,6 @@ end;
 
 
 { TCryptCrcInternal }
-
-function CryptCrc32(algo: TCrc32Algo): THasher;
-begin
-  case algo of
-    caCrc32c:
-      result := crc32c;
-    caCrc32:
-      result := crc32;   // maybe from mormot.lib.z
-    caAdler32:
-      result := adler32; // maybe from mormot.lib.z
-    caxxHash32:
-      result := @xxHash32;
-    caFnv32:
-      result := @fnv32;
-  else
-    result := nil;
-  end;
-end;
 
 constructor TCryptCrcInternal.Create(algo: TCryptCrc32Internal);
 begin
