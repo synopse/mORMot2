@@ -4997,12 +4997,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    if boInsertOrIgnore in BatchOptions then
-      W.AddShort('insert or ignore into ')
-    else if boInsertOrReplace in BatchOptions then
-      W.AddShort('insert or replace into ')
-    else
-      W.AddShort('insert into ');
+    EncodeInsert(W, BatchOptions, {Firebird=}false);
     W.AddString(Props.SqlTableName);
     if FieldCount = 0 then
       W.AddShort(' default values')

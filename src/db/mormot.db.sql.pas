@@ -1166,7 +1166,8 @@ type
   TOnBatchInsert = procedure(Props: TSqlDBConnectionProperties;
     const TableName: RawUtf8; const FieldNames: TRawUtf8DynArray;
     const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
-    const FieldValues: TRawUtf8DynArrayDynArray) of object;
+    const FieldValues: TRawUtf8DynArrayDynArray;
+    BatchOptions: TRestBatchOptions) of object;
 
   /// event handler called to customize TRestStorageExternal table creation
   // - access the DB using Sender.Properties to properly create the index
@@ -1348,14 +1349,14 @@ type
     procedure MultipleValuesInsert(Props: TSqlDBConnectionProperties;
       const TableName: RawUtf8; const FieldNames: TRawUtf8DynArray;
       const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
-      const FieldValues: TRawUtf8DynArrayDynArray);
+      const FieldValues: TRawUtf8DynArrayDynArray; BatchOptions: TRestBatchOptions);
     /// Firebird-dedicated method able to implement OnBatchInsert()
     // - will run an EXECUTE BLOCK statement without any parameters, but
     // including inlined values - sounds to be faster on ZEOS/ZDBC!
     procedure MultipleValuesInsertFirebird(Props: TSqlDBConnectionProperties;
       const TableName: RawUtf8; const FieldNames: TRawUtf8DynArray;
       const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
-      const FieldValues: TRawUtf8DynArrayDynArray);
+      const FieldValues: TRawUtf8DynArrayDynArray; BatchOptions: TRestBatchOptions);
   public
     /// initialize the properties
     // - children may optionaly handle the fact that no UserID or Password
@@ -5012,7 +5013,8 @@ end;
 procedure TSqlDBConnectionProperties.MultipleValuesInsert(
   Props: TSqlDBConnectionProperties; const TableName: RawUtf8;
   const FieldNames: TRawUtf8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
-  RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray);
+  RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray;
+  BatchOptions: TRestBatchOptions);
 var
   sql: RawUtf8;
   sqlcached: boolean;
@@ -5022,133 +5024,135 @@ var
   procedure ComputeSql(rowcount, offset: integer);
   var
     f, r, p, len: PtrInt;
+    W: TJsonWriter;
     tmp: TTextWriterStackBuffer;
   begin
     if (fDbms <> dFireBird) and
        (rowcount = prevrowcount) then
       exit;
     prevrowcount := rowcount;
-    with TJsonWriter.CreateOwnedStream(tmp) do
+    W := TJsonWriter.CreateOwnedStream(tmp);
     try
       case Props.fDbms of
         dFirebird:
           begin
-            AddShort('execute block('#10);
+            W.AddShort('execute block('#10);
             p := 0;
             for r := offset to offset + rowcount - 1 do
             begin
               for f := 0 to maxf do
               begin
-                Add('i');
+                W.Add('i');
                 inc(p);
-                AddU(p);
+                W.AddU(p);
                 if FieldValues[f, r] = 'null' then
-                  AddShorter(' CHAR(1)')
+                  W.AddShorter(' CHAR(1)')
                 else
                   case FieldTypes[f] of
                     ftNull:
-                      AddShorter(' CHAR(1)');
+                      W.AddShorter(' CHAR(1)');
                     ftUtf8:
                       begin
                         len := length(FieldValues[f, r]) - 2;
                         if len < 1 then
                           len := 1; // unquoted UTF-8 text length
-                        AddShort(' VARCHAR(');
-                        AddU(len);
-                        AddShort(') CHARACTER SET UTF8');
+                        W.AddShort(' VARCHAR(');
+                        W.AddU(len);
+                        W.AddShort(') CHARACTER SET UTF8');
                       end;
                   else
-                    AddString(DB_FIELDS[dFirebird, FieldTypes[f]]);
+                    W.AddString(DB_FIELDS[dFirebird, FieldTypes[f]]);
                   end;
-                AddShorter('=?,');
+                W.AddShorter('=?,');
               end;
-              CancelLastComma;
-              Add(#10, ',');
+              W.CancelLastComma;
+              W.Add(#10, ',');
             end;
-            CancelLastComma;
-            AddShort(') as begin'#10);
+            W.CancelLastComma;
+            W.AddShort(') as begin'#10);
             p := 0;
             for r := 1 to rowcount do
             begin
-              AddShort('INSERT INTO ');
-              AddString(TableName);
-              Add(' ', '(');
+              EncodeInsert(W, BatchOptions, {Firebird=}true);
+              W.AddString(TableName);
+              W.Add(' ', '(');
               for f := 0 to maxf do
               begin
-                AddString(FieldNames[f]);
-                AddComma;
+                W.AddString(FieldNames[f]);
+                W.AddComma;
               end;
-              CancelLastComma;
-              AddShort(') VALUES (');
+              W.CancelLastComma;
+              W.AddShort(') VALUES (');
               for f := 0 to maxf do
               begin
                 inc(p);
-                Add(':', 'i');
-                AddU(p);
-                AddComma;
+                W.Add(':', 'i');
+                W.AddU(p);
+                W.AddComma;
               end;
-              CancelLastComma;
-              AddShorter(');'#10);
+              W.CancelLastComma;
+              W.AddShorter(');'#10);
             end;
-            AddShorter('end');
-            if TextLength > 32700 then
+            W.AddShorter('end');
+            if W.TextLength > 32700 then
               raise ESqlDBException.CreateUtf8(
                 '%.MultipleValuesInsert: Firebird Execute Block length=%',
-                [self, TextLength]);
+                [self, W.TextLength]);
             sqlcached := false; // ftUtf8 values will have varying field length
           end;
         dOracle:
           begin
             // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
-            AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
+            W.AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
             for r := 1 to rowcount do
             begin
-              AddShorter('into ');
-              AddString(TableName);
-              Add(' ', '(');
+              W.AddShorter('into ');
+              W.AddString(TableName);
+              W.Add(' ', '(');
               for f := 0 to maxf do
               begin
-                AddString(FieldNames[f]);
-                AddComma;
+                W.AddString(FieldNames[f]);
+                W.AddComma;
               end;
-              CancelLastComma;
-              AddShort(') VALUES (');
+              W.CancelLastComma;
+              W.AddShort(') VALUES (');
               for f := 0 to maxf do
-                Add('?', ',');
-              CancelLastComma;
-              Add(')', #10);
+                W.Add('?', ',');
+              W.CancelLastComma;
+              W.Add(')', #10);
             end;
-            AddShort('select 1 from dual');
+            W.AddShort('select 1 from dual');
             sqlcached := true;
           end;
       else
         begin
           //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
-          AddShort('INSERT INTO '); // INSERT .. VALUES (..),(..),(..),..
-          AddString(TableName);
-          Add(' ', '(');
+          // INSERT .. VALUES (..),(..),(..),..
+          EncodeInsert(W, BatchOptions, false); // Firebird is done above
+          W.AddString(TableName);
+          W.Add(' ', '(');
           for f := 0 to maxf do
           begin
-            AddString(FieldNames[f]);
-            AddComma;
+            W.AddString(FieldNames[f]);
+            W.AddComma;
           end;
-          CancelLastComma;
-          AddShort(') VALUES ');
+          W.CancelLastComma;
+          W.AddShort(') VALUES ');
           for r := 1 to rowcount do
           begin
-            Add('(');
+            W.Add('(');
             for f := 0 to maxf do
-              Add('?', ',');
-            CancelLastComma;
-            Add(')', ',');
+              W.Add('?', ',');
+            W.CancelLastComma;
+            W.Add(')', ',');
           end;
-          CancelLastComma;
+          W.CancelLastComma;
           sqlcached := true;
         end;
       end;
-      SetText(sql);
+      W.SetText(sql);
     finally
-      Free;
+      W.Free;
     end;
   end;
 
@@ -5239,7 +5243,8 @@ end;
 procedure TSqlDBConnectionProperties.MultipleValuesInsertFirebird(
   Props: TSqlDBConnectionProperties; const TableName: RawUtf8;
   const FieldNames: TRawUtf8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
-  RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray);
+  RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray;
+  BatchOptions: TRestBatchOptions);
 var
   W: TJsonWriter;
   maxf, sqllenwitoutvalues, sqllen, r, f, i: PtrInt;
@@ -5261,7 +5266,7 @@ begin
         begin
           // not possible to inline BLOBs -> fallback to regular
           MultipleValuesInsert(Props, TableName, FieldNames, FieldTypes,
-            RowCount, FieldValues);
+            RowCount, FieldValues, BatchOptions);
           exit;
         end;
       ftDate:
@@ -5280,7 +5285,7 @@ begin
           inc(sqllen, length(FieldValues[f, r]));
         if sqllen + PtrInt(W.TextLength) > 30000 then
           break;
-        W.AddShort('INSERT INTO ');
+        EncodeInsert(W, BatchOptions, {Firebird=}true);
         W.AddString(TableName);
         W.Add(' ', '(');
         for f := 0 to maxf do

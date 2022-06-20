@@ -92,6 +92,7 @@ type
     fFieldsInternalToExternal: TIntegerDynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TUriMethod;
+    fBatchOptions: TRestBatchOptions;
     fBatchCapacity, fBatchCount: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchIDs: TIDDynArray;
@@ -168,7 +169,6 @@ type
       const FieldValue: array of const; out ResultID: TIDDynArray): boolean;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
-    // BatchOptions is ignored with external DB (syntax are too much specific)
     function InternalBatchStart(Encoding: TRestBatchEncoding;
       BatchOptions: TRestBatchOptions): boolean; override;
     // internal method called by TRestServer.RunBatch() to process fast sending
@@ -995,6 +995,7 @@ begin
         raise ERestStorage.CreateUtf8('Missing previous %.InternalBatchStop(%)',
           [self, StoredClass]);
       fBatchMethod := Method;
+      fBatchOptions := BatchOptions;
       fBatchCount := 0;
       result := true; // means BATCH mode is supported
     finally
@@ -1124,7 +1125,7 @@ begin
            Assigned(fProperties.OnBatchInsert) then
           // use multiple insert dedicated function if available
           fProperties.OnBatchInsert(
-            fProperties, fTableName, ExternalFields, Types, n, Values)
+            fProperties, fTableName, ExternalFields, Types, n, Values, fBatchOptions)
         else
         begin
           // use array binding

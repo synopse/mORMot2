@@ -548,41 +548,6 @@ function Utf8ContentNumberType(P: PUtf8Char): TOrmFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  /// the available options for TRest.BatchStart() process
-  // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
-  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
-  // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
-  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
-  // - boExtendedJson will force the JSON to unquote the column names,
-  // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
-  // - boPostNoSimpleFields (client-side only) will avoid to send a
-  // TRestBach.Add() with simple fields as "SIMPLE":[val1,val2...] or
-  // "SIMPLE@tablename":[val1,val2...], without the field names - for
-  // backward compatibility with very old mORMot 1 servers
-  // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
-  // it is up to the caller to ensure cache coherency
-  // - boRollbackOnError will raise an exception and Rollback any transaction
-  // if any step failed - default if to continue batch processs, but setting
-  // a value <> 200/HTTP_SUCCESS in Results[]
-  // - boNoModelEncoding (client-side only) will force the mORMot 1 more verbose
-  // "POST"/"SIMPLE"/"PUT" encodings - for backward compatibility, or if client
-  // and server TOrmModel tables or fields do not match
-  // - boOnlyObjects will force to generate only a JSON array of raw JSON
-  // objects with no BATCH prefix nor verbs
-  TRestBatchOption = (
-    boInsertOrIgnore,
-    boInsertOrReplace,
-    boExtendedJson,
-    boPostNoSimpleFields,
-    boPutNoCacheFlush,
-    boRollbackOnError,
-    boNoModelEncoding,
-    boOnlyObjects);
-
-  /// a set of options for TRest.BatchStart() process
-  // - TJsonObjectDecoder will use it to compute the corresponding SQL
-  TRestBatchOptions = set of TRestBatchOption;
-
   /// internal kind of encoding for one TRestBatch.Add/Update/Delete action
   TRestBatchEncoding = (
     encPost,
@@ -3462,12 +3427,7 @@ begin
         end;
       ooInsert:
         begin
-          if boInsertOrIgnore in BatchOptions then
-            W.AddShort('insert or ignore into ')
-          else if boInsertOrReplace in BatchOptions then
-            W.AddShort('insert or replace into ')
-          else
-            W.AddShort('insert into ');
+          EncodeInsert(W, BatchOptions, {firebird=}false);
           W.AddString(TableName);
           if Decoder.FieldCount = 0 then
             W.AddShort(' default values')

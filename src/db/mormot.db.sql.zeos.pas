@@ -630,7 +630,8 @@ begin
   if result then
     meta.ClearCache; // we need to retrieve the actual metadata
   {$ifdef ZEOS72UP} // new since 7.2up
-  if result and meta.GetDatabaseInfo.SupportsArrayBindings then
+  if result and
+     meta.GetDatabaseInfo.SupportsArrayBindings then
   begin
     case GetDBMS of
       dPostgreSQL:
