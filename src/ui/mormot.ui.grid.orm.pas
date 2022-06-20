@@ -674,9 +674,10 @@ var
 begin
   if NotDefined then // avoid any possible GPF
     exit;
-  // prevent sorting when resizing columns  
-  if TDrawGrid(Owner).CursorState=gcsColWidthChanging then 
-    exit;
+  {$ifdef FPC}
+  if TDrawGrid(Owner).CursorState = gcsColWidthChanging then 
+    exit; // prevent sorting when resizing columns on FPC
+  {$endif FPC}
   fMouseDownMarkedValue := markNone;
   TDrawGrid(Owner).MouseToCell(X, Y, c, r);
   if cardinal(c) < cardinal(Table.FieldCount) then
