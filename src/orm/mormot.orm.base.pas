@@ -724,7 +724,7 @@ function ToText(vk: TOrmVirtualKind): PShortString; overload;
 function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
   const TableName: RawUtf8; Occasion: TOrmOccasion;
   const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
-  MultiInsertRowCount: integer = 1): RawUtf8;
+  DB: TSqlDBDefinition; MultiInsertRowCount: integer = 1): RawUtf8;
 
 /// low-level function used to convert a JSON Value into a variant,
 // according to the property type
@@ -3363,7 +3363,7 @@ const
 function EncodeAsSqlPrepared(const Decoder: TJsonObjectDecoder;
   const TableName: RawUtf8; Occasion: TOrmOccasion;
   const UpdateIDFieldName: RawUtf8; BatchOptions: TRestBatchOptions;
-  MultiInsertRowCount: integer): RawUtf8;
+  DB: TSqlDBDefinition; MultiInsertRowCount: integer): RawUtf8;
 var
   f: PtrInt;
   W: TJsonWriter;
@@ -3427,7 +3427,7 @@ begin
         end;
       ooInsert:
         begin
-          EncodeInsertPrefix(W, BatchOptions, dSQLite);
+          EncodeInsertPrefix(W, BatchOptions, DB);
           W.AddString(TableName);
           if Decoder.FieldCount = 0 then
             W.AddShort(' default values')

@@ -5062,7 +5062,7 @@ var
                 W.AddComma;
               end;
               W.CancelLastComma;
-              W.AddShort(') VALUES (');
+              W.AddShort(') values (');
               for f := 0 to maxf do
               begin
                 inc(p);
@@ -5095,7 +5095,7 @@ var
                 W.AddComma;
               end;
               W.CancelLastComma;
-              W.AddShort(') VALUES (');
+              W.AddShort(') values (');
               for f := 0 to maxf do
                 W.Add('?', ',');
               W.CancelLastComma;
@@ -5117,7 +5117,7 @@ var
             W.AddComma;
           end;
           W.CancelLastComma;
-          W.AddShort(') VALUES ');
+          W.AddShort(') values ');
           for r := 1 to rowcount do
           begin
             W.Add('(');
@@ -5274,7 +5274,7 @@ begin
           W.AddComma;
         end;
         W.CancelLastComma;
-        W.AddShort(') VALUES (');
+        W.AddShort(') values (');
         for f := 0 to maxf do
         begin
           v := FieldValues[f, r]; // includes single quotes (#39)

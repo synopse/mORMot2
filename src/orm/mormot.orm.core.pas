@@ -8843,7 +8843,7 @@ begin
     result := false
   else
     with OrmProps do
-      result := Server.ExecuteFmt('INSERT INTO %(%) VALUES(''optimize'');',
+      result := Server.ExecuteFmt('insert into %(%) values(''optimize'');',
         [SqlTableName, SqlTableName]);
 end;
 

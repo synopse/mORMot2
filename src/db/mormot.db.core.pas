@@ -1117,7 +1117,7 @@ type
 
   /// the available options for TRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
-  // plain 'INSERT' - supported only by SQLite3
+  // plain 'INSERT' - supported only by SQLite3 and MySQL
   // - boInsertOrUpdate will create 'REPLACE' statements instead of
   // plain 'INSERT' - supported only by SQLite3, Firebird and MySQL
   // - boExtendedJson will force the JSON to unquote the column names,
@@ -1268,7 +1268,7 @@ type
 // - if Fields is void, expects expanded "COL1"="VAL1" pairs in P^, stopping at '}' or ']'
 // - otherwise, Fields[] contains the column names and expects "VAL1","VAL2".. in P^
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
+// - returns '(COL1, COL2) values ("VAL1", VAL2)' otherwise (INSERT format)
 // - escape SQL strings, according to the official SQLite3 documentation
 // (i.e. ' inside a string is stored as '')
 // - if InlinedParams is set, will create prepared parameters like
@@ -1283,7 +1283,7 @@ function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
 // - expect a regular JSON expanded object as "COL1"="VAL1",...} pairs
 // - make its own temporary copy of JSON data before calling GetJsonObjectAsSql() above
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
+// - returns '(COL1, COL2) values ("VAL1", VAL2)' otherwise (INSERT format)
 // - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
 function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
@@ -3591,7 +3591,7 @@ begin
     end
     else
     begin
-      // returns ' (COL1,COL2) VALUES ('VAL1',VAL2)'
+      // returns ' (COL1,COL2) values ('VAL1',VAL2)'
       W.Add(' ', '(');
       for f := 0 to FieldCount - 1 do
       begin
@@ -3600,7 +3600,7 @@ begin
         W.AddComma;
       end;
       W.CancelLastComma;
-      W.AddShort(') VALUES (');
+      W.AddShort(') values (');
       for f := 0 to FieldCount - 1 do
         AddValue;
       W.CancelLastComma;

@@ -1069,7 +1069,7 @@ begin
                 begin
                   Decode.AssignFieldNamesTo(Fields);
                   SQL := JsonDecodedPrepareToSql(Decode, ExternalFields, Types,
-                    Occasion, [], {array=}true);
+                    Occasion, fBatchOptions, {array=}true);
                   SetLength(Values, Decode.FieldCount);
                   ValuesMax := fBatchCount - BatchBegin;
                   if ValuesMax > max then
@@ -2127,7 +2127,7 @@ begin
     // e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
   result := EncodeAsSqlPrepared(Decoder, fTableName, Occasion,
-    fStoredClassMapping^.RowIDFieldName, BatchOptions);
+    fStoredClassMapping^.RowIDFieldName, BatchOptions, fProperties.Dbms);
   if Occasion = ooUpdate then
     if Decoder.FieldCount = MAX_SQLFIELDS then
       raise ERestStorage.CreateUtf8(

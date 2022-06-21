@@ -1441,7 +1441,7 @@ begin
     exit;
   end;
   if TrimU(SentData) = '' then
-    sql := 'INSERT INTO ' + sql + ' DEFAULT VALUES;'
+    sql := 'insert into ' + sql + ' default values;'
   else
   begin
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
@@ -1452,7 +1452,7 @@ begin
         fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
           props.RecordVersionField);
       sql := fJsonDecoder.EncodeAsSql(
-        'INSERT INTO ', sql, {update=}false, nil, dSQLite);
+        'insert into ', sql, {update=}false, nil, dSQLite);
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
