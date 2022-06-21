@@ -2253,7 +2253,7 @@ begin
   J := GetJsonObjectAsSql('{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null,'+
     '"First Login" :   null  ,  "Department"  :  ' +
     '"{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true);
-  U := ' (ID,Name,Role,Last Login,First Login,Department) VALUES ' +
+  U := ' (ID,Name,Role,Last Login,First Login,Department) values ' +
     '(:(1):,:(''Alice''):,:(''User''):,:(null):,:(null):,' +
     ':(''{"relPath":"317\\","revision":1}''):)';
   CheckEqual(J, U);
@@ -4014,7 +4014,10 @@ begin
   Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = BSONAWESOMEBIN);
   Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = BSONAWESOMEBIN);
   Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = BSONAWESOMEBIN);
-  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986]) = BSONAWESOMEBIN);
+  temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
+  Check(temp = BSONAWESOMEBIN);
+  temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
+  Check(temp = BSONAWESOMEBIN);
   o2 := BsonVariantType[bsonDat];
   Check(VariantSaveJson(o2) = u);
   _Json('{BSON: ["test", 5.05, 1986]}', o);
