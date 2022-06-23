@@ -720,6 +720,10 @@ type
   PSynMonitorUsageTrackProp = ^TSynMonitorUsageTrackProp;
   PSynMonitorUsageTrack = ^TSynMonitorUsageTrack;
 
+  /// define all known information about a given time
+  // - may be the current time, or a former time
+  TSynMonitorUsageLoad = array[mugHour..mugYear] of variant;
+
   /// abstract class to track, compute and store TSynMonitor detailed statistics
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
@@ -728,7 +732,7 @@ type
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;
-    fValues: array[mugHour..mugYear] of variant;
+    fValues: TSynMonitorUsageLoad;
     fCustomWritePropGranularity: TSynMonitorUsageGranularity;
     fLastInstance: TObject;
     fLastTrack: PSynMonitorUsageTrack;
