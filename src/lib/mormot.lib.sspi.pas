@@ -294,6 +294,7 @@ const
   SEC_E_ILLEGAL_MESSAGE        = $80090326;
   SEC_E_CERT_UNKNOWN           = $80090327;
   SEC_E_CERT_EXPIRED           = $80090328;
+  SEC_E_ALGORITHM_MISMATCH     = $80090331;
 
   SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
 
@@ -465,7 +466,7 @@ function SecDecrypt(var aSecContext: TSecContext;
   var aEncrypted: RawByteString): RawByteString;
 
 /// retrieve the connection information text of a given TLS connection
-function TlsConnectionInfo(Ctxt: TCtxtHandle): RawUtf8;
+function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -593,6 +594,8 @@ begin
       result := 'SEC_E_CERT_UNKNOWN';
     SEC_E_CERT_EXPIRED:
       result := 'SEC_E_CERT_EXPIRED';
+    SEC_E_ALGORITHM_MISMATCH:
+      result := 'SEC_E_ALGORITHM_MISMATCH';
   else
     result := IntToStr(res);
   end;
@@ -671,12 +674,16 @@ begin
   FixProtocol(dwProtocol);
   if aiCipher and $1f in [14..17] then
     alg := 'AES'
+  else if aiCipher = $6801 then
+    alg := 'RC4-'
   else
     str(aiCipher and $1f, alg);
   h := aiHash and $1f;
   case h of
-    1..3:
+    1..2:
       hsh := 'MD';
+    3:
+      hsh := 'MD5-';
     4, 12..14:
       begin
         hsh := 'SHA';
@@ -697,7 +704,8 @@ begin
   else
     str(h, hsh);
   end;
-  if aiExch = $a400 then
+  if (aiExch = $a400) or
+     (aiExch = $2400) then
     xch := 'RSA'
   else if aiExch = $aa02 then
     xch := 'DH'
@@ -858,7 +866,7 @@ begin
   FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
-function TlsConnectionInfo(Ctxt: TCtxtHandle): RawUtf8;
+function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 var
   nfo: TSecPkgConnectionInfo;
   cip: TSecPkgCipherInfo; // Vista+ attribute
@@ -876,7 +884,8 @@ begin
      (cip.szCipherSuite[0] <> #0) then
   begin
     FixProtocol(nfo.dwProtocol); // cip.dwProtocol seems incorrect :(
-    result := RawUtf8(format('%s TLSv1.%d ', [@cip.szCipherSuite, nfo.dwProtocol]));
+    result := RawUtf8(format('%s TLSv1.%d ',
+      [PWideChar(@cip.szCipherSuite), nfo.dwProtocol]));
   end
   else
     result := nfo.ToText; // fallback on XP

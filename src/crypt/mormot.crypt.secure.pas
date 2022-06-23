@@ -1196,7 +1196,6 @@ type
   ECryptCert = class(ESynException);
 
   /// the known asymmetric algorithms, e.g. as published by OpenSSL
-  // - is an exact match of TCryptAsymAlgo enumerate in mormot.crypt.openssl.pas
   // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
   // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
   // accessible via CryptAsymOpenSsl[] and CryptCertAlgoOpenSsl[] factories
@@ -1681,6 +1680,8 @@ var
 
   /// direct access to the mormot.crypt.openssl.pas  ICryptCert factories
   // - may be nil if this unit was not included or if OpenSSL is not available
+  // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
+  // $ CryptCertAlgoOpenSsl[caaRS256].New
   CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
 
