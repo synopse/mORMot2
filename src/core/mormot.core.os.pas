@@ -2626,6 +2626,7 @@ var
   StdOut: THandle;
 
   {$ifdef OSPOSIX}
+  /// set at initialization if StdOut has the TTY flag and env has a known TERM
   StdOutIsTTY: boolean;
   {$endif OSPOSIX}
 
@@ -3272,7 +3273,7 @@ var
   SharedRandom: TLecuyerThreadSafe;
 
 {$ifdef OSPOSIX}
-  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
+  /// could be set to TRUE to force SleepHiRes(0) to call the POSIX sched_yield
   // - in practice, it has been reported as buggy under POSIX systems
   // - even Linus Torvald himself raged against its usage - see e.g.
   // https://www.realworldtech.com/forum/?threadid=189711&curpostid=189752

@@ -220,7 +220,7 @@ const
     'u_setDataDirectory',
     'u_init');
   {$ifdef OSANDROID}
-  // from https://developer.android.com/guide/topics/resources/internationalization
+  // https://developer.android.com/guide/topics/resources/internationalization
   ICU_VER: array[1..15] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
     '_56', '_58', '_60', '_63', '_66', '_68');
@@ -234,7 +234,10 @@ var
   i: integer;
   err: SizeInt;
   P: PPointer;
-  so, v, vers: string;
+  {$ifndef OSDARWIN}
+  so: string;
+  {$endif OSDARWIN}
+  v, vers: string;
   data: PAnsiChar;
 begin
   GlobalLock;
@@ -1146,7 +1149,7 @@ begin
     begin
       // warning: reported as buggy by Alan on POSIX, and despitable by Linus
       // - from our testing, it gives worse performance than fpnanosleep()
-      ThreadSwitch; // call e.g. pthread's sched_yield API
+      ThreadSwitch; // call e.g. POSIX libc's sched_yield API
       exit;
     end
     else
@@ -1168,7 +1171,7 @@ procedure SwitchToThread;
 var
   timeout: Ttimespec;
 begin
-  // nanosleep() seems better than FPC RTL ThreadSwitch = sched_yield
+  // nanosleep() seems better than FPC RTL ThreadSwitch = POSIX libc sched_yield
   timeout.tv_sec := 0;
   timeout.tv_nsec := 10; // empirically identified on a recent Linux Kernel
   // note: nanosleep() adds a few dozen of microsecs for context switching
@@ -1318,10 +1321,8 @@ procedure TextColor(Color: TConsoleColor);
 const
   TERM_CTRL: string[8] = '04261537';
 begin
-{$ifdef OSPOSIX}
   if not StdOutIsTTY then
     exit;
-{$endif OSPOSIX}
   if ord(Color) = TextAttr then
     exit;
   TextAttr := ord(Color);
@@ -2518,54 +2519,6 @@ end;
 
 {$endif OSLINUX}
 
-function Hex2Dec(c: AnsiChar): integer; inline;
-begin
-  result := ord(c);
-  case c of
-    '0'..'9':
-      dec(result, ord('0'));
-    'A'..'Z':
-      dec(result, ord('A') - 10);
-    'a'..'z':
-      dec(result, ord('a') - 10);
-  else
-    result := -1;
-  end;
-end;
-
-function PosixParseHex32(p: PAnsiChar): integer;
-var
-  v0, v1: integer;
-begin
-  result := 0;
-  p := StrScan(p, 'x');
-  if p = nil then
-    exit;
-  repeat
-    inc(p); // points to trailing 'x' at start
-    v0 := Hex2Dec(p^);
-    if v0 < 0 then
-      break; // not in '0'..'9','a'..'f'
-    inc(p);
-    v1 := Hex2Dec(p^);
-    if v1 < 0 then
-    begin
-      result := (result shl 4) or v0; // only one char left
-      break;
-    end;
-    result := (result shl 8) or (v0 shl 4) or v1;
-  until false;
-end;
-
-procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
-var
-  v: integer;
-begin
-  v := PosixParseHex32(p);
-  if v <> 0 then
-    AddInteger(result, v, {nodup=}true);
-end;
-
 {$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code
 
 function libc_strlen(s: PAnsiChar): SizeInt;
@@ -2622,6 +2575,55 @@ end;
 {$endif OSLINUXANDROID}
 
 {$endif CPUARM3264}
+
+function Hex2Dec(c: AnsiChar): integer; inline;
+begin
+  result := ord(c);
+  case c of
+    '0'..'9':
+      dec(result, ord('0'));
+    'A'..'Z':
+      dec(result, ord('A') - 10);
+    'a'..'z':
+      dec(result, ord('a') - 10);
+  else
+    result := -1;
+  end;
+end;
+
+// this function is published in interface section for mormot.net.sock.posix.inc
+function PosixParseHex32(p: PAnsiChar): integer;
+var
+  v0, v1: integer;
+begin
+  result := 0;
+  p := StrScan(p, 'x');
+  if p = nil then
+    exit;
+  repeat
+    inc(p); // points to trailing 'x' at start
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+    begin
+      result := (result shl 4) or v0; // only one char left
+      break;
+    end;
+    result := (result shl 8) or (v0 shl 4) or v1;
+  until false;
+end;
+
+procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
+var
+  v: integer;
+begin
+  v := PosixParseHex32(p);
+  if v <> 0 then
+    AddInteger(result, v, {nodup=}true);
+end;
 
 function ParseLine(P: PUtf8Char): PUtf8Char;
 begin
@@ -2913,7 +2915,6 @@ begin
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
   {$else}
-  {$ifdef OSPOSIX}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
@@ -2977,7 +2978,6 @@ begin
   {$endif NOPATCHRTL}
   {$endif OSLINUX}
   {$endif CPUX64}
-  {$endif OSPOSIX}
   {$endif OSDARWIN}
 end;
 
