@@ -846,7 +846,7 @@ type
   /// used for efficient TAuthSession.IDCardinal comparison
   TAuthSessionParent = class(TSynPersistent)
   protected
-    fIDCardinal: cardinal;
+    fID: cardinal;
   end;
 
   /// class used to maintain in-memory sessions
@@ -858,7 +858,6 @@ type
   TAuthSession = class(TAuthSessionParent)
   protected
     fUser: TAuthUser;
-    fID: RawUtf8;
     fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
     fPrivateKey: RawUtf8;
@@ -877,7 +876,7 @@ type
     function GetGroupID: TID;
     function GetRemoteOS: RawUtf8;
     procedure SaveTo(W: TBufferWriter); virtual;
-    procedure ComputeProtectedValues; virtual;
+    procedure ComputeProtectedValues(tix: Int64); virtual;
   public
     /// initialize a session instance with the supplied TAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
@@ -887,18 +886,13 @@ type
       aUser: TAuthUser); reintroduce; virtual;
     /// initialize a session instance from some persisted buffer
     // - following the TRestServer.SessionsSaveToFile binary layout
-    constructor CreateFrom(var Read: TFastReader; Server: TRestServer); virtual;
+    constructor CreateFrom(var Read: TFastReader; Server: TRestServer;
+      tix: Int64); virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
     /// update the Interfaces[] statistics
     procedure NotifyInterfaces(aCtxt: TRestServerUriContext; aElapsed: Int64);
   public
-    /// the session ID number, as numerical value
-    // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
-    // mode is not enabled), nor 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED,
-    // i.e. session still in handshaking phase)
-    property IDCardinal: cardinal
-      read fIDCardinal;
     /// the associated User
     // - this is a true TAuthUser instance, and User.GroupRights will contain
     // also a true TAuthGroup instance
@@ -937,8 +931,11 @@ type
     property RemoteOsVersion: TOperatingSystemVersion
       read fRemoteOsVersion;
   published
-    /// the session ID number, as text
-    property ID: RawUtf8
+    /// the session ID number, as numerical value
+    // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
+    // mode is not enabled), nor 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED,
+    // i.e. session still in handshaking phase)
+    property ID: cardinal
       read fID;
     /// the associated User Name, as in User.LogonName
     property UserName: RawUtf8
@@ -4551,16 +4548,16 @@ end;
 /// TSynObjectListSorted-TOnObjectCompare compatible callback method
 function AuthSessionCompare(A, B: TObject): integer;
 begin
-  result := CompareCardinal(TAuthSession(A).fIDCardinal, TAuthSession(B).fIDCardinal);
+  result := CompareCardinal(TAuthSession(A).fID, TAuthSession(B).fID);
 end;
 
-procedure TAuthSession.ComputeProtectedValues;
+procedure TAuthSession.ComputeProtectedValues(tix: Int64);
 begin
   // here User.GroupRights and fPrivateKey should have been set
   fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout) * (1000 * 60)) shr 10;
-  fTimeOutTix := GetTickCount64 shr 10 + fTimeOutShr10;
+  fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.SqlAccessRights;
-  fPrivateSalt := fID + '+' + fPrivateKey;
+  FormatUtf8('%+%', [fID, fPrivateKey], fPrivateSalt);
   fPrivateSaltHash := crc32(crc32(0, pointer(fPrivateSalt), length(fPrivateSalt)),
     pointer(User.PasswordHashHexa), length(User.PasswordHashHexa));
 end;
@@ -4583,8 +4580,7 @@ begin
     if User.GroupRights.IDValue <> 0 then
     begin
       // compute the next Session ID
-      fIDCardinal := InterlockedIncrement(aCtxt.Server.fSessionCounter);
-      UInt32ToUtf8(fIDCardinal, fID);
+      fID := InterlockedIncrement(aCtxt.Server.fSessionCounter);
       // set session parameters
       TAesPrng.Main.Fill(@rnd, SizeOf(rnd));
       fPrivateKey := BinToHex(@rnd, SizeOf(rnd));
@@ -4597,13 +4593,13 @@ begin
       if (aCtxt.fCall <> nil) and
          (aCtxt.fCall^.InHead <> '') then
         fSentHeaders := aCtxt.fCall^.InHead;
-      ComputeProtectedValues;
+      ComputeProtectedValues(aCtxt.TickCount64);
       fRemoteIP := aCtxt.RemoteIP;
       fRemoteOsVersion := aCtxt.SessionOS;
       if aCtxt.Log <> nil then
         aCtxt.Log.Log(sllUserAuth,
           'New [%] session %/% created at %/% running % {%}',
-          [User.GroupRights.Ident, User.LogonName, fIDCardinal, fRemoteIP,
+          [User.GroupRights.Ident, User.LogonName, fID, fRemoteIP,
            aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent,
            ToTextOS(integer(fRemoteOsVersion))], self);
       exit; // create successfull
@@ -4692,7 +4688,7 @@ const
 procedure TAuthSession.SaveTo(W: TBufferWriter);
 begin
   W.Write1(TAUTHSESSION_MAGIC);
-  W.WriteVarUInt32(fIDCardinal);
+  W.WriteVarUInt32(fID);
   W.WriteVarUInt32(fUser.IDValue);
   fUser.GetBinaryValues(W); // User.fGroup is a pointer, but will be overriden
   W.WriteVarUInt32(fUser.GroupRights.IDValue);
@@ -4702,13 +4698,13 @@ begin
   W.Write4(integer(fRemoteOsVersion));
 end; // TODO: persist ORM/SOA stats? -> rather integrate them before saving
 
-constructor TAuthSession.CreateFrom(var Read: TFastReader; Server: TRestServer);
+constructor TAuthSession.CreateFrom(var Read: TFastReader; Server: TRestServer;
+  tix: Int64);
 begin
   if Read.NextByte <> TAUTHSESSION_MAGIC then
     raise ESecurityException.CreateUtf8(
       '%.CreateFrom() with invalid format on % %', [self, Server, Server.Model.Root]);
-  fIDCardinal := Read.VarUInt32;
-  UInt32ToUtf8(fIDCardinal, fID);
+  fID := Read.VarUInt32;
   fUser := Server.AuthUserClass.Create;
   fUser.IDValue := Read.VarUInt32;
   fUser.SetBinaryValues(Read); // fUser.fGroup will be overriden by true instance
@@ -4718,7 +4714,7 @@ begin
   Read.VarUtf8(fPrivateKey);
   Read.VarUtf8(fSentHeaders);
   integer(fRemoteOsVersion) := Read.Next4;
-  ComputeProtectedValues;
+  ComputeProtectedValues(tix);
   FindNameValue(fSentHeaders, HEADER_REMOTEIP_UPPER, fRemoteIP);
 end;
 
@@ -4844,7 +4840,7 @@ var
 begin
   body.InitFast(10, dvObject);
   if result = '' then
-    body.AddValue('result', Session.IDCardinal)
+    body.AddValue('result', Session.ID)
   else
     body.AddValue('result', RawUtf8ToVariant(result));
   if data <> '' then
@@ -5209,7 +5205,7 @@ begin
         begin
           // see TRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((REST_COOKIE_SESSION + '=') +
-            CardinalToHexLower(sess.IDCardinal));
+            CardinalToHexLower(sess.ID));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and
              (Ctxt.ClientKind = ckAjax) then
             Ctxt.Redirect(fServer.Model.Root)
@@ -6336,7 +6332,7 @@ begin
     result := nil
   else
   begin
-    TAuthSessionParent(@tmp).fIDCardinal := aSessionID;
+    TAuthSessionParent(@tmp).fID := aSessionID;
     i := fSessions.IndexOf(@tmp); // use fast O(log(n)) binary search
     if aIndex <> nil then
       aIndex^ := i;
@@ -6359,13 +6355,13 @@ begin
   begin
     a := fSessions.List[aSessionIndex];
     if fServices <> nil then
-      soa := (fServices as TServiceContainerServer).OnCloseSession(a.IDCardinal);
+      soa := (fServices as TServiceContainerServer).OnCloseSession(a.ID);
     if Ctxt = nil then
       InternalLog('Deleted deprecated session %:%/% soaGC=%',
-        [a.User.LogonName, a.IDCardinal, fSessions.Count, soa], sllUserAuth)
+        [a.User.LogonName, a.ID, fSessions.Count, soa], sllUserAuth)
     else
       InternalLog('Deleted session %:%/% from %/% soaGC=%',
-        [a.User.LogonName, a.IDCardinal, fSessions.Count, a.RemoteIP,
+        [a.User.LogonName, a.ID, fSessions.Count, a.RemoteIP,
          Ctxt.Call^.LowLevelConnectionID, soa], sllUserAuth);
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self, a, Ctxt);
@@ -6708,6 +6704,7 @@ procedure TRestServer.SessionsLoadFromFile(const aFileName: TFileName;
 
 var
   i, n: integer;
+  tix: Int64;
   s: RawByteString;
   R: TFastReader;
 begin
@@ -6718,6 +6715,7 @@ begin
   s := AlgoSynLZ.Decompress(s);
   if s = '' then
     exit;
+  tix := GetTickCount64;
   R.Init(s);
   fSessions.Safe.WriteLock;
   try
@@ -6729,7 +6727,7 @@ begin
     fSessions.Clear;
     for i := 1 to n do
     begin
-      fSessions.Add(fSessionClass.CreateFrom(R, self));
+      fSessions.Add(fSessionClass.CreateFrom(R, self, tix));
       fStats.ClientConnect;
     end;
     fSessionCounter := PCardinal(R.P)^;
