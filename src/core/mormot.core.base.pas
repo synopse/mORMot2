@@ -1077,7 +1077,12 @@ function GetCardinalW(P: PWideChar): PtrUInt;
 
 /// get a boolean value stored as 'true'/'false' text in P^
 // - would also recognize any non '0' integer as true, or false if P = nil
-function GetBoolean(P: PUtf8Char): boolean;
+function GetBoolean(P: PUtf8Char): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get a boolean value stored as 'true'/'false' text in input variable
+// - would also recognize any non '0' integer as true, or false if P is ''
+function GetBoolean(const value: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the 64-bit integer value stored in P^
@@ -4628,6 +4633,11 @@ begin
             (PInteger(P)^ <> FALSE_LOW) and
             ((PInteger(P)^ = TRUE_LOW) or
              ((PInteger(P)^ and $ffff) <> ord('0')));
+end;
+
+function GetBoolean(const value: RawUtf8): boolean;
+begin
+  result := GetBoolean(pointer(value));
 end;
 
 function GetInt64Bool(P: PUtf8Char; out V: Int64): boolean;
