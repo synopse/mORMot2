@@ -864,6 +864,7 @@ type
     fPrivateSalt: RawUtf8;
     fSentHeaders: RawUtf8;
     fRemoteIP: RawUtf8;
+    fConnectionID: TRestConnectionID;
     fPrivateSaltHash: cardinal;
     fLastTimestamp: cardinal; // client-side generated timestamp
     fExpectedHttpAuthentication: RawUtf8;
@@ -951,6 +952,9 @@ type
     // - is used for fast comparison with GetTickCount64 shr 10
     property TimeoutShr10: cardinal
       read fTimeOutShr10;
+    /// the low-level ConnectionID of the connection initiating this session
+    property ConnectionID: TRestConnectionID
+      read fConnectionID;
     /// the remote IP, if any
     // - is extracted from SentHeaders properties
     property RemoteIP: RawUtf8
@@ -4594,6 +4598,7 @@ begin
          (aCtxt.fCall^.InHead <> '') then
         fSentHeaders := aCtxt.fCall^.InHead;
       ComputeProtectedValues(aCtxt.TickCount64);
+      fConnectionID := aCtxt.Call^.LowLevelConnectionID;
       fRemoteIP := aCtxt.RemoteIP;
       fRemoteOsVersion := aCtxt.SessionOS;
       if aCtxt.Log <> nil then
@@ -6409,6 +6414,18 @@ begin
     result := LockedSessionFind(Ctxt.Session, nil); // O(log(n)) binary search
     if result <> nil then
     begin
+      // security check of session connection ID consistency
+      if (reCheckSessionConnectionID in
+          Ctxt.Call^.RestAccessRights^.AllowRemoteExecute) then
+        if result.ConnectionID = 0 then // may have been retrieved from a file
+          result.fConnectionID := Ctxt.Call^.LowLevelConnectionID
+        else if result.ConnectionID <> Ctxt.Call^.LowLevelConnectionID then
+        begin
+          InternalLog('Session % from % rejected, since created from %/%',
+           [Ctxt.Session, Ctxt.Call^.LowLevelConnectionID,
+            result.RemoteIP, result.ConnectionID], sllUserAuth);
+          exit;
+        end;
       // found the session
       result.fTimeOutTix := (Ctxt.TickCount64 shr 10) + result.TimeoutShr10;
       Ctxt.fAuthSession := result; // for TRestServer internal use
