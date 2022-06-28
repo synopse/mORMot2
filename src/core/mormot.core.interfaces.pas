@@ -3643,7 +3643,7 @@ end;
 {$endif HASINTERFACERTTI}
 
 function FindGuid(f: PInterfaceFactory; n: integer;
-  {$ifdef CPU64} gL, gH : QWord {$else} guid: PHash128Rec {$endif}): TInterfaceFactory;
+  {$ifdef CPU64} gL, gH : QWord {$else} g: PHash128Rec {$endif}): TInterfaceFactory;
 begin
   if n > 0 then
     repeat
@@ -3653,10 +3653,10 @@ begin
         if (L = gL) and
            (H = gH) then
         {$else}
-        if (c0 = guid^.c0) and
-           (c1 = guid^.c1) and
-           (c2 = guid^.c2) and
-           (c3 = guid^.c3) then
+        if (c0 = g^.c0) and
+           (c1 = g^.c1) and
+           (c2 = g^.c2) and
+           (c3 = g^.c3) then
         {$endif CPU64}
           exit;
       inc(f);
