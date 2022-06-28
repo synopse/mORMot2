@@ -10802,7 +10802,7 @@ begin
     W.Add('{');
     if (decoded <> 0) and
        (sfoPutIDFirst in Format) then
-      W.AddPropJsonInt64('ID', decoded);
+      W.AddPropInt64('ID', decoded);
     for i := 0 to Fields.Count - 1 do
       if GetBitPtr(@Bits, i) then
       begin
@@ -10823,7 +10823,7 @@ begin
       decoded := info.GetJsonInt64;
     if (decoded <> 0) and
        (sfoPutIDLast in Format) then
-      W.AddPropJsonInt64('ID', decoded);
+      W.AddPropInt64('ID', decoded);
     W.CancelLastComma;
     W.Add('}');
     W.SetText(result);

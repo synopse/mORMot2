@@ -7967,11 +7967,11 @@ begin
   W.BlockBegin('{', Options);
   if woIDAsIDstr in Options then
   begin
-    W.AddPropJsonInt64('ID', TOrm(Instance).fID);
-    W.AddPropJsonInt64('ID_str', TOrm(Instance).fID, '"'); // for AJAX
+    W.AddPropInt64('ID', TOrm(Instance).fID);
+    W.AddPropInt64('ID_str', TOrm(Instance).fID, '"'); // for AJAX
   end
   else
-    W.AddPropJsonInt64('RowID', TOrm(Instance).fID);
+    W.AddPropInt64('RowID', TOrm(Instance).fID);
   props := TOrm(Instance).Orm.Fields;
   cur := pointer(props.List);
   n := props.Count;

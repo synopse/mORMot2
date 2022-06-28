@@ -2630,13 +2630,13 @@ begin
     WR.AddShort(ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
   WR.Add('"', ',');
-  WR.AddPropJsonInt64('index', IndexVar);
+  WR.AddPropInt64('index', IndexVar);
   WR.AddPropJsonString('var',
     GetEnumNameTrimed(TypeInfo(TInterfaceMethodValueVar), ValueVar));
-  WR.AddPropJsonInt64('stackoffset', InStackOffset);
-  WR.AddPropJsonInt64('reg', RegisterIdent);
-  WR.AddPropJsonInt64('fpreg', FPRegisterIdent);
-  WR.AddPropJsonInt64('stacksize', SizeInStack);
+  WR.AddPropInt64('stackoffset', InStackOffset);
+  WR.AddPropInt64('reg', RegisterIdent);
+  WR.AddPropInt64('fpreg', FPRegisterIdent);
+  WR.AddPropInt64('stacksize', SizeInStack);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('}', ',');

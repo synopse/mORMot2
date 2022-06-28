@@ -1065,6 +1065,9 @@ type
     // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append a JSON field name, followed by a number value and a comma (',')
+    procedure AddPropInt64(const PropName: ShortString; Value: Int64;
+      WithQuote: AnsiChar = #0);
     /// append a RawUtf8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
@@ -5791,6 +5794,18 @@ end;
 procedure TTextWriter.AddPropName(const PropName: ShortString);
 begin
   AddProp(@PropName[1], ord(PropName[0]));
+end;
+
+procedure TTextWriter.AddPropInt64(const PropName: ShortString;
+  Value: Int64; WithQuote: AnsiChar);
+begin
+  AddProp(@PropName[1], ord(PropName[0]));
+  if WithQuote <> #0 then
+    Add(WithQuote);
+  Add(Value);
+  if WithQuote <> #0 then
+    Add(WithQuote);
+  AddComma;
 end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUtf8);
