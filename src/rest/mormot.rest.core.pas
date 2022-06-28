@@ -3825,8 +3825,13 @@ end;
 
 function TRestUriContext.GetRemoteIPNotLocal: RawUtf8;
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
-  if result = '127.0.0.1' then
+  if self <> nil then
+  begin
+    result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
+    if result = '127.0.0.1' then
+      result := '';
+  end
+  else
     result := '';
 end;
 
