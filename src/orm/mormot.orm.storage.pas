@@ -2621,7 +2621,6 @@ var
   P: TOrmPropInfo;
   nfo: PRttiProp;
   offs: PtrUInt;
-  ot: TRttiOrd;
   vp: PPtrUInt;
 
   function FoundOneAndReachedLimit: boolean;
@@ -2704,28 +2703,32 @@ begin
         nfo := TOrmPropInfoRtti(P).PropInfo;
         offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
         if offs <> 0 then
-        begin
           // plain field with no getter
-          ot := TOrmPropInfoRtti(P).PropRtti.Cache.RttiOrd;
-          if ot in [roSLong, roULong] then
-          begin
-            // handle very common 32-bit integer field
-            for i := 0 to fCount - 1 do
-              if (PCardinal(vp^ + offs)^ = cardinal(v)) and
-                 FoundOneAndReachedLimit then
-                break
-              else
-                inc(vp);
+          case TOrmPropInfoRtti(P).PropRtti.Cache.Size of
+            SizeOf(Byte):
+              // e.g. boolean property
+              for i := 0 to fCount - 1 do
+                if (PByte(vp^ + offs)^ = PByte(@v)^) and
+                   FoundOneAndReachedLimit then
+                  break
+                else
+                  inc(vp);
+            SizeOf(Word):
+              for i := 0 to fCount - 1 do
+                if (PWord(vp^ + offs)^ = PWord(@v)^) and
+                   FoundOneAndReachedLimit then
+                  break
+                else
+                  inc(vp);
+            SizeOf(Cardinal):
+              // handle very common 32-bit integer field
+              for i := 0 to fCount - 1 do
+                if (PCardinal(vp^ + offs)^ = PCardinal(@v)^) and
+                   FoundOneAndReachedLimit then
+                  break
+                else
+                  inc(vp);
           end
-          else
-            // inlined GetOrdProp() for 8-bit or 16-bit values
-            for i := 0 to fCount - 1 do
-              if (FromRttiOrd(ot, pointer(vp^ + offs)) = v) and
-                 FoundOneAndReachedLimit then
-                break
-              else
-                inc(vp);
-        end
         else
           // has getter -> use GetOrdProp()
           for i := 0 to fCount - 1 do
