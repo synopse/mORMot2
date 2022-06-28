@@ -410,6 +410,12 @@ type
     // a local ShortString variable, e.g. for logging/debug purposes
     class function CallbackReleasedOnClientSide(const callback: IInterface;
       callbacktext: PShortString = nil): boolean; overload;
+    /// class method able to associate an Opaque pointer to a fake callback
+    // - allow to avoid a lookup in an array e.g. when a callback is released
+    class procedure CallbackSetOpaque(const callback: IInterface;
+      Opaque: pointer);
+    /// class method able to associate an Opaque pointer to a fake callback
+    class function CallbackGetOpaque(const callback: IInterface): pointer;
     /// replace the connection ID of callbacks after a reconnection
     // - returns the number of callbacks changed
     function FakeCallbackReplaceConnectionID(
@@ -1058,7 +1064,7 @@ begin
         if integer(tix) > 0 then // tix<0 when booted sooner than the timeout
           for i := fInstances.Count - 1 downto 0 do // downto for proper Delete
           begin
-            P := @fInstance[i];
+            P := @fInstance[i]; // fInstance[i] due to Delete(i) below
             if tix > P^.LastAccess then
             begin
               fRestServer.InternalLog('%.RetrieveInstance: deleted I% % ' +
@@ -1581,6 +1587,7 @@ type
     fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
     fFakeInterface: Pointer;
+    fOpaque: Pointer;
     fRaiseExceptionOnInvokeError: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;
       const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
@@ -1883,6 +1890,7 @@ var
   connectionID: TRestConnectionID;
   fakeID: TInterfacedObjectFakeID;
   Values: TNameValuePUtf8CharDynArray;
+  params: RawUtf8;
   withLog: boolean; // avoid stack overflow
 begin
   if (self = nil) or
@@ -1929,8 +1937,9 @@ begin
         Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex +
           Length(SERVICE_PSEUDO_METHOD);
         fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
-        Ctxt.ServiceParameters := pointer(FormatUtf8('[%,"%"]',
-          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text]));
+        FormatUtf8('[%,"%"]',
+          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text], params);
+        Ctxt.ServiceParameters := pointer(params);
         fake.fService.ExecuteMethod(Ctxt);
         if withLog then
           fRestServer.InternalLog('I%() returned %',
@@ -2014,6 +2023,30 @@ begin
     result := (instance.ClassType = TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
   end;
+end;
+
+class procedure TServiceContainerServer.CallbackSetOpaque(
+  const callback: IInterface; Opaque: pointer);
+var
+  instance: TObject;
+begin
+  instance := ObjectFromInterface(callback);
+  if (instance <> nil) and
+     (instance.ClassType = TInterfacedObjectFakeServer) then
+    TInterfacedObjectFakeServer(instance).fOpaque := Opaque;
+end;
+
+class function TServiceContainerServer.CallbackGetOpaque(
+  const callback: IInterface): pointer;
+var
+  instance: TObject;
+begin
+  instance := ObjectFromInterface(callback);
+  if (instance <> nil) and
+     (instance.ClassType = TInterfacedObjectFakeServer) then
+    result := TInterfacedObjectFakeServer(instance).fOpaque
+  else
+    result := nil;
 end;
 
 function FakeCallbackReplaceID(list: PPointer; n: integer;
