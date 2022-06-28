@@ -409,7 +409,8 @@ type
     property OnLog: TSynLogProc
       read fInfo.OnLog write fInfo.OnLog;
     /// optional TOnInfoProgress callback triggered during Zip/Unzip
-    // - at least at process startup and finish, and every ReportDelay ms
+    // - at least at process startup and finish, and following ReportDelay ms
+    // for the methods supporting it, i.e. if streams are used, not libdeflate
     property OnProgress: TOnInfoProgress
       read fInfo.OnProgress write fInfo.OnProgress;
     /// number of milliseconds between each OnLog/OnProgress notification
