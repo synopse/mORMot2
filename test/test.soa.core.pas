@@ -228,7 +228,7 @@ type
   end;
 
 const
-  IID_ICalculator: TGUID = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}';
+  IID_ICalculator: TGuid = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}';
 
 type
   TTestServiceInstances = record
@@ -1405,8 +1405,8 @@ begin
   Check(S.InstanceCreation = sicShared);
   Check(S.InterfaceTypeInfo^.Kind = rkInterface);
   Check(S.InterfaceTypeInfo^.Name^ = 'ICalculator');
-  Check(GUIDToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
-  Check(GUIDToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
+  Check(GuidToString(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
+  Check(GuidToRawUtf8(S.InterfaceIID) = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}');
   Check(S.InterfaceMangledURI = '7chgmrLOCU6H1EoW9Jbl_g');
   fClient.Server.Services.ExpectMangledURI := true;
   Check(fClient.Server.Services[S.InterfaceMangledURI] = S);

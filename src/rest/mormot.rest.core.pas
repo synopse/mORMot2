@@ -175,7 +175,7 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
@@ -195,7 +195,7 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
@@ -363,7 +363,7 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsyncRedirect()
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
@@ -376,7 +376,7 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsyncRedirect()
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// allows background garbage collection of specified RawUtf8 interning
@@ -409,7 +409,7 @@ type
     // ! ...
     // !   fSharedCallbacks := nil; // will stop redirection
     // !                            // and unregister callbacks, if needed
-    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGuid; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     /// low-level access to the associated timer
     // - may contain nil if EnsureBackgroundTimerExists has not yet been called
@@ -846,15 +846,15 @@ type
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     procedure BeginCurrentThread(Sender: TThread); virtual;
     procedure EndCurrentThread(Sender: TThread); virtual;
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
-    procedure AsyncRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
     procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
-    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGuid; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     function BackgroundTimer: TRestBackgroundTimer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2956,7 +2956,7 @@ begin
     fRun.EndCurrentThread(Sender);
 end;
 
-procedure TRest.AsyncRedirect(const aGuid: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
@@ -2965,7 +2965,7 @@ begin
       aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsyncRedirect(const aGuid: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
@@ -2982,7 +2982,7 @@ begin
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRest.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
+function TRest.MultiRedirect(const aGuid: TGuid; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 begin
   if self = nil then
@@ -3417,7 +3417,7 @@ begin
   end;
 end;
 
-procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 var
@@ -3436,7 +3436,7 @@ begin
     aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 var
@@ -3844,7 +3844,7 @@ end;
 function TRestUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
 begin
   if fJwtContent = nil then
-    New(fJwtContent);
+    fJwtContent := AllocMem(SizeOf(fJwtContent^));
   if jwt = nil then
     fJwtContent^.result := jwtNoToken
   else
@@ -4538,7 +4538,7 @@ begin
     fOwner.OnEndCurrentThread(sender);
 end;
 
-procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
@@ -4548,7 +4548,7 @@ begin
       aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGuid;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsyncRedirectResult);
 begin
@@ -4567,7 +4567,7 @@ begin
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRestRunThreads.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
+function TRestRunThreads.MultiRedirect(const aGuid: TGuid; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 var
   factory: TInterfaceFactory;

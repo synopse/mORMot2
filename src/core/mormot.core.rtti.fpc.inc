@@ -182,7 +182,7 @@ begin // is very efficiently inlined by FPC
 end;
 
 
-function TRttiInterfaceTypeData.IntfGuid: PGUID;
+function TRttiInterfaceTypeData.IntfGuid: PGuid;
 begin
   result := @PTypeData(@self)^.Guid;
 end;
@@ -560,7 +560,7 @@ begin
   begin
     ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
     ShortStringToAnsi7String(info^.UnitName, Definition.UnitName);
-    Definition.Guid := info^.GUID;
+    Definition.Guid := info^.Guid;
   end;
   ancestor := DeRef(info^.Parent);
   if ancestor <> nil then

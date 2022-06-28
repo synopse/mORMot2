@@ -196,7 +196,7 @@ end;
 {$endif ASMX86}
 
 
-function TRttiInterfaceTypeData.IntfGuid: PGUID;
+function TRttiInterfaceTypeData.IntfGuid: PGuid;
 begin
   {$ifdef ISDELPHI102} // adapt to latest TypInfo.pas changes
   result := @PTypeData(@self)^.IntfGuid;
@@ -575,7 +575,7 @@ type
   TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
 {$endif ISDELPHI2010}
 
-/// fake TTypeInfo RTTI used for TGUID/THash128... on Delphi 7/2007
+/// fake TTypeInfo RTTI used for TGuid/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
                        
 type
@@ -641,7 +641,7 @@ var
     argtypename := ps;
     ps := @ps^[ord(ps^[0]) + 1];
     if pp^ = nil then
-      {$ifdef HASNOSTATICRTTI} // detect e.g. TGUID/THash128 -> fake TypeInfo()
+      {$ifdef HASNOSTATICRTTI} // detect e.g. TGuid/THash128 -> fake TypeInfo()
       argtypeinfo := PT_INFO[TypeNameToStandardParserType(argtypename^)];
       if argtypeinfo = nil then
       {$endif HASNOSTATICRTTI}

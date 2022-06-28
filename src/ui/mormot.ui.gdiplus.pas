@@ -488,7 +488,7 @@ end;
 
 function TSynPicture.GetImageFormat: TGdipPictureType;
 const
-  // only the TGUID.D1 is relevant here
+  // only the TGuid.D1 is relevant here
   RawFormat: array[TGdipPictureType] of cardinal = (
     $b96b3cb0,
     $b96b3caf,
@@ -497,7 +497,7 @@ const
     $b96b3cb1
   );
 var
-  id: TGUID;
+  id: TGuid;
 begin
   if fHasContent and
      (fImage <> 0) and

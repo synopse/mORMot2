@@ -7274,7 +7274,7 @@ begin
     // randomness and entropy from mormot.core.base
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));
-    XorEntropy(data); // 512-bit from RdRand32 + Rdtsc + Now + CreateGUID
+    XorEntropy(data); // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
     sha3.Update(@data, SizeOf(data));
     // include some official system-derivated entropy source
     if IsZero(_OSEntropySeed) then

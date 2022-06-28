@@ -2083,7 +2083,7 @@ type
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
     function ServiceDefine(aImplementationClass: TInterfacedClass;
-      const aInterfaces: array of TGUID;
+      const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload;
     /// register a Service instance on the server side
@@ -2095,12 +2095,12 @@ type
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
-      const aInterfaces: array of TGUID;
+      const aInterfaces: array of TGuid;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload;
     /// register a remote Service via its interface
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
-    function ServiceDefine(aClient: TRest; const aInterfaces: array of TGUID;
+    function ServiceDefine(aClient: TRest; const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// the routing classs of the service remote request
@@ -6637,7 +6637,7 @@ begin
 end;
 
 function TRestServer.ServiceDefine(aImplementationClass: TInterfacedClass;
-  const aInterfaces: array of TGUID; aInstanceCreation: TServiceInstanceImplementation;
+  const aInterfaces: array of TGuid; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUtf8): TServiceFactoryServerAbstract;
 var
   ti: PRttiInfoDynArray;
@@ -6648,7 +6648,7 @@ begin
 end;
 
 function TRestServer.ServiceDefine(aSharedImplementation: TInterfacedObject;
-  const aInterfaces: array of TGUID;
+  const aInterfaces: array of TGuid;
   const aContractExpected: RawUtf8): TServiceFactoryServerAbstract;
 var
   ti: PRttiInfoDynArray;
@@ -6658,7 +6658,7 @@ begin
 end;
 
 function TRestServer.ServiceDefine(aClient: TRest;
-  const aInterfaces: array of TGUID;
+  const aInterfaces: array of TGuid;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUtf8): boolean;
 var

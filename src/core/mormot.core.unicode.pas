@@ -7049,7 +7049,7 @@ begin
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
   {$ifdef ASMX64AVX}
-  if cpuHaswell in CPUIDX64 then
+  if cpuHaswell in X64CpuFeatures then
     // Haswell CPUs can use simdjson AVX2 asm for IsValidUtf8()
     IsValidUtf8Buffer := @IsValidUtf8Avx2;
   {$endif ASMX64AVX}

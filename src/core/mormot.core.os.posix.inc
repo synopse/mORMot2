@@ -1643,9 +1643,12 @@ end;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
-  avg: TLoadAvg;
   mem: TMemoryInfo;
-  us: Int64;
+  avg: TLoadAvg absolute mem;
+  us: Int64 absolute mem;
+  {$ifndef OSDARWIN}
+  guid: THash128Rec absolute mem;
+  {$endif OSDARWIN}
 begin
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
@@ -1653,10 +1656,12 @@ begin
   DefaultHasher128(@e.h1, @avg, SizeOf(avg));
   GetMemoryInfo(mem, {withalloc=}false);
   DefaultHasher128(@e.h2, @mem, SizeOf(mem));
-  {$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
+  {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
   e.i[6] := e.i[6] xor mach_absolute_time; // monotonic clock in nanoseconds
   {$else}
-  CreateGuid(TGUID(e.h3)); // use e.g. FreeBSD syscall or /dev/urandom
+  CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
+  e.r[3].L := e.r[3].L xor guid.L;
+  e.r[3].H := e.r[3].H xor guid.H;
   {$endif OSDARWIN}
   QueryPerformanceMicroSeconds(us); // should have changed in-between
   e.i[7] := e.i[7] xor us;

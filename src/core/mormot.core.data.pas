@@ -88,12 +88,12 @@ type
   protected
     fRefCount: integer;
     // returns E_NOINTERFACE by default
-    function VirtualQueryInterface(IID: PGUID; out Obj): TIntQry; virtual;
+    function VirtualQueryInterface(IID: PGuid; out Obj): TIntQry; virtual;
     // always return 1 for a "non allocated" instance (0 triggers release)
     function VirtualAddRef: integer;  virtual; abstract;
     function VirtualRelease: integer; virtual; abstract;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGUID; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
   public
@@ -2973,13 +2973,13 @@ begin
 end;
 
 function TSynInterfacedObject.QueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGuid;
   out Obj): TIntQry;
 begin
   result := VirtualQueryInterface(@IID, Obj);
 end;
 
-function TSynInterfacedObject.VirtualQueryInterface(IID: PGUID; out Obj): TIntQry;
+function TSynInterfacedObject.VirtualQueryInterface(IID: PGuid; out Obj): TIntQry;
 begin
   result := E_NOINTERFACE;
 end;

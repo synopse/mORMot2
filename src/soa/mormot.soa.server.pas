@@ -1711,7 +1711,7 @@ function TServiceContainerServer.AddImplementation(
   const aContractExpected: RawUtf8): TServiceFactoryServer;
 var
   i, j: PtrInt;
-  UID, implemented: PGuidDynArray;
+  uid, implemented: PGuidDynArray;
   F: TServiceFactoryServer;
 begin
   result := nil;
@@ -1726,32 +1726,32 @@ begin
       raise EServiceException.CreateUtf8('%.AddImplementation: invalid % class',
         [self, aSharedImplementation]);
   CheckInterface(aInterfaces);
-  SetLength(UID, length(aInterfaces));
+  SetLength(uid, length(aInterfaces));
   for j := 0 to high(aInterfaces) do
-    UID[j] := pointer(aInterfaces[j]^.InterfaceGuid);
+    uid[j] := pointer(aInterfaces[j]^.InterfaceGuid);
   // check all interfaces available in aSharedImplementation/aImplementationClass
   if (aSharedImplementation <> nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then
   begin
     // TInterfacedObjectFake has no RTTI
-    if IsEqualGuid(UID[0],
+    if IsEqualGuid(uid[0],
         @TInterfacedObjectFake(aSharedImplementation).Factory.InterfaceIID) then
-      UID[0] := nil; // mark TGUID implemented by this fake interface
+      uid[0] := nil; // mark TGuid implemented by this fake interface
   end
   else
   begin
-    // search all implemented TGUID for this class
+    // search all implemented TGuid for this class
     implemented := GetRttiClassGuid(aImplementationClass);
-    for j := 0 to high(UID) do
+    for j := 0 to high(uid) do
       for i := 0 to high(implemented) do
-        if IsEqualGuid(UID[j], implemented[i]) then
+        if IsEqualGuid(uid[j], implemented[i]) then
         begin
-          UID[j] := nil; // mark TGUID found
+          uid[j] := nil; // mark TGuid found
           break;
         end;
   end;
-  for j := 0 to high(UID) do
-    if UID[j] <> nil then
+  for j := 0 to high(uid) do
+    if uid[j] <> nil then
       raise EServiceException.CreateUtf8('%.AddImplementation: % not found in %',
         [self, aInterfaces[j]^.RawName, aImplementationClass]);
   // register this implementation class

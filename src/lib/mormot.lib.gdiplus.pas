@@ -271,7 +271,7 @@ type
   );
 
   TEncoderParameter = record
-    Guid           : TGUID;   // GUID of the parameter
+    Guid           : TGuid;   // GUID of the parameter
     NumberOfValues : ULONG;   // number of values for this parameter
     Type_          : ULONG;   // value type, like ValueTypeLONG  etc.
     Value          : pointer; // a pointer to the parameter values
@@ -289,9 +289,9 @@ type
 
 const
   EncoderParameterValueTypeLong = 4;    // 32-bit unsigned int
-  EncoderQuality: TGUID     = '{1d5be4b5-fa4a-452d-9cdd-5db35105e7eb}';
-  EncoderCompression: TGUID = '{e09d739d-ccd4-44ee-8eba-3fbf8be4fc58}';
-  FrameDimensionPage: TGUID = '{7462dc86-6180-4c7e-8e3f-ee7333a7a483}';
+  EncoderQuality: TGuid     = '{1d5be4b5-fa4a-452d-9cdd-5db35105e7eb}';
+  EncoderCompression: TGuid = '{e09d739d-ccd4-44ee-8eba-3fbf8be4fc58}';
+  FrameDimensionPage: TGuid = '{7462dc86-6180-4c7e-8e3f-ee7333a7a483}';
 
 const
   /// the corresponding file extension for every saving format type
@@ -314,12 +314,12 @@ const
   );
 
 var
-  ENCODERS_GUID: array[TGdipPictureType] of TGUID;
+  ENCODERS_GUID: array[TGdipPictureType] of TGuid;
 
 {$else}
 
 const
-  ENCODERS_GUID: array[TGdipPictureType] of TGUID = (
+  ENCODERS_GUID: array[TGdipPictureType] of TGuid = (
     '{557CF402-1A04-11D3-9A73-0000F81EF32E}',
     '{557CF406-1A04-11D3-9A73-0000F81EF32E}',
     '{557CF401-1A04-11D3-9A73-0000F81EF32E}',
@@ -418,11 +418,11 @@ type
     DrawImage: function(graphics, image: THandle; x,y: integer): TGdipStatus; stdcall;
     {$endif GDIPLUS_USEDPI}
     DisposeImage: function(image: THandle): TGdipStatus; stdcall;
-    GetImageRawFormat: function(image: THandle; var format: TGUID): TGdipStatus; stdcall;
+    GetImageRawFormat: function(image: THandle; var format: TGuid): TGdipStatus; stdcall;
     GetImageWidth: function(image: THandle; var width: cardinal): TGdipStatus; stdcall;
     GetImageHeight: function(image: THandle; var height: cardinal): TGdipStatus; stdcall;
     SaveImageToStream: function(image: THandle; stream: IStream;
-      clsidEncoder: PGUID; encoderParams: pointer): TGdipStatus; stdcall;
+      clsidEncoder: PGuid; encoderParams: pointer): TGdipStatus; stdcall;
     {$ifdef GDIPLUS_USEENCODERS}
     GetImageEncodersSize: function(out numEncoders: cardinal;
       out size: cardinal): TGdipStatus; stdcall;
@@ -433,8 +433,8 @@ type
           out bitmap: THandle): TGdipStatus; stdcall;
     CreateBitmapFromGdiDib: function(bmi, bits: pointer; out bitmap: THandle): TGdipStatus; stdcall;
     BitmapSetResolution: function(bitmap: THandle; XDPI,YDPI: single): TGdipStatus; stdcall;
-    GetFrameCount: function(image: THandle; dimensionID: PGUID; var count: UINT): TGdipStatus; stdcall;
-    SelectActiveFrame: function(image: THandle; dimensionID: PGUID; frameIndex: UINT): TGdipStatus; stdcall;
+    GetFrameCount: function(image: THandle; dimensionID: PGuid; var count: UINT): TGdipStatus; stdcall;
+    SelectActiveFrame: function(image: THandle; dimensionID: PGuid; frameIndex: UINT): TGdipStatus; stdcall;
     CreateImageAttributes: function(out imageattr: TGpipImageAttributes): TGdipStatus; stdcall;
     CloneImageAttributes: function(imageattr: TGpipImageAttributes; out cloneImageattr: TGpipImageAttributes): TGdipStatus; stdcall;
     DisposeImageAttributes: function(imageattr: TGpipImageAttributes): TGdipStatus; stdcall;
@@ -534,7 +534,7 @@ type
     ConvertToEmfPlus11: function(graphics, image: THandle; flag: pointer;
       emftype: TEmfType; description: PWideChar; var out_metafile: THandle): TGdipStatus; stdcall;
     {$ifdef GDIPLUS_USEENCODERS}
-    function GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): PtrInt;
+    function GetEncoderClsid(format: PAnsiChar; out pClsid: TGuid): PtrInt;
     {$endif GDIPLUS_USEENCODERS}
   public
     /// load the GDI+ library and all needed procedures
@@ -776,8 +776,8 @@ end;
 
 type
   ImageCodecInfo = record
-    Clsid: TGUID;
-    FormatID: TGUID;
+    Clsid: TGuid;
+    FormatID: TGuid;
     CodecName: PWCHAR;
     DllName: PWCHAR;
     FormatDescription: PWCHAR;
@@ -820,7 +820,7 @@ begin
     result := 0;      // W=A
 end;
 
-function TGdiPlus.GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): PtrInt;
+function TGdiPlus.GetEncoderClsid(format: PAnsiChar; out pClsid: TGuid): PtrInt;
 var
   num, size: cardinal;
   ImageCodecInfo: AnsiString;

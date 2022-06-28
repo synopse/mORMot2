@@ -724,7 +724,7 @@ type
     Luid: Int64;
     Dhcpv4Server: SOCKET_ADDRESS;
     CompartmentId: DWORD;
-    NetworkGuid: TGUID;
+    NetworkGuid: TGuid;
     ConnectionType: DWORD;
     TunnelType: DWORD;
     // DHCP v6 Info following (not used by our code)

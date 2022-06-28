@@ -267,8 +267,8 @@ type
   TErrorInfo = record
     hrError: HRESULT;
     dwMinor: UINT;
-    clsid: TGUID;
-    iid: TGUID;
+    clsid: TGuid;
+    iid: TGuid;
     dispid: integer;
   end;
 
@@ -282,7 +282,7 @@ type
   PDBObject = ^TDBObject;
   TDBObject = record
     dwFlags: UINT;
-    iid: TGUID;
+    iid: TGuid;
   end;
 
   PDBBindExt = ^TDBBindExt;
@@ -315,8 +315,8 @@ type
 
   DBIDGUID = record
     case integer of
-      0: (guid: TGUID);
-      1: (pguid: ^TGUID);
+      0: (guid: TGuid);
+      1: (PGuid: ^TGuid);
   end;
 
   DBIDNAME = record
@@ -363,7 +363,7 @@ type
   TDBPropSet = record
     rgProperties: PDBPropArray;
     cProperties: UINT;
-    guidPropertySet: TGUID;
+    guidPropertySet: TGuid;
   end;
   PDBPropSet = ^TDBPropSet;
 
@@ -449,10 +449,10 @@ type
       var DataSource: IUnknown): HRESULT; stdcall;
     function GetInitializationString(const DataSource: IUnknown;
       fIncludePassword: boolean; out pwszInitString: POleStr): HRESULT; stdcall;
-    function CreateDBInstance(const clsidProvider: TGUID;
+    function CreateDBInstance(const clsidProvider: TGuid;
       const pUnkOuter: IUnknown; dwClsCtx: DWORD; pwszReserved: POleStr;
       riid: TIID; var DataSource: IUnknown): HRESULT; stdcall;
-    function CreateDBInstanceEx(const clsidProvider: TGUID;
+    function CreateDBInstanceEx(const clsidProvider: TGuid;
       const pUnkOuter: IUnknown; dwClsCtx: DWORD; pwszReserved: POleStr;
       pServerInfo: PCoServerInfo; cmq: ULONG; rgmqResults: PMultiQI): HRESULT; stdcall;
     function LoadStringFromStorage(pwszFileName: POleStr;
@@ -464,7 +464,7 @@ type
   /// obtain a new session to a given OleDB data source
   IDBCreateSession = interface(IUnknown)
     ['{0C733A5D-2A1C-11CE-ADE5-00AA0044773D}']
-    function CreateSession(const punkOuter: IUnknown; const riid: TGUID;
+    function CreateSession(const punkOuter: IUnknown; const riid: TGuid;
       out ppDBSession: IUnknown): HRESULT; stdcall;
   end;
 
@@ -495,16 +495,16 @@ type
   ICommand = interface(IUnknown)
     ['{0C733A63-2A1C-11CE-ADE5-00AA0044773D}']
     function Cancel: HRESULT; stdcall;
-    function Execute(const punkOuter: IUnknown; const riid: TGUID; var pParams: TDBParams;
+    function Execute(const punkOuter: IUnknown; const riid: TGuid; var pParams: TDBParams;
       pcRowsAffected: PInteger; ppRowset: PIUnknown): HRESULT; stdcall;
-    function GetDBSession(const riid: TGUID; out ppSession: IUnknown): HRESULT; stdcall;
+    function GetDBSession(const riid: TGuid; out ppSession: IUnknown): HRESULT; stdcall;
   end;
   /// methods to access the ICommand text to be executed
   ICommandText = interface(ICommand)
     ['{0C733A27-2A1C-11CE-ADE5-00AA0044773D}']
-    function GetCommandText(var pguidDialect: TGUID;
+    function GetCommandText(var pguidDialect: TGuid;
       out ppwszCommand: PWideChar): HRESULT; stdcall;
-    function SetCommandText(const guidDialect: TGUID;
+    function SetCommandText(const guidDialect: TGuid;
       pwszCommand: PWideChar): HRESULT; stdcall;
   end;
 
@@ -549,7 +549,7 @@ type
   IOpenRowset = interface(IUnknown)
     ['{0C733A69-2A1C-11CE-ADE5-00AA0044773D}']
     function OpenRowset(const punkOuter: IUnknown; pTableID: PDBID; pIndexID: PDBID;
-      const riid: TGUID; cPropertySets: UINT; rgPropertySets: PDBPropSetArray;
+      const riid: TGuid; cPropertySets: UINT; rgPropertySets: PDBPropSetArray;
       ppRowset: PIUnknown): HRESULT; stdcall;
   end;
 
@@ -568,7 +568,7 @@ type
     function GetBasicErrorInfo(ulRecordNum: UINT;
       pErrorInfo: PErrorInfo): HRESULT; stdcall;
     function GetCustomErrorObject(ulRecordNum: UINT;
-      const riid: TGUID; var ppObject: IUnknown): HRESULT; stdcall;
+      const riid: TGuid; var ppObject: IUnknown): HRESULT; stdcall;
     function GetErrorInfo(ulRecordNum: UINT; lcid: LCID;
       var ppErrorInfo: IErrorInfo): HRESULT; stdcall;
     function GetErrorParameters(ulRecordNum: UINT;
@@ -579,7 +579,7 @@ type
   /// used on an OleDB session to obtain a new command
   IDBCreateCommand = interface(IUnknown)
     ['{0C733A1D-2A1C-11CE-ADE5-00AA0044773D}']
-    function CreateCommand(const punkOuter: IUnknown; const riid: TGUID;
+    function CreateCommand(const punkOuter: IUnknown; const riid: TGuid;
       out ppCommand: ICommand): HRESULT; stdcall;
   end;
 
@@ -625,11 +625,11 @@ type
   /// used to retrieve the database metadata (e.g. tables and fields layout)
   IDBSchemaRowset = interface(IUnknown)
     ['{0c733a7b-2a1c-11ce-ade5-00aa0044773d}']
-    function GetRowset(pUnkOuter: IUnknown; const rguidSchema: TGUID;
+    function GetRowset(pUnkOuter: IUnknown; const rguidSchema: TGuid;
       cRestrictions: integer; rgRestrictions: pointer;
       const riid: TIID; cPropertySets: integer; rgPropertySets: PDBPROPSET;
       var ppRowset: IRowset): HRESULT; stdcall;
-    function GetSchemas(var pcSchemas: integer; var prgSchemas: PGUID;
+    function GetSchemas(var pcSchemas: integer; var prgSchemas: PGuid;
       var prgRestrictionSupport: PInteger): HRESULT; stdcall;
   end;
 
@@ -681,7 +681,7 @@ type
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
     destructor Destroy; override;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGUID; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     /// Adds a reference count to an existing row handle
@@ -808,7 +808,7 @@ begin
 end;
 
 function TBaseAggregatingRowset.QueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGuid;
   out Obj): TIntQry;
 begin
   if IsEqualGuid(@IID, @IID_IUnknown) then

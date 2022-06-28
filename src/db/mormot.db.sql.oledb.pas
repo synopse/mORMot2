@@ -87,7 +87,7 @@ type
     fOnCustomError: TSqlDBOleDBOnCustomError;
     fSchemaRec: array of TDBSchemaRec;
     fSupportsOnlyIRowset: boolean;
-    function GetSchema(const aUID: TGUID; const Fields: array of RawUtf8;
+    function GetSchema(const aUid: TGuid; const Fields: array of RawUtf8;
       var aResult: IRowSet): boolean;
     /// will create the generic fConnectionString from supplied parameters
     procedure SetInternalProperties; override;
@@ -2177,13 +2177,13 @@ begin
   end;
 end;
 
-function TSqlDBOleDBConnectionProperties.GetSchema(const aUID: TGUID;
+function TSqlDBOleDBConnectionProperties.GetSchema(const aUid: TGuid;
   const Fields: array of RawUtf8; var aResult: IRowset): boolean;
 var
   i, res, n: integer;
   C: TSqlDBOleDBConnection;
   SRS: IDBSchemaRowset;
-  PG, OG: PGUID;
+  PG, OG: PGuid;
   PI, OI: PInteger;
   Args: array of Variant;
 begin
@@ -2220,7 +2220,7 @@ begin
   end;
   res := 0;
   for i := 0 to high(fSchemaRec) do
-    if IsEqualGuid(@fSchemaRec[i].SchemaGuid, @aUID) then
+    if IsEqualGuid(@fSchemaRec[i].SchemaGuid, @aUid) then
     begin
       res := fSchemaRec[i].SupportedRestrictions;
       break;
@@ -2236,7 +2236,7 @@ begin
   aResult := nil;
   try
     C.OleDBCheck(nil,
-      SRS.GetRowset(nil, aUID, length(Args), Args, IID_IRowset, 0, nil, aResult));
+      SRS.GetRowset(nil, aUid, length(Args), Args, IID_IRowset, 0, nil, aResult));
     result := aResult <> nil; // mark some rows retrieved
   except
     result := false;

@@ -392,8 +392,8 @@ type
   {$endif HASVARUSTRING}
   TRawJsonDynArray = array of RawJson;
   PRawJsonDynArray = ^TRawJsonDynArray;
-  TGuidDynArray = array of TGUID;
-  PGuidDynArray = array of PGUID;
+  TGuidDynArray = array of TGuid;
+  PGuidDynArray = array of PGuid;
 
   PObject = ^TObject;
   PClass = ^TClass;
@@ -654,49 +654,49 @@ const
   /// used to mark the end of ASCIIZ buffer, or return a void ShortString
   NULCHAR: AnsiChar = #0;
 
-  /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
-  GUID_NULL: TGUID = ({%H-});
+  /// a TGuid containing '{00000000-0000-0000-0000-00000000000}'
+  GUID_NULL: TGuid = ({%H-});
 
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
   TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
-/// fill a GUID with 0
-procedure FillZero(var result: TGUID); overload;
+/// fill a TGuid with 0
+procedure FillZero(var result: TGuid); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compare two TGUID values
+/// compare two TGuid values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid1, guid2: TGUID): boolean; overload;
+  guid1, guid2: TGuid): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compare two TGUID values
+/// compare two TGuid values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGuid(guid1, guid2: PGUID): boolean; overload;
+function IsEqualGuid(guid1, guid2: PGuid): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns the index of a matching TGUID in an array
+/// returns the index of a matching TGuid in an array
 // - returns -1 if no item matched
-function IsEqualGuidArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGuidArray(const guid: TGuid; const guids: array of TGuid): integer;
 
-/// check if a TGUID value contains only 0 bytes
+/// check if a TGuid value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
+function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// append one TGUID item to a TGUID dynamic array
+/// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
-// guids[] if NoDuplicates is TRUE and TGUID already exists
-function AddGuid(var guids: TGuidDynArray; const guid: TGUID;
+// guids[] if NoDuplicates is TRUE and TGuid already exists
+function AddGuid(var guids: TGuidDynArray; const guid: TGuid;
   NoDuplicates: boolean = false): integer;
 
-/// compute a random UUID value from the RandomBytes() generator and RFC 4122
-procedure RandomGuid(out result: TGUID); overload;
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+procedure RandomGuid(out result: TGuid); overload;
 
-/// compute a random UUID value from the RandomBytes() generator and RFC 4122
-function RandomGuid: TGUID; overload;
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the new capacity when expanding an array of items
@@ -1936,6 +1936,8 @@ type
       w: array[0..7] of word);
   7: (
       l64, h64: Int64Rec);
+  8: (
+      guid: TGuid);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -2494,7 +2496,7 @@ type
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
-  CPUIDX64: TX64CpuFeatures;
+  X64CpuFeatures: TX64CpuFeatures;
 
 {$ifdef ASMX64AVX}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
@@ -2816,7 +2818,7 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 procedure LecuyerEncrypt(key: Qword; var data: RawByteString);
 
 /// retrieve 512-bit of entropy, from system time and current execution state
-// - entropy is gathered over several sources like RTL Now(), CreateGUID(),
+// - entropy is gathered over several sources like RTL Now(), CreateGuid(),
 // current gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
 // - the resulting output is to be hashed - e.g. with DefaultHasher128
 // - execution is fast, but not enough as unique seed for a cryptographic PRNG:
@@ -4049,26 +4051,26 @@ end;
 
 
 function IsEqualGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid1, guid2: TGUID): boolean;
+  guid1, guid2: TGuid): boolean;
 begin
   result := (PHash128Rec(@guid1).L = PHash128Rec(@guid2).L) and
             (PHash128Rec(@guid1).H = PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGuid(guid1, guid2: PGUID): boolean;
+function IsEqualGuid(guid1, guid2: PGuid): boolean;
 begin
   result := (PHash128Rec(guid1).L = PHash128Rec(guid2).L) and
             (PHash128Rec(guid1).H = PHash128Rec(guid2).H);
 end;
 
-function IsEqualGuidArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGuidArray(const guid: TGuid; const guids: array of TGuid): integer;
 begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
-function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
+function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGuid): boolean;
 var
-  a: TPtrIntArray absolute guid;
+  a: TPtrIntArray absolute Guid;
 begin
   result := (a[0] = 0) and
             (a[1] = 0) {$ifdef CPU32} and
@@ -4076,7 +4078,7 @@ begin
             (a[3] = 0) {$endif CPU32};
 end;
 
-function AddGuid(var guids: TGuidDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
+function AddGuid(var guids: TGuidDynArray; const guid: TGuid; NoDuplicates: boolean): integer;
 begin
   if NoDuplicates then
   begin
@@ -4089,7 +4091,7 @@ begin
   guids[result] := guid;
 end;
 
-procedure FillZero(var result: TGUID);
+procedure FillZero(var result: TGuid);
 var
   d: TInt64Array absolute result;
 begin
@@ -4097,14 +4099,14 @@ begin
   d[1] := 0;
 end;
 
-function RandomGuid: TGUID;
+function RandomGuid: TGuid;
 begin
   RandomGuid(result);
 end;
 
-procedure RandomGuid(out result: TGUID);
+procedure RandomGuid(out result: TGuid);
 begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
-  RandomBytes(@result, SizeOf(TGUID));
+  RandomBytes(@result, SizeOf(TGuid));
   result.D3 := (result.D3 and $0FFF) + $4000; // version bits 12-15 = 4 (random)
   result.D4[0] := byte(result.D4[0] and $3F) + $80; // reserved bits 6-7 = 1
 end;
@@ -8128,13 +8130,13 @@ begin
   result := @_Lecuyer;
 end;
 
-{$ifdef OSDARWIN} // FPC CreateGUID calls /dev/urandom which is not advised
+{$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
 function mach_absolute_time: Int64; cdecl external 'c';
 
-procedure CreateGUID(var guid: TGUID);
+procedure CreateGuid(var guid: TGuid);
 begin
-  PInt64(@guid)^ := mach_absolute_time;  // monotonic time in nanoseconds
-  crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
+  PInt64(@Guid)^ := mach_absolute_time;  // monotonic time in nanoseconds
+  crc128c(@Guid, SizeOf(Guid), THash128(Guid)); // good enough diffusion
 end;
 {$endif OSDARWIN}
 
@@ -8152,7 +8154,7 @@ var
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   if _EntropyGlobal.L = 0 then
-    CreateGUID(TGuid(_EntropyGlobal)); // some rich initial value
+    CreateGuid(_EntropyGlobal.guid); // some rich initial value
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
@@ -8162,7 +8164,7 @@ begin
   e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
   // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
   // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
-  CreateGUID(TGuid(guid));
+  CreateGuid(guid.guid);
   e.r[2].L := e.r[2].L xor guid.L;
   e.r[2].H := e.r[2].H xor guid.H;
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
@@ -8195,7 +8197,7 @@ begin
       e.b[j] := {%H-}e.b[j] xor entropy^[i];
     end;
   repeat
-    XorEntropy(e); // 512-bit from RdRand32 + Rdtsc + Now + CreateGUID
+    XorEntropy(e); // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
     DefaultHasher128(@h, @e, SizeOf(e)); // may be AesNiHash128
     rs1 := rs1 xor h.c0;
     rs2 := rs2 xor h.c1;

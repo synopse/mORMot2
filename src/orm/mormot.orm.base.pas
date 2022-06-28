@@ -1778,10 +1778,10 @@ type
     // field within a nil object, e.g for
     // !  class TMainObject = class(TOrm)
     // !    (...)
-    // !    fGUID: TGUID;
+    // !    fGUID: TGuid;
     // !  public
     // !    (...)
-    // !    property GUID: TGUID read fGUID write fGUID;
+    // !    property GUID: TGuid read fGUID write fGUID;
     // !  end;
     // you will have to register it via a call to
     // TOrmProperties.RegisterCustomPropertyFromTypeName()
@@ -3056,7 +3056,7 @@ type
     // members) do not have RTTI generated, at least in older versions of Delphi
     // - use this method within TOrm.InternalRegisterCustomProperties
     // overridden method to define a custom record property with no
-    // reference-counted types within (like strings) - typical use may be TGUID
+    // reference-counted types within (like strings) - typical use may be TGuid
     // - main parameters are the record size, in bytes, and the property pointer
     // - add an TOrmPropInfoRecordFixedSize instance to the internal list
     // - if aData2Text/aText2Data parameters are not defined, it will fallback
@@ -3108,7 +3108,7 @@ type
       aTypeInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
       aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
     /// add a custom property from its type name, stored as JSON
-    // - handle any kind of registered record, including TGUID
+    // - handle any kind of registered record, including TGuid
     // - use this method within InternalRegisterCustomProperties overridden method
     // to define a custom record property containing reference-counted types
     // - main parameters are the record RTTI information, and the property pointer

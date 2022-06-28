@@ -877,17 +877,17 @@ type
 
   TOrmCustomProps = class(TOrmPeople)
   protected
-    fGUID: TGUID;
+    fGUid: TGuid;
     fPeopleID: TID;
     fPeople: TOrmPeopleID;
     fPeopleCascade: TOrmPeopleToBeDeletedID;
     {$ifdef PUBLISHRECORD}
-    fGUIDXE6: TGUID;
+    fGUidXE6: TGuid;
     {$endif PUBLISHRECORD}
     class procedure InternalRegisterCustomProperties(Props: TOrmProperties); override;
   public
-    property GUID: TGUID
-      read fGUID write fGUID;
+    property guid: TGuid
+      read fGUid write fGUid;
   published
     property PeopleID: TID
       read fPeopleID write fPeopleID;
@@ -896,8 +896,8 @@ type
     property PeopleCascade: TOrmPeopleToBeDeletedID
       read fPeopleCascade write fPeopleCascade;
     {$ifdef PUBLISHRECORD}
-    property GUIDXE6: TGUID
-      read fGUIDXE6 write fGUIDXE6;
+    property GUidXE6: TGuid
+      read fGUidXE6 write fGUidXE6;
     {$endif PUBLISHRECORD}
   end;
 
@@ -947,8 +947,8 @@ end;
 
 class procedure TOrmCustomProps.InternalRegisterCustomProperties(Props: TOrmProperties);
 begin
-  Props.RegisterCustomPropertyFromTypeName(self, 'TGUID', 'GUID',
-    @TOrmCustomProps(nil).fGUID, [aIsUnique], 38);
+  Props.RegisterCustomPropertyFromTypeName(self, 'TGuid', 'Guid',
+    @TOrmCustomProps(nil).fGUid, [aIsUnique], 38);
 end;
 
 
@@ -1725,9 +1725,9 @@ begin
           begin
             VP.FillFrom(V2); // fast copy some content from TOrmPeople
             inc(n);
-            VP.fGUID.D1 := n;
+            VP.fGUid.D1 := n;
             {$ifdef PUBLISHRECORD}
-            VP.fGUIDXE6.D1 := n shl 1;
+            VP.fGUidXE6.D1 := n shl 1;
             {$endif PUBLISHRECORD}
             check(Client.Orm.Add(VP, true) = n);
           end;
@@ -1736,9 +1736,9 @@ begin
           while VP.FillOne do
           begin
             check(VP.LastName = 'Morse');
-            check(Integer(VP.GUID.D1) = VP.ID);
+            check(Integer(VP.Guid.D1) = VP.ID);
             {$ifdef PUBLISHRECORD}
-            check(Integer(VP.GUIDXE6.D1) = VP.ID shl 1);
+            check(Integer(VP.GUidXE6.D1) = VP.ID shl 1);
             {$endif PUBLISHRECORD}
           end;
         except

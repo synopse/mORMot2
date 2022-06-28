@@ -1847,7 +1847,7 @@ end;
 class procedure TSynMustache.NewGuid(const Value: variant;
   out Result: variant);
 var
-  g: TGUID;
+  g: TGuid;
 begin
   RandomGuid(g);
   RawUtf8ToVariant(GuidToRawUtf8(g), Result);

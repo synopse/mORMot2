@@ -599,8 +599,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// interface abilities - not inlined to avoid random trouble on FPC trunk
     function IntfFlags: TRttiIntfFlags;
-    /// interface 128-bit GUID
-    function IntfGuid: PGUID;
+    /// interface 128-bit Guid
+    function IntfGuid: PGuid;
       {$ifdef HASINLINE}inline;{$endif}
     /// where the interface has been defined
     function IntfUnit: PShortString;
@@ -862,9 +862,9 @@ type
     /// for rkInterface: get the interface type information
     function InterfaceType: PRttiInterfaceTypeData;
       {$ifdef HASINLINE}inline;{$endif}
-    /// for rkInterface: get the TGUID of a given interface type information
+    /// for rkInterface: get the TGuid of a given interface type information
     // - returns nil if this type is not an interface
-    function InterfaceGuid: PGUID;
+    function InterfaceGuid: PGuid;
     /// for rkInterface: get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
@@ -872,7 +872,7 @@ type
     // - returns nil if this type has no parent
     function InterfaceAncestor: PRttiInfo;
     /// for rkInterface: get all ancestors/parents of a given interface type information
-    // - only ancestors with an associated TGUID will be added
+    // - only ancestors with an associated TGuid will be added
     // - if OnlyImplementedBy is not nil, only the interface explicitly
     // implemented by this class will be added, and AncestorsImplementedEntry[]
     // will contain the corresponding PInterfaceEntry values
@@ -1527,7 +1527,7 @@ type
     /// the unit where the interface was defined
     UnitName: RawUtf8;
     /// the associated GUID of this interface
-    Guid: TGUID;
+    Guid: TGuid;
     /// the interface methods
     Methods: array of TRttiMethod;
   end;
@@ -1548,7 +1548,7 @@ function GetRttiInterface(aTypeInfo: PRttiInfo;
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
   out Obj): boolean;
 
-/// returns all TGUID implemented by a given class
+/// returns all TGuid implemented by a given class
 // - TObject.GetInterfaceTable is not consistent on Delphi and FPC
 function GetRttiClassGuid(aClass: TClass): PGuidDynArray;
 
@@ -1789,7 +1789,7 @@ var
   // requering additional PRttiInfo (rkRecord, rkDynArray, rkArray...)
   // - you can use PT_INFO[] for types with no RTTI before Delphi 2010, for
   // instance PT_INFO[ptGuid], PT_INFO[ptHash128], PT_INFO[ptHash256] and
-  // PT_INFO[ptHash512] since oldest compilers refuse to compile TypeInfo(TGUID),
+  // PT_INFO[ptHash512] since oldest compilers refuse to compile TypeInfo(TGuid),
   // TypeInfo(THash128), TypeInfo(THash256) and TypeInfo(THash512)
   PT_INFO: array[TRttiParserType] of PRttiInfo;
 
@@ -1865,7 +1865,7 @@ const
     'SynUnicode',     //  ptSynUnicode
     'TDateTime',      //  ptDateTime
     'TDateTimeMS',    //  ptDateTimeMS
-    'TGUID',          //  ptGuid
+    'TGuid',          //  ptGuid
     'THash128',       //  ptHash128
     'THash256',       //  ptHash256
     'THash512',       //  ptHash512
@@ -1907,21 +1907,21 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
   pct: TRttiParserComplexType): PRttiInfo;
 
 /// recognize a simple value type from a supplied type name
-// - from known ('byte', 'string', 'RawUtf8', 'TGUID'...) type names
+// - from known ('byte', 'string', 'RawUtf8', 'TGuid'...) type names
 // - will return ptNone for any unknown type
 // - for ptOrm and ptTimeLog, optional Complex will contain the specific type found
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
   Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type name
-// - from known ('byte', 'string', 'RawUtf8', 'TGUID'...) type names
+// - from known ('byte', 'string', 'RawUtf8', 'TGuid'...) type names
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(Name: PShortString;
   Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// recognize a simple value type from a supplied type name
-// - from known ('byte', 'string', 'RawUtf8', 'TGUID'...) type names, then
+// - from known ('byte', 'string', 'RawUtf8', 'TGuid'...) type names, then
 // calling Rtti.Find() if CheckRttiCustomTypes=true
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(const Name: RawUtf8;
@@ -2639,7 +2639,7 @@ type
     // same format as any pascal record:
     // ! 'A,B,C: integer; D: RawUtf8; E: record E1,E2: double;'
     // ! 'A,B,C: integer; D: RawUtf8; E: array of record E1,E2: double;'
-    // ! 'A,B,C: integer; D: RawUtf8; E: array of SynUnicode; F: array of TGUID'
+    // ! 'A,B,C: integer; D: RawUtf8; E: array of SynUnicode; F: array of TGuid'
     // or a shorter alternative syntax for records and arrays:
     // ! 'A,B,C: integer; D: RawUtf8; E: {E1,E2: double}'
     // ! 'A,B,C: integer; D: RawUtf8; E: [E1,E2: double]'
@@ -3593,7 +3593,7 @@ begin
   end;
 end;
 
-function TRttiInfo.InterfaceGuid: PGUID;
+function TRttiInfo.InterfaceGuid: PGuid;
 begin
   if (@self = nil) or
      (Kind <> rkInterface) then
@@ -7454,7 +7454,7 @@ begin
         item := fCache.ItemInfo;
         if item = nil then // unmanaged types
         begin
-          // try to guess the actual type, e.g. a TGUID or an integer
+          // try to guess the actual type, e.g. a TGuid or an integer
           item := aInfo^.DynArrayItemTypeExtended; // FPC or Delphi 2010+
           if item = nil then
           begin
@@ -9026,7 +9026,7 @@ begin
   PT_INFO[ptHash256]       := @_THASH256;
   PT_INFO[ptHash512]       := @_THASH512;
   {$else}
-  PT_INFO[ptGuid]          := TypeInfo(TGUID);
+  PT_INFO[ptGuid]          := TypeInfo(TGuid);
   PT_INFO[ptHash128]       := TypeInfo(THash128);
   PT_INFO[ptHash256]       := TypeInfo(THash256);
   PT_INFO[ptHash512]       := TypeInfo(THash512);

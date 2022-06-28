@@ -1009,7 +1009,7 @@ type
     fThreadContextCount: integer;
     fNextFlushTix10: cardinal;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      iid: TGUID; out obj): TIntQry;
+      iid: TGuid; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     function _AddRef: TIntCnt;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -4621,7 +4621,7 @@ begin
 end;
 
 function TSynLog.QueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGUID;
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGuid;
   out obj): TIntQry;
 begin
   result := E_NOINTERFACE;

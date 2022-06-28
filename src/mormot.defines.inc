@@ -401,7 +401,7 @@
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
   {$else}
-    {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGUID)
+    {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif}
 
   {$define ISDELPHI}
@@ -464,7 +464,7 @@
     {$if CompilerVersion = 20}    // = Delphi 2009
       {$define ISDELPHI2009}      // to circumvent some specific bugs
       {$define ISDELPHI20092010}
-      {$define HASNOSTATICRTTI}   // has no TypeInfo(TGUID)
+      {$define HASNOSTATICRTTI}   // has no TypeInfo(TGuid)
     {$ifend}
     {$if CompilerVersion = 21}    // = Delphi 2010
       {$define ISDELPHI20092010}  // to circumvent some specific bugs

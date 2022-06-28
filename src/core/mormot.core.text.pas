@@ -909,7 +909,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    procedure Add(Value: PGUID; QuotedChar: AnsiChar = #0); overload;
+    procedure Add(Value: PGuid; QuotedChar: AnsiChar = #0); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
@@ -2474,64 +2474,64 @@ function IPToCardinal(const aIP: RawUtf8; out aValue: cardinal): boolean; overlo
 function IPToCardinal(const aIP: RawUtf8): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// append a TGUID binary content as text
+/// append a TGuid binary content as text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 
-/// convert a TGUID into UTF-8 encoded { text }
+/// convert a TGuid into UTF-8 encoded { text }
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUtf8() overloaded function
-function GuidToRawUtf8(const guid: TGUID): RawUtf8;
+function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 
-/// convert a TGUID into UTF-8 encoded text
+/// convert a TGuid into UTF-8 encoded text
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
-function ToUtf8(const guid: TGUID): RawUtf8; overload;
+function ToUtf8(const guid: TGuid): RawUtf8; overload;
 
-/// convert a TGUID into text
+/// convert a TGuid into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
-function GuidToString(const guid: TGUID): string;
+function GuidToString(const guid: TGuid): string;
 
 type
   /// stack-allocated ASCII string, used by GuidToShort() function
   TGuidShortString = string[38];
   PGuidShortString = ^TGuidShortString;
 
-/// convert a TGUID into text
+/// convert a TGuid into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a ShortString will allow fast allocation on the stack, so is
-// preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
-function GuidToShort(const guid: TGUID): TGuidShortString; overload;
+// preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
+function GuidToShort(const guid: TGuid): TGuidShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a TGUID into text
+/// convert a TGuid into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a ShortString will allow fast allocation on the stack, so is
-// preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
+// preferred e.g. when providing a Guid to a ESynException.CreateUtf8()
 procedure GuidToShort(const
-  guid: TGUID; out dest: TGuidShortString); overload;
+  guid: TGuid; out dest: TGuidShortString); overload;
 
-/// convert some text into its TGUID binary value
+/// convert some text into its TGuid binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
-// - return nil if the supplied text buffer is not a valid TGUID
+// - return nil if the supplied text buffer is not a valid TGuid
 // - this will be the format used for JSON encoding, e.g.
-// $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
-function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+// $ { "Uid": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
+function TextToGuid(P: PUtf8Char; Guid: PByteArray): PUtf8Char;
 
-/// convert some VCL text into a TGUID
+/// convert some VCL text into a TGuid
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
-// is not a valid TGUID
-function StringToGuid(const text: string): TGUID;
+// is not a valid TGuid
+function StringToGuid(const text: string): TGuid;
 
-/// convert some UTF-8 encoded text into a TGUID
+/// convert some UTF-8 encoded text into a TGuid
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
-// is not a valid TGUID
-function RawUtf8ToGuid(const text: RawByteString): TGUID;
+// is not a valid TGuid
+function RawUtf8ToGuid(const text: RawByteString): TGuid;
 
 /// read a TStream content into a String
 // - it will read binary or text content from the current position until the
@@ -5441,7 +5441,7 @@ begin
     B^ := '0';
 end;
 
-procedure TTextWriter.Add(Value: PGUID; QuotedChar: AnsiChar);
+procedure TTextWriter.Add(Value: PGuid; QuotedChar: AnsiChar);
 begin
   if BEnd - B <= 38 then
     FlushToStream;
@@ -10950,7 +10950,7 @@ begin
   result := P;
 end;
 
-function GuidToRawUtf8(const guid: TGUID): RawUtf8;
+function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 var
   P: PUtf8Char;
 begin
@@ -10960,18 +10960,18 @@ begin
   GuidToText(P + 1, @guid)^ := '}';
 end;
 
-function ToUtf8(const guid: TGUID): RawUtf8;
+function ToUtf8(const guid: TGuid): RawUtf8;
 begin
   FastSetString(result, nil, 36);
-  GuidToText(pointer(result), @guid);
+  GuidToText(pointer(result), @Guid);
 end;
 
-function GuidToShort(const guid: TGUID): TGuidShortString;
+function GuidToShort(const guid: TGuid): TGuidShortString;
 begin
-  GuidToShort(guid, result);
+  GuidToShort(Guid, result);
 end;
 
-procedure GuidToShort(const guid: TGUID; out dest: TGuidShortString);
+procedure GuidToShort(const guid: TGuid; out dest: TGuidShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
@@ -10980,7 +10980,7 @@ begin
 end;
 
 {$ifdef UNICODE}
-function GuidToString(const guid: TGUID): string;
+function GuidToString(const guid: TGuid): string;
 var
   tmp: array[0..35] of AnsiChar;
   i: integer;
@@ -10993,7 +10993,7 @@ begin
   PWordArray(result)[37] := ord('}');
 end;
 {$else}
-function GuidToString(const guid: TGUID): string;
+function GuidToString(const guid: TGuid): string;
 begin
   result := GuidToRawUtf8(guid);
 end;
@@ -11055,7 +11055,7 @@ begin
   result := P;
 end;
 
-function StringToGuid(const text: string): TGUID;
+function StringToGuid(const text: string): TGuid;
 {$ifdef UNICODE}
 var
   tmp: array[0..35] of byte;
@@ -11078,7 +11078,7 @@ begin
   FillZero(PHash128(@result)^);
 end;
 
-function RawUtf8ToGuid(const text: RawByteString): TGUID;
+function RawUtf8ToGuid(const text: RawByteString): TGuid;
 begin
   // decode from '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
   if (length(text) <> 38) or
