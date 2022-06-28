@@ -8541,15 +8541,15 @@ begin
   {$ifdef WITH_ERMS}
   // actually slower than our movnt code, and not cpuid in VMs -> ignored
   if cfERMS in CpuFeatures then
-    include(CPUIDX64, cpuERMS);
+    include(X64CpuFeatures, cpuERMS);
   {$endif WITH_ERMS}
   if cfAVX in CpuFeatures then
   begin
-    include(CPUIDX64, cpuAVX);
+    include(X64CpuFeatures, cpuAVX);
     if cfAVX2 in CpuFeatures then
-      include(CPUIDX64, cpuAVX2);
+      include(X64CpuFeatures, cpuAVX2);
     if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
-      include(CPUIDX64, cpuHaswell);
+      include(X64CpuFeatures, cpuHaswell);
   end;
   {$endif ASMX64}
   // redirect some CPU-aware functions
