@@ -6276,7 +6276,7 @@ begin
     data := ''
   else if fObjArray <> nil then
     // T*ObjArray use JSON serialization
-    with TOrmWriter.CreateOwnedStream(temp) do
+    with TJsonWriter.CreateOwnedStream(temp) do
     try
       if ExtendedJson then // smaller content
         CustomOptions := CustomOptions + [twoForceJsonExtended];
@@ -7053,10 +7053,10 @@ end;
 procedure TOrmPropInfoCustomJson.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
 var
-  W: TOrmWriter;
+  W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TOrmWriter.CreateOwnedStream(temp);
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
     GetJsonValues(Instance, W);
     W.SetText(result);
@@ -10771,7 +10771,7 @@ function TOrmPropertiesAbstract.SaveFieldsFromJsonArray(var P: PUtf8Char;
 var
   i: PtrInt;
   decoded: TID;
-  W: TOrmWriter;
+  W: TTextWriter;
   Start: PUtf8Char;
   info: TGetJsonField;
   temp: TTextWriterStackBuffer;
@@ -10795,7 +10795,7 @@ begin
     decoded := ID^;
   if sfoStartWithID in Format then
     decoded := info.GetJsonInt64;
-  W := TOrmWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     if sfoExtendedJson in Format then
       W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
