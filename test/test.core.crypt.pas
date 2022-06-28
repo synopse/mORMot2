@@ -2171,6 +2171,7 @@ var
   st1, st2, st3: ICryptStore;
   alg: TCryptAlgos;
   fmt: TCryptCertFormat;
+  names: string;
 begin
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
@@ -2303,6 +2304,10 @@ begin
   for a := 0 to high(alg) do
   begin
     crt := alg[a] as TCryptCertAlgo;
+    if (a <> 0) and
+       (a mod 5 = 0) then
+      names := names + CRLF + '     ';
+    names := names + ' ' + string(crt.AlgoName);
     c1 := crt.New;
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
@@ -2368,6 +2373,7 @@ begin
         CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
     end;
   end;
+  AddConsole(names);
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
   alg := TCryptStoreAlgo.Instances;
