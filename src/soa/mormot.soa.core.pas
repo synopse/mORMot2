@@ -260,7 +260,7 @@ type
       aOptions: TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
     function GetInterfaceTypeInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetInterfaceIID: TGuid;
+    function GetInterfaceIID: TGUID;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the service provider parameters
@@ -294,7 +294,7 @@ type
       read GetInterfaceTypeInfo;
     /// the registered Interface GUID
     // - just maps InterfaceFactory.InterfaceIID
-    property InterfaceIID: TGuid
+    property InterfaceIID: TGUID
       read GetInterfaceIID;
     /// the service contract, serialized as a JSON object
     // - a "contract" is in fact the used interface signature, i.e. its
@@ -668,9 +668,9 @@ type
     // ! if fClient.Services.Info(ICalculator).Get(I) then
     // !   ... use I
     {$ifdef FPC_HAS_CONSTREF}
-    function Info(constref aGuid: TGuid): TServiceFactory; overload;
+    function Info(constref aGuid: TGUID): TServiceFactory; overload;
     {$else}
-    function Info(const aGuid: TGuid): TServiceFactory; overload;
+    function Info(const aGuid: TGUID): TServiceFactory; overload;
     {$endif FPC_HAS_CONSTREF}
     /// retrieve a service provider from its type information
     // - on match, it  will return the service the corresponding interface factory
@@ -684,8 +684,8 @@ type
     /// notify the other side that the given Callback event interface is released
     // - this default implementation will do nothing
     function CallBackUnRegister(const Callback: IInvokable): boolean; virtual;
-    /// retrieve all registered Services TGuid
-    procedure SetGUids(out Services: TGuidDynArray);
+    /// retrieve all registered Services TGUID
+    procedure SetGUIDs(out Services: TGuidDynArray);
     /// retrieve all registered Services names
     // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
     // ICalculator
@@ -1027,7 +1027,7 @@ begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGuid));
+  fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceUri := fInterface.InterfaceUri;
   if fOrm.Model.GetTableIndex(fInterfaceUri) >= 0 then
     raise EServiceException.CreateUtf8('%.Create: I% routing name is ' +
@@ -1058,7 +1058,7 @@ begin
     result := nil;
 end;
 
-function TServiceFactory.GetInterfaceIID: TGuid;
+function TServiceFactory.GetInterfaceIID: TGUID;
 begin
   result := fInterface.InterfaceIID;
 end;
@@ -1512,9 +1512,9 @@ begin
 end;
 
 {$ifdef FPC_HAS_CONSTREF}
-function TServiceContainer.Info(constref aGuid: TGuid): TServiceFactory;
+function TServiceContainer.Info(constref aGuid: TGUID): TServiceFactory;
 {$else}
-function TServiceContainer.Info(const aGuid: TGuid): TServiceFactory;
+function TServiceContainer.Info(const aGuid: TGUID): TServiceFactory;
 {$endif FPC_HAS_CONSTREF}
 var
   n: TDALen;
@@ -1542,7 +1542,7 @@ begin
   result := nil;
 end;
 
-procedure TServiceContainer.SetGUids(out Services: TGuidDynArray);
+procedure TServiceContainer.SetGUIDs(out Services: TGuidDynArray);
 var
   i, n: PtrInt;
 begin

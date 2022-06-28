@@ -967,7 +967,7 @@ begin
       sicPerSession:
         begin
           inst.InstanceID := aSessionID;
-          RetrieveInstance(nil, inst, ord(imFree), aSessionID);
+          RetrieveInstance(nil, inst, ord(imFree), aSessionID); // O(log(n))
         end;
       sicClientDriven:
         // release ASAP if was not notified by client
@@ -1116,7 +1116,7 @@ begin
       AddNew;
     exit;
   end;
-  // O(log(n)) search of the instance corresponding to Inst.InstanceID
+  // O(log(n)) binary search of the instance corresponding to Inst.InstanceID
   if fInstances.Count > 0 then
   begin
     // non-blocking regular retrieval of any existing TInterfacedObject
@@ -1350,6 +1350,7 @@ begin
     sicPerGroup,
     sicPerThread:
       begin
+        // identify which Inst.InstanceID is to be retrieved
         case InstanceCreation of
           sicClientDriven:
             Inst.InstanceID := Ctxt.ServiceInstanceID;
@@ -1373,6 +1374,7 @@ begin
             exit;
           end;
         end;
+        // O(log(n)) binary search of Inst.Instance from Inst.InstanceID
         case RetrieveInstance(Ctxt, Inst, Ctxt.ServiceMethodIndex, Ctxt.Session) of
           ord(imFree):
             begin

@@ -3188,12 +3188,14 @@ var
 begin
   s := TServiceFactoryServer(Service);
   // XML needs a full JSON object as input
-  fForceServiceResultAsXMLObject := fForceServiceResultAsXMLObject or
-                                    s.ResultAsXMLObject;
-  fForceServiceResultAsJsonObject := fForceServiceResultAsJsonObject or
-                                     s.ResultAsJsonObject or
-                                     s.ResultAsJsonObjectWithoutResult or
-                                     ForceServiceResultAsXMLObject;
+  fForceServiceResultAsXMLObject :=
+    fForceServiceResultAsXMLObject or
+    s.ResultAsXMLObject;
+  fForceServiceResultAsJsonObject :=
+    fForceServiceResultAsJsonObject or
+    s.ResultAsJsonObject or
+    s.ResultAsJsonObjectWithoutResult or
+    ForceServiceResultAsXMLObject;
   fForceServiceResultAsJsonObjectWithoutResult :=
     ForceServiceResultAsJsonObject and
     (s.InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
