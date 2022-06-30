@@ -1476,6 +1476,8 @@ type
     function NotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
     function NotAfter: TDateTime;
+    /// returns the hexadecimal SHA-1 digest of the whole certificate
+    function FingerPrint: RawUtf8;
     /// verbose certificate information, returned as huge text blob
     function PeerInfo: RawUtf8;
     /// access a Certificate extension by NID
@@ -1966,6 +1968,8 @@ function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
   impl: PENGINE): integer; cdecl;
 function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
 function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+function EVP_sha1: PEVP_MD;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function EVP_sha256: PEVP_MD;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
@@ -2781,6 +2785,7 @@ type
     HMAC_Init_ex: function(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
     HMAC_Update: function(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
     HMAC_Final: function(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+    EVP_sha1: function: PEVP_MD; cdecl;
     EVP_sha256: function: PEVP_MD; cdecl;
     EC_GROUP_new_by_curve_name: function(nid: integer): PEC_GROUP; cdecl;
     EC_KEY_new: function(): PEC_KEY; cdecl;
@@ -2832,7 +2837,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..282] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..283] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3068,6 +3073,7 @@ const
     'HMAC_Init_ex',
     'HMAC_Update',
     'HMAC_Final',
+    'EVP_sha1',
     'EVP_sha256',
     'EC_GROUP_new_by_curve_name',
     'EC_KEY_new',
@@ -4341,6 +4347,11 @@ end;
 function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer;
 begin
   result := libcrypto.HMAC_Final(ctx, md, len);
+end;
+
+function EVP_sha1: PEVP_MD;
+begin
+  result := libcrypto.EVP_sha1;
 end;
 
 function EVP_sha256: PEVP_MD;
@@ -5647,6 +5658,9 @@ function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
 
 function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Final';
+
+function EVP_sha1: PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha1';
 
 function EVP_sha256: PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha256';
@@ -7468,6 +7482,19 @@ begin
     result := 0
   else
     result := X509_getm_notAfter(@self).ToDateTime;
+end;
+
+function X509.FingerPrint: RawUtf8;
+var
+  sha1: THash160;
+  len: integer;
+begin
+  if (@self = nil) or
+     (X509_digest(@self, EVP_sha1, @sha1, @len) <> OPENSSLSUCCESS) or
+     (len <> SizeOf(sha1)) then
+    result := ''
+  else
+    result := MacToHex(@sha1, SizeOf(sha1));
 end;
 
 function X509.SetValidity(ValidDays, ExpireDays: integer): boolean;
