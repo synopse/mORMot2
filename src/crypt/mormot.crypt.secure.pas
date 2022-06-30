@@ -4769,7 +4769,7 @@ begin
   if pem = nil then
     result := ''
   else
-    FastSetString(result, pem, len);
+    FastSetString(RawUtf8(result), pem, len);
 end;
 
 const
