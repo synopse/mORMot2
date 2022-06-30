@@ -455,7 +455,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-224 algorithm
+  /// experimental JSON Web Tokens using 'S3224' (SHA3-224) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 224 bits
@@ -464,7 +464,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-256 algorithm
+  /// experimental JSON Web Tokens using 'S3256' (SHA3-256) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 256 bits
@@ -473,7 +473,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-384 algorithm
+  /// experimental JSON Web Tokens using 'S3384' (SHA3-384) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 384 bits
@@ -482,7 +482,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-512 algorithm
+  /// experimental JSON Web Tokens using 'S3512' (SHA3-512) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 512 bits
@@ -491,7 +491,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-SHAKE128 algorithm
+  /// experimental JSON Web Tokens using 'S3S128' (SHA3-SHAKE128) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 256 bits
@@ -500,7 +500,7 @@ type
     function GetAlgo: TSignAlgo; override;
   end;
 
-  /// experimental JSON Web Tokens using SHA3-SHAKE256 algorithm
+  /// experimental JSON Web Tokens using 'S3S256' (SHA3-SHAKE256) algorithm
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
   // - resulting signature size will be of 512 bits
