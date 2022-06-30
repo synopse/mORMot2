@@ -185,7 +185,7 @@ var
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
-  // - equals e.g. '1010106F'
+  // - equals e.g. '1010106f'
   OpenSslVersionHexa: string;
 
 {$ifdef OPENSSLSTATIC}
@@ -4724,7 +4724,7 @@ begin
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
-      OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
+      OpenSslVersionHexa := MacToHex(@OpenSslVersion, 4);
       if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,

@@ -311,6 +311,10 @@ procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 // string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
 function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
+/// convert a MAC address value into a RawUtf8 hexadecimal text
+// - returns e.g. '1250b61ec6aa'
+function MacToHex(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
+
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
 function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
@@ -2078,6 +2082,27 @@ begin
       break;
     P[2] := ':'; // as in Linux
     inc(P, 3);
+    inc(i);
+  until false;
+end;
+
+function MacToHex(mac: PByteArray; maclen: PtrInt): RawUtf8;
+var
+  P: PAnsiChar;
+  i: PtrInt;
+  tab: PAnsichar;
+begin
+  SetLength(result, maclen * 2);
+  dec(maclen);
+  tab := @HexCharsLower;
+  P := pointer(result);
+  i := 0;
+  repeat
+    P[0] := tab[mac[i] shr 4];
+    P[1] := tab[mac[i] and $F];
+    if i = maclen then
+      break;
+    inc(P, 2);
     inc(i);
   until false;
 end;
