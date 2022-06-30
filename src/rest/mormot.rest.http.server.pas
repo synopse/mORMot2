@@ -96,7 +96,7 @@ type
   // using its thread poll for all its HTTP or WebSockets process, , so would
   // scale much better than older useBidirSocket
   // - in practice, useHttpSocket is good behind a reverse proxy defined in
-  // HTTP/1.0 mode, but useHttpAsync  may scale much better in case of
+  // HTTP/1.0 mode, but useHttpAsync may scale much better in case of
   // a lot of concurrent connections, especially kept-alive connections
   // - useBidirSocket may be used for legacy reasons, if one thread per client
   // is a good idea - but useBidirAsync may be preferred for proper scaling

@@ -2366,6 +2366,9 @@ var
   CpuFeatures: TArmHwCaps;
 {$endif CPUARM3264}
 
+/// cross-platform wrapper function to check AES HW support on Intel or ARM
+function HasHWAes: boolean;
+
 {$ifdef CPUINTEL}
 
 var
@@ -7473,6 +7476,19 @@ end;
 
 
 { ************ Faster alternative to RTL standard functions }
+
+function HasHWAes: boolean;
+begin
+  {$ifdef CPUINTEL}
+  result := cfAESNI in CpuFeatures;
+  {$else}
+  {$ifdef CPUARM}
+  result := ahcAES in CpuFeatures;
+  {$else}
+  result := false; // unknown CPU architecture
+  {$endif CPUARM}
+  {$endif CPUINTEL}
+end;
 
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
