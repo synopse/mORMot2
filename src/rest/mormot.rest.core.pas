@@ -3716,8 +3716,8 @@ begin
   begin
     FindNameValue(InHead, UpperName, result);
     if result = '' then
-      Store := NULL_STR_VAR
-    else // ensure header is parsed only once
+      Store := NULL_STR_VAR // flag to ensure header is parsed only once
+    else
       Store := result;
   end
   else if pointer(Store) = pointer(NULL_STR_VAR) then

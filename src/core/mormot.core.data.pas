@@ -8036,12 +8036,12 @@ begin
         inc(P2, s);
       end;
     end
-    else if not(rcfArrayItemManaged in fInfo.Flags) then
-      // binary comparison with length (always CaseSensitive)
-      result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
     else if rcfObjArray in fInfo.Flags then
       // T*ObjArray comparison of published properties
       result := ObjectCompare(fValue^, B.fValue^, n, not CaseSensitive)
+    else if not(rcfArrayItemManaged in fInfo.Flags) then
+      // binary comparison with length (always CaseSensitive)
+      result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
     else
       result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfo, n,
         not CaseSensitive);
