@@ -301,6 +301,9 @@ const
   rkOrdinalTypes =
     rkHasRttiOrdTypes + [ {$ifdef FPC} rkQWord, {$endif} rkInt64 ];
 
+  /// maps integer and floating point types in TRttiKind RTTI enumerates
+  rkNumberTypes = rkOrdinalTypes + [ rkFloat ];
+
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes 32-bit ordinals and pointers
   rkGetOrdPropTypes =
@@ -644,7 +647,8 @@ type
     rcfGetOrdProp,
     rcfGetInt64Prop,
     rcfIsRawBlob,
-    rcfIsCurrency);
+    rcfIsCurrency,
+    rcfIsNumber);
 
   /// as used by TRttiCache.Flags
   // - rcfQWord/rcfBoolean map Info^.IsQWord/IsBoolean
@@ -3472,6 +3476,8 @@ begin
       include(Cache.Flags, rcfBoolean);
     end;
   end;
+  if Kind in rkNumberTypes then
+    include(Cache.Flags, rcfIsNumber);
   if Kind in rkGetOrdPropTypes then
     include(Cache.Flags, rcfGetOrdProp)
   else if Kind in rkGetInt64PropTypes then
@@ -6039,11 +6045,12 @@ begin
     {$ifdef FPC}
     rkLStringOld,
     {$endif FPC}
-    {$ifdef HASVARUSTRING}
-    rkUString,
-    {$endif HASVARUSTRING}
     rkLString:
       FillZero(RawByteString(Value));
+    {$ifdef HASVARUSTRING}
+    rkUString:
+      FillZero(UnicodeString(Value));
+    {$endif HASVARUSTRING}
     rkVariant:
       if TVarData(Value).VType = varString then
         FillZero(RawByteString(TVarData(Value).VAny));
@@ -6079,12 +6086,16 @@ begin
   if nfo <> nil then
   begin
     p := pointer(nfo.Props.List); // for both records and classes
-    v := PPointer(Value)^;
-    for i := 0 to nfo.Props.Count - 1 do
+    if Info^.Kind = rkClass then
+      v := PPointer(Value)^ // classes are passed by reference
+    else
+      v := @Value;          // records are passed by value
+    for i := 1 to nfo.Props.Count do
     begin
       if (p^.OffsetSet >= 0) and
          (p^.Value <> nil) and
-         (p^.Value.Info <> nil) then
+         (p^.Value.Info <> nil) and
+         not (rcfIsNumber in p^.Value.Cache.Flags) then
         FillZero(p^.Value.Info, v[p^.OffsetSet]); // process nested fields
       inc(p);
     end;

@@ -145,6 +145,11 @@ procedure FillZero(var secret: SpiUtf8); overload;
 // (i.e. has refcount = 1), to avoid zeroing still-used values
 procedure FillZero(var secret: TBytes); overload;
 
+{$ifdef HASVARUSTRING}
+/// fill all bytes of this UTF-16 string with zeros, i.e. 'toto' -> #0#0#0#0
+procedure FillZero(var secret: UnicodeString); overload;
+{$endif HASVARUSTRING}
+
 /// actual replacement function called by StringReplaceAll() on first match
 // - not to be called as such, but defined globally for proper inlining
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;
@@ -2918,6 +2923,16 @@ procedure FillZero(var secret: SpiUtf8);
 begin
   FillZero(RawByteString(secret));
 end;
+
+{$ifdef HASVARUSTRING}
+procedure FillZero(var secret: UnicodeString);
+begin
+  if secret <> '' then
+    with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
+      if refCnt = 1 then // avoid GPF if const
+        FillCharFast(pointer(secret)^, length * SizeOf(WideChar), 0);
+end;
+{$endif HASVARUSTRING}
 
 procedure FillZero(var secret: TBytes);
 begin
