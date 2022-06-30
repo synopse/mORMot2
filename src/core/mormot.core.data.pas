@@ -2499,6 +2499,9 @@ function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main
 function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// search if the WebSocketUpgrade() header is present
+function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
 
@@ -4090,6 +4093,17 @@ end;
 function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER, @CONTENT_TYPE_TEXTUAL);
+end;
+
+const
+  WS_UPGRADE: array[0..2] of PAnsiChar = (
+    'UPGRADE',
+    'KEEP-ALIVE, UPGRADE',
+    nil);
+
+function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
+begin
+  result := ExistsIniNameValue(pointer(headers), 'CONNECTION: ', @WS_UPGRADE);
 end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
