@@ -1004,6 +1004,7 @@ type
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
+    function GetRawTls: pointer;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -1187,6 +1188,11 @@ begin
   if fCipherName = '' then
     fCipherName := TlsConnectionInfo(fCtxt);
   result := fCipherName;
+end;
+
+function TSChannelNetTls.GetRawTls: pointer;
+begin
+  result := @fCtxt; // return as PCtxtHandle
 end;
 
 procedure TSChannelNetTls.HandshakeLoop;

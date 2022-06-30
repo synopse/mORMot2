@@ -305,13 +305,13 @@ procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 /// convert an IPv6 full address into a ShortString text
 procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 
-/// convert a MAC address value into a RawUtf8 text
+/// convert a MAC address value into its standard RawUtf8 text representation
 // - returns e.g. '12:50:b6:1e:c6:aa'
 // - could be used to convert some binary buffer into human-friendly hexadecimal
 // string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
 function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
-/// convert a MAC address value into a RawUtf8 hexadecimal text
+/// convert a MAC address value into a RawUtf8 hexadecimal text with no ':'
 // - returns e.g. '1250b61ec6aa'
 function MacToHex(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
@@ -508,6 +508,10 @@ type
       LastError, CipherName: PRawUtf8);
     /// retrieve the textual name of the cipher used following AfterAccept()
     function GetCipherName: RawUtf8;
+    /// return the low-level TLS instance used, depending on the engine
+    // - typically a PSSL on OpenSSL, so you can use e.g. PSSL().PeerCertificate,
+    // or a PCtxtHandle on SChannel
+    function GetRawTls: pointer;
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// send some data from the TLS layer

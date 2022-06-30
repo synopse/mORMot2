@@ -7955,6 +7955,7 @@ type
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
     function GetCipherName: RawUtf8;
+    function GetRawTls: pointer;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -8259,6 +8260,17 @@ begin
   if fCipherName = '' then
     fCipherName := fSsl.CurrentCipher.Description;
   result := fCipherName;
+end;
+
+function TOpenSslNetTls.GetRawTls: pointer;
+// e.g. to retrieve fSsl.PeerCertificate fields to set in HTTP headers:
+//   at least FingerPrint + SubjectName
+// SerialNumber,SubjectKeyIdentifier,IssuerKeyIdentifier,SubjectName
+// see https://nginx.org/en/docs/http/ngx_http_ssl_module.html
+//   $ssl_client_verify  $ssl_client_i_dn  $ssl_client_escaped_cert
+//   $ssl_client_fingerprint $ssl_client_s_dn
+begin
+  result := fSsl;
 end;
 
 destructor TOpenSslNetTls.Destroy;
