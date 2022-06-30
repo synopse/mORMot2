@@ -2191,10 +2191,24 @@ type
     Dyn: array of integer;
     Bulk: array[0..19] of byte;
   end;
+  TLicenseData = record
+    CustomerNum: Integer;
+    CustomerName: RawUtf8;
+    CustomerAddress: RawUtf8;
+    LicenceDate: TDate;
+    ProductName: RawUtf8;
+  end;
 var
   A, B, C: TR;
   i, j: PtrInt;
+  lic: TLicenseData;
 begin
+  CheckEqual(lic.CustomerName, '');
+  FillZero(TypeInfo(TLicenseData), lic);
+  CheckEqual(lic.CustomerName, '');
+  lic.CustomerName := '1234';
+  FillZero(TypeInfo(TLicenseData), lic);
+  CheckEqual(lic.CustomerName, '');
   FillCharFast(A, SizeOf(A), 0);
   FillCharFast(B, SizeOf(B), 0);
   FillCharFast(C, SizeOf(C), 0);
