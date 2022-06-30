@@ -1696,7 +1696,7 @@ begin
   utf16 := Utf8Decode(Utf8);
   tmp.Init(length(utf16) * 3);
   CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16) + 1); // +1 = ending #0
-  FastSetRawByteString(Console, tmp.buf, StrLen(tmp.buf));
+  FastSetStringCP(Console, tmp.buf, StrLen(tmp.buf), CP_OEMCP);
   tmp.Done;
 end;
 
