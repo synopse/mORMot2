@@ -194,7 +194,7 @@ type
     szExchange: TSecPkgCipherInfoText;
     dwMinExchangeLen: cardinal;
     dwMaxExchangeLen: cardinal;
-    szCertificate: TSecPkgCipherInfoText;
+    szCertificate: TSecPkgCipherInfoText;  // e.g. 'RSA'
     dwKeyType: cardinal;
   end;
 

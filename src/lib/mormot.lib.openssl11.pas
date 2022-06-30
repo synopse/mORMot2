@@ -7946,6 +7946,7 @@ type
     fPeer: PX509;
     fCipherName: RawUtf8;
     fDoSslShutdown: boolean;
+    procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
   public
     destructor Destroy; override;
     // INetTls methods
@@ -8044,33 +8045,18 @@ const
     'DHE-RSA-AES128-GCM-SHA256:' +
     'DHE-RSA-AES256-GCM-SHA384');
 
-function HasHWAes: boolean; {$ifdef HASINLINE} inline; {$endif}
-begin
-  {$ifdef CPUINTEL}
-  result := cfAESNI in CpuFeatures;
-  {$else}
-  {$ifdef CPUARM}
-  result := ahcAES in CpuFeatures;
-  {$else}
-  result := false;
-  {$endif CPUARM}
-  {$endif CPUINTEL}
-end;
-
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
 procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
-  v: integer;
   P: PUtf8Char;
   h: RawUtf8;
   //x: PX509DynArray;
-  //ext: TX509_Extensions; exts: TRawUtf8DynArray;
+  //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt;
 begin
   fSocket := Socket;
   fContext := @Context;
-  _PeerVerify := self; // safe and simple context for the callbacks
   // reset output information
   fLastError := @Context.LastError;
   Context.CipherName := '';
@@ -8080,44 +8066,7 @@ begin
   Context.LastError := '';
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
-  if Context.IgnoreCertificateErrors then
-    SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
-  else
-  begin
-    if Assigned(Context.OnEachPeerVerify) then
-      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify)
-    else
-      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
-    if FileExists(TFileName(Context.CACertificatesFile)) then
-      SSL_CTX_load_verify_locations(
-        fCtx, pointer(Context.CACertificatesFile), nil)
-    else
-      SSL_CTX_set_default_verify_paths(fCtx);
-  end;
-  if FileExists(TFileName(Context.CertificateFile)) then
-     SSL_CTX_use_certificate_file(
-       fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
-  if FileExists(TFileName(Context.PrivateKeyFile)) then
-  begin
-    if Assigned(Context.OnPrivatePassword) then
-      SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
-    else if Context.PrivatePassword <> '' then
-      SSL_CTX_set_default_passwd_cb_userdata(
-        fCtx, pointer(Context.PrivatePassword));
-    SSL_CTX_use_PrivateKey_file(
-      fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    EOpenSslNetTls.Check(self, 'AfterConnection check_private_key',
-      SSL_CTX_check_private_key(fCtx), @Context.LastError);
-  end;
-  if Context.CipherList = '' then
-    Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
-  EOpenSslNetTls.Check(self, 'AfterConnection setcipherlist',
-    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
-    @Context.LastError);
-  v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
-  if Context.AllowDeprecatedTls then
-    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
-  SSL_CTX_set_min_proto_version(fCtx, v);
+  SetupCtx(Context, {bind=}false);
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
   if not Context.IgnoreCertificateErrors then
@@ -8169,29 +8118,32 @@ begin
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
-        // writeln(Context.PeerInfo);
-        // writeln(fPeer.SerialNumber);
-        // exts := fPeer.SubjectAlternativeNames;
-        // for len := 0 to high(exts) do
-        //   writeln('dns=',exts[len]);
-        // ext := fPeer.GetExtensions;
-        // writeln(length(ext));
-        // for len := 0 to high(ext) do
-        //   writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
-        // writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
-        // writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
-        // writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
-        // writeln('IssuerKeyIdentifier=',fPeer.IssuerKeyIdentifier);
-        // writeln('Usage=',word(fPeer.GetUsage));
-        // writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
-        // writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
-        // writeln('kuTlsClient=',fPeer.HasUsage(kuTlsClient));
-        // writeln('KeyUsage=',fPeer.KeyUsage);
-        // writeln('ExtendedKeyUsage=',fPeer.ExtendedKeyUsage);
-        // writeln('IssuerName=',fPeer.IssuerName);
-        // writeln('SubjectName=',fPeer.SubjectName);
-        // writeln(fPeer.ExtensionText(NID_basic_constraints));
-        // writeln(length(fPeer.ToBinary));
+        {
+        writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
+        writeln('SerialNumber=',fPeer.SerialNumber);
+        exts := fPeer.SubjectAlternativeNames;
+        for len := 0 to high(exts) do
+          writeln('dns=',exts[len]);
+        ext := fPeer.GetExtensions;
+        writeln(length(ext));
+        for len := 0 to high(ext) do
+          writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
+        writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
+        writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
+        writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
+        writeln('IssuerKeyIdentifier=',fPeer.IssuerKeyIdentifier);
+        writeln('Usage=',word(fPeer.GetUsage));
+        writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
+        writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
+        writeln('kuTlsClient=',fPeer.HasUsage(kuTlsClient));
+        writeln('KeyUsage=',fPeer.KeyUsage);
+        writeln('ExtendedKeyUsage=',fPeer.ExtendedKeyUsage);
+        writeln('FingerPrint=',fPeer.FingerPrint);
+        writeln('IssuerName=',fPeer.IssuerName);
+        writeln('SubjectName=',fPeer.SubjectName);
+        writeln(fPeer.ExtensionText(NID_basic_constraints));
+        writeln(length(fPeer.ToBinary));
+        }
       end;
       if Context.IgnoreCertificateErrors then
         Context.LastError := 'not verified';
@@ -8205,34 +8157,67 @@ begin
   end;
 end;
 
-procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
+procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v: Integer;
+  v: integer;
+begin
+  _PeerVerify := self; // safe and simple context for the callbacks
+  if Context.IgnoreCertificateErrors then
+    SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
+  else
+  begin
+    if Assigned(Context.OnEachPeerVerify) then
+      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify)
+    else
+      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
+    if FileExists(TFileName(Context.CACertificatesFile)) then
+      SSL_CTX_load_verify_locations(
+        fCtx, pointer(Context.CACertificatesFile), nil)
+    else
+      SSL_CTX_set_default_verify_paths(fCtx);
+  end;
+  if FileExists(TFileName(Context.CertificateFile)) then
+     SSL_CTX_use_certificate_file(
+       fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM)
+  else if Bind then
+    raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
+  if FileExists(TFileName(Context.PrivateKeyFile)) then
+  begin
+    if Assigned(Context.OnPrivatePassword) then
+      SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
+    else if Context.PrivatePassword <> '' then
+      SSL_CTX_set_default_passwd_cb_userdata(
+        fCtx, pointer(Context.PrivatePassword));
+    SSL_CTX_use_PrivateKey_file(
+      fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+    EOpenSslNetTls.Check(self, 'check_private_key',
+      SSL_CTX_check_private_key(fCtx), @Context.LastError);
+  end
+  else if Bind then
+    raise EOpenSslNetTls.Create('AfterBind: PrivateKeyFile required');
+  if Context.CipherList = '' then
+    Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
+  EOpenSslNetTls.Check(self, 'setcipherlist',
+    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
+    @Context.LastError);
+  v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
+  if Context.AllowDeprecatedTls then
+    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
+  SSL_CTX_set_min_proto_version(fCtx, v);
+end;
+
+procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
 begin
   // we don't store fSocket/fContext bound socket
   Context.LastError := '';
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
-  if Context.CertificateFile = '' then
-    raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
-  SSL_CTX_use_certificate_file(
-    fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
-  if Context.PrivatePassword <> '' then
-    SSL_CTX_set_default_passwd_cb_userdata(
-      fCtx, pointer(Context.PrivatePassword));
-  if Context.PrivateKeyFile = '' then
-    raise EOpenSslNetTls.Create('AfterBind: PrivateKeyFile required');
-  SSL_CTX_use_PrivateKey_file(
-    fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-  EOpenSslNetTls.Check(self, 'AfterBind check_private_key',
-    SSL_CTX_check_private_key(fCtx), @Context.LastError);
-  v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
-  if Context.AllowDeprecatedTls then
-    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
-  SSL_CTX_set_min_proto_version(fCtx, v);
+  SetupCtx(Context, {bind=}true);
   // this global context fCtx will be reused by AfterAccept()
   Context.AcceptCert := fCtx;
 end;
+
+//TODO: SSL_CTX_use_certificate_chain_file() with the CA?
 
 procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
