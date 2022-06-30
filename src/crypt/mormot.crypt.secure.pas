@@ -1689,6 +1689,12 @@ var
 { ************************** Minimal PEM/DER Encoding/Decoding }
 
 type
+  /// a certificate (typically X509) encoded as PEM / text
+  TCertPem = type RawUtf8;
+
+  /// a certificate (typically X509) encoded as binary
+  TCertDer = type RawByteString;
+
   /// the DerToPem() supported contents of a PEM text instance
   // - pemSynopseSignature, pemSynopseCertificate and
   // pemSynopseCertificateAndPrivateKey follow our proprietary
@@ -1756,21 +1762,21 @@ const
     '-----END SYNECC PRIVATE KEY AND CERTIFICATE-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text
-function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8; overload;
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem; overload;
 
 /// convert a binary DER content into a single-instance PEM text
-function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8; overload;
+function DerToPem(const der: TCertDer; kind: TPemKind): TCertPem; overload;
 
 /// convert a single-instance PEM text file into a binary DER
 // - if the supplied buffer doesn't start with '-----BEGIN .... -----'
 // trailer, will expect the input to be plain DER binary and return it
-function PemToDer(const pem: RawUtf8; kind: PPemKind = nil): RawByteString;
+function PemToDer(const pem: TCertPem; kind: PPemKind = nil): TCertDer;
 
 /// parse a multi-PEM text input and return the next PEM content
 // - search and identify any PEM_BEGIN/PEM_END markers
 // - ready to be decoded via PemToDer()
 // - optionally returning the recognized TPemKind (maybe pemUnspecified)
-function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): RawUtf8;
+function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): TCertPem;
 
 /// quickly check the begin/end of a single-instance PEM text
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
@@ -1780,7 +1786,7 @@ function IsPem(const pem: RawUtf8): boolean;
 /// quickcly check if a PEM text is likely to be encrypted
 // - search for a PEM format, with ENCRYPTED keyword
 // - won't decode the Base64 encoded binary, so may return some false negative
-function IsPemEncrypted(const pem: RawUtf8): boolean;
+function IsPemEncrypted(const pem: TCertPem): boolean;
 
 /// low-level binary-to-DER encoder
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
@@ -4642,12 +4648,12 @@ end;
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
 
-function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): RawUtf8;
+function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem;
 begin
   result := BinToBase64Line(der, len, PEM_BEGIN[kind], PEM_END[kind]);
 end;
 
-function DerToPem(const der: RawByteString; kind: TPemKind): RawUtf8;
+function DerToPem(const der: TCertDer; kind: TPemKind): TCertPem;
 begin
   result := DerToPem(pointer(der), length(der), kind);
 end;
@@ -4661,7 +4667,7 @@ begin
             (PosEx('-----END', pem, i + 10) <> 0);
 end;
 
-function IsPemEncrypted(const pem: RawUtf8): boolean;
+function IsPemEncrypted(const pem: TCertPem): boolean;
 begin
   result := IsPem(pem) and
             (PosEx('ENCRYPTED', pem) <> 0);
@@ -4734,7 +4740,7 @@ begin
   result := d;
 end;
 
-function PemToDer(const pem: RawUtf8; kind: PPemKind): RawByteString;
+function PemToDer(const pem: TCertPem; kind: PPemKind): TCertDer;
 var
   P: PUtf8Char;
   len: PtrInt;
@@ -4754,7 +4760,7 @@ begin
   result := pem;
 end;
 
-function NextPem(var P: PUtf8Char; Kind: PPemKind): RawUtf8;
+function NextPem(var P: PUtf8Char; Kind: PPemKind): TCertPem;
 var
   len: PtrInt;
   pem: PUtf8Char;
