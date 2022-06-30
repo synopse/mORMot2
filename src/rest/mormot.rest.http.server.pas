@@ -156,6 +156,13 @@ const
   HTTP_DEFAULT_MODE = useHttpAsync;
   {$endif USEHTTPSYS}
 
+  /// the kind of HTTP server to be used by default with/without TLS
+  // - only our socket-based servers do allow setting certificates at runtime
+  // - see also HTTPS_SECURITY[]
+  HTTPS_DEFAULT_MODE: array[{tls=}boolean] of TRestHttpServerUse = (
+    HTTP_DEFAULT_MODE,
+    useHttpAsync);
+
   /// the kind of HTTP server to be used by default for WebSockets support
   // - will define the best available server class, depending on the platform
   // - useBidirSocket uses one thread per connection, whereas useBidirAsync
@@ -167,6 +174,7 @@ const
   HTTP_BIDIR = [useBidirSocket, useBidirAsync];
 
   /// HTTP/HTTPS security flags for TRestHttpServer.Create() constructor
+  // - see also HTTPS_DEFAULT_MODE[]
   HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
     secNone,
     secTLS);
