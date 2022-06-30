@@ -284,6 +284,7 @@ type
     fConnectionFlags: THttpServerRequestFlags;
     fRemoteIP: RawUtf8;
     fUpgradeUri: RawUtf8;
+    fUpgradeBearerToken: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
@@ -367,6 +368,9 @@ type
     /// the URI on which this protocol has been upgraded
     property UpgradeUri: RawUtf8
       read fUpgradeUri write fUpgradeUri;
+    /// the "Bearer" HTTP header value on which this protocol has been upgraded
+    property UpgradeBearerToken: RawUtf8
+      read fUpgradeBearerToken write fUpgradeBearerToken;
     /// the last error message, during frame processing
     property LastError: string
       read fLastError;
@@ -1448,6 +1452,7 @@ begin
     // regular HTTP-like request from client
     Ctxt := Sender.ComputeContext(onRequest);
     try
+      // prepare the HTTP request from input frame
       if (Ctxt = nil) or
          (not Assigned(onRequest)) then
         raise EWebSockets.CreateUtf8('%.ProcessOne: onRequest=nil', [self]);
@@ -1455,12 +1460,16 @@ begin
          not FrameToInput(request, noAnswer, Ctxt) then
         raise EWebSockets.CreateUtf8('%.ProcessOne: invalid frame', [self]);
       request.payload := ''; // release memory ASAP
+      if fUpgradeBearerToken <> '' then
+        Ctxt.AuthBearer := fUpgradeBearerToken; // re-pass the HTTP bearer
       if info <> '' then
-        Ctxt.AddInHeader(info);
-      status := onRequest(Ctxt); // blocking call to compute the answer
+        Ctxt.AddInHeader(info);  // include JUMBO_INFO[] custom header
+      // compute the HTTP answer from the main HTTP server
+      status := onRequest(Ctxt);
       if (Ctxt.OutContentType = NORESPONSE_CONTENT_TYPE) or
          noAnswer then
-        exit;
+        exit; // custom non-blocking process expects no answer
+      // there is a response frame to send back
       OutputToFrame(Ctxt, status, head, answer);
       if not Sender.SendFrame(answer) then // immediate frame sending
         FormatString('%.SendFrame error', [Sender], fLastError);
@@ -2361,6 +2370,7 @@ begin
   if Protocol = nil then
     exit;
   Protocol.UpgradeUri := uri;
+  Protocol.UpgradeBearerToken := Http.BearerToken;
   Protocol.RemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
   if Protocol.RemoteIP = '' then
   begin
