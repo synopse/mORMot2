@@ -66,7 +66,8 @@ type
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
-      aConnectionFlags: THttpServerRequestFlags; aConnectionOpaque: PPointer); virtual;
+      aConnectionFlags: THttpServerRequestFlags;
+      aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -359,7 +360,7 @@ type
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
-    fConnectionOpaque: PPointer;
+    fConnectionOpaque: THttpServerConnectionOpaque;
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -1269,7 +1270,8 @@ var
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
-  aConnectionFlags: THttpServerRequestFlags; aConnectionOpaque: PPointer);
+  aConnectionFlags: THttpServerRequestFlags;
+  aConnectionOpaque: PHttpServerConnectionOpaque);
 var
   id: PInteger;
 begin

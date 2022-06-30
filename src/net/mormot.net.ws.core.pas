@@ -705,7 +705,7 @@ type
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
     fOwnerConnectionID: THttpServerConnectionID;
-    fConnectionOpaque: pointer;
+    fConnectionOpaque: PHttpServerConnectionOpaque;
     fProtocol: TWebSocketProtocol;
     fState: TWebSocketProcessState;
     fMaskSentFrames: byte;
@@ -733,9 +733,8 @@ type
     function ProcessLoopStepSend: boolean;
     // blocking process, for one thread handling all WebSocket connection process
     procedure ProcessLoop;
-    function ComputeContext(
-       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
-      virtual; abstract;
+    function ComputeContext(out RequestProcess: TOnHttpServerRequest
+        ): THttpServerRequestAbstract; virtual; abstract;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;
@@ -746,7 +745,8 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aProtocol: TWebSocketProtocol;
       aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
-      aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8); reintroduce;
+      aConnectionOpaque: PHttpServerConnectionOpaque; aSettings: PWebSocketProcessSettings;
+      const aProcessName: RawUtf8); reintroduce;
     /// finalize the context
     // - if needed, will notify the other end with a focConnectionClose frame
     // - will release the TWebSocketProtocol associated instance
@@ -812,7 +812,7 @@ type
     property OwnerConnectionID: THttpServerConnectionID
       read fOwnerConnectionID;
     /// associated low-level opaque pointer maintained during the connection
-    property ConnectionOpaque: pointer
+    property ConnectionOpaque: PHttpServerConnectionOpaque
       read fConnectionOpaque;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer
@@ -846,8 +846,9 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
       aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
-      aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
-       reintroduce; virtual;
+      aConnectionOpaque: PHttpServerConnectionOpaque;
+      aSettings: PWebSocketProcessSettings;
+      const aProcessName: RawUtf8); reintroduce; virtual;
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
     // - in practice, just call fSocket.SockInPending to check for pending data
     function CanGetFrame(TimeOut: cardinal;
@@ -2441,6 +2442,7 @@ end;
 
 constructor TWebSocketProcess.Create(aProtocol: TWebSocketProtocol;
   aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
+  aConnectionOpaque: PHttpServerConnectionOpaque;
   aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
 begin
   inherited Create; // may have been overriden
@@ -2448,6 +2450,7 @@ begin
   fProtocol := aProtocol;
   fOwnerConnectionID := aOwnerConnectionID;
   fOwnerThread := aOwnerThread;
+  fConnectionOpaque := aConnectionOpaque;
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create(30 * 60);
   fOutgoing := TWebSocketFrameList.Create(0);
@@ -2980,11 +2983,11 @@ end;
 
 constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
   aProtocol: TWebSocketProtocol; aOwnerConnectionID: THttpServerConnectionID;
-  aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
-  const aProcessName: RawUtf8);
+  aOwnerThread: TSynThread; aConnectionOpaque: PHttpServerConnectionOpaque;
+  aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
 begin
-  inherited Create(
-    aProtocol, aOwnerConnectionID, aOwnerThread, aSettings, aProcessName);
+  inherited Create(aProtocol, aOwnerConnectionID, aOwnerThread,
+    aConnectionOpaque, aSettings, aProcessName);
   fSocket := aSocket;
 end;
 

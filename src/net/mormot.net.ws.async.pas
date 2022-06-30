@@ -438,8 +438,8 @@ var
 begin
   serv := aConnection.fServer as TWebSocketAsyncServer;
   fNoLastSocketTicks := true; // aConnection.OnLastOperationIdle handles pings
-  inherited Create(
-    aProtocol, aConnection.Handle, nil, @serv.fSettings, serv.ProcessName);
+  inherited Create(aProtocol, aConnection.Handle, nil,
+    @aConnection.fConnectionOpaque, @serv.fSettings, serv.ProcessName);
   fConnection := aConnection;
   fOnRead.Init(self, @fOnReadFrame);
 end;
@@ -449,7 +449,7 @@ function TWebSocketAsyncProcess.ComputeContext(
 begin
   result := THttpServerRequest.Create(
     fConnection.fServer, fOwnerConnectionID, nil, fProtocol.ConnectionFlags,
-    @fConnectionOpaque);
+    fConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;
 end;
 

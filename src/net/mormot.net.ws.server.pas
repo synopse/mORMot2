@@ -231,9 +231,8 @@ var
   server: THttpServer;
 begin
   server := (fSocket as TWebSocketServerSocket).Server;
-  result := THttpServerRequest.Create(
-    server, fOwnerConnectionID, fOwnerThread, fProtocol.ConnectionFlags,
-      @fConnectionOpaque);
+  result := THttpServerRequest.Create(server, fOwnerConnectionID,
+    fOwnerThread, fProtocol.ConnectionFlags, fConnectionOpaque);
   RequestProcess :=  server.Request;
 end;
 
@@ -293,7 +292,8 @@ begin
   end;
   // if we reached here, we switched/upgraded to WebSockets bidir frames
   sock.fProcess := fProcessClass.Create(ClientSock, protocol,
-    sock.RemoteConnectionID, {ownerthread=}nil, @fSettings, fProcessName);
+    sock.RemoteConnectionID, {ownerthread=}nil, @sock.fConnectionOpaque,
+    @fSettings, fProcessName);
   fWebSocketConnections.Add(sock.fProcess);
   try
     // run main blocking loop in this connection-dedicated thread

@@ -405,6 +405,13 @@ type
   /// a dynamic array of client connection identifiers, e.g. for broadcasting
   THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
 
+  /// an opaque connection-specific pointer identifier with a strong type
+  THttpServerConnectionOpaque = record
+    Value: pointer;
+  end;
+  /// reference to an opaque connection-specific pointer identifier
+  PHttpServerConnectionOpaque = ^THttpServerConnectionOpaque;
+
   /// event handler used by THttpServerGeneric.OnRequest property
   // - Ctxt defines both input and output parameters
   // - result of the function is the HTTP error code (200 if OK, e.g.)
@@ -498,7 +505,7 @@ type
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fRespStatus: integer;
     fConnectionThread: TSynThread;
-    fConnectionOpaque: PPointer;
+    fConnectionOpaque: PHttpServerConnectionOpaque;
   public
     /// prepare an incoming request from explicit values
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -528,7 +535,7 @@ type
     /// some HTTP servers support a per-connection pointer storage
     // - may be nil if unsupported, e.g. by the http.sys servers
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
-    property ConnectionOpaque: PPointer
+    property ConnectionOpaque: PHttpServerConnectionOpaque
       read fConnectionOpaque;
   published
     /// input parameter containing the caller URI

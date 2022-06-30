@@ -737,7 +737,7 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
-    fConnectionOpaque: pointer;
+    fConnectionOpaque: THttpServerConnectionOpaque;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;

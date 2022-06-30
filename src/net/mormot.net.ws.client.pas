@@ -195,7 +195,7 @@ begin
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
   fMaskSentFrames := FRAME_LEN_MASK;
-  inherited Create(aSender, aProtocol, 0, nil, @aSender.fSettings, aProcessName);
+  inherited Create(aSender, aProtocol, 0, nil, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fConnectionID := aConnectionID;
   fClientThread := TWebSocketProcessClientThread.Create(self);
@@ -237,8 +237,8 @@ begin
   ws := fSocket as THttpClientWebSockets;
   RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
-    result := THttpServerRequest.Create(nil, 0, fOwnerThread,
-      ws.fProcess.Protocol.ConnectionFlags, @ws.fProcess.fConnectionOpaque)
+    result := THttpServerRequest.Create(
+      nil, 0, fOwnerThread, ws.fProcess.Protocol.ConnectionFlags, nil)
   else
     result := nil;
 end;
@@ -351,8 +351,7 @@ begin
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
       Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnectionID,
-        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags,
-        @fProcess.ConnectionOpaque);
+        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags, nil);
       try
         body := Data;
         if InStream <> nil then

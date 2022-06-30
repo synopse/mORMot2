@@ -1058,7 +1058,7 @@ begin
     call.OutInternalState := 0;
     call.RestAccessRights := nil;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
-    call.LowLevelConnectionOpaque := Ctxt.ConnectionOpaque;
+    call.LowLevelConnectionOpaque := pointer(Ctxt.ConnectionOpaque);
     call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
     call.LowLevelRemoteIP := Ctxt.RemoteIP;
     call.LowLevelBearerToken := Ctxt.AuthBearer;

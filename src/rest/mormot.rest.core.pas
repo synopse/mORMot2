@@ -1150,6 +1150,7 @@ type
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// most HTTP servers support a per-connection pointer storage
     // - may be nil if unsupported, e.g. by the http.sys servers
+    // - see also THttpServerConnectionOpaque as defined in mormot.net.http
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
     LowLevelConnectionOpaque: PPointer;
     /// pre-parsed Remote IP of the current connection
