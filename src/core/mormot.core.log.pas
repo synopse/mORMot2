@@ -5493,6 +5493,9 @@ end;
 procedure TSynLog.ComputeFileName;
 var
   timeNow, hourRotate, timeBeforeRotate: TDateTime;
+  {$ifdef OSPOSIX}
+  i: PtrInt;
+  {$endif OSPOSIX}
 begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
@@ -5523,10 +5526,15 @@ begin
   if IsLibrary and
      (fFamily.fCustomFileName = '') then
     fFileName := fFileName + ' ' + ExtractFileName(GetModuleName(HInstance));
-  {$endif}
+  {$endif OSWINDOWS}
   if fFamily.fPerThreadLog = ptOneFilePerThread then
     fFileName := fFileName + ' ' +
       sysutils.IntToHex(PtrInt(GetCurrentThreadId), 8);
+  {$ifdef OSPOSIX}
+  for i := 1 to length(fFileName) do
+    if fFileName[i] = ' ' then
+      fFileName[i] := '-'; // more readable and usable on POSIX command line
+  {$endif OSPOSIX}
   fFileName := fFamily.fDestinationPath + fFileName + fFamily.fDefaultExtension;
 end;
 
