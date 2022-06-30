@@ -2614,7 +2614,6 @@ begin
   end;
   // TAsyncServer.Execute made Accept(async=false) from acoEnableTls
   Sender.fSecure := NewNetTls;  // should work since DoTlsAfter() was fine
-  Sender.fSocket.MakeBlocking;
   Sender.fSecure.AfterAccept(Sender.fSocket, fServer.TLS, nil, nil);
   Sender.fSocket.MakeAsync;     // as expected by our asynchronous code
 end;
@@ -3040,7 +3039,8 @@ begin
     fHttp.UncompressData;
   // compute the HTTP/REST process
   result := soClose;
-  req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil, []);
+  req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil,
+    HTTPREMOTEFLAGS[Assigned(fSecure)]);
   try
     // let the associated THttpAsyncServer execute the request
     req.Prepare(fHttp, fRemoteIP);
