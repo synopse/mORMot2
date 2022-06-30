@@ -987,11 +987,6 @@ const
   EVP_R_WRONG_FINAL_BLOCK_LENGTH = 109;
   EVP_R_XTS_DUPLICATED_KEYS = 183;
   
-  EVP_MAX_MD_SIZE = 64;
-  EVP_MAX_KEY_LENGTH = 64;
-  EVP_MAX_IV_LENGTH = 16;
-  EVP_MAX_BLOCK_LENGTH = 32;
-  
   SN_undef = 'UNDEF';
   LN_undef = 'undefined';
   NID_undef = 0;
@@ -13980,9 +13975,6 @@ function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: P
 
 function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_SealFinal';
-
-function EVP_sha1(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha1';
 
 function EVP_sha224(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha224';

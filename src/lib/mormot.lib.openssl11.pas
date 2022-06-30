@@ -255,6 +255,11 @@ const
   EVP_CTRL_GCM_GET_TAG = $10;
   EVP_CTRL_GCM_SET_TAG = $11;
 
+  EVP_MAX_MD_SIZE = 64; // 512-bit
+  EVP_MAX_KEY_LENGTH = 64;
+  EVP_MAX_IV_LENGTH = 16;
+  EVP_MAX_BLOCK_LENGTH = 32;
+
   EVP_MD_FLAG_ONESHOT = $0001;
   EVP_MD_FLAG_XOF = $0002;
   EVP_MD_FLAG_DIGALGID_MASK = $0018;
@@ -1006,6 +1011,10 @@ type
   PEVP_MD = type pointer;
   PPEVP_MD = ^PEVP_MD;
 
+  /// buffer able to hold up to the maximum PEVP_MD digest size
+  EVP_MD_DIG = array[0..EVP_MAX_MD_SIZE - 1] of byte;
+  PEVP_MD_DIG = ^EVP_MD_DIG;
+
   EVP_PKEY = object
   public
     function PrivateToBinary: RawByteString;
@@ -1477,7 +1486,8 @@ type
     /// the maximum Validity timestamp of this Certificate
     function NotAfter: TDateTime;
     /// returns the hexadecimal SHA-1 digest of the whole certificate
-    function FingerPrint: RawUtf8;
+    // - you can set e.g. md = EVP_sha256 to retrieve the SHA-256 digest
+    function FingerPrint(md: PEVP_MD = nil): RawUtf8;
     /// verbose certificate information, returned as huge text blob
     function PeerInfo: RawUtf8;
     /// access a Certificate extension by NID
@@ -1714,7 +1724,7 @@ function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): i
 function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
 function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
-  d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
+  d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
 function BIO_new(typ: PBIO_METHOD): PBIO;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function BIO_free(a: PBIO): integer;
@@ -1774,7 +1784,7 @@ function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8C
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
-function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
+function X509_digest(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
 function X509_get_serialNumber(x: PX509): PASN1_INTEGER;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
@@ -1960,14 +1970,14 @@ function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
 function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
 function EVP_MD_size(md: PEVP_MD): integer; cdecl;
 function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
-function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
-function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; s: PCardinal): integer; cdecl;
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; len: PtrUInt): integer; cdecl;
 function HMAC_CTX_new(): PHMAC_CTX; cdecl;
 procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
 function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
   impl: PENGINE): integer; cdecl;
 function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
-function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+function HMAC_Final(ctx: PHMAC_CTX; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
 function EVP_sha1: PEVP_MD;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function EVP_sha256: PEVP_MD;
@@ -2568,7 +2578,7 @@ type
     EVP_DigestVerifyFinal: function(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
     EVP_DigestSign: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
     EVP_DigestVerify: function(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
-    HMAC: function(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
+    HMAC: function(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
     BIO_new: function(typ: PBIO_METHOD): PBIO; cdecl;
     BIO_free: function(a: PBIO): integer; cdecl;
     BIO_test_flags: function(b: PBIO; flags: integer): integer; cdecl;
@@ -2619,7 +2629,7 @@ type
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
     X509_NAME_cmp: function(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
     X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
-    X509_digest: function(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
+    X509_digest: function(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
     X509_get_serialNumber: function(x: PX509): PASN1_INTEGER; cdecl;
     X509_check_private_key: function(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
     X509_get_ext_count: function(x: PX509): integer; cdecl;
@@ -2778,13 +2788,13 @@ type
     EVP_MD_flags: function(md: PEVP_MD): cardinal; cdecl;
     EVP_MD_size: function(md: PEVP_MD): integer; cdecl;
     EVP_DigestInit_ex: function(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
-    EVP_DigestFinal_ex: function(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
-    EVP_DigestFinalXOF: function(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+    EVP_DigestFinal_ex: function(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; s: PCardinal): integer; cdecl;
+    EVP_DigestFinalXOF: function(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; len: PtrUInt): integer; cdecl;
     HMAC_CTX_new: function: PHMAC_CTX; cdecl;
     HMAC_CTX_free: procedure(ctx: PHMAC_CTX); cdecl;
     HMAC_Init_ex: function(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
     HMAC_Update: function(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
-    HMAC_Final: function(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+    HMAC_Final: function(ctx: PHMAC_CTX; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
     EVP_sha1: function: PEVP_MD; cdecl;
     EVP_sha256: function: PEVP_MD; cdecl;
     EC_GROUP_new_by_curve_name: function(nid: integer): PEC_GROUP; cdecl;
@@ -3227,7 +3237,7 @@ begin
 end;
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt;
-   md: PByte; var md_len: cardinal): PByte;
+   md: PEVP_MD_DIG; var md_len: cardinal): PByte;
 begin
   result := libcrypto.HMAC(evp_md, key, key_len, d, n, md, md_len);
 end;
@@ -3487,7 +3497,7 @@ begin
   result := libcrypto.X509_STORE_CTX_get_current_cert(ctx);
 end;
 
-function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer;
+function X509_digest(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer;
 begin
   result := libcrypto.X509_digest(data, typ, md, len);
 end;
@@ -4313,12 +4323,12 @@ begin
   result := libcrypto.EVP_DigestInit_ex(ctx, typ, impl);
 end;
 
-function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer;
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; s: PCardinal): integer;
 begin
   result := libcrypto.EVP_DigestFinal_ex(ctx, md, s);
 end;
 
-function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer;
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; len: PtrUInt): integer;
 begin
   result := libcrypto.EVP_DigestFinalXOF(ctx, md, len);
 end;
@@ -4344,7 +4354,7 @@ begin
   result := libcrypto.HMAC_Update(ctx, data, len);
 end;
 
-function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer;
+function HMAC_Final(ctx: PHMAC_CTX; md: PEVP_MD_DIG; len: PCardinal): integer;
 begin
   result := libcrypto.HMAC_Final(ctx, md, len);
 end;
@@ -4988,7 +4998,7 @@ function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
-  d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
+  d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC';
 
 function BIO_new(typ: PBIO_METHOD): PBIO; cdecl;
@@ -5146,7 +5156,7 @@ function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
 
-function X509_digest(data: PX509; typ: PEVP_MD; md: PByte; len: PCardinal): integer; cdecl;
+function X509_digest(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_digest';
 
 function X509_get_serialNumber(x: PX509): PASN1_INTEGER; cdecl;
@@ -5637,10 +5647,10 @@ function EVP_MD_size(md: PEVP_MD): integer; cdecl;
 function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestInit_ex';
 
-function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; s: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestFinal_ex';
 
-function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; len: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestFinalXOF';
 
 function HMAC_CTX_new(): PHMAC_CTX; cdecl;
@@ -5656,7 +5666,7 @@ function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
 function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Update';
 
-function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+function HMAC_Final(ctx: PHMAC_CTX; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Final';
 
 function EVP_sha1: PEVP_MD; cdecl;
@@ -7484,17 +7494,20 @@ begin
     result := X509_getm_notAfter(@self).ToDateTime;
 end;
 
-function X509.FingerPrint: RawUtf8;
+function X509.FingerPrint(md: PEVP_MD): RawUtf8;
 var
-  sha1: THash160;
+  dig: EVP_MD_DIG;
   len: integer;
 begin
+  if md = nil then
+    md := EVP_sha1; // SHA-1 fingerprint by default
+  len := 0;
   if (@self = nil) or
-     (X509_digest(@self, EVP_sha1, @sha1, @len) <> OPENSSLSUCCESS) or
-     (len <> SizeOf(sha1)) then
+     (X509_digest(@self, md, @dig, @len) <> OPENSSLSUCCESS) or
+     (len > SizeOf(dig)) then
     result := ''
   else
-    result := MacToHex(@sha1, SizeOf(sha1));
+    result := MacToHex(@dig, len);
 end;
 
 function X509.SetValidity(ValidDays, ExpireDays: integer): boolean;
