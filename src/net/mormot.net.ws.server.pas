@@ -232,7 +232,8 @@ var
 begin
   server := (fSocket as TWebSocketServerSocket).Server;
   result := THttpServerRequest.Create(
-    server, fOwnerConnectionID, fOwnerThread, fProtocol.ConnectionFlags);
+    server, fOwnerConnectionID, fOwnerThread, fProtocol.ConnectionFlags,
+      @fConnectionOpaque);
   RequestProcess :=  server.Request;
 end;
 

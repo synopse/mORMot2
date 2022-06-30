@@ -1054,8 +1054,11 @@ begin
   else
   begin
     // compute URI
-    call.Init;
+    call.OutStatus := 0; // see call.Init
+    call.OutInternalState := 0;
+    call.RestAccessRights := nil;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
+    call.LowLevelConnectionOpaque := Ctxt.ConnectionOpaque;
     call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
     call.LowLevelRemoteIP := Ctxt.RemoteIP;
     call.LowLevelBearerToken := Ctxt.AuthBearer;
@@ -1306,7 +1309,7 @@ begin
     begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, []);
+      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, [], nil);
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);

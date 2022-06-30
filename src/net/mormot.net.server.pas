@@ -66,7 +66,7 @@ type
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
-      aConnectionFlags: THttpServerRequestFlags); virtual;
+      aConnectionFlags: THttpServerRequestFlags; aConnectionOpaque: PPointer); virtual;
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -359,6 +359,7 @@ type
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
+    fConnectionOpaque: PPointer;
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -1268,7 +1269,7 @@ var
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
-  aConnectionFlags: THttpServerRequestFlags);
+  aConnectionFlags: THttpServerRequestFlags; aConnectionOpaque: PPointer);
 var
   id: PInteger;
 begin
@@ -1276,6 +1277,7 @@ begin
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
+  fConnectionOpaque := aConnectionOpaque;
   fConnectionFlags := aConnectionFlags;
   if fServer = nil then
     id := @GlobalRequestID
@@ -1944,7 +1946,7 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   // compute the response
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
-    HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
+    HTTPREMOTEFLAGS[ClientSock.TLS.Enabled], @ClientSock.fConnectionOpaque);
   try
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
     DoRequest(req);
@@ -2941,7 +2943,7 @@ begin
     logdata := pointer(fLogDataStorage);
     if global_verbs[hvOPTIONS] = '' then
       global_verbs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self, []);
+    ctxt := THttpServerRequest.Create(self, 0, self, [], nil);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
@@ -2985,6 +2987,7 @@ begin
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
             ctxt.ConnectionFlags := HTTPREMOTEFLAGS[req^.pSslInfo <> nil];
             ctxt.fConnectionID := req^.ConnectionID;
+            // ctxt.fConnectionOpaque is not supported by http.sys
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
               req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
               {out} ctxt.fRemoteIP, PQword(@ctxt.fConnectionID)^);

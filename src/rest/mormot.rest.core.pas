@@ -1141,13 +1141,17 @@ type
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: POrmAccessRights;
-    /// opaque reference to the connection which made this request
+    /// numerical reference to the connection which made this request
     // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
     // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: TRestConnectionID;
     /// low-level properties of the current connection
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
+    /// most HTTP servers support a per-connection pointer storage
+    // - may be nil if unsupported, e.g. by the http.sys servers
+    // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
+    LowLevelConnectionOpaque: PPointer;
     /// pre-parsed Remote IP of the current connection
     LowLevelRemoteIP: RawUtf8;
     /// pre-parsed "Bearer" HTTP header value
@@ -3658,6 +3662,7 @@ begin
   RestAccessRights := nil;
   LowLevelConnectionID := 0;
   byte(LowLevelConnectionFlags) := 0;
+  LowLevelConnectionOpaque := nil;
 end;
 
 procedure TRestUriParams.Init(const aUri, aMethod, aInHead, aInBody: RawUtf8);

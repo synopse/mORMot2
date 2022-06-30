@@ -705,6 +705,7 @@ type
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
     fOwnerConnectionID: THttpServerConnectionID;
+    fConnectionOpaque: pointer;
     fProtocol: TWebSocketProtocol;
     fState: TWebSocketProcessState;
     fMaskSentFrames: byte;
@@ -807,9 +808,12 @@ type
     /// the associated low-level processing thread
     property OwnerThread: TSynThread
       read fOwnerThread;
-    /// the associated low-level WebSocket connection opaque identifier
+    /// the associated low-level WebSocket connection numerical identifier
     property OwnerConnectionID: THttpServerConnectionID
       read fOwnerConnectionID;
+    /// associated low-level opaque pointer maintained during the connection
+    property ConnectionOpaque: pointer
+      read fConnectionOpaque;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer
       read fProcessCount;

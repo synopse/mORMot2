@@ -737,6 +737,7 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
+    fConnectionOpaque: pointer;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
@@ -3040,7 +3041,7 @@ begin
   // compute the HTTP/REST process
   result := soClose;
   req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil,
-    HTTPREMOTEFLAGS[Assigned(fSecure)]);
+    HTTPREMOTEFLAGS[Assigned(fSecure)], @fConnectionOpaque);
   try
     // let the associated THttpAsyncServer execute the request
     req.Prepare(fHttp, fRemoteIP);

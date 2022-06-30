@@ -498,6 +498,7 @@ type
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fRespStatus: integer;
     fConnectionThread: TSynThread;
+    fConnectionOpaque: PPointer;
   public
     /// prepare an incoming request from explicit values
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -519,6 +520,16 @@ type
     /// output parameter to be set to the response message body
     property OutContent: RawByteString
       read fOutContent write fOutContent;
+    /// the thread which owns the connection of this execution context
+    // - may be nil, depending on the HTTP server used
+    // - depending on the HTTP server used, may not follow ConnectionID
+    property ConnectionThread: TSynThread
+      read fConnectionThread;
+    /// some HTTP servers support a per-connection pointer storage
+    // - may be nil if unsupported, e.g. by the http.sys servers
+    // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
+    property ConnectionOpaque: PPointer
+      read fConnectionOpaque;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -574,10 +585,6 @@ type
     /// define how the client is connected
     property ConnectionFlags: THttpServerRequestFlags
       read fConnectionFlags write fConnectionFlags;
-    /// the thread which owns the connection of this execution context
-    // - depending on the HTTP server used, may not follow ConnectionID
-    property ConnectionThread: TSynThread
-      read fConnectionThread;
     /// contains the THttpServer-side authentication status
     // - e.g. when using http.sys authentication with HTTP API 2.0
     property AuthenticationStatus: THttpServerRequestAuthentication

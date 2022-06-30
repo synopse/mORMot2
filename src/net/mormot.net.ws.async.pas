@@ -448,7 +448,8 @@ function TWebSocketAsyncProcess.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    fConnection.fServer, fOwnerConnectionID, nil, fProtocol.ConnectionFlags);
+    fConnection.fServer, fOwnerConnectionID, nil, fProtocol.ConnectionFlags,
+    @fConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;
 end;
 
