@@ -2995,10 +2995,12 @@ begin
     // on fatal error direct reject and close the connection
     StatusCodeToReason(status, fHttp.Command);
     // (use fHttp.Command(Uri) as temp var to avoid local RawUtf8 allocation)
-    FormatUtf8('HTTP/1.0 % %'#13#10#13#10'Server Rejected Request as % %',
-      [status, fHttp.Command, status, fHttp.Command],
-      fHttp.CommandUri);
-    fServer.fAsync.fClients.WriteString(self, fHttp.CommandUri); // no polling
+    FormatUtf8('HTTP/1.0 % %'#13#10 + TEXT_CONTENT_TYPE_HEADER +
+      #13#10#13#10'% Server rejected % request as % %',
+      [status, fHttp.Command, fHttp.Host, fHttp.CommandUri, status, fHttp.Command],
+      fHttp.Headers);
+    fHttp.State := hrsResponseDone; // as expected by ProcessWrite
+    fServer.fAsync.fClients.WriteString(self, fHttp.Headers); // no polling
     fServer.IncStat(grRejected);
     exit;
   end;
