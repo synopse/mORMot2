@@ -206,7 +206,7 @@ type
     function GetInputExists(const ParamName: RawUtf8): boolean;
     function GetInputInt(const ParamName: RawUtf8): Int64;
     function GetInputDouble(const ParamName: RawUtf8): Double;
-    procedure GetInputByName(const ParamName,InputName: RawUtf8;
+    procedure GetInputByName(const ParamName, InputName: RawUtf8;
       var result: RawUtf8);
     function GetInputUtf8(const ParamName: RawUtf8): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
@@ -334,10 +334,11 @@ type
       read GetInputStringOrVoid;
     /// retrieve one input parameter from its URI name as RawUtf8
     // - returns FALSE and call Error(ErrorMessageForMissingParameter) - which
-    // may be a resourcestring - if the parameter is not found
+    // may be a resourcestring - if the parameter is not found; if
+    // ErrorMessageForMissingParameter is not set, a default message is used
     // - returns TRUE and set Value if the parameter is found
     function InputUtf8OrError(const ParamName: RawUtf8; out Value: RawUtf8;
-      const ErrorMessageForMissingParameter: string): boolean;
+      const ErrorMessageForMissingParameter: string = ''): boolean;
     /// retrieve one input parameter from its URI name as RawUtf8
     // - returns supplied DefaultValue if the parameter is not found
     function InputUtf8OrDefault(const ParamName, DefaultValue: RawUtf8): RawUtf8;

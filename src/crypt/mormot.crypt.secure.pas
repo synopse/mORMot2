@@ -1440,6 +1440,11 @@ type
     constructor Create(const name: RawUtf8); override;
     /// main factory to create a new Certificate instance with this algorithm
     function New: ICryptCert; virtual; abstract;
+    /// factory to load a Certificate from a ICryptCert.Save() content
+    // - PrivatePassword is needed if the input contains a private key
+    // - will only recognize and support the ccfBinary and ccfPem formats
+    function Load(const Saved: RawByteString;
+      const PrivatePassword: RawUtf8 = ''): ICryptCert;
     /// factory to generate a new Certificate instance
     // - just a wrapper around New and ICryptCert.Generate()
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
@@ -4311,6 +4316,14 @@ begin
   inherited Create(name);
   // by convention, JWT matches 2nd item, e.g. in 'x509-es256' or 'syn-es256-v1'
   fJwtName := UpperCase(GetCsvItem(pointer(name), 1, '-'));
+end;
+
+function TCryptCertAlgo.Load(const Saved: RawByteString;
+  const PrivatePassword: RawUtf8): ICryptCert;
+begin
+  result := New;
+  if not result.Load(Saved, PrivatePassword) then
+    result := nil;
 end;
 
 function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
