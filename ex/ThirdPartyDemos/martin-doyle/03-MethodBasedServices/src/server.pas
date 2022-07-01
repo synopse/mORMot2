@@ -10,6 +10,7 @@ uses
   mormot.core.unicode,
   mormot.orm.core,
   mormot.orm.rest,
+  mormot.rest.core, 
   mormot.rest.server,
   mormot.rest.sqlite3,
   mormot.db.raw.sqlite3.static,
@@ -35,7 +36,7 @@ begin
   case Ctxt.Method of
   mGET:
     begin
-      OrmSample := TOrmSample.Create(Self.Orm,'Name=?',[Ctxt['Name']]);
+      OrmSample := TOrmSample.Create(Self.Orm,'Name=?',[Ctxt.InputUTF8['Name']]);
       try
       if OrmSample.ID=0 then
       begin
