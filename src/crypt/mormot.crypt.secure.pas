@@ -1254,6 +1254,7 @@ type
 
   /// the Digital Signature results for a given Certificate
   // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
+  // - see CV_VALIDSIGN constant
   TCryptCertValidity = (
     cvUnknown,
     cvValidSigned,
@@ -1432,7 +1433,11 @@ type
 
   /// abstract parent class for ICryptCert factories
   TCryptCertAlgo = class(TCryptAlgo)
+  protected
+    fJwtName: RawUtf8;
   public
+    /// properly initialize the corresponding JWT algorithm name
+    constructor Create(const name: RawUtf8); override;
     /// main factory to create a new Certificate instance with this algorithm
     function New: ICryptCert; virtual; abstract;
     /// factory to generate a new Certificate instance
@@ -1440,6 +1445,11 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
+    /// return the corresponding JWT algorithm name
+    // - extracted from the algorithm name, by convention
+    // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
+    property JwtName: RawUtf8
+      read fJwtName;
   end;
 
   /// abstract interface to a Certificates Store, as returned by Store() factory
@@ -1542,6 +1552,9 @@ type
 const
   /// such a Certificate could be used for anything
   CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+  /// TCryptCertValidity results indicating a valid digital signature
+  CV_VALIDSIGN =
+    [cvValidSigned, cvValidSelfSigned];
 
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
@@ -4292,6 +4305,13 @@ end;
 
 
 { TCryptCertAlgo }
+
+constructor TCryptCertAlgo.Create(const name: RawUtf8);
+begin
+  inherited Create(name);
+  // by convention, JWT matches 2nd item, e.g. in 'x509-es256' or 'syn-es256-v1'
+  fJwtName := UpperCase(GetCsvItem(pointer(name), 1, '-'));
+end;
 
 function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
