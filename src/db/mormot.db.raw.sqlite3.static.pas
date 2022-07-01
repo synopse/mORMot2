@@ -1033,9 +1033,14 @@ const
   // error message if statically linked sqlite3.o(bj) does not match this value
   EXPECTED_SQLITE3_VERSION = '3.39.0';
 
+  // the github release tag associated with this EXPECTED_SQLITE3_VERSION
+  // - you could download the static for this exact mORMot source revision e.g. as
+  // https://github.com/synopse/mORMot2/releases/download/2.0.3532/mormot2static.7z
+  EXPECTED_RELEASE_TAG = '2.0.3532';
+
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
-  // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION
+
 
 constructor TSqlite3LibraryStatic.Create;
 begin
