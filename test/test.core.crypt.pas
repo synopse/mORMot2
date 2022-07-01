@@ -719,15 +719,23 @@ procedure TTestCoreCrypto._JWT;
 
   procedure test(one: TJwtAbstract);
   var
-    t: RawUtf8;
+    t, sub, iss, hp: RawUtf8;
     jwt: TJwtContent;
     i: integer;
     exp: TUnixTime;
   begin
     t := one.Compute(['http://example.com/is_root', true], 'joe');
     check(t <> '');
-    check(TJwtAbstract.VerifyPayload(t, '', '', 'joe', '', @exp) = jwtValid);
-    check(one.VerifyPayload(t, '', '', 'joe', '', @exp) = jwtValid);
+    check(TJwtAbstract.VerifyPayload(
+      t, '', '', 'joe', '', @exp, nil, @sub, @iss, @hp) = jwtValid);
+    checkEqual(sub, '');
+    checkEqual(iss, 'joe');
+    if one.Algorithm = 'none' then
+      checkEqual(hp + '.', t);
+    check(one.VerifyPayload(
+      t, one.Algorithm, '', 'joe', '', @exp, nil, @sub, @iss, nil) = jwtValid);
+    checkEqual(one.ExtractAlgo(t), one.Algorithm);
+    checkEqual(one.ExtractAlgo(copy(t, 2, 1000)), '');
     check(one.CacheTimeoutSeconds = 0);
     one.Options := one.Options + [joHeaderParse];
     one.Verify(t, jwt);
