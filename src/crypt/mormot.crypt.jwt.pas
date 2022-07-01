@@ -259,9 +259,13 @@ type
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token,
       ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
-      Expiration: PUnixTime = nil; Signature: PRawUtf8 = nil;
+      Expiration: PUnixTime; Signature, Subject, Issuer, HeadPayload: PRawUtf8;
       Payload: PVariant = nil;
       IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJwtResult;
+    /// in-place decoding of the JWT header, returning the algorithm
+    // - checking there is a payload and a signature, without decoding them
+    // - could be used to quickly check if a token is likely to be a JWT
+    class function ExtractAlgo(const Token: RawUtf8): RawUtf8;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUtf8
@@ -1078,16 +1082,36 @@ const
     'nbf',  // 3
     'sub'); // 4
 
+class function TJwtAbstract.ExtractAlgo(const Token: RawUtf8): RawUtf8;
+var
+  P: PUtf8Char;
+  V: TValuePUtf8Char;
+  temp: TSynTempBuffer;
+begin
+  result := '';
+  P := PosChar(pointer(Token), '.');
+  if (P = nil) or
+     (PosChar(P + 1, '.') = nil) then
+    exit;
+  if Base64UriToBin(pointer(Token), P - pointer(Token), temp) and
+     (JsonDecode(temp.buf, @JWT_HEAD, 1, @V, false) <> nil) then
+    V.ToUtf8(result);
+  temp.Done;
+end;
+
 class function TJwtAbstract.VerifyPayload(const Token,
   ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
-  Expiration: PUnixTime; Signature: PRawUtf8; Payload: PVariant;
-  IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
+  Expiration: PUnixTime; Signature, Subject, Issuer, HeadPayload: PRawUtf8;
+  Payload: PVariant; IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
 var
   P, B: PUtf8Char;
   V: array[0..high(JWT_PLD)] of TValuePUtf8Char;
   now, time: PtrUInt;
   temp, temp2: TSynTempBuffer;
 begin
+  result := jwtNoToken;
+  if Token = '' then
+    exit;
   result := jwtInvalidAlgorithm;
   P := PosChar(pointer(Token), '.');
   if P = nil then
@@ -1110,19 +1134,18 @@ begin
   if P = nil then
     exit;
   result := jwtInvalidPayload;
-  if not Base64UriToBin(PAnsiChar(B), P - B, temp) then
-  begin
-    temp.Done;
-    exit;
-  end;
-  if Payload <> nil then
-  begin
-    VarClear(PayLoad^);
-    temp2.Init(temp.buf, temp.len); // its own copy for in-place parsing
-    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_FAST);
-    temp2.Done;
-  end;
-  repeat // avoid try..finally for temp.Done
+  repeat // avoid try..finally for temp.Done: break = goto end
+    if not Base64UriToBin(PAnsiChar(B), P - B, temp) then
+      break;
+    if HeadPayload <> nil then
+      FastSetString(HeadPayload^, pointer(Token), P - pointer(Token));
+    if Payload <> nil then
+    begin
+      VarClear(PayLoad^);
+      temp2.Init(temp.buf, temp.len); // its own copy for in-place parsing
+      PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_FAST);
+      temp2.Done;
+    end;
     if JsonDecode(temp.buf, @JWT_PLD, length(JWT_PLD), @V, true) = nil then
       break;
     result := jwtUnexpectedClaim;
@@ -1161,6 +1184,11 @@ begin
           break;
       end;
     end;
+    // if we reached here, we got a valid JWT payload
+    if Issuer <> nil then
+      V[0].ToUtf8(Issuer^);
+    if Subject <> nil then
+      V[4].ToUtf8(Subject^);
     inc(P);
     if Signature <> nil then
       FastSetString(Signature^, P, StrLen(P));
