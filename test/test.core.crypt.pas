@@ -2163,7 +2163,7 @@ var
   a, i: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
-  n, h, nprev, aead, pub, priv, pub2, priv2: RawUtf8;
+  n, h, nprev, aead, pub, priv, pub2, priv2, jwt: RawUtf8;
   r, s: RawByteString;
   aes: TAesAbstract;
   key: THash256;
@@ -2339,6 +2339,10 @@ begin
     end;
     Check(c1.GetSerial <> '');
     Check(c1.HasPrivateSecret);
+    jwt := c1.JwtCompute([], 'myself', 'me', '', 0, 10);
+    check(jwt <> '');
+    check(TJwtAbstract.VerifyPayload(jwt, crt.JwtName, 'me', 'myself',
+      '', nil, nil, nil, nil, nil) = jwtValid);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
     check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
@@ -2351,6 +2355,7 @@ begin
       s := c1.Save(cccCertOnly, '', fmt);
       check(c2.Load(s));
       Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
+      CheckEqual(c2.JwtCompute([], 'myself', 'me', '', 0, 10), '');
       Check(c1.IsEqual(c2));
       CheckEqual(c2.GetSerial, c1.GetSerial);
       CheckEqual(c2.GetSubject, c1.GetSubject);

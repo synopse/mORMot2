@@ -1398,6 +1398,14 @@ type
     // - just a wrapper around the overloaded Verify() function
     function Verify(
       const Signature, Data: RawByteString): TCryptCertValidity; overload;
+    /// compute a new JWT for a given payload using this certificate
+    // - will use the private key and Sign() to compute the signature
+    // - same signature than the reusable TJwtAbstract.Compute() method
+    // - returns '' on error, e.g. if HasPrivateSecret is false
+    function JwtCompute(const DataNameValue: array of const;
+      const Issuer: RawUtf8 = ''; const Subject: RawUtf8 = '';
+      const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
+      ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the public key as raw binary
@@ -1462,6 +1470,9 @@ type
       overload; virtual; abstract;
     function Verify(const Signature, Data: RawByteString): TCryptCertValidity;
       overload; virtual;
+    function JwtCompute(const DataNameValue: array of const;
+      const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
+      ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
   end;
@@ -4451,6 +4462,42 @@ function TCryptCert.Verify(const Signature, Data: RawByteString): TCryptCertVali
 begin
   result := Verify(pointer(Signature), pointer(Data),
                    length(Signature), length(Data));
+end;
+
+function TCryptCert.JwtCompute(const DataNameValue: array of const;
+  const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
+  ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
+var
+  payload: TDocVariantData;
+  headpayload, signtrail: RawUtf8;
+begin
+  result := '';
+  if not HasPrivateSecret then
+    exit;
+  // cut-down version of TJwtAbstract.PayloadToJson
+  payload.InitObject(DataNameValue, JSON_FAST);
+  if Issuer <> '' then
+    payload.AddValueFromText('iss', Issuer);
+  if Subject <> '' then
+    payload.AddValueFromText('sub', Subject);
+  if Audience <> '' then
+    payload.AddValueFromText('aud', Audience);
+  if NotBefore > 0 then
+    payload.AddValue('nbf', DateTimeToUnixTime(NotBefore));
+  if ExpirationMinutes > 0 then
+    payload.AddValue('exp', UnixTimeUtc + ExpirationMinutes * 60);
+  if payload.Count = 0 then
+    exit; // we need something to sign
+  // see TJwtAbstract.Compute
+  headpayload := BinToBase64Uri(FormatUtf8('{"alg":"%"}',
+                   [(fCryptAlgo as TCryptCertAlgo).JwtName])) + '.' +
+                 BinToBase64Uri(payload.ToJson);
+  signtrail := BinToBase64Uri(Sign(headpayload));
+  if signtrail = '' then
+    exit;
+  if Signature <> nil then
+    Signature^ := signtrail;
+  result := headpayload + '.' + signtrail;
 end;
 
 function TCryptCert.Instance: TCryptCert;
