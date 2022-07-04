@@ -2341,6 +2341,7 @@ begin
     Check(c1.HasPrivateSecret);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
+    check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
     for fmt := ccfBinary to ccfPem do
     begin
       c2 := crt.New;

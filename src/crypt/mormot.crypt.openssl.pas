@@ -1729,7 +1729,9 @@ type
     function Save(const PrivatePassword: RawUtf8;
       Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
+    function GetPublicKey: RawByteString; override;
     function GetPrivateKey: RawByteString; override;
+    function SetPrivateKey(const saved: RawByteString): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
@@ -2055,12 +2057,33 @@ begin
   result := fPrivKey <> nil;
 end;
 
+function TCryptCertOpenSsl.GetPublicKey: RawByteString;
+begin
+  result := fX509.GetPublicKey.PublicToBinary;
+end;
+
 function TCryptCertOpenSsl.GetPrivateKey: RawByteString;
 begin
   if HasPrivateSecret then
     result := fPrivKey.PrivateToBinary
   else
     result := '';
+end;
+
+function TCryptCertOpenSsl.SetPrivateKey(const saved: RawByteString): boolean;
+begin
+  result := false;
+  if saved = '' then
+    exit;
+  fPrivKey.Free;
+  fPrivKey := LoadPrivateKey(saved);
+  if fX509.MatchPrivateKey(fPrivKey) then
+    result := true
+  else
+  begin
+    fPrivKey.Free;
+    fPrivKey := nil;
+  end;
 end;
 
 function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;

@@ -4964,7 +4964,9 @@ type
     function Save(const PrivatePassword: RawUtf8;
       Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
+    function GetPublicKey: RawByteString; override;
     function GetPrivateKey: RawByteString; override;
+    function SetPrivateKey(const saved: RawByteString): boolean; override;
     function IsEqual(const another: ICryptCert): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
     function Verify(Sign, Data: pointer;
@@ -5188,6 +5190,13 @@ begin
             TEccCertificateSecret(fEcc).HasSecret;
 end;
 
+function TCryptCertInternal.GetPublicKey: RawByteString;
+begin
+  if fEcc <> nil then
+    FastSetRawByteString(result, @fEcc.Content.Head.Signed.PublicKey,
+      SizeOf(TEccPublicKey))
+end;
+
 function TCryptCertInternal.GetPrivateKey: RawByteString;
 begin
   if HasPrivateSecret then
@@ -5195,6 +5204,25 @@ begin
       SizeOf(TEccPrivateKey))
   else
     result := '';
+end;
+
+function TCryptCertInternal.SetPrivateKey(const saved: RawByteString): boolean;
+var
+  new: TEccCertificateSecret;
+begin
+  result := false;
+  if (fEcc = nil) or
+     (length(saved) <> SizeOf(TEccPrivateKey)) then
+    exit;
+  if not fEcc.InheritsFrom(TEccCertificateSecret) then
+  begin
+    new := TEccCertificateSecret.CreateVersion(fMaxVersion);
+    new.Content := fEcc.Content; // inject whole certificate information at once
+    fEcc.Free;
+    fEcc := new;
+  end;
+  TEccCertificateSecret(fEcc).fPrivateKey := PEccPrivateKey(saved)^;
+  result := true;
 end;
 
 function TCryptCertInternal.IsEqual(const another: ICryptCert): boolean;

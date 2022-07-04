@@ -341,7 +341,7 @@ type
   public
     /// basic content - version 1 compatible
     Head: TEccCertificateContentV1;
-    /// new version >= 2 with additional information
+    /// new version >= 2 with additional information (up to 512 bytes)
     Info: TEccCertificateContentV2;
     /// set Certificate usage, as 16-bit TCryptCertUsage value
     // - will also force the version to be 2 if maxversion allow it

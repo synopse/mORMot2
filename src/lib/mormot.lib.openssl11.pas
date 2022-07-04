@@ -2082,15 +2082,23 @@ function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
-/// load a private key from a binary buffer, optionally with a password
+/// load a private key from a PEM buffer, optionally with a password
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
-  const PrivateKeyPassword: RawUtf8): PEVP_PKEY;
+  const PrivateKeyPassword: RawUtf8): PEVP_PKEY; overload;
 
-/// load a public key from a binary buffer
+/// load a private key from the raw PEVP_PKEY.PrivateToBinary export format
+// - caller should make result.Free once done with the result
+function LoadPrivateKey(const Saved: RawByteString): PEVP_PKEY; overload;
+
+/// load a public key from a PEM buffer, optionally with a password
 // - caller should make result.Free once done with the result
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
-  const PublicKeyPassword: RawUtf8 = ''): PEVP_PKEY;
+  const PublicKeyPassword: RawUtf8 = ''): PEVP_PKEY; overload;
+
+/// load a public key from the raw PEVP_PKEY.PublicToBinary export format
+// - caller should make result.Free once done with the result
+function LoadPublicKey(const Saved: RawByteString): PEVP_PKEY; overload;
 
 /// convert e.g. SSL.GetPeerCertificates result as a PEM text
 function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
@@ -6176,9 +6184,19 @@ begin
   result := BioSave(@self, @i2d_PrivateKey_bio);
 end;
 
+function LoadPrivateKey(const Saved: RawByteString): PEVP_PKEY;
+begin
+  result := BioLoad(Saved, @d2i_PrivateKey_bio);
+end;
+
 function EVP_PKEY.PublicToBinary: RawByteString;
 begin
   result := BioSave(@self, @i2d_PUBKEY_bio);
+end;
+
+function LoadPublicKey(const Saved: RawByteString): PEVP_PKEY;
+begin
+  result := BioLoad(Saved, @d2i_PUBKEY_bio);
 end;
 
 function EVP_PKEY.PrivateKeyToPem(const PassWord: RawUtf8): RawUtf8;

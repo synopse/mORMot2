@@ -1375,8 +1375,14 @@ type
       const Signature, Data: RawByteString): TCryptCertValidity; overload;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
+    /// retrieve the public key as raw binary
+    function GetPublicKey: RawByteString;
     /// retrieve the private key as raw binary, or '' if none
     function GetPrivateKey: RawByteString;
+    /// include the raw private key as saved by GetPrivateKey
+    // - the private key should match with the public key of the Certificate
+    // - any previously stored private key will first be erased
+    function SetPrivateKey(const saved: RawByteString): boolean;
     /// compare two Certificates, which should share the same algorithm
     // - will compare the internal properties and the public key, not the
     // private key: you could e.g. use it to verify that a ICryptCert with
@@ -1415,7 +1421,9 @@ type
     function Save(const PrivatePassword: RawUtf8;
       Format: TCryptCertFormat): RawByteString; virtual;
     function HasPrivateSecret: boolean; virtual; abstract;
+    function GetPublicKey: RawByteString; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
+    function SetPrivateKey(const saved: RawByteString): boolean; virtual; abstract;
     function IsEqual(const another: ICryptCert): boolean; virtual;
     function Sign(Data: pointer; Len: integer): RawByteString;
       overload; virtual; abstract;
@@ -1443,6 +1451,7 @@ type
     /// factory to load a Certificate from a ICryptCert.Save() content
     // - PrivatePassword is needed if the input contains a private key
     // - will only recognize and support the ccfBinary and ccfPem formats
+    // - return nil if Saved content was not in the expected format/algorithm
     function Load(const Saved: RawByteString;
       const PrivatePassword: RawUtf8 = ''): ICryptCert;
     /// factory to generate a new Certificate instance
