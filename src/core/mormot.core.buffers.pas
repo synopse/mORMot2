@@ -1931,7 +1931,7 @@ function AnyTextFileToRawUtf8(const FileName: TFileName;
 // ! const
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
-// !     $01,$02,$03);
+// !     $01, $02, $03);
 procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len: integer; PerLine: integer = 16); overload;
 
@@ -1941,9 +1941,13 @@ procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
 // ! const
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
-// !     $01,$02,$03);
+// !     $01, $02, $03);
 function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
   Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
+
+/// generate some pascal source code holding some data binary as constant
+function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteString;
+  PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
 
 { *************************** TStreamRedirect and other Hash process }
@@ -8908,7 +8912,6 @@ begin
   end;
 end;
 
-
 function BinToSource(const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
 var
@@ -8937,6 +8940,12 @@ begin
   end;
 end;
 
+function BinToSource(const ConstName, Comment: RawUtf8;
+  const Data: RawByteString; PerLine: integer; const Suffix: RawUtf8): RawUtf8;
+begin
+  result := BinToSource(ConstName, Comment, Data, PerLine, Suffix);
+end;
+
 procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer);
 var
@@ -8958,10 +8967,10 @@ begin
       line := PerLine
     else
       line := Len;
-    Dest.AddShorter(#13#10'    ');
+    Dest.AddShorter(#13#10'   ');
     for i := 1 to line do
     begin
-      Dest.Add('$');
+      Dest.Add(' ', '$');
       Dest.AddByteToHex(P^);
       inc(P);
       Dest.AddComma;
@@ -8971,7 +8980,6 @@ begin
   Dest.CancelLastComma;
   Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
 end;
-
 
 { *************************** TStreamRedirect and other Hash process }
 
