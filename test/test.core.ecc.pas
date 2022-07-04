@@ -333,7 +333,7 @@ begin
     check(sign.AuthorityIssuer = secret.Issuer);
     sav := sign.ToBase64;
     bin := sign.SaveToDERBinary;
-    check(length(bin) >= ECC_BYTES * 2 + 6);
+    check(length(bin) >= ECC_BYTES * 2);
     sign.Free;
     sign := TEccSignatureCertified.CreateFromBase64(sav);
     check(sign.Check);

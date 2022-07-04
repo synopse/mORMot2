@@ -2163,7 +2163,7 @@ var
   a, i: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
-  n, h, nprev, aead, pub, priv, pub2, priv2, jwt: RawUtf8;
+  n, h, nprev, aead, pub, priv, pub2, priv2, jwt, iss, sub: RawUtf8;
   r, s: RawByteString;
   aes: TAesAbstract;
   key: THash256;
@@ -2339,10 +2339,15 @@ begin
     end;
     Check(c1.GetSerial <> '');
     Check(c1.HasPrivateSecret);
-    jwt := c1.JwtCompute([], 'myself', 'me', '', 0, 10);
+    jwt := c1.JwtCompute([], {iss=}'myself', {sub=}'me', '', 0, 10);
     check(jwt <> '');
     check(TJwtAbstract.VerifyPayload(jwt, crt.JwtName, 'me', 'myself',
       '', nil, nil, nil, nil, nil) = jwtValid);
+    iss := '';
+    sub := '';
+    check(c1.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify');
+    CheckEqual(iss, 'myself');
+    CheckEqual(sub, 'me');
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
     check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
@@ -2366,6 +2371,11 @@ begin
       CheckSame(c2.GetNotBefore, c1.GetNotBefore);
       CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
       CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
+      iss := '';
+      sub := '';
+      check(c2.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify2');
+      CheckEqual(iss, 'myself');
+      CheckEqual(sub, 'me');
       // validate persistence in PEM/DER with password-protected private key
       c3 := crt.New;
       Check(not c3.IsEqual(c1));

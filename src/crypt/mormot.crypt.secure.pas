@@ -1398,7 +1398,7 @@ type
     // - just a wrapper around the overloaded Verify() function
     function Verify(
       const Signature, Data: RawByteString): TCryptCertValidity; overload;
-    /// compute a new JWT for a given payload using this certificate
+    /// compute a new JWT for a given payload using this certificate private key
     // - will use the private key and Sign() to compute the signature
     // - same signature than the reusable TJwtAbstract.Compute() method
     // - returns '' on error, e.g. if HasPrivateSecret is false
@@ -1406,6 +1406,10 @@ type
       const Issuer: RawUtf8 = ''; const Subject: RawUtf8 = '';
       const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
       ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
+    /// verify a JWT signature from the public key of this certificate
+    // - can optionally return the payload fields
+    function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
+      Payload: PDocVariantData = nil): TCryptCertValidity;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the public key as raw binary
@@ -1473,6 +1477,8 @@ type
     function JwtCompute(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
+    function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
+      Payload: PDocVariantData): TCryptCertValidity; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
   end;
@@ -4469,7 +4475,7 @@ function TCryptCert.JwtCompute(const DataNameValue: array of const;
   ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
 var
   payload: TDocVariantData;
-  headpayload, signtrail: RawUtf8;
+  headpayload, sig: RawUtf8;
 begin
   result := '';
   if not HasPrivateSecret then
@@ -4492,12 +4498,60 @@ begin
   headpayload := BinToBase64Uri(FormatUtf8('{"alg":"%"}',
                    [(fCryptAlgo as TCryptCertAlgo).JwtName])) + '.' +
                  BinToBase64Uri(payload.ToJson);
-  signtrail := BinToBase64Uri(Sign(headpayload));
-  if signtrail = '' then
+  sig := BinToBase64Uri(Sign(headpayload));
+  if sig = '' then
     exit;
   if Signature <> nil then
-    Signature^ := signtrail;
-  result := headpayload + '.' + signtrail;
+    Signature^ := sig;
+  result := headpayload + '.' + sig;
+end;
+
+function TCryptCert.JwtVerify(const Jwt: RawUtf8;
+  Issuer, Subject, Audience: PRawUtf8;
+  Payload: PDocVariantData): TCryptCertValidity;
+var
+  P, S: PUtf8Char;
+  pl: TDocVariantData;
+  ms: Int64;
+  head, payl, sig: RawUtf8;
+begin
+  result := cvWrongUsage;
+  P := PosChar(pointer(Jwt), '.');
+  if P = nil then
+    exit;
+  S := PosChar(P + 1, '.');
+  if S = nil then
+    exit;
+  head := Base64UriToBin(pointer(Jwt), P - pointer(Jwt));
+  if JsonDecode(head, 'alg') <> (fCryptAlgo as TCryptCertAlgo).JwtName  then
+    exit;
+  inc(P);
+  payl := Base64UriToBin(pointer(P), S - P);
+  inc(S);
+  sig := Base64UriToBin(PAnsiChar(S), StrLen(S));
+  if (payl = '') or
+     (sig = '') then
+    exit;
+  if pl.InitJsonInPlace(pointer(payl), JSON_FAST) = nil then
+    exit;
+  result := cvInvalidDate;
+  if pl.GetAsInt64('exp', ms) and
+     (UnixTimeUtc > ms) then
+    exit;
+  if pl.GetAsInt64('nbf', ms) and
+     (UnixTimeUtc + 15 < ms) then
+    exit;
+  result := Verify(pointer(sig), pointer(Jwt), length(sig), S - 1 - pointer(Jwt));
+  if not (result in CV_VALIDSIGN) then
+    exit;
+  if Issuer <> nil then
+    Issuer^ := pl.U['iss'];
+  if Subject <> nil then
+    Subject^ := pl.U['sub'];
+  if Audience <> nil then
+    Audience^ := pl.U['aud'];
+  if Payload <> nil then
+    Payload^ := pl;
 end;
 
 function TCryptCert.Instance: TCryptCert;
