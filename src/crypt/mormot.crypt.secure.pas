@@ -1310,6 +1310,8 @@ type
     // will use this Authority private key to sign the certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is -1 by default to avoid most clock synch issues
+    // - additional information can be passed into Fields, e.g. common name
+    // or a pre-computed public key
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil);

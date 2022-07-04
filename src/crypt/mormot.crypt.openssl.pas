@@ -374,6 +374,15 @@ function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY; overload
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
   out PrivateKey, PublicKey: RawUtf8); overload;
 
+/// generate a public/private pair of keys in raw DER binary format
+// - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
+// BitsOrCurve is the number of bits of the key
+// - if EvpType is EVP_PKEY_EC, BitsOrCurve is the Elliptic curve NID (e.g.
+// NID_X9_62_prime256v1)
+// - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
+procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString);
+
 {
 /// compute the (e.g. ECDH) shared secret from a public/private keys inverted pair
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
@@ -526,6 +535,7 @@ type
     procedure SetAlgorithm; virtual; abstract; // set fAsym
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
+    // - the supplied key(s) could be in PEM or raw DER binary format
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
@@ -540,6 +550,8 @@ type
       reintroduce;
     /// generate a private/public keys pair for this algorithm in PEM text format
     class procedure GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
+    /// generate a private/public keys pair for this algorithm in raw DER format
+    class procedure GenerateBinaryKeys(out PrivateKey, PublicKey: RawByteString);
   end;
 
   /// meta-class of all OpenSSL JWT algorithms
@@ -1247,6 +1259,21 @@ begin
   keys.Free;
 end;
 
+procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString);
+var
+  keys: PEVP_PKEY;
+begin
+  keys := OpenSslGenerateKeys(EvpType, BitsOrCurve);
+  if keys = nil then
+    raise EOpenSslHash.CreateFmt(
+      'OpenSslGenerateBinaryKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
+  PrivateKey := keys.PrivateToBinary;
+  PublicKey := keys.PublicToBinary;
+  keys.Free;
+end;
+
+
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
   const PublicKey, PrivateKey, PrivateKeyPassword: RawUtf8): RawByteString;
 begin
@@ -1520,7 +1547,8 @@ begin
     aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
+class procedure TJwtAbstractOsl.GenerateKeys(
+  out PrivateKey, PublicKey: RawUtf8);
 begin
   with TJwtAbstractOsl(NewInstance) do // no need to call Create
     try
@@ -1530,6 +1558,19 @@ begin
       Free;
     end;
 end;
+
+class procedure TJwtAbstractOsl.GenerateBinaryKeys(
+  out PrivateKey, PublicKey: RawByteString);
+begin
+  with TJwtAbstractOsl(NewInstance) do // no need to call Create
+    try
+      SetAlgorithms;
+      OpenSslGenerateBinaryKeys(fGenEvpType, fGenBitsOrCurve, PrivateKey, PublicKey);
+    finally
+      Free;
+    end;
+end;
+
 
 
 { TJwtES256Osl }

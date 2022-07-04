@@ -986,12 +986,14 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function get_ssl(s: PSSL): integer;
     function pending: integer;
+    function eof: boolean;
     procedure ToString(var data: RawByteString;
       cp: integer = CP_RAWBYTESTRING); overload;
     function ToUtf8: RawUtf8; overload;
       {$ifdef HASINLINE} inline; {$endif}
     function ToUtf8AndFree: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
+    procedure Reset;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -2083,6 +2085,8 @@ function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
 /// load a private key from a PEM buffer, optionally with a password
+// - will try first with PEM_read_bio_PrivateKey() but will fallback to the raw
+// format of overloaded LoadPrivateKey() on failure, if no password is given
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const PrivateKeyPassword: RawUtf8): PEVP_PKEY; overload;
@@ -2092,6 +2096,8 @@ function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
 function LoadPrivateKey(const Saved: RawByteString): PEVP_PKEY; overload;
 
 /// load a public key from a PEM buffer, optionally with a password
+// - will try first with PEM_read_bio_PrivateKey() but will fallback to the raw
+// format of overloaded LoadPublicKey() on failure, if no password is given
 // - caller should make result.Free once done with the result
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
   const PublicKeyPassword: RawUtf8 = ''): PEVP_PKEY; overload;
@@ -6292,6 +6298,20 @@ begin
 end;
 
 
+function IsPem(p: PUtf8Char; up: PUtf8Char = '-----BEGIN'): boolean;
+begin
+  result := true;
+  repeat
+    p := PosChar(p, '-');
+    if p = nil then
+      break;
+    if NetStartWith(p, up) then // naive but good enough
+      exit;
+    inc(p);
+  until false;
+  result := false;
+end;
+
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const PrivateKeyPassword: RawUtf8): PEVP_PKEY;
 var
@@ -6303,7 +6323,15 @@ begin
   else
   begin
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
-    result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(PrivateKeyPassword));
+    if IsPem(PrivateKey) then
+      result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(PrivateKeyPassword))
+    else
+      result := nil;
+    if result = nil then
+    begin
+      priv.reset;
+      result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
+    end;
     priv.Free;
   end;
 end;
@@ -6319,10 +6347,19 @@ begin
   else
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-    if NetStartWith(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
-      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
+    if IsPem(PublicKey) then
+      if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
+        result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
+      else
+        result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword))
     else
-      result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
+      result := nil;
+    if (result = nil) and
+       (PublicKeyPassword = '') then
+    begin
+      pub.reset;
+      result := d2i_PUBKEY_bio(pub, nil); // try raw binary format
+    end;
     pub.Free;
   end;
 end;
@@ -6369,6 +6406,17 @@ end;
 function BIO.pending: integer;
 begin
   result := BIO_ctrl(@self, _BIO_CTRL_PENDING, 0, nil);
+end;
+
+function BIO.eof: boolean;
+begin
+  result := BIO_ctrl(@self, BIO_CTRL_EOF, 0, nil) = 1;
+end;
+
+procedure BIO.Reset;
+begin
+  if @self <> nil then
+    BIO_ctrl(@self, BIO_CTRL_RESET, 0, nil);
 end;
 
 procedure BIO.ToString(var data: RawByteString; cp: integer);
