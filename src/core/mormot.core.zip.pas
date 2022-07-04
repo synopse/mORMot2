@@ -807,8 +807,8 @@ begin
   if not fInitialized then
     result := 0
   else if (Offset = 0) and
-          (Origin = soCurrent) then
-    // for TStream.Position on Delphi
+          (Origin in [soCurrent, soEnd]) then
+    // for TStream.Position/GetSize on Delphi
     result := fSizeIn
   else
   begin
