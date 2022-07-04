@@ -318,6 +318,8 @@ end;
 {$endif ONLYUSEHTTPSOCKET}
 
 procedure TTestClientServerAccess._TRestHttpServer;
+const
+  HTTPS_PW = 'pass';
 var
   c: ICryptCert;
   pfx: RawByteString;
@@ -330,22 +332,22 @@ begin
       fHttpsCertFile := WorkDir + 'privkeycert.pfx';
       FastSetRawByteString(pfx, @PrivKeyCertPfx, SizeOf(PrivKeyCertPfx));
       FileFromString(pfx, fHttpsCertFile);
+      // on Windows: how to create PKCS#12 privkeycert.pfx?
     end
     else
     begin
-      // create a new self-signed key pair using OpenSSL
+      // create a new self-signed key pair using OpenSSL (if available)
       fHttpsKeyFile := WorkDir + 'privkey.pem';
       fHttpsCertFile := WorkDir + 'cert.pem';
       c := CryptCertAlgoOpenSsl[caaRS256].New;
       c.Generate([cuTlsServer], '127.0.0.1', nil, 3650);
       //writeln(c.GetPeerInfo);
-      FileFromString(c.Save('pass', ccfPem), fHttpsKeyFile); // public + private keys
-      FileFromString(c.Save('', ccfPem), fHttpsCertFile);    // public key
-      pfx := c.Save('pass', ccfBinary);
+      FileFromString(c.Save(cccCertWithPrivateKey, HTTPS_PW, ccfPem), fHttpsKeyFile);
+      FileFromString(c.Save(cccCertOnly, '', ccfPem), fHttpsCertFile);
+      pfx := c.Save(cccCertWithPrivateKey, HTTPS_PW, ccfBinary); // PKCS#12
       FileFromString(pfx, WorkDir + 'privkeycert.pfx');
-      //FileFromString(BinToSource('PrivKeyCertPfx', '', pointer(pfx), length(pfx)), WorkDir + 'privkeycert.pas');
+      //FileFromString(BinToSource('PrivKeyCertPfx', '', pfx), WorkDir + 'privkeycert.pas');
     end;
-    // on Windows: create PKCS#12 privkeycert.pfx
   end;
   Model := TOrmModel.Create([TOrmPeople], 'root');
   Check(Model <> nil);
@@ -356,7 +358,7 @@ begin
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
       HTTPS_DEFAULT_MODE[fHttps], 16, HTTPS_SECURITY[fHttps], '', '',
-      [rsoLogVerbose], fHttpsCertFile, fHttpsKeyFile, 'pass');
+      [rsoLogVerbose], fHttpsCertFile, fHttpsKeyFile, HTTPS_PW);
     AddConsole('using % %', [Server.HttpServer, Server.HttpServer.APIVersion]);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except

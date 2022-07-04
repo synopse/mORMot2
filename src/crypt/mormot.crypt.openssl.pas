@@ -1756,8 +1756,6 @@ type
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields); override;
-    function Load(const Saved: RawByteString;
-      const PrivatePassword: RawUtf8): boolean; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -1767,7 +1765,9 @@ type
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
-    function Save(const PrivatePassword: RawUtf8;
+    function Load(const Saved: RawByteString; Content: TCryptCertContent;
+      const PrivatePassword: RawUtf8): boolean; override;
+    function Save(Content: TCryptCertContent; const PrivatePassword: RawUtf8;
       Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPublicKey: RawByteString; override;
@@ -2004,38 +2004,49 @@ begin
   result := fX509.PeerInfo;
 end;
 
-function TCryptCertOpenSsl.Save(const PrivatePassword: RawUtf8;
-  Format: TCryptCertFormat): RawByteString;
+function TCryptCertOpenSsl.Save(Content: TCryptCertContent;
+  const PrivatePassword: RawUtf8; Format: TCryptCertFormat): RawByteString;
 begin
   result := '';
   if fX509 = nil then
     exit;
   if not (Format in [ccfBinary, ccfPem]) then
-    result := inherited Save(PrivatePassword, Format)
-  else if PrivatePassword = '' then
-  begin
-    // include the X509 certificate (but not any private key) as DER or PEM
-    result := fX509.ToBinary;
-    if Format = ccfPem then
-      result := DerToPem(result, pemCertificate);
-  end
-  else
-  begin
-    // PrivatePassword will be used to encrypt the private key
-    if fPrivKey = nil then
-      RaiseError('Save(password) with no Private Key');
-    if Format = ccfPem then
-      // concatenate the certificate and its private key as PEM
-      result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
-                fPrivKey.PrivateKeyToPem(PrivatePassword)
-    else
-      // ccfBinary will use the PKCS12 binary encoding
-      result := fX509.ToPkcs12(fPrivKey, PrivatePassword)
+    // hexa or base64 encoding of the binary output is handled by TCryptCert
+    result := inherited Save(Content, PrivatePassword, Format)
+  else case Content of
+    cccCertOnly:
+      begin
+        // include the X509 certificate (but not any private key) as DER or PEM
+        result := fX509.ToBinary;
+        if Format = ccfPem then
+          result := DerToPem(result, pemCertificate);
+      end;
+    cccCertWithPrivateKey:
+      if fPrivKey = nil then
+        RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
+      else if Format = ccfPem then
+        // concatenate the certificate and its private key as PEM
+        result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
+                  fPrivKey.PrivateKeyToPem(PrivatePassword)
+      else
+        // ccfBinary will use the PKCS12 binary encoding
+        result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
+    cccPrivateKeyOnly:
+      if fPrivKey = nil then
+        RaiseError('Save(cccPrivateKeyOnly) with no Private Key')
+      else if Format = ccfPem then
+        result := fPrivKey.PrivateKeyToPem(PrivatePassword)
+      else
+      begin
+        result := fPrivKey.PrivateToBinary;
+        if Format = ccfPem then
+          result := DerToPem(result, pemPrivateKey);
+      end;
   end;
 end;
 
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
-  const PrivatePassword: RawUtf8): boolean;
+  Content: TCryptCertContent; const PrivatePassword: RawUtf8): boolean;
 var
   P: PUtf8Char;
   k: TPemKind;
@@ -2046,49 +2057,53 @@ begin
   Clear;
   if Saved = '' then
     exit;
-  if PrivatePassword = '' then
-    // input only include the X509 certificate as DER or PEM
-    if IsPem(Saved) then
-      fX509 := LoadCertificate(PemToDer(Saved))
-    else
-      fX509 := LoadCertificate(Saved)
-  else
-  begin
-    // input include the X509 certificate and its associated private key
-    if IsPem(Saved) then
-    begin
-      // PEM certificate and PEM private key were concatenated
-      P := pointer(Saved);
-      repeat
-        pem := NextPem(P, @k);
-        if pem = '' then
-          break;
-        if k = pemCertificate then
-          if cert <> '' then
-            exit // should contain a single Certificate
-          else
-            cert := PemToDer(pem)
+  case Content of
+    cccCertOnly:
+      // input only include the X509 certificate as DER or PEM
+      if IsPem(Saved) then
+        fX509 := LoadCertificate(PemToDer(Saved))
+      else
+        fX509 := LoadCertificate(Saved);
+    cccCertWithPrivateKey:
+      begin
+        // input include the X509 certificate and its associated private key
+        if IsPem(Saved) then
+        begin
+          // PEM certificate and PEM private key were concatenated
+          P := pointer(Saved);
+          repeat
+            pem := NextPem(P, @k);
+            if pem = '' then
+              break;
+            if k = pemCertificate then
+              if cert <> '' then
+                exit // should contain a single Certificate
+              else
+                cert := PemToDer(pem)
+            else
+              priv := pem; // private key may be with several TPemKind markers
+          until false;
+          if (cert = '') or
+             (priv = '') then
+            exit;
+          fX509 := LoadCertificate(cert);
+          if fX509 = nil then
+            exit;
+          fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
+        end
         else
-          priv := pem; // private key may be with several TPemKind markers
-      until false;
-      if (cert = '') or
-         (priv = '') then
-        exit;
-      fX509 := LoadCertificate(cert);
-      if fX509 = nil then
-        exit;
-      fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
-    end
-    else
-    begin
-      // input should be some PKCS12 binary with certificate and private key
-      pkcs12 := LoadPkcs12(Saved);
-      if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
-        Clear;
-      pkcs12.Free;
-    end;
-    if not fX509.MatchPrivateKey(fPrivKey) then
-      Clear;
+        begin
+          // input should be some PKCS12 binary with certificate and private key
+          pkcs12 := LoadPkcs12(Saved);
+          if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
+            Clear;
+          pkcs12.Free;
+        end;
+        if not fX509.MatchPrivateKey(fPrivKey) then
+          Clear;
+      end;
+    cccPrivateKeyOnly:
+      ;
   end;
   result := fX509 <> nil;
 end;

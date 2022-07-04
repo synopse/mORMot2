@@ -2348,7 +2348,7 @@ begin
       Check(not c2.IsEqual(c1));
       Check(c2.GetDigest <> c1.GetDigest);
       // validate persistence in PEM/DER with no password (i.e. no private key)
-      s := c1.Save('', fmt);
+      s := c1.Save(cccCertOnly, '', fmt);
       check(c2.Load(s));
       Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
       Check(c1.IsEqual(c2));
@@ -2365,8 +2365,8 @@ begin
       c3 := crt.New;
       Check(not c3.IsEqual(c1));
       Check(not c3.IsEqual(c2));
-      s := c1.Save('pwd', fmt);
-      check(c3.Load(s, 'pwd'));
+      s := c1.Save(cccCertWithPrivateKey, 'pwd', fmt);
+      check(c3.Load(s, cccCertWithPrivateKey, 'pwd'));
       Check(c3.HasPrivateSecret, 'pwd=priv');
       Check(c3.IsEqual(c1));
       Check(c3.IsEqual(c2));
