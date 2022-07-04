@@ -280,6 +280,7 @@ type
     Serial: TEccCertificateID;
     /// identify the certificate issuer
     // - is either geniune random bytes, or some Baudot-encoded text
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     Issuer: TEccCertificateIssuer;
     /// genuine identifier of the authority certificate used for signing
     // - should be used to retrieve the associated PublicKey used to compute
@@ -288,7 +289,7 @@ type
     AuthoritySerial: TEccCertificateID;
     /// identify the authoritify issuer used for signing
     // - is either geniune random bytes, or some Baudot-encoded text
-    // - may equal Issuer, if was self-signed
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     AuthorityIssuer: TEccCertificateIssuer;
     /// the ECDSA secp256r1 public key of this certificate
     // - may be used later on for signing or key derivation
@@ -366,8 +367,7 @@ type
     // - could be validated against EccCheck()
     function CheckDate(nowdate: PEccDate = nil): boolean;
     /// fast check if the binary buffer storage of a certificate was self-signed
-    // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
-    // fields matching Serial/Issuer
+    // - a self-signed certificate has its AuthoritySerial field matching Seial
     function IsSelfSigned: boolean;
     /// compare all fields of both Certificates
     function FieldsEqual(const another: TEccCertificateContent): boolean;
@@ -408,6 +408,7 @@ type
     AuthoritySerial: TEccCertificateID;
     /// identify the authoritify issuer used for signing
     // - is either geniune random bytes, or some Baudot-encoded text
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     AuthorityIssuer: TEccCertificateIssuer;
     /// SHA-256 + ECDSA secp256r1 digital signature of the content
     Signature: TEccSignature;
@@ -1456,7 +1457,7 @@ begin
     if truncated and
        (maxversion >= 2) then
     begin
-      FillZero(THash128(Head.Signed.Issuer));
+      FillZero(THash128(Head.Signed.Issuer)); // Issuer set to blank in V2
       Head.Version := 2; // we need the new format and its V2 Subject field
     end
     else
@@ -1514,8 +1515,7 @@ end;
 function TEccCertificateContent.IsSelfSigned: boolean;
 begin
   result := IsEqual(Head.Signed.AuthoritySerial, Head.Signed.Serial) and
-            not IsZero(Head.Signed.Serial) and
-            IsEqual(Head.Signed.AuthorityIssuer, Head.Signed.Issuer);
+            not IsZero(Head.Signed.Serial);
 end;
 
 function TEccCertificateContent.FieldsEqual(
@@ -1588,7 +1588,6 @@ begin
   result := (Version in [1]) and
             (Date <> 0) and
             not IsZero(AuthoritySerial) and
-            not IsZero(AuthorityIssuer) and
             not IsZero(@Signature, SizeOf(Signature));
 end;
 
