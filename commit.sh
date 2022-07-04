@@ -1,13 +1,7 @@
 #!/bin/bash
 
-function next_version {
-python - <<END
-with open("src/mormot.commit.inc") as file:
-  print (int(file.readline().replace("'", "")[4:])+1)
-END
-}
 
-VERS=$(next_version)
+VERS=$(python - `git rev-list --count master` <<<'import sys; print int(sys.argv[1])+1')
 #echo VERS=$VERS
 
 echo -e "'2.0.$VERS'\r">src/mormot.commit.inc
