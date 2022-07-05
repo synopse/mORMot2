@@ -266,9 +266,8 @@ type
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
     procedure ParseHeaderFinalize;
-    /// parse Command and Head into Headers and CommandMethod/CommandUri fields
-    // - calls ParseHeaderFinalize() and server-side process the Command
-    function ParseCommandAndHeader: boolean;
+    /// parse Command into CommandMethod/CommandUri fields
+    function ParseCommand: boolean;
     /// search a value from the internal parsed Headers
     // - supplied aUpperName should be already uppercased:
     // HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
@@ -1144,7 +1143,7 @@ begin
         ComputeContentEncoding(Compress, pointer(AcceptEncoding));
 end;
 
-function THttpRequestContext.ParseCommandAndHeader: boolean;
+function THttpRequestContext.ParseCommand: boolean;
 var
   P: PUtf8Char;
 begin
@@ -1162,7 +1161,6 @@ begin
     if not (hfConnectionKeepAlive in HeaderFlags) and
        (P[7] <> '1') then
       include(HeaderFlags, hfConnectionClose);
-  ParseHeaderFinalize;
   result := true;
 end;
 

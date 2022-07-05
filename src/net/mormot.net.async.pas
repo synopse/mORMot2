@@ -2985,8 +2985,9 @@ begin
   // finalize the headers
   result := soClose;
   if (nfHeadersParsed in fHttp.HeaderFlags) or
-     not fHttp.ParseCommandAndHeader then
+     not fHttp.ParseCommand then
     exit;
+  fHttp.ParseHeaderFinalize;
   fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, fRemoteConnID);
   // immediate reject of clearly invalid requests
   status := DecodeHeaders; // may handle hfConnectionUpgrade when overriden
