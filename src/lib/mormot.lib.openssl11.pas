@@ -1266,6 +1266,7 @@ type
     function Compare(another: PX509_NAME): integer;
     // as used for X509_STORE.SetLocations() CAFolder 'Hash.N' names
     function Hash: cardinal;
+    function ToText: RawUtf8;
   end;
 
   PPX509_NAME = ^PX509_NAME;
@@ -1433,6 +1434,7 @@ type
   // - kuCA match NID_basic_constraints containing 'CA:TRUE'
   // - kuEncipherOnly .. kuDecipherOnly match NID_key_usage values
   // - kuTlsServer .. kuAnyeku match NID_ext_key_usage values
+  // - see https://omvs.de/2019/11/13/key-usage-extensions-at-x-509-certificates
   TX509Usage = (
     kuCA,
     kuEncipherOnly,
@@ -1517,12 +1519,12 @@ type
     /// the X509v3 text Extended Key Usage of this Certificate
     // - e.g. 'TLS Web Server Authentication, TLS Web Client Authentication'
     function ExtendedKeyUsage: RawUtf8;
-    /// the X509v3 Subject Key Identifier of this Certificate
+    /// the X509v3 Subject Key Identifier (SKID) of this Certificate
     // - e.g. '3B:C5:FB:28:27:2C:45:FE:50:03:B9:88:E4:84:1A:81:8E:F8:B5:CC'
     function SubjectKeyIdentifier: RawUtf8;
-    /// the X509v3 Issuer Key Identifier of this Certificate
+    /// the X509v3 Authority Key Identifier (AKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
-    function IssuerKeyIdentifier: RawUtf8;
+    function AuthorityKeyIdentifier: RawUtf8;
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is usually -1 to avoid most clock synch issues
@@ -6533,6 +6535,11 @@ begin
     result := X509_NAME_hash(@self);
 end;
 
+function X509_NAME.ToText: RawUtf8;
+begin
+  ToUtf8(result);
+end;
+
 
 { X509_REVOKED }
 
@@ -7249,6 +7256,7 @@ begin
   bio := BIO_new(BIO_s_mem);
   X509V3_EXT_print(bio, @self, flags, 0);
   result := bio.ToUtf8AndFree;
+  TrimSelf(result); // OpenSSL add ending spaces to some extensions  :(
 end;
 
 procedure X509_EXTENSION.Free;
@@ -7497,7 +7505,7 @@ begin
   result := ExtensionText(NID_subject_key_identifier);
 end;
 
-function X509.IssuerKeyIdentifier: RawUtf8;
+function X509.AuthorityKeyIdentifier: RawUtf8;
 begin
   result := ExtensionText(NID_authority_key_identifier);
   if NetStartWith(pointer(result), 'KEYID:') then
@@ -7779,7 +7787,8 @@ begin
   x := X509_new();
   if X509_set_version(x, X509v3) = OPENSSLSUCCESS then
   begin
-    RAND_bytes(@rnd, 20);     // random serial from OpenSSL PRNG
+    // compute a random serial from OpenSSL PRNG
+    RAND_bytes(@rnd, 20);
     rnd[0] := rnd[0] and $7f; // ensure > 0
     bn := BN_bin2bn(@rnd, 20, nil);
     ai := BN_to_ASN1_INTEGER(bn, nil);
@@ -8197,7 +8206,7 @@ begin
         writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
         writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
         writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
-        writeln('IssuerKeyIdentifier=',fPeer.IssuerKeyIdentifier);
+        writeln('AuthorityKeyIdentifier=',fPeer.AuthorityKeyIdentifier);
         writeln('Usage=',word(fPeer.GetUsage));
         writeln('kuDigitalSignature=',fPeer.HasUsage(kuDigitalSignature));
         writeln('kuCodeSign=',fPeer.HasUsage(kuCodeSign));
@@ -8316,7 +8325,7 @@ end;
 function TOpenSslNetTls.GetRawTls: pointer;
 // e.g. to retrieve fSsl.PeerCertificate fields to set in HTTP headers:
 //   at least FingerPrint + SubjectName
-// SerialNumber,SubjectKeyIdentifier,IssuerKeyIdentifier,SubjectName
+// SerialNumber,SubjectKeyIdentifier,AuthorityKeyIdentifier,SubjectName
 // see https://nginx.org/en/docs/http/ngx_http_ssl_module.html
 //   $ssl_client_verify  $ssl_client_i_dn  $ssl_client_escaped_cert
 //   $ssl_client_fingerprint $ssl_client_s_dn
