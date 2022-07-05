@@ -398,18 +398,19 @@ type
     // - this method raise an EHttpServer if the associated server class does not
     // support WebSockets, i.e. this instance isn't useBidirSocket/useBidirAsync
     function WebSocketsEnable(
-      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax: boolean = false;
-      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
-        [pboSynLzCompress]): PWebSocketProcessSettings; overload;
+      const aWSURI, aWSEncryptionKey: RawUtf8; aWSAjax: boolean = false;
+      aWSBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
+      const aOnWSUpgraded: TOnWebSocketProtocolUpgraded = nil): PWebSocketProcessSettings;
+        overload;
     /// defines the WebSockets protocols used by useBidirSocket/useBidirAsync
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TRestHttpClientWebsockets.WebSocketsUpgrade()
     function WebSocketsEnable(aServer: TRestServer;
-      const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
-      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
-        [pboSynLzCompress]): PWebSocketProcessSettings; overload;
+      const aWSEncryptionKey: RawUtf8; aWSAjax: boolean = false;
+      aWSBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
+      const aOnWSUpgraded: TOnWebSocketProtocolUpgraded = nil): PWebSocketProcessSettings;
+        overload;
     /// the TCP/IP (address and) port on which this server is listening to
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
@@ -1269,27 +1270,31 @@ begin
         HostUrl := HostUrl + '/' + Ctxt.Url;
 end;
 
-function TRestHttpServer.WebSocketsEnable(
-  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): PWebSocketProcessSettings;
+function TRestHttpServer.WebSocketsEnable(const aWSURI, aWSEncryptionKey: RawUtf8;
+  aWSAjax: boolean; aWSBinaryOptions: TWebSocketProtocolBinaryOptions;
+  const aOnWSUpgraded: TOnWebSocketProtocolUpgraded): PWebSocketProcessSettings;
 begin
   // will raise an EHttpServer exception if not supported
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
-    aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax,
-    aWebSocketsBinaryOptions);
+    aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
+  if Assigned(aOnWSUpgraded) then
+    if fHttpServer is TWebSocketAsyncServer then
+      TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded
+    else if fHttpServer is TWebSocketServer then
+      TWebSocketServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
-  const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): PWebSocketProcessSettings;
+  const aWSEncryptionKey: RawUtf8; aWSAjax: boolean;
+  aWSBinaryOptions: TWebSocketProtocolBinaryOptions;
+  const aOnWSUpgraded: TOnWebSocketProtocolUpgraded): PWebSocketProcessSettings;
 begin
   if (aServer = nil) or
      (DBServerFind(aServer) < 0) then
     raise EWebSockets.CreateUtf8(
       '%.WebSocketEnable(aServer=%?)', [self, aServer]);
-  result := WebSocketsEnable(aServer.Model.Root, aWebSocketsEncryptionKey,
-    aWebSocketsAjax, aWebSocketsBinaryOptions);
+  result := WebSocketsEnable(aServer.Model.Root, aWSEncryptionKey,
+    aWSAjax, aWSBinaryOptions, aOnWSUpgraded);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;

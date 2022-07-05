@@ -577,11 +577,11 @@ begin
     if Frame.opcode = focContinuation then
       Frame.payload := ip + #13 + Name + #13 + UpgradeUri; // propagate to Private Relay
     if not fOwner.EncapsulateAndSend(
-        fOwner.fServerConnected, ip, Frame, Sender.OwnerConnectionID) and
+        fOwner.fServerConnected, ip, Frame, Sender.Protocol.ConnectionID) and
        (Frame.opcode <> focConnectionClose) then
       raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Error relaying % from #% % to server',
-        [ToText(Frame.opcode)^, Sender.OwnerConnectionID, ip]);
+        [ToText(Frame.opcode)^, Sender.Protocol.ConnectionID, ip]);
   finally
     fOwner.Safe.UnLock;
   end;
