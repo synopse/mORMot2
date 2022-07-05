@@ -1869,12 +1869,11 @@ procedure TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields);
 var
+  cn: RawUtf8;
   dns: TRawUtf8DynArray;
   name: PX509_NAME;
   x: PX509;
-  req: PX509_REQ;
-  key, pub: PEVP_PKEY;
-  auth: TCryptCertOpenSsl;
+  key: PEVP_PKEY;
   i: PtrInt;
 begin
   if fX509 <> nil then
@@ -1886,12 +1885,14 @@ begin
   if x = nil then
     RaiseErrorGenerate('NewCertificate');
   key := nil;
-  req := nil;
   try
     key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
     CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
+    if dns = nil then
+      RaiseErrorGenerate('no Subject/CommonName');
+    cn := dns[0];
     for i := 0 to length(dns) - 1 do
       if not IdemPChar(pointer(dns[i]), 'DNS:') then
         dns[i] := 'DNS:' + dns[i];
@@ -1901,45 +1902,36 @@ begin
       RaiseErrorGenerate('SetUsage');
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');
+    name := X509_get_subject_name(x);
+    if Fields <> nil then
+      with Fields^ do
+      begin
+        if CommonName <> '' then
+          cn := CommonName;
+        name.AddEntries(
+          Country, State, Locality, Organization, OrgUnit, cn);
+      end
+      else
+        name.AddEntry('CN', cn);
+    EOpenSslCert.Check(X509_set_pubkey(x, key));
+    if not x.SetExtension(NID_subject_key_identifier, 'hash') then
+      RaiseErrorGenerate('SKID');
     if Authority = nil then
     begin
-      // self-signed certificate
-      name := X509_get_subject_name(x);
-      if Fields <> nil then
-        with Fields^ do
-          name.AddEntries(
-            Country, State, Locality, Organization, OrgUnit, CommonName);
+      // self-signed certificate - no AKID
       EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer = subject
-      EOpenSslCert.Check(X509_set_pubkey(x, key));
       if x.Sign(key, GetMD) = 0 then
         RaiseErrorGenerate('Self Sign');
     end
     else
-    begin
-      // certificate signed by a CA
-      auth := TCryptCertOpenSsl(Authority.Instance);
-      if not auth.InheritsFrom(TCryptCertOpenSsl) or
-         (auth.fPrivKey = nil) then
-        RaiseErrorGenerate('incompatible Authority');
-      req := X509_REQ_new();
-      EOpenSslCert.Check(X509_REQ_set_pubkey(req, key));
-      name := X509_REQ_get_subject_name(req);
-      if Fields <> nil then
-        with Fields^ do
-          name.AddEntries(
-            Country, State, Locality, Organization, OrgUnit, CommonName);
-      if X509_REQ_sign(req, key, GetMD) = 0 then
-        RaiseErrorGenerate('Req Sign');
-      EOpenSslCert.Check(X509_set_issuer_name(x, X509_get_subject_name(auth.fX509)));
-      EOpenSslCert.Check(X509_set_subject_name(x, name));
-      pub := X509_REQ_get_pubkey(req);
-      if pub = nil then
-        RaiseErrorGenerate('GetPubKey');
-      X509_set_pubkey(x, pub);
-      pub.Free;
-      if X509_sign(x, auth.fPrivKey, auth.GetMD) = 0 then
-        RaiseErrorGenerate('CA Sign');
-    end;
+      try
+        // certificate signed by a provided CA
+        fX509 := x; // as expected by next line
+        Sign(Authority);
+      except
+        fX509 := nil; // on erorr, rollback (and call x.Free)
+      end;
+    //writeln('IsSelfSigned=',x.IsSelfSigned);
     // the certificate was generated so can be stored within this instance
     fX509 := x;
     fPrivKey := key;
@@ -1948,7 +1940,6 @@ begin
   finally
     x.Free;
     key.Free;
-    req.Free;
   end;
 end;
 
