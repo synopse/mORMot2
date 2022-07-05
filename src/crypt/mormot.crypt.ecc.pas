@@ -266,7 +266,9 @@ type
     function CheckCRC: boolean;
     /// use this Certificate as Authority to verify an ECC digital signature
     function Verify(const hash: THash256;
-      const Signature: TEccSignatureCertifiedContent): TEccValidity; overload;
+      const Signature: TEccSignatureCertifiedContent): TEccValidity;
+    /// verify the certificate signature using the given Authority public key
+    function VerifyCertificate(Authority: TEccCertificate): TEccValidity;
     /// encrypt using the ECIES scheme, using this public certificate as key,
     // via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - returns the encrypted content, in the .synecc optimized format
@@ -2205,6 +2207,40 @@ begin
     result := Signature.Verify(hash, fContent);
 end;
 
+function TEccCertificate.VerifyCertificate(Authority: TEccCertificate): TEccValidity;
+var
+  hash: THash256;
+begin
+  if self = nil then
+    result := ecvBadParameter
+  else if not fContent.Check then
+    result := ecvCorrupted
+  else if not fContent.CheckDate then
+    result := ecvInvalidDate
+  else if fContent.IsSelfSigned then
+  begin
+    Authority := self;
+    result := ecvValidSelfSigned;
+  end
+  else if (Authority = nil) or
+          not mormot.crypt.ecc256r1.IsEqual(fContent.Head.Signed.AuthoritySerial,
+            Authority.fContent.Head.Signed.Serial) or
+          not Authority.fContent.Check then
+    result := ecvUnknownAuthority
+  else if not Authority.fContent.CheckDate then
+    result := ecvDeprecatedAuthority
+  else if not (cuKeyCertSign in Authority.GetUsage) then
+    result := ecvWrongUsage
+  else
+    result := ecvValidSigned;
+  if not (result in ECC_VALIDSIGN) then
+    exit;
+  fContent.ComputeHash(hash); // sha-256 cryptographic hash
+  if not Ecc256r1Verify(Authority.fContent.Head.Signed.PublicKey, hash,
+       fContent.Head.Signature) then
+    result := ecvInvalidSignature;
+end;
+
 {$ifdef ISDELPHI20062007}
   {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
 {$endif}
@@ -2831,6 +2867,9 @@ begin
   if HasSecret then
   begin
     // Dest is signed by this TEccCertificateSecret
+    if not (cuKeyCertSign in GetUsage) then
+      raise EEccException.CreateUtf8(
+        '%.SignCertificate: % authority has no cuKeyCertSign', [self, Serial]);
     dst.AuthoritySerial := fContent.Head.Signed.Serial;
     dst.AuthorityIssuer := fContent.Head.Signed.Issuer;
     priv := @fPrivateKey;
@@ -3585,7 +3624,7 @@ begin
   result := -1;
   if (self = nil) or
      (cert = nil) or
-     (cert.GetUsage * [cuCA, cuDigitalSignature] = []) or
+     (cert.GetUsage * [cuCA, cuKeyCertSign, cuDigitalSignature] = []) or
      (IsValidRaw(cert.fContent, {igndate=}true,
                  {allowself=}expected = ecvValidSelfSigned) <> expected) then
     exit;
