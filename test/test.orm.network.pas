@@ -340,7 +340,8 @@ begin
       fHttpsKeyFile := WorkDir + 'privkey.pem';
       fHttpsCertFile := WorkDir + 'cert.pem';
       c := CryptCertAlgoOpenSsl[caaRS256].New;
-      c.Generate([cuTlsServer], '127.0.0.1', nil, 3650);
+      c.Generate([cuTlsServer, cuKeyAgreement, cuKeyEncipherment],
+        '127.0.0.1', nil, 3650);
       //writeln(c.GetPeerInfo);
       FileFromString(c.Save(cccCertWithPrivateKey, HTTPS_PW, ccfPem), fHttpsKeyFile);
       FileFromString(c.Save(cccCertOnly, '', ccfPem), fHttpsCertFile);

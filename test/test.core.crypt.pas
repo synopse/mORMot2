@@ -2322,7 +2322,7 @@ begin
     if crt.AlgoName = 'syn-es256-v1' then
     begin
       // TEccCertificate V1 has limited Usage and Subjects support
-      c1.Generate([cuCA, cuDigitalSignature], ' s1, s2 ', nil);
+      c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign], ' s1, s2 ', nil);
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 's1,s2');
       check(c1.GetUsage = CERTIFICATE_USAGE_ALL);
       CheckEqual(c1.GetSubject, 's1');
@@ -2330,14 +2330,19 @@ begin
     else
     begin
       // X509 and TEccCertificate V2 have proper Usage and Subjects support
-      c1.Generate([cuCA, cuDigitalSignature],
+      c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign],
         ' synopse.info, www.synopse.info ', nil);
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects),
         'synopse.info,www.synopse.info');
-      check(c1.GetUsage = [cuCA, cuDigitalSignature]);
+      check(c1.GetUsage = [cuCA, cuDigitalSignature, cuKeyCertSign]);
       CheckEqual(c1.GetSubject, 'synopse.info');
     end;
     Check(c1.GetSerial <> '');
+    Check(c1.GetSubjectKey <> '');
+    if c1.GetAuthorityKey <> c1.GetSubjectKey then
+      CheckEqual(c1.GetAuthorityKey, '');
+    Check(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1');
+    Check(c1.Verify(c1) = cvValidSelfSigned, 'cvValidSelfSigned2');
     Check(c1.HasPrivateSecret);
     jwt := c1.JwtCompute([], {iss=}'myself', {sub=}'me', '', 0, 10);
     check(jwt <> '');
@@ -2356,16 +2361,18 @@ begin
       c2 := crt.New;
       Check(not c2.IsEqual(c1));
       Check(c2.GetDigest <> c1.GetDigest);
-      // validate persistence in PEM/DER with no password (i.e. no private key)
+      // validate c2=cccCertOnly persistence in PEM/DER
       s := c1.Save(cccCertOnly, '', fmt);
       check(c2.Load(s));
       Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
       CheckEqual(c2.JwtCompute([], 'myself', 'me', '', 0, 10), '');
-      Check(c1.IsEqual(c2));
+      Check(c2.IsEqual(c1));
+      Check(c2.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned3');
+      Check(c2.Verify(c2) = cvValidSelfSigned, 'cvValidSelfSigned4');
       CheckEqual(c2.GetSerial, c1.GetSerial);
       CheckEqual(c2.GetSubject, c1.GetSubject);
       CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
-      CheckEqual(c2.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckEqual(c2.GetSubjectKey, c1.GetSubjectKey);
       CheckEqual(c2.GetDigest, c1.GetDigest);
       CheckSame(c2.GetNotAfter, c1.GetNotAfter);
       CheckSame(c2.GetNotBefore, c1.GetNotBefore);
@@ -2376,7 +2383,7 @@ begin
       check(c2.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify2');
       CheckEqual(iss, 'myself');
       CheckEqual(sub, 'me');
-      // validate persistence in PEM/DER with password-protected private key
+      // validate c3=cccCertWithPrivateKey persistence in PEM/DER
       c3 := crt.New;
       Check(not c3.IsEqual(c1));
       Check(not c3.IsEqual(c2));
@@ -2388,14 +2395,24 @@ begin
       CheckEqual(c3.GetSerial, c1.GetSerial);
       CheckEqual(c3.GetSubject, c1.GetSubject);
       CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
-      CheckEqual(c3.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckEqual(c3.GetSubjectKey, c1.GetSubjectKey);
       CheckSame(c3.GetNotAfter, c1.GetNotAfter);
       CheckSame(c3.GetNotBefore, c1.GetNotBefore);
       CheckEqual(c3.GetDigest, c1.GetDigest);
       CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
-      if fmt = ccfPem then // PKCS12 seems to add some information to X509
+      if fmt = ccfPem then // PKCS12 seems to add some information to X509 :(
         CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
     end;
+    // validate signed certificate with c1 as CA
+    c3 := crt.New;
+    c3.Generate([cuDataEncipherment], 'signed', c1);
+    Check(not c3.IsEqual(c1));
+    Check(not c3.IsEqual(c2));
+    Check(c3.HasPrivateSecret);
+    CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
+    Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned');
+    Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
   end;
   AddConsole(names);
   // validate Store High-Level Algorithms Factory
@@ -2408,21 +2425,21 @@ begin
     st1 := str.New;
     CheckEqual(st1.Count, 0);
     // set c1 as self-signed root certificate (in v1 format)
-    c1 := st1.CertAlgo.Generate([cuCA]);
+    c1 := st1.CertAlgo.Generate([cuCA, cuKeyCertSign]);
     Check(st1.IsValid(c1) = cvUnknownAuthority);
     Check(st1.Add(c1));
     CheckEqual(st1.Count, 1);
     Check(st1.IsValid(c1) = cvValidSelfSigned);
     Check(c1.HasPrivateSecret, 'priv1');
     Check(c1.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 1');
-    // set c2 as itermediate CA, signed by c1 root CA
+    // set c2 as intermediate CA, signed by c1 root CA
     c2 := nil;
     Check(not st1.Add(c2), 'no priv');
     CheckEqual(st1.Count, 1);
     c2 := st1.CertAlgo.New;
     Check(c2.Instance.ClassType = c1.Instance.ClassType);
-    c2.Generate([cuCA], '', c1);
-    Check(c2.GetUsage = [cuCA]);
+    c2.Generate([cuCA, cuKeyCertSign], '', c1);
+    Check(c2.GetUsage = [cuCA, cuKeyCertSign]);
     Check(cuCA in c2.GetUsage);
     Check(not (cuDigitalSignature in c2.GetUsage));
     Check(c2.HasPrivateSecret, 'priv2');
