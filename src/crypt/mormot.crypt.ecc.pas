@@ -1171,13 +1171,13 @@ function DerToEcc(der: PByteArray; derlen: PtrInt; out priv: TEccPrivateKey): bo
 function DerToEcc(der: PByteArray; derlen: PtrInt; out pub: TEccPublicKey): boolean; overload;
 
 /// parse ECDSA signature in raw, PEM or DER format into its binary raw buffer
-function PemToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
 
 /// parse ECC private key in raw, PEM or DER format into its binary raw buffer
-function PemToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; overload;
 
 /// parse ECC public key in raw, PEM or DER format into its binary raw buffer
-function PemToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
 
 
 { ***************** IProtocol Implemented using our Public Key Cryptography }
@@ -1929,12 +1929,12 @@ begin
     result := DerParse(@der[2], @pub[0], SizeOf(pub)) = PAnsiChar(@der[der[1] + 2]);
 end;
 
-function PemToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; overload;
 var
   der: RawByteString;
 begin
   result := false;
-  der := PemToDer(pem);
+  der := PemToDer(pem); // return input if not PEM (assume was DER)
   if not DerToEcc(pointer(der), length(der), priv) then
     if length(der) = SizeOf(priv) then
       priv := PEccPrivateKey(der)^
@@ -1943,7 +1943,7 @@ begin
   result := true;
 end;
 
-function PemToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
 var
   der: RawByteString;
 begin
@@ -1957,7 +1957,7 @@ begin
   result := true;
 end;
 
-function PemToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
+function PemDerRawToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
 var
   der: RawByteString;
 begin
@@ -4943,7 +4943,7 @@ begin
      (priv = '') or
      (privpwd <> '') then
     exit; // invalid or unsupported
-  if not PemToEcc(priv, key) then
+  if not PemDerRawToEcc(priv, key) then
     exit; // accept key in raw, PEM or DER format
   FillZero(digest.b); // hasher may not fill all bytes needed by the algorithm
   hasher.Full(msg, msglen, digest);
@@ -4966,8 +4966,8 @@ begin
   if (hasher = nil) or
      (pub = '') then
     exit; // invalid or unsupported
-  if not PemToEcc(sig, sign) or
-     not PemToEcc(pub, key) then
+  if not PemDerRawToEcc(sig, sign) or
+     not PemDerRawToEcc(pub, key) then
     exit; // accept signature and public key in raw, PEM or DER format
   FillZero(digest.b); // hasher may not fill all bytes needed by the algorithm
   hasher.Full(msg, msglen, digest);
@@ -4980,8 +4980,8 @@ var
   keypriv: TEccPrivateKey;
   sec: TEccSecretKey;
 begin
-  if PemToEcc(priv, keypriv) and
-     PemToEcc(pub, keypub) and
+  if PemDerRawToEcc(priv, keypriv) and
+     PemDerRawToEcc(pub, keypub) and
      Ecc256r1SharedSecret(keypub, keypriv, sec) then
     // accept signature and public key in raw, PEM or DER format
     FastSetRawByteString(result, @sec, SizeOf(sec))
