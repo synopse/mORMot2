@@ -4515,6 +4515,8 @@ var
   ms: Int64;
   head, payl, sig: RawUtf8;
 begin
+  // same logic than TJwtAbstract.Verify, but (slower and) with no cache
+  // -> TJwtAbstract is to be preferred if the ICryptCert is reused
   result := cvWrongUsage;
   P := PosChar(pointer(Jwt), '.');
   if P = nil then
@@ -4523,7 +4525,7 @@ begin
   if S = nil then
     exit;
   head := Base64UriToBin(pointer(Jwt), P - pointer(Jwt));
-  if JsonDecode(head, 'alg') <> (fCryptAlgo as TCryptCertAlgo).JwtName  then
+  if JsonDecode(head, 'alg') <> (fCryptAlgo as TCryptCertAlgo).JwtName then
     exit;
   inc(P);
   payl := Base64UriToBin(pointer(P), S - P);

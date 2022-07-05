@@ -1025,7 +1025,7 @@ var
 // - by default, the version numbers will be retrieved at startup from the
 // executable itself (if it was included at build time)
 // - but you can use this function to set any custom version numbers
-procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload;
+procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overload;
 
 /// initialize Executable global variable, supplying the version as text
 // - e.g. SetExecutableVersion('7.1.2.512');

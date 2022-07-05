@@ -5243,9 +5243,14 @@ end;
 function TCryptCertInternal.SetPrivateKey(const saved: RawByteString): boolean;
 begin
   result := false;
-  if (fEcc = nil) or
-     (length(saved) <> SizeOf(TEccPrivateKey)) then
+  if fEcc = nil then
     exit;
+  if length(saved) <> SizeOf(TEccPrivateKey) then
+  begin
+    if fEcc.InheritsFrom(TEccCertificateSecret) then // always reset the key
+      FillZero(TEccCertificateSecret(fEcc).fPrivateKey); // now HasSecret=false
+    exit;
+  end;
   if fEcc.InheritsFrom(TEccCertificateSecret) then
     TEccCertificateSecret(fEcc).fPrivateKey := PEccPrivateKey(saved)^
   else
