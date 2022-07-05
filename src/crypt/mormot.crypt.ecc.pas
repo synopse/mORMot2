@@ -526,6 +526,11 @@ type
     // - use TEccSignatureCertifiedFile class to load and validate such files
     function SignFile(const FileToSign: TFileName;
       const MetaNameValuePairs: array of const): TFileName;
+    /// digital sign another certificate content
+    // - as used e.g. by CreateNew(Authority) or TCryptCertInternal.Sign()
+    // - if self is nil, Dest will be self-signed
+    procedure SignCertificate(Dest: TEccCertificate;
+      ParanoidVerify: boolean = false);
     /// decrypt using the ECIES scheme, using this private certificate as key,
     // via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - expects TEccCertificate.Crypt() cyphered content with its public key
@@ -2402,12 +2407,7 @@ constructor TEccCertificateSecret.CreateNew(Authority: TEccCertificateSecret;
   ParanoidVerify: boolean; Usage: TCryptCertUsages;
   const Subjects: RawUtf8; MaxVers: byte);
 var
-  priv: PEccPrivateKey;
-  pub: PEccPublicKey;
   now: TEccDate;
-  hash: TSha256Digest;
-  temp: TEccSignature;
-  retry: boolean;
 begin
   CreateVersion(MaxVers);
   with fContent.Head.Signed do
@@ -2431,42 +2431,10 @@ begin
         TAesPrng.Fill(TAesBlock(Issuer))
     else
       EccIssuer(IssuerText, Issuer);
-    for retry := false to true do
-    begin
-      if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
-        raise EEccException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
-      if Authority = nil then
-      begin
-        AuthoritySerial := Serial;
-        AuthorityIssuer := Issuer;
-        priv := @fPrivateKey; // self-signing
-        pub := @PublicKey;
-      end
-      else
-      begin
-        AuthoritySerial := Authority.fContent.Head.Signed.Serial;
-        AuthorityIssuer := Authority.fContent.Head.Signed.Issuer;
-        priv := @Authority.fPrivateKey;
-        pub := @Authority.fContent.Head.Signed.PublicKey;
-        if ParanoidVerify then // check below will be on Authority keys
-          if not Ecc256r1Sign(fPrivateKey, hash{%H-}, temp) or
-             not Ecc256r1Verify(PublicKey, hash, temp) then
-            if retry then
-              raise EEccException.CreateUtf8('%.CreateNew: ParanoidVerify1?', [self])
-            else
-              continue;
-      end;
-      fContent.ComputeHash(hash);
-      if not Ecc256r1Sign(priv^, hash, fContent.Head.Signature) then
-        raise EEccException.CreateUtf8('%.CreateNew: Ecc256r1Sign?', [self]);
-      if not ParanoidVerify or
-         Ecc256r1Verify(pub^, hash, fContent.Head.Signature) then
-        break
-      else if retry then
-        raise EEccException.CreateUtf8('%.CreateNew: ParanoidVerify2?', [self]);
-    end;
+    if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
+      raise EEccException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
   end;
-  fContent.Head.CRC := fContent.ComputeCrc32;
+  Authority.SignCertificate(self, ParanoidVerify);
 end;
 
 constructor TEccCertificateSecret.CreateFromSecureBinary(
@@ -2847,6 +2815,47 @@ begin
     JSON_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(doc.ToJson('', '', jsonHumanReadable), result);
+end;
+
+procedure TEccCertificateSecret.SignCertificate(Dest: TEccCertificate;
+  ParanoidVerify: boolean);
+var
+  dst: PEccCertificateSigned;
+  priv: PEccPrivateKey;
+  pub: PEccPublicKey;
+  hash: TSha256Digest;
+begin
+  if Dest = nil then
+    exit; // nothing to sign
+  dst := @Dest.fContent.Head.Signed;
+  if HasSecret then
+  begin
+    // Dest is signed by this TEccCertificateSecret
+    dst.AuthoritySerial := fContent.Head.Signed.Serial;
+    dst.AuthorityIssuer := fContent.Head.Signed.Issuer;
+    priv := @fPrivateKey;
+    pub := @fContent.Head.Signed.PublicKey;
+  end
+  else if Dest.InheritsFrom(TEccCertificateSecret) and
+          TEccCertificateSecret(Dest).HasSecret then
+  begin
+    // Dest is self-signed (e.g. if self=nil or without secret)
+    dst.AuthoritySerial := dst.Serial;
+    dst.AuthorityIssuer := dst.Issuer;
+    priv := @TEccCertificateSecret(Dest).fPrivateKey;
+    pub := @dst.PublicKey;
+  end
+  else
+    raise EEccException.CreateUtf8(
+      '%.SignCertificate: self-sign with no secret', [self]);
+  // compute the digital signature of Dest.fContent
+  Dest.fContent.ComputeHash(hash);
+  if not Ecc256r1Sign(priv^, hash, Dest.fContent.Head.Signature) then
+    raise EEccException.CreateUtf8('%.SignCertificate: Ecc256r1Sign?', [self]);
+  if ParanoidVerify and
+     not Ecc256r1Verify(pub^, hash, Dest.fContent.Head.Signature) then
+    raise EEccException.CreateUtf8('%.SignCertificate: Ecc256r1Verify?', [self]);
+  Dest.fContent.Head.CRC := Dest.fContent.ComputeCrc32; // crc changed
 end;
 
 function TEccCertificateSecret.Decrypt(const Encrypted: RawByteString;

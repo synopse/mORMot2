@@ -314,7 +314,7 @@ type
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
     // - avoiding to compute slow ECDSA verification in case of corruption,
     // due e.g. to unexpected transmission/bug/fuzzing/dosattack
-    // - include Info content, as computed by TEccCertificateContent.ComputeCrc32
+    // - include V2 Info, as computed by TEccCertificateContent.ComputeCrc32
     CRC: cardinal;
   end;
 
