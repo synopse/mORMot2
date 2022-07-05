@@ -1981,6 +1981,7 @@ begin
     end
   else
     ClientSock.fKeepAliveClient := false;
+  ClientSock.Http.ProcessDone;   // ContentStream.Free
   // add transfert stats to main socket
   if Sock <> nil then
   begin
