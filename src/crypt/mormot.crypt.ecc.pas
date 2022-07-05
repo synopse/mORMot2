@@ -5020,7 +5020,8 @@ type
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
-    function GetIssuerSerial: RawUtf8; override;
+    function GetSubjectKey: RawUtf8; override;
+    function GetAuthorityKey: RawUtf8; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -5035,8 +5036,10 @@ type
     function SetPrivateKey(const saved: RawByteString): boolean; override;
     function IsEqual(const another: ICryptCert): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
+    procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
     function Handle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
@@ -5151,7 +5154,15 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.GetIssuerSerial: RawUtf8;
+function TCryptCertInternal.GetSubjectKey: RawUtf8;
+begin
+  if fEcc <> nil then
+    result := fEcc.Serial
+  else
+    result := '';
+end;
+
+function TCryptCertInternal.GetAuthorityKey: RawUtf8;
 begin
   if fEcc <> nil then
     result := fEcc.AuthoritySerial
@@ -5328,6 +5339,16 @@ begin
     result := '';
 end;
 
+procedure TCryptCertInternal.Sign(const Authority: ICryptCert);
+begin
+  if (fEcc <> nil) and
+     Authority.Instance.InheritsFrom(TCryptCertInternal) and
+     Authority.HasPrivateSecret then
+    TEccCertificateSecret(Authority.Handle).SignCertificate(fEcc)
+  else
+    RaiseError('Sign: unsupported');
+end;
+
 function TCryptCertInternal.Verify(Sign, Data: pointer;
   SignLen, DataLen: integer): TCryptCertValidity;
 var
@@ -5341,9 +5362,25 @@ begin
     result := TCryptCertValidity(fEcc.Verify(Sha256Digest(Data, DataLen), s^));
 end;
 
+function TCryptCertInternal.Verify(const Authority: ICryptCert): TCryptCertValidity;
+var
+  auth: TEccCertificate;
+begin
+  result := cvBadParameter;
+  if fEcc = nil then
+    exit;
+  auth := nil;
+  if Assigned(Authority) then
+    if Authority.Instance.InheritsFrom(TCryptCertInternal) then
+      auth := Authority.handle
+    else
+      exit;
+  result := TCryptCertValidity(fEcc.VerifyCertificate(auth));
+end;
+
 function TCryptCertInternal.Handle: pointer;
 begin
-  result := fEcc;
+  result := fEcc; // TEccCertificate or TEccCertificateSecret
 end;
 
 type

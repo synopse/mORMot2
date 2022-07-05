@@ -1310,7 +1310,7 @@ type
   TCryptCert = class;
 
   /// abstract interface to a Certificate, as returned by Cert() factory
-  // - may be X509 or not, OpenSSL implemented or not
+  // - may be X509 or not, OpenSSL implemented or not, e.g. for syn-es256
   // - note: features and serialization are not fully compatible between engines,
   // but those high-level methods work as expected within each TCryptCertAlgo
   ICryptCert = interface
@@ -1320,8 +1320,7 @@ type
     // will use this Authority private key to sign the certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is -1 by default to avoid most clock synch issues
-    // - additional information can be passed into Fields, e.g. common name
-    // or a pre-computed public key
+    // - additional information can be passed into Fields (e.g. common name)
     procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil);
@@ -1339,7 +1338,11 @@ type
     function GetIssuerName: RawUtf8;
     /// the Issuer Key Identifier of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
-    function GetIssuerSerial: RawUtf8;
+    // - match the SKID on X509, or the serial number for syn-es256
+    function GetSubjectKey: RawUtf8;
+    /// the signing Authority Key Identifier of this Certificate
+    // - match the AKID on X509, or the authority serial number for syn-es256
+    function GetAuthorityKey: RawUtf8;
     /// the minimum Validity timestamp of this Certificate
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -1382,6 +1385,7 @@ type
     // of this certificate instance
     // - you could later on verify this text signature according to the public
     // key of this certificate, using ICryptCert.Verify() or ICertStore.Verify()
+    // - this certificate should have the kuDigitalSignature usage
     // - returns '' on failure, e.g. if this Certificate has no private key
     // - returns the binary signature of the Data buffer
     function Sign(Data: pointer; Len: integer): RawByteString; overload;
@@ -1389,8 +1393,12 @@ type
     // - will use the private key of this certificate
     // - just a wrapper around the overloaded Sign() function
     function Sign(const Data: RawByteString): RawByteString; overload;
+    /// sign this certificate with the private key of one CA
+    // - Authority certificate should have the kuKeyCertSign usage
+    procedure Sign(const Authority: ICryptCert); overload;
     /// verify a digital signature of some digital content
     // - will use the public key of this certificate
+    // - this certificate should have the kuDigitalSignature usage
     // - see ICertStore.Verify() for a complete CA chain validation
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; overload;
@@ -1398,8 +1406,13 @@ type
     // - just a wrapper around the overloaded Verify() function
     function Verify(
       const Signature, Data: RawByteString): TCryptCertValidity; overload;
+    /// verify another certificate signature with this certificate public key
+    // (if self-signed), or a supplied Authority reference
+    // - Authority certificate should have the kuKeyCertSign usage
+    function Verify(const Authority: ICryptCert): TCryptCertValidity; overload;
     /// compute a new JWT for a given payload using this certificate private key
     // - will use the private key and Sign() to compute the signature
+    // - this certificate should have the kuDigitalSignature usage
     // - same signature than the reusable TJwtAbstract.Compute() method
     // - returns '' on error, e.g. if HasPrivateSecret is false
     function JwtCompute(const DataNameValue: array of const;
@@ -1407,6 +1420,7 @@ type
       const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
       ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
     /// verify a JWT signature from the public key of this certificate
+    // - this certificate should have the kuDigitalSignature usage
     // - can optionally return the payload fields
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData = nil): TCryptCertValidity;
@@ -1447,7 +1461,8 @@ type
     function GetSubject: RawUtf8; virtual; abstract;
     function GetSubjects: TRawUtf8DynArray; virtual; abstract;
     function GetIssuerName: RawUtf8; virtual; abstract;
-    function GetIssuerSerial: RawUtf8; virtual; abstract;
+    function GetSubjectKey: RawUtf8; virtual; abstract;
+    function GetAuthorityKey: RawUtf8; virtual; abstract;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function GetUsage: TCryptCertUsages; virtual; abstract;
@@ -1470,10 +1485,13 @@ type
     function Sign(Data: pointer; Len: integer): RawByteString;
       overload; virtual; abstract;
     function Sign(const Data: RawByteString): RawByteString; overload; virtual;
+    procedure Sign(const Authority: ICryptCert); overload; virtual; abstract;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer): TCryptCertValidity;
       overload; virtual; abstract;
     function Verify(const Signature, Data: RawByteString): TCryptCertValidity;
       overload; virtual;
+    function Verify(const Authority: ICryptCert): TCryptCertValidity;
+      overload; virtual; abstract;
     function JwtCompute(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
@@ -1614,6 +1632,7 @@ type
 const
   /// such a Certificate could be used for anything
   CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+
   /// TCryptCertValidity results indicating a valid digital signature
   CV_VALIDSIGN =
     [cvValidSigned, cvValidSelfSigned];

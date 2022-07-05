@@ -1760,7 +1760,8 @@ type
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
-    function GetIssuerSerial: RawUtf8; override;
+    function GetSubjectKey: RawUtf8; override;
+    function GetAuthorityKey: RawUtf8; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -1774,8 +1775,10 @@ type
     function GetPrivateKey: RawByteString; override;
     function SetPrivateKey(const saved: RawByteString): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
+    procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
     function Handle: pointer; override;
   end;
 
@@ -1970,9 +1973,14 @@ begin
   result := fX509.IssuerName;
 end;
 
-function TCryptCertOpenSsl.GetIssuerSerial: RawUtf8;
+function TCryptCertOpenSsl.GetSubjectKey: RawUtf8;
 begin
-  result := fX509.IssuerKeyIdentifier;
+  result := fX509.SubjectKeyIdentifier;
+end;
+
+function TCryptCertOpenSsl.GetAuthorityKey: RawUtf8;
+begin
+  result := fX509.AuthorityKeyIdentifier;
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
@@ -2142,33 +2150,93 @@ begin
     result := '';
 end;
 
-function TCryptCertOpenSsl.Verify(Sign, Data: pointer;
-  SignLen, DataLen: integer): TCryptCertValidity;
+procedure TCryptCertOpenSsl.Sign(const Authority: ICryptCert);
+var
+  a: PX509;
+  auth: TCryptCertOpenSsl;
+begin
+  if Assigned(Authority) and
+     Authority.HasPrivateSecret then
+  begin
+    auth := Authority.Instance as TCryptCertOpenSsl;
+    a := auth.fX509;
+    if not a.HasUsage(kuKeyCertSign) then
+      RaiseError('Sign: no kuKeyCertSign');
+    EOpenSslCert.Check(X509_set_issuer_name(fX509, X509_get_subject_name(a)));
+    if not fX509.SetExtension(NID_authority_key_identifier, 'keyid:always', a) then
+      RaiseError('Sign: AKID'); // see RFC 3280
+    if fX509.Sign(auth.fPrivKey, auth.GetMD) = 0 then
+      RaiseError('Sign: CA Sign');
+  end
+  else
+    RaiseError('Sign: not a CA');
+end;
+
+function CanVerify(auth: PX509; usage: TX509Usage): TCryptCertValidity;
 var
   now: TDateTime;
 begin
   now := NowUtc;
-  if (fX509 = nil) or
-     (SignLen <= 0) or
+  if auth = nil then
+    result := cvUnknownAuthority
+  else if not auth.HasUsage(usage) then
+    result := cvWrongUsage
+  else if (now >= auth.NotAfter) or
+          (now < auth.NotBefore) then
+    result := cvDeprecatedAuthority
+  else
+    result := cvValidSigned;
+end;
+
+function TCryptCertOpenSsl.Verify(Sign, Data: pointer;
+  SignLen, DataLen: integer): TCryptCertValidity;
+begin
+  if (SignLen <= 0) or
      (DataLen <= 0) then
     result := cvBadParameter
-  else if not fX509.HasUsage(kuDigitalSignature) then
-    result := cvWrongUsage
-  else if (now >= fX509.NotAfter) or
-          (now < fX509.NotBefore) then
-    result := cvDeprecatedAuthority
-  else if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
-    if fX509.IsSelfSigned then
-      result := cvValidSelfSigned
-    else
-      result := cvValidSigned
   else
-    result := cvInvalidSignature;
+    result := CanVerify(fX509, kuDigitalSignature);
+  if result = cvValidSigned then
+    if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
+      if fX509.IsSelfSigned then
+        result := cvValidSelfSigned
+      else
+        result := cvValidSigned
+    else
+      result := cvInvalidSignature;
+end;
+
+function TCryptCertOpenSsl.Verify(const Authority: ICryptCert): TCryptCertValidity;
+var
+  auth: PX509;
+begin
+  result := cvBadParameter;
+  if fX509 = nil then
+    exit;
+  if fX509.IsSelfSigned then
+    auth := fX509
+  else if Assigned(Authority) then
+    if Authority.Instance.InheritsFrom(TCryptCertOpenSsl) then
+    begin
+      auth := Authority.Handle;
+      if auth.SubjectKeyIdentifier <> fX509.AuthorityKeyIdentifier then
+        auth := nil;
+    end
+    else
+      exit
+  else
+    auth := nil;
+  result := CanVerify(auth, kuKeyCertSign);
+  if result = cvValidSigned then
+    if X509_verify(fX509, auth.GetPublicKey) <> 1 then
+      result := cvInvalidSignature
+    else if auth = fX509 then
+      result := cvValidSelfSigned
 end;
 
 function TCryptCertOpenSsl.Handle: pointer;
 begin
-  result := fX509;
+  result := fX509; // a PX509 instance
 end;
 
 
