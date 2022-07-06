@@ -6300,7 +6300,7 @@ begin
 end;
 
 
-function IsPem(p: PUtf8Char; up: PUtf8Char = '-----BEGIN'): boolean;
+function IsPem(p: PUtf8Char; up: PUtf8Char): boolean;
 begin
   result := true;
   repeat
@@ -6325,7 +6325,7 @@ begin
   else
   begin
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
-    if IsPem(PrivateKey) then
+    if IsPem(PrivateKey, '-----BEGIN') then
       result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(PrivateKeyPassword))
     else
       result := nil;
@@ -6349,11 +6349,10 @@ begin
   else
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-    if IsPem(PublicKey) then
-      if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
-        result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
-      else
-        result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword))
+    if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
+      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
+    else if IsPem(PublicKey, '-----BEGIN') then
+      result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword))
     else
       result := nil;
     if (result = nil) and
