@@ -1320,6 +1320,16 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+/// cypher/decypher any buffer using AES and PKCS7 padding, from a key buffer
+function AesPkcs7(const src: RawByteString; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil): RawByteString; overload;
+
+/// cypher/decypher any buffer using AES and PKCS7 padding, from a key buffer
+// - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
+// 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
+function AesPkcs7(const src: RawByteString; encrypt: boolean;
+  const password: RawUtf8; const salt: RawByteString = '';
+  rounds: cardinal = 1000; aesMode: TAesMode = mCtr): RawByteString; overload;
 
 /// cypher/decypher any file using AES and PKCS7 padding, from a key buffer
 // - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
@@ -6725,6 +6735,43 @@ end;
 function TAesPkcs7Reader.Write(const Buffer; Count: Longint): Longint;
 begin
   result := RaiseStreamError(self, 'Write');
+end;
+
+function AesPkcs7(const src: RawByteString; encrypt: boolean; const key;
+  keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock): RawByteString;
+var
+  aes: TAesAbstract;
+begin
+  if src = '' then
+    result := ''
+  else
+  begin
+    aes := TAesFast[aesMode].Create(key, keySizeBits);
+    try
+      if IV <> nil then
+        aes.IV := IV^;
+      if encrypt then
+        result := aes.EncryptPkcs7(src, IV = nil)
+      else
+        result := aes.DecryptPkcs7(src, IV = nil);
+    finally
+      aes.Free;
+    end;
+  end;
+end;
+
+function AesPkcs7(const src: RawByteString; encrypt: boolean;
+  const password: RawUtf8; const salt: RawByteString; rounds: cardinal;
+  aesMode: TAesMode): RawByteString;
+var
+  dig: THash256Rec; // see AesPkcs7File() and TAesPkcs7Abstract.Create overload
+begin
+  Pbkdf2HmacSha256(password, salt, rounds, dig.b, TAESPKCS7WRITER_SALT);
+  try
+    result := AesPkcs7(src, encrypt, dig.Lo, 128, aesMode, @dig.Hi);
+  finally
+    FillZero(dig.b);
+  end;
 end;
 
 function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
