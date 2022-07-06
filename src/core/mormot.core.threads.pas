@@ -36,10 +36,10 @@ uses
   mormot.core.perf;
 
 const
-  /// defined here to avoid explicit link to syncobjs in uses clause
+  // defined here to avoid explicit link to syncobjs in uses clause
   wrSignaled = syncobjs.wrSignaled;
-  /// defined here to avoid explicit link to syncobjs in uses clause
   wrTimeout = syncobjs.wrTimeout;
+  wrError = syncobjs.wrError;
 
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
@@ -2401,7 +2401,7 @@ begin
           if integer(t^.Secs) = -1 then
           begin
             // from ExecuteOnce()
-            fTasks.DynArray.Delete(i);
+            fTasks.DynArray.Delete(i); // is likely to be the last -> no move
             continue; // don't inc(i)
           end
           else
@@ -2417,15 +2417,15 @@ begin
       with todo[i] do
         if Msg <> nil then
           for f := 0 to length(Msg) - 1 do
-          try
-            OnProcess(self, Event, Msg[f]);
-          except
-          end
+            try
+              OnProcess(self, Event, Msg[f]);
+            except // any exception is just ignored
+            end
         else
-        try
-          OnProcess(self, Event, '');
-        except
-        end;
+          try
+            OnProcess(self, Event, '');
+          except
+          end;
   finally
     fProcessing := InterlockedDecrement(fProcessingCounter) <> 0;
   end;
