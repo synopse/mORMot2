@@ -1915,7 +1915,8 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
 // - will return ptNone for any unknown type
 // - for ptOrm and ptTimeLog, optional Complex will contain the specific type found
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
-  Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
+  Complex: PRttiParserComplexType = nil;
+  Kind: TRttiKind = rkUnknown): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type name
 // - from known ('byte', 'string', 'RawUtf8', 'TGuid'...) type names
@@ -6263,7 +6264,7 @@ const
     pctNone);                      // btWORD
 
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
-  Complex: PRttiParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType; Kind: TRttiKind): TRttiParserType;
 var
   ndx: PtrInt;
   up: PUtf8Char;
@@ -6280,7 +6281,8 @@ begin
     result := BT_TYPES[TBasicType(ndx)];
     c := BT_COMPLEX[TBasicType(ndx)];
   end
-  else if (NameLen < 200) and
+  else if (Kind = rkInt64) and
+          (NameLen < 200) and
           (tmp[0] = 'T') and // T...ID pattern in name?
           (PWord(@tmp[NameLen - 2])^ = ord('I') + ord('D') shl 8) then
   begin
@@ -6321,14 +6323,9 @@ begin
   if FirstSearchByName then
   begin
     result := TypeNameToStandardParserType(
-      @Info^.RawName[1], ord(Info^.RawName[0]), Complex);
+      @Info^.RawName[1], ord(Info^.RawName[0]), Complex, Info^.Kind);
     if result <> ptNone then
-      if (result = ptOrm) and
-         (Info^.Kind <> rkInt64) then
-        // paranoid check e.g. for T...ID false positives
-        result := ptNone
-      else
-        exit;
+      exit; // found by name
   end;
   case Info^.Kind of
     // FPC and Delphi will use a fast jmp table
