@@ -1767,8 +1767,8 @@ type
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
-      const PrivatePassword: RawUtf8): boolean; override;
-    function Save(Content: TCryptCertContent; const PrivatePassword: RawUtf8;
+      const PrivatePassword: SpiUtf8): boolean; override;
+    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
     function GetPublicKey: RawByteString; override;
@@ -2004,7 +2004,7 @@ begin
 end;
 
 function TCryptCertOpenSsl.Save(Content: TCryptCertContent;
-  const PrivatePassword: RawUtf8; Format: TCryptCertFormat): RawByteString;
+  const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 begin
   result := '';
   if fX509 = nil then
@@ -2045,7 +2045,7 @@ begin
 end;
 
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
-  Content: TCryptCertContent; const PrivatePassword: RawUtf8): boolean;
+  Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 var
   P: PUtf8Char;
   k: TPemKind;

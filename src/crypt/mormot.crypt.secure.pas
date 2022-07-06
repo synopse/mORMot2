@@ -1359,12 +1359,12 @@ type
     // - will only recognize and support the ccfBinary and ccfPem formats
     function Load(const Saved: RawByteString;
       Content: TCryptCertContent = cccCertOnly;
-      const PrivatePassword: RawUtf8 = ''): boolean;
+      const PrivatePassword: SpiUtf8 = ''): boolean;
     /// load a Certificate from a SaveToFile() content
     // - just a wrapper around the Load() method
     function LoadFromFile(const Source: TFileName;
       Content: TCryptCertContent = cccCertOnly;
-      const PrivatePassword: RawUtf8 = ''): boolean;
+      const PrivatePassword: SpiUtf8 = ''): boolean;
     /// serialize the Certificate as reusable content
     // - after Generate, will contain the public and private key, so
     // cccCertWithPrivateKey and cccPrivateKeyOnly content could be used, with
@@ -1372,13 +1372,13 @@ type
     // - will use binary by default, but you can export to another formats,
     // depending on the underlying TCryptCertAlgo
     function Save(Content: TCryptCertContent = cccCertOnly;
-      const PrivatePassword: RawUtf8 = '';
+      const PrivatePassword: SpiUtf8 = '';
       Format: TCryptCertFormat = ccfBinary): RawByteString;
     /// serialize the Certificate as reusable file content
     // - just a wrapper around the Save() method
     procedure SaveToFile(const Dest: TFileName;
       Content: TCryptCertContent = cccCertOnly;
-      const PrivatePassword: RawUtf8 = '';
+      const PrivatePassword: SpiUtf8 = '';
       Format: TCryptCertFormat = ccfBinary);
     /// compute a digital signature of some digital content
     // - memory buffer will be hashed then signed using the private secret key
@@ -1469,14 +1469,14 @@ type
     function GetPeerInfo: RawUtf8; virtual; abstract;
     function GetDigest(Algo: THashAlgo): RawUtf8; virtual;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
-      const PrivatePassword: RawUtf8): boolean; virtual; abstract;
+      const PrivatePassword: SpiUtf8): boolean; virtual; abstract;
     function LoadFromFile(const Source: TFileName; Content: TCryptCertContent;
-      const PrivatePassword: RawUtf8): boolean;
+      const PrivatePassword: SpiUtf8): boolean;
     function Save(Content: TCryptCertContent;
-      const PrivatePassword: RawUtf8;
+      const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; virtual;
     procedure SaveToFile(const Dest: TFileName; Content: TCryptCertContent;
-      const PrivatePassword: RawUtf8; Format: TCryptCertFormat);
+      const PrivatePassword: SpiUtf8; Format: TCryptCertFormat);
     function HasPrivateSecret: boolean; virtual; abstract;
     function GetPublicKey: RawByteString; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
@@ -1519,7 +1519,7 @@ type
     // - return nil if Saved content was not in the expected format/algorithm
     function Load(const Saved: RawByteString;
       Content: TCryptCertContent = cccCertOnly;
-      const PrivatePassword: RawUtf8 = ''): ICryptCert;
+      const PrivatePassword: SpiUtf8 = ''): ICryptCert;
     /// factory to generate a new Certificate instance
     // - just a wrapper around New and ICryptCert.Generate()
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
@@ -4398,7 +4398,7 @@ begin
 end;
 
 function TCryptCertAlgo.Load(const Saved: RawByteString;
-  Content: TCryptCertContent; const PrivatePassword: RawUtf8): ICryptCert;
+  Content: TCryptCertContent; const PrivatePassword: SpiUtf8): ICryptCert;
 begin
   result := New;
   if not result.Load(Saved, Content, PrivatePassword) then
@@ -4442,13 +4442,13 @@ begin
 end;
 
 function TCryptCert.LoadFromFile(const Source: TFileName;
-  Content: TCryptCertContent; const PrivatePassword: RawUtf8): boolean;
+  Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 begin
   result := Load(StringFromFile(Source), Content, PrivatePassword);
 end;
 
 function TCryptCert.Save(Content: TCryptCertContent;
-  const PrivatePassword: RawUtf8; Format: TCryptCertFormat): RawByteString;
+  const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 begin
   // overriden call only for ccfHexa, ccfBase64 and ccfBase64Uri encoding
   result := Save(Content, PrivatePassword, ccfBinary);
@@ -4465,7 +4465,7 @@ begin
 end;
 
 procedure TCryptCert.SaveToFile(const Dest: TFileName; Content: TCryptCertContent;
-  const PrivatePassword: RawUtf8; Format: TCryptCertFormat);
+  const PrivatePassword: SpiUtf8; Format: TCryptCertFormat);
 begin
   FileFromString(Save(Content, PrivatePassword, Format), Dest);
 end;
