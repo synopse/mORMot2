@@ -2691,7 +2691,10 @@ begin
   if D = pointer(S) then
     S := ''
   else
+  begin
+    D^ := #0;
     PStrLen(PtrUInt(S) - _STRLEN)^ := D - pointer(S); // no SetLength needed
+  end;
 end;
 
 procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
@@ -2871,7 +2874,10 @@ begin
       if n = 0 then
         result := ''
       else
-        PStrLen(PtrUInt(result) - _STRLEN)^ := n; // in-place truncation
+      begin
+        PStrLen(P - _STRLEN)^ := n; // in-place truncation
+        P[n] := #0;
+      end;
       exit;
     end;
   result := text; // no control char found
@@ -2900,7 +2906,10 @@ begin
       if n = 0 then
         result := ''
       else
-        PStrLen(PtrUInt(result) - _STRLEN)^ := n; // in-place truncation
+      begin
+        PStrLen(P - _STRLEN)^ := n; // in-place truncation
+        P[n] := #0;
+      end;
       exit;
     end;
   result := text; // no control char found

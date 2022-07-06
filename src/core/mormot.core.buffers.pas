@@ -8798,14 +8798,15 @@ begin
 end;
 
 function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
+var
+  p: PAnsiChar;
 begin
   FastSetString(result, nil, sourcelen * 3); // worse case
   if sourcelen = 0 then
     exit;
-  sourcelen := EscapeBuffer(source, sourcelen,
-    pointer(result), sourcelen * 3) - pointer(result);
-  // don't call the MM which may move the data -> just adjust length()
-  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
+  p := pointer(result);
+  sourcelen := EscapeBuffer(source, sourcelen, p, sourcelen * 3) - p;
+  PStrLen(p - _STRLEN)^ := sourcelen; // in-place adjust
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
@@ -10741,16 +10742,19 @@ begin
 end;
 
 procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
+var
+  p: PAnsiChar;
 begin
   if (Len = 0) or
      (OverHead < 0) then
     exit;
   FastSetString(Text, nil, Len + Overhead);
-  MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
+  p := pointer(Text);
+  MoveFast(pointer(fBuffer)^, p^, Len);
   if OverHead <> 0 then
   begin
-    PAnsiChar(pointer(Text))[Len] := #0;
-    PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^ := Len; // fake length
+    PStrLen(p - _STRLEN)^ := Len; // fake length
+    p[Len] := #0;
   end;
 end;
 
