@@ -6300,14 +6300,14 @@ begin
 end;
 
 
-function IsPem(p: PUtf8Char; up: PUtf8Char = '-----BEGIN'): boolean;
+function IsPem(p: PUtf8Char; up: RawUtf8 = '-----BEGIN'): boolean;
 begin
   result := true;
   repeat
     p := PosChar(p, '-');
     if p = nil then
       break;
-    if NetStartWith(p, up) then // naive but good enough
+    if NetStartWith(p, @up) then // naive but good enough
       exit;
     inc(p);
   until false;
