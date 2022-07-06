@@ -963,7 +963,7 @@ type
     class function InternalResolve(const name: RawUtf8; CSV: PUtf8Char): integer;
   public
     /// inherited classes should properly initialize this kind of process
-    constructor Create(const name: RawUtf8); virtual;
+    constructor Create(const name: RawUtf8); reintroduce; virtual;
     /// register this class to override one or several identifiers implementation
     // - returns the last instance created for name[]
     class function Implements(const name: array of RawUtf8): pointer; overload;
