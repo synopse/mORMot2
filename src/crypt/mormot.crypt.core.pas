@@ -7603,7 +7603,7 @@ begin
     // persist the new private user key into local hidden file
     if FileExists(fn) then
       // allow rewrite of an invalid local file
-      FileSetAttributes(fn, {secret=}false);
+      FileSetHidden(fn, {ReadOnly=}false);
     TAesPrng.Main.FillRandom(__h);
     key := TAesPrng.Main.AFSplit(__h, SizeOf(__h), 126);
     {$ifdef OSWINDOWS}
@@ -7617,7 +7617,7 @@ begin
     key := TAesCfb.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
       ESynCrypto.CreateUtf8('Unable to write %', [fn]);
-    FileSetAttributes(fn, {secret=}true); // chmod 400
+    FileSetHidden(fn, {ReadOnly=}true); // chmod 400
   finally
     FillZero(key);
     FillZero(key2);
