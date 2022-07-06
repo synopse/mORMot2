@@ -6095,7 +6095,7 @@ begin
         else
           check(Length(obfusc) = 24);
         inc(obfusc[12]);
-        check(not gen.FromObfuscated(obfusc, i3), 'tampered text');
+        check(not gen.FromObfuscated(obfusc, i3), 'tempered text');
         dec(obfusc[12]);
       end;
       //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);

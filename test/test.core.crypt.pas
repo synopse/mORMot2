@@ -2324,7 +2324,7 @@ begin
       // TEccCertificate V1 has limited Usage and Subjects support
       c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign], ' s1, s2 ', nil);
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 's1,s2');
-      check(c1.GetUsage = CERTIFICATE_USAGE_ALL);
+      check(c1.GetUsage = CU_ALL);
       CheckEqual(c1.GetSubject, 's1');
     end
     else
