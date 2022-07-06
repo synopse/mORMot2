@@ -3283,7 +3283,7 @@ begin
     fUnSortedID := false;
   end
   else
-    // JSON may have been tampered, so we actually ensure IDs are sorted
+    // JSON may have been tempered, so we actually ensure IDs are sorted
     fMaxID := FindMaxIDAndCheckSorted(pointer(fValue), fCount, fUnSortedID);
   InternalLog('LoadFrom% % count=% load=% index=%',
     [_CALLER[binary], fStoredClass, fCount, loaded.Stop, timer.Stop]);

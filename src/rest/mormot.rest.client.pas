@@ -2104,7 +2104,7 @@ begin
       if elapsed >= max then
         exit;
       inc(retry);
-      if elapsed < 500 then
+      if elapsed < 500 then // retry in pace of 100-200ms, 1-2s, 5-10s
         wait := 100
       else if elapsed < 10000 then
         wait := 1000
@@ -2120,9 +2120,10 @@ begin
       fLogClass.Add.Log(sllTrace, 'IsOpen: % after % -> wait % and ' +
         'retry #% up to % seconds - %',
         [exc, MilliSecToString(elapsed), MilliSecToString(wait), retry,
-         fConnectRetrySeconds, self],
-        self);
+         fConnectRetrySeconds, self], self);
       SleepHiRes(wait);
+      if isDestroying in fInternalState then
+        exit;
     until InternalIsOpen;
   finally
     fSafe.Leave;

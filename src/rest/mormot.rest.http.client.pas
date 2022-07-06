@@ -310,17 +310,17 @@ type
   // instance, as defined in the mormot.net.ws.client unit
   TRestHttpClientWebsockets = class(TRestHttpClientSocket)
   protected
-    fWebSocketParams: record
+    fOnWebSocketsUpgrade, fOnWebSocketsUpgraded: TOnClientNotify;
+    fOnWebSocketsClosed: TNotifyEvent;
+    fWebSocketLoopDelay: integer;
+    fWebSocketProcessSettings: TWebSocketProcessSettings;
+    fUpgradeCount: integer;
+    fWebSocketAutoUpgradeParams: record
       AutoUpgrade: boolean;
       Ajax: boolean;
       BinaryOptions: TWebSocketProtocolBinaryOptions;
       Key: RawUtf8;
     end;
-    fOnWebSocketsUpgraded: TOnClientNotify;
-    fOnWebSocketsClosed: TNotifyEvent;
-    fWebSocketLoopDelay: integer;
-    fWebSocketProcessSettings: TWebSocketProcessSettings;
-    fUpgradeCount: integer;
     function CallbackRequest(
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     procedure InternalOpen; override;
@@ -332,6 +332,7 @@ type
       const aProxyByPass: RawUtf8 = ''; aSendTimeout: cardinal = 0;
       aReceiveTimeout: cardinal = 0; aConnectTimeout: cardinal = 0); override;
     /// overriden method which will auto-upgrade the WebSockets if needed
+    /// - first check if connected to the server, or try to (re)connect
     function IsOpen: boolean; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - the Model.Root URI will be used for upgrade
@@ -360,6 +361,7 @@ type
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
         [pboSynLzCompress]): RawUtf8;
     /// internal HTTP/1.1 and WebSockets compatible client
+    // - will call IsOpen to ensure the connection is actually established
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
     /// returns true if the connection is a running WebSockets
@@ -375,6 +377,12 @@ type
     /// used to finalize an interface parameter as SOA callback
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
       FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean; override;
+    /// this event will be executed just before the HTTP client will try to
+    // upgrade to the expected WebSockets protocol
+    // - supplied Sender parameter will be this TRestHttpClientWebsockets instance
+    // - it may be the right time e.g. to set a JWT bearer
+    property OnWebSocketsUpgrade: TOnClientNotify
+      read fOnWebSocketsUpgrade write fOnWebSocketsUpgrade;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
     // - supplied Sender parameter will be this TRestHttpClientWebsockets instance
@@ -856,7 +864,7 @@ function TRestHttpClientWebsockets.IsOpen: boolean;
     result := inherited IsOpen; // connect and call OnConnected
     if not result then
       exit;
-    with fWebSocketParams do
+    with fWebSocketAutoUpgradeParams do
       if AutoUpgrade then
       begin
         err := WebSocketsUpgrade(Key, Ajax, BinaryOptions);
@@ -986,7 +994,7 @@ var
   log: ISynLog;
 begin
   log := fLogFamily.SynLog.Enter(self, 'WebSocketsUpgrade');
-  sockets := WebSockets;
+  sockets := WebSockets; // call IsOpen if necessary
   if sockets = nil then
     result := 'Impossible to connect to the Server'
   else
@@ -997,13 +1005,15 @@ begin
       prevconn := sockets.WebSockets.ConnectionID
     else
       prevconn := 0;
+    if Assigned(fOnWebSocketsUpgrade) then
+      fOnWebSocketsUpgrade(self); // e.g. to set a JWT in fCustomHeader
     result := sockets.WebSocketsUpgrade(
       Model.Root, aWebSocketsEncryptionKey,
       aWebSocketsAjax, aWebSocketsBinaryOptions, nil, fCustomHeader);
     if result = '' then
     begin
       // no error message = success
-      with fWebSocketParams do
+      with fWebSocketAutoUpgradeParams do
       begin
         // store parameters for auto-reconnection
         AutoUpgrade := sockets.Settings^.ClientAutoUpgrade;
@@ -1018,7 +1028,7 @@ begin
             Int64ToUtf8(prevconn), result) = HTTP_SUCCESS then
           result := ''; // on error, log result = server response
       if Assigned(fOnWebSocketsUpgraded) then
-        fOnWebSocketsUpgraded(self);
+        fOnWebSocketsUpgraded(self); // e.g. to register some callbacks
       inc(fUpgradeCount);
     end;
   end;
