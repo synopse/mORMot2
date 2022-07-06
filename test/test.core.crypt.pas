@@ -2339,8 +2339,8 @@ begin
     end;
     Check(c1.GetSerial <> '');
     Check(c1.GetSubjectKey <> '');
-    if c1.GetAuthorityKey <> c1.GetSubjectKey then
-      CheckEqual(c1.GetAuthorityKey, '');
+    if c1.GetAuthorityKey <> c1.GetSubjectKey then // equal on syn-ecc
+      CheckEqual(c1.GetAuthorityKey, '', 'X509 self-sign has no auth');
     Check(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1');
     Check(c1.Verify(c1) = cvValidSelfSigned, 'cvValidSelfSigned2');
     Check(c1.HasPrivateSecret);
@@ -2413,6 +2413,16 @@ begin
     Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
     Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned');
     Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
+    c2 := crt.New;
+    c2.Generate([cuDigitalSignature], 'self.signed', nil);
+    if c2.GetAuthorityKey <> c2.GetSubjectKey then
+      CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
+    Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
+    Check(c2.Verify(nil) = cvValidSelfSigned, 'self2');
+    c2.Sign(c1); // change signature
+    CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c2.Verify(c1) = cvValidSigned, 'self3');
+    Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
   end;
   AddConsole(names);
   // validate Store High-Level Algorithms Factory

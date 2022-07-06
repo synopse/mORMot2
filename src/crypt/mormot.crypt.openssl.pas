@@ -2172,14 +2172,15 @@ begin
     RaiseError('Sign: not a CA');
 end;
 
-function CanVerify(auth: PX509; usage: TX509Usage): TCryptCertValidity;
+function CanVerify(auth: PX509; usage: TX509Usage;
+  selfsigned: boolean): TCryptCertValidity;
 var
   now: TDateTime;
 begin
   now := NowUtc;
   if auth = nil then
     result := cvUnknownAuthority
-  else if not auth.HasUsage(usage) then
+  else if not (selfsigned or auth.HasUsage(usage)) then
     result := cvWrongUsage
   else if (now >= auth.NotAfter) or
           (now < auth.NotBefore) then
@@ -2195,7 +2196,7 @@ begin
      (DataLen <= 0) then
     result := cvBadParameter
   else
-    result := CanVerify(fX509, kuDigitalSignature);
+    result := CanVerify(fX509, kuDigitalSignature, false);
   if result = cvValidSigned then
     if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
       if fX509.IsSelfSigned then
@@ -2226,7 +2227,7 @@ begin
       exit
   else
     auth := nil;
-  result := CanVerify(auth, kuKeyCertSign);
+  result := CanVerify(auth, kuKeyCertSign, auth = fX509);
   if result = cvValidSigned then
     if X509_verify(fX509, auth.GetPublicKey) <> 1 then
       result := cvInvalidSignature

@@ -5100,7 +5100,7 @@ var
 begin
   // note: Fields is unsupported (yet)
   if fEcc <> nil then
-    RaiseError('New: called twice');
+    RaiseError('Generate: called twice');
   if ValidDays = 0 then
     start := 0
   else
@@ -5113,9 +5113,9 @@ begin
   begin
     a := Authority.Instance;
     if not a.InheritsFrom(TCryptCertInternal) then
-      RaiseError('New: Authority is a % which is unsupported', [a]);
+      RaiseError('Generate: Authority is a % which is unsupported', [a]);
     if not a.HasPrivateSecret then
-      RaiseError('New: Authority holds % which has no private key', [a]);
+      RaiseError('Generate: Authority holds % which has no private key', [a]);
     auth := TCryptCertInternal(a).fEcc as TEccCertificateSecret;
   end;
   fEcc := TEccCertificateSecret.CreateNew(
@@ -5346,7 +5346,7 @@ begin
      Authority.HasPrivateSecret then
     TEccCertificateSecret(Authority.Handle).SignCertificate(fEcc)
   else
-    RaiseError('Sign: unsupported');
+    RaiseError('Sign: CA');
 end;
 
 function TCryptCertInternal.Verify(Sign, Data: pointer;
