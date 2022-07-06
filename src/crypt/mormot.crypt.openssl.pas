@@ -2053,6 +2053,20 @@ var
   pkcs12: PPKCS12;
 begin
   result := false;
+  if Content = cccPrivateKeyOnly then
+  begin
+    fPrivKey.Free;
+    fPrivKey := LoadPrivateKey(pointer(saved), length(saved), PrivatePassword);
+    if fPrivKey <> nil then
+      if fX509.MatchPrivateKey(fPrivKey) then
+        result := true
+      else
+      begin
+        fPrivKey.Free;
+        fPrivKey := nil;
+      end;
+    exit;
+  end;
   Clear;
   if Saved = '' then
     exit;
@@ -2101,8 +2115,6 @@ begin
         if not fX509.MatchPrivateKey(fPrivKey) then
           Clear;
       end;
-    cccPrivateKeyOnly:
-      ;
   end;
   result := fX509 <> nil;
 end;
