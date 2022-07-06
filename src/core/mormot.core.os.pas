@@ -1042,7 +1042,7 @@ var
 
 
 type
-  /// identify an operating system folder
+  /// identify an operating system folder for GetSystemPath()
   TSystemPath = (
     spCommonData,
     spUserData,
@@ -2136,13 +2136,12 @@ function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
 // - returns 0 if the conversion failed
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
-/// reduce the visibility of a given file by setting its read/write attributes
+/// reduce the visibility of a given file, and set its read/write attributes
 // - on POSIX, change attributes for the the owner, and reset group/world flags
-// - if Secret=false, will have normal file attributes, with read/write access
-// - if Secret=true, will have read-only attributes (and hidden on Windows -
-// under POSIX, there is no "hidden" file attribute, but you should define a
-// FileName starting by '.')
-procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+// so that it is accessible by the current user only; under POSIX, there is
+// no "hidden" file attribute, but you should define a FileName starting by '.'
+// - on Windows, will set the "hidden" file attribue
+procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 
 /// get a file size, from its name
 // - returns 0 if file doesn't exist

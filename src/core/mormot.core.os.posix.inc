@@ -916,9 +916,9 @@ begin
   result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
 end;
 
-procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 begin
-  if Secret then
+  if ReadOnly then
     fpchmod(pointer(FileName), S_IRUSR)
   else
     fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);

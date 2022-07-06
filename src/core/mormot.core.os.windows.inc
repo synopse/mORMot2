@@ -533,16 +533,16 @@ begin
   end;
 end;
 
-procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 const
   FLAGS: array[boolean] of integer = (
-    FILE_ATTRIBUTE_NORMAL,
+    FILE_ATTRIBUTE_HIDDEN,
     FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
 var
   tmp: TW32Temp;
 begin
   if FileName <> '' then
-    SetFileAttributesW(W32(FileName, tmp), FLAGS[Secret]);
+    SetFileAttributesW(W32(FileName, tmp), FLAGS[ReadOnly]);
 end;
 
 function RenameFile(const OldName, NewName: TFileName): boolean;
