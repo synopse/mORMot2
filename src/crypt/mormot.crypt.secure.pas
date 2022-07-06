@@ -1091,7 +1091,7 @@ type
     function Process(const src: RawByteString; out dst: RawByteString;
       const aeadinfo: RawByteString = ''): boolean; overload;
     /// general encryption/decryption method using TBytes buffers
-    // - use use TByteDynArray for aeadinfo because TBytes raise a Delphi XE
+    // - use TByteDynArray for aeadinfo because TBytes raises a Delphi XE
     // compiler bug - it should be assignment compatible with any TBytes value
     function Process(const src: TBytes; out dst: TBytes;
       const aeadinfo: TByteDynArray = nil): boolean; overload;
@@ -1819,6 +1819,7 @@ type
     pemSynopseSignature,
     pemSynopseCertificate,
     pemSynopseUnencryptedPrivateKey,
+    pemSynopseEncryptedPrivateKey,
     pemSynopsePrivateKeyAndCertificate);
   PPemKind = ^TPemKind;
 
@@ -1843,6 +1844,7 @@ const
     '-----BEGIN SYNECC SIGNATURE-----'#13#10,
     '-----BEGIN SYNECC CERTIFICATE-----'#13#10,
     '-----BEGIN SYNECC PRIVATE KEY-----'#13#10,
+    '-----BEGIN SYNECC ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
   /// the supported ending markers of a PEM text instance
@@ -1864,6 +1866,7 @@ const
     '-----END SYNECC SIGNATURE-----'#13#10,
     '-----END SYNECC CERTIFICATE-----'#13#10,
     '-----END SYNECC PRIVATE KEY-----'#13#10,
+    '-----END SYNECC ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
 /// convert a binary DER content into a single-instance PEM text

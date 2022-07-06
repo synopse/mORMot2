@@ -2140,9 +2140,10 @@ end;
 function TCryptCertOpenSsl.SetPrivateKey(const saved: RawByteString): boolean;
 begin
   result := false;
+  fPrivKey.Free;
+  fPrivKey := nil;
   if saved = '' then
     exit;
-  fPrivKey.Free;
   fPrivKey := LoadPrivateKey(saved);
   if fX509.MatchPrivateKey(fPrivKey) then
     result := true

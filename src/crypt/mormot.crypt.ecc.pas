@@ -27,12 +27,12 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.datetime,
-  mormot.crypt.secure,
   mormot.core.variants,
   mormot.core.json,
   mormot.core.rtti,
@@ -5218,11 +5218,21 @@ begin
   end
   else if fEcc.InheritsFrom(TEccCertificateSecret) then
     if Content = cccPrivateKeyOnly then
-    begin
-      // note: our TEccCertificateSecret has no password support for its privkey
-      result := EccToDer(TEccCertificateSecret(fEcc).PrivateKey);
-      if Format = ccfPem then
-        result := DerToPem(result, pemSynopseUnencryptedPrivateKey);
+      if (Format = ccfPem) and
+         (PrivatePassword = '') then
+        // -----BEGIN SYNECC PRIVATE KEY----- has a real DER encoding
+        result := DerToPem(EccToDer(TEccCertificateSecret(fEcc).PrivateKey),
+          pemSynopseUnencryptedPrivateKey)
+      else
+      begin
+        // other formats use the raw compressed TEccPrivateKey binary
+        result := GetPrivateKey;
+        if PrivatePassword <> '' then
+          // encryption using PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32
+          result := AesPkcs7(MainAesPrng.AFSplit(result, 31), {encrypt=}true,
+            PrivatePassword, 'synecc', 1000);
+       if Format = ccfPem then
+         result := DerToPem(result, pemSynopseEncryptedPrivateKey);
     end
     else
     begin
@@ -5246,7 +5256,7 @@ begin
   begin
     bin := PemToDer(Saved, @k);
     if not (k in [pemSynopseCertificate, pemSynopseUnencryptedPrivateKey,
-                  pemSynopsePrivateKeyAndCertificate]) then
+        pemSynopsePrivateKeyAndCertificate, pemSynopseEncryptedPrivateKey]) then
       bin := '';
   end
   else
@@ -5261,10 +5271,13 @@ begin
         result := fEcc.LoadFromBinary(bin); // plain public key only
       end;
     cccPrivateKeyOnly:
-      if SetPrivateKey(Saved) then // no password support
-        result := true
-      else
+      begin
+        if PrivatePassword <> '' then
+          bin := TAesPrng.AFUnsplit(AesPkcs7(
+            bin, {encrypt=}false, PrivatePassword, 'synecc', 1000), 31);
+        result := SetPrivateKey(bin);
         exit; // don't free the main TEccCertificate instance
+      end;
     cccCertWithPrivateKey:
       begin
         fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
@@ -5300,20 +5313,26 @@ begin
 end;
 
 function TCryptCertInternal.SetPrivateKey(const saved: RawByteString): boolean;
+var
+  pk: TEccPrivateKey;
 begin
   result := false;
   if fEcc = nil then
     exit;
-  if length(saved) <> SizeOf(TEccPrivateKey) then
+  if length(saved) = SizeOf(TEccPrivateKey) then
+    pk := PEccPrivateKey(saved)^
+  else if not DerToEcc(pointer(saved), length(saved), pk) then
+    FillZero(pk);
+  if IsZero(THash256(pk)) then
   begin
-    if fEcc.InheritsFrom(TEccCertificateSecret) then // always reset the key
+    if fEcc.InheritsFrom(TEccCertificateSecret) then    // always reset the key
       FillZero(TEccCertificateSecret(fEcc).fPrivateKey); // now HasSecret=false
     exit;
   end;
   if fEcc.InheritsFrom(TEccCertificateSecret) then
-    TEccCertificateSecret(fEcc).fPrivateKey := PEccPrivateKey(saved)^
+    TEccCertificateSecret(fEcc).fPrivateKey := pk
   else
-    fEcc := TEccCertificateSecret.CreateFrom(fEcc, pointer(saved), {free=}true);
+    fEcc := TEccCertificateSecret.CreateFrom(fEcc, @pk, {freefEcc=}true);
   result := true;
 end;
 
