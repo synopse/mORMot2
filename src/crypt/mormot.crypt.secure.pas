@@ -955,7 +955,7 @@ type
   // store some engine-specific context ahead of time, for faster process
   // - inherited classes would dedicated New() factory methods; this parent
   // features the internal registration feature of the known algorithms
-  TCryptAlgo = class(TObject)
+  TCryptAlgo = class(TSynPersistent)
   protected
     fName: RawUtf8;
     // case-insensitive quick lookup of the algorithms into a TCryptAlgo instance
@@ -975,6 +975,7 @@ type
     /// return all the TCryptAlog instances matching this class type
     // - could be used e.g. as TCryptRandom.Names
     class function Names: TRawUtf8DynArray;
+  published
     /// process-wide case-insensitive identifier for quick lookup of the algorithms
     // - typical values may follow OpenSSL naming, e.g. 'MD5', 'AES-128-GCM' or
     // 'prime256v1'
@@ -1214,7 +1215,7 @@ type
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
-  // - stored as a 16-bit memory block, with CERTIFICATE_USAGE_ALL = 65535
+  // - stored as a 16-bit memory block, with CU_ALL = 65535
   TCryptCertUsage = (
     cuCA,
     cuEncipherOnly,
@@ -1443,6 +1444,7 @@ type
     function Instance: TCryptCert;
     /// access to the low-level implementation handle
     // - e.g. PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
+    // - equals nil if there is no associated certificate, e.g. after New
     function Handle: pointer;
   end;
 
@@ -1631,7 +1633,13 @@ type
 
 const
   /// such a Certificate could be used for anything
-  CERTIFICATE_USAGE_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+  CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+
+  /// such a Certificate could be used for a TLS server authentication
+  CU_TLS_SERVER = [cuTlsServer, cuKeyAgreement, cuKeyEncipherment];
+
+  /// such a Certificate could be used for a TLS client authentication
+  CU_TLS_CLIENT = [cuTlsClient, cuKeyAgreement, cuKeyEncipherment];
 
   /// TCryptCertValidity results indicating a valid digital signature
   CV_VALIDSIGN =

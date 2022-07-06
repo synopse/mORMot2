@@ -348,7 +348,7 @@ type
     // - will also force the version to be 2 if maxversion allow it
     procedure SetUsage(usage: integer; maxversion: byte);
     /// get Certificate 16-bit TCryptCertUsage usage
-    // - returns CERTIFICATE_USAGE_ALL = all Usage for version 1
+    // - returns CU_ALL = all Usage for version 1
     function GetUsage: integer;
     /// set Certificate subject
     // - the input subject text could be CSV separated
@@ -502,7 +502,7 @@ const
     [ecdDecrypted, ecdDecryptedWithSignature];
 
   /// map all TCryptCertUsages flags for ECC Version 1 default value
-  // - should match word(CERTIFICATE_USAGE_ALL) from mormot.crypt.secure.pas
+  // - should match word(CU_ALL) from mormot.crypt.secure.pas
   ECCV1_USAGE_ALL = 65535;
 
 

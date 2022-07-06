@@ -352,9 +352,9 @@ type
       read GetAuthorityIssuer;
     /// the allowed usages of this certificate
     // - only encoded with V2 format, so not published as JSON property
-    // - V1 would set CERTIFICATE_USAGE_ALL = 65335 which won't be serialized
+    // - V1 would set CU_ALL = 65335 which won't be serialized
     property Usage: TCryptCertUsages
-      read GetUsage default CERTIFICATE_USAGE_ALL;
+      read GetUsage default CU_ALL;
     /// if this certificate has been signed by itself
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer, and should be used as "root" certificates
@@ -398,7 +398,7 @@ type
     constructor CreateNew(Authority: TEccCertificateSecret;
       const IssuerText: RawUtf8 = ''; ExpirationDays: integer = 0;
       StartDate: TDateTime = 0; ParanoidVerify: boolean = true;
-      Usage: TCryptCertUsages = CERTIFICATE_USAGE_ALL; const
+      Usage: TCryptCertUsages = CU_ALL; const
       Subjects: RawUtf8 = ''; MaxVers: byte = 1);
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
@@ -2409,7 +2409,7 @@ begin
     'AuthorityIssuer', AuthorityIssuer,
     'IsSelfSigned',    IsSelfSigned]);
   u := GetUsage;
-  if u <> CERTIFICATE_USAGE_ALL then
+  if u <> CU_ALL then
     TDocVariantData(result).AddValue(
       'Usage',  SetNameToVariant(word(u), TypeInfo(TCryptCertUsages)));
   if withBase64 then
@@ -5003,7 +5003,7 @@ type
 
   /// class implementing ICryptCert using our ECC Public Key Cryptography
   // - TEccCertificate will store Subjects Baudot-encoded, and as issuer in V1
-  // - with the current implementation, GetUsages returns CERTIFICATE_USAGE_ALL
+  // - with the current implementation, GetUsages returns CU_ALL
   TCryptCertInternal = class(TCryptCert)
   protected
     fEcc: TEccCertificate; // TEccCertificate or TEccCertificateSecret
@@ -5548,7 +5548,7 @@ begin
   assert(SizeOf(TEciesHeader) = 228);
   assert(SizeOf(TEcdheFrameClient) = 290);
   assert(SizeOf(TEcdheFrameServer) = 306);
-  a := CERTIFICATE_USAGE_ALL;
+  a := CU_ALL;
   assert(word(a) = ECCV1_USAGE_ALL);
   assert(ord(High(TCryptCertValidity)) = ord(High(TEccValidity)));
   assert(ord(cvRevoked) = ord(ecvRevoked));
