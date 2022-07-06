@@ -75,7 +75,11 @@ procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
 
 /// returns the supplied text content, without any specified char
 // - specify a custom char set to be excluded, e.g. as [#0 .. ' ']
-function TrimChar(const text: RawUtf8; const chars: TSynAnsicharSet): RawUtf8;
+function TrimChar(const text: RawUtf8; const exclude: TSynAnsicharSet): RawUtf8;
+
+/// returns the supplied text content, without any other char than specified
+// - specify a custom char set to be included, e.g. as ['A'..'Z']
+function OnlyChar(const text: RawUtf8; only: TSynAnsicharSet): RawUtf8;
 
 /// returns the supplied text content, without any control char
 // - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= ' '
@@ -2883,22 +2887,22 @@ begin
   result := text; // no control char found
 end;
 
-function TrimChar(const text: RawUtf8; const chars: TSynAnsicharSet): RawUtf8;
+function TrimChar(const text: RawUtf8; const exclude: TSynAnsicharSet): RawUtf8;
 var
   len, i, j, n: PtrInt;
   P: PAnsiChar;
 begin
   len := length(text);
   for i := 1 to len do
-    if text[i] in chars then
+    if text[i] in exclude then
     begin
       n := i - 1;
-      FastSetString(result, nil, len);
+      FastSetString(result, nil, len - 1);
       P := pointer(result);
       if n > 0 then
         MoveFast(pointer(text)^, P^, n);
       for j := i + 1 to len do
-        if not (text[j] in chars) then
+        if not (text[j] in exclude) then
         begin
           P[n] := text[j];
           inc(n);
@@ -2912,7 +2916,16 @@ begin
       end;
       exit;
     end;
-  result := text; // no control char found
+  result := text; // no exclude char found
+end;
+
+function OnlyChar(const text: RawUtf8; only: TSynAnsicharSet): RawUtf8;
+var
+  i: PtrInt;
+begin
+  for i := 0 to SizeOf(only) do
+    PByteArray(@only)[i] := not PByteArray(@only)[i]; // reverse bits
+  result := TrimChar(text, only);
 end;
 
 procedure FillZero(var secret: RawByteString);
