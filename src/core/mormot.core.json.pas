@@ -2381,6 +2381,8 @@ type
     fFileName: TFileName;
     fLoadedAsIni: boolean;
     fSettingsOptions: TSynJsonFileSettingsOptions;
+    // could be overriden to validate the content coherency and/or clean fields
+    function AfterLoad: boolean; virtual;
   public
     /// read existing settings from a JSON content
     // - if the input is no JSON object, then a .INI structure is tried
@@ -10785,6 +10787,11 @@ end;
 
 { TSynJsonFileSettings }
 
+function TSynJsonFileSettings.AfterLoad: boolean;
+begin
+  result := true; // success
+end;
+
 function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8): boolean;
 begin
   if fsoReadIni in fSettingsOptions then
@@ -10797,6 +10804,8 @@ begin
     if result then
       include(fSettingsOptions, fsoWriteIni); // save back as INI
   end;
+  if result then
+    result := AfterLoad;
 end;
 
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
