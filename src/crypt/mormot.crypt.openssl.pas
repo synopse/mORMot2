@@ -1746,16 +1746,15 @@ type
   protected
     fX509: PX509;
     fPrivKey: PEVP_PKEY;
-    procedure RaiseErrorGenerate(const api: ShortString);
     function GetMD: PEVP_MD;
   public
     constructor CreateFrom(aX509: PX509);
     destructor Destroy; override;
     procedure Clear;
     // ICryptCert methods
-    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      Fields: PCryptCertFields); override;
+      Fields: PCryptCertFields): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -1858,19 +1857,14 @@ begin
   fPrivKey := nil;
 end;
 
-procedure TCryptCertOpenSsl.RaiseErrorGenerate(const api: ShortString);
-begin
-  RaiseError('Generate: % error', [api]); // raise ECryptCert
-end;
-
 function TCryptCertOpenSsl.GetMD: PEVP_MD;
 begin
   result := (fCryptAlgo as TCryptCertAlgoOpenSsl).fHash;
 end;
 
-procedure TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
+function TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer; Fields: PCryptCertFields);
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
   cn: RawUtf8;
   dns: TRawUtf8DynArray;
@@ -1944,6 +1938,7 @@ begin
     x.Free;
     key.Free;
   end;
+  result := self;
 end;
 
 function TCryptCertOpenSsl.GetSerial: RawUtf8;

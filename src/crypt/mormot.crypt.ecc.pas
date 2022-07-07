@@ -5013,9 +5013,9 @@ type
     constructor CreateFrom(aEcc: TEccCertificate);
     destructor Destroy; override;
     // ICryptCert methods
-    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      Fields: PCryptCertFields); override;
+      Fields: PCryptCertFields): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -5090,9 +5090,9 @@ begin
   inherited Destroy;
 end;
 
-procedure TCryptCertInternal.Generate(Usages: TCryptCertUsages;
+function TCryptCertInternal.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer; Fields: PCryptCertFields);
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
   start: TDateTime;
   a: TCryptCert;
@@ -5100,7 +5100,7 @@ var
 begin
   // note: Fields is unsupported (yet)
   if fEcc <> nil then
-    RaiseError('Generate: called twice');
+    RaiseErrorGenerate('called twice');
   if ValidDays = 0 then
     start := 0
   else
@@ -5120,6 +5120,7 @@ begin
   end;
   fEcc := TEccCertificateSecret.CreateNew(
     auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
+  result := self;
 end;
 
 function TCryptCertInternal.GetSerial: RawUtf8;

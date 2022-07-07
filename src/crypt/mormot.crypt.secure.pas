@@ -1322,9 +1322,10 @@ type
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is -1 by default to avoid most clock synch issues
     // - additional information can be passed into Fields (e.g. common name)
-    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
+    // - return self to be used as a fluent interface
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
-      ValidDays: integer = -1; Fields: PCryptCertFields = nil);
+      ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function GetSerial: RawUtf8;
@@ -1454,11 +1455,12 @@ type
     procedure RaiseVoid(Instance: pointer; const Msg: shortstring);
     procedure RaiseError(const Msg: shortstring); overload;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
+    procedure RaiseErrorGenerate(const api: ShortString);
   public
     // ICryptCert methods
-    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      Fields: PCryptCertFields); virtual; abstract;
+      Fields: PCryptCertFields): ICryptCert; virtual; abstract;
     function GetSerial: RawUtf8; virtual; abstract;
     function GetSubject: RawUtf8; virtual; abstract;
     function GetSubjects: TRawUtf8DynArray; virtual; abstract;
@@ -4445,6 +4447,11 @@ var
 begin
   FormatShort(Fmt, Args, msg);
   RaiseError(msg);
+end;
+
+procedure TCryptCert.RaiseErrorGenerate(const api: ShortString);
+begin
+  RaiseError('Generate: % error', [api]); // raise ECryptCert
 end;
 
 function TCryptCert.GetDigest(Algo: THashAlgo): RawUtf8;
