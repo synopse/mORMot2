@@ -11178,15 +11178,15 @@ begin
     result := false;
     exit;
   end;
-  d := s;
   result := true;
+  d := s;
   repeat
     c := s^;
     inc(s);
     case c of
       #0:
         break;
-      #1..' ', '-', '{', '}': // trim spaces and GUID/UID separators
+      #1..' ', '-', '{', '}': // trim spaces and GUID/UUID separators
         continue;
       'A'..'F':
         inc(c, 32);
@@ -11202,7 +11202,7 @@ begin
   if L = 0 then
   begin
     FastAssignNew(text);
-    result := true;
+    result := false;
   end
   else
   begin
