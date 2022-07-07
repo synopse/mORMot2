@@ -8944,7 +8944,7 @@ end;
 function BinToSource(const ConstName, Comment: RawUtf8;
   const Data: RawByteString; PerLine: integer; const Suffix: RawUtf8): RawUtf8;
 begin
-  result := BinToSource(ConstName, Comment, Data, PerLine, Suffix);
+  result := BinToSource(ConstName, Comment, pointer(Data), length(Data), PerLine, Suffix);
 end;
 
 procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUtf8;
