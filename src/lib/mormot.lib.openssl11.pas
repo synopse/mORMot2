@@ -1464,7 +1464,9 @@ type
   public
     function GetSerial: PASN1_INTEGER;
       {$ifdef HASINLINE} inline; {$endif}
-    function GetName: PX509_NAME;
+    function GetSubjectName: PX509_NAME;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetIssuerName: PX509_NAME;
       {$ifdef HASINLINE} inline; {$endif}
     function GetPublicKey: PEVP_PKEY;
       {$ifdef HASINLINE} inline; {$endif}
@@ -6750,7 +6752,7 @@ begin
   begin
     X509_CRL_sort(@self);
     if ca <> nil then
-      X509_CRL_set_issuer_name(@self, ca.GetName);
+      X509_CRL_set_issuer_name(@self, ca.GetSubjectName);
     result := true;
   end
   else
@@ -7303,12 +7305,20 @@ begin
     result := X509_get_serialNumber(@self);
 end;
 
-function X509.GetName: PX509_NAME;
+function X509.GetSubjectName: PX509_NAME;
 begin
   if @self = nil then
     result := nil
   else
     result := X509_get_subject_name(@self);
+end;
+
+function X509.GetIssuerName: PX509_NAME;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := X509_get_issuer_name(@self);
 end;
 
 function X509.GetPublicKey: PEVP_PKEY;
@@ -7326,7 +7336,12 @@ end;
 
 function X509.SubjectName: RawUtf8;
 begin
-  GetName.ToUtf8(result);
+  GetSubjectName.ToUtf8(result);
+end;
+
+function X509.IssuerName: RawUtf8;
+begin
+  GetIssuerName.ToUtf8(result);
 end;
 
 procedure GetNext(var P: PUtf8Char; Sep1, Sep2: AnsiChar; var result: RawUtf8);
@@ -7366,14 +7381,6 @@ end;
 function X509.GetSubject(const id: RawUtf8): RawUtf8;
 begin
   result := GetPair(pointer(SubjectName), id);
-end;
-
-function X509.IssuerName: RawUtf8;
-begin
-  if @self = nil then
-    result := ''
-  else
-    X509_get_issuer_name(@self).ToUtf8(result);
 end;
 
 function X509.GetIssuer(const id: RawUtf8): RawUtf8;
