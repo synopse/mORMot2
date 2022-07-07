@@ -1887,12 +1887,14 @@ begin
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
     CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
-    if dns = nil then
+    if dns <> nil then
+      cn := dns[0]
+    else if (Fields = nil) or
+            (Fields^.CommonName = '') then
       RaiseErrorGenerate('no Subject/CommonName');
-    cn := dns[0];
     for i := 0 to length(dns) - 1 do
-      if not IdemPChar(pointer(dns[i]), 'DNS:') then
-        dns[i] := 'DNS:' + dns[i];
+      if PosExChar(':', dns[i]) = 0 then
+        dns[i] := 'DNS:' + dns[i]; // e.g. DNS: email: IP: URI:
     if not x.SetBasic(cuCA in Usages, RawUtf8ArrayToCsv(dns)) then
       RaiseErrorGenerate('SetBasic');
     if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
