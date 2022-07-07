@@ -1839,7 +1839,7 @@ type
     // - if HandleUserAuthentication is true, will add TAuthUser and
     // TAuthGroup to the TOrmModel (if not already there)
     constructor Create(aModel: TOrmModel;
-      aHandleUserAuthentication: boolean = false); reintroduce; virtual;
+      aHandleUserAuthentication: boolean = false); reintroduce; overload; virtual;
     /// initialize REST server instance from a TSynConnectionDefinition
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition;
@@ -1854,6 +1854,9 @@ type
     constructor CreateWithOwnModel(const Tables: array of TOrmClass;
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUtf8 = 'root');
+    /// Server initialization with a void Database Model and not authentication
+    // - could be used e.g. for a interface-based services API REST server
+    constructor Create(const aRoot: RawUtf8); reintroduce; overload;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TRestOrmParent); override;
 
@@ -5690,15 +5693,19 @@ begin
     GlobalLibraryRequestServer := nil; // unregister
 end;
 
-constructor TRestServer.CreateWithOwnModel(
-  const Tables: array of TOrmClass; aHandleUserAuthentication: boolean;
-  const aRoot: RawUtf8);
+constructor TRestServer.CreateWithOwnModel(const Tables: array of TOrmClass;
+  aHandleUserAuthentication: boolean; const aRoot: RawUtf8);
 var
   model: TOrmModel;
 begin
   model := TOrmModel.Create(Tables, aRoot);
   Create(model, aHandleUserAuthentication);
   model.Owner := self;
+end;
+
+constructor TRestServer.Create(const aRoot: RawUtf8);
+begin
+  CreateWithOwnModel([], {auth=}false, aRoot);
 end;
 
 procedure TRestServer.SetOrmInstance(aORM: TRestOrmParent);
