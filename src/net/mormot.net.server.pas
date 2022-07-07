@@ -38,7 +38,8 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
-  mormot.net.client;
+  mormot.net.client,
+  mormot.crypt.secure;
 
 
 { ******************** Shared Server-Side HTTP Process }
@@ -576,9 +577,14 @@ type
     // the benefit of this method parameters is that the certificates are
     // loaded and checked now by calling InitializeTlsAfterBind, not at the
     // first client connection (which may be too late)
-    procedure WaitStarted(Seconds: integer = 30;
-      const CertificateFile: TFileName = '';
-      const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '');
+    procedure WaitStarted(Seconds: integer; const CertificateFile: TFileName;
+      const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '';
+      const CACertificatesFile: TFileName = ''); overload;
+    /// ensure the HTTP server thread is actually bound to the specified port
+    // - for hsoEnableTls support, allow to specify all server-side TLS
+    // events, including callbacks, as supported by OpenSSL
+    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
+      overload;
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
     // - use Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     procedure InitializeTlsAfterBind;
@@ -672,7 +678,7 @@ type
   // - a typical HTTPS server usecase could be:
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
   // $ fHttpServer.WaitStarted('cert.pem', 'privkey.pem', '');  // cert.pfx for SSPI
-  // $ // now certificates will be initialized at first incoming request
+  // $ // now certificates will be initialized and used
   THttpServer = class(THttpServerSocketGeneric)
   protected
     fThreadPool: TSynThreadPoolTHttpServer;
@@ -1805,7 +1811,18 @@ begin
 end;
 
 procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer;
-  const CertificateFile, PrivateKeyFile: TFileName; const PrivateKeyPassword: RawUtf8);
+  const CertificateFile, PrivateKeyFile: TFileName;
+  const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
+var
+  tls: TNetTlsContext;
+begin
+  InitNetTlsContext(tls, {server=}true,
+    CertificateFile, PrivateKeyFile, PrivateKeyPassword, CACertificatesFile);
+  WaitStarted(Seconds, @tls);
+end;
+
+procedure THttpServerSocketGeneric.WaitStarted(
+  Seconds: integer; TLS: PNetTlsContext);
 var
   tix: Int64;
 begin
@@ -1827,15 +1844,20 @@ begin
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (CertificateFile <> '') and
-     (fSock <> nil) and // may be nil at first
-     not fSock.TLS.Enabled then
+     (TLS <> nil) and
+     (TLS^.CertificateFile <> '') and
+     ((fSock = nil) or
+      not fSock.TLS.Enabled) then
   begin
-    StringToUtf8(CertificateFile, fSock.TLS.CertificateFile);
-    StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
-    fSock.TLS.PrivatePassword := PrivateKeyPassword;
-    InitializeTlsAfterBind; // validate TLS certificate(s) now
-    sleep(1); // let some warmup happen
+    if fSock = nil then
+      Sleep(5); // paranoid on some servers which propagate the pointer
+    if (fSock <> nil) and
+       not fSock.TLS.Enabled then // call InitializeTlsAfterBind once
+    begin
+      fSock.TLS := TLS^;
+      InitializeTlsAfterBind; // validate TLS certificate(s) now
+      Sleep(1); // let some warmup happen
+    end;
   end;
 end;
 
