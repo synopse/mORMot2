@@ -1485,6 +1485,9 @@ type
     /// the High-Level Certificate Issuer
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
     function IssuerName: RawUtf8;
+    /// extract a given part of the Certificate Main Subject
+    // - e.g. 'R3' from IssuerName = '/C=US/O=Let''s Encrypt/CN=R3'
+    function GetIssuer(const id: RawUtf8 = 'CN'): RawUtf8;
     /// the minimum Validity timestamp of this Certificate
     function NotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -7326,7 +7329,7 @@ begin
   GetName.ToUtf8(result);
 end;
 
-procedure GetNext(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
+procedure GetNext(var P: PUtf8Char; Sep1, Sep2: AnsiChar; var result: RawUtf8);
 var
   S, E: PUtf8Char;
 begin // see GetNextItemTrimed() from mormot.core.text
@@ -7334,8 +7337,7 @@ begin // see GetNextItemTrimed() from mormot.core.text
         (P^ <> #0) do
     inc(P); // trim left
   S := P;
-  while (S^ <> #0) and
-        (S^ <> Sep) do
+  while not (S^ in [#0, Sep1, Sep2]) do
     inc(S);
   E := S;
   while (E > P) and (E[-1] in [#1..' ']) do
@@ -7347,20 +7349,23 @@ begin // see GetNextItemTrimed() from mormot.core.text
     P := nil;
 end;
 
-function X509.GetSubject(const id: RawUtf8): RawUtf8;
+function GetPair(p: PUtf8Char; const id: RawUtf8): RawUtf8;
 var
-  p: PUtf8Char;
   nam: RawUtf8;
 begin
-  p := pointer(SubjectName);
   while p <> nil do
   begin
-    GetNext(p, '=', nam);
-    GetNext(p, ',', result);
+    GetNext(p, '=', #0, nam);
+    GetNext(p, ',', '/', result);
     if nam = id then
       exit;
   end;
   result := '';
+end;
+
+function X509.GetSubject(const id: RawUtf8): RawUtf8;
+begin
+  result := GetPair(pointer(SubjectName), id);
 end;
 
 function X509.IssuerName: RawUtf8;
@@ -7369,6 +7374,11 @@ begin
     result := ''
   else
     X509_get_issuer_name(@self).ToUtf8(result);
+end;
+
+function X509.GetIssuer(const id: RawUtf8): RawUtf8;
+begin
+  result := GetPair(pointer(IssuerName), id);
 end;
 
 function X509.PeerInfo: RawUtf8;
