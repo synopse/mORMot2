@@ -1363,6 +1363,7 @@ begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
   AllocConsole;
+  RunFromSynTests := true; // set mormot.core.os.pas global flag
   with TSynLogTestLog.Family do
   begin
     Level := withLogs;

@@ -2629,6 +2629,10 @@ var
   StdOutIsTTY: boolean;
   {$endif OSPOSIX}
 
+  /// global flag to modify the code behavior at runtime when run from TSynTests
+  // - e.g. TSynDaemon.AfterCreate won't overwrite TSynTests.RunAsConsole logs
+  RunFromSynTests: boolean;
+
 /// similar to Windows AllocConsole API call, to be truly cross-platform
 // - do nothing on Linux/POSIX, but set StdOut propertly from StdOutputHandle
 // - on Windows, will call the corresponding API, and set StdOut global variable
