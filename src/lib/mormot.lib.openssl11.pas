@@ -185,7 +185,7 @@ var
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
-  // - equals e.g. '1010106f'
+  // - equals e.g. '1010106F'
   OpenSslVersionHexa: string;
 
 {$ifdef OPENSSLSTATIC}
@@ -231,6 +231,12 @@ const
 // been defined, since they link the library at compile or startup time
 // - you should never call any OpenSSL function if false is returned
 function OpenSslIsAvailable: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// return TRUE if OpenSSL 1.1.1 / 3.x library has been initialized
+// - don't try to load it if was not already done
+// - could be run before OpenSslInitialize() is called
+function OpenSslIsLoaded: boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// initialize the OpenSSL 1.1.1 / 3.x API, accessible via the global functions
@@ -4677,6 +4683,11 @@ begin
   end;
 end;
 
+function OpenSslIsLoaded: boolean;
+begin
+  result := openssl_initialized = osslAvailable;
+end;
+
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
   const libprefix: RawUtf8): boolean;
 var
@@ -4766,7 +4777,7 @@ begin
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
-      OpenSslVersionHexa := MacToHex(@OpenSslVersion, 4);
+      OpenSslVersionHexa := RawUtf8(IntToHex(OpenSslVersion, 8));
       if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,
@@ -5855,6 +5866,11 @@ begin
 end;
 
 function OpenSslIsAvailable: boolean;
+begin
+  result := true;
+end;
+
+function OpenSslIsLoaded: boolean;
 begin
   result := true;
 end;

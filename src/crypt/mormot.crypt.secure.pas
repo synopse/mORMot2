@@ -1529,6 +1529,7 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
+  published
     /// return the corresponding JWT algorithm name
     // - extracted from the algorithm name, by convention
     // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
