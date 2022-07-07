@@ -821,7 +821,7 @@ begin
         [self, fDBServerNames, ToText(aUse)^]);
     if aSecurity = secTLSSelfSigned then
     begin
-      InitNetTlsContextSelfSignedServer(net);
+      InitNetTlsContextSelfSignedServer(net {, caaES256});
       tls := @net;
     end;
     try

@@ -139,8 +139,14 @@ type
     procedure _TRestHttpsServer;
     /// validate the HTTPS/1.1 client implementation
     procedure _TRestHttpsClient;
-    /// validate the HTTPS/1.1 client over one TLS connection
+    /// validate HTTPS/1.1 client over one TLS connection
     procedure HttpsClientKeepAlive;
+  public
+    /// validate HTTP/1.0 client over multiple short-living TLS connections
+    // - is disabled by default because establishing each TLS handshake is slow
+    // via caaRS256 (400/s) or caaES256 (600/s) in respect to no TLS (13550/s)
+    procedure HttpsClientMultiConnect;
+  published
     /// validate the client implementation, using direct access to the server
     // - it connects directly the client to the server, therefore use the same
     // process and memory during the run: it's the fastest possible way of
@@ -444,6 +450,13 @@ end;
 procedure TTestClientServerAccess.HttpsClientKeepAlive;
 begin
   HttpClientKeepAlive;
+  fHttps := false;
+end;
+
+procedure TTestClientServerAccess.HttpsClientMultiConnect;
+begin
+  fHttps := true;
+  HttpClientMultiConnect;
   fHttps := false;
 end;
 
