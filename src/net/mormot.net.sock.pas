@@ -404,10 +404,15 @@ type
   // $ finally
   // $   Free;
   // $ end;
+  // - for passing a PNetTlsContext, use InitNetTlsContext for initialization
   TNetTlsContext = record
     /// output: set by TCrtSocket.OpenBind() method once TLS is established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
+    // - on client: will avoid checking the server certificate, so will
+    // allow to connect and encrypt e.g. with secTLSSelfSigned servers
+    // - on OpenSSL server, should be true if no mutual authentication is done,
+    // i.e. if OnPeerValidate/OnEachPeerVerify callbacks are not set
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
     // - ignored on SChannel
@@ -420,7 +425,8 @@ type
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
     // - not used on SChannel client
     // - on SChannel server, expects a .pfx / PKCS#12 file format including
-    // the certificate and the private key:
+    // the certificate and the private key, e.g. generated from
+    // ICryptCert.SaveToFile(FileName, cccCertWithPrivateKey, ', ccfBinary) or
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
     /// input: PEM file name containing a private key to be loaded
@@ -520,6 +526,12 @@ type
 
   /// signature of a factory for a new TLS encrypted layer
   TOnNewNetTls = function: INetTls;
+
+
+/// initialize a stack-allocated TNetTlsContext instance
+procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
+  const CertificateFile: TFileName = ''; const PrivateKeyFile: TFileName = '';
+  const PrivateKeyPassword: RawUtf8 = ''; const CACertificatesFile: TFileName = '');
 
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
@@ -2207,6 +2219,21 @@ begin
     Text[true] := wo;
     result := Text[WithoutName];
   end;
+end;
+
+
+{ ******************** TLS / HTTPS Encryption Abstract Layer }
+
+procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
+  const CertificateFile, PrivateKeyFile: TFileName;
+  const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
+begin
+  FillCharFast(TLS, SizeOf(TLS), 0);
+  TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
+  TLS.CertificateFile := RawUtf8(CertificateFile);
+  TLS.PrivateKeyFile := RawUtf8(PrivateKeyFile);
+  TLS.PrivatePassword := PrivateKeyPassword;
+  TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
 end;
 
 
