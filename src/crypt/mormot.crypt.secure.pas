@@ -1871,6 +1871,13 @@ const
     '-----END SYNECC ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
+  /// our proprietary SYNECC TPemKind formats
+  PEM_SYNECC =  [pemSynopseSignature,
+                 pemSynopseCertificate,
+                 pemSynopseUnencryptedPrivateKey,
+                 pemSynopsePrivateKeyAndCertificate,
+                 pemSynopseEncryptedPrivateKey];
+
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem; overload;
 
