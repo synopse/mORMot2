@@ -2530,7 +2530,9 @@ procedure GuidToShort(const
   guid: TGuid; out dest: TGuidShortString); overload;
 
 /// convert some text into its TGuid binary value
-// - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
+// - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {}) but
+// will ignore internal '-' so '3F2504E04F8911D39A0C0305E82C3301' is also fine
+// - note: TGuid binary order does not follow plain HexToBin or HexDisplayToBin
 // - return nil if the supplied text buffer is not a valid TGuid
 // - this will be the format used for JSON encoding, e.g.
 // $ { "Uid": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
@@ -2544,9 +2546,21 @@ function StringToGuid(const text: string): TGuid;
 
 /// convert some UTF-8 encoded text into a TGuid
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGuid
-function RawUtf8ToGuid(const text: RawByteString): TGuid;
+function RawUtf8ToGuid(const text: RawByteString): TGuid; overload;
+
+/// convert some UTF-8 encoded text into a TGuid
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
+function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean; overload;
+
+/// trim any space and '{' '-' '}' chars from input to get a 32-char TGuid hexa
+// - and return true if the result is actually a 128-bit lowercase hexadecimal
+function TrimGuid(var text: RawUtf8): boolean;
 
 /// read a TStream content into a String
 // - it will read binary or text content from the current position until the
@@ -11081,20 +11095,23 @@ begin
   inc(PByte(guid), 4);
   for i := 1 to 2 do
   begin
-    if (P^ <> '-') or
-       not HexaToByte(P + 1, guid[1]) or
-       not HexaToByte(P + 3, guid[0]) then
+    if P^ = '-' then
+      inc(P);
+    if not HexaToByte(P, guid[1]) or
+       not HexaToByte(P + 2, guid[0]) then
       exit;
-    inc(P, 5);
+    inc(P, 4);
     inc(PByte(guid), 2);
   end;
-  if (P[0] <> '-') or
-     (P[5] <> '-') or
-     not HexaToByte(P + 1, guid[0]) or
-     not HexaToByte(P + 3, guid[1]) then
+  if P^ = '-' then
+    inc(P);
+  if not HexaToByte(P, guid[0]) or // in reverse order than the previous loop
+     not HexaToByte(P + 2, guid[1]) then
     exit;
+  inc(P, 4);
   inc(PByte(guid), 2);
-  inc(P, 6);
+  if P^ = '-' then
+    inc(P);
   for i := 0 to 5 do
     if HexaToByte(P, guid[i]) then
       inc(P, 2)
@@ -11128,12 +11145,70 @@ end;
 
 function RawUtf8ToGuid(const text: RawByteString): TGuid;
 begin
-  // decode from '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
-  if (length(text) <> 38) or
-     (text[1] <> '{') or
-     (text[38] <> '}') or
-     (TextToGuid(@text[2], @result) = nil) then
-   FillZero(PHash128(@result)^);
+  if not RawUtf8ToGuid(text, result) then
+    FillZero(PHash128(@result)^);
+end;
+
+function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean;
+begin
+  result := true;
+  case length(text) of
+    32, // '3F2504E04F8911D39A0C0305E82C3301' TextToGuid() order, not HexToBin()
+    36: // '3F2504E0-4F89-11D3-9A0C-0305E82C3301' JSON compatible layout
+      if TextToGuid(pointer(text), @guid) <> nil then
+        exit;
+    38: // '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' regular layout
+      if (text[1] <> '{') or
+         (text[38] <> '}') or
+         (TextToGuid(@text[2], @guid) <> nil) then
+        exit;
+  end;
+  result := false;
+end;
+
+function TrimGuid(var text: RawUtf8): boolean;
+var
+  s, d: PUtf8Char;
+  L: PtrInt;
+  c: AnsiChar;
+begin
+  s := UniqueRawUtf8(text);
+  if s = nil then
+  begin
+    result := false;
+    exit;
+  end;
+  d := s;
+  result := true;
+  repeat
+    c := s^;
+    inc(s);
+    case c of
+      #0:
+        break;
+      #1..' ', '-', '{', '}': // trim spaces and GUID/UID separators
+        continue;
+      'A'..'F':
+        inc(c, 32);
+      'a'..'f', '0'..'9':
+        ;
+    else
+      result := false; // not a true hexadecimal content
+    end;
+    d^ := c;
+    inc(d);
+  until false;
+  L := d - pointer(text);
+  if L = 0 then
+  begin
+    FastAssignNew(text);
+    result := true;
+  end
+  else
+  begin
+    PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ := L; // just fake length
+    result := result and (L = 32);
+  end;
 end;
 
 function StreamToRawByteString(aStream: TStream): RawByteString;
