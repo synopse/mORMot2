@@ -214,7 +214,7 @@ type
   // - this HTTP/HTTPS server is multi-threaded and not blocking, shared between
   // one or several TRestServer instances, identified via their TOrmModel.Root
   // - depending on the constructor, one TRestHttpServerUse kind is used,
-  // which may be over http.sys or blocking sockets, or asynchornous sockets,
+  // which may be over http.sys or blocking sockets, or asynchronous sockets,
   // able to upgrade to WebSockets or not - note that http.sys requires a
   // proper URI registration with administrator rights
   // - for a true AJAX server, see AccessControlAllowOrigin property and
