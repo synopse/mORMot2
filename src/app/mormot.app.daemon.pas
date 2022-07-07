@@ -56,8 +56,7 @@ type
     constructor Create; override;
     /// define the log information into the supplied TSynLog class
     // - if you don't call this method, the logging won't be initiated
-    // - is to be called typically in the overriden Create constructor of the
-    // associated TSynDaemon class, just after "inherited Create"
+    // - called by default in TSynDaemon.AfterCreate if RunFromSynTests=false
     procedure SetLog(aLogClass: TSynLogClass);
     /// returns user-friendly description of the service, including version
     // information and company copyright (if available)
@@ -157,6 +156,7 @@ type
     fConsoleMode: boolean;
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
+    procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
     function CustomCommandLineSyntax: string; virtual;
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
@@ -289,6 +289,15 @@ begin
         {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
+  AfterCreate;
+end;
+
+procedure TSynDaemon.AfterCreate;
+begin
+  if RunFromSynTests then
+    fSettings.fLogClass := TSynLog // don't overwrite
+  else
+    fSettings.SetLog(TSynLog);
 end;
 
 destructor TSynDaemon.Destroy;
