@@ -2402,6 +2402,18 @@ begin
       CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
       if fmt = ccfPem then // PKCS12 seems to add some information to X509 :(
         CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+      s := c1.Save;
+      check(c2.load(s));
+      checkEqual(c2.GetPrivateKey, '');
+      check(c2.Load(c1.Save(cccPrivateKeyOnly, '', fmt), cccPrivateKeyOnly, ''));
+      checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
+      Check(c2.IsEqual(c1));
+      c2.SetPrivateKey('');
+      Check(c2.IsEqual(c1));
+      checkEqual(c2.GetPrivateKey, '');
+      check(c2.Load(c1.Save(cccPrivateKeyOnly, 'pass', fmt), cccPrivateKeyOnly, 'pass'));
+      checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
+      Check(c2.IsEqual(c1));
     end;
     // validate signed certificate with c1 as CA
     c3 := crt.New;
@@ -2411,7 +2423,8 @@ begin
     Check(c3.HasPrivateSecret);
     CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
     Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
-    Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned');
+    Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned1');
+    Check(c3.Verify(c2) = cvValidSigned, 'cvValidSigned2');
     Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
     c2 := crt.New;
     c2.Generate([cuDigitalSignature], 'self.signed', nil);
