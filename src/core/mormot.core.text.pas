@@ -11206,6 +11206,7 @@ begin
   end
   else
   begin
+    d^ := #0;
     PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ := L; // just fake length
     result := result and (L = 32);
   end;
