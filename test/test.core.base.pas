@@ -2377,7 +2377,7 @@ end;
 procedure TTestCoreBase._GUID;
 var
   i: integer;
-  s: RawByteString;
+  s: RawUtf8;
   st: string;
   g, g2: TGuid;
   h, h2: THash512Rec;
@@ -2391,12 +2391,37 @@ begin
   Check(IsEqualGuid(g2, Guid));
   Check(GuidToString(Guid) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
   Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  s := s + s;
+  repeat
+    delete(s, Random32(length(s)) + 1, 1);
+    Check(TrimGuid(s) = (length(s) = 32));
+  until s = '';
+  s := '   ';
+  Check(not TrimGuid(s));
+  CheckEqual(s, '');
+  Check(not TrimGuid(s));
+  CheckEqual(s, '');
+  s := 'C9A646D3-9C61-4CB7-BFCD-EE2522C8F633';
+  Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  s := 'C9A646D39C614CB7BFCDEE2522C8F633';
+  Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  s[3] := 'Z';
+  Check(not TrimGuid(s));
+  CheckEqual(s, 'c9Z646d39c614cb7bfcdee2522c8f633');
+  s := '   1234 678 --';
+  Check(not TrimGuid(s));
+  CheckEqual(s, '1234678');
   for i := 1 to 1000 do
   begin
-    g.D1 := Random32;
-    g.D2 := Random32(65535);
-    g.D3 := Random32(65535);
-    Int64(g.D4) := Random64;
+    RandomGuid(g);
     st := GuidToString(g);
     Check(st = SysUtils.GuidToString(g));
     Check(IsEqualGuid(StringToGuid(st), g));
@@ -2408,6 +2433,8 @@ begin
     Check(TextToGuid(@s[2], @g2)^ = '}');
     Check(IsEqualGuid(g2, g));
     Check(IsEqualGuid(@g2, @g));
+    Check(TrimGuid(s));
+    CheckEqual(length(s), 32);
     Check(IsEqualGuid(RawUtf8ToGuid(s), g));
     inc(g.D1);
     Check(not IsEqualGuid(g2, g));
