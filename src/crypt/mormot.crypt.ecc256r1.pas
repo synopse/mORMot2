@@ -568,6 +568,7 @@ function EccText(const ID: TEccCertificateID): RawUtf8; overload;
 
 /// convert a supplied hexadecimal buffer into a TEccCertificateID binary buffer
 // - returns TRUE if the supplied Text was a valid hexadecimal buffer
+// - will also recognize GUID/UUID layout as {x-x-x-x} or x-x-x-x
 function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
 
 /// convert a supplied TEccSignature binary buffer into proper text
@@ -1450,7 +1451,13 @@ var
   truncated: boolean;
   v2: TInfov2;
 begin
-  // #13/#10 are Baudot-friendly
+  if EccID(sub, TEccCertificateID(Head.Signed.Issuer)) then
+  begin
+    // exactly 128-bit hexa or TGuid of input is stored in V1 issuer field
+    Head.Version := 1;
+    exit;
+  end;
+  // try to store as Baudot - #13/#10 are Baudot-friendly so replace ','/'.'
   truncated := EccIssuer(StringReplaceChars(StringReplaceChars(TrimControlChars(
     sub), ',', #13),  '.', #10), iss, @baudot);
   if Head.Version = 1 then
@@ -1852,11 +1859,12 @@ begin
 end;
 
 function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
+var
+  tmp: RawUtf8;
 begin
-  if length(Text) <> SizeOf(ID) * 2 then
-    result := false
-  else
-    result := mormot.core.text.HexToBin(pointer(Text), @ID, SizeOf(ID));
+  tmp := Text;
+  result := ((length(tmp) = 32) or TrimGuid(tmp)) and
+            mormot.core.text.HexToBin(pointer(tmp), @ID, SizeOf(ID))
 end;
 
 function EccText(const sign: TEccSignature): RawUtf8;
