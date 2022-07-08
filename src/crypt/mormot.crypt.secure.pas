@@ -3418,7 +3418,7 @@ type
       cryptnonce: cardinal; // ctr to cipher following bytes
       crc: cardinal;        // = 32-bit digital signature (CrcAlgo)
       session: integer;     // = jti claim
-      issued: cardinal;     // = iat claim (from UnixTimeUtc-UNIXTIME_MINIMAL)
+      issued: cardinal;     // = iat claim (from UnixTimeMinimalUtc)
       expires: cardinal;    // = exp claim
     end;
     data: array[0..2047] of byte; // optional record binary serialization
@@ -3445,7 +3445,7 @@ begin
     end;
     cc.head.cryptnonce := Random32;
     cc.head.session := result;
-    cc.head.issued := UnixTimeUtc - UNIXTIME_MINIMAL;
+    cc.head.issued := UnixTimeMinimalUtc;
     if TimeOutMinutes = 0 then
       TimeOutMinutes := DefaultTimeOutMinutes;
     if TimeOutMinutes = 0 then
@@ -3495,7 +3495,7 @@ begin
         PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
       if PIssued <> nil then
         PIssued^ := cc.head.issued + UNIXTIME_MINIMAL;
-      now := UnixTimeUtc - UNIXTIME_MINIMAL;
+      now := UnixTimeMinimalUtc;
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) then
         if (PRecordData = nil) or

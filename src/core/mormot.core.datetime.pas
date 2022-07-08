@@ -559,6 +559,9 @@ const
   // - or used to store a timestamp without any 32-bit "Year 2038" overflow
   UNIXTIME_MINIMAL = 1481187020;
 
+/// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
+function UnixTimeMinimalUtc: cardinal;
+
 /// convert a second-based c-encoded time as TDateTime
 //  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
@@ -2375,6 +2378,11 @@ end;
 
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
+
+function UnixTimeMinimalUtc: cardinal;
+begin
+  result := UnixTimeUtc - UNIXTIME_MINIMAL;
+end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
 begin
