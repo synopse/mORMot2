@@ -5342,9 +5342,9 @@ function TAlgoCompress.StreamCompress(Source, Dest: TStream; Magic: cardinal;
 var
   count: Int64;
   S, D: pointer;
-  Head: TAlgoCompressHead;
-  Trailer: TAlgoCompressTrailer;
-  src, dst: RawByteString;
+  head: TAlgoCompressHead;
+  trail: TAlgoCompressTrailer;
+  tmps, tmpd: RawByteString;
 begin
   result := 0;
   if (Dest = nil) or
@@ -5354,48 +5354,50 @@ begin
   if count = 0 then
     exit;
   S := GetStreamBuffer(Source);
-  Head.Magic := Magic;
+  head.Magic := Magic;
   repeat
     // compress Source into Dest with proper chunking
     if count > ChunkBytes then
-      Head.UnCompressedSize := ChunkBytes
+      head.UnCompressedSize := ChunkBytes
     else
-      Head.UnCompressedSize := count;
+      head.UnCompressedSize := count;
     if S = nil then
     begin
-      FastSetRawByteString(src, nil, Head.UnCompressedSize);
-      S := pointer(src);
+      FastSetRawByteString(tmps, nil, head.UnCompressedSize);
+      S := pointer(tmps); // here S is a temporary buffer
     end;
-    if {%H-}dst = '' then
-      FastSetRawByteString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
-    dec(count, Head.UnCompressedSize); // supports premature end of input
-    if S = pointer(src) then
-      Head.UnCompressedSize := Source.Read(S^, Head.UnCompressedSize);
-    if Head.UnCompressedSize <= 0 then
+    if {%H-}tmpd = '' then
+      FastSetRawByteString(tmpd, nil, AlgoCompressDestLen(head.UnCompressedSize));
+    dec(count, head.UnCompressedSize); // supports premature end of input
+    if S = pointer(tmps) then
+      head.UnCompressedSize := Source.Read(S^, head.UnCompressedSize);
+    if head.UnCompressedSize <= 0 then
       exit; // read error
-    Head.UncompressedHash := AlgoHash(ForceHash32, S, Head.UnCompressedSize);
-    D := pointer(dst);
-    Head.CompressedSize := AlgoCompress(S, Head.UnCompressedSize, D);
-    if Head.CompressedSize >= Head.UnCompressedSize then
+    head.UncompressedHash := AlgoHash(ForceHash32, S, head.UnCompressedSize);
+    D := pointer(tmpd);
+    head.CompressedSize := AlgoCompress(S, head.UnCompressedSize, D);
+    if head.CompressedSize >= head.UnCompressedSize then
     begin
       D := S; // compression is not worth it -> store
-      Head.CompressedSize := Head.UnCompressedSize;
-      Head.CompressedHash := Head.UncompressedHash;
+      head.CompressedSize := head.UnCompressedSize;
+      head.CompressedHash := head.UncompressedHash;
     end
     else
-      Head.CompressedHash := AlgoHash(ForceHash32, D, Head.CompressedSize);
-    Dest.WriteBuffer(Head, SizeOf(Head));
-    Dest.WriteBuffer(D^, Head.CompressedSize);
-    inc(result, SizeOf(Head) + Head.CompressedSize);
+      head.CompressedHash := AlgoHash(ForceHash32, D, head.CompressedSize);
+    Dest.WriteBuffer(head, SizeOf(head));
+    Dest.WriteBuffer(D^, head.CompressedSize);
+    if S <> pointer(tmps) then
+      inc(PByte(S), head.UnCompressedSize); // move ahead to next chunk
+    inc(result, SizeOf(head) + head.CompressedSize);
   until count = 0;
   if WithTrailer then
   begin
-    inc(result, SizeOf(Trailer));
-    Trailer.Magic := Magic;
-    Trailer.HeaderRelativeOffset := result;        // Int64 into cardinal
-    if Trailer.HeaderRelativeOffset <> result then // max 4GB compressed size
-      RaiseStreamError(self, 'StreamCompress trailer overflow');
-    Dest.WriteBuffer(Trailer, SizeOf(Trailer));
+    inc(result, SizeOf(trail));
+    trail.Magic := Magic;
+    trail.HeaderRelativeOffset := result;        // Int64 into cardinal
+    if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
+      RaiseStreamError(self, 'StreamCompress trail overflow');
+    Dest.WriteBuffer(trail, SizeOf(trail));
   end;
 end;
 
