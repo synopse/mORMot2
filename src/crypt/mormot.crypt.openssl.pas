@@ -1371,7 +1371,7 @@ begin
      (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
     result := DerToEcc(@der, derlen, Signature);
-  BN_free(bn);
+  bn.Free;
   EC_KEY_free(key);
 end;
 
@@ -1419,7 +1419,7 @@ begin
      (EC_KEY_set_private_key(key, priv) = OPENSSLSUCCESS) and
      (ECDH_compute_key(@Secret, SizeOf(Secret), pub, key, nil) = SizeOf(Secret)) then
     result := true;
-  BN_free(priv);
+  priv.Free;
   EC_POINT_free(pub);
   EC_KEY_free(key);
 end;

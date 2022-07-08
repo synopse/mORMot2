@@ -12333,9 +12333,6 @@ function BN_clear_bit(a: PBIGNUM; n: integer): integer; cdecl;
 function BN_bn2hex(a: PBIGNUM): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'BN_bn2hex';
 
-function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_bn2dec';
-
 function BN_hex2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_hex2bn';
 
@@ -13107,9 +13104,6 @@ function ASN1_INTEGER_set(a: PASN1_INTEGER; v: integer): integer; cdecl;
 function ASN1_INTEGER_get(a: PASN1_INTEGER): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_get';
 
-function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_INTEGER_to_BN';
-
 function ASN1_ENUMERATED_get_int64(pr: PInt64; a: PASN1_ENUMERATED): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_get_int64';
 
@@ -13196,9 +13190,6 @@ function ASN1_STRING_print(bp: PBIO; v: PASN1_STRING): integer; cdecl;
 
 function ASN1_buf_print(bp: PBIO; buf: PByte; buflen: PtrUInt; off: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_buf_print';
-
-function ASN1_bn_print(bp: PBIO; number: PUtf8Char; num: PBIGNUM; buf: PByte; off: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_bn_print';
 
 function ASN1_parse(bp: PBIO; pp: PByte; len: integer; indent: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_parse';

@@ -1091,7 +1091,14 @@ type
       read GetItem; default;
   end;
 
-  PBIGNUM = type pointer;
+  PBIGNUM = ^BIGNUM;
+
+  BIGNUM = object
+  public
+    function ToDecimal: RawUtf8;
+    procedure Free;
+  end;
+
   PPBIGNUM = ^PBIGNUM;
 
   PBN_CTX = type pointer;
@@ -1140,7 +1147,13 @@ type
     function Equals(const another: asn1_string_st): boolean;
   end;
 
-  ASN1_INTEGER = asn1_string_st;
+  ASN1_INTEGER = object(asn1_string_st)
+  public
+    function ToBigInt: PBIGNUM;
+    function ToDecimal: RawUtf8;
+    procedure Free;
+  end;
+
   PASN1_INTEGER = ^ASN1_INTEGER;
   PPASN1_INTEGER = ^PASN1_INTEGER;
   PASN1_OBJECT = type pointer;
@@ -2020,7 +2033,11 @@ function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
 function EC_KEY_new(): PEC_KEY; cdecl;
 function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
 function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
+function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
+function ASN1_bn_print(bp: PBIO; number: PUtf8Char;
+  num: PBIGNUM; buf: PByte; off: integer): integer; cdecl; // returns hexa :(
+function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
 function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
 procedure ASN1_INTEGER_free(a: PASN1_INTEGER); cdecl;
 function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
@@ -2851,7 +2868,10 @@ type
     EC_KEY_new: function(): PEC_KEY; cdecl;
     EC_KEY_set_group: function(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
     BN_bin2bn: function(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
+    BN_bn2dec: function(a: PBIGNUM): PUtf8Char; cdecl;
     BN_to_ASN1_INTEGER: function(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
+    ASN1_bn_print: function(bp: PBIO; number: PUtf8Char; num: PBIGNUM; buf: PByte; off: integer): integer; cdecl;
+    ASN1_INTEGER_to_BN: function(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
     ASN1_INTEGER_new: function(): PASN1_INTEGER; cdecl;
     ASN1_INTEGER_free: procedure(a: PASN1_INTEGER); cdecl;
     ASN1_ENUMERATED_set: function(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
@@ -2897,7 +2917,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..287] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..290] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3143,7 +3163,10 @@ const
     'EC_KEY_new',
     'EC_KEY_set_group',
     'BN_bin2bn',
+    'BN_bn2dec',
     'BN_to_ASN1_INTEGER',
+    'ASN1_bn_print',
+    'ASN1_INTEGER_to_BN',
     'ASN1_INTEGER_new',
     'ASN1_INTEGER_free',
     'ASN1_ENUMERATED_set',
@@ -4464,9 +4487,25 @@ begin
   result := libcrypto.BN_bin2bn(s, len, ret);
 end;
 
+function BN_bn2dec(a: PBIGNUM): PUtf8Char;
+begin
+  result := libcrypto.BN_bn2dec(a);
+end;
+
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER;
 begin
   result := libcrypto.BN_to_ASN1_INTEGER(bn, ai);
+end;
+
+function ASN1_bn_print(bp: PBIO; number: PUtf8Char; num: PBIGNUM;
+  buf: PByte; off: integer): integer;
+begin
+  result := libcrypto.ASN1_bn_print(bp, number, num, buf, off);
+end;
+
+function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM;
+begin
+  result := libcrypto.ASN1_INTEGER_to_BN(ai, bn);
 end;
 
 function ASN1_INTEGER_new(): PASN1_INTEGER;
@@ -5779,8 +5818,17 @@ function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
 function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
   external LIB_CRYPTO name _PU + 'BN_bin2bn';
 
+function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
+  external LIB_CRYPTO name _PU + 'BN_bn2dec';
+
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
   external LIB_CRYPTO name _PU + 'BN_to_ASN1_INTEGER';
+
+function ASN1_bn_print(bp: PBIO; number: PUtf8Char; num: PBIGNUM; buf: PByte; off: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_bn_print';
+
+function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_INTEGER_to_BN';
 
 function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_new';
@@ -7353,6 +7401,48 @@ begin
 end;
 
 
+{ BIGNUM }
+
+function BIGNUM.ToDecimal: RawUtf8;
+var
+  tmp: PUtf8Char;
+begin
+  result := '';
+  if @self = nil then
+    exit;
+  tmp := BN_bn2dec(@self);
+  FastSetString(result, tmp, StrLen(tmp));
+  OpenSSL_Free(tmp);
+end;
+
+procedure BIGNUM.Free;
+begin
+  if @self <> nil then
+    BN_free(@self);
+end;
+
+
+{ ASN1_INTEGER }
+
+function ASN1_INTEGER.ToBigInt: PBIGNUM;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := ASN1_INTEGER_to_BN(@self, nil);
+end;
+
+function ASN1_INTEGER.ToDecimal: RawUtf8;
+begin
+  result := ToBigInt.ToDecimal;
+end;
+
+procedure ASN1_INTEGER.Free;
+begin
+  if @self <> nil then
+    ASN1_INTEGER_free(@self);
+end;
+
 
 { asn1_string_st }
 
@@ -7961,8 +8051,8 @@ begin
     ai := BN_to_ASN1_INTEGER(bn, nil);
     if X509_set_serialNumber(x, ai) = OPENSSLSUCCESS then
       result := x;
-    ASN1_INTEGER_free(ai);
-    BN_free(bn);
+    ai.Free;
+    bn.Free;
   end;
   if result = nil then
     x.Free;
@@ -8363,6 +8453,7 @@ begin
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
         writeln('SerialNumber=',fPeer.SerialNumber);
+        writeln(fPeer.GetSerial.ToDecimal);
         exts := fPeer.SubjectAlternativeNames;
         for len := 0 to high(exts) do
           writeln('dns=',exts[len]);
