@@ -9535,8 +9535,6 @@ type
   PPX509_VAL = ^PX509_VAL;
   PX509_SIG = pointer;
   PPX509_SIG = ^PX509_SIG;
-  PX509_NAME_ENTRY = pointer;
-  PPX509_NAME_ENTRY = ^PX509_NAME_ENTRY;
 
   sk_X509_NAME_ENTRY_compfunc = function(a: PPX509_NAME_ENTRY; b: PPX509_NAME_ENTRY): integer; cdecl;
   sk_X509_NAME_ENTRY_freefunc = procedure(a: PX509_NAME_ENTRY); cdecl;
@@ -17893,9 +17891,6 @@ function X509_EXTENSIONS_it(): PASN1_ITEM; cdecl;
 function X509_NAME_ENTRY_new(): PX509_NAME_ENTRY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_new';
 
-procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_free';
-
 function d2i_X509_NAME_ENTRY(a: PPX509_NAME_ENTRY; _in: PPByte; len: integer): PX509_NAME_ENTRY; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_NAME_ENTRY';
 
@@ -18379,23 +18374,14 @@ function X509_REQ_print_ex(bp: PBIO; x: PX509_REQ; nmflag: cardinal; cflag: card
 function X509_REQ_print(bp: PBIO; req: PX509_REQ): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_print';
 
-function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_get_text_by_NID';
-
 function X509_NAME_get_text_by_OBJ(name: PX509_NAME; obj: PASN1_OBJECT; buf: PUtf8Char; len: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_text_by_OBJ';
-
-function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_get_index_by_NID';
 
 function X509_NAME_get_index_by_OBJ(name: PX509_NAME; obj: PASN1_OBJECT; lastpos: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_index_by_OBJ';
 
 function X509_NAME_get_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_entry';
-
-function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_delete_entry';
 
 function X509_NAME_add_entry(name: PX509_NAME; ne: PX509_NAME_ENTRY; loc: integer; _set: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_add_entry';

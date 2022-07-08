@@ -29,6 +29,7 @@ unit mormot.lib.openssl11;
 
 {.$define OPENSSLFULLAPI}
 // define this conditional to publish the whole (huge) OpenSSL API
+// - as stored in mormot.lib.openssl11.full.inc separated file
 // - by default, only the API features needed by mORMot are published
 // - full API increases compilation time, but is kept as reference
 // - the full API libraries will be directly/statically linked, not dynamically:
@@ -1263,18 +1264,32 @@ type
   end;
   PX509V3_CONF_METHOD = ^X509V3_CONF_METHOD;
 
+  PX509_NAME_ENTRY = ^X509_NAME_ENTRY;
+
   X509_NAME = object
   public
+    function Count: integer;
+    function GetEntry(NID: integer): RawUtf8; overload; // not MBSTRING ready
+    function GetEntry(const Name: RawUtf8): RawUtf8; overload;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = XN_FLAG_RFC2253);
     procedure AddEntry(const Name, Value: RawUtf8);
     procedure AddEntries(const Country, State, Locality,
       Organization, OrgUnit, CommonName: RawUtf8);
+    procedure SetEntry(const Name, Value: RawUtf8);
+    procedure DeleteEntry(NID: integer); overload;
+    procedure DeleteEntry(const Name: RawUtf8); overload;
     function Compare(another: PX509_NAME): integer;
     // as used for X509_STORE.SetLocations() CAFolder 'Hash.N' names
     function Hash: cardinal;
     function ToText: RawUtf8;
   end;
 
+  X509_NAME_ENTRY = object
+  public
+    procedure Free;
+  end;
+
+  PPX509_NAME_ENTRY = ^PX509_NAME_ENTRY;
   PPX509_NAME = ^PX509_NAME;
 
   PX509_CRL = ^X509_CRL;
@@ -1795,6 +1810,10 @@ function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: 
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
+function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
+function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
+function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
@@ -2652,6 +2671,10 @@ type
     X509_NAME_print_ex: function(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
+    X509_NAME_get_text_by_NID: function (name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
+    X509_NAME_get_index_by_NID: function(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
+    X509_NAME_delete_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+    X509_NAME_ENTRY_free: procedure(a: PX509_NAME_ENTRY); cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
     X509_NAME_cmp: function(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
@@ -2874,7 +2897,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..283] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..287] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2941,6 +2964,10 @@ const
     'X509_NAME_print_ex',
     'X509_NAME_print_ex_fp',
     'X509_NAME_entry_count',
+    'X509_NAME_get_text_by_NID',
+    'X509_NAME_get_index_by_NID',
+    'X509_NAME_delete_entry',
+    'X509_NAME_ENTRY_free',
     'X509_NAME_oneline',
     '?X509_NAME_hash', // not defined on OpenSSL 3.0 -> ? = ignored by now
     'X509_NAME_cmp',
@@ -3502,6 +3529,27 @@ end;
 function X509_NAME_entry_count(name: PX509_NAME): integer;
 begin
   result := libcrypto.X509_NAME_entry_count(name);
+end;
+
+function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer;
+   buf: PUtf8Char; len: integer): integer;
+begin
+  result := libcrypto.X509_NAME_get_text_by_NID(name, nid, buf, len);
+end;
+
+function X509_NAME_get_index_by_NID(name: PX509_NAME; nid, lastpos: integer): integer;
+begin
+  result := libcrypto.X509_NAME_get_index_by_NID(name, nid, lastpos);
+end;
+
+function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY;
+begin
+  result := libcrypto.X509_NAME_delete_entry(name, loc);
+end;
+
+procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY);
+begin
+  libcrypto.X509_NAME_ENTRY_free(a);
 end;
 
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char;
@@ -5176,6 +5224,18 @@ function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_entry_count';
 
+function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_get_text_by_NID';
+
+function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_get_index_by_NID';
+
+function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_delete_entry';
+
+procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_free';
+
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_oneline';
 
@@ -6507,6 +6567,34 @@ end;
 
 { X509_NAME }
 
+function X509_NAME.Count: integer;
+begin
+  if @self = nil then
+    result := 0
+  else
+    result := X509_NAME_entry_count(@self);
+end;
+
+function X509_NAME.GetEntry(NID: integer): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+  L: integer;
+begin
+  result := '';
+  if (@self = nil) or
+     (NID <= 0) then
+    exit;
+  L := SizeOf(tmp);
+  L := X509_NAME_get_text_by_NID(@self, NID, @tmp, L); // not MBSTRING ready
+  if L > 0 then
+    FastSetString(result, @tmp, L);
+end;
+
+function X509_NAME.GetEntry(const Name: RawUtf8): RawUtf8;
+begin
+  result := GetEntry(OBJ_txt2nid(pointer(name)));
+end;
+
 procedure X509_NAME.ToUtf8(out result: RawUtf8; flags: cardinal);
 var
   bio: PBIO;
@@ -6530,12 +6618,49 @@ end;
 procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
   OrgUnit, CommonName: RawUtf8);
 begin
+  // warning: don't check for duplicates
   AddEntry('C',  Country);
   AddEntry('ST', State);
   AddEntry('L',  Locality);
   AddEntry('O',  Organization);
   AddEntry('OU', OrgUnit);
   AddEntry('CN', CommonName);
+end;
+
+procedure X509_NAME.SetEntry(const Name, Value: RawUtf8);
+var
+  nid: integer;
+begin
+  nid := OBJ_txt2nid(pointer(Name));
+  if (@self = nil) or
+     (Name = '') or
+     (nid <= 0) or
+     (GetEntry(nid) = Value) then
+    exit;
+  DeleteEntry(nid);
+  AddEntry(Name, Value);
+end;
+
+procedure X509_NAME.DeleteEntry(NID: integer);
+var
+  last, loc: integer;
+begin
+  if (@self = nil) or
+     (NID <= 0) then
+    exit;
+  last := -1;
+  repeat
+    loc := X509_NAME_get_index_by_NID(@self, NID, last);
+    if loc < 0 then
+      break;
+    X509_NAME_delete_entry(@self, loc).Free;
+    last := loc; // find and delete all occurences
+  until false;
+end;
+
+procedure X509_NAME.DeleteEntry(const Name: RawUtf8);
+begin
+  DeleteEntry(OBJ_txt2nid(pointer(name)));
 end;
 
 function X509_NAME.Compare(another: PX509_NAME): integer;
@@ -6558,6 +6683,15 @@ end;
 function X509_NAME.ToText: RawUtf8;
 begin
   ToUtf8(result);
+end;
+
+
+{ X509_NAME_ENTRY }
+
+procedure X509_NAME_ENTRY.Free;
+begin
+  if @self <> nil then
+    X509_NAME_ENTRY_free(@self);
 end;
 
 
@@ -7380,6 +7514,7 @@ begin // see GetNextItemTrimed() from mormot.core.text
     P := nil;
 end;
 
+// note: PX509_Name.GetEntry() is not MBSTRING ready so we favor manual parsing
 function GetPair(p: PUtf8Char; const id: RawUtf8): RawUtf8;
 var
   nam: RawUtf8;
@@ -8250,6 +8385,15 @@ begin
         writeln('SubjectName=',fPeer.SubjectName);
         writeln(fPeer.ExtensionText(NID_basic_constraints));
         writeln(length(fPeer.ToBinary));
+        writeln(fPeer.SubjectName);
+        writeln(fPeer.GetSubject('O'));
+        fPeer.GetSubjectName.SetEntry('O', 'Synopse');
+        writeln(fPeer.SubjectName);
+        writeln(fPeer.GetSubject('O'));
+        fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
+        writeln(fPeer.SubjectName);
+        fPeer.GetSubjectName.SetEntry('O', 'Synopse2');
+        writeln(fPeer.SubjectName);
         }
       end;
       if Context.IgnoreCertificateErrors then
