@@ -1451,12 +1451,7 @@ var
   truncated: boolean;
   v2: TInfov2;
 begin
-  if EccID(sub, TEccCertificateID(Head.Signed.Issuer)) then
-  begin
-    // exactly 128-bit hexa or TGuid of input is stored in V1 issuer field
-    Head.Version := 1;
-    exit;
-  end;
+  // EccID(128-bit hexa) can't be stored as V1 because EccText() is then wrong
   // try to store as Baudot - #13/#10 are Baudot-friendly so replace ','/'.'
   truncated := EccIssuer(StringReplaceChars(StringReplaceChars(TrimControlChars(
     sub), ',', #13),  '.', #10), iss, @baudot);

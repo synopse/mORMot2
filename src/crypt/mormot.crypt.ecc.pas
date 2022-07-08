@@ -4395,6 +4395,7 @@ begin
      (pw <> '') and
      EccKeyFileFind(fn, {privkey=}true) then
     priv := TEccCertificateSecret.CreateFromSecureFile(fn, pw, pr);
+  // create a new TEcdheProtocol instance with those parameters
   result := ECDHEPROT_CLASS[aServer].Create(algo.auth, ca, priv);
   result.KDF := algo.kdf;
   result.EF := algo.ef;
@@ -5112,7 +5113,7 @@ var
 begin
   // note: Fields is unsupported (yet)
   if fEcc <> nil then
-    RaiseErrorGenerate('called twice');
+    RaiseErrorGenerate('duplicated call');
   if ValidDays = 0 then
     start := 0
   else
