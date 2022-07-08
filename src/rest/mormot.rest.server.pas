@@ -652,7 +652,8 @@ type
     // - you can use it to log some process on the server side
     property Log: TSynLog
       read fLog;
-    end;
+  end;
+  PRestServerUriContext = ^TRestServerUriContext;
 
   /// method prototype to be used on Server-Side for method-based services
   // - will be routed as ModelRoot/[TableName/TableID/]MethodName RESTful requests

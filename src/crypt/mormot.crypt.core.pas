@@ -1574,6 +1574,7 @@ type
     // - this method is thread-safe, but you may use your own TAesPrng instance
     // if you need some custom entropy level
     class procedure Fill(out Block: TAesBlock); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// just a wrapper around TAesPrngAbstract.Main.FillRandom() function
     // - this method is thread-safe, but you may use your own TAesPrng instance
     // if you need some custom entropy level
