@@ -54,6 +54,13 @@ type
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char;
   andtrim: boolean = false): RawUtf8;
 
+/// returns n leading characters
+function LeftU(const S: RawUtf8; n: PtrInt): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// returns n trailing characters
+function RightU(const S: RawUtf8; n: PtrInt): RawUtf8;
+
 /// trims leading whitespace characters from the string by removing
 // new line, space, and tab characters
 function TrimLeft(const S: RawUtf8): RawUtf8;
@@ -2663,6 +2670,21 @@ begin
     FastSetString(result, beg, source - beg);
     exit;
   until false;
+end;
+
+function LeftU(const S: RawUtf8; n: PtrInt): RawUtf8;
+begin
+  result := Copy(S, 1, n);
+end;
+
+function RightU(const S: RawUtf8; n: PtrInt): RawUtf8;
+var
+  L: PtrInt;
+begin
+  L := length(S);
+  if n > L then
+    n := L;
+  result := Copy(S, L + 1 - n, n);
 end;
 
 function TrimLeft(const S: RawUtf8): RawUtf8;
