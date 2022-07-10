@@ -4864,7 +4864,7 @@ begin
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
-      OpenSslVersionHexa := RawUtf8(IntToHex(OpenSslVersion, 8));
+      OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
       if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,
