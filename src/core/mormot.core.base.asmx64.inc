@@ -17,19 +17,31 @@
 
 const
   // non-temporal writes should bypass the cache when the size is bigger than
-  // half the size of the largest level cache - we assume low 1MB cache here
+  // half the size of the largest level cache = 512KB, assuming a low 1MB cache
   NONTEMPORALSIZE = 512 * 1024;
+
+  {$ifdef NO_ERMS}
+    {$undef WITH_ERMS}
+  {$else}
+    {$define WITH_ERMS}
+    // we enable forward rep movsb/stosb over SSE2MAXSIZE=256 bytes on x86_64
+    // and we don't try to detect it because CPUID is unset in some VMs
+  {$endif NO_ERMS}
+
+  // minimum size triggering ASMX64AVX or WITH_ERMS optimized asm
+  // - pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
+  // (copy_user_enhanced_fast_string() in recent Linux kernel uses 64)
+  // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
+  // - see also mormot.core.fpcx64mm.pas as reference
+  SSE2MAXSIZE = 256;
 
   // identify Intel/AMD AVX2+BMI support at Haswell level
   CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
 
 {
-  regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
+  regarding benchmark numbers from TTestLowLevelCommon.CustomRTL on x86_64
   -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
   -> Delphi RTL is slower than FPC's, and it doesn't support AVX assembly yet
-  -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
-  https://blog.synopse.info?post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
-  and https://stackoverflow.com/a/43837564/458259 for explanations and timing
 }
 
 // these stand-alone functions will use X64CpuFeatures global to adjust the algorithm
@@ -82,13 +94,16 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     src, dst
         lea     dst, [dst + rax]
         ja     @lrgbwd
-@lrgfwd:{$ifdef WITH_ERMS}
-        test    byte ptr [rip + X64CpuFeatures], 1 shl cpuERMS
-        jz      @nofwe
-        cmp     rax, 2048
-        jb      @nofwe
+@lrgfwd:// cnt > 32 bytes
+        mov     r9, dst
+        cmp     rax, SSE2MAXSIZE
+        jb      @fsse2     // 32..255 bytes is not good for ERMSB nor AVX
+        {$ifdef WITH_ERMS}
+        cmp     rax, NONTEMPORALSIZE
+        jae     @fnt       // non-temporal move > 512KB is better than rep ERMSB
+        // 256..512K could use the "rep movsb" ERMSB pattern on all CPUs
         cld
-@repmov:{$ifdef WIN64ABI}
+        {$ifdef WIN64ABI}
         push    rsi
         push    rdi
         mov     rsi, src
@@ -105,15 +120,13 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         rep movsb
         {$endif WIN64ABI}
         ret
-@nofwe: {$endif WITH_ERMS}
-        mov     r9, dst
+@fnt:   {$endif WITH_ERMS}
         {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 11 is buggy) :(
-        cmp     rax, 256                     // vzeroupper penaly for cnt>255
-        jb      @fsse2
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jnz     @fwdavx
         {$endif ASMX64AVX}
-@fsse2: movups  xmm2, oword ptr [src]        // first 16
+@fsse2: // forward move using SSE2 registers
+        movups  xmm2, oword ptr [src]        // first 16
         lea     src, [src + rax - 16]
         lea     rax, [rax + dst - 16]
         movups  xmm1, oword ptr [src]        // last 16
@@ -122,7 +135,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         and     dst,  -16                    // 16-byte aligned writes
         lea     rax, [rax + dst + 16]
         cmp     r8, NONTEMPORALSIZE
-        ja      @fwdnv                       // bypass cache for cnt>512KB
+        jae     @fwdnv                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @fwd:   movups  xmm0, oword ptr [src + rax]  // regular loop
         movaps  [r10 + rax], xmm0
@@ -138,7 +151,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @fwdnv
         sfence
         jmp     @fwdend
-        {$ifdef ASMX64AVX}
+        {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 11 is buggy) :(
 @fwdavx:vmovups ymm2, yword ptr [src]        // first 32
         lea     src, [src + rax - 32]
         lea     rax, [rax + dst - 32]
@@ -148,7 +161,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         and     dst,  -32                    // 32-byte aligned writes
         lea     rax, [rax + dst + 32]
         cmp     r8, NONTEMPORALSIZE
-        ja      @favxn                       // bypass cache for cnt>512KB
+        jae     @favxn                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @favxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
         vmovaps [r10 + rax], ymm0            // most CPUs have one store unit
@@ -167,21 +180,12 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         sfence
         jmp     @favxe
         {$endif ASMX64AVX}
-@lrgbwd:{$ifdef WITH_ERMS}  // backward move
-        test    byte ptr [rip + X64CpuFeatures], 1 shl cpuERMS
-        jz      @nobwe
-        cmp     rax, 2048
-        jb      @nobwe
-        std
-        lea     src, [src + rax - 1]
-        lea     dst, [dst + rax - 1]
-        jmp     @repmov
-@nobwe: {$endif WITH_ERMS}
+@lrgbwd:// note: ERMSB is not available on "std rep move"
         {$ifdef ASMX64AVX}
-        cmp     rax, 256
-        jb      @bsse2
+        cmp     rax, SSE2MAXSIZE
+        jb      @bsse2 // 32..255 bytes is not good for AVX
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
-        jnz      @bwdavx
+        jnz     @bwdavx
         {$endif ASMX64AVX}
 @bsse2: sub     rax, 16
         mov     r9, rax
@@ -191,7 +195,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         and     rax, -16                     // 16-byte aligned writes
         sub     rax, dst
         cmp     r8, NONTEMPORALSIZE
-        ja      @bwdnv                       // bypass cache for cnt>512KB
+        jae     @bwdnv                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bwd:   movups  xmm0, oword ptr [src + rax]  // regular loop
         movaps  oword ptr [dst + rax], xmm0
@@ -219,7 +223,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         and     rax, -32                     // 32-byte aligned writes
         sub     rax, dst
         cmp     r8, NONTEMPORALSIZE
-        ja      @bavxn                       // bypass cache for cnt>512KB
+        jae     @bavxn                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bavxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
         vmovaps yword ptr [dst + rax], ymm0
@@ -304,14 +308,13 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         ret
 {$ifdef FPC} align 8 {$else} .align 8{$endif}
 @abv32: jng     @00  // < 0
+        // cnt > 32 bytes
         movd    xmm0, eax
         lea     r8, [dst + cnt]        // r8 point to end
         pshufd  xmm0, xmm0, 0          // broadcast value into all bytes of xmm0
         mov     r10, rdx               // save rdx=cnt
-        {$ifdef ASMX64AVX} // Delphi doesn't support avx, and erms is slower
-        cmp     rdx, 256
-        jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
-        {$endif ASMX64AVX}
+        cmp     rdx, SSE2MAXSIZE
+        jae     @abv256            // 32..255 bytes is not good for ERMSB or AVX
 @sse2:  movups  oword ptr [dst], xmm0  // first unaligned 16 bytes
         lea     rdx, [dst + rdx - 1]
         and     rdx, -16
@@ -320,7 +323,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         sub     dst, rdx
         jnb     @last
         cmp     r10, NONTEMPORALSIZE
-        ja      @nv                    // bypass cache for cnt>512KB
+        jae     @sse2nv                // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @reg:   movaps  oword ptr [rdx + dst], xmm0  // regular loop
         add     dst, 16
@@ -328,22 +331,20 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @last:  movups  oword ptr [r8 - 16], xmm0 // last unaligned 16 bytes
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@nv:    movntdq [rdx + dst], xmm0      // non-temporal loop
+@sse2nv:movntdq [rdx + dst], xmm0      // non-temporal loop
         add     dst, 16
-        jnz     @nv
+        jnz     @sse2nv
         sfence
         movups  oword ptr [r8 - 16], xmm0
         ret
+@abv256:{$ifdef WITH_ERMS}
+        cmp     rax, NONTEMPORALSIZE // non-temporal move > 512KB
         {$ifdef ASMX64AVX}
-@abv256:
-        {$ifdef WITH_ERMS}
-        mov     r9b, byte ptr [rip + X64CpuFeatures]
-        test    r9b, 1 shl cpuERMS
-        jz      @noerms
-        cmp     rdx, 2048  // ERMS is worth it for cnt>2KB
-        jb      @noerms
-        cmp     rdx, NONTEMPORALSIZE   // non-temporal moves are still faster
-        jae     @noerms
+        jae     @avx
+        {$else}
+        jae     @sse2
+        {$endif ASMX64AVX}
+        // 256..512K could use the "rep stosb" ERMSB pattern on all CPUs
         cld
         {$ifdef WIN64ABI}
         mov     r8, rdi
@@ -356,10 +357,9 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         rep stosb
         {$endif WIN64ABI}
         ret
-@noerms:test    r9b, 1 shl cpuAVX
-        {$else}
-        test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         {$endif WITH_ERMS}
+        {$ifdef ASMX64AVX}
+@avx:   test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jz      @sse2
         movups  oword ptr [dst], xmm0  // first unaligned 1..16 bytes
         add     dst, 16
@@ -372,7 +372,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         and     rdx, -32
         sub     dst, rdx
         cmp     r10, NONTEMPORALSIZE
-        ja      @avxnv
+        jae     @avxnv
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @avxreg:vmovaps yword ptr [rdx + dst], ymm0  // regular loop
         add     dst, 32

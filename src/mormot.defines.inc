@@ -47,12 +47,6 @@
 // if defined, FPC RTL won't be patched on x86_64 with optimized asm
 // - you can enable it if you find out some compatibility problem
 
-{.$define WITH_ERMS}
-// you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
-// if cfERMS flag is available in Intel's CpuFeatures
-// -> disabled by default, since in practice it is slower than non-temporal mov
-// see https://stackoverflow.com/a/43837564/458259 for explanations and timing
-
 {$ifdef CPUX86}
   {.$define HASNOSSE2} // force x87 code on very very old CPU
 {$endif CPUX86}

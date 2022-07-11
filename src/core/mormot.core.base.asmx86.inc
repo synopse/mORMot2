@@ -23,12 +23,14 @@ var
   // it has been reported that "on 32-bit strings have to be at least 4KB"
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
   ERMSB_MIN_SIZE_FWD: integer = maxInt; // maxInt = disabled by default
-  ERMSB_MIN_SIZE_BWD: integer = maxInt; // maxInt = disabled by default
+  {$ifndef FPC_X86}
+  ERMSB_MIN_SIZE_BWD: integer = maxInt; // used for no-SSE2, not for ERMSB
+  {$endif FPC_X86}
   {$define WITH_ERMSASM} // include "rep movsb" asm blocks
 {$endif WITH_ERMS}
 
 {$ifdef HASNOSSE2}
-  {$define WITH_ERMSASM} // "rep movsd" is used on oldest CPU
+  {$define WITH_ERMSASM} // "rep movsd" is used as fallback on oldest CPU
 {$endif HASNOSSE2}
 
 const

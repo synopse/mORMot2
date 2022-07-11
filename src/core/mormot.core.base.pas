@@ -2492,10 +2492,11 @@ function BSRqword(const q: Qword): cardinal;
 
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
-  // - cpuERMS is ignored (slower than our movnt code, and not cpuid in VMs)
   // - cpuHaswell identifies Intel/AMD AVX2+BMI support at Haswell level
+  // as expected e.g. by IsValidUtf8Avx2/Base64EncodeAvx2 dedicated asm
+  // - won't include ERMSB flag because it is not propagated within some VMs
   TX64CpuFeatures = set of (
-    cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif}, cpuHaswell);
+    cpuAVX, cpuAVX2, cpuHaswell);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
@@ -2514,7 +2515,6 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 /// our fast version of FillChar()
 // - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
-// - you could try to define WITH_ERMS conditional but it is usually slower
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
 // and on x86_64, ERMS is wrongly used even for small blocks
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
@@ -2524,7 +2524,6 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
 // - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
 // - FPC x86_64 RTL is slower than our SSE2/AVX asm
-// - you could try to define WITH_ERMS conditional but it is usually slower
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef FPC_X86}
@@ -8555,11 +8554,7 @@ begin
       exclude(CpuFeatures, cfPOPCNT);
     end;
   {$ifdef ASMX64}
-  {$ifdef WITH_ERMS}
-  // actually slower than our movnt code, and not cpuid in VMs -> ignored
-  if cfERMS in CpuFeatures then
-    include(X64CpuFeatures, cpuERMS);
-  {$endif WITH_ERMS}
+  // note: cfERMS has no cpuid within some VMs -> ignore and assume present
   if cfAVX in CpuFeatures then
   begin
     include(X64CpuFeatures, cpuAVX);
@@ -8576,7 +8571,9 @@ begin
   if not (cfSSE2 in CpuFeatures) then
   begin
     ERMSB_MIN_SIZE_FWD := 0; // FillCharFast fallbacks to rep stosb on older CPU
-    ERMSB_MIN_SIZE_BWD := 0; // in both directions ;)
+    {$ifndef FPC_X86}
+    ERMSB_MIN_SIZE_BWD := 0; // in both directions to bypass the SSE2 code
+    {$endif FPC_X86}
   end
     // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
     // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
@@ -8590,11 +8587,11 @@ begin
   {$endif ASMX86}
   if cfSSE42 in CpuFeatures then // for both i386 and x86_64
   begin
-    crc32c := @crc32csse42;
-    crc32cby4 := @crc32cby4sse42;
-    crcblock := @crcblocksse42;
-    crcblocks := @crcblockssse42;
-    DefaultHasher := @crc32csse42;
+    crc32c          := @crc32csse42;
+    crc32cby4       := @crc32cby4sse42;
+    crcblock        := @crcblocksse42;
+    crcblocks       := @crcblockssse42;
+    DefaultHasher   := @crc32csse42;
     InterningHasher := @crc32csse42;
   end;
 end;
