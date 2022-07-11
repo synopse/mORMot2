@@ -1819,8 +1819,7 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    // return our favorite caaES256 algorithm for signing Certificates
-    function CertAlgo: TCryptCertAlgo; override;
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -2445,6 +2444,11 @@ end;
 function TCryptStoreOpenSsl.CrlCount: integer;
 begin
   result := fStore.CrlCount;
+end;
+
+function TCryptStoreOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertAlgoOpenSsl[CryptCertAlgoOpenSslDefault];
 end;
 
 function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;

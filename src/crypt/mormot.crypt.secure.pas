@@ -1622,8 +1622,9 @@ type
     function Count: integer;
     /// how many CRLs are currently stored
     function CrlCount: integer;
-    /// call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
-    function CertAlgo: TCryptCertAlgo;
+    /// return the prefered algo to be used with this store
+    // - call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
+    function DefaultCertAlgo: TCryptCertAlgo;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
@@ -1648,7 +1649,7 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; virtual; abstract;
     function Count: integer; virtual; abstract;
     function CrlCount: integer; virtual; abstract;
-    function CertAlgo: TCryptCertAlgo; virtual; abstract;
+    function DefaultCertAlgo: TCryptCertAlgo; virtual; abstract;
   end;
 
   /// meta-class of the abstract parent to implement ICryptStore interface
@@ -1795,6 +1796,10 @@ function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
 function Store(const name: RawUtf8): ICryptStore;
 
 var
+  /// direct access to the mormot.crypt.ecc.pas 'syn-ecc' algorithm
+  // - may be nil if this unit was not included
+  CryptCertAlgoSyn: TCryptCertAlgo;
+
   /// direct access to the mormot.crypt.ecc.pas 'syn-store' algorithm
   // - may be nil if this unit was not included
   CryptStoreAlgoSyn: TCryptStoreAlgo;
@@ -1812,11 +1817,17 @@ var
   // - may be nil if this unit was not included or if OpenSSL is not available
   CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
 
-  /// direct access to the mormot.crypt.openssl.pas  ICryptCert factories
+  /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
   // $ CryptCertAlgoOpenSsl[caaRS256].New
   CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
+  /// the prefered/default algorithm to be used wth OpenSsl X509 certificates
+  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
+  // still be used for compatiblity with legacy systems
+  // - as returned e.g. by 'x509-store' for its DefaultCertAlgo method
+  CryptCertAlgoOpenSslDefault: TCryptAsymAlgo = caaES256;
 
 
 

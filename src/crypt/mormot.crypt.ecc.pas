@@ -5096,17 +5096,12 @@ end;
 
 { TCryptCertInternal }
 
-var
-  CryptCertInternal: TCryptCertAlgoInternal;
-
 constructor TCryptCertInternal.CreateFrom(aEcc: TEccCertificate);
 begin
   fEcc := aEcc;
   fEccByRef := true;
-  fMaxVersion := CryptCertInternal.fMaxVersion;
-  if CryptCertInternal = nil then
-    CryptCertInternal := CertAlgo('syn-es256') as TCryptCertAlgoInternal;
-  Create(CryptCertInternal);
+  fMaxVersion := (CryptCertAlgoSyn as TCryptCertAlgoInternal).fMaxVersion;
+  Create(CryptCertAlgoSyn);
 end;
 
 destructor TCryptCertInternal.Destroy;
@@ -5488,7 +5483,7 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    function CertAlgo: TCryptCertAlgo; override;
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -5591,14 +5586,9 @@ begin
   result := length(fEcc.fCrl);
 end;
 
-var
-  CryptCertAlgoInternal: TCryptCertAlgo;
-
-function TCryptStoreInternal.CertAlgo: TCryptCertAlgo;
+function TCryptStoreInternal.DefaultCertAlgo: TCryptCertAlgo;
 begin
-  if CryptCertAlgoInternal = nil then
-    CryptCertAlgoInternal := mormot.crypt.secure.CertAlgo('syn-es256');
-  result := CryptCertAlgoInternal;
+  result := CryptCertAlgoSyn;
 end;
 
 
@@ -5632,6 +5622,7 @@ begin
   TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
   TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
+  CryptCertAlgoSyn := CertAlgo('syn-es256');
   CryptStoreAlgoSyn := StoreAlgo('syn-store');
   CryptStoreAlgoSynNoCache := StoreAlgo('syn-store-nocache');
 end;
