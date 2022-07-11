@@ -5036,6 +5036,7 @@ type
     function GetIssuerName: RawUtf8; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function IsSelfSigned: boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function IsValidDate: boolean; override;
@@ -5190,6 +5191,11 @@ begin
     result := fEcc.AuthoritySerial
   else
     result := '';
+end;
+
+function TCryptCertInternal.IsSelfSigned: boolean;
+begin
+  result := fEcc.IsSelfSigned;
 end;
 
 function TCryptCertInternal.GetNotBefore: TDateTime;

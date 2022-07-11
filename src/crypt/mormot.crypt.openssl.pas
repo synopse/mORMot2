@@ -1771,6 +1771,7 @@ type
     function GetIssuerName: RawUtf8; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function IsSelfSigned: boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -1996,6 +1997,11 @@ end;
 function TCryptCertOpenSsl.GetAuthorityKey: RawUtf8;
 begin
   result := fX509.AuthorityKeyIdentifier;
+end;
+
+function TCryptCertOpenSsl.IsSelfSigned: boolean;
+begin
+  result := fX509.IsSelfSigned;
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;

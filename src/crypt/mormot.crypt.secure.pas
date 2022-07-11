@@ -1354,8 +1354,12 @@ type
     // - match the SKID on X509, or the serial number for syn-es256
     function GetSubjectKey: RawUtf8;
     /// the signing Authority Key Identifier of this Certificate
-    // - match the AKID on X509, or the authority serial number for syn-es256
+    // - match the AKID on X509 (so may be '' for a self-signed certificate),
+    // or the authority serial number for syn-es256 (so equals GetSubjectKey
+    // for a self-signed certificate)
     function GetAuthorityKey: RawUtf8;
+    /// check if this certificate has been self-signed
+    function IsSelfSigned: boolean;
     /// the minimum Validity timestamp of this Certificate
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -1486,6 +1490,7 @@ type
     function GetIssuerName: RawUtf8; virtual; abstract;
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
+    function IsSelfSigned: boolean; virtual; abstract;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate: boolean; virtual;
