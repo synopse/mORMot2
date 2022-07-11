@@ -1625,7 +1625,7 @@ type
     // and validate the stored signature according to the public key of
     // the associated signing authority (which should be in this Store)
     // - warning: only supported by our 'syn-store' algorithm: OpenSSL Store
-    // has no way to lookup the X509 certificate which actually sign the buffer
+    // has no way to lookup the X509 certificate which actually signed the buffer
     function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity;
     /// how many certificates are currently stored

@@ -1330,8 +1330,18 @@ type
   Pstack_st_X509_EXTENSION = POPENSSL_STACK;
   PPstack_st_X509_EXTENSION = ^Pstack_st_X509_EXTENSION;
 
+  BASIC_CONSTRAINTS_st = record
+    ca: integer;
+    pathlen: PASN1_INTEGER;
+  end;
+
+  BASIC_CONSTRAINTS = BASIC_CONSTRAINTS_st;
+  PBASIC_CONSTRAINTS = ^BASIC_CONSTRAINTS;
+  PPBASIC_CONSTRAINTS = ^PBASIC_CONSTRAINTS;
+
   X509_EXTENSION = object
   public
+    function BasicConstraintIsCA: boolean;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = X509V3_EXT_DEFAULT);
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1833,6 +1843,8 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_RE
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
+procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS); cdecl;
+function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
 function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
@@ -1851,7 +1863,8 @@ function X509_get_serialNumber(x: PX509): PASN1_INTEGER;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_check_private_key(x509: PX509; pkey: PEVP_PKEY): integer; cdecl;
 function X509_get_ext_count(x: PX509): integer; cdecl;
-function X509_get_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
+function X509_get_ext(x: PX509; loc: integer): PX509_EXTENSION;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_get_ext_by_NID(x: PX509; nid: integer; lastpos: integer): integer; cdecl;
 function X509_EXTENSION_get_object(ex: PX509_EXTENSION): PASN1_OBJECT;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
@@ -2701,6 +2714,8 @@ type
     X509V3_set_ctx: procedure(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
     X509_gmtime_adj: function(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
+    BASIC_CONSTRAINTS_free: procedure(a: PBASIC_CONSTRAINTS); cdecl;
+    d2i_BASIC_CONSTRAINTS: function(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
     X509_NAME_add_entry_by_txt: function(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
     X509_NAME_print_ex: function(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
@@ -2934,7 +2949,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..292] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..294] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2999,6 +3014,8 @@ const
     'X509V3_set_ctx',
     'X509_gmtime_adj',
     'X509_EXTENSION_free',
+    'BASIC_CONSTRAINTS_free',
+    'd2i_BASIC_CONSTRAINTS',
     'X509_NAME_add_entry_by_txt',
     'X509_NAME_print_ex',
     'X509_NAME_print_ex_fp',
@@ -3558,6 +3575,17 @@ end;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION);
 begin
   libcrypto.X509_EXTENSION_free(a);
+end;
+
+procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS);
+begin
+  libcrypto.BASIC_CONSTRAINTS_free(a);
+end;
+
+function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS;
+   _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
+begin
+  result := libcrypto.d2i_BASIC_CONSTRAINTS(a, _in, len);
 end;
 
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
@@ -5283,6 +5311,12 @@ function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
 
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_free';
+
+procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS); cdecl;
+  external LIB_CRYPTO name _PU + 'BASIC_CONSTRAINTS_free';
+
+function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
+  external LIB_CRYPTO name _PU + 'd2i_BASIC_CONSTRAINTS';
 
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
   typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
@@ -7527,6 +7561,28 @@ end;
 
 { X509_EXTENSION }
 
+function X509_EXTENSION.BasicConstraintIsCA: boolean;
+var
+  d: PASN1_OCTET_STRING;
+  data: PByte;
+  c: PBASIC_CONSTRAINTS;
+begin
+  result := false;
+  if @self = nil then
+    exit;
+  d := X509_EXTENSION_get_data(@self);
+  if d = nil then
+    exit;
+  data := d.data;
+  if data = nil then
+    exit;
+  c := d2i_BASIC_CONSTRAINTS(nil, @data, d.Len);
+  if c = nil then
+    exit;
+  result := c^.ca <> 0;
+  BASIC_CONSTRAINTS_free(c);
+end;
+
 procedure X509_EXTENSION.ToUtf8(out result: RawUtf8; flags: cardinal);
 var
   bio: PBIO;
@@ -7707,7 +7763,7 @@ end;
 
 function X509.IsCA: boolean;
 begin
-  result := PosEx('CA:TRUE', ExtensionText(NID_basic_constraints)) <> 0;
+  result := Extension(NID_basic_constraints).BasicConstraintIsCA;
 end;
 
 function X509.IsSelfSigned: boolean;

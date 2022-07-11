@@ -2461,6 +2461,8 @@ begin
     Check(c2.IsSelfSigned);
     if c2.GetAuthorityKey <> c2.GetSubjectKey then
       CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
+    if crt.AlgoName <> 'syn-es256-v1' then
+      Check(c2.GetUsage = [cuDigitalSignature]);
     Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
     Check(c2.Verify(nil) = cvValidSelfSigned, 'self2');
     c2.Sign(c1); // change signature
@@ -2481,6 +2483,7 @@ begin
     // set c1 as self-signed root certificate (in v1 format)
     c1 := st1.DefaultCertAlgo.Generate([cuCA, cuKeyCertSign], 'rootca');
     Check(c1.IsSelfSigned);
+    Check(c1.GetUsage = [cuCA, cuKeyCertSign]);
     //writeln(C1.GetPeerInfo);
     CheckEqual(c1.GetSubject, 'rootca');
     Check(st1.IsValid(c1) = cvUnknownAuthority);
@@ -2516,6 +2519,7 @@ begin
     c3 := st1.DefaultCertAlgo.New;
     c3.Generate([cuDigitalSignature], 'testsigning', c2);
     Check(not c3.IsSelfSigned);
+    Check(c3.GetUsage = [cuDigitalSignature]);
     //writeln(c3.GetPeerInfo);
     CheckEqual(c3.GetSubject, 'testsigning');
     Check(c3.Instance.ClassType = c1.Instance.ClassType);
