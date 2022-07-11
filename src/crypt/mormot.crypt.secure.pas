@@ -1349,6 +1349,8 @@ type
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
     function GetNotAfter: TDateTime;
+    /// check GetNotBefore/GetNotAfter validity
+    function IsValidDate: boolean;
     /// the Key Usages of this Certificate
     function GetUsage: TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
@@ -1469,6 +1471,7 @@ type
     function GetAuthorityKey: RawUtf8; virtual; abstract;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
+    function IsValidDate: boolean; virtual;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
     function GetDigest(Algo: THashAlgo): RawUtf8; virtual;
@@ -1519,7 +1522,7 @@ type
     function New: ICryptCert; virtual; abstract;
     /// low-level factory directly from the raw implementation handle
     // - e.g. a PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
-    // - warning: ensure Handle is of the expect type, otherwise it would break
+    // - warning: ensure Handle is of the expected type, otherwise it will GPF
     function FromHandle(Handle: pointer): ICryptCert; virtual; abstract;
     /// factory to load a Certificate from a ICryptCert.Save() content
     // - PrivatePassword is needed if the input contains a private key
@@ -4464,6 +4467,18 @@ end;
 procedure TCryptCert.RaiseErrorGenerate(const api: ShortString);
 begin
   RaiseError('Generate: % error', [api]); // raise ECryptCert
+end;
+
+function TCryptCert.IsValidDate: boolean;
+var
+  na, nb, now: TDateTime;
+begin
+  now := NowUtc;
+  na := GetNotAfter;
+  nb := GetNotBefore;
+  result := (Handle <> nil) and
+            ((na <= 0) or (na > now)) and
+            ((nb <= 0) or (nb <= now));
 end;
 
 function TCryptCert.GetDigest(Algo: THashAlgo): RawUtf8;

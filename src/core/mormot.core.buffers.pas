@@ -1421,14 +1421,14 @@ function AsciiToBaudot(const Text: RawUtf8): RawByteString; overload;
 /// convert some Baudot code binary, into ASCII-7 text
 // - reverse of the AsciiToBaudot() function
 // - any uppercase character would be decoded as lowercase - and some characters
-// may have disapeared
+// may have disapeared outside of a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; range
 // - the "baud" symbol rate measurement comes from Emile's name ;)
 function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8; overload;
 
 /// convert some Baudot code binary, into ASCII-7 text
 // - reverse of the AsciiToBaudot() function
 // - any uppercase character would be decoded as lowercase - and some characters
-// may have disapeared
+// may have disapeared outside of a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; range
 // - the "baud" symbol rate measurement comes from Emile's name ;)
 function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 
