@@ -1742,6 +1742,7 @@ type
     constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
+    function FromHandle(Handle: pointer): ICryptCert; override;
   end;
 
   /// class implementing ICryptCert using OpenSSL X509
@@ -1835,6 +1836,11 @@ end;
 function TCryptCertAlgoOpenSsl.New: ICryptCert;
 begin
   result := TCryptCertOpenSsl.Create(self);
+end;
+
+function TCryptCertAlgoOpenSsl.FromHandle(Handle: pointer): ICryptCert;
+begin
+  result := CryptCertOpenSslFrom(Handle);
 end;
 
 

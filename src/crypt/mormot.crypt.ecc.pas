@@ -5012,6 +5012,7 @@ type
   public
     constructor Create(const name: RawUtf8); override;
     function New: ICryptCert; override; // = TCryptCertInternal.Create(self)
+    function FromHandle(Handle: pointer): ICryptCert; override;
   end;
 
   /// class implementing ICryptCert using our ECC Public Key Cryptography
@@ -5078,6 +5079,15 @@ begin
   cert := TCryptCertInternal.Create(self);
   cert.fMaxVersion := fMaxVersion;
   result := cert;
+end;
+
+function TCryptCertAlgoInternal.FromHandle(Handle: pointer): ICryptCert;
+begin
+  if (Handle <> nil) and
+     TObject(Handle).InheritsFrom(TEccCertificate) then
+    result := TCryptCertInternal.CreateFrom(Handle)
+  else
+    result := nil;
 end;
 
 

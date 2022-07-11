@@ -1517,6 +1517,10 @@ type
     constructor Create(const name: RawUtf8); override;
     /// main factory to create a new Certificate instance with this algorithm
     function New: ICryptCert; virtual; abstract;
+    /// low-level factory directly from the raw implementation handle
+    // - e.g. a PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
+    // - warning: ensure Handle is of the expect type, otherwise it would break
+    function FromHandle(Handle: pointer): ICryptCert; virtual; abstract;
     /// factory to load a Certificate from a ICryptCert.Save() content
     // - PrivatePassword is needed if the input contains a private key
     // - will only recognize and support the ccfBinary and ccfPem formats
@@ -4427,8 +4431,8 @@ begin
 end;
 
 function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
-  const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
+  const Subjects: RawUtf8; const Authority: ICryptCert; ExpireDays: integer;
+  ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 begin
   result := New;
   result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
