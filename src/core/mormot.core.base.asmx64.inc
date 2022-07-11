@@ -161,27 +161,33 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 11 is buggy) :(
 @fwdavx:vmovups ymm2, yword ptr [src]        // first 32
         lea     src, [src + rax - 32]
-        lea     rax, [rax + dst - 32]
+        lea     dst, [dst + rax - 32]
         vmovups ymm1, yword ptr [src]        // last 32
-        mov     r10, rax
         neg     rax
-        and     dst,  -32                    // 32-byte aligned writes
-        lea     rax, [rax + dst + 32]
+        add     rax, dst
+        and     rax,  -32                    // 32-byte aligned writes
+        sub     rax, dst
+        add     rax, 64
         cmp     r8, NONTEMPORALSIZE
         jae     @favxn                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @favxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
-        vmovaps [r10 + rax], ymm0            // most CPUs have one store unit
+        vmovaps [dst + rax], ymm0            // most CPUs have one store unit
         add     rax, 32
         jl      @favxr
-@favxe: vmovups yword ptr [r10], ymm1        // last 32
+@favxe: vmovups yword ptr [dst], ymm1        // last 32
         vmovups yword ptr [r9], ymm2         // first 32
 // https://software.intel.com/en-us/articles/avoiding-avx-sse-transition-penalties
         vzeroupper
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @favxn: vmovups ymm0, yword ptr [src + rax]  // non-temporal loop
-        vmovntps [r10 + rax], ymm0
+        // circumvent FPC inline asm bug with vmovntps [dst + rax], ymm0
+        {$ifdef WIN64ABI}
+        vmovntps [rdx + rax], ymm0           // rdx=dst on Win64
+        {$else}
+        vmovntps [rsi + rax], ymm0           // rsi=dst on POSIX
+        {$endif WIN64ABI}
         add     rax, 32
         jl      @favxn
         sfence
@@ -242,7 +248,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bavxn: vmovups ymm0, yword ptr [src + rax]  // non-temporal loop
-        {$ifdef WIN64ABI} // circumvent inline asm limitation with [dst + rax]
+        // circumvent FPC inline asm bug with vmovntps [dst + rax], ymm0
+        {$ifdef WIN64ABI}
         vmovntps [rdx + rax], ymm0           // rdx=dst on Win64
         {$else}
         vmovntps [rsi + rax], ymm0           // rsi=dst on POSIX
