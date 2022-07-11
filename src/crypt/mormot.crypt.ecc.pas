@@ -5042,6 +5042,7 @@ type
     function IsVoid: boolean; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
+    function GetSignatureInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; override;
     function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
@@ -5237,6 +5238,14 @@ begin
     JsonBufferReformat(pointer(fEcc.ToJson({withbase64=}false)), result)
   else
     result := '';
+end;
+
+function TCryptCertInternal.GetSignatureInfo: RawUtf8;
+begin
+  if fEcc = nil then
+    result := ''
+  else
+    result := '128 syn-es256';
 end;
 
 function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;

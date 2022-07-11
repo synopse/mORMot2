@@ -1774,6 +1774,7 @@ type
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
+    function GetSignatureInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; override;
     function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
@@ -2015,6 +2016,11 @@ end;
 function TCryptCertOpenSsl.GetPeerInfo: RawUtf8;
 begin
   result := fX509.PeerInfo;
+end;
+
+function TCryptCertOpenSsl.GetSignatureInfo: RawUtf8;
+begin
+  result := fX509.GetSignatureAlgo;
 end;
 
 function TCryptCertOpenSsl.Save(Content: TCryptCertContent;

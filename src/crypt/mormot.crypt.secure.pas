@@ -1368,6 +1368,11 @@ type
     function GetUsage: TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
     function GetPeerInfo: RawUtf8;
+    /// the signature algorithm as engine-specific plain text
+    // - the first value is the effective security bits of this algorithm
+    // - e.g. '128 ecdsa-with-SHA256', '128 RSA-SHA256' or '128 ED25519' on
+    // OpenSSL, or '128 syn-es256' for our cryptography
+    function GetSignatureInfo: RawUtf8;
     /// compute the hexadecimal fingerprint of this Certificate
     // - is usually the hash of its binary (e.g. DER) serialization
     function GetDigest(Algo: THashAlgo = hfSHA256): RawUtf8;
@@ -1487,6 +1492,7 @@ type
     function IsVoid: boolean; virtual;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
+    function GetSignatureInfo: RawUtf8; virtual; abstract;
     function GetDigest(Algo: THashAlgo): RawUtf8; virtual;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; virtual; abstract;
