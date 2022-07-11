@@ -2179,8 +2179,23 @@ var
   st1, st2, st3: ICryptStore;
   alg: TCryptAlgos;
   fmt: TCryptCertFormat;
-  names: string;
+  cv: TCryptCertValidity;
+  namelen: integer;
+  names: RawUtf8;
+
+  procedure AddAlgName;
+  begin
+    inc(namelen, length(alg[a].AlgoName) + 1);
+    if namelen > 73 then
+    begin
+      names := names + CRLF + '     ';
+      namelen := length(alg[a].AlgoName) + 1;
+    end;
+    names := names + ' ' + alg[a].AlgoName;
+  end;
+
 begin
+  namelen := 0;
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
   for k := 0 to 2 do
@@ -2207,6 +2222,7 @@ begin
   for a := 0 to high(alg) do
   begin
     rnd := alg[a] as TCryptRandom;
+    AddAlgName;
     Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
     cprev := 0;
     dprev := 0;
@@ -2229,6 +2245,7 @@ begin
   for a := 0 to high(alg) do
   begin
     hsh := alg[a] as TCryptHasher;
+    AddAlgName;
     Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
@@ -2244,6 +2261,7 @@ begin
   for a := 0 to high(alg) do
   begin
     sig := alg[a] as TCryptSigner;
+    AddAlgName;
     Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
@@ -2266,6 +2284,7 @@ begin
   for a := 0 to high(alg) do
   begin
     cip := alg[a] as TCryptCipherAlgo;
+    AddAlgName;
     Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
@@ -2312,14 +2331,13 @@ begin
   for a := 0 to high(alg) do
   begin
     crt := alg[a] as TCryptCertAlgo;
-    if (a <> 0) and
-       (a mod 5 = 0) then
-      names := names + CRLF + '     ';
-    names := names + ' ' + string(crt.AlgoName);
+    AddAlgName;
     c1 := crt.New;
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
     Check(c1.IsVoid);
+    Check(not c1.IsValidDate);
+    CheckEqual(c1.GetSignatureInfo, '');
     if crt.AlgoName = 'syn-es256-v1' then
     begin
       // TEccCertificate V1 has limited Usage and Subjects support
@@ -2341,10 +2359,12 @@ begin
     Check(not c1.IsVoid);
     Check(c1.GetSerial <> '');
     Check(c1.GetSubjectKey <> '');
+    Check(c1.IsSelfSigned);
     if c1.GetAuthorityKey <> c1.GetSubjectKey then // equal on syn-ecc
       CheckEqual(c1.GetAuthorityKey, '', 'X509 self-sign has no auth');
     Check(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1');
     Check(c1.Verify(c1) = cvValidSelfSigned, 'cvValidSelfSigned2');
+    Check(c1.GetSignatureInfo <> '');
     Check(c1.HasPrivateSecret);
     jwt := c1.JwtCompute([], {iss=}'myself', {sub=}'me', '', 0, 10);
     check(jwt <> '');
@@ -2355,6 +2375,7 @@ begin
     check(c1.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify');
     CheckEqual(iss, 'myself');
     CheckEqual(sub, 'me');
+    check(c1.Handle <> nil);
     check(c1.IsValidDate);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
@@ -2363,6 +2384,7 @@ begin
     begin
       c2 := crt.New;
       Check(c2.IsVoid);
+      Check(not c2.IsValidDate);
       Check(not c2.IsEqual(c1));
       Check(c2.GetDigest <> c1.GetDigest);
       // validate c2=cccCertOnly persistence in PEM/DER
@@ -2381,6 +2403,7 @@ begin
       CheckEqual(c2.GetDigest, c1.GetDigest);
       CheckSame(c2.GetNotAfter, c1.GetNotAfter);
       CheckSame(c2.GetNotBefore, c1.GetNotBefore);
+      Check(c2.IsValidDate);
       CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
       CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
       iss := '';
@@ -2388,6 +2411,7 @@ begin
       check(c2.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify2');
       CheckEqual(iss, 'myself');
       CheckEqual(sub, 'me');
+      Check(c2.Handle <> nil);
       // validate c3=cccCertWithPrivateKey persistence in PEM/DER
       c3 := crt.New;
       Check(not c3.IsEqual(c1));
@@ -2425,6 +2449,7 @@ begin
     c3.Generate([cuDataEncipherment], 'signed', c1);
     Check(not c3.IsEqual(c1));
     Check(not c3.IsEqual(c2));
+    Check(not c3.IsSelfSigned);
     Check(c3.HasPrivateSecret);
     CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
     Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
@@ -2433,6 +2458,7 @@ begin
     Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
     c2 := crt.New;
     c2.Generate([cuDigitalSignature], 'self.signed', nil);
+    Check(c2.IsSelfSigned);
     if c2.GetAuthorityKey <> c2.GetSubjectKey then
       CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
     Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
@@ -2442,33 +2468,41 @@ begin
     Check(c2.Verify(c1) = cvValidSigned, 'self3');
     Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
   end;
-  AddConsole(names);
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
   alg := TCryptStoreAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
+    AddAlgName;
     //writeln(str.AlgoName);
     st1 := str.New;
     CheckEqual(st1.Count, 0);
     // set c1 as self-signed root certificate (in v1 format)
-    c1 := st1.CertAlgo.Generate([cuCA, cuKeyCertSign]);
+    c1 := st1.DefaultCertAlgo.Generate([cuCA, cuKeyCertSign], 'rootca');
+    Check(c1.IsSelfSigned);
+    //writeln(C1.GetPeerInfo);
+    CheckEqual(c1.GetSubject, 'rootca');
     Check(st1.IsValid(c1) = cvUnknownAuthority);
     Check(st1.Add(c1));
     CheckEqual(st1.Count, 1);
     Check(st1.IsValid(c1) = cvValidSelfSigned);
     Check(c1.HasPrivateSecret, 'priv1');
     Check(c1.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 1');
+    Check((c1.GetAuthorityKey = '') or
+          (c1.GetAuthorityKey = c1.GetSubjectKey));
     // set c2 as intermediate CA, signed by c1 root CA
     c2 := nil;
     Check(not st1.Add(c2), 'no priv');
     CheckEqual(st1.Count, 1);
-    c2 := st1.CertAlgo.New;
+    c2 := st1.DefaultCertAlgo.New;
     Check(c2.Instance.ClassType = c1.Instance.ClassType);
-    c2.Generate([cuCA, cuKeyCertSign], '', c1);
+    c2.Generate([cuCA, cuKeyCertSign], 'mainca', c1);
+    Check(not c2.IsSelfSigned);
+    //writeln(c2.GetPeerInfo);
     Check(c2.GetUsage = [cuCA, cuKeyCertSign]);
     Check(cuCA in c2.GetUsage);
+    CheckEqual(c2.GetSubject, 'mainca');
     Check(not (cuDigitalSignature in c2.GetUsage));
     Check(c2.HasPrivateSecret, 'priv2');
     Check(st1.IsValid(c2) = cvValidSigned, 'c2');
@@ -2476,35 +2510,47 @@ begin
     CheckEqual(st1.Count, 2);
     Check(st1.IsValid(c2) = cvValidSigned, 'c2');
     Check(c2.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 2');
+    CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c2.GetAuthorityKey <> c2.GetSubjectKey);
     // set c3 as signing authority
-    c3 := st1.CertAlgo.New;
-    c3.Generate([cuDigitalSignature], '', c2);
+    c3 := st1.DefaultCertAlgo.New;
+    c3.Generate([cuDigitalSignature], 'testsigning', c2);
+    Check(not c3.IsSelfSigned);
+    //writeln(c3.GetPeerInfo);
+    CheckEqual(c3.GetSubject, 'testsigning');
     Check(c3.Instance.ClassType = c1.Instance.ClassType);
     CheckEqual(c3.Instance.CryptAlgo.AlgoName, c2.Instance.CryptAlgo.AlgoName);
     Check(c3.HasPrivateSecret, 'priv3');
     Check(st1.IsValid(c3) = cvValidSigned, 'c3');
     Check(st1.Add(c3));
+    CheckEqual(c3.GetAuthorityKey, c2.GetSubjectKey);
     // sign
     s := c3.Sign(pointer(r), length(r));
     Check(s <> '', 'sign');
-    Check(st1.Verify(s, pointer(r), length(r)) = cvValidSigned, 's1');
+    cv := st1.Verify(s, pointer(r), length(r));
+    if cv <> cvNotSupported then
+      // TCryptStoreOpenSsl.Verify has no way to know which cert signed it
+      CheckUtf8(cv = cvValidSigned, 's1=%', [ToText(cv)^]);
     // persist the Store
-    st2 := str.NewFrom(st1.ToBinary);
+    st2 := str.NewFrom(st1.Save);
     CheckEqual(st2.Count, 3);
     Check(st2 <> nil);
     Check(st2.IsValid(c1) = cvValidSelfSigned, '2c1');
     Check(st2.IsValid(c2) = cvValidSigned, '2c2');
     Check(st2.IsValid(c3) = cvValidSigned, '2c3');
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2a');
-    dec(r[1]);
-    Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
-    inc(r[1]);
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
-    // validate CRL
-    Check(st2.Revoke(c3, 0, crrWithdrawn));
-    Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
-    Check(st2.Revoke(c3, 0, crrNotRevoked));
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
+    if cv <> cvNotSupported then
+    begin
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2a');
+      dec(r[1]);
+      Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
+      inc(r[1]);
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
+      // validate CRL
+      Check(st2.Revoke(c3, 0, crrWithdrawn));
+      Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
+      Check(st2.Revoke(c3, 0, crrNotRevoked));
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
+    end;
     // ensure new certs are not recognized by previous stores
     if st3 <> nil then
     begin
@@ -2512,10 +2558,12 @@ begin
       Check(st3.IsValid(c1) = cvUnknownAuthority, '3c1');
       Check(st3.IsValid(c2) = cvUnknownAuthority, '3c2');
       Check(st3.IsValid(c3) = cvUnknownAuthority, '3c3');
-      Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
+      if cv <> cvNotSupported then
+        Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
     end;
     st3 := st2;
   end;
+  AddConsole(Utf8ToString(names));
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
