@@ -638,9 +638,6 @@ type
 // TCryptAsymOsl class)
 procedure RegisterOpenSsl;
 
-/// ICryptCert low-level factory from an existing OpenSSL X509 instance
-function CryptCertOpenSslFrom(aX509: PX509): ICryptCert;
-
 
 implementation
 
@@ -1752,7 +1749,6 @@ type
     fPrivKey: PEVP_PKEY;
     function GetMD: PEVP_MD;
   public
-    constructor CreateFrom(aX509: PX509);
     destructor Destroy; override;
     procedure Clear;
     // ICryptCert methods
@@ -1839,18 +1835,21 @@ begin
 end;
 
 function TCryptCertAlgoOpenSsl.FromHandle(Handle: pointer): ICryptCert;
+var
+  instance: TCryptCertOpenSsl;
 begin
-  result := CryptCertOpenSslFrom(Handle);
+  if Handle = nil then
+    instance := nil
+  else
+  begin
+    instance := TCryptCertOpenSsl.Create(self);
+    instance.fX509 := Handle;
+  end;
+  result := instance;
 end;
 
 
 { TCryptCertOpenSsl }
-
-constructor TCryptCertOpenSsl.CreateFrom(aX509: PX509);
-begin
-  inherited Create(nil);
-  fX509 := aX509;
-end;
 
 destructor TCryptCertOpenSsl.Destroy;
 begin
@@ -2061,6 +2060,7 @@ begin
   result := false;
   if Content = cccPrivateKeyOnly then
   begin
+    // input only include the private key as DER or PEM
     fPrivKey.Free;
     fPrivKey := LoadPrivateKey(pointer(saved), length(saved), PrivatePassword);
     if fPrivKey <> nil then
@@ -2071,7 +2071,7 @@ begin
         fPrivKey.Free;
         fPrivKey := nil;
       end;
-    exit;
+    exit; // don't clear the main X509 certificate
   end;
   Clear;
   if Saved = '' then
@@ -2310,10 +2310,7 @@ var
   x: PX509;
 begin
   x := fStore.BySerial(Serial); // makes x.Acquire
-  if x = nil then
-    result := nil
-  else
-    result := TCryptCertOpenSsl.CreateFrom(x);
+  result := CryptCertAlgoOpenSsl[caaRS256].FromHandle(x);
 end;
 
 function ToReason(r: integer): TCryptCertRevocationReason;
@@ -2531,15 +2528,6 @@ begin
   result := CryptCertAlgoOpenSsl[caaES256];
 end;
 
-
-
-function CryptCertOpenSslFrom(aX509: PX509): ICryptCert;
-begin
-  if aX509 = nil then
-    result := nil
-  else
-    result := TCryptCertOpenSsl.CreateFrom(aX509);
-end;
 
 
 procedure RegisterOpenSsl;
