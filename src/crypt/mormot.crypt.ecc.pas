@@ -5039,6 +5039,7 @@ type
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function IsValidDate: boolean; override;
+    function IsVoid: boolean; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
@@ -5215,6 +5216,11 @@ function TCryptCertInternal.IsValidDate: boolean;
 begin
   result := (fEcc <> nil) and
             fEcc.Content.CheckDate;
+end;
+
+function TCryptCertInternal.IsVoid: boolean;
+begin
+  result := not fEcc.CheckCRC;
 end;
 
 function TCryptCertInternal.GetUsage: TCryptCertUsages;

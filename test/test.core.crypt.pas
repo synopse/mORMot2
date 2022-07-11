@@ -2319,6 +2319,7 @@ begin
     c1 := crt.New;
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
+    Check(c1.IsVoid);
     if crt.AlgoName = 'syn-es256-v1' then
     begin
       // TEccCertificate V1 has limited Usage and Subjects support
@@ -2337,6 +2338,7 @@ begin
       check(c1.GetUsage = [cuCA, cuDigitalSignature, cuKeyCertSign]);
       CheckEqual(c1.GetSubject, 'synopse.info');
     end;
+    Check(not c1.IsVoid);
     Check(c1.GetSerial <> '');
     Check(c1.GetSubjectKey <> '');
     if c1.GetAuthorityKey <> c1.GetSubjectKey then // equal on syn-ecc
@@ -2353,17 +2355,20 @@ begin
     check(c1.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify');
     CheckEqual(iss, 'myself');
     CheckEqual(sub, 'me');
+    check(c1.IsValidDate);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
     check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
     for fmt := ccfBinary to ccfPem do
     begin
       c2 := crt.New;
+      Check(c2.IsVoid);
       Check(not c2.IsEqual(c1));
       Check(c2.GetDigest <> c1.GetDigest);
       // validate c2=cccCertOnly persistence in PEM/DER
       s := c1.Save(cccCertOnly, '', fmt);
       check(c2.Load(s));
+      Check(not c2.IsVoid);
       Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
       CheckEqual(c2.JwtCompute([], 'myself', 'me', '', 0, 10), '');
       Check(c2.IsEqual(c1));

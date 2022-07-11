@@ -1351,6 +1351,8 @@ type
     function GetNotAfter: TDateTime;
     /// check GetNotBefore/GetNotAfter validity
     function IsValidDate: boolean;
+    /// returns true e.g. after TCryptCertAlgo.New but before Generate()
+    function IsVoid: boolean;
     /// the Key Usages of this Certificate
     function GetUsage: TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
@@ -1454,7 +1456,6 @@ type
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
   TCryptCert = class(TCryptInstance, ICryptCert)
   protected
-    procedure RaiseVoid(Instance: pointer; const Msg: shortstring);
     procedure RaiseError(const Msg: shortstring); overload;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
@@ -1472,6 +1473,7 @@ type
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate: boolean; virtual;
+    function IsVoid: boolean; virtual;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
     function GetDigest(Algo: THashAlgo): RawUtf8; virtual;
@@ -4444,12 +4446,6 @@ end;
 
 { TCryptCert }
 
-procedure TCryptCert.RaiseVoid(Instance: pointer; const Msg: shortstring);
-begin
-  if Instance = nil then
-    RaiseError('% is not set', [Msg]);
-end;
-
 procedure TCryptCert.RaiseError(const Msg: shortstring);
 begin
   raise ECryptCert.CreateUtf8('%.%', [self, Msg]);
@@ -4476,9 +4472,14 @@ begin
   now := NowUtc;
   na := GetNotAfter;
   nb := GetNotBefore;
-  result := (Handle <> nil) and
+  result := (not IsVoid) and
             ((na <= 0) or (na > now)) and
             ((nb <= 0) or (nb <= now));
+end;
+
+function TCryptCert.IsVoid: boolean;
+begin
+  result := Handle = nil;
 end;
 
 function TCryptCert.GetDigest(Algo: THashAlgo): RawUtf8;
