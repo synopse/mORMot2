@@ -15,7 +15,20 @@
 
 {$ifdef ASMX86} // i386 asm with global - disabled on PIC targets
 
-{$define WITH_ERMS} // we enable it as fallback on old CPU without SSE2
+{
+ FillCharFast/MoveFast implementation notes:
+ - use SS2 and not FPU fld/fst which may trigger unexpected exceptions (Agner)
+ - use dedicated branchless sub-functions for small buffers of 0..32 bytes
+ - use simple SSE2 loop for 33..255 bytes
+ - assume ERBMS is available (cpuid flag may not be propagated within VMs)
+ - use "rep movsb" for 256..512K input (should work on all CPUs, even older with
+ no ERBMS), or as fallback if no SSE2 CPU is used
+ - use non volatile SSE2 loop when >= 512KB (to not pollute the CPU cache)
+ - don't use backward "std rep movsb" since it is not involved by ERMBS (slow)
+ - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated
+}
+
+{$define WITH_ERMS} // we need it as fallback on old CPU without SSE2
 
 {$ifdef WITH_ERMS}
 var
@@ -39,9 +52,6 @@ const
   NONTEMPORALSIZE = 1 shl 20;
 
 // fast SSE2 version - force define HASNOSSE2 when run any very old CPU
-// - using FPU fld/fst may trigger unexpected exceptions, as reported by Agner
-// Fog on "Optimizing Assembly" page 118 -> default is SSE2 code
-// - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -92,12 +102,7 @@ asm
 {$ifdef WITH_ERMSASM}
 @ermsb: push    edi
         cld
-{$ifndef HASNOSSE2}
-        mov     edi, eax
-        mov     eax, ecx
-        mov     ecx, edx
-        rep     stosb   // ERMSB favors stosb and will properly align writes
-{$else} 
+{$ifdef HASNOSSE2}
 @ermsa: test    al, 3   // aligned stosd is better on old CPUs
         jz      @erms3
         mov     byte ptr [eax], cl
@@ -117,6 +122,11 @@ asm
 @erms1: test    dl, 1
         jz      @erms0
         mov     byte ptr [edi], al
+{$else} // ERMSB favors stosb and will properly align writes
+        mov     edi, eax
+        mov     eax, ecx
+        mov     ecx, edx
+        rep     stosb
 {$endif HASNOSSE2}
 @erms0: pop     edi
         ret

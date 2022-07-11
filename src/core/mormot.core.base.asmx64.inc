@@ -15,6 +15,20 @@
 
 {$ifdef ASMX64}
 
+{
+ FillCharFast/MoveFast implementation notes:
+ - assume ERBMS is available (cpuid flag may not be propagated within VMs)
+ - use dedicated branchless sub-functions for small buffers of 0..32 bytes
+ - use simple SSE2 loop for 33..255 bytes
+ - use "rep movsb" for 256..512K input (should work on all CPUs, even oldest)
+ - use non volatile SSE2 or AVX loop >= 512KB (to not pollute the CPU cache)
+ - will check X64CpuFeatures global to adjust the algorithm if cpuAVX is set
+ - don't use backward "std rep movsb" since it is not involved by ERMBS (slow)
+ - regarding benchmark, run TTestLowLevelCommon.CustomRTL on x86_64
+  -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
+  -> Delphi RTL is slower than FPC's, and it does not support AVX assembly yet
+}
+
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache = 512KB, assuming a low 1MB cache
@@ -38,13 +52,6 @@ const
   // identify Intel/AMD AVX2+BMI support at Haswell level
   CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
 
-{
-  regarding benchmark numbers from TTestLowLevelCommon.CustomRTL on x86_64
-  -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
-  -> Delphi RTL is slower than FPC's, and it doesn't support AVX assembly yet
-}
-
-// these stand-alone functions will use X64CpuFeatures global to adjust the algorithm
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
@@ -97,7 +104,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @lrgfwd:// cnt > 32 bytes
         mov     r9, dst
         cmp     rax, SSE2MAXSIZE
-        jb      @fsse2     // 32..255 bytes is not good for ERMSB nor AVX
+        jb      @fsse2     // 33..255 bytes is not good for ERMSB nor AVX
         {$ifdef WITH_ERMS}
         cmp     rax, NONTEMPORALSIZE
         jae     @fnt       // non-temporal move > 512KB is better than rep ERMSB
@@ -183,7 +190,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @lrgbwd:// note: ERMSB is not available on "std rep move"
         {$ifdef ASMX64AVX}
         cmp     rax, SSE2MAXSIZE
-        jb      @bsse2 // 32..255 bytes is not good for AVX
+        jb      @bsse2 // 33..255 bytes is not good for AVX
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jnz     @bwdavx
         {$endif ASMX64AVX}
@@ -314,7 +321,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         pshufd  xmm0, xmm0, 0          // broadcast value into all bytes of xmm0
         mov     r10, rdx               // save rdx=cnt
         cmp     rdx, SSE2MAXSIZE
-        jae     @abv256            // 32..255 bytes is not good for ERMSB or AVX
+        jae     @abv256            // 33..255 bytes is not good for ERMSB or AVX
 @sse2:  movups  oword ptr [dst], xmm0  // first unaligned 16 bytes
         lea     rdx, [dst + rdx - 1]
         and     rdx, -16
