@@ -1911,9 +1911,13 @@ begin
     else if (Fields = nil) or
             (Fields^.CommonName = '') then
       RaiseErrorGenerate('no Subject/CommonName');
-    for i := 0 to length(dns) - 1 do
-      if PosExChar(':', dns[i]) = 0 then
-        dns[i] := 'DNS:' + dns[i]; // e.g. DNS: email: IP: URI:
+    if (length(dns) = 1) and
+       (Usages * [cuTlsClient, cuTlsServer] = []) then
+      dns := nil // no DNS: alt sub name if not needed
+    else
+      for i := 0 to length(dns) - 1 do
+        if PosExChar(':', dns[i]) = 0 then
+          dns[i] := 'DNS:' + dns[i]; // e.g. DNS: email: IP: URI:
     if not x.SetBasic(cuCA in Usages, RawUtf8ArrayToCsv(dns)) then
       RaiseErrorGenerate('SetBasic');
     if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
