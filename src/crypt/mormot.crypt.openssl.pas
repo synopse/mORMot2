@@ -638,6 +638,9 @@ type
 // TCryptAsymOsl class)
 procedure RegisterOpenSsl;
 
+/// ICryptCert low-level factory from an existing OpenSSL X509 instance
+function CryptCertOpenSslFrom(aX509: PX509): ICryptCert;
+
 
 implementation
 
@@ -2520,6 +2523,16 @@ end;
 function TCryptStoreOpenSsl.CertAlgo: TCryptCertAlgo;
 begin
   result := CryptCertAlgoOpenSsl[caaES256];
+end;
+
+
+
+function CryptCertOpenSslFrom(aX509: PX509): ICryptCert;
+begin
+  if aX509 = nil then
+    result := nil
+  else
+    result := TCryptCertOpenSsl.CreateFrom(aX509);
 end;
 
 
