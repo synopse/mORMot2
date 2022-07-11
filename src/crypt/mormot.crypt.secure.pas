@@ -1555,7 +1555,8 @@ type
       const PrivatePassword: SpiUtf8 = ''): ICryptCert;
     /// factory to generate a new Certificate instance
     // - just a wrapper around New and ICryptCert.Generate()
-    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
+    // - Subjects is a mandatory field as with X509
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
   published
@@ -1569,10 +1570,12 @@ type
   /// abstract interface to a Certificates Store, as returned by Store() factory
   // - may be X509 or not, OpenSSL implemented or not
   ICryptStore = interface
-    /// load a Certificates Store from a ToBinary content
-    function FromBinary(const Binary: RawByteString): boolean;
-    /// serialize the Certificates Store as raw binary
-    function ToBinary: RawByteString;
+    /// load a Certificates Store from a ICryptStore.Save memory buffer content
+    function Load(const Saved: RawByteString): boolean;
+    /// serialize the Certificates Store into a memory buffer
+    // - may be our TEccCertificateChain proprietary binary, or a chain of
+    // X509 Certificates and CRLs in PEM text format
+    function Save: RawByteString;
     /// search for a certificate from its (hexadecimal) identifier
     function GetBySerial(const Serial: RawUtf8): ICryptCert;
     /// quickly check if a given certificate ID is part of the CRL
@@ -1616,6 +1619,8 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored signature according to the public key of
     // the associated signing authority (which should be in this Store)
+    // - warning: only supported by our 'syn-store' algorithm: OpenSSL Store
+    // has no way to lookup the X509 certificate which actually sign the buffer
     function Verify(const Signature: RawByteString;
       Data: pointer; Len: integer): TCryptCertValidity;
     /// how many certificates are currently stored
@@ -1631,8 +1636,8 @@ type
   TCryptStore = class(TCryptInstance, ICryptStore)
   public
     // ICryptStore methods
-    function FromBinary(const Binary: RawByteString): boolean; virtual; abstract;
-    function ToBinary: RawByteString; virtual; abstract;
+    function Load(const Saved: RawByteString): boolean; virtual; abstract;
+    function Save: RawByteString; virtual; abstract;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
       overload; virtual; abstract;
@@ -4721,7 +4726,7 @@ end;
 function TCryptStoreAlgo.NewFrom(const Binary: RawByteString): ICryptStore;
 begin
   result := New;
-  if not result.FromBinary(Binary) then
+  if not result.Load(Binary) then
     result := nil;
 end;
 

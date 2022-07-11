@@ -5470,8 +5470,8 @@ type
     constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
-    function FromBinary(const Binary: RawByteString): boolean; override;
-    function ToBinary: RawByteString; override;
+    function Load(const Saved: RawByteString): boolean; override;
+    function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
@@ -5501,12 +5501,12 @@ begin
   fEcc.Free;
 end;
 
-function TCryptStoreInternal.FromBinary(const Binary: RawByteString): boolean;
+function TCryptStoreInternal.Load(const Saved: RawByteString): boolean;
 begin
-  result := fEcc.LoadFromBinary(Binary);
+  result := fEcc.LoadFromBinary(Saved);
 end;
 
-function TCryptStoreInternal.ToBinary: RawByteString;
+function TCryptStoreInternal.Save: RawByteString;
 begin
   result := fEcc.SaveToBinary;
 end;

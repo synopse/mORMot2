@@ -1806,8 +1806,8 @@ type
     constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
-    function FromBinary(const Binary: RawByteString): boolean; override;
-    function ToBinary: RawByteString; override;
+    function Load(const Saved: RawByteString): boolean; override;
+    function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
@@ -2297,7 +2297,7 @@ begin
   fStore.Free;
 end;
 
-function TCryptStoreOpenSsl.ToBinary: RawByteString;
+function TCryptStoreOpenSsl.Save: RawByteString;
 var
   x: PX509DynArray;
   c: PX509_CRLDynArray;
@@ -2307,17 +2307,17 @@ begin
   result := '';
   x := fStore.Certificates;
   for i := 0 to length(x) - 1 do
-    result := x[i].ToPem + CRLF;
+    result := result + x[i].ToPem + CRLF;
   c := fStore.Crls;
   for i := 0 to length(c) - 1 do
-    result := c[i].ToPem + CRLF;
+    result := result + c[i].ToPem + CRLF;
 end;
 
-function TCryptStoreOpenSsl.FromBinary(const Binary: RawByteString): boolean;
+function TCryptStoreOpenSsl.Load(const Saved: RawByteString): boolean;
 begin
   fStore.Free;
-  fStore := NewCertificateStore;          // clear (with proper ref counting)
-  result := AddFromBuffer(Binary) <> nil; // most probably ToBinary PEM format
+  fStore := NewCertificateStore;         // clear (with proper ref counting)
+  result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
 end;
 
 function TCryptStoreOpenSsl.GetBySerial(const Serial: RawUtf8): ICryptCert;
