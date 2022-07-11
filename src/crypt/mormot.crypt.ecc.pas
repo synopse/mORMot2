@@ -5560,9 +5560,11 @@ function TCryptStoreInternal.IsValid(const cert: ICryptCert): TCryptCertValidity
 begin
   if cert = nil then
     result := cvBadParameter
-  else
+  else if cert.Instance.InheritsFrom(TCryptCertInternal) then
     result := TCryptCertValidity(fEcc.IsValid(
-                (cert.Instance as TCryptCertInternal).fEcc));
+                TCryptCertInternal(cert.Instance).fEcc))
+  else
+    result := cvUnknownAuthority;
 end;
 
 function TCryptStoreInternal.Verify(const Signature: RawByteString;

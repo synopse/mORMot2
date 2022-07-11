@@ -2636,8 +2636,7 @@ begin
     CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
     CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
   end;
-  // not stable enough yet
-  //CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
 end;
 
 procedure FinalizeUnit;
