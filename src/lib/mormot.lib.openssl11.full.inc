@@ -1124,11 +1124,8 @@ const
   SN_ecdsa_with_SHA224 = 'ecdsa-with-SHA224';
   NID_ecdsa_with_SHA224 = 793;
   SN_ecdsa_with_SHA256 = 'ecdsa-with-SHA256';
-  NID_ecdsa_with_SHA256 = 794;
   SN_ecdsa_with_SHA384 = 'ecdsa-with-SHA384';
-  NID_ecdsa_with_SHA384 = 795;
   SN_ecdsa_with_SHA512 = 'ecdsa-with-SHA512';
-  NID_ecdsa_with_SHA512 = 796;
   SN_wap_wsg_idm_ecid_wtls1 = 'wap-wsg-idm-ecid-wtls1';
   NID_wap_wsg_idm_ecid_wtls1 = 735;
   SN_wap_wsg_idm_ecid_wtls3 = 'wap-wsg-idm-ecid-wtls3';
@@ -1203,16 +1200,12 @@ const
   SN_rsassaPss = 'RSASSA-PSS';
   SN_sha256WithRSAEncryption = 'RSA-SHA256';
   LN_sha256WithRSAEncryption = 'sha256WithRSAEncryption';
-  NID_sha256WithRSAEncryption = 668;
   SN_sha384WithRSAEncryption = 'RSA-SHA384';
   LN_sha384WithRSAEncryption = 'sha384WithRSAEncryption';
-  NID_sha384WithRSAEncryption = 669;
   SN_sha512WithRSAEncryption = 'RSA-SHA512';
   LN_sha512WithRSAEncryption = 'sha512WithRSAEncryption';
-  NID_sha512WithRSAEncryption = 670;
   SN_sha224WithRSAEncryption = 'RSA-SHA224';
   LN_sha224WithRSAEncryption = 'sha224WithRSAEncryption';
-  NID_sha224WithRSAEncryption = 671;
   SN_sha512_224WithRSAEncryption = 'RSA-SHA512/224';
   LN_sha512_224WithRSAEncryption = 'sha512-224WithRSAEncryption';
   NID_sha512_224WithRSAEncryption = 1145;
@@ -2476,16 +2469,12 @@ const
   NID_des_ede3_cfb8 = 659;
   SN_sha256 = 'SHA256';
   LN_sha256 = 'sha256';
-  NID_sha256 = 672;
   SN_sha384 = 'SHA384';
   LN_sha384 = 'sha384';
-  NID_sha384 = 673;
   SN_sha512 = 'SHA512';
   LN_sha512 = 'sha512';
-  NID_sha512 = 674;
   SN_sha224 = 'SHA224';
   LN_sha224 = 'sha224';
-  NID_sha224 = 675;
   SN_sha512_224 = 'SHA512-224';
   LN_sha512_224 = 'sha512-224';
   NID_sha512_224 = 1094;
@@ -17969,14 +17958,8 @@ function X509_SIG_INFO_get(siginf: PX509_SIG_INFO; mdnid: PInteger; pknid: PInte
 procedure X509_SIG_INFO_set(siginf: PX509_SIG_INFO; mdnid: integer; pknid: integer; secbits: integer; flags: cardinal); cdecl;
   external LIB_CRYPTO name _PU + 'X509_SIG_INFO_set';
 
-function X509_get_signature_info(x: PX509; mdnid: PInteger; pknid: PInteger; secbits: PInteger; flags: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_signature_info';
-
 procedure X509_get0_signature(psig: PPASN1_BIT_STRING; palg: PPX509_ALGOR; x: PX509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_get0_signature';
-
-function X509_get_signature_nid(x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_get_signature_nid';
 
 function X509_trusted(x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_trusted';

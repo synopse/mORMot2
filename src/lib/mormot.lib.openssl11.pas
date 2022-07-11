@@ -289,6 +289,10 @@ const
   NID_X9_62_prime239v3 = 414;
   SN_X9_62_prime256v1 = 'prime256v1';
   NID_X9_62_prime256v1 = 415; // = secp256r1
+  NID_sha256 = 672;
+  NID_sha384 = 673;
+  NID_sha512 = 674;
+  NID_sha224 = 675;
   SN_secp112r1 = 'secp112r1';
   NID_secp112r1 = 704;
   SN_secp112r2 = 'secp112r2';
@@ -362,6 +366,12 @@ const
   NID_rsassaPss = 912;
   LN_dsa = 'dsaEncryption';
   NID_dsa = 116;
+  NID_sha256WithRSAEncryption = 668;
+  NID_sha384WithRSAEncryption = 669;
+  NID_sha512WithRSAEncryption = 670;
+  NID_ecdsa_with_SHA256 = 794;
+  NID_ecdsa_with_SHA384 = 795;
+  NID_ecdsa_with_SHA512 = 796;
   LN_dhKeyAgreement = 'dhKeyAgreement';
   NID_dhKeyAgreement = 28;
   SN_X9_62_id_ecPublicKey = 'id-ecPublicKey';
@@ -1546,6 +1556,9 @@ type
     function IsCA: boolean;
     /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
+    /// returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
+    // or '128 ED25519'
+    function GetSignatureAlgo: RawUtf8;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;
     /// check a X509v3 Key and Extended Key Usage Flag of this Certificate
@@ -1785,6 +1798,8 @@ function BIO_new_socket(sock: integer; close_flag: integer): PBIO; cdecl;
 function X509_get_issuer_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
+function X509_get_signature_nid(x: PX509): integer; cdecl;
+function X509_get_signature_info(x: PX509; mdnid, pknid, secbits, flags: PInteger): integer; cdecl;
 function X509_up_ref(x: PX509): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 procedure X509_STORE_free(v: PX509_STORE); cdecl;
@@ -2654,6 +2669,8 @@ type
     X509_get_issuer_name: function(a: PX509): PX509_NAME; cdecl;
     X509_get_subject_name: function(a: PX509): PX509_NAME; cdecl;
     X509_get_pubkey: function(x: PX509): PEVP_PKEY; cdecl;
+    X509_get_signature_nid: function(x: PX509): integer; cdecl;
+    X509_get_signature_info: function(x: PX509; mdnid, pknid, secbits, flags: PInteger): integer; cdecl;
     X509_up_ref: function(x: PX509): integer; cdecl;
     X509_STORE_free: procedure(v: PX509_STORE); cdecl;
     X509_STORE_CTX_free: procedure(ctx: PX509_STORE_CTX); cdecl;
@@ -2917,7 +2934,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..290] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..292] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -2950,6 +2967,8 @@ const
     'X509_get_issuer_name',
     'X509_get_subject_name',
     'X509_get_pubkey',
+    'X509_get_signature_nid',
+    'X509_get_signature_info',
     'X509_up_ref',
     'X509_STORE_free',
     'X509_STORE_CTX_free',
@@ -3377,6 +3396,16 @@ end;
 function X509_get_pubkey(x: PX509): PEVP_PKEY;
 begin
   result := libcrypto.X509_get_pubkey(x);
+end;
+
+function X509_get_signature_nid(x: PX509): integer;
+begin
+  result := libcrypto.X509_get_signature_nid(x);
+end;
+
+function X509_get_signature_info(x: PX509; mdnid, pknid, secbits, flags: PInteger): integer;
+begin
+  result := libcrypto.X509_get_signature_info(x, mdnid, pknid, secbits, flags);
 end;
 
 function X509_up_ref(x: PX509): integer;
@@ -5155,6 +5184,13 @@ function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 
 function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_pubkey';
+
+function X509_get_signature_nid(x: PX509): integer; cdecl;
+      external LIB_CRYPTO name _PU +
+
+function X509_get_signature_info(x: PX509;
+    mdnid, pknid, secbits, flags: PInteger): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_get_signature_info';
 
 function X509_up_ref(x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_up_ref';
@@ -7680,6 +7716,25 @@ begin
       (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
 end;
 
+function X509.GetSignatureAlgo: RawUtf8;
+var
+  nid, md, bits: integer;
+begin
+  if @self = nil then
+    result := ''
+  else
+  begin
+    nid := X509_get_signature_nid(@self);
+    result := OBJ_nid2sn(nid);
+    if X509_get_signature_info(@self, @md, nil, @bits, nil) = OPENSSLSUCCESS then
+    begin
+      result := RawUtf8(format('%d %s', [bits, result]));
+      if nid = NID_rsassaPss then // only PS256/PS384/PS512 don't supply the MD
+        result := result + '-' + RawUtf8(OBJ_nid2sn(md));
+    end;
+  end;
+end;
+
 const
   KU: array[kuEncipherOnly .. kuDecipherOnly] of integer = (
     X509v3_KU_ENCIPHER_ONLY,
@@ -7851,8 +7906,8 @@ begin
     (X509_gmtime_adj(X509_getm_notAfter(@self),  SecsPerDay * ExpireDays) <> nil);
 end;
 
-function X509.SetExtension(nid: cardinal; const value: RawUtf8;
-  issuer, subject: PX509): boolean;
+function X509.SetExtension(nid: cardinal; const value: RawUtf8; issuer: PX509;
+  subject: PX509): boolean;
 var
   x, old: PX509_EXTENSION;
   prev, p: integer;
@@ -7968,8 +8023,8 @@ begin
 end;
 
 function X509.ToPkcs12(pkey: PEVP_PKEY; const password: RawUtf8;
-  CA: Pstack_st_X509; nid_key, nid_cert, iter, mac_iter: integer;
-  const FriendlyName: RawUtf8): RawByteString;
+  CA: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer;
+  mac_iter: integer; const FriendlyName: RawUtf8): RawByteString;
 var
   p12: PPKCS12;
 begin
@@ -8450,6 +8505,8 @@ begin
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
+        writeln(fPeer.PeerInfo);
+        writeln(fPeer.GetSignatureAlgo);
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
         writeln('SerialNumber=',fPeer.SerialNumber);
