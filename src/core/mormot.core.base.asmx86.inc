@@ -22,8 +22,9 @@ var
   // "rep stosb/movsb" enabled for len >= 4096 on ERMSB CPUs
   // it has been reported that "on 32-bit strings have to be at least 4KB"
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
-  ERMSB_MIN_SIZE: integer = maxInt; // maxInt = disabled by default
-  {$define WITH_ERMSASM} // include "rep movsb" asm blocks 
+  ERMSB_MIN_SIZE_FWD: integer = maxInt; // maxInt = disabled by default
+  ERMSB_MIN_SIZE_BWD: integer = maxInt; // maxInt = disabled by default
+  {$define WITH_ERMSASM} // include "rep movsb" asm blocks
 {$endif WITH_ERMS}
 
 {$ifdef HASNOSSE2}
@@ -58,7 +59,7 @@ asm
         {$ifdef WITH_ERMS}
         cmp     edx, NONTEMPORALSIZE
         jae     @noerms // movntdq was reported to be faster than ERMSB
-        cmp     edx, ERMSB_MIN_SIZE
+        cmp     edx, ERMSB_MIN_SIZE_FWD
         ja      @ermsb
 @noerms:{$endif WITH_ERMS}
         sub     edx, 16
@@ -201,7 +202,7 @@ asm
         lea     esi, [eax + ecx - 1]
         lea     edi, [edx + ecx - 1]
         std
-        rep     movsb  // ERMSB backward move
+        rep     movsb  // backward move is slow even if ERMSB is set
         pop     edi
         pop     esi
         cld            // FPC requires this
@@ -221,12 +222,12 @@ asm
         {$ifdef WITH_ERMS}
         cmp     ecx, NONTEMPORALSIZE
         jae     @noermf // movntdq was reported to be faster than ERMSB
-        cmp     ecx, ERMSB_MIN_SIZE
+        cmp     ecx, ERMSB_MIN_SIZE_FWD
         ja      @ermsf
 @noermf:{$endif WITH_ERMS}
         push    edx
         movups  xmm2, dqword ptr [eax]       // first 16
-        lea     eax, [eax + ecx - 16]
+        lea     eax, [eax + ecx - 16]        
         lea     ecx, [ecx + edx - 16]
         movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
@@ -245,7 +246,7 @@ asm
         pop     edx
         movups  dqword ptr [edx], xmm2       // first 16
         ret
-        {$ifdef FPC} align 16 {$endif}
+        {$ifdef FPC} align 16 {$endif}        
 @fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
@@ -261,7 +262,7 @@ asm
         jna     @lrgfwd
         // large backward/overlapping move
         {$ifdef WITH_ERMS}
-        cmp     ecx, ERMSB_MIN_SIZE
+        cmp     ecx, ERMSB_MIN_SIZE_BWD // enabled for no-SSE2, not for ERMSB
         ja      @ermsb
         {$endif WITH_ERMS}
         sub     ecx, 16

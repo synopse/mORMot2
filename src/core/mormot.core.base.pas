@@ -2535,7 +2535,6 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 
 {$else}
 
-
 // fallback to RTL versions on non-INTEL or PIC platforms by default
 // and mormot.core.os.posix.inc redirects them to libc memset/memmove
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
@@ -8575,11 +8574,15 @@ begin
   {$ifndef HASNOSSE2}
   {$ifdef WITH_ERMS}
   if not (cfSSE2 in CpuFeatures) then
-    ERMSB_MIN_SIZE := 0 // FillCharFast will fallback to rep stosb
+  begin
+    ERMSB_MIN_SIZE_FWD := 0; // FillCharFast fallbacks to rep stosb on older CPU
+    ERMSB_MIN_SIZE_BWD := 0; // in both directions ;)
+  end
     // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
     // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
   else if cfERMS in CpuFeatures then
-    ERMSB_MIN_SIZE := 4096; // "on 32-bit strings have to be at least 4KB"
+    ERMSB_MIN_SIZE_FWD := 4096; // "on 32-bit strings have to be at least 4KB"
+    // backward rep movsd has no ERMS optimization so degrades performance
   {$endif WITH_ERMS}
   {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then
