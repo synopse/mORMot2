@@ -1372,6 +1372,9 @@ const
   /// the AES chaining modes which supports AEAD process
   AES_AEAD = [mCfc, mOfc, mCtc, mGcm];
 
+  /// our non standard chaining modes, which do not exist e.g. on OpenSSL
+  AES_INTERNAL = [mC64, mCfc, mOfc, mCtc];
+
   /// the AES chaining modes supported by TAesPkcs7Writer/TAesPkcs7Reader
   // - ECB is unsafe and has no IV, and AEAD modes are out of context
   // because we don't handle the additional AEAD information yet

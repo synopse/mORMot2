@@ -1698,8 +1698,8 @@ function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
 // to compute a digital signature from a given secret
 // - the shared TCryptHasher of this algorithm is returned: caller should NOT free it
 // - if not nil, you could call New or Full/FullFile methods
-// - this unit supports 'MD5','SHA1','SHA256','SHA384','SHA512','SHA3_256','SHA3_512'
-// and 32-bit non-cryptographic 'CRC32','CRC32C','XXHASH32','ADLER32','FNV32'
+// - this unit supports 'md5','sha1','sha256','sha384','sha512','sha3_256','sha3_512'
+// and 32-bit non-cryptographic 'crc32','crc32c','xxhash32','adler32','fnv32'
 function Hasher(const name: RawUtf8): TCryptHasher;
 
 /// main factory of the hashers instances as returned by Hasher()
@@ -1710,8 +1710,8 @@ function Hash(const name: RawUtf8): ICryptHash;
 // - in respect to Hasher(), will require a secret for safe digital signature
 // - the shared TCryptSigner of this algorithm is returned: caller should NOT free it
 // - if not nil, you could call New or Full/FullFile methods
-// - this unit supports 'HMAC-SHA1','HMAC-SHA256','HMAC-SHA384','HMAC-SHA512',
-// and 'SHA3-224','SHA3-256','SHA3-384','SHA3-512','SHA3-S128','SHA3-S256'
+// - this unit supports 'hmac-sha1','hmac-sha256','hmac-sha384','hmac-sha512',
+// and 'sha3-224','sha3-256','sha3-384','sha3-512','sha3-s128','sha3-s256'
 function Signer(const name: RawUtf8): TCryptSigner;
 
 /// main factory of the signer instances as returned by Signer()
@@ -3950,7 +3950,7 @@ type
 
 const
   /// CSV text of TCrc32Algo items
-  CrcAlgosText: PUtf8Char = 'CRC32,CRC32C,XXHASH32,ADLER32,FNV32';
+  CrcAlgosText: PUtf8Char = 'crc32,crc32c,xxhash32,adler32,fnv32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin
@@ -4010,7 +4010,7 @@ type
 
 const
   /// CSV text of THashAlgo items, as recognized by Hasher/Hash factories
-  HashAlgosText: PUtf8Char = 'MD5,SHA1,SHA256,SHA384,SHA512,SHA3_256,SHA3_512';
+  HashAlgosText: PUtf8Char = 'md5,sha1,sha256,sha384,sha512,sha3_256,sha3_512';
 
 constructor TCryptHasherInternal.Create(const name: RawUtf8);
 begin
@@ -4107,8 +4107,8 @@ type
 
 const
   /// CSV text of TSignAlgo items, as recognized by Signer/Sign factories
-  SignAlgosText: PUtf8Char = 'HMAC-SHA1,HMAC-SHA256,HMAC-SHA384,HMAC-SHA512,' +
-    'SHA3-224,SHA3-256,SHA3-384,SHA3-512,SHA3-S128,SHA3-S256';
+  SignAlgosText: PUtf8Char = 'hmac-sha1,hmac-sha256,hmac-sha384,hmac-sha512,' +
+    'sha3-224,sha3-256,sha3-384,sha3-512,sha3-s128,sha3-s256';
 
 constructor TCryptSignerInternal.Create(const name: RawUtf8);
 begin
@@ -4778,7 +4778,8 @@ begin
         bits := 128 + b * 64;
         n := AesAlgoNameEncode(m, bits);
         TCryptAesInternal.Create(n, m, bits, TAesFast); // fastest
-        TCryptAesInternal.Create(n + '-int', m, bits, TAesInternal); // internal
+        if not (m in AES_INTERNAL) then // if exists as OpenSSL standard
+          TCryptAesInternal.Create(n + '-int', m, bits, TAesInternal);
       end;
   finally
    GlobalUnlock;
