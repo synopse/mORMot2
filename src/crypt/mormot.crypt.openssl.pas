@@ -648,6 +648,7 @@ function X509Algo(x: PX509): TCryptAsymAlgo;
 procedure RegisterOpenSsl;
 
 
+
 implementation
 
 
@@ -2323,8 +2324,11 @@ function TCryptStoreOpenSsl.GetBySerial(const Serial: RawUtf8): ICryptCert;
 var
   x: PX509;
 begin
-  x := fStore.BySerial(Serial); // makes x.Acquire
-  result := CryptCertAlgoOpenSsl[caaRS256].FromHandle(x);
+  x := fStore.BySerial(Serial);     // makes x.Acquire
+  if x = nil then
+    result := nil
+  else
+    result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
 function ToReason(r: integer): TCryptCertRevocationReason;
