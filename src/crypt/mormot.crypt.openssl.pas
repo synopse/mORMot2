@@ -630,6 +630,15 @@ type
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
+/// guess the asymmetric algorithm of this OpenSSL X509 certificate
+// - returns nil if x is nil
+// - raise an EOpenSslCert if x has an unsupported algorithm
+// - warning: caaES256K can not be distinguished from caaES256
+// - is defined here because TCryptAsymAlgo is from mormot.crypt.secure.pas
+// which does not fit in the low-level mormot.lib.openssl.pas unit
+function X509Algo(x: PX509): TCryptAsymAlgo;
+
+
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
@@ -2523,11 +2532,59 @@ begin
   result := cvNotSupported;
 end;
 
-function TCryptStoreOpenSsl.CertAlgo: TCryptCertAlgo;
-begin
-  result := CryptCertAlgoOpenSsl[caaES256];
-end;
 
+
+
+function X509Algo(x: PX509): TCryptAsymAlgo;
+var
+  md: integer;
+begin
+  // NOTE: caaES256K can not be distinguished from caaES256 so marks default
+  result := caaES256K;
+  {
+    x509-es256 = 794 672 ecdsa-with-SHA256 SHA256 id-ecPublicKey 128
+    x509-es384 = 795 673 ecdsa-with-SHA384 SHA384 id-ecPublicKey 192
+    x509-es512 = 796 674 ecdsa-with-SHA512 SHA512 id-ecPublicKey 256
+    x509-es256k = 794 672 ecdsa-with-SHA256 SHA256 id-ecPublicKey 128
+    x509-rs256 = 668 672 RSA-SHA256 SHA256 rsaEncryption 128
+    x509-rs384 = 669 673 RSA-SHA384 SHA384 rsaEncryption 192
+    x509-rs512 = 670 674 RSA-SHA512 SHA512 rsaEncryption 256
+    x509-ps256 = 912 672 RSASSA-PSS SHA256 RSASSA-PSS 128
+    x509-ps384 = 912 673 RSASSA-PSS SHA384 RSASSA-PSS 192
+    x509-ps512 = 912 674 RSASSA-PSS SHA512 RSASSA-PSS 256
+    x509-eddsa = 1087 0 ED25519 UNDEF ED25519 128
+  }
+  case X509_get_signature_nid(x) of
+    NID_sha256WithRSAEncryption:
+      result := caaRS256;
+    NID_sha384WithRSAEncryption:
+      result := caaRS384;
+    NID_sha512WithRSAEncryption:
+      result := caaRS512;
+    NID_ecdsa_with_SHA256:
+      result := caaES256;
+    NID_ecdsa_with_SHA384:
+      result := caaES384;
+    NID_ecdsa_with_SHA512:
+      result := caaES512;
+    NID_rsassaPss:
+      begin
+        X509_get_signature_info(x, @md, nil, nil, nil);
+        case md of
+          NID_sha256:
+            result := caaPS256;
+          NID_sha384:
+            result := caaPS384;
+          NID_sha512:
+            result := caaPS512;
+        end;
+      end;
+    NID_ED25519:
+      result := caaEdDSA;
+  end;
+  if result = caaES256K then
+    raise EOpenSslCert.Create('Unexpected X509Algo()');
+end;
 
 
 procedure RegisterOpenSsl;

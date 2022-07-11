@@ -1200,6 +1200,17 @@ type
   // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
   // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
   // accessible via CryptAsymOpenSsl[] and CryptCertAlgoOpenSsl[] factories
+  // - caaES256 is our mormot.crypt.ecc256r1 prime256v1/NISTP-256 ECC Curve
+  // - caaES256, caaES384 and caaES512 match OpenSSL EVP_PKEY_EC with
+  // prime256v1, NID_secp384r1 and NID_secp512r1 curves
+  // - caaRS256, caaRS384 and caaRS512 match OpenSSL EVP_PKEY_RSA with
+  // 2048 bits from SHA-256, SHA-384 and SHA-512 digest method
+  // - caaPS256, caaPS384 and caaPS512 match OpenSSL EVP_PKEY_RSA_PSS with
+  // 2048 bits from SHA-256, SHA-384 and SHA-512 digest method
+  // - caaEdDSA match OpenSSL EVP_PKEY_ED25519 curve
+  // - note that caaES256K is NID_secp256k1 which was defined for completeness,
+  // but should appear for special needs only: caaES256 is to be preferred,
+  // and is also significantly faster
   TCryptAsymAlgo = (
     caaES256,
     caaES384,
@@ -1525,6 +1536,9 @@ type
     /// low-level factory directly from the raw implementation handle
     // - e.g. a PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
     // - warning: ensure Handle is of the expected type, otherwise it will GPF
+    // - includes the private key for TEccCertificate, or not for OpenSsl
+    // - note that this Handle will be owned by the new ICryptCert instance,
+    // so you should not make FromHandle(another.Handle)
     function FromHandle(Handle: pointer): ICryptCert; virtual; abstract;
     /// factory to load a Certificate from a ICryptCert.Save() content
     // - PrivatePassword is needed if the input contains a private key
