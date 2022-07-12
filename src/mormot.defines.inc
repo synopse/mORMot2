@@ -497,6 +497,7 @@
       {$define ISDELPHIXE4}
       {$define FPC_OR_DELPHIXE4}  // circumvent Internal Error: C2130 on XE3
       {$define HASAESNI}
+      {$define HASALIGN}          // .align ### inline assembler directive
     {$ifend}
     {$if CompilerVersion >= 26.0} // = Delphi XE5
       {$define ISDELPHIXE5}

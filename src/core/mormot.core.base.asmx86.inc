@@ -88,12 +88,12 @@ asm
         neg     edx
         cmp     edx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @nv
-// {$ifdef FPC} align 16 {$endif} natural alignment is actually OK
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @loop:  movaps  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
         add     edx, 16
         jl      @loop
         ret
-{$ifdef FPC} align 16 {$else} nop; nop; nop {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @nv:    movntdq dqword ptr [eax + edx], xmm0 // non-temporal fill 16 bytes
         add     edx, 16
         jl      @nv
@@ -197,7 +197,7 @@ asm
         ret
 {$endif HASNOSSE2}
 @exit:  rep     ret
-        {$ifdef FPC} align 4 {$endif}
+{$ifdef FPC} align 4 {$else} {$ifdef HASALIGN} .align 4 {$endif}{$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
 {$ifdef WITH_ERMSASM}
 @ermsf: push    esi
@@ -239,7 +239,7 @@ asm
 @noermf:{$endif WITH_ERMS}
         push    edx
         movups  xmm2, dqword ptr [eax]       // first 16
-        lea     eax, [eax + ecx - 16]        
+        lea     eax, [eax + ecx - 16]
         lea     ecx, [ecx + edx - 16]
         movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
@@ -249,7 +249,7 @@ asm
         pop     edx
         cmp     ecx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @fwnv
-        {$ifdef FPC} align 16 {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
         movaps  dqword ptr [edx + ecx], xmm0
         add     ecx, 16
@@ -258,8 +258,10 @@ asm
         pop     edx
         movups  dqword ptr [edx], xmm2       // first 16
         ret
-        {$ifdef FPC} align 16 {$endif}        
-@fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
+@lrgovf:add     edx, ecx
+        jmp     @lrgbwd
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+@fwnv:  movups  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
         jl      @fwnv
@@ -285,7 +287,8 @@ asm
         add     ecx, edx
         and     ecx, -16              // 16-byte align writes
         sub     ecx, edx
-        {$ifdef FPC} align 16 {$endif}
+        // non-volatile backward is not efficient since we overlap data
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @bwd:   movups  xmm0, dqword ptr [eax + ecx]
         movaps  dqword ptr [edx + ecx], xmm0
         sub     ecx, 16
@@ -294,8 +297,6 @@ asm
         movups  dqword ptr [edx], xmm1       // first 16
         movups  dqword ptr [edx + ecx], xmm2 // last 16
         ret
-@lrgovf:add     edx, ecx
-        jmp     @lrgbwd
 {$endif HASNOSSE2}
 @m01:   mov     al, [eax]
         mov     [edx], al
@@ -1137,7 +1138,7 @@ asm
         jnz     @fnd
         cmp     edx, ecx
         jbe     @no
-{$ifdef FPC} align 16 {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @by16:  movaps  xmm0, [ebx + ecx]
         add     ecx, 16
         pcmpeqb xmm0, xmm1
@@ -1869,9 +1870,7 @@ asm
           mov     ecx, dword ptr [esi + 8]
           mov     edx, dword ptr [esi + 12]
           {$ifdef HASAESNI}
-          {$ifdef FPC}
-          align 8
-          {$endif FPC}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @s:       crc32   eax, dword ptr [edi]
           crc32   ebx, dword ptr [edi + 4]
           crc32   ecx, dword ptr [edi + 8]
