@@ -8562,12 +8562,11 @@ begin
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
-        writeln(fPeer.PeerInfo);
-        writeln(fPeer.GetSignatureAlgo);
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
         writeln('SerialNumber=',fPeer.SerialNumber);
         writeln(fPeer.GetSerial.ToDecimal);
+        writeln(fPeer.GetSignatureAlgo);
         exts := fPeer.SubjectAlternativeNames;
         for len := 0 to high(exts) do
           writeln('dns=',exts[len]);
