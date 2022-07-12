@@ -1865,8 +1865,7 @@ var
   der: array[0..511] of AnsiChar;
   len: PtrInt;
 begin
-  if IsZero(PHash256(@sign[0])^) or
-     isZero(PHash256(@sign[ECC_BYTES])^) then
+  if IsZero(sign) then
     len := 0
   else
   begin
@@ -1883,7 +1882,7 @@ var
   der: array[0..511] of AnsiChar;
   len: PtrInt;
 begin
-  if IsZero(PHash256(@priv)^) then
+  if IsZero(priv) then
     len := 0
   else
   begin
@@ -1899,7 +1898,7 @@ var
   der: array[0..511] of AnsiChar;
   len: PtrInt;
 begin
-  if IsZero(PHash256(@pub)^) then
+  if IsZero(pub) then
     len := 0
   else
   begin
@@ -2555,7 +2554,7 @@ end;
 function TEccCertificateSecret.HasSecret: boolean;
 begin
   result := (self <> nil) and
-            not IsZero(THash256(fPrivateKey));
+            not IsZero(fPrivateKey);
 end;
 
 const
@@ -2740,7 +2739,7 @@ begin
     try
       if LoadFromStream(st) then
         result := fContent.Check and
-                  not IsZero(THash256(fPrivateKey));
+                  not IsZero(fPrivateKey);
     finally
       st.Free;
     end;
