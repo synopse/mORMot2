@@ -5272,7 +5272,7 @@ function TCryptCertInternal.Save(Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 begin
   if fEcc = nil then
-    result := ''
+    result := '' // we can't separate the privkey from TEccCertificateSecret
   else if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the ccfBinary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
