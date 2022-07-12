@@ -1036,11 +1036,12 @@ type
 
   EVP_PKEY = object
   public
-    function PrivateToBinary: RawByteString;
-    function PublicToBinary: RawByteString;
-    function PrivateKeyToPem(const PassWord: RawUtf8): RawUtf8;
-    function PublicKeyToPem: RawUtf8;
-    procedure ToPem(out PrivateKey, PublicKey: RawUtf8);
+    function PrivateToDer(const PassWord: SpiUtf8): RawByteString;
+    function PublicToDer: RawByteString;
+    function PrivateToPem(const PassWord: SpiUtf8): RawUtf8;
+    function PublicToPem: RawUtf8;
+    procedure ToPem(out PrivateKey, PublicKey: RawUtf8;
+      const PrivateKeyPassWord: SpiUtf8 = '');
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
@@ -1612,7 +1613,7 @@ type
     function ToPem: RawUtf8;
     /// serialize the certificate and associated private key as PKCS12 raw binary
     // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
-    function ToPkcs12(pkey: PEVP_PKEY; const password: RawUtf8;
+    function ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
       CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
       iter: integer = 0; mac_iter: integer = 0;
       const FriendlyName: RawUtf8 = ''): RawByteString;
@@ -1640,7 +1641,7 @@ type
     /// parse and extract the private key, certificate and CAs in this PKCS12 store
     // - use pointers to result structures, nil if one is not needed
     // - caller should call needed privatekey^.Free, cert^.Free and ca^.FreeX509
-    function Extract(const password: RawUtf8;
+    function Extract(const password: SpiUtf8;
       privatekey: PPEVP_PKEY; cert: PPX509; ca: PPstack_st_X509): boolean;
     /// serialize the PKCS12 Structure as DER raw binary
     function ToBinary: RawByteString;
@@ -2110,7 +2111,12 @@ function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
 function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
-function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER; p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
+function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER;
+  p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
+function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY;
+  cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 function OpenSSL_version_num(): cardinal; cdecl;
@@ -2161,27 +2167,29 @@ function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
-/// load a private key from a PEM buffer, optionally with a password
-// - will try first with PEM_read_bio_PrivateKey() but will fallback to the raw
-// format of overloaded LoadPrivateKey() on failure, if no password is given
+/// load a private key from a PEM or DER buffer, optionally with a password
+// - try first with PEM text format, then will fallback to DER binary
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
-  const PrivateKeyPassword: RawUtf8): PEVP_PKEY; overload;
+  const Password: SpiUtf8): PEVP_PKEY; overload;
 
-/// load a private key from the raw PEVP_PKEY.PrivateToBinary export format
+/// load a private key from a PEM or DER content, optionally with a password
+// - just a wrapper to the overloaded LoadPrivateKey() function
 // - caller should make result.Free once done with the result
-function LoadPrivateKey(const Saved: RawByteString): PEVP_PKEY; overload;
+function LoadPrivateKey(const Saved: RawByteString;
+  const Password: SpiUtf8 = ''): PEVP_PKEY; overload;
 
-/// load a public key from a PEM buffer, optionally with a password
-// - will try first with PEM_read_bio_PrivateKey() but will fallback to the raw
-// format of overloaded LoadPublicKey() on failure, if no password is given
+/// load a public key from a PEM or DER buffer, optionally with a password
+// - try first with PEM text format, then will fallback to DER binary
 // - caller should make result.Free once done with the result
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
-  const PublicKeyPassword: RawUtf8 = ''): PEVP_PKEY; overload;
+  const Password: SpiUtf8 = ''): PEVP_PKEY; overload;
 
-/// load a public key from the raw PEVP_PKEY.PublicToBinary export format
+/// load a public key from a PEM or DER content, optionally with a password
+// - just a wrapper to the overloaded LoadPublicKey() function
 // - caller should make result.Free once done with the result
-function LoadPublicKey(const Saved: RawByteString): PEVP_PKEY; overload;
+function LoadPublicKey(const Saved: RawByteString;
+  const Password: SpiUtf8 = ''): PEVP_PKEY; overload;
 
 /// convert e.g. SSL.GetPeerCertificates result as a PEM text
 function PX509DynArrayToPem(const X509: PX509DynArray): RawUtf8;
@@ -2242,7 +2250,7 @@ function NewOpenSslStack: POPENSSL_STACK;
 
 /// create a new OpenSSL PKCS12 structure instance with all given parameters
 // - nid_key/nid_cert could be retrieved from OBJ_txt2nid()
-function NewPkcs12(const Password: RawUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
+function NewPkcs12(const Password: SpiUtf8; PrivKey: PEVP_PKEY; Cert: PX509;
   CA: Pstack_st_X509 = nil; nid_key: integer = 0; nid_cert: integer = 0;
   iter: integer = 0; mac_iter: integer = 0;
   const FriendlyName: RawUtf8 = ''): PPKCS12;
@@ -2942,6 +2950,8 @@ type
     EVP_PKEY_derive: function(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
     PEM_write_bio_PrivateKey: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
     PEM_write_bio_PKCS8PrivateKey: function(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER; p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
+    i2d_PKCS8PrivateKey_bio: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+    d2i_PKCS8PrivateKey_bio: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     EVP_aes_256_cbc: function(): PEVP_CIPHER; cdecl;
     PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
     OpenSSL_version_num: function(): cardinal; cdecl;
@@ -2949,7 +2959,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..294] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..296] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3241,6 +3251,8 @@ const
     'EVP_PKEY_derive',
     'PEM_write_bio_PrivateKey',
     'PEM_write_bio_PKCS8PrivateKey',
+    'i2d_PKCS8PrivateKey_bio',
+    'd2i_PKCS8PrivateKey_bio',
     'EVP_aes_256_cbc',
     'PEM_write_bio_PUBKEY',
     'OpenSSL_version_num',
@@ -4763,6 +4775,18 @@ begin
   result := libcrypto.PEM_write_bio_PKCS8PrivateKey(p1, p2, p3, p4, p5, p6, p7);
 end;
 
+function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer;
+begin
+  result := libcrypto.i2d_PKCS8PrivateKey_bio(bp, x, enc, kstr, klen, cb, u);
+end;
+
+function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY;
+  cb: Ppem_password_cb; u: pointer): PEVP_PKEY;
+begin
+  result := libcrypto.d2i_PKCS8PrivateKey_bio(bp, x, cb, u);
+end;
+
 function EVP_aes_256_cbc(): PEVP_CIPHER;
 begin
   result := libcrypto.EVP_aes_256_cbc();
@@ -6023,6 +6047,12 @@ function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER;
   p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PKCS8PrivateKey';
 
+function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKey_bio';
+
+function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+  external LIB_CRYPTO name _PU + 'd2i_PKCS8PrivateKey_bio';
+
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_aes_256_cbc';
 
@@ -6386,27 +6416,31 @@ begin
   end;
 end;
 
-function EVP_PKEY.PrivateToBinary: RawByteString;
+function EVP_PKEY.PrivateToDer(const PassWord: SpiUtf8): RawByteString;
+var
+  bio: PBIO;
+  res: integer;
 begin
-  result := BioSave(@self, @i2d_PrivateKey_bio);
+  result := '';
+  if @self = nil then
+    exit;
+  bio := BIO_new(BIO_s_mem);
+  if PassWord = '' then
+    res := i2d_PrivateKey_bio(bio, @self)
+  else
+    res := i2d_PKCS8PrivateKey_bio(bio, @self, EVP_aes_256_cbc,
+      pointer(PassWord), Length(PassWord), nil, nil);
+  if res = OPENSSLSUCCESS then
+    bio.ToString(result);
+  bio.Free;
 end;
 
-function LoadPrivateKey(const Saved: RawByteString): PEVP_PKEY;
-begin
-  result := BioLoad(Saved, @d2i_PrivateKey_bio);
-end;
-
-function EVP_PKEY.PublicToBinary: RawByteString;
+function EVP_PKEY.PublicToDer: RawByteString;
 begin
   result := BioSave(@self, @i2d_PUBKEY_bio);
 end;
 
-function LoadPublicKey(const Saved: RawByteString): PEVP_PKEY;
-begin
-  result := BioLoad(Saved, @d2i_PUBKEY_bio);
-end;
-
-function EVP_PKEY.PrivateKeyToPem(const PassWord: RawUtf8): RawUtf8;
+function EVP_PKEY.PrivateToPem(const PassWord: SpiUtf8): RawUtf8;
 var
   bio: PBIO;
   res: integer;
@@ -6425,17 +6459,18 @@ begin
   bio.Free;
 end;
 
-function EVP_PKEY.PublicKeyToPem: RawUtf8;
+function EVP_PKEY.PublicToPem: RawUtf8;
 begin
   result := BioSave(@self, @PEM_write_bio_PUBKEY, CP_UTF8);
 end;
 
-procedure EVP_PKEY.ToPem(out PrivateKey, PublicKey: RawUtf8);
+procedure EVP_PKEY.ToPem(out PrivateKey, PublicKey: RawUtf8;
+  const PrivateKeyPassWord: SpiUtf8);
 begin
   if @self = nil then
     exit;
-  PrivateKey := PrivateKeyToPem('');
-  PublicKey := PublicKeyToPem;
+  PrivateKey := PrivateToPem(PrivateKeyPassWord);
+  PublicKey := PublicToPem;
 end;
 
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
@@ -6514,7 +6549,7 @@ begin
 end;
 
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
-  const PrivateKeyPassword: RawUtf8): PEVP_PKEY;
+  const Password: SpiUtf8): PEVP_PKEY;
 var
   priv: PBIO;
 begin
@@ -6525,20 +6560,29 @@ begin
   begin
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
     if IsPem(PrivateKey, '-----BEGIN') then
-      result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(PrivateKeyPassword))
+      result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(Password))
     else
       result := nil;
     if result = nil then
     begin
       priv.reset;
-      result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
+      if Password = '' then
+        result := d2i_PrivateKey_bio(priv, nil) // try raw binary format
+      else
+        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pointer(Password));
     end;
     priv.Free;
   end;
 end;
 
+function LoadPrivateKey(const Saved: RawByteString;
+  const Password: SpiUtf8): PEVP_PKEY;
+begin
+  result := LoadPrivateKey(pointer(Saved), length(Saved), Password);
+end;
+
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
-  const PublicKeyPassword: RawUtf8): PEVP_PKEY;
+  const Password: SpiUtf8): PEVP_PKEY;
 var
   pub: PBIO;
 begin
@@ -6549,19 +6593,25 @@ begin
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
     if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
-      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
+      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(Password))
     else if IsPem(PublicKey, '-----BEGIN') then
-      result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword))
+      result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(Password))
     else
       result := nil;
     if (result = nil) and
-       (PublicKeyPassword = '') then
+       (Password = '') then
     begin
       pub.reset;
       result := d2i_PUBKEY_bio(pub, nil); // try raw binary format
     end;
     pub.Free;
   end;
+end;
+
+function LoadPublicKey(const Saved: RawByteString;
+  const Password: SpiUtf8): PEVP_PKEY;
+begin
+  result := LoadPublicKey(pointer(Saved), length(Saved), Password);
 end;
 
 
@@ -8079,7 +8129,7 @@ begin
   result := BioSave(@self, @PEM_write_bio_X509, CP_UTF8);
 end;
 
-function X509.ToPkcs12(pkey: PEVP_PKEY; const password: RawUtf8;
+function X509.ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
   CA: Pstack_st_X509; nid_key: integer; nid_cert: integer; iter: integer;
   mac_iter: integer; const FriendlyName: RawUtf8): RawByteString;
 var
@@ -8122,7 +8172,7 @@ end;
 
 { PKCS12 }
 
-function PKCS12.Extract(const password: RawUtf8; privatekey: PPEVP_PKEY;
+function PKCS12.Extract(const password: SpiUtf8; privatekey: PPEVP_PKEY;
   cert: PPX509; ca: PPstack_st_X509): boolean;
 begin
   result := (@self <> nil) and
@@ -8255,7 +8305,7 @@ begin
   result := BioLoad(Der, @d2i_X509_REQ_bio);
 end;
 
-function NewPkcs12(const Password: RawUtf8; PrivKey: PEVP_PKEY;
+function NewPkcs12(const Password: SpiUtf8; PrivKey: PEVP_PKEY;
   Cert: PX509; CA: Pstack_st_X509; nid_key, nid_cert, iter, mac_iter: integer;
   const FriendlyName: RawUtf8): PPKCS12;
 begin

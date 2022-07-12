@@ -20894,14 +20894,8 @@ function PEM_write_bio_PrivateKey_traditional(bp: PBIO; x: PEVP_PKEY; enc: PEVP_
 function PEM_write_bio_PKCS8PrivateKey_nid(bp: PBIO; x: PEVP_PKEY; nid: integer; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PKCS8PrivateKey_nid';
 
-function i2d_PKCS8PrivateKey_bio(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKey_bio';
-
 function i2d_PKCS8PrivateKey_nid_bio(bp: PBIO; x: PEVP_PKEY; nid: integer; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKey_nid_bio';
-
-function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_PKCS8PrivateKey_bio';
 
 function i2d_PKCS8PrivateKey_fp(fp: PPointer; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PKCS8PrivateKey_fp';
