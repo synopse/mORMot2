@@ -2294,7 +2294,7 @@ begin
     for i := 1 to 5 do
     begin
       en := cip.Encrypt('hmac-sha256', 'sec', 'salt', i);
-      de := cip.Decrypt('hmac-SHA256', 'sec', 'salt', i);
+      de := cip.Decrypt('Hmac-SHA256', 'sec', 'salt', i);
       CheckUtf8(en.Process(n, r, aead), cip.AlgoName);
       Check(nprev <> r);
       Check(de.Process(r, s, aead));
@@ -2435,14 +2435,21 @@ begin
       check(c2.load(s));
       checkEqual(c2.GetPrivateKey, '');
       check(c2.Load(c1.Save(cccPrivateKeyOnly, '', fmt), cccPrivateKeyOnly, ''));
+      check(c2.HasPrivateSecret);
       checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
       Check(c2.IsEqual(c1));
       c2.SetPrivateKey('');
       Check(c2.IsEqual(c1));
       checkEqual(c2.GetPrivateKey, '');
       check(c2.Load(c1.Save(cccPrivateKeyOnly, 'pass', fmt), cccPrivateKeyOnly, 'pass'));
+      check(c2.HasPrivateSecret);
       checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
       Check(c2.IsEqual(c1));
+      c3 := crt.New;
+      check(c3.Load(c1.Save(cccPrivateKeyOnly, 'pass2', fmt), cccPrivateKeyOnly, 'pass2'));
+      check(c3.HasPrivateSecret, 'privkey with no main cert');
+      checkEqual(c3.GetPrivateKey, c1.GetPrivateKey);
+      Check(not c3.IsEqual(c1));
     end;
     // validate signed certificate with c1 as CA
     c3 := crt.New;

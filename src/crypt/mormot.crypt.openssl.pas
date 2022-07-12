@@ -2040,28 +2040,27 @@ begin
   if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the binary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
-  else case Content of
+  else
+  case Content of
     cccCertOnly:
+      if fX509 <> nil then
       begin
         // include the X509 certificate (but not any private key) as DER or PEM
-        if fX509 = nil then
-          exit;
         result := fX509.ToBinary;
         if Format = ccfPem then
           result := DerToPem(result, pemCertificate);
       end;
     cccCertWithPrivateKey:
-      if fX509 = nil then
-        exit
-      else if fPrivKey = nil then
-        RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
-      else if Format = ccfPem then
-        // concatenate the certificate and its private key as PEM
-        result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
-                  fPrivKey.PrivateKeyToPem(PrivatePassword)
-      else
-        // ccfBinary will use the PKCS12 binary encoding
-        result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
+      if fX509 <> nil then
+        if fPrivKey = nil then
+          RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
+        else if Format = ccfPem then
+          // concatenate the certificate and its private key as PEM
+          result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
+                    fPrivKey.PrivateKeyToPem(PrivatePassword)
+        else
+          // ccfBinary will use the PKCS12 binary encoding
+          result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
     cccPrivateKeyOnly:
       if fPrivKey = nil then
         RaiseError('Save(cccPrivateKeyOnly) with no Private Key')

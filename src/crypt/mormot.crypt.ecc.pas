@@ -5022,6 +5022,8 @@ type
     fEcc: TEccCertificate; // TEccCertificate or TEccCertificateSecret
     fEccByRef: boolean;
     fMaxVersion: integer;
+    fPrivateKeyOnly: TEccPrivateKey;
+    function GetEccPrivateKey(checkZero: boolean): PEccPrivateKey;
   public
     constructor CreateFrom(aEcc: TEccCertificate);
     destructor Destroy; override;
@@ -5108,6 +5110,7 @@ destructor TCryptCertInternal.Destroy;
 begin
   if not fEccByRef then
     fEcc.Free;
+  FillZero(fPrivateKeyOnly);
   inherited Destroy;
 end;
 
@@ -5267,43 +5270,65 @@ begin
       {encrypt=}false, PrivatePassword, 'synecc', 1000), 31);
 end;
 
+function TCryptCertInternal.GetEccPrivateKey(checkZero: boolean): PEccPrivateKey;
+begin
+  result := nil;
+  if fEcc = nil then
+    result := @fPrivateKeyOnly
+  else if fEcc.InheritsFrom(TEccCertificateSecret) then
+    result := @TEccCertificateSecret(fEcc).PrivateKey
+  else
+    exit;
+  if checkZero and
+     IsZero(result^) then
+    result := nil;
+end;
+
 function TCryptCertInternal.Save(Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
+var
+  pk: PEccPrivateKey;
 begin
-  if fEcc = nil then
-    result := '' // we can't separate the privkey from TEccCertificateSecret
-  else if not (Format in [ccfBinary, ccfPem]) then
+  result := '';
+  if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the ccfBinary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
-  else if Content = cccCertOnly then
-  begin
-    result := fEcc.SaveToBinary({publickeyonly=}true);
-    if Format = ccfPem then
-      result := DerToPem(result, pemSynopseCertificate);
-  end
-  else if fEcc.InheritsFrom(TEccCertificateSecret) then
-    if Content = cccPrivateKeyOnly then
-      if (Format = ccfPem) and
-         (PrivatePassword = '') then
-        // -----BEGIN SYNECC PRIVATE KEY----- has a real DER encoding
-        result := DerToPem(EccToDer(TEccCertificateSecret(fEcc).PrivateKey),
-          pemSynopseUnencryptedPrivateKey)
-      else
-      begin
-        // other formats use the raw compressed TEccPrivateKey binary
-        result := EccPrivateKeyEncrypt(
-          TEccCertificateSecret(fEcc).PrivateKey, PrivatePassword);
-       if Format = ccfPem then
-         result := DerToPem(result, pemSynopseEncryptedPrivateKey);
-    end
-    else
-    begin
-      result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword);
-      if Format = ccfPem then
-        result := DerToPem(result, pemSynopsePrivateKeyAndCertificate);
-    end
   else
-    result := '';
+  case Content of
+    cccCertOnly:
+      if fEcc <> nil then
+      begin
+        result := fEcc.SaveToBinary({publickeyonly=}true);
+        if Format = ccfPem then
+          result := DerToPem(result, pemSynopseCertificate);
+      end;
+    cccCertWithPrivateKey:
+      if fEcc <> nil then
+      begin
+        if not fEcc.InheritsFrom(TEccCertificateSecret) then
+          RaiseError('Save(cccCertWithPrivateKey) with no Private Key');
+        result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword);
+        if Format = ccfPem then
+          result := DerToPem(result, pemSynopsePrivateKeyAndCertificate);
+      end;
+    cccPrivateKeyOnly:
+      begin
+        pk := GetEccPrivateKey({checkZero=}true);
+        if pk = nil then
+          RaiseError('Save(cccPrivateKeyOnly) with no Private Key');
+        if (Format = ccfPem) and
+           (PrivatePassword = '') then
+          // -----BEGIN SYNECC PRIVATE KEY----- has a real DER encoding
+          result := DerToPem(EccToDer(pk^), pemSynopseUnencryptedPrivateKey)
+        else
+        begin
+          // other formats use our encrypted TEccPrivateKey binary
+          result := EccPrivateKeyEncrypt(pk^, PrivatePassword);
+         if Format = ccfPem then
+           result := DerToPem(result, pemSynopseEncryptedPrivateKey);
+        end;
+      end;
+  end;
 end;
 
 function TCryptCertInternal.Load(const Saved: RawByteString;
@@ -5313,7 +5338,10 @@ var
   k: TPemKind;
 begin
   if content <> cccPrivateKeyOnly then
+  begin
     FreeAndNil(fEcc);
+    FillZero(fPrivateKeyOnly);
+  end;
   if IsPem(Saved) then
   begin
     bin := PemToDer(Saved, @k);
@@ -5333,8 +5361,15 @@ begin
       end;
     cccPrivateKeyOnly:
       begin
-        result := SetPrivateKey(EccPrivateKeyDecrypt(bin, PrivatePassword));
-        exit; // don't free the main TEccCertificate instance
+        bin := EccPrivateKeyDecrypt(bin, PrivatePassword);
+        if fEcc <> nil then
+          result := SetPrivateKey(bin)
+        else if length(bin) = SizeOf(fPrivateKeyOnly) then
+        begin
+          fPrivateKeyOnly := PEccPrivateKey(bin)^;
+          result := true;
+        end;
+        exit; // don't free the main fEcc instance below
       end;
     cccCertWithPrivateKey:
       begin
@@ -5349,9 +5384,7 @@ end;
 
 function TCryptCertInternal.HasPrivateSecret: boolean;
 begin
-  result := (fEcc <> nil) and
-            fEcc.InheritsFrom(TEccCertificateSecret) and
-            TEccCertificateSecret(fEcc).HasSecret;
+  result := GetEccPrivateKey({checkZero=}true) <> nil;
 end;
 
 function TCryptCertInternal.GetPublicKey: RawByteString;
@@ -5362,35 +5395,38 @@ begin
 end;
 
 function TCryptCertInternal.GetPrivateKey: RawByteString;
+var
+  pk: PEccPrivateKey;
 begin
-  if HasPrivateSecret then
-    FastSetRawByteString(result, @TEccCertificateSecret(fEcc).PrivateKey,
-      SizeOf(TEccPrivateKey))
+  pk := GetEccPrivateKey({checkZero=}true);
+  if pk <> nil then
+    FastSetRawByteString(result, pk, SizeOf(pk^))
   else
     result := '';
 end;
 
 function TCryptCertInternal.SetPrivateKey(const saved: RawByteString): boolean;
 var
-  pk: TEccPrivateKey;
+  ecc: TEccPrivateKey;
+  pk, dst: PEccPrivateKey;
 begin
-  result := false;
-  if fEcc = nil then
-    exit;
+  dst := GetEccPrivateKey({checkZero=}false);
   if length(saved) = SizeOf(TEccPrivateKey) then
-    pk := PEccPrivateKey(saved)^
-  else if not DerToEcc(pointer(saved), length(saved), pk) then
-    FillZero(pk);
-  if IsZero(THash256(pk)) then
+    pk := pointer(saved)
+  else if DerToEcc(pointer(saved), length(saved), ecc) then
+    pk := @ecc
+  else
   begin
-    if fEcc.InheritsFrom(TEccCertificateSecret) then    // always reset the key
-      FillZero(TEccCertificateSecret(fEcc).fPrivateKey); // now HasSecret=false
+    if dst <> nil then
+      FillZero(dst^);
+    result := false;
     exit;
   end;
-  if fEcc.InheritsFrom(TEccCertificateSecret) then
-    TEccCertificateSecret(fEcc).fPrivateKey := pk
+  if dst <> nil then
+    dst^ := pk^
   else
-    fEcc := TEccCertificateSecret.CreateFrom(fEcc, @pk, {freefEcc=}true);
+    fEcc := TEccCertificateSecret.CreateFrom(fEcc, pk, {freefEcc=}true);
+  FillZero(ecc);
   result := true;
 end;
 
