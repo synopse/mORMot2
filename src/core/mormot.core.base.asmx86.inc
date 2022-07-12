@@ -269,11 +269,12 @@ asm
         cmp     eax, edx
         ja      @lrgfwd
         sub     edx, ecx
+        jc      @lrgovf              // 32-bit overflow (e.g. count = 1 shl 30)
         cmp     eax, edx
         lea     edx, [edx + ecx]
         jna     @lrgfwd
         // large backward/overlapping move
-        {$ifdef WITH_ERMS}
+@lrgbwd:{$ifdef WITH_ERMS}
         cmp     ecx, ERMSB_MIN_SIZE_BWD // enabled for no-SSE2, not for ERMSB
         ja      @ermsb
         {$endif WITH_ERMS}
@@ -293,6 +294,8 @@ asm
         movups  dqword ptr [edx], xmm1       // first 16
         movups  dqword ptr [edx + ecx], xmm2 // last 16
         ret
+@lrgovf:add     edx, ecx
+        jmp     @lrgbwd
 {$endif HASNOSSE2}
 @m01:   mov     al, [eax]
         mov     [edx], al
