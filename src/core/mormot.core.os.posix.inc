@@ -224,6 +224,8 @@ const
   ICU_VER: array[1..15] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
     '_56', '_58', '_60', '_63', '_66', '_68');
+  ICU_MAX = 80;
+  ICU_MIN = 69; // previous versions are known and listed within ICU_VER[]
   SYSDATA: PAnsiChar = '/system/usr/icu';
   {$else}
   ICU_MAX = 80;
