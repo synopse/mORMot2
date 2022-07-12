@@ -5266,7 +5266,7 @@ begin
   if PrivatePassword = '' then
     result := Input
   else
-    result := MainAesPrng.AFUnSplit(AesPkcs7(Input,
+    result := TAesPrng.AFUnSplit(AesPkcs7(Input,
       {encrypt=}false, PrivatePassword, 'synecc', 1000), 31);
 end;
 
@@ -5361,6 +5361,7 @@ begin
       end;
     cccPrivateKeyOnly:
       begin
+        // PEM/DER input encoded with our encrypted TEccPrivateKey binary
         bin := EccPrivateKeyDecrypt(bin, PrivatePassword);
         if fEcc <> nil then
           result := SetPrivateKey(bin)

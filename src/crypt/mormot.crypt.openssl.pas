@@ -343,15 +343,14 @@ type
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
-  const Engine: RawUtf8 = ''): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: SpiUtf8 = ''): cardinal;
 
 /// asymmetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
 // - returns false on error, or true if the Message has been authenticated
-function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
+function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer;
   const Engine: RawUtf8 = ''): boolean;
@@ -381,12 +380,12 @@ procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
 // NID_X9_62_prime256v1)
 // - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
 procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawByteString);
+  out PrivateKey, PublicKey: RawByteString; const PrivateKeyPassWord: SpiUtf8 = '');
 
 {
 /// compute the (e.g. ECDH) shared secret from a public/private keys inverted pair
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
-  const PublicKey, PrivateKey: RawUtf8; const PrivateKeyPassword: RawUtf8 = ''): RawByteString;
+  const PublicKey, PrivateKey: RawUtf8; const PrivateKeyPassword: SpiUtf8 = ''): RawByteString;
 }
 
 /// mormot.crypt.ecc256r1 compatible function for asymmetric key generation
@@ -485,7 +484,7 @@ type
   TJwtOpenSsl = class(TJwtAbstract)
   protected
     fPrivateKey, fPublicKey: RawByteString;
-    fPrivateKeyPassword, fPublicKeyPassword: RawUtf8;
+    fPrivateKeyPassword, fPublicKeyPassword: SpiUtf8;
     fHashAlgorithm: RawUtf8;
     fGenEvpType: integer;
     fGenBitsOrCurve: integer;
@@ -499,7 +498,7 @@ type
     constructor Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
       aGenEvpType, aGenBitsOrCurve: integer;
       const aPrivateKey, aPublicKey: RawByteString;
-      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
       aClaims: TJwtClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
@@ -543,7 +542,7 @@ type
     // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(
       const aPrivateKey, aPublicKey: RawByteString;
-      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
       aClaims: TJwtClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
@@ -1159,7 +1158,7 @@ end;
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword, Engine: RawUtf8): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: SpiUtf8): cardinal;
 var
   pkey: PEVP_PKEY;
 begin
@@ -1174,7 +1173,7 @@ begin
   end;
 end;
 
-function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
+function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer; const Engine: RawUtf8): boolean;
 var
@@ -1270,7 +1269,7 @@ begin
 end;
 
 procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawByteString);
+  out PrivateKey, PublicKey: RawByteString; const PrivateKeyPassWord: SpiUtf8);
 var
   keys: PEVP_PKEY;
 begin
@@ -1278,20 +1277,20 @@ begin
   if keys = nil then
     raise EOpenSslHash.CreateFmt(
       'OpenSslGenerateBinaryKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
-  PrivateKey := keys.PrivateToBinary;
-  PublicKey := keys.PublicToBinary;
+  PrivateKey := keys.PrivateToDer(PrivateKeyPassWord);
+  PublicKey := keys.PublicToDer;
   keys.Free;
 end;
 
-
+{
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
-  const PublicKey, PrivateKey, PrivateKeyPassword: RawUtf8): RawByteString;
+  const PublicKey, PrivateKey, PrivateKeyPassword: SpiUtf8): RawByteString;
 begin
   result := '';
   EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslSharedSecret');
-  { TODO: implement as https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman }
+  //TODO: see https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman
 end;
-
+}
 
 var
   prime256v1grp: PEC_GROUP;
@@ -1471,7 +1470,7 @@ end;
 constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
   aGenEvpType, aGenBitsOrCurve: integer;
   const aPrivateKey, aPublicKey: RawByteString;
-  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+  const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
   aClaims: TJwtClaims; const aAudience: array of RawUtf8;
   aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
   aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
@@ -1510,8 +1509,7 @@ var
   sign: RawByteString;
 begin
   if fPrivKey = nil then
-    fPrivKey := LoadPrivateKey(
-      pointer(fPrivateKey), length(fPrivateKey), fPrivateKeyPassword);
+    fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
   sign := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sign = '' then
     raise EJwtException.CreateUtf8('%.ComputeSignature: OpenSslSign failed [%]',
@@ -1523,8 +1521,7 @@ procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJwtContent);
 begin
   if fPubKey = nil then
-    fPubKey := LoadPublicKey(
-      pointer(fPublicKey), length(fPublicKey), fPublicKeyPassword);
+    fPubKey := LoadPublicKey(fPublicKey, fPublicKeyPassword);
   if fPubKey^.Verify(fAlgoMd, pointer(signature), pointer(headpayload),
       length(signature), length(headpayload)) then
     JWT.result := jwtValid
@@ -1545,7 +1542,7 @@ begin
 end;
 
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
-  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8; aClaims: TJwtClaims;
+  const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
@@ -1732,7 +1729,8 @@ end;
 
 function TCryptAsymOsl.SharedSecret(const pub, priv: RawByteString): RawByteString;
 begin
-  result := OpenSslSharedSecret(fEvpType, fBitsOrCurve, pub, priv, '');
+  result := ''; // not implemented yet
+  //result := OpenSslSharedSecret(fEvpType, fBitsOrCurve, pub, priv, '');
 end;
 
 
@@ -2057,7 +2055,7 @@ begin
         else if Format = ccfPem then
           // concatenate the certificate and its private key as PEM
           result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
-                    fPrivKey.PrivateKeyToPem(PrivatePassword)
+                    fPrivKey.PrivateToPem(PrivatePassword)
         else
           // ccfBinary will use the PKCS12 binary encoding
           result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
@@ -2065,13 +2063,9 @@ begin
       if fPrivKey = nil then
         RaiseError('Save(cccPrivateKeyOnly) with no Private Key')
       else if Format = ccfPem then
-        result := fPrivKey.PrivateKeyToPem(PrivatePassword)
+        result := fPrivKey.PrivateToPem(PrivatePassword)
       else
-      begin
-        result := fPrivKey.PrivateToBinary;
-        if Format = ccfPem then
-          result := DerToPem(result, pemPrivateKey);
-      end;
+        result := fPrivKey.PrivateToDer(PrivatePassword);
   end;
 end;
 
@@ -2088,7 +2082,7 @@ begin
   begin
     // input only include the private key as DER or PEM
     fPrivKey.Free;
-    fPrivKey := LoadPrivateKey(pointer(saved), length(saved), PrivatePassword);
+    fPrivKey := LoadPrivateKey(saved, PrivatePassword);
     if fPrivKey <> nil then
       if (fX509 = nil) or // can load just the privkey
          fX509.MatchPrivateKey(fPrivKey) then
@@ -2135,7 +2129,7 @@ begin
           fX509 := LoadCertificate(cert);
           if fX509 = nil then
             exit;
-          fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
+          fPrivKey := LoadPrivateKey(priv, PrivatePassword);
         end
         else
         begin
@@ -2159,13 +2153,13 @@ end;
 
 function TCryptCertOpenSsl.GetPublicKey: RawByteString;
 begin
-  result := fX509.GetPublicKey.PublicToBinary;
+  result := fX509.GetPublicKey.PublicToDer;
 end;
 
 function TCryptCertOpenSsl.GetPrivateKey: RawByteString;
 begin
   if HasPrivateSecret then
-    result := fPrivKey.PrivateToBinary
+    result := fPrivKey.PrivateToDer({pwd=}'')
   else
     result := '';
 end;
