@@ -262,7 +262,7 @@ asm
 @fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
-        jl      @fwd
+        jl      @fwnv
         sfence
         jmp     @fwde
 @lrg:   jng     @exit                // count < 0
