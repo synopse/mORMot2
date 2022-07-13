@@ -42,7 +42,7 @@ const
     // and we don't try to detect it because CPUID is unset in some VMs
   {$endif NO_ERMS}
 
-  // minimum size triggering ASMX64AVX or WITH_ERMS optimized asm
+  // minimum size triggering ASMX64AVXNOCONST or WITH_ERMS optimized asm
   // - pre-ERMS expects at least 256 bytes, IvyBridge+ with ERMS is good from 64
   // (copy_user_enhanced_fast_string() in recent Linux kernel uses 64)
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
@@ -63,13 +63,14 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$endif WIN64ABI}
         lea     r10, [rip + @jmptab]
         cmp     cnt, 32
-        ja      @lrg                         // >32 or <0
+        ja      @lrg                           // >32 or <0
         sub     rax, 8
-        jg      @sml                         // 9..32
+        jg      @sml                           // 9..32
         jmp     qword ptr [r10 + 64 + rax * 8] // 0..8
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq      @exit, @01, @02, @03, @04, @05, @06, @07, @08
-@sml:   mov     r8, qword ptr [src + rax]    // last 8
+@sml:   // cnt = 9..32
+        mov     r8, qword ptr [src + rax]    // last 8
         mov     r9, qword ptr [src]          // first 8
         cmp     al, 8
         jle     @sml16
@@ -91,16 +92,17 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @02:    movzx   eax, word ptr [src]
         mov     word ptr [dst], ax
 @exit:  ret
-@lrg:   jng     @exit                        // cnt < 0
+@lrg:   // cnt > 32 or cnt < 0
+        jng     @exit                        // cnt < 0
         sub     dst, src
         jz      @exit                        // src=dst
         cmp     dst, cnt
         lea     dst, [dst + src]
         jb      @lrgbwd    // move backwards if unsigned(dst-src) < cnt
-@lrgfwd:// cnt > 32 bytes
+@lrgfwd:// forward SSE2/ERMSB/AVX move for cnt > 32 bytes
         mov     r9, dst
         cmp     rax, SSE2MAXSIZE
-        jb      @fsse2     // 33..255 bytes is not good for ERMSB nor AVX
+        jb      @fsse2     // 33..255 bytes is not enough for ERMSB nor AVX
         {$ifdef WITH_ERMS}
         cmp     rax, NONTEMPORALSIZE
         jae     @fnt       // non-temporal move > 512KB is better than rep ERMSB
@@ -124,10 +126,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$endif WIN64ABI}
         ret
 @fnt:   {$endif WITH_ERMS}
-        {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 11 is buggy) :(
+        {$ifdef ASMX64AVXNOCONST} // limited AVX asm on Delphi 11
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jnz     @fwdavx
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
 @fsse2: // forward move using SSE2 registers
         movups  xmm2, oword ptr [src]        // first 16
         lea     src, [src + rax - 16]
@@ -154,7 +156,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @fwdnv
         sfence
         jmp     @fwdend
-        {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 11 is buggy) :(
+        {$ifdef ASMX64AVXNOCONST}
 @fwdavx:vmovups ymm2, yword ptr [src]        // first 32
         lea     src, [src + rax - 32]
         lea     dst, [dst + rax - 32]
@@ -168,7 +170,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jae     @favxn                       // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @favxr: vmovups ymm0, yword ptr [src + rax]  // regular loop
-        vmovaps [dst + rax], ymm0            // most CPUs have one store unit
+        vmovaps yword ptr [dst + rax], ymm0  // most CPUs have one store unit
         add     rax, 32
         jl      @favxr
 @favxe: vmovups yword ptr [dst], ymm1        // last 32
@@ -188,14 +190,15 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @favxn
         sfence
         jmp     @favxe
-        {$endif ASMX64AVX}
-@lrgbwd:// note: ERMSB is not available on "std rep move"
-        {$ifdef ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
+@lrgbwd:// backward SSE2/AVX move for cnt > 32 bytes
+        // note: ERMSB is not available on "std rep move" which is slower
+        {$ifdef ASMX64AVXNOCONST}
         cmp     rax, SSE2MAXSIZE
-        jb      @bsse2 // 33..255 bytes is not good for AVX
+        jb      @bsse2 // 33..255 bytes is not worth AVX context transition
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jnz     @bwdavx
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
 @bsse2: sub     rax, 16
         mov     r9, rax
         movups  xmm2, oword ptr [src + rax]  // last 16
@@ -223,7 +226,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jg      @bwdnv
         sfence
         jmp     @bwdend
-        {$ifdef ASMX64AVX}
+        {$ifdef ASMX64AVXNOCONST}
 @bwdavx:sub     rax, 32
         mov     r9, rax
         vmovups ymm2, yword ptr [src + rax]  // last 32
@@ -254,7 +257,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jg      @bavxn
         sfence
         jmp     @bavxe
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
 @03:    movzx   eax, word ptr [src]
         mov     cl, byte ptr [src + 2]
         mov     word ptr [dst], ax
@@ -349,11 +352,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         ret
 @abv256:{$ifdef WITH_ERMS}
         cmp     rax, NONTEMPORALSIZE // non-temporal move > 512KB
-        {$ifdef ASMX64AVX}
+        {$ifdef ASMX64AVXNOCONST}
         jae     @avx
         {$else}
         jae     @sse2
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
         // 256..512K could use the "rep stosb" ERMSB pattern on all CPUs
         cld
         {$ifdef WIN64ABI}
@@ -368,7 +371,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         {$endif WIN64ABI}
         ret
         {$endif WITH_ERMS}
-        {$ifdef ASMX64AVX}
+        {$ifdef ASMX64AVXNOCONST}
 @avx:   test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX
         jz      @sse2
         movups  oword ptr [dst], xmm0  // first unaligned 1..16 bytes
@@ -400,7 +403,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         jnz      @avxnv
         sfence
         jmp      @avxok
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -647,7 +650,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         add     rcx, 4
         sub     r8, 1
         jmp     @align
-@ok:    {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+@ok:    {$ifdef ASMX64AVXNOCONST}
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuAVX2
         jz      @sse2
         vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane
@@ -676,7 +679,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jae      @avx2
         vzeroupper
         jmp      @2
-        {$endif ASMX64AVX}
+        {$endif ASMX64AVXNOCONST}
         // SSE2 process of 64 bytes (16 indexes) per loop iteration
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @sse2:  sub     r8, 16
@@ -791,7 +794,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$endif WIN64ABI}
 end;
 
-{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi < 11
+{$ifdef ASMX64AVX} // AVX2 ASM .align 32 for const is not available on Delphi :(
 
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
