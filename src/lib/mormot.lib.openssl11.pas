@@ -2123,6 +2123,7 @@ procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
 function EVP_PKEY_derive_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer; cdecl;
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
+function EVP_PKEY_get0_EC_KEY(pkey: PEVP_PKEY): PEC_KEY; cdecl;
 function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
 function PEM_write_bio_PKCS8PrivateKey(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER;
@@ -2984,6 +2985,7 @@ type
     EVP_PKEY_derive_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
     EVP_PKEY_derive_set_peer: function(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer; cdecl;
     EVP_PKEY_derive: function(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
+    EVP_PKEY_get0_EC_KEY: function(pkey: PEVP_PKEY): PEC_KEY; cdecl;
     PEM_write_bio_PrivateKey: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
     PEM_write_bio_PKCS8PrivateKey: function(p1: PBIO; p2: PEVP_PKEY; p3: PEVP_CIPHER; p4: PUtf8Char; p5: integer; p6: Ppem_password_cb; p7: pointer): integer; cdecl;
     i2d_PKCS8PrivateKey_bio: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PUtf8Char; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
@@ -2995,7 +2997,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..304] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..305] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3293,6 +3295,7 @@ const
     'EVP_PKEY_derive_init',
     'EVP_PKEY_derive_set_peer',
     'EVP_PKEY_derive',
+    'EVP_PKEY_get0_EC_KEY',
     'PEM_write_bio_PrivateKey',
     'PEM_write_bio_PKCS8PrivateKey',
     'i2d_PKCS8PrivateKey_bio',
@@ -4851,6 +4854,11 @@ begin
   result := libcrypto.EVP_PKEY_derive(ctx, key, keylen);
 end;
 
+function EVP_PKEY_get0_EC_KEY(pkey: PEVP_PKEY): PEC_KEY;
+begin
+  result := libcrypto.EVP_PKEY_get0_EC_KEY(pkey);
+end;
+
 function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer;
 begin
@@ -6152,6 +6160,9 @@ function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_derive';
+
+function EVP_PKEY_get0_EC_KEY(pkey: PEVP_PKEY): PEC_KEY; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_get0_EC_KEY';
 
 function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;

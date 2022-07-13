@@ -14624,9 +14624,6 @@ function EVP_PKEY_get1_DH(pkey: PEVP_PKEY): Pdh_st; cdecl;
 function EVP_PKEY_set1_EC_KEY(pkey: PEVP_PKEY; key: Pec_key_st): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_set1_EC_KEY';
 
-function EVP_PKEY_get0_EC_KEY(pkey: PEVP_PKEY): Pec_key_st; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_get0_EC_KEY';
-
 function EVP_PKEY_get1_EC_KEY(pkey: PEVP_PKEY): Pec_key_st; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_get1_EC_KEY';
 

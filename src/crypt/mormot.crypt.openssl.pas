@@ -1332,34 +1332,66 @@ begin
   end;
 end;
 
+function GetEcPub(k: PEC_KEY; out PublicKey: TEccPublicKey): boolean;
+var
+  pub: PByte;
+  publen: integer;
+begin
+  result := false;
+  if k = nil then
+    exit;
+  pub := nil;
+  publen := EC_POINT_point2buf(prime256v1grp,
+    EC_KEY_get0_public_key(k), POINT_CONVERSION_COMPRESSED, @pub, nil);
+  if publen = SizeOf(PublicKey) then
+  begin
+    MoveFast(pub^, PublicKey, SizeOf(PublicKey));
+    result := true;
+  end;
+  OPENSSL_free(pub);
+end;
+
+function GetEcPriv(k: PEC_KEY; out PrivateKey: TEccPrivateKey): boolean; overload;
+var
+  priv: PBIGNUM;
+  privlen: integer;
+begin
+  result := false;
+  if k = nil then
+    exit;
+  priv := EC_KEY_get0_private_key(k);
+  privlen := BN_num_bytes(priv);
+  if (privlen <= 0) or
+     (privlen > SizeOf(PrivateKey)) then
+    exit;
+  FillZero(PrivateKey); // may be padded with zeros
+  BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
+  result := true;
+end;
+
+function GetEs256Public(k: PEVP_PKEY): TEccPublicKey;
+begin
+  if not GetEcPub(EVP_PKEY_get0_EC_KEY(k), result) then
+    FillZero(result, SizeOf(result));
+end;
+
+function GetEs256Private(k: PEVP_PKEY): TEccPrivateKey;
+begin
+  if not GetEcPriv(EVP_PKEY_get0_EC_KEY(k), result) then
+    FillZero(result);
+end;
+
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
                           out PrivateKey: TEccPrivateKey): boolean;
 var
   key: PEC_KEY;
-  pub: PByte;
-  priv: PBIGNUM;
-  publen, privlen: integer;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
     exit;
   if EC_KEY_generate_key(key) = OPENSSLSUCCESS then
-  begin
-    priv := EC_KEY_get0_private_key(key);
-    privlen := BN_num_bytes(priv);
-    pub := nil;
-    publen := EC_POINT_point2buf(prime256v1grp,
-      EC_KEY_get0_public_key(key), POINT_CONVERSION_COMPRESSED, @pub, nil);
-    if (publen = SizeOf(PublicKey)) and
-       (privlen <= SizeOf(PrivateKey)) then
-    begin
-      FillZero(PrivateKey); // may be padded with zeros
-      BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
-      MoveFast(pub^, PublicKey, publen);
-      result := true;
-    end;
-    OPENSSL_free(pub);
-  end;
+    result := GetEcPub(key, PublicKey) and
+              GetEcPriv(key, PrivateKey);
   EC_KEY_free(key);
 end;
 
@@ -2285,10 +2317,12 @@ function TCryptCertOpenSsl.Encrypt(const Cipher: RawUtf8;
 begin
   if (fX509 <> nil) and
      (Cipher <> '') and
-     (AsymAlgo in CAA_RSA) and
      (GetUsage * [cuDataEncipherment, cuEncipherOnly] <> []) then
-    result := fX509.GetPublicKey.RsaSeal(
-      EVP_get_cipherbyname(pointer(Cipher)), Message)
+    if AsymAlgo in CAA_RSA then
+      result := fX509.GetPublicKey.RsaSeal(
+        EVP_get_cipherbyname(pointer(Cipher)), Message)
+    else if AsymAlgo = caaES256 then
+      result := EciesSeal(Cipher, GetEs256Public(fX509.GetPublicKey), Message)
   else
     result := '';
 end;
@@ -2298,9 +2332,11 @@ function TCryptCertOpenSsl.Decrypt(const Cipher: RawUtf8;
 begin
   if (fPrivKey <> nil) and
      (Cipher <> '') and
-     (AsymAlgo in CAA_RSA) and
      (GetUsage * [cuDataEncipherment, cuDecipherOnly] <> []) then
-    result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
+    if AsymAlgo in CAA_RSA then
+      result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
+    else if AsymAlgo = caaES256 then
+      result := EciesOpen(Cipher, GetEs256Private(fPrivKey), Message)
   else
     result := '';
 end;

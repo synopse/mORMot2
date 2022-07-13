@@ -1452,11 +1452,16 @@ type
       Payload: PDocVariantData = nil): TCryptCertValidity;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
-    // - RSA uses OpenSSL Envelope key transport, and ES256 our EciesSeal/EciesOpen
+    // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
+    // transport then our EVP_PKEY.RsaSeal encoding, then both 'x509-es256' and
+    // 'syn-es256' use our EciesSeal ES256 encoding
     // - returns '' if this feature is not supported
     function Encrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
     /// decrypt a message using the private key of this certificate
     // - not all algorithms support key transport, only RSA and ES256 by now
+    // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
+    // transport then our EVP_PKEY.RsaOpen decoding, then both 'x509-es256' and
+    // 'syn-es256' use our EciesOpen ES256 decoding
     // - returns '' if this feature is not supported, or Message is incorrect
     function Decrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
     /// returns true if the Certificate contains a private key secret
