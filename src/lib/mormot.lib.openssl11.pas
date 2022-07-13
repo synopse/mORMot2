@@ -1034,6 +1034,9 @@ type
   EVP_MD_DIG = array[0..EVP_MAX_MD_SIZE - 1] of byte;
   PEVP_MD_DIG = ^EVP_MD_DIG;
 
+  PEVP_CIPHER = type pointer;
+  PPEVP_CIPHER = ^PEVP_CIPHER;
+
   EVP_PKEY = object
   public
     function PrivateToDer(const PassWord: SpiUtf8): RawByteString;
@@ -1045,6 +1048,8 @@ type
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
+    function RsaSeal(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
+    function RsaOpen(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1052,9 +1057,6 @@ type
 
   PEVP_PKEY = ^EVP_PKEY;
   PPEVP_PKEY = ^PEVP_PKEY;
-
-  PEVP_CIPHER = type pointer;
-  PPEVP_CIPHER = ^PEVP_CIPHER;
 
   PEVP_CIPHER_CTX = type pointer;
   PPEVP_CIPHER_CTX = ^PEVP_CIPHER_CTX;
@@ -1793,6 +1795,13 @@ function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
 function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
 function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: PInteger; iv: PByte; pubk: PPEVP_PKEY; npubk: integer): integer; cdecl;
+function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
+function EVP_OpenFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer; cdecl;
+function EVP_DecryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
 function BIO_new(typ: PBIO_METHOD): PBIO;
@@ -2696,6 +2705,12 @@ type
     EVP_DigestVerifyFinal: function(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
     EVP_DigestSign: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
     EVP_DigestVerify: function(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+    EVP_SealInit: function(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: PInteger; iv: PByte; pubk: PPEVP_PKEY; npubk: integer): integer; cdecl;
+    EVP_SealFinal: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+    EVP_OpenInit: function(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
+    EVP_OpenFinal: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+    EVP_EncryptUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
+    EVP_DecryptUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
     HMAC: function(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
     BIO_new: function(typ: PBIO_METHOD): PBIO; cdecl;
     BIO_free: function(a: PBIO): integer; cdecl;
@@ -2980,7 +2995,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..298] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..304] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3000,6 +3015,12 @@ const
     'EVP_DigestVerifyFinal',
     'EVP_DigestSign',
     'EVP_DigestVerify',
+    'EVP_SealInit',
+    'EVP_SealFinal',
+    'EVP_OpenInit',
+    'EVP_OpenFinal',
+    'EVP_EncryptUpdate',
+    'EVP_DecryptUpdate',
     'HMAC',
     'BIO_new',
     'BIO_free',
@@ -3382,6 +3403,40 @@ function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
    tbs: PByte; tbslen: PtrUInt): integer;
 begin
   result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen);
+end;
+
+function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER;
+   ek: PPByte; ekl: PInteger; iv: PByte; pubk: PPEVP_PKEY; npubk: integer): integer;
+begin
+  result := libcrypto.EVP_SealInit(ctx, typ, ek, ekl, iv, pubk, npubk);
+end;
+
+function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer;
+begin
+  result := libcrypto.EVP_SealFinal(ctx, _out, outl);
+end;
+
+function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER;
+   ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_OpenInit(ctx, typ, ek, ekl, iv, priv);
+end;
+
+function EVP_OpenFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer;
+begin
+  result := libcrypto.EVP_OpenFinal(ctx, _out, outl);
+end;
+
+function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer;
+begin
+  result := libcrypto.EVP_EncryptUpdate(ctx, _out, outl, _in, inl);
+end;
+
+function EVP_DecryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer;
+begin
+  result := libcrypto.EVP_DecryptUpdate(ctx, _out, outl, _in, inl);
 end;
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt;
@@ -5230,6 +5285,26 @@ function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
   tbs: PByte; tbslen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
+
+function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: PInteger; iv: PByte; pubk: PPEVP_PKEY; npubk: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_SealInit';
+
+function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_SealFinal';
+
+function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_OpenInit';
+
+function EVP_OpenFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_OpenFinal';
+
+function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_EncryptUpdate';
+
+function EVP_DecryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DecryptUpdate';
+
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PEVP_MD_DIG; var md_len: cardinal): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC';
@@ -6555,6 +6630,7 @@ var
   ctx: PEVP_MD_CTX;
   s: PtrUInt;
 begin
+  // expects @self to be a private key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
   result := ''; // '' on error
   ctx := EVP_MD_CTX_new;
@@ -6583,6 +6659,7 @@ function EVP_PKEY.Verify(Algo: PEVP_MD; Sig, Msg: pointer;
 var
   ctx: PEVP_MD_CTX;
 begin
+  // expects @self to be a public key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
   // we don't check "Algo = nil" because algo may have its built-in hashing
   ctx := EVP_MD_CTX_new;
@@ -6596,12 +6673,98 @@ begin
   end;
 end;
 
+function EVP_PKEY.RsaSeal(Cipher: PEVP_CIPHER;
+  const Msg: RawByteString): RawByteString;
+var
+  ctx: PEVP_CIPHER_CTX;
+  pubk: PEVP_PKEY;
+  ek: RawByteString;
+  ekl, l: integer;
+  p: PByte;
+  iv: THash128;
+begin
+  // expects @self to be a public key, and Msg to be a multiple of 16 bytes
+  // must be RSA because it is the only OpenSSL algorithm featuring key transport
+  result := '';
+  if (@self = nil) or
+     (Msg = '') or
+     (Cipher = nil) then
+    exit;
+  ctx := EVP_CIPHER_CTX_new;
+  if ctx = nil then
+    exit;
+  pubk := @self;
+  SetLength(ek, EVP_PKEY_size(@self));
+  if EVP_SealInit(ctx, Cipher, @ek, @ekl, @iv, @pubk, 1) = OPENSSLSUCCESS then
+  begin
+    l := length(Msg);
+    FastSetRawByteString(result, nil, ekl + l + (SizeOf(iv) + 4 + 2 + 16));
+    p := pointer(result);
+    PHash128(p)^ := iv;
+    inc(PHash128(p));
+    PCardinal(p)^ := l;
+    inc(PCardinal(p));
+    PWord(p)^ := ekl;
+    inc(PWord(p));
+    MoveFast(pointer(ek)^, p^, ekl);
+    inc(p, ekl);
+    if EVP_EncryptUpdate(ctx, p, @l, pointer(Msg), l) = OPENSSLSUCCESS then
+    begin
+      inc(p, l);
+      if EVP_SealFinal(ctx, p, @l) = OPENSSLSUCCESS then
+        PStrLen(PtrUInt(Msg) - _STRLEN)^ := PAnsiChar(p) + l - pointer(Msg)
+      else
+        result := '';
+    end
+    else
+      result := '';
+  end;
+  EVP_CIPHER_CTX_free(ctx);
+end;
+
+function EVP_PKEY.RsaOpen(Cipher: PEVP_CIPHER;
+  const Msg: RawByteString): RawByteString;
+var
+  ctx: PEVP_CIPHER_CTX;
+  p: PByte;
+  ekl, l, lu, lf: integer;
+begin
+  // expects @self to be a private key
+  result := '';
+  if (@self = nil) or
+     (Msg = '') or
+     (Cipher = nil) then
+    exit;
+  ctx := EVP_CIPHER_CTX_new;
+  if ctx = nil then
+    exit;
+  p := pointer(Msg);
+  inc(PHash128(p));
+  l := PCardinal(p)^;
+  inc(PCardinal(p));
+  if l > 128 shl 20 then
+    exit; // support up to 128 MB of content
+  ekl := PWord(p)^;
+  inc(PWord(p));
+  if EVP_OpenInit(ctx, Cipher, p, ekl, pointer(Msg), @self) = OPENSSLSUCCESS then
+  begin
+    inc(p, ekl);
+    FastSetRawByteString(result, nil, l);
+    l := length(Msg) - (PAnsiChar(p) - pointer(Msg));
+    if (EVP_DecryptUpdate(ctx, pointer(result), @lu, p, l) <> OPENSSLSUCCESS) or
+       (EVP_OpenFinal(ctx, @PByteArray(result)[{%H-}lu], @lf) <> OPENSSLSUCCESS) or
+       (lu + {%H-}lf <> length(result)) then
+      result:= '';
+  end;
+  EVP_CIPHER_CTX_free(ctx);
+end;
+
 function EVP_PKEY.Size: integer;
 begin
   if @self <> nil then
     result := EVP_PKEY_size(@self)
   else
-    result :=0;
+    result := 0;
 end;
 
 procedure EVP_PKEY.Free;

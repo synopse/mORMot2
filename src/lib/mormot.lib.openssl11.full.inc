@@ -13895,10 +13895,6 @@ function EVP_EncryptInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
   impl: PENGINE; key: PByte; iv: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptInit_ex';
 
-function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
-  _in: PByte; inl: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_EncryptUpdate';
-
 function EVP_EncryptFinal_ex(ctx: PEVP_CIPHER_CTX;
   _out: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptFinal_ex';
@@ -13911,9 +13907,6 @@ function EVP_DecryptInit(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; key: PByte; 
 
 function EVP_DecryptInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DecryptInit_ex';
-
-function EVP_DecryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DecryptUpdate';
 
 function EVP_DecryptFinal(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DecryptFinal';
@@ -13932,18 +13925,6 @@ function EVP_SignFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal; pkey: PEVP_PKE
 
 function EVP_VerifyFinal(ctx: PEVP_MD_CTX; sigbuf: PByte; siglen: cardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_VerifyFinal';
-
-function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_OpenInit';
-
-function EVP_OpenFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_OpenFinal';
-
-function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: PInteger; iv: PByte; pubk: PPEVP_PKEY; npubk: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_SealInit';
-
-function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_SealFinal';
 
 function EVP_sha224(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha224';
