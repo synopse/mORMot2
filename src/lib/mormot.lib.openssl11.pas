@@ -6933,9 +6933,11 @@ begin
   if @self = nil then
     exit;
   data := @dest;
-  result := i2d_X509_NAME(@self, @data);
-  if result < 0 then
-    result := 0;
+  result := i2d_X509_NAME(@self, nil); // compute canonical encoding in cache
+  if (result <= 0) or
+     (result > SizeOf(dest)) or
+     (i2d_X509_NAME(@self, @data) <> result) then
+    result := 0 // avoid buffer overflow (4KB is big enough for any real value)
 end;
 
 function X509_NAME.ToBinary: RawByteString;
@@ -8716,14 +8718,12 @@ begin
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
-        writeln(fPeer.GetIssuerName.ToBinary);
-        writeln(fPeer.GetIssuerName.ToText);
-        writeln(fPeer.GetIssuerName.ToDigest);
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
         writeln('SerialNumber=',fPeer.SerialNumber);
         writeln(fPeer.GetSerial.ToDecimal);
         writeln(fPeer.GetSignatureAlgo);
+        writeln(fPeer.GetIssuerName.ToDigest);
         exts := fPeer.SubjectAlternativeNames;
         for len := 0 to high(exts) do
           writeln('dns=',exts[len]);
