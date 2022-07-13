@@ -1305,6 +1305,9 @@ type
     function Compare(another: PX509_NAME): integer;
     // as used for X509_STORE.SetLocations() CAFolder 'Hash.N' names
     function Hash: cardinal;
+    function ToBinary(out dest: TSynTempBuffer): integer; overload;
+    function ToBinary: RawByteString; overload;
+    function ToDigest(md: PEVP_MD = nil): RawUtf8;
     function ToText: RawUtf8;
   end;
 
@@ -1858,6 +1861,8 @@ procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_digest(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
 function X509_get_serialNumber(x: PX509): PASN1_INTEGER;
@@ -2749,6 +2754,8 @@ type
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
     X509_NAME_cmp: function(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
+    d2i_X509_NAME: function(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+    i2d_X509_NAME: function(a: PX509_NAME; _out: PPByte): integer; cdecl;
     X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
     X509_digest: function(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
     X509_get_serialNumber: function(x: PX509): PASN1_INTEGER; cdecl;
@@ -2973,7 +2980,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..296] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..298] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3051,6 +3058,8 @@ const
     'X509_NAME_oneline',
     '?X509_NAME_hash', // not defined on OpenSSL 3.0 -> ? = ignored by now
     'X509_NAME_cmp',
+    'd2i_X509_NAME',
+    'i2d_X509_NAME',
     'X509_STORE_CTX_get_current_cert',
     'X509_digest',
     'X509_get_serialNumber',
@@ -3671,6 +3680,16 @@ end;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer;
 begin
   result := libcrypto.X509_NAME_cmp(a, b);
+end;
+
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME;
+begin
+  result := libcrypto.d2i_X509_NAME(a, _in, len);
+end;
+
+function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer;
+begin
+  result := libcrypto.i2d_X509_NAME(a, _out);
 end;
 
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509;
@@ -5392,6 +5411,12 @@ function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_cmp';
 
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+  external LIB_CRYPTO name _PU + 'd2i_X509_NAME';
+
+function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'i2d_X509_NAME';
+
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
 
@@ -6898,6 +6923,33 @@ begin
     result := 0
   else
     result := X509_NAME_hash(@self);
+end;
+
+function X509_NAME.ToBinary(out dest: TSynTempBuffer): integer;
+var
+  data: PByte;
+begin
+  result := 0;
+  if @self = nil then
+    exit;
+  data := @dest;
+  result := i2d_X509_NAME(@self, @data);
+  if result < 0 then
+    result := 0;
+end;
+
+function X509_NAME.ToBinary: RawByteString;
+var
+  tmp: TSynTempBuffer;
+begin
+  FastSetRawByteString(result, @tmp, ToBinary(tmp));
+end;
+
+function X509_NAME.ToDigest(md: PEVP_MD): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := Digest(md, @tmp, ToBinary(tmp));
 end;
 
 function X509_NAME.ToText: RawUtf8;
@@ -8664,6 +8716,9 @@ begin
            (not Context.IgnoreCertificateErrors and
             not fSsl.IsVerified) then // include full peer info on failure
           Context.PeerInfo := fPeer.PeerInfo;
+        writeln(fPeer.GetIssuerName.ToBinary);
+        writeln(fPeer.GetIssuerName.ToText);
+        writeln(fPeer.GetIssuerName.ToDigest);
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
         writeln('SerialNumber=',fPeer.SerialNumber);

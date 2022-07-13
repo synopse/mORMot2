@@ -17877,12 +17877,6 @@ function X509_NAME_new(): PX509_NAME; cdecl;
 procedure X509_NAME_free(a: PX509_NAME); cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_free';
 
-function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_NAME';
-
-function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_NAME';
-
 function X509_NAME_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_it';
 
