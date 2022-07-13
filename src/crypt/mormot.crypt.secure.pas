@@ -1410,7 +1410,7 @@ type
     // - memory buffer will be hashed then signed using the private secret key
     // of this certificate instance
     // - you could later on verify this text signature according to the public
-    // key of this certificate, using ICryptCert.Verify() or ICertStore.Verify()
+    // key of this certificate, using ICryptCert.Verify() or ICryptStore.Verify()
     // - this certificate should have the kuDigitalSignature usage
     // - returns '' on failure, e.g. if this Certificate has no private key
     // - returns the binary signature of the Data buffer
@@ -1425,7 +1425,7 @@ type
     /// verify a digital signature of some digital content
     // - will use the public key of this certificate
     // - this certificate should have the kuDigitalSignature usage
-    // - see ICertStore.Verify() for a complete CA chain validation
+    // - see ICryptStore.Verify() for a complete CA chain validation
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; overload;
     /// verify a digital signature of some digital content
