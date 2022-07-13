@@ -147,19 +147,18 @@ type
     ValueVar: TInterfaceMethodValueVar;
     /// how the variable is to be passed at asm level
     ValueKindAsm: TInterfaceMethodValueAsm;
-    /// used to specify if the argument is passed as register
+    /// specify if the argument is passed as register
     // - contains 0 if parameter is not a register
-    // - contains 1 for EAX, 2 for EDX and 3 for ECX registers for x86
-    // - contains 1 for RCX, 2 for RDX, 3 for R8, and
-    // 4 for R9, with a backing store on the stack for x64
-    // - contains 1 for R0, 2 R1 ... 4 for R3, with a backing store on the stack for arm
-    // - contains 1 for X0, 2 X1 ... 8 for X7, with a backing store on the stack for aarch64
+    // - i386: 1 for EAX, 2 for EDX and 3 for ECX registers
+    // - x86_64: 1=RCX/RDI 2=RDX/RSI 3=R8/RDX 4=R9/RCX, with stack backing store
+    // - ARM: 1=R0 2=R1 3=R2 4=R3, with a backing store on the stack
+    // - AARCH64: 1=X0 2=X1, ..., 8=X7, with a backing store on the stack
     RegisterIdent: byte;
-    /// used to specify if a floating-point argument is passed as register
-    // - contains always 0 for x86/x87
-    // - contains 1 for XMM0, 2 for XMM1, ..., 4 for XMM3 for x64
-    // - contains 1 for D0, 2 for D1, ..., 8 for D7 for armhf
-    // - contains 1 for V0, 2 for V1, ..., 8 for V7 for aarch64
+    /// specify if a floating-point argument is passed as register
+    // - i386/x87: contains always 0
+    // - x86_64: 1 for XMM0, 2 for XMM1, , ..., 8 for XMM7
+    // - ARMHF: 1 for D0, 2 for D1, ..., 8 for D7
+    // - AARCH64: 1 for V0, 2 for V1, ..., 8 for V7
     FPRegisterIdent: byte;
     /// index of the associated variable in the local array[ArgsUsedCount[]]
     IndexVar: byte;
@@ -6610,10 +6609,6 @@ end;
 
 type
   PCallMethodArgs = ^TCallMethodArgs;
-  {$ifdef FPC}
-  {$push}
-  {$packrecords 16} // stack is aligned on 16 bytes
-  {$endif FPC}
   TCallMethodArgs = record
     StackSize: PtrInt;
     StackAddr, method: PtrInt;
@@ -6624,9 +6619,6 @@ type
     res64: Int64Rec;
     resKind: TInterfaceMethodValueType;
   end;
-  {$ifdef FPC}
-  {$pop}
-  {$endif FPC}
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef CPUARM}
