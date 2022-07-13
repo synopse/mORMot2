@@ -6679,15 +6679,16 @@ var
   ctx: PEVP_CIPHER_CTX;
   pubk: PEVP_PKEY;
   ek: RawByteString;
-  ekl, l: integer;
+  ekl, l, lu, lf: integer;
   p: PByte;
   iv: THash128;
 begin
-  // expects @self to be a public key, and Msg to be a multiple of 16 bytes
+  // expects @self to be a public key
   // must be RSA because it is the only OpenSSL algorithm featuring key transport
   result := '';
+  l := length(Msg);
   if (@self = nil) or
-     (Msg = '') or
+     (l = 0) or
      (Cipher = nil) then
     exit;
   ctx := EVP_CIPHER_CTX_new;
@@ -6697,7 +6698,6 @@ begin
   SetLength(ek, EVP_PKEY_size(@self));
   if EVP_SealInit(ctx, Cipher, @ek, @ekl, @iv, @pubk, 1) = OPENSSLSUCCESS then
   begin
-    l := length(Msg);
     FastSetRawByteString(result, nil, ekl + l + (SizeOf(iv) + 4 + 2 + 16));
     p := pointer(result);
     PHash128(p)^ := iv;
@@ -6708,11 +6708,11 @@ begin
     inc(PWord(p));
     MoveFast(pointer(ek)^, p^, ekl);
     inc(p, ekl);
-    if EVP_EncryptUpdate(ctx, p, @l, pointer(Msg), l) = OPENSSLSUCCESS then
+    if EVP_EncryptUpdate(ctx, p, @lu, pointer(Msg), l) = OPENSSLSUCCESS then
     begin
-      inc(p, l);
-      if EVP_SealFinal(ctx, p, @l) = OPENSSLSUCCESS then
-        PStrLen(PtrUInt(Msg) - _STRLEN)^ := PAnsiChar(p) + l - pointer(Msg)
+      inc(p, lu);
+      if EVP_SealFinal(ctx, p, @lf) = OPENSSLSUCCESS then
+        PStrLen(PtrUInt(result) - _STRLEN)^ := PAnsiChar(p) + lf - pointer(result)
       else
         result := '';
     end
