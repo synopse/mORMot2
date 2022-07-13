@@ -1465,6 +1465,8 @@ type
     // private key: you could e.g. use it to verify that a ICryptCert with
     // HasPrivateSecret=false matches another with HasPrivateSecret=true
     function IsEqual(const another: ICryptCert): boolean;
+    /// the high-level asymmetric algorithm used for this certificate
+    function AsymAlgo: TCryptAsymAlgo;
     /// access to the low-level implementation class
     function Instance: TCryptCert;
     /// access to the low-level implementation handle
@@ -1528,6 +1530,7 @@ type
       ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData): TCryptCertValidity; virtual;
+    function AsymAlgo: TCryptAsymAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
   end;
@@ -1538,10 +1541,8 @@ type
   /// abstract parent class for ICryptCert factories
   TCryptCertAlgo = class(TCryptAlgo)
   protected
-    fJwtName: RawUtf8;
+    fOsa: TCryptAsymAlgo; // should be set by the overwritten constructor
   public
-    /// properly initialize the corresponding JWT algorithm name
-    constructor Create(const name: RawUtf8); override;
     /// main factory to create a new Certificate instance with this algorithm
     function New: ICryptCert; virtual; abstract;
     /// low-level factory directly from the raw implementation handle
@@ -1564,12 +1565,13 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
-  published
-    /// return the corresponding JWT algorithm name
-    // - extracted from the algorithm name, by convention
+    /// return the corresponding JWT algorithm name, computed from AsymAlgo
     // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
-    property JwtName: RawUtf8
-      read fJwtName;
+    function JwtName: RawUtf8;
+  published
+    /// the asymmetric algorithm used for these certificates
+    property AsymAlgo: TCryptAsymAlgo
+      read fOsa;
   end;
 
   /// abstract interface to a Certificates Store, as returned by Store() factory
@@ -1675,6 +1677,24 @@ type
   end;
 
 const
+  /// the JWT algorithm names according to our known asymmetric algorithms
+  // - as implemented e.g. by TJwtAbstractOsl
+  CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
+    'ES256',  // caaES256
+    'ES384',  // caaES384
+    'ES512',  // caaES512
+    'ES256K', // caaES256K
+    'RS256',  // caaRS256
+    'RS384',  // caaRS384
+    'RS512',  // caaRS512
+    'PS256',  // caaPS256
+    'PS384',  // caaPS384
+    'PS512',  // caaPS512
+    'EdDSA'); // caaEdDSA
+
+  /// the known asymmetric algorithms which implement RSA cryptography
+  CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
+
   /// such a Certificate could be used for anything
   CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
 
@@ -4461,13 +4481,6 @@ end;
 
 { TCryptCertAlgo }
 
-constructor TCryptCertAlgo.Create(const name: RawUtf8);
-begin
-  inherited Create(name);
-  // by convention, JWT matches 2nd item, e.g. in 'x509-es256' or 'syn-es256-v1'
-  fJwtName := UpperCase(GetCsvItem(pointer(name), 1, '-'));
-end;
-
 function TCryptCertAlgo.Load(const Saved: RawByteString;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): ICryptCert;
 begin
@@ -4482,6 +4495,11 @@ function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
 begin
   result := New;
   result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
+end;
+
+function TCryptCertAlgo.JwtName: RawUtf8;
+begin
+  result := CAA_JWT[fOsa];
 end;
 
 
@@ -4660,6 +4678,11 @@ begin
     Audience^ := pl.U['aud'];
   if Payload <> nil then
     Payload^ := pl;
+end;
+
+function TCryptCert.AsymAlgo: TCryptAsymAlgo;
+begin
+  result := (fCryptAlgo as TCryptCertAlgo).AsymAlgo;
 end;
 
 function TCryptCert.Instance: TCryptCert;

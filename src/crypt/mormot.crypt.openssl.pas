@@ -371,7 +371,7 @@ function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY; overload
 // NID_X9_62_prime256v1)
 // - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawUtf8); overload;
+  out PrivateKey, PublicKey: RawUtf8; const PrivateKeyPassWord: SpiUtf8 = ''); overload;
 
 /// generate a public/private pair of keys in raw DER binary format
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
@@ -1256,7 +1256,7 @@ begin
 end;
 
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawUtf8);
+  out PrivateKey, PublicKey: RawUtf8; const PrivateKeyPassWord: SpiUtf8);
 var
   keys: PEVP_PKEY;
 begin
@@ -1264,7 +1264,7 @@ begin
   if keys = nil then
     raise EOpenSslHash.CreateFmt(
       'OpenSslGenerateKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
-  keys.ToPem(PrivateKey, PublicKey);
+  keys.ToPem(PrivateKey, PublicKey, PrivateKeyPassWord);
   keys.Free;
 end;
 
@@ -1827,6 +1827,7 @@ type
 
 constructor TCryptCertAlgoOpenSsl.Create(osa: TCryptAsymAlgo);
 begin
+  fOsa := osa;
   fHash := OpenSslGetMd(CAA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
   fEvpType := CAA_EVPTYPE[osa];
   fBitsOrCurve := CAA_BITSORCURVE[osa];
@@ -2334,6 +2335,7 @@ begin
   if x = nil then
     result := nil
   else
+    // guess the type because the PX509 item has no ICryptCert.AsymAlgo any more
     result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
@@ -2551,8 +2553,6 @@ function TCryptStoreOpenSsl.Verify(const Signature: RawByteString;
 begin
   result := cvNotSupported;
 end;
-
-
 
 
 function X509Algo(x: PX509): TCryptAsymAlgo;

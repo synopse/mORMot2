@@ -1401,7 +1401,7 @@ function AesAlgoNameDecode(AesAlgoName: PUtf8Char;
   out Mode: TAesMode; out KeyBits: integer): boolean; overload;
 
 /// OpenSSL-like Cipher name decoding into a mormot.crypt.core TAesAbstract class
-// - decode e.g. 'aes-128-cfb' into Mode=mCfb and KeyBits=128
+// - decode e.g. 'aes-128-cfb' into TAesFast[mCfb] and KeyBits=128
 function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
   out KeyBits: integer): TAesAbstractClass; overload;
 

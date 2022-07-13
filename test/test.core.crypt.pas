@@ -2332,6 +2332,7 @@ begin
   begin
     crt := alg[a] as TCryptCertAlgo;
     AddAlgName;
+    check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
     c1 := crt.New;
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
