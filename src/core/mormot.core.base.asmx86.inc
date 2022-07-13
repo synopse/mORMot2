@@ -161,8 +161,6 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=source edx=dest ecx=count
-        cmp     eax, edx
-        jz      @exit                  // exit if source=dest
         cmp     ecx, 32
         ja      @lrg                   // count > 32 or count < 0
         sub     ecx, 8
@@ -221,14 +219,13 @@ asm
         ret
 {$endif WITH_ERMSASM}
 {$ifdef HASNOSSE2}
-@lrg:   jng     @exit                // count < 0
-        cmp     eax, edx
-        ja      @ermsf               // fallback to rep movsb on old CPUs
-        sub     edx, ecx
-        cmp     eax, edx
-        lea     edx, [edx + ecx]
-        jna     @ermsf
-        jmp     @ermsb
+@lrg:   jng    @exit   // count < 0
+        sub    edx, eax
+        jz     @exit
+        cmp    edx, ecx
+        lea    edx, [edx + eax]
+        jb     @ermsb  // move backwards if unsigned(dest-source) < count
+        jmp    @ermsf
 {$else}
 @lrgfwd:// large forward move
         {$ifdef WITH_ERMS}
@@ -258,8 +255,6 @@ asm
         pop     edx
         movups  dqword ptr [edx], xmm2       // first 16
         ret
-@lrgovf:add     edx, ecx
-        jmp     @lrgbwd
 {$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @fwnv:  movups  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
@@ -267,14 +262,12 @@ asm
         jl      @fwnv
         sfence
         jmp     @fwde
-@lrg:   jng     @exit                // count < 0
-        cmp     eax, edx
-        ja      @lrgfwd
-        sub     edx, ecx
-        jc      @lrgovf              // 32-bit overflow (e.g. count = 1 shl 30)
-        cmp     eax, edx
-        lea     edx, [edx + ecx]
-        jna     @lrgfwd
+@lrg:   jng     @exit      // count < 0
+        sub     edx, eax
+        jz      @exit      // source=dest
+        cmp     edx, ecx
+        lea     edx, [edx + eax]
+        jae     @lrgfwd   // move backwards if unsigned(dest-source) < count
         // large backward/overlapping move
 @lrgbwd:{$ifdef WITH_ERMS}
         cmp     ecx, ERMSB_MIN_SIZE_BWD // enabled for no-SSE2, not for ERMSB

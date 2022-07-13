@@ -1304,7 +1304,7 @@ function CompareQWord(const A, B: QWord): integer;
 // - returns nil if Value was not found
 // - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
-  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef CPUINTEL} {$ifndef HASNOSSE2} {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
 
 /// fast search of an unsigned integer position in a 32-bit integer array
 // - Count is the number of integer entries in P^
@@ -1319,7 +1319,7 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
 // - returns false if Value was not found
 // - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
-  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef CPUINTEL} {$ifndef HASNOSSE2} {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
 
 /// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
@@ -8477,6 +8477,8 @@ type
 
 // optimized asm for x86 and x86_64 is located in include files
 
+{$ifndef HASNOSSE2}
+
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 begin
   Count := IntegerScanIndex(P, Count, Value); // SSE2 asm on Intel/AMD
@@ -8490,6 +8492,8 @@ function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): b
 begin
   result := IntegerScanIndex(P, Count, Value) >= 0; // SSE2 asm on Intel/AMD
 end;
+
+{$endif HASNOSSE2}
 
 type
   TIntelRegisters = record

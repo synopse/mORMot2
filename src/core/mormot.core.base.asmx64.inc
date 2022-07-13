@@ -62,14 +62,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     r8, rdx
         {$endif WIN64ABI}
         lea     r10, [rip + @jmptab]
-        cmp     src, dst
-        je      @equal
         cmp     cnt, 32
         ja      @lrg                         // >32 or <0
         sub     rax, 8
         jg      @sml                         // 9..32
         jmp     qword ptr [r10 + 64 + rax * 8] // 0..8
-@equal: ret
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq      @exit, @01, @02, @03, @04, @05, @06, @07, @08
 @sml:   mov     r8, qword ptr [src + rax]    // last 8
@@ -95,12 +92,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     word ptr [dst], ax
 @exit:  ret
 @lrg:   jng     @exit                        // cnt < 0
-        cmp     src, dst
-        ja      @lrgfwd
-        sub     dst, rax
-        cmp     src, dst
-        lea     dst, [dst + rax]
-        ja     @lrgbwd
+        sub     dst, src
+        jz      @exit                        // src=dst
+        cmp     dst, cnt
+        lea     dst, [dst + src]
+        jb      @lrgbwd    // move backwards if unsigned(dst-src) < cnt
 @lrgfwd:// cnt > 32 bytes
         mov     r9, dst
         cmp     rax, SSE2MAXSIZE
