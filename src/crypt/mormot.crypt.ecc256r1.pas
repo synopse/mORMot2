@@ -624,7 +624,7 @@ implementation
  - OpenSSL 300 Ecc256r1MakeKey in   5.09ms i.e. 57.5K/s, aver. 16us
  - OpenSSL 300 Ecc256r1Sign in   7.97ms i.e. 36.7K/s, aver. 26us
  - OpenSSL 300 Ecc256r1Verify in  28.66ms i.e. 10.2K/s, aver. 95us
- - OpenSSL 598 Ecc256r1SharedSecret in  44.75ms i.e. 13K/s, aver. 74us
+ - OpenSSL 598 Ecc256r1SharedSecret in 44.75ms i.e. 13K/s, aver. 74us
 
  Some Numbers on Linux AARCH64 (Oracle Cloud VM) :
  - mORMot  300 Ecc256r1MakeKey in 243.31ms i.e. 1.2K/s, aver. 811us

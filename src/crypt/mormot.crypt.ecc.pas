@@ -142,6 +142,24 @@ function EciesHeaderText(const head: TEciesHeader): RawUtf8; overload;
 function EciesHeaderText(const encryptedfile: TFileName;
   const rawencryptedfile: TFileName = ''): RawUtf8; overload;
 
+/// encrypt a message using a ECC secp256r1 public key
+// - similar to EVP_PKEY.RsaSeal, as a cut-down version of our ECIES algorithm
+function EciesSeal(aes: TAesAbstractClass; aesbits: integer;
+  const pubkey: TEccPublicKey; const msg: RawByteString): RawByteString; overload;
+
+/// decrypt a message using a ECC secp256r1 private key
+// - similar to EVP_PKEY.RsaOpen, as a cut-down version of our ECIES algorithm
+function EciesOpen(aes: TAesAbstractClass; aesbits: integer;
+  const privkey: TEccPrivateKey; const msg: RawByteString): RawByteString; overload;
+
+/// encrypt a message using a ECC secp256r1 public key
+function EciesSeal(const cipher: RawUtf8; const pubkey: TEccPublicKey;
+  const msg: RawByteString): RawByteString; overload;
+
+/// decrypt a message using a ECC secp256r1 private key
+function EciesOpen(const cipher: RawUtf8; const privkey: TEccPrivateKey;
+  const msg: RawByteString): RawByteString; overload;
+
 
 const
   /// how many PBKDF2 rounds are performed by default for password derivation
@@ -1790,6 +1808,97 @@ var
 begin
   if EciesHeaderFile(encryptedfile, h, rawencryptedfile) then
     result := EciesHeaderText(h)
+  else
+    result := '';
+end;
+
+function EciesSeal(aes: TAesAbstractClass; aesbits: integer;
+  const pubkey: TEccPublicKey; const msg: RawByteString): RawByteString;
+var
+  ephpub: TEccPublicKey;
+  ephprv: TEccPrivateKey;
+  ephsec: TEccSecretKey;
+  secret: THash512Rec;
+  a: TAesAbstract;
+  l, o: integer;
+  p: PEccPublicKey;
+  sha3: TSha3; // uses 256-bit or 384-bit of it
+begin
+  result := '';
+  l := length(msg);
+  if (aes = nil) or
+     (l = 0) or
+     IsZero(pubkey) or
+     not Ecc256r1MakeKey(ephpub, ephprv) or
+     not Ecc256r1SharedSecret(pubkey, ephprv, ephsec) then
+    exit;
+  sha3.Full(@ephsec, SizeOf(ephsec), secret.b);
+  a := aes.Create(secret.l, aesbits); // use 128-bit or 256-bit of secret.l
+  try
+    a.IV := secret.h.Lo; // use 128-bit of secret.h
+    o := a.EncryptPkcs7Length(l, false);
+    FastSetRawByteString(result, nil, o + SizeOf(ephpub));
+    p := pointer(result);
+    p^ := ephpub;
+    inc(p);
+    if not a.EncryptPkcs7Buffer(pointer(msg), p, l, o, false) then
+      result := '';
+  finally
+    a.Free;
+    FillZero(secret.b);
+  end;
+end;
+
+function EciesOpen(aes: TAesAbstractClass; aesbits: integer;
+  const privkey: TEccPrivateKey; const msg: RawByteString): RawByteString;
+var
+  l: integer;
+  ephsec: TEccSecretKey;
+  secret: THash512Rec;
+  a: TAesAbstract;
+  p: PEccPublicKey;
+  sha3: TSha3;
+begin
+  p := pointer(msg);
+  l := length(msg);
+  result := '';
+  if (aes = nil) or
+     (l <= SizeOf(p^)) or
+     IsZero(privkey) or
+     not Ecc256r1SharedSecret(p^, privkey, ephsec) then
+    exit;
+  inc(p);
+  sha3.Full(@ephsec, SizeOf(ephsec), secret.b);
+  a := aes.Create(secret.l, aesbits);
+  try
+    a.IV := secret.h.Lo;
+    result := a.DecryptPkcs7Buffer(p, l - SizeOf(p^), false, false);
+  finally
+    a.Free;
+    FillZero(secret.b);
+  end;
+end;
+
+function EciesSeal(const cipher: RawUtf8; const pubkey: TEccPublicKey;
+  const msg: RawByteString): RawByteString;
+var
+  mode: TAesMode;
+  bits: integer;
+begin
+  if AesAlgoNameDecode(pointer(cipher), mode, bits) then
+    result := EciesSeal(TAesFast[mode], bits, pubkey, msg)
+  else
+    result := '';
+end;
+
+function EciesOpen(const cipher: RawUtf8; const privkey: TEccPrivateKey;
+  const msg: RawByteString): RawByteString;
+var
+  mode: TAesMode;
+  bits: integer;
+begin
+  if AesAlgoNameDecode(pointer(cipher), mode, bits) then
+    result := EciesOpen(TAesFast[mode], bits, privkey, msg)
   else
     result := '';
 end;
