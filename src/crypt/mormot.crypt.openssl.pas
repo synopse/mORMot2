@@ -1351,12 +1351,13 @@ begin
   OPENSSL_free(pub);
 end;
 
-function GetEcPriv(k: PEC_KEY; out PrivateKey: TEccPrivateKey): boolean; overload;
+function GetEcPriv(k: PEC_KEY; out PrivateKey: TEccPrivateKey): boolean;
 var
   priv: PBIGNUM;
   privlen: integer;
 begin
   result := false;
+  FillZero(PrivateKey); // may be padded with zeros anyway
   if k = nil then
     exit;
   priv := EC_KEY_get0_private_key(k);
@@ -1364,7 +1365,6 @@ begin
   if (privlen <= 0) or
      (privlen > SizeOf(PrivateKey)) then
     exit;
-  FillZero(PrivateKey); // may be padded with zeros
   BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
   result := true;
 end;
@@ -1375,10 +1375,9 @@ begin
     FillZero(result, SizeOf(result));
 end;
 
-function GetEs256Private(k: PEVP_PKEY): TEccPrivateKey;
+function GetEs256Private(k: PEVP_PKEY; out PrivateKey: TEccPrivateKey): boolean;
 begin
-  if not GetEcPriv(EVP_PKEY_get0_EC_KEY(k), result) then
-    FillZero(result);
+  result := GetEcPriv(EVP_PKEY_get0_EC_KEY(k), PrivateKey);
 end;
 
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
@@ -2329,16 +2328,21 @@ end;
 
 function TCryptCertOpenSsl.Decrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
+var
+  priv: TEccPrivateKey;
 begin
+  result := '';
   if (fPrivKey <> nil) and
      (Cipher <> '') and
      (GetUsage * [cuDataEncipherment, cuDecipherOnly] <> []) then
     if AsymAlgo in CAA_RSA then
       result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
-    else if AsymAlgo = caaES256 then
-      result := EciesOpen(Cipher, GetEs256Private(fPrivKey), Message)
-  else
-    result := '';
+    else if (AsymAlgo = caaES256) and
+            GetEs256Private(fPrivKey, priv) then
+    begin
+      result := EciesOpen(Cipher, priv, Message);
+      FillZero(priv);
+    end;
 end;
 
 function TCryptCertOpenSsl.Handle: pointer;
