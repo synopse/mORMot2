@@ -1820,10 +1820,10 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
-    function Encrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; override;
-    function Decrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; override;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
     function Handle: pointer; override;
   end;
 
@@ -2312,8 +2312,8 @@ begin
       result := cvValidSelfSigned
 end;
 
-function TCryptCertOpenSsl.Encrypt(const Cipher: RawUtf8;
-  const Message: RawByteString): RawByteString;
+function TCryptCertOpenSsl.Encrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
 begin
   if (fX509 <> nil) and
      (Cipher <> '') and
@@ -2327,8 +2327,8 @@ begin
     result := '';
 end;
 
-function TCryptCertOpenSsl.Decrypt(const Cipher: RawUtf8;
-  const Message: RawByteString): RawByteString;
+function TCryptCertOpenSsl.Decrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
 begin
   if (fPrivKey <> nil) and
      (Cipher <> '') and

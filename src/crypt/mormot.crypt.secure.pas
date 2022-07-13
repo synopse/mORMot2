@@ -1456,14 +1456,16 @@ type
     // transport then our EVP_PKEY.RsaSeal encoding, then both 'x509-es256' and
     // 'syn-es256' use our EciesSeal ES256 encoding
     // - returns '' if this feature is not supported
-    function Encrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
     /// decrypt a message using the private key of this certificate
     // - not all algorithms support key transport, only RSA and ES256 by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
     // transport then our EVP_PKEY.RsaOpen decoding, then both 'x509-es256' and
     // 'syn-es256' use our EciesOpen ES256 decoding
     // - returns '' if this feature is not supported, or Message is incorrect
-    function Decrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the public key as raw binary
@@ -1544,10 +1546,10 @@ type
       ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData): TCryptCertValidity; virtual;
-    function Encrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; virtual; abstract;
-    function Decrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; virtual; abstract;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; virtual; abstract;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function AsymAlgo: TCryptAsymAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;

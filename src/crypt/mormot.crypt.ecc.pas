@@ -5173,10 +5173,10 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
-    function Encrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; override;
-    function Decrypt(const Cipher: RawUtf8;
-      const Message: RawByteString): RawByteString; override;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
     function Handle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
@@ -5611,8 +5611,8 @@ begin
   result := TCryptCertValidity(fEcc.VerifyCertificate(auth));
 end;
 
-function TCryptCertInternal.Encrypt(const Cipher: RawUtf8;
-  const Message: RawByteString): RawByteString;
+function TCryptCertInternal.Encrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
 begin
   if fEcc <> nil then
     result := EciesSeal(Cipher, fEcc.Content.Head.Signed.PublicKey, Message)
@@ -5620,8 +5620,8 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.Decrypt(const Cipher: RawUtf8;
-  const Message: RawByteString): RawByteString;
+function TCryptCertInternal.Decrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
 var
   pk: PEccPrivateKey;
 begin
