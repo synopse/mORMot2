@@ -1788,6 +1788,10 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
+    function Encrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; override;
+    function Decrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; override;
     function Handle: pointer; override;
   end;
 
@@ -2274,6 +2278,31 @@ begin
       result := cvInvalidSignature
     else if auth = fX509 then
       result := cvValidSelfSigned
+end;
+
+function TCryptCertOpenSsl.Encrypt(const Cipher: RawUtf8;
+  const Message: RawByteString): RawByteString;
+begin
+  if (fX509 <> nil) and
+     (Cipher <> '') and
+     (AsymAlgo in CAA_RSA) and
+     (GetUsage * [cuDataEncipherment, cuEncipherOnly] <> []) then
+    result := fX509.GetPublicKey.RsaSeal(
+      EVP_get_cipherbyname(pointer(Cipher)), Message)
+  else
+    result := '';
+end;
+
+function TCryptCertOpenSsl.Decrypt(const Cipher: RawUtf8;
+  const Message: RawByteString): RawByteString;
+begin
+  if (fPrivKey <> nil) and
+     (Cipher <> '') and
+     (AsymAlgo in CAA_RSA) and
+     (GetUsage * [cuDataEncipherment, cuDecipherOnly] <> []) then
+    result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
+  else
+    result := '';
 end;
 
 function TCryptCertOpenSsl.Handle: pointer;

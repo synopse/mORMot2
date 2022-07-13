@@ -2334,6 +2334,7 @@ begin
     AddAlgName;
     check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
     c1 := crt.New;
+    check(c1.AsymAlgo = crt.AsymAlgo);
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
     Check(c1.IsVoid);
@@ -2464,6 +2465,14 @@ begin
     Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned1');
     Check(c3.Verify(c2) = cvValidSigned, 'cvValidSigned2');
     Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
+    n := '0123456789012345012345678901234'; // not a 16-byte multiple length
+    r := c3.Encrypt('aes-128-ctr', n);
+    if r <> '' then // not all algorithms support encryption (RSA+ES256 only)
+    begin
+      CheckEqual(c3.Decrypt('aes-128-ctr', r), n, 'asym ctr');
+      r := c3.Encrypt('aes-128-cbc', n);
+      CheckEqual(c3.Decrypt('aes-128-cbc', r), n, 'another padding');
+    end;
     c2 := crt.New;
     c2.Generate([cuDigitalSignature], 'self.signed', nil);
     Check(c2.IsSelfSigned);

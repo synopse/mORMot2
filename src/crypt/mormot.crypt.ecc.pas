@@ -2381,9 +2381,9 @@ begin
     exit;
   if not CheckCRC then
     raise EEccException.CreateUtf8('%.Encrypt: no public key', [self]);
-  if not (cuEncipherOnly in GetUsage) then
+  if GetUsage * [cuDataEncipherment, cuEncipherOnly] = [] then
     raise EEccException.CreateUtf8(
-      '%.Encrypt: missing cuEncipherOnly Usage', [self]);
+      '%.Encrypt: missing cuDataEncipherment/cuEncipherOnly Usage', [self]);
   if Algo = ecaUnknown then // use safest algorithm by default
     if IsContentCompressed(pointer(Plain), length(Plain)) then
       Algo := ecaPBKDF2_HMAC_SHA256_AES256_CFB
@@ -3032,7 +3032,7 @@ var
   c: TAesAbstractClass;
 begin
   result := ecdUnsupported;
-  if not (cuDigitalSignature in GetUsage) then
+  if GetUsage * [cuDataEncipherment, cuDecipherOnly] = [] then
     exit;
   result := ecdCorrupted;
   datalen := length(Encrypted) - SizeOf(TEciesHeader);
@@ -5168,6 +5168,10 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
+    function Encrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; override;
+    function Decrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; override;
     function Handle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
@@ -5600,6 +5604,27 @@ begin
     else
       exit;
   result := TCryptCertValidity(fEcc.VerifyCertificate(auth));
+end;
+
+function TCryptCertInternal.Encrypt(const Cipher: RawUtf8;
+  const Message: RawByteString): RawByteString;
+begin
+  if fEcc <> nil then
+    result := EciesSeal(Cipher, fEcc.Content.Head.Signed.PublicKey, Message)
+  else
+    result := '';
+end;
+
+function TCryptCertInternal.Decrypt(const Cipher: RawUtf8;
+  const Message: RawByteString): RawByteString;
+var
+  pk: PEccPrivateKey;
+begin
+  pk := GetEccPrivateKey({checkzero=}true);
+  if pk <> nil then
+    result := EciesOpen(Cipher, pk^, Message)
+  else
+    result := '';
 end;
 
 function TCryptCertInternal.Handle: pointer;

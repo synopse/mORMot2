@@ -1450,6 +1450,15 @@ type
     // - can optionally return the payload fields
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData = nil): TCryptCertValidity;
+    /// encrypt a message using the public key of this certificate
+    // - only RSA and ES256 support this method by now
+    // - RSA uses OpenSSL Envelope key transport, and ES256 our EciesSeal/EciesOpen
+    // - returns '' if this feature is not supported
+    function Encrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
+    /// decrypt a message using the private key of this certificate
+    // - not all algorithms support key transport, only RSA and ES256 by now
+    // - returns '' if this feature is not supported, or Message is incorrect
+    function Decrypt(const Cipher: RawUtf8; const Message: RawByteString): RawByteString;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the public key as raw binary
@@ -1530,6 +1539,10 @@ type
       ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData): TCryptCertValidity; virtual;
+    function Encrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; virtual; abstract;
+    function Decrypt(const Cipher: RawUtf8;
+      const Message: RawByteString): RawByteString; virtual; abstract;
     function AsymAlgo: TCryptAsymAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
