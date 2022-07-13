@@ -290,6 +290,7 @@
         {$define ASMX64}       // supports asm with globals
         {$define ASMINTEL}     // either ASMX86 or ASMX64
         {$define ASMX64AVX}    // supports AVX/AVX2/AVX512
+        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
         {$define CPUX64ASM}    // FPC has no problem (not Delphi prior XE7)
         {$define HASAESNI}     // mormot.crypt.core rejected by Darwin asm
       {$endif OSDARWIN}
@@ -549,6 +550,7 @@
       {$define ISDELPHI11}
       {$ifdef CPU64}
         {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
+        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
       {$endif CPU64}
     {$ifend}
     {$if CompilerVersion >= 36.0} // = Delphi 12
