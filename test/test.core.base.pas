@@ -2159,14 +2159,14 @@ begin
   cpu := bak - [cpuHaswell, cpuAvx2];
   X64CpuFeatures := []; // default SSE2 128-bit process
   Validate({rtl=}false);
-  {$ifdef FPC} // Delphi doesn't support AVX asm
+  {$ifdef ASMX64AVXNOCONST} // oldest Delphi doesn't support AVX asm
   if cpuAvx in cpu then
   begin
     X64CpuFeatures := [cpuAvx]; // AVX 256-bit process
     Validate(false);
   end;
-  {$endif FPC}
-  X64CpuFeatures := bak; // there is no AVX2 move/fillchar (still 256-bit wide)
+  {$endif ASMX64AVXNOCONST}
+  X64CpuFeatures := bak; // there is no AVX move/fillchar (still 256-bit wide)
   if (cpu <> []) and
      (cpu <> [cpuAvx]) then
     Validate(false);
@@ -6109,7 +6109,7 @@ begin
         i2.From(i1.Value);
         check(i1.Equal(i2));
         json := VariantSaveJson(i1.AsVariant);
-        check(VariantSaveJson(i2.AsVariant) = json);
+        checkEqual(VariantSaveJson(i2.AsVariant), json);
         CheckEqual(json, FormatUtf8(
           '{"Created":"%","Identifier":%,"Counter":%,"Value":%,"Hex":"%"}',
           [DateTimeToIso8601Text(i1.CreateDateTime), i1.ProcessID, i1.Counter,
