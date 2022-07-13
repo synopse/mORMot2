@@ -144,11 +144,13 @@ function EciesHeaderText(const encryptedfile: TFileName;
 
 /// encrypt a message using a ECC secp256r1 public key
 // - similar to EVP_PKEY.RsaSeal, as a cut-down version of our ECIES algorithm
+// - store the ephemeral public key as output trailer, followed by ciphered data
 function EciesSeal(aes: TAesAbstractClass; aesbits: integer;
   const pubkey: TEccPublicKey; const msg: RawByteString): RawByteString; overload;
 
 /// decrypt a message using a ECC secp256r1 private key
 // - similar to EVP_PKEY.RsaOpen, as a cut-down version of our ECIES algorithm
+// - expects the ephemeral public key as input trailer, followed by ciphered data
 function EciesOpen(aes: TAesAbstractClass; aesbits: integer;
   const privkey: TEccPrivateKey; const msg: RawByteString): RawByteString; overload;
 
@@ -1846,6 +1848,8 @@ begin
   finally
     a.Free;
     FillZero(secret.b);
+    FillZero(ephprv);
+    FillZero(ephsec);
   end;
 end;
 
@@ -1876,6 +1880,7 @@ begin
   finally
     a.Free;
     FillZero(secret.b);
+    FillZero(ephsec);
   end;
 end;
 
