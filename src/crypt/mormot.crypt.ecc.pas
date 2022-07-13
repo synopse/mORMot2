@@ -145,12 +145,14 @@ function EciesHeaderText(const encryptedfile: TFileName;
 /// encrypt a message using a ECC secp256r1 public key
 // - similar to EVP_PKEY.RsaSeal, as a cut-down version of our ECIES algorithm
 // - store the ephemeral public key as output trailer, followed by ciphered data
+// - ephemeral secret and IV are SHA-3 derivated from safe ECDH shared secret
 function EciesSeal(aes: TAesAbstractClass; aesbits: integer;
   const pubkey: TEccPublicKey; const msg: RawByteString): RawByteString; overload;
 
 /// decrypt a message using a ECC secp256r1 private key
 // - similar to EVP_PKEY.RsaOpen, as a cut-down version of our ECIES algorithm
 // - expects the ephemeral public key as input trailer, followed by ciphered data
+// - ephemeral secret and IV are SHA-3 derivated from safe ECDH shared secret
 function EciesOpen(aes: TAesAbstractClass; aesbits: integer;
   const privkey: TEccPrivateKey; const msg: RawByteString): RawByteString; overload;
 
@@ -318,6 +320,11 @@ type
       const DestFile: TFileName = ''; const Salt: RawUtf8 = 'salt';
       SaltRounds: integer = DEFAULT_ECCROUNDS; Algo: TEciesAlgo = ecaUnknown;
       IncludeSignFile: boolean = true): boolean;
+    /// encrypt some message using the ECDH/SHA3 EciesSeal() pattern
+    // - so is not compatible with TEccCertificate.Encrypt() but with
+    // ICryptCert.Encrypt and TEccCertificateSecret.DecryptMessage
+    function EncryptMessage(const Plain: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
     /// returns a TDocVariant object of all published properties of this instance
     // - excludes the Base64 property content if withBase64 is set to false
     function ToVariant(withBase64: boolean = true): variant;
@@ -581,6 +588,11 @@ type
       SaltRounds: integer = DEFAULT_ECCROUNDS;
       Signature: PEccSignatureCertifiedContent = nil;
       MetaData: PRawJson = nil): TEccDecrypt;
+    /// decrypt some message using the ECDH/SHA3 EciesOpen() pattern
+    // - so is not compatible with TEccCertificateSecret.Decrypt() but with
+    // ICryptCert.Decrypt and TEccCertificate.EncryptMessage
+    function DecryptMessage(const Encrypted: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
   public
     /// how many anti-forensic diffusion stripes are used for private key storage
     // - default is 0, meaning no diffusion, i.e. 32 bytes of storage space
@@ -2519,6 +2531,16 @@ begin
   end;
 end;
 
+function TEccCertificate.EncryptMessage(const Plain: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if CheckCRC and
+    (GetUsage * [cuDataEncipherment, cuEncipherOnly] <> []) then
+    result := EciesSeal(Cipher, fContent.Head.Signed.PublicKey, Plain)
+  else
+    result := '';
+end;
+
 function TEccCertificate.ToVariant(withBase64: boolean): variant;
 var
   u: TCryptCertUsages;
@@ -3045,7 +3067,8 @@ begin
      not EciesHeader(Encrypted, head) then
     exit;
   data := @PByteArray(Encrypted)[SizeOf(TEciesHeader)];
-  if CheckCRC and HasSecret then
+  if CheckCRC and
+     HasSecret then
   try
     if not mormot.crypt.ecc256r1.IsEqual(head.recid, fContent.Head.Signed.Serial) then
     begin
@@ -3157,6 +3180,17 @@ begin
   finally
     FillZero(plain);
   end;
+end;
+
+function TEccCertificateSecret.DecryptMessage(const Encrypted: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if (GetUsage * [cuDataEncipherment, cuDecipherOnly] <> []) and
+     CheckCRC and
+     HasSecret then
+    result := EciesOpen(Cipher, fPrivateKey, Encrypted)
+  else
+    result := '';
 end;
 
 
