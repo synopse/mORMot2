@@ -2167,6 +2167,20 @@ function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
 
+/// compute the binary hash of one binary buffer
+// - will use EVP_sha1 if no md instance is specified
+// - return the number of bytes stored into dig
+function Digest(md: PEVP_MD; buf: pointer; buflen: integer;
+  out dig: THash512): integer; overload;
+
+/// compute the hexadecimal hash of one binary buffer
+// - will use EVP_sha1 if no md instance is specified
+function Digest(md: PEVP_MD; buf: pointer; buflen: integer): RawUtf8; overload;
+
+/// compute the hexadecimal hash of one binary buffer
+// - will use EVP_sha1 if no md instance is specified
+function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8; overload;
+
 /// load a private key from a PEM or DER buffer, optionally with a password
 // - try first with PEM text format, then will fallback to DER binary
 // - caller should make result.Free once done with the result
@@ -6136,6 +6150,44 @@ begin
     exit;
   ERR_error_string_n(err, @tmp, SizeOf(tmp));
   DisplayError('%s', [tmp]);
+end;
+
+function Digest(md: PEVP_MD; buf: pointer; buflen: integer;
+  out dig: THash512): integer;
+var
+  ctx: PEVP_MD_CTX;
+begin
+  result := 0;
+  if (buf = nil) or
+     (buflen < 0) then
+    exit;
+  ctx := EVP_MD_CTX_new;
+  if ctx = nil then
+    exit;
+  if md = nil then
+    md := EVP_sha1; // SHA-1 fingerprint by default
+  if (EVP_DigestInit_ex(ctx, md, nil) = OPENSSLSUCCESS) and
+     (EVP_DigestUpdate(ctx, buf, buflen) = OPENSSLSUCCESS) and
+     (EVP_DigestFinal_ex(ctx, @dig, nil) = OPENSSLSUCCESS) then
+    result := EVP_MD_size(md);
+  EVP_MD_CTX_free(ctx);
+end;
+
+function Digest(md: PEVP_MD; buf: pointer; buflen: integer): RawUtf8;
+var
+  dig: THash512;
+  len: integer;
+begin
+  len := Digest(md, buf, buflen, dig);
+  if len > 0 then
+    result := MacToHex(@dig, len)
+  else
+    result := '';
+end;
+
+function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8;
+begin
+  result := Digest(md, pointer(buf), length(buf));
 end;
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
