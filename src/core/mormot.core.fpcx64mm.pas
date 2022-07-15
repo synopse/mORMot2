@@ -327,6 +327,7 @@ function GetSmallBlockContention(
 /// convenient debugging function into the console
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
+// - see also RetrieveMemoryManagerInfo from mormot.core.log for runtime call
 procedure WriteHeapStatus(const context: ShortString = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
   compilationflags: boolean = false);
@@ -334,6 +335,7 @@ procedure WriteHeapStatus(const context: ShortString = '';
 /// convenient debugging function into a string
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
 // up to the smallblockcontentioncount biggest occurences
+// - see also RetrieveMemoryManagerInfo from mormot.core.log for more details
 // - warning: this function is not thread-safe
 function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): string;
@@ -2774,12 +2776,17 @@ begin
   result.CurrHeapFree := 0;
 end;
 
+function _GetHeapInfo: string;
+begin
+  result := GetHeapStatus(' - fpcx64mm: ', 16, 16, {flags=}true, {sameline=}true);
+end;
+
 function _GetHeapStatus: THeapStatus;
 begin
+  // use this deprecated 32-bit structure to return
   FillChar(result, sizeof(result), 0);
-  with HeapStatus do
-    result.TotalAllocated := Medium.CurrentBytes + Large.CurrentBytes;
-  result.TotalAddrSpace := result.TotalAllocated;
+  PShortString(@result.TotalAddrSpace)^ := 'fpcx64mm'; // magic
+  PPointer(@result.Unused)^ := @_GetHeapInfo;
 end;
 
 type

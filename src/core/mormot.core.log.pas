@@ -419,6 +419,12 @@ function ToCaption(filter: TSynLogFilter): string; overload;
 /// returns a method event as text, using the .map/.dbg/.mab information if available
 function ToText(const Event: TMethod): RawUtf8; overload;
 
+/// retrieve a one-line of text including detailed heap information
+// - will use the RTL status entrypoint, or detect mormot.core.fpcx64mm
+// and retrieve all its available information
+// - as used by TSynLog.AddMemoryStats
+function RetrieveMemoryManagerInfo: RawUtf8;
+
 var
   /// low-level variable used internally by this unit
   // - we use a process-wide giant lock to avoid proper multi-threading of logs
@@ -1873,18 +1879,10 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
 
 implementation
 
-{$ifdef FPC_X64MM}
-uses
-  {$ifdef FPC}
-  exeinfo, // cross-platform executable raw access for GDB DWARF support
-  {$endif FPC}
-  mormot.core.fpcx64mm; // for sllMemory detailed stats
-{$else}
 {$ifdef FPC}
 uses
-  exeinfo;
+  exeinfo; // cross-platform executable raw access for GDB DWARF support
 {$endif FPC}
-{$endif FPC_X64MM}
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -3597,6 +3595,45 @@ begin
     TObject(Event.Data), Event.Data], result);
 end;
 
+{$ifdef FPC}
+type
+  THeapInfo = function: string;
+
+function RetrieveMemoryManagerInfo: RawUtf8;
+begin
+  {$ifdef CPUX64}
+  // detect and include mormot.core.fpcx64mm raw information
+  with GetHeapStatus do
+    if PShortString(@TotalAddrSpace)^ = 'fpcx64mm' then // magic marker
+    try
+      result := StringReplaceAll(THeapInfo(PPointer(@Unused)^)(), '  ', ' ');
+      exit;
+    except
+    end;
+  {$endif CPUX64}
+  // standard FPC memory manager
+  with GetFPCHeapStatus do
+    FormatUtf8(' - Heap: Current: used=% size=% free=%   Max: size=% used=%',
+      [KBNoSpace(CurrHeapUsed), KBNoSpace(CurrHeapSize), KBNoSpace(CurrHeapFree),
+       KBNoSpace(MaxHeapSize), KBNoSpace(MaxHeapUsed)], result);
+end;
+{$else}
+function RetrieveMemoryManagerInfo: RawUtf8;
+begin
+  // standard Delphi memory manager
+  with GetHeapStatus do
+    if TotalAddrSpace <> 0 then
+      FormatUtf8(' - Heap: AddrSpace=% Uncommitted=% Committed=% Allocated=% '+
+         'Free=% FreeSmall=% FreeBig=% Unused=% Overheap=% ',
+        [KBNoSpace(TotalAddrSpace), KBNoSpace(TotalUncommitted),
+         KBNoSpace(TotalCommitted), KBNoSpace(TotalAllocated),
+         KBNoSpace(TotalFree), KBNoSpace(FreeSmall), KBNoSpace(FreeBig),
+         KBNoSpace(Unused), KBNoSpace(Overhead)], result)
+    else
+      result := '';
+end;
+{$endif FPC}
+
 
 type
   /// an array to all available per-thread TSynLog instances
@@ -5258,15 +5295,12 @@ var
 begin
   if GetMemoryInfo(info, {withalloc=}true) then
     fWriter.Add(
-      ' memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
+      ' System: memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
       [KBNoSpace(info.memtotal), KBNoSpace(info.memfree),
        KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
-  {$ifdef FPC_X64MM}
-  // include mormot.core.fpcx64mm raw information
-  fWriter.AddNoJsonEscapeString(GetHeapStatus(
-    ' - fpcx64mm', 16, 16, {flags=}true, {sameline=}true));
-  {$endif FPC_X64MM}
+  // include mormot.core.fpcx64mm raw information if available
+  fWriter.AddNoJsonEscapeUtf8(RetrieveMemoryManagerInfo);
   fWriter.AddShorter('   ');
 end;
 
