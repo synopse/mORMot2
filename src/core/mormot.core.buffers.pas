@@ -2576,11 +2576,14 @@ type
     /// how many bytes are currently allocated in the Buffer
     property Capacity: PtrInt
       read GetCapacity;
-    /// add some content to the Buffer, resizing it if needed
+    /// add some UTF-8 buffer content to the Buffer, resizing it if needed
     // - could optionally include a #13#10 end of line
     procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false); overload;
-    /// add some content to the Buffer, resizing it if needed
+    /// add some UTF-8 string content to the Buffer, resizing it if needed
     procedure Append(const Text: RawUtf8; CRLF: boolean = false); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+      /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
+    procedure AppendShort(const Text: ShortString; CRLF: boolean = false);
       {$ifdef HASINLINE}inline;{$endif}
     /// add some values as text to the Buffer, resizing it if needed
     procedure Append(const Args: array of const; CRLF: boolean = false); overload;
@@ -10676,6 +10679,11 @@ end;
 procedure TRawByteStringBuffer.Append(const Text: RawUtf8; CRLF: boolean);
 begin
   Append(pointer(Text), length(Text), CRLF);
+end;
+
+procedure TRawByteStringBuffer.AppendShort(const Text: ShortString; CRLF: boolean);
+begin
+  Append(@Text[1], length(Text), CRLF);
 end;
 
 procedure TRawByteStringBuffer.Append(const Args: array of const; CRLF: boolean);

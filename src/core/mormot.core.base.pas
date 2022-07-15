@@ -472,6 +472,10 @@ type
   /// stack-allocated ASCII string, used by GuidToShort() function
   TGuidShortString = string[38];
 
+  /// used e.g. by HttpDateNowUtc
+  TShort63 = string[63];
+  PShort63 = ^TShort63;
+
   /// used e.g. for SetThreadName/GetCurrentThreadName
   TShort31 = string[31];
   PShort31 = ^TShort31;
