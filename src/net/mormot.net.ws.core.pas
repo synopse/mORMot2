@@ -1636,7 +1636,7 @@ begin
             IdemPropNameU(ContentType, JSON_CONTENT_TYPE) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
     else if IdemPChar(pointer(ContentType), 'TEXT/') then
-      WR.AddCsvUtf8([Content])
+      WR.AddJsonString(Content)
     else
       WR.WrBase64(pointer(Content), length(Content), true);
     WR.Add(']', '}');

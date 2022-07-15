@@ -1832,11 +1832,11 @@ var
   ephpub: TEccPublicKey;
   ephprv: TEccPrivateKey;
   ephsec: TEccSecretKey;
-  secret: THash512Rec;
   a: TAesAbstract;
   l, o: integer;
   p: PEccPublicKey;
-  sha3: TSha3; // uses 256-bit or 384-bit of it
+  secret: THash512Rec; // uses 256-bit or 384-bit of it
+  sha3: TSha3;
 begin
   result := '';
   l := length(msg);
@@ -1850,7 +1850,7 @@ begin
   a := aes.Create(secret.l, aesbits); // use 128-bit or 256-bit of secret.l
   try
     a.IV := secret.h.Lo; // use 128-bit of secret.h
-    o := a.EncryptPkcs7Length(l, false);
+    o := a.EncryptPkcs7Length(l, {withiv=}false);
     FastSetRawByteString(result, nil, o + SizeOf(ephpub));
     p := pointer(result);
     p^ := ephpub;
