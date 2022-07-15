@@ -26,6 +26,7 @@ unit mormot.crypt.core;
    with (deep) refactoring (other routines are our own coding):
    - aes_pascal, keccak_pascal: (c) Wolfgang Ehrhardt under zlib license
    - KeccakPermutationKernel MMX/i386: (c) Eric Grange
+   - Andy Polyakov's keccak1600-avx2.pl from the CRYPTOGAMS project
    - MD5_386.asm: (c) Maxim Masiutin - Ritlabs, SRL
    - sha512-x86: (c) Project Nayuki under MIT license
    - sha512-x64sse4, sha256-sse4, crc32c64: (c) Intel Corporation w/ OS licence
@@ -1789,10 +1790,10 @@ function CryptDataForCurrentUser(const Data, AppSecret: RawByteString;
 { ****************** SHA-2 SHA-3 Secure Hashing }
 
 const
-  /// hide all SHA-1/SHA-2 complex code by storing the context as buffer
+  /// hide TSha1/TSha256 complex code by storing the SHA-1/SHA-2 context as buffer
   SHAContextSize = 108;
 
-  /// hide all SHA-3 complex code by storing the Keccak Sponge as buffer
+  /// hide TSha3Context complex code by storing the Keccak/SHA-3 Sponge as buffer
   SHA3ContextSize = 412;
 
 type
@@ -1947,7 +1948,7 @@ type
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
   // since it already includes proper padding, so keys could be concatenated
   // - this implementation is based on Wolfgang Ehrhardt's and Eric Grange's,
-  // with our own manually optimized x64 assembly
+  // with manually optimized x64 assembly, with AVX2 runtime detection
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. after InitCypher
   // - see TSynHasher if you expect to support more than one algorithm at runtime
@@ -8194,7 +8195,8 @@ end;
 const
   cKeccakPermutationSize = 1600;
   cKeccakMaximumRate = 1536;
-  cKeccakPermutationSizeInBytes = cKeccakPermutationSize div 8;
+  cKeccakPermutationSizeInByte = cKeccakPermutationSize div 8;
+  cKeccakPermutationSizeInQWord = cKeccakPermutationSize div 64;
   cKeccakMaximumRateInBytes = cKeccakMaximumRate div 8;
   cKeccakNumberOfRounds = 24;
   cRoundConstants: array[0..cKeccakNumberOfRounds - 1] of QWord = (
@@ -8215,11 +8217,69 @@ var
   C: array[0..4] of QWord;
   i: PtrInt;
 begin
-  for i := 0 to 23 do
+  {$ifdef ASMX64AVXNOCONST}
+  if cpuAVX2 in X64CpuFeatures then
   begin
-    KeccakPermutationKernel(@B, A, @C);
-    A[00] := A[00] xor cRoundConstants[i];
-  end;
+    B[0] := A[0]; // AVX2 asm has a diverse state order to perform its rotations
+    B[1] := A[1];
+    B[2] := A[2];
+    B[3] := A[3];
+    B[4] := A[4];
+    B[7] := A[5];
+    B[21] := A[6];
+    B[10] := A[7];
+    B[15] := A[8];
+    B[20] := A[9];
+    B[5] := A[10];
+    B[13] := A[11];
+    B[22] := A[12];
+    B[19] := A[13];
+    B[12] := A[14];
+    B[8] := A[15];
+    B[9] := A[16];
+    B[18] := A[17];
+    B[23] := A[18];
+    B[16] := A[19];
+    B[6] := A[20];
+    B[17] := A[21];
+    B[14] := A[22];
+    B[11] := A[23];
+    B[24] := A[24];
+    KeccakPermutationAvx2(@B);
+    A[0] := B[0];
+    A[1] := B[1];
+    A[2] := B[2];
+    A[3] := B[3];
+    A[4] := B[4];
+    A[5] := B[7];
+    A[6] := B[21];
+    A[7] := B[10];
+    A[8] := B[15];
+    A[9] := B[20];
+    A[10] := B[5];
+    A[11] := B[13];
+    A[12] := B[22];
+    A[13] := B[19];
+    A[14] := B[12];
+    A[15] := B[8];
+    A[16] := B[9];
+    A[17] := B[18];
+    A[18] := B[23];
+    A[19] := B[16];
+    A[20] := B[6];
+    A[21] := B[17];
+    A[22] := B[14];
+    A[23] := B[11];
+    A[24] := B[24];
+  end
+  else
+  {$endif ASMX64AVXNOCONST}
+    // regular pascal/IntelAsm code
+    for i := 0 to high(cRoundConstants) do
+    begin
+      KeccakPermutationKernel(@B, A, @C);
+      A[00] := A[00] xor cRoundConstants[i];
+    end;
   {$ifdef CPUX86}
   asm
      emms // reset MMX state after use
@@ -8263,7 +8323,7 @@ var
   C0, C1, C2, C3, C4, D0, D1, D2, D3, D4: QWord;
   i: PtrInt;
 begin
-  for i := 0 to 23 do
+  for i := 0 to high(cRoundConstants) do
   begin
     C0 := A[00] xor A[05] xor A[10] xor A[15] xor A[20];
     C1 := A[01] xor A[06] xor A[11] xor A[16] xor A[21];
@@ -8336,7 +8396,7 @@ end;
 type
   TSha3Context = object
   public
-    State: packed array[0..cKeccakPermutationSizeInBytes - 1] of byte;
+    State: packed array[0..cKeccakPermutationSizeInQWord - 1] of QWord;
     DataQueue: packed array[0..cKeccakMaximumRateInBytes - 1] of byte;
     Algo: TSha3Algo;
     Squeezing: boolean;

@@ -1441,6 +1441,227 @@ end;
 
 {$endif ASMX64}
 
+{$ifdef ASMX64AVXNOCONST}
+
+// our AVX2 version is at least x2 faster than KeccakPermutationKernel() asm
+// inspired by Andy Polyakov's keccak1600-avx2.pl from the CRYPTOGAMS project
+procedure KeccakPermutationAvx2(A: PQWordArray);
+{$ifdef WIN64ABI}
+var
+  bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
+asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
+        movups  dqword ptr [bak6], xmm6
+        movups  dqword ptr [bak7], xmm7
+        movups  dqword ptr [bak8], xmm8
+        movups  dqword ptr [bak9], xmm9
+        movups  dqword ptr [bak10], xmm10
+        movups  dqword ptr [bak11], xmm11
+        movups  dqword ptr [bak12], xmm12
+        movups  dqword ptr [bak13], xmm13
+        movups  dqword ptr [bak14], xmm14
+        movups  dqword ptr [bak15], xmm15
+        push    rdi
+{$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$endif WIN64ABI}
+        // + 60H ajustments to keep asm opcodes offsets within -$7f..+$7f range
+        lea     r8, qword ptr [rip + @rhotates_left + 60H]
+        lea     r9, qword ptr [rip + @rhotates_right + 60H]
+        lea     rax, qword ptr [rip + @iotas]
+        lea     rdi, qword ptr [A + 60H]
+        mov     ecx, 24
+        vzeroupper
+        //vpbroadcastq ymm0, qword ptr [rdi - 60H]
+        db $C4, $E2, $7D, $59, $47, $A0
+        vmovdqu ymm1, yword ptr [rdi - 58H]
+        vmovdqu ymm2, yword ptr [rdi - 38H]
+        vmovdqu ymm3, yword ptr [rdi - 18H]
+        vmovdqu ymm4, yword ptr [rdi + 8H]
+        vmovdqu ymm5, yword ptr [rdi + 28H]
+        vmovdqu ymm6, yword ptr [rdi + 48H]
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@round: // Theta
+        vpshufd ymm13, ymm2, 4EH
+        vpxor   ymm12, ymm5, ymm3
+        vpxor   ymm9, ymm4, ymm6
+        vpxor   ymm12, ymm12, ymm1
+        vpxor   ymm12, ymm12, ymm9
+        vpermq  ymm11, ymm12, 93H
+        vpxor   ymm13, ymm13, ymm2
+        vpermq  ymm7, ymm13, 4EH
+        vpsrlq  ymm8, ymm12, 63
+        vpaddq  ymm9, ymm12, ymm12
+        vpor    ymm8, ymm8, ymm9
+        vpermq  ymm15, ymm8, 39H
+        vpxor   ymm14, ymm8, ymm11
+        vpermq  ymm14, ymm14, 00H
+        vpxor   ymm13, ymm13, ymm0
+        vpxor   ymm13, ymm13, ymm7
+        vpsrlq  ymm7, ymm13, 63
+        vpaddq  ymm8, ymm13, ymm13
+        vpor    ymm8, ymm8, ymm7
+        vpxor   ymm2, ymm2, ymm14
+        vpxor   ymm0, ymm0, ymm14
+        vpblendd ymm15, ymm15, ymm8, 0C0H
+        vpblendd ymm11, ymm11, ymm13, 03H
+        vpxor   ymm15, ymm15, ymm11
+        // Rho + Pi + pre-Chi shuffle
+        vpsllvq ymm10, ymm2, yword ptr [r8 - 60H]
+        vpsrlvq ymm2, ymm2, yword ptr [r9 - 60H]
+        vpor    ymm2, ymm2, ymm10
+        vpxor   ymm3, ymm3, ymm15
+        vpsllvq ymm11, ymm3, yword ptr [r8 - 20H]
+        vpsrlvq ymm3, ymm3, yword ptr [r9 - 20H]
+        vpor    ymm3, ymm3, ymm11
+        vpxor   ymm4, ymm4, ymm15
+        vpsllvq ymm12, ymm4, yword ptr [r8]
+        vpsrlvq ymm4, ymm4, yword ptr [r9]
+        vpor    ymm4, ymm4, ymm12
+        vpxor   ymm5, ymm5, ymm15
+        vpsllvq ymm13, ymm5, yword ptr [r8 + 20H]
+        vpsrlvq ymm5, ymm5, yword ptr [r9 + 20H]
+        vpor    ymm5, ymm5, ymm13
+        vpxor   ymm6, ymm6, ymm15
+        vpermq  ymm10, ymm2, 8DH
+        vpermq  ymm11, ymm3, 8DH
+        vpsllvq ymm14, ymm6, yword ptr [r8 + 40H]
+        vpsrlvq ymm8, ymm6, yword ptr [r9 + 40H]
+        vpor    ymm8, ymm8, ymm14
+        vpxor   ymm1, ymm1, ymm15
+        vpermq  ymm12, ymm4, 1BH
+        vpermq  ymm13, ymm5, 72H
+        vpsllvq ymm15, ymm1, yword ptr [r8 - 40H]
+        vpsrlvq ymm9, ymm1, yword ptr [r9 - 40H]
+        vpor    ymm9, ymm9, ymm15
+        // Chi
+        vpsrldq ymm14, ymm8, 8
+        vpandn  ymm7, ymm8, ymm14
+        vpblendd ymm3, ymm9, ymm13, 0CH
+        vpblendd ymm15, ymm11, ymm9, 0CH
+        vpblendd ymm5, ymm10, ymm11, 0CH
+        vpblendd ymm14, ymm9, ymm10, 0CH
+        vpblendd ymm3, ymm3, ymm11, 30H
+        vpblendd ymm15, ymm15, ymm12, 30H
+        vpblendd ymm5, ymm5, ymm9, 30H
+        vpblendd ymm14, ymm14, ymm13, 30H
+        vpblendd ymm3, ymm3, ymm12, 0C0H
+        vpblendd ymm15, ymm15, ymm13, 0C0H
+        vpblendd ymm5, ymm5, ymm13, 0C0H
+        vpblendd ymm14, ymm14, ymm11, 0C0H
+        vpandn  ymm3, ymm3, ymm15
+        vpandn  ymm5, ymm5, ymm14
+        vpblendd ymm6, ymm12, ymm9, 0CH
+        vpblendd ymm15, ymm10, ymm12, 0CH
+        vpxor   ymm3, ymm3, ymm10
+        vpblendd ymm6, ymm6, ymm10, 30H
+        vpblendd ymm15, ymm15, ymm11, 30H
+        vpxor   ymm5, ymm5, ymm12
+        vpblendd ymm6, ymm6, ymm11, 0C0H
+        vpblendd ymm15, ymm15, ymm9, 0C0H
+        vpandn  ymm6, ymm6, ymm15
+        vpxor   ymm6, ymm6, ymm13
+        vpermq  ymm4, ymm8, 1EH
+        vpblendd ymm15, ymm4, ymm0, 30H
+        vpermq  ymm1, ymm8, 39H
+        vpblendd ymm1, ymm1, ymm0, 0C0H
+        vpandn  ymm1, ymm1, ymm15
+        vpblendd ymm2, ymm11, ymm12, 0CH
+        vpblendd ymm14, ymm13, ymm11, 0CH
+        vpblendd ymm2, ymm2, ymm13, 30H
+        vpblendd ymm14, ymm14, ymm10, 30H
+        vpblendd ymm2, ymm2, ymm10, 0C0H
+        vpblendd ymm14, ymm14, ymm12, 0C0H
+        vpandn  ymm2, ymm2, ymm14
+        vpxor   ymm2, ymm2, ymm9
+        vpermq  ymm7, ymm7, 00H
+        vpermq  ymm3, ymm3, 1BH
+        vpermq  ymm5, ymm5, 8DH
+        vpermq  ymm6, ymm6, 72H
+        vpblendd ymm4, ymm13, ymm10, 0CH
+        vpblendd ymm14, ymm12, ymm13, 0CH
+        vpblendd ymm4, ymm4, ymm12, 30H
+        vpblendd ymm14, ymm14, ymm9, 30H
+        vpblendd ymm4, ymm4, ymm9, 0C0H
+        vpblendd ymm14, ymm14, ymm10, 0C0H
+        vpandn  ymm4, ymm4, ymm14
+        vpxor   ymm0, ymm0, ymm7
+        vpxor   ymm1, ymm1, ymm8
+        vpxor   ymm4, ymm4, ymm11
+        // Iota
+        vpxor   ymm0, ymm0, yword ptr [rax]
+        add     rax, 32
+        dec     ecx
+        jnz     @round
+        vmovq   qword ptr [rdi - 60H], xmm0
+        vmovdqu yword ptr [rdi - 58H], ymm1
+        vmovdqu yword ptr [rdi - 38H], ymm2
+        vmovdqu yword ptr [rdi - 18H], ymm3
+        vmovdqu yword ptr [rdi + 8H], ymm4
+        vmovdqu yword ptr [rdi + 28H], ymm5
+        vmovdqu yword ptr [rdi + 48H], ymm6
+        vzeroupper
+        {$ifdef WIN64ABI}
+        jmp @w64end
+        {$else}
+        ret
+        {$endif WIN64ABI}
+        {$ifdef FPC} align 32 {$else} .align 16 {$endif}
+        // note: on AVX2, constant alignment is not required by above opcodes
+@rhotates_left:
+        dq     3,   18,    36,    41   // [2][0] [4][0] [1][0] [3][0]
+        dq     1,   62,    28,    27   // [0][1] [0][2] [0][3] [0][4]
+        dq    45,    6,    56,    39   // [3][1] [1][2] [4][3] [2][4]
+        dq    10,   61,    55,     8   // [2][1] [4][2] [1][3] [3][4]
+        dq     2,   15,    25,    20   // [4][1] [3][2] [2][3] [1][4]
+        dq    44,   43,    21,    14   // [1][1] [2][2] [3][3] [4][4]
+@rhotates_right:
+        dq    64 - 3,  64 - 18,  64 - 36,  64 - 41
+        dq    64 - 1,  64 - 62,  64 - 28,  64 - 27
+        dq    64 - 45, 64 - 6,   64 - 56,  64 - 39
+        dq    64 - 10, 64 - 61,  64 - 55,  64 - 8
+        dq    64 - 2,  64 - 15,  64 - 25,  64 - 20
+        dq    64 - 44, 64 - 43,  64 - 21,  64 - 14
+@iotas:
+   dq $0000000000000001, $0000000000000001, $0000000000000001, $0000000000000001
+   dq $0000000000008082, $0000000000008082, $0000000000008082, $0000000000008082
+   dq $800000000000808a, $800000000000808a, $800000000000808a, $800000000000808a
+   dq $8000000080008000, $8000000080008000, $8000000080008000, $8000000080008000
+   dq $000000000000808b, $000000000000808b, $000000000000808b, $000000000000808b
+   dq $0000000080000001, $0000000080000001, $0000000080000001, $0000000080000001
+   dq $8000000080008081, $8000000080008081, $8000000080008081, $8000000080008081
+   dq $8000000000008009, $8000000000008009, $8000000000008009, $8000000000008009
+   dq $000000000000008a, $000000000000008a, $000000000000008a, $000000000000008a
+   dq $0000000000000088, $0000000000000088, $0000000000000088, $0000000000000088
+   dq $0000000080008009, $0000000080008009, $0000000080008009, $0000000080008009
+   dq $000000008000000a, $000000008000000a, $000000008000000a, $000000008000000a
+   dq $000000008000808b, $000000008000808b, $000000008000808b, $000000008000808b
+   dq $800000000000008b, $800000000000008b, $800000000000008b, $800000000000008b
+   dq $8000000000008089, $8000000000008089, $8000000000008089, $8000000000008089
+   dq $8000000000008003, $8000000000008003, $8000000000008003, $8000000000008003
+   dq $8000000000008002, $8000000000008002, $8000000000008002, $8000000000008002
+   dq $8000000000000080, $8000000000000080, $8000000000000080, $8000000000000080
+   dq $000000000000800a, $000000000000800a, $000000000000800a, $000000000000800a
+   dq $800000008000000a, $800000008000000a, $800000008000000a, $800000008000000a
+   dq $8000000080008081, $8000000080008081, $8000000080008081, $8000000080008081
+   dq $8000000000008080, $8000000000008080, $8000000000008080, $8000000000008080
+   dq $0000000080000001, $0000000080000001, $0000000080000001, $0000000080000001
+   dq $8000000080008008, $8000000080008008, $8000000080008008, $8000000080008008
+        {$ifdef WIN64ABI}
+@w64end:pop     rdi
+        movups  xmm6, dqword ptr [bak6]
+        movups  xmm7, dqword ptr [bak7]
+        movups  xmm8, dqword ptr [bak8]
+        movups  xmm9, dqword ptr [bak9]
+        movups  xmm10, dqword ptr [bak10]
+        movups  xmm11, dqword ptr [bak11]
+        movups  xmm12, dqword ptr [bak12]
+        movups  xmm13, dqword ptr [bak13]
+        movups  xmm14, dqword ptr [bak14]
+        movups  xmm15, dqword ptr [bak15]
+        {$endif WIN64ABI}
+end;
+
+{$endif ASMX64AVXNOCONST}
+
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
