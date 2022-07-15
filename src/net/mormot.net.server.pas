@@ -1359,9 +1359,9 @@ begin
   // append Command
   Context.Head.Reset;
   if hfConnectionClose in Context.HeaderFlags then
-    Context.Head.Append('HTTP/1.0 ')
+    Context.Head.AppendShort('HTTP/1.0 ')
   else
-    Context.Head.Append('HTTP/1.1 ');
+    Context.Head.AppendShort('HTTP/1.1 ');
   Context.Head.Append([fRespStatus, ' ', fRespReason], {crlf=}true);
   // custom headers from Request() method
   P := pointer(OutCustomHeaders);
@@ -1383,15 +1383,12 @@ begin
     until P^ = #0;
   end;
   // generic headers
-  Context.Head.Append('Server: ');
+  Context.Head.AppendShort('Server: ');
   Context.Head.Append(fServer.ServerName, {crlf=}true);
   if hsoIncludeDateHeader in fServer.Options then
-  begin
-    SetHttpDateNowUtcCache;
-    Context.Head.Append(HttpDateNowUtcCache);
-  end;
+    Context.Head.AppendShort(HttpDateNowUtc);
   if not (hsoNoXPoweredHeader in fServer.Options) then
-    Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
+    Context.Head.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
