@@ -713,7 +713,6 @@ var
   net: TNetTlsContext;
   log: ISynLog;
 begin
-  inherited Create; // may have been overriden
   // prepare the running parameters
   if high(aServers) < 0 then
     fLog := TSynLog
@@ -722,7 +721,7 @@ begin
   log := fLog.Enter('Create % (%) on port %',
     [ToText(aUse)^, ToText(aSecurity)^, aPort], self);
   fOptions := aOptions;
-  inherited Create;
+  inherited Create; // may have been overriden
   SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
   fDomainName := aDomainName;

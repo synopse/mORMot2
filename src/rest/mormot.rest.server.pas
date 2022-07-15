@@ -4256,7 +4256,7 @@ begin
   if Server.fIPBan.Exists(GetRemoteIP) then
   begin
     Error('Banned IP %', [fCall^.LowLevelRemoteIP]);
-    result := true;
+    result := false;
   end
   else
     result := true;
