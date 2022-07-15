@@ -4890,11 +4890,16 @@ end;
 
 procedure _JS_RawByteString(Data: PRawByteString; const Ctxt: TJsonSaveContext);
 begin
-  if (rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
-     not (woRawBlobAsBase64 in Ctxt.Options) then
+  if (Data^ = '') or
+     ((rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
+      not (woRawBlobAsBase64 in Ctxt.Options)) then
     Ctxt.W.AddNull
   else
-    Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}true);
+  begin
+    Ctxt.W.Add('"'); // no magic trailer as with mORMot 1
+    Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}false);
+    Ctxt.W.Add('"');
+  end;
 end;
 
 procedure _JS_RawJson(Data: PRawJson; const Ctxt: TJsonSaveContext);
@@ -7351,8 +7356,10 @@ begin
   if Ctxt.ParseNext then
     if Ctxt.Value = nil then // null
       Data^ := ''
-    else
-      Ctxt.Valid := Base64MagicCheckAndDecode(Ctxt.Value, Ctxt.ValueLen, Data^);
+    else if not Ctxt.WasString then
+      Ctxt.Valid := false
+    else if not Base64MagicTryAndDecode(Ctxt.Value, Ctxt.ValueLen, Data^) then
+      FastSetRawByteString(Data^, Ctxt.Value, Ctxt.ValueLen); // allow text
 end;
 
 procedure _JL_RawJson(Data: PRawJson; var Ctxt: TJsonParserContext);
