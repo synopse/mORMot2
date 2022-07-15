@@ -616,7 +616,7 @@ end;
 procedure fpc_ansistr_decr_ref;      external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref;      external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign;        external name 'FPC_ANSISTR_ASSIGN';
-procedure fpc_ansistr_setlength;     external name 'FPC_ANSISTR_SETLENGTH';
+//procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
 procedure fpc_ansistr_compare;       external name 'FPC_ANSISTR_COMPARE';
 procedure fpc_ansistr_compare_equal; external name 'FPC_ANSISTR_COMPARE_EQUAL';
 procedure fpc_unicodestr_decr_ref;   external name 'FPC_UNICODESTR_DECR_REF';
@@ -869,6 +869,8 @@ begin // the caller ensured s := ''
     MoveFast(buf^, s^, len);
 end;
 
+(* BUGGY especially on Win64
+
 procedure _ansistr_setlength_new(var s: pointer; len: PtrInt; cp: cardinal);
 var
   p, new: PAnsiChar;
@@ -913,6 +915,8 @@ asm
         mov     qword ptr [rax].TStrRec.length, len
         mov     byte ptr [rax + len + _STRRECSIZE], 0
 end;
+
+ BUGGY especially on Win64  *)
 
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
@@ -996,7 +1000,8 @@ begin
     if pointer(s1) = pointer(dest) then
     begin
       // dest := dest+s2 -> self-resize dest
-      _ansistr_setlength(dest, l1 + _lstrlen(s2), cp);
+      SetLength(dest, l1 + _lstrlen(s2));
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
       MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
     end
     else
@@ -1216,14 +1221,14 @@ begin
     RedirectRtlUtf8(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
     RedirectRtlUtf8(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;
-  RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);
+  //RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength); buggy
   {$endif FPC_HAS_CPSTRING}
   GetMemoryManager(mm); // will work with mormot.core.fpcx64mm and any other MM
   RedirectRtlCall(@_fpc_getmem, @mm.Getmem, 0);    // RTL calls
   RedirectRtlCall(@_fpc_freemem, @mm.Freemem, 0);
+  RedirectCode(@ReAllocMem, @mm.ReAllocMem);
   RedirectCode(@fpc_getmem, @mm.Getmem);           // asm calls
   RedirectCode(@fpc_freemem, @mm.Freemem);
-  Freemem(nil);
   {$endif NOPATCHRTL}
 end;
 
