@@ -1516,6 +1516,9 @@ type
   // - rsoNoTableURI will disable any /root/tablename URI for safety
   // - rsoMethodUnderscoreAsSlashUri will try to decode /root/method/name
   // as 'method_name' method
+  // - rsoValidateUtf8Input will call IsValidUtf8() on input UTF-8 JSON/text,
+  // to sanitize character encodings - with AVX2 this function is very fast so
+  // this could be a good option if you don't trust your clients
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1533,7 +1536,8 @@ type
     rsoGetUserRetrieveNoBlobData,
     rsoNoInternalState,
     rsoNoTableURI,
-    rsoMethodUnderscoreAsSlashUri);
+    rsoMethodUnderscoreAsSlashUri,
+    rsoValidateUtf8Input);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -2453,8 +2457,10 @@ type
     adSspi);
 
   /// customize TRestHttpServer process
-  // - rsoOnlyJsonRequests to force the server to respond only to MIME type
-  // APPLICATION/JSON requests
+  // - rsoOnlyJsonRequests will return HTTP 400 "Bad Request" if the input
+  // is not of 'application/json' content type
+  // - rsoOnlyValidUtf8 will return HTTP 406 "Non Acceptable" if input JSON or
+  // text body is not valid UTF-8 - calling fast IsValidUtf8() function
   // - rsoRedirectServerRootUriForExactCase to search root URI case-sensitive,
   // mainly to avoid errors with HTTP cookies, which path is case-sensitive -
   // when set, such not exact case will be redirected via a HTTP 307 command
@@ -2470,6 +2476,7 @@ type
   // - rsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
+    rsoOnlyValidUtf8,
     rsoRedirectServerRootUriForExactCase,
     rsoAllowSingleServerNoRoot,
     rsoHeadersUnFiltered,
@@ -6878,6 +6885,11 @@ begin
             (Call.Url = Model.Root) and
             (Call.InBody = '') then
       ctxt.Redirect(RootRedirectGet)
+    else if (Call.InBody <> '') and
+            (rsoValidateUtf8Input in fOptions) and
+            Call.InBodyTypeIsJson and
+            not IsValidUtf8(Call.InBody) then
+      ctxt.Error('Expects valid UTF-8 input')
     else
     begin
       ctxt.UriDecodeSoaByMethod;

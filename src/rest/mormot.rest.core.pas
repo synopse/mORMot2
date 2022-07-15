@@ -3675,7 +3675,8 @@ begin
   InBody := aInBody;
 end;
 
-procedure TRestUriParams.InBodyType(out ContentType: RawUtf8; GuessJsonIfNoneSet: boolean);
+procedure TRestUriParams.InBodyType(out ContentType: RawUtf8;
+  GuessJsonIfNoneSet: boolean);
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, ContentType);
   if GuessJsonIfNoneSet and

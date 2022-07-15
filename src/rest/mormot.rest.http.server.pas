@@ -1093,6 +1093,12 @@ begin
            not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST
+  else if (Ctxt.InContent <> '') and
+          (rsoOnlyValidUtf8 in fOptions) and
+          (IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER) or
+           IdemPChar(pointer(Ctxt.InContentType), 'TEXT/')) and
+          not IsValidUtf8(Ctxt.InContent) then // may use AVX2
+    result := HTTP_NOTACCEPTABLE
   else
   begin
     // compute URI
