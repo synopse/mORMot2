@@ -1933,6 +1933,8 @@ type
 
 type
   /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
+  // - SHA3_224..SHA3_512 output 224, 256, 384 and 512 bits of cryptographic hash
+  // - SHAKE_128 and SHAKE_256 implements a XOF/cipher generator
   TSha3Algo = (
     SHA3_224,
     SHA3_256,
