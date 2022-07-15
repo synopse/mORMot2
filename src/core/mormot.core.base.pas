@@ -3840,15 +3840,6 @@ uses
   Windows; // circumvent unexpected warning about inlining (WTF!)
 {$endif ISDELPHI20062007}
 
-{$ifdef FPC_X64MM} // for direct string access to our fpcx64mm Memory Manager
-{$ifdef CPUX64}
-uses
-  mormot.core.fpcx64mm;
-{$else}
-  {$undef FPC_X64MM}
-{$endif CPUX64}
-{$endif FPC_X64MM}
-
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
   {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
@@ -4157,14 +4148,14 @@ begin
   result := nil;
   if len > 0 then
   begin
-    {$ifdef FPC_X64MM}
-    P := _GetMem(len + (_STRRECSIZE + 4));
+    {$ifdef FPC}
+    P := GetMem(len + (_STRRECSIZE + 4));
     result := PAnsiChar(P) + _STRRECSIZE;
     {$else}
     GetMem(result, len + (_STRRECSIZE + 4));
     P := pointer(result);
     inc(PStrRec(result));
-    {$endif FPC_X64MM}
+    {$endif FPC}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
     {$ifdef FPC}
     P^.codePageElemSize := codepage + (1 shl 16);

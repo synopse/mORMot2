@@ -2808,15 +2808,6 @@ function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
 implementation
 
-{$ifdef FPC_X64MM}
-{$ifdef CPUX64}
-uses
-  mormot.core.fpcx64mm; // for direct call of _getmem/_freemem in x86_64 asm
-{$else}
-  {$undef FPC_X64MM}
-{$endif CPUX64}
-{$endif FPC_X64MM}
-
 
 { some inlined definitions which should be declared before $include code }
 
@@ -5333,11 +5324,7 @@ begin
       dec(p);
       if (p^.refCnt >= 0) and
          StrCntDecFree(p^.refCnt) then
-        {$ifdef FPC_X64MM}
-        _Freemem(p); // works for both rkLString + rkUString
-        {$else}
-        Freemem(p);
-        {$endif FPC_X64MM}
+        Freemem(p); // works for both rkLString + rkUString
     end;
     inc(v);
     dec(n);

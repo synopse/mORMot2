@@ -569,10 +569,7 @@ end;
 
 {$ifdef FPC}
 
-{$ifndef FPC_X64MM}
-procedure _Getmem;  external name 'FPC_GETMEM';  // call standard FPC MM
-procedure _Freemem; external name 'FPC_FREEMEM';
-{$endif FPC_X64MM}
+procedure fpc_freemem; external name 'FPC_FREEMEM'; // access to RTL from asm
 
 procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
 asm
@@ -584,15 +581,14 @@ asm
         {$ifdef STRCNT32}
         cmp     dword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
         jl      @z
-lock    dec     dword ptr [rax - _STRCNT]
+   lock dec     dword ptr [rax - _STRCNT]
         {$else}
         cmp     qword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
         jl      @z
-lock    dec     qword ptr [rax - _STRCNT]
+   lock dec     qword ptr [rax - _STRCNT]
         {$endif STRCNT32}
-        jbe     @free
-@z:     ret
-@free:  jmp     _Freemem
+        jbe     fpc_freemem
+@z:
 end;
 
 {$endif FPC}
@@ -630,8 +626,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak6], xmm6
         movups  dqword ptr [bak7], xmm7
         movups  dqword ptr [bak8], xmm8
-{$else}
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$else}  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
@@ -730,8 +725,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak6], xmm6
         movups  dqword ptr [bak7], xmm7
         movups  dqword ptr [bak8], xmm8
-{$else}
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
@@ -1085,8 +1079,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rsi, r8     // rsi = b64
         mov     r8, rdx     // r8 = blen
         mov     rdi, rcx    // rdi = b
-{$else}
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     r8, rsi     // r8 = blen
         mov     rsi, rdx    // rsi = b64   rdi = b
 {$endif WIN64ABI}
@@ -1272,9 +1265,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rsi, rdx
         mov     rdx, r8
         mov     rdi, rcx
-        {$else}
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$endif WIN64ABI}
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$endif WIN64ABI}
         // rcx/rdi=b64 rdx/rsi=b64len r8/rdx=b
         // on decoding error, b64 will point to the faulty input
         mov     r8, qword ptr [rsi]
