@@ -2316,7 +2316,8 @@ function TCryptCertOpenSsl.Encrypt(const Message: RawByteString;
 begin
   if (fX509 <> nil) and
      (Cipher <> '') and
-     (GetUsage * [cuDataEncipherment, cuEncipherOnly] <> []) then
+     (fX509.HasUsage(kuDataEncipherment) or
+      fX509.HasUsage(kuEncipherOnly)) then
     if AsymAlgo in CAA_RSA then
       result := fX509.GetPublicKey.RsaSeal(
         EVP_get_cipherbyname(pointer(Cipher)), Message)
@@ -2334,7 +2335,9 @@ begin
   result := '';
   if (fPrivKey <> nil) and
      (Cipher <> '') and
-     (GetUsage * [cuDataEncipherment, cuDecipherOnly] <> []) then
+     ((fX509 = nil) or
+      fX509.HasUsage(kuDataEncipherment) or
+      fX509.HasUsage(kuDecipherOnly)) then
     if AsymAlgo in CAA_RSA then
       result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
     else if (AsymAlgo = caaES256) and

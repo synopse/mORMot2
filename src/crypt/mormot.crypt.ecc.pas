@@ -5648,7 +5648,8 @@ end;
 function TCryptCertInternal.Encrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  if fEcc <> nil then
+  if (fEcc <> nil) and
+     (fEcc.Usage * [cuDataEncipherment, cuEncipherOnly] <> []) then
     result := EciesSeal(Cipher, fEcc.Content.Head.Signed.PublicKey, Message)
   else
     result := '';
@@ -5660,7 +5661,9 @@ var
   pk: PEccPrivateKey;
 begin
   pk := GetEccPrivateKey({checkzero=}true);
-  if pk <> nil then
+  if (pk <> nil) and
+     ((fEcc = nil) or
+      (fEcc.Usage * [cuDataEncipherment, cuDecipherOnly] <> [])) then
     result := EciesOpen(Cipher, pk^, Message)
   else
     result := '';
