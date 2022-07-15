@@ -1024,6 +1024,12 @@ procedure Base64MagicDecode(var ParamValue: RawUtf8);
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
 function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: RawByteString): boolean; overload;
 
+/// decode '\uFFF0base64encodedbinary' or 'base64encodedbinary' into binary
+// - same as Base64MagicCheckAndDecode(), but will detect and ignore the magic
+// and not require it
+function Base64MagicTryAndDecode(Value: PUtf8Char; ValueLen: integer;
+  var Blob: RawByteString): boolean;
+
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
@@ -6476,35 +6482,13 @@ begin
   result := IsBase64Internal(pointer(s), length(s), @ConvertBase64ToBin);
 end;
 
-function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
-var
-  dec: PBase64Dec;
-begin
-  dec := @ConvertBase64ToBin;
-  if IsBase64Internal(sp, len, dec) then
-  begin
-    if dec[sp[len - 2]] >= 0 then
-      if dec[sp[len - 1]] >= 0 then
-        result := 0
-      else
-        result := 1
-    else
-      result := 2;
-    result := (len shr 2) * 3 - result;
-  end
-  else
-    result := 0;
-end;
-
-function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
-var
-  dec: PBase64Dec;
+function Base64Length(sp: PAnsiChar; len: PtrInt; dec: PBase64Dec): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   result := 0;
   if (len = 0) or
      (len and 3 <> 0) then
     exit;
-  dec := @ConvertBase64ToBin;
   if dec[sp[len - 2]] >= 0 then
     if dec[sp[len - 1]] >= 0 then
       result := 0
@@ -6513,6 +6497,22 @@ begin
   else
     result := 2;
   result := (len shr 2) * 3 - result;
+end;
+
+function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
+var
+  dec: PBase64Dec;
+begin
+  dec := @ConvertBase64ToBin;
+  if IsBase64Internal(sp, len, dec) then
+    result := Base64Length(sp, len, dec)
+  else
+    result := 0;
+end;
+
+function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
+begin
+  result := Base64Length(sp, len, @ConvertBase64ToBin);
 end;
 
 function Base64ToBin(const s: RawByteString): RawByteString;
@@ -6543,21 +6543,39 @@ begin
   Base64ToBinSafe(sp, len, result);
 end;
 
+function Base64LengthAdjust(sp: PAnsiChar; var len: PtrInt): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  tab: PBase64Dec;
+begin
+  result := len; // for better code generation
+  if (result = 0) or
+     (result and 3 <> 0) then
+  begin
+    result := 0;
+    exit;
+  end;
+  tab := @ConvertBase64ToBin;
+  if tab[sp[result - 2]] >= 0 then
+    if tab[sp[result - 1]] >= 0 then
+      result := 0
+    else
+      result := 1
+  else
+    result := 2;
+  sp := pointer(result);
+  result := (len shr 2) * 3 - result;
+  dec(len, PtrInt(sp)); // adjust for Base64AnyDecode() algorithm
+end;
+
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
 var
   resultLen: PtrInt;
 begin
-  resultLen := Base64ToBinLength(sp, len);
+  resultLen := Base64LengthAdjust(sp, len);
   if resultLen <> 0 then
   begin
     FastSetRawByteString(data, nil, resultLen);
-    if ConvertBase64ToBin[sp[len - 2]] >= 0 then
-      if ConvertBase64ToBin[sp[len - 1]] >= 0 then
-        // keep len as it is
-      else
-        dec(len)
-    else
-      dec(len, 2); // adjust for Base64AnyDecode() algorithm
     result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
     if not result then
       data := '';
@@ -6573,17 +6591,10 @@ function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; out data: TBytes): boolean;
 var
   resultLen: PtrInt;
 begin
-  resultLen := Base64ToBinLength(sp, len);
+  resultLen := Base64LengthAdjust(sp, len);
   if resultLen <> 0 then
   begin
     SetLength(data, resultLen);
-    if ConvertBase64ToBin[sp[len - 2]] >= 0 then
-      if ConvertBase64ToBin[sp[len - 1]] >= 0 then
-        // keep len as it is
-      else
-        dec(len)
-    else
-      dec(len, 2); // adjust for Base64AnyDecode() algorithm
     result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
     if not result then
       data := nil;
@@ -6843,6 +6854,18 @@ begin
     else
       result := false;
   end;
+end;
+
+function Base64MagicTryAndDecode(Value: PUtf8Char; ValueLen: integer;
+  var Blob: RawByteString): boolean;
+begin
+  if (ValueLen >= 4) and
+     (PCardinal(Value)^ and $ffffff = JSON_BASE64_MAGIC_C) then
+  begin
+    inc(Value, 3); // just ignore the magic trailer
+    dec(ValueLen, 3);
+  end;
+  result := Base64ToBinSafe(PAnsiChar(Value), ValueLen, Blob);
 end;
 
 function Base64MagicCheckAndDecode(Value: PUtf8Char; ValueLen: integer;
