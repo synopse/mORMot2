@@ -6226,11 +6226,11 @@ begin
       dec(len)
   else
     dec(len, 2); // Base64AnyDecode() algorithm ignores the trailing '='
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVXNOCONST}
   result := Base64DecodeMain(sp, rp, len); // may be Base64DecodeMainAvx2
   {$else}
   result := Base64AnyDecode(tab^, sp, rp, len);
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
 end;
 
 procedure Base64EncodeLoop(rp, sp: PAnsiChar; len: cardinal; enc: PBase64Enc);
@@ -6250,7 +6250,7 @@ begin // this loop is faster than mORMot 1 manual x86 asm, even on Delphi 7
   until len = 0;
 end;
 
-{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi < 11
+{$ifdef ASMX64AVXNOCONST} // AVX2 ASM not available on Delphi < 11
 function Base64EncodeMainAvx2(rp, sp: PAnsiChar; len: cardinal): integer;
 var
   blen: PtrUInt;
@@ -6269,7 +6269,7 @@ begin
   // on error, AVX2 code let sp point to the faulty input so result=false
   result := Base64AnyDecode(ConvertBase64ToBin, sp, rp, len);
 end;
-{$endif ASMX64AVX}
+{$endif ASMX64AVXNOCONST}
 
 function Base64EncodeMainPas(rp, sp: PAnsiChar; len: cardinal): integer;
 var
@@ -10841,13 +10841,13 @@ begin
   AlgoRle := TAlgoRle.Create;
   Base64EncodeMain := @Base64EncodeMainPas;
   Base64DecodeMain := @Base64DecodeMainPas;
-  {$ifdef ASMX64AVX} // focus on FPC x86_64 server performance
+  {$ifdef ASMX64AVXNOCONST} // focus on x86_64 server performance
   if cfAVX2 in CpuFeatures then
   begin // our AVX2 asm code is almost 10x faster than the pascal version
     Base64EncodeMain := @Base64EncodeMainAvx2; // 11.5 GB/s vs 1.3 GB/s
     Base64DecodeMain := @Base64DecodeMainAvx2; //  8.7 GB/s vs 0.9 GB/s
   end;
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
 end;
 
 

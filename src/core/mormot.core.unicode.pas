@@ -7048,11 +7048,11 @@ begin
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVXNOCONST}
   if cpuHaswell in X64CpuFeatures then
     // Haswell CPUs can use simdjson AVX2 asm for IsValidUtf8()
     IsValidUtf8Buffer := @IsValidUtf8Avx2;
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
 end;
 
 

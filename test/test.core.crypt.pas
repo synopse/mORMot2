@@ -1536,13 +1536,13 @@ begin
   SetLength(tmp2, length(tmp));
   L := 0;
   n := 50;
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVXNOCONST}
   if cfAVX2 in CpuFeatures then
   begin
     n := n * 10;
     msg := ' avx2';
   end;
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
   for i := 0 to 20 do
   begin
     enc.Resume;

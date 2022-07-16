@@ -788,7 +788,8 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$endif WIN64ABI}
 end;
 
-{$ifdef ASMX64AVX} // AVX2 ASM .align 32 for const is not available on Delphi :(
+{$ifdef ASMX64AVXNOCONST}
+// AVX2 ASM .align 32 for const is not available on Delphi :(
 
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
@@ -830,10 +831,10 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         je      @small
         vpxor   xmm3, xmm3, xmm3
         xor     esi, esi
-        vmovdqa ymm7,  yword ptr [rip + @0f]
-        vmovdqa ymm15, yword ptr [rip + @_6]
-        vmovdqa ymm14, yword ptr [rip + @_7]
-        vmovdqa ymm13, yword ptr [rip + @_8]
+        vmovdqu ymm7,  yword ptr [rip + @0f]
+        vmovdqu ymm15, yword ptr [rip + @_6]
+        vmovdqu ymm14, yword ptr [rip + @_7]
+        vmovdqu ymm13, yword ptr [rip + @_8]
         vmovdqa ymm5, ymm3
         vmovdqa ymm2, ymm3
         // main processing loop, 64 bytes per iteration
@@ -855,7 +856,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
 @trail: sub     rdi, rsi
         jz      @ended
         add     rsi, rax
-        vmovdqa xmm0, oword ptr [rip + @20]
+        vmovdqu xmm0, oword ptr [rip + @20]
         lea     rdx, qword ptr [rsp + 60H] // copy on stack with space padding
         sub     rsi, rdx
         vmovdqa oword ptr [rdx], xmm0
@@ -964,21 +965,21 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         jmp     @trail
         // validate UTF-8 extra bytes from input ending
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@last:  vmovdqa ymm5, yword ptr [rip + @0f]
+@last:  vmovdqu ymm5, yword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
-        vmovdqa ymm9, yword ptr [rip + @_7]
+        vmovdqu ymm9, yword ptr [rip + @_7]
         vpsrlw  ymm11, ymm1, 4
         vpalignr ymm0, ymm1, ymm3, 0FH
-        vmovdqa ymm13, yword ptr [rip + @_10]
-        vmovdqa ymm14, yword ptr [rip + @_9]
+        vmovdqu ymm13, yword ptr [rip + @_10]
+        vmovdqu ymm14, yword ptr [rip + @_9]
         vpsrlw  ymm6, ymm0, 4
         vpand   ymm0, ymm5, ymm0
         vpand   ymm11, ymm11, ymm5
-        vmovdqa ymm7, yword ptr [rip + @_6]
+        vmovdqu ymm7, yword ptr [rip + @_6]
         vpshufb ymm10, ymm9, ymm0
         vpalignr ymm0, ymm1, ymm3, 0EH
         vpand   ymm6, ymm6, ymm5
-        vmovdqa ymm8, yword ptr [rip + @_8]
+        vmovdqu ymm8, yword ptr [rip + @_8]
         vpalignr ymm3, ymm1, ymm3, 0DH
         vperm2i128 ymm1, ymm1, ymm2, 21H
         vpsubusb ymm0, ymm0, ymm14
@@ -1003,7 +1004,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpor    ymm1, ymm3, ymm1
         vpshufb ymm8, ymm8, ymm5
         vpsubusb ymm5, ymm2, yword ptr [rip + @_12]
-        vmovdqa ymm2, yword ptr [rip + @_11]
+        vmovdqu ymm2, yword ptr [rip + @_11]
         vpcmpgtb ymm1, ymm1, ymm12
         vpand   ymm6, ymm6, ymm10
         vpand   ymm7, ymm7, ymm9
@@ -1020,7 +1021,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @20:    dq 2020202020202020H
         dq 2020202020202020H
-{$ifdef FPC} align 32 {$else} .align 32 {Delphi doesn't allow this :(} {$endif}
+{$ifdef FPC} align 32 {$else} .align 16 {Delphi doesn't allow 32 :(} {$endif}
 @0f:    dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
@@ -1087,18 +1088,18 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         cmp     rcx, 31
         jbe     @done
         lea     rdx, qword ptr [rcx - 4]
-        vmovdqa ymm0,  yword ptr [rip + @c9]
+        vmovdqu ymm0,  yword ptr [rip + @c9]
         mov     r10, 0AAAAAAAAAAAAAAABH
-        vmovdqa ymm7,  yword ptr [rip + @c10]
+        vmovdqu ymm7,  yword ptr [rip + @c10]
         mov     rax, rdx
-        vmovdqa ymm5,  yword ptr [rip + @c11]
-        vmovdqa ymm8,  yword ptr [rip + @c12]
+        vmovdqu ymm5,  yword ptr [rip + @c11]
+        vmovdqu ymm8,  yword ptr [rip + @c12]
         mul     r10
-        vmovdqa ymm9,  yword ptr [rip + @c13]
-        vmovdqa ymm10, yword ptr [rip + @c14]
-        vmovdqa ymm6,  yword ptr [rip + @c16]
-        vmovdqa ymm4,  yword ptr [rip + @c15]
-        vmovdqa ymm11, yword ptr [rip + @c17]
+        vmovdqu ymm9,  yword ptr [rip + @c13]
+        vmovdqu ymm10, yword ptr [rip + @c14]
+        vmovdqu ymm6,  yword ptr [rip + @c16]
+        vmovdqu ymm4,  yword ptr [rip + @c15]
+        vmovdqu ymm11, yword ptr [rip + @c17]
         shr     rdx, 4                  // rdx = rounds = (blen - 4) / 24
         lea     rax, qword ptr [rdx + rdx * 2]
         shl     rax, 3
@@ -1194,7 +1195,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         add     rcx, 24
         add     rax, 32
         jmp     @10
-{$ifdef FPC} align 32 {$else} .align 32 {Delphi doesn't allow this :(} {$endif}
+{$ifdef FPC} align 32 {$else} .align 16 {Delphi doesn't allow 32 :(} {$endif}
 @c9:    dq 0000000000000000H
         dq 0000000200000001H
         dq 0000000400000003H
@@ -1273,20 +1274,20 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         cmp     r8, 44
         jbe     @done
         lea     r9, qword ptr [r8 - 0DH]
-        vmovdqa ymm1, yword ptr [rip + @c0]
-        vmovdqa ymm5, yword ptr [rip + @c1]
+        vmovdqu ymm1, yword ptr [rip + @c0]
+        vmovdqu ymm5, yword ptr [rip + @c1]
         mov     rax, r9
         and     r9, 0FFFFFFFFFFFFFFE0H
-        vmovdqa ymm4, yword ptr [rip + @c2]
-        vmovdqa ymm9, yword ptr [rip + @c3]
+        vmovdqu ymm4, yword ptr [rip + @c2]
+        vmovdqu ymm9, yword ptr [rip + @c3]
         sub     r8, r9
         shr     rax, 5                         // rax = rounds
-        vmovdqa ymm8, yword ptr [rip + @c4]
-        vmovdqa ymm3, yword ptr [rip + @c5]
+        vmovdqu ymm8, yword ptr [rip + @c4]
+        vmovdqu ymm3, yword ptr [rip + @c5]
         mov     qword ptr [rsi], r8            // set final b64len
-        vmovdqa ymm2, yword ptr [rip + @c6]
-        vmovdqa ymm7, yword ptr [rip + @c7]
-        vmovdqa ymm6, yword ptr [rip + @c8]
+        vmovdqu ymm2, yword ptr [rip + @c6]
+        vmovdqu ymm7, yword ptr [rip + @c7]
+        vmovdqu ymm6, yword ptr [rip + @c8]
         mov     r8, qword ptr [rdi]            // r8 = [rdi] = b64
         mov     r9, qword ptr [rdx]            // r9 = [rdx] = b
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -1325,7 +1326,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$else}
         ret
         {$endif WIN64ABI}
-{$ifdef FPC} align 32 {$else} .align 32 {Delphi doesn't allow this :(} {$endif}
+{$ifdef FPC} align 32 {$else} .align 16 {Delphi doesn't allow 32 :(} {$endif}
 @c0:    dq 2F2F2F2F2F2F2F2FH
         dq 2F2F2F2F2F2F2F2FH
         dq 2F2F2F2F2F2F2F2FH
@@ -1375,7 +1376,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif WIN64ABI}
 end;
 
-{$endif ASMX64AVX}
+{$endif ASMX64AVXNOCONST}
 
 {$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
 

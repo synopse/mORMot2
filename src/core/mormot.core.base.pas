@@ -2506,13 +2506,13 @@ var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   X64CpuFeatures: TX64CpuFeatures;
 
-{$ifdef ASMX64AVX}
+{$ifdef ASMX64AVXNOCONST}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt):  boolean;
 // avx2 asm as used by mormot.core.buffers for Base64EncodeMain/Base64DecodeMain
 procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt; var b64: PAnsiChar);
 procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiChar);
-{$endif ASMX64AVX}
+{$endif ASMX64AVXNOCONST}
 
 {$endif ASMX64}
 
