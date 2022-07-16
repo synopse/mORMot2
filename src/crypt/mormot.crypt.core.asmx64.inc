@@ -1605,7 +1605,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         ret
         {$endif WIN64ABI}
         {$ifdef FPC} align 32 {$else} .align 16 {$endif}
-        // note: on AVX2, constant alignment is not required by above opcodes
+        // note: on AVX2, constant alignment seems not required by above opcodes
 @rhotates_left:
         dq     3,   18,    36,    41   // [2][0] [4][0] [1][0] [3][0]
         dq     1,   62,    28,    27   // [0][1] [0][2] [0][3] [0][4]

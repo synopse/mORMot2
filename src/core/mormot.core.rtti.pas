@@ -5312,6 +5312,7 @@ begin
   end;
 end;
 
+
 procedure StringClearSeveral(v: PPointer; n: PtrInt);
 var
   p: PStrRec;
