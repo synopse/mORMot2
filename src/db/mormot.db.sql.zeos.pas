@@ -1387,12 +1387,14 @@ begin
             if fDbms = dMSSQL then
             begin
               P := Pointer(fResultSet.GetPWideChar(col + FirstDbcIndex, Len));
-              WR.AddJsonEscapeW(Pointer(P), Len);
+              if Len > 0 then // ZDBC returns P<>nil but Len=0 for ""
+                WR.AddJsonEscapeW(Pointer(P), Len);
             end
             else
             begin
               P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
-              WR.AddJsonEscape(P, Len);
+              if Len > 0 then
+                WR.AddJsonEscape(P, Len);
             end;
             WR.Add('"');
           end;
