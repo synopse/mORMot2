@@ -1151,7 +1151,7 @@ begin
     Strings.BeginUpdate;
     Strings.Clear;
     T := ExecuteList([Table], SqlFromSelect(Table.SqlTableName,
-      'ID,' + FieldName, WhereClause, ''));
+      'RowID,' + FieldName, WhereClause, ''));
     if T <> nil then
     try
       if (T.FieldCount = 2) and
