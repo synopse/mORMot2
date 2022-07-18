@@ -1987,7 +1987,8 @@ var
 // tkVariant kind of content - other kinds would return 'null'
 // - you can override serialization options if needed
 procedure SaveJson(const Value; TypeInfo: PRttiInfo;
-  Options: TTextWriterOptions; var result: RawUtf8); overload;
+  Options: TTextWriterOptions; var result: RawUtf8;
+  ObjectOptions: TTextWriterWriteObjectOptions = []); overload;
 
 /// serialize most kind of content as JSON, using its RTTI
 // - is just a wrapper around TJsonWriter.AddTypedJson()
@@ -10283,14 +10284,14 @@ begin
 end;
 
 procedure SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions;
-  var result: RawUtf8);
+  var result: RawUtf8; ObjectOptions: TTextWriterWriteObjectOptions);
 var
   temp: TTextWriterStackBuffer;
 begin
   with TJsonWriter.CreateOwnedStream(temp) do
   try
     CustomOptions := CustomOptions + Options;
-    AddTypedJson(@Value, TypeInfo);
+    AddTypedJson(@Value, TypeInfo, ObjectOptions);
     SetText(result);
   finally
     Free;
