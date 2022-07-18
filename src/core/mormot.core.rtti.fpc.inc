@@ -753,15 +753,15 @@ asm
         test    s1, s2
         jz      @maybe0
 @first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
-        sub     al, byte ptr [s2]
+        movzx   r8, byte ptr [s2]
+        sub     rax, r8
         je      @s
-        movsx   rax, al           // branchless execution on Quicksort
-        ret
+@0:     ret                       // branchless execution on Quicksort
 @maybe0:test    s2, s2
         jz      @1
         test    s1, s1
         jnz     @first
-        dec     rax
+        dec     eax
         ret
 @s:     mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
@@ -778,7 +778,7 @@ asm
         add     rax, 8
         js      @by8
 @e:     mov     rax, r8 // all equal -> return difflen
-@0:     ret
+        ret
 @d:     bsf     r10, r10 // compute s1^-s2^
         shr     r10, 3
         add     rax, r10
@@ -1113,7 +1113,7 @@ begin
   PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
   PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
   PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $77); // fpclen=$12f
+  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $7f); // fpclen=$12f
   PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
   PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
   PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
