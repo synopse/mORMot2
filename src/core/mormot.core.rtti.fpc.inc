@@ -864,14 +864,20 @@ end;
 
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
 
-procedure _setstring_ansistr_pansichar(out s: pointer; buf: PAnsiChar;
+procedure _setstring_ansistr_pansichar(var s: pointer; buf: PAnsiChar;
   len: SizeInt; cp: cardinal);
-begin // the caller ensured s := ''
+var
+  new: pointer;
+begin
   if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
     cp := DefaultSystemCodePage;
-  s := FastNewString(len, cp);
+  new := FastNewString(len, cp);
   if buf <> nil then
-    MoveFast(buf^, s^, len);
+    MoveFast(buf^, new^, len);
+  if s = nil then
+    s := new
+  else
+    FastAssignNew(s, new); // needed since FPC 3.2.3
 end;
 
 procedure _ansistr_concat_convert(var dest: RawByteString;
