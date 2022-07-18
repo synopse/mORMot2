@@ -697,7 +697,7 @@ procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr [d]
         cmp     rax, s
-        jz      @eq
+        je      @eq
         test    s, s
         jz      @ns
         {$ifdef STRCNT32}
@@ -934,30 +934,30 @@ var
   new: PAnsiChar;
   l1: PtrInt;
 begin
-  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
-    cp := CP_UTF8;
-  cp1 := _lstrcp(s1, cp);
-  cp2 := _lstrcp(s2, cp1);
-  if (cp1 = cp2) and
-     ((cp >= CP_RAWBLOB) or
-      (cp = cp1)) then
-    cp := cp1
-  else if ((cp1 <> cp) and
-           (cp1 < CP_RAWBLOB)) or
-          ((cp2 <> cp) and
-           (cp2 < CP_RAWBLOB)) then
-  begin
-    // we need to ensure that codepage handling is performed as expected
-    _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
-    exit;
-  end;
-  // we can safely concatenate the input with no conversion
   if s1 = '' then
     dest := s2
   else if s2 = '' then
     dest := s1
   else
   begin
+    if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
+      cp := CP_UTF8;
+    cp1 := _lstrcp(s1, cp);
+    cp2 := _lstrcp(s2, cp1);
+    if (cp1 = cp2) and
+       ((cp >= CP_RAWBLOB) or
+        (cp = cp1)) then
+      cp := cp1
+    else if ((cp1 <> cp) and
+             (cp1 < CP_RAWBLOB)) or
+            ((cp2 <> cp) and
+             (cp2 < CP_RAWBLOB)) then
+    begin
+      // we need to ensure that codepage handling is performed as expected
+      _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
+      exit;
+    end;
+    // we can safely concatenate the input with no conversion
     l1 := _lstrlen(s1);
     if (pointer(s1) = pointer(dest)) and
        (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
@@ -1037,6 +1037,7 @@ begin
   len := _lstrlen(RawByteString(p));
   cpf := _lstrcp(RawByteString(p), cp);
   if (cpf <> cp) and
+     (cp < CP_RAWBLOB) and
      (cpf < CP_RAWBLOB) then
     cpf := 0
   else
