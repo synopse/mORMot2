@@ -2778,7 +2778,7 @@ function Lecuyer: PLecuyer;
 function Random32: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
-// - calls internally the overloaded Random32 function
+// - calls internally the overloaded Random32 function, ensuring Random32(max)<max
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine

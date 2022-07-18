@@ -315,6 +315,7 @@ type
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
     // - an internal cache is maintained by this class function
+    // - don't free the returned instance: it is owned by the cache
     // - this implementation is thread-safe and re-entrant: i.e. the same
     // TSynMustache returned instance can be used by several threads at once
     // - will raise an ESynMustache exception on error
