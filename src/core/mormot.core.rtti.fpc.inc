@@ -997,15 +997,22 @@ begin
   else
   begin
     l1 := _lstrlen(s1);
-    if pointer(s1) = pointer(dest) then
+    if (pointer(s1) = pointer(dest)) and
+       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
     begin
-      // dest := dest+s2 -> self-resize dest
-      SetLength(dest, l1 + _lstrlen(s2));
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
-      MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
+      // dest := dest+s2 -> resize dest inplace
+      new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
+      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.length := l1 + _lstrlen(s2);
+      pointer(dest) := new;
+      new := ReallocMem(pointer(dest),
+        PStrRec(new)^.length + (_STRRECSIZE + 4)) + _STRRECSIZE;
+      pointer(dest) := new;
+      MoveFast(pointer(s2)^, new[l1], _lstrlen(s2) + 1); // +1 = #0
     end
     else
     begin
+      // we need to allocate a new string
       new := FastNewString(l1 + _lstrlen(s2), cp);
       MoveFast(pointer(s1)^, new[0], l1);
       MoveFast(pointer(s2)^, new[l1], _lstrlen(s2));
@@ -1096,16 +1103,22 @@ begin
     // we can safely concatenate the input with no conversion
     p := pointer(s[first]);
     l := _lstrlen(RawByteString(p));
-    if p = pointer(dest) then
+    if (p = pointer(dest)) and
+       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
     begin
-      // dest := dest+s... -> self-resize
-      SetLength(dest, len);
-      new := pointer(dest);
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
+      // dest := dest+s... -> resize dest inplace
+      new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
+      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.length := len;
+      pointer(dest) := new;
+      new := ReallocMem(pointer(dest), len + (_STRRECSIZE + 16)) + _STRRECSIZE;
+      PCardinal(new + len)^ := 0; // as FastNewString and SetLength do
+      pointer(dest) := new;
       cp := 0; // no FastAssignNew() below
     end
     else
     begin
+      // we need to allocate a new string
       new := FastNewString(len, cp);
       MoveFast(p^, new[0], l);
     end;
