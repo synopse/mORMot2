@@ -66,6 +66,16 @@ type
     procedure InternalInfo(Ctxt: TRestServerUriContext;
       var Info: TDocVariantData); override;
   public
+    /// initialize a standalone efficient SQLite3 REST server with some tables
+    // - will set the database as smOff/lmExclusive for safety and performance
+    // - also calls CreateMissingTables
+    // - if aDBFileName is left to '', will use SQLITE_MEMORY_DATABASE_NAME
+    // - if aRoot is left to '' will extract it from aDBFileName
+    // - most of the time, you could prefer this constructor to its overloads,
+    // unless you need to use external tables or some other low-level tuning
+    constructor CreateSqlite3(const aTables: array of TOrmClass;
+      aDBFileName: TFileName = ''; aRoot: RawUtf8 = '';
+      const aPassword: SpiUtf8 = ''; aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// initialize a REST server with a SQLite3 database
     // - any needed TSqlVirtualTable class should have been already registered
     // via the RegisterVirtualTableModule() method
@@ -78,7 +88,7 @@ type
     // (the main SQLite3 database file is encrypted, not the wal file during run)
     // - it will then call the other overloaded constructor to initialize the server
     constructor Create(aModel: TOrmModel; const aDBFileName: TFileName;
-      aHandleUserAuthentication: boolean = false; const aPassword: RawUtf8 = '';
+      aHandleUserAuthentication: boolean = false; const aPassword: SpiUtf8 = '';
       aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); reintroduce; overload;
     /// initialize a REST server with a database, and a temporary Database Model
@@ -88,7 +98,7 @@ type
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const aTables: array of TOrmClass;
       const aDBFileName: TFileName; aHandleUserAuthentication: boolean = false;
-      const aRoot: RawUtf8 = 'root'; const aPassword: RawUtf8 = '';
+      const aRoot: RawUtf8 = 'root'; const aPassword: SpiUtf8 = '';
       aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); overload;
     /// create a REST server with an in-memory SQLite3 engine
@@ -155,7 +165,7 @@ type
     // (the main SQLite3 database file is encrypted, not the wal file during run)
     constructor Create(aClientModel, aServerModel: TOrmModel;
       const aDBFileName: TFileName; aServerClass: TRestServerDBClass;
-      aHandleUserAuthentication: boolean = false; const aPassword: RawUtf8 = '';
+      aHandleUserAuthentication: boolean = false; const aPassword: SpiUtf8 = '';
       aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// initialize the class, for an existing TRestServerDB
     // - the client TOrmModel will be cloned from the server's one
@@ -192,6 +202,28 @@ implementation
 
 { TRestServerDB }
 
+constructor TRestServerDB.CreateSqlite3(const aTables: array of TOrmClass;
+  aDBFileName: TFileName; aRoot: RawUtf8; const aPassword: SpiUtf8;
+  aDefaultCacheSize: integer);
+var
+  model: TOrmModel;
+begin
+  if aDBFileName = '' then
+    aDBFileName := SQLITE_MEMORY_DATABASE_NAME;
+  if aRoot = '' then
+    if aDBFileName = SQLITE_MEMORY_DATABASE_NAME then
+      aRoot := 'mem'
+    else
+      aRoot := LowerCase(GetFileNameWithoutExtOrPath(aDBFileName));
+  model := TOrmModel.Create(aTables, aRoot);
+  Create(model, aDBFileName, model.GetTableIndexInheritsFrom(TAuthUser) >= 0,
+    aPassword, aDefaultCacheSize);
+  model.Owner := self;
+  DB.Synchronous := smOff;
+  DB.LockingMode := lmExclusive;
+  CreateMissingTables;
+end;
+
 constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSqlDataBase;
   aHandleUserAuthentication: boolean; aOwnDB: boolean);
 begin
@@ -204,7 +236,8 @@ end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aPassword: RawUtf8; aDefaultCacheSize, aDefaultPageSize: integer);
+  const aPassword: SpiUtf8; aDefaultCacheSize: integer;
+  aDefaultPageSize: integer);
 var
   db: TSqlDatabase;
 begin
@@ -215,7 +248,8 @@ end;
 
 constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aRoot, aPassword: RawUtf8; aDefaultCacheSize, aDefaultPageSize: integer);
+  const aRoot: RawUtf8; const aPassword: SpiUtf8; aDefaultCacheSize: integer;
+  aDefaultPageSize: integer);
 var
   model: TOrmModel;
 begin
@@ -363,7 +397,7 @@ end;
 
 constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;
   const aDBFileName: TFileName; aServerClass: TRestServerDBClass;
-  aHandleUserAuthentication: boolean; const aPassword: RawUtf8;
+  aHandleUserAuthentication: boolean; const aPassword: SpiUtf8;
   aDefaultCacheSize: integer);
 begin
   fOwnedDB := TSqlDataBase.Create(

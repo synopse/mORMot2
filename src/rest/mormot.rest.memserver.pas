@@ -292,7 +292,7 @@ begin
   for t := 0 to fStaticDataCount - 1 do
     with TRestStorageInMemory(fStaticData[t]) do
       if Count = 0 then
-        // emulates TSqlRestServerDB.CreateMissingTables
+        // emulates TRestServerDB.CreateMissingTables
         StoredClass.InitializeTable(self, '', Options);
 end;
 

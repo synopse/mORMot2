@@ -1468,13 +1468,12 @@ function GetCaptionFromEnum(aTypeInfo: PRttiInfo; aIndex: integer): string;
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
 /// will get a class name as UTF-8
-// - will trim 'T', 'TSyn', 'TSql' or 'TOrm' left side of the class name
+// - will trim 'T', 'TSyn' or 'TOrm' left side of the class name
 // - will encode the class name as UTF-8 (for Unicode Delphi versions)
 // - is used e.g. to extract the SQL table name for a TOrm class
 function GetDisplayNameFromClass(C: TClass): RawUtf8;
 
-///  UnCamelCase and translate the class name, triming any left 'T', 'TSyn',
-// 'TSql' or 'TOrm'
+/// UnCamelCase and translate the class name, triming any left 'T' 'TSyn' 'TOrm'
 // - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
@@ -5070,6 +5069,7 @@ begin
   if name^[0] > #4 then
     // fast case-insensitive compare
     case PInteger(@name^[1])^ and $DFDFDFDF of
+      {$ifndef PUREMORMOT2}
       // backward compatibility trim of left-sided TSql* or TSqlRecord*
       ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24:
         if (name^[0] <= #10) or
@@ -5079,6 +5079,7 @@ begin
           totrim := 4
         else
           totrim := 10;
+      {$endif PUREMORMOT2}
       // trim left-sided TOrm* and TSyn* naming conventions
       ord('T') + ord('O') shl 8 + ord('R') shl 16 + ord('M') shl 24,
       ord('T') + ord('S') shl 8 + ord('Y') shl 16 + ord('N') shl 24:

@@ -222,7 +222,7 @@ type
 
   /// an abstract service provider, as registered in TServiceContainer
   // - each registered interface has its own TServiceFactory instance, available
-  // as one TSqlServiceContainer item from TRest.Services property
+  // as one TServiceContainer item from TRest.Services property
   // - this will be either implemented by a registered TInterfacedObject on the
   // server, or by a on-the-fly generated fake TInterfacedObject class
   // communicating via JSON on a client
