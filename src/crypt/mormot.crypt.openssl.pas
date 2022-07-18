@@ -2090,7 +2090,7 @@ begin
           RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
         else if Format = ccfPem then
           // concatenate the certificate and its private key as PEM
-          result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
+          result := DerToPem(fX509.ToBinary, pemCertificate) + RawUtf8(#13#10) +
                     fPrivKey.PrivateToPem(PrivatePassword)
         else
           // ccfBinary will use the PKCS12 binary encoding
@@ -2381,15 +2381,27 @@ var
   x: PX509DynArray;
   c: PX509_CRLDynArray;
   i: PtrInt;
+  tmp: TTextWriterStackBuffer;
 begin
   // since DER has no simple binary array format, use PEM serialization
-  result := '';
-  x := fStore.Certificates;
-  for i := 0 to length(x) - 1 do
-    result := result + x[i].ToPem + CRLF;
-  c := fStore.Crls;
-  for i := 0 to length(c) - 1 do
-    result := result + c[i].ToPem + CRLF;
+  with TTextWriter.CreateOwnedStream(tmp) do
+  try
+    x := fStore.Certificates;
+    for i := 0 to length(x) - 1 do
+    begin
+      AddString(x[i].ToPem);
+      AddShorter(CRLF);
+    end;
+    c := fStore.Crls;
+    for i := 0 to length(c) - 1 do
+    begin
+      AddString(c[i].ToPem);
+      AddShorter(CRLF);
+    end;
+    SetText(RawUtf8(result));
+  finally
+    Free;
+  end;
 end;
 
 function TCryptStoreOpenSsl.Load(const Saved: RawByteString): boolean;
@@ -2513,7 +2525,7 @@ begin
   end
   else
   begin
-    // try binary DER serialization of X509 certificate or CRL
+    // try binary DER serialization of a single X509 certificate or CRL
     serial := fStore.AddFromBinary(Content);
     if serial <> '' then
       AddRawUtf8(result, serial);
