@@ -5865,7 +5865,8 @@ var
 label
   utf8;
 begin
-  if Len > 0 then
+  if (P <> nil) and
+     (Len > 0) then
   begin
     if CodePage = 0 then // CP_UTF8 is very likely on POSIX or LCL
       CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
@@ -5923,6 +5924,8 @@ procedure TJsonWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 var
   trailing, main, n: PtrUInt;
 begin
+  if P = nil then
+    Len := 0;
   if withMagic then
     if Len <= 0 then
     begin
