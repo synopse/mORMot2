@@ -1730,7 +1730,7 @@ begin
   finally
     Free;
   end;
-  ctxt.fileName := GetFileNameWithoutExt(ExtractFileName(DestFileName));
+  ctxt.fileName := GetFileNameWithoutExtOrPath(DestFileName);
   FileFromString(TSynMustache.Parse(AnyTextFileToRawUtf8(TemplateName, true)).
     Render(ctxt, nil, nil, nil, true), DestFileName);
 end;

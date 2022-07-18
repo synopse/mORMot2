@@ -2308,6 +2308,11 @@ function TemporaryFileName: TFileName;
 function GetFileNameWithoutExt(const FileName: TFileName;
   Extension: PFileName = nil): TFileName;
 
+/// extract the file name without any path nor extension, as UTF-8
+// - e.g. GetFileNameWithoutExt('/var/toto.ext') = 'toto'
+// - used e.g. to compute Executable.ProgramName
+function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
+
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
 // - the expected string type is the generic RTL string, i.e. TFileName
@@ -4868,6 +4873,11 @@ begin
   end;
 end;
 
+function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
+begin
+  result := RawUtf8(GetFileNameWithoutExt(ExtractFileName(FileName)));
+end;
+
 {$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
 function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 begin
@@ -5618,8 +5628,9 @@ begin
   begin
     if fUserAgent = '' then
     begin
-      fUserAgent := RawUtf8(Format('%s/%s%s', [GetFileNameWithoutExt(
-        ExtractFileName(fFileName)), DetailedOrVoid, OS_INITIAL[OS_KIND]]));
+      fUserAgent := RawUtf8(Format('%s/%s%s', [
+        GetFileNameWithoutExtOrPath(fFileName), DetailedOrVoid,
+        OS_INITIAL[OS_KIND]]));
       {$ifdef OSWINDOWS}
       if OSVersion in WINDOWS_32 then
         fUserAgent := fUserAgent + '32';
@@ -5700,7 +5711,7 @@ begin
         InstanceFileName := GetModuleName(HInstance)
       else
         InstanceFileName := ProgramFileName;
-      ProgramName := RawUtf8(GetFileNameWithoutExt(ExtractFileName(ProgramFileName)));
+      ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
       GetUserHost(User, Host);
       if Host = '' then
         Host := 'unknown';
