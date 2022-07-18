@@ -1853,7 +1853,7 @@ type
     destructor Destroy; override;
     /// Server initialization with a temporary Database Model
     // - a Model will be created with supplied tables, and owned by the server
-    // - if you instantiate a TRestServerFullMemory or TSqlRestServerDB
+    // - if you instantiate a TRestServerFullMemory or TRestServerDB
     // with this constructor, an in-memory engine will be created, with
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const Tables: array of TOrmClass;
@@ -1950,13 +1950,13 @@ type
       read GetAuthenticationSchemesCount;
     /// define if unsecure connections (i.e. not in-process or encrypted
     // WebSockets) with no session can be authenticated via JWT
-    // - once set, this instance will be owned by the TSqlRestServer
+    // - once set, this instance will be owned by the TRestServer
     // - by definition, such JWT authentication won't identify any mORMot user
     // nor session (it just has to be valid), so only sicSingle, sicShared or
     // sicPerThread interface-based services execution are possible
     // - typical usage is for a public API, in conjunction with
     // ServiceDefine(...).ResultAsJsonObjectWithoutResult := true on the server
-    // side and TSqlRestClientUri.ServiceDefineSharedApi() method for the client
+    // side and TRestClientUri.ServiceDefineSharedApi() method for the client
     // - see also JwtForUnauthenticatedRequestWhiteIP() for additional security
     property JwtForUnauthenticatedRequest: TJwtAbstract
       read fJwtForUnauthenticatedRequest write fJwtForUnauthenticatedRequest;
@@ -2489,7 +2489,7 @@ type
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;
 
-  /// parameters supplied to publish a TSqlRestServer via HTTP
+  /// parameters supplied to publish a TRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
   // constructor in mormot.rest.http.server.pas, and also in dddInfraSettings.pas
   TRestHttpServerDefinition = class(TSynPersistentWithPassword)
@@ -7136,7 +7136,7 @@ begin
               (llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags) then
         if Ctxt.UriBlobFieldName = '_callback_' then
           // POST root/cacheflush/_callback_
-          // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
+          // as called from TRestHttpClientWebsockets.FakeCallbackUnregister
           (fServices as TServiceContainerServer).FakeCallbackRelease(Ctxt)
         else if Ctxt.UriBlobFieldName = '_replaceconn_' then
         begin

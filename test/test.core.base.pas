@@ -2378,7 +2378,7 @@ procedure TTestCoreBase._GUID;
 var
   i: integer;
   s: RawUtf8;
-  st: string;
+  st, st2: string;
   g, g2: TGuid;
   h, h2: THash512Rec;
   pt: TRttiParserType;
@@ -2423,7 +2423,8 @@ begin
   begin
     RandomGuid(g);
     st := GuidToString(g);
-    Check(st = SysUtils.GuidToString(g));
+    st2 := SysUtils.GuidToString(g);
+    Check(st = st2);
     Check(IsEqualGuid(StringToGuid(st), g));
     s := GuidToRawUtf8(g);
     Check(st = mormot.core.unicode.Utf8ToString(s));
