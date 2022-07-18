@@ -1466,17 +1466,25 @@ function SortDynArrayAnsiString(const A, B): integer;
         // x86_64 version optimized for AnsiString/RawUtf8/RawByteString types
         mov     rax, qword ptr [A]
         mov     rdx, qword ptr [B]
-        xor     ecx, ecx
         cmp     rax, rdx
-        je      @0
+        je      @z
         test    rax, rdx
         jz      @maynil
-@f:     mov     cl, byte ptr [rax]    // first char comparison
-        sub     cl, byte ptr [rdx]
+@f:     movzx   ecx, byte ptr [rax]    // first char comparison
+        movzx   r8d, byte ptr [rdx]    // 32-bit to avoid overflow
+        sub     ecx, r8d
         je      @s
-@0:     movsx   eax, cl              // branchless execution on Quicksort
+        mov     eax, ecx              // branchless execution on Quicksort
         ret
 @1:     mov     eax, 1
+        ret
+@z:     xor     eax, eax
+        ret
+@maynil:test    rdx, rdx       // A or B may be ''
+        jz      @1
+        test    rax, rax
+        jnz     @f
+        dec     eax
         ret
         {$ifdef FPC}
 @s:     mov     r9, qword ptr [rax - _STRLEN]   // TStrLen=SizeInt on FPC
@@ -1509,12 +1517,6 @@ function SortDynArrayAnsiString(const A, B): integer;
         movzx   eax, byte ptr [rax + rcx]
         movzx   edx, byte ptr [rdx + rcx]
         sub     eax, edx
-        ret
-@maynil:test    rdx, rdx       // A or B may be ''
-        jz      @1
-        test    rax, rax
-        jnz     @f
-        dec     eax
 end; // note: SSE4.2 read up to 16 bytes after buffer, this version won't
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;

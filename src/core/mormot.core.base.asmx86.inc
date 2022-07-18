@@ -1619,14 +1619,24 @@ asm
         je      @0
         test    eax, edx
         jz      @maynil
-@f:     movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
-        sub     cl, byte ptr [edx]
+@f:     mov     cl, byte ptr [eax] // first char comparison (quicksort speedup)
+        mov     ch, byte ptr [edx]
+        cmp     cl, ch
         je      @s
-        movsx   eax, cl              // branchless execution on Quicksort/ReHash
+        movzx   eax, cl
+        movzx   edx, ch
+        sub     eax, edx            // branchless execution on Quicksort/ReHash
         ret
 @0:     xor     eax, eax
         ret
+@maynil:test    edx, edx       // A or B may be ''
+        jz      @1
+        test    eax, eax
+        jnz     @f
+        dec     eax
+        ret
 @s:     push    ebx
+        xor     ecx, ecx
         mov     ebx, dword ptr [eax - 4]
         sub     ebx, dword ptr [edx - 4]   // ebx = length(A)-length(B)
         push    ebx
@@ -1635,7 +1645,7 @@ asm
         sub     ecx, dword ptr [eax - 4]   // ecx = -min(length(A),length(B))
         sub     eax, ecx
         sub     edx, ecx
-{$ifdef FPC} align 16 {$else} nop; nop {$endif}
+{$ifdef FPC} align 16 {$endif} // is naturally aligned anyway
 @by4:   mov     ebx, dword ptr [eax + ecx]  // compare 4 bytes per iteration
         xor     ebx, dword ptr [edx + ecx]
         jnz     @d
@@ -1653,12 +1663,6 @@ asm
         pop     ebx
         pop     ebx
         sub     eax, edx
-        ret
-@maynil:test    edx, edx       // A or B may be ''
-        jz      @1
-        test    eax, eax
-        jnz     @f
-        dec     eax
         ret
 @1:     mov     eax, 1
 end;
