@@ -4177,7 +4177,10 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt);
@@ -4188,7 +4191,10 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if s = '' then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
@@ -4199,11 +4205,14 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
-procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
-  out aligned: pointer; alignment: PtrUInt);
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
+  len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
   FastSetRawByteString(holder, nil, len + alignment);
