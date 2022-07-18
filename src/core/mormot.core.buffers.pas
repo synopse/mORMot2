@@ -6363,7 +6363,7 @@ begin
   end;
   while len >= PERLINE do
   begin
-    Base64EncodeMain(p, sp, PERLINE); // may use AVX2 on FPC x86_64
+    Base64EncodeLoop(p, sp, PERLINE, @b64enc); // better inlining than AVX2 here
     inc(sp, PERLINE);
     PWord(p + 64)^ := $0a0d; // on all systems for safety
     inc(p, 66);
@@ -6371,7 +6371,9 @@ begin
   end;
   if len > 0 then
   begin
-    last := Base64EncodeMain(p, sp, len);
+    last := len div 3;
+    if last <> 0 then
+      Base64EncodeLoop(p, sp, last * 3, @b64enc);
     inc(p, last * 4);
     last := last * 3;
     inc(sp, last);
