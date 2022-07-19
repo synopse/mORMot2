@@ -5758,8 +5758,12 @@ begin
   if fSessions = nil then
     // avoid GPF e.g. in case of missing sqlite3-64.dll
     exit;
-  log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
-    [aStateFileName, fModel.Root, fStats.CurrentRequestCount], self);
+  if (fModel <> nil) and
+     (fStats <> nil) then
+    log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
+      [aStateFileName, fModel.Root, fStats.CurrentRequestCount], self)
+  else
+    log := fLogClass.Enter('Shutdown(%)', [aStateFileName], self);
   OnNotifyCallback := nil;
   fSessions.Safe.WriteLock;
   try
@@ -5770,7 +5774,8 @@ begin
   finally
     fSessions.Safe.WriteUnLock;
   end;
-  if fStats.CurrentRequestCount > 0 then
+  if (fStats <> nil) and
+     (fStats.CurrentRequestCount > 0) then
   begin
     timeout := GetTickCount64 + 30000; // never wait forever
     repeat

@@ -2826,7 +2826,8 @@ type
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: ReadLocks are reentrant and allow concurrent acccess, but calling
   // WriteLock within a ReadLock, or within another WriteLock, would deadlock
-  // - consider TRWLock is you need an upgradable lock
+  // - consider TRWLock is you need an upgradable lock - but if you mostly read,
+  // then a TRWLightLock.ReadLock/ReadUnLock/WriteLock is faster than upgrading
   // - light locks are expected to be kept a very small amount of time: use
   // TSynLocker or TRTLCriticalSection if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
