@@ -2510,13 +2510,14 @@ function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
 type
   /// used to store one list of hashed RawUtf8 in TRawUtf8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
+  // - each slot has its own TRWLightLock for efficient concurrent reads
   {$ifdef USERECORDWITHMETHODS}
   TRawUtf8InterningSlot = record
   {$else}
   TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: TLightLock;
+    fSafe: TRWLightLock;
     fCount: integer;
     fValue: TRawUtf8DynArray;
     fValues: TDynArrayHashed;
@@ -2541,6 +2542,7 @@ type
     property Count: integer
       read fCount;
   end;
+  PRawUtf8InterningSlot = ^TRawUtf8InterningSlot;
 
   /// allow to store only one copy of distinct RawUtf8 values
   // - thanks to the Copy-On-Write feature of string variables, this may
@@ -4233,52 +4235,57 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  fSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
-  {$else}
+  fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, fValues.Hasher.Compare);
+  if i >= 0 then
   begin
-  {$endif HASFASTTRYFINALLY}
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    if added then
-    begin
-      fValue[i] := aText;   // copy new value to the pool
-      aResult := aText;
-    end
-    else
-      aResult := fValue[i]; // return unified string instance
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    aResult := fValue[i]; // return unified string instance
+    fSafe.ReadUnLock;
+    exit;
   end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added within the write lock
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  if added then
+  begin
+    fValue[i] := aText; // copy new value to the pool
+    aResult := aText;
+  end
+  else
+    aResult := fValue[i]; // was added in a background thread
+  fSafe.WriteUnLock;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
 var
-  i: PtrInt;
+  c: AnsiChar;
   added: boolean;
+  i: PtrInt;
   bak: TDynArraySortCompare;
 begin
-  fSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
-  {$else}
+  c := aText[aTextLen];
+  aText[aTextLen] := #0; // input buffer may not be #0 terminated
+  fSafe.ReadLock;
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
+  if i >= 0 then
   begin
-  {$endif HASFASTTRYFINALLY}
-    bak := fValues.Hasher.fCompare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
-    PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    PDynArrayHasher(@fValues.Hasher)^.fCompare := bak;
-    if added then
-      FastSetString(fValue[i], aText, aTextLen); // new value to the pool
     aResult := fValue[i]; // return unified string instance
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    fSafe.ReadUnLock;
+    aText[aTextLen] := c;
+    exit;
   end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added
+  bak := fValues.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+  PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  PDynArrayHasher(@fValues.Hasher)^.fCompare := bak;
+  if added then
+    FastSetString(fValue[i], aText, aTextLen); // new value to the pool
+  aResult := fValue[i];
+  fSafe.WriteUnLock;
+  aText[aTextLen] := c;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
@@ -4286,26 +4293,32 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  fSafe.Lock;
-  try
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    if added then
-      fValue[i] := aText    // copy new value to the pool
-    else
-      aText := fValue[i];   // return unified string instance
-  finally
-    fSafe.UnLock;
+  fSafe.ReadLock;
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, fValues.Hasher.Compare);
+  if i >= 0 then
+  begin
+    aText := fValue[i]; // return unified string instance
+    fSafe.ReadUnLock;
+    exit;
   end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  if added then
+    fValue[i] := aText  // copy new value to the pool
+  else
+    aText := fValue[i]; // was added in a background thread
+  fSafe.WriteUnLock;
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     fValues.SetCount(0); // Values.Clear
     fValues.Hasher.ForceReHash;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -4315,7 +4328,9 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  fSafe.Lock;
+  if fCount = 0 then
+    exit;
+  fSafe.WriteLock;
   try
     if fCount = 0 then
       exit;
@@ -4349,7 +4364,7 @@ begin
       fValues.ForceReHash;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
