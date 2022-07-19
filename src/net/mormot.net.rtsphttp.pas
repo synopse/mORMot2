@@ -342,7 +342,7 @@ begin
       end
       else if log <> nil then
         log.Log(sllDebug, 'ConnectionCreate rejected % % % % % %',
-          [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
+          [ToText(parse)^, sock.Http.CommandResp, sock, sock.Method, sock.URL,
            sock.Http.Headers], self);
     finally
       sock.Free;

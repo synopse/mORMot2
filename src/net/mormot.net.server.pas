@@ -2331,8 +2331,8 @@ begin
     else
       noheaderfilter := false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
-    SockRecvLn(Http.Command);
-    P := pointer(Http.Command);
+    SockRecvLn(Http.CommandResp);
+    P := pointer(Http.CommandResp);
     if P = nil then
       exit; // broken
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'

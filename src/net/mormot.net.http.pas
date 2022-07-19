@@ -27,6 +27,7 @@ uses
   mormot.core.os,
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text,
+  mormot.core.data,
   mormot.core.buffers,
   mormot.core.zip,
   mormot.core.threads,
@@ -197,6 +198,9 @@ type
     ContentLeft: Int64;
     ContentPos: PByte;
     ContentEncoding: RawUtf8;
+    procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt; nointern: boolean);
+    function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
+    procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8; nointern: boolean = false);
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -206,13 +210,15 @@ type
     HeaderFlags: THttpRequestHeaderFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
-    /// will contain the first header line:
-    // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
+    /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
+    Interning: PRawUtf8InterningSlot;
+    /// will contain the first header line on client side
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
-    Command: RawUtf8;
-    /// the HTTP method parsed from Command, e.g. 'GET'
+    // - THttpServerSocket will use it, but THttpAsyncServer won't
+    CommandResp: RawUtf8;
+    /// the HTTP method parsed from first header line, e.g. 'GET'
     CommandMethod: RawUtf8;
-    /// the HTTP URI parsed from Command, e.g. '/path/to/resource'
+    /// the HTTP URI parsed from first header line, e.g. '/path/to/resource'
     CommandUri: RawUtf8;
     /// will contain all header lines after all ParseHeader
     // - use HeaderGetValue() to get one HTTP header item value by name
@@ -890,21 +896,6 @@ begin
   result := -1;
 end;
 
-procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
-var
-  B: PUtf8Char;
-begin
-  while (P^ > #0) and
-        (P^ <= ' ') do
-    inc(P); // trim left
-  B := P;
-  P := GotoNextControlChar(P);
-  while (P > B) and
-        (P[-1] <= ' ') do
-    dec(P); // trim right
-  FastSetString(result, B, P - B);
-end;
-
 function HttpChunkToHex32(p: PAnsiChar): integer;
 var
   v0, v1: byte;
@@ -956,6 +947,22 @@ begin
   ServerInternalState := 0;
   CompressContentEncoding := -1;
   integer(CompressAcceptHeader) := 0;
+end;
+
+procedure THttpRequestContext.GetTrimmed(P: PUtf8Char; var result: RawUtf8;
+  nointern: boolean);
+var
+  B: PUtf8Char;
+begin
+  while (P^ > #0) and
+        (P^ <= ' ') do
+    inc(P); // trim left
+  B := P;
+  P := GotoNextControlChar(P);
+  while (P > B) and
+        (P[-1] <= ' ') do
+    dec(P); // trim right
+  SetRawUtf8(result, B, P - B, nointern);
 end;
 
 const
@@ -1098,7 +1105,7 @@ begin
       begin
         // 'AUTHORIZATION: BEARER '
         inc(P, 22);
-        GetTrimmed(P, BearerToken);
+        GetTrimmed(P, BearerToken, {nointern=}true);
         if BearerToken <> '' then
           // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
           HeadersUnFiltered := true;
@@ -1145,16 +1152,36 @@ end;
 
 function THttpRequestContext.ParseCommand: boolean;
 var
-  P: PUtf8Char;
+  P, B: PUtf8Char;
 begin
   result := false;
   if nfHeadersParsed in HeaderFlags then
     exit;
-  P := pointer(Command);
+  P := pointer(CommandUri);
   if P = nil then
     exit;
-  GetNextItem(P, ' ', CommandMethod); // GET
-  GetNextItem(P, ' ', CommandUri);    // /path/to/resource
+  B := P;
+  while true do
+    if P^ = ' ' then
+      break
+    else if P^ = #0 then
+      exit
+    else
+      inc(P);
+  SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
+  inc(P);
+  B := P;
+  while true do
+    if P^ = ' ' then
+      break
+    else if P^ = #0 then
+      exit
+    else
+      inc(P);
+  P^ := #0;
+  MoveFast(B^, pointer(CommandUri)^, P - B + 1); // in-place resize
+  PStrLen(PtrUInt(CommandUri) - _STRLEN)^ := P - B;
+  inc(P);
   if not IdemPChar(P, 'HTTP/1.') then
     exit;
   if not (hfConnectionClose in HeaderFlags) then
@@ -1184,7 +1211,18 @@ begin
   State := hrsGetCommand;
 end;
 
-function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
+procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;
+  P: pointer; PLen: PtrInt; nointern: boolean);
+begin
+  if (Interning <> nil) and
+     not nointern then
+    Interning^.UniqueFromBuffer(res, P, PLen, InterningHasher(0, P, PLen))
+  else
+    FastSetString(res, P, PLen);
+end;
+
+function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine;
+  line: PRawUtf8): boolean;
 var
   P: PUtf8Char;
   Len: PtrInt;
@@ -1227,7 +1265,7 @@ begin
   st.Line := st.P;
   st.LineLen := P - st.P;
   if line <> nil then
-    FastSetString(line^, st.Line, st.LineLen);
+    FastSetString(line^, st.Line, st.LineLen); // no interning for CommandUri
   result := true;
   st.P := P; // will ensure below that st.line ends with #0
   // go to beginning of next line
@@ -1256,7 +1294,7 @@ begin
   repeat
     case State of
       hrsGetCommand:
-        if ProcessParseLine(st, @Command) then
+        if ProcessParseLine(st, @CommandUri) then
           State := hrsGetHeaders
         else
           exit; // not enough input
@@ -1617,8 +1655,9 @@ begin
   // finalize the headers
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % flags=% len=% %', [Http.Command,
-      ToText(Http.HeaderFlags), Http.ContentLength, Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
+      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
+      Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
