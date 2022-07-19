@@ -4104,7 +4104,7 @@ begin
   if wasString then
     result := temp = ''
   else
-    result := GetInt64(pointer(temp)) = 0;
+    result := (temp = '0') or (temp = 'false') or (temp = 'null');
 end;
 
 function TOrmPropInfo.SetFieldSqlVar(Instance: TObject;
