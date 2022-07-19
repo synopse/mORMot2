@@ -755,6 +755,7 @@ type
   THttpAsyncConnections = class(TAsyncServer)
   protected
     fAsyncServer: THttpAsyncServer;
+    procedure IdleEverySecond; override;
     procedure SetExecuteState(State: THttpServerExecuteState); override;
     procedure Execute; override;
   end;
@@ -769,9 +770,13 @@ type
     fHeadersDefaultBufferSize: integer;
     fConnectionClass: TAsyncConnectionClass;
     fConnectionsClass: THttpAsyncConnectionsClass;
+    fInterning: PRawUtf8InterningSlot;
+    fInterningSlot: TRawUtf8InterningSlot;
+    fInterningTix: cardinal;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
+    procedure IdleEverySecond; virtual;
     // the main thread will Send output packets in the background
     procedure Execute; override;
   public
@@ -2501,7 +2506,7 @@ constructor TAsyncServer.Create(const aPort: RawUtf8;
 begin
   fSockPort := aPort;
   fMaxConnections := 7777777; // huge number for sure
-  fMaxPending := 10000;        // fair enough for pending requests
+  fMaxPending := 10000;       // fair enough for pending requests
   inherited Create(OnStart, OnStop, aConnectionClass, ProcessName, aLog,
     aOptions, aThreadPoolCount);
   if acoEnableTls in aOptions then
@@ -2813,6 +2818,7 @@ begin
   if fServer <> nil then
   begin
     HttpInit;
+    fHttp.Interning := fServer.fInterning;
     fHttp.Compress := fServer.fCompress;
     fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
@@ -3082,6 +3088,13 @@ begin
   inherited Execute;
 end;
 
+procedure THttpAsyncConnections.IdleEverySecond;
+begin
+  inherited IdleEverySecond;
+  if fAsyncServer <> nil then
+    fAsyncServer.IdleEverySecond;
+end;
+
 procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
 begin
   if (State = esRunning) and
@@ -3111,6 +3124,11 @@ begin
     aco := ASYNC_OPTION_VERBOSE // for server debugging
   else
     aco := ASYNC_OPTION_PROD;   // default is to log only errors/warnings
+  if hsoHeadersInterning in ProcessOptions then
+  begin
+    fInterningSlot.Init;
+    fInterning := @fInterningSlot;
+  end;
   //include(aco, acoNoConnectionTrack);
   //include(aco, acoWritePollOnly);
   //include(aco, acoNoReadWait);
@@ -3146,6 +3164,26 @@ function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
   fExecuteMessage := fAsync.fExecuteMessage;
+end;
+
+procedure THttpAsyncServer.IdleEverySecond;
+var
+  tix, cleaned: cardinal;
+begin
+  if fInterning <> nil then
+  begin
+    tix := mormot.core.os.GetTickCount64 shr 14; // clean every 16 secs
+    if (fInterning^.Count > 1000) or   // or if the slot is highly used (DDos?)
+       (fInterningTix <> tix) then
+    begin
+      cleaned := fInterning^.Clean(1);
+      if (cleaned > 500) or
+         ((cleaned <> 0) and
+          (hsoLogVerbose in Options)) then
+        fAsync.DoLog(sllTrace, 'IdleEverySecond: cleaned % headers', [cleaned], self);
+      fInterningTix := tix;
+    end;
+  end;
 end;
 
 function THttpAsyncServer.GetHttpQueueLength: cardinal;

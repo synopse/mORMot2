@@ -95,6 +95,7 @@ type
   // - some THttpServerGeneric classes may have only partial support of them
   // - hsoHeadersUnfiltered will store all headers, not only relevant (i.e.
   // include raw Content-Length, Content-Type and Content-Encoding entries)
+  // - hsoHeadersInterning triggers TRawUtf8Interning to reduce memory usage
   // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - hsoCreateSuspended won't start the server thread immediately
   // - hsoLogVerbose could be used to debug a server in production
@@ -103,6 +104,7 @@ type
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
   THttpServerOption = (
     hsoHeadersUnfiltered,
+    hsoHeadersInterning,
     hsoNoXPoweredHeader,
     hsoCreateSuspended,
     hsoLogVerbose,
