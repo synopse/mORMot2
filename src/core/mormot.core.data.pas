@@ -1939,6 +1939,8 @@ type
     function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
+    /// returns position in array, or -1 if not found with a custom comparer
+    function FindOrNewComp(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare): PtrInt;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
@@ -9050,6 +9052,37 @@ begin
       end;
   until false;
   RaiseFatalCollision('FindOrNew', aHashCode);
+end;
+
+function TDynArrayHasher.FindOrNewComp(aHashCode: cardinal; Item: pointer;
+  Comp: TDynArraySortCompare): PtrInt;
+var
+  first, last, ndx: PtrInt;
+begin // cut-down version of FindOrNew()
+  if not Assigned(Comp) then
+    Comp := fCompare;
+  ndx := HashTableIndex(aHashCode);
+  first := ndx;
+  last := fHashTableSize;
+  if hasHasher in fState then
+    repeat
+      result := HashTableIndexToIndex(ndx) - 1; // index+1 was stored
+      if (result < 0) or // void slot = not found, or return matching index
+         (Comp((PAnsiChar(fDynArray^.Value^) +
+           result * fDynArray^.fInfo.Cache.ItemSize)^, Item^) = 0) then
+        exit;
+      inc(ndx); // hash or slot collision -> search next item
+      if ndx = last then
+        if ndx= first then
+          break
+        else
+        begin
+          ndx := 0;
+          last := first;
+        end;
+    until false;
+  result := 0; // make compiler happy
+  RaiseFatalCollision('FindOrNewCompare', aHashCode);
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);

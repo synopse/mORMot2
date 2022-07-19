@@ -6332,6 +6332,8 @@ end;
 
 var
   HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
+  HTML_ESCAPED: array[1..4] of string[7] = (
+    '&lt;', '&gt;', '&amp;', '&quot;');
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
@@ -6351,18 +6353,10 @@ begin
     while esc[Text^] = 0 do
       inc(Text);
     AddNoJsonEscape(B, Text - B);
-    case Text^ of
-      #0:
-        exit;
-      '<':
-        AddShorter('&lt;');
-      '>':
-        AddShorter('&gt;');
-      '&':
-        AddShorter('&amp;');
-      '"':
-        AddShorter('&quot;');
-    end;
+    if Text^ = #0 then
+      exit
+    else
+      AddShorter(HTML_ESCAPED[esc[Text^]]);
     inc(Text);
   until Text^ = #0;
 end;
@@ -6419,18 +6413,10 @@ begin
     AddNoJsonEscape(B, Text - B);
     if PtrUInt(Text) = PtrUInt(TextLen) then
       exit;
-    case Text^ of
-      #0:
-        exit;
-      '<':
-        AddShorter('&lt;');
-      '>':
-        AddShorter('&gt;');
-      '&':
-        AddShorter('&amp;');
-      '"':
-        AddShorter('&quot;');
-    end;
+    if Text^ = #0 then
+      exit
+    else
+      AddShorter(HTML_ESCAPED[esc[Text^]]);
     inc(Text);
   until false;
 end;
@@ -6463,9 +6449,9 @@ begin
   esc := @XML_ESC;
   i := 0;
   repeat
-    beg := i;
     if esc[Text[i]] = 0 then
     begin
+      beg := i;
       repeat // it is faster to handle all not-escaped chars at once
         inc(i);
       until esc[Text[i]] <> 0;
@@ -11371,13 +11357,29 @@ begin
   for c := #0 to #127 do
   begin
     XML_ESC[c] := ord(c in [#0..#31, '<', '>', '&', '"', '''']);
-    HTML_ESC[hfAnyWhere, c] := ord(c in [#0, '&', '"', '<', '>']);
-    HTML_ESC[hfOutsideAttributes, c] := ord(c in [#0, '&', '<', '>']);
-    HTML_ESC[hfWithinAttributes, c] := ord(c in [#0, '&', '"']);
+    case c of // HTML_ESCAPED: array[1..4] = '&lt;', '&gt;', '&amp;', '&quot;'
+      #0,
+      '<':
+        v := 1;
+      '>':
+        v := 2;
+      '&':
+        v := 3;
+      '"':
+        v := 4;
+    else
+      v := 0;
+    end;
+    HTML_ESC[hfAnyWhere, c] := v;
+    if c in [#0, '&', '<', '>'] then
+      HTML_ESC[hfOutsideAttributes, c] := v;
+    if c in [#0, '&', '"'] then
+      HTML_ESC[hfWithinAttributes, c] := v;
   end;
   _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
   _VariantSaveJson := __VariantSaveJson;
 end;
+
 
 
 initialization

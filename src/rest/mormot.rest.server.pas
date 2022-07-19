@@ -683,7 +683,7 @@ type
   // !  while Ctxt.Parameters<>nil do
   // !  begin
   // !    UrlDecodeValue(Ctxt.Parameters,'SORT=',aSortString);
-  // !    UrlDecodeValueInteger(Ctxt.Parameters,'COUNT=',aCountInteger,@Ctxt.Parameters);
+  // !    UrlDecodeInteger(Ctxt.Parameters,'COUNT=',aCountInteger,@Ctxt.Parameters);
   // !  end;
   // - Ctxt.Call is set with low-level incoming and outgoing data from client
   // (e.g. Ctxt.Call.InBody contain POST/PUT data message)
