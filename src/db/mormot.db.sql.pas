@@ -1861,7 +1861,7 @@ type
   /// abstract connection created from TSqlDBConnectionProperties
   // - more than one TSqlDBConnection instance can be run for the same
   // TSqlDBConnectionProperties
-  TSqlDBConnection = class
+  TSqlDBConnection = class(TSynPersistentLock)
   protected
     fProperties: TSqlDBConnectionProperties;
     fErrorException: ExceptClass;
@@ -1869,7 +1869,7 @@ type
     fTransactionCount: integer;
     fServerTimestampOffset: TDateTime;
     fServerTimestampAtConnection: TDateTime;
-    fCache: TRawUtf8List;
+    fCache: TRawUtf8List; // statements cache protected by main Safe.Lock/UnLock
     fOnProcess: TOnSqlDBProcess;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
@@ -1886,7 +1886,7 @@ type
     procedure InternalProcess(Event: TOnSqlDBProcessEvent);
   public
     /// connect to a specified database engine
-    constructor Create(aProperties: TSqlDBConnectionProperties); virtual;
+    constructor Create(aProperties: TSqlDBConnectionProperties); reintroduce; virtual;
     /// release memory and connection
     destructor Destroy; override;
 
@@ -3489,8 +3489,8 @@ begin
     RaiseExceptionOnError);
 end;
 
-function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const
-  SqlFormat: RawUtf8; const Args: array of const; ExpectResults,
+function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(
+  const SqlFormat: RawUtf8; const Args: array of const; ExpectResults,
   RaiseExceptionOnError: boolean): ISqlDBStatement;
 begin
   result := NewThreadSafeStatementPrepared(FormatUtf8(SqlFormat, Args),
@@ -6949,6 +6949,7 @@ end;
 
 constructor TSqlDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 begin
+  inherited Create;
   fProperties := aProperties;
   if aProperties <> nil then
   begin
@@ -6989,6 +6990,7 @@ begin
   if fCache <> nil then
   begin
     InternalProcess(speActive);
+    fSafe.Lock; // protect fCache access e.g. for a single SQLite3 DB
     try
       obj := fCache.ObjectPtr;
       if obj <> nil then
@@ -6996,6 +6998,7 @@ begin
           TSqlDBStatement(obj[i]).FRefCount := 0; // force clean release
       FreeAndNilSafe(fCache); // release all cached statements
     finally
+      fSafe.UnLock;
       InternalProcess(speNonActive);
     end;
   end;
@@ -7104,14 +7107,19 @@ var
         stmt.Prepare(aSql, ExpectResults);
         if tocache then
         begin
-          if fCache = nil then
-            fCache := TRawUtf8List.CreateEx(
-              [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
-          if fCache.AddObject(cachedsql, stmt) >= 0 then
-            stmt._AddRef
-          else // will be owned by fCache.Objects[]
-            SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
-              'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
+          fSafe.Lock; // protect fCache access
+          try
+            if fCache = nil then
+              fCache := TRawUtf8List.CreateEx(
+                [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
+            if fCache.AddObject(cachedsql, stmt) >= 0 then
+              stmt._AddRef
+            else // will be owned by fCache.Objects[]
+              SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
+                'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
+          finally
+            fSafe.UnLock;
+          end;
         end;
         result := stmt;
       finally
@@ -7147,47 +7155,52 @@ begin
   if tocache and
      (fCache <> nil) then
   begin
-    ndx := fCache.IndexOf(cachedsql);
-    if ndx >= 0 then
-    begin
-      stmt := fCache.Objects[ndx];
-      if stmt.RefCount = 1 then
+    fSafe.Lock; // protect fCache access
+    try
+      ndx := fCache.IndexOf(cachedsql);
+      if ndx >= 0 then
       begin
-        // ensure statement is not currently in use
-        result := stmt; // acquire the statement
-        stmt.Reset;
-        exit;
-      end
-      else
-      begin
-        // in use -> create cached alternatives
-        tocache := false; // if all slots are used, won't cache this statement
-        if fProperties.StatementCacheReplicates = 0 then
-          SynDBLog.Add.Log(sllWarning,
-            'NewStatementPrepared: cached statement still in use ' +
-            '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
+        stmt := fCache.Objects[ndx];
+        if stmt.RefCount = 1 then
+        begin
+          // ensure statement is not currently in use
+          result := stmt; // acquire the statement
+          stmt.Reset;
+          exit;
+        end
         else
-          for altern := 1 to fProperties.StatementCacheReplicates do
-          begin
-            cachedsql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
-            ndx := fCache.IndexOf(cachedsql);
-            if ndx >= 0 then
+        begin
+          // in use -> create cached alternatives
+          tocache := false; // if all slots are used, won't cache this statement
+          if fProperties.StatementCacheReplicates = 0 then
+            SynDBLog.Add.Log(sllWarning,
+              'NewStatementPrepared: cached statement still in use ' +
+              '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
+          else
+            for altern := 1 to fProperties.StatementCacheReplicates do
             begin
-              stmt := fCache.Objects[ndx];
-              if stmt.RefCount = 1 then
+              cachedsql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
+              ndx := fCache.IndexOf(cachedsql);
+              if ndx >= 0 then
               begin
-                result := stmt;
-                stmt.Reset;
-                exit;
+                stmt := fCache.Objects[ndx];
+                if stmt.RefCount = 1 then
+                begin
+                  result := stmt;
+                  stmt.Reset;
+                  exit;
+                end;
+              end
+              else
+              begin
+                tocache := true; // cache the statement in this void slot
+                break;
               end;
-            end
-            else
-            begin
-              tocache := true; // cache the statement in this void slot
-              break;
             end;
-          end;
+        end;
       end;
+    finally
+      fSafe.UnLock;
     end;
   end;
   // not in cache (or not cachable) -> prepare now
