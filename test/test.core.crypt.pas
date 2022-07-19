@@ -20,6 +20,7 @@ uses
   mormot.crypt.secure,
   mormot.core.perf,
   mormot.core.test,
+  mormot.core.variants,
   mormot.crypt.jwt,
   mormot.crypt.ecc;
 
@@ -735,6 +736,9 @@ procedure TTestCoreCrypto._JWT;
     jwt: TJwtContent;
     i: integer;
     exp: TUnixTime;
+    exp64: Int64;
+    bool: boolean;
+    v: variant;
   begin
     t := one.Compute(['http://example.com/is_root', true], 'joe');
     check(t <> '');
@@ -744,6 +748,20 @@ procedure TTestCoreCrypto._JWT;
     checkEqual(iss, 'joe');
     if one.Algorithm = 'none' then
       checkEqual(hp + '.', t);
+    check(TJwtAbstract.VerifyPayload(
+      t, '', '', 'joe', '', nil, nil, nil, nil, nil, @v) = jwtValid);
+    // {"http://example.com/is_root":true,"iss":"joe","exp":1658258457}
+    check(_Safe(v)^.Count >= 3);
+    with _Safe(v)^ do
+    begin
+      Check(GetAsInt64('exp', exp64));
+      CheckEqual(exp, exp64);
+      Check(GetAsRawUtf8('iss', iss));
+      checkEqual(iss, 'joe');
+      bool := false;
+      Check(GetAsBoolean('http://example.com/is_root', bool));
+      check(bool);
+    end;
     check(one.VerifyPayload(
       t, one.Algorithm, '', 'joe', '', @exp, nil, @sub, @iss, nil) = jwtValid);
     checkEqual(one.ExtractAlgo(t), one.Algorithm);
