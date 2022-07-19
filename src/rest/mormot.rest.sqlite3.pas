@@ -221,7 +221,7 @@ begin
   model.Owner := self;
   DB.Synchronous := smOff;
   DB.LockingMode := lmExclusive;
-  CreateMissingTables;
+  Server.CreateMissingTables;
 end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSqlDataBase;
