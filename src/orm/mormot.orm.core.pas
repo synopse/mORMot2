@@ -11151,7 +11151,8 @@ begin
       fields := fields + props.ComputeBeforeAddFieldsBits;
   end;
   blob := pointer(props.BlobFields);
-  if blob <> nil then // no need to send any null: default blob value
+  if (blob <> nil) and // no need to send any null: default blob value
+     (fields * props.FieldBits[oftBlob] <> []) then
     for f := 1 to length(props.BlobFields) do
     begin
       if (blob^.PropertyIndex in fields) and
