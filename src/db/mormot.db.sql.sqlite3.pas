@@ -360,13 +360,19 @@ begin
 end;
 
 
+
 { TSqlDBSQLite3Connection }
 
 procedure TSqlDBSQLite3Connection.Commit;
 begin
   inherited Commit;
   try
-    fDB.Commit;
+    fDB.Lock;
+    try
+      fDB.Commit;
+    finally
+      fDB.UnLock;
+    end;
   except
     inc(fTransactionCount); // the transaction is still active
     raise;
@@ -448,7 +454,12 @@ end;
 procedure TSqlDBSQLite3Connection.StartTransaction;
 begin
   inherited;
-  fDB.TransactionBegin;
+  fDB.Lock;
+  try
+    fDB.TransactionBegin;
+  finally
+    fDB.UnLock;
+  end;
 end;
 
 
@@ -641,8 +652,10 @@ end;
 destructor TSqlDBSQLite3Statement.Destroy;
 begin
   try
+    fDB.Lock;
     fStatement.Close; // release statement
   finally
+    fDB.UnLock;
     inherited Destroy;
   end;
 end;
@@ -655,12 +668,14 @@ begin
     exit; // execution done in Step()
   if fShouldLogSQL then
     SqlLogBegin(sllSQL);
+  fDB.Lock;
   try
     // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
     until fStatement.Step <> SQLITE_ROW;
     fUpdateCount := fDB.LastChangeCount;
   finally
+    fDB.UnLock;
     if fShouldLogSQL then
       SqlLogEnd;
   end;
@@ -695,22 +710,32 @@ begin
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
   if fDB = nil then
     fDB := TSqlDBSQLite3Connection(fConnection).DB;
-  fStatement.Prepare(fDB.DB, aSql);
-  fColumnCount := fStatement.FieldCount;
-  if fShouldLogSQL then
-  begin
-    fParamCount := fStatement.ParamCount;
-    SetLength(fLogSQLValues, fParamCount);
-    SqlLogEnd(' %', [fDB.FileNameWithoutPath]);
+  fDB.Lock;
+  try
+    fStatement.Prepare(fDB.DB, aSql);
+    fColumnCount := fStatement.FieldCount;
+    if fShouldLogSQL then
+    begin
+      fParamCount := fStatement.ParamCount;
+      SetLength(fLogSQLValues, fParamCount);
+      SqlLogEnd(' %', [fDB.FileNameWithoutPath]);
+    end;
+  finally
+    fDB.UnLock;
   end;
 end;
 
 procedure TSqlDBSQLite3Statement.Reset;
 begin
-  fStatement.Reset; // should be done now
-  fUpdateCount := 0;
-  // fStatement.BindReset; // slow down the process, and is not mandatory
-  ReleaseRows;
+  fDB.Lock;
+  try
+    fStatement.Reset; // should be done now
+    fUpdateCount := 0;
+    // fStatement.BindReset; // slow down the process, and is not mandatory
+    ReleaseRows;
+  finally
+    fDB.UnLock;
+  end;
   if fShouldLogSQL then
     SetLength(fLogSQLValues, fParamCount);
   inherited Reset;
@@ -720,7 +745,7 @@ procedure TSqlDBSQLite3Statement.ReleaseRows;
 begin
   if fShouldLogSQL then
     VariantDynArrayClear(fLogSQLValues);
-  inherited ReleaseRows;
+  inherited ReleaseRows; // fSqlWithInlinedParams := ''
 end;
 
 function TSqlDBSQLite3Statement.Step(SeekFirst: boolean): boolean;
@@ -733,7 +758,12 @@ begin
     //fStatement.Reset;
   end;
   try
-    result := fStatement.Step = SQLITE_ROW;
+    fDB.Lock;
+    try
+      result := fStatement.Step = SQLITE_ROW;
+    finally
+      fDB.UnLock;
+    end;
   except
     on E: Exception do
     begin
