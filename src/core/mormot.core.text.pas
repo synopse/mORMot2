@@ -10593,12 +10593,13 @@ begin
   {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
   begin
-    inc(Bin, BinBytes - 1);
+    inc(Bin, BinBytes - 1); // display = reverse order
     repeat
       b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
+      if b = 255 then
+        exit;
       c := tab[Ord(Hex[1])];
-      if (b = 255) or
-         (c = 255) then
+      if c = 255 then
         exit;
       Bin^ := b or c;
       dec(Bin);
@@ -10648,9 +10649,10 @@ begin
     if Bin <> nil then
       repeat
         b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
+        if b = 255 then
+          exit;
         c := tab[Ord(Hex[1])];
-        if (b = 255) or
-           (c = 255) then
+        if c = 255 then
           exit;
         inc(Hex, 2);
         Bin^ := b or c;
@@ -11089,18 +11091,19 @@ begin
 end;
 {$endif UNICODE}
 
-function HexaToByte(P: PUtf8Char; var Dest: byte): boolean;
+function HexaToByte(P: PUtf8Char; var Dest: byte; tab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
   b, c: byte;
 begin
-  b := ConvertHexToBin[Ord(P[0]) + 256]; // + 256 for shl 4
+  b := tab[Ord(P[0]) + 256]; // + 256 for shl 4
   if b <> 255 then
   begin
-    c := ConvertHexToBin[Ord(P[1])];
+    c := tab[Ord(P[1])];
     if c <> 255 then
     begin
-      Dest := b + c;
+      inc(b, c);
+      Dest := b;
       result := true;
       exit;
     end;
@@ -11111,37 +11114,39 @@ end;
 function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
   i: PtrInt;
+  tab: PByteArray;
 begin
   // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := nil;
+  tab := @ConvertHexToBin;
   for i := 3 downto 0 do
   begin
-    if not HexaToByte(P, guid[i]) then
+    if not HexaToByte(P, guid[i], tab) then
       exit;
     inc(P, 2);
   end;
   inc(PByte(guid), 4);
   for i := 1 to 2 do
   begin
-    if P^ = '-' then
+    if P^ = '-' then // '-' separators are optional
       inc(P);
-    if not HexaToByte(P, guid[1]) or
-       not HexaToByte(P + 2, guid[0]) then
+    if not HexaToByte(P, guid[1], tab) or
+       not HexaToByte(P + 2, guid[0], tab) then
       exit;
     inc(P, 4);
     inc(PByte(guid), 2);
   end;
   if P^ = '-' then
     inc(P);
-  if not HexaToByte(P, guid[0]) or // in reverse order than the previous loop
-     not HexaToByte(P + 2, guid[1]) then
+  if not HexaToByte(P, guid[0], tab) or // in reverse order than the previous loop
+     not HexaToByte(P + 2, guid[1], tab) then
     exit;
   inc(P, 4);
   inc(PByte(guid), 2);
   if P^ = '-' then
     inc(P);
   for i := 0 to 5 do
-    if HexaToByte(P, guid[i]) then
+    if HexaToByte(P, guid[i], tab) then
       inc(P, 2)
     else
       exit;
