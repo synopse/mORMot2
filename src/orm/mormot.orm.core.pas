@@ -4280,6 +4280,7 @@ type
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): integer;
     /// activate the internal caching for a whole Table
     // - any cached item of this table will be flushed
+    // - you can use FillFromQuery() to SELECT and load all items into the cache
     // - return true on success
     function SetCache(aTable: TOrmClass): boolean; overload;
     /// activate the internal caching for a given TOrm

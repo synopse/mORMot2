@@ -2329,7 +2329,9 @@ end;
 procedure TRestOrmServerDB.FlushInternalDBCache;
 begin
   inherited;
-  if DB = nil then
+  if (DB = nil) or
+     (DB.Cache = nil) or
+     (DB.Cache.Count = 0) then
     exit;
   DB.Lock;
   try
