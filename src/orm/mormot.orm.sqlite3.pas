@@ -1417,6 +1417,7 @@ function TRestOrmServerDB.MainEngineAdd(TableModelIndex: integer;
 var
   props: TOrmProperties;
   sql: RawUtf8;
+  tmp: TSynTempBuffer;
 begin
   result := 0;
   if TableModelIndex < 0 then
@@ -1444,9 +1445,10 @@ begin
     sql := 'insert into ' + sql + ' default values;'
   else
   begin
+    tmp.Init(SentData);
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
     try
-      fJsonDecoder.Decode(SentData, nil, pInlined, result, false);
+      fJsonDecoder.Decode(tmp, nil, pInlined, result, false);
       if (fOwner <> nil) and
          (props.RecordVersionField <> nil) then
         fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
@@ -1456,6 +1458,7 @@ begin
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+      tmp.Done;
     end;
   end;
   if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
@@ -2040,6 +2043,7 @@ function TRestOrmServerDB.MainEngineUpdate(TableModelIndex: integer; ID: TID;
 var
   props: TOrmProperties;
   sql: RawUtf8;
+  tmp: TSynTempBuffer;
 begin
   result := false;
   if (TableModelIndex < 0) or
@@ -2052,9 +2056,10 @@ begin
   begin
     // this sql statement use :(inlined params): for all values
     props := fModel.TableProps[TableModelIndex].Props;
+    tmp.Init(SentData);
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // protect fJsonDecoder
     try
-      fJsonDecoder.Decode(SentData, nil, pInlined, ID, false);
+      fJsonDecoder.Decode(tmp, nil, pInlined, ID, false);
       if (props.RecordVersionField <> nil) and
          (fOwner <> nil) then
         fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
@@ -2063,6 +2068,7 @@ begin
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
+      tmp.Done;
     end;
     if sql = '' then
       raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
@@ -2447,22 +2453,23 @@ begin
     if b^.ValuesCount = 1 then
     begin
       // handle single record insert (with inlined parameters)
-      case b^.Encoding of
-        encPost:
-          v := b^.Values[0];
-        encSimple,
-        encPostHex,
-        encPostHexID:
-          v := props.SaveFieldsFromJsonArray(
-            b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson]);
+      if b^.Encoding = encPost then
+        v := b^.Values[0]
+      else // encSimple, encPostHex, encPostHexID
+        v := props.SaveFieldsFromJsonArray(
+          b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson]);
+      b^.Temp.Init(v);
+      try
+        fJsonDecoder.Decode(b^.Temp, nil, pInlined, b^.ID[0]);
+        if (props.RecordVersionField <> nil) and
+           (fOwner <> nil) then
+          fOwner.RecordVersionHandle(
+            ooInsert, b^.TableIndex, fJsonDecoder, props.RecordVersionField);
+        sql := fJsonDecoder.EncodeAsSql(
+          '', props.SqlTableName, {update=}false, @b^.Options, dSQLite);
+      finally
+        b^.Temp.Done;
       end;
-      fJsonDecoder.Decode(v, nil, pInlined, b^.ID[0]);
-      if (props.RecordVersionField <> nil) and
-         (fOwner <> nil) then
-        fOwner.RecordVersionHandle(
-          ooInsert, b^.TableIndex, fJsonDecoder, props.RecordVersionField);
-      sql := fJsonDecoder.EncodeAsSql(
-        '', props.SqlTableName, {update=}false, @b^.Options, dSQLite);
       if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
@@ -2539,7 +2546,7 @@ begin
             end;
             while P^ in [#1..' ', '{', '['] do
               inc(P);
-            fJsonDecoder.Decode(P, nil, pNonQuoted, b^.ID[ndx]);
+            fJsonDecoder.DecodeInPlace(P, nil, pNonQuoted, b^.ID[ndx]);
             inc(ndx);
             decodedsaved := false;
           finally

@@ -7697,7 +7697,11 @@ begin
           Dest.AddNull;
         end
       else
+      begin
+        Dest.Add('[');
         Dest.AddString(VArray[0]); // first item is enough in the logs
+        Dest.AddShorter('...]');
+      end;
 end;
 
 procedure TSqlDBStatementWithParams.BindArray(Param: integer;

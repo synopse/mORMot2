@@ -7431,7 +7431,7 @@ begin
   if Ctxt.ParseNext then
     if Ctxt.WasString then
     begin
-      FillZeroSmall(Data, Ctxt.Info.Size);
+      FillZeroSmall(Data, Ctxt.Info.Size); // BinarySize may be < Size
       if Ctxt.ValueLen > 0 then // "" -> is valid 0
         Ctxt.Valid := (Ctxt.ValueLen = Ctxt.Info.BinarySize * 2) and
           HexDisplayToBin(PAnsiChar(Ctxt.Value), Data, Ctxt.Info.BinarySize);

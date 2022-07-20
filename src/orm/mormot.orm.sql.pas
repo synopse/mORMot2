@@ -1059,10 +1059,10 @@ begin
                 case Occasion of
                   ooInsert:
                     // mPost=INSERT with the supplied fields and computed ID
-                    Decode.Decode(P, nil, pQuoted, fBatchIDs[i], true);
+                    Decode.DecodeInPlace(P, nil, pQuoted, fBatchIDs[i], true);
                   ooUpdate:
                     // mPut=UPDATE with the supplied fields and ID set appart
-                    Decode.Decode(P, nil, pQuoted, 0, true);
+                    Decode.DecodeInPlace(P, nil, pQuoted, 0, true);
                 end;
                 RecordVersionFieldHandle(Occasion, Decode);
                 if {%H-}Fields = nil then
@@ -2015,6 +2015,7 @@ var
   InsertedID: TID;
   F: PtrInt;
   stmt: ISqlDBStatement;
+  tmp: TSynTempBuffer;
 begin
   result := 0;
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ExtExecuteFromJson' {$endif});
@@ -2039,41 +2040,46 @@ begin
         [self, StoredClass, ToText(Occasion)^]);
     end;
     // decode fields
-    if (fEngineAddForcedID <> 0) and
-       (InsertedID = fEngineAddForcedID) then
-      Decoder.Decode(SentData, nil, pNonQuoted, 0, true)
-    else
-      Decoder.Decode(SentData, nil, pNonQuoted, InsertedID, true);
-    if (Decoder.FieldCount = 0) and
-       (Occasion = ooUpdate) then
-    begin
-      // SentData='' -> no column to update
-      result := UpdatedID;
-      exit;
-    end;
-    RecordVersionFieldHandle(Occasion, Decoder);
-    // compute SQL statement and associated bound parameters
-    SQL := JsonDecodedPrepareToSql(
-      Decoder, ExternalFields, Types, Occasion, [], {array=}false);
-    if Occasion = ooUpdate then
-      // Int64ToUtf8(var) fails on D2007
-      Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
-    // execute statement
+    tmp.Init(SentData);
     try
-      stmt := fProperties.NewThreadSafeStatementPrepared(
-        SQL, {results=}false, {except=}true);
-      if stmt = nil then
+      if (fEngineAddForcedID <> 0) and
+         (InsertedID = fEngineAddForcedID) then
+        Decoder.Decode(tmp, nil, pNonQuoted, 0, true)
+      else
+        Decoder.Decode(tmp, nil, pNonQuoted, InsertedID, true);
+      if (Decoder.FieldCount = 0) and
+         (Occasion = ooUpdate) then
+      begin
+        // SentData='' -> no column to update
+        result := UpdatedID;
         exit;
-      for F := 0 to Decoder.FieldCount - 1 do
-        if Decoder.FieldTypeApproximation[F] = ftaNull then
-          stmt.BindNull(F + 1)
-        else
-          stmt.Bind(F + 1, Types[F], Decoder.FieldValues[F], true);
-      stmt.ExecutePrepared;
-    except
-      stmt := nil;
-      HandleClearPoolOnConnectionIssue;
-      exit; // leave result=0
+      end;
+      RecordVersionFieldHandle(Occasion, Decoder);
+      // compute SQL statement and associated bound parameters
+      SQL := JsonDecodedPrepareToSql(
+        Decoder, ExternalFields, Types, Occasion, [], {array=}false);
+      if Occasion = ooUpdate then
+        // Int64ToUtf8(var) fails on D2007
+        Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
+      // execute statement
+      try
+        stmt := fProperties.NewThreadSafeStatementPrepared(
+          SQL, {results=}false, {except=}true);
+        if stmt = nil then
+          exit;
+        for F := 0 to Decoder.FieldCount - 1 do
+          if Decoder.FieldTypeApproximation[F] = ftaNull then
+            stmt.BindNull(F + 1)
+          else
+            stmt.Bind(F + 1, Types[F], Decoder.FieldValues[F], true);
+        stmt.ExecutePrepared;
+      except
+        stmt := nil;
+        HandleClearPoolOnConnectionIssue;
+        exit; // leave result=0
+      end;
+    finally
+      tmp.Done;
     end;
     // mark success
     if UpdatedID = 0 then
@@ -2108,11 +2114,19 @@ begin
   SetLength(ExternalFields, Decoder.FieldCount);
   for f := 0 to Decoder.FieldCount - 1 do
   begin
-    k := fStoredClassRecordProps.Fields.IndexByNameOrExcept(
-      Decoder.FieldNames[f]);
-    ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
-    // retrieve mormot.db.sql Types[f]
-    k := fFieldsInternalToExternal[k + 1];
+    if IsRowID(Decoder.FieldNames[f], Decoder.FieldNamesL[f]) then
+      k := VIRTUAL_TABLE_ROWID_COLUMN
+    else
+    begin
+      k := fStoredClassRecordProps.Fields.IndexByName(Decoder.FieldNames[f]);
+      if k < 0 then
+        k := -2;
+    end;
+    if k >= VIRTUAL_TABLE_ROWID_COLUMN then
+    begin
+      ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
+      k := fFieldsInternalToExternal[k + 1];
+    end;
     if k < 0 then
       raise ERestStorage.CreateUtf8(
         '%.JsonDecodedPrepareToSql(%): No column for [%] field in table %',

@@ -3384,9 +3384,9 @@ begin
             W.AddShort(' as t set ');
             for f := 0 to Decoder.FieldCount - 1 do
             begin
-              W.AddString(Decoder.DecodedFieldNames^[f]);
+              W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddShorter('=v.');
-              W.AddString(Decoder.DecodedFieldNames^[f]);
+              W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.CancelLastComma;
@@ -3400,7 +3400,7 @@ begin
             W.AddShort(' unnest(?::int8[]) ) as v('); // last param is ID
             for f := 0 to Decoder.FieldCount - 1 do
             begin
-              W.AddString(Decoder.DecodedFieldNames^[f]);
+              W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.AddString(UpdateIDFieldName);
@@ -3416,7 +3416,7 @@ begin
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               // append 'COL1=?,COL2=?'
-              W.AddString(Decoder.DecodedFieldNames^[f]);
+              W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddShorter('=?,');
             end;
             W.CancelLastComma;
@@ -3437,7 +3437,7 @@ begin
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               // append 'COL1,COL2'
-              W.AddString(Decoder.DecodedFieldNames^[f]);
+              W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddComma;
             end;
             W.CancelLastComma;
