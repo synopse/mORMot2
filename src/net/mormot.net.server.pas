@@ -3140,8 +3140,8 @@ var
           if RawValueLength = 0 then
           begin
             // no previous encoding -> try if any compression
-            outcontenc := CompressContent(
-              compressset, fCompress, ctxt.OutContentType, ctxt.fOutContent);
+            CompressContent(compressset, fCompress, ctxt.OutContentType,
+              ctxt.fOutContent, outcontenc);
             pRawValue := pointer(outcontenc);
             RawValueLength := length(outcontenc);
           end;
