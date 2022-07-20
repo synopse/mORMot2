@@ -1155,6 +1155,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function Len: integer;
       {$ifdef HASINLINE} inline; {$endif}
+    function GetType: integer;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = ASN1_STRFLGS_RFC2253);
     procedure ToHex(out result: RawUtf8);
     function Equals(const another: asn1_string_st): boolean;
@@ -1167,9 +1168,16 @@ type
     procedure Free;
   end;
 
+  ASN1_OBJECT = object
+  public
+    function NID: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    function Name: PUtf8Char;
+  end;
+
   PASN1_INTEGER = ^ASN1_INTEGER;
   PPASN1_INTEGER = ^PASN1_INTEGER;
-  PASN1_OBJECT = type pointer;
+  PASN1_OBJECT = ^ASN1_OBJECT;
   PPASN1_OBJECT = ^PASN1_OBJECT;
   ASN1_STRING = asn1_string_st;
   PASN1_STRING = ^ASN1_STRING;
@@ -1317,7 +1325,9 @@ type
   X509_NAME_ENTRY = object
   public
     function Data: PASN1_STRING;
-    function ToText: RawUtf8;
+    function NID: integer;
+    function Name: PUtf8Char;
+    function Value: RawUtf8;
     procedure Free;
   end;
 
@@ -1871,6 +1881,7 @@ function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Cha
 function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
 function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
 function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
+function X509_NAME_ENTRY_get_object(ne: PX509_NAME_ENTRY): PASN1_OBJECT; cdecl;
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
@@ -2025,6 +2036,7 @@ function ASN1_STRING_data(x: PASN1_STRING): PByte;
    {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function ASN1_STRING_length(x: PASN1_STRING): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function ASN1_STRING_type(x: PASN1_STRING): integer; cdecl;
 function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
 function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb;
   u: pointer): PX509; cdecl;
@@ -2773,6 +2785,7 @@ type
     X509_NAME_get_index_by_NID: function(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
     X509_NAME_delete_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
     X509_NAME_ENTRY_get_data: function(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
+    X509_NAME_ENTRY_get_object: function(ne: PX509_NAME_ENTRY): PASN1_OBJECT; cdecl;
     X509_NAME_ENTRY_free: procedure(a: PX509_NAME_ENTRY); cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
@@ -2907,6 +2920,7 @@ type
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
+    ASN1_STRING_type: function(x: PASN1_STRING): integer; cdecl;
     ASN1_STRING_print_ex: function(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     PEM_write_bio_X509: function(bp: PBIO; x: PX509): integer; cdecl;
@@ -3004,7 +3018,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..307] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..309] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3086,6 +3100,7 @@ const
     'X509_NAME_get_index_by_NID',
     'X509_NAME_delete_entry',
     'X509_NAME_ENTRY_get_data',
+    'X509_NAME_ENTRY_get_object',
     'X509_NAME_ENTRY_free',
     'X509_NAME_oneline',
     '?X509_NAME_hash', // not defined on OpenSSL 3.0 -> ? = ignored by now
@@ -3218,8 +3233,9 @@ const
     'OBJ_nid2sn',
     'OBJ_txt2nid',
     'OBJ_obj2nid',
-    'ASN1_STRING_data',
+    'ASN1_STRING_data ASN1_STRING_get0_data', // alternate names
     'ASN1_STRING_length',
+    'ASN1_STRING_type',
     'ASN1_STRING_print_ex',
     'PEM_read_bio_X509',
     'PEM_write_bio_X509',
@@ -3737,6 +3753,11 @@ end;
 function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING;
 begin
   result := libcrypto.X509_NAME_ENTRY_get_data(ne);
+end;
+
+function X509_NAME_ENTRY_get_object(ne: PX509_NAME_ENTRY): PASN1_OBJECT;
+begin
+  result := libcrypto.X509_NAME_ENTRY_get_object(ne);
 end;
 
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY);
@@ -4429,6 +4450,11 @@ end;
 function ASN1_STRING_length(x: PASN1_STRING): integer;
 begin
   result := libcrypto.ASN1_STRING_length(x);
+end;
+
+function ASN1_STRING_type(x: PASN1_STRING): integer;
+begin
+  result := libcrypto.ASN1_STRING_type(x);
 end;
 
 function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer;
@@ -5507,6 +5533,9 @@ function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTR
 function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_data';
 
+function X509_NAME_ENTRY_get_object(ne: PX509_NAME_ENTRY): PASN1_OBJECT; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_object';
+
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_free';
 
@@ -5915,6 +5944,9 @@ function ASN1_STRING_data(x: PASN1_STRING): PByte; cdecl;
 
 function ASN1_STRING_length(x: PASN1_STRING): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_length';
+
+function ASN1_STRING_type(x: PASN1_STRING): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_STRING_type';
 
 function ASN1_STRING_print_ex(_out: PBIO; str: PASN1_STRING; flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_print_ex';
@@ -7174,7 +7206,17 @@ begin
   result := X509_NAME_ENTRY_get_data(@self);
 end;
 
-function X509_NAME_ENTRY.ToText: RawUtf8;
+function X509_NAME_ENTRY.NID: integer;
+begin
+  result := X509_NAME_ENTRY_get_object(@self).NID;
+end;
+
+function X509_NAME_ENTRY.Name: PUtf8Char;
+begin
+  result := X509_NAME_ENTRY_get_object(@self).Name;
+end;
+
+function X509_NAME_ENTRY.Value: RawUtf8;
 begin
   Data^.ToUtf8(result);
 end;
@@ -7886,6 +7928,18 @@ begin
     ASN1_INTEGER_free(@self);
 end;
 
+{ ASN1_OBJECT }
+
+function ASN1_OBJECT.NID: integer;
+begin
+  result := OBJ_obj2nid(@self);
+end;
+
+function ASN1_OBJECT.Name: PUtf8Char;
+begin
+  result := OBJ_nid2ln(OBJ_obj2nid(@self));
+end;
+
 
 { asn1_string_st }
 
@@ -7903,6 +7957,14 @@ begin
     result := 0
   else
     result := ASN1_STRING_length(@self);
+end;
+
+function asn1_string_st.GetType: integer;
+begin
+  if @self = nil then
+    result := 0
+  else
+    result := ASN1_STRING_type(@self);
 end;
 
 procedure asn1_string_st.ToUtf8(out result: RawUtf8; flags: cardinal);

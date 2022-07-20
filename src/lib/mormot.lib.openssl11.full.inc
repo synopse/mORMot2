@@ -12670,9 +12670,6 @@ procedure ASN1_STRING_set0(str: PASN1_STRING; data: pointer; len: integer); cdec
 procedure ASN1_STRING_length_set(x: PASN1_STRING; n: integer); cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_length_set';
 
-function ASN1_STRING_type(x: PASN1_STRING): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_STRING_type';
-
 function ASN1_STRING_get0_data(x: PASN1_STRING): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_get0_data';
 
@@ -18343,9 +18340,6 @@ function X509_NAME_ENTRY_set_object(ne: PX509_NAME_ENTRY; obj: PASN1_OBJECT): in
 
 function X509_NAME_ENTRY_set_data(ne: PX509_NAME_ENTRY; typ: integer; bytes: PAnsiChar; len: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_set_data';
-
-function X509_NAME_ENTRY_get_object(ne: PX509_NAME_ENTRY): PASN1_OBJECT; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_object';
 
 function X509_NAME_ENTRY_set(ne: PX509_NAME_ENTRY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_set';
