@@ -1433,7 +1433,6 @@ begin
   inherited Destroy;
 end;
 
-
 function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin

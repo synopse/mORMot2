@@ -1276,6 +1276,16 @@ const
     [twoFullSetsAsStar],
     [twoFullSetsAsStar, twoEnumSetsAsTextInRecord]);
 
+  /// TTextWriter JSON serialization options including twoEnumSetsAsTextInRecord
+  TEXTWRITEROPTIONS_ENUMASTEXT: array[boolean] of TTextWriterOptions = (
+    [],
+    [twoEnumSetsAsTextInRecord]);
+
+  /// TTextWriter JSON serialization options including woEnumSetsAsText
+  TEXTWRITEROBJECTOPTIONS_ENUMASTEXT: array[boolean] of TTextWriterWriteObjectOptions = (
+    [],
+    [woEnumSetsAsText]);
+
   /// TTextWriter JSON serialization options which should be preserved
   // - used e.g. by TTextWriter.CancelAllAsNew to reset its CustomOptions
   TEXTWRITEROPTIONS_RESET = [twoStreamIsOwned, twoBufferIsExternal];

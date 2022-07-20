@@ -1593,20 +1593,23 @@ type
     // stored checksum which is not needed any more
     function LoadFromBinary(const Buffer: RawByteString): boolean;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJson()
-    // - this method will therefore recognize T*ObjArray types
     function SaveToJson(EnumSetsAsText: boolean = false;
       reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
+    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
+      reformat: TTextWriterJsonFormat = jsonCompact); overload;
+    /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
+    procedure SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
+      ObjectOptions: TTextWriterWriteObjectOptions = [];
       reformat: TTextWriterJsonFormat = jsonCompact); overload;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextDateWTTextWriterriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJson(W: TTextWriter); overload;
+    procedure SaveToJson(W: TTextWriter;
+      ObjectOptions: TTextWriterWriteObjectOptions = []); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJson method, i.e.
     // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -7200,6 +7203,13 @@ end;
 
 procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJsonFormat);
+begin
+  SaveToJson(result, TEXTWRITEROPTIONS_ENUMASTEXT[EnumSetsAsText],
+    TEXTWRITEROBJECTOPTIONS_ENUMASTEXT[EnumSetsAsText]);
+end;
+
+procedure TDynArray.SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
+  ObjectOptions: TTextWriterWriteObjectOptions; reformat: TTextWriterJsonFormat);
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -7210,9 +7220,8 @@ begin
   begin
     W := DefaultJsonWriter.CreateOwnedStream(temp);
     try
-      if EnumSetsAsText then
-        W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
-      SaveToJson(W);
+      W.CustomOptions := W.CustomOptions + Options;
+      SaveToJson(W, ObjectOptions);
       W.SetText(result, reformat);
     finally
       W.Free;
@@ -7220,7 +7229,8 @@ begin
   end;
 end;
 
-procedure TDynArray.SaveToJson(W: TTextWriter);
+procedure TDynArray.SaveToJson(W: TTextWriter;
+  ObjectOptions: TTextWriterWriteObjectOptions);
 var
   len, backup: PtrInt;
   hacklen: PDALen;
@@ -7234,7 +7244,7 @@ begin
     backup := hacklen^;
     try
       hacklen^ := len - _DAOFF; // may use ExternalCount
-      W.AddTypedJson(fValue, Info.Info); // serialization from mormot.core.json
+      W.AddTypedJson(fValue, Info.Info, ObjectOptions); // from mormot.core.json
     finally
       hacklen^ := backup;
     end;

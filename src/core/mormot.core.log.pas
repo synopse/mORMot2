@@ -3234,9 +3234,9 @@ begin
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
                            TypeInfo(TDebugUnit), _TDebugUnit]);
   W.AddShort('{"Symbols":');
-  fSymbols.SaveToJson(W);
+  fSymbols.SaveToJson(W, []);
   W.AddShort(',"Units":');
-  fUnits.SaveToJson(W);
+  fUnits.SaveToJson(W, []);
   W.Add('}');
 end;
 
