@@ -1365,7 +1365,7 @@ begin
   else
     Context.Head.AppendShort('HTTP/1.1 ');
   Context.Head.Append([fRespStatus, ' ', fRespReason], {crlf=}true);
-  // custom headers from Request() method
+  // append (and sanitize) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
   begin

@@ -2200,8 +2200,8 @@ begin
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
     begin
-      aDataEncoding := CompressContent(fCompressAcceptHeader,
-        fCompress, InDataType, aData);
+      CompressContent(fCompressAcceptHeader, fCompress, InDataType,
+        aData, aDataEncoding);
       if aDataEncoding <> '' then
         InternalAddHeader(RawUtf8('Content-Encoding: ') + aDataEncoding);
     end;

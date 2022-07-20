@@ -82,9 +82,9 @@ type
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or
 // 'application/json') from OutContentType
-function CompressContent(Accepted: THttpSocketCompressSet;
+procedure CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
+  var OutContent: RawByteString; var OutContentEncoding: RawUtf8);
 
 /// enable a give compression function for a HTTP link
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
@@ -825,9 +825,9 @@ const
     'JAVASCRIPT',
     nil);
 
-function CompressContent(Accepted: THttpSocketCompressSet;
+procedure CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
+  var OutContent: RawByteString; var OutContentEncoding: RawUtf8);
 var
   i, OutContentLen: integer;
   compressible: boolean;
@@ -856,11 +856,11 @@ begin
               (OutContentLen >= CompressMinSize)) then
           begin
             // compression of the OutContent + update header
-            result := Func(OutContent, true);
+            OutContentEncoding := Func(OutContent, true);
             exit; // first in fCompress[] is prefered
           end;
   end;
-  result := '';
+  OutContentEncoding := '';
 end;
 
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
@@ -1423,8 +1423,8 @@ begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
      (ContentStream = nil) then // no stream compression (yet)
-    ContentEncoding := CompressContent(
-      CompressAcceptHeader, Compress, ContentType, Content);
+    CompressContent(CompressAcceptHeader, Compress, ContentType,
+      Content, ContentEncoding);
   if ContentEncoding <> '' then
     Head.Append(['Content-Encoding: ', ContentEncoding], {crlf=}true);
   if ContentStream = nil then
@@ -1437,14 +1437,17 @@ begin
   Head.Append(['Content-Length: ', ContentLength], {crlf=}true);
   if (ContentType <> '') and
      (ContentType <> STATICFILE_CONTENT_TYPE) then
-    Head.Append(['Content-Type: ', ContentType], {crlf=}true);
+  begin
+    Head.AppendShort('Content-Type: ');
+    Head.Append(ContentType, {crlf=}true);
+  end;
   if hfConnectionClose in HeaderFlags then
-    Head.Append('Connection: Close', {crlf=}true)
+    Head.AppendShort('Connection: Close', {crlf=}true)
   else
   begin
     if CompressAcceptEncoding <> '' then
       Head.Append(CompressAcceptEncoding, {crlf=}true);
-    Head.Append('Connection: Keep-Alive', {crlf=}true);
+    Head.AppendShort('Connection: Keep-Alive', {crlf=}true);
   end;
   Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
   result := @Head;
@@ -1582,8 +1585,8 @@ begin
   if (integer(Http.CompressAcceptHeader) <> 0) and
      (OutStream = nil) then // no stream compression (yet)
   begin
-    OutContentEncoding := CompressContent(
-      Http.CompressAcceptHeader, Http.Compress, OutContentType, OutContent);
+    CompressContent(Http.CompressAcceptHeader, Http.Compress, OutContentType,
+      OutContent, OutContentEncoding);
     if OutContentEncoding <> '' then
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;
