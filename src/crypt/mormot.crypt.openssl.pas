@@ -637,6 +637,9 @@ type
 // which does not fit in the low-level mormot.lib.openssl.pas unit
 function X509Algo(x: PX509): TCryptAsymAlgo;
 
+function ToText(u: TX509Usage): RawUtf8; overload;
+function ToText(u: TX509Usages): ShortString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
@@ -2638,6 +2641,16 @@ begin
   result := cvNotSupported;
 end;
 
+
+function ToText(u: TX509Usage): RawUtf8;
+begin
+  result := GetEnumNameTrimed(TypeInfo(TX509Usage), ord(u));
+end;
+
+function ToText(u: TX509Usages): ShortString;
+begin
+  result := ToText(TCryptCertUsages(u)); // both sets do match
+end;
 
 function X509Algo(x: PX509): TCryptAsymAlgo;
 var
