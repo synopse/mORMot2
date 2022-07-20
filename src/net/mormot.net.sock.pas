@@ -311,6 +311,10 @@ procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
 // string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
 function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
+/// convert a MAC address value from its standard hexadecimal text representation
+// - returns e.g. '12:50:b6:1e:c6:aa' from '1250b61ec6aa' or '1250B61EC6AA'
+function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
+
 /// convert a MAC address value into a RawUtf8 hexadecimal text with no ':'
 // - returns e.g. '1250b61ec6aa'
 function MacToHex(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
@@ -2086,7 +2090,7 @@ var
   i: PtrInt;
   tab: PAnsichar;
 begin
-  SetLength(result, (maclen * 3) - 1);
+  FastSetString(result, nil, (maclen * 3) - 1);
   dec(maclen);
   tab := @HexCharsLower;
   P := pointer(result);
@@ -2102,13 +2106,45 @@ begin
   until false;
 end;
 
+function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
+var
+  L: PtrInt;
+  h, m: PAnsiChar;
+begin
+  L := length(Hex);
+  if (L = 0) or
+     (L and 1 <> 0) then
+  begin
+    result := '';
+    exit;
+  end;
+  L := L shr 1;
+  FastSetString(result, nil, (L * 3) - 1);
+  h := pointer(Hex);
+  m := pointer(result);
+  repeat
+    m[0] := h[0];
+    if h[0] in ['A'..'Z'] then
+      inc(m[0], 32);
+    m[1] := h[1];
+    if h[1] in ['A'..'Z'] then
+      inc(m[1], 32);
+    dec(L);
+    if L = 0 then
+      break;
+    m[2] := ':';
+    inc(h, 2);
+    inc(m, 3);
+  until false;
+end;
+
 function MacToHex(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
   i: PtrInt;
   tab: PAnsichar;
 begin
-  SetLength(result, maclen * 2);
+  FastSetString(result, nil, maclen * 2);
   dec(maclen);
   tab := @HexCharsLower;
   P := pointer(result);

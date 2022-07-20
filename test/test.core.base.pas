@@ -2393,6 +2393,14 @@ begin
   Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
   Check(TrimGuid(s));
   CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  CheckEqual(MacTextFromHex(''), '');
+  CheckEqual(MacTextFromHex('1'), '');
+  CheckEqual(MacTextFromHex('12'), '12');
+  CheckEqual(MacTextFromHex('123'), '');
+  CheckEqual(MacTextFromHex('1234'), '12:34');
+  CheckEqual(MacTextFromHex('12345'), '');
+  CheckEqual(MacTextFromHex(s), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
+  CheckEqual(MacTextFromHex(UpperCase(s)), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
   s := s + s;
   repeat
     delete(s, Random32(length(s)) + 1, 1);
