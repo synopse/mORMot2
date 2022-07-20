@@ -974,6 +974,7 @@ type
     // - input length is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscape(P: Pointer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscape(P: Pointer; Len: PtrInt); overload;
@@ -1072,7 +1073,11 @@ type
     // and only ASCII 7-bit characters)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
-    procedure AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
+    procedure AddProp(PropName: PUtf8Char; PropNameLen: PtrInt); overload;
+    /// append a property name, as '"PropName":'
+    // - just a wrapper around AddProp(PropName, StrLen(PropName))
+    procedure AddProp(PropName: PUtf8Char); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a ShortString property name, as '"PropName":'
     // - PropName content should not need to be JSON escaped (e.g. no " within,
     // and only ASCII 7-bit characters)
@@ -5856,6 +5861,11 @@ begin
         break;
     until false;
   end;
+end;
+
+procedure TTextWriter.AddProp(PropName: PUtf8Char);
+begin
+  AddProp(PropName, StrLen(PropName));
 end;
 
 procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
