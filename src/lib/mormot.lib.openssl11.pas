@@ -1295,6 +1295,7 @@ type
   X509_NAME = object
   public
     function Count: integer;
+    function Item(ndx: integer): PX509_NAME_ENTRY;
     function GetEntry(NID: integer): RawUtf8; overload; // not MBSTRING ready
     function GetEntry(const Name: RawUtf8): RawUtf8; overload;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = XN_FLAG_RFC2253);
@@ -1315,6 +1316,8 @@ type
 
   X509_NAME_ENTRY = object
   public
+    function Data: PASN1_STRING;
+    function ToText: RawUtf8;
     procedure Free;
   end;
 
@@ -1863,9 +1866,11 @@ function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: 
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
+function X509_NAME_get_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
 function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
 function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
 function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
@@ -2763,9 +2768,11 @@ type
     X509_NAME_print_ex: function(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
+    X509_NAME_get_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
     X509_NAME_get_text_by_NID: function (name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
     X509_NAME_get_index_by_NID: function(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
     X509_NAME_delete_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+    X509_NAME_ENTRY_get_data: function(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
     X509_NAME_ENTRY_free: procedure(a: PX509_NAME_ENTRY); cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
@@ -2997,7 +3004,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..305] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..307] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3074,9 +3081,11 @@ const
     'X509_NAME_print_ex',
     'X509_NAME_print_ex_fp',
     'X509_NAME_entry_count',
+    'X509_NAME_get_entry',
     'X509_NAME_get_text_by_NID',
     'X509_NAME_get_index_by_NID',
     'X509_NAME_delete_entry',
+    'X509_NAME_ENTRY_get_data',
     'X509_NAME_ENTRY_free',
     'X509_NAME_oneline',
     '?X509_NAME_hash', // not defined on OpenSSL 3.0 -> ? = ignored by now
@@ -3704,6 +3713,11 @@ begin
   result := libcrypto.X509_NAME_entry_count(name);
 end;
 
+function X509_NAME_get_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY;
+begin
+  result := libcrypto.X509_NAME_get_entry(name, loc);
+end;
+
 function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer;
    buf: PUtf8Char; len: integer): integer;
 begin
@@ -3718,6 +3732,11 @@ end;
 function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY;
 begin
   result := libcrypto.X509_NAME_delete_entry(name, loc);
+end;
+
+function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING;
+begin
+  result := libcrypto.X509_NAME_ENTRY_get_data(ne);
 end;
 
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY);
@@ -5473,6 +5492,9 @@ function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
 function X509_NAME_entry_count(name: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_entry_count';
 
+function X509_NAME_get_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_get_entry';
+
 function X509_NAME_get_text_by_NID(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_text_by_NID';
 
@@ -5481,6 +5503,9 @@ function X509_NAME_get_index_by_NID(name: PX509_NAME; nid: integer; lastpos: int
 
 function X509_NAME_delete_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_delete_entry';
+
+function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_data';
 
 procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_free';
@@ -6994,6 +7019,14 @@ begin
     result := X509_NAME_entry_count(@self);
 end;
 
+function X509_NAME.Item(ndx: integer): PX509_NAME_ENTRY;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := X509_NAME_get_entry(@self, ndx);
+end;
+
 function X509_NAME.GetEntry(NID: integer): RawUtf8;
 var
   tmp: TSynTempBuffer;
@@ -7135,6 +7168,16 @@ end;
 
 
 { X509_NAME_ENTRY }
+
+function X509_NAME_ENTRY.Data: PASN1_STRING;
+begin
+  result := X509_NAME_ENTRY_get_data(@self);
+end;
+
+function X509_NAME_ENTRY.ToText: RawUtf8;
+begin
+  Data^.ToUtf8(result);
+end;
 
 procedure X509_NAME_ENTRY.Free;
 begin

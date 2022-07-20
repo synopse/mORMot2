@@ -18317,9 +18317,6 @@ function X509_NAME_get_text_by_OBJ(name: PX509_NAME; obj: PASN1_OBJECT; buf: PUt
 function X509_NAME_get_index_by_OBJ(name: PX509_NAME; obj: PASN1_OBJECT; lastpos: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_get_index_by_OBJ';
 
-function X509_NAME_get_entry(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_get_entry';
-
 function X509_NAME_add_entry(name: PX509_NAME; ne: PX509_NAME_ENTRY; loc: integer; _set: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_add_entry';
 
@@ -18349,9 +18346,6 @@ function X509_NAME_ENTRY_set_data(ne: PX509_NAME_ENTRY; typ: integer; bytes: PAn
 
 function X509_NAME_ENTRY_get_object(ne: PX509_NAME_ENTRY): PASN1_OBJECT; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_object';
-
-function X509_NAME_ENTRY_get_data(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_get_data';
 
 function X509_NAME_ENTRY_set(ne: PX509_NAME_ENTRY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_ENTRY_set';
