@@ -1060,7 +1060,7 @@ type
       aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
     /// initialize a variant instance to store some TDynArray content
     procedure InitArrayFrom(const aItems: TDynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions = JSON_FAST_FLOAT); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
@@ -5098,15 +5098,14 @@ begin
   if (n = 0) or
      (item = nil) then
     exit;
-  if item.Kind in rkRecordOrDynArrayTypes then
+  if item.Kind in (rkRecordOrDynArrayTypes + [rkClass]) then
   begin
-    // use temporary JSON conversion for complex nested content
-    aItems.SaveToJson(json);
+    // use temporary non-expanded JSON conversion for complex nested content
+    aItems.SaveToJson(json, [twoNonExpandedArrays]);
     if (json <> '') and
-       (json[1] = '[') and
-       (PCardinal(@PByteArray(json)[1])^ <> JSON_BASE64_MAGIC_QUOTE_C) then
-      // should be serialized as a true array
-      InitJsonInPlace(pointer(json), aOptions);
+       (json[1] = '{') then
+      // should be a non-expanded array, not JSON_BASE64_MAGIC_QUOTE_C
+      InitArrayFromResults(pointer(json), length(json), aOptions);
   end
   else
   begin
