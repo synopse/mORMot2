@@ -771,7 +771,6 @@ type
     fConnectionClass: TAsyncConnectionClass;
     fConnectionsClass: THttpAsyncConnectionsClass;
     fInterning: PRawUtf8InterningSlot;
-    fInterningSlot: TRawUtf8InterningSlot;
     fInterningTix: cardinal;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -1770,7 +1769,7 @@ begin
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
   fLastOperationReleaseMemorySeconds := 60;
-  fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
+  fLastOperationSec := Qword(GetTickCount64) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
   fLog := aLog;
   fConnectionClass := aConnectionClass;
@@ -3126,8 +3125,8 @@ begin
     aco := ASYNC_OPTION_PROD;   // default is to log only errors/warnings
   if hsoHeadersInterning in ProcessOptions then
   begin
-    fInterningSlot.Init;
-    fInterning := @fInterningSlot;
+    fInterning := AllocMem(SizeOf(fInterning^));
+    fInterning.Init;
   end;
   //include(aco, acoNoConnectionTrack);
   //include(aco, acoWritePollOnly);
@@ -3158,6 +3157,11 @@ begin
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
+  if fInterning <> nil then
+  begin
+    Dispose(fInterning);
+    fInterning := nil;
+  end;
 end;
 
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
