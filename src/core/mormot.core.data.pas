@@ -4267,9 +4267,13 @@ var
   i: PtrInt;
   bak: TDynArraySortCompare;
 begin
+  if not fSafe.TryReadLock then
+  begin
+    FastSetString(aResult, aText, aTextLen); // avoid waiting on contention
+    exit;
+  end;
   c := aText[aTextLen];
   aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  fSafe.ReadLock;
   i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
   if i >= 0 then
   begin
