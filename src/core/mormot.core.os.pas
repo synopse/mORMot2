@@ -163,10 +163,11 @@ const
 
   /// MIME content type used for JSON communication (as used by the Microsoft
   // WCF framework and the YUI framework)
-  JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
+  // - no 'charset=UTF-8' encoding is necessary, as by specified by RFC 7159
+  JSON_CONTENT_TYPE = 'application/json';
 
   /// HTTP header for MIME content type used for plain JSON
-  // - i.e. 'Content-Type: application/json; charset=UTF-8'
+  // - i.e. 'Content-Type: application/json'
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
 
   /// MIME content type used for plain JSON, in upper case
@@ -256,7 +257,7 @@ const
 
 var
   /// MIME content type used for JSON communication
-  // - i.e. 'application/json; charset=UTF-8'
+  // - i.e. 'application/json' as stated by datatracker.ietf.org/doc/html/rfc7159
   // - this global will be initialized with JSON_CONTENT_TYPE constant, to
   // avoid a memory allocation each time it is assigned to a variable
   JSON_CONTENT_TYPE_VAR: RawUtf8;

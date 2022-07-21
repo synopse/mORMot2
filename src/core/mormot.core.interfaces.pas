@@ -7496,7 +7496,7 @@ begin
       begin
         c := pointer(fValues[fMethod^.ArgsResultIndex]);
         if c^.Header = '' then
-          // set to 'Content-Type: application/json; charset=UTF-8' by default
+          // set to 'Content-Type: application/json' by default
           c^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
         // implementation could override the Header content
         fServiceCustomAnswerHead := c^.Header;
