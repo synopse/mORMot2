@@ -27,6 +27,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
@@ -157,6 +158,11 @@ type
     // enabled in SynDBLog.Family.Level
     // - raise an ESqlDBPostgres on any error
     procedure ExecutePrepared; override;
+    /// bind an array of JSON values to a parameter
+    // - overloaded for direct assignment to the PostgreSQL client
+    // - warning: input JSON should already be in the expected format (ftDate)
+    procedure BindArrayJson(Param: integer; ParamType: TSqlDBFieldType;
+      var JsonArray: RawUtf8; ValuesCount: integer); override;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
     /// Reset the previous prepared statement
@@ -568,6 +574,9 @@ begin
   SetLength(fPGparamLengths, fPreparedParamsCount);
 end;
 
+var
+  _BindArrayJson: TRawUtf8DynArray; // fake variable as VArray marker
+
 procedure TSqlDBPostgresStatement.ExecutePrepared;
 var
   i: PtrInt;
@@ -599,7 +608,8 @@ begin
            ftUtf8]) then
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
           'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
-      p^.VData := BoundArrayToJsonArray(p^.VArray);
+      if p^.VArray[0] <> _BindArrayJson[0] then // p^.VData set by BindArrayJson
+        p^.VData := BoundArrayToJsonArray(p^.VArray);
     end
     else
     begin
@@ -620,13 +630,13 @@ begin
         ftUtf8:
           ; // text already in p^.VData
         ftBlob:
-        begin
-          fPGParamFormats[i] := 1; // binary
-          fPGparamLengths[i] := length(p^.VData);
-        end;
-        else
-          raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: cannot bind ' +
-            'parameter #% of type %', [self, i, ToText(p^.VType)^]);
+          begin
+            fPGParamFormats[i] := 1; // binary
+            fPGparamLengths[i] := length(p^.VData);
+          end;
+      else
+        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: cannot bind ' +
+          'parameter #% of type %', [self, i, ToText(p^.VType)^]);
       end;
     end;
     fPGParams[i] := pointer(p^.VData);
@@ -662,6 +672,20 @@ begin
   end
   else
     SqlLogEnd;
+end;
+
+procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
+  ParamType: TSqlDBFieldType; var JsonArray: RawUtf8; ValuesCount: integer);
+var
+  p: PSqlDBParam;
+begin
+  if ValuesCount <= 0 then
+    ParamType := ftUnknown; // to raise exception
+  p := CheckParam(Param, ParamType, paramIn, 0);
+  p^.VArray := _BindArrayJson; // fake marker
+  p^.VInt64 := ValuesCount;
+  p^.VData := JsonArray;
+  fParamsArrayCount := ValuesCount;
 end;
 
 function TSqlDBPostgresStatement.UpdateCount: integer;
@@ -816,6 +840,8 @@ end;
 
 initialization
   TSqlDBPostgresConnectionProperties.RegisterClassNameForDefinition;
+  SetLength(_BindArrayJson, 1);
+  _BindArrayJson[0] := 'json'; // impossible SQL value (should be 'json')
 
 end.
 

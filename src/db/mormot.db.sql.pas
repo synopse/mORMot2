@@ -637,7 +637,7 @@ function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
 /// create an array of UTF-8 SQL bound values from a JSON array
 // - as generated during array binding, i.e. with quoted strings
 // '["one","t\"wo"]' -> 'one','t"wo'  and  '[1,2,3]' -> 1,2,3
-// - as used e.g. by BindArray(json) outside of PostgreSQL library
+// - as used e.g. by BindArrayJson outside of PostgreSQL library
 // - warning: input JSON buffer will be parsed in-place, so will be modified
 // - here syntax is regular [] so not an exact reverse to BoundArrayToJsonArray
 function JsonArrayToBoundArray(Json: PUtf8Char; ParamType: TSqlDBFieldType;
@@ -1037,8 +1037,9 @@ type
     // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
     // - this default implementation will call JsonArrayToBoundArray()
     // then BindArray(array of RawUtf8)
-    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
-      JsonArray: PUtf8Char); overload;
+    // - warning: JsonArray could be parsed in-place so a private copy is needed
+    procedure BindArrayJson(Param: integer; ParamType: TSqlDBFieldType;
+      var JsonArray: RawUtf8; ValuesCount: integer);
 
     /// retrieve the parameter content, after SQL execution
     // - the leftmost SQL parameter has an index of 1
@@ -2229,8 +2230,9 @@ type
     // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
     // - this default implementation will call JsonArrayToBoundArray()
     // then BindArray(array of RawUtf8)
-    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
-      JsonArray: PUtf8Char); overload; virtual;
+    // - warning: JsonArray could be parsed in-place so a private copy is needed
+    procedure BindArrayJson(Param: integer; ParamType: TSqlDBFieldType;
+      var JsonArray: RawUtf8; ValuesCount: integer); virtual;
 
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
@@ -2844,8 +2846,9 @@ type
     // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
     // - this default implementation will call JsonArrayToBoundArray()
     // then BindArray(array of RawUtf8)
-    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
-      JsonArray: PUtf8Char); overload; override;
+    // - warning: JsonArray could be parsed in-place so a private copy is needed
+    procedure BindArrayJson(Param: integer; ParamType: TSqlDBFieldType;
+      var JsonArray: RawUtf8; ValuesCount: integer); override;
 
     /// start parameter array binding per-row process
     // - BindArray*() methods expect the data to be supplied "verticaly": this
@@ -3239,7 +3242,7 @@ begin
   p.Init(Json, nil, [], nil, nil);
   if not p.ParseArray then
     exit;
-  n := JsonArrayCount(p.Json);
+  n := JsonArrayCount(p.Json); // prefetch input and compute dest length
   if n <= 0 then
     exit;
   SetLength(Values, n);
@@ -5875,8 +5878,8 @@ begin
   BindArray(Param, ftDate, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSqlDBStatement.BindArray(Param: integer; ParamType: TSqlDBFieldType;
-  JsonArray: PUtf8Char);
+procedure TSqlDBStatement.BindArrayJson(Param: integer; ParamType: TSqlDBFieldType;
+  var JsonArray: RawUtf8; ValuesCount: integer);
 begin
   BindArray(Param, ParamType, nil, 0); // will raise an exception (Values=nil)
 end;
@@ -7821,18 +7824,19 @@ begin
   fParamsArrayCount := ValuesCount;
 end;
 
-procedure TSqlDBStatementWithParams.BindArray(Param: integer;
-  ParamType: TSqlDBFieldType; JsonArray: PUtf8Char);
+procedure TSqlDBStatementWithParams.BindArrayJson(Param: integer;
+  ParamType: TSqlDBFieldType; var JsonArray: RawUtf8; ValuesCount: integer);
 var
   p: PSqlDBParam;
 begin
   // default implementation is to convert JSON values into SQL values
   p := CheckParam(Param, ParamType, paramIn, 0);
-  if not JsonArrayToBoundArray(JsonArray, ParamType,
-     Connection.Properties.DateTimeFirstChar, fForceDateWithMS, p^.VArray) then
+  if not JsonArrayToBoundArray(pointer(JsonArray), ParamType,
+     Connection.Properties.DateTimeFirstChar, fForceDateWithMS, p^.VArray) or
+    (length(p^.VArray) <> ValuesCount) then
     BindArray(Param, ParamType, nil, 0); // raise exception
-  p^.VInt64 := length(p^.VArray);
-  fParamsArrayCount := p^.VInt64;
+  p^.VInt64 := ValuesCount;
+  fParamsArrayCount := ValuesCount;
 end;
 
 procedure TSqlDBStatementWithParams.BindArray(Param: integer;
