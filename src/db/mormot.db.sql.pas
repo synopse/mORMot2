@@ -1032,6 +1032,13 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     procedure BindArray(Param: integer; const Values: array of RawUtf8); overload;
+    /// bind an array of JSON values to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
+    // - this default implementation will call JsonArrayToBoundArray()
+    // then BindArray(array of RawUtf8)
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
+      JsonArray: PUtf8Char); overload;
 
     /// retrieve the parameter content, after SQL execution
     // - the leftmost SQL parameter has an index of 1
@@ -2217,6 +2224,13 @@ type
     // does not support array binding
     procedure BindArray(Param: integer;
       const Values: array of RawUtf8); overload; virtual;
+    /// bind an array of JSON values to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
+    // - this default implementation will call JsonArrayToBoundArray()
+    // then BindArray(array of RawUtf8)
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
+      JsonArray: PUtf8Char); overload; virtual;
 
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
@@ -2825,6 +2839,13 @@ type
     // does not support array binding
     procedure BindArray(Param: integer;
       const Values: array of RawUtf8); overload; override;
+    /// bind an array of JSON values to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - values are stored as JSON Arrays (i.e. [1,2,3] or ["a","b","c"])
+    // - this default implementation will call JsonArrayToBoundArray()
+    // then BindArray(array of RawUtf8)
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
+      JsonArray: PUtf8Char); overload; override;
 
     /// start parameter array binding per-row process
     // - BindArray*() methods expect the data to be supplied "verticaly": this
@@ -5854,6 +5875,12 @@ begin
   BindArray(Param, ftDate, nil, 0); // will raise an exception (Values=nil)
 end;
 
+procedure TSqlDBStatement.BindArray(Param: integer; ParamType: TSqlDBFieldType;
+  JsonArray: PUtf8Char);
+begin
+  BindArray(Param, ParamType, nil, 0); // will raise an exception (Values=nil)
+end;
+
 procedure TSqlDBStatement.CheckCol(Col: integer);
 begin
   if (self = nil) or
@@ -7781,22 +7808,32 @@ var
   p: PSqlDBParam;
 begin
   inherited; // raise an exception in case of invalid parameter
-  if fConnection = nil then
-    timeseparator := 'T'
-  else
-    timeseparator := Connection.Properties.DateTimeFirstChar;
   p := CheckParam(Param, ParamType, paramIn);
   p^.VInt64 := ValuesCount;
   p^.VArray := Values; // immediate COW reference-counted assignment
   if (ParamType = ftDate) and
-     (timeseparator <> 'T') then
+     (Connection.Properties.DateTimeFirstChar <> 'T') then
     for i := 0 to ValuesCount - 1 do // fix e.g. for PostgreSQL
       if (p^.VArray[i] <> '') and
          (p^.VArray[i][1] = '''') then
         // not only replace 'T'->timeseparator, but force expanded format
-        DateTimeToIso8601(Iso8601ToDateTime(p^.VArray[i]),
-          {expanded=}true, timeseparator, {ms=}fForceDateWithMS, '''');
+        DateTimeToIso8601(Iso8601ToDateTime(p^.VArray[i]), {expanded=}true,
+          Connection.Properties.DateTimeFirstChar, {ms=}fForceDateWithMS, '''');
   fParamsArrayCount := ValuesCount;
+end;
+
+procedure TSqlDBStatementWithParams.BindArray(Param: integer;
+  ParamType: TSqlDBFieldType; JsonArray: PUtf8Char);
+var
+  p: PSqlDBParam;
+begin
+  // default implementation is to convert JSON values into SQL values
+  p := CheckParam(Param, ParamType, paramIn, 0);
+  if not JsonArrayToBoundArray(JsonArray, ParamType,
+     Connection.Properties.DateTimeFirstChar, fForceDateWithMS, p^.VArray) then
+    BindArray(Param, ParamType, nil, 0); // raise exception
+  p^.VInt64 := length(p^.VArray);
+  fParamsArrayCount := p^.VInt64;
 end;
 
 procedure TSqlDBStatementWithParams.BindArray(Param: integer;
