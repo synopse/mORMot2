@@ -197,6 +197,7 @@ var
   Props: TSqlDBConnectionProperties;
   Server: TRestServer;
   Ext: TRestStorageExternalHook;
+  v: TRawUtf8DynArray;
 
   procedure Test(aDbms: TSqlDBDefinition; AdaptShouldWork: boolean;
     const SQLExpected: RawUtf8 = '');
@@ -247,6 +248,23 @@ begin
     '{"1",2,"3"}');
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(
     ['''1"1''', '2', '''"3\'''])), '{"1\"1",2,"\"3\\"}');
+  Check(not JsonArrayToBoundArray(nil, ftUtf8, ' ', false, v));
+  s := '{one}';
+  Check(not JsonArrayToBoundArray(UniqueRawUtf8(s), ftUtf8, ' ', false, v));
+  s := '[]';
+  Check(not JsonArrayToBoundArray(UniqueRawUtf8(s), ftUtf8, ' ', false, v));
+  s := '[1]';
+  Check(JsonArrayToBoundArray(UniqueRawUtf8(s), ftUtf8, ' ', false, v));
+  CheckEqual(RawUtf8ArrayToCsv(v), '''1''');
+  s := '[1]';
+  Check(JsonArrayToBoundArray(UniqueRawUtf8(s), ftInt64, ' ', false, v));
+  CheckEqual(RawUtf8ArrayToCsv(v), '1');
+  s := '[1,2,3,null]';
+  Check(JsonArrayToBoundArray(UniqueRawUtf8(s), ftInt64, ' ', false, v));
+  CheckEqual(RawUtf8ArrayToCsv(v), '1,2,3,null');
+  s := '["a","''","c"]';
+  Check(JsonArrayToBoundArray(UniqueRawUtf8(s), ftUtf8, ' ', false, v));
+  CheckEqual(RawUtf8ArrayToCsv(v), '''a'','''''''',''c''');
 
   check(TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'SELEct'));
   check(not TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'toto'));

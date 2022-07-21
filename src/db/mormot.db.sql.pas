@@ -626,12 +626,22 @@ function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
 function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
   IndexChar: AnsiChar = '$'; AllowSemicolon: boolean = false): integer;
 
-/// create a JSON array from an array of UTF-8 bound values
+/// create a JSON array from an array of UTF-8 SQL bound values
 // - as generated during array binding, i.e. with quoted strings
 // 'one','t"wo' -> '{"one","t\"wo"}'   and  1,2,3 -> '{1,2,3}'
-// - as used e.g. by PostgreSQL library
-function BoundArrayToJsonArray(const Values: TRawUtf8DynArray): RawUtf8;
+// - as used e.g. by PostgreSQL library (note that its syntax as {} not []
+// unless you change the Open/Close optional parameters)
+function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
+  Open: AnsiChar = '{'; Close: AnsiChar = '}'): RawUtf8;
 
+/// create an array of UTF-8 SQL bound values from a JSON array
+// - as generated during array binding, i.e. with quoted strings
+// '["one","t\"wo"]' -> 'one','t"wo'  and  '[1,2,3]' -> 1,2,3
+// - as used e.g. by BindArray(json) outside of PostgreSQL library
+// - warning: input JSON buffer will be parsed in-place, so will be modified
+// - here syntax is regular [] so not an exact reverse to BoundArrayToJsonArray
+function JsonArrayToBoundArray(Json: PUtf8Char; ParamType: TSqlDBFieldType;
+  TimeSeparator: AnsiChar; DateMS: boolean; out Values: TRawUtf8DynArray): boolean;
 
 
 { ************ Abstract SQL DB Classes and Interfaces }
@@ -3092,7 +3102,8 @@ begin
   //assert(d - pointer(aNewSql) = length(aNewSql)); // until stabilized
 end;
 
-function BoundArrayToJsonArray(const Values: TRawUtf8DynArray): RawUtf8;
+function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
+  Open, Close: AnsiChar): RawUtf8;
 //  'one', 't"wo' -> '{"one","t\"wo"}'  and  1,2,3 -> '{1,2,3}'
 var
   V: ^RawUtf8;
@@ -3142,7 +3153,7 @@ begin
   // generate the output JSON
   FastSetString(result, nil, L);
   d := pointer(result);
-  d^ := '{';
+  d^ := Open;
   inc(d);
   v := pointer(Values);
   n := length(Values);
@@ -3191,8 +3202,46 @@ _dq:        dec(vl);
     inc(v);
     dec(n);
   until n = 0;
-  d[-1] := '}'; // replace last ',' by '}'
+  d[-1] := Close; // replace last ',' by '}'
   //assert(d - pointer(result) = length(result)); // until stabilized
+end;
+
+function JsonArrayToBoundArray(Json: PUtf8Char; ParamType: TSqlDBFieldType;
+  TimeSeparator: AnsiChar; DateMS: boolean; out Values: TRawUtf8DynArray): boolean;
+var
+  i, n: PtrInt;
+  p: TJsonParserContext;
+begin
+  result := false;
+  if Json = nil then
+    exit;
+  p.Init(Json, nil, [], nil, nil);
+  if not p.ParseArray then
+    exit;
+  n := JsonArrayCount(p.Json);
+  if n <= 0 then
+    exit;
+  SetLength(Values, n);
+  for i := 0 to n - 1 do
+  begin
+    p.GetJsonFieldOrObjectOrArray;
+    if not p.Valid then
+      exit;
+    case ParamType of
+      ftUtf8:
+        QuotedStr(p.Value, p.ValueLen, '''', Values[i]);
+      ftDate: // normalize
+        Values[i] := DateTimeToIso8601(Iso8601ToDateTimePUtf8Char(
+          p.Value, p.ValueLen), {expanded=}true, TimeSeparator, DateMS, '''');
+    else
+      if (p.Value = '') and
+         not p.WasString then
+        Values[i] := 'null'
+      else
+        FastSetString(Values[i], p.Value, p.ValueLen);
+    end;
+  end;
+  result := true;
 end;
 
 
