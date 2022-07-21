@@ -133,7 +133,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize and start the high resolution timer
     // - similar to Init + Resume
-    procedure Start;
+    procedure Start; overload;
+    /// initialize and start the high resolution timer with a supplied timestamp
+    // - if CurrentMicroSeconds is 0, will call QueryPerformanceMicroSeconds()
+    procedure Start(CurrentMicroSeconds: Int64); overload;
     /// stop the timer, returning the total time elapsed as text
     // - with appended time resolution (us,ms,s) - from MicroSecToString()
     // - is just a wrapper around Pause + Time
@@ -1168,6 +1171,15 @@ procedure TPrecisionTimer.Start;
 begin
   FillCharFast(self, SizeOf(self), 0);
   QueryPerformanceMicroSeconds(fStart);
+end;
+
+procedure TPrecisionTimer.Start(CurrentMicroSeconds: Int64);
+begin
+  FillCharFast(self, SizeOf(self), 0);
+  if CurrentMicroSeconds = 0 then
+    QueryPerformanceMicroSeconds(fStart)
+  else
+    fStart := CurrentMicroSeconds;
 end;
 
 function TPrecisionTimer.Started: boolean;
