@@ -1825,7 +1825,7 @@ procedure THttpServerSocketGeneric.WaitStarted(
 var
   tix: Int64;
 begin
-  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
+  tix := GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
     if Terminated then
       exit;
@@ -1837,7 +1837,7 @@ begin
           [self, fExecuteMessage]);
     end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > tix then
+    if GetTickCount64 > tix then
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
@@ -2012,7 +2012,7 @@ begin
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;
-  endtix := mormot.core.os.GetTickCount64 + 20000;
+  endtix := GetTickCount64 + 20000;
   try
     if fInternalHttpServerRespList <> nil then // HTTP/1.1 long running threads
     begin
@@ -2031,7 +2031,7 @@ begin
           fInternalHttpServerRespList.Safe.ReadOnlyUnLock;
         end;
         SleepHiRes(10);
-      until mormot.core.os.GetTickCount64 > endtix;
+      until GetTickCount64 > endtix;
       FreeAndNilSafe(fInternalHttpServerRespList);
     end;
   finally
@@ -2105,7 +2105,7 @@ begin
             cltservsock.DoTlsAfter(cstaAccept);
           endtix := fHeaderRetrieveAbortDelay;
           if endtix > 0 then
-            inc(endtix, mormot.core.os.GetTickCount64);
+            inc(endtix, GetTickCount64);
           if cltservsock.GetRequest({withbody=}true, endtix)
               in [grBodyReceived, grHeaderReceived] then
             Process(cltservsock, 0, self);
@@ -2464,7 +2464,7 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
     try
       repeat
-        beforetix := mormot.core.os.GetTickCount64;
+        beforetix := GetTickCount64;
         keepaliveendtix := beforetix + fServer.ServerKeepAliveTimeOut;
         repeat
           // within this loop, break=wait for next command, exit=quit
@@ -2492,7 +2492,7 @@ procedure THttpServerResp.Execute;
               end;
             cspNoData:
               begin
-                tix := mormot.core.os.GetTickCount64;
+                tix := GetTickCount64;
                 if tix >= keepaliveendtix then
                 begin
                   if Assigned(fServer.Sock.OnLog) then

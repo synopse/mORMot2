@@ -1808,12 +1808,12 @@ begin
     for i := 1 to aThreadPoolCount - 1 do
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
-  tix := mormot.core.os.GetTickCount64 + 7000;
+  tix := GetTickCount64 + 7000;
   repeat
      if AllThreadsStarted then
        break;
      SleepHiRes(1);
-  until mormot.core.os.GetTickCount64 > tix;
+  until GetTickCount64 > tix;
   // caller will start the main thread
   log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
 end;
@@ -1902,7 +1902,7 @@ begin
     for i := 0 to high(fThreads) do
       fThreads[i].Terminate;
     p := 0;
-    endtix := mormot.core.os.GetTickCount64 + 10000;
+    endtix := GetTickCount64 + 10000;
     repeat
       n := 0;
       for i := 0 to high(fThreads) do
@@ -1919,7 +1919,7 @@ begin
         break;
       SleepHiRes(1);
       inc(p);
-    until mormot.core.os.GetTickCount64 > endtix;
+    until GetTickCount64 > endtix;
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
     ObjArrayClear(fThreads, {continueonexception=}true);
   end;
@@ -2521,7 +2521,7 @@ begin
   if self = nil then
     raise EAsyncConnections.CreateUtf8(
       'TAsyncServer.WaitStarted(%) with self=nil', [seconds]);
-  tix := mormot.core.os.GetTickCount64 + seconds * 1000; // never wait forever
+  tix := GetTickCount64 + seconds * 1000; // never wait forever
   repeat
     if Terminated then
       exit;
@@ -2533,7 +2533,7 @@ begin
           [self, fExecuteMessage]);
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > tix then
+    if GetTickCount64 > tix then
       raise EAsyncConnections.CreateUtf8(
         '%.WaitStarted timeout after % seconds', [self, seconds]);
   until false;
@@ -2587,7 +2587,7 @@ destructor TAsyncServer.Destroy;
 var
   endtix: Int64;
 begin
-  endtix := mormot.core.os.GetTickCount64 + 10000;
+  endtix := GetTickCount64 + 10000;
   Shutdown;
   //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;
@@ -2597,7 +2597,7 @@ begin
     repeat
       SleepHiRes(1); // wait for Execute to be finalized (unlikely)
     until (fExecuteState <> esRunning) or
-          (mormot.core.os.GetTickCount64 > endtix);
+          (GetTickCount64 > endtix);
   end;
   FreeAndNilSafe(fServer);
   DoLog(sllTrace, 'Destroy finished', [], self);
@@ -3172,7 +3172,7 @@ var
 begin
   if fInterning <> nil then
   begin
-    tix := mormot.core.os.GetTickCount64 shr 14; // clean every 16 secs
+    tix := GetTickCount64 shr 14; // clean every 16 secs
     if (fInterning^.Count > 1000) or   // or if the slot is highly used (DDos?)
        (fInterningTix <> tix) then
     begin
@@ -3211,7 +3211,7 @@ begin
     try
       fSock := fAsync.fServer;
       fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
-      tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
+      tix := GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between
       if fAsync.fClientsEpoll then
@@ -3232,7 +3232,7 @@ begin
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
           SleepHiRes(msidle);
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
-          tix64 := mormot.core.os.GetTickCount64;
+          tix64 := GetTickCount64;
           tix := tix64 shr 16;
           fAsync.ProcessIdleTix(self, tix64);
           if (fCallbackSendDelay <> nil) and
@@ -3247,7 +3247,7 @@ begin
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then
           begin
-            tix := mormot.core.os.GetTickCount64 shr 16;
+            tix := GetTickCount64 shr 16;
             lasttix := tix;
           end;
         end;

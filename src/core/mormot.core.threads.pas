@@ -394,6 +394,33 @@ type
   {$M+}
   TSynBackgroundThreadAbstract = class;
   TSynBackgroundThreadEvent = class;
+
+  /// abstract parent of all TThread inherited classes
+  // - to leverage cross-compiler and cross-version RTL differences
+  // - to have expected Start and TerminateSet methods, and Terminated property
+  TThreadAbstract = class(TThread)
+  public
+    {$ifndef HASTTHREADSTART}
+    /// method to be called to start the thread
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
+    procedure Start;
+    {$endif HASTTHREADSTART}
+    {$ifndef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif HASTTHREADTERMINATESET}
+    {$ifdef FPC}
+    /// method which redirects to mormot.core.os instead of sysutils on FPC
+    class function GetTickCount64: Int64; static; reintroduce; inline;
+    {$endif FPC}
+    /// defined as public since may be used to terminate the processing methods
+    property Terminated;
+  end;
   {$M-}
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
@@ -416,7 +443,7 @@ type
   // - you should not use this class directly, but use either
   // TSynBackgroundThreadMethodAbstract / TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
-  TSynBackgroundThreadAbstract = class(TThread)
+  TSynBackgroundThreadAbstract = class(TThreadAbstract)
   protected
     fProcessEvent: TEvent;
     fOnBeforeExecute: TOnNotifyThread;
@@ -437,27 +464,12 @@ type
       const OnBeforeExecute: TOnNotifyThread = nil;
       const OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; override;
     /// release used resources
     // - calls WaitForNotExecuting(100) for proper finalization
     destructor Destroy; override;
-    {$ifndef HASTTHREADSTART}
-    /// method to be called to start the thread
-    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature; we define here this method
-    // for older versions of Delphi
-    procedure Start;
-    {$endif HASTTHREADSTART}
-    {$ifdef HASTTHREADTERMINATESET}
-    /// properly terminate the thread
-    // - called by TThread.Terminate since Delphi XE2
-    procedure TerminatedSet; override;
-    {$else}
-    /// properly terminate the thread
-    // - called by reintroduced Terminate
-    procedure TerminatedSet; virtual;
-    /// reintroduced to call TeminatedSet
-    procedure Terminate; reintroduce;
-    {$endif HASTTHREADTERMINATESET}
     /// wait for Execute/ExecuteLoop to be ended (i.e. fExecute<>exRun)
     // - call Sleep() in a loop until the timeout is reached
     // - used e.g. in Destroy to avoid any GPF and ensure clean finalization
@@ -476,8 +488,6 @@ type
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
     property ProcessEvent: TEvent
       read fProcessEvent;
-    /// defined as public since may be used to terminate the processing methods
-    property Terminated;
   end;
 
   /// state machine status of the TSynBackgroundThreadAbstract process
@@ -988,7 +998,7 @@ type
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
   // not have to use the protected fOnThreadTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
-  TSynThread = class(TThread)
+  TSynThread = class(TThreadAbstract)
   protected
     fStartNotified: TObject;
     // we defined an fOnThreadTerminate event which would be run in the terminated
@@ -999,13 +1009,6 @@ type
   public
     /// initialize the thread instance, in non suspended state
     constructor Create(CreateSuspended: boolean); reintroduce; virtual;
-    {$ifndef HASTTHREADSTART}
-    /// method to be called when the thread was created as suspended
-    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature
-    // - we define here this method for older versions of Delphi
-    procedure Start;
-    {$endif HASTTHREADSTART}
     /// safe version of Sleep() which won't break the thread process
     // - returns TRUE if the thread was Terminated
     // - returns FALSE if successfully waited up to MS milliseconds
@@ -1013,8 +1016,6 @@ type
     /// ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     property StartNotified: TObject
       read fStartNotified write fStartNotified;
-    /// defined as public since may be used to terminate the processing methods
-    property Terminated;
   end;
 
   /// abstract class to implement a thread with start/stop notifications
@@ -1936,6 +1937,42 @@ end;
 
 { ************ Background Thread Processing }
 
+
+{ TRestThreadAbstract }
+
+{$ifndef HASTTHREADSTART}
+
+procedure TThreadAbstract.Start;
+begin
+  Resume;
+end;
+
+{$endif HASTTHREADSTART}
+
+{$ifndef HASTTHREADTERMINATESET}
+
+procedure TThreadAbstract.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+
+procedure TThreadAbstract.TerminatedSet;
+begin
+end;
+
+{$endif HASTTHREADTERMINATESET}
+
+{$ifdef FPC}
+
+class function TThreadAbstract.GetTickCount64: Int64;
+begin
+  result := mormot.core.os.GetTickCount64;
+end;
+
+{$endif FPC}
+
+
 { TSynBackgroundThreadAbstract }
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUtf8;
@@ -1950,21 +1987,6 @@ begin
     {$ifdef FPC}, 512 * 1024{$endif}); // StackSize=512KB (instead of FPC 4MB)
 end;
 
-{$ifndef HASTTHREADSTART}
-procedure TSynBackgroundThreadAbstract.Start;
-begin
-  Resume;
-end;
-{$endif HASTTHREADSTART}
-
-{$ifndef HASTTHREADTERMINATESET}
-procedure TSynBackgroundThreadAbstract.Terminate;
-begin
-  inherited Terminate; // FTerminated := True
-  TerminatedSet;
-end;
-{$endif HASTTHREADTERMINATESET}
-
 procedure TSynBackgroundThreadAbstract.TerminatedSet;
 begin
   fProcessEvent.SetEvent; // ExecuteLoop should handle Terminated flag
@@ -1976,11 +1998,11 @@ var
 begin
   if fExecute = exRun then
   begin
-    endtix := mormot.core.os.GetTickCount64 + maxMS;
+    endtix := GetTickCount64 + maxMS;
     repeat
       SleepHiRes(1); // wait for Execute to finish
     until (fExecute <> exRun) or
-          (mormot.core.os.GetTickCount64 >= endtix);
+          (GetTickCount64 >= endtix);
   end;
 end;
 
@@ -2137,7 +2159,7 @@ end;
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(
   var start: Int64): Int64;
 begin
-  result := mormot.core.os.GetTickCount64;
+  result := GetTickCount64;
   if start = 0 then
     result := start;
   dec(result, start);
@@ -2381,7 +2403,7 @@ begin
   if (fTask = nil) or
      Terminated then
     exit;
-  tix := mormot.core.os.GetTickCount64;
+  tix := GetTickCount64;
   n := 0;
   LockedInc32(@fProcessingCounter);
   try
@@ -2468,8 +2490,7 @@ begin
   end;
   task.OnProcess := aOnProcess;
   task.Secs := aOnProcessSecs;
-  task.NextTix :=
-    mormot.core.os.GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
+  task.NextTix := GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
   task.MsgSafe.Init; // required since task is on stack
   fTasks.Safe.WriteLock;
   try
@@ -2979,12 +3000,12 @@ begin
   end
   else
   begin
-    endtix := mormot.core.os.GetTickCount64 + MS;
+    endtix := GetTickCount64 + MS;
     repeat
       SleepHiRes(10);
       if Terminated then
         exit;
-    until mormot.core.os.GetTickCount64 > endtix;
+    until GetTickCount64 > endtix;
   end;
   result := false; // abnormal delay expiration
 end;
@@ -3003,13 +3024,6 @@ begin
     // hardened: a closing thread should not jeopardize the whole executable! 
   end;
 end;
-
-{$ifndef HASTTHREADSTART}
-procedure TSynThread.start;
-begin
-  Resume;
-end;
-{$endif HASTTHREADSTART}
 
 
 

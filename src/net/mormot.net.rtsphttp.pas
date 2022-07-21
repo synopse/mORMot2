@@ -282,7 +282,7 @@ begin
         fPendingGet.Safe.WriteLock;
         try
           found := -1;
-          now := mormot.core.os.GetTickCount64 shr 10;
+          now := GetTickCount64 shr 10;
           for i := fPendingGet.Count - 1 downto 0 do
           begin
             old := fPendingGet.ObjectPtr[i];
