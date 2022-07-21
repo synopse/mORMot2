@@ -21,7 +21,7 @@ type
   end;
 
 const
-  PROJECT31_TRANSMISSION_KEY = 'longwork_privatekey';
+  LONGWORK_TRANSMISSION_KEY = 'longwork_privatekey';
 
 implementation
 
