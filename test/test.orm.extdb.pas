@@ -245,8 +245,8 @@ begin
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['1', '2', '3'])), '{1,2,3}');
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1''', '2', '''3'''])),
     '{"1",2,"3"}');
-  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1"1''', '2',
-    '''"3\'''])), '{"1\"1",2,"\"3\\"}');
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(
+    ['''1"1''', '2', '''"3\'''])), '{"1\"1",2,"\"3\\"}');
 
   check(TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'SELEct'));
   check(not TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'toto'));

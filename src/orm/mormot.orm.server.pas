@@ -54,9 +54,9 @@ uses
 { ************ TRestOrmServer Abstract Server }
 
 type
-  /// implements TRestServer.ORM process for REST server with abstract storage
-  // - works in conjunction with TRestClientUri from mormot.rest.client.pas
-  // - you should inherit it to provide its main storage capabilities
+  /// a generic REpresentational State Transfer (REST) ORM server
+  // - inherit to provide its main storage capabilities, e.g. our in-memory
+  // engine for TRestOrmServerFullMemory or SQlite3 for TRestOrmServerDB
   // - is able to register and redirect some TOrm classes to their own
   // dedicated TRestStorage
   TRestOrmServer = class(TRestOrm, IRestOrmServer)
@@ -1322,8 +1322,8 @@ begin
         case PWord(cmd)^ of // enough to check the first 2 chars
           ord('P') + ord('O') shl 8:
             begin
-              // '{"Table":[...,"POST",{object},...]}'
-              // or '[...,"POST@Table",{object},...]'
+              // {"Table":[...,"POST",{object},...]}
+              // or [...,"POST@Table",{object},...]
               encoding := encPost;
               value := JsonGetObject(info.Json, @id, info.EndOfObject, true);
               if info.Json = nil then
@@ -1339,8 +1339,8 @@ begin
             end;
           ord('P') + ord('U') shl 8:
             begin
-              // '{"Table":[...,"PUT",{object},...]}'
-              // or '[...,"PUT@Table",{object},...]'
+              // {"Table":[...,"PUT",{object},...]}
+              // or [...,"PUT@Table",{object},...]
               encoding := encPut;
               value := JsonGetObject(info.Json, @id, info.EndOfObject, false);
               if (info.Json = nil) or
@@ -1355,8 +1355,8 @@ begin
             end;
           ord('D') + ord('E') shl 8:
             begin
-              // '{"Table":[...,"DELETE",id,...]}'
-              // or '[...,"DELETE@Table",id,...]'
+              // {"Table":[...,"DELETE",id,...]}
+              // or '[...,"DELETE@Table",id,...]
               encoding := encDelete;
               id := info.GetJsonInt64;
               if (id <= 0) or
@@ -1373,7 +1373,7 @@ begin
             end;
           ord('S') + ord('I') shl 8:
             begin
-              // '{"Table":[...,"SIMPLE",[values...' or '[...,"SIMPLE@Table"...
+              // {"Table":[...,"SIMPLE",[values],...' or '[...,"SIMPLE@Table"...
               id := 0; // no id is never transmitted with "SIMPLE" fields
               encoding := encSimple;
               runfields := runtable.OrmProps.SimpleFieldsBits[ooInsert];

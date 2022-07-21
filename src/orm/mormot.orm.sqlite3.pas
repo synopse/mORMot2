@@ -239,6 +239,9 @@ type
   end;
   PRestOrmServerDBBatch = ^TRestOrmServerDBBatch;
 
+  /// implements TRestServerDB.ORM process for REST server over SQlite3 storage
+  // - the main engine will be SQLite3, but specific classes of the model could
+  // be redirected to other TRestStorage instances, e.g. external SQL/NoSQL
   TRestOrmServerDB = class(TRestOrmServer)
   protected
     /// access to the associated SQLite3 database engine
