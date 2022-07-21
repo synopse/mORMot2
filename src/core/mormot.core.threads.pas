@@ -414,10 +414,10 @@ type
     /// reintroduced to call TeminatedSet
     procedure Terminate; reintroduce;
     {$endif HASTTHREADTERMINATESET}
-    {$ifdef FPC}
+    {$ifdef HASINLINE}
     /// method which redirects to mormot.core.os instead of sysutils on FPC
-    class function GetTickCount64: Int64; static; reintroduce; inline;
-    {$endif FPC}
+    class function GetTickCount64: Int64; reintroduce; static; inline;
+    {$endif HASINLINE}
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
   end;
@@ -1963,14 +1963,14 @@ end;
 
 {$endif HASTTHREADTERMINATESET}
 
-{$ifdef FPC}
+{$ifdef HASINLINE}
 
 class function TThreadAbstract.GetTickCount64: Int64;
 begin
   result := mormot.core.os.GetTickCount64;
 end;
 
-{$endif FPC}
+{$endif HASINLINE}
 
 
 { TSynBackgroundThreadAbstract }
