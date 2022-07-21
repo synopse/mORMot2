@@ -525,7 +525,7 @@ type
     constructor Create(aRest: TRestOrmServer; aTable: TOrmClass;
       var aData: RawUtf8; aExpectedResultsCount: integer); reintroduce;
     /// execute the TRestBatch server-side processing
-    function ParseAndExecute: integer;
+    procedure ParseAndExecute;
     /// the ParseAndExecute results
     property Results: TIDDynArray
       read fResults;
@@ -1211,8 +1211,9 @@ begin
   process := TRestOrmServerBachSend.Create(
     self, Table, Data, ExpectedResultsCount);
   try
-    result := process.ParseAndExecute;
+    process.ParseAndExecute;
     Results := process.Results;
+    result := HTTP_SUCCESS; // if no exception was raised, it was fine
   finally
     process.Free;
   end;
@@ -2380,12 +2381,12 @@ begin
     byte(fBatchOptions) := 0;
 end;
 
-function TRestOrmServerBachSend.ParseAndExecute: integer;
+procedure TRestOrmServerBachSend.ParseAndExecute;
 begin
   fLog := fOrm.LogClass.Enter('EngineBatchSend % inlen=%',
     [fTable, length(fData)], self);
   //log.Log(sllCustom2, Data, self, 100 shl 10);
-  fTimer.Start;
+  fTimer.Start(fLog.Instance.LastQueryPerformanceMicroSeconds);
   ParseHeader;
   fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
   // try..except to intercept any error
@@ -2420,6 +2421,7 @@ begin
       finally
         fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
         if LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level then
+          ProcessLog;
       end;
     end;
   except
@@ -2437,7 +2439,6 @@ begin
     fResults := nil
   else
     DynArrayFakeLength(fResults, fCount);
-  result := HTTP_SUCCESS;
 end;
 
 

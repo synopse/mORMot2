@@ -476,7 +476,7 @@ begin
   if (fEngineAddCompute = eacSynUniqueIdentifier) and
      (fEngineGenerator <> nil) then
   begin
-    result := fEngineGenerator.ComputeNew;
+    result := fEngineGenerator.ComputeNew; // this is preferred if several nodes
     fEngineLastID := result;
     exit;
   end;
