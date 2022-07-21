@@ -278,7 +278,7 @@ type
     /// finalize the execution context
     destructor Destroy; override;
 
-    /// validate mPOST/mPUT/mDELETE action against those access rights
+    /// validate mPOST/mPUT/mDELETE action against current session access rights
     // - used by TRestServerUriContext.ExecuteOrmWrite and
     // TRestServer.EngineBatchSend methods for proper security checks
     function CanExecuteOrmWrite(Method: TUriMethod;

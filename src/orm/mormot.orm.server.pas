@@ -8,6 +8,7 @@ unit mormot.orm.server;
 
    Server-Side Object-Relational-Mapping (ORM) Process
     - TRestOrmServer Abstract Server
+    - TRestOrmServerBachSend TRestBach Server-Side Process
 
   *****************************************************************************
 }
@@ -472,6 +473,62 @@ type
     // (should not to be used normally, because it will add unnecessary overhead)
     property StaticVirtualTableDirect: boolean read fVirtualTableDirect
       write fVirtualTableDirect;
+  end;
+
+
+{ ************ TRestOrmServerBachSend TRestBach Server-Side Process }
+
+type
+  /// internal state machine used by TRestOrmServer.EngineBatchSend
+  // - this code is so complex/optimized that it needed its own class
+  TRestOrmServerBachSend = class
+  protected
+    fParse: TGetJsonField;
+    fCommand: PUtf8Char;
+    fValue: RawUtf8;
+    fValueID: TID;
+    fValueDirect: PUtf8Char;
+    fOrm: TRestOrmServer;
+    fTable: TOrmClass;
+    fBatchOptions: TRestBatchOptions;
+    fEncoding, fCommandEncoding, fRunningBatchEncoding: TRestBatchEncoding;
+    fCommandDirectFormat: TSaveFieldsAsObject;
+    fRunMainTrans: boolean;
+    fRunningBatchRest: TRestOrm;
+    fRunningRest: TRestOrm;
+    fRunStatic: TRestOrm;
+    fRunTableTrans: array of TRestOrm;
+    fRunTable, fRunningBatchTable: TOrmClass;
+    fRunTableIndex, fMainTableIndex: integer;
+    fRowCountPerTrans, fRowCountPerCurrTrans: cardinal;
+    fUriContext: TRestServerUriContext;
+    fResults: TIDDynArray;
+    fData: RawUtf8;
+    fCount, fErrors: integer;
+    fLog: ISynLog;
+    fValueDirectFields: TFieldBits;
+    fCounts: array[TRestBatchEncoding] of cardinal;
+    fTimer: TPrecisionTimer;
+    procedure PerformAutomaticTransactionBegin;
+    procedure PerformAutomaticCommit;
+    procedure PerformRestChange;
+    function IsNotAllowed: boolean;
+      {$ifdef FPC} inline; {$endif}
+    procedure ParseHeader;
+    procedure ParseNextCommandAndValue;
+    procedure ParseEnding;
+    function ExecuteNextValue: boolean;
+    procedure ProcessError(E: Exception);
+    procedure ProcessLog;
+  public
+    /// intialize the TRestBatch server-side processing
+    constructor Create(aRest: TRestOrmServer; aTable: TOrmClass;
+      var aData: RawUtf8; aExpectedResultsCount: integer); reintroduce;
+    /// execute the TRestBatch server-side processing
+    function ParseAndExecute: integer;
+    /// the ParseAndExecute results
+    property Results: TIDDynArray
+      read fResults;
   end;
 
 
@@ -1149,496 +1206,16 @@ function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
 var
-  info: TGetJsonField;
-  ok, runmaintrans: boolean;
-  runstatickind: TRestServerKind;
-  batchoptions: TRestBatchOptions;
-  fmt: TSaveFieldsAsObject;
-  tablename, value, errmsg: RawUtf8;
-  encoding, runningbatchencoding: TRestBatchEncoding;
-  runningbatchrest, runningrest: TRestOrm;
-  cmd, cmdtable, simplevalue: PUtf8Char;
-  P: PAnsiChar;
-  transperrow, rowcountpercurrtrans: cardinal;
-  runtabletrans: array of TRestOrm;
-  id: TID;
-  timeouttix: Int64;
-  runtable, runningbatchtable: TOrmClass;
-  runtableindex, i, tableindex, count, errors: integer;
-  runstatic: TRestOrm;
-  uricontext: TRestServerUriContext;
-  timer: TPrecisionTimer;
-  runfields: TFieldBits;
-  counts: array[TRestBatchEncoding] of cardinal;
-
-  procedure PerformAutomaticCommit;
-  var
-    i: PtrInt;
-  begin
-    if runningbatchrest <> nil then
-    begin
-      runningbatchrest.InternalBatchStop; // send pending rows before commit
-      runningbatchrest := nil;
-      runningbatchtable := nil;
-    end;
-    for i := 0 to high(runtabletrans) do
-      if runtabletrans[i] <> nil then
-      begin
-        runtabletrans[i].Commit(CONST_AUTHENTICATION_NOT_USED, true);
-        if runtabletrans[i] = self then
-          runmaintrans := false;
-        runtabletrans[i] := nil; // to acquire and begin a new transaction
-      end;
-    rowcountpercurrtrans := 0;
-  end;
-
-  function IsNotAllowed: boolean;
-    {$ifdef FPC} inline; {$endif}
-  begin
-    result := (uricontext <> nil) and
-              (uricontext.Command = execOrmWrite) and
-              not uricontext.CanExecuteOrmWrite(BATCH_METHOD[encoding],
-      runtable, runtableindex, id, uricontext.Call.RestAccessRights^);
-  end;
-
-var
-  log: ISynLog;
+  process: TRestOrmServerBachSend; // will encapsulate all TRestBach execution
 begin
-  log := fRest.LogClass.Enter('EngineBatchSend % inlen=%',
-    [Table, length(Data)], self);
-  //log.Log(sllCustom2, Data, self, 100 shl 10);
-  info.Json := pointer(Data); // will be parsed therefore in-place modified
-  if info.Json = nil then
-    raise EOrmBatchException.CreateUtf8(
-      '%.EngineBatchSend(%,"")', [self, Table]);
-  if Table <> nil then
-  begin
-    tableindex := fModel.GetTableIndexExisting(Table);
-    // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
-    if not NextNotSpaceCharIs(info.Json, '{') then
-      raise EOrmBatchException.CreateUtf8('%.EngineBatchSend: Missing {', [self]);
-    tablename := GetJsonPropName(info.Json);
-    if (tablename = '') or
-       (info.Json = nil) or
-       not IdemPropNameU(tablename,
-         fModel.TableProps[tableindex].Props.SqlTableName) then
-      raise EOrmBatchException.CreateUtf8(
-        '%.EngineBatchSend(%): Wrong "Table":"%"', [self, Table, tablename]);
-  end
-  else
-    // or '["cmd@Table":values,...]'
-    tableindex := -1;
-  if not NextNotSpaceCharIs(info.Json, '[') then
-    raise EOrmBatchException.CreateUtf8(
-      '%.EngineBatchSend: Missing [', [self]);
-  if IdemPChar(info.Json, '"AUTOMATICTRANSACTIONPERROW",') then
-  begin
-    inc(info.Json, 29);
-    transperrow := GetNextItemCardinal(info.Json, ',');
-  end
-  else
-    transperrow := 0;
-  SetLength(runtabletrans, fModel.TablesMax + 1);
-  runmaintrans := false;
-  rowcountpercurrtrans := 0;
-  if IdemPChar(info.Json, '"OPTIONS",') then
-  begin
-    inc(info.Json, 10);
-    byte(batchoptions) := GetNextItemCardinal(info.Json, ',');
-  end
-  else
-    byte(batchoptions) := 0;
-  timer.Start;
-  uricontext := ServiceRunningContext^.Request;
-  cmd := nil;
-  runningbatchrest := nil;
-  runningbatchtable := nil;
-  runningbatchencoding := encPost;
-  runningrest := nil;
-  runstatic := nil;
-  runtableindex := -1;
-  count := 0;
-  errors := 0;
-  FillZero(runfields);
-  FillCharFast(counts, SizeOf(counts), 0);
-  fRest.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
-  // try..except to intercept any error
+  process := TRestOrmServerBachSend.Create(
+    self, Table, Data, ExpectedResultsCount);
   try
-    // try..finally for transactions, writelock and InternalBatchStart
-    try
-      // main loop: process one POST/PUT/DELETE per iteration
-      // "POST",{object}  "SIMPLE",[values]  "PUT",{object}  "DELETE",id
-      repeat
-        // retrieve cmd name and associated (static) table
-        if info.Json = nil then
-          raise EOrmBatchException.CreateUtf8(
-            '%.EngineBatchSend: unexpected end of input', [self]);
-        info.Json := GotoNextNotSpace(info.Json);
-        if info.Json^ = '"' then
-        begin
-          info.GetJsonField;
-          cmd := info.Value;
-          if (info.Json = nil) or
-             (cmd = nil) then
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: Missing CMD', [self]);
-          if tableindex >= 0 then
-          begin
-            // e.g. '{"Table":[...,"POST",{object},...]}'
-            runtableindex := tableindex;
-            runtable := Table;
-          end
-          else
-          begin
-            // e.g. '[...,"POST@Table",{object},...]'
-            cmdtable := PosChar(cmd, '@');
-            if cmdtable <> nil then
-            begin
-              cmdtable^ := #0; // isolate 'POST' or 'hex'/'ihex' prefix
-              runtableindex := fModel.GetTableIndexPtr(cmdtable + 1);
-              if runtableindex < 0 then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: Unknown %', [self, cmdtable]);
-              runtable := fModel.Tables[runtableindex];
-            end;
-          end;
-          runstatic := GetStaticTableIndex(runtableindex, runstatickind);
-          if runstatic = nil then
-            runningrest := self
-          else
-            runningrest := runstatic;
-        end
-        else
-        begin
-          // allow "POST",{obj1},{obj2} or "SIMPLE",[v1],[v2] or "DELETE",id1,id2
-          // (never appearing if boNoModelEncoding was set on Client side)
-          if (runtableindex < 0) or
-             (cmd = nil) then
-            // plain "POST",{object} should reuse the previous table
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: "..@Table" expected', [self]);
-        end;
-        // get CRUD cmd and associated value/id
-        case PWord(cmd)^ of // enough to check the first 2 chars
-          ord('P') + ord('O') shl 8:
-            begin
-              // {"Table":[...,"POST",{object},...]}
-              // or [...,"POST@Table",{object},...]
-              encoding := encPost;
-              value := JsonGetObject(info.Json, @id, info.EndOfObject, true);
-              if info.Json = nil then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: Wrong POST', [self]);
-              if IsNotAllowed then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: POST/Add not allowed on %',
-                  [self, runtable]);
-              if not RecordCanBeUpdated(runtable, id, oeAdd, @errmsg) then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: POST impossible: %', [self, errmsg]);
-            end;
-          ord('P') + ord('U') shl 8:
-            begin
-              // {"Table":[...,"PUT",{object},...]}
-              // or [...,"PUT@Table",{object},...]
-              encoding := encPut;
-              value := JsonGetObject(info.Json, @id, info.EndOfObject, false);
-              if (info.Json = nil) or
-                 (value = '') or
-                 (id <= 0) then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: Wrong PUT', [self]);
-              if IsNotAllowed then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: PUT/Update not allowed on %',
-                  [self, runtable]);
-            end;
-          ord('D') + ord('E') shl 8:
-            begin
-              // {"Table":[...,"DELETE",id,...]}
-              // or '[...,"DELETE@Table",id,...]
-              encoding := encDelete;
-              id := info.GetJsonInt64;
-              if (id <= 0) or
-                 info.WasString then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: Wrong DELETE', [self]);
-              if IsNotAllowed then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: DELETE not allowed on %',
-                  [self, runtable]);
-              if not RecordCanBeUpdated(runtable, id, oeDelete, @errmsg) then
-                raise EOrmBatchException.CreateUtf8(
-                  '%.EngineBatchSend: DELETE impossible [%]', [self, errmsg]);
-            end;
-          ord('S') + ord('I') shl 8:
-            begin
-              // {"Table":[...,"SIMPLE",[values],...' or '[...,"SIMPLE@Table"...
-              id := 0; // no id is never transmitted with "SIMPLE" fields
-              encoding := encSimple;
-              runfields := runtable.OrmProps.SimpleFieldsBits[ooInsert];
-            end;
-        else
-          begin
-            id := 0; // no id by default
-            encoding := encPostHex;   // "hex",[...] or "hex@Table",[...]
-            FillZero(runfields);
-            P := pointer(cmd);
-            case P^ of
-              'i': // "ihex",[id,...] or "ihex@Table",[id,...]
-                begin
-                  encoding := encPostHexID;
-                  inc(P);
-                end;
-              'u':
-                begin // "uhex",[id,...] or "uhex@Table",[id,...]
-                  encoding := encPutHexID;
-                  inc(P);
-                end;
-            end;
-            if not HexDisplayToBin(P, @runfields, StrLen(P) shr 1) then
-              raise EOrmBatchException.CreateUtf8(
-                '%.EngineBatchSend: Unknown [%] cmd', [self, cmd]);
-          end;
-        end;
-        if encoding in BATCH_DIRECT then
-        begin
-          // first InternalBatchDirect(sent=nil) call to check if supported
-          if (runningrest.InternalBatchDirect(
-               encoding, runtableindex, runfields, nil) <> 0) and
-             (info.Json^ = '[')  then
-          begin
-            // this storage engine allows direct JSON array process
-            // (see e.g. TRestOrmServerDB.InternalBatchDirect
-            //  or TRestStorageTOrm.InternalBatchDirect)
-            info.GetJsonFieldOrObjectOrArray;
-            simplevalue := info.Value;
-          end
-          else
-          begin
-            // convert input array into a JSON object as regular "POST"/"PUT"
-            if encoding = encPostHexID then
-              fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
-            else if encoding = encPutHexID then
-              fmt := [sfoExtendedJson, sfoStartWithID]
-            else
-              fmt := [sfoExtendedJson];
-            value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(info.Json, runfields, @id, @info.EndOfObject, fmt);
-            if encoding = encPutHexID then
-              encoding := encPut
-            else
-              encoding := encPost;
-            if (info.Json = nil) or
-               (value = '') then
-              raise EOrmBatchException.CreateUtf8(
-                '%.EngineBatchSend: % incorrect format', [self, cmd]);
-          end;
-          if IsNotAllowed then
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: % not allowed on %', [self, cmd, runtable]);
-          if not RecordCanBeUpdated(runtable, 0, BATCH_EVENT[encoding], @errmsg) then
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: % impossible: %', [self, cmd, errmsg]);
-        end;
-        if (count = 0) and
-           (info.EndOfObject = ']') then
-        begin
-          // single op do not need a transaction nor InternalBatchStart/Stop
-          transperrow := 0;
-          SetLength(Results, 1);
-          if encoding in BATCH_DIRECT then
-          begin
-            // InternalBatchDirect requires InternalBatchStart -> object fallback
-            if encoding in BATCH_DIRECT_ID then
-              fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
-            else
-              fmt := [sfoExtendedJson];
-            value := fModel.TableProps[runtableindex].Props.
-              SaveFieldsFromJsonArray(simplevalue, runfields, @id, nil, fmt);
-            if encoding = encPutHexID then
-              encoding := encPut
-            else
-              encoding := encPost;
-          end;
-        end
-        else
-        begin
-          // handle auto-committed transaction process
-          if transperrow > 0 then
-          begin
-            if rowcountpercurrtrans = transperrow then
-              // reached transperrow chunk
-              PerformAutomaticCommit;
-            inc(rowcountpercurrtrans);
-            if runtabletrans[runtableindex] = nil then
-              // initiate transaction for this table if not started yet
-              if (runstatic <> nil) or
-                 not runmaintrans then
-              begin
-                timeouttix := GetTickCount64 + 2000;
-                repeat
-                  if runningrest.TransactionBegin(
-                    runtable, CONST_AUTHENTICATION_NOT_USED) then
-                  begin
-                    // acquired transaction
-                    runtabletrans[runtableindex] := runningrest;
-                    if runstatic = nil then
-                      runmaintrans := true;
-                    Break;
-                  end;
-                  if GetTickCount64 > timeouttix then
-                    raise EOrmBatchException.CreateUtf8(
-                      '%.EngineBatchSend: %.TransactionBegin timeout',
-                      [self, runningrest]);
-                  SleepHiRes(1); // retry in 1 ms
-                until (fOwner <> nil) and
-                      (fOwner.ShutdownRequested);
-              end;
-          end;
-          // handle batch pending request sending (if table or cmd changed)
-          if (runningbatchrest <> nil) and
-             ((runtable <> runningbatchtable) or
-              (runningbatchencoding <> encoding)) then
-          begin
-            runningbatchrest.InternalBatchStop; // send pending statements
-            runningbatchrest := nil;
-            runningbatchtable := nil;
-          end;
-          if (runstatic <> nil) and
-             (runstatic <> runningbatchrest) and
-             runstatic.InternalBatchStart(encoding, batchoptions) then
-          begin
-            runningbatchrest := runstatic;
-            runningbatchtable := runtable;
-            runningbatchencoding := encoding;
-          end
-          else
-          if (runningbatchrest = nil) and
-             (runstatic = nil) and
-             InternalBatchStart(encoding, batchoptions) then
-          begin
-            runningbatchrest := self; // e.g. multi-insert in main SQlite3 engine
-            runningbatchtable := runtable;
-            runningbatchencoding := encoding;
-          end;
-          if count >= length(Results) then
-            SetLength(Results, NextGrow(count));
-        end;
-        // process CRUD cmd operation
-        ok := false;
-        Results[count] := HTTP_NOTMODIFIED;
-        case encoding of
-          encPost:
-            begin
-              id := EngineAdd(runtableindex, value);
-              Results[count] := id;
-              if id <> 0 then
-              begin
-                if fCache <> nil then
-                  fCache.Notify(runtableindex, id, value, ooInsert);
-                ok := true;
-              end;
-            end;
-          encSimple,
-          encPostHex,
-          encPostHexID,
-          encPutHexID:
-            begin
-              // note: DB operation could be delayed in InternalBatchDirect()
-              // (for multi-insert, may be up to InternalBatchStop)
-              id := runningrest.InternalBatchDirect(
-                encoding, runtableindex, runfields, simplevalue);
-              Results[count] := id;
-              if id <> 0 then
-                ok := true;
-              // no ready-to-used value -> no fCache notification
-            end;
-          encPut:
-            if EngineUpdate(runtableindex, id, value) then
-            begin
-              Results[count] := HTTP_SUCCESS; // 200 ok
-              ok := true;
-              if fCache <> nil then
-                // JSON value may be uncomplete -> delete from cache
-                if not (boPutNoCacheFlush in batchoptions) then
-                  fCache.NotifyDeletion(runtableindex, id);
-            end;
-          encDelete:
-            if EngineDelete(runtableindex, id) then
-            begin
-              if fCache <> nil then
-                fCache.NotifyDeletion(runtableindex, id);
-              if (runningbatchrest <> nil) or
-                 AfterDeleteForceCoherency(runtableindex, id) then
-              begin
-                Results[count] := HTTP_SUCCESS; // 200 ok
-                ok := true;
-              end;
-            end;
-        end;
-        if not ok then
-          if boRollbackOnError in batchoptions then
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: Results[%]=% on % %',
-              [self, count, Results[count], cmd, runtable])
-          else
-            inc(errors);
-        inc(count);
-        inc(counts[encoding]);
-      until info.EndOfObject = ']';
-      if (transperrow > 0) and
-         (rowcountpercurrtrans > 0) then
-        // send pending rows within transaction
-        PerformAutomaticCommit;
-    finally
-      try
-        if runningbatchrest <> nil then
-          // send pending rows, and release Safe.Lock
-          runningbatchrest.InternalBatchStop;
-      finally
-        fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
-        log.Log(LOG_TRACEERROR[errors <> 0], 'EngineBatchSend json=% count=% ' +
-          'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
-          [KB(Data), count, errors, counts[encPost], counts[encSimple],
-           counts[encPostHex], counts[encPostHexID], counts[encPut],
-           counts[encDelete], timer.Stop, timer.PerSec(count)], self);
-      end;
-    end;
-  except
-    on E: Exception do
-    begin
-      if (transperrow > 0) and
-         (rowcountpercurrtrans > 0) then
-      begin
-        for i := 0 to high(runtabletrans) do
-          if runtabletrans[i] <> nil then
-            runtabletrans[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
-        UniqueRawUtf8ZeroToTilde(Data, 1 shl 16);
-        log.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
-          'transaction data=%', [E, Data]);
-      end;
-      raise;
-    end;
+    result := process.ParseAndExecute;
+    Results := process.Results;
+  finally
+    process.Free;
   end;
-  if Table <> nil then
-  begin
-    // '{"Table":["cmd":values,...]}' format
-    if info.Json = nil then
-      raise EOrmBatchException.CreateUtf8(
-        '%.EngineBatchSend: % Truncated', [self, Table]);
-    while not (info.Json^ in ['}', #0]) do
-      inc(info.Json);
-    if info.Json^ <> '}' then
-      raise EOrmBatchException.CreateUtf8(
-        '%.EngineBatchSend(%): Missing }', [self, Table]);
-  end;
-  // if we reached here, process was ok
-  if count = 0 then
-    Results := nil
-  else
-    DynArrayFakeLength(Results, count);
-  result := HTTP_SUCCESS;
 end;
 
 procedure TRestOrmServer.TrackChanges(const aTable: array of TOrmClass;
@@ -1789,7 +1366,7 @@ begin
             rec := histblob.HistoryGetLast
           else
           begin
-            // histblob.fID=0 -> no previous BLOB content
+            // histblob.ID=0 -> no previous BLOB content
             json := JsonEncode([
               'ModifiedRecord', histjson.ModifiedRecord,
               'Timestamp', GetServerTimestamp,
@@ -2331,6 +1908,538 @@ begin
       result := inherited RetrieveBlobFields(Value);
   end;
 end;
+
+
+{ ************ TRestOrmServerBachSend TRestBach Server-Side Process }
+
+{ TRestOrmServerBachSend }
+
+constructor TRestOrmServerBachSend.Create(aRest: TRestOrmServer;
+  aTable: TOrmClass; var aData: RawUtf8; aExpectedResultsCount: integer);
+begin
+  fOrm := aRest;
+  fTable := aTable;
+  fData := aData;
+  fUriContext := ServiceRunningContext^.Request;
+  fRunningBatchEncoding := encPost;
+  fRunTableIndex := -1;
+end;
+
+procedure TRestOrmServerBachSend.PerformAutomaticTransactionBegin;
+var
+  timeouttix: Int64;
+begin
+  timeouttix := GetTickCount64 + 2000;
+  repeat
+    if fRunningRest.TransactionBegin(
+      fRunTable, CONST_AUTHENTICATION_NOT_USED) then
+    begin
+      // acquired transaction
+      fRunTableTrans[fRunTableIndex] := fRunningRest;
+      if fRunStatic = nil then
+        fRunMainTrans := true;
+      break;
+    end;
+    if GetTickCount64 > timeouttix then
+      raise EOrmBatchException.CreateUtf8(
+        '%.EngineBatchSend: %.TransactionBegin timeout',
+        [self, fRunningRest]);
+    SleepHiRes(1); // retry in 1 ms
+  until (fOrm.Owner <> nil) and
+        (fOrm.Owner.ShutdownRequested);
+end;
+
+procedure TRestOrmServerBachSend.PerformAutomaticCommit;
+var
+  i: PtrInt;
+begin
+  if fRunningBatchRest <> nil then
+  begin
+    fRunningBatchRest.InternalBatchStop; // send pending rows before commit
+    fRunningBatchRest := nil;
+    fRunningBatchTable := nil;
+  end;
+  for i := 0 to high(fRunTableTrans) do
+    if fRunTableTrans[i] <> nil then
+    begin
+      fRunTableTrans[i].Commit(CONST_AUTHENTICATION_NOT_USED, true);
+      if fRunTableTrans[i] = fOrm then
+        fRunMainTrans := false;
+      fRunTableTrans[i] := nil; // to acquire and begin a new transaction
+    end;
+  fRowCountPerCurrTrans := 0;
+end;
+
+procedure TRestOrmServerBachSend.PerformRestChange;
+begin
+  if (fRunningBatchRest <> nil) and
+     ((fRunTable <> fRunningBatchTable) or
+      (fRunningBatchEncoding <> fEncoding)) then
+  begin
+    fRunningBatchRest.InternalBatchStop; // send pending statements
+    fRunningBatchRest := nil;
+    fRunningBatchTable := nil;
+  end;
+  if (fRunStatic <> nil) and
+     (fRunStatic <> fRunningBatchRest) and
+     fRunStatic.InternalBatchStart(fEncoding, fBatchOptions) then
+  begin
+    fRunningBatchRest := fRunStatic;
+    fRunningBatchTable := fRunTable;
+    fRunningBatchEncoding := fEncoding;
+  end
+  else
+  if (fRunningBatchRest = nil) and
+     (fRunStatic = nil) and
+     fOrm.InternalBatchStart(fEncoding, fBatchOptions) then
+  begin
+    fRunningBatchRest := fOrm; // e.g. multi-insert in main SQlite3 engine
+    fRunningBatchTable := fRunTable;
+    fRunningBatchEncoding := fEncoding;
+  end;
+end;
+
+function TRestOrmServerBachSend.IsNotAllowed: boolean;
+  {$ifdef FPC} inline; {$endif}
+begin
+  result := (fUriContext <> nil) and
+            (fUriContext.Command = execOrmWrite) and
+            not fUriContext.CanExecuteOrmWrite(BATCH_METHOD[fEncoding],
+    fRunTable, fRunTableIndex, fValueID, fUriContext.Call.RestAccessRights^);
+end;
+
+procedure TRestOrmServerBachSend.ParseNextCommandAndValue;
+var
+  cmdtable: PUtf8Char;
+  errmsg: RawUtf8;
+  runstatickind: TRestServerKind; // unused
+  P: PAnsiChar;
+begin
+  if fParse.Json = nil then
+    raise EOrmBatchException.CreateUtf8(
+      '%.EngineBatchSend: unexpected end of input', [self]);
+  fParse.Json := GotoNextNotSpace(fParse.Json);
+  if fParse.Json^ = '"' then
+  begin
+    // retrieve fCommand
+    fParse.GetJsonField;
+    fCommand := fParse.Value;
+    if (fParse.Json = nil) or
+       (fCommand = nil) then
+      raise EOrmBatchException.CreateUtf8(
+        '%.EngineBatchSend: Missing CMD', [self]);
+    // retrieve associated (static) table
+    if fMainTableIndex >= 0 then
+    begin
+      // e.g. '{"Table":[...,"POST",{object},...]}'
+      fRunTableIndex := fMainTableIndex;
+      fRunTable := fTable;
+    end
+    else
+    begin
+      // e.g. '[...,"POST@Table",{object},...]'
+      cmdtable := PosChar(fCommand, '@');
+      if cmdtable <> nil then
+      begin
+        cmdtable^ := #0; // isolate 'POST' or 'hex'/'ihex' prefix
+        fRunTableIndex := fOrm.Model.GetTableIndexPtr(cmdtable + 1);
+        if fRunTableIndex < 0 then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: Unknown %', [self, cmdtable]);
+        fRunTable := fOrm.Model.Tables[fRunTableIndex];
+      end;
+    end;
+    fRunStatic := fOrm.GetStaticTableIndex(fRunTableIndex, runstatickind);
+    if fRunStatic = nil then
+      fRunningRest := fOrm
+    else
+      fRunningRest := fRunStatic;
+    // retrieve fCommandEncoding/fValueDirectFields
+    case PWord(fCommand)^ of // enough to check the first 2 chars
+      ord('P') + ord('O') shl 8:
+        // {"Table":[...,"POST",{object},...]} [...,"POST@Table",{object},...]
+        fCommandEncoding := encPost;
+      ord('P') + ord('U') shl 8:
+        // {"Table":[...,"PUT",{object},...]} or [...,"PUT@Table",{object},...]
+        fCommandEncoding := encPut;
+      ord('D') + ord('E') shl 8:
+        // {"Table":[...,"DELETE",id,...]} or '[...,"DELETE@Table",id,...]
+        fCommandEncoding := encDelete;
+      ord('S') + ord('I') shl 8:
+        // {"Table":[...,"SIMPLE",[values],...' or '[...,"SIMPLE@Table"...
+        begin
+          fCommandEncoding := encSimple;
+          fCommandDirectFormat := [sfoExtendedJson];
+          fValueDirectFields := fRunTable.OrmProps.SimpleFieldsBits[ooInsert];
+        end;
+    else
+      begin
+        fCommandEncoding := encPostHex;       // "hex",[...] or "hex@Table",[...]
+        fCommandDirectFormat := [sfoExtendedJson];
+        FillZero(fValueDirectFields);  // only meaningful bytes are transmitted
+        P := pointer(fCommand);
+        case P^ of
+          'i': // "ihex",[id,...] or "ihex@Table",[id,...]
+            begin
+              fCommandEncoding := encPostHexID;
+              fCommandDirectFormat := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst];
+              inc(P);
+            end;
+          'u':
+            begin // "uhex",[id,...] or "uhex@Table",[id,...]
+              fCommandEncoding := encPutHexID;
+              fCommandDirectFormat := [sfoExtendedJson, sfoStartWithID];
+              inc(P);
+            end;
+        end;
+        if not HexDisplayToBin(P, @fValueDirectFields, StrLen(P) shr 1) then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: Unknown [%] cmd', [self, fCommand]);
+      end;
+    end;
+    fEncoding := fCommandEncoding; // overwritten if InternalBatchDirect failed
+  end
+  else
+    // allow "POST",{obj1},{obj2} or "SIMPLE",[v1],[v2] or "DELETE",id1,id2
+    // (never appearing if boNoModelEncoding was set on Client side)
+    if (fRunTableIndex < 0) or
+       (fCommand = nil) then
+      // plain "POST",{object} should reuse the previous table
+      raise EOrmBatchException.CreateUtf8(
+        '%.EngineBatchSend: "..@Table" expected', [self]);
+  // retrieve next fValue/fValueID/fValueDirect content
+  fValueID := 0; // no id is never transmitted with "SIMPLE" fields e.g.
+  case fCommandEncoding of
+    encPost:
+      begin
+        // {"Table":[...,"POST",{object},...]} or [...,"POST@Table",{object},...]
+        fValue := JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, true);
+        if (fParse.Json = nil) or
+           (fValue = '') then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: Wrong POST', [self]);
+        if IsNotAllowed then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: POST/Add not allowed on %',
+            [self, fRunTable]);
+        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeAdd, @errmsg) then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: POST impossible: %', [self, errmsg]);
+      end;
+    encPut:
+      begin
+        // {"Table":[...,"PUT",{object},...]} or [...,"PUT@Table",{object},...]
+        fValue := JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, false);
+        if (fParse.Json = nil) or
+           (fValue = '') or
+           (fValueID <= 0) then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: Wrong PUT', [self]);
+        if IsNotAllowed then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: PUT/Update not allowed on %',
+            [self, fRunTable]);
+      end;
+    encDelete:
+      begin
+        // {"Table":[...,"DELETE",fValueID,...]} or '[...,"DELETE@Table",id,...]
+        fValueID := fParse.GetJsonInt64;
+        if (fValueID <= 0) or
+           fParse.WasString then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: Wrong DELETE', [self]);
+        if IsNotAllowed then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: DELETE not allowed on %',
+            [self, fRunTable]);
+        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeDelete, @errmsg) then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: DELETE impossible [%]', [self, errmsg]);
+      end;
+  else
+    // encSimple/encPostHex/encPostHexID/encPutHexID = BATCH_DIRECT
+    begin
+      // first InternalBatchDirect(sent=nil) call to check if supported
+      if (fEncoding = fCommandEncoding) and
+         (fRunningRest.InternalBatchDirect(
+           fEncoding, fRunTableIndex, fValueDirectFields, nil) <> 0) and
+         (fParse.Json^ = '[')  then
+      begin
+        // this storage engine allows direct JSON array process
+        // (see e.g. TRestOrmServerDB.InternalBatchDirect
+        //  or TRestStorageTOrm.InternalBatchDirect)
+        fParse.GetJsonFieldOrObjectOrArray;
+        fValueDirect := fParse.Value;
+      end
+      else
+      begin
+        // fallback to convert input into JSON object as regular encPost/encPut
+        if fCommandEncoding = encPutHexID then
+          fEncoding := encPut
+        else
+          fEncoding := encPost;
+        fValue := fOrm.Model.TableProps[fRunTableIndex].Props.
+          SaveFieldsFromJsonArray(fParse.Json, fValueDirectFields,
+            @fValueID, @fParse.EndOfObject, fCommandDirectFormat);
+        if (fParse.Json = nil) or
+           (fValue = '') then
+          raise EOrmBatchException.CreateUtf8(
+            '%.EngineBatchSend: % incorrect format', [self, fCommand]);
+      end;
+      if IsNotAllowed then
+        raise EOrmBatchException.CreateUtf8(
+          '%.EngineBatchSend: % not allowed on %', [self, fCommand, fRunTable]);
+      if not fOrm.RecordCanBeUpdated(fRunTable, 0, BATCH_EVENT[fEncoding], @errmsg) then
+        raise EOrmBatchException.CreateUtf8(
+          '%.EngineBatchSend: % impossible: %', [self, fCommand, errmsg]);
+    end;
+  end;
+end;
+
+procedure TRestOrmServerBachSend.ParseEnding;
+begin
+  if fParse.Json = nil then
+    raise EOrmBatchException.CreateUtf8(
+      '%.EngineBatchSend: % Truncated', [self, fTable]);
+  while not (fParse.Json^ in ['}', #0]) do
+    inc(fParse.Json);
+  if fParse.Json^ <> '}' then
+    raise EOrmBatchException.CreateUtf8(
+      '%.EngineBatchSend(%): Missing }', [self, fTable]);
+end;
+
+function TRestOrmServerBachSend.ExecuteNextValue: boolean;
+var
+  fmt: TSaveFieldsAsObject;
+begin
+  if (fCount = 0) and
+     (fParse.EndOfObject = ']') then
+  begin
+    // single op do not need a transaction nor InternalBatchStart/Stop
+    fRowCountPerTrans := 0;
+    SetLength(fResults, 1);
+    if fEncoding in BATCH_DIRECT then
+    begin
+      // InternalBatchDirect requires InternalBatchStart -> object fallback
+      if fEncoding in BATCH_DIRECT_ID then
+        fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
+      else
+        fmt := [sfoExtendedJson];
+      fValue := fOrm.Model.TableProps[fRunTableIndex].Props.
+        SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID, nil, fmt);
+      if fEncoding = encPutHexID then
+        fEncoding := encPut
+      else
+        fEncoding := encPost;
+    end;
+  end
+  else
+  begin
+    // handle auto-committed transaction process
+    if fRowCountPerTrans > 0 then
+    begin
+      if fRowCountPerCurrTrans = fRowCountPerTrans then
+        // reached fRowCountPerTrans chunk
+        PerformAutomaticCommit;
+      inc(fRowCountPerCurrTrans);
+      if fRunTableTrans[fRunTableIndex] = nil then
+        // initiate transaction for this table if not started yet
+        if (fRunStatic <> nil) or
+           not fRunMainTrans then
+          PerformAutomaticTransactionBegin;
+    end;
+    // handle batch pending request sending (if table or fCommand changed)
+    PerformRestChange;
+    // prepare space for the next results
+    if fCount >= length(fResults) then
+      SetLength(fResults, NextGrow(fCount));
+  end;
+  // process CRUD fCommand operation
+  result := false;
+  fResults[fCount] := HTTP_NOTMODIFIED;
+  case fEncoding of
+    encPost:
+      begin
+        fValueID := fOrm.EngineAdd(fRunTableIndex, fValue);
+        fResults[fCount] := fValueID;
+        if fValueID <> 0 then
+        begin
+          if fOrm.fCache <> nil then
+            fOrm.fCache.Notify(fRunTableIndex, fValueID, fValue, ooInsert);
+          result := true;
+        end;
+      end;
+    encSimple,
+    encPostHex,
+    encPostHexID,
+    encPutHexID:
+      begin
+        // note: DB operation could be delayed in InternalBatchDirect()
+        // (for multi-insert, may be up to InternalBatchStop)
+        fValueID := fRunningRest.InternalBatchDirect(
+          fEncoding, fRunTableIndex, fValueDirectFields, fValueDirect);
+        fResults[fCount] := fValueID;
+        if fValueID <> 0 then
+          result := true;
+        // no ready-to-used fValue -> no fCache notification
+      end;
+    encPut:
+      if fOrm.EngineUpdate(fRunTableIndex, fValueID, fValue) then
+      begin
+        fResults[fCount] := HTTP_SUCCESS; // 200 ok
+        result := true;
+        if fOrm.fCache <> nil then
+          // JSON fValue may be uncomplete -> delete from cache
+          if not (boPutNoCacheFlush in fBatchOptions) then
+            fOrm.fCache.NotifyDeletion(fRunTableIndex, fValueID);
+      end;
+    encDelete:
+      if fOrm.EngineDelete(fRunTableIndex, fValueID) then
+      begin
+        if fOrm.fCache <> nil then
+          fOrm.fCache.NotifyDeletion(fRunTableIndex, fValueID);
+        if (fRunningBatchRest <> nil) or
+           fOrm.AfterDeleteForceCoherency(fRunTableIndex, fValueID) then
+        begin
+          fResults[fCount] := HTTP_SUCCESS; // 200 ok
+          result := true;
+        end;
+      end;
+  end;
+end;
+
+procedure TRestOrmServerBachSend.ProcessError(E: Exception);
+var
+  i: PtrInt;
+begin
+  if (fRowCountPerTrans > 0) and
+     (fRowCountPerCurrTrans > 0) then
+  begin
+    for i := 0 to high(fRunTableTrans) do
+      if fRunTableTrans[i] <> nil then
+        fRunTableTrans[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
+    UniqueRawUtf8ZeroToTilde(fData, 1 shl 16);
+    fLog.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
+      'transaction data=%', [E, fData]);
+  end;
+end;
+
+procedure TRestOrmServerBachSend.ProcessLog;
+begin
+  fLog.Log(LOG_TRACEERROR[fErrors <> 0], 'EngineBatchSend json=% count=% ' +
+    'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
+    [KB(fData), fCount, fErrors, fCounts[encPost], fCounts[encSimple],
+     fCounts[encPostHex], fCounts[encPostHexID], fCounts[encPut],
+     fCounts[encDelete], fTimer.Stop, fTimer.PerSec(fCount)], self);
+end;
+
+procedure TRestOrmServerBachSend.ParseHeader;
+var
+  tablename: RawUtf8;
+begin
+  fParse.Json := pointer(fData); // will be parsed therefore in-place modified
+  if fParse.Json = nil then
+    raise EOrmBatchException.CreateUtf8(
+      '%.EngineBatchSend(%,"")', [self, fTable]);
+  if fTable <> nil then
+  begin
+    fMainTableIndex := fOrm.Model.GetTableIndexExisting(fTable);
+    // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
+    if not NextNotSpaceCharIs(fParse.Json, '{') then
+      raise EOrmBatchException.CreateUtf8('%.EngineBatchSend: Missing {', [self]);
+    tablename := GetJsonPropName(fParse.Json);
+    if (tablename = '') or
+       (fParse.Json = nil) or
+       not IdemPropNameU(tablename,
+         fOrm.Model.TableProps[fMainTableIndex].Props.SqlTableName) then
+      raise EOrmBatchException.CreateUtf8(
+        '%.EngineBatchSend(%): Wrong "Table":"%"', [self, fTable, tablename]);
+  end
+  else
+    // or '["cmd@Table":values,...]'
+    fMainTableIndex := -1;
+  if not NextNotSpaceCharIs(fParse.Json, '[') then
+    raise EOrmBatchException.CreateUtf8(
+      '%.EngineBatchSend: Missing [', [self]);
+  if IdemPChar(fParse.Json, '"AUTOMATICTRANSACTIONPERROW",') then
+  begin
+    inc(fParse.Json, 29);
+    fRowCountPerTrans := GetNextItemCardinal(fParse.Json, ',');
+  end
+  else
+    fRowCountPerTrans := 0;
+  SetLength(fRunTableTrans, fOrm.Model.TablesMax + 1);
+  fRunMainTrans := false;
+  fRowCountPerCurrTrans := 0;
+  if IdemPChar(fParse.Json, '"OPTIONS",') then
+  begin
+    inc(fParse.Json, 10);
+    byte(fBatchOptions) := GetNextItemCardinal(fParse.Json, ',');
+  end
+  else
+    byte(fBatchOptions) := 0;
+end;
+
+function TRestOrmServerBachSend.ParseAndExecute: integer;
+begin
+  fLog := fOrm.LogClass.Enter('EngineBatchSend % inlen=%',
+    [fTable, length(fData)], self);
+  //log.Log(sllCustom2, Data, self, 100 shl 10);
+  fTimer.Start;
+  ParseHeader;
+  fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
+  // try..except to intercept any error
+  try
+    // try..finally for transactions, writelock and InternalBatchStart
+    try
+      // main loop: process one POST/PUT/DELETE per iteration
+      // "POST",{object}  "SIMPLE",[values]  "PUT",{object}  "DELETE",id
+      repeat
+        // parse command (e.g. "POST"), table, and next value
+        ParseNextCommandAndValue;
+        // execute the value (may be now or in next InternalBatchStop)
+        if not ExecuteNextValue then
+          if boRollbackOnError in fBatchOptions then
+            raise EOrmBatchException.CreateUtf8(
+              '%.EngineBatchSend: Results[%]=% on % %',
+              [self, fCount, fResults[fCount], fCommand, fRunTable])
+          else
+            inc(fErrors);
+        inc(fCount);
+        inc(fCounts[fEncoding]);
+      until fParse.EndOfObject = ']';
+      if (fRowCountPerTrans > 0) and
+         (fRowCountPerCurrTrans > 0) then
+        // send pending rows within transaction
+        PerformAutomaticCommit;
+    finally
+      // send pending rows, and release Safe.Lock
+      try
+        if fRunningBatchRest <> nil then
+          fRunningBatchRest.InternalBatchStop;
+      finally
+        fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
+        if LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level then
+      end;
+    end;
+  except
+    on E: Exception do
+    begin
+      ProcessError(E);
+      raise;
+    end;
+  end;
+  if fTable <> nil then
+    // finalize '{"Table":["cmd":values,...]}' format parsing
+    ParseEnding;
+  // if we reached here, process was ok
+  if fCount = 0 then
+    fResults := nil
+  else
+    DynArrayFakeLength(fResults, fCount);
+  result := HTTP_SUCCESS;
+end;
+
 
 
 end.
