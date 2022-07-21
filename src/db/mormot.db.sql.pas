@@ -3249,7 +3249,7 @@ begin
     if not p.Valid then
       exit;
     case ParamType of
-      ftUtf8:
+      ftUtf8: // SQL single-quoted string
         QuotedStr(p.Value, p.ValueLen, '''', Values[i]);
       ftDate: // normalize
         Values[i] := DateTimeToIso8601(Iso8601ToDateTimePUtf8Char(
@@ -7804,7 +7804,6 @@ procedure TSqlDBStatementWithParams.BindArray(Param: integer;
   ParamType: TSqlDBFieldType; const Values: TRawUtf8DynArray; ValuesCount: integer);
 var
   i: PtrInt;
-  timeseparator: AnsiChar;
   p: PSqlDBParam;
 begin
   inherited; // raise an exception in case of invalid parameter
