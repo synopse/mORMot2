@@ -32,6 +32,7 @@ uses
   mormot.crypt.jwt,
   mormot.net.client,
   mormot.net.server,
+  mormot.net.async,
   mormot.net.relay,
   mormot.net.ws.core,
   mormot.net.ws.client,
@@ -74,6 +75,7 @@ type
     DataBase: TRestServerDB;
     Server: TRestHttpServer;
     Client: TRestClientURI;
+    fAsync: TAsyncConnectionsSockets; // to set hsoFavorHttp10 at runtime
     fHttps: boolean;
     /// perform the tests of the current Client instance
     procedure ClientTest;
@@ -183,7 +185,9 @@ begin
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
       HTTPS_DEFAULT_MODE[fHttps], 16, HTTPS_SECURITY_SELFSIGNED[true, fHttps],
-      '', '', [rsoLogVerbose]);
+      '', '', [{rsoLogVerbose}]);
+    if Server.HttpServer.InheritsFrom(THttpAsyncServer) then
+      fAsync := THttpAsyncServer(Server.HttpServer).Async.Clients;
     AddConsole('using % %', [Server.HttpServer, Server.HttpServer.APIVersion]);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
@@ -386,7 +390,11 @@ procedure TTestClientServerAccess.HttpClientMultiConnect;
 begin
   (Client as TRestHttpClientGeneric).KeepAliveMS := 0;
   (Client as TRestHttpClientGeneric).Compression := [];
+  if fAsync <> nil then
+    fAsync.ReadWaitMs := 100; // same as hsoFavorHttp10 at runtime
   ClientTest;
+  if fAsync <> nil then
+    fAsync.ReadWaitMs := 0; // back to normal
 end;
 
 {$ifndef PUREMORMOT2}
