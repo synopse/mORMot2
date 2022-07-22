@@ -184,7 +184,7 @@ type
     fTempGetValueFromContextHelper: TVariantDynArray;
     fReuse: TLightLock;
     fPathDelim: AnsiChar;
-    procedure PushContext(aDoc: TVarData);
+    procedure PushContext(const aDoc: TVarData);
     procedure PopContext; override;
     procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
       override;
@@ -529,7 +529,7 @@ begin
   fReuse.UnLock;
 end;
 
-procedure TSynMustacheContextVariant.PushContext(aDoc: TVarData);
+procedure TSynMustacheContextVariant.PushContext(const aDoc: TVarData);
 begin
   if fContextCount >= length(fContext) then
     // was roughtly set by SectionMaxCount
@@ -537,7 +537,7 @@ begin
   with fContext[fContextCount] do
   begin
     Document := aDoc;
-    DocumentType := FindSynVariantType(aDoc.VType);
+    DocumentType := DocVariantType.FindSynVariantType(aDoc.VType);
     ListCurrent := -1;
     if DocumentType = nil then
       ListCount := -1
@@ -559,7 +559,7 @@ var
   tmp: TVarData;
 begin
   if (ValueName = '') or
-     (ValueName[1] in ['0'..'9', '"', '{', '[']) or
+     (ValueName[1] in ['-', '0'..'9', '"', '{', '[']) or
      (ValueName = 'true') or
      (ValueName = 'false') or
      (ValueName = 'null') then
@@ -806,7 +806,8 @@ begin
       if ListCurrent >= ListCount then
         exit;
       DocumentType.Iterate(ListCurrentDocument, Document, ListCurrent);
-      ListCurrentDocumentType := FindSynVariantType(ListCurrentDocument.VType);
+      ListCurrentDocumentType := DocVariantType.FindSynVariantType(
+        ListCurrentDocument.VType);
       result := true;
     end;
 end;

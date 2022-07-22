@@ -7534,7 +7534,7 @@ begin
     begin
       dec(PtrUInt(Str1), PtrUInt(Str2));
       if Str1 = nil then
-        exit;
+        exit; // Str1=Str2
       repeat
         c := PByteArray(Str1)[PtrUInt(Str2)];
         if c <> PByte(Str2)^ then

@@ -237,7 +237,12 @@ type
     // - will first compare with its own VarType for efficiency
     // - returns true and set the matching CustomType if found, false otherwise
     function FindSynVariantType(aVarType: cardinal;
-      out CustomType: TSynInvokeableVariantType): boolean;
+      out CustomType: TSynInvokeableVariantType): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// search of a registered custom variant type from its low-level VarType
+    // - will first compare with its own VarType for efficiency
+    function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// customization of JSON parsing into variants
     // - is enabled only if the sioHasTryJsonToVariant option is set
     // - will be called by e.g. by VariantLoadJson() or GetVariantFromJsonField()
@@ -3641,6 +3646,15 @@ begin
     ct := mormot.core.variants.FindSynVariantType(aVarType);
   CustomType := ct;
   result := ct <> nil;
+end;
+
+function TSynInvokeableVariantType.FindSynVariantType(
+  aVarType: cardinal): TSynInvokeableVariantType;
+begin
+  if aVarType = VarType then
+    result := self
+  else
+    result := mormot.core.variants.FindSynVariantType(aVarType);
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;
