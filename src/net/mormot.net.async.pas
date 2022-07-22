@@ -53,6 +53,21 @@ type
     soContinue,
     soClose);
 
+  /// low-level flags used by the state machine about one TPollAsyncConnection
+  // - fWasActive is set by TAsyncConnections.IdleEverySecond to purge rd/wr
+  // unused buffers, to avoid calling GetTickCount64 for every activity
+  // - fClosed is set by OnClose virtual method
+  // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
+  // - fSubRead/fSubWrite flags are set when Subscribe() has been called
+  // - fInList indicates that the connection was Added to the list
+  TPollAsyncConnectionFlags = set of (
+    fWasActive,
+    fClosed,
+    fFirstRead,
+    fSubRead,
+    fSubWrite,
+    fInList);
+
   /// abstract parent to store information aboout one TPollAsyncSockets connection
   TPollAsyncConnection = class(TSynPersistent)
   protected
@@ -67,14 +82,7 @@ type
     /// false for a single lock (default), true to separate read/write locks
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
-    // - fWasActive is set by TAsyncConnections.IdleEverySecond to purge rd/wr
-    // unused buffers, to avoid calling GetTickCount64 for every activity
-    // - fClosed is set by OnClose virtual method
-    // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
-    fFlags: set of (fWasActive, fClosed, fFirstRead);
-    /// pseRead/pseWrite flags set when Subscribe() has been called
-    // - pseClosed indicates that the connection was Added to the list
-    fSubscribed: TPollSocketEvents;
+    fFlags: TPollAsyncConnectionFlags;
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -1068,6 +1076,9 @@ begin
   end;
 end;
 
+const
+  _SUB: array[boolean] of AnsiChar = '+-';
+
 function TPollAsyncSockets.Stop(connection: TPollAsyncConnection): boolean;
 var
   sock: TNetSocket;
@@ -1081,15 +1092,16 @@ begin
     // retrieve the raw information of this abstract connection
     sock := connection.fSocket;
     if fDebugLog <> nil then
-      DoLog('Stop sock=% handle=% r=% w=% sub=%',
+      DoLog('Stop sock=% handle=% r=%% w=%%',
         [pointer(sock), connection.Handle, connection.fRW[false].RentrantCount,
-         connection.fRW[true].RentrantCount, ToText(connection.fSubscribed)]);
+         _SUB[fSubRead in connection.fFlags], connection.fRW[true].RentrantCount,
+         _SUB[fSubWrite in connection.fFlags]]);
     if sock <> nil then
     begin
       // notify ProcessRead/ProcessWrite to abort
       connection.fSocket := nil;
       // unsubscribe and close the socket
-      if pseWrite in connection.fSubscribed then
+      if fSubWrite in connection.fFlags then
         // write first because of fRead.UnsubscribeShouldShutdownSocket
         fWrite.Unsubscribe(sock, TPollSocketTag(connection));
       if connection.fSecure <> nil then
@@ -1098,7 +1110,7 @@ begin
         except
           pointer(connection.fSecure) := nil; // leak is better than GPF
         end;
-      if pseRead in connection.fSubscribed then
+      if fSubRead in connection.fFlags then
         // note: fRead.UnsubscribeShouldShutdownSocket=true, so ShutdownAndClose
         // is done now on Epoll, or at next PollForPendingEvents()
         fRead.Unsubscribe(sock, TPollSocketTag(connection))
@@ -1279,20 +1291,24 @@ function TPollAsyncSockets.SubscribeConnection(const caller: shortstring;
 var
   poll: TPollSockets;
 begin
-  if not (pseClosed in connection.fSubscribed) then // not already registered
+  if not (fInList in connection.fFlags) then // not already registered
     RegisterConnection(connection);
-  if sub in connection.fSubscribed then
-  begin
-    result := false;
-    exit;
-  end;
+  result := false;
   if sub = pseRead then
-    poll := fRead
-  else
-    poll := fWrite;
+    if fSubRead in connection.fFlags then
+      exit
+    else
+      poll := fRead
+  else if fSubWrite in connection.fFlags then
+      exit
+    else
+      poll := fWrite;
   result := poll.Subscribe(connection.fSocket, [sub], TPollSocketTag(connection));
   if result then
-    include(connection.fSubscribed, sub);
+     if sub = pseRead then
+       include(connection.fFlags, fSubRead)
+     else
+       include(connection.fFlags, fSubWrite);
   if fDebugLog <> nil then
     DoLog('Subscribe(%)=% % handle=% % cnt=%', [pointer(connection.fSocket),
       BOOL_STR[result], caller, connection.Handle, ToText(sub)^, poll.Count]);
@@ -1421,7 +1437,7 @@ begin
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
-             not (pseRead in connection.fSubscribed) then
+             not (fSubRead in connection.fFlags) then
             // it is time to subscribe for any future read on this connection
             if not SubscribeConnection('read', connection, pseRead) then
               if fDebugLog <> nil then
@@ -1488,7 +1504,7 @@ begin
         else if res <> nrOk then
         begin
           fWrite.Unsubscribe(connection.fSocket, notif.tag);
-          exclude(connection.fSubscribed, pseWrite);
+          exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write failed as % -> Unsubscribe(%,%) %', [ToText(res)^,
               pointer(connection.fSocket), connection.Handle, fWrite]);
@@ -1520,7 +1536,7 @@ begin
         begin
           // no further ProcessWrite unless slot.fWr contains pending data
           fWrite.Unsubscribe(connection.fSocket, notif.tag);
-          exclude(connection.fSubscribed, pseWrite);
+          exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(sock=%,handle=%)=% %',
              [pointer(connection.fSocket), connection.Handle, fWrite]);
@@ -2068,7 +2084,7 @@ begin
   aConnection.fHandle := InterlockedIncrement(fLastHandle);
   if acoNoConnectionTrack in fOptions then
   begin
-    include(aConnection.fSubscribed, pseClosed);
+    include(aConnection.fFlags, fInList);
     LockedInc32(@fConnectionCount);
   end else if (fThreadReadPoll = nil) or
               aAddAndSubscribe then
@@ -2115,7 +2131,7 @@ var
   c: ^TPollAsyncConnection;
   i, n: PtrInt;
 begin
-  include(conn.fSubscribed, pseClosed); // mark as registered
+  include(conn.fFlags, fInList); // mark as registered
   fConnectionLock.WriteLock;
   try
     n := fConnectionCount;
@@ -2155,7 +2171,7 @@ begin
      (aConnection = nil) or
      (aConnection.Handle <= 0) then
     exit;
-  if not (pseClosed in aConnection.fSubscribed) then
+  if not (fInList in aConnection.fFlags) then
   begin
     // this connection was not part of fConnection[] list nor subscribed
     // e.g. HTTP/1.0 short request -> explicit GC - Free is unstable here
@@ -2163,7 +2179,7 @@ begin
     result := true;
     exit;
   end;
-  exclude(aConnection.fSubscribed, pseClosed);
+  exclude(aConnection.fFlags, fInList);
   conn := ConnectionFindAndLock(aConnection.Handle, cWrite, @i);
   if conn <> nil then
     try
