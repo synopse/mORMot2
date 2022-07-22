@@ -1336,7 +1336,7 @@ var
   connection: TPollAsyncConnection;
   recved, added: integer;
   res: TNetResult;
-  timer: TPrecisionTimer;
+  start, stop: Int64;
   wf: string[3];
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
@@ -1388,7 +1388,7 @@ begin
              (connection.fSocket = nil) then
             exit;
           if fDebugLog <> nil then
-            timer.Start;
+            QueryPerformanceMicroSeconds(start);
           recved := SizeOf(temp);
           res := connection.Recv(@temp, recved); // no need of RecvPending()
           if (res = nrRetry) and
@@ -1403,8 +1403,11 @@ begin
           else
             wf[0] := #0;
           if fDebugLog <> nil then
+          begin
+            QueryPerformanceMicroSeconds(stop);
             DoLog('ProcessRead recv(%)=% len=% %in % %', [pointer(connection.Socket),
-              ToText(res)^, recved, wf, timer.Stop, fRead]);
+              ToText(res)^, recved, wf, MicroSecToString(stop - start), fRead]);
+          end;
           if connection.fSocket = nil then
             exit; // Stop() called
           if res = nrRetry then
@@ -1463,7 +1466,7 @@ var
   buf: PByte;
   buflen, bufsent, sent: integer;
   res: TNetResult;
-  timer: TPrecisionTimer;
+  start, stop: Int64;
 begin
   connection := TPollAsyncConnection(notif.tag);
   if (self = nil) or
@@ -1486,7 +1489,7 @@ begin
       buf := connection.fWr.Buffer;
       repeat
         if fDebugLog <> nil then
-          timer.Start;
+          QueryPerformanceMicroSeconds(start);
         if fWrite.Terminated or
            (connection.fSocket = nil) then
           exit;
@@ -1494,9 +1497,12 @@ begin
         //DoLog('ProcessWrite: before Send buflen=%', [bufsent]);
         res := connection.Send(buf, bufsent);
         if fDebugLog <> nil then
+        begin
+          QueryPerformanceMicroSeconds(stop);
           DoLog('ProcessWrite send(%)=% %/%B in % % fProcessingWrite=%',
-            [pointer(connection.fSocket), ToText(res)^,
-             bufsent, buflen, timer.Stop, fWrite, fProcessingWrite]);
+            [pointer(connection.fSocket), ToText(res)^, bufsent, buflen,
+             MicroSecToString(stop - start), fWrite, fProcessingWrite]);
+        end;
         if connection.fSocket = nil then
           exit; // Stop() called
         if res = nrRetry then
