@@ -584,6 +584,11 @@ var
   c: TSqlDBPostgresConnection;
 begin
   SqlLogBegin(sllSQL);
+  if fRes <> nil then
+  begin
+    PQ.Clear(fRes); // if forgot to call ReleaseRows
+    fRes := nil;
+  end;
   if fSqlPrepared = '' then
     raise ESqlDBPostgres.CreateUtf8(
       '%.ExecutePrepared: Statement not prepared', [self]);
