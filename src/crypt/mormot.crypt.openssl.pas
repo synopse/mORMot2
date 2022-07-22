@@ -2224,7 +2224,8 @@ end;
 function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;
 begin
   if HasPrivateSecret and
-     fX509.HasUsage(kuDigitalSignature) then
+     ((fX509 <> nil) and
+      fX509.HasUsage(kuDigitalSignature)) then
     result := fPrivKey.Sign(GetMD, Data, Len)
   else
     result := '';
