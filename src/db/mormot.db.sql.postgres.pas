@@ -56,9 +56,11 @@ type
     // - raise an exception in case libpg is not thead-safe
     // - aDatabaseName can be a Connection URI - see
     // https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING
-    // - if aDatabaseName contains connection URI with password we recommend to repeat password
-    // in aPassword parameter to prevent logging it (see TSqlDBConnectionProperties.DatabaseNameSafe)
-    // - better to use environment variables and postgres config file for connection parameters
+    // - if aDatabaseName contains a connection URI with password, we recommend
+    // to repeat the password in aPassword parameter to prevent logging it
+    // (see TSqlDBConnectionProperties.DatabaseNameSafe)
+    // - it may be better to use environment variables and postgres config file
+    // for connection parameters
     constructor Create(
       const aServerName, aDatabaseName, aUserID, aPassword: RawUtf8); override;
     /// create a new connection
@@ -128,9 +130,9 @@ type
   TSqlDBPostgresStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fPreparedStmtName: RawUtf8; // = SHA-256 of the SQL
-    fPreparedParamsCount: integer;
     fRes: pointer;
     fResStatus: integer;
+    fPreparedParamsCount: integer;
     // pointers to query parameters; initialized by Prepare, filled in Executeprepared
     fPGParams: TPointerDynArray;
     // 0 - text, 1 - binary; initialized by Prepare, filled in Executeprepared
@@ -424,7 +426,7 @@ begin
   MapOid(FLOAT8OID, ftDouble);
   MapOid(TIMESTAMPOID, ftDate);
   MapOid(BYTEAOID, ftBlob);
-  MapOid(NUMERICOID, ftCurrency);// our ORM uses NUMERIC(19,4) for currency
+  MapOid(NUMERICOID, ftCurrency); // our ORM uses NUMERIC(19,4) for currency
   MapOid(BOOLOID, ftInt64);
   MapOid(INT2OID, ftInt64);
   MapOid(CASHOID, ftCurrency);
@@ -614,7 +616,7 @@ begin
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
           'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
       if p^.VArray[0] <> _BindArrayJson[0] then // p^.VData set by BindArrayJson
-        p^.VData := BoundArrayToJsonArray(p^.VArray);
+        p^.VData := BoundArrayToJsonArray(p^.VArray); // e.g. '{1,2,3}'
     end
     else
     begin
@@ -684,12 +686,17 @@ procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
 var
   p: PSqlDBParam;
 begin
-  if ValuesCount <= 0 then
-    ParamType := ftUnknown; // to raise exception
+  if (ValuesCount <= 0) or
+     (JsonArray = '') or
+     (JsonArray[1] <> '[') or
+     (JsonArray[length(JsonArray)] <> ']') then
+    ParamType := ftUnknown;    // to raise exception
   p := CheckParam(Param, ParamType, paramIn, 0);
   p^.VArray := _BindArrayJson; // fake marker
   p^.VInt64 := ValuesCount;
-  p^.VData := JsonArray;
+  JsonArray[1] := '{';
+  JsonArray[length(JsonArray)] := '}'; // PostgreSQL weird syntax
+  p^.VData := JsonArray;       // ExecutePrepared will use directly this
   fParamsArrayCount := ValuesCount;
 end;
 
