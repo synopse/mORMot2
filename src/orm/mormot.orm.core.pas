@@ -1364,7 +1364,7 @@ type
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitly this before having called StaticDataCreate()
+    // - you must call explicitly this before having called OrmMapInMemory()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or
@@ -3628,7 +3628,7 @@ type
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
-  POrmPropertiesMapping = ^TOrmPropertiesMapping;
+  POrmMapping = ^TOrmMapping;
 
   /// allow custom field mapping of a TOrm
   // - used e.g. for external database process, including SQL generation,
@@ -3637,9 +3637,9 @@ type
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
   {$ifdef USERECORDWITHMETHODS}
-  TOrmPropertiesMapping = record
+  TOrmMapping = record
   {$else}
-  TOrmPropertiesMapping = object
+  TOrmMapping = object
   {$endif USERECORDWITHMETHODS}
   private
     /// storage of main read-only properties
@@ -3651,7 +3651,7 @@ type
     fExtFieldNamesUnQuotedSql: TRawUtf8DynArray;
     fSql: TOrmModelPropertiesSql;
     fFieldNamesMatchInternal: TFieldBits;
-    fOptions: TOrmPropertiesMappingOptions;
+    fOptions: TOrmMappingOptions;
     fAutoComputeSql: boolean;
     fMappingVersion: cardinal;
     /// fill fRowIDFieldName/fSql with the current information
@@ -3662,10 +3662,9 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.MapField('IntField', 'ExtField');
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
-    function MapField(
-      const InternalName, ExternalName: RawUtf8): POrmPropertiesMapping;
+    function MapField(const InternalName, ExternalName: RawUtf8): POrmMapping;
     /// call this method to ensure that all fields won't conflict with a SQL
     // keyword for the given database
     // - by default, no check is performed: you can use this method to ensure
@@ -3676,19 +3675,18 @@ type
     // !   MapField('IntField', 'ExtField').
     // !   MapAutoKeywordFields;
     // - will in fact include the rpmAutoMapKeywordFields flag in Options
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
-    function MapAutoKeywordFields: POrmPropertiesMapping;
+    function MapAutoKeywordFields: POrmMapping;
     /// specify some advanced options for the field mapping
-    // - see TOrmPropertiesMappingOptions for all possibilities
+    // - see TOrmMappingOptions for all possibilities
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.
     // !   MapField('IntField', 'ExtField').
     // !   SetOptions([rpmNoCreateMissingTable, rpmNoCreateMissingField]);
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().SetOptions().MapField(); calls to map several fields
-    function SetOptions(
-      aOptions: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
+    function SetOptions(aOptions: TOrmMappingOptions): POrmMapping;
     /// add several custom field mappings
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.
@@ -3697,8 +3695,7 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - is slightly faster than several chained MapField() calls, since SQL
     // will be computed only once
-    function MapFields(
-      const InternalExternalPairs: array of RawUtf8): POrmPropertiesMapping;
+    function MapFields(const InternalExternalPairs: array of RawUtf8): POrmMapping;
   public
     /// initialize the field mapping for a given TOrm
     // - if AutoComputeSql is true, will pre-compute all needed SQL from the
@@ -3707,7 +3704,7 @@ type
     // custom field mapping
     procedure Init(Table: TOrmClass; const MappedTableName: RawUtf8;
       MappedConnection: TObject; AutoComputeSql: boolean;
-      MappingOptions: TOrmPropertiesMappingOptions);
+      MappingOptions: TOrmMappingOptions);
     /// map a field name from its internal name to its external name
     // - raise an EOrmException if the supplied field name is not defined in
     // the TOrm as ID or a published property
@@ -3805,7 +3802,7 @@ type
     property FieldNamesMatchInternal: TFieldBits
       read fFieldNamesMatchInternal;
     /// how the mapping process will take place
-    property Options: TOrmPropertiesMappingOptions
+    property Options: TOrmMappingOptions
       read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
@@ -3844,7 +3841,7 @@ type
     // tables with mapped table or fields names
     Sql: TOrmModelPropertiesSql;
     /// allow SQL process for one external TOrm in this model
-    ExternalDB: TOrmPropertiesMapping;
+    ExternalDB: TOrmMapping;
     /// will by-pass automated table and field creation for this TOrm
     // - may be used e.g. when the TOrm is in fact mapped into a View,
     // or is attached as external table and not a real local table
@@ -4115,9 +4112,10 @@ type
     // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
     // be used to specify e.g. connection parameters as expected by mormot.orm.sql
     // - call it before TRestServer.Create()
+    // - raise EModelException on error, or return the external DB table mapping
     function VirtualTableRegister(aClass: TOrmClass; aModule: TClass;
       const aExternalTableName: RawUtf8 = ''; aExternalDataBase: TObject = nil;
-      aMappingOptions: TOrmPropertiesMappingOptions = []): boolean;
+      aMappingOptions: TOrmMappingOptions = []): POrmMapping;
     /// retrieve a Virtual Table module associated to a class
     // - returns a TOrmVirtualTableClass type definition
     function VirtualTableModule(aClass: TOrmClass): TClass;
@@ -4909,6 +4907,8 @@ type
   TSqlRestCache = TRestCache;
   TSqlRestBatch = TRestBatch;
   TSqlRestBatchLocked = TRestBatchLocked;
+  TOrmPropertiesMapping = TOrmMapping;
+  TOrmPropertiesMappingOptions = TOrmMappingOptions;
 
 {$endif PUREMORMOT2}
 
@@ -10060,11 +10060,11 @@ end;
 
 function TOrmModel.VirtualTableRegister(aClass: TOrmClass; aModule: TClass;
   const aExternalTableName: RawUtf8; aExternalDataBase: TObject;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): POrmMapping;
 var
   i: PtrInt;
 begin
-  result := false;
+  result := nil;
   if aClass = nil then
     exit;
   if (aModule = nil) or
@@ -10082,11 +10082,11 @@ begin
         raise EModelException.CreateUtf8('Invalid %.VirtualTableRegister(%) call: ' +
           'impossible to set class as virtual', [self, aClass]);
     ExternalDB.Init(aClass, aExternalTableName, aExternalDataBase, true, aMappingOptions);
+    result := @ExternalDB;
   end;
   if high(fVirtualTableModule) <> fTablesMax then
     SetLength(fVirtualTableModule, fTablesMax + 1);
   fVirtualTableModule[i] := aModule;
-  result := true;
 end;
 
 function TOrmModel.VirtualTableModule(aClass: TOrmClass): TClass;
@@ -10135,7 +10135,7 @@ constructor TOrmModelProperties.Create(aModel: TOrmModel; aTable: TOrmClass;
   aKind: TOrmVirtualKind);
 var
   f: PtrInt;
-begin // similar to TOrmPropertiesMapping.ComputeSql
+begin // similar to TOrmMapping.ComputeSql
   fModel := aModel;
   fTableIndex := fModel.GetTableIndexExisting(aTable);
   fProps := aTable.OrmProps;
@@ -10309,11 +10309,11 @@ end;
 
 
 
-{ TOrmPropertiesMapping }
+{ TOrmMapping }
 
-procedure TOrmPropertiesMapping.Init(Table: TOrmClass;
+procedure TOrmMapping.Init(Table: TOrmClass;
   const MappedTableName: RawUtf8; MappedConnection: TObject; AutoComputeSql: boolean;
-  MappingOptions: TOrmPropertiesMappingOptions);
+  MappingOptions: TOrmMappingOptions);
 begin
   // set associated properties
   fProps := Table.OrmProps;
@@ -10334,15 +10334,15 @@ begin
     ComputeSql;
 end;
 
-function TOrmPropertiesMapping.MapField(
-  const InternalName, ExternalName: RawUtf8): POrmPropertiesMapping;
+function TOrmMapping.MapField(
+  const InternalName, ExternalName: RawUtf8): POrmMapping;
 begin
   MapFields([InternalName, ExternalName]);
   result := @self;
 end;
 
-function TOrmPropertiesMapping.MapFields(
-  const InternalExternalPairs: array of RawUtf8): POrmPropertiesMapping;
+function TOrmMapping.MapFields(
+  const InternalExternalPairs: array of RawUtf8): POrmMapping;
 var
   i, f: PtrInt;
 begin
@@ -10373,22 +10373,22 @@ begin
   result := @self;
 end;
 
-function TOrmPropertiesMapping.MapAutoKeywordFields: POrmPropertiesMapping;
+function TOrmMapping.MapAutoKeywordFields: POrmMapping;
 begin
   if @self <> nil then
     include(fOptions, rpmAutoMapKeywordFields);
   result := @self;
 end;
 
-function TOrmPropertiesMapping.SetOptions(
-  aOptions: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
+function TOrmMapping.SetOptions(
+  aOptions: TOrmMappingOptions): POrmMapping;
 begin
   if @self <> nil then
     fOptions := aOptions;
   result := @self;
 end;
 
-procedure TOrmPropertiesMapping.ComputeSql;
+procedure TOrmMapping.ComputeSql;
 
 type
   // similar to TOrmModelProperties.Create()/SetKind()
@@ -10462,7 +10462,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.InternalToExternal(
+function TOrmMapping.InternalToExternal(
   const FieldName: RawUtf8): RawUtf8;
 var
   f: PtrInt;
@@ -10474,7 +10474,7 @@ begin
     result := fExtFieldNames[f];
 end;
 
-function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUtf8;
+function TOrmMapping.InternalToExternal(BlobField: PRttiProp): RawUtf8;
 var
   f: PtrInt;
 begin
@@ -10485,7 +10485,7 @@ begin
     result := fExtFieldNames[f];
 end;
 
-function TOrmPropertiesMapping.InternalCsvToExternalCsv(
+function TOrmMapping.InternalCsvToExternalCsv(
   const CsvFieldNames, Sep, SepEnd: RawUtf8): RawUtf8;
 var
   IntFields, ExtFields: TRawUtf8DynArray;
@@ -10495,7 +10495,7 @@ begin
   result := RawUtf8ArrayToCsv(ExtFields, Sep) + SepEnd;
 end;
 
-procedure TOrmPropertiesMapping.InternalToExternalDynArray(
+procedure TOrmMapping.InternalToExternalDynArray(
   const IntFieldNames: array of RawUtf8; out result: TRawUtf8DynArray;
   IntFieldIndex: PIntegerDynArray);
 var
@@ -10517,7 +10517,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.ExternalToInternalIndex(
+function TOrmMapping.ExternalToInternalIndex(
   const ExtFieldName: RawUtf8): integer;
 begin
   if IdemPropNameU(ExtFieldName, RowIDFieldName) then
@@ -10532,7 +10532,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.ExternalToInternalOrNull(
+function TOrmMapping.ExternalToInternalOrNull(
   const ExtFieldName: RawUtf8): RawUtf8;
 var
   i: PtrInt;
@@ -10546,7 +10546,7 @@ begin
     result := ''; // indicates not found
 end;
 
-function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
+function TOrmMapping.AppendFieldName(FieldIndex: integer;
   var Text: RawUtf8): boolean;
 begin
   result := false; // success
@@ -10559,7 +10559,7 @@ begin
     Text := Text + ExtFieldNames[FieldIndex];
 end;
 
-function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
+function TOrmMapping.AppendFieldName(FieldIndex: integer;
   WR: TJsonWriter): boolean;
 begin
   result := false; // success
@@ -10572,7 +10572,7 @@ begin
     WR.AddString(ExtFieldNames[FieldIndex]);
 end;
 
-function TOrmPropertiesMapping.FieldNameByIndex(FieldIndex: integer): RawUtf8;
+function TOrmMapping.FieldNameByIndex(FieldIndex: integer): RawUtf8;
 begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName

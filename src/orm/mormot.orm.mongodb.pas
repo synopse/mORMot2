@@ -270,7 +270,7 @@ function StaticMongoDBRegisterAll(aServer: TRestOrmServer;
 // of this kind will be created and returned
 // - if aDefinition.Kind is 'MongoDB' or 'MongoDBS', it will instantiate an
 // in-memory TRestServerDB or a TRestServerFullMemory instance (calling
-// CreateInMemoryServerForAllVirtualTables), then StaticMongoDBRegisterAll()
+// CreateInMemoryServer), then StaticMongoDBRegisterAll()
 // with a TMongoClient initialized from aDefinition.ServerName
 // ('server' or 'server:port') - optionally with TLS enabled if Kind equals
 // 'MongoDBS' - and a TMongoDatabase created from aDefinition.DatabaseName,
@@ -1732,8 +1732,7 @@ begin
         end
         else
           database := client.Open(DatabaseName);
-      result := CreateInMemoryServerForAllVirtualTables(
-        aModel, aHandleAuthentication);
+      result := CreateInMemoryServer(aModel, aHandleAuthentication);
       StaticMongoDBRegisterAll(
         (result as TRestServer).OrmInstance as TRestOrmServer,
         database, aOptions, aMongoDBIdentifier);

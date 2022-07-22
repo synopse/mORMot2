@@ -281,7 +281,7 @@ begin
     Props := TSqlDBSQLite3ConnectionProperties.Create(
       SQLITE_MEMORY_DATABASE_NAME, '', '', '');
     try
-      VirtualTableExternalMap(fExternalModel, TOrmPeopleExt, Props,
+      OrmMapExternal(fExternalModel, TOrmPeopleExt, Props,
         'SampleRecord').MapField('LastChange', 'Changed');
       Ext := TRestStorageExternalHook.Create(
         TOrmPeopleExt, Server.OrmInstance as TRestOrmServer);
@@ -464,7 +464,7 @@ begin
         TSqlDBZeosConnectionProperties.URI(
           dFirebird, '', FIREBIRDEMBEDDEDDLL, False), 'test.fdb', '', '');
       try
-        VirtualTableExternalMap(Model, TOrmPeople, Props, 'peopleext').
+        OrmMapExternal(Model, TOrmPeople, Props, 'peopleext').
           MapFields(['ID', 'key',
                      'YearOfBirth', 'yob']);
         Server := TRestServerDB.Create(Model, SQLITE_MEMORY_DATABASE_NAME);
@@ -573,7 +573,7 @@ begin
       DeleteFile('test.mdb');
       Props := TSqlDBOleDBJetConnectionProperties.Create('test.mdb', '', '', '');
       try
-        VirtualTableExternalRegister(Model, TOrmPeople, Props, '');
+        OrmMapExternal(Model, TOrmPeople, Props, '');
         Client := TRestClientDB.Create(
           Model, nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB);
         try
@@ -989,21 +989,15 @@ begin
   fProperties := TSqlDBSQLite3ConnectionProperties.Create('extdata.db3', '', '', '');
   (fProperties.MainConnection as TSqlDBSQLite3Connection).Synchronous := smOff;
   (fProperties.MainConnection as TSqlDBSQLite3Connection).LockingMode := lmExclusive;
-  Check(VirtualTableExternalMap(
-    fExternalModel, TOrmPeopleExt, fProperties, 'PeopleExternal').
+  Check(OrmMapExternal(fExternalModel, TOrmPeopleExt, fProperties, 'PeopleExternal').
       MapField('ID', 'Key').
       MapField('YearOfDeath', 'YOD').
       MapAutoKeywordFields <> nil);
-  Check(VirtualTableExternalRegister(
-    fExternalModel, TOrmOnlyBlob, fProperties, 'OnlyBlobExternal'));
-  Check(VirtualTableExternalRegister(
-    fExternalModel, TOrmTestJoin, fProperties, 'TestJoinExternal'));
-  Check(VirtualTableExternalRegister(
-    fExternalModel, TOrmASource, fProperties, 'SourceExternal'));
-  Check(VirtualTableExternalRegister(
-    fExternalModel, TOrmADest, fProperties, 'DestExternal'));
-  Check(VirtualTableExternalRegister(
-    fExternalModel, TOrmADests, fProperties, 'DestsExternal'));
+  Check(OrmMapExternal(fExternalModel, TOrmOnlyBlob, fProperties, 'OnlyBlobExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmTestJoin, fProperties, 'TestJoinExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmASource, fProperties, 'SourceExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADest, fProperties, 'DestExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADests, fProperties, 'DestsExternal') <> nil);
   DeleteFile('testExternal.db3'); // need a file for backup testing
   if TrackChanges and
      StaticVirtualTableDirect then

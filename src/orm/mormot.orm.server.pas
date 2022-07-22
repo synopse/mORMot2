@@ -188,7 +188,7 @@ type
     procedure EndCurrentThread(Sender: TThread); override;
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitly this before having called StaticDataCreate()
+    // - you must call explicitly this before having called OrmMapInMemory()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or
@@ -248,7 +248,7 @@ type
     procedure RefreshInternalStateFromStatic;
     /// assign a TRestOrm instance for a given slot
     // - called e.g. by TOrmVirtualTable.Create, StaticMongoDBRegister(),
-    // StaticDataCreate() or TRestOrmServer.RemoteDataCreate
+    // OrmMapInMemory() or TRestOrmServer.RemoteDataCreate
     procedure StaticTableSetup(aTableIndex: integer; aStatic: TRestOrm;
       aKind: TRestServerKind);
     /// fast get the associated static server or virtual table from its index, if any
@@ -374,10 +374,10 @@ type
     // return a TRestStorageExternal instance (as defined in mormot.orm.sql)
     // - this property will return nil if there is no Virtual Table associated
     // or if the corresponding module is not a TOrmVirtualTable
-    // (e.g. "pure" static tables registered by StaticDataCreate will be
+    // (e.g. "pure" static tables registered by OrmMapInMemory() will be
     // accessible only via StaticDataServer[], not via StaticVirtualTable[])
     // - has been associated by the TOrmModel.VirtualTableRegister method or
-    // the VirtualTableExternalRegister() global function
+    // the OrmMapExternal() global function
     property StaticVirtualTable[aClass: TOrmClass]: TRestOrm
       read GetVirtualTable;
     /// fast get the associated static server or virtual table, if any

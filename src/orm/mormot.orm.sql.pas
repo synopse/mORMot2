@@ -188,7 +188,7 @@ type
     function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
   public
     /// initialize the remote database connection
-    // - you should not use this, but rather call VirtualTableExternalRegister()
+    // - you should not use this, but rather call OrmMapExternal()
     // - OrmProps.ExternalDatabase will map the associated TSqlDBConnectionProperties
     // - OrmProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any databas<e schema prefix
@@ -356,8 +356,8 @@ type
   end;
 
   /// mormot.db.sql-based virtual table for accessing any external database
-  // - for ORM access, you should use VirtualTableExternalRegister method to
-  //   associate this virtual table module to any TOrm class
+  // - for ORM access, you should use the OrmMapExternal() function to
+  // associate this virtual table module to any TOrm class
   // - transactions are handled by this module, according to the external database
   TOrmVirtualTableExternal = class(TOrmVirtualTable)
   public { overridden methods }
@@ -422,56 +422,51 @@ type
 // - typical usage is therefore for instance:
 // !  Props := TOleDBMSSQLConnectionProperties.Create('.\SQLEXPRESS','AdventureWorks2008R2','','');
 // !  Model := TOrmModel.Create([TOrmCustomer],'root');
-// !  VirtualTableExternalRegister(Model,TOrmCustomer,Props,'Sales.Customer');
+// !  OrmMapExternal(Model,TOrmCustomer,Props,'Sales.Customer');
 // !  Server := TRestServerDB.Create(aModel,'application.db'),true)
 // - the supplied aExternalDB parameter is stored within aClass.OrmProps, so
 // the instance must stay alive until all database access to this external table
 // is finished (e.g. use a private/protected property)
 // - aMappingOptions can be specified now, or customized later
-// - server-side may omit a call to VirtualTableExternalRegister() if the need of
+// - server-side may omit a call to OrmMapExternal() if the need of
 // an internal database is expected: it will allow custom database configuration
 // at runtime, depending on the customer's expectations (or license)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+// - this method would allow to chain MapField() or MapAutoKeywordFields
+// definitions, in a fluent interface, to refine the fields mapping
+function OrmMapExternal(aModel: TOrmModel; aClass: TOrmClass;
   aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8 = '';
-  aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
+  aMappingOptions: TOrmMappingOptions = []): POrmMapping; overload;
 
 /// register several tables of the model to be external
-// - just a wrapper over the overloaded VirtualTableExternalRegister() method
-function VirtualTableExternalRegister(aModel: TOrmModel;
+// - just a wrapper over the overloaded OrmMapExternal() method
+function OrmMapExternal(aModel: TOrmModel;
   const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
-
-/// register one table of the model to be external, with optional mapping
-// - this method would allow to chain MapField() or MapAutoKeywordFields
-// definitions, in a fluent interface:
-function VirtualTableExternalMap(aModel: TOrmModel;
-  aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  const aExternalTableName: RawUtf8 = '';
-  aMapping: TOrmPropertiesMappingOptions = []): POrmPropertiesMapping;
+  aMappingOptions: TOrmMappingOptions = []): boolean; overload;
 
 type
-  /// all possible options for VirtualTableExternalRegisterAll/TRestExternalDBCreate
+  /// all possible options for OrmMapExternalAll/TRestExternalDBCreate
   // - by default, TAuthUser and TAuthGroup tables will be handled via the
   // external DB, but you can avoid it for speed when handling session and security
-  // by setting regDoNotRegisterUserGroupTables
+  // by setting regDoNotRegisterUserGroupTables - it would also allow to encrypt
+  // the SQLite3 instance and its authentication information for higher security
   // - you can set regMapAutoKeywordFields to ensure that the mapped field names
   // won't conflict with a SQL reserved keyword on the external database by
   // mapping a name with a trailing '_' character for the external column
   // - regClearPoolOnConnectionIssue will call ClearConnectionPool when a
   // connection-linked exception is discovered
-  TVirtualTableExternalRegisterOption = (
+  TOrmMapExternalOption = (
     regDoNotRegisterUserGroupTables,
     regMapAutoKeywordFields,
     regClearPoolOnConnectionIssue);
 
-  /// set of options for VirtualTableExternalRegisterAll/TRestExternalDBCreate functions
-  TVirtualTableExternalRegisterOptions = set of TVirtualTableExternalRegisterOption;
+  /// set of options for OrmMapExternalAll/TRestExternalDBCreate functions
+  TOrmMapExternalOptions = set of TOrmMapExternalOption;
 
 /// register all tables of the model to be external, with some options
 // - by default, all tables are handled by the SQLite3 engine, unless they
-// are explicitly declared as external via VirtualTableExternalRegister: this
+// are explicitly declared as external via OrmMapExternal: this
 // function can be used to register all tables to be handled by an external DBs
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)
@@ -485,18 +480,9 @@ type
 // mapping or connection loss detection
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+function OrmMapExternalAll(aModel: TOrmModel;
   aExternalDB: TSqlDBConnectionProperties;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
-
-/// register all tables of the model to be external
-// - mainly for retro-compatibility with existing code
-// - just a wrapper around the VirtualTableExternalRegisterAll() overloaded
-// function with some boolean flags instead of TVirtualTableExternalRegisterOptions
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSqlDBConnectionProperties;
-  DoNotRegisterUserGroupTables: boolean = false;
-  ClearPoolOnConnectionIssue: boolean = false): boolean; overload;
+  aExternalOptions: TOrmMapExternalOptions): boolean; overload;
 
 
 /// create a new TRest instance, and possibly an external database, from its
@@ -505,12 +491,39 @@ function VirtualTableExternalRegisterAll(aModel: TOrmModel;
 // of this kind will be created and returned
 // - if aDefinition.Kind is a registered TSqlDBConnectionProperties class name,
 // it will instantiate an in-memory TRestServerDB or a TRestServerFullMemory
-// instance, then call VirtualTableExternalRegisterAll() on this connection
+// instance, then call OrmMapExternalAll() on this connection
 // - will return nil if the supplied aDefinition does not match any registered
 // TRest or TSqlDBConnectionProperties types
 function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): TRest; overload;
+  aExternalOptions: TOrmMapExternalOptions): TRest; overload;
+
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+type
+  TVirtualTableExternalRegisterOptions = TOrmMappingOptions;
+
+function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8 = '';
+  aMappingOptions: TVirtualTableExternalRegisterOptions = []): boolean; overload;
+function VirtualTableExternalRegister(aModel: TOrmModel;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  aMappingOptions: TVirtualTableExternalRegisterOptions = []): boolean; overload;
+function VirtualTableExternalMap(aModel: TOrmModel;
+  aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  const aExternalTableName: RawUtf8 = '';
+  aMapping: TVirtualTableExternalRegisterOptions = []): POrmMapping;
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  aExternalOptions: TOrmMapExternalOptions): boolean; overload;
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  DoNotRegisterUserGroupTables: boolean = false;
+  ClearPoolOnConnectionIssue: boolean = false): boolean; overload;
+
+{$endif PUREMORMOT2}
 
 
 implementation
@@ -603,7 +616,7 @@ var
   Field: TSqlDBColumnCreate;
   TableCreated, TableModified: boolean;
   CreateColumns: TSqlDBColumnCreateDynArray;
-  options: TOrmPropertiesMappingOptions;
+  options: TOrmMappingOptions;
 begin
   // initialize external DB properties
   options := fStoredClassMapping^.options;
@@ -2510,14 +2523,14 @@ end;
 
 { *********** External SQL Database Engines Registration }
 
-function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+function OrmMapExternal(aModel: TOrmModel; aClass: TOrmClass;
   aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): POrmMapping;
 var
   ExternalTableName: RawUtf8;
   Props: TOrmModelProperties;
 begin
-  result := False;
+  result := nil;
   if (aModel = nil) or
      (aClass = nil) or
      (aExternalDB = nil) then
@@ -2536,40 +2549,25 @@ begin
     aExternalDB.SqlFullTableName(ExternalTableName), aExternalDB, aMappingOptions);
 end;
 
-function VirtualTableExternalRegister(aModel: TOrmModel;
+function OrmMapExternal(aModel: TOrmModel;
   const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): boolean;
 var
   i: PtrInt;
 begin
   result := true;
-  for i := 0 to High(aClass) do
-    if not VirtualTableExternalRegister(
-       aModel, aClass[i], aExternalDB, '', aMappingOptions) then
+  for i := 0 to high(aClass) do
+    if OrmMapExternal(aModel, aClass[i], aExternalDB, '', aMappingOptions) = nil then
       result := false;
 end;
 
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+function OrmMapExternalAll(aModel: TOrmModel;
   aExternalDB: TSqlDBConnectionProperties;
-  DoNotRegisterUserGroupTables, ClearPoolOnConnectionIssue: boolean): boolean;
-var
-  opt: TVirtualTableExternalRegisterOptions;
-begin
-  opt := []; // to call the overloaded function below with proper options
-  if DoNotRegisterUserGroupTables then
-    include(opt, regDoNotRegisterUserGroupTables);
-  if ClearPoolOnConnectionIssue then
-    include(opt, regClearPoolOnConnectionIssue);
-  result := VirtualTableExternalRegisterAll(aModel, aExternalDB, opt);
-end;
-
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSqlDBConnectionProperties;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean;
+  aExternalOptions: TOrmMapExternalOptions): boolean;
 var
   i: PtrInt;
   rec: TOrmClass;
-  opt: TOrmPropertiesMappingOptions;
+  opt: TOrmMappingOptions;
 begin
   result := (aModel <> nil) and
             (aExternalDB <> nil);
@@ -2585,27 +2583,16 @@ begin
        (rec.InheritsFrom (TAuthGroup) or
         rec.InheritsFrom(TAuthUser)) then
       continue
-    else if not VirtualTableExternalRegister(aModel, rec, aExternalDB, '', opt) then
+    else if OrmMapExternal(aModel, rec, aExternalDB, '', opt) = nil then
       result := false
     else if regMapAutoKeywordFields in aExternalOptions then
       aModel.TableProps[i].ExternalDB.MapAutoKeywordFields;
   end;
 end;
 
-function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
-  aMapping: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
-begin
-  if VirtualTableExternalRegister(aModel, aClass, aExternalDB,
-    aExternalTableName, aMapping) then
-    result := @aModel.Props[aClass].ExternalDB
-  else
-    result := nil;
-end;
-
 function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): TRest;
+  aExternalOptions: TOrmMapExternalOptions): TRest;
 var
   propsClass: TSqlDBConnectionPropertiesClass;
   props: TSqlDBConnectionProperties;
@@ -2621,9 +2608,9 @@ begin
       // aDefinition.Kind was a TSqlDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,
         aDefinition.DatabaseName, aDefinition.User, aDefinition.PassWordPlain);
-      VirtualTableExternalRegisterAll(aModel, props, aExternalOptions);
+      OrmMapExternalAll(aModel, props, aExternalOptions);
       // instantiate either a SQLite3 :memory: DB or a TRestServerFullMemory
-      result := CreateInMemoryServerForAllVirtualTables(
+      result := CreateInMemoryServer(
         aModel, aHandleAuthentication);
     except
       FreeAndNilSafe(result);
@@ -2635,6 +2622,54 @@ begin
     result := TRest.CreateTryFrom(aModel, aDefinition, aHandleAuthentication);
 end;
 
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
+  aMappingOptions: TVirtualTableExternalRegisterOptions): boolean;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aExternalTableName,
+    aMappingOptions) <> nil;
+end;
+
+function VirtualTableExternalRegister(aModel: TOrmModel;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  aMappingOptions: TVirtualTableExternalRegisterOptions): boolean;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aMappingOptions);
+end;
+
+function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
+  aMapping: TVirtualTableExternalRegisterOptions): POrmMapping;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aExternalTableName, aMapping);
+end;
+
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  aExternalOptions: TOrmMapExternalOptions): boolean;
+begin
+  result := OrmMapExternalAll(aModel, aExternalDB, aExternalOptions);
+end;
+
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties; DoNotRegisterUserGroupTables: boolean;
+  ClearPoolOnConnectionIssue: boolean): boolean;
+var
+  opt: TOrmMapExternalOptions;
+begin
+  opt := []; // to call the overloaded function below with proper options
+  if DoNotRegisterUserGroupTables then
+    include(opt, regDoNotRegisterUserGroupTables);
+  if ClearPoolOnConnectionIssue then
+    include(opt, regClearPoolOnConnectionIssue);
+  result := OrmMapExternalAll(aModel, aExternalDB, opt);
+end;
+
+{$endif PUREMORMOT2}
 
 
 end.

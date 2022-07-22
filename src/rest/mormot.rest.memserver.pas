@@ -124,7 +124,7 @@ type
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitly this before having called StaticDataCreate()
+    // - you must call explicitly this before having called OrmMapInMemory()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method also create additional fields, if the TOrm definition
     // has been modified; only field adding is available, field renaming or
@@ -223,7 +223,7 @@ type
 // - you can use this method to change the filename of an existing storage
 // - return nil on any error, or an EModelException if the class is not in
 // the aServer database model
-function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
+function OrmMapInMemory(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName = ''; aBinaryFile: boolean = false;
   aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
 
@@ -233,7 +233,7 @@ function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
 // - will try to instantiate an in-memory (':memory:') TRestServerDB, and if
 // mormot.orm.sqlite3.pas is not linked, fallback to a TRestServerFullMemory
 // - used e.g. by TRestMongoDBCreate() and TRestExternalDBCreate()
-function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
+function CreateInMemoryServer(aModel: TOrmModel;
   aHandleUserAuthentication: boolean): TRestServer;
 
 
@@ -243,6 +243,12 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
 type
   // should be a proper type for RegisterClassNameForDefinition
   TSqlRestServerFullMemory = TRestServerFullMemory;
+
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
+  const aFileName: TFileName = ''; aBinaryFile: boolean = false;
+  aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
+function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
+  aHandleUserAuthentication: boolean): TRestServer;
 
 {$endif PUREMORMOT2}
 
@@ -262,7 +268,7 @@ begin
   // pre-allocate all TRestStorageInMemory instances
   fStaticDataCount := length(fModel.Tables);
   for t := 0 to fStaticDataCount - 1 do
-    StaticDataCreate(self, fModel.Tables[t]);
+    OrmMapInMemory(self, fModel.Tables[t]);
 end;
 
 constructor TRestOrmServerFullMemory.Create(aRest: TRest;
@@ -285,7 +291,7 @@ begin
   if fStaticDataCount <> length(fModel.Tables) then
   begin
     for t := fStaticDataCount to high(fModel.Tables) do
-      StaticDataCreate(self, fModel.Tables[t]);
+      OrmMapInMemory(self, fModel.Tables[t]);
     fStaticDataCount := length(fModel.Tables);
   end;
   // initialize new tables
@@ -602,7 +608,7 @@ end;
 
 { ************ TRestServerFullMemory Standalone REST Server }
 
-function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
+function OrmMapInMemory(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName; aBinaryFile: boolean;
   aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
 var
@@ -627,7 +633,7 @@ begin
   end;
 end;
 
-function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
+function CreateInMemoryServer(aModel: TOrmModel;
   aHandleUserAuthentication: boolean): TRestServer;
 var
   c: TRestClass;
@@ -638,12 +644,6 @@ begin
     // search SQLite3 by name, available if mormot.orm.sqlite3 is linked
     fake.Kind := 'TRestServerDB';
     c := TRest.ClassFrom(fake);
-    if (c = nil) or
-       not c.InheritsFrom(TRestServer) then
-    begin
-      fake.Kind := 'TSqlRestServerDB';
-      c := TRest.ClassFrom(fake);
-    end;
     if (c = nil) or
        not c.InheritsFrom(TRestServer) then
     begin
@@ -701,6 +701,24 @@ begin
     Ctxt.Success;
   end;
 end;
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
+  const aFileName: TFileName; aBinaryFile: boolean;
+  aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
+begin
+  result := OrmMapInMemory(aServer, aClass, aFileName, aBinaryFile, aStorageClass);
+end;
+
+function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
+  aHandleUserAuthentication: boolean): TRestServer;
+begin
+  result := CreateInMemoryServer(aModel, aHandleUserAuthentication);
+end;
+
+{$endif PUREMORMOT2}
 
 
 initialization

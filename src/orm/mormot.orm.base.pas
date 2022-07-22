@@ -578,7 +578,7 @@ type
   // rCustomForcedID/rCustomAutoID
   // - a plain TOrm class can be defined as rCustomForcedID (e.g. for
   // TOrmMany) after registration for an external DB via a call to
-  // VirtualTableExternalRegister() from mormot.orm.sql unit
+  // OrmMapExternal() from mormot.orm.sql unit
   TOrmVirtualKind = (
     ovkSQLite3,
     ovkFTS3,
@@ -652,7 +652,7 @@ type
     InsertSet: RawUtf8;
   end;
 
-  /// used by TOrmPropertiesMapping.Options for custom field mapping
+  /// used by TOrmMapping.Options for custom field mapping
   // of a TOrm on an external database process
   // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
   // i.e. if field names which may conflict with a keyword should be
@@ -666,7 +666,7 @@ type
   // - rpmQuoteFieldName will quote the field names - to be used e.g. with
   // FireBird in its Dialect 3
   // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
-  TOrmPropertiesMappingOptions = set of (
+  TOrmMappingOptions = set of (
     rpmAutoMapKeywordFields,
     rpmNoCreateMissingTable,
     rpmNoCreateMissingField,
@@ -680,7 +680,7 @@ const
     [ovkFTS3, ovkFTS4, ovkFTS5];
 
   /// if the TOrmVirtual table kind is not an embedded type
-  // - can be set for a TOrm after a VirtualTableExternalRegister call
+  // - can be set for a TOrm after a OrmMapExternal call
   IS_CUSTOM_VIRTUAL =
     [ovkCustomForcedID, ovkCustomAutoID];
 

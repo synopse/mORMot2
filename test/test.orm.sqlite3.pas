@@ -1759,7 +1759,7 @@ begin
             Server.NoAjaxJson := true;
             DeleteFile(WorkDir + 'People.json');
             DeleteFile(WorkDir + 'People.data');
-            StaticDataCreate(Server.OrmInstance, TOrmPeople, 'People.data', true);
+            OrmMapInMemory(Server.OrmInstance, TOrmPeople, 'People.data', true);
             json := Demo.ExecuteJson('SELECT * From People');
             aStatic := (Server.OrmInstance as TRestOrmServer).
               StaticDataServer[TOrmPeople] as TRestStorageInMemory;

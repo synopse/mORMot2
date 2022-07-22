@@ -505,7 +505,7 @@ type
     fStoredClass: TOrmClass;
     fStoredClassProps: TOrmModelProperties;
     fStoredClassRecordProps: TOrmProperties;
-    fStoredClassMapping: POrmPropertiesMapping;
+    fStoredClassMapping: POrmMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fModified: boolean;
     fOutInternalStateForcedRefresh: boolean;
@@ -709,7 +709,7 @@ type
   // - store the associated TOrm values in memory
   // - handle one TOrm per TRestStorageInMemory instance
   // - must be registered individualy in a TRestOrmServer to access data from a
-  // common client, by using the TRestOrmServer.StaticDataCreate method:
+  // common client, by using the TRestOrmServer.OrmMapInMemory method:
   // it allows an unique access for both SQLite3 and Static databases
   // - handle basic REST commands, no full SQL interpreter is implemented: only
   // valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;", i.e
@@ -1030,7 +1030,7 @@ type
       read GetID;
   published
     /// read only access to the file name specified by constructor
-    // - you can call the TRestOrmServer.StaticDataCreate method to
+    // - you can call the TRestOrmServer.StaticData method to
     // update the file name of an already instanciated static table
     // - if you change manually the file name from this property, the storage
     // will be marked as "modified" so that UpdateFile will save the content
