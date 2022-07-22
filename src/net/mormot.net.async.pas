@@ -302,8 +302,10 @@ type
     property WriteBytes: Int64
       read fWriteBytes;
     // enable WaitFor() during recv() in ProcessRead
-    // - enhance responsiveness especially on HTTP/1.0 connections
-    // - equals 50 ms by default, but could be tuned e.g. via acoNoReadWait
+    // - may enhance responsiveness especially on HTTP/1.0 connections
+    // - equals 0 ms by default, but could be tuned e.g. to 50 or 100 if needed
+    // - is set to 50 ms if hsoFavorHttp10 option is set
+    // - use with care: performance degrades with highly concurrent HTTP/1.1
     property ReadWaitMs: integer
       read fReadWaitMs write fReadWaitMs;
   end;
@@ -433,7 +435,6 @@ type
   // - acoDebugReadWriteLog would make low-level send/receive logging
   // - acoNoConnectionTrack would force to by-pass the internal Connections list
   // if it is not needed - not used by now
-  // - acoNoReadWait will set ReadWaitMs = 0 instead of 50 ms
   // - acoEnableTls flag for TLS support, via Windows SChannel or OpenSSL 1.1/3.x
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
@@ -443,7 +444,6 @@ type
     acoWritePollOnly,
     acoDebugReadWriteLog,
     acoNoConnectionTrack,
-    acoNoReadWait,
     acoEnableTls);
 
   /// implements an abstract thread-pooled high-performance TCP clients or server
@@ -1029,7 +1029,6 @@ begin
   fRead := TPollConnectionSockets.Create;
   fRead.UnsubscribeShouldShutdownSocket := true;
   fWrite := TPollSockets.Create;
-  fReadWaitMs := 50; // is mandatary e.g. for apache bench process
 end;
 
 destructor TPollAsyncSockets.Destroy;
@@ -1802,8 +1801,6 @@ begin
     include(opt, paoWritePollOnly);
   fClients := TAsyncConnectionsSockets.Create(opt);
   fClients.fOwner := self;
-  if acoNoReadWait in aOptions then
-    fClients.ReadWaitMs := 0;
   fClientsEpoll := fClients.fRead.PollClass.FollowEpoll;
   fClients.OnStart := ProcessClientStart;
   fClients.fWrite.OnGetOneIdle := ProcessIdleTix;
@@ -3151,7 +3148,6 @@ begin
   end;
   //include(aco, acoNoConnectionTrack);
   //include(aco, acoWritePollOnly);
-  //include(aco, acoNoReadWait);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
   if fConnectionClass = nil then
@@ -3162,6 +3158,8 @@ begin
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
+  if hsoFavorHttp10 in ProcessOptions then
+    fAsync.Clients.ReadWaitMs := 50;
   // launch this TThread instance
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
