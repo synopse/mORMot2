@@ -5212,6 +5212,7 @@ type
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Handle: pointer; override;
+    function PrivateKeyHandle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
       read fEcc;
@@ -5672,6 +5673,15 @@ end;
 function TCryptCertInternal.Handle: pointer;
 begin
   result := fEcc; // TEccCertificate or TEccCertificateSecret
+end;
+
+function TCryptCertInternal.PrivateKeyHandle: pointer;
+begin
+  if (fEcc = nil) or
+     not fEcc.InheritsFrom(TEccCertificateSecret) then
+    result := nil
+  else
+    result := @TEccCertificateSecret(fEcc).fPrivateKey;
 end;
 
 type

@@ -1827,6 +1827,7 @@ type
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Handle: pointer; override;
+    function PrivateKeyHandle: pointer; override;
   end;
 
   /// 'x509-store' ICryptStore algorithm
@@ -2354,6 +2355,11 @@ end;
 function TCryptCertOpenSsl.Handle: pointer;
 begin
   result := fX509; // a PX509 instance
+end;
+
+function TCryptCertOpenSsl.PrivateKeyHandle: pointer;
+begin
+  result := fPrivKey; // a PEVP_PKEY instance
 end;
 
 

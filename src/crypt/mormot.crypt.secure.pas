@@ -1485,10 +1485,14 @@ type
     function AsymAlgo: TCryptAsymAlgo;
     /// access to the low-level implementation class
     function Instance: TCryptCert;
-    /// access to the low-level implementation handle
+    /// access to the low-level implementation handle of the certificate
     // - e.g. PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
     // - equals nil if there is no associated certificate, e.g. after New
     function Handle: pointer;
+    /// access to the low-level implementation handle of the stored private key
+    // - e.g. PEVP_PKEY for OpenSsl, or PEccPrivateKey for mormot.crypt.ecc
+    // - equals nil if there is no associated private key
+    function PrivateKeyHandle: pointer;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
@@ -1553,6 +1557,7 @@ type
     function AsymAlgo: TCryptAsymAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
+    function PrivateKeyHandle: pointer; virtual; abstract;
   end;
 
   /// meta-class of the abstract parent to implement ICryptCert interface
