@@ -1272,8 +1272,8 @@ type
     // - holds information between calls to ServerSspiAuth()
     // - access to this array is made thread-safe thanks to Safe.Lock/Unlock
     fSspiAuthContext: TSecContextDynArray;
-    fSspiAuthContextCount: integer;
     fSspiAuthContexts: TDynArray;
+    fSspiAuthContextCount: integer;
   public
     /// initialize this SSPI/GSSAPI authentication scheme
     constructor Create(aServer: TRestServer); override;
@@ -5317,7 +5317,7 @@ begin
   end
   else
     browserauth := False;
-  // check for outdated auth context
+  // SSPI authentication
   fSafe.Lock;
   try
     // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
@@ -5346,17 +5346,18 @@ begin
     // call SSPI provider
     if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then
     begin
+      // 1st call: send back outdata to the client
       if browserauth then
       begin
-        Ctxt.Call.OutHead :=
-          (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata);
+        Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') +
+                               BinToBase64(outdata);
         Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
         StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
       end
       else
         Ctxt.Returns(['result', '',
                       'data', BinToBase64(outdata)]);
-      exit; // 1st call: send back outdata to the client
+      exit;
     end;
     // 2nd call: user was authenticated -> release used context
     ServerSspiAuthUser(fSspiAuthContext[ndx], username);

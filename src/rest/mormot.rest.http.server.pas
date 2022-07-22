@@ -90,8 +90,8 @@ type
   // the standard request/answer RESTful mode: will use one thread per client
   // so won't scale
   // - useHttpAsync will use the Sockets library in event-driven mode,
-  // with a thread poll for both HTTP/1.0 single shot and HTTP/1.1 kept alive
-  // connections, so would scale much better than older useHttpSocket
+  // with a thread poll for HTTP/1.1 kept alive connections, so would scale
+  // much better than older useHttpSocket - which is preferred for HTTP/1.0
   // - useBidirAsync will use TWebSocketAsyncServerRest in event-driven mode,
   // using its thread poll for all its HTTP or WebSockets process, , so would
   // scale much better than older useBidirSocket
@@ -158,7 +158,7 @@ const
   // - older useHttpSocket focuses on HTTP/1.0 or a small number of short-living
   // connections - creating one thread per HTTP/1.1 connection - so is a good
   // idea behind a nginx reverse proxy using HTTP/1.0, whereas our new
-  // useHttpAsync server scales much better with high number of connections
+  // useHttpAsync server scales better with high number of HTTP/1.1 connections
   HTTP_DEFAULT_MODE = useHttpAsync;
   {$endif USEHTTPSYS}
 
@@ -188,8 +188,8 @@ const
   /// HTTP/HTTPS security flags for TRestHttpServer.Create() constructor
   // with an optional self-signed server certificate (if supported)
   // - see also HTTPS_DEFAULT_MODE[]
-  HTTPS_SECURITY_SELFSIGNED:
-       array[{selfsigned=}boolean, {tls=}boolean] of TRestHttpServerSecurity = (
+  HTTPS_SECURITY_SELFSIGNED: array[{selfsigned=}boolean, {tls=}boolean] of
+      TRestHttpServerSecurity = (
     (secNone,
      secTLS),
     (secNone,
