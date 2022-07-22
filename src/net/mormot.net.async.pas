@@ -2739,9 +2739,8 @@ begin
             // failure (too many clients?) -> wait and retry
             DoLog(sllWarning, 'Execute: Accept(%) failed as %',
               [fServer.Port, ToText(res)^], self);
-            if res <> nrTooManyConnections then
-              // progressive wait (if not load-balancing, but socket error)
-              SleepStep(start);
+            // progressive wait on socket error, including nrTooManyConnections
+            SleepStep(start);
             break;
           end;
           if Terminated then
@@ -2968,14 +2967,14 @@ begin
     except
       include(fHttp.HeaderFlags, hfConnectionClose);
     end;
+  fHttp.ProcessDone;   // ContentStream.Free
+  fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
   if hfConnectionClose in fHttp.HeaderFlags then
     // connection: close -> shutdown and clear the connection
     result := soClose
   else
   begin
     // kept alive connection -> reset the HTTP parser and continue
-    fHttp.ProcessDone;   // ContentStream.Free
-    fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
     HttpInit;
     result := soContinue;
   end;
