@@ -635,9 +635,12 @@ type
       const SentData: RawUtf8): boolean; override;
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - overriden for optimized multi-insert of the supplied JSON array values
-    function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; const Fields: TFieldBits;
-      Sent: PUtf8Char): TID; override;
+    function InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer): TRestOrmBatchDirect; override;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - overriden for optimized multi-insert of the supplied JSON array values
+    function InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID; override;
     /// manual Add of a TOrm
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g., optionally setting
@@ -1516,6 +1519,7 @@ function ToText(t: TOrmVirtualTableTransaction): PShortString; overload;
 
 /// extract the ID from first value of the encPostHexID input JSON
 // - and move Sent^ to a fake '[' with the first real simple parameter
+// - used by InternalBatchDirectOne method of TRestStorageTOrm and TRestOrmServerDB
 function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
 
 
@@ -2069,36 +2073,34 @@ begin
   Sent^ := '['; // ignore the first field (stored in fBatch.ID)
 end;
 
-function TRestStorageTOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+function TRestStorageTOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer): TRestOrmBatchDirect;
+begin
+  if Encoding in BATCH_DIRECT then
+    result := dirWriteNoLock
+  else
+    result := dirUnsupported;
+end;
+
+function TRestStorageTOrm.InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 var
   rec: TOrm;
-  id: TID;
 begin
-  result := 0; // unsupported
-  if not (Encoding in BATCH_DIRECT) then
-    exit;
-  if Sent = nil then
-  begin
-    // called first with Sent=nil
-    result := 1; // supported
-    exit;
-  end;
   // called a second time with the proper JSON array
+  result := 0;
   if Encoding in [encPutHexID, encPostHexID] then
   begin
-    id := BatchExtractSimpleID(Sent);
-    if id <= 0 then
+    result := BatchExtractSimpleID(Sent);
+    if result <= 0 then
       exit; // invalid input
-  end
-  else
-    id := 0;
+  end;
   // same logic than EngineAdd/EngineUpdate but with no memory alloc
   rec := fStoredClass.Create;
   try
     if rec.FillFromArray(Fields, Sent) then
     begin
-      rec.IDValue := id;
+      rec.IDValue := result;
       if Encoding = encPutHexID then
         if UpdateOne(rec, Fields, '') then // no SentData
           result := HTTP_SUCCESS
@@ -2106,9 +2108,10 @@ begin
           result := HTTP_NOTFOUND
       else
       begin
-        StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirect' {$endif});
+        StorageLock(true
+          {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirectOne' {$endif});
         try
-          result := AddOne(rec, id > 0, ''); // no SentData
+          result := AddOne(rec, result > 0, ''); // no SentData
         finally
           StorageUnLock;
         end;

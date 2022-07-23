@@ -2626,7 +2626,7 @@ type
     // - return true on success, but be aware that the field list must match
     // the field layout, otherwise if may return true but will corrupt data
     function SimplePropertiesFill(const aSimpleFields: array of const): boolean;
-    /// set the simple fields from a JSON array of values - after the initial [
+    /// set the fields from a JSON array of values - after the initial [
     function FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
     /// initialize a TDynArray wrapper to map dynamic array property values
     // - if the field name is not existing or not a dynamic array, result.IsVoid

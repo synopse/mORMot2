@@ -68,6 +68,12 @@ const
 { ************ TRestOrm Parent Class for abstract REST client/server }
 
 type
+  /// low-level TRestOrm.InternalBatchDirectSupport response
+  TRestOrmBatchDirect = (
+    dirUnsupported,
+    dirWriteLock,
+    dirWriteNoLock);
+
   {$M+}
 
   /// implements TRest.ORM process for abstract REST client/server
@@ -213,13 +219,16 @@ type
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - an optimized storage engine could override it to process the Sent
     // JSON array values directly from the memory buffer
-    // - called first with Sent=nil to return either false (unsupported - which
-    // is what this default method does) or true (supported in overriden method)
+    // - called first to return if supported in overriden methods
+    function InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer): TRestOrmBatchDirect; virtual;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - an optimized storage engine could override it to process the Sent
+    // JSON array values directly from the memory buffer
     // - called a second time with the proper Sent JSON array of values,
     // returning the inserted ID or 200 after proper update
-    function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; const Fields: TFieldBits;
-      Sent: PUtf8Char): TID; virtual;
+    function InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID; virtual;
   public
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -2061,13 +2070,19 @@ end;
 
 procedure TRestOrm.InternalBatchStop;
 begin
-  raise EOrmException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
+  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
 end;
 
-function TRestOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+function TRestOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer): TRestOrmBatchDirect;
+begin
+  result := dirUnsupported; // by default, will use regular Add/Update
+end;
+
+function TRestOrm.InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
-  result := 0; // this engine does NOT support optimized SIMPLE multi-insert
+  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchDirectOne',[self]);
 end;
 
 function TRestOrm.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;

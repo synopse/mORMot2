@@ -331,9 +331,12 @@ type
     procedure InternalBatchStop; override;
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - overriden for optimized multi-insert of the supplied JSON array values
-    function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; const Fields: TFieldBits;
-      Sent: PUtf8Char): TID; override;
+    function InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer): TRestOrmBatchDirect; override;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - overriden for optimized multi-insert of the supplied JSON array values
+    function InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID; override;
     /// reset the cache if necessary
     procedure SetNoAjaxJson(const Value: boolean); override;
   public
@@ -2410,11 +2413,11 @@ function TRestOrmServerDB.InternalBatchStart(Encoding: TRestBatchEncoding;
 begin
   if not (Encoding in BATCH_INSERT) then
   begin
-    result := false; // means BATCH mode not supported
+    result := false; // BATCH mode is supported only for INSERT (not UPDATE)
     exit;
   end;
   // encPost: MainEngineAdd() to Values[]
-  // BATCH_DIRECT: InternalBatchDirect() to SimpleFields[]
+  // BATCH_DIRECT: InternalBatchDirectOne() to SimpleFields[]
   if (fBatch^.ValuesCount <> 0) or
      (fBatch^.IDCount <> 0) then
     raise EOrmBatchException.CreateUtf8(
@@ -2745,7 +2748,7 @@ begin
         DB.fStatement.Bind(arg + 1, id);
       if Sent = nil then
       begin
-        DB.InternalLog('InternalBatchDirect: encPutHexID JSON', sllError);
+        DB.InternalLog('InternalBatchDirectOne: encPutHexID JSON', sllError);
         result := HTTP_BADREQUEST;
         exit;
       end;
@@ -2765,24 +2768,26 @@ begin
   end;
 end;
 
-function TRestOrmServerDB.InternalBatchDirect(Encoding: TRestBatchEncoding;
-  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
+function TRestOrmServerDB.InternalBatchDirectSupport(
+  Encoding: TRestBatchEncoding; RunTableIndex: integer): TRestOrmBatchDirect;
 begin
-  result := 0; // unsupported
-  if not (Encoding in BATCH_DIRECT) then
-    exit;
-  if Sent = nil then
-  begin
-    // called first with Sent=nil: is it a static or virtual table?
+  result := dirUnsupported;
+  if Encoding in BATCH_DIRECT then
+    // is it a static or virtual table?
     if GetStaticTableIndex(RunTableIndex) = nil then
       // supported (plain SQLite3 table in the main database)
       if (Encoding <> encPutHexID) or
          not InternalUpdateEventNeeded(oeUpdate, RunTableIndex) then
-        result := 1;
-    exit;
-  end;
+        // update notification requires a full JSON object -> not compatible
+        result := dirWriteLock; // fBatch should be protected by the lock
+end;
+
+function TRestOrmServerDB.InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
+begin
   // called a second time with the proper Sent JSON, returning added ID
   // same logic than MainEngineAdd() but with no memory allocation
+  result := 0;
   case Encoding of
     encPostHexID:
       begin
@@ -2801,16 +2806,15 @@ begin
   end;
   // compute ID from Max(ID) if was not set by encPostHexID
   PrepareBatchAdd(self, RunTableIndex, result);
-  if result <> 0 then
+  if result <= 0 then
+    exit;
+  if fBatch^.SimpleFieldsCount = 0 then
   begin
-    if fBatch^.SimpleFieldsCount = 0 then
-    begin
-      fBatch^.SimpleFields := Fields;
-      fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields) shl 3) + 1;
-    end;
-    AddID(fBatch^.ID, fBatch^.IDCount, result);
-    ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);
+    fBatch^.SimpleFields := Fields;
+    fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields) shl 3) + 1;
   end;
+  AddID(fBatch^.ID, fBatch^.IDCount, result);
+  ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);
 end;
 
 

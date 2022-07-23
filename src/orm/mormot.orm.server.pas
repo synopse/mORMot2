@@ -492,7 +492,9 @@ type
     fTable: TOrmClass;
     fBatchOptions: TRestBatchOptions;
     fEncoding, fCommandEncoding, fRunningBatchEncoding: TRestBatchEncoding;
+    fCommandDirectSupport: TRestOrmBatchDirect;
     fCommandDirectFormat: TSaveFieldsAsObject;
+    fAcquiredExecutionWrite: boolean;
     fRunMainTrans: boolean;
     fRunningBatchRest: TRestOrm;
     fRunningRest: TRestOrm;
@@ -509,17 +511,19 @@ type
     fValueDirectFields: TFieldBits;
     fCounts: array[TRestBatchEncoding] of cardinal;
     fTimer: TPrecisionTimer;
-    procedure PerformAutomaticTransactionBegin;
-    procedure PerformAutomaticCommit;
-    procedure PerformRestChange;
+    procedure AcquireExecutionWrite;
+    procedure AutomaticTransactionBegin;
+    procedure AutomaticCommit;
+    procedure RestChange;
     function IsNotAllowed: boolean;
       {$ifdef FPC} inline; {$endif}
     procedure ParseHeader;
-    procedure ParseNextCommandAndValue;
+    procedure ParseCommand;
+    procedure ParseValue;
+    function ExecuteValue: boolean;
     procedure ParseEnding;
-    function ExecuteNextValue: boolean;
-    procedure ProcessError(E: Exception);
-    procedure ProcessLog;
+    procedure OnError(E: Exception);
+    procedure DoLog;
   public
     /// intialize the TRestBatch server-side processing
     constructor Create(aRest: TRestOrmServer; aTable: TOrmClass;
@@ -1926,7 +1930,15 @@ begin
   fRunTableIndex := -1;
 end;
 
-procedure TRestOrmServerBachSend.PerformAutomaticTransactionBegin;
+procedure TRestOrmServerBachSend.AcquireExecutionWrite;
+begin
+  if fAcquiredExecutionWrite then
+    exit;
+  fAcquiredExecutionWrite := true;
+  fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
+end;
+
+procedure TRestOrmServerBachSend.AutomaticTransactionBegin;
 var
   timeouttix: Int64;
 begin
@@ -1950,7 +1962,7 @@ begin
         (fOrm.Owner.ShutdownRequested);
 end;
 
-procedure TRestOrmServerBachSend.PerformAutomaticCommit;
+procedure TRestOrmServerBachSend.AutomaticCommit;
 var
   i: PtrInt;
 begin
@@ -1971,7 +1983,7 @@ begin
   fRowCountPerCurrTrans := 0;
 end;
 
-procedure TRestOrmServerBachSend.PerformRestChange;
+procedure TRestOrmServerBachSend.RestChange;
 begin
   if (fRunningBatchRest <> nil) and
      ((fRunTable <> fRunningBatchTable) or
@@ -2009,10 +2021,9 @@ begin
     fRunTable, fRunTableIndex, fValueID, fUriContext.Call.RestAccessRights^);
 end;
 
-procedure TRestOrmServerBachSend.ParseNextCommandAndValue;
+procedure TRestOrmServerBachSend.ParseCommand;
 var
   cmdtable: PUtf8Char;
-  errmsg: RawUtf8;
   runstatickind: TRestServerKind; // unused
   P: PAnsiChar;
 begin
@@ -2098,7 +2109,8 @@ begin
             '%.EngineBatchSend: Unknown [%] cmd', [self, fCommand]);
       end;
     end;
-    fEncoding := fCommandEncoding; // overwritten if InternalBatchDirect failed
+    fEncoding := fCommandEncoding; // see InternalBatchDirectSupport below
+    fCommandDirectSupport := dirUnsupported;
   end
   else
     // allow "POST",{obj1},{obj2} or "SIMPLE",[v1],[v2] or "DELETE",id1,id2
@@ -2108,6 +2120,12 @@ begin
       // plain "POST",{object} should reuse the previous table
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend: "..@Table" expected', [self]);
+end;
+
+procedure TRestOrmServerBachSend.ParseValue;
+var
+  errmsg: RawUtf8;
+begin
   // retrieve next fValue/fValueID/fValueDirect content
   fValueID := 0; // no id is never transmitted with "SIMPLE" fields e.g.
   case fCommandEncoding of
@@ -2160,21 +2178,21 @@ begin
   else
     // encSimple/encPostHex/encPostHexID/encPutHexID = BATCH_DIRECT
     begin
-      // first InternalBatchDirect(sent=nil) call to check if supported
       if (fEncoding = fCommandEncoding) and
-         (fRunningRest.InternalBatchDirect(
-           fEncoding, fRunTableIndex, fValueDirectFields, nil) <> 0) and
-         (fParse.Json^ = '[')  then
+         (fParse.Json^ = '[') then
+        fCommandDirectSupport := fRunningRest.InternalBatchDirectSupport(
+          fEncoding, fRunTableIndex);
+      if fCommandDirectSupport <> dirUnsupported then
       begin
         // this storage engine allows direct JSON array process
-        // (see e.g. TRestOrmServerDB.InternalBatchDirect
-        //  or TRestStorageTOrm.InternalBatchDirect)
+        // (e.g. TRestOrmServerDB or TRestStorageTOrm)
         fParse.GetJsonFieldOrObjectOrArray;
         fValueDirect := fParse.Value;
       end
       else
       begin
         // fallback to convert input into JSON object as regular encPost/encPut
+        fCommandDirectSupport := dirUnsupported;
         if fCommandEncoding = encPutHexID then
           fEncoding := encPut
         else
@@ -2209,9 +2227,7 @@ begin
       '%.EngineBatchSend(%): Missing }', [self, fTable]);
 end;
 
-function TRestOrmServerBachSend.ExecuteNextValue: boolean;
-var
-  fmt: TSaveFieldsAsObject;
+function TRestOrmServerBachSend.ExecuteValue: boolean;
 begin
   if (fCount = 0) and
      (fParse.EndOfObject = ']') then
@@ -2221,13 +2237,10 @@ begin
     SetLength(fResults, 1);
     if fEncoding in BATCH_DIRECT then
     begin
-      // InternalBatchDirect requires InternalBatchStart -> object fallback
-      if fEncoding in BATCH_DIRECT_ID then
-        fmt := [sfoExtendedJson, sfoStartWithID, sfoPutIDFirst]
-      else
-        fmt := [sfoExtendedJson];
+      // InternalBatchDirectOne format requires JSON object fallback
       fValue := fOrm.Model.TableProps[fRunTableIndex].Props.
-        SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID, nil, fmt);
+        SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID,
+          nil, fCommandDirectFormat);
       if fEncoding = encPutHexID then
         fEncoding := encPut
       else
@@ -2241,16 +2254,16 @@ begin
     begin
       if fRowCountPerCurrTrans = fRowCountPerTrans then
         // reached fRowCountPerTrans chunk
-        PerformAutomaticCommit;
+        AutomaticCommit;
       inc(fRowCountPerCurrTrans);
       if fRunTableTrans[fRunTableIndex] = nil then
         // initiate transaction for this table if not started yet
         if (fRunStatic <> nil) or
            not fRunMainTrans then
-          PerformAutomaticTransactionBegin;
+          AutomaticTransactionBegin;
     end;
     // handle batch pending request sending (if table or fCommand changed)
-    PerformRestChange;
+    RestChange;
     // prepare space for the next results
     if fCount >= length(fResults) then
       SetLength(fResults, NextGrow(fCount));
@@ -2275,13 +2288,11 @@ begin
     encPostHexID,
     encPutHexID:
       begin
-        // note: DB operation could be delayed in InternalBatchDirect()
-        // (for multi-insert, may be up to InternalBatchStop)
-        fValueID := fRunningRest.InternalBatchDirect(
+        // note: DB operation could be delayed up to InternalBatchStop()
+        fValueID := fRunningRest.InternalBatchDirectOne(
           fEncoding, fRunTableIndex, fValueDirectFields, fValueDirect);
         fResults[fCount] := fValueID;
-        if fValueID <> 0 then
-          result := true;
+        result := fValueID > 0;
         // no ready-to-used fValue -> no fCache notification
       end;
     encPut:
@@ -2309,7 +2320,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServerBachSend.ProcessError(E: Exception);
+procedure TRestOrmServerBachSend.OnError(E: Exception);
 var
   i: PtrInt;
 begin
@@ -2325,7 +2336,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServerBachSend.ProcessLog;
+procedure TRestOrmServerBachSend.DoLog;
 begin
   fLog.Log(LOG_TRACEERROR[fErrors <> 0], 'EngineBatchSend json=% count=% ' +
     'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
@@ -2388,7 +2399,6 @@ begin
   //log.Log(sllCustom2, Data, self, 100 shl 10);
   fTimer.Start(fLog.Instance.LastQueryPerformanceMicroSeconds);
   ParseHeader;
-  fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
   // try..except to intercept any error
   try
     // try..finally for transactions, writelock and InternalBatchStart
@@ -2397,9 +2407,10 @@ begin
       // "POST",{object}  "SIMPLE",[values]  "PUT",{object}  "DELETE",id
       repeat
         // parse command (e.g. "POST"), table, and next value
-        ParseNextCommandAndValue;
+        ParseCommand;
+        ParseValue;
         // execute the value (may be now or in next InternalBatchStop)
-        if not ExecuteNextValue then
+        if not ExecuteValue then
           if boRollbackOnError in fBatchOptions then
             raise EOrmBatchException.CreateUtf8(
               '%.EngineBatchSend: Results[%]=% on % %',
@@ -2412,22 +2423,23 @@ begin
       if (fRowCountPerTrans > 0) and
          (fRowCountPerCurrTrans > 0) then
         // send pending rows within transaction
-        PerformAutomaticCommit;
+        AutomaticCommit;
     finally
       // send pending rows, and release Safe.Lock
       try
         if fRunningBatchRest <> nil then
           fRunningBatchRest.InternalBatchStop;
       finally
-        fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
+        if fAcquiredExecutionWrite then
+          fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
         if LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level then
-          ProcessLog;
+          DoLog;
       end;
     end;
   except
     on E: Exception do
     begin
-      ProcessError(E);
+      OnError(E);
       raise;
     end;
   end;
