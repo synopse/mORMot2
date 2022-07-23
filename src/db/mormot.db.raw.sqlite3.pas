@@ -4496,7 +4496,7 @@ type
     // - TDateTime parameters can be bound with this method, either directly
     // as ISO-8601 text, or encoded via DateToSql() or DateTimeToSql()
     procedure Bind(const Params: array of const); overload;
-    /// bind a UTF-8 encoded string to a parameter
+    /// bind a UTF-8 encoded string buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESqlite3Exception on any error
     // - this function will directly call sqlite3.bind_text() and let SQLite3

@@ -927,7 +927,7 @@ type
     /// raw assignment of rkLString
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
     /// raw copy of rkLString
-    procedure CopyLongStrProp(Source,Dest: TObject);
+    procedure CopyLongStrProp(Source, Dest: TObject);
     /// raw retrieval of rkString into an Ansi7String
     procedure GetShortStrProp(Instance: TObject; var Value: RawUtf8);
     /// raw retrieval of rkWString
