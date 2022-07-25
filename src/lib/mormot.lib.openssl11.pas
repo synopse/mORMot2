@@ -6856,6 +6856,16 @@ begin
   result := false;
 end;
 
+var
+  VOID_STRING: cardinal;
+
+function PassNotNil(const PassWord: SpiUtf8): pointer;
+begin
+  result := pointer(Password);
+  if result = nil then
+    result := @VOID_STRING; // nil would trigger the OpenSSL callback
+end;
+
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const Password: SpiUtf8): PEVP_PKEY;
 var
@@ -6868,16 +6878,16 @@ begin
   begin
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
     if IsPem(PrivateKey, '-----BEGIN') then
-      result := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(Password))
+      result := PEM_read_bio_PrivateKey(priv, nil, nil, PassNotNil(Password))
     else
       result := nil;
     if result = nil then
     begin
       priv.reset;
       if Password = '' then
-        result := d2i_PrivateKey_bio(priv, nil) // try raw binary format
-      else
-        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pointer(Password));
+        result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
+      if result = nil then
+        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, PassNotNil(Password));
     end;
     priv.Free;
   end;
@@ -6901,9 +6911,9 @@ begin
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
     if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
-      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(Password))
+      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, PassNotNil(Password))
     else if IsPem(PublicKey, '-----BEGIN') then
-      result := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(Password))
+      result := PEM_read_bio_PUBKEY(pub, nil, nil, PassNotNil(Password))
     else
       result := nil;
     if (result = nil) and
