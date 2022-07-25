@@ -1280,7 +1280,7 @@ begin
   // first unlock (if needed)
   c.UnLockFinal(writer);
   // optional process - e.g. TWebSocketAsyncConnection = focConnectionClose
-  c.OnClose; // called before slot/socket closing
+  c.OnClose; // called before slot/socket closing - set fClosed flag
   // Stop() will try to acquire this lock -> notify no need to wait
   CloseConnection(c);
 end;
@@ -1859,7 +1859,7 @@ end;
 
 procedure TAsyncConnections.DoGC;
 var
-  gc: TObjectDynArray; // local copy for Free outside fGCSafe
+  gc: TAsyncConnectionDynArray; // local copy for Free outside fGCSafe
   i, ngc, nkept: PtrInt;
   c: TAsyncConnection;
   oldenough: TAsyncConnectionSec;
@@ -2118,8 +2118,8 @@ begin
     if acoVerboseLog in fOptions then
     begin
       QueryPerformanceMicroSeconds(stop); // a few us at most
-      DoLog(sllTrace, 'ConnectionDelete % count=% %us',
-        [aConnection, n, stop - start], self);
+      DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %us',
+        [aConnection, aIndex, n, stop - start], self);
     end;
     aConnection.fSocket := nil;   // ensure is known as disabled
     AddGC(aConnection); // will be released once processed

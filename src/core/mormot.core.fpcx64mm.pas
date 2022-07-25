@@ -3284,6 +3284,9 @@ begin
 end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+var
+  ObjectLeaksCount: integer;
+
 function SeemsRealPointer(p: pointer): boolean;
 {$ifdef MSWINDOWS}
 var
@@ -3377,9 +3380,10 @@ begin
                      ' leak (', PPtrInt(vmt + vmtInstanceSize)^, '/',
                      PSmallBlockPoolHeader(block).BlockType.BlockSize,
                      ' bytes) at $', HexStr(first));
+                   inc(ObjectLeaksCount);
                 end;
               except
-                // intercept and ignore any GPF - SeemsRealPointer()
+                // intercept and ignore any GPF - SeemsRealPointer() not enough?
                 inc(exceptcount);
               end;
             end;
@@ -3490,6 +3494,10 @@ begin
   FreeMediumPool(SmallMediumBlockInfo);
   {$endif FPCMM_SMALLNOTWITHMEDIUM}
   FreeMediumPool(MediumBlockInfo);
+  {$ifdef FPCMM_REPORTMEMORYLEAKS}
+  if ObjectLeaksCount <> 0 then
+    writeln(' Total objects leaks = ', ObjectLeaksCount);
+  {$endif FPCMM_REPORTMEMORYLEAKS}
   large := LargeBlocksCircularList.NextLargeBlockHeader;
   while large <> @LargeBlocksCircularList do
   begin
