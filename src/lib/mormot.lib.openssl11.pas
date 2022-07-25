@@ -6857,7 +6857,7 @@ begin
 end;
 
 var
-  VOID_STRING: cardinal;
+  VOID_STRING: AnsiChar; // initialized at #0 at startup
 
 function PassNotNil(const PassWord: SpiUtf8): pointer;
 begin

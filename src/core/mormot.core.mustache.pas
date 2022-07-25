@@ -1660,7 +1660,7 @@ begin
   if wasstring then
     if (u <> '') and
        (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
-      JsonBufferReformat(pointer(u), r)
+      r := JsonReformat(u)
     else
       QuotedStrJson(u, r)
   else

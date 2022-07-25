@@ -2737,7 +2737,9 @@ begin
   P := UniqueRawUtf8(S);
   D := P; // in-place process
   repeat
-    P := GotoNextNotSpace(P);
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P);
     while not (P^ in [#0, #10, #13]) do
     begin
       D^ := P^;
