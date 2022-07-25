@@ -1076,7 +1076,7 @@ begin
 end;
 
 const
-  _SUB: array[boolean] of AnsiChar = '+-';
+  _SUB: array[boolean] of AnsiChar = '-+';
 
 function TPollAsyncSockets.Stop(connection: TPollAsyncConnection): boolean;
 var

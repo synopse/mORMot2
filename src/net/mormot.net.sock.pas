@@ -558,7 +558,7 @@ type
   /// set of events monitored by TPollSocketAbstract
   TPollSocketEvents = set of TPollSocketEvent;
 
-  /// some opaque value (which may be a pointer) associated with a polling event
+  /// some opaque value (typically a pointer) associated with a polling event
   TPollSocketTag = type PtrInt;
   PPollSocketTag = ^TPollSocketTag;
   TPollSocketTagDynArray = TPtrUIntDynArray;
@@ -685,14 +685,12 @@ type
     fPendingSafe: TLightLock;
     fPollIndex: integer;
     fGettingOne: integer;
-    fLastUnsubscribeTagCount: integer;
     fTerminated: boolean;
     fEpollGettingOne: boolean;
     fUnsubscribeShouldShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
-    fLastUnsubscribeTag: TPollSocketTagDynArray; // protected by fPendingSafe
     // used for select/poll (FollowEpoll=false) with multiple thread-unsafe fPoll[]
     fSubscription: TPollSocketsSubscription;
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
@@ -2457,7 +2455,6 @@ begin
         if fnd <> nil then
           byte(fnd^.events) := 0; // GetOnePending() will ignore it
       end;
-      AddPtrUInt(fLastUnsubscribeTag, fLastUnsubscribeTagCount, tag);
     finally
       fPendingSafe.UnLock;
     end;
@@ -2487,7 +2484,7 @@ end;
 
 function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
 begin
-  result := true; // overriden e.g. in TPollAsyncReadSockets
+  result := tag <> 0; // overriden e.g. in TPollAsyncReadSockets
 end;
 
 function TPollSockets.GetSubscribeCount: integer;
@@ -2512,8 +2509,6 @@ function TPollSockets.GetOnePending(out notif: TPollSocketResult;
   const call: RawUtf8): boolean;
 var
   n, ndx: PtrInt;
-label
-  ok;
 begin
   result := false;
   if fTerminated or
@@ -2528,31 +2523,25 @@ begin
     n := fPending.Count;
     ndx := fPendingIndex;
     if ndx < n then
-    begin
       repeat
         // retrieve next notified event
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(notif.events) <> 0) and // Unsubscribe() may have reset to 0
-           IsValidPending(notif.tag) and // e.g. TPollAsyncReadSockets
-           ((fLastUnsubscribeTagCount = 0) or
-            not PtrUIntScanExists(pointer(fLastUnsubscribeTag),
-              fLastUnsubscribeTagCount, notif.tag)) then
+        if (byte(notif.events) <> 0) and  // Unsubscribe() may have reset to 0
+           IsValidPending(notif.tag) then // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
           result := true;
           fPendingIndex := ndx; // continue with next event
-          // quick exit with one notified event
-          if ndx = n then
-            break; // reset fPending list
-          goto ok;
+          break;
         end;
       until ndx >= n;
+    if ndx >= n then
+    begin
       fPending.Count := 0; // reuse shared fPending.Events[] memory
       fPendingIndex := 0;
-      fLastUnsubscribeTagCount := 0;
-ok: end;
+    end;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
