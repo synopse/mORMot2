@@ -494,8 +494,9 @@ type
     fEncoding, fCommandEncoding, fRunningBatchEncoding: TRestBatchEncoding;
     fCommandDirectSupport: TRestOrmBatchDirect;
     fCommandDirectFormat: TSaveFieldsAsObject;
-    fAcquiredExecutionWrite: boolean;
-    fRunMainTrans: boolean;
+    fFlags: set of (
+      fNeedAcquireExecutionWrite, fAcquiredExecutionWrite,
+      fRunMainTrans);
     fRunningBatchRest: TRestOrm;
     fRunningRest: TRestOrm;
     fRunStatic: TRestOrm;
@@ -511,10 +512,9 @@ type
     fValueDirectFields: TFieldBits;
     fCounts: array[TRestBatchEncoding] of cardinal;
     fTimer: TPrecisionTimer;
-    procedure AcquireExecutionWrite;
     procedure AutomaticTransactionBegin;
     procedure AutomaticCommit;
-    procedure RestChange;
+    procedure ExecuteValueCheckIfRestChange;
     function IsNotAllowed: boolean;
       {$ifdef FPC} inline; {$endif}
     procedure ParseHeader;
@@ -1930,14 +1930,6 @@ begin
   fRunTableIndex := -1;
 end;
 
-procedure TRestOrmServerBatchSend.AcquireExecutionWrite;
-begin
-  if fAcquiredExecutionWrite then
-    exit;
-  fAcquiredExecutionWrite := true;
-  fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
-end;
-
 procedure TRestOrmServerBatchSend.AutomaticTransactionBegin;
 var
   timeouttix: Int64;
@@ -1950,7 +1942,7 @@ begin
       // acquired transaction
       fRunTableTrans[fRunTableIndex] := fRunningRest;
       if fRunStatic = nil then
-        fRunMainTrans := true;
+        include(fFlags, fRunMainTrans);
       break;
     end;
     if GetTickCount64 > timeouttix then
@@ -1977,13 +1969,13 @@ begin
     begin
       fRunTableTrans[i].Commit(CONST_AUTHENTICATION_NOT_USED, true);
       if fRunTableTrans[i] = fOrm then
-        fRunMainTrans := false;
+        exclude(fFlags, fRunMainTrans);
       fRunTableTrans[i] := nil; // to acquire and begin a new transaction
     end;
   fRowCountPerCurrTrans := 0;
 end;
 
-procedure TRestOrmServerBatchSend.RestChange;
+procedure TRestOrmServerBatchSend.ExecuteValueCheckIfRestChange;
 begin
   if (fRunningBatchRest <> nil) and
      ((fRunTable <> fRunningBatchTable) or
@@ -2066,6 +2058,7 @@ begin
       fRunningRest := fOrm
     else
       fRunningRest := fRunStatic;
+    include(fFlags, fNeedAcquireExecutionWrite); // default paranoid thread-safe
     // retrieve fCommandEncoding/fValueDirectFields
     case PWord(fCommand)^ of // enough to check the first 2 chars
       ord('P') + ord('O') shl 8:
@@ -2188,6 +2181,8 @@ begin
         // (e.g. TRestOrmServerDB or TRestStorageTOrm)
         fParse.GetJsonFieldOrObjectOrArray;
         fValueDirect := fParse.Value;
+        if fCommandDirectSupport = dirWriteNoLock then
+          exclude(fFlags, fNeedAcquireExecutionWrite);
       end
       else
       begin
@@ -2229,6 +2224,12 @@ end;
 
 function TRestOrmServerBatchSend.ExecuteValue: boolean;
 begin
+  if (fNeedAcquireExecutionWrite in fFlags) and
+     not(fAcquiredExecutionWrite in fFlags) then
+  begin
+    include(fFlags, fAcquiredExecutionWrite); // thread protection
+    fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock;
+  end;
   if (fCount = 0) and
      (fParse.EndOfObject = ']') then
   begin
@@ -2259,11 +2260,11 @@ begin
       if fRunTableTrans[fRunTableIndex] = nil then
         // initiate transaction for this table if not started yet
         if (fRunStatic <> nil) or
-           not fRunMainTrans then
+           not (fRunMainTrans in fFlags) then
           AutomaticTransactionBegin;
     end;
     // handle batch pending request sending (if table or fCommand changed)
-    RestChange;
+    ExecuteValueCheckIfRestChange;
     // prepare space for the next results
     if fCount >= length(fResults) then
       SetLength(fResults, NextGrow(fCount));
@@ -2381,7 +2382,7 @@ begin
   else
     fRowCountPerTrans := 0;
   SetLength(fRunTableTrans, fOrm.Model.TablesMax + 1);
-  fRunMainTrans := false;
+  exclude(fFlags, fRunMainTrans);
   fRowCountPerCurrTrans := 0;
   if IdemPChar(fParse.Json, '"OPTIONS",') then
   begin
@@ -2422,7 +2423,7 @@ begin
       until fParse.EndOfObject = ']';
       if (fRowCountPerTrans > 0) and
          (fRowCountPerCurrTrans > 0) then
-        // send pending rows within transaction
+        // call InternalBatchStop and send pending rows within transaction
         AutomaticCommit;
     finally
       // send pending rows, and release Safe.Lock
@@ -2430,7 +2431,7 @@ begin
         if fRunningBatchRest <> nil then
           fRunningBatchRest.InternalBatchStop;
       finally
-        if fAcquiredExecutionWrite then
+        if fAcquiredExecutionWrite in fFlags then
           fOrm.Owner.AcquireExecution[execOrmWrite].Safe.UnLock;
         if LOG_TRACEERROR[fErrors <> 0] in fLog.Instance.Family.Level then
           DoLog;
