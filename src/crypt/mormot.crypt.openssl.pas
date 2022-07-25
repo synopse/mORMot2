@@ -1968,8 +1968,8 @@ begin
       begin
         if CommonName <> '' then
           cn := CommonName;
-        name.AddEntries(
-          Country, State, Locality, Organization, OrgUnit, cn);
+        name.AddEntries(Country, State, Locality, Organization, OrgUnit,
+          cn, EmailAddress, SurName, GivenName);
       end
       else
         name.AddEntry('CN', cn);

@@ -1289,7 +1289,10 @@ type
     Locality,
     Organization,
     OrgUnit,
-    CommonName: RawUtf8;
+    CommonName,
+    EmailAddress,
+    SurName,
+    GivenName: RawUtf8;
   end;
   PCryptCertFields = ^TCryptCertFields;
 

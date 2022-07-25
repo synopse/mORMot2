@@ -1309,7 +1309,7 @@ type
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = XN_FLAG_RFC2253);
     procedure AddEntry(const Name, Value: RawUtf8);
     procedure AddEntries(const Country, State, Locality,
-      Organization, OrgUnit, CommonName: RawUtf8);
+      Organization, OrgUnit, CommonName, EmailAddress, SurName, GivenName: RawUtf8);
     procedure SetEntry(const Name, Value: RawUtf8);
     procedure DeleteEntry(NID: integer); overload;
     procedure DeleteEntry(const Name: RawUtf8); overload;
@@ -7100,7 +7100,7 @@ begin
 end;
 
 procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
-  OrgUnit, CommonName: RawUtf8);
+  OrgUnit, CommonName, EmailAddress, SurName, GivenName: RawUtf8);
 begin
   // warning: don't check for duplicates
   AddEntry('C',  Country);
@@ -7109,6 +7109,9 @@ begin
   AddEntry('O',  Organization);
   AddEntry('OU', OrgUnit);
   AddEntry('CN', CommonName);
+  AddEntry('emailAddress', EmailAddress);
+  AddEntry('SN', Surname);
+  AddEntry('GN', GivenName);
 end;
 
 procedure X509_NAME.SetEntry(const Name, Value: RawUtf8);
