@@ -407,8 +407,8 @@ end;
 procedure TSqlDBPostgresConnectionProperties.GetForeignKeys;
 begin
   // TODO - how to get field we reference to? (currently consider this is "ID")
-  with Execute('SELECT' + '  ct.conname as foreign_key_name, ' +
-      '  case when ct.condeferred then 1 else 0 end AS is_disabled, ' +
+  with Execute('SELECT ct.conname as foreign_key_name, ' +
+      '  case when ct.condeferred then 1 else 0 end as is_disabled, ' +
       '  (SELECT tc.relname from pg_class tc where tc.oid = ct.conrelid) || ''.'' || ' +
       '     (SELECT a.attname FROM pg_attribute a WHERE a.attnum = ct.conkey[1] AND a.attrelid = ct.conrelid) as from_ref, ' +
       '  (SELECT tc.relname from pg_class tc where tc.oid = ct.confrelid) || ''.id'' as referenced_object ' +

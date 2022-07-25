@@ -1893,6 +1893,8 @@ type
     fServerTimestampAtConnection: TDateTime;
     fCache: TRawUtf8List; // statements cache protected by main Safe.Lock/UnLock
     fOnProcess: TOnSqlDBProcess;
+    fCacheLast: RawUtf8;
+    fCacheLastIndex: integer;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
     fRollbackOnDisconnect: boolean;
@@ -3562,8 +3564,8 @@ end;
 function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const aSql:
   RawUtf8; ExpectResults, RaiseExceptionOnError: boolean): ISqlDBStatement;
 begin
-  result := ThreadSafeConnection.NewStatementPrepared(aSql, ExpectResults,
-    RaiseExceptionOnError);
+  result := ThreadSafeConnection.NewStatementPrepared(
+    aSql, ExpectResults, RaiseExceptionOnError);
 end;
 
 function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(
@@ -7192,7 +7194,7 @@ var
   stmt: TSqlDBStatement;
   tocache: boolean;
   ndx, altern: integer;
-  cachedsql: RawUtf8;
+  cachedsql, fakesql: RawUtf8;
 
   procedure TryPrepare(doraise: boolean);
   var
@@ -7212,8 +7214,8 @@ var
               fCache := TRawUtf8List.CreateEx(
                 [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
             if fCache.AddObject(cachedsql, stmt) >= 0 then
-              stmt._AddRef
-            else // will be owned by fCache.Objects[]
+              stmt._AddRef // instance will be owned by fCache.Objects[]
+            else
               SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
                 'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
           finally
@@ -7256,13 +7258,22 @@ begin
   begin
     fSafe.Lock; // protect fCache access
     try
-      ndx := fCache.IndexOf(cachedsql);
+      if (fCacheLast = cachedsql) and
+         (fCache.Strings[fCacheLastIndex] = cachedsql) then
+        ndx := fCacheLastIndex // no need to use the hash lookup
+      else
+        ndx := fCache.IndexOf(cachedsql);
       if ndx >= 0 then
       begin
         stmt := fCache.Objects[ndx];
         if stmt.RefCount = 1 then
         begin
           // ensure statement is not currently in use
+          if ndx <> fCacheLastIndex then
+          begin
+            fCacheLastIndex := ndx;
+            fCacheLast := cachedsql;
+          end;
           result := stmt; // acquire the statement
           stmt.Reset;
           exit;
@@ -7276,9 +7287,12 @@ begin
               'NewStatementPrepared: cached statement still in use ' +
               '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
           else
+          begin
+            fakesql := #0'A';
             for altern := 1 to fProperties.StatementCacheReplicates do
             begin
-              cachedsql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
+              fakesql[1] := AnsiChar(altern); // no valid SQL as cache name
+              cachedsql := aSql + fakesql;
               ndx := fCache.IndexOf(cachedsql);
               if ndx >= 0 then
               begin
@@ -7296,6 +7310,7 @@ begin
                 break;
               end;
             end;
+          end;
         end;
       end;
     finally
