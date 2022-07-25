@@ -1650,9 +1650,22 @@ end;
 
 class procedure TSynMustache.ToJson(const Value: variant;
   out Result: variant);
+var
+  u, r: RawUtf8;
+  wasstring: boolean;
 begin
-  if not VarIsEmptyOrNull(Value) then
-    RawUtf8ToVariant(JsonReformat(VariantToUtf8(Value)), Result);
+  if VarIsEmptyOrNull(Value) then
+    exit;
+  VariantToUtf8(Value, u, wasstring);
+  if wasstring then
+    if (u <> '') and
+       (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
+      JsonBufferReformat(pointer(u), r)
+    else
+      QuotedStrJson(u, r)
+  else
+    r := u; // false, true, number
+  RawUtf8ToVariant(r, Result);
 end;
 
 class procedure TSynMustache.JsonQuote(const Value: variant;
