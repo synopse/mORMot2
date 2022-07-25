@@ -304,7 +304,6 @@ type
     // enable WaitFor() during recv() in ProcessRead
     // - may enhance responsiveness especially on HTTP/1.0 connections
     // - equals 0 ms by default, but could be tuned e.g. to 50 or 100 if needed
-    // - is set to 50 ms if hsoFavorHttp10 option is set
     // - use with care: performance degrades with highly concurrent HTTP/1.1
     property ReadWaitMs: integer
       read fReadWaitMs write fReadWaitMs;
@@ -3158,8 +3157,6 @@ begin
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
-  if hsoFavorHttp10 in ProcessOptions then
-    fAsync.Clients.ReadWaitMs := 50;
   // launch this TThread instance
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);

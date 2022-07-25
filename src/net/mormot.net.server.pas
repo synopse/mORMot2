@@ -102,8 +102,6 @@ type
   // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
-  // - hsoFavorHttp10 will tune the server to favor HTTP/1.0 short-living
-  // connections (mainly for THttpAsyncServer)
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -111,8 +109,7 @@ type
     hsoCreateSuspended,
     hsoLogVerbose,
     hsoIncludeDateHeader,
-    hsoEnableTls,
-    hsoFavorHttp10);
+    hsoEnableTls);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
