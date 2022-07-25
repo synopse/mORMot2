@@ -1191,6 +1191,13 @@ type
     const aTableName: RawUtf8; const FieldNames: array of RawUtf8; Unique: boolean;
     IndexName: RawUtf8; const SQL: RawUtf8): boolean of object;
 
+  /// internal in-memory structure used for transactions
+  TSqlDBConnectionTransaction = record
+    SessionID: cardinal;
+    RefCount: integer;
+    Connection: TSqlDBConnection;
+  end;
+
   /// specify the class of TSqlDBConnectionProperties
   // - sometimes used to create connection properties instances, from a set
   // of available classes (see e.g. SynDBExplorer or sample 16)
@@ -1233,11 +1240,8 @@ type
     fStatementCacheReplicates: integer;
     fSqlCreateField: TSqlDBFieldTypeDefinition;
     fSqlCreateFieldMax: cardinal;
-    fSharedTransactions: array of record
-      SessionID: cardinal;
-      RefCount: integer;
-      Connection: TSqlDBConnection;
-    end;
+    fSharedTransactionsSafe: TLightLock;
+    fSharedTransactions: array of TSqlDBConnectionTransaction;
     fExecuteWhenConnected: TRawUtf8DynArray;
     fForeignKeys: TSynNameValue;
     fOnTableCreate: TOnTableCreate;
@@ -3572,68 +3576,84 @@ end;
 
 function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   action: TSqlDBSharedTransactionAction): TSqlDBConnection;
-
-  procedure SetResultToSameConnection(index: PtrInt);
-  begin
-    result := ThreadSafeConnection;
-    if result <> fSharedTransactions[index].Connection then
-      raise ESqlDBException.CreateUtf8(
-        '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
-        [self, SessionID, result, fSharedTransactions[index].Connection]);
-  end;
-
 var
   i, n: PtrInt;
+  found: boolean;
+  t: ^TSqlDBConnectionTransaction;
 begin
-  n := Length(fSharedTransactions);
   try
-    for i := 0 to n - 1 do
-      if fSharedTransactions[i].SessionID = SessionID then
-      begin
-        SetResultToSameConnection(i);
-        case action of
-          transBegin: // nested StartTransaction
-            LockedInc32(@fSharedTransactions[i].RefCount);
-        else
-          begin  // (nested) commit/rollback
-            if InterlockedDecrement(fSharedTransactions[i].RefCount) = 0 then
+    result := ThreadSafeConnection;
+    // thread-safe found transactions support
+    fSharedTransactionsSafe.Lock;
+    try
+      n := Length(fSharedTransactions);
+      t := pointer(fSharedTransactions);
+      found := false;
+      for i := 0 to n - 1 do
+        if t^.SessionID = SessionID then
+        begin
+          if result <> t^.Connection then
+            raise ESqlDBException.CreateUtf8(
+              '%.SharedTransaction(sessionID=%) with mixed connections: % and %',
+              [self, SessionID, result, t^.Connection]);
+          if action = transBegin then
+          begin
+            // found StartTransaction
+            inc(t^.RefCount);
+            exit;
+          end
+          else
+          begin
+            // (found) commit/rollback
+            dec(t^.RefCount);
+            if t^.RefCount = 0 then
             begin
               dec(n);
-              MoveFast(fSharedTransactions[i + 1], fSharedTransactions[i],
-                (n - i) * SizeOf(fSharedTransactions[0]));
+              MoveFast(fSharedTransactions[i + 1], t^, (n - i) * SizeOf(t^));
               SetLength(fSharedTransactions, n);
-              case action of
-                transCommitWithException,
-                transCommitWithoutException:
-                  result.Commit;
-                transRollback:
-                  result.Rollback;
-              end;
+              found := true;
             end;
           end;
-        end;
-        exit;
-      end;
+          break;
+        end
+        else
+          inc(t);
+      if not found then
+        if action = transBegin then
+        begin
+          t := pointer(fSharedTransactions);
+          for i := 1 to n do
+            if t^.Connection = result then
+              raise ESqlDBException.CreateUtf8(
+                'Dup %.SharedTransaction(sessionID=%,transBegin) sessionID=%',
+                [self, SessionID, t^.SessionID])
+            else
+              inc(t);
+          SetLength(fSharedTransactions, n + 1);
+          t := @fSharedTransactions[n];
+          t^.SessionID := SessionID;
+          t^.RefCount := 1;
+          t^.Connection := result;
+        end
+        else
+          raise ESqlDBException.CreateUtf8('Unexpected %.SharedTransaction(%,%)',
+            [self, SessionID, ord(action)]);
+    finally
+      fSharedTransactionsSafe.Unlock;
+    end;
+    // perform the actual transaction SQL operation outside the lock
     case action of
       transBegin:
         begin
-          result := ThreadSafeConnection;
-          for i := 0 to n - 1 do
-            if fSharedTransactions[i].Connection = result then
-              raise ESqlDBException.CreateUtf8(
-                '%.SharedTransaction(sessionID=%) already started for sessionID=%',
-                [self, SessionID, fSharedTransactions[i].SessionID]);
           if not result.Connected then
             result.Connect;
           result.StartTransaction;
-          SetLength(fSharedTransactions, n + 1);
-          fSharedTransactions[n].SessionID := SessionID;
-          fSharedTransactions[n].RefCount := 1;
-          fSharedTransactions[n].Connection := result;
-        end
-    else
-      raise ESqlDBException.CreateUtf8('Unexpected %.SharedTransaction(%,%)',
-        [self, SessionID, ord(action)]);
+        end;
+      transCommitWithException,
+      transCommitWithoutException:
+        result.Commit;
+      transRollback:
+        result.Rollback;
     end;
   except
     on Exception do
