@@ -1017,7 +1017,7 @@ type
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
 begin
-  inherited Create(fOwner);
+  inherited Create(aOwner);
   fMaxSockets := 100; // initial value: no limitation in practice and can grow
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
   SetLength(fResults, fMaxSockets);
