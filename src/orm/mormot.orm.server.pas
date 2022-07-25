@@ -8,7 +8,7 @@ unit mormot.orm.server;
 
    Server-Side Object-Relational-Mapping (ORM) Process
     - TRestOrmServer Abstract Server
-    - TRestOrmServerBachSend TRestBach Server-Side Process
+    - TRestOrmServerBatchSend TRestBach Server-Side Process
 
   *****************************************************************************
 }
@@ -476,12 +476,12 @@ type
   end;
 
 
-{ ************ TRestOrmServerBachSend TRestBach Server-Side Process }
+{ ************ TRestOrmServerBatchSend TRestBach Server-Side Process }
 
 type
   /// internal state machine used by TRestOrmServer.EngineBatchSend
   // - this code is so complex/optimized that it needed its own class
-  TRestOrmServerBachSend = class
+  TRestOrmServerBatchSend = class
   protected
     fParse: TGetJsonField;
     fCommand: PUtf8Char;
@@ -1210,9 +1210,9 @@ function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
 var
-  process: TRestOrmServerBachSend; // will encapsulate all TRestBach execution
+  process: TRestOrmServerBatchSend; // will encapsulate all TRestBach execution
 begin
-  process := TRestOrmServerBachSend.Create(
+  process := TRestOrmServerBatchSend.Create(
     self, Table, Data, ExpectedResultsCount);
   try
     process.ParseAndExecute;
@@ -1915,11 +1915,11 @@ begin
 end;
 
 
-{ ************ TRestOrmServerBachSend TRestBach Server-Side Process }
+{ ************ TRestOrmServerBatchSend TRestBach Server-Side Process }
 
-{ TRestOrmServerBachSend }
+{ TRestOrmServerBatchSend }
 
-constructor TRestOrmServerBachSend.Create(aRest: TRestOrmServer;
+constructor TRestOrmServerBatchSend.Create(aRest: TRestOrmServer;
   aTable: TOrmClass; var aData: RawUtf8; aExpectedResultsCount: integer);
 begin
   fOrm := aRest;
@@ -1930,7 +1930,7 @@ begin
   fRunTableIndex := -1;
 end;
 
-procedure TRestOrmServerBachSend.AcquireExecutionWrite;
+procedure TRestOrmServerBatchSend.AcquireExecutionWrite;
 begin
   if fAcquiredExecutionWrite then
     exit;
@@ -1938,7 +1938,7 @@ begin
   fOrm.Owner.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
 end;
 
-procedure TRestOrmServerBachSend.AutomaticTransactionBegin;
+procedure TRestOrmServerBatchSend.AutomaticTransactionBegin;
 var
   timeouttix: Int64;
 begin
@@ -1962,7 +1962,7 @@ begin
         (fOrm.Owner.ShutdownRequested);
 end;
 
-procedure TRestOrmServerBachSend.AutomaticCommit;
+procedure TRestOrmServerBatchSend.AutomaticCommit;
 var
   i: PtrInt;
 begin
@@ -1983,7 +1983,7 @@ begin
   fRowCountPerCurrTrans := 0;
 end;
 
-procedure TRestOrmServerBachSend.RestChange;
+procedure TRestOrmServerBatchSend.RestChange;
 begin
   if (fRunningBatchRest <> nil) and
      ((fRunTable <> fRunningBatchTable) or
@@ -2012,7 +2012,7 @@ begin
   end;
 end;
 
-function TRestOrmServerBachSend.IsNotAllowed: boolean;
+function TRestOrmServerBatchSend.IsNotAllowed: boolean;
   {$ifdef FPC} inline; {$endif}
 begin
   result := (fUriContext <> nil) and
@@ -2021,7 +2021,7 @@ begin
     fRunTable, fRunTableIndex, fValueID, fUriContext.Call.RestAccessRights^);
 end;
 
-procedure TRestOrmServerBachSend.ParseCommand;
+procedure TRestOrmServerBatchSend.ParseCommand;
 var
   cmdtable: PUtf8Char;
   runstatickind: TRestServerKind; // unused
@@ -2122,7 +2122,7 @@ begin
         '%.EngineBatchSend: "..@Table" expected', [self]);
 end;
 
-procedure TRestOrmServerBachSend.ParseValue;
+procedure TRestOrmServerBatchSend.ParseValue;
 var
   errmsg: RawUtf8;
 begin
@@ -2215,7 +2215,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServerBachSend.ParseEnding;
+procedure TRestOrmServerBatchSend.ParseEnding;
 begin
   if fParse.Json = nil then
     raise EOrmBatchException.CreateUtf8(
@@ -2227,7 +2227,7 @@ begin
       '%.EngineBatchSend(%): Missing }', [self, fTable]);
 end;
 
-function TRestOrmServerBachSend.ExecuteValue: boolean;
+function TRestOrmServerBatchSend.ExecuteValue: boolean;
 begin
   if (fCount = 0) and
      (fParse.EndOfObject = ']') then
@@ -2320,7 +2320,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServerBachSend.OnError(E: Exception);
+procedure TRestOrmServerBatchSend.OnError(E: Exception);
 var
   i: PtrInt;
 begin
@@ -2336,7 +2336,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServerBachSend.DoLog;
+procedure TRestOrmServerBatchSend.DoLog;
 begin
   fLog.Log(LOG_TRACEERROR[fErrors <> 0], 'EngineBatchSend json=% count=% ' +
     'errors=% post=% simple=% hex=% hexid=% put=% delete=% % %/s',
@@ -2345,7 +2345,7 @@ begin
      fCounts[encDelete], fTimer.Stop, fTimer.PerSec(fCount)], self);
 end;
 
-procedure TRestOrmServerBachSend.ParseHeader;
+procedure TRestOrmServerBatchSend.ParseHeader;
 var
   tablename: RawUtf8;
 begin
@@ -2392,7 +2392,7 @@ begin
     byte(fBatchOptions) := 0;
 end;
 
-procedure TRestOrmServerBachSend.ParseAndExecute;
+procedure TRestOrmServerBatchSend.ParseAndExecute;
 begin
   fLog := fOrm.LogClass.Enter('EngineBatchSend % inlen=%',
     [fTable, length(fData)], self);
