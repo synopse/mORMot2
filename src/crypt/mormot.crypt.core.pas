@@ -845,7 +845,8 @@ type
   // to use this TAesC64 class which behaves the same as the old TAESCTR
   // - the CTR will use a counter in bytes 7..0 - which is not standard, and
   // can be changed via the ComposeIV() methods
-  // - this class will use AES-NI hardware instructions, if available
+  // - this class will use AES-NI hardware instructions, if available, but
+  // does not benefit from the optimized x86_64 of TAesCtr which is much faster
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesC64 = class(TAesAbstractEncryptOnly)
   protected
@@ -1420,7 +1421,7 @@ type
   /// BREAKING CHANGE since mORMOt 1.18: our 64-bit CTR was not standard, so
   // SynCrypto.pas' TAESCTR class was wrongly named and TAesCtr in this unit
   // refers to the standard NIST implementation (also much faster on x86_64)
-  // - so you need to renamed any TAESCTR class as TAesC64
+  // - so you need to rename any mORMot 1 TAESCTR class into TAesC64
   TAesCtrAny = TAesC64;
   TAesCtrNist = TAesCtr;
 
