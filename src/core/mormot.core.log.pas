@@ -5527,7 +5527,7 @@ begin
         fFamily.WithInstancePointer);
     fWriter.AddOnSameLine(pointer(aName));
     fWriter.Add('=');
-    fWriter.AddTypedJson(@aValue, aTypeInfo);
+    fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
     LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
