@@ -3687,42 +3687,67 @@ begin
     Owner := fForcedSchemaName;
 end;
 
+const
+  _CACHEABLE: array[0..15] of PAnsiChar = (
+    'SELECT ',
+    // following SQL commands are not cacheable (at least on Sqlite3/PostgreSQL)
+    'CREATE ',
+    'ALTER ',
+    'DROP ',
+    'TRUNCATE ',
+    'REINDEX ',
+    'ATTACH ',
+    'VACUUM ',
+    'ANALYZE ',
+    'COPY ',
+    'GRANT ',
+    'REVOKE ',
+    'LISTEN ',
+    'LOAD ',
+    'MOVE ',
+    nil);
+  _LASTCACHEABLE = 0; // following items in _CACHEABLE[] should not be cached
+
 function TSqlDBConnectionProperties.IsCachable(P: PUtf8Char): boolean;
 var
-  hasnowhereclause: boolean;
+  c: PtrInt;
+  selectWithNoParamOrWhere: boolean;
 begin
-  // cachable if with ? parameter or SELECT without WHERE clause
+  // cacheable if with ? parameter or SELECT without WHERE clause
   if (P <> nil) and
      fUseCache then
   begin
     while P^ in [#1..' '] do
       inc(P);
-    hasnowhereclause := IdemPChar(P, 'SELECT ');
-    if hasnowhereclause or
-       not (IdemPChar(P, 'CREATE ') or
-            IdemPChar(P, 'ALTER ')) then
+    c := IdemPPChar(P, @_CACHEABLE);
+    selectWithNoParamOrWhere := c = 0;
+    if c <= _LASTCACHEABLE then // CREATE,ALTER,... and later are not cacheable
     begin
-      result := true;
+      result := true; // exit as cacheable if any ? parameter is found
       while P^ <> #0 do
       begin
-        if P^ = '"' then
-        begin
-          // ignore chars within quotes
-          repeat
-            inc(P)
-          until P^ in [#0, '"'];
-          if P^ = #0 then
-            break;
-        end
-        else if P^ = '?' then
-          exit
-        else if (P^ = ' ') and
-                IdemPChar(P + 1, 'WHERE ') then
-          hasnowhereclause := false;
+        case P^ of
+          '"':
+            begin
+              // ignore chars within quotes
+              repeat
+                inc(P)
+              until P^ in [#0, '"']; // double quotes will reuse this loop
+              if P^ = #0 then
+                break;
+            end;
+        ' ':
+          if selectWithNoParamOrWhere and
+             (P[1] in ['w', 'W']) and
+             IdemPChar(P + 2, 'HERE ') then
+            selectWithNoParamOrWhere := false; // SELECT with WHERE
+        '?':
+          exit; // we could cache statements with parameters for sure
+        end;
         inc(P);
       end;
     end;
-    result := hasnowhereclause;
+    result := selectWithNoParamOrWhere;
   end
   else
     result := false;
