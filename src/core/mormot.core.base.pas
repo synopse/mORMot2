@@ -738,6 +738,18 @@ procedure FastAssignNew(var d; s: pointer = nil);
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawUtf8; len: PtrInt); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// initialize a RawByteString, ensuring returned "aligned" pointer
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
@@ -4167,6 +4179,24 @@ begin
     P^.length := len;
     PCardinal(PAnsiChar(P) + len + _STRRECSIZE)^ := 0; // ends with four #0
   end;
+end;
+
+procedure FakeLength(var s: RawUtf8; len: PtrInt);
+begin
+  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := len; // in-place SetLength()
+  PByteArray(s)[len] := 0;
+end;
+
+procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char);
+begin
+  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := endChar - pointer(s);
+  endChar^ := #0;
+end;
+
+procedure FakeLength(var s: RawByteString; len: PtrInt);
+begin
+  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := len; // in-place SetLength()
+  PByteArray(s)[len] := 0;
 end;
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
@@ -7858,8 +7888,8 @@ begin
     if (L <> 0) and
        (PStrCnt(PAnsiChar(pointer(S)) - _STRCNT)^ = 1) then
     begin
-      PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^ := L; // just fake length
-      MoveFast(PByteArray(S)[i], pointer(S)^, L + 1); // move in place (with #0)
+      MoveFast(PByteArray(S)[i], pointer(S)^, L); // move in place
+      FakeLength(S, L); // after move
     end
     else
       FastSetString(S, @PByteArray(S)[i], L); // allocate
