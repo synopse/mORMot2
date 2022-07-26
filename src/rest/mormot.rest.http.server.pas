@@ -779,6 +779,7 @@ begin
     include(hso, hsoNoXPoweredHeader);
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
+  //include(hso, hsoHeadersInterning);
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
   try

@@ -197,10 +197,14 @@ type
   private
     ContentLeft: Int64;
     ContentPos: PByte;
-    ContentEncoding: RawUtf8;
-    procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt; nointern: boolean);
-    function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
-    procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8; nointern: boolean = false);
+    ContentEncoding, CommandUriInstance: RawUtf8;
+    CommandUriInstanceLen: PtrInt;
+    procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
+      nointern: boolean);
+    function ProcessParseLine(var st: TProcessParseLine;
+      setCommandUri: boolean = false): boolean;
+    procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8;
+      nointern: boolean = false);
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -1142,7 +1146,7 @@ begin
   if nfHeadersParsed in HeaderFlags then
     exit;
   include(HeaderFlags, nfHeadersParsed);
-  Head.AsText(Headers, {OverheadForRemoteIP=}40);
+  Head.AsText(Headers, {ForRemoteIP=}40, {usemainbuffer=}Interning <> nil);
   Head.Reset;
   if Compress <> nil then
     if AcceptEncoding <> '' then
@@ -1223,7 +1227,7 @@ begin
 end;
 
 function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine;
-  line: PRawUtf8): boolean;
+  setCommandUri: boolean): boolean;
 var
   P: PUtf8Char;
   Len: PtrInt;
@@ -1265,8 +1269,20 @@ begin
   // here P^ <= #13: we found a whole text line
   st.Line := st.P;
   st.LineLen := P - st.P;
-  if line <> nil then
-    FastSetString(line^, st.Line, st.LineLen); // no interning for CommandUri
+  if setCommandUri then
+    if Interning = nil then
+      FastSetString(CommandUri, st.Line, st.LineLen)
+    else
+    begin // no real interning, but CommandUriInstance buffer reuse
+      if st.LineLen > CommandUriInstanceLen then
+      begin
+        CommandUriInstanceLen := st.LineLen + 256;
+        FastSetString(CommandUriInstance, nil, CommandUriInstanceLen);
+      end;
+      CommandUri := CommandUriInstance; // COW memory buffer reuse
+      MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
+      FakeLength(CommandUri, st.LineLen);
+    end;
   result := true;
   st.P := P; // will ensure below that st.line ends with #0
   // go to beginning of next line
@@ -1295,12 +1311,12 @@ begin
   repeat
     case State of
       hrsGetCommand:
-        if ProcessParseLine(st, @CommandUri) then
+        if ProcessParseLine(st, {SetCommandUri=}true) then
           State := hrsGetHeaders
         else
           exit; // not enough input
       hrsGetHeaders:
-        if ProcessParseLine(st, nil) then
+        if ProcessParseLine(st) then
           if st.LineLen <> 0 then
             // Headers end with a void line
             ParseHeader(st.Line, hroHeadersUnfiltered in Options)
@@ -1321,7 +1337,7 @@ begin
           exit;
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
-        if ProcessParseLine(st, nil) then
+        if ProcessParseLine(st) then
         begin
           ContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
           if ContentLeft <> 0 then
@@ -1360,12 +1376,12 @@ begin
             exit;
         end;
       hrsGetBodyChunkedDataVoidLine:
-        if ProcessParseLine(st, nil) then // chunks end with a void line
+        if ProcessParseLine(st) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
         else
           exit;
       hrsGetBodyChunkedDataLastLine:
-        if ProcessParseLine(st, nil) then // last chunk
+        if ProcessParseLine(st) then // last chunk
           if st.Len <> 0 then
             State := hrsErrorUnsupportedFormat // should be no further input
           else
