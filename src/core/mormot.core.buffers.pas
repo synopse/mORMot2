@@ -2559,8 +2559,7 @@ type
     /// the actual storage, with length(Buffer) as Capacity
     fBuffer: RawByteString;
     fLen: PtrInt;
-    function GetCapacity: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
+    fCapacity: PtrInt; // may not be length(fBuffer) after AsText(UseMainBuffer)
   public
     /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
@@ -2575,7 +2574,7 @@ type
       read fLen write fLen;
     /// how many bytes are currently allocated in the Buffer
     property Capacity: PtrInt
-      read GetCapacity;
+      read fCapacity;
     /// add some UTF-8 buffer content to the Buffer, resizing it if needed
     // - could optionally include a #13#10 end of line
     procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false); overload;
@@ -2611,7 +2610,9 @@ type
     /// retrieve the current Buffer/Len content as RawUtf8 text
     // - with some optional overhead for faster reallocmem at concatenation
     // - won't force Len to 0: caller should call Reset if done with it
-    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
+    // - UseMainBuffer=true will return a copy of fBuffer into Text
+    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0;
+      UseMainBuffer: boolean = false);
   end;
 
   /// pointer reference to a TRawByteStringBuffer
@@ -10622,11 +10623,6 @@ end;
 
 { TRawByteStringBuffer }
 
-function TRawByteStringBuffer.GetCapacity: PtrInt;
-begin
-  result := length(fBuffer);
-end;
-
 procedure TRawByteStringBuffer.Reset;
 begin
   fLen := 0;
@@ -10635,7 +10631,10 @@ end;
 procedure TRawByteStringBuffer.Clear;
 begin
   fLen := 0;
+  if fBuffer = '' then
+    exit;
   fBuffer := '';
+  fCapacity := 0;
 end;
 
 function TRawByteStringBuffer.Buffer: pointer;
@@ -10645,19 +10644,24 @@ end;
 
 procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt; CRLF: boolean);
 var
-  cap, needed: PtrInt;
+  needed: PtrInt;
 begin
   if (PLen <= 0) and
      not CRLF then
     exit;
-  cap := Length(fBuffer);
-  if cap = 0 then
-    SetLength(fBuffer, PLen + 128) // small overhead at first
+  if fCapacity = 0 then
+  begin
+    fCapacity := PLen + 128; // small overhead at first
+    SetLength(fBuffer, fCapacity);
+  end
   else
   begin
     needed := fLen + PLen + 2;
-    if needed > cap then
-      SetLength(fBuffer, needed + needed shr 3 + 2048); // generous overhead
+    if needed > fCapacity then
+    begin
+      fCapacity := needed + needed shr 3 + 2048; // generous overhead
+      SetLength(fBuffer, fCapacity);
+    end;
   end;
   if PLen > 0 then
   begin
@@ -10700,14 +10704,17 @@ end;
 function TRawByteStringBuffer.CanAppend(Bytes: PtrInt): boolean;
 begin
   result := (Bytes = 0) or
-            (fLen + Bytes <= length(fBuffer));
+            (fLen + Bytes <= fCapacity);
 end;
 
 function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;
 begin
   fLen := 0;
-  if MaxSize > length(fBuffer) then
-    FastSetRawByteString(fBuffer, nil, MaxSize); // no realloc -> not SetLength()
+  if MaxSize > fCapacity then
+  begin
+    fCapacity := MaxSize;
+    FastSetRawByteString(fBuffer, nil, MaxSize); // no realloc -> no SetLength()
+  end;
   result := pointer(fBuffer);
 end;
 
@@ -10760,8 +10767,11 @@ procedure TRawByteStringBuffer.Insert(P: pointer; PLen: PtrInt;
   Position: PtrInt; CRLF: boolean);
 begin
   inc(PLen, 2 * ord(CRLF));
-  if PLen + fLen > length(fBuffer) then
-    SetLength(fBuffer, PLen + fLen + fLen shr 3);
+  if PLen + fLen > fCapacity then
+  begin
+    fCapacity := PLen + fLen + fLen shr 3;
+    SetLength(fBuffer, fCapacity);
+  end;
   MoveFast(pointer(fBuffer)^, PByteArray(fBuffer)[PLen], fLen);
   dec(PLen, 2 * ord(CRLF));
   MoveFast(P^, pointer(fBuffer)^, PLen);
@@ -10769,21 +10779,25 @@ begin
     PWord(@PByteArray(fBuffer)[PLen])^ := $0a0d;
 end;
 
-procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
-var
-  p: PAnsiChar;
+procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt;
+  UseMainBuffer: boolean);
 begin
   if (Len = 0) or
+     (fBuffer = '') or
      (OverHead < 0) then
     exit;
-  FastSetString(Text, nil, Len + Overhead);
-  p := pointer(Text);
-  MoveFast(pointer(fBuffer)^, p^, Len);
-  if OverHead <> 0 then
+  if UseMainBuffer and
+     (PStrCnt(PAnsiChar(pointer(fBuffer)) - _STRCNT)^ = 1) and
+     (Len + Overhead <= fCapacity) then
+    Text := fBuffer // fast COW
+  else
   begin
-    PStrLen(p - _STRLEN)^ := Len; // fake length
-    p[Len] := #0;
+    FastSetString(Text, nil, Len + Overhead);
+    MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
+    if OverHead = 0 then
+      exit;
   end;
+  FakeLength(Text, Len);
 end;
 
 
