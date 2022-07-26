@@ -2330,7 +2330,7 @@ begin
           if StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
              fStatement, fError, pointer(fSqlPrepared), length(fSqlPrepared), nil,
              0, OCI_NTV_SYNTAX, OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
-            fCacheIndex := 1
+            include(fCache, scOnServer)
           else
             Check(nil, self,
               StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
@@ -2358,7 +2358,8 @@ begin
       end;
     end;
   finally
-    fTimeElapsed.FromExternalMicroSeconds(SqlLogEnd(' cache=%', [fCacheIndex]));
+    fTimeElapsed.FromExternalMicroSeconds(
+      SqlLogEnd(' cache=%', [ord(scOnServer in fCache)]));
   end;
 end;
 

@@ -2034,6 +2034,17 @@ type
       read fProperties;
   end;
 
+  /// how this statement is cached
+  // - scPossible is set by TSqlDBConnection.NewStatementPrepared when
+  // TSqlDBConnectionProperties.IsCacheable was true for this SQL statement
+  // - scOnClient is set when it is actually cached within the TSqlDBConnection
+  // - scOnServer is set when cached on server side (mormot.db.sql.oracle
+  // and mormot.db.sql.postgresl only by now)
+  TSqlDBStatementCache = set of (
+    scPossible,
+    scOnClient,
+    scOnServer);
+
   /// generic abstract class to implement a prepared SQL query
   // - inherited classes should implement the DB-specific connection in its
   // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
@@ -2051,13 +2062,13 @@ type
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDbms: TSqlDBDefinition;
+    fCache: TSqlDBStatementCache;
     {$ifndef SYNDB_SILENCE}
     fSqlLogLevel: TSynLogInfo;
     fSqlLogLog: TSynLog;
     {$endif SYNDB_SILENCE}
     fSqlWithInlinedParams: RawUtf8;
     fSqlLogTimer: TPrecisionTimer;
-    fCacheIndex: integer;
     fSqlPrepared: RawUtf8;
     function GetSqlCurrent: RawUtf8;
     function GetSqlWithInlinedParams: RawUtf8;
@@ -2569,21 +2580,19 @@ type
     // - used internally by the implementation units, e.g. for errors logging
     property SqlCurrent: RawUtf8
       read GetSqlCurrent;
-    /// low-level access to the statement cache index, after a call to Prepare()
-    // - contains >= 0 if the database supports prepared statement cache
-    //(Oracle, Postgres) and query plan is cached; contains -1 in other cases
-    property CacheIndex: integer
-      read fCacheIndex;
   published
     /// the prepared SQL statement, as supplied to Prepare() method
     property Sql: RawUtf8
       read fSql;
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
-    // - such statement query plan usually differ from a real execution plan
-    // for prepared statements with parameters - see SqlPrepared property instead
+    // - such statement query plan usually differ from a real execution plan for
+    // prepared statements with parameters - see SqlPrepared property instead
     property SqlWithInlinedParams: RawUtf8
       read GetSqlWithInlinedParams;
+    /// how this statement has been cached, after a call to Prepare()
+    property Cache: TSqlDBStatementCache
+      read fCache;
     /// the current row after Execute/Step call, corresponding to Column*() methods
     // - contains 0 before initial Step call, or a number >=1 during data retrieval
     property CurrentRow: integer
@@ -2602,6 +2611,9 @@ type
     property StripSemicolon: boolean
       read fStripSemicolon write fStripSemicolon;
   end;
+
+
+function ToText(c: TSqlDBStatementCache): ShortString; overload;
 
 
 { ************ Parent Classes for Thread-Safe and Parametrized Connections }
@@ -5969,7 +5981,6 @@ begin
   inherited Create;
   fConnection := aConnection;
   fStripSemicolon := true;
-  fCacheIndex := -1;
   if aConnection <> nil then
     fDbms := aConnection.fProperties.GetDbms;
 end;
@@ -7036,6 +7047,12 @@ begin
 end;
 
 
+function ToText(c: TSqlDBStatementCache): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TSqlDBStatementCache), c, result, {trim=}true);
+end;
+
+
 { TSqlDBConnection }
 
 procedure TSqlDBConnection.CheckConnection;
@@ -7217,9 +7234,9 @@ function TSqlDBConnection.NewStatementPrepared(const aSql: RawUtf8;
   AllowReconnect: boolean): ISqlDBStatement;
 var
   stmt: TSqlDBStatement;
-  tocache: boolean;
+  iscacheable, tocache: boolean;
   ndx, altern: integer;
-  cachedsql, fakesql: RawUtf8;
+  cachedsql: RawUtf8;
 
   procedure TryPrepare(doraise: boolean);
   var
@@ -7230,6 +7247,8 @@ var
       InternalProcess(speActive);
       try
         stmt := NewStatement;
+        if iscacheable then
+          include(stmt.fCache, scPossible);
         stmt.Prepare(aSql, ExpectResults);
         if tocache then
         begin
@@ -7239,7 +7258,10 @@ var
               fCache := TRawUtf8List.CreateEx(
                 [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
             if fCache.AddObject(cachedsql, stmt) >= 0 then
-              stmt._AddRef // instance will be owned by fCache.Objects[]
+            begin
+              stmt._AddRef; // instance will be owned by fCache.Objects[]
+              include(stmt.fCache, scOnClient);
+            end
             else
               SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
                 'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
@@ -7277,7 +7299,8 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
-  tocache := fProperties.IsCachable(Pointer(aSql));
+  iscacheable := fProperties.IsCachable(Pointer(aSql));
+  tocache := iscacheable;
   if tocache and
      (fCache <> nil) then
   begin
@@ -7293,7 +7316,7 @@ begin
         stmt := fCache.Objects[ndx];
         if stmt.RefCount = 1 then
         begin
-          // ensure statement is not currently in use
+          // this statement is not currently in use and can be returned
           if ndx <> fCacheLastIndex then
           begin
             fCacheLastIndex := ndx;
@@ -7305,19 +7328,16 @@ begin
         end
         else
         begin
-          // in use -> create cached alternatives
+          // main statement in use -> create cached alternatives
           tocache := false; // if all slots are used, won't cache this statement
           if fProperties.StatementCacheReplicates = 0 then
             SynDBLog.Add.Log(sllWarning,
               'NewStatementPrepared: cached statement still in use ' +
               '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
           else
-          begin
-            fakesql := #0'A';
             for altern := 1 to fProperties.StatementCacheReplicates do
             begin
-              fakesql[1] := AnsiChar(altern); // no valid SQL as cache name
-              cachedsql := aSql + fakesql;
+              cachedsql := aSql + #0 + UInt32ToUtf8(altern); // not valid SQL
               ndx := fCache.IndexOf(cachedsql);
               if ndx >= 0 then
               begin
@@ -7335,14 +7355,13 @@ begin
                 break;
               end;
             end;
-          end;
         end;
       end;
     finally
       fSafe.UnLock;
     end;
   end;
-  // not in cache (or not cachable) -> prepare now
+  // not in cache (or not cacheable) -> prepare now
   if fProperties.ReconnectAfterConnectionError and
      AllowReconnect then
   begin

@@ -544,15 +544,6 @@ end;
 
 // see https://www.postgresql.org/docs/9.3/libpq-exec.html
 
-const
-  PREP_SQL: array[0..5] of PAnsiChar = (
-    'SELECT',
-    'INSERT',
-    'UPDATE',
-    'DELETE',
-    'VALUES',
-    nil);
-
 procedure TSqlDBPostgresStatement.Prepare(
   const aSql: RawUtf8; ExpectResults: boolean);
 begin
@@ -561,13 +552,13 @@ begin
     raise ESqlDBPostgres.CreateUtf8('%.Prepare: empty statement', [self]);
   inherited Prepare(aSql, ExpectResults); // will strip last ;
   fPreparedParamsCount := ReplaceParamsByNumbers(fSql, fSqlPrepared, '$');
-  if (fPreparedParamsCount > 0) and
-     (IdemPPChar(pointer(fSqlPrepared), @PREP_SQL) >= 0) then
+  if scPossible in fCache then
   begin
-    // preparable statement will be cached by Sha256(SQL) name on server side
-    fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
+    // preparable statements will be cached server-side by Sha256(SQL) as name
+    include(fCache, scOnServer);
+    TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
-    SqlLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
+    SqlLogEnd(' cached as %', [fPreparedStmtName]);
   end
   else
     SqlLogEnd;
