@@ -993,13 +993,30 @@ end;
 
 function TPollConnectionSockets.IsValidPending(tag: TPollSocketTag): boolean;
 begin
-  // same logic than TPollAsyncConnection IsDangling() + TryLock()
-  result := (tag <> 0) and
-            // avoid dangling pointer
-            (TPollAsyncConnection(tag).fHandle <> 0) and
-            // another atpReadPending thread may currently own this connection
-            // (occurs if PollForPendingEvents was called in between)
-            (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0);
+  try
+    // same logic than TPollAsyncConnection IsDangling() + TryLock()
+    result := (tag <> 0) and
+              // avoid dangling pointer
+              (TPollAsyncConnection(tag).fHandle <> 0) and
+              // another atpReadPending thread may currently own this connection
+              // (occurs if PollForPendingEvents was called in between)
+              (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0);
+  except
+    on E: Exception do
+    begin
+      // this GPF has been seen on very rare occasions on wrk -c 16384
+      // -> has a slight performance impact, but is mandatory for proper
+      // TPollSockets.GetOnePending fPendingSafe.Lock release
+      // -> perhaps KeepConnectionInstanceMS may be set to a higher value
+      try
+        if Assigned(fOnlog) then
+          fOnLog(sllError, 'IsValidPending(%) raised %',
+            [pointer(tag), E.ClassType], self);
+      except // paranoid
+      end;
+      result := false;
+    end;
+  end;
 end;
 
 procedure TPollConnectionSockets.PendingLogDebug(const caller: shortstring);
@@ -2088,8 +2105,9 @@ begin
   begin
     include(aConnection.fFlags, fInList);
     LockedInc32(@fConnectionCount);
-  end else if (fThreadReadPoll = nil) or
-              aAddAndSubscribe then
+  end
+  else if (fThreadReadPoll = nil) or
+          aAddAndSubscribe then
     // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
     ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
