@@ -751,7 +751,6 @@ type
     procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents;
       aNoSearch: boolean);
     /// disable any pending notification associated with a given connection tag
-    // - as used e.g. by Unsubscribe()
     // - can be called when a connection is removed from the main logic
     // to ensure function IsValidPending() never raise any GPF, if the
     // connection has been set via AddOnePending() but not via Subscribe()
@@ -2448,27 +2447,14 @@ begin
 end;
 
 procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
-const
-  FOUND: array[boolean] of string[10] = ('', 'events:=0 ');
-var
-  fnd: boolean;
 begin
-  // first check if there is any pending notification about this socket
-  fnd := false;
-  if fPending.Count <> 0 then
-  begin
-    fnd := DeleteOnePending(tag);
-    if Assigned(fOnLog) then
-      fOnLog(sllTrace, 'Unsubscribe(%) count=% %pending #%/%', [pointer(tag),
-        fCount, FOUND[fnd], fPendingIndex, fPending.Count], self);
-  end;
   // actually unsubscribe from the sockets monitoring API
   {$ifdef POLLSOCKETEPOLL}
   // epoll_ctl() is thread-safe and let epoll_wait() work in the background
   if fPoll[0].Unsubscribe(socket) then
   begin
     LockedDec32(@fCount);
-    if Assigned(fOnLog) then // log outside fPendingSafe
+    if Assigned(fOnLog) then
       fOnLog(sllTrace, 'Unsubscribe(%) count=%', [pointer(socket), fCount], self);
   end;
   {$else}
@@ -2577,7 +2563,7 @@ begin
       // new event to process
       if n >= cap then
       begin
-        cap := n + newCount + 16;
+        cap := NextGrow(n + newCount);
         SetLength(res.Events, cap); // seldom needed
       end;
       res.Events[n] := new^;
@@ -2787,8 +2773,7 @@ begin
       fPendingSafe.UnLock;
     end;
     new.Events := nil;
-    //if result = 0 then {$i-} write('!'); {$i+}
-    if {(result > 0) and}
+    if (result > 0) and
        Assigned(fOnLog) then
     begin
       QueryPerformanceMicroSeconds(stop);
@@ -2866,8 +2851,13 @@ begin
   if (fPending.Count = 0) or
      (aTagCount = 0) then
     exit;
-  //dec(aTagCount);
-  //QuickSortPtrInt(pointer(aTag), 0, aTagCount);
+  dec(aTagCount);
+  if aTagCount = 0 then
+  begin
+    result := ord(DeleteOnePending(aTag^));
+    exit;
+  end;
+  QuickSortPtrInt(pointer(aTag), 0, aTagCount);
   fPendingSafe.Lock;
   try
     n := fPending.Count;
@@ -2877,8 +2867,7 @@ begin
     p := @fPending.Events[fPendingIndex];
     if n > 0 then
       repeat
-        if PtrUIntScanExists(pointer(aTag), aTagCount, p^.Tag) then
-        // if FastFindPtrIntSorted(pointer(aTag), aTagCount, p^.tag) >= 0 then
+        if FastFindPtrIntSorted(pointer(aTag), aTagCount, p^.tag) >= 0 then
         begin
           byte(p^.events) := 0; // GetOnePending() will just ignore it
           inc(result);

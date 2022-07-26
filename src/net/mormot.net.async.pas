@@ -1883,33 +1883,45 @@ begin
   if Terminated or
      (fGCCount = 0) then
     exit;
-  oldenough := fLastOperationMS - fKeepConnectionInstanceMS; // keep for 100 ms
+  if fClients.fRead.PendingCount <> 0 then
+    oldenough := 2000 // wait 2 seconds until no pending event is in queue
+  else
+    oldenough := fKeepConnectionInstanceMS; // keep for 100 ms by default
+  oldenough := fLastOperationMS - oldenough;
   ngc := 0;
   nkept := 0;
   fGCSafe.Lock;
-  if fGCCount <> 0 then
-  begin
-    SetLength(gc, fGCCount);
-    for i := 0 to fGCCount - 1 do
+  try
+    if fGCCount <> 0 then
     begin
-      c := fGC[i];
-      if (c.fLastOperation <= oldenough) or         // timeout
-         (c.fLastOperation > fLastOperationMS) then // or 42 days overflow
+      for i := 0 to fGCCount - 1 do
       begin
-        gc[ngc] := c;
-        inc(ngc);
-      end
-      else
-      begin
-        fGC[nkept] := c; // keep if not fKeepConnectionInstanceMS old
-        inc(nkept);
+        c := fGC[i];
+        if c.fLastOperation <= oldenough then
+        begin
+          // release after timeout
+          if gc = nil then
+            SetLength(gc, fGCCount - i);
+          gc[ngc] := c;
+          inc(ngc);
+        end
+        else
+        begin
+          if c.fLastOperation > fLastOperationMS then
+            // reset time flag after 42 days overflow
+            c.fLastOperation := fLastOperationMS;
+          fGC[nkept] := c; // keep if not fKeepConnectionInstanceMS old
+          inc(nkept);
+        end;
       end;
+      fGCCount := nkept; // don't resize fGC[] to avoid realloc
     end;
-    fGCCount := nkept; // don't resize fGC[] to avoid realloc
+  finally
+    fGCSafe.UnLock;
   end;
-  fGCSafe.UnLock;
   if ngc = 0 then
     exit;
+  // np := fClients.fRead.DeleteSeveralPending(pointer(gc), ngc); always 0
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace,  'DoGC=% kept=%', [ngc, nkept], self);
   ObjArrayClear(gc, {continueonexc=}true, @ngc);
