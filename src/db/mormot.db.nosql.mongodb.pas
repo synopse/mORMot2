@@ -2259,7 +2259,7 @@ var
   W: TBsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(tmp);
+  W := TBsonWriter.Create(tmp{%H-});
   try
     W.BSONDocumentBegin;
     GetRepliesAndFree(Query, ReplyBson, W); // W.Tag = item number in array

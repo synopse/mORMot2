@@ -3212,7 +3212,7 @@ end;
 
 function FromVarString(var Source: PByte): RawUtf8;
 begin
-  FromVarString(Source, result);
+  FromVarString(Source, result{%H-});
 end;
 
 procedure FromVarString(var Source: PByte; var Value: RawUtf8);
@@ -3232,7 +3232,7 @@ begin
   if (Source = nil) or
       (PAnsiChar(Source) + len > PAnsiChar(SourceMax)) then
     len := 0;
-  FastSetString(result, Source, len);
+  FastSetString(result{%H-}, Source, len);
   inc(Source, len);
 end;
 
@@ -3781,13 +3781,13 @@ end;
 function TFastReader.VarString: RawByteString;
 begin
   with VarBlob do
-    FastSetRawByteString(result, Ptr, Len);
+    FastSetRawByteString(result{%H-}, Ptr, Len);
 end;
 
 function TFastReader.VarString(CodePage: integer): RawByteString;
 begin
   with VarBlob do
-    FastSetStringCP(result, Ptr, Len, CodePage)
+    FastSetStringCP(result{%H-}, Ptr, Len, CodePage)
 end;
 
 procedure TFastReader.VarUtf8(out result: RawUtf8);
@@ -5462,7 +5462,7 @@ var
       Source.Position := sourceSize - tmplen;
       if Source.Read(tmp, tmplen) <> tmplen then
         exit;
-      dec(tmplen, SizeOf(t^));
+      dec(tmplen, SizeOf(TAlgoCompressTrailer));
       t := @tmp[tmplen];
       repeat
         dec(PByte(t)); // search backward
@@ -5950,7 +5950,7 @@ begin
   L := 0;
   for i := 0 to high(Values) do
     inc(L, length(Values[i]));
-  FastSetRawByteString(result, nil, L);
+  FastSetRawByteString(result{%H-}, nil, L);
   P := pointer(result);
   for i := 0 to high(Values) do
   begin
@@ -6353,7 +6353,7 @@ var
 begin
   outlen := BinToBase64Length(len);
   inc(outlen, 2 * (outlen shr 6) + 2); // one CRLF per line
-  FastSetString(result, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
+  FastSetString(result{%H-}, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
   p := pointer(result);
   if Prefix <> '' then
   begin
@@ -6436,12 +6436,12 @@ end;
 
 function BinToBase64WithMagic(const data: RawByteString): RawUtf8;
 begin
-  BinToBase64WithMagic(pointer(data), length(data), result);
+  BinToBase64WithMagic(pointer(data), length(data), result{%H-});
 end;
 
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUtf8;
 begin
-  BinToBase64WithMagic(Data, DataLen, result);
+  BinToBase64WithMagic(Data, DataLen, result{%H-});
 end;
 
 procedure BinToBase64WithMagic(Data: pointer; DataLen: integer;
@@ -6520,12 +6520,12 @@ end;
 
 function Base64ToBin(const s: RawByteString): RawByteString;
 begin
-  Base64ToBinSafe(pointer(s), length(s), result);
+  Base64ToBinSafe(pointer(s), length(s), result{%H-});
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
 begin
-  Base64ToBinSafe(sp, len, result);
+  Base64ToBinSafe(sp, len, result{%H-});
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
@@ -6543,7 +6543,7 @@ end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString;
 begin
-  Base64ToBinSafe(sp, len, result);
+  Base64ToBinSafe(sp, len, result{%H-});
 end;
 
 function Base64LengthAdjust(sp: PAnsiChar; var len: PtrInt): PtrInt;
@@ -6740,12 +6740,12 @@ end;
 
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
 begin
-  Base64uriToBin(sp, len, result);
+  Base64uriToBin(sp, len, result{%H-});
 end;
 
 function Base64uriToBin(const s: RawByteString): RawByteString;
 begin
-  Base64uriToBin(pointer(s), length(s), result);
+  Base64uriToBin(pointer(s), length(s), result{%H-});
 end;
 
 procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
@@ -6968,7 +6968,7 @@ var
   len: integer;
 begin
   len := BinToBase58(Bin, BinLen, temp);
-  FastSetString(result, temp.buf, len);
+  FastSetString(result{%H-}, temp.buf, len);
   temp.Done;
 end;
 
@@ -7039,7 +7039,7 @@ var
   len: integer;
 begin
   len := Base58ToBin(B58, B58Len, temp);
-  FastSetRawByteString(result, temp.buf, len);
+  FastSetRawByteString(result{%H-}, temp.buf, len);
   temp.Done;
 end;
 
@@ -7050,7 +7050,7 @@ end;
 
 function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;
 begin
-  BlobToRawBlob(P, result, Len);
+  BlobToRawBlob(P, result{%H-}, Len);
 end;
 
 procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
@@ -8827,7 +8827,7 @@ end;
 
 function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
 begin
-  FastSetString(result, nil, sourcelen * 3); // worse case
+  FastSetString(result{%H-}, nil, sourcelen * 3); // worse case
   if sourcelen <> 0 then
     FakeLength(result, pointer(EscapeBuffer(
       pointer(result), sourcelen, pointer(result), sourcelen * 3)));

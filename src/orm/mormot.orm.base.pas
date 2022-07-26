@@ -10763,7 +10763,7 @@ end;
 function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
   ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
 begin
-  SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
+  result := SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
     ID, EndOfObject, Format);
 end;
 

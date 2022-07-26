@@ -2000,7 +2000,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  FastSetRawByteString(result, @der, len);
+  FastSetRawByteString(result{%H-}, @der, len);
 end;
 
 function EccToDer(const priv: TEccPrivateKey): RawByteString;
@@ -2016,7 +2016,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  FastSetRawByteString(result, @der, len);
+  FastSetRawByteString(result{%H-}, @der, len);
 end;
 
 function EccToDer(const pub: TEccPublicKey): RawByteString;
@@ -2032,7 +2032,7 @@ begin
     der[0] := DER_SEQUENCE;
     der[1] := AnsiChar(len - 2);
   end;
-  FastSetRawByteString(result, @der, len);
+  FastSetRawByteString(result{%H-}, @der, len);
 end;
 
 function DerToEcc(der: PByteArray; derlen: PtrInt; out sign: TEccSignature): boolean;
@@ -2566,7 +2566,7 @@ end;
 
 function TEccCertificate.ToJson(withBase64: boolean): RawUtf8;
 begin
-  _VariantSaveJson(ToVariant(withBase64), twJsonEscape, result);
+  _VariantSaveJson(ToVariant(withBase64), twJsonEscape, result{%H-});
 end;
 
 function TEccCertificate.ToFile(const filename: TFileName): boolean;
@@ -3333,7 +3333,7 @@ end;
 
 function TEccSignatureCertified.ToBinary: RawByteString;
 begin
-  FastSetRawByteString(result, @fCertified, SizeOf(fCertified));
+  FastSetRawByteString(result{%H-}, @fCertified, SizeOf(fCertified));
 end;
 
 function TEccSignatureCertified.ToVariant: variant;
@@ -3834,6 +3834,7 @@ var
   cert: TEccCertificate;
   chain: TEccCertificateChain;
 begin
+  result := nil;
   n := 0;
   P := pointer(Content);
   case GetNextJsonToken(P) of
@@ -5144,7 +5145,7 @@ begin
      PemDerRawToEcc(pub, keypub) and
      Ecc256r1SharedSecret(keypub, keypriv, sec) then
     // accept signature and public key in raw, PEM or DER format
-    FastSetRawByteString(result, @sec, SizeOf(sec))
+    FastSetRawByteString(result{%H-}, @sec, SizeOf(sec))
   else
     result := '';
   FillZero(sec);
@@ -5408,7 +5409,7 @@ end;
 function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;
   const PrivatePassword: SpiUtf8): RawByteString;
 begin
-  FastSetRawByteString(result, @Input, SizeOf(Input));
+  FastSetRawByteString(result{%H-}, @Input, SizeOf(Input));
   if PrivatePassword <> '' then
     result := AesPkcs7(MainAesPrng.AFSplit(result, 31),
       {encrypt=}true, PrivatePassword, 'synecc', 1000);
@@ -5545,7 +5546,7 @@ end;
 function TCryptCertInternal.GetPublicKey: RawByteString;
 begin
   if fEcc <> nil then
-    FastSetRawByteString(result, @fEcc.Content.Head.Signed.PublicKey,
+    FastSetRawByteString(result{%H-}, @fEcc.Content.Head.Signed.PublicKey,
       SizeOf(TEccPublicKey))
 end;
 
@@ -5555,7 +5556,7 @@ var
 begin
   pk := GetEccPrivateKey({checkZero=}true);
   if pk <> nil then
-    FastSetRawByteString(result, pk, SizeOf(pk^))
+    FastSetRawByteString(result{%H-}, pk, SizeOf(pk^))
   else
     result := '';
 end;

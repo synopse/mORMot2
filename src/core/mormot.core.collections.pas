@@ -1356,14 +1356,14 @@ end;
 // in this very unit, to reduce units and executable code size
 
 {$ifdef ISDELPHI} {$HINTS OFF} {$endif}
-class function Collections.RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer;
+class function Collections.{%H-}RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer;
 begin
   raise ESynList.CreateUtf8('Collections.NewList<>: Type is too complex - ' +
     'use Collections.NewPlainList<%> instead', [aItemTypeInfo.Name^]);
     // we tried Delphi' "at ReturnAddress" but disabled to avoid internal errors
 end;
 
-class function Collections.RaiseUseNewPlainKeyValue(
+class function Collections.{%H-}RaiseUseNewPlainKeyValue(
   const aContext: TNewKeyValueContext): pointer;
 begin
   raise ESynKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +

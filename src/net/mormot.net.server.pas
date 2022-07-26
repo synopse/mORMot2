@@ -1801,7 +1801,7 @@ begin
     fCompressGz := -1;
 end;
 
-function THttpServerSocketGeneric.WebSocketsEnable(const aWebSocketsURI,
+function THttpServerSocketGeneric.{%H-}WebSocketsEnable(const aWebSocketsURI,
   aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
   aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): pointer;
 begin

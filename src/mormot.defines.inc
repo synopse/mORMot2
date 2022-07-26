@@ -120,10 +120,11 @@
   // -vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
 
   // disable some no-brainer warnings - let FPC align with Delphi in that matter
-  {$WARN 5089 off : uninitialized managed variables 1}
-  {$WARN 5091 off : uninitialized managed variables 2}
-  {$WARN 5093 off : function result variable of a managed uninitialized}
-  {$WARN 6058 off : call to subroutine marked as inline is not inlined}
+  {$WARN 5089 off} // uninitialized managed variables 1
+  {$WARN 5091 off} // uninitialized managed variables 2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+  {$WARN 5094 off} // function result variable of a managed uninitialized 2
+  {$WARN 6058 off} // call to subroutine marked as inline is not inlined
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility

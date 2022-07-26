@@ -3482,7 +3482,7 @@ end;
 
 function SendEmailSubject(const Text: string): RawUtf8;
 begin
-  StringToUtf8(Text, result);
+  StringToUtf8(Text, result{%H-});
   result := MimeHeaderEncode(result);
 end;
 

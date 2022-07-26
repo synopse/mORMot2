@@ -564,7 +564,11 @@ type
   TPollSocketTagDynArray = TPtrUIntDynArray;
 
   /// modifications notified by TPollSocketAbstract.WaitForModified
-  TPollSocketResult = record
+  {$ifdef CPUINTEL}
+  TPollSocketResult =  packed record
+  {$else}
+  TPollSocketResult =  record // ARM uslaly prefers aligned data
+  {$endif CPUINTEL}
     /// opaque value as defined by TPollSocketAbstract.Subscribe
     // - holds typically a TPollAsyncConnection instance
     tag: TPollSocketTag;
@@ -746,6 +750,15 @@ type
     // - ready to be retrieved by GetOnePending
     procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents;
       aNoSearch: boolean);
+    /// disable any pending notification associated with a given connection tag
+    // - as used e.g. by Unsubscribe()
+    // - can be called when a connection is removed from the main logic
+    // to ensure function IsValidPending() never raise any GPF, if the
+    // connection has been set via AddOnePending() but not via Subscribe()
+    function DeleteOnePending(aTag: TPollSocketTag): boolean;
+    /// disable any pending notification associated with several connection tags
+    // - note that aTag array will be sorted during the process
+    function DeleteSeveralPending(aTag: PPollSocketTag; aTagCount: integer): integer;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; override;
     /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
@@ -2435,33 +2448,19 @@ begin
 end;
 
 procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
-var
-  fnd: PPollSocketResult;
-  ndx, n: PtrInt;
 const
   FOUND: array[boolean] of string[10] = ('', 'events:=0 ');
+var
+  fnd: boolean;
 begin
   // first check if there is any pending notification about this socket
-  fnd := nil;
+  fnd := false;
   if fPending.Count <> 0 then
   begin
-    fPendingSafe.Lock;
-    try
-      ndx := fPendingIndex;
-      n := fPending.Count;
-      if n <> 0 then
-      begin
-        fnd := FindPendingFromTag(@fPending.Events[ndx], n - ndx, tag);
-        if fnd <> nil then
-          byte(fnd^.events) := 0; // GetOnePending() will ignore it
-      end;
-    finally
-      fPendingSafe.UnLock;
-    end;
-    if Assigned(fOnLog) and
-       (n <> 0) then // log outside fPendingSafe
-      fOnLog(sllTrace, 'Unsubscribe(%) count=% %pending #%/%',
-        [pointer(tag), fCount, FOUND[fnd <> nil], ndx, n], self);
+    fnd := DeleteOnePending(tag);
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'Unsubscribe(%) count=% %pending #%/%', [pointer(tag),
+        fCount, FOUND[fnd], fPendingIndex, fPending.Count], self);
   end;
   // actually unsubscribe from the sockets monitoring API
   {$ifdef POLLSOCKETEPOLL}
@@ -2516,7 +2515,7 @@ begin
     exit;
   fPendingSafe.Lock;
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
+  try                        // and IsValidPending() should be secured
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
@@ -2528,7 +2527,7 @@ begin
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(notif.events) <> 0) and  // Unsubscribe() may have reset to 0
+        if (byte(notif.events) <> 0) and  // DeleteOnePending() may reset to 0
            IsValidPending(notif.tag) then // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
@@ -2815,8 +2814,8 @@ begin
     n := fPending.Count;
     if aNoSearch or
        (n = 0) or
-       (FindPendingFromTag(@fPending.Events[fPendingIndex],
-          n - fPendingIndex, aTag) = nil) then
+       (FindPendingFromTag( // fast O(n) search in L1 cache
+          @fPending.Events[fPendingIndex], n - fPendingIndex, aTag) = nil) then
     begin
       if n >= length(fPending.Events) then
         SetLength(fPending.Events, NextGrow(n));
@@ -2827,6 +2826,66 @@ begin
       end;
       fPending.Count := n + 1;
     end;
+  finally
+    fPendingSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.DeleteOnePending(aTag: TPollSocketTag): boolean;
+var
+  fnd: PPollSocketResult;
+begin
+  result := false;
+  if (fPending.Count = 0) or
+     (aTag = 0) then
+    exit;
+  fPendingSafe.Lock;
+  try
+    if fPending.Count <> 0 then
+    begin
+      fnd := FindPendingFromTag( // fast O(n) search in L1 cache
+        @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, aTag);
+      if fnd <> nil then
+      begin
+        byte(fnd^.events) := 0; // GetOnePending() will just ignore it
+        result := true;
+      end;
+    end;
+  finally
+    fPendingSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.DeleteSeveralPending(
+  aTag: PPollSocketTag; aTagCount: integer): integer;
+var
+  p: PPollSocketResult;
+  n: integer;
+begin
+  result := 0;
+  if (fPending.Count = 0) or
+     (aTagCount = 0) then
+    exit;
+  //dec(aTagCount);
+  //QuickSortPtrInt(pointer(aTag), 0, aTagCount);
+  fPendingSafe.Lock;
+  try
+    n := fPending.Count;
+    if n = 0 then
+      exit;
+    dec(n, fPendingIndex);
+    p := @fPending.Events[fPendingIndex];
+    if n > 0 then
+      repeat
+        if PtrUIntScanExists(pointer(aTag), aTagCount, p^.Tag) then
+        // if FastFindPtrIntSorted(pointer(aTag), aTagCount, p^.tag) >= 0 then
+        begin
+          byte(p^.events) := 0; // GetOnePending() will just ignore it
+          inc(result);
+        end;
+        inc(p);
+        dec(n)
+      until n = 0;
   finally
     fPendingSafe.UnLock;
   end;

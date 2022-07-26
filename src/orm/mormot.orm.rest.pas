@@ -2079,7 +2079,7 @@ begin
   result := dirUnsupported; // by default, will use regular Add/Update
 end;
 
-function TRestOrm.InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+function TRestOrm.{%H-}InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
   raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchDirectOne',[self]);

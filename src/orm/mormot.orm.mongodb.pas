@@ -318,7 +318,7 @@ var
   temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   sf := length(SubFields);
-  W := TBsonWriter.Create(temp);
+  W := TBsonWriter.Create(temp{%H-});
   try
     W.BsonDocumentBegin;
     if WithID then

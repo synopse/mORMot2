@@ -4228,7 +4228,7 @@ begin
   if doc.VarType <> DocVariantType.VarType then
     raise EBsonException.CreateUtf8(
       'Bson(doc) is % not a TDocVariant', [doc.VarType]);
-  with TBsonWriter.Create(tmp) do
+  with TBsonWriter.Create(tmp{%H-}) do
   try
     BsonWriteDoc(doc);
     ToBsonDocument(result);
@@ -4241,7 +4241,7 @@ function BsonFromIntegers(const Integers: array of integer): TBsonDocument;
 var
   tmp: TTextWriterStackBuffer;
 begin
-  with TBsonWriter.Create(tmp) do
+  with TBsonWriter.Create(tmp{%H-}) do
   try
     BsonWriteArrayOfInteger(Integers);
     ToBsonDocument(result);
@@ -4254,7 +4254,7 @@ function BsonFromInt64s(const Integers: array of Int64): TBsonDocument;
 var
   tmp: TTextWriterStackBuffer;
 begin
-  with TBsonWriter.Create(tmp) do
+  with TBsonWriter.Create(tmp{%H-}) do
   try
     BsonWriteArrayOfInt64(Integers);
     ToBsonDocument(result);
@@ -4309,7 +4309,7 @@ var
   end;
 
 begin
-  W := TBsonWriter.Create(tmp);
+  W := TBsonWriter.Create(tmp{%H-});
   try
     W.BsonDocumentBegin;
     a := 0;
@@ -4333,7 +4333,7 @@ var
   W: TBsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(tmp);
+  W := TBsonWriter.Create(tmp{%H-});
   try
     W.BsonDocumentBegin;
     for i := 0 to high(FieldNames) do
@@ -4359,7 +4359,7 @@ var
   W: TBsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TBsonWriter.Create(tmp);
+  W := TBsonWriter.Create(tmp{%H-});
   try
     W.BsonWriteDocFromJson(Json, nil, result, DoNotTryExtendedMongoSyntax);
     W.ToBsonDocument(doc);
@@ -4386,7 +4386,7 @@ begin
     exit;
   Json := GotoNextNotSpace(Json + 1);
   n := 0;
-  W := TBsonWriter.Create(tmp);
+  W := TBsonWriter.Create(tmp{%H-});
   try
     repeat
       Json := W.BsonWriteDocFromJson(Json, @EndOfObject, Kind,
