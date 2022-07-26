@@ -2484,7 +2484,7 @@ end;
 
 function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
 begin
-  result := tag <> 0; // overriden e.g. in TPollAsyncReadSockets
+  result := true; // overriden e.g. in TPollAsyncReadSockets
 end;
 
 function TPollSockets.GetSubscribeCount: integer;
