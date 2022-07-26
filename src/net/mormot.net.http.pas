@@ -1180,7 +1180,7 @@ begin
       inc(P);
   P^ := #0;
   MoveFast(B^, pointer(CommandUri)^, P - B + 1); // in-place resize
-  PStrLen(PtrUInt(CommandUri) - _STRLEN)^ := P - B;
+  {%H-}PStrLen(PtrUInt(CommandUri) - _STRLEN)^ := P - B;
   inc(P);
   if not IdemPChar(P, 'HTTP/1.') then
     exit;

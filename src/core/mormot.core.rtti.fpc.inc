@@ -803,7 +803,7 @@ asm
         lea     s1, qword ptr [s1 + rax - 8]
         lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr [s1] // compare last 8 bytes
+        mov     r8, qword ptr [s1] // compare last 8 bytes (may include length)
         cmp     r8, qword ptr [s2]
         jne     @q
         align 16

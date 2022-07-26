@@ -2073,8 +2073,8 @@ begin
   Sent^ := '['; // ignore the first field (stored in fBatch.ID)
 end;
 
-function TRestStorageTOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
-  RunTableIndex: integer): TRestOrmBatchDirect;
+function TRestStorageTOrm.InternalBatchDirectSupport(
+  Encoding: TRestBatchEncoding; RunTableIndex: integer): TRestOrmBatchDirect;
 begin
   if Encoding in BATCH_DIRECT then
     result := dirWriteNoLock
