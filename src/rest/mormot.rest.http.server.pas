@@ -782,32 +782,35 @@ begin
   //include(hso, hsoHeadersInterning);
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
-  try
     if PosEx('Wine', OSVersionInfoEx) > 0 then
-      log.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
-        'try useHttpSocket/useHttpAsync',
-        [ToText(aUse)^, OSVersionInfoEx], self);
-    // first try to use fastest http.sys
-    fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-      HttpThreadTerminate, TrimU(fDBServerNames), hso);
-    for i := 0 to high(aServers) do
-      HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
-        fUse in HTTP_API_REGISTERING_MODES, true);
-    if aAdditionalUrl <> '' then
-      HttpApiAddUri(aAdditionalUrl, fDomainName, aSecurity,
-        fUse in HTTP_API_REGISTERING_MODES, true);
-  except
-    on E: Exception do
     begin
-      log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
-        [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
-      FreeAndNilSafe(fHttpServer); // if http.sys initialization failed
-      if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
-        // propagate fatal exception with no fallback to the sockets HTTP server
-        raise;
-      aUse := useHttpSocket; // conservative: useHttpAsync is less mature on Win
+      log.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
+        'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
+      aUse := useHttpAsync; // the closest server we have using sockets
+    end
+    else
+    try
+      // first try to use fastest http.sys
+      fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
+        HttpThreadTerminate, TrimU(fDBServerNames), hso);
+      for i := 0 to high(aServers) do
+        HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
+          fUse in HTTP_API_REGISTERING_MODES, true);
+      if aAdditionalUrl <> '' then
+        HttpApiAddUri(aAdditionalUrl, fDomainName, aSecurity,
+          fUse in HTTP_API_REGISTERING_MODES, true);
+    except
+      on E: Exception do
+      begin
+        log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
+          [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
+        FreeAndNilSafe(fHttpServer); // if http.sys initialization failed
+        if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
+          // propagate fatal exception with no fallback to the sockets server
+          raise;
+        aUse := useHttpSocket; // conservative: useHttpAsync less mature on Win
+      end;
     end;
-  end;
   {$endif USEHTTPSYS}
   if fHttpServer = nil then
   begin
@@ -821,7 +824,7 @@ begin
         [self, fDBServerNames, ToText(aUse)^]);
     if aSecurity = secTLSSelfSigned then
     begin
-      InitNetTlsContextSelfSignedServer(net {, caaES256});
+      InitNetTlsContextSelfSignedServer(net {, caaES256}); // RSA is more common
       tls := @net;
     end;
     try
