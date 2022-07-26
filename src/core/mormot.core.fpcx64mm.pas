@@ -3494,10 +3494,10 @@ begin
   FreeMediumPool(SmallMediumBlockInfo);
   {$endif FPCMM_SMALLNOTWITHMEDIUM}
   FreeMediumPool(MediumBlockInfo);
-  {$ifdef FPCMM_REPORTMEMORYLEAKS}
+  {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   if ObjectLeaksCount <> 0 then
     writeln(' Total objects leaks = ', ObjectLeaksCount);
-  {$endif FPCMM_REPORTMEMORYLEAKS}
+  {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   large := LargeBlocksCircularList.NextLargeBlockHeader;
   while large <> @LargeBlocksCircularList do
   begin
