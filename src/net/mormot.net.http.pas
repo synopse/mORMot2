@@ -1153,6 +1153,7 @@ end;
 function THttpRequestContext.ParseCommand: boolean;
 var
   P, B: PUtf8Char;
+  L: PtrInt;
 begin
   result := false;
   if nfHeadersParsed in HeaderFlags then
@@ -1178,9 +1179,9 @@ begin
       exit
     else
       inc(P);
-  P^ := #0;
-  MoveFast(B^, pointer(CommandUri)^, P - B + 1); // in-place resize
-  {%H-}PStrLen(PtrUInt(CommandUri) - _STRLEN)^ := P - B;
+  L := P - B;
+  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
+  FakeLength(CommandUri, L);
   inc(P);
   if not IdemPChar(P, 'HTTP/1.') then
     exit;

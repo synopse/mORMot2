@@ -2964,7 +2964,7 @@ begin
       inc(P, 4);
       PCardinal(P)^ := L;
       inc(P, 4);
-      PStrLen(PAnsiChar(pointer(tmp)) - _STRLEN)^ := P - pointer(tmp); // no realloc
+      FakeLength(tmp, P - pointer(tmp)); // no realloc
       Data := tmp;
     end;
   end
@@ -2988,7 +2988,7 @@ begin
     if L <= 0 then
       Data := ''
     else
-      PStrLen(PAnsiChar(pointer(Data)) - _STRLEN)^ := L; // fake len: no realloc
+      FakeLength(Data, L);
   end
   else
     Data := UnCompressZipString(pointer(src), L, nil, ZLib, 0);

@@ -2754,10 +2754,7 @@ begin
   if D = pointer(S) then
     S := ''
   else
-  begin
-    D^ := #0;
-    PStrLen(PtrUInt(S) - _STRLEN)^ := D - pointer(S); // no SetLength needed
-  end;
+    FakeLength(S, D); // no SetLength needed
 end;
 
 procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
@@ -11241,8 +11238,7 @@ begin
   end
   else
   begin
-    d^ := #0;
-    PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ := L; // just fake length
+    FakeLength(text, L);
     result := result and (L = 32);
   end;
 end;

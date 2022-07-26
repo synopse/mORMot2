@@ -2411,8 +2411,7 @@ begin
     inc(Count);
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
-  Gen^ := #0; // as SetLength(), but with no memory realloc
-  PStrLen(PAnsiChar(pointer(GenericSQL)) - _STRLEN)^ := Gen - pointer(GenericSQL);
+  FakeLength(GenericSQL, Gen);
   inc(Count);
 end;
 

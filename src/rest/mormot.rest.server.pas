@@ -2733,7 +2733,6 @@ begin
   slash := PosExChar('/', fUri);
   if slash > 0 then
   begin
-    fUri[slash] := #0; // will ensure fUri is unique
     par := pointer(fUri);
     InternalSetTableFromTableName(par, slash - 1);
     inc(par, slash);
@@ -2761,16 +2760,15 @@ begin
       parlen := StrLen(par);
       if rsoMethodUnderscoreAsSlashUri in Server.Options then
       begin
-        fUriUnderscoreAsSlash := Uri;
-        i := slash; // set e.g. 'Method_Name' from 'ModelRoot/Method/Name' URI
-        repeat
-          fUriUnderscoreAsSlash[i] := '_';
-          i := PosEx('/', URI, i + 1);
-        until i = 0;
+        // set e.g. 'Method_Name' from 'ModelRoot/Method/Name' URI
+        FastSetString(fUriUnderscoreAsSlash, pointer(fUri), length(fUri));
+        for i := slash - 1 to length(fUri) - 1 do
+          if PByteArray(fUriUnderscoreAsSlash)[i] = ord('/') then
+            PByteArray(fUriUnderscoreAsSlash)[i] := ord('_');
       end;
     end;
     FastSetString(fUriBlobFieldName, par, parlen);
-    {%H-}PStrLen(PtrUInt(fUri) - _STRLEN)^ := slash - 1; // in-place truncation
+    FakeLength(fUri, slash - 1); // in-place truncation
   end
   else
     // "ModelRoot/TableName"

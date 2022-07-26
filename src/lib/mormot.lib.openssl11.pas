@@ -6780,7 +6780,7 @@ begin
     begin
       inc(p, lu);
       if EVP_SealFinal(ctx, p, @lf) = OPENSSLSUCCESS then
-        {%H-}PStrLen(PtrUInt(result) - _STRLEN)^ := PAnsiChar(p) + lf - pointer(result)
+        FakeLength(result, PAnsiChar(p) + lf - pointer(result))
       else
         result := '';
     end

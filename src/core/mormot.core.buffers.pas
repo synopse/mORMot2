@@ -5132,9 +5132,7 @@ begin
     if R = @tmp[BufferOffset] then
       FastSetRawByteString(result, @tmp, len)
     else
-      if result {%H-}<> '' then
-        // don't call the MM which may move the data: just adjust length()
-        PStrLen(R - _STRLEN)^ := len;
+      FakeLength(result, len);
   end;
 end;
 
@@ -6391,8 +6389,7 @@ begin
     MoveFast(pointer(Suffix)^, p^, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
     inc(p, PStrLen(PAnsiChar(pointer(Suffix)) - _STRLEN)^);
   end;
-  p^ := #0;
-  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := p - pointer(result); // trim
+  FakeLength(result, pointer(p));
 end;
 
 function BinToBase64Short(const s: RawByteString): ShortString;
@@ -8828,15 +8825,11 @@ begin
 end;
 
 function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
-var
-  p: PAnsiChar;
 begin
   FastSetString(result, nil, sourcelen * 3); // worse case
-  if sourcelen = 0 then
-    exit;
-  p := pointer(result);
-  sourcelen := EscapeBuffer(source, sourcelen, p, sourcelen * 3) - p;
-  PStrLen(p - _STRLEN)^ := sourcelen; // in-place adjust
+  if sourcelen <> 0 then
+    FakeLength(result, pointer(EscapeBuffer(
+      pointer(result), sourcelen, pointer(result), sourcelen * 3)));
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString;
