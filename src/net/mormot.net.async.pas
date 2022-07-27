@@ -339,7 +339,6 @@ type
     fLastOperation: TAsyncConnectionSec;
     fOwner: TAsyncConnections;
     fRemoteIP: RawUtf8;
-    fRemoteConnID: THttpServerConnectionID;
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     // - should finish quickly and be non-blocking
@@ -1620,7 +1619,6 @@ begin
   fLastOperation := 0;
   if aRemoteIP <> IP4local then
     fRemoteIP := aRemoteIP;
-  fRemoteConnID := 0;
 end;
 
 function TAsyncConnection.OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;
@@ -3088,8 +3086,9 @@ begin
     // 413 HTTP error if requested payload is too big (default is 0 = no limit)
     result := HTTP_PAYLOADTOOLARGE;
     fServer.IncStat(grOversizedPayload);
-  end else if (fHeadersSec > 0) and
-              (fServer.Async.fLastOperationSec > fHeadersSec) then
+  end
+  else if (fHeadersSec > 0) and
+          (fServer.Async.fLastOperationSec > fHeadersSec) then
   begin
     // 408 HTTP error after Server.HeaderRetrieveAbortDelay ms
     result := HTTP_TIMEOUT;
@@ -3113,7 +3112,6 @@ begin
      not fHttp.ParseCommand then
     exit;
   fHttp.ParseHeaderFinalize;
-  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, fRemoteConnID);
   // immediate reject of clearly invalid requests
   status := DecodeHeaders; // may handle hfConnectionUpgrade when overriden
   if status <> HTTP_SUCCESS then
@@ -3150,6 +3148,7 @@ function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
+  remoteID: THttpServerConnectionID;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -3167,7 +3166,9 @@ begin
     fHttp.UncompressData;
   // compute the HTTP/REST process
   result := soClose;
-  req := THttpServerRequest.Create(fServer, fRemoteConnID, {thread=}nil,
+  remoteid := fHandle;
+  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
+  req := THttpServerRequest.Create(fServer, remoteid, {thread=}nil,
     HTTPREMOTEFLAGS[Assigned(fSecure)], @fConnectionOpaque);
   try
     // let the associated THttpAsyncServer execute the request
