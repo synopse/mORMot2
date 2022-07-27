@@ -1315,11 +1315,11 @@ end;
 
 const
   _CMD_200: array[boolean] of string[17] = (
-    'HTTP/1.0 200 OK'#13#10,
-    'HTTP/1.1 200 OK'#13#10);
+    'HTTP/1.1 200 OK'#13#10,
+    'HTTP/1.0 200 OK'#13#10);
   _CMD_ERR: array[boolean] of string[9] = (
-    'HTTP/1.0 ',
-    'HTTP/1.1 ');
+    'HTTP/1.1 ',
+    'HTTP/1.0 ');
 
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
