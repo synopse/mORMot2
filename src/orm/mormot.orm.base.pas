@@ -7782,13 +7782,13 @@ begin
     dec(Value, PtrUInt(fDataStart));
     if (PtrInt(PtrUInt(Value)) > MaxInt) or
        (PtrInt(PtrUInt(Value)) < -MaxInt) then
-      raise EOrmTable.CreateUtf8('%.Results[%] overflow: all PUtf8Char ' +
-        'should be in a [-2GB..+2GB] 32-bit range (%) - consider forcing ' +
-        'NOPOINTEROFFSET conditional for your project'
+      raise EOrmTable.CreateUtf8('%.Results[%] set overflow: all PUtf8Char ' +
+        'should be in a [-2GB..+2GB] 32-bit range (value=% start=%) - ' +
+        'consider forcing NOPOINTEROFFSET conditional for your project'
         // FPCMM_MEDIUM32BIT may be incompatible with TOrmTable for data >256KB
         // so may require NOPOINTEROFFSET conditional, so is not set by default
         {$ifdef FPCMM_MEDIUM32BIT} + ' or disable FPCMM_MEDIUM32BIT' {$endif},
-        [self, Offset, Value]);
+        [self, Offset, pointer(Value), pointer(fDataStart)]);
   end;
   fData[Offset] := PtrInt(Value);
   {$endif NOPOINTEROFFSET}
