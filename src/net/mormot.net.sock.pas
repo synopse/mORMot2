@@ -2602,9 +2602,9 @@ begin
     // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    if fPending.Count = 0 then
+    if (fPending.Count = 0) and
+       fPendingSafe.TryLock then
     begin
-      fPendingSafe.Lock;
       if fPending.Count = 0 then
       begin
         // reuse the main dynamic array of results
