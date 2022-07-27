@@ -2212,7 +2212,7 @@ begin
           break; // finished
         hrsSendBody:
           begin
-            dest.Reset; // body is retrieved from Content/ContentStream
+            dest.Clear; // body is retrieved from Content/ContentStream
             ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
             if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
               continue; // send body by fServerSendBufferSize chunks
