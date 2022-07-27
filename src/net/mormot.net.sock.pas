@@ -749,7 +749,7 @@ type
     /// manually append one event to the pending nodifications
     // - ready to be retrieved by GetOnePending
     procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents;
-      aNoSearch: boolean);
+      aSearchExisting: boolean);
     /// disable any pending notification associated with a given connection tag
     // - can be called when a connection is removed from the main logic
     // to ensure function IsValidPending() never raise any GPF, if the
@@ -2790,27 +2790,28 @@ begin
 end;
 
 procedure TPollSockets.AddOnePending(
-  aTag: TPollSocketTag; aEvents: TPollSocketEvents; aNoSearch: boolean);
+  aTag: TPollSocketTag; aEvents: TPollSocketEvents; aSearchExisting: boolean);
 var
   n: PtrInt;
+  fnd: PPollSocketResult;
 begin
+  fnd := nil;
   fPendingSafe.Lock;
   try
     n := fPending.Count;
-    if aNoSearch or
-       (n = 0) or
-       (FindPendingFromTag( // fast O(n) search in L1 cache
-          @fPending.Events[fPendingIndex], n - fPendingIndex, aTag) = nil) then
+    if aSearchExisting and
+       (n <> 0) then
+      fnd := FindPendingFromTag( // fast O(n) search in L1 cache
+          @fPending.Events[fPendingIndex], n - fPendingIndex, aTag);
+    if fnd = nil then
     begin
       if n >= length(fPending.Events) then
         SetLength(fPending.Events, NextGrow(n));
-      with fPending.Events[n] do
-      begin
-        tag := aTag;
-        events := aEvents;
-      end;
+      fnd := @fPending.Events[n];
+      fnd^.tag := aTag;
       fPending.Count := n + 1;
     end;
+    fnd^.events := aEvents
   finally
     fPendingSafe.UnLock;
   end;

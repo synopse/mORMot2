@@ -60,13 +60,15 @@ type
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
   // - fInList indicates that the connection was Added to the list
+  // - fFromGC is set when the connection has been recycled from the GC list
   TPollAsyncConnectionFlags = set of (
     fWasActive,
     fClosed,
     fFirstRead,
     fSubRead,
     fSubWrite,
-    fInList);
+    fInList,
+    fFromGC);
 
   /// abstract parent to store information aboout one TPollAsyncSockets connection
   TPollAsyncConnection = class(TSynPersistent)
@@ -347,6 +349,8 @@ type
     /// initialize this instance
     constructor Create(aOwner: TAsyncConnections;
       const aRemoteIP: RawUtf8); reintroduce; virtual;
+    /// reuse this instance for a new incoming connection
+    procedure Recycle(const aRemoteIP: RawUtf8); virtual;
     /// read-only access to the associated connections list
     property Owner: TAsyncConnections
       read fOwner;
@@ -445,6 +449,13 @@ type
     acoNoConnectionTrack,
     acoEnableTls);
 
+  /// to implement generational garbage collector of asynchronous connections
+  TAsyncConnectionsGC = record
+    Safe: TLightLock;
+    Count: integer;
+    Items: TAsyncConnectionDynArray;
+  end;
+
   /// implements an abstract thread-pooled high-performance TCP clients or server
   // - internal TAsyncConnectionsSockets will handle high-performance process
   // of a high number of long-living simultaneous connections
@@ -481,9 +492,7 @@ type
     end;
     fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupIndex: integer;
-    fGCCount: integer;
-    fGCSafe: TLightLock;
-    fGC: array of TAsyncConnection;
+    fGC: array[1..2] of TAsyncConnectionsGC;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
     procedure DoGC;
@@ -756,6 +765,9 @@ type
     function DecodeHeaders: integer; virtual;
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
+  public
+    /// reuse this instance for a new incoming connection
+    procedure Recycle(const aRemoteIP: RawUtf8); override;
   end;
 
   /// event-driven process of HTTP/WebSockets connections
@@ -1001,6 +1013,8 @@ begin
               // another atpReadPending thread may currently own this connection
               // (occurs if PollForPendingEvents was called in between)
               (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0);
+    {fOnLog(sllDebug, 'IsValidPending % rwc=%', [TPollAsyncConnection(tag),
+      TPollAsyncConnection(tag).fRW[false].RentrantCount], self);}
   except
     on E: Exception do
     begin
@@ -1594,6 +1608,21 @@ begin
   include(fFlags, fWasActive); // by definition
 end;
 
+procedure TAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+begin
+  fWaitCounter := 0;
+  fLockMax := false;
+  fFlags := [fFromGC, fWasActive];
+  fRd.Reset;
+  fWr.Reset;
+  FillCharFast(fRW, SizeOf(fRW), 0);
+  fSecure := nil;
+  fLastOperation := 0;
+  if aRemoteIP <> IP4local then
+    fRemoteIP := aRemoteIP;
+  fRemoteConnID := 0;
+end;
+
 function TAsyncConnection.OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;
 begin
   result := false; // nothing happened
@@ -1868,63 +1897,77 @@ begin
   if Terminated then
     exit;
   (aConnection as TAsyncConnection).fLastOperation := fLastOperationMS; // in ms
-  fGCSafe.Lock;
-  ObjArrayAddCount(fGC, aConnection, fGCCount);
-  fGCSafe.UnLock;
+  with fGC[1] do // add to 1st generation
+  begin
+    Safe.Lock;
+    ObjArrayAddCount(Items, aConnection, Count);
+    Safe.UnLock;
+  end;
+end;
+
+function OneGC(var gen, dst: TAsyncConnectionsGC;
+  lastop, oldenough: TAsyncConnectionSec): PtrInt;
+var
+  c: TAsyncConnection;
+  i: PtrInt;
+begin
+  result := 0;
+  if gen.Count = 0 then
+    exit;
+  oldenough := lastop - oldenough;
+  for i := 0 to gen.Count - 1 do
+  begin
+    c := gen.Items[i];
+    if c.fLastOperation <= oldenough then
+    begin
+      // release after timeout
+      if dst.Count >= length(dst.Items) then
+        SetLength(dst.Items, dst.Count + gen.Count - i);
+      dst.Items[dst.Count] := c;
+      inc(dst.Count);
+    end
+    else
+    begin
+      if c.fLastOperation > lastop then
+        // reset time flag after 42 days overflow
+        c.fLastOperation := lastop;
+      gen.Items[result] := c; // keep if not fKeepConnectionInstanceMS old
+      inc(result);
+    end;
+  end;
+  gen.Count := result; // don't resize gen.Items[] to avoid realloc
 end;
 
 procedure TAsyncConnections.DoGC;
 var
-  gc: TAsyncConnectionDynArray; // local copy for Free outside fGCSafe
-  i, ngc, nkept: PtrInt;
-  c: TAsyncConnection;
-  oldenough: TAsyncConnectionSec;
+  tofree: TAsyncConnectionsGC;
+  n1, n2: integer;
 begin
   if Terminated or
-     (fGCCount = 0) then
+     (fGC[1].Count + fGC[2].Count = 0) then
     exit;
-  if fClients.fRead.PendingCount <> 0 then
-    oldenough := 2000 // wait 2 seconds until no pending event is in queue
-  else
-    oldenough := fKeepConnectionInstanceMS; // keep for 100 ms by default
-  oldenough := fLastOperationMS - oldenough;
-  ngc := 0;
-  nkept := 0;
-  fGCSafe.Lock;
+  fGC[2].Safe.Lock;
   try
-    if fGCCount <> 0 then
-    begin
-      for i := 0 to fGCCount - 1 do
-      begin
-        c := fGC[i];
-        if c.fLastOperation <= oldenough then
-        begin
-          // release after timeout
-          if gc = nil then
-            SetLength(gc, fGCCount - i);
-          gc[ngc] := c;
-          inc(ngc);
-        end
-        else
-        begin
-          if c.fLastOperation > fLastOperationMS then
-            // reset time flag after 42 days overflow
-            c.fLastOperation := fLastOperationMS;
-          fGC[nkept] := c; // keep if not fKeepConnectionInstanceMS old
-          inc(nkept);
-        end;
-      end;
-      fGCCount := nkept; // don't resize fGC[] to avoid realloc
+    fGC[1].Safe.Lock;
+    try
+      // keep in first generation GC for 100 ms by default
+      n1 := OneGC(fGC[1], fGC[2], fLastOperationMS, fKeepConnectionInstanceMS);
+    finally
+      fGC[1].Safe.UnLock;
     end;
+    // wait 2 seconds until no pending event is in queue and free instances
+    tofree.Count := 0;
+    n2 := OneGC(fGC[2], tofree, fLastOperationMS, 2000);
   finally
-    fGCSafe.UnLock;
+    fGC[2].Safe.UnLock;
   end;
-  if ngc = 0 then
+  if n1 + n2 + tofree.Count = 0 then
     exit;
   // np := fClients.fRead.DeleteSeveralPending(pointer(gc), ngc); always 0
   if Assigned(fLog) then
-    fLog.Add.Log(sllTrace,  'DoGC=% kept=%', [ngc, nkept], self);
-  ObjArrayClear(gc, {continueonexc=}true, @ngc);
+    fLog.Add.Log(sllTrace,  'DoGC #1=% #2=% free=%', [n1, n2, tofree.Count], self);
+  if tofree.Count <> 0 then
+    ObjArrayClear(tofree.Items, {continueonexc=}true, @tofree.Count);
 end;
 
 procedure TAsyncConnections.Shutdown;
@@ -1970,11 +2013,13 @@ begin
     ObjArrayClear(fThreads, {continueonexception=}true);
   end;
   // there may be some trailing connection instances to be released
-  if fGCCount <> 0 then
-  begin
-    DoLog(sllTrace, 'Shutdown GC=%', [fGCCount], self);
-    ObjArrayClear(fGC, {continueonexception=}true, @fGCCount);
-  end;
+  for i := low(fGC) to high(fGC) do
+    with fGC[i] do
+      if Count <> 0 then
+      begin
+        DoLog(sllTrace, 'Shutdown GC#%=%', [i, Count], self);
+        ObjArrayClear(Items, {continueonexception=}true, @Count);
+      end;
 end;
 
 destructor TAsyncConnections.Destroy;
@@ -2097,7 +2142,22 @@ begin
     result := false
   else
   begin
-    aConnection := fConnectionClass.Create(self, aRemoteIp);
+    aConnection := nil;
+    with fGC[2] do // recycle 2nd gen instances e.g. for short-living HTTP/1.0
+      if (Count > 0) and
+         Safe.TryLock then
+      begin
+        if Count > 0 then
+        begin
+          dec(Count);
+          aConnection := Items[Count];
+        end;
+        Safe.UnLock;
+      end;
+    if aConnection = nil then
+      aConnection := fConnectionClass.Create(self, aRemoteIp)
+    else
+      aConnection.Recycle(aRemoteIP);
     result := ConnectionNew(aSocket, aConnection, {add=}false);
   end;
 end;
@@ -2535,7 +2595,8 @@ begin
   begin
     // initial accept() will be directly redirected to atpReadPending threads
     // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
-    fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead], {nosrch=}true);
+    fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead],
+      {aSearchExisting=} fFromGC in Sender.fFlags);
     ThreadPollingWakeup(1);
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
@@ -2658,11 +2719,11 @@ begin
     raise EAsyncConnections.CreateUtf8('Unexpected %.OnFirstReadDoTls', [self]);
   if not fServer.TLS.Enabled then  // if not already done in WaitStarted()
   begin
-    fGCSafe.Lock; // load certificates once from first connected thread
+    fGC[1].Safe.Lock; // load certificates once from first connected thread
     try
       fServer.DoTlsAfter(cstaBind);  // validate certificates now
     finally
-      fGCSafe.UnLock;
+      fGC[1].Safe.UnLock;
     end;
   end;
   // TAsyncServer.Execute made Accept(async=false) from acoEnableTls
@@ -2872,6 +2933,18 @@ begin
                        fServer.fServerKeepAliveTimeOutSec;
   end;
   // inherited AfterCreate; // void parent method
+end;
+
+procedure THttpAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+begin
+  inherited Recycle(aRemoteIP);
+  fConnectionOpaque.Value := nil;
+  if fServer <> nil then
+  begin
+    if fServer.fServerKeepAliveTimeOutSec <> 0 then
+      fKeepAliveSec := fServer.Async.fLastOperationSec +
+                       fServer.fServerKeepAliveTimeOutSec;
+  end;
 end;
 
 procedure THttpAsyncConnection.BeforeDestroy;
@@ -3275,7 +3348,7 @@ begin
           if (fCallbackSendDelay <> nil) and
              (tix = lasttix) then
             msidle := fCallbackSendDelay^ // delayed SendFrames gathering
-          else if (fAsync.fGCCount = 0) or
+          else if (fAsync.fGC[1].Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
           else

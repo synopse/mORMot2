@@ -92,12 +92,16 @@ type
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     procedure OnClose; override;
     function DecodeHeaders: integer; override;
+    procedure EndProcess;
     procedure BeforeDestroy; override;
     // called every 10 seconds to check against HeartbeatDelay and send ping
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
+  public
+    /// reuse this instance for a new incoming connection
+    procedure Recycle(const aRemoteIP: RawUtf8); override;
   end;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
@@ -316,6 +320,23 @@ begin
     TryUpgrade;
 end;
 
+procedure TWebSocketAsyncConnection.EndProcess;
+begin
+  if fProcess <> nil then
+  begin
+    fProcess.fConnectionCloseWasSent := true; // too late for focConnectionClose
+    if not fProcess.fProcessEnded then
+      fProcess.ProcessStop; // there is no separated thread loop to wait for
+    FreeAndNilSafe(fProcess);
+  end;
+end;
+
+procedure TWebSocketAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+begin
+  inherited Recycle(aRemoteIP);
+  EndProcess;
+end;
+
 procedure TWebSocketAsyncConnection.OnClose;
 begin
   inherited OnClose; // set fClosed flag
@@ -329,14 +350,8 @@ end;
 
 procedure TWebSocketAsyncConnection.BeforeDestroy;
 begin
-  if fProcess <> nil then
-  begin
-    fProcess.fConnectionCloseWasSent := true; // too late for focConnectionClose
-    if not fProcess.fProcessEnded then
-      fProcess.ProcessStop; // there is no separated thread loop to wait for
-  end;
+  EndProcess;
   inherited BeforeDestroy;
-  FreeAndNilSafe(fProcess);
 end;
 
 function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
