@@ -1313,6 +1313,14 @@ begin
     id^ := 0; // ensure no overflow (31-bit range)
 end;
 
+const
+  _CMD_200: array[boolean] of string[17] = (
+    'HTTP/1.0 200 OK'#13#10,
+    'HTTP/1.1 200 OK'#13#10);
+  _CMD_ERR: array[boolean] of string[9] = (
+    'HTTP/1.0 ',
+    'HTTP/1.1 ');
+
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
 
@@ -1337,6 +1345,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   begin
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
+    StatusCodeToReason(fRespStatus, fRespReason);
     FormatUtf8('<body style="font-family:verdana">'#10 +
       '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
       [fServer.ServerName, fRespStatus, fRespStatus, fRespReason,
@@ -1346,6 +1355,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
+  h: PRawByteStringBuffer;
 begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
   // process content
@@ -1355,16 +1365,22 @@ begin
   else if (OutContent <> '') and
           (OutContentType = STATICFILE_CONTENT_TYPE) then
     ProcessStaticFile;
-  StatusCodeToReason(fRespStatus, fRespReason);
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
-  Context.Head.Reset;
-  if hfConnectionClose in Context.HeaderFlags then
-    Context.Head.AppendShort('HTTP/1.0 ')
+  h := @Context.Head;
+  h^.Reset;
+  if fRespStatus = HTTP_SUCCESS then // optimistic approach
+    h^.AppendShort(_CMD_200[hfConnectionClose in Context.HeaderFlags])
   else
-    Context.Head.AppendShort('HTTP/1.1 ');
-  Context.Head.Append([fRespStatus, ' ', fRespReason], {crlf=}true);
+  begin
+    h^.AppendShort(_CMD_ERR[hfConnectionClose in Context.HeaderFlags]);
+    StatusCodeToReason(fRespStatus, fRespReason);
+    h^.Append(fRespStatus);
+    h^.Append(' ');
+    h^.Append(fRespReason);
+    h^.AppendCRLF;
+  end;
   // append (and sanitize) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
@@ -1377,7 +1393,8 @@ begin
         if IdemPChar(P, 'CONTENT-ENCODING:') then
           // custom encoding: don't compress
           integer(Context.CompressAcceptHeader) := 0;
-        Context.Head.Append(P, len, {crlf=}true); // normalize CR/LF endings
+        h^.Append(P, len); // normalize CR/LF endings
+        h^.AppendCRLF;
         inc(P, len);
       end;
       while P^ in [#10, #13] do
@@ -1385,12 +1402,13 @@ begin
     until P^ = #0;
   end;
   // generic headers
-  Context.Head.AppendShort('Server: ');
-  Context.Head.Append(fServer.ServerName, {crlf=}true);
+  h^.AppendShort('Server: ');
+  h^.Append(fServer.ServerName);
+  h^.AppendCRLF;
   if hsoIncludeDateHeader in fServer.Options then
-    Context.Head.AppendShort(HttpDateNowUtc);
+    h^.AppendShort(HttpDateNowUtc);
   if not (hsoNoXPoweredHeader in fServer.Options) then
-    Context.Head.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
+    h^.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State

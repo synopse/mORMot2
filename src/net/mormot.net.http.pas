@@ -1126,14 +1126,16 @@ begin
         inc(P, 5);
         GetTrimmed(P, Host);
         HeadersUnFiltered := true; // may still be needed by some code
-      end
+      end;
   else
     // unrecognized name should be stored in Headers
     HeadersUnFiltered := true;
   end;
-  if HeadersUnFiltered then
-    // store meaningful headers into WorkBuffer, if not already there
-    Head.Append(P2, GotoNextControlChar(P) - P2, {crlf=}true);
+  if not HeadersUnFiltered then
+    exit;
+  // store meaningful headers into WorkBuffer, if not already there
+  Head.Append(P2, GotoNextControlChar(P) - P2);
+  Head.AppendCRLF;
 end;
 
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
@@ -1442,8 +1444,13 @@ begin
      (ContentStream = nil) then // no stream compression (yet)
     CompressContent(CompressAcceptHeader, Compress, ContentType,
       Content, ContentEncoding);
+  result := @Head;
   if ContentEncoding <> '' then
-    Head.Append(['Content-Encoding: ', ContentEncoding], {crlf=}true);
+  begin
+    result^.AppendShort('Content-Encoding: ');
+    result^.Append(ContentEncoding);
+    result^.AppendCRLF;
+  end;
   if ContentStream = nil then
   begin
     ContentPos := pointer(Content);
@@ -1451,46 +1458,44 @@ begin
   end
   else if ContentLength = 0 then // maybe set by SetupResponse for local file
     ContentLength := ContentStream.Size - ContentStream.Position;
-  Head.Append(['Content-Length: ', ContentLength], {crlf=}true);
+  result^.AppendShort('Content-Length: ');
+  result^.Append(ContentLength);
+  result^.AppendCRLF;
   if (ContentType <> '') and
      (ContentType <> STATICFILE_CONTENT_TYPE) then
   begin
-    Head.AppendShort('Content-Type: ');
-    Head.Append(ContentType, {crlf=}true);
+    result^.AppendShort('Content-Type: ');
+    result^.Append(ContentType);
+    result^.AppendCRLF;
   end;
   if hfConnectionClose in HeaderFlags then
-    Head.AppendShort('Connection: Close', {crlf=}true)
+    result^.AppendShort('Connection: Close'#13#10#13#10) // end with a void line
   else
   begin
     if CompressAcceptEncoding <> '' then
-      Head.Append(CompressAcceptEncoding, {crlf=}true);
-    Head.AppendShort('Connection: Keep-Alive', {crlf=}true);
+    begin
+      result^.Append(CompressAcceptEncoding);
+      result^.AppendCRLF;
+    end;
+    result^.AppendShort('Connection: Keep-Alive'#13#10#13#10);
   end;
-  Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
-  result := @Head;
   Process.Reset;
   if ContentStream = nil then
-    if ContentLength = 0 then
-      // single socket send() is possible (no output body)
-      State := hrsResponseDone
-    else if Head.CanAppend(ContentLength) then
-    begin
+    if (ContentLength = 0) or
+       result^.CanAppend(pointer(Content), ContentLength) then
       // single socket send() is possible (small body appended to headers)
-      Head.Append(Content);
-      Content := '';
-      State := hrsResponseDone;
-    end
+      State := hrsResponseDone
     else
     begin
       if ContentLength + Head.Len < MaxSizeAtOnce then
       begin
         // single socket send() is possible (body fits in the sending buffer)
-        Process.Reserve(ContentLength + Head.Len);
+        Process.Reserve(Head.Len + ContentLength);
         Process.Append(Head.Buffer, Head.Len);
         Process.Append(Content);
         Content := ''; // release ASAP
-        Head.Reset; // DoRequest will use Process
-        result := @Process;
+        Head.Reset;
+        result := @Process; // DoRequest will use Process
         State := hrsResponseDone;
       end
       else

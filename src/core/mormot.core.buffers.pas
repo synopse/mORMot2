@@ -2576,19 +2576,23 @@ type
     property Capacity: PtrInt
       read fCapacity;
     /// add some UTF-8 buffer content to the Buffer, resizing it if needed
-    // - could optionally include a #13#10 end of line
-    procedure Append(P: pointer; PLen: PtrInt; CRLF: boolean = false); overload;
+    procedure Append(P: pointer; PLen: PtrInt); overload;
     /// add some UTF-8 string content to the Buffer, resizing it if needed
-    procedure Append(const Text: RawUtf8; CRLF: boolean = false); overload;
+    procedure Append(const Text: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-      /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
-    procedure AppendShort(const Text: ShortString; CRLF: boolean = false);
+    /// add some number as text content to the Buffer, resizing it if needed
+    procedure Append(Value: QWord); overload;
+    /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
+    procedure AppendShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
-    /// add some values as text to the Buffer, resizing it if needed
-    procedure Append(const Args: array of const; CRLF: boolean = false); overload;
-    /// check if Append(Bytes) would not need to resize the internal Buffer
-    function CanAppend(Bytes: PtrInt): boolean;
+    /// just after Append/AppendShort, append a #13#10 end of line
+    procedure AppendCRLF;
       {$ifdef HASINLINE}inline;{$endif}
+    /// just after Append/AppendShort, append one single character
+    procedure Append(Ch: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// add some UTF-8 buffer content to the Buffer, without resizing it
+    function CanAppend(P: pointer; PLen: PtrInt): boolean;
     /// ensure the internal Buffer has at least MaxSize bytes and return it
     // - also reset the internal Len to 0
     function Reserve(MaxSize: PtrInt): pointer;
@@ -10642,69 +10646,69 @@ begin
   result := pointer(fBuffer);
 end;
 
-procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt; CRLF: boolean);
+procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt);
 var
   needed: PtrInt;
 begin
-  if (PLen <= 0) and
-     not CRLF then
-    exit;
-  if fCapacity = 0 then
+  needed := fLen + PLen + 2;
+  if needed > fCapacity then
   begin
-    fCapacity := PLen + 128; // small overhead at first
+    if fCapacity = 0 then
+      fCapacity := needed + 128 // small overhead at first
+    else
+      fCapacity := needed + needed shr 3 + 2048; // generous overhead
     SetLength(fBuffer, fCapacity);
-  end
+  end;
+  MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
+  inc(fLen, PLen);
+end;
+
+procedure TRawByteStringBuffer.Append(const Text: RawUtf8);
+begin
+  Append(pointer(Text), length(Text));
+end;
+
+procedure TRawByteStringBuffer.Append(Value: QWord);
+var
+  tmp: array[0..23] of AnsiChar;
+  P: PAnsiChar;
+begin
+  if Value <= high(SmallUInt32Utf8) then
+    Append(SmallUInt32Utf8[Value])
   else
   begin
-    needed := fLen + PLen + 2;
-    if needed > fCapacity then
-    begin
-      fCapacity := needed + needed shr 3 + 2048; // generous overhead
-      SetLength(fBuffer, fCapacity);
-    end;
+    P := StrUInt64(@tmp[23], Value);
+    Append(P, @tmp[23] - P);
   end;
-  if PLen > 0 then
+end;
+
+procedure TRawByteStringBuffer.AppendCRLF;
+begin
+  PWord(@PByteArray(fBuffer)[fLen])^ := $0a0d;
+  inc(fLen, 2);
+end;
+
+procedure TRawByteStringBuffer.Append(Ch: AnsiChar);
+begin
+  PByteArray(fBuffer)[fLen] := ord(Ch);
+  inc(fLen);
+end;
+
+procedure TRawByteStringBuffer.AppendShort(const Text: ShortString);
+begin
+  Append(@Text[1], length(Text));
+end;
+
+function TRawByteStringBuffer.CanAppend(P: pointer; PLen: PtrInt): boolean;
+begin
+  if fLen + PLen <= fCapacity then
   begin
     MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
     inc(fLen, PLen);
-  end;
-  if CRLF then
-  begin
-    PWord(@PByteArray(fBuffer)[fLen])^ := $0a0d;
-    inc(fLen, 2);
-  end;
-end;
-
-procedure TRawByteStringBuffer.Append(const Text: RawUtf8; CRLF: boolean);
-begin
-  Append(pointer(Text), length(Text), CRLF);
-end;
-
-procedure TRawByteStringBuffer.AppendShort(const Text: ShortString; CRLF: boolean);
-begin
-  Append(@Text[1], length(Text), CRLF);
-end;
-
-procedure TRawByteStringBuffer.Append(const Args: array of const; CRLF: boolean);
-var
-  tmp: TTempUtf8;
-  a: PtrInt;
-begin
-  for a := 0 to high(Args) do
-  begin
-    VarRecToTempUtf8(Args[a], tmp);
-    Append(tmp.Text, tmp.Len);
-    if tmp.TempRawUtf8 <> nil then
-      RawUtf8(tmp.TempRawUtf8) := ''; // release temp memory
-  end;
-  if CRLF then
-    Append('', {crlf=}true);
-end;
-
-function TRawByteStringBuffer.CanAppend(Bytes: PtrInt): boolean;
-begin
-  result := (Bytes = 0) or
-            (fLen + Bytes <= fCapacity);
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;
