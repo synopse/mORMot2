@@ -4182,21 +4182,30 @@ begin
 end;
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
+var
+  p: PAnsiChar; // faster with a temp variable
 begin
-  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := len; // in-place SetLength()
-  PByteArray(s)[len] := 0;
+  p := pointer(s);
+  p[len] := #0;
+  PStrLen(p - _STRLEN)^ := len; // in-place SetLength()
 end;
 
 procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char);
+var
+  p: PAnsiChar;
 begin
-  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := endChar - pointer(s);
+  p := pointer(s);
   endChar^ := #0;
+  PStrLen(p - _STRLEN)^ := endChar - p;
 end;
 
 procedure FakeLength(var s: RawByteString; len: PtrInt);
+var
+  p: PAnsiChar;
 begin
-  PStrLen(PAnsiChar(pointer(s)) - _STRLEN)^ := len; // in-place SetLength()
-  PByteArray(s)[len] := 0;
+  p := pointer(s);
+  p[len] := #0;
+  PStrLen(p - _STRLEN)^ := len; // in-place SetLength()
 end;
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
