@@ -3401,6 +3401,10 @@ begin
   until false;
 end;
 
+{$else}
+
+{$undef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+
 {$endif FPCMM_REPORTMEMORYLEAKS}
 
 procedure FreeMediumPool(var Info: TMediumBlockInfo);
