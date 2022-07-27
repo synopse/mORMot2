@@ -3228,8 +3228,10 @@ type
   end;
 
   /// our light cross-platform TEvent-like component
-  // - on POSIX, FPC will use PRTLEvent which is lighter than BasicEvent
-  // - only limitation is that we don't know if WaitFor is signaled or timeout
+  // - on POSIX, FPC will use PRTLEvent which is lighter than TEvent BasicEvent
+  // - only limitation is that we don't know if WaitFor is signaled or timeout,
+  // but this is not a real one in practice since most code don't need it
+  // or has already its own flag in its implementation logic
   TSynEvent = class
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
@@ -3240,14 +3242,17 @@ type
     destructor Destroy; override;
     /// ignore any pending events, so that WaitFor will be set on next SetEvent
     procedure ResetEvent;
+      {$ifdef OSPOSIX} inline; {$endif}
     /// trigger any pending event, releasing the WaitFor/WaitForEver methods
     procedure SetEvent;
       {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
-    // - limitation is that we don't know if it was signaled or timeout
+    // - does not return if it was signaled or timeout
     procedure WaitFor(TimeoutMS: integer);
+      {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with no maximum time
     procedure WaitForEver;
+      {$ifdef OSPOSIX} inline; {$endif}
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
   end;
@@ -6149,7 +6154,8 @@ var
   f: PtrUInt;
 begin
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
-  result := LockedExc(Flags, f + 1, f);
+  result := (Flags = f) and
+            LockedExc(Flags, f + 1, f);
 end;
 
 procedure TRWLightLock.WriteUnLock;

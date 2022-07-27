@@ -10635,10 +10635,8 @@ end;
 procedure TRawByteStringBuffer.Clear;
 begin
   fLen := 0;
-  if fBuffer = '' then
-    exit;
-  fBuffer := '';
   fCapacity := 0;
+  fBuffer := '';
 end;
 
 function TRawByteStringBuffer.Buffer: pointer;

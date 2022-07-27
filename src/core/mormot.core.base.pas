@@ -2405,12 +2405,14 @@ function RdRand32: cardinal;
 function Rdtsc: Int64;
 
 /// compatibility function, to be implemented according to the running CPU
-// - expect the same result as the homonymous Win32 API function
+// - expect the same result as the homonymous Win32 API function, i.e.
+// returns I + 1, and store I + 1 within I in an atomic/tread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedIncrement(var I: integer): integer;
 
 /// compatibility function, to be implemented according to the running CPU
-// - expect the same result as the homonymous Win32 API function
+// - expect the same result as the homonymous Win32 API function, i.e.
+// returns I - 1, and store I - 1 within I in an atomic/tread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
