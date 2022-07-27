@@ -3227,6 +3227,31 @@ type
     destructor Destroy; override;
   end;
 
+  /// our light cross-platform TEvent-like component
+  // - on POSIX, FPC will use PRTLEvent which is lighter than BasicEvent
+  // - only limitation is that we don't know if WaitFor is signaled or timeout
+  TSynEvent = class
+  protected
+    fHandle: pointer; // Windows THandle or FPC PRTLEvent
+  public
+    /// initialize an instance of cross-platform event
+    constructor Create;
+    /// finalize this instance of cross-platform event
+    destructor Destroy; override;
+    /// ignore any pending events, so that WaitFor will be set on next SetEvent
+    procedure ResetEvent;
+    /// trigger any pending event, releasing the WaitFor/WaitForEver methods
+    procedure SetEvent;
+      {$ifdef OSPOSIX} inline; {$endif}
+    /// wait until SetEvent is called from another thread, with a maximum time
+    // - limitation is that we don't know if it was signaled or timeout
+    procedure WaitFor(TimeoutMS: integer);
+    /// wait until SetEvent is called from another thread, with no maximum time
+    procedure WaitForEver;
+    /// calls SleepHiRes() in steps while checking terminated flag and this event
+    function SleepStep(var start: Int64; terminated: PBoolean): Int64;
+  end;
+
 
 /// initialize a TSynLocker instance from heap
 // - call DoneandFreeMem to release the associated memory and OS mutex
@@ -3260,7 +3285,7 @@ type
   TSynLockedClass = class of TSynLocked;
 
   /// a thread-safe Pierre L'Ecuyer software random generator
-  // - just wrap TLecuyer with a LighLock()
+  // - just wrap TLecuyer with a TLighLock
   // - should not be used, unless may be slightly faster than a threadvar
   TLecuyerThreadSafe = object
     Safe: TLightLock;
@@ -6730,6 +6755,31 @@ begin
   inherited Destroy;
   fSafe^.DoneAndFreeMem;
 end;
+
+
+{ TSynEvent }
+
+function TSynEvent.SleepStep(var start: Int64; terminated: PBoolean): Int64;
+var
+  ms: integer;
+  endtix: Int64;
+begin
+  ms := SleepStepTime(start, result, @endtix);
+  if (ms < 10) or
+     (terminated = nil) then
+    if ms = 0 then
+      SleepHiRes(0) // < 16 ms is a pious wish on Windows anyway
+    else
+      WaitFor(ms)
+  else
+    repeat
+      WaitFor(10);
+      if terminated^ then
+        exit;
+      result := GetTickCount64;
+    until result >= endtix;
+end;
+
 
 { TLecuyerThreadSafe }
 

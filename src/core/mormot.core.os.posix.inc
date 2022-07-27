@@ -1180,6 +1180,41 @@ begin
   fpnanosleep(@timeout, nil);
 end;
 
+
+{ TSynEvent }
+
+constructor TSynEvent.Create;
+begin
+  fHandle := RTLEventCreate;
+end;
+
+destructor TSynEvent.Destroy;
+begin
+  RTLEventDestroy(fHandle);
+  inherited Destroy;
+end;
+
+procedure TSynEvent.ResetEvent;
+begin
+  RTLEventResetEvent(fHandle);
+end;
+
+procedure TSynEvent.SetEvent;
+begin
+  RTLEventSetEvent(fHandle);
+end;
+
+procedure TSynEvent.WaitFor(TimeoutMS: integer);
+begin
+  RTLEventWaitFor(fHandle, TimeoutMS);
+end;
+
+procedure TSynEvent.WaitForEver;
+begin
+  RTLEventWaitFor(fHandle);
+end;
+
+
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
   InitCriticalSection(cs);

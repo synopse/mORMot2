@@ -605,6 +605,41 @@ begin
      SwitchToThread;
 end;
 
+
+{ TSynEvent }
+
+constructor TSynEvent.Create;
+begin
+  fHandle := pointer(CreateEvent(nil, false, false, nil));
+end;
+
+destructor TSynEvent.Destroy;
+begin
+  CloseHandle(THandle(fHandle));
+  inherited Destroy;
+end;
+
+procedure TSynEvent.ResetEvent;
+begin
+  Windows.ResetEvent(THandle(fHandle));
+end;
+
+procedure TSynEvent.SetEvent;
+begin
+  Windows.SetEvent(THandle(fHandle));
+end;
+
+procedure TSynEvent.WaitFor(TimeoutMS: integer);
+begin
+  WaitForSingleObject(THandle(fHandle), TimeoutMS);
+end;
+
+procedure TSynEvent.WaitForEver;
+begin
+  WaitForSingleObject(THandle(fHandle), INFINITE);
+end;
+
+
 {$ifdef FPC}
   {$define NOSETTHREADNAME} // only tested and supported on Delphi
 {$endif FPC}
