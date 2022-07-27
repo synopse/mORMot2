@@ -406,7 +406,7 @@ type
     fWaitForReadPending: boolean;
     fExecuteState: THttpServerExecuteState;
     fIndex: integer;
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     fName: RawUtf8;
     procedure Execute; override;
   public
@@ -1680,7 +1680,7 @@ begin
   fOwner := aOwner;
   fProcess := aProcess;
   fIndex := aIndex;
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   fOnThreadTerminate := fOwner.fOnThreadTerminate;
   inherited Create({suspended=}false);
 end;
@@ -1745,7 +1745,7 @@ begin
                 if not fOwner.fClientsEpoll then
                 begin
                   // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
-                  SleepStep(start, @Terminated, fEvent);
+                  fEvent.SleepStep(start, @Terminated);
                   continue;
                 end
                 else if (pending = 0) and
@@ -1756,9 +1756,8 @@ begin
                   fEvent.ResetEvent;
                   fWaitForReadPending := true;
                   //fOwner.DoLog(sllInfo, 'Execute: % sleep', [fName], self);
-                  fEvent.WaitFor(INFINITE); // blocking until next accept()
+                  fEvent.WaitForEver; // blocking until next accept()
                   //fOwner.DoLog(sllInfo, 'Execute: % wakeup', [fName], self);
-                  start := 0;
                   continue;
                 end;
               if pending > 0 then
@@ -1766,17 +1765,12 @@ begin
                 // process fOwner.fClients.fPending in atpReadPending threads
                 //fOwner.fClients.fRead.PendingLogDebug('Wakeup');
                 fEvent.ResetEvent;
+                fWaitForReadPending := true; // should be set before wakeup
                 fOwner.ThreadPollingWakeup(pending);
-                // atpReadPending notifies fThreadReadPoll.fEvent when done
-                fWaitForReadPending := true;
                 //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending', [], self);
-                if Terminated or
-                   (fEvent.WaitFor(20) = wrSignaled) then
-                begin
-                  //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending signaled', [], self);
-                  break;
-                end;
-                //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending timeout', [], self);
+                if not Terminated then
+                  fEvent.WaitFor(20);
+                break;
               end;
             end;
           end;
@@ -1784,18 +1778,15 @@ begin
           begin
             // secondary threads wait, then read and process pending events
             fWaitForReadPending := true;
-            if fEvent.WaitFor(INFINITE) = wrSignaled then
-            begin
-              if Terminated then
-                break;
-              fWaitForReadPending := false;
-              while fOwner.fClients.fRead.GetOnePending(notif, fName) and
-                    not Terminated do
-                fOwner.fClients.ProcessRead(notif);
-              // release atpReadPoll lock above
-              //if fOwner.fThreadReadPoll.fWaitForReadPending then wrk 30% slower
+            fEvent.WaitForEver;
+            if Terminated then
+              break;
+            while fOwner.fClients.fRead.GetOnePending(notif, fName) and
+                  not Terminated do
+              fOwner.fClients.ProcessRead(notif);
+            // release atpReadPoll lock above
+            if fOwner.fThreadReadPoll.fWaitForReadPending then
               fOwner.fThreadReadPoll.fEvent.SetEvent;
-            end;
           end;
       else
         raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
