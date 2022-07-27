@@ -57,7 +57,7 @@ begin
       raise EServiceException.Create('Service IChatService unavailable');
     try
       TextColor(ccWhite);
-      writeln('Please enter you name, then press [Enter] to join the chat');
+      writeln('Please enter your name, then press [Enter] to join the chat');
       writeln('Enter a void line to quit');
       write('@');
       TextColor(ccLightGray);
