@@ -4348,8 +4348,9 @@ begin
   begin
     if _SafeArray(DocVariant, result) then
       exit;
-  end else if (ExpectedKind = dvObject) and
-              _SafeObject(DocVariant, result) then
+  end
+  else if (ExpectedKind = dvObject) and
+          _SafeObject(DocVariant, result) then
     exit;
   EDocVariant.RaiseSafe(ExpectedKind);
 end;

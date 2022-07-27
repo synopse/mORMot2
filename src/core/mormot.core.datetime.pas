@@ -2344,7 +2344,7 @@ begin
   _HttpDateNowUtcLock.Lock;
   if c <> _HttpDateNowUtcTix then
     SetHttpDateNowUtc(c);
-  result := _HttpDateNowUtc; // true atomic copy
+  MoveFast(_HttpDateNowUtc[0], result[0], ord(_HttpDateNowUtc[0]) + 1);
   _HttpDateNowUtcLock.UnLock;
 end;
 

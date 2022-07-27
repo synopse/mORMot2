@@ -2621,7 +2621,8 @@ begin
       // last AddColumn() call would finalize the non-expanded header
       Add('"' , ',');
       fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
-    end else
+    end
+    else
       AddShorter('","');
   end;
 end;
