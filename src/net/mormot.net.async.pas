@@ -173,7 +173,6 @@ type
   TPollConnectionSockets = class(TPollSockets)
   protected
     function IsValidPending(tag: TPollSocketTag): boolean; override;
-    procedure PendingLogDebug(const caller: shortstring);
   end;
 
   /// callback prototype for TPollAsyncSockets.OnStart events
@@ -1030,22 +1029,6 @@ begin
       result := false;
     end;
   end;
-end;
-
-procedure TPollConnectionSockets.PendingLogDebug(const caller: shortstring);
-var
-  tmp: shortstring;
-  i: PtrInt;
-begin
-  if not Assigned(fOnLog) then
-    exit;
-  tmp := '';
-  fPendingSafe.Lock;
-  for i := 0 to fPending.Count - 1 do
-    tmp := tmp + PointerToHexShort(pointer(fPending.Events[i].tag)) + ' ';
-  fPendingSafe.UnLock;
-  if tmp <> '' then
-    fOnLog(sllTrace, '% tag=%n=%', [caller, tmp, fPending.Count], self);
 end;
 
 
