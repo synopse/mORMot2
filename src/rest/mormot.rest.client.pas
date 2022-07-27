@@ -570,8 +570,7 @@ type
     function SessionCreate(aAuth: TRestClientAuthenticationClass;
       var aUser: TAuthUser; const aSessionKey: RawUtf8): boolean;
     // call each fSession.HeartbeatSeconds delay
-    procedure SessionRenewEvent(Sender: TSynBackgroundTimer; Event: TWaitResult;
-      const Msg: RawUtf8);
+    procedure SessionRenewEvent(Sender: TSynBackgroundTimer; const Msg: RawUtf8);
     /// abstract methods to be implemented with a local, piped or HTTP/1.1 provider
     // - you can specify some POST/PUT data in Call.OutBody (leave '' otherwise)
     // - return the execution result in Call.OutStatus
@@ -1826,31 +1825,31 @@ var
   aText: RawUtf8;
 begin
   while not Terminated do
-    if fEvent.WaitFor(INFINITE) = wrSignaled then
-    begin
-      if Terminated then
-        break;
-      fSafe.Lock;
-      try
-        aText := fPendingRows;
-        fPendingRows := '';
-      finally
-        fSafe.UnLock;
-      end;
-      if (aText <> '') and
-         not Terminated then
-      try
-        while not fClient.InternalRemoteLogSend(aText) do
-          if SleepOrTerminated(2000) then // retry after 2 seconds delay
-            exit;
-      except
-        on E: Exception do
-          if (fClient <> nil) and
-             not Terminated then
-            fClient.InternalLog('%.Execute fatal error: %' +
-              'some events were not transmitted', [ClassType, E], sllWarning);
-      end;
+  begin
+    fEvent.WaitForEver;
+    if Terminated then
+      break;
+    fSafe.Lock;
+    try
+      aText := fPendingRows;
+      fPendingRows := '';
+    finally
+      fSafe.UnLock;
     end;
+    if (aText <> '') and
+       not Terminated then
+    try
+      while not fClient.InternalRemoteLogSend(aText) do
+        if SleepOrTerminated(2000) then // retry after 2 seconds delay
+          exit;
+    except
+      on E: Exception do
+        if (fClient <> nil) and
+           not Terminated then
+          fClient.InternalLog('%.Execute fatal error: %' +
+            'some events were not transmitted', [ClassType, E], sllWarning);
+    end;
+  end;
 end;
 
 
@@ -2046,7 +2045,7 @@ begin
 end;
 
 procedure TRestClientUri.SessionRenewEvent(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUtf8);
+  const Msg: RawUtf8);
 var
   resp: RawUtf8;
   status: integer;

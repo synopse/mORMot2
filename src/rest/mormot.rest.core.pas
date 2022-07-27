@@ -140,18 +140,18 @@ type
     fBackgroundInterningMaxRefCount: integer;
     fBackgroundInterningSafe: TLightLock;
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     // used by AsyncRedirect/AsyncBatch/AsyncInterning
     function AsyncBatchIndex(aTable: TOrmClass): PtrInt;
     function AsyncBatchLocked(aTable: TOrmClass;
       out aBatch: TRestBatchLocked): boolean;
     procedure AsyncBatchUnLock(aBatch: TRestBatchLocked);
     procedure AsyncBatchExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     procedure AsyncBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     procedure AsyncBackgroundInterning(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
   public
     /// initialize the thread for a periodic task processing
     constructor Create(aRest: TRest; const aThreadName: RawUtf8 = '';
@@ -1536,7 +1536,7 @@ type
     fExecuting: boolean;
     fLog: TSynLog;
     fSafe: TSynLocker;
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     /// allows customization in overriden Create (before Execute)
     fThreadName: RawUtf8;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
@@ -1577,7 +1577,7 @@ type
     /// a event associated to this thread
     // - used mainly by Terminate/WaitForNotExecuting but could be used
     // for other notification purpose
-    property Event: TEvent
+    property Event: TSynEvent
       read fEvent;
     /// publishes the thread executing state (set when Execute leaves)
     property Executing: boolean
@@ -3097,7 +3097,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.SystemUseBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
@@ -3143,7 +3143,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBatchExecute(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUtf8);
+  const Msg: RawUtf8);
 var
   json, tablename: RawUtf8;
   batch: TRestBatchLocked;
@@ -3380,7 +3380,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 var
   exec: TInterfaceMethodExecute;
   call: TInterfacedObjectAsyncCall;
@@ -3443,7 +3443,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBackgroundInterning(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 var
   i: PtrInt;
   claimed, total: integer;
@@ -4299,7 +4299,7 @@ begin
   if fThreadName = '' then
     // if thread name has not been set by the overriden constructor
     FormatUtf8('% %', [self, fRest.Model.Root], fThreadName);
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   inherited Create(aCreateSuspended);
 end;
 

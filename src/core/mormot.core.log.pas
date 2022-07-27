@@ -25,7 +25,6 @@ interface
 uses
   sysutils,
   classes,
-  syncobjs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -3672,7 +3671,7 @@ type
   // cross-platform / cross-compiler TThread-based flush
   TAutoFlushThread = class(TThread)
   protected
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     fToCompress: TFileName;
     fStartTix: Int64;
     fSecondElapsed: cardinal;
@@ -3690,7 +3689,7 @@ var
 
 constructor TAutoFlushThread.Create;
 begin
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   fStartTix := mormot.core.os.GetTickCount64;
   inherited Create(false);
 end;
