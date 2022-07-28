@@ -673,7 +673,11 @@ type
     // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
     // identified as varAny with TVarData.VAny pointing to the actual value, and
     // will be handled as expected by TJsonWriter.AddRttiVarData
-    RttiVarDataVType: cardinal;
+    RttiVarDataVType: word;
+    /// corresponding TVarData.VType
+    // - in respect to RttiVarDataVType, rkEnumeration and rkSet are varInt64
+    // since we don't need the RTTI information as for TRttiVarData
+    VarDataVType: word;
     /// type-specific information
     case TRttiKind of
       rkFloat: (
@@ -1111,7 +1115,11 @@ const
 function ToText(k: TRttiKind): PShortString; overload;
 
 /// convert an ordinal value from its (signed) pointer-sized integer representation
-function FromRttiOrd(o: TRttiOrd; P: pointer): Int64;
+function FromRttiOrd(o: TRttiOrd; P: pointer): Int64; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert an ordinal value from its (signed) pointer-sized integer representation
+procedure FromRttiOrd(o: TRttiOrd; P: pointer; res: PInt64); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an ordinal value into its (signed) pointer-sized integer representation
@@ -2839,6 +2847,31 @@ begin
   end;
 end;
 
+procedure FromRttiOrd(o: TRttiOrd; P: pointer; res: PInt64);
+begin
+  case o of
+    roSByte:
+      res^ := PShortInt(P)^;
+    roSWord:
+      res^ := PSmallInt(P)^;
+    roSLong:
+      res^ := PInteger(P)^;
+    roUByte:
+      res^ := PByte(P)^;
+    roUWord:
+      res^ := PWord(P)^;
+    roULong:
+      res^ := PCardinal(P)^;
+    {$ifdef FPC_NEWRTTI}
+    roSQWord,
+    roUQWord:
+      res^ := PInt64(P)^;
+    {$endif FPC_NEWRTTI}
+  else
+    res^ := 0; // should never happen
+  end;
+end;
+
 procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
 begin
   case o of
@@ -3455,6 +3488,10 @@ begin
   Cache.Size := RttiSize;
   Cache.Kind := Kind;
   Cache.RttiVarDataVType := RTTI_TO_VARTYPE[Kind];
+  if Kind in [rkEnumeration, rkSet] then
+    Cache.VarDataVType := varInt64 // no need of the varAny marker for TypeInfo
+  else
+    Cache.VarDataVType := Cache.RttiVarDataVType;
   Cache.Flags := [];
   if Kind in rkOrdinalTypes then
   begin
@@ -6777,7 +6814,7 @@ begin
   varInt64,
   varBoolean:
     // rkInteger, rkBool using VInt64 for proper cardinal support
-    RVD.Data.VInt64 := FromRttiOrd(Value.Cache.RttiOrd, Data);
+    FromRttiOrd(Value.Cache.RttiOrd, Data, @RVD.Data.VInt64);
   varWord64:
     // rkInt64, rkQWord
     begin
@@ -6889,10 +6926,9 @@ begin
     if (OffsetGet >= 0) and
        (OtherRtti.OffsetGet >= 0) then
     begin
-      v1.Data.VInt64 := FromRttiOrd(
-        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet);
-      v2.Data.VInt64 := FromRttiOrd(
-        OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet);
+      FromRttiOrd(Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet, @v1.Data.VInt64);
+      FromRttiOrd(OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet,
+        @v2.Data.VInt64);
     end
     else
     begin

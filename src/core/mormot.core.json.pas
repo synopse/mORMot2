@@ -9972,22 +9972,22 @@ function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData;
   Options: pointer{PDocVariantOptions}): PtrInt;
 var
   tmp: pointer;
+  vt: cardinal;
   ctx: TGetJsonField;
-label
-  fro;
 begin
   // see TRttiCustomProp.GetValueDirect
-  PCardinal(@Dest.VType)^ := Cache.RttiVarDataVType;
-  case Cache.RttiVarDataVType of
+  vt := Cache.VarDataVType;
+  TRttiVarData(Dest).VType := vt;
+  case vt of
     varInt64,
     varBoolean:
-      // rkInteger, rkBool using VInt64 for proper cardinal support
-fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
+      // rkInteger,rkBool,rkEnumeration,rkSet using VInt64 for unsigned 32-bit
+      FromRttiOrd(Cache.RttiOrd, Data, @Dest.VInt64);
     varWord64:
       // rkInt64, rkQWord
       begin
         if not (rcfQWord in Cache.Flags) then
-          PCardinal(@Dest.VType)^ := varInt64; // fix VType
+          TRttiVarData(Dest).VType := varInt64; // fix VType
         Dest.VInt64 := PInt64(Data)^;
       end;
     varDouble,
@@ -10019,27 +10019,18 @@ fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
-        PCardinal(@Dest.VType)^ := varString;
+        TRttiVarData(Dest).VType := varString;
         Dest.VAny := nil; // avoid GPF
         Info.StringToUtf8(Data, RawUtf8(Dest.VAny));
       end;
    else
-     case Cache.Kind of
-       rkEnumeration,
-       rkSet:
-         begin
-           PCardinal(@Dest.VType)^ := varInt64;
-           goto fro;
-         end;
-     else
-       begin
-         tmp := nil; // from temporary JSON
-         SaveJson(Data^, Info, [], RawUtf8(tmp)); // =TJsonWriter.AddTypedJson()
-         PCardinal(@Dest.VType)^ := varEmpty;
-         ctx.Json := tmp;
-         JsonToAnyVariant(variant(Dest), ctx, Options, true);
-         FastAssignNew(tmp);
-       end;
+     begin
+       tmp := nil; // use temporary JSON conversion
+       SaveJson(Data^, Info, [], RawUtf8(tmp)); // =TJsonWriter.AddTypedJson()
+       TRttiVarData(Dest).VType := varEmpty;
+       ctx.Json := tmp;
+       JsonToAnyVariant(variant(Dest), ctx, Options, true);
+       FastAssignNew(tmp);
      end;
   end;
   result := Cache.ItemSize;

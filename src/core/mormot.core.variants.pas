@@ -5181,7 +5181,7 @@ begin
     dv := pointer(VValue);
     for r := 1 to rowcount do
     begin
-      val := dv^.InitFrom(proto, {values=}false); // names byref + no values
+      val := dv^.InitFrom(proto, {values=}false); // names byref + void values
       for f := 1 to fieldcount do
       begin
         JsonToAnyVariant(val^, info, @aOptions);
@@ -5636,7 +5636,7 @@ end;
 
 procedure TDocVariantData.ClearFast;
 begin
-  PInteger(@VType)^ := 0; // clear VType and VOptions
+  TRttiVarData(self).VType := 0; // clear VType and VOptions
   FastDynArrayClear(@VName, TypeInfo(RawUtf8));
   FastDynArrayClear(@VValue, TypeInfo(variant));
   VCount := 0;
@@ -6759,7 +6759,7 @@ begin
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
       MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
-      TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
+      TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
   end;
