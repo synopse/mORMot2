@@ -5998,14 +5998,16 @@ const
 
 function DoSpin(spin: PtrUInt): PtrUInt;
   {$ifdef CPUINTEL} {$ifdef HASINLINE} inline; {$endif} {$endif}
+  // on Intel, the pause CPU instruction would relax the core
+  // on ARM/AARCH64, the not-inlined function call makes a small delay
 begin
-  {$ifdef CPUINTEL} // on ARM/AARCH64, the not-inlined function call makes delay
+  {$ifdef CPUINTEL}
   DoPause;
   {$endif CPUINTEL}
   dec(spin);
   if spin = 0 then
   begin
-    SwitchToThread;
+    SwitchToThread; // fpnanosleep on POSIX
     spin := SPIN_COUNT;
   end;
   result := spin;

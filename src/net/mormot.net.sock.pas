@@ -576,11 +576,12 @@ type
     events: TPollSocketEvents;
   end;
   PPollSocketResult = ^TPollSocketResult;
+  TPollSocketResultDynArray = array of TPollSocketResult;
 
   /// all modifications returned by TPollSocketAbstract.WaitForModified
   TPollSocketResults = record
     // hold [0..Count-1] notified events
-    Events: array of TPollSocketResult;
+    Events: TPollSocketResultDynArray;
     /// how many modifications are currently monitored in Results[]
     Count: PtrInt;
   end;
@@ -701,7 +702,11 @@ type
     fPollLock: TRTLCriticalSection;
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
-    function IsValidPending(tag: TPollSocketTag): boolean; virtual;
+    function MergePendingEvents(const new: TPollSocketResults): integer;
+    // virtual methods below could be overridden for O(1) pending state check
+    function EnsurePending(tag: TPollSocketTag): boolean; virtual;
+    procedure SetPending(tag: TPollSocketTag); virtual;
+    function UnsetPending(tag: TPollSocketTag): boolean; virtual;
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -752,7 +757,7 @@ type
       aSearchExisting: boolean);
     /// disable any pending notification associated with a given connection tag
     // - can be called when a connection is removed from the main logic
-    // to ensure function IsValidPending() never raise any GPF, if the
+    // to ensure function UnsetPending() never raise any GPF, if the
     // connection has been set via AddOnePending() but not via Subscribe()
     function DeleteOnePending(aTag: TPollSocketTag): boolean;
     /// disable any pending notification associated with several connection tags
@@ -2429,23 +2434,6 @@ begin
   {$endif POLLSOCKETEPOLL}
 end;
 
-function FindPendingFromTag(res: PPollSocketResult; n: PtrInt;
-  tag: TPollSocketTag): PPollSocketResult;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if n > 0 then
-  begin
-    result := res;
-    repeat
-      if result^.tag = tag then // fast O(n) search in L1 cache
-        exit;
-      inc(result);
-      dec(n);
-    until n = 0;
-  end;
-  result := nil;
-end;
-
 procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
 begin
   // actually unsubscribe from the sockets monitoring API
@@ -2467,7 +2455,36 @@ begin
   {$endif POLLSOCKETEPOLL}
 end;
 
-function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
+function FindPendingFromTag(res: PPollSocketResult; n: PtrInt;
+  tag: TPollSocketTag): PPollSocketResult;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if n > 0 then
+  begin
+    result := res;
+    repeat
+      if result^.tag = tag then // fast O(n) search in L1 cache
+        exit;
+      inc(result);
+      dec(n);
+    until n = 0;
+  end;
+  result := nil;
+end;
+
+function TPollSockets.EnsurePending(tag: TPollSocketTag): boolean;
+begin
+  // manual O(n) brute force search
+  result := FindPendingFromTag(
+    @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, tag) <> nil;
+end;
+
+procedure TPollSockets.SetPending(tag: TPollSocketTag);
+begin
+  // overriden method may set a per-connection flag for O(1) lookup
+end;
+
+function TPollSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
   result := true; // overriden e.g. in TPollAsyncReadSockets
 end;
@@ -2500,8 +2517,8 @@ begin
      (fPending.Count <= 0) then
     exit;
   fPendingSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try                        // and IsValidPending() should be secured
+  {$ifdef HASFASTTRYFINALLY} // make a performance difference
+  try                        // and UnsetPending() should be secured
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
@@ -2514,7 +2531,7 @@ begin
         // move forward
         inc(ndx);
         if (byte(notif.events) <> 0) and  // DeleteOnePending() may reset to 0
-           IsValidPending(notif.tag) then // e.g. TPollAsyncReadSockets
+           UnsetPending(notif.tag) then   // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
           result := true;
@@ -2538,53 +2555,70 @@ begin
       byte({%H-}notif.events), ndx, n], self);
 end;
 
-function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;
-  new: PPollSocketResult; newcount: PtrInt): integer;
+function TPollSockets.MergePendingEvents(const new: TPollSocketResults): integer;
 var
-  n, cap: PtrInt;
-  exist: PPollSocketResult;
+  n, len, cap: PtrInt;
+  p: PPollSocketResult;
 begin
-  result := 0; // returns number of new events to process
-  n := res.Count;
-  // vacuum the results list (to let caller set fPendingIndex := 0)
-  if resindex <> 0 then
+  len := fPending.Count;
+  if len = 0 then
   begin
-    dec(n, resindex);
-    MoveFast(res.Events[resindex], res.Events[0], n * SizeOf(res.Events[0]));
-    res.Count := n;
+    // no previous results: just replace the list
+    result := new.Count;
+    fPending.Count := new.Count;
+    fPending.Events := new.Events;
+    fPendingIndex := 0;
+    if PClass(self)^ <> TPollSockets then // if SetPending() is overriden
+    begin
+      p := pointer(new.Events);
+      n := new.Count;
+      repeat
+        SetPending(p^.tag); // for O(1) EnsurePending() implementation
+        inc(p);
+        dec(n);
+      until n = 0;
+    end;
+    exit;
   end;
+  // vacuum the results list (to let caller set fPendingIndex := 0)
+  if fPendingIndex <> 0 then
+  begin
+    dec(len, fPendingIndex);
+    with fPending do
+      MoveFast(Events[fPendingIndex], Events[0], len * SizeOf(Events[0]));
+    fPending.Count := len;
+    fPendingIndex := 0;
+  end;
+  result := 0; // returns number of new events to process
   // remove any duplicate: PollForPendingEvents() called before GetOnePending()
-  cap := length(res.Events);
+  p := pointer(new.Events);
+  n := new.Count;
+  cap := length(fPending.Events);
   repeat
-    // O(n*m) is faster than UnSubscribe/Subscribe because n and m are small
-    exist := FindPendingFromTag(pointer(res.Events), res.Count, new^.tag);
-    if exist = nil then
+    if not EnsurePending(p^.Tag) then
     begin
       // new event to process
-      if n >= cap then
+      if len >= cap then
       begin
-        cap := NextGrow(n + newCount);
-        SetLength(res.Events, cap); // seldom needed
+        cap := NextGrow(len + new.Count);
+        SetLength(fPending.Events, cap); // seldom needed
       end;
-      res.Events[n] := new^;
-      inc(n);
+      fPending.Events[len] := p^;
+      inc(len);
       inc(result);
-    end
-    else
-      // merge with existing notification flags
-      exist^.events := exist^.events + new^.events;
-    inc(new);
-    dec(newCount);
-  until newCount = 0;
-  res.Count := n;
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+  fPending.Count := len;
 end;
 
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
 var
-  last, lastcount, n: PtrInt;
+  last, lastcount: PtrInt;
   start, stop: Int64;
   {$ifndef POLLSOCKETEPOLL}
-  u, s, p: PtrInt;
+  n, u, s, p: PtrInt;
   poll: TPollSocketAbstract;
   sock: TNetSocket;
   sub: TPollSocketsSubscription;
@@ -2761,14 +2795,7 @@ begin
       exit;
     fPendingSafe.Lock;
     try
-      n := fPending.Count;
-      if (n <= 0) or
-         (fPendingIndex = n) then
-        fPending := new // atomic list assignment (most common case)
-      else
-        result := MergePendingEvents(fPending, fPendingIndex,
-          pointer(new.Events), new.Count); // avoid duplicates
-      fPendingIndex := 0;
+      result := MergePendingEvents(new);
     finally
       fPendingSafe.UnLock;
     end;
@@ -2793,25 +2820,23 @@ procedure TPollSockets.AddOnePending(
   aTag: TPollSocketTag; aEvents: TPollSocketEvents; aSearchExisting: boolean);
 var
   n: PtrInt;
-  fnd: PPollSocketResult;
 begin
-  fnd := nil;
   fPendingSafe.Lock;
   try
     n := fPending.Count;
-    if aSearchExisting and
-       (n <> 0) then
-      fnd := FindPendingFromTag( // fast O(n) search in L1 cache
-          @fPending.Events[fPendingIndex], n - fPendingIndex, aTag);
-    if fnd = nil then
+    if (n = 0) or
+       (not aSearchExisting) or
+       (not EnsurePending(aTag)) then
     begin
       if n >= length(fPending.Events) then
         SetLength(fPending.Events, NextGrow(n));
-      fnd := @fPending.Events[n];
-      fnd^.tag := aTag;
+      with fPending.Events[n] do
+      begin
+        tag := aTag;
+        events := aEvents;
+      end;
       fPending.Count := n + 1;
     end;
-    fnd^.events := aEvents
   finally
     fPendingSafe.UnLock;
   end;

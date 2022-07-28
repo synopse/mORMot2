@@ -60,6 +60,7 @@ type
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
   // - fInList indicates that the connection was Added to the list
+  // - fReadPending states that there is a pending event for this connection
   // - fFromGC is set when the connection has been recycled from the GC list
   TPollAsyncConnectionFlags = set of (
     fWasActive,
@@ -68,6 +69,7 @@ type
     fSubRead,
     fSubWrite,
     fInList,
+    fReadPending,
     fFromGC);
 
   /// abstract parent to store information aboout one TPollAsyncSockets connection
@@ -172,7 +174,9 @@ type
 
   TPollConnectionSockets = class(TPollSockets)
   protected
-    function IsValidPending(tag: TPollSocketTag): boolean; override;
+    function EnsurePending(tag: TPollSocketTag): boolean; override;
+    procedure SetPending(tag: TPollSocketTag); override;
+    function UnsetPending(tag: TPollSocketTag): boolean; override;
   end;
 
   /// callback prototype for TPollAsyncSockets.OnStart events
@@ -1001,33 +1005,45 @@ end;
 
 { TPollConnectionSockets }
 
-function TPollConnectionSockets.IsValidPending(tag: TPollSocketTag): boolean;
+function TPollConnectionSockets.EnsurePending(tag: TPollSocketTag): boolean;
 begin
+  // fast O(1) flag access
+  result := fReadPending in TPollAsyncConnection(tag).fFlags;
+  include(TPollAsyncConnection(tag).fFlags, fReadPending); // always set
+end;
+
+procedure TPollConnectionSockets.SetPending(tag: TPollSocketTag);
+begin
+  include(TPollAsyncConnection(tag).fFlags, fReadPending);
+end;
+
+function TPollConnectionSockets.UnsetPending(tag: TPollSocketTag): boolean;
+begin
+  result := false;
+  if tag <> 0 then
   try
-    // same logic than TPollAsyncConnection IsDangling() + TryLock()
-    result := (tag <> 0) and
-              // avoid dangling pointer
-              (TPollAsyncConnection(tag).fHandle <> 0) and
-              // another atpReadPending thread may currently own this connection
-              // (occurs if PollForPendingEvents was called in between)
-              (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0);
-    {fOnLog(sllDebug, 'IsValidPending % rwc=%', [TPollAsyncConnection(tag),
-      TPollAsyncConnection(tag).fRW[false].RentrantCount], self);}
-  except
-    on E: Exception do
+    // same paranoid logic than TPollAsyncConnection IsDangling() + TryLock()
+    if // avoid dangling pointer
+       (TPollAsyncConnection(tag).fHandle <> 0) and
+       // another atpReadPending thread may currently own this connection
+       // (occurs if PollForPendingEvents was called in between)
+       (TPollAsyncConnection(tag).fRW[{write=}false].RentrantCount = 0) then
     begin
-      // this GPF has been seen on very rare occasions on wrk -c 16384
+      exclude(TPollAsyncConnection(tag).fFlags, fReadPending);
+      result := true;
+    end;
+  except
+    {on E: Exception do
+      // a GPF has been observed some time ago on rare occasions on wrk -c 16384
+      // but has never been seen any more thanks to our dual generational GC
       // -> has a slight performance impact, but is mandatory for proper
-      // TPollSockets.GetOnePending fPendingSafe.Lock release
-      // -> perhaps KeepConnectionInstanceMS may be set to a higher value
+      // fPendingSafe.Lock release in TPollSockets.GetOnePending
       try
         if Assigned(fOnlog) then
-          fOnLog(sllError, 'IsValidPending(%) raised %',
+          fOnLog(sllError, 'UnsetPending(%) raised %',
             [pointer(tag), E.ClassType], self);
-      except // paranoid
-      end;
-      result := false;
-    end;
+      except
+      end;}
   end;
 end;
 
@@ -1750,9 +1766,10 @@ begin
                 fEvent.ResetEvent;
                 fWaitForReadPending := true; // should be set before wakeup
                 fOwner.ThreadPollingWakeup(pending);
-                //fOwner.DoLog(sllCustom1, 'Execute: WaitForReadPending', [], self);
+                //fOwner.DoLog(sllCustom1, 'Execute: WaitFor ReadPending', [], self);
                 if not Terminated then
                   fEvent.WaitFor(20);
+                //fOwner.DoLog(sllCustom1, 'Execute: WaitFor out', [], self);
                 break;
               end;
             end;
