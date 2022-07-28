@@ -542,7 +542,11 @@ begin
     if DocumentType = nil then
       ListCount := -1
     else
+    begin
       ListCount := DocumentType.IterateCount(aDoc);
+      if fContextCount = 1 then
+        ListCurrentDocument := aDoc; // allow {#.}...{/.} at first level
+    end;
   end;
   inc(fContextCount);
 end;
