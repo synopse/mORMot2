@@ -1009,13 +1009,19 @@ end;
 function TPollConnectionSockets.EnsurePending(tag: TPollSocketTag): boolean;
 begin
   // fast O(1) flag access
-  result := fReadPending in TPollAsyncConnection(tag).fFlags;
-  include(TPollAsyncConnection(tag).fFlags, fReadPending); // always set
+  if tag = 0 then // tag = 0 at shutdown
+    result := false
+  else
+  begin
+    result := fReadPending in TPollAsyncConnection(tag).fFlags;
+    include(TPollAsyncConnection(tag).fFlags, fReadPending); // always set
+  end;
 end;
 
 procedure TPollConnectionSockets.SetPending(tag: TPollSocketTag);
 begin
-  include(TPollAsyncConnection(tag).fFlags, fReadPending);
+  if tag <> 0 then // tag = 0 at shutdown
+    include(TPollAsyncConnection(tag).fFlags, fReadPending);
 end;
 
 function TPollConnectionSockets.UnsetPending(tag: TPollSocketTag): boolean;
@@ -3270,7 +3276,7 @@ begin
   Shutdown;
   // abort pending async process
   if fAsync <> nil then
-    fAsync.Terminate;
+    fAsync.Shutdown;
   // terminate the (void) Execute (suspended) thread
   inherited Destroy;
   // finalize all thread-pooled connections
