@@ -7166,8 +7166,8 @@ begin
     try
       if (optExecInMainThread in Options) and
          (GetCurrentThreadID <> MainThreadID) then
-        BackgroundExecuteCallMethod(@call, nil) else
-      if optExecInPerInterfaceThread in Options then
+        BackgroundExecuteCallMethod(@call, nil)
+      else if optExecInPerInterfaceThread in Options then
         if Assigned(BackgroundExecutionThread) then
           BackgroundExecuteCallMethod(@call, BackgroundExecutionThread)
         else
