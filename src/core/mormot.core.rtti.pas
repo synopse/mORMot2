@@ -1386,6 +1386,10 @@ function IsObjectDefaultOrVoid(Value: TObject): boolean;
 // handle the ID property, and any nested JOINed instances
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean = false);
 
+/// release all low-level managed fields of this instance
+// - just a wrapper around Value.CleanupInstance
+procedure FinalizeObject(Value: TObject);
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { *************** Enumerations RTTI }
@@ -7647,7 +7651,8 @@ end;
 procedure TRttiCustom.ValueFinalizeAndClear(Data: pointer);
 begin
   ValueFinalize(Data);
-  FillCharFast(Data^, fCache.Size, 0);
+  if not (rcfIsManaged in fFlags) then // managed fields are already set to nil
+    FillCharFast(Data^, fCache.Size, 0);
 end;
 
 function TRttiCustom.ValueIsVoid(Data: PAnsiChar): boolean;
@@ -8793,6 +8798,12 @@ begin
       p^.SetValue(pointer(Value), PRttiVarData(@NullVarData)^, {andclear=}false);
     inc(p);
   end;
+end;
+
+procedure FinalizeObject(Value: TObject);
+begin
+  if Value <> nil then
+    Value.CleanupInstance;
 end;
 
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
