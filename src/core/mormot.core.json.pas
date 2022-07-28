@@ -5840,7 +5840,7 @@ begin
   end;
   if CodePage < 0 then
     {$ifdef HASCODEPAGE}
-    CodePage := StringCodePage(s);
+    CodePage := GetCodePage(s);
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif HASCODEPAGE}

@@ -4421,14 +4421,15 @@ procedure TTestCoreBase._UTF8;
     {$ifdef HASCODEPAGE}
     CP := StringCodePage(A);
     CheckEqual(CP, C.CodePage, 'cpb');
-    {$endif FPC}
+    CheckEqual(CP, GetCodePage(A), 'cpc');
+    {$endif HASCODEPAGE}
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
     {$ifdef FPC}
     CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
     {$else}
-    CheckUtF8(A = W, 'CP%-AW', [CP]);
+    CheckUtf8(A = W, 'CP%-AW', [CP]);
     CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
     {$endif FPC}
   end;

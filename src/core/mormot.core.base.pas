@@ -750,6 +750,12 @@ procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
 procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+{$ifdef HASCODEPAGE}
+/// retrieve the code page of a non void string
+// - caller should have ensure that s <> ''
+function GetCodePage(const s: RawByteString): cardinal; inline;
+{$endif HASCODEPAGE}
+
 /// initialize a RawByteString, ensuring returned "aligned" pointer
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
@@ -4182,6 +4188,13 @@ begin
     PCardinal(PAnsiChar(P) + len + _STRRECSIZE)^ := 0; // ends with four #0
   end;
 end;
+
+{$ifdef HASCODEPAGE}
+function GetCodePage(const s: RawByteString): cardinal;
+begin
+  result := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage;
+end;
+{$endif HASCODEPAGE}
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
 var

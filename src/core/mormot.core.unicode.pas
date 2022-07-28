@@ -3526,7 +3526,7 @@ begin
   else
   {$ifdef HASCODEPAGE}
   begin
-    cp := StringCodePage(s);
+    cp := GetCodePage(s);
     if cp = CP_UTF8 then
       result := s
     else if cp >= CP_RAWBLOB then
