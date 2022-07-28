@@ -135,9 +135,18 @@ type
     fEscapeInvert: boolean;
     fOwnWriter: boolean;
     fHelpers: TSynMustacheHelpers;
+    fTempGetValueFromContextHelper: TVariantDynArray;
     fOnStringTranslate: TOnStringTranslate;
+    // some variant support is needed for the helpers
+    function ProcessHelper(const ValueName: RawUtf8; space, helper: PtrInt;
+      var Value: TVarData): TSynMustacheSectionType; virtual;
     procedure TranslateBlock(Text: PUtf8Char; TextLen: Integer); virtual;
-    procedure PopContext; virtual; abstract;
+    function GetVariantFromContext(const ValueName: RawUtf8): variant;
+    procedure PopContext; virtual;
+    procedure AppendVariant(const Value: variant; UnEscape: boolean);
+    // inherited class should override those methods
+    function GetVarDataFromContext(const ValueName: RawUtf8;
+      var Value: TVarData): TSynMustacheSectionType; virtual; abstract;
     procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
       virtual; abstract;
     function AppendSection(const ValueName: RawUtf8): TSynMustacheSectionType;
@@ -181,20 +190,16 @@ type
       ListCurrentDocument: TVarData;
       ListCurrentDocumentType: TSynInvokeableVariantType;
     end;
-    fTempGetValueFromContextHelper: TVariantDynArray;
     fReuse: TLightLock;
     fPathDelim: AnsiChar;
     procedure PushContext(const aDoc: TVarData);
-    procedure PopContext; override;
     procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
       override;
     function AppendSection(const ValueName: RawUtf8): TSynMustacheSectionType;
       override;
     function GotoNextListItem: boolean; override;
-    function GetValueFromContext(const ValueName: RawUtf8;
-      var Value: TVarData): TSynMustacheSectionType;
-    function GetValueCopyFromContext(const ValueName: RawUtf8): variant;
-    procedure AppendVariant(const Value: variant; UnEscape: boolean);
+    function GetVarDataFromContext(const ValueName: RawUtf8;
+      var Value: TVarData): TSynMustacheSectionType; override;
   public
     /// initialize the context from a custom variant document
     // - note that the aDocument instance shall be available during all
@@ -289,7 +294,7 @@ type
     fTags: TSynMustacheTagDynArray;
     fInternalPartials: TSynMustachePartials;
     fSectionMaxCount: integer;
-    fCachedContext: TSynMustacheContextVariant;
+    fCachedContextVariant: TSynMustacheContextVariant;
     // standard helpers implementation
     class procedure DateTimeToText(const Value: variant; out Result: variant);
     class procedure DateToText(const Value: variant; out Result: variant);
@@ -493,6 +498,12 @@ begin
     fWriter.Free;
 end;
 
+procedure TSynMustacheContext.PopContext;
+begin
+  if fContextCount > 1 then
+    dec(fContextCount);
+end;
+
 procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: Integer);
 var
   s: string;
@@ -505,6 +516,124 @@ begin
   end
   else
     fWriter.AddNoJsonEscape(Text, TextLen);
+end;
+
+procedure TSynMustacheContext.AppendVariant(
+  const Value: variant; UnEscape: boolean);
+var
+  ValueText: pointer;
+  wasString: boolean;
+begin
+  if fEscapeInvert then
+    UnEscape := not UnEscape;
+  if TVarData(Value).VType > varNull then
+    if Unescape or
+       VarIsNumeric(Value) then
+      // avoid RawUtf8 conversion for plain numbers or if no HTML escaping
+      fWriter.AddVariant(Value, twNone)
+    else
+    begin
+      pointer(ValueText) := nil;
+      VariantToUtf8(Value, RawUtf8(ValueText), wasString);
+      fWriter.AddHtmlEscape(ValueText);
+      FastAssignNew(ValueText);
+    end;
+end;
+
+function TSynMustacheContext.GetVariantFromContext(
+  const ValueName: RawUtf8): variant;
+var
+  tmp: TVarData;
+begin
+  if (ValueName = '') or
+     (ValueName[1] in ['-', '0'..'9', '"', '{', '[']) or
+     (ValueName = 'true') or
+     (ValueName = 'false') or
+     (ValueName = 'null') then
+    VariantLoadJson(result, ValueName, @JSON_[mFast])
+  else
+  begin
+    GetVarDataFromContext(ValueName, tmp);
+    SetVariantByValue(variant(tmp), result); // copy value
+  end;
+end;
+
+function TSynMustacheContext.ProcessHelper(const ValueName: RawUtf8;
+  space, helper: PtrInt; var Value: TVarData): TSynMustacheSectionType;
+var
+  valnam: RawUtf8;
+  val: TVarData;
+  valArr: TDocVariantData absolute val;
+  valFree: boolean;
+  names: TRawUtf8DynArray;
+  res: PVarData;
+  j, k, n: integer;
+begin
+  valnam := Copy(ValueName, space + 1, maxInt);
+  valFree := false;
+  if valnam <> '' then
+  begin
+    if valnam = '.' then
+      GetVarDataFromContext(valnam, val)
+    else if ((valnam <> '') and
+             (valnam[1] in ['1'..'9', '"', '{', '['])) or
+            (valnam = 'true') or
+            (valnam = 'false') or
+            (valnam = 'null') then
+    begin
+      // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
+      val.VType := varEmpty;
+      JsonToVariantInPlace(variant(val), pointer(valnam), JSON_FAST_FLOAT);
+      valFree := true;
+    end
+    else
+    begin
+      for j := 1 to length(valnam) do
+        case valnam[j] of
+          ' ':
+            // allows {{helper1 helper2 value}} recursive calls
+            break;
+          ',':
+            begin
+              // {{helper value,123,"constant"}}
+              CsvToRawUtf8DynArray(Pointer(valnam), names, ',', true);
+              // TODO: handle 123,"a,b,c"
+              valArr.InitFast;
+              for k := 0 to High(names) do
+                valArr.AddItem(GetVariantFromContext(names[k]));
+              valFree := true;
+              break;
+            end;
+          '<',
+          '>',
+          '=':
+            begin
+              // {{#if .=123}} -> {{#if .,"=",123}}
+              k := j + 1;
+              if valnam[k] in ['=', '>'] then
+                inc(k);
+              valArr.InitArray([
+                 GetVariantFromContext(Copy(valnam, 1, j - 1)),
+                 Copy(valnam, j, k - j),
+                 GetVariantFromContext(Copy(valnam, k, maxInt))],
+                JSON_FAST_FLOAT);
+              valFree := true;
+              break;
+            end;
+        end;
+      if not valFree then
+        GetVarDataFromContext(valnam, val);
+    end;
+  end;
+  n := fContextCount + 4;
+  if length(fTempGetValueFromContextHelper) < n then
+    SetLength(fTempGetValueFromContextHelper, n);
+  res := @fTempGetValueFromContextHelper[fContextCount - 1];
+  Helpers[helper].Event(variant(val), variant(res^));
+  Value := res^;
+  if valFree then
+    VarClear(variant(val));
+  result := msSinglePseudo;
 end;
 
 
@@ -551,112 +680,10 @@ begin
   inc(fContextCount);
 end;
 
-procedure TSynMustacheContextVariant.PopContext;
-begin
-  if fContextCount > 1 then
-    dec(fContextCount);
-end;
-
-function TSynMustacheContextVariant.GetValueCopyFromContext(
-  const ValueName: RawUtf8): variant;
-var
-  tmp: TVarData;
-begin
-  if (ValueName = '') or
-     (ValueName[1] in ['-', '0'..'9', '"', '{', '[']) or
-     (ValueName = 'true') or
-     (ValueName = 'false') or
-     (ValueName = 'null') then
-    VariantLoadJson(result, ValueName, @JSON_[mFast])
-  else
-  begin
-    GetValueFromContext(ValueName, tmp);
-    SetVariantByValue(variant(tmp), result); // copy value
-  end;
-end;
-
-function TSynMustacheContextVariant.GetValueFromContext(
+function TSynMustacheContextVariant.GetVarDataFromContext(
   const ValueName: RawUtf8; var Value: TVarData): TSynMustacheSectionType;
 var
   i, space, helper: PtrInt;
-
-  procedure ProcessHelper;
-  var
-    valnam: RawUtf8;
-    val: TVarData;
-    valArr: TDocVariantData absolute val;
-    valFree: boolean;
-    names: TRawUtf8DynArray;
-    res: PVarData;
-    j, k, n: integer;
-  begin
-    valnam := Copy(ValueName, space + 1, maxInt);
-    valFree := false;
-    if valnam <> '' then
-    begin
-      if valnam = '.' then
-        GetValueFromContext(valnam, val)
-      else if ((valnam <> '') and
-               (valnam[1] in ['1'..'9', '"', '{', '['])) or
-              (valnam = 'true') or
-              (valnam = 'false') or
-              (valnam = 'null') then
-      begin
-        // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
-        val.VType := varEmpty;
-        JsonToVariantInPlace(variant(val), pointer(valnam), JSON_FAST_FLOAT);
-        valFree := true;
-      end
-      else
-      begin
-        for j := 1 to length(valnam) do
-          case valnam[j] of
-            ' ':
-              // allows {{helper1 helper2 value}} recursive calls
-              break;
-            ',':
-              begin
-                // {{helper value,123,"constant"}}
-                CsvToRawUtf8DynArray(Pointer(valnam), names, ',', true);
-                // TODO: handle 123,"a,b,c"
-                valArr.InitFast;
-                for k := 0 to High(names) do
-                  valArr.AddItem(GetValueCopyFromContext(names[k]));
-                valFree := true;
-                break;
-              end;
-            '<',
-            '>',
-            '=':
-              begin
-                // {{#if .=123}} -> {{#if .,"=",123}}
-                k := j + 1;
-                if valnam[k] in ['=', '>'] then
-                  inc(k);
-                valArr.InitArray([
-                   GetValueCopyFromContext(Copy(valnam, 1, j - 1)),
-                   Copy(valnam, j, k - j),
-                   GetValueCopyFromContext(Copy(valnam, k, maxInt))],
-                  JSON_FAST_FLOAT);
-                valFree := true;
-                break;
-              end;
-          end;
-        if not valFree then
-          GetValueFromContext(valnam, val);
-      end;
-    end;
-    n := fContextCount + 4;
-    if length(fTempGetValueFromContextHelper) < n then
-      SetLength(fTempGetValueFromContextHelper, n);
-    res := @fTempGetValueFromContextHelper[fContextCount - 1];
-    Helpers[helper].Event(variant(val), variant(res^));
-    Value := res^;
-    if valFree then
-      VarClear(variant(val));
-    result := msSinglePseudo;
-  end;
-
 begin
   result := msNothing;
   if ValueName = '.' then
@@ -675,7 +702,7 @@ begin
     helper := TSynMustache.HelperFind(Helpers, pointer(ValueName), space - 1);
     if helper >= 0 then
     begin
-      ProcessHelper;
+      result := ProcessHelper(ValueName, space, helper, Value);
       exit;
     end;
     // if helper not found, will return the unprocessed value
@@ -715,7 +742,7 @@ begin
     space := length(ValueName);
     helper := TSynMustache.HelperFind(Helpers, pointer(ValueName), space);
     if helper >= 0 then
-      ProcessHelper;
+      result := ProcessHelper(ValueName, space, helper, Value);
   end;
 end;
 
@@ -724,30 +751,8 @@ procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUtf8;
 var
   Value: TVarData;
 begin
-  GetValueFromContext(ValueName, Value);
+  GetVarDataFromContext(ValueName, Value);
   AppendVariant(variant(Value), UnEscape);
-end;
-
-procedure TSynMustacheContextVariant.AppendVariant(const Value: variant;
-  UnEscape: boolean);
-var
-  ValueText: RawUtf8;
-  wasString: boolean;
-begin
-  if TVarData(Value).VType > varNull then
-    if VarIsNumeric(Value) then
-      // avoid RawUtf8 conversion for plain numbers
-      fWriter.AddVariant(Value, twNone)
-    else
-    begin
-      if fEscapeInvert then
-        UnEscape := not UnEscape;
-      VariantToUtf8(Value, ValueText, wasString);
-      if UnEscape then
-        fWriter.AddNoJsonEscape(pointer(ValueText), length(ValueText))
-      else
-        fWriter.AddHtmlEscape(pointer(ValueText));
-    end;
 end;
 
 function TSynMustacheContextVariant.AppendSection(
@@ -770,7 +775,7 @@ begin
           result := msSinglePseudo;
         exit;
       end;
-  result := GetValueFromContext(ValueName, Value);
+  result := GetVarDataFromContext(ValueName, Value);
   if result <> msNothing then
   begin
     if (Value.VType <= varNull) or
@@ -1310,7 +1315,7 @@ begin
   finally
     Free;
   end;
-  fCachedContext := TSynMustacheContextVariant.Create(self,
+  fCachedContextVariant := TSynMustacheContextVariant.Create(self,
     TJsonWriter.CreateOwnedStream(8192), SectionMaxCount + 4, Null, true);
 end;
 
@@ -1410,7 +1415,7 @@ var
   ctx: TSynMustacheContextVariant;
   tmp: TTextWriterStackBuffer;
 begin
-  ctx := fCachedContext; // thread-safe reuse of a shared rendering context
+  ctx := fCachedContextVariant; // thread-safe reuse of shared rendering context
   if ctx.fReuse.TryLock then
     ctx.PushContext(TVarData(Context)) // weak copy
   else
@@ -1423,7 +1428,7 @@ begin
     RenderContext(ctx, 0, high(fTags), Partials, false);
     ctx.Writer.SetText(result);
   finally
-    if ctx = fCachedContext then
+    if ctx = fCachedContextVariant then
       ctx.CancelAll
     else
       ctx.Free;
@@ -1455,7 +1460,7 @@ destructor TSynMustache.Destroy;
 begin
   FreeAndNil(fInternalPartials);
   inherited;
-  fCachedContext.Free;
+  fCachedContextVariant.Free;
 end;
 
 function TSynMustache.FoundInTemplate(const text: RawUtf8): boolean;
