@@ -734,7 +734,7 @@ begin
      (ColumnDBForm = SQLCS_NCHAR) then
     FastSetString(result, P, L)
   else
-    result := fAnsiConvert.AnsiBufferToRawUtf8(P, L);
+    fAnsiConvert.AnsiBufferToRawUtf8(P, L, result);
 end;
 
 {$ifndef UNICODE}

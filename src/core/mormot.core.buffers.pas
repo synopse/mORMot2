@@ -8891,7 +8891,7 @@ begin
         if AssumeUtf8IfNoBom then
           FastSetString(result, Map.Buffer, Map.Size)
         else
-          result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Map.Buffer, Map.Size);
+          CurrentAnsiConvert.AnsiBufferToRawUtf8(Map.Buffer, Map.Size, result);
     end;
   finally
     Map.UnMap;

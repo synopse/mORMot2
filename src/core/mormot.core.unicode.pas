@@ -307,8 +307,8 @@ type
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; virtual;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
-    function AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal): RawUtf8; overload; virtual;
+    procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
+      SourceChars: cardinal; out Value: RawUtf8); overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
@@ -483,8 +483,8 @@ type
     // - directly assign the input as result, since no conversion is needed
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
-    function AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal): RawUtf8; override;
+    procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
+      SourceChars: cardinal; out Value: RawUtf8); override;
   end;
 
   /// a class to handle UTF-16 to/from Unicode translation
@@ -2583,24 +2583,21 @@ end;
 
 function TSynAnsiConvert.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
 begin
-  result := AnsiBufferToRawUtf8(pointer(AnsiText), length(AnsiText));
+  AnsiBufferToRawUtf8(pointer(AnsiText), length(AnsiText), result);
 end;
 
-function TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
-  SourceChars: cardinal): RawUtf8;
+procedure TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
+  SourceChars: cardinal; out Value: RawUtf8);
 var
   tmp: TSynTempBuffer;
-  P: pointer;
+  P: PUtf8Char;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    result := ''
-  else
-  begin
-    P := tmp.Init(SourceChars * 3);
-    P := AnsiBufferToUtf8(P, Source, SourceChars);
-    tmp.Done(P, result);
-  end;
+    exit;
+  P := AnsiBufferToUtf8(tmp.Init(SourceChars * 3), Source, SourceChars);
+  FastSetString(Value, tmp.buf, P - tmp.buf);
+  tmp.Done;
 end;
 
 constructor TSynAnsiConvert.Create(aCodePage: cardinal);
@@ -3433,10 +3430,10 @@ begin
   {$endif HASCODEPAGE}
 end;
 
-function TSynAnsiUtf8.AnsiBufferToRawUtf8(Source: PAnsiChar;
-  SourceChars: cardinal): RawUtf8;
+procedure TSynAnsiUtf8.AnsiBufferToRawUtf8(
+  Source: PAnsiChar; SourceChars: cardinal; out Value: RawUtf8);
 begin
-  FastSetString(result, Source, SourceChars);
+  FastSetString(Value, Source, SourceChars);
 end;
 
 
@@ -3535,10 +3532,10 @@ begin
       SetCodePage(RawByteString(result), CP_UTF8, false);
     end
     else
-      result := TSynAnsiConvert.Engine(cp).AnsiToUtf8(s);
+      TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), length(s), result);
   end;
   {$else}
-  result := CurrentAnsiConvert.AnsiToUtf8(s);
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(s), length(s), result);
   {$endif HASCODEPAGE}
 end;
 
@@ -3555,7 +3552,7 @@ end;
 
 function ShortStringToUtf8(const source: ShortString): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(@source[1], ord(source[0]));
+  WinAnsiConvert.AnsiBufferToRawUtf8(@source[1], ord(source[0]), result);
 end;
 
 procedure WinAnsiToUnicodeBuffer(const S: WinAnsiString; Dest: PWordArray; DestLen: PtrInt);
@@ -3581,12 +3578,12 @@ end;
 
 function WinAnsiToUtf8(const S: WinAnsiString): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(pointer(S), length(S));
+  WinAnsiConvert.AnsiBufferToRawUtf8(pointer(S), length(S), result);
 end;
 
 function WinAnsiToUtf8(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(WinAnsi, WinAnsiLen);
+  WinAnsiConvert.AnsiBufferToRawUtf8(WinAnsi, WinAnsiLen, result);
 end;
 
 function WideCharToWinAnsiChar(wc: cardinal): AnsiChar;
@@ -3746,7 +3743,7 @@ end;
 
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8; ACP: integer);
 begin
-  result := TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L);
+  TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L, result);
 end;
 
 {$ifdef UNICODE}
@@ -3930,7 +3927,7 @@ end;
 
 procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8);
 begin
-  result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Source, StrLen(Source));
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(Source, StrLen(Source), result);
 end;
 
 function StringToUtf8(const Text: string): RawUtf8;
@@ -3940,7 +3937,7 @@ end;
 
 procedure StringToUtf8(Text: PChar; TextLen: PtrInt; var result: RawUtf8);
 begin
-  result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Text, TextLen);
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(Text, TextLen, result);
 end;
 
 procedure StringToUtf8(const Text: string; var result: RawUtf8);

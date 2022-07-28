@@ -186,6 +186,7 @@ type
     fSqlW: RawUnicode;
     procedure AllocStatement;
     procedure DeallocStatement;
+    function CType2SQL(CDataType: integer): integer;
     procedure BindColumns;
     procedure GetData(var Col: TSqlDBColumnProperty; ColIndex: integer);
     function GetCol(Col: integer; ExpectedType: TSqlDBFieldType): TSqlDBStatementGetCol;
@@ -952,41 +953,40 @@ const
   IDList_type:  PWideChar = 'IDList';
   StrList_type: PWideChar = 'StrList';
 
-procedure TSqlDBOdbcStatement.ExecutePrepared;
-
-  function CType2SQL(CDataType: integer): integer;
-  begin
-    case CDataType of
-      SQL_C_CHAR:
-        case fDbms of
-          dInformix:
-            result := SQL_INTEGER;
-        else
+function TSqlDBOdbcStatement.CType2SQL(CDataType: integer): integer;
+begin
+  case CDataType of
+    SQL_C_CHAR:
+      case fDbms of
+        dInformix:
+          result := SQL_INTEGER;
+      else
+        result := SQL_VARCHAR;
+      end;
+    SQL_C_TYPE_DATE:
+      result := SQL_TYPE_DATE;
+    SQL_C_TYPE_TIMESTAMP:
+      result := SQL_TYPE_TIMESTAMP;
+    SQL_C_WCHAR:
+      case fDbms of
+        dInformix:
           result := SQL_VARCHAR;
-        end;
-      SQL_C_TYPE_DATE:
-        result := SQL_TYPE_DATE;
-      SQL_C_TYPE_TIMESTAMP:
-        result := SQL_TYPE_TIMESTAMP;
-      SQL_C_WCHAR:
-        case fDbms of
-          dInformix:
-            result := SQL_VARCHAR;
-        else
-          result := SQL_WVARCHAR;
-        end;
-      SQL_C_BINARY:
-        result := SQL_VARBINARY;
-      SQL_C_SBIGINT:
-        result := SQL_BIGINT;
-      SQL_C_DOUBLE:
-        result := SQL_DOUBLE;
-    else
-      raise EOdbcException.CreateUtf8('%.ExecutePrepared: Unexpected ODBC C type %',
-        [self, CDataType]);
-    end;
+      else
+        result := SQL_WVARCHAR;
+      end;
+    SQL_C_BINARY:
+      result := SQL_VARBINARY;
+    SQL_C_SBIGINT:
+      result := SQL_BIGINT;
+    SQL_C_DOUBLE:
+      result := SQL_DOUBLE;
+  else
+    raise EOdbcException.CreateUtf8('%.ExecutePrepared: Unexpected ODBC C type %',
+      [self, CDataType]);
   end;
+end;
 
+procedure TSqlDBOdbcStatement.ExecutePrepared;
 var
   p, k: integer;
   status: SqlReturn;
@@ -997,6 +997,7 @@ var
   ItemPW: PWideChar;
   timestamp: SQL_TIMESTAMP_STRUCT;
   ansitext: boolean;
+  tmp: RawUtf8;
   StrLen_or_Ind: array of PtrInt;
   ArrayData: array of record
     StrLen_or_Ind: array of PtrInt;
@@ -1236,11 +1237,14 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
             if VInOut <> paramIn then
               PDateTime(@VInt64)^ := PSql_TIMESTAMP_STRUCT(VData)^.ToDateTime;
           ftUtf8:
-            if ansitext then
-              VData := CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(VData),
-                StrLen(pointer(VData)))
-            else
-              VData := RawUnicodeToUtf8(pointer(VData), StrLenW(pointer(VData)));
+            begin
+              if ansitext then
+                CurrentAnsiConvert.AnsiBufferToRawUtf8(
+                  pointer(VData), StrLen(pointer(VData)), tmp)
+              else // UTF-16
+                RawUnicodeToUtf8(pointer(VData), StrLenW(pointer(VData)), tmp);
+              VData := tmp;
+            end;
         end;
   end;
   SqlLogEnd;
