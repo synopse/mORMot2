@@ -3189,7 +3189,7 @@ begin
   if fHttp.Interning = nil then
     FreeAndNil(fRequest) // more efficient to create a new instance
   else
-    fRequest.CleanupInstance;
+    fRequest.CleanupInstance; // let all headers have refcount=1
   // now try socket send() with headers (and small body if hrsResponseDone)
   // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
   fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);

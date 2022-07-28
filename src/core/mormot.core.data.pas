@@ -1943,7 +1943,8 @@ type
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
     /// returns position in array, or -1 if not found with a custom comparer
-    function FindOrNewComp(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare): PtrInt;
+    function FindOrNewComp(aHashCode: cardinal; Item: pointer;
+      Comp: TDynArraySortCompare = nil): PtrInt;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
@@ -4239,7 +4240,7 @@ var
   added: boolean;
 begin
   fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, fValues.Hasher.Compare);
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
   begin
     aResult := fValue[i]; // return unified string instance
@@ -4301,7 +4302,7 @@ var
   added: boolean;
 begin
   fSafe.ReadLock;
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, fValues.Hasher.Compare);
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
   begin
     aText := fValue[i]; // return unified string instance
@@ -9111,7 +9112,7 @@ begin // cut-down version of FindOrNew()
         end;
     until false;
   result := 0; // make compiler happy
-  RaiseFatalCollision('FindOrNewCompare', aHashCode);
+  RaiseFatalCollision('FindOrNewComp', aHashCode);
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
