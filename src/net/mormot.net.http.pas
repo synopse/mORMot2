@@ -516,14 +516,15 @@ type
     fConnectionThread: TSynThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
   public
-    /// prepare an incoming request from explicit values
+    /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
+    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
+    /// prepare an incoming request from explicit values
+    // - could be used for non-HTTP execution, e.g. from a WebSockets link
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// prepare an incoming request from a parsed THttpRequestContext
-    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
     /// append some values to the OutCustomHeaders output parameter

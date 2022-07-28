@@ -69,6 +69,9 @@ type
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
       aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
+    /// could be called before Prepare() to reuse an existing instance
+    procedure Recycle(aConnectionID: THttpServerConnectionID;
+      aConnectionFlags: THttpServerRequestFlags);
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -1313,6 +1316,14 @@ begin
     id^ := 0; // ensure no overflow (31-bit range)
 end;
 
+procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
+  aConnectionFlags: THttpServerRequestFlags);
+begin
+  fConnectionID := aConnectionID;
+  fConnectionFlags := aConnectionFlags;
+  fErrorMessage := '';
+end;
+
 const
   _CMD_200: array[boolean] of string[17] = (
     'HTTP/1.1 200 OK'#13#10,
@@ -1411,6 +1422,7 @@ begin
     h^.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
+  OutContent := ''; // release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
   // now TAsyncConnectionsSockets.Write(result) should be called
 end;
@@ -1894,6 +1906,7 @@ begin
     begin
       // execute the main processing callback
       Ctxt.RespStatus := Request(Ctxt);
+      Ctxt.InContent := ''; // release memory ASAP
       cod := DoAfterRequest(Ctxt);
       if cod > 0 then
         Ctxt.RespStatus := cod;

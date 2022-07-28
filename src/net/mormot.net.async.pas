@@ -755,6 +755,7 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
+    fRequest: THttpServerRequest;
     fConnectionOpaque: THttpServerConnectionOpaque;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -2939,6 +2940,7 @@ end;
 procedure THttpAsyncConnection.BeforeDestroy;
 begin
   fHttp.ProcessDone;
+  FreeAndNil(fRequest);
   inherited BeforeDestroy;
 end;
 
@@ -3137,9 +3139,9 @@ end;
 
 function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
-  req: THttpServerRequest;
   output: PRawByteStringBuffer;
   remoteID: THttpServerConnectionID;
+  flags: THttpServerRequestFlags;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -3155,34 +3157,39 @@ begin
   // optionaly uncompress content
   if fHttp.CompressContentEncoding >= 0 then
     fHttp.UncompressData;
-  // compute the HTTP/REST process
+  // prepare the HTTP/REST process reusing the THttpServerRequest instance
   result := soClose;
   remoteid := fHandle;
   fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
-  req := THttpServerRequest.Create(fServer, remoteid, {thread=}nil,
-    HTTPREMOTEFLAGS[Assigned(fSecure)], @fConnectionOpaque);
-  try
-    // let the associated THttpAsyncServer execute the request
-    req.Prepare(fHttp, fRemoteIP);
-    if fServer.DoRequest(req) then
-      result := soContinue;
-    // handle HTTP/1.1 keep alive timeout
-    if (fKeepAliveSec > 0) and
-       not (hfConnectionClose in fHttp.HeaderFlags) and
-       (fServer.Async.fLastOperationSec > fKeepAliveSec) then
-    begin
-      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
-        [fKeepAliveSec], self);
-      include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
-    end;
-    // compute the response for the HTTP state machine
-    output := req.SetupResponse(fHttp, fServer.fCompressGz,
-      fServer.fAsync.fClients.fSendBufferSize);
-    // now fHttp.State is final as hrsSendBody or hrsResponseDone
-    fRespStatus := req.RespStatus;
-  finally
-    req.Free;
+  flags := HTTPREMOTEFLAGS[Assigned(fSecure)];
+  if fRequest = nil then // only create if not rejected by OnBeforeBody
+    fRequest := THttpServerRequest.Create(
+      fServer, remoteid, nil, flags, @fConnectionOpaque)
+  else
+    fRequest.Recycle(remoteid, flags);
+  fRequest.Prepare(fHttp, fRemoteIP);
+  // let the associated THttpAsyncServer execute the request
+  if fServer.DoRequest(fRequest) then
+    result := soContinue;
+  // handle HTTP/1.1 keep alive timeout
+  if (fKeepAliveSec > 0) and
+     not (hfConnectionClose in fHttp.HeaderFlags) and
+     (fServer.Async.fLastOperationSec > fKeepAliveSec) then
+  begin
+    fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
+      [fKeepAliveSec], self);
+    include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
   end;
+  // compute the response for the HTTP state machine
+  output := fRequest.SetupResponse(fHttp, fServer.fCompressGz,
+    fServer.fAsync.fClients.fSendBufferSize);
+  // now fHttp.State is final as hrsSendBody or hrsResponseDone
+  fRespStatus := fRequest.RespStatus;
+  // release memory of all COW fields ASAP if HTTP header was interned
+  if fHttp.Interning = nil then
+    FreeAndNil(fRequest) // more efficient to create a new instance
+  else
+    fRequest.CleanupInstance;
   // now try socket send() with headers (and small body if hrsResponseDone)
   // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
   fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
@@ -3285,17 +3292,19 @@ procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
 begin
+  // clean interned HTTP headers every 16 secs
   if fInterning <> nil then
   begin
-    tix := GetTickCount64 shr 14; // clean every 16 secs
-    if (fInterning^.Count > 1000) or   // or if the slot is highly used (DDos?)
+    tix := GetTickCount64 shr 14;
+    if (fInterning^.Count > 1000) or // is the slot highly used (DDos?)
        (fInterningTix <> tix) then
     begin
       cleaned := fInterning^.Clean(1);
       if (cleaned > 500) or
          ((cleaned <> 0) and
           (hsoLogVerbose in Options)) then
-        fAsync.DoLog(sllTrace, 'IdleEverySecond: cleaned % headers', [cleaned], self);
+        fAsync.DoLog(sllTrace,
+          'IdleEverySecond: cleaned % interned headers', [cleaned], self);
       fInterningTix := tix;
     end;
   end;

@@ -138,7 +138,7 @@ const
   /// the default access rights used by the HTTP server if none is specified
   HTTP_DEFAULT_ACCESS_RIGHTS: POrmAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
 
-  /// the TRestHttpServerSecurity which implies TLS/HTTPS
+  /// the TRestHttpServerSecurity flags which imply TLS/HTTPS
   SEC_TLS = [secTLS, secTLSSelfSigned];
 
   /// the kind of HTTP server to be used by default
