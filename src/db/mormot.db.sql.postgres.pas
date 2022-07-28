@@ -24,11 +24,11 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
   mormot.db.sql;
@@ -79,14 +79,12 @@ type
   /// implements a connection via the libpq access layer
   TSqlDBPostgresConnection = class(TSqlDBConnectionThreadSafe)
   protected
-    // prepared statement names = SHA-256 of its SQL
-    fPrepared: THash256DynArray; // O(n) fast search in L1 cache
-    fPreparedCount: integer;
+    // SQL of server-side prepared statements - name is index as hexadecimal
+    // - statements are already cached in TSqlDBConnection.NewStatementPrepared
+    fPrepared: TRawUtf8List;
     // the associated low-level provider connection
     fPGConn: pointer;
-    // fServerSettings: set of (ssByteAasHex);
-    // maintain fPrepared[] hash list to identify already cached
-    // - returns statement index in prepared cache array
+    // return statement index in fPrepared cache array
     function PrepareCached(const aSql: RawUtf8; aParamCount: integer;
       out aName: RawUtf8): integer;
     /// direct execution of SQL statement what do not returns a result
@@ -99,6 +97,8 @@ type
     /// query the pg_settings table for a given setting
     function GetServerSetting(const Name: RawUtf8): RawUtf8;
   public
+    /// finalize this connection
+    destructor Destroy; override;
     /// connect to the specified server
     // - should raise an ESqlDBPostgres on error
     procedure Connect; override;
@@ -121,15 +121,14 @@ type
     property Direct: pointer
       read fPGConn;
     /// how many prepared statements are currently cached for this connection
-    property PreparedCount: integer
-      read fPreparedCount;
+    function PreparedCount: integer;
   end;
 
 
   /// implements a statement via a Postgres database connection
   TSqlDBPostgresStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
-    fPreparedStmtName: RawUtf8; // = SHA-256 of the SQL
+    fPreparedStmtName: RawUtf8; // = hexadecimal of the SQL cached index
     fRes: pointer;
     fResStatus: integer;
     fPreparedParamsCount: integer;
@@ -207,7 +206,6 @@ type
 implementation
 
 uses
-  mormot.crypt.core,  // libpq requires named prepared statements = use SHA-256
   mormot.db.raw.postgres; // raw libpq library API access
 
 
@@ -215,23 +213,35 @@ uses
 
 { TSqlDBPostgresConnection }
 
+destructor TSqlDBPostgresConnection.Destroy;
+begin
+  inherited Destroy;
+  fPrepared.Free;
+end;
+
 function TSqlDBPostgresConnection.PrepareCached(
   const aSql: RawUtf8; aParamCount: integer; out aName: RawUtf8): integer;
-var
-  dig: TSha256Digest;
 begin
-  dig := Sha256Digest(aSql);
-  aName := Sha256DigestToString(dig);
-  result := Hash256Index(pointer(fPrepared), fPreparedCount, @dig);
-  if result >= 0 then
-    exit; // already prepared -> we will just give the statement name to PQ
+  if fPrepared = nil then
+  begin
+    fPrepared :=
+      TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate, fNoThreadLock]);
+    result := -1;
+  end
+  else
+  begin
+    result := fPrepared.IndexOf(aSql);
+    if result >= 0 then
+    begin
+      // never called in practice: already cached in TSqlDBConnection
+      aName := Int64ToHexLower(result); // statement name is index as hexa
+      exit; // already prepared -> we will just give the statement name to PQ
+    end;
+  end;
+  result := fPrepared.Add(aSql);
+  aName := Int64ToHexLower(result);
   PQ.Check(fPGConn,
     PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
-  result := fPreparedCount;
-  inc(fPreparedCount);
-  if result = length(fPrepared) then
-    SetLength(fPrepared, result + 32);
-  fPrepared[result] := dig;
 end;
 
 procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8);
@@ -338,8 +348,8 @@ begin
     inherited Disconnect;
   finally
     // any prepared statements will be released with this connection
-    fPrepared := nil;
-    fPreparedCount := 0;
+    if fPrepared <> nil then
+      fPrepared.Clear;
     // let PG driver finish the connection
     if fPGConn <> nil then
     begin
@@ -399,6 +409,15 @@ procedure TSqlDBPostgresConnection.Rollback;
 begin
   inherited;
   DirectExecSql('ROLLBACK');
+end;
+
+function TSqlDBPostgresConnection.PreparedCount: integer;
+begin
+  if (self = nil) or
+     (fPrepared = nil) then
+    result := 0
+  else
+    result := fPrepared.Count;
 end;
 
 
@@ -542,11 +561,12 @@ begin
   end;
 end;
 
-// see https://www.postgresql.org/docs/9.3/libpq-exec.html
+// see https://www.postgresql.org/docs/current/libpq-exec.html
 
 procedure TSqlDBPostgresStatement.Prepare(
   const aSql: RawUtf8; ExpectResults: boolean);
 begin
+  // it is called once: already cached in TSqlDBConnection.NewStatementPrepared
   SqlLogBegin(sllDB);
   if aSql = '' then
     raise ESqlDBPostgres.CreateUtf8('%.Prepare: empty statement', [self]);
@@ -554,7 +574,7 @@ begin
   fPreparedParamsCount := ReplaceParamsByNumbers(fSql, fSqlPrepared, '$');
   if scPossible in fCache then
   begin
-    // preparable statements will be cached server-side by Sha256(SQL) as name
+    // preparable statements will be cached server-side by index hexa as name
     include(fCache, scOnServer);
     TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
@@ -646,7 +666,8 @@ begin
       pointer(fPGParamFormats), PGFMT_TEXT)
   else if fPreparedParamsCount = 0 then
     // PQexec handles multiple SQL commands
-    fRes := PQ.Exec(c.fPGConn, pointer(fSqlPrepared)) else
+    fRes := PQ.Exec(c.fPGConn, pointer(fSqlPrepared))
+  else
     fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared),
       fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGparamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
@@ -666,10 +687,10 @@ begin
     fCurrentRow := -1;
     if fColumn.Count = 0 then // if columns exist then statement is already cached
       BindColumns;
-    SqlLogEnd(' rows=%', [fTotalRowsRetrieved]);
+    SqlLogEnd(' % rows=%', [fPreparedStmtName, fTotalRowsRetrieved]);
   end
   else
-    SqlLogEnd;
+    SqlLogEnd(' %', [fPreparedStmtName]);
 end;
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
