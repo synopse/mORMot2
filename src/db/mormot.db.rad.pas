@@ -251,11 +251,8 @@ type
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
   end;
 
   ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
@@ -737,79 +734,70 @@ begin
   result := fQuery.Fields[col];
 end;
 
-procedure TSqlDBDatasetStatementAbstract.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBDatasetStatementAbstract.ColumnToJson(Col: integer;
+  W: TJsonWriter);
 var
-  col: PtrInt;
   f: TField;
   blob: RawByteString;
 begin
-  if WR.Expand then
-    WR.Add('{');
-  for col := 0 to fColumnCount - 1 do
-    with fColumns[col] do
-    begin
-      if WR.Expand then
-        WR.AddFieldName(ColumnName); // add '"ColumnName":'
-      f := TField(ColumnAttr);
-      if f.IsNull then
-        WR.AddNull
+  with fColumns[Col] do
+  begin
+    f := TField(ColumnAttr);
+    if f.IsNull then
+      W.AddNull
+    else
+      case ColumnType of
+        mormot.db.core.ftNull:
+          W.AddNull;
+        mormot.db.core.ftInt64:
+          if f.DataType = ftBoolean then
+            W.Add(ord(f.AsBoolean))
+          else
+          {$ifdef UNICODE}
+            W.Add(f.AsLargeInt);
+          {$else}
+            if ColumnValueDBType = IsTLargeIntField then
+              W.Add(TLargeIntField(f).AsLargeInt)
+            else
+              W.Add(f.AsInteger);
+          {$endif UNICODE}
+        mormot.db.core.ftDouble:
+          W.AddDouble(f.AsFloat);
+        mormot.db.core.ftCurrency:
+          if f.DataType in [ftBCD, ftFMTBcd] then
+            AddBcd(W, f.AsBCD)
+          else
+            W.AddCurr(f.AsCurrency);
+        mormot.db.core.ftDate:
+          begin
+            W.Add('"');
+            W.AddDateTime(f.AsDateTime, fForceDateWithMS);
+            W.Add('"');
+          end;
+        mormot.db.core.ftUtf8:
+          begin
+            W.Add('"');
+          {$ifndef UNICODE}
+            if ColumnValueDBType=IsTWideStringField then
+              W.AddJsonEscapeW(Pointer(TWideStringField(ColumnAttr).Value))
+            else
+          {$endif UNICODE}
+              W.AddJsonEscapeString(f.AsString);
+            W.Add('"');
+          end;
+        mormot.db.core.ftBlob:
+          if fForceBlobAsNull then
+            W.AddNull
+          else
+          begin
+            blob := ColumnBlob(Col);
+            W.WrBase64(pointer(blob), length(blob), true); // withMagic=true
+          end;
       else
-        case ColumnType of
-          mormot.db.core.ftNull:
-            WR.AddNull;
-          mormot.db.core.ftInt64:
-            if f.DataType = ftBoolean then
-              WR.Add(ord(f.AsBoolean))
-            else
-            {$ifdef UNICODE}
-              WR.Add(f.AsLargeInt);
-            {$else}
-              if ColumnValueDBType = IsTLargeIntField then
-                WR.Add(TLargeIntField(f).AsLargeInt)
-              else
-                WR.Add(f.AsInteger);
-            {$endif UNICODE}
-          mormot.db.core.ftDouble:
-            WR.AddDouble(f.AsFloat);
-          mormot.db.core.ftCurrency:
-            if f.DataType in [ftBCD, ftFMTBcd] then
-              AddBcd(WR, f.AsBCD)
-            else
-              WR.AddCurr(f.AsCurrency);
-          mormot.db.core.ftDate:
-            begin
-              WR.Add('"');
-              WR.AddDateTime(f.AsDateTime, fForceDateWithMS);
-              WR.Add('"');
-            end;
-          mormot.db.core.ftUtf8:
-            begin
-              WR.Add('"');
-            {$ifndef UNICODE}
-              if ColumnValueDBType=IsTWideStringField then
-                WR.AddJsonEscapeW(Pointer(TWideStringField(ColumnAttr).Value))
-              else
-            {$endif UNICODE}
-                WR.AddJsonEscapeString(f.AsString);
-              WR.Add('"');
-            end;
-          mormot.db.core.ftBlob:
-            if fForceBlobAsNull then
-              WR.AddNull
-            else
-            begin
-              blob := ColumnBlob(col);
-              WR.WrBase64(pointer(blob), length(blob), true); // withMagic=true
-            end;
-        else
-          raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
-            [self, ord(ColumnType)]);
-        end;
-      WR.AddComma;
-    end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
+        raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+          [self, ord(ColumnType)]);
+      end;
+  end;
 end;
 
 

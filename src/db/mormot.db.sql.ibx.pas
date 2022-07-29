@@ -258,11 +258,8 @@ type
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - this overriden implementation will call fReultSet methods to avoid
-    // creating most temporary variable
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
   end;
 
 
@@ -984,125 +981,104 @@ begin
   result := fResults[Col].GetAsString;
 end;
 
-procedure TSqlDBIbxStatement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBIbxStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
-  I, H, C: integer;
-  s:   RawUtf8;
+  s: RawUtf8;
   isNull: boolean;
   len: smallint;
   data: PByte;
 begin
-  if WR.Expand then
-    WR.Add('{');
-  if Assigned(WR.Fields) then
-    H := High(WR.Fields)
+  fResults.GetData(Col, isNull, len, data);
+  if isNull then
+    W.AddNull
   else
-    H := High(WR.ColNames);
-  for I := 0 to H do
   begin
-    if Pointer(WR.Fields) = nil then
-      C := I
-    else
-      C := WR.Fields[I];
-    if WR.Expand then
-      WR.AddString(WR.ColNames[I]); // add '"ColumnName":'
-    fResults.GetData(C, isNull, len, data);
-    if isNull then
-      WR.AddNull
-    else
-    begin
-      with fColumnsMeta[C] do
-      case SQLType of
-        SQL_VARYING,
-        SQL_TEXT:
+    with fColumnsMeta[Col] do
+    case SQLType of
+      SQL_VARYING,
+      SQL_TEXT:
+        begin
+          W.Add('"');
+          if CodePage = CP_UTF8 then
+            W.AddJsonEscape(data, len)
+          else
           begin
-            WR.Add('"');
-            if CodePage = CP_UTF8 then
-              WR.AddJsonEscape(data, len)
+            s := fResults[Col].AsString;
+            W.AddJsonEscape(pointer(s));
+          end;
+          W.Add('"');
+        end;
+      SQL_DOUBLE,
+      SQL_D_FLOAT:
+        W.AddDouble(PDouble(data)^);
+      SQL_FLOAT:
+        W.AddSingle(PSingle(data)^);
+      SQL_TIMESTAMP,
+      SQL_TIMESTAMP_TZ_EX,
+      SQL_TIME_TZ_EX,
+      SQL_TIMESTAMP_TZ,
+      SQL_TIME_TZ,
+      SQL_TYPE_TIME,
+      SQL_TYPE_DATE:
+        begin
+          W.Add('"');
+          W.AddDateTime(fResults[Col].GetAsDateTime, fForceDateWithMS);
+          W.Add('"');
+        end;
+      SQL_BOOLEAN:
+        W.Add(PByte(data)^ = 1);
+      SQL_LONG:
+        begin
+          if Scale = 0 then
+            W.Add(PInteger(data)^)
+          else
+            W.AddDouble(fResults[Col].GetAsDouble);
+        end;
+      SQL_SHORT:
+        begin
+          if Scale = 0 then
+            W.Add(PSmallInt(data)^)
+          else
+            W.AddDouble(fResults[Col].GetAsDouble);
+        end;
+      SQL_INT64:
+        begin
+          if Scale = 0 then
+            W.Add(PInt64(data)^)
+          else
+          if Scale = (-4) then
+            W.AddCurr64(PInt64(data))
+          else
+            W.AddDouble(fResults[Col].AsDouble);
+        end;
+      SQL_BLOB:
+        begin
+          if fForceBlobAsNull then
+            W.AddNull
+          else
+          begin
+            if Subtype = isc_blob_text then
+            begin
+              s := fResults[Col].AsString;
+              W.Add('"');
+              W.AddJsonEscape(pointer(s));
+              W.Add('"');
+            end
             else
             begin
-              s := fResults[C].AsString;
-              WR.AddJsonEscape(pointer(s), length(s));
+              s := fResults[Col].GetAsString;
+              W.WrBase64(pointer(s), length(s), true);
             end;
-            WR.Add('"');
           end;
-        SQL_DOUBLE,
-        SQL_D_FLOAT:
-          WR.AddDouble(PDouble(data)^);
-        SQL_FLOAT:
-          WR.AddSingle(PSingle(data)^);
-        SQL_TIMESTAMP,
-        SQL_TIMESTAMP_TZ_EX,
-        SQL_TIME_TZ_EX,
-        SQL_TIMESTAMP_TZ,
-        SQL_TIME_TZ,
-        SQL_TYPE_TIME,
-        SQL_TYPE_DATE:
-          begin
-            WR.Add('"');
-            WR.AddDateTime(fResults[C].GetAsDateTime, fForceDateWithMS);
-            WR.Add('"');
-          end;
-        SQL_BOOLEAN:
-          WR.Add(PByte(data)^ = 1);
-        SQL_LONG:
-          begin
-            if Scale = 0 then
-              WR.Add(PInteger(data)^)
-            else
-              WR.AddDouble(fResults[C].GetAsDouble);
-          end;
-        SQL_SHORT:
-          begin
-            if Scale=0 then
-              WR.Add(PSmallInt(data)^)
-            else
-              WR.AddDouble(fResults[C].GetAsDouble);
-          end;
-        SQL_INT64:
-          begin
-            if Scale = 0 then
-              WR.Add(PInt64(data)^)
-            else
-            if Scale = (-4) then
-              WR.AddCurr64(PInt64(data))
-            else
-              WR.AddDouble(fResults[C].AsDouble);
-          end;
-        SQL_BLOB:
-          begin
-            if fForceBlobAsNull then
-              WR.AddNull
-            else
-            begin
-              if Subtype = isc_blob_text then
-              begin
-                s := fResults[C].AsString;
-                WR.Add('"');
-                WR.AddJsonEscape(pointer(s), length(s));
-                WR.Add('"');
-              end
-              else
-              begin
-                s := fResults[C].GetAsString;
-                WR.WrBase64(pointer(s), length(s), true);
-              end;
-            end;
-          end
-      else
-        // SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
-        // SQL_NULL, SQL_ARRAY, SQL_QUAD
-        raise ESqlDBException.CreateUtf8(
-          '%.ColumnsToJson: unexpected ColumnType(#% "%")=%',
-          [self, C, fColumns[C].ColumnName, ord(fColumns[C].ColumnType)]);
-      end;
+        end
+    else
+      // SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
+      // SQL_NULL, SQL_ARRAY, SQL_QUAD
+      raise ESqlDBException.CreateUtf8(
+        '%.ColumnToJson: unexpected ColumnType(#% "%")=%',
+        [self, Col, fColumns[Col].ColumnName, ord(fColumns[Col].ColumnType)]);
     end;
-    WR.AddComma;
   end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
-  //FileFromString(WR.Text, FormatUtf8('row%.json', [fResults[0].AsString]));
 end;
 
 

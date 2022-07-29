@@ -27,6 +27,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
@@ -316,13 +317,8 @@ type
     // as defined in mormot.orm.sql unit (i.e. mORMot external DB access)
     procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar;
       var Temp: RawByteString); override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable (about 20%
-    // faster when run over high number of data rows)
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but Oracle usually use
     // such structures to get data from strored procedures
@@ -923,86 +919,77 @@ begin
   result := GetCol(Col, C) = nil;
 end;
 
-procedure TSqlDBOracleStatement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBOracleStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   V: pointer;
-  col, indicator: integer;
+  indicator: integer;
   tmp: array[0..31] of AnsiChar;
   U: RawUtf8;
 begin
   // dedicated version to avoid as much memory allocation than possible
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
-    raise ESqlDBOracle.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
-  if WR.Expand then
-    WR.Add('{');
-  for col := 0 to fColumnCount - 1 do // fast direct conversion from OleDB buffer
-    with fColumns[col] do
+    raise ESqlDBOracle.CreateUtf8('%.ColumnToJson() with no prior Step', [self]);
+  with fColumns[Col] do
+  begin
+    indicator := PSmallIntArray(fRowBuffer)[cardinal(Col) * fRowCount +
+      fRowFetchedCurrent];
+    if (indicator = -1) or
+       (ColumnType = ftNull) then // ftNull for SQLT_RSET
+      W.AddNull
+    else
     begin
-      if WR.Expand then
-        WR.AddFieldName(ColumnName); // add '"ColumnName":'
-      indicator := PSmallIntArray(fRowBuffer)[cardinal(col) * fRowCount +
-        fRowFetchedCurrent];
-      if (indicator = -1) or
-         (ColumnType = ftNull) then // ftNull for SQLT_RSET
-        WR.AddNull
+      if indicator <> 0 then
+        LogTruncatedColumn(self, fColumns[Col]);
+      V := @fRowBuffer[ColumnAttr + fRowFetchedCurrent * ColumnValueDBSize];
+      case ColumnType of
+        ftInt64:
+          if ColumnValueDBType = SQLT_INT then
+            W.Add(PInt64(V)^)
+          else
+            W.AddNoJsonEscape(V); // already as SQLT_STR
+        ftDouble:
+          W.AddDouble(unaligned(PDouble(V)^));
+        ftCurrency:
+          W.AddFloatStr(V); // already as SQLT_STR
+        ftDate:
+          if ColumnValueDBType = SQLT_DAT then
+            W.AddNoJsonEscape(@tmp, POracleDate(V)^.ToIso8601(tmp{%H-}))
+          else
+          begin
+            W.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS
+            W.AddDateTime(IntervalTextToDateTime(V));
+            W.Add('"');
+          end;
+        ftUtf8:
+          begin
+            W.Add('"');
+            with TSqlDBOracleConnection(Connection) do
+              if ColumnValueInlined then
+                OCISTRToUtf8(V, U, ColumnValueDBCharSet, ColumnValueDBForm)
+              else
+                OCI.ClobFromDescriptor(self, fContext, fError,
+                  PPOCIDescriptor(V)^, ColumnValueDBForm, U, false);
+            W.AddJsonEscape(pointer(U));
+            W.Add('"');
+          end;
+        ftBlob:
+          if fForceBlobAsNull then
+            W.AddNull
+          else if ColumnValueInlined then
+            W.WrBase64(V, ColumnValueDBSize, true)
+          else
+          begin
+            with TSqlDBOracleConnection(Connection) do
+              OCI.BlobFromDescriptor(self, fContext, fError,
+                PPOCIDescriptor(V)^, RawByteString(U));
+            W.WrBase64(Pointer(U), length(U), true);
+          end;
       else
-      begin
-        if indicator <> 0 then
-          LogTruncatedColumn(self, fColumns[col]);
-        V := @fRowBuffer[ColumnAttr + fRowFetchedCurrent * ColumnValueDBSize];
-        case ColumnType of
-          ftInt64:
-            if ColumnValueDBType = SQLT_INT then
-              WR.Add(PInt64(V)^)
-            else
-              WR.AddNoJsonEscape(V); // already as SQLT_STR
-          ftDouble:
-            WR.AddDouble(unaligned(PDouble(V)^));
-          ftCurrency:
-            WR.AddFloatStr(V); // already as SQLT_STR
-          ftDate:
-            if ColumnValueDBType = SQLT_DAT then
-              WR.AddNoJsonEscape(@tmp, POracleDate(V)^.ToIso8601(tmp{%H-}))
-            else
-            begin
-              WR.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS
-              WR.AddDateTime(IntervalTextToDateTime(V));
-              WR.Add('"');
-            end;
-          ftUtf8:
-            begin
-              WR.Add('"');
-              with TSqlDBOracleConnection(Connection) do
-                if ColumnValueInlined then
-                  OCISTRToUtf8(V, U, ColumnValueDBCharSet, ColumnValueDBForm)
-                else
-                  OCI.ClobFromDescriptor(self, fContext, fError,
-                    PPOCIDescriptor(V)^, ColumnValueDBForm, U, false);
-              WR.AddJsonEscape(pointer(U));
-              WR.Add('"');
-            end;
-          ftBlob:
-            if fForceBlobAsNull then
-              WR.AddNull
-            else if ColumnValueInlined then
-              WR.WrBase64(V, ColumnValueDBSize, true)
-            else
-            begin
-              with TSqlDBOracleConnection(Connection) do
-                OCI.BlobFromDescriptor(self, fContext, fError,
-                  PPOCIDescriptor(V)^, RawByteString(U));
-              WR.WrBase64(Pointer(U), length(U), true);
-            end;
-        else
-          assert(false);
-        end;
+        assert(false);
       end;
-      WR.AddComma;
     end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
+  end;
 end;
 
 procedure TSqlDBOracleStatement.ColumnToSqlVar(Col: integer; var Value: TSqlVar;

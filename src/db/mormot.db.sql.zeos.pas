@@ -1343,7 +1343,7 @@ begin
   for col := 0 to fColumnCount - 1 do
   begin
     if WR.Expand then
-      WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
+      WR.AddString(WR.ColNames[col]); // add '"ColumnName":'
     if fResultSet.IsNull(col + FirstDbcIndex) then
       WR.AddNull
     else

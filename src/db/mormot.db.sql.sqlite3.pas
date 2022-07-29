@@ -268,12 +268,8 @@ type
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
   end;
 
 
@@ -593,9 +589,10 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSqlDBSQLite3Statement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBSQLite3Statement.ColumnToJson(Col: integer; W: TJsonWriter);
 begin
-  fStatement.FieldsToJson(WR, fForceBlobAsNull);
+  fStatement.FieldToJson(W,
+    sqlite3.column_value(fStatement.Request, Col), fForceBlobAsNull);
 end;
 
 function TSqlDBSQLite3Statement.ColumnType(Col: integer;

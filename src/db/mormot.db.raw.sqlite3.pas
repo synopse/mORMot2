@@ -8166,6 +8166,7 @@ begin
     W.AddNoJsonEscape(sqlite3.column_name(fRequest, f));
     W.Add('"', ':');
     FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.Add('}');
@@ -8588,7 +8589,6 @@ begin
         WR.Add('"');
       end;
   end;
-  WR.AddComma;
 end;
 
 procedure TSqlRequest.FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean);
@@ -8628,6 +8628,7 @@ begin
       WR.AddString(WR.ColNames[f]); // '"'+ColNames[]+'":'
     end;
     FieldToJson(WR, v, DoNotFetchBlobs); // append the value and a trailing ','
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

@@ -711,6 +711,14 @@ type
     // !   end;
     // ! end;
     function Step(SeekFirst: boolean = false): boolean;
+    /// retrieve one row of the result set as a JSON object
+    // - see also FetchAllAsJson to retrieve all the raws as a JSON result
+    // - returns '' if the step was not possible (i.e. reached end of results)
+    function StepAsJson(SeekFirst: boolean = false): RawUtf8;
+    /// retrieve one row of the resultset as a JSON object into a TResultsWriter
+    // - see also FetchAllToJson to retrieve all the raws into a JSON result
+    // - returns false if the step was not possible (i.e. reached end of results)
+    function StepToJson(W: TJsonWriter; SeekFirst: boolean = false): boolean;
     /// release cursor memory and resources once Step loop is finished
     // - this method call is optional, but is better be used if the ISqlDBRows
     // statement from taken from cache, and returned a lot of content which
@@ -761,6 +769,8 @@ type
     // - the specified Temp variable will be used for temporary storage of
     // ftUtf8/ftBlob values
     procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar; var Temp: RawByteString);
+    /// append a Column as a JSON value, first Col is 0
+    procedure ColumnToJson(Col: integer; W: TJsonWriter);
     /// return a Column as a variant
     // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
@@ -2376,6 +2386,12 @@ type
     // !   end;
     // ! end;
     function Step(SeekFirst: boolean = false): boolean; virtual; abstract;
+    /// retrieve one row of the result set as a JSON object
+    // - see also FetchAllAsJson to retrieve all the raws as a JSON result
+    function StepAsJson(SeekFirst: boolean = false): RawUtf8; virtual;
+    /// retrieve one row of the resultset as a JSON object into a TResultsWriter
+    // - see also FetchAllToJson to retrieve all the raws into a JSON result
+    function StepToJson(W: TJsonWriter; SeekFirst: boolean = false): boolean; virtual;
     /// the column/field count of the current Row
     function ColumnCount: integer;
     /// the Column name of the current Row
@@ -2442,8 +2458,8 @@ type
     /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // ftUtf8/ftBlob values
-    procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar; var Temp:
-      RawByteString); virtual;
+    procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar;
+      var Temp: RawByteString); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
@@ -2504,6 +2520,8 @@ type
     // one giving access to the data rows
     // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(const ColName: RawUtf8): ISqlDBRows; overload;
+    /// append a Column as a JSON value, first Col is 0
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); virtual;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
     // - this default implementation will call Column*() methods above, but you
@@ -6118,51 +6136,14 @@ end;
 procedure TSqlDBStatement.ColumnsToJson(WR: TResultsWriter);
 var
   col: integer;
-  blob: RawByteString;
 begin
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount - 1 do
   begin
     if WR.Expand then
-      WR.AddFieldName(ColumnName(col)); // add '"ColumnName":'
-    if ColumnNull(col) then
-      WR.AddNull
-    else
-      case ColumnType(col) of
-        ftNull:
-          WR.AddNull;
-        ftInt64:
-          WR.Add(ColumnInt(col));
-        ftDouble:
-          WR.AddDouble(ColumnDouble(col));
-        ftCurrency:
-          WR.AddCurr(ColumnCurrency(col));
-        ftDate:
-          begin
-            WR.Add('"');
-            WR.AddDateTime(ColumnDateTime(col), fForceDateWithMS);
-            WR.Add('"');
-          end;
-        ftUtf8:
-          begin
-            WR.Add('"');
-            WR.AddJsonEscape(pointer(ColumnUtf8(col)));
-            WR.Add('"');
-          end;
-        ftBlob:
-          if fForceBlobAsNull then
-            WR.AddNull
-          else
-          begin
-            blob := ColumnBlob(col);
-            WR.WrBase64(pointer(blob), length(blob), {withMagic=}true);
-          end;
-      else
-        raise ESqlDBException.CreateUtf8(
-          '%.ColumnsToJson: invalid ColumnType(%)=%',
-          [self, col, ord(ColumnType(col))]);
-      end;
+      WR.AddString(WR.ColNames[col]); // add '"ColumnName":'
+    ColumnToJson(col, WR);
     WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
@@ -6208,6 +6189,49 @@ begin
   end;
 end;
 
+procedure TSqlDBStatement.ColumnToJson(Col: integer; W: TJsonWriter);
+var
+  blob: RawByteString;
+begin
+  if ColumnNull(col) then
+    W.AddNull
+  else
+    case ColumnType(col) of
+      ftNull:
+        W.AddNull;
+      ftInt64:
+        W.Add(ColumnInt(col));
+      ftDouble:
+        W.AddDouble(ColumnDouble(col));
+      ftCurrency:
+        W.AddCurr(ColumnCurrency(col));
+      ftDate:
+        begin
+          W.Add('"');
+          W.AddDateTime(ColumnDateTime(col), fForceDateWithMS);
+          W.Add('"');
+        end;
+      ftUtf8:
+        begin
+          W.Add('"');
+          W.AddJsonEscape(pointer(ColumnUtf8(col)));
+          W.Add('"');
+        end;
+      ftBlob:
+        if fForceBlobAsNull then
+          W.AddNull
+        else
+        begin
+          blob := ColumnBlob(col);
+          W.WrBase64(pointer(blob), length(blob), {withMagic=}true);
+        end;
+    else
+      raise ESqlDBException.CreateUtf8(
+        '%.ColumnToJson: invalid ColumnType(%)=%',
+        [self, col, ord(ColumnType(col))]);
+    end;
+end;
+
 function TSqlDBStatement.ColumnToTypedValue(Col: integer;
   DestType: TSqlDBFieldType; var Dest): TSqlDBFieldType;
 var
@@ -6242,6 +6266,38 @@ begin
     raise ESqlDBException.CreateUtf8('%.ParamToVariant(%)', [self, Param]);
   // overridden method should fill Value with proper data
   result := ftUnknown;
+end;
+
+function TSqlDBStatement.StepAsJson(SeekFirst: boolean): RawUtf8;
+var
+  w: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  w := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    StepToJson(w, SeekFirst);
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+function TSqlDBStatement.StepToJson(W: TJsonWriter; SeekFirst: boolean): boolean;
+var
+  col: integer;
+begin
+  result := Step(SeekFirst);
+  if not result then
+    exit;
+  W.Add('{');
+  for col := 0 to fColumnCount - 1 do
+  begin
+    W.AddFieldName(ColumnName(col)); // add '"ColumnName":'
+    ColumnToJson(col, W);
+    W.AddComma;
+  end;
+  W.CancelLastComma; // cancel last ','
+  W.Add('}');
 end;
 
 procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean);
@@ -8062,7 +8118,7 @@ end;
 
 procedure TSqlDBStatementWithParams.Reset;
 begin
-  fParam.Clear;
+  fParamCount := 0; // no need of fParam.Clear
   fParamsArrayCount := 0;
   inherited Reset;
 end;

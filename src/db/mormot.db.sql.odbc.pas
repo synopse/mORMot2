@@ -26,6 +26,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.data,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
@@ -251,12 +252,8 @@ type
     //  e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     //  or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -874,56 +871,47 @@ begin
   result := GetCol(Col, ftNull) = colNull;
 end;
 
-procedure TSqlDBOdbcStatement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBOdbcStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   res: TSqlDBStatementGetCol;
-  col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
-    raise EOdbcException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
-  if WR.Expand then
-    WR.Add('{');
-  for col := 0 to fColumnCount - 1 do // fast direct conversion from OleDB buffer
-    with fColumns[col] do
-    begin
-      if WR.Expand then
-        WR.AddFieldName(ColumnName); // add '"ColumnName":'
-      res := GetCol(col, ColumnType);
-      if res = colNull then
-        WR.AddNull
+    raise EOdbcException.CreateUtf8('%.ColumnToJson() with no prior Step', [self]);
+  with fColumns[Col] do
+  begin
+    res := GetCol(Col, ColumnType);
+    if res = colNull then
+      W.AddNull
+    else
+      case ColumnType of
+        ftInt64:
+          W.AddNoJsonEscape(Pointer(fColData[Col]));  // already as SQL_C_CHAR
+        ftDouble,
+        ftCurrency:
+          W.AddFloatStr(Pointer(fColData[Col]));      // already as SQL_C_CHAR
+        ftDate:
+          W.AddNoJsonEscape(@tmp,
+            PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToIso8601(
+              tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
+        ftUtf8:
+          begin
+            W.Add('"');
+            if ColumnDataSize > 1 then
+              W.AddJsonEscapeW(Pointer(fColData[Col]), ColumnDataSize shr 1);
+            W.Add('"');
+          end;
+        ftBlob:
+          if fForceBlobAsNull then
+            W.AddNull
+          else
+            W.WrBase64(pointer(fColData[Col]), ColumnDataSize, true);
       else
-        case ColumnType of
-          ftInt64:
-            WR.AddNoJsonEscape(Pointer(fColData[col]));  // already as SQL_C_CHAR
-          ftDouble,
-          ftCurrency:
-            WR.AddFloatStr(Pointer(fColData[col]));      // already as SQL_C_CHAR
-          ftDate:
-            WR.AddNoJsonEscape(@tmp,
-              PSql_TIMESTAMP_STRUCT(Pointer(fColData[col]))^.ToIso8601(
-                tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
-          ftUtf8:
-            begin
-              WR.Add('"');
-              if ColumnDataSize > 1 then
-                WR.AddJsonEscapeW(Pointer(fColData[col]), ColumnDataSize shr 1);
-              WR.Add('"');
-            end;
-          ftBlob:
-            if fForceBlobAsNull then
-              WR.AddNull
-            else
-              WR.WrBase64(pointer(fColData[col]), ColumnDataSize, true);
-        else
-          assert(false);
-        end;
-      WR.AddComma;
-    end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
+        raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+          [self, ord(ColumnType)]);
+      end;
+  end;
 end;
 
 constructor TSqlDBOdbcStatement.Create(aConnection: TSqlDBConnection);
