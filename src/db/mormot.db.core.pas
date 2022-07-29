@@ -2561,16 +2561,31 @@ end;
 
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
-  i: PtrInt;
+  i, len: PtrInt;
+  c: PPointer;
+  new: PAnsiChar;
 begin
   if fExpand then
   begin
-    if twoForceJsonExtended in CustomOptions then
-      for i := 0 to length(ColNames) - 1 do
-        ColNames[i] := ColNames[i] + ':'
-    else
-      for i := 0 to length(ColNames) - 1 do
-        ColNames[i] := '"' + ColNames[i] + '":';
+    c := pointer(ColNames);
+    for i := 1 to length(ColNames) do
+    begin
+      len := PStrLen(PAnsiChar(c^) - _STRLEN)^; // ColNames[] <> ''
+      if twoForceJsonExtended in CustomOptions then
+      begin
+        SetLength(RawUtf8(c^), len + 1); // reallocate in-place
+        PAnsiChar(c^)[len] := ':';
+      end
+      else
+      begin
+        new := FastNewString(len + 3, CP_UTF8);
+        new[0] := '"';
+        MoveFast(c^^, new[1], len);
+        PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+        FastAssignNew(c^, new);
+      end;
+      inc(c);
+    end;
   end
   else
   begin
@@ -2596,15 +2611,29 @@ begin
 end;
 
 procedure TResultsWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
-const
-  FMT: array[boolean] of RawUtf8 = ('"%":', '%:');
+var
+  len: PtrInt;
+  new: PAnsiChar;
 begin
+  len := StrLen(aColName);
   if fExpand then
   begin
     if aColIndex = 0 then // non-expanded mode doesn't use ColNames[]
       SetLength(ColNames, aColCount);
-    FormatUtf8(FMT[twoForceJsonExtended in CustomOptions], [aColName],
-      ColNames[aColIndex]);
+    if twoForceJsonExtended in CustomOptions then
+    begin
+      new := FastNewString(len + 1, CP_UTF8);
+      MoveFast(aColName^, new^, len);
+      new[len] := ':';
+    end
+    else
+    begin
+      new := FastNewString(len + 3, CP_UTF8);
+      new[0] := '"';
+      MoveFast(aColName^, new[1], len);
+      PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+    end;
+    FastAssignNew(ColNames[aColIndex], new);
   end
   else
   begin
@@ -2615,7 +2644,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddNoJsonEscape(aColName, StrLen(aColName));
+    AddNoJsonEscape(aColName, len);
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
