@@ -3477,7 +3477,7 @@ var
   // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
   // identified as varAny with TVarData.VAny pointing to the actual value
   // - rkChar,rkWChar,rkSString converted into temporary RawUtf8 as varUnknown
-  RTTI_TO_VARTYPE: array[TRttiKind] of cardinal;
+  RTTI_TO_VARTYPE: array[TRttiKind] of word;
 
 procedure TRttiInfo.ComputeCache(out Cache: TRttiCache);
 var
@@ -3487,11 +3487,6 @@ begin
   Cache.Info := @self;
   Cache.Size := RttiSize;
   Cache.Kind := Kind;
-  Cache.RttiVarDataVType := RTTI_TO_VARTYPE[Kind];
-  if Kind in [rkEnumeration, rkSet] then
-    Cache.VarDataVType := varInt64 // no need of the varAny marker for TypeInfo
-  else
-    Cache.VarDataVType := Cache.RttiVarDataVType;
   Cache.Flags := [];
   if Kind in rkOrdinalTypes then
   begin
@@ -3514,6 +3509,8 @@ begin
     include(Cache.Flags, rcfGetOrdProp)
   else if Kind in rkGetInt64PropTypes then
     include(Cache.Flags, rcfGetInt64Prop);
+  Cache.RttiVarDataVType := RTTI_TO_VARTYPE[Kind];
+  Cache.VarDataVType := Cache.RttiVarDataVType;
   case Kind of
     rkFloat:
       begin
@@ -3527,6 +3524,7 @@ begin
     rkEnumeration,
     rkSet:
       begin
+        Cache.VarDataVType := varInt64; // no need of the varAny TypeInfo marker
         if Kind = rkEnumeration then
           enum := Cache.Info.EnumBaseType
         else
