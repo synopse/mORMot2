@@ -6682,7 +6682,8 @@ begin
       info.GetJsonFieldOrObjectOrArray;
       FillValue(j, F[0], info.Value, L[0], info.ValueLen,
         info.WasString, FieldBits); // parse value
-    until info.Json = nil;
+    until (info.Json = nil) or
+          (info.Json^ = #0);
   end;
 end;
 

@@ -1388,6 +1388,7 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   stmt: ISqlDBStatement;
+  w: TJsonWriter;
 begin
   // TableModelIndex is not useful here
   result := '';
@@ -1400,14 +1401,14 @@ begin
     if stmt = nil then
       exit;
     stmt.Bind(1, ID);
-    // Expanded=true -> '[{"ID":10,...}]'#10
-    stmt.ExecutePreparedAndFetchAllAsJson({expanded=}true, result);
-    if IsNotAjaxJson(pointer(result)) then
-      // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
-      result := ''
-    else
-      // list '[{...}]'#10 -> object '{...}'
-      TrimChars(result, 1, 2);
+    stmt.ExecutePrepared;
+    w := AcquireJsonWriter;
+    try
+      stmt.StepToJson(w);
+      w.SetText(result);
+    finally
+      ReleaseJsonWriter(w);
+    end;
   except
     stmt := nil;
     HandleClearPoolOnConnectionIssue;
