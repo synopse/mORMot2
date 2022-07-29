@@ -1339,7 +1339,7 @@ begin
     for F := 0 to colcount - 1 do
     begin
       FromVarString(Data, colname);
-      prop := fColumn.AddAndMakeUniqueName(colname);
+      prop := AddColumn(colname);
       prop^.ColumnType := TSqlDBFieldType(Data^);
       inc(Data);
       prop^.ColumnValueDBSize := FromVarUInt32(Data);

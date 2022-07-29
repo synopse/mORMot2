@@ -592,14 +592,12 @@ begin
     begin
       fQuery.Open;
       fCurrentRow := -1;
-      fColumnCount := 0;
-      fColumn.ForceReHash;
+      ClearColumns;
       fColumn.Capacity := fQuery.FieldCount;
       for i := 0 to fQuery.FieldCount - 1 do
       begin
         field := DatasetField(i);
-        with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
-              StringToUtf8(field.FieldName)))^ do
+        with AddColumn(StringToUtf8(field.FieldName))^ do
         begin
           ColumnAttr := PtrUInt(field);
           ColumnType := ColumnTypeNativeToDB(field.DataType);

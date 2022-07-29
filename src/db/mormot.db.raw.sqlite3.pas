@@ -4431,6 +4431,7 @@ type
       Expand: boolean = false; aResultCount: PPtrInt = nil;
       MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
     /// Execute one SQL statement step into a JSON object
+    // - has less overhead than ExecuteJson() for a single row of data
     function ExecuteStepJson(aDB: TSqlite3DB; W: TJsonWriter): boolean;
     /// Execute one SQL statement which return the results as a TDocVariant array
     // - if aSql is '', the statement should have been prepared, reset and bound

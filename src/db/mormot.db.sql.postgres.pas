@@ -526,15 +526,16 @@ procedure TSqlDBPostgresStatement.BindColumns;
 var
   nCols, c: integer;
   cName: RawUtf8;
+  p: PUtf8Char;
 begin
-  fColumn.Clear;
-  fColumn.ForceReHash;
+  ClearColumns;
   nCols := PQ.nfields(fRes);
   fColumn.Capacity := nCols;
   for c := 0 to nCols - 1 do
   begin
-    cName := PQ.fname(fRes, c);
-    with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(cName))^ do
+    p := PQ.fname(fRes, c);
+    FastSetString(cName, p, StrLen(p));
+    with AddColumn(cName)^ do
     begin
       ColumnAttr := PQ.ftype(fRes, c);
       ColumnType := TSqlDBPostgresConnectionProperties(Connection.Properties).

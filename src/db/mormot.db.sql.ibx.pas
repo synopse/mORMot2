@@ -428,8 +428,7 @@ begin
     tr, {$ifdef UNICODE} Utf8ToString(fSQL) {$else} fSQL {$endif});
   fStatement.SetStaleReferenceChecks(false);
   fStatement.SetRetainInterfaces(true);
-  fColumnCount := 0;
-  fColumn.ReHash;
+  ClearColumns;
   fIbxParams := fStatement.GetSQLParams;
   SetLength(farrParams, fIbxParams.Count);
   for i := 0 to fIbxParams.Count - 1 do
@@ -448,9 +447,8 @@ begin
       fColumnsMeta[i].Scale := fColumnMetaData.getScale;
       fColumnsMeta[i].Subtype := fColumnMetaData.getSubtype;
       name := fColumnMetaData.getName;
-      PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
-        // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
-        {$ifdef UNICODE} StringToUtf8 {$endif}(name)))^.ColumnType :=
+      AddColumn(// Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
+        {$ifdef UNICODE}StringToUtf8{$endif}(name))^.ColumnType :=
           IbxSQLTypeToTSqlDBFieldType(fColumnsMeta[i]);
     end;
   end;

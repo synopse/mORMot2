@@ -1226,8 +1226,8 @@ type
     fDbms: TSqlDBDefinition;
     fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
-      fRollbackOnDisconnect, fReconnectAfterConnectionError,
-      fFilterTableViewSchemaName: boolean;
+    fRollbackOnDisconnect, fReconnectAfterConnectionError,
+    fEnsureColumnNameUnique, fFilterTableViewSchemaName: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
@@ -1837,6 +1837,15 @@ type
     // - is set to TRUE by default
     property RollbackOnDisconnect: boolean
       read fRollbackOnDisconnect write fRollbackOnDisconnect;
+    /// by default, result column names won't be checked for name unicity
+    // - it is up to your SQL statement to return genuine columns
+    // - ColumName() lookup will use O(1) brute force, so you should rather
+    // use per-index Column*() methods
+    // - force true to have the mORMot 1 compatible behavior, in which column
+    // names will be hashed for unicity (so will be slower at execution),
+    // but will allow faster ColumnName() lookup
+    property EnsureColumnNameUnique: boolean
+      read fEnsureColumnNameUnique write fEnsureColumnNameUnique;
     /// defines if '' string values are to be stored as SQL null
     // - by default, '' will be stored as ''
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
@@ -1868,7 +1877,7 @@ type
     property VariantStringAsWideString: boolean
       read fVariantWideString write fVariantWideString;
     {$endif UNICODE}
-    /// SQL statements what will be executed for each new connection
+    /// SQL statements what will be executed for each new connection, as typical
     // usage scenarios examples:
     // - Oracle: force case-insensitive like
     // $  ['ALTER SESSION SET NLS_COMP=LINGUISTIC', 'ALTER SESSION SET NLS_SORT=BINARY_CI']
@@ -2914,6 +2923,8 @@ type
   protected
     fColumns: TSqlDBColumnPropertyDynArray;
     fColumn: TDynArrayHashed;
+    procedure ClearColumns;
+    function AddColumn(const ColName: RawUtf8): PSqlDBColumnProperty;
   public
     /// create a statement instance
     // - this overridden version will initialize the internal fColumn* fields
@@ -3573,8 +3584,8 @@ begin
   result := ThreadSafeConnection.NewStatement;
 end;
 
-function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const aSql:
-  RawUtf8; ExpectResults, RaiseExceptionOnError: boolean): ISqlDBStatement;
+function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(
+  const aSql: RawUtf8; ExpectResults, RaiseExceptionOnError: boolean): ISqlDBStatement;
 begin
   result := ThreadSafeConnection.NewStatementPrepared(
     aSql, ExpectResults, RaiseExceptionOnError);
@@ -8081,14 +8092,52 @@ constructor TSqlDBStatementWithParamsAndColumns.Create(
   aConnection: TSqlDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray),
-    fColumns, ptRawUtf8, @fColumnCount, {caseinsens=}true);
+  if aConnection.Properties.EnsureColumnNameUnique then
+    fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray),
+      fColumns, ptRawUtf8, @fColumnCount, {caseinsens=}true)
+  else
+    PDynArray(@fColumn)^.Init(TypeInfo(TSqlDBColumnPropertyDynArray),
+      fColumns, @fColumnCount); // no hash index created nor unicity check
+end;
+
+procedure TSqlDBStatementWithParamsAndColumns.ClearColumns;
+begin
+  if fColumnCount = 0 then
+    exit;
+  fColumn.Clear;
+  if fConnection.Properties.EnsureColumnNameUnique then
+    fColumn.ForceReHash;
+end;
+
+function TSqlDBStatementWithParamsAndColumns.AddColumn(
+  const ColName: RawUtf8): PSqlDBColumnProperty;
+begin
+  if fConnection.Properties.EnsureColumnNameUnique then
+    result := fColumn.AddAndMakeUniqueName(ColName)
+  else
+  begin
+    result := PDynArray(@fColumn)^.NewPtr;
+    result^.ColumnName := ColName;
+  end;
 end;
 
 function TSqlDBStatementWithParamsAndColumns.ColumnIndex(
   const aColumnName: RawUtf8): integer;
+var
+  c: PSqlDBColumnProperty;
 begin
-  result := fColumn.FindHashed(aColumnName);
+  if fConnection.Properties.EnsureColumnNameUnique then
+    result := fColumn.FindHashed(aColumnName)
+  else
+  begin
+    c := pointer(fColumns);
+    for result := 0 to fColumnCount - 1 do
+      if IdemPropNameU(aColumnName, c^.ColumnName) then
+        exit // brute force O(n) case insensitive check
+      else
+        inc(c);
+    result := -1
+  end;
 end;
 
 function TSqlDBStatementWithParamsAndColumns.ColumnName(Col: integer): RawUtf8;

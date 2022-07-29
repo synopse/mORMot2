@@ -1137,8 +1137,7 @@ begin
     // 2. Execute query
     if fExpectResults then
     begin
-      fColumnCount := 0;
-      fColumn.ForceReHash;
+      ClearColumns;
       fCurrentRow := -1;
       fResultSet := fStatement.ExecuteQueryPrepared;
       if fResultSet = nil then
@@ -1158,9 +1157,8 @@ begin
           name := fResultInfo.GetColumnLabel(i + FirstDbcIndex);
           if name = '' then
             name := fResultInfo.GetColumnName(i + FirstDbcIndex);
-          PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
-            // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
-            {$ifdef UNICODE}StringToUtf8{$endif}(name)))^.ColumnType :=
+          AddColumn(// Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
+            {$ifdef UNICODE}StringToUtf8{$endif}(name))^.ColumnType :=
               Props.TZSQLTypeToTSqlDBFieldType(fResultInfo.GetColumnType(i + FirstDbcIndex));
         end;
       end;

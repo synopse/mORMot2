@@ -1916,8 +1916,7 @@ begin
   end;
   if fRowBuffer <> nil then
     SetLength(fRowBuffer, 0); // release internal buffer memory
-  if fColumnCount > 0 then
-    fColumn.Clear;
+  ClearColumns;
 end;
 
 function TSqlDBOracleStatement.GetCol(Col: integer; out Column:
@@ -2006,7 +2005,7 @@ begin
         FastSetString(aName, oName, oNameLen);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oType, nil, OCI_ATTR_DATA_TYPE, fError);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oSize, nil, OCI_ATTR_DATA_SIZE, fError);
-      with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(aName))^ do
+      with AddColumn(aName)^ do
       begin
         ColumnValueDBSize := oSize;
         ColumnValueInlined := true;

@@ -2068,8 +2068,8 @@ begin
     if JS <> '' then // avoid memory leak
       with TOrmTableDB.Create(Demo, [], Req, {expand=}true) do
       try
-        check(RowCount = J.RowCount);
-        check(FieldCount = J.FieldCount);
+        checkEqual(RowCount, J.RowCount);
+        checkEqual(FieldCount, J.FieldCount);
         SetFieldType('YearOfBirth', oftModTime);
         for aR := 0 to RowCount do
           for aF := 0 to FieldCount - 1 do

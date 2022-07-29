@@ -639,8 +639,7 @@ begin
         DescribeColW(fStatement, c, Name{%H-}, 256, NameLength, DataType,
           ColumnSize, DecimalDigits, Nullable),
         SQL_HANDLE_STMT, fStatement);
-      with PSqlDBColumnProperty(
-        fColumn.AddAndMakeUniqueName(RawUnicodeToUtf8(Name, NameLength)))^ do
+      with AddColumn(RawUnicodeToUtf8(Name, NameLength))^ do
       begin
         ColumnValueInlined := true;
         ColumnValueDBType := DataType;
@@ -1270,8 +1269,7 @@ begin
   begin
     if fStatement <> nil then
       ODBC.CloseCursor(fStatement); // no check needed
-    fColumn.Clear;
-    fColumn.ForceReHash;
+    ClearColumns;
   end;
   inherited ReleaseRows;
 end;
