@@ -2062,14 +2062,22 @@ function ObjectToJsonDebug(Value: TObject;
 
 /// unserialize most kind of content as JSON, using its RTTI, as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
-// - is just a wrapper around GetDataFromJson() global low-level function
+// - same implementation than GetDataFromJson() global low-level function
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy if you need to access it later or if the string comes from
 // a constant (refcount=-1) - see e.g. the overloaded RecordLoadJson()
 function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): PUtf8Char;
+  Tolerant: boolean = true): PUtf8Char; overload;
+
+/// unserialize most kind of content as JSON, using its RTTI, as saved by
+// TJsonWriter.AddRecordJson / RecordSaveJson
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
+function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
+  EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): boolean; overload;
 
 /// fill a record content from a JSON serialization as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2088,9 +2096,6 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // TJsonWriter.AddRecordJson / RecordSaveJson
 // - this overloaded function will make a private copy before parsing it,
 // so is safe with a read/only or shared string - but slightly slower
-// - will use default Base64 encoding over RecordSave() binary - or custom
-// JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
-// or via enhanced RTTI), if available
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions = nil;
   Tolerant: boolean = true): boolean; overload;
@@ -10438,6 +10443,21 @@ begin
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, Json, EndOfObject,
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
   result := Json;
+end;
+
+function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
+  EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
+  Tolerant: boolean): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Json); // make private copy before in-place decoding
+  try
+    result := LoadJson(Value, tmp.buf, TypeInfo, EndOfObject,
+      CustomVariantOptions, Tolerant) <> nil;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
