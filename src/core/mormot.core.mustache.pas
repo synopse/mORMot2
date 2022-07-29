@@ -673,7 +673,7 @@ begin
     else
     begin
       ListCount := DocumentType.IterateCount(aDoc);
-      if fContextCount = 1 then
+      if fContextCount = 0 then
         ListCurrentDocument := aDoc; // allow {#.}...{/.} at first level
     end;
   end;
@@ -1317,6 +1317,7 @@ begin
   end;
   fCachedContextVariant := TSynMustacheContextVariant.Create(self,
     TJsonWriter.CreateOwnedStream(8192), SectionMaxCount + 4, Null, true);
+  fCachedContextVariant.CancelAll; // to be reused from a void context
 end;
 
 procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
