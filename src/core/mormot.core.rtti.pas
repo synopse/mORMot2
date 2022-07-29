@@ -2148,8 +2148,7 @@ type
     /// contains List[].Name as a JSON array including a trailing ,
     NamesAsJsonArray: RawUtf8;
     /// locate a property/field by name
-    function Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
-    /// locate a property/field by name
+    // - just redirect to FindCustomProp() low-level function
     function Find(const PropName: RawUtf8): PRttiCustomProp; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// locate a property/field index by name
@@ -2689,6 +2688,11 @@ type
       read fGlobalClass write SetGlobalClass;
   end;
 
+
+/// low-level internal function use when inlining TRttiCustomProps.Find()
+// - caller should ensure that namelen <> 0
+function FindCustomProp(p: PRttiCustomProp; name: pointer; namelen: TStrLen;
+  count: integer): PRttiCustomProp;
 
 var
   /// low-level access to the list of registered PRttiInfo/TRttiCustom/TRttiJson
@@ -6982,26 +6986,52 @@ end;
 
 { TRttiCustomProps }
 
-function TRttiCustomProps.Find(
-  PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp;
+function FindCustomProp(p: PRttiCustomProp; name: pointer; namelen: TStrLen;
+  count: integer): PRttiCustomProp;
 var
-  n: integer;
+  p1, p2, l: PUtf8Char;
+label
+  no;
 begin
-  if PropNameLen <> 0 then
-  begin
-    result := pointer(List);
-    if result <> nil then
+  result := p;
+  if result = nil then
+    exit;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, namelen)
+    p1 := pointer(result^.Name); // Name<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = namelen then
     begin
-      n := Count;
-      repeat
-        if result^.NameMatch(PropName, PropNameLen) then
-          exit;
-        inc(result);
-        dec(n);
-      until n = 0;
+      l := @p1[namelen - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
     end;
-  end;
+    inc(result);
+    dec(count);
+  until count = 0;
   result := nil;
+end;
+
+function TRttiCustomProps.Find(const PropName: RawUtf8): PRttiCustomProp;
+begin
+  result := pointer(PropName);
+  if result <> nil then
+    result := FindCustomProp(pointer(List), pointer(PropName),
+      PStrLen(PAnsiChar(result) - _STRLEN)^, Count);
 end;
 
 function TRttiCustomProps.FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
@@ -7018,11 +7048,6 @@ begin
         inc(p);
   end;
   result := -1;
-end;
-
-function TRttiCustomProps.Find(const PropName: RawUtf8): PRttiCustomProp;
-begin
-  result := Find(pointer(PropName), length(PropName));
 end;
 
 function FromNames(p: PRttiCustomProp; n: integer; out names: RawUtf8): integer;
@@ -8796,7 +8821,7 @@ begin
     GetNextItemShortString(paf, @n, '.');
     if n[0] in [#0, #254] then
       exit;
-    p := rc.Props.Find(@n[1], ord(n[0]));
+    p := FindCustomProp(pointer(rc.Props.List), @n[1], ord(n[0]), rc.Props.Count);
     if p = nil then
       exit; // incorrect path (property not found)
     if paf = nil then
