@@ -2450,31 +2450,24 @@ type
   // - is usually a TRttiJson class type once mormot.core.json.pas is linked
   TRttiCustomClass = class of TRttiCustom;
 
-  /// store PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
-  TRttiCustomListPair = record
-    Pairs: TPointerDynArray;
-    PairsEnd: pointer;
-  end;
-  PRttiCustomListPair = ^TRttiCustomListPair;
-
   /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
   // - as stored in TRttiCustomListHashTable[TRttiKind] = one per TRttiKind
   TRttiCustomListPairs = record
-    /// efficient PerHash[].Pairs thread-safety during Find/AddToPairs
+    /// efficient PerHash[] pairs thread-safety during Find/AddToPairs
     Safe: TRWLightLock;
     /// speedup search by name e.g. from a loop
     LastName: TRttiCustom;
     /// speedup search by PRttiInfo e.g. from a loop
     LastInfo: TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
-    PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
+    PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
 
   /// internal structure for TRttiCustomList "hash table of the poor" (tm)
   // - a per-Kind and per-Name hash table of PRttiInfo/TRttiCustom pairs
   // - avoid link to mormot.core.data hash table, with a fast access
-  // - consume e.g. around 50KB of memory for all mormot2tests types
+  // - consume e.g. around 25KB of memory for all mormot2tests types
   TRttiCustomListHashTable =
     array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustomListPairs;
 
@@ -8109,32 +8102,35 @@ begin
   inherited Destroy;
 end;
 
-function LockedFind(Info: PRttiInfo; P: PRttiCustomListPair): TRttiCustom;
+function LockedFind(Info: PRttiInfo; P: pointer): TRttiCustom;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := pointer(P^.Pairs);
+  result := P;
   if result <> nil then
   begin
-    P := P^.PairsEnd;
-    repeat
-      // efficient brute force search within L1 cache
-      if PPointer(result)^ <> Info then
-      begin
-        inc(PByte(result), 2 * SizeOf(pointer)); // PRttiInfo/TRttiCustom pairs
-        if PAnsiChar(result) < PAnsiChar(P) then
-          continue;
+    // efficient brute force search within L1 cache
+    if PPointer(result)^ <> Info then
+    begin
+      P := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1)];
+      repeat
+        inc(PByte(result), 2 * SizeOf(pointer));  // PRttiInfo/TRttiCustom pairs
+        if PAnsiChar(result) <= PAnsiChar(P) then // P = P[high(P)]
+          if PPointer(result)^ = Info then
+            break
+          else
+            continue;
         result := nil; // not found
         exit;
-      end;
-      result := PPointerArray(result)[1]; // found
-      exit;
-    until false;
+      until false;
+    end;
+    result := PPointerArray(result)[1]; // found
   end;
 end;
 
 function TRttiCustomList.Find(Info: PRttiInfo): TRttiCustom;
 var
   k: PRttiCustomListPairs;
+  p: PPointer; // ^TPointerDynArray
 begin
   if Info^.Kind <> rkClass then
   begin
@@ -8146,11 +8142,17 @@ begin
        (result.Info = Info) then
       exit;
     // note: we tried to include RawName[2] and $df, but with no gain
-    k^.Safe.ReadLock;
-    result := LockedFind(Info, @k^.PerHash[(PtrUInt(Info.RawName[0]) xor
-      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
-    k^.Safe.ReadUnLock;
-    k^.LastInfo := result;
+    p := @k^.PerHash[(PtrUInt(Info.RawName[0]) xor
+      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]; // hash before lock
+    result := p^;
+    if result <> nil then
+    begin
+      k^.Safe.ReadLock;
+      result := LockedFind(Info, p^);
+      k^.Safe.ReadUnLock;
+      if result <> nil then
+        k^.LastInfo := result;
+    end;
   end
   else
     // direct lookup of the vmtAutoTable slot for classes
@@ -8207,26 +8209,28 @@ function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
 var
   k: PRttiCustomListPairs;
-  p: PRttiCustomListPair;
+  p: PPointer; // ^TPointerDynArray
 begin
   if (Kind <> rkUnknown) and
      (Name <> nil) and
      (NameLen > 0) then
   begin
     k := @PerKind^[Kind];
-    // try latest found value e.g. calling from JsonRetrieveObjectRttiCustom()
+    // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
     result := k^.LastName;
     if (result <> nil) and
        (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
        IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
       exit;
     // our optimized "hash table of the poor" (tm) lookup
-    p := @k^.PerHash[(PtrUInt(NameLen) xor PtrUInt(Name[0]))
-           and RTTICUSTOMTYPEINFOHASH];
+    p := @k^.PerHash[(PtrUInt(NameLen) xor
+      PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH]; // hashed before the lock
     k^.Safe.ReadLock;
-    result := pointer(p^.Pairs);
+    result := p^;
     if result <> nil then
-      result := LockedFindNameInPairs(pointer(result), p^.PairsEnd, Name, NameLen);
+      result := LockedFindNameInPairs(pointer(result),
+        @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF],
+        Name, NameLen);
     k^.Safe.ReadUnLock;
     if result <> nil then
       k^.LastName := result;
@@ -8279,7 +8283,7 @@ function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
 var
   n: integer;
   k: PRttiCustomListPairs;
-  p: PRttiCustomListPair;
+  p: PPointer; // TPointerDynArray
 begin
   if ElemInfo = nil then
   begin
@@ -8291,10 +8295,11 @@ begin
   p := @k^.PerHash;
   n := length(k^.PerHash);
   repeat
-    result := pointer(p^.Pairs);
+    result := p^;
     if result <> nil then
     begin
-      result := FindNameInArray(pointer(p^.Pairs), p^.PairsEnd, ElemInfo);
+      result := FindNameInArray(pointer(result),
+        @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF], ElemInfo);
       if result <> nil then
         break;
     end;
@@ -8401,24 +8406,21 @@ end;
 
 procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom);
 var
-  hash, n: PtrInt;
+  n: PtrInt;
   k: PRttiCustomListPairs;
-  p: PRttiCustomListPair;
+  p: ^TPointerDynArray;
 begin
   // call is made within RegisterLock but when resizing p^.Pairs,
   // Table^.PairsSafe.WriteLock should be used
-  hash := (PtrUInt(Instance.Info.RawName[0]) xor
-           PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
   k := @PerKind^[Instance.Kind];
-  p := @k^.PerHash[hash];
+  p := @k^.PerHash[(PtrUInt(Instance.Info.RawName[0]) xor
+    PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
   k^.Safe.WriteLock;
   try
-    n := length(p^.Pairs);
-    SetLength(p^.Pairs, n + 2);
-    p^.PairsEnd := @p^.Pairs[n];
-    PPointerArray(p^.PairsEnd)[0] := Instance.Info;
-    PPointerArray(p^.PairsEnd)[1] := Instance;
-    p^.PairsEnd := @PPointerArray(p^.PairsEnd)[2];
+    n := length(p^);
+    SetLength(p^, n + 2);
+    p^[n] := Instance.Info;
+    p^[n + 1] := Instance;
     ObjArrayAddCount(Instances, Instance, Count); // to release memory
     inc(Counts[Instance.Kind]);
   finally
