@@ -1394,11 +1394,14 @@ begin
   if (self = nil) or
      (ID <= 0) then
     exit;
-  stmt := PrepareDirectForRows(pointer(fSelectOneDirectSQL), [], [ID]);
-  if stmt <> nil then
   try
+    stmt := fProperties.NewThreadSafeStatementPrepared(
+      fSelectOneDirectSQL, {results=}true, {except=}true);
+    if stmt = nil then
+      exit;
+    stmt.Bind(1, ID);
     // Expanded=true -> '[{"ID":10,...}]'#10
-    stmt.ExecutePreparedAndFetchAllAsJson(true, result);
+    stmt.ExecutePreparedAndFetchAllAsJson({expanded=}true, result);
     if IsNotAjaxJson(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
       result := ''
