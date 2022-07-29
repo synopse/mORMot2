@@ -7308,6 +7308,7 @@ var
   procedure TryPrepare(doraise: boolean);
   var
     stmt: TSqlDBStatement;
+    ndx: integer;
   begin
     stmt := nil;
     try
@@ -7324,10 +7325,13 @@ var
             if fCache = nil then
               fCache := TRawUtf8List.CreateEx(
                 [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
-            if fCache.AddObject(cachedsql, stmt) >= 0 then
+            ndx := fCache.AddObject(cachedsql, stmt);
+            if ndx >= 0 then
             begin
               stmt._AddRef; // instance will be owned by fCache.Objects[]
               include(stmt.fCache, scOnClient);
+              fCacheLastIndex := ndx;
+              fCacheLast := cachedsql;
             end
             else
               SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
@@ -7366,13 +7370,12 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
-  iscacheable := fProperties.IsCachable(Pointer(aSql));
-  tocache := iscacheable;
-  if tocache and
-     (fCache <> nil) then
-  begin
-    fSafe.Lock; // protect fCache access
-    try
+  fSafe.Lock; // protect fCache access
+  try
+    stmt := nil;
+    if fCache <> nil then
+    begin
+      // most common case: we have this statement in cache
       if (fCacheLast = cachedsql) and
          (fCache.Strings[fCacheLastIndex] = cachedsql) then
         ndx := fCacheLastIndex // no need to use the hash lookup
@@ -7390,43 +7393,53 @@ begin
             fCacheLast := cachedsql;
           end;
           result := stmt; // acquire the statement
-          stmt.Reset;
-          exit;
         end
+      end;
+    end;
+    // full cache support
+    if result = nil then
+    begin
+      iscacheable := fProperties.IsCachable(Pointer(aSql));
+      if iscacheable and
+         (stmt <> nil) then // RefCount > 1
+      begin
+        // main statement in use -> create cached alternatives
+        tocache := false; // if all slots are used, won't cache this statement
+        if fProperties.StatementCacheReplicates = 0 then
+          SynDBLog.Add.Log(sllWarning,
+            'NewStatementPrepared: cached statement still in use ' +
+            '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
         else
-        begin
-          // main statement in use -> create cached alternatives
-          tocache := false; // if all slots are used, won't cache this statement
-          if fProperties.StatementCacheReplicates = 0 then
-            SynDBLog.Add.Log(sllWarning,
-              'NewStatementPrepared: cached statement still in use ' +
-              '-> you should release ISqlDBStatement ASAP [%]', [cachedsql], self)
-          else
-            for altern := 1 to fProperties.StatementCacheReplicates do
+          for altern := 1 to fProperties.StatementCacheReplicates do
+          begin
+            cachedsql := aSql + #0 + UInt32ToUtf8(altern); // not valid SQL
+            ndx := fCache.IndexOf(cachedsql);
+            if ndx >= 0 then
             begin
-              cachedsql := aSql + #0 + UInt32ToUtf8(altern); // not valid SQL
-              ndx := fCache.IndexOf(cachedsql);
-              if ndx >= 0 then
+              stmt := fCache.Objects[ndx];
+              if stmt.RefCount = 1 then
               begin
-                stmt := fCache.Objects[ndx];
-                if stmt.RefCount = 1 then
-                begin
-                  result := stmt;
-                  stmt.Reset;
-                  exit;
-                end;
-              end
-              else
-              begin
-                tocache := true; // cache the statement in this void slot
+                result := stmt;
                 break;
               end;
+            end
+            else
+            begin
+              tocache := true; // cache the statement in this void slot
+              break;
             end;
-        end;
-      end;
-    finally
-      fSafe.UnLock;
+          end;
+      end
+      else
+        tocache := iscacheable;
     end;
+  finally
+    fSafe.UnLock;
+  end;
+  if result <> nil then
+  begin
+    stmt.Reset; // process outside the lock
+    exit;       // return the cached statement
   end;
   // not in cache (or not cacheable) -> prepare now
   if fProperties.ReconnectAfterConnectionError and
