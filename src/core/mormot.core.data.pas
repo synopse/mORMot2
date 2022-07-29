@@ -2147,7 +2147,7 @@ type
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
-    // some suffix is added to make it unique
+    // some suffix is added to make it unique, counting from _1 to _999
     // - use internally FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
@@ -9673,7 +9673,9 @@ begin
     aName_ := aName + '_';
     j := 1;
     repeat
-      aName := aName_ + UInt32ToUtf8(j);
+      if j > high(SmallUInt32Utf8) then // should never happen - 999 is enough
+        raise EDynArray.Create('TDynArrayHashed.AddAndMakeUniqueName overflow');
+      aName := aName_ + SmallUInt32Utf8[j];
       ndx := FindHashedForAdding(aName, added);
       inc(j);
     until added;
