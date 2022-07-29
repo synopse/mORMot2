@@ -2573,10 +2573,11 @@ begin
       for i := 0 to length(ColNames) - 1 do begin
         // faster version of ColNames[i] := '"' + ColNames[i] + '":';
         l := length(ColNames[i]);
-        new := FastNewString(l+2, CP_UTF8);
+        new := FastNewString(l+3, CP_UTF8);
         MoveFast(pointer(ColNames[i]), new[1], l);
         new[0] := '"';
-        new[l-1] := '"';
+        new[l-2] := '"';
+        new[l-1] := ':';
         FastAssignNew(ColNames[i], new);
       end;
   end
