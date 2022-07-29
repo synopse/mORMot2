@@ -10586,14 +10586,6 @@ end;
 
 { ------------ TRestCache Definition }
 
-/// update/refresh the cached JSON serialization of a supplied Record
-procedure CacheSetJson(var Entry: TRestCacheEntry; aRecord: TOrm);
-  {$ifdef HASINLINE} inline; {$endif}
-begin  // ooInsert = include all fields
-  if Entry.CacheEnable then
-    Entry.SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
-end;
-
 /// unserialize a JSON cached record of a given ID
 function CacheRetrieveJson(var Entry: TRestCacheEntry; aID: TID; aValue: TOrm;
   aTag: PCardinal = nil): boolean;
@@ -10776,8 +10768,8 @@ begin
   rec := aTable.CreateAndFillPrepare(fRest, FormatSqlWhere, BoundsSqlWhere);
   try
     while rec.FillOne do
-    begin
-      CacheSetJson(cache^, rec);
+    begin // expand=true (JSON object), withid=false (not in JSON), ooInsert=all
+      cache^.SetJson(rec.fID, rec.GetJsonValues(true, false, ooInsert));
       inc(result);
     end;
   finally
@@ -10833,7 +10825,9 @@ begin
     exit;
   aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
-    CacheSetJson(fCache[aTableIndex], aRecord);
+    with fCache[aTableIndex] do
+      if CacheEnable then // expand=true, withid=false, ooInsert=all
+        SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
 end;
 
 procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
