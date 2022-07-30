@@ -418,7 +418,13 @@ type
   // - so that you can write e.g.
   // ! PMongoReplyHeader(aMongoReply)^.RequestID
   PMongoReplyHeader = ^TMongoReplyHeader;
-
+  
+  TMongoMsgHeader = packed record
+    /// standard message header
+    Header: TMongoWireHeader;
+    /// response flags
+    ResponseFlags: integer;
+  end;
 
   /// map a MongoDB server reply message as sent by the database
   // - in response to TMongoRequestQuery / TMongoRequestGetMore messages
@@ -1933,7 +1939,11 @@ begin
     fNumberReturned := NumberReturned;
   end;
   fReply := ReplyMessage;
+  {$IFNDEF MONGO_WIRE_MSG}
   fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
+  {$ELSE}
+  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader)+1;
+  {$ENDIF}
   Rewind;
   fLatestDocIndex := -1;
 end;
