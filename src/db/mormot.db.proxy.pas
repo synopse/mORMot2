@@ -1462,7 +1462,6 @@ begin
       raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
         [self, ord(fDataCurrentRowColTypes[Col])]);
     end;
-  W.AddComma;
 end;
 
 procedure TSqlDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
