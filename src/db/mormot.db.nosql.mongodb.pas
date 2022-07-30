@@ -1646,7 +1646,7 @@ const
     1, 1000, 2001, 2002, 2004, 2005, 2006, 2007, 2013);
 
   CLIENT_OPCODES =
-    [opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors];
+    [opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors, opMsg];
 
 var
   GlobalRequestID: integer;
@@ -1672,12 +1672,12 @@ begin
   Write4(WIRE_OPCODES[opCode]);
 end;
 
-procedure TMongoRequest.BsonWriteParam(const paramDoc: variant);
+procedure TMongoRequest.BsonWriteParam(const paramDoc: variant; const dbname: RawUtf8 = '');
 begin
   if TVarData(paramDoc).VType = varVariantByRef then
     BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^)
   else if VarIsStr(paramDoc) then
-    BsonWriteProjection(VariantToUtf8(paramDoc))
+    BsonWriteProjection(VariantToUtf8(paramDoc), dbname)
   else if (TVarData(paramDoc).VType = BsonVariantType.VarType) and
           (TBsonVariantData(paramDoc).VKind in [betDoc, betArray]) and
           (TBsonVariantData(paramDoc).VBlob <> nil) then
@@ -1824,15 +1824,26 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUtf8;
   const Query, ReturnFieldsSelector: variant;
   NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
 begin
+  {$IFNDEF MONGO_WIRE_MSG}
   inherited Create(FullCollectionName, opQuery, 0, 0);
+  {$ELSE}
+  inherited Create(FullCollectionName, opMsg, 0, 0);
+  {$ENDIF}
   fNumberToReturn := NumberToReturn;
   fNumberToSkip := NumberToSkip;
   fQuery := TVarData(Query);
   fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
+
+  {$IFNDEF MONGO_WIRE_MSG}
   WriteCollectionName(byte(Flags), FullCollectionName);
   Write4(NumberToSkip);
   Write4(NumberToReturn);
   BsonWriteParam(Query);
+  {$ELSE}
+  Write4(65536);
+  Write1(0);
+  BsonWriteParam(Query, fDatabaseName);
+  {$ENDIF}
   if TVarData(ReturnFieldsSelector).VType > varNull then
     BsonWriteParam(ReturnFieldsSelector);
 end;
