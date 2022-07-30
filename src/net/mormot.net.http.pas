@@ -973,16 +973,16 @@ end;
 const
   PARSEDHEADERS: array[0..11] of PAnsiChar = (
     'CONTENT-',                    // 0
-    'HOST:',                       // 10 -> 1
+    'HOST:',                       // 1
     'CONNECTION: ',                // 2
     'ACCEPT',                      // 3
-    'USER-AGENT:',                 // 9 -> 4
+    'USER-AGENT:',                 // 4
     'SERVER-INTERNALSTATE:',       // 5
     'X-POWERED-BY:',               // 6
     'EXPECT: 100',                 // 7
     HEADER_BEARER_UPPER,           // 8
-    'UPGRADE:',                    // 4 -> 9
-    'TRANSFER-ENCODING: CHUNKED',  // 1 -> 10
+    'UPGRADE:',                    // 9
+    'TRANSFER-ENCODING: CHUNKED',  // 10
     nil);
   PARSEDHEADERS2: array[0..3] of PAnsiChar = (
     'LENGTH:',    // 0
@@ -1048,9 +1048,13 @@ begin
       else
         HeadersUnFiltered := true;
       end;
-    10:
-      // 'TRANSFER-ENCODING: CHUNKED'
-      include(HeaderFlags, hfTransferChunked);
+    1:
+      begin
+        // 'HOST:'
+        inc(P, 5);
+        GetTrimmed(P, Host);
+        HeadersUnFiltered := true; // may still be needed by some code
+      end;
     2:
       begin
         // 'CONNECTION: '
@@ -1092,9 +1096,12 @@ begin
         else //Accept:, Accept-Language: etc.
           HeadersUnFiltered := true;
       end;
-    9:
-      // 'UPGRADE:'
-      GetTrimmed(P + 8, Upgrade);
+    4:
+      begin
+        // 'USER-AGENT:'
+        inc(P, 11);
+        GetTrimmed(P, UserAgent);
+      end;
     5:
       begin
         // 'SERVER-INTERNALSTATE:'
@@ -1119,19 +1126,12 @@ begin
           // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
           HeadersUnFiltered := true;
       end;
-    4:
-      begin
-        // 'USER-AGENT:'
-        inc(P, 11);
-        GetTrimmed(P, UserAgent);
-      end;
-    1:
-      begin
-        // 'HOST:'
-        inc(P, 5);
-        GetTrimmed(P, Host);
-        HeadersUnFiltered := true; // may still be needed by some code
-      end;
+    9:
+      // 'UPGRADE:'
+      GetTrimmed(P + 8, Upgrade);
+    10:
+      // 'TRANSFER-ENCODING: CHUNKED'
+      include(HeaderFlags, hfTransferChunked);
   else
     // unrecognized name should be stored in Headers
     HeadersUnFiltered := true;
