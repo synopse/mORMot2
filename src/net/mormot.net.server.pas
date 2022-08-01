@@ -1403,8 +1403,16 @@ begin
       len := BufferLineLength(P, PEnd);
       if len > 0 then // no void line (means headers ending)
       begin
-        if IdemPChar(P, 'CONTENT-ENCODING:') then
-          // custom encoding: don't compress
+        if (PCardinal(P)^ or $20202020 =
+             ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24) and
+           (PCardinal(P + 4)^ or $20202020 =
+             ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24) and
+           (PCardinal(P + 8)^ or $20202020 =
+             ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
+           (PCardinal(P + 12)^ or $20202020 =
+             ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+           (P[16] = ':') then
+          // custom CONTENT-ENCODING: don't compress
           integer(Context.CompressAcceptHeader) := 0;
         h^.Append(P, len); // normalize CR/LF endings
         h^.AppendCRLF;
