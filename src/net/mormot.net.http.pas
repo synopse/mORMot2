@@ -1279,21 +1279,20 @@ var
   P: PUtf8Char;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  P := st.P;
-  if (Len >= 0) and
-     (P[Len + 1] = #10) then
+  if PtrUInt(Len) < PtrUInt(st.Len) then // we just ignore the following #10
   begin
+    P := st.P;
     st.Line := P;
     P[Len] := #0; // replace ending CRLF by #0
     st.LineLen := Len;
-    inc(Len, 2);
+    inc(Len, 2);  // if 2nd char is not #10, parsing will fail as expected
     inc(st.P, Len);
     dec(st.Len, Len);
     result := true;
     // now we have the next full line in st.Line/st.LineLen
   end
   else
-    result := false; // CR only is not enough
+    result := false; // not enough input
 end;
 
 function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
