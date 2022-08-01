@@ -201,10 +201,11 @@ type
     CommandUriInstanceLen: PtrInt;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
-    function ProcessParseLine(var st: TProcessParseLine;
-      setCommandUri: boolean = false): boolean;
+    function ProcessParseLine(var st: TProcessParseLine): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8;
-      nointern: boolean = false); {$ifdef HASINLINE} inline; {$endif}
+      nointern: boolean = false);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -1272,50 +1273,27 @@ begin
     FastSetString(res, P, PLen);
 end;
 
-function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine;
-  setCommandUri: boolean): boolean;
+function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine): boolean;
 var
-  P: PUtf8Char;
   Len: PtrInt;
+  P: PUtf8Char;
 begin
-  result := false;
-  if (st.Len = 2) and (PWord(st.P)^ = $0a0d) then // last CRLF
+  Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
+  P := st.P;
+  if (Len >= 0) and
+     (P[Len + 1] = #10) then
   begin
-    inc(st.P, 2);
-    st.Len := 0;
-    st.LineLen := 0;
-    exit(true);
-  end;
-
-  P := mormot.core.base.PosChar(st.P, st.Len, #13);
-  if p = nil then
-    exit;
-
-  st.Line := st.P;
-  Len := P - st.P;
-  st.LineLen := Len;
-  st.Len := st.Len - Len;
-  if (st.Len < 2) or (PWord(P)^ <> $0a0d) then // must be at last CRLF
-    exit;
-  result := true;
-  P^ := #0;
-  st.P := P + 2;
-  dec(st.Len, 2);
-
-  if setCommandUri then
-    if Interning = nil then
-      FastSetString(CommandUri, st.Line, st.LineLen)
-    else
-    begin // no real interning, but CommandUriInstance buffer reuse
-      if st.LineLen > CommandUriInstanceLen then
-      begin
-        CommandUriInstanceLen := st.LineLen + 256;
-        FastSetString(CommandUriInstance, nil, CommandUriInstanceLen);
-      end;
-      CommandUri := CommandUriInstance; // COW memory buffer reuse
-      MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
-      FakeLength(CommandUri, st.LineLen);
-    end;
+    st.Line := P;
+    P[Len] := #0; // replace ending CRLF by #0
+    st.LineLen := Len;
+    inc(Len, 2);
+    inc(st.P, Len);
+    dec(st.Len, Len);
+    result := true;
+    // now we have the next full line in st.Line/st.LineLen
+  end
+  else
+    result := false; // CR only is not enough
 end;
 
 function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
@@ -1329,8 +1307,24 @@ begin
   repeat
     case State of
       hrsGetCommand:
-        if ProcessParseLine(st, {SetCommandUri=}true) then
-          State := hrsGetHeaders
+        if ProcessParseLine(st) then
+        begin
+          if Interning = nil then
+            FastSetString(CommandUri, st.Line, st.LineLen)
+          else
+          begin
+            // no real interning, but CommandUriInstance buffer reuse
+            if st.LineLen > CommandUriInstanceLen then
+            begin
+              CommandUriInstanceLen := st.LineLen + 256;
+              FastSetString(CommandUriInstance, nil, CommandUriInstanceLen);
+            end;
+            CommandUri := CommandUriInstance; // COW memory buffer reuse
+            MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
+            FakeLength(CommandUri, st.LineLen);
+          end;
+          State := hrsGetHeaders;
+        end
         else
           exit; // not enough input
       hrsGetHeaders:
@@ -1339,18 +1333,18 @@ begin
             // Headers end with a void line
             ParseHeader(st.Line, hroHeadersUnfiltered in Options)
           else
-          // we reached end of headers
-          if hfTransferChunked in HeaderFlags then
-            // process chunked body
-            State := hrsGetBodyChunkedHexFirst
-          else if ContentLength > 0 then
-            // regular process with explicit content-length
-            State := hrsGetBodyContentLength
-            // note: old HTTP/1.0 format with no Content-Length is unsupported
-            // because officially not defined in HTTP/1.1 RFC2616 4.3
-          else
-            // no body
-            State := hrsWaitProcessing
+            // we reached end of headers
+            if hfTransferChunked in HeaderFlags then
+              // process chunked body
+              State := hrsGetBodyChunkedHexFirst
+            else if ContentLength > 0 then
+              // regular process with explicit content-length
+              State := hrsGetBodyContentLength
+              // note: old HTTP/1.0 format with no Content-Length is unsupported
+              // because officially not defined in HTTP/1.1 RFC2616 4.3
+            else
+              // no body
+              State := hrsWaitProcessing
         else
           exit;
       hrsGetBodyChunkedHexFirst,
