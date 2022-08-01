@@ -817,11 +817,11 @@ begin
         ftInt64,
         ftDouble,
         ftCurrency:
-          W.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col));
+          W.AddNoJsonEscape(P);
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
-            W.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col))
+            W.AddNoJsonEscape(P) // let's mORMOt calc string length - it's faster than PQ.GetLength
           else
           begin
             W.Add('"');
