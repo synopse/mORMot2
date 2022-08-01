@@ -767,10 +767,12 @@ begin
 end;
 
 function TSqlDBPostgresStatement.ColumnDateTime(Col: integer): TDateTime;
+var
+  P: PUtf8Char;
 begin
   CheckColAndRowset(Col);
-  Iso8601ToDateTimePUtf8CharVar(PQ.GetValue(fRes, fCurrentRow, Col),
-    PQ.GetLength(fRes, fCurrentRow, Col), result);
+  P := PQ.GetValue(fRes, fCurrentRow, Col);
+  Iso8601ToDateTimePUtf8CharVar(P, StrLen(P), result);
 end;
 
 function TSqlDBPostgresStatement.ColumnCurrency(Col: integer): currency;
@@ -807,21 +809,23 @@ begin
   with fColumns[Col] do
   begin
     P := PQ.GetValue(fRes, fCurrentRow, Col);
-    if (PUtf8Char(P)^ = #0) and (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
+    if (PUtf8Char(P)^ = #0) and
+       (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
       W.AddNull
     else
     begin
       case ColumnType of
         ftNull:
           W.AddNull;
+        // note: StrLen is slightly faster than PQ.GetLength for small content
         ftInt64,
         ftDouble,
         ftCurrency:
-          W.AddNoJsonEscape(P);
+          W.AddNoJsonEscape(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
-            W.AddNoJsonEscape(P) // let's mORMOt calc string length - it's faster than PQ.GetLength
+            W.AddNoJsonEscape(P, StrLen(P))
           else
           begin
             W.Add('"');
@@ -831,7 +835,7 @@ begin
         ftDate:
           begin
             W.Add('"');
-            if (PQ.GetLength(fRes, fCurrentRow, Col) > 10) and
+            if (StrLen(P) > 10) and
                (PAnsiChar(P)[10] = ' ') then
               PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
             W.AddJsonEscape(P);
