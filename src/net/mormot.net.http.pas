@@ -148,6 +148,7 @@ type
     hrsResponseDone,
     hrsUpgraded,
     hrsErrorPayloadTooLarge,
+    hrsErrorRejected,
     hrsErrorMisuse,
     hrsErrorUnsupportedFormat,
     hrsErrorAborted,
@@ -329,8 +330,6 @@ const
   HTTP_REQUEST_WRITE =
     [hrsSendBody];
 
-  /// when this and following THttpRequestContext.State are fatal HTTP errors
-  HTTP_REQUEST_FIRSTERROR = hrsErrorPayloadTooLarge;
 
 function ToText(st: THttpRequestState): PShortString; overload;
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
@@ -1233,12 +1232,14 @@ begin
   L := P - B;
   MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
   FakeLength(CommandUri, L);
-  inc(P);
-  if not IdemPChar(P, 'HTTP/1.') then
+  if (PCardinal(P + 1)^ <>
+       ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) or
+     (PCardinal(P + 5)^ and $ffffff <>
+       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
   if not (hfConnectionClose in HeaderFlags) then
     if not (hfConnectionKeepAlive in HeaderFlags) and
-       (P[7] <> '1') then
+       (P[8] <> '1') then
       include(HeaderFlags, hfConnectionClose);
   result := true;
 end;

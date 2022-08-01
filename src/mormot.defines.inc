@@ -108,8 +108,6 @@
 // enable the more advanced "multi session" API functions of mormot.lib.curl
 // see https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
 
-{.$define MONGO_WIRE_MSG}
-
 
 {$ifdef FPC}
 
