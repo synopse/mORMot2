@@ -54,23 +54,24 @@ const
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
-        {$ifdef WIN64ABI}
+        {$ifdef WIN64ABI}    // circumvent FPC asm bug and adapt to xmm ABI
         mov     rax, r8
-        {$else}
-        mov     rax, rdx                     // rax=r8=cnt
-        mov     r8, rdx
-        {$endif WIN64ABI}
-        lea     r10, [rip + 16 * 8 + @jmptab]
+        lea     r10, [rip + @jmptab] // 0..16
         sub     rax, 16
-        jg      @sml         // 17..96/128
-        jmp     qword ptr [r10 + rax * 8] // 0..16
-@sml:   // cnt = 17..96/128 - xmm0..xmm5 are volatile on Win64 and SystemV ABI
-        {$ifdef SYSVABI}
-        cmp     rax, 128 - 16  // two more volatile xmm registers on SystemV ABI
+        jg      @sml                 // 17..96/128 or <0
+        jmp     qword ptr [r10 + r8 * 8]
+@sml:   cmp     rax, 96 - 16
         {$else}
-        cmp     rax, 96 - 16
-        {$endif SYSVABI}
+        mov     rax, rdx             // rax=r8=cnt
+        lea     r10, [rip + @jmptab] // 0..16
+        sub     rax, 16
+        jg      @sml                 // 17..96/128 or <0
+        jmp     qword ptr [r10 + rdx * 8]
+@sml:   mov     r8, rdx
+        cmp     rax, 128 - 16  // two more volatile xmm registers on SystemV ABI
+        {$endif WIN64ABI}
         ja      @lrg         // >96/128 or <0
+        // cnt = 17..96/128
         movups  xmm0, oword ptr [src + rax]    // last 16
         movups  xmm1, oword ptr [src]          // first 16
         cmp     al, 16
@@ -85,7 +86,9 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     al, 64
         jle     @sml80
         movups  xmm5, oword ptr [src + 64]     // fifth 16
-        {$ifdef SYSVABI} // xmm6 and xmm7 are volatile on SystemV ABI
+        // xmm0..xmm5 are volatile on both Win64 and SystemV ABI
+        // xmm6 and xmm7 are also volatile on SystemV ABI so allow 32 more bytes
+        {$ifdef SYSVABI}
         cmp     al, 80
         jle     @sml96
         movups  xmm6, oword ptr [src + 80]
@@ -101,12 +104,12 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @sml48: movups  oword ptr [dst + 16], xmm2     // second 16
 @sml32: movups  oword ptr [dst],      xmm1     // first 16
         movups  oword ptr [dst + rax], xmm0    // last 16 (may be overlapping)
-@00:    ret
+@z:     ret
 @lrg:   // cnt > 96/128 or cnt < 0
         add     rax, 16              // restore rax=cnt as expected below
-        jl      @00                  // cnt < 0
+        jl      @z                   // cnt < 0
         sub     dst, src
-        jz      @00                  // src=dst
+        jz      @z                   // src=dst
         cmp     dst, cnt
         lea     dst, [dst + src]
         jb      @lrgbwd    // move backwards if unsigned(dst-src) < cnt
@@ -276,7 +279,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         dq      @08, @09, @10, @11, @12, @13, @14, @15, @16
 @01:    mov     al, byte ptr [src]
         mov     byte ptr [dst], al
-        ret
+@00:    ret
 @02:    movzx   eax, word ptr [src]
         mov     word ptr [dst], ax
         ret
@@ -2417,8 +2420,9 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 end;
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-var off: TOffsets;
-    cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
+var
+  off: TOffsets;
+  cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
         {$ifdef WIN64ABI} // additional registers to preserve
         push    rdi
@@ -2573,7 +2577,8 @@ asm // rcx=src, edx=size, r8=dest
 end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-var off: TOffsets;
+var
+  off: TOffsets;
 asm     // rcx=src, edx=size, r8=dest
         {$ifdef WIN64ABI} // additional registers to preserve
         push    rsi
