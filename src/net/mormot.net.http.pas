@@ -1278,43 +1278,30 @@ var
   P: PUtf8Char;
   Len: PtrInt;
 begin
-  P := st.P;
-  Len := st.Len;
   result := false;
-  if Len <= 0 then
+  if (st.Len = 2) and (PWord(st.P)^ = $0a0d) then // last CRLF
+  begin
+    inc(st.P, 2);
+    st.Len := 0;
+    st.LineLen := 0;
+    exit(true);
+  end;
+
+  P := mormot.core.base.PosChar(st.P, st.Len, #13);
+  if p = nil then
     exit;
-  // search for the CR or CRLF line end - assume no other control char appears
-  dec(Len, 4);
-  if Len >= 0 then
-    repeat
-      if P[0] > #13 then
-        if P[1] > #13 then
-          if P[2] > #13 then
-            if P[3] > #13 then
-            begin
-              inc(P, 4);
-              dec(Len, 4);
-              if Len <= 0 then
-                break;
-              continue;
-            end;
-      break;
-    until false;
-  inc(Len, 4);
-  // here Len=0..3
-  if Len = 0 then
-    exit;
-  repeat
-    if P[0] <= #13 then
-      break;
-    dec(Len);
-    if Len = 0 then
-      exit;
-    inc(P);
-  until false;
-  // here P^ <= #13: we found a whole text line
+
   st.Line := st.P;
-  st.LineLen := P - st.P;
+  Len := P - st.P;
+  st.LineLen := Len;
+  st.Len := st.Len - Len;
+  if (st.Len < 2) or (PWord(P)^ <> $0a0d) then // must be at last CRLF
+    exit;
+  result := true;
+  P^ := #0;
+  st.P := P + 2;
+  dec(st.Len, 2);
+
   if setCommandUri then
     if Interning = nil then
       FastSetString(CommandUri, st.Line, st.LineLen)
@@ -1329,21 +1316,6 @@ begin
       MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
       FakeLength(CommandUri, st.LineLen);
     end;
-  result := true;
-  st.P := P; // will ensure below that st.line ends with #0
-  // go to beginning of next line
-  dec(Len);
-  if (Len <> 0) and
-     (PWord(P)^ = $0a0d) then
-    begin
-      inc(P);
-      dec(Len);
-    end;
-  inc(P);
-  st.P^ := #0;
-  // prepare for parsing the next line
-  st.P := P;
-  st.Len := Len;
 end;
 
 function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
