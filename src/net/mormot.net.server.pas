@@ -99,6 +99,7 @@ type
   // - hsoHeadersUnfiltered will store all headers, not only relevant (i.e.
   // include raw Content-Length, Content-Type and Content-Encoding entries)
   // - hsoHeadersInterning triggers TRawUtf8Interning to reduce memory usage
+  // - hsoNoStats will disable low-level statistic counters
   // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - hsoCreateSuspended won't start the server thread immediately
   // - hsoLogVerbose could be used to debug a server in production
@@ -109,6 +110,7 @@ type
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
     hsoNoXPoweredHeader,
+    hsoNoStats,
     hsoCreateSuspended,
     hsoLogVerbose,
     hsoIncludeDateHeader,
@@ -1890,6 +1892,19 @@ begin
   end;
 end;
 
+function THttpServerSocketGeneric.GetStat(
+  one: THttpServerSocketGetRequestResult): integer;
+begin
+  result := fStats[one];
+end;
+
+procedure THttpServerSocketGeneric.IncStat(
+  one: THttpServerSocketGetRequestResult);
+begin
+  if not (hsoNoStats in fOptions) then
+    LockedInc32(@fStats[one]);
+end;
+
 function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;
 var
   cod: integer;
@@ -1928,18 +1943,6 @@ procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
   fServerKeepAliveTimeOut := Value;
   fServerKeepAliveTimeOutSec := Value div 1000;
-end;
-
-function THttpServerSocketGeneric.GetStat(
-  one: THttpServerSocketGetRequestResult): integer;
-begin
-  result := fStats[one];
-end;
-
-procedure THttpServerSocketGeneric.IncStat(
-  one: THttpServerSocketGetRequestResult);
-begin
-  LockedInc32(@fStats[one]);
 end;
 
 function THttpServerSocketGeneric.OnNginxAllowSend(
