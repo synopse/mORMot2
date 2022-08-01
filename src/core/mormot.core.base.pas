@@ -2565,11 +2565,10 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 
 {$endif ASMINTEL}
 
-/// an alternative Move() function tuned for small unaligned counts
-// - warning: expects Count>0 and Source/Dest not nil
-// - warning: doesn't support buffers overlapping
-procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
-  {$ifdef HASINLINE}inline;{$endif}
+/// Move() with one-by-one byte copy
+// - never redirect to MoveFast() so could be used when data overlaps
+procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// perform a MoveFast then fill the Source buffer with zeros
 // - could be used e.g. to quickly move a managed record content into a newly
@@ -4277,7 +4276,7 @@ begin
     MoveFast(fillwith^, aligned^, len);
 end;
 
-// CompareMemSmall/MoveSmall defined now for proper inlining below
+// CompareMemSmall/MoveByOne defined now for proper inlining below
 
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
 var
@@ -4308,7 +4307,7 @@ zero:
   {$endif CPUX86}
 end;
 
-procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
 var
   c: AnsiChar; // better code generation on FPC
 begin
@@ -4353,7 +4352,7 @@ begin
   if (len = 0) or
      (len + ord(dest[0]) > 255) then
     exit;
-  MoveSmall(@src[1], @dest[ord(dest[0]) + 1], len);
+  MoveFast(src[1], dest[ord(dest[0]) + 1], len);
   inc(dest[0], len);
 end;
 
@@ -7436,7 +7435,7 @@ procedure Rcu(var src, dst; len: integer);
 begin
   if len > 0 then
     repeat
-      MoveSmall(@src, @dst, len); // per-byte inlined copy
+      MoveByOne(@src, @dst, len); // per-byte inlined copy
       ReadBarrier;
     until CompareMemSmall(@src, @dst, len);
 end;
@@ -9479,14 +9478,14 @@ nextCW:
         {$ifdef CPU64}
         o := offset[h];
         if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
-          MoveSmall(o, dst, t)
+          MoveByOne(o, dst, t)
         else if t <= 8 then
           PInt64(dst)^ := PInt64(o)^ // much faster in practice
         else
           MoveFast(o^, dst^, t);     // safe since src_endmatch := src_end-(6+5)
         {$else}
         if PtrUInt(dst - offset[h]) < t then
-          MoveSmall(offset[h], dst, t)
+          MoveByOne(offset[h], dst, t)
         else if t > 8 then
           MoveFast(offset[h]^, dst^, t)
         else
@@ -9582,20 +9581,20 @@ nextCW:
         if dst + t >= dst_end then
         begin
           // avoid buffer overflow by all means
-          MoveSmall(offset[h], dst, dst_end - dst);
+          MoveByOne(offset[h], dst, dst_end - dst);
           break;
         end;
         {$ifdef CPU64}
         o := offset[h];
         if (t <= 8) or
            (PtrUInt(dst - o) < t) then
-          MoveSmall(o, dst, t)
+          MoveByOne(o, dst, t)
         else
           MoveFast(o^, dst^, t);
         {$else}
         if (t <= 8) or
            (PtrUInt(dst - offset[h]) < t) then
-          MoveSmall(offset[h], dst, t)
+          MoveByOne(offset[h], dst, t)
         else
           MoveFast(offset[h]^, dst^, t);
         {$endif CPU64}

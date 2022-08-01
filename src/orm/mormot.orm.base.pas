@@ -8702,7 +8702,7 @@ begin
       break;
     if SepLen = 0 then
       continue;
-    MoveFast(pointer(Sep)^, P^, SepLen); // MoveSmall() won't be inlined anyway
+    MoveFast(pointer(Sep)^, P^, SepLen); // MoveByOne() won't be inlined anyway
     inc(P, SepLen);
   until false;
 end;

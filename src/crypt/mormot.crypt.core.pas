@@ -4729,7 +4729,7 @@ begin
   if IV_len = CTR_POS then
   begin
     // Initialization Vector size matches perfect size of 12 bytes
-    MoveSmall(pIV, @TAesContext(aes).iv, CTR_POS);
+    MoveFast(pIV^, TAesContext(aes).iv, CTR_POS);
     TAesContext(aes).iv.c3 := $01000000;
   end
   else
@@ -7024,7 +7024,7 @@ begin
   sha.Update(@iv, SizeOf(iv));
   sha.Update(buf, size);
   sha.Final(dig);
-  MoveSmall(@dig, buf, size);
+  MoveFast(dig, buf^, size);
 end;
 
 
@@ -7476,7 +7476,7 @@ begin
     begin
       TAesContext(fAes.Context).DoBlock(
         TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, {%H-}aes.iv);
-      MoveSmall(@aes.iv, Buffer, remain);
+      MoveFast(aes.iv, Buffer^, remain);
       inc(TAesContext(fAes.Context).iv.b[15]);
       if TAesContext(fAes.Context).iv.b[15] = 0 then
         CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
@@ -7517,7 +7517,7 @@ begin
   if remain <> 0 then
   begin
     aes.DoBlock(aes, aes.iv, aes.iv);
-    MoveSmall(@aes.iv, Buffer, remain);
+    MoveFast(aes.iv, Buffer^, remain);
   end;
 end;
 

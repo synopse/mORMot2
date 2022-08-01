@@ -5120,7 +5120,7 @@ begin
   begin
     // standard serialization as unsigned integer (up to 64 items)
     v := 0;
-    MoveSmall(Data, @v, Ctxt.Info.Size);
+    MoveFast(Data^, v, Ctxt.Info.Size);
     Ctxt.W.AddQ(v);
   end;
 end;
@@ -7442,7 +7442,7 @@ begin
     else
     begin
       SetQWord(Ctxt.Value, v{%H-});
-      MoveSmall(@v, Data, Ctxt.Info.Size);
+      MoveFast(v, Data^, Ctxt.Info.Size);
     end;
 end;
 
@@ -7534,7 +7534,7 @@ begin
         v := 0
       else
         Ctxt.Valid := false;
-    MoveSmall(@v, Data, Ctxt.Info.Size);
+    MoveFast(v, Data^, Ctxt.Info.Size);
   end;
 end;
 
@@ -7545,7 +7545,7 @@ begin
   with Ctxt.Info.Cache do
     v := GetSetNameValue(EnumList, EnumMin, EnumMax, Ctxt.Json, Ctxt.EndOfObject);
   Ctxt.Valid := Ctxt.Json <> nil;
-  MoveSmall(@v, Data, Ctxt.Info.Size);
+  MoveFast(v, Data^, Ctxt.Info.Size);
 end;
 
 function JsonLoadProp(Data: PAnsiChar; Prop: PRttiCustomProp;

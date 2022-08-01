@@ -2921,7 +2921,7 @@ begin
                     GetNextCardinal(P) shl 8 +
                     GetNextCardinal(P);
   OSVersion32.os := OS_KIND;
-  MoveSmall(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit version
+  MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit version
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then

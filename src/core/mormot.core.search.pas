@@ -4501,7 +4501,7 @@ begin
     if srclen <> 0 then
     begin
       if PtrUInt(upd - src) < srclen then
-        MoveSmall(src, upd, srclen)
+        MoveByOne(src, upd, srclen)
       else
         MoveFast(src^, upd^, srclen);
       inc(upd, srclen);

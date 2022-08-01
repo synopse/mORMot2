@@ -3055,7 +3055,7 @@ begin
     inc(dst, sharedlen);
     if newlen > 0 then
     begin
-      MoveSmall(pointer(NewPattern), dst, newlen);
+      MoveByOne(pointer(NewPattern), dst, newlen);
       inc(dst, newlen);
     end;
     last := pos[i] + oldlen;
@@ -3139,7 +3139,7 @@ function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
       begin
         if TLen > 0 then
         begin
-          MoveSmall(T, D, TLen);
+          MoveByOne(T, D, TLen);
           inc(D, TLen);
         end;
         inc(S);
@@ -3684,7 +3684,7 @@ begin
   if integer(ord(result[0])) + len >= 255 then
     exit;
   if len > 0 then
-    MoveSmall(text, @result[ord(result[0]) + 1], len);
+    MoveByOne(text, @result[ord(result[0]) + 1], len);
   inc(result[0], len + 1);
   result[ord(result[0])] := ',';
 end;
@@ -3877,7 +3877,7 @@ begin
     begin
       if i > 0 then
       begin
-        MoveSmall(P, @tmp, i);
+        MoveFast(P^, tmp, i);
         inc(P, i);
         dec(len, i);
       end;
@@ -4745,7 +4745,7 @@ begin
       Break;
     if seplen > 0 then
     begin
-      MoveSmall(pointer(Sep), P, seplen);
+      MoveFast(pointer(Sep)^, P^, seplen);
       inc(P, seplen);
     end;
     inc(i);
@@ -4839,7 +4839,7 @@ begin
     if Prefix <> '' then
     begin
       L := length(Prefix);
-      MoveSmall(pointer(Prefix), P, L);
+      MoveFast(pointer(Prefix)^, P^, L);
       inc(P, L);
     end;
     for i := 0 to ValuesCount do
@@ -4850,7 +4850,7 @@ begin
         inc(P, 2);
       end;
       L := ord(ints[i][0]);
-      MoveSmall(@ints[i][1], P, L);
+      MoveFast(ints[i][1], P^, L);
       inc(P, L);
       if InlinedValue then
       begin
@@ -4859,7 +4859,7 @@ begin
       end;
     end;
     if Suffix <> '' then
-      MoveSmall(pointer(Suffix), P, length(Suffix));
+      MoveFast(pointer(Suffix)^, P^, length(Suffix));
   finally
     tmpbuf.Done;
   end;
@@ -4906,7 +4906,7 @@ begin
     if Prefix <> '' then
     begin
       L := length(Prefix);
-      MoveSmall(pointer(Prefix), P, L);
+      MoveFast(pointer(Prefix)^, P^, L);
       inc(P, L);
     end;
     int := tmp.buf;
@@ -4917,7 +4917,7 @@ begin
         inc(P, 2);
       end;
       L := int^.Len;
-      MoveSmall(PAnsiChar(int) + 21 - L, P, L);
+      MoveFast(PAnsiChar(int)[21 - L], P^, L);
       inc(P, L);
       if InlinedValue then
       begin
@@ -4932,7 +4932,7 @@ begin
       dec(ValuesCount);
     until false;
     if Suffix <> '' then
-      MoveSmall(pointer(Suffix), P, length(Suffix));
+      MoveFast(pointer(Suffix)^, P^, length(Suffix));
   finally
     tmp.Done;
   end;
@@ -5379,7 +5379,7 @@ begin
     P := StrInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
-  MoveSmall(P, B + 1, Len);
+  MoveFast(P^, B[1], Len);
   inc(B, Len);
 end;
 
@@ -5408,7 +5408,7 @@ begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
-  MoveSmall(P, B + 1, Len);
+  MoveByOne(P, B + 1, Len);
   inc(B, Len);
 end;
 {$endif CPU32}
@@ -5435,7 +5435,7 @@ begin
           dec(Len, 2) // 'xxx.1200' -> 'xxx.12'
       else
         dec(Len); // 'xxx.1220' -> 'xxx.123'
-  MoveSmall(P, B + 1, Len);
+  MoveFast(P^, B[1], Len);
   inc(B, Len);
 end;
 
@@ -5462,7 +5462,7 @@ begin
     P := StrUInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
-  MoveSmall(P, B + 1, Len);
+  MoveFast(P^, B[1], Len);
   inc(B, Len);
 end;
 
@@ -5484,7 +5484,7 @@ begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
-  MoveSmall(P, B + 1, Len);
+  MoveFast(P^, B[1], Len);
   inc(B, Len);
 end;
 
@@ -5879,14 +5879,14 @@ begin
     FlushToStream;
   if twoForceJsonExtended in fCustomOptions then
   begin
-    MoveSmall(PropName, B + 1, PropNameLen);
+    MoveFast(PropName^, B[1], PropNameLen);
     inc(B, PropNameLen + 1);
     B^ := ':';
   end
   else
   begin
     B[1] := '"';
-    MoveSmall(PropName, B + 2, PropNameLen);
+    MoveFast(PropName^, B[2], PropNameLen);
     inc(B, PropNameLen + 2);
     PWord(B)^ := ord('"') + ord(':') shl 8;
     inc(B);
@@ -7443,7 +7443,7 @@ begin
       // 2 decimals -> trunc trailing *.??00 chars
       dec(result, 2);
   end;
-  MoveSmall(P, Dest, result);
+  MoveFast(P^, Dest^, result);
 end;
 
 function StrToCurr64(P: PUtf8Char; NoDecimal: PBoolean): Int64;
@@ -7826,7 +7826,7 @@ begin
     if S^[1] = ' ' then
     begin
       dec(S^[0]);
-      MoveSmall(@S^[2], @S^[1], ord(S^[0]));
+      MoveFast(S^[2], S^[1], ord(S^[0]));
     end;
     result := ord(S^[0]);
   end
@@ -8289,7 +8289,7 @@ begin
     PWord(P)^ := tab[x]; // 10..99
     break;
   until false;
-  PHash192(buf)^ := PHash192(P)^; // faster than MoveSmall(P,buf,result)
+  PHash192(buf)^ := PHash192(P)^; // faster than MoveByOne(P,buf,result)
   result := PAnsiChar(@buf[24]) - P;
 end;
 
@@ -9299,7 +9299,7 @@ begin // Res.Len has been set by caller
   end
   else
   begin
-    THash192(Res.Temp) := PHash192(Buf)^; // faster than MoveSmall()
+    THash192(Res.Temp) := PHash192(Buf)^; // faster than MoveByOne()
     Res.Text := @Res.Temp; // no RawUtf8 memory allocation
   end;
 end;
@@ -9772,7 +9772,7 @@ var
 begin
   d := @blocks;
   repeat
-    MoveFast(d^.Text^, Dest^, d^.Len); // no MoveSmall() - may be huge result
+    MoveFast(d^.Text^, Dest^, d^.Len); // no MoveByOne() - may be huge result
     inc(Dest, d^.Len);
     if d^.TempRawUtf8 <> nil then
       {$ifdef FPC}

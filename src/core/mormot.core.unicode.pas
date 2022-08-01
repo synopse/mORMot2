@@ -5219,7 +5219,7 @@ begin
       S := P - 1;
       inc(P, extra);
       inc(extra);
-      MoveSmall(S, D + result, extra);
+      MoveByOne(S, D + result, extra);
       inc(result, extra);
     end;
   until false;

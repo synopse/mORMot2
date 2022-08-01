@@ -5066,7 +5066,7 @@ begin
   end;
   tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
   if L > 0 then
-    MoveSmall(PS, @tmp, L);
+    MoveFast(PS^, tmp, L);
   GetCaptionFromPCharLen(tmp, result);
 end;
 
@@ -7345,7 +7345,7 @@ begin
         rtti := pp^.Value;
         rtti.ValueFinalize(pointer(p));
         if pp^.OrdinalDefault <> NO_DEFAULT then
-          MoveSmall(@pp^.OrdinalDefault, pointer(p), rtti.Size)
+          MoveByOne(@pp^.OrdinalDefault, pointer(p), rtti.Size)
         else
           FillZeroSmall(pointer(p), rtti.Size);
       end

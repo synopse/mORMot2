@@ -4980,7 +4980,7 @@ begin
         Break;
       if DelimLen > 0 then
       begin
-        MoveSmall(pointer(Delimiter), P, DelimLen);
+        MoveByOne(pointer(Delimiter), P, DelimLen);
         inc(P, DelimLen);
       end;
     until false;

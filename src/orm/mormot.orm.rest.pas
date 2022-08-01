@@ -1133,7 +1133,7 @@ begin
         break;
       if SepLen <> 0 then
       begin
-        MoveSmall(pointer(Separator), P, SepLen);
+        MoveByOne(pointer(Separator), P, SepLen);
         inc(P, SepLen);
       end;
       inc(i);

@@ -6427,7 +6427,7 @@ begin
     inc(len, 3);
   FastSetString(result, nil, len);
   if lenprefix > 0 then
-    MoveSmall(pointer(Prefix), res, lenprefix);
+    MoveFast(pointer(Prefix)^, res^, lenprefix);
   if WithMagic then
   begin
     PInteger(@res[lenprefix])^ := JSON_BASE64_MAGIC_C;
@@ -6435,7 +6435,7 @@ begin
   end;
   Base64Encode(@res[lenprefix], pointer(data), lendata);
   if lensuffix > 0 then
-    MoveSmall(pointer(Suffix), @res[len - lensuffix], lensuffix);
+    MoveFast(pointer(Suffix)^, res[len - lensuffix], lensuffix);
 end;
 
 function BinToBase64WithMagic(const data: RawByteString): RawUtf8;
@@ -8706,7 +8706,7 @@ var
 begin
   P := pointer(SmallUInt32Utf8[Value]);
   L := PStrLen(P - _STRLEN)^;
-  MoveSmall(P, Buffer, L);
+  MoveByOne(P, Buffer, L);
   result := Buffer + L;
 end;
 
@@ -8726,13 +8726,14 @@ begin
   begin
     P := pointer(SmallUInt32Utf8[Value]);
     L := PStrLen(P - _STRLEN)^;
+    MoveByOne(P, Buffer, L);
   end
   else
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
+    MoveFast(P^, Buffer^, L);
   end;
-  MoveSmall(P, Buffer, L);
   result := Buffer + L;
 end;
 
@@ -8759,7 +8760,7 @@ begin
      (L <= 240) then
   begin
     // avoid buffer overflow
-    MoveSmall(@itemname[1], @result[len + 1], L);
+    MoveFast(itemname[1], result[len + 1], L);
     inc(len, L);
     if itemcount > 1 then
     begin

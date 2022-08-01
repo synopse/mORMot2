@@ -673,7 +673,7 @@ begin
           if Len = 0 then
             exit; // was a plain and simple 0 value
         end;
-        MoveSmall(Data, @result, Len); // was stored as little-endian
+        MoveByOne(Data, @result, Len); // was stored as little-endian
       end;
     atBitString:
       begin
@@ -682,7 +682,7 @@ begin
           raise EAsn.CreateUtf8('ToUInt32 BitString unused=%', [ord(Data[0])]);
         inc(Data); // just ignore the unused number of bits = 0 (as in BER)
         dec(Len);
-        MoveSmall(Data, PAnsiChar(@result) + 4 - Len, Len);
+        MoveByOne(Data, PAnsiChar(@result) + 4 - Len, Len);
         result := bswap32(result); // was stored as big-endian
       end
   else

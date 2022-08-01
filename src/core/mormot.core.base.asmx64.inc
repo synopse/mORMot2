@@ -54,18 +54,14 @@ const
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
-        {$ifdef WIN64ABI}    // circumvent FPC asm bug and adapt to xmm ABI
-        mov     rax, r8
+        mov     rax, cnt             // rax=r8/rdx=cnt
         lea     r10, [rip + @jmptab] // 0..16
         sub     rax, 16
         jg      @sml                 // 17..96/128 or <0
+        {$ifdef WIN64ABI}    // circumvent FPC asm bug and adapt to xmm ABI
         jmp     qword ptr [r10 + r8 * 8]
 @sml:   cmp     rax, 96 - 16
         {$else}
-        mov     rax, rdx             // rax=r8=cnt
-        lea     r10, [rip + @jmptab] // 0..16
-        sub     rax, 16
-        jg      @sml                 // 17..96/128 or <0
         jmp     qword ptr [r10 + rdx * 8]
 @sml:   mov     r8, rdx
         cmp     rax, 128 - 16  // two more volatile xmm registers on SystemV ABI
