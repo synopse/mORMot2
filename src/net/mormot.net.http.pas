@@ -204,7 +204,7 @@ type
     function ProcessParseLine(var st: TProcessParseLine;
       setCommandUri: boolean = false): boolean;
     procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8;
-      nointern: boolean = false);
+      nointern: boolean = false); {$ifdef HASINLINE} inline; {$endif}
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -241,8 +241,6 @@ type
     // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     BearerToken: RawUtf8;
-    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during ParseHeader
-    XPoweredBy: RawUtf8;
     /// will contain the data retrieved from the server, after all ParseHeader
     Content: RawByteString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
@@ -946,7 +944,6 @@ begin
   Upgrade := '';
   BearerToken := '';
   UserAgent := '';
-  XPoweredBy := '';
   Content := '';
   ContentLength := -1;
   ServerInternalState := 0;
@@ -957,43 +954,20 @@ end;
 procedure THttpRequestContext.GetTrimmed(P: PUtf8Char; var result: RawUtf8;
   nointern: boolean);
 var
-  B: PUtf8Char;
+  L: PtrInt;
 begin
   while (P^ > #0) and
         (P^ <= ' ') do
     inc(P); // trim left
-  B := P;
-  P := GotoNextControlChar(P);
-  while (P > B) and
-        (P[-1] <= ' ') do
-    dec(P); // trim right
-  SetRawUtf8(result, B, P - B, nointern);
+  L := StrLen(P);
+  repeat
+    if (L = 0) or
+       (P[L - 1] > ' ') then
+      break;
+    dec(L); // trim right
+  until false;
+  SetRawUtf8(result, P, L, nointern);
 end;
-
-const
-  PARSEDHEADERS: array[0..11] of PAnsiChar = (
-    'CONTENT-',                    // 0
-    'HOST:',                       // 1
-    'CONNECTION: ',                // 2
-    'ACCEPT',                      // 3
-    'USER-AGENT:',                 // 4
-    'SERVER-INTERNALSTATE:',       // 5
-    'X-POWERED-BY:',               // 6
-    'EXPECT: 100',                 // 7
-    HEADER_BEARER_UPPER,           // 8
-    'UPGRADE:',                    // 9
-    'TRANSFER-ENCODING: CHUNKED',  // 10
-    nil);
-  PARSEDHEADERS2: array[0..3] of PAnsiChar = (
-    'LENGTH:',    // 0
-    'TYPE:',      // 1
-    'ENCODING:',  // 2
-    nil);
-  PARSEDHEADERS3: array[0..3] of PAnsiChar = (
-    'CLOSE',      // 0
-    'UPGRADE',    // 1
-    'KEEP-ALIVE', // 2
-    nil);
 
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char;
   HeadersUnFiltered: boolean);
@@ -1004,142 +978,207 @@ begin
   if P = nil then
     exit; // avoid unexpected GPF in case of wrong usage
   P2 := P;
-  case IdemPPChar(P, @PARSEDHEADERS) of
-    0:
-      // 'CONTENT-'
-      case IdemPPChar(P + 8, @PARSEDHEADERS2) of
-        0:
-          begin
-            // 'CONTENT-LENGTH:'
-            inc(P, 16);
-            ContentLength := GetInt64(P);
-          end;
-        1:
-          begin
-            // 'CONTENT-TYPE:'
-            P := GotoNextNotSpace(P + 13);
-            if IdemPChar(P, 'APPLICATION/JSON') then
-              ContentType := JSON_CONTENT_TYPE_VAR
-            else
+  // standard headers are expected to be pure A-Z chars: fast lowercase search
+  // - or $20 makes conversion to a-z lowercase, but won't affect - / : chars
+  // - the worse case may be some false positive, which won't hurt
+  // - much less readable than cascaded IdemPPChar(), but slightly faster ;)
+  case PCardinal(P)^ or $20202020 of
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+        ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
+        // 'CONTENT-'
+        case PCardinal(P + 8)^ or $20202020 of
+          ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+            if PCardinal(P + 12)^ or $20202020 =
+              ord('t') + ord('h') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
             begin
-              GetTrimmed(P, ContentType);
-              if ContentType <> '' then
-                // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
-                HeadersUnFiltered := true;
+              // 'CONTENT-LENGTH:'
+              ContentLength := GetInt64(P + 16);
+              if not HeadersUnFiltered then
+                exit;
             end;
-          end;
-        2:
-          if Compress <> nil then
-          begin
-            // 'CONTENT-ENCODING:'
-            P := GotoNextNotSpace(P + 17);
-            P2 := P;
-            while P^ > ' ' do
-              inc(P); // no control char should appear in any header
-            len := P - P2;
-            if len <> 0 then
-              for i := 0 to length(Compress) - 1 do
-                if IdemPropNameU(Compress[i].Name, P2, len) then
-                begin
-                  CompressContentEncoding := i;
-                  break;
-                end;
-          end;
-      else
-        HeadersUnFiltered := true;
-      end;
-    1:
-      begin
+          ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+            if P[12] = ':' then
+            begin
+              // 'CONTENT-TYPE:'
+              P := GotoNextNotSpace(P + 13);
+              if (PCardinal(P)^ or $20202020 =
+                ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) and
+                 (PCardinal(P + 11)^ or $20202020 =
+                ord('/') + ord('j') shl 8 + ord('s') shl 16 + ord('o') shl 24) then
+              begin
+                // 'APPLICATION/JSON'
+                ContentType := JSON_CONTENT_TYPE_VAR;
+                if not HeadersUnFiltered then
+                  exit; // '' in headers means JSON for our REST server
+              end
+              else
+              begin
+                GetTrimmed(P, ContentType);
+                if ContentType = '' then
+                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+                  exit;
+              end;
+            end;
+          ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
+            if (Compress <> nil) and
+               (PCardinal(P + 12)^ or $20202020 =
+                ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+               (P[16] = ':') then
+            begin
+              // 'CONTENT-ENCODING:'
+              P := GotoNextNotSpace(P + 17);
+              P2 := P;
+              while P^ > ' ' do
+                inc(P); // no control char should appear in any header
+              len := P - P2;
+              if len <> 0 then
+                for i := 0 to length(Compress) - 1 do
+                  if IdemPropNameU(Compress[i].Name, P2, len) then
+                  begin
+                    CompressContentEncoding := i; // will handle e.g. gzip
+                    if not HeadersUnFiltered then
+                      exit;
+                    break;
+                  end;
+            end;
+        end;
+    ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if P[4] = ':' then
         // 'HOST:'
-        inc(P, 5);
-        GetTrimmed(P, Host);
-        HeadersUnFiltered := true; // may still be needed by some code
-      end;
-    2:
+        GetTrimmed(P + 5, Host);
+        // always add to headers - 'host:' sometimes parsed directly
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
+        (PCardinal(P + 8)^ or $20202020 =
+          ord('o') + ord('n') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
       begin
         // 'CONNECTION: '
         inc(P, 12);
-        case IdemPPChar(P, @PARSEDHEADERS3) of
-          0:
+        case PCardinal(P)^ or $20202020 of
+          ord('c') + ord('l') shl 8 + ord('o') shl 16 + ord('s') shl 24:
             begin
               // 'CONNECTION: CLOSE'
               include(HeaderFlags, hfConnectionClose);
-              inc(P, 5);
+              if not HeadersUnFiltered then
+                exit;
             end;
-          1:
-            // 'CONNECTION: UPGRADE'
-            include(HeaderFlags, hfConnectionUpgrade);
-          2:
+          ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+            begin
+              // 'CONNECTION: UPGRADE'
+              include(HeaderFlags, hfConnectionUpgrade);
+              if not HeadersUnFiltered then
+                exit;
+            end;
+          ord('k') + ord('e') shl 8 + ord('e') shl 16 + ord('p') shl 24:
+            if (PCardinal(P + 4)^ or $20202020 =
+                ord('-') + ord('a') shl 8 + ord('l') shl 16 + ord('i') shl 24) and
+               (PWord(P + 8)^ or $2020 = ord('v') + ord('e') shl 8) then
             begin
               // 'CONNECTION: KEEP-ALIVE'
               include(HeaderFlags, hfConnectionKeepAlive);
               inc(P, 10);
               if P^ = ',' then
               begin
-                P := GotoNextNotSpace(P + 1);
-                if IdemPChar(P, 'UPGRADE') then
+                repeat
+                  inc(P);
+                until P^ <= ' ';
+                if PCardinal(P)^ or $20202020 =
+                  ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24 then
                   // 'CONNECTION: KEEP-ALIVE, UPGRADE'
                   include(HeaderFlags, hfConnectionUpgrade);
               end;
+              if not HeadersUnFiltered then
+                exit;
             end;
-        else
-          HeadersUnFiltered := true;
         end;
       end;
-    3:
-      begin
-        // 'ACCEPT
-        if IdemPChar(P + 6, '-ENCODING:') then begin
-          inc(P, 17);
-          GetTrimmed(P, AcceptEncoding);
-        end
-        else //Accept:, Accept-Language: etc.
-          HeadersUnFiltered := true;
-      end;
-    4:
+    ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('c') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
+        begin
+           // 'ACCEPT-ENCODING:'
+          GetTrimmed(P + 17, AcceptEncoding);
+          if not HeadersUnFiltered then
+            exit;
+        end;
+    ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
       begin
         // 'USER-AGENT:'
-        inc(P, 11);
-        GetTrimmed(P, UserAgent);
+        GetTrimmed(P + 11, UserAgent);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    5:
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('t') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('n') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+        ord('t') + ord('a') shl 8 + ord('t') shl 16 + ord('e') shl 24) and
+         (P[20] = ':') then
       begin
         // 'SERVER-INTERNALSTATE:'
         inc(P, 21);
         ServerInternalState := GetCardinal(P);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    6:
+    ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
+         (PCardinal(P + 8)^ =
+        ord('1') + ord('0') shl 8 + ord('0') shl 16 + ord('-') shl 24) then
       begin
-        // 'X-POWERED-BY:'
-        inc(P, 13);
-        GetTrimmed(P, XPoweredBy);
+        // 'Expect: 100-continue'
+        include(HeaderFlags, hfExpect100);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    7:
-      // Expect: 100-continue
-      include(HeaderFlags, hfExpect100);
-    8:
-      begin
+    ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('n') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+        ord('e') + ord('a') shl 8 + ord('r') shl 16 + ord('e') shl 24) and
+         (PWord(P + 20)^ or $2020 = ord('r') + ord(' ') shl 8) then
         // 'AUTHORIZATION: BEARER '
-        inc(P, 22);
-        GetTrimmed(P, BearerToken, {nointern=}true);
-        if BearerToken <> '' then
-          // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
-          HeadersUnFiltered := true;
+        GetTrimmed(P + 22, BearerToken, {nointern=}true);
+        // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+    ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+        ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
+      begin
+        // 'UPGRADE:'
+        GetTrimmed(P + 8, Upgrade);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    9:
-      // 'UPGRADE:'
-      GetTrimmed(P + 8, Upgrade);
-    10:
-      // 'TRANSFER-ENCODING: CHUNKED'
-      include(HeaderFlags, hfTransferChunked);
-  else
-    // unrecognized name should be stored in Headers
-    HeadersUnFiltered := true;
+    ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
+      if IdemPChar(P + 4, 'SFER-ENCODING: CHUNKED') then
+      begin
+        // 'TRANSFER-ENCODING: CHUNKED'
+        include(HeaderFlags, hfTransferChunked);
+        if not HeadersUnFiltered then
+          exit;
+      end;
   end;
-  if not HeadersUnFiltered then
-    exit;
   // store meaningful headers into WorkBuffer, if not already there
-  Head.Append(P2, GotoNextControlChar(P) - P2);
+  Head.Append(P2, StrLen(P2));
   Head.AppendCRLF;
 end;
 
