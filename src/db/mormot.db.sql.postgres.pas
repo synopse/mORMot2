@@ -806,11 +806,11 @@ begin
     raise ESqlDBPostgres.CreateUtf8('%.ColumnToJson unexpected', [self]);
   with fColumns[Col] do
   begin
-    if PQ.GetIsNull(fRes, fCurrentRow, Col) = 1 then
+    P := PQ.GetValue(fRes, fCurrentRow, Col);
+    if (PUtf8Char(P)^ = #0) and (PQ.GetIsNull(fRes, fCurrentRow, Col) = 1) then
       W.AddNull
     else
     begin
-      P := PQ.GetValue(fRes, fCurrentRow, Col);
       case ColumnType of
         ftNull:
           W.AddNull;
