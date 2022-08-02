@@ -825,11 +825,11 @@ begin
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
-            W.AddNoJsonEscape(P, StrLen(P))
+            W.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col))
           else
           begin
             W.Add('"');
-            W.AddJsonEscape(P);
+            W.AddJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col));
             W.Add('"');
           end;
         ftDate:
