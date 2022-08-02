@@ -172,7 +172,7 @@ type
     // ! TMongoRequestQuery.Create('admin.$cmd','buildinfo',[],1)
     // will query   { buildinfo: 1 }  to the  admin.$cmd  collection, i.e.
     // $ admin.$cmd.findOne( { buildinfo: 1 } )
-    procedure BsonWriteParam(const paramDoc: variant);
+    procedure BsonWriteParam(const paramDoc: variant; const dbname: RawUtf8 = '');
     /// flush the content and return the whole binary encoded stream
     // - expect the TBsonWriter instance to have been created with reintroduced
     // Create() specific constructors inheriting from this TMongoRequest class
@@ -426,6 +426,8 @@ type
     ResponseFlags: integer;
   end;
 
+  PMongoMsgHeader = ^TMongoMsgHeader;
+
   /// map a MongoDB server reply message as sent by the database
   // - in response to TMongoRequestQuery / TMongoRequestGetMore messages
   // - you can use the record's methods to retrieve information about a given
@@ -442,7 +444,7 @@ type
     fRequestID: integer;
     fResponseTo: integer;
     fResponseFlags: TMongoReplyCursorFlags;
-    fCursorID: Int64;
+    {$IFNDEF MONGO_WIRE_MSG}fCursorID: Int64;{$ENDIF}
     fStartingFrom: integer;
     fNumberReturned: integer;
     fDocuments: TPointerDynArray;
@@ -573,8 +575,8 @@ type
     // TMongoRequestGetMore messages
     // - in the event that the result set of the query fits into one OP_REPLY
     // message, CursorID will be 0
-    property CursorID: Int64
-      read fCursorID;
+    {$IFNDEF MONGO_WIRE_MSG}property CursorID: Int64
+      read fCursorID;{$ENDIF}
     /// where in the cursor this reply is starting
     property StartingFrom: integer
       read fStartingFrom;
@@ -1846,7 +1848,7 @@ begin
   Write4(NumberToReturn);
   BsonWriteParam(Query);
   {$ELSE}
-  Write4(65536);
+  Write4(0);
   Write1(0);
   BsonWriteParam(Query, fDatabaseName);
   {$ENDIF}
@@ -1934,13 +1936,14 @@ var
   Len: integer;
 begin
   Len := length(ReplyMessage);
+  {$IFNDEF MONGO_WIRE_MSG}
   with PMongoReplyHeader(ReplyMessage)^ do
   begin
     if (Len < SizeOf(TMongoReplyHeader)) or
-       (Header.MessageLength <> Len) or
-       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len) then
+       (Header.MessageLength <> Len) (*or
+       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len)*) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
-    if Header.OpCode <> WIRE_OPCODES[opReply] then
+    if (Header.OpCode <> WIRE_OPCODES[opReply]) and (Header.OpCode <> WIRE_OPCODES[opMsg]) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
     fRequestID := requestID;
     fResponseTo := responseTo;
@@ -1949,12 +1952,31 @@ begin
     fStartingFrom := StartingFrom;
     fNumberReturned := NumberReturned;
   end;
+  {$ELSE}
+  with PMongoMsgHeader(ReplyMessage)^ do
+  begin
+    if (Len < SizeOf(TMongoReplyHeader)) or
+       (Header.MessageLength <> Len) (*or
+       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len)*) then
+      raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
+    if (Header.OpCode <> WIRE_OPCODES[opReply]) and (Header.OpCode <> WIRE_OPCODES[opMsg]) then
+      raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
+    fRequestID := requestID;
+    fResponseTo := responseTo;
+    byte(fResponseFlags) := ResponseFlags;
+    //fCursorID := CursorID;
+    //fStartingFrom := StartingFrom;
+    fNumberReturned := 1;
+  end;
+
+  {$ENDIF}
   fReply := ReplyMessage;
   {$IFNDEF MONGO_WIRE_MSG}
   fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
   {$ELSE}
   fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader)+1;
   {$ENDIF}
+
   Rewind;
   fLatestDocIndex := -1;
 end;
@@ -2132,9 +2154,9 @@ begin
   end;
   if WithHeader and
      (Mode = modMongoShell) then
-    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,CursorID:%,' +
+    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,'{$IFNDEF MONGO_WIRE_MSG}+'CursorID:%,'{$ENDIF} +
       'StartingFrom:%,NumberReturned:%,ReplyDocuments:[', [byte(ResponseFlags),
-      requestID, responseTo, CursorID, StartingFrom, DocumentCount]);
+      requestID, responseTo, {$IFNDEF MONGO_WIRE_MSG}CursorID,{$ENDIF} StartingFrom, DocumentCount]);
   Rewind;
   while Next(b) do
   begin
@@ -2345,7 +2367,7 @@ begin
       if count > 0 then
         dec(count, main.DocumentCount);
     end;
-    cursorID := main.CursorID;
+    cursorID := {$IFNDEF MONGO_WIRE_MSG}main.CursorID{$ELSE}0{$ENDIF};
     if cursorID <> 0 then
       if (Query.NumberToReturn = 0) or
          ((Query.NumberToReturn > 0) and
@@ -2363,7 +2385,7 @@ begin
               OnEachReply(Query, more, Opaque);
               dec(count, more.DocumentCount);
             end;
-            cursorID := more.CursorID;
+            {$IFNDEF MONGO_WIRE_MSG}cursorID := more.CursorID;{$ENDIF}
           finally
             getMore.Free;
           end;
@@ -2371,8 +2393,10 @@ begin
                (count <= 0)) or
               (cursorID = 0);
     if cursorID <> 0 then // if cursor not exhausted: need to kill it
+      {$IFNDEF MONGO_WIRE_MSG}
       SendAndFree(TMongoRequestKillCursor.Create(
         Query.FullCollectionName, [cursorID]), true);
+      {$ENDIF}
   finally
     Query.Free;
   end;
@@ -2522,9 +2546,9 @@ begin
       finally
         raise EMongoRequestException.CreateUtf8(RECV_ERROR, [self, 'hdr'], self, Request);
       end;
-      if Header.MessageLength > MONGODB_MAXMESSAGESIZE then
+      {if Header.MessageLength > MONGODB_MAXMESSAGESIZE then
         raise EMongoRequestException.CreateUtf8('%.GetReply: MessageLength=%',
-          [self, Header.MessageLength], self, Request);
+          [self, Header.MessageLength], self, Request);}
       SetLength(result, Header.MessageLength);
       PMongoWireHeader(result)^ := Header;
       DataLen := Header.MessageLength - SizeOf(Header);
@@ -3013,7 +3037,11 @@ begin
         'saslStart', 1,
         'mechanism', 'SCRAM-SHA-1',
         'payload', bson,
-        'autoAuthorize', 1]), res);
+        'autoAuthorize', 1
+        {$IFDEF MONGO_WIRE_MSG}
+        ,'$db', DatabaseName
+        {$ENDIF}
+        ]), res);
     CheckPayload;
     if err = '' then
     begin
@@ -3040,7 +3068,11 @@ begin
       DatabaseName, BsonVariant([
         'saslContinue', 1,
         'conversationId', res.conversationId,
-        'payload', bson]), res);
+        'payload', bson
+        {$IFDEF MONGO_WIRE_MSG}
+        ,'$db', DatabaseName
+        {$ENDIF}
+        ]), res);
     resp.Clear;
     CheckPayload;
     if (err = '') and
@@ -3056,7 +3088,11 @@ begin
         DatabaseName, BsonVariant([
            'saslContinue', 1,
            'conversationId', res.conversationId,
-           'payload', '']), res);
+           'payload', ''
+           {$IFDEF MONGO_WIRE_MSG}
+           ,'$db', DatabaseName
+           {$ENDIF}
+           ]), res);
       if (err = '') and
          not res.done then
         err := 'SASL conversation failed to complete';
