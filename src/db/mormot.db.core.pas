@@ -3471,8 +3471,6 @@ begin
   FieldCount := 0;
   DecodedRowID := 0;
   DecodedFieldTypesToUnnest := nil;
-  FillCharFast(FieldTypeApproximation, SizeOf(FieldTypeApproximation),
-    ord(ftaNumber{TID}));
   InlinedParams := Params;
   info.Json := P;
   if pointer(Fields) = nil then
@@ -3493,9 +3491,11 @@ begin
         FieldNamesL[0] := 5;
       end;
       Int64ToUtf8(RowID, FieldValues[0]);
+      FieldTypeApproximation[0] := ftaNumber;
       FieldCount := 1;
       DecodedRowID := RowID;
     end;
+    // parse all JSON fields and value, converting them to SQL values
     repeat
       if info.Json = nil then
         break;

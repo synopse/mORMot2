@@ -1989,8 +1989,7 @@ end;
 procedure TRestStorage.RecordVersionFieldHandle(Occasion: TOrmOccasion;
   var Decoder: TJsonObjectDecoder);
 begin
-  if fStoredClassRecordProps.RecordVersionField = nil then
-    exit;
+  // caller should ensure that fStoredClassRecordProps.RecordVersionField <> nil
   if fOwner = nil then
     raise ERestStorage.CreateUtf8('Owner=nil for %.%: TRecordVersion',
       [fStoredClass, fStoredClassRecordProps.RecordVersionField.Name]);

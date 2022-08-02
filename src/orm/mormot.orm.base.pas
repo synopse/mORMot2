@@ -2822,6 +2822,8 @@ type
     // - note: caller should have made Mutex.Lock
     procedure LockedFlushCacheEntry(Index: integer);
     /// flush cache for a given Value[]
+    procedure FlushCacheEntry(aID: TID);
+    /// flush cache for a given Value[]
     procedure FlushCacheEntries(const aID: array of TID);
     /// flush cache for all Value[]
     procedure FlushCacheAllEntries;
@@ -10394,6 +10396,18 @@ begin
         Json := '';
         Tag := 0;
       end;
+end;
+
+procedure TRestCacheEntry.FlushCacheEntry(aID: TID);
+begin
+  if not CacheEnable then
+    exit;
+  Mutex.Lock;
+  try
+    LockedFlushCacheEntry(Value.Find(aID));
+  finally
+    Mutex.UnLock;
+  end;
 end;
 
 procedure TRestCacheEntry.FlushCacheEntries(const aID: array of TID);

@@ -1078,10 +1078,6 @@ begin
                   // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
                   // be updated to >= 17.5.2
                   ParameterValue := pointer(@VInt64);
-                  // in case of "Invalid character value for cast specification" error
-                  // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
-                  // be updated to >= 17.5.2
-                  ParameterValue := pointer(@VInt64);
                 end;
               ftCurrency:
                 if VInOut = paramIn then

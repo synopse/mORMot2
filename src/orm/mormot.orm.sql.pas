@@ -1022,7 +1022,7 @@ procedure TRestStorageExternal.InternalBatchStop;
 var
   i, j, n, max, BatchBegin, BatchEnd, ValuesMax: PtrInt;
   Query: ISqlDBStatement;
-  NotifySQLEvent: TOrmEvent;
+  ev: TOrmEvent;
   SQL: RawUtf8;
   P: PUtf8Char;
   Fields, ExternalFields: TRawUtf8DynArray;
@@ -1077,7 +1077,8 @@ begin
                     // mPut=UPDATE with the supplied fields and ID set appart
                     Decode.DecodeInPlace(P, nil, pQuoted, 0, true);
                 end;
-                RecordVersionFieldHandle(Occasion, Decode);
+                if fStoredClassRecordProps.RecordVersionField <> nil then
+                  RecordVersionFieldHandle(Occasion, Decode);
                 if {%H-}Fields = nil then
                 begin
                   Decode.AssignFieldNamesTo(Fields);
@@ -1179,12 +1180,13 @@ begin
       if fBatchMethod in [mPost, mPut] then
       begin
         if fBatchMethod = mPost then
-          NotifySQLEvent := oeAdd
+          ev := oeAdd
         else
-          NotifySQLEvent := oeUpdate;
-        for i := 0 to fBatchCount - 1 do
-          Owner.InternalUpdateEvent(NotifySQLEvent,
-            fStoredClassProps.TableIndex, fBatchIDs[i], fBatchValues[i], nil, nil);
+          ev := oeUpdate;
+        if Owner.InternalUpdateEventNeeded(ev, fStoredClassProps.TableIndex) then
+          for i := 0 to fBatchCount - 1 do
+            Owner.InternalUpdateEvent(ev, fStoredClassProps.TableIndex,
+              fBatchIDs[i], fBatchValues[i], nil, nil);
       end;
       Owner.FlushInternalDBCache;
     end;
@@ -2071,7 +2073,8 @@ begin
         result := UpdatedID;
         exit;
       end;
-      RecordVersionFieldHandle(Occasion, Decoder);
+      if fStoredClassRecordProps.RecordVersionField <> nil then
+        RecordVersionFieldHandle(Occasion, Decoder);
       // compute SQL statement and associated bound parameters
       SQL := JsonDecodedPrepareToSql(
         Decoder, ExternalFields, Types, Occasion, [], {array=}false);

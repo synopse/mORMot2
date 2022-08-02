@@ -4261,6 +4261,12 @@ type
     // - this will flush the stored JSON content for this record (and table
     // settings will be kept)
     procedure Flush(aTable: TOrmClass; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// flush the cache for a given record
+    // - this will flush the stored JSON content for this record (and table
+    // settings will be kept)
+    procedure Flush(aTableIndex: PtrInt; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// flush the cache for a set of specified records
     // - this will flush the stored JSON content for these record (and table
     // settings will be kept)
@@ -4344,6 +4350,7 @@ type
     // - this method is dedicated for a record deletion
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// TRest instance shall call this method when records are deleted
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of TID); overload;
@@ -10796,7 +10803,15 @@ end;
 procedure TRestCache.Flush(aTable: TOrmClass; aID: TID);
 begin
   if self <> nil then
-    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries([aID]);
+    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntry(aID);
+end;
+
+procedure TRestCache.Flush(aTableIndex: PtrInt; aID: TID);
+begin
+  if self <> nil then
+    with fCache[aTableIndex] do
+      if CacheEnable then
+        FlushCacheEntry(aID);
 end;
 
 procedure TRestCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
@@ -10849,7 +10864,9 @@ begin
   if (self <> nil) and
      (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    fCache[aTableIndex].FlushCacheEntries([aID]);
+    with fCache[aTableIndex] do
+      if CacheEnable then
+        FlushCacheEntry(aID);
 end;
 
 procedure TRestCache.NotifyDeletions(aTableIndex: integer;
@@ -10858,7 +10875,9 @@ begin
   if (self <> nil) and
      (high(aIDs) >= 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    fCache[aTableIndex].FlushCacheEntries(aIDs);
+     with fCache[aTableIndex] do
+       if CacheEnable then
+         FlushCacheEntries(aIDs);
 end;
 
 procedure TRestCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
