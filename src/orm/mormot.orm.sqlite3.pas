@@ -2462,8 +2462,8 @@ begin
       if b^.Encoding = encPost then
         v := b^.Values[0]
       else // encSimple, encPostHex, encPostHexID
-        v := props.SaveFieldsFromJsonArray(
-          b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson]);
+        props.SaveFieldsFromJsonArray(
+          b^.Simples[0], b^.SimpleFields, nil, nil, [sfoExtendedJson], v);
       b^.Temp.Init(v);
       try
         fJsonDecoder.Decode(b^.Temp, nil, pInlined, b^.ID[0]);
@@ -2508,8 +2508,8 @@ begin
             begin
               if length(b^.Values) < b^.ValuesCount then
                 SetLength(b^.Values, b^.ValuesCount);
-              b^.Values[ndx] := props.SaveFieldsFromJsonArray(b^.Simples[ndx],
-                b^.SimpleFields, @b^.ID[ndx], nil, [sfoExtendedJson]);
+              props.SaveFieldsFromJsonArray(b^.Simples[ndx], b^.SimpleFields,
+                @b^.ID[ndx], nil, [sfoExtendedJson], b^.Values[ndx]);
               encoding := encPost;
             end;
           end

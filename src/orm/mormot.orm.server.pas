@@ -512,6 +512,7 @@ type
     fValueDirectFields: TFieldBits;
     fCounts: array[TRestBatchEncoding] of cardinal;
     fTimer: TPrecisionTimer;
+    fErrorMessage: RawUtf8;
     procedure AutomaticTransactionBegin;
     procedure AutomaticCommit;
     procedure ExecuteValueCheckIfRestChange;
@@ -2116,8 +2117,6 @@ begin
 end;
 
 procedure TRestOrmServerBatchSend.ParseValue;
-var
-  errmsg: RawUtf8;
 begin
   // retrieve next fValue/fValueID/fValueDirect content
   fValueID := 0; // no id is never transmitted with "SIMPLE" fields e.g.
@@ -2125,7 +2124,7 @@ begin
     encPost:
       begin
         // {"Table":[...,"POST",{object},...]} or [...,"POST@Table",{object},...]
-        fValue := JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, true);
+        JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, true, fValue);
         if (fParse.Json = nil) or
            (fValue = '') then
           raise EOrmBatchException.CreateUtf8(
@@ -2134,14 +2133,14 @@ begin
           raise EOrmBatchException.CreateUtf8(
             '%.EngineBatchSend: POST/Add not allowed on %',
             [self, fRunTable]);
-        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeAdd, @errmsg) then
+        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeAdd, @fErrorMessage) then
           raise EOrmBatchException.CreateUtf8(
-            '%.EngineBatchSend: POST impossible: %', [self, errmsg]);
+            '%.EngineBatchSend: POST impossible: %', [self, fErrorMessage]);
       end;
     encPut:
       begin
         // {"Table":[...,"PUT",{object},...]} or [...,"PUT@Table",{object},...]
-        fValue := JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, false);
+        JsonGetObject(fParse.Json, @fValueID, fParse.EndOfObject, false, fValue);
         if (fParse.Json = nil) or
            (fValue = '') or
            (fValueID <= 0) then
@@ -2164,9 +2163,9 @@ begin
           raise EOrmBatchException.CreateUtf8(
             '%.EngineBatchSend: DELETE not allowed on %',
             [self, fRunTable]);
-        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeDelete, @errmsg) then
+        if not fOrm.RecordCanBeUpdated(fRunTable, fValueID, oeDelete, @fErrorMessage) then
           raise EOrmBatchException.CreateUtf8(
-            '%.EngineBatchSend: DELETE impossible [%]', [self, errmsg]);
+            '%.EngineBatchSend: DELETE impossible [%]', [self, fErrorMessage]);
       end;
   else
     // encSimple/encPostHex/encPostHexID/encPutHexID = BATCH_DIRECT
@@ -2192,9 +2191,9 @@ begin
           fEncoding := encPut
         else
           fEncoding := encPost;
-        fValue := fOrm.Model.TableProps[fRunTableIndex].Props.
+        fOrm.Model.TableProps[fRunTableIndex].Props.
           SaveFieldsFromJsonArray(fParse.Json, fValueDirectFields,
-            @fValueID, @fParse.EndOfObject, fCommandDirectFormat);
+            @fValueID, @fParse.EndOfObject, fCommandDirectFormat, fValue);
         if (fParse.Json = nil) or
            (fValue = '') then
           raise EOrmBatchException.CreateUtf8(
@@ -2203,9 +2202,9 @@ begin
       if IsNotAllowed then
         raise EOrmBatchException.CreateUtf8(
           '%.EngineBatchSend: % not allowed on %', [self, fCommand, fRunTable]);
-      if not fOrm.RecordCanBeUpdated(fRunTable, 0, BATCH_EVENT[fEncoding], @errmsg) then
+      if not fOrm.RecordCanBeUpdated(fRunTable, 0, BATCH_EVENT[fEncoding], @fErrorMessage) then
         raise EOrmBatchException.CreateUtf8(
-          '%.EngineBatchSend: % impossible: %', [self, fCommand, errmsg]);
+          '%.EngineBatchSend: % impossible: %', [self, fCommand, fErrorMessage]);
     end;
   end;
 end;
@@ -2239,9 +2238,9 @@ begin
     if fEncoding in BATCH_DIRECT then
     begin
       // InternalBatchDirectOne format requires JSON object fallback
-      fValue := fOrm.Model.TableProps[fRunTableIndex].Props.
+      fOrm.Model.TableProps[fRunTableIndex].Props.
         SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID,
-          nil, fCommandDirectFormat);
+          nil, fCommandDirectFormat, fValue);
       if fEncoding = encPutHexID then
         fEncoding := encPut
       else

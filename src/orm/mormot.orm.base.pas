@@ -3052,8 +3052,9 @@ type
       EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     /// convert a JSON array of simple field values into a matching JSON object
-    function SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
-      ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
+    procedure SaveFieldsFromJsonArray(var P: PUtf8Char; const Bits: TFieldBits;
+      ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject;
+      out JsonObject: RawUtf8);
 
     /// add a custom unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
@@ -10777,13 +10778,13 @@ end;
 function TOrmPropertiesAbstract.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
   ID: PID; EndOfObject: PAnsiChar; Format: TSaveFieldsAsObject): RawUtf8;
 begin
-  result := SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
-    ID, EndOfObject, Format);
+  SaveFieldsFromJsonArray(P, SimpleFieldsBits[ooInsert],
+    ID, EndOfObject, Format, result);
 end;
 
-function TOrmPropertiesAbstract.SaveFieldsFromJsonArray(var P: PUtf8Char;
+procedure TOrmPropertiesAbstract.SaveFieldsFromJsonArray(var P: PUtf8Char;
   const Bits: TFieldBits; ID: PID; EndOfObject: PAnsiChar;
-  Format: TSaveFieldsAsObject): RawUtf8;
+  Format: TSaveFieldsAsObject; out JsonObject: RawUtf8);
 var
   i: PtrInt;
   decoded: TID;
@@ -10792,7 +10793,6 @@ var
   info: TGetJsonField;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
   info.Json := P;
   if info.Json = nil then
     exit;
@@ -10842,7 +10842,7 @@ begin
       W.AddPropInt64('ID', decoded);
     W.CancelLastComma;
     W.Add('}');
-    W.SetText(result);
+    W.SetText(JsonObject);
   finally
     W.Free;
   end;
