@@ -2400,45 +2400,38 @@ end;
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc
-        not     eax
         test    len, len
-        jz      @0
+        jz      @z
         test    buf, buf
-        jz      @0
-        jmp     @align
-@7:     crc32   eax, byte ptr [buf]
-        add     buf, 1
-        sub     len, 1
-        jz      @0
-@align: test    buf, 7
-        jnz     @7
+        jz      @z
+        not     eax
         mov     ecx, len
         shr     len, 3
-        jnz     @s
-@2:     test    cl, 4
-        jz      @3
+        jnz     @by8 // we don't care for read alignment
+@0:     test    cl, 4
+        jz      @4
         crc32   eax, dword ptr [buf]
         add     buf, 4
-@3:     test    cl, 2
-        jz      @1
+@4:     test    cl, 2
+        jz      @2
         crc32   eax, word ptr [buf]
         add     buf, 2
-@1:     test    cl, 1
-        jz      @0
+@2:     test    cl, 1
+        jz      @1
         crc32   eax, byte ptr [buf]
-@0:     not     eax
-        ret
+@1:     not     eax
+@z:     ret
         {$ifdef FPC}
         align 16
-@s:     crc32   rax, qword ptr [buf] // hash 8 bytes per loop
+@by8:   crc32   rax, qword ptr [buf] // hash 8 bytes per loop
         {$else}
-       .align 16
-@s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+        .align 16
+@by8:   db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif FPC}
         add     buf, 8
         sub     len, 1
-        jnz     @s
-        jmp     @2
+        jnz     @by8
+        jmp     @0
 end;
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
