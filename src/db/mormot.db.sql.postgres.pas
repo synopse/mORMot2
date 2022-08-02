@@ -817,10 +817,10 @@ begin
       case ColumnType of
         ftNull:
           W.AddNull;
-        // note: StrLen is slightly faster than PQ.GetLength for small content
         ftInt64,
         ftDouble,
         ftCurrency:
+          // note: StrLen is slightly faster than PQ.GetLength for small content
           W.AddNoJsonEscape(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
@@ -829,7 +829,7 @@ begin
           else
           begin
             W.Add('"');
-            W.AddJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col));
+            W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
             W.Add('"');
           end;
         ftDate:
