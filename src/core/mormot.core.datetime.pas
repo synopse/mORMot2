@@ -2330,7 +2330,7 @@ begin
 end;
 
 var
-  _HttpDateNowUtc: TShort63;
+  _HttpDateNowUtc: string[39];  // consume 37 chars
   _HttpDateNowUtcLock: TLightLock;
   _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
 

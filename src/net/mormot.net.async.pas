@@ -797,7 +797,7 @@ type
     fConnectionsClass: THttpAsyncConnectionsClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
-    fHttpDateNowUtc: TShort63;
+    fHttpDateNowUtc: string[39]; // consume 37 chars
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
@@ -3339,9 +3339,10 @@ begin
     fHttpDateNowUtc := tmp; // (almost) atomic set
   end;
   // clean interned HTTP headers every 16 secs
-  if fInterning <> nil then
+  if (fInterning <> nil) and
+     (fAsync <> nil) then
   begin
-    tix := GetTickCount64 shr 14;
+    tix := fAsync.LastOperationSec shr 4;
     if (fInterning^.Count > 1000) or // is the slot highly used (DDos?)
        (fInterningTix <> tix) then
     begin

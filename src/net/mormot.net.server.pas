@@ -520,14 +520,14 @@ type
   protected
     fServerKeepAliveTimeOut: cardinal;
     fServerKeepAliveTimeOutSec: cardinal;
+    fHeaderRetrieveAbortDelay: cardinal;
+    fCompressGz: integer;
     fSockPort: RawUtf8;
     fSock: TCrtSocket;
     fSafe: TLightLock;
     fExecuteMessage: RawUtf8;
-    fHeaderRetrieveAbortDelay: cardinal;
     fNginxSendFileFrom: array of TFileName;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fCompressGz: integer;
     function DoRequest(Ctxt: THttpServerRequest): boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
