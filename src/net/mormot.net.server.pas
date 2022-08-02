@@ -162,6 +162,7 @@ type
     function NextConnectionID: integer; // 31-bit internal sequence
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
+    procedure AppendHttpDate(var Dest: TRawByteStringBuffer); virtual;
   public
     /// initialize the server instance
     constructor Create(const OnStart, OnStop: TOnNotifyThread;
@@ -1427,7 +1428,7 @@ begin
   h^.Append(fServer.ServerName);
   h^.AppendCRLF;
   if hsoIncludeDateHeader in fServer.Options then
-    h^.AppendShort(HttpDateNowUtc);
+    fServer.AppendHttpDate(h^);
   if not (hsoNoXPoweredHeader in fServer.Options) then
     h^.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
   Context.Content := OutContent;
@@ -1525,6 +1526,11 @@ begin
   if RemoteConnID = 0 then
     // fallback to 31-bit sequence
     RemoteConnID := NextConnectionID;
+end;
+
+procedure THttpServerGeneric.AppendHttpDate(var Dest: TRawByteStringBuffer);
+begin
+  Dest.AppendShort(HttpDateNowUtc);
 end;
 
 function THttpServerGeneric.CanNotifyCallback: boolean;

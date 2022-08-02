@@ -28,6 +28,7 @@ uses
   mormot.core.text,
   mormot.core.unicode,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.threads,
   mormot.core.log,
   mormot.core.rtti,
@@ -796,10 +797,12 @@ type
     fConnectionsClass: THttpAsyncConnectionsClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
+    fHttpDateNowUtc: TShort63;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
     procedure IdleEverySecond; virtual;
+    procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
     // the main thread will Send output packets in the background
     procedure Execute; override;
   public
@@ -3325,7 +3328,16 @@ end;
 procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
+  T: TSynSystemTime;
+  tmp: shortstring;
 begin
+  // no need to use the global HttpDateNowUtc and its GetTickCount64 API call
+  if hsoIncludeDateHeader in fOptions then
+  begin
+    T.FromNowUtc;
+    T.ToHttpDate(tmp, 'GMT'#13#10, 'Date: ');
+    fHttpDateNowUtc := tmp; // (almost) atomic set
+  end;
   // clean interned HTTP headers every 16 secs
   if fInterning <> nil then
   begin
@@ -3342,6 +3354,11 @@ begin
       fInterningTix := tix;
     end;
   end;
+end;
+
+procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
+begin
+  Dest.AppendShort(fHttpDateNowUtc); // set by IdleEverySecond
 end;
 
 function THttpAsyncServer.GetHttpQueueLength: cardinal;
@@ -3369,6 +3386,7 @@ begin
     try
       fSock := fAsync.fServer;
       fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
+      IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
       tix := GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between

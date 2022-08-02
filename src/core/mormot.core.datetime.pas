@@ -438,7 +438,10 @@ type
     // "Date", "Expires" or "Last-Modified" HTTP header
     // - handle UTC/GMT time zone by default, and allow a 'Date: ' prefix
     procedure ToHttpDate(out text: RawUtf8; const tz: RawUtf8 = 'GMT';
-      const prefix: RawUtf8 = '');
+      const prefix: RawUtf8 = ''); overload;
+    /// convert the stored date and time to its text in HTTP-like format
+    procedure ToHttpDate(var text: shortstring; const tz: RawUtf8 = 'GMT';
+      const prefix: RawUtf8 = ''); overload;
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
     procedure ToIsoDateTime(out text: RawUtf8; const FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date into its Iso-8601 text with no time part
@@ -2038,10 +2041,18 @@ begin
 end;
 
 procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz, prefix: RawUtf8);
+var
+  tmp: shortstring;
+begin
+  ToHttpDate(tmp, tz, prefix);
+  FastSetString(text, @tmp[1], ord(tmp[0]));
+end;
+
+procedure TSynSystemTime.ToHttpDate(var text: shortstring; const tz, prefix: RawUtf8);
 begin
   if DayOfWeek = 0 then
     PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
-  FormatUtf8('%%, % % % %:%:% %', [
+  FormatShort('%%, % % % %:%:% %', [
     prefix,
     HTML_WEEK_DAYS[DayOfWeek],
     UInt2DigitsToShortFast(Day),
@@ -2323,27 +2334,24 @@ var
   _HttpDateNowUtcLock: TLightLock;
   _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
 
-procedure SetHttpDateNowUtc(tix: cardinal);
-var
-  T: TSynSystemTime;
-  now: RawUtf8; // use a temp variable for _HttpDateNowUtc atomic set
-begin
-  _HttpDateNowUtcLock.UnLock;
-  T.FromNowUtc;
-  T.ToHttpDate(now, 'GMT'#13#10, 'Date: ');
-  _HttpDateNowUtcLock.Lock;
-  _HttpDateNowUtcTix := tix;
-  SetString(_HttpDateNowUtc, PAnsiChar(pointer(now)), length(now));
-end;
-
 function HttpDateNowUtc: TShort63;
 var
   c: cardinal;
+  T: TSynSystemTime;
+  now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   c := GetTickCount64 shr 10;
   _HttpDateNowUtcLock.Lock;
   if c <> _HttpDateNowUtcTix then
-    SetHttpDateNowUtc(c);
+  begin
+    _HttpDateNowUtcLock.UnLock;
+    T.FromNowUtc;
+    T.ToHttpDate(now, 'GMT'#13#10, 'Date: ');
+    c := GetTickCount64 shr 10;
+    _HttpDateNowUtcLock.Lock;
+    _HttpDateNowUtcTix := c;
+    _HttpDateNowUtc := now;
+  end;
   MoveFast(_HttpDateNowUtc[0], result[0], ord(_HttpDateNowUtc[0]) + 1);
   _HttpDateNowUtcLock.UnLock;
 end;

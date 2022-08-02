@@ -5756,7 +5756,7 @@ begin
   Len := Engine.AnsiBufferToUtf8(tmp.Init(Len * 3), P, Len) - PUtf8Char({%H-}tmp.buf);
   W.AddNoJsonEscape(tmp.buf, Len);
   tmp.Done;
-end;
+end;{%H-}
 
 procedure TTextWriter.AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
 var
@@ -9136,7 +9136,7 @@ begin
       if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
         // simple varByRef
         VariantToUtf8(Variant(tmp), result, wasString)
-      else if vt = varVariantByRef then
+      else if vt = varVariantByRef then{%H-}
         // complex varByRef
         VariantToUtf8(PVariant(VPointer)^, result, wasString)
       else if vt = varStringByRef then
