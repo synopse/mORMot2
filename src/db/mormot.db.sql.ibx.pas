@@ -1000,7 +1000,10 @@ begin
         begin
           W.Add('"');
           if CodePage = CP_UTF8 then
-            W.AddJsonEscape(data, len)
+          begin
+            if len <> 0 then // otherwise AddJsonEscape() uses StrLen(data)
+              W.AddJsonEscape(data, len);
+          end
           else
           begin
             s := fResults[Col].AsString;

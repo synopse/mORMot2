@@ -778,7 +778,7 @@ begin
           begin
             W.Add('"');
           {$ifndef UNICODE}
-            if ColumnValueDBType=IsTWideStringField then
+            if ColumnValueDBType = IsTWideStringField then
               W.AddJsonEscapeW(Pointer(TWideStringField(ColumnAttr).Value))
             else
           {$endif UNICODE}

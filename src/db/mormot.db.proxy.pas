@@ -1407,8 +1407,9 @@ begin
           begin
             len := FromVarUInt32(Reader);
             if not IgnoreColumnDataSize then
-              if len > fColumns[F].ColumnDataSize then
-                fColumns[F].ColumnDataSize := len;
+              with fColumns[F] do
+                if len > ColumnDataSize then
+                  ColumnDataSize := len;
             inc(Reader, len); // jump string/blob content
           end;
       else
@@ -1447,7 +1448,8 @@ begin
         begin
           W.Add('"');
           len := FromVarUInt32(data);
-          W.AddJsonEscape(data, len);
+          if len <> 0 then // otherwise W.AddJsonEscape() uses StrLen(data)
+            W.AddJsonEscape(data, len);
           W.Add('"');
         end;
       ftBlob:

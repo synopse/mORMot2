@@ -1120,7 +1120,8 @@ Write:case c^.ColumnType of
         ftUtf8:
           begin
             W.Add('"');
-            W.AddJsonEscapeW(ColPtr(C, V), V^.Length shr 1);
+            if V^.Length > 1 then
+              W.AddJsonEscapeW(ColPtr(C, V), V^.Length shr 1);
             W.Add('"');
           end;
         ftBlob:

@@ -8775,7 +8775,7 @@ begin
           ftDouble,
           ftCurrency:
 nostr:      {$ifdef NOTORMTABLELEN}
-            W.AddNoJsonEscape(U, StrLen(U));
+            W.AddNoJsonEscape(U, StrLen(U)); // StrLen() is fast enough
             {$else}
             W.AddNoJsonEscape(U, fLen[o]);
             {$endif NOTORMTABLELEN}
