@@ -2393,6 +2393,11 @@ procedure Int64ToHexShort(aInt64: Int64; out result: TShort16); overload;
 // - such result type would avoid a string allocation on heap
 function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 
+/// fast conversion for up to 256-bit of little-endian input into non-zero hexa
+// - Len should be <= 32 bytes, to fit in a TShort64 result
+// - use internally DisplayMinChars() and BinToHexDisplay()
+function ToHexShort(P: pointer; Len: PtrInt): TShort64;
+
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally DisplayMinChars() and BinToHexDisplay()
 function Int64ToHexLower(aInt64: Int64): RawUtf8; overload;
@@ -10562,6 +10567,15 @@ function Int64ToHexShort(aInt64: Int64): TShort16;
 begin
   result[0] := AnsiChar(SizeOf(aInt64) * 2);
   BinToHexDisplay(@aInt64, @result[1], SizeOf(aInt64));
+end;
+
+function ToHexShort(P: pointer; Len: PtrInt): TShort64;
+begin
+  if Len > 32 then
+    Len := 32;
+  Len := DisplayMinChars(p, Len);
+  result[0] := AnsiChar(Len);
+  BinToHexDisplay(P, @result[1], Len);
 end;
 
 function Int64ToHexLower(aInt64: Int64): RawUtf8;

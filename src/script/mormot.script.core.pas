@@ -662,7 +662,7 @@ begin
     if Assigned(fManager.fOnGetName) then
       fNameForDebug := fManager.fOnGetName(self);
     if fNameForDebug = '' then
-      FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
+      FormatUtf8('% %', [ToHexShort(@fThreadId, SizeOf(fThreadId)),
         CurrentThreadName], fNameForDebug);
     if Assigned(fManager.fOnGetWebAppRootPath) then
       fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
