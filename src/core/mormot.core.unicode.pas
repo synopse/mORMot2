@@ -6897,16 +6897,16 @@ end;
 
 
 const
-  // reference 8-bit upper chars as in WinAnsi / code page 1252
-  WinAnsiToUp: array[138..255] of byte =
-    (83, 139, 140, 141, 90, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
-     153, 83, 155, 140, 157, 90, 89, 160, 161, 162, 163, 164, 165, 166, 167,
-     168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181,
-     182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 65, 65, 65, 65, 65,
-     65, 198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
-     79, 215, 79, 85, 85, 85, 85, 89, 222, 223, 65, 65, 65, 65, 65, 65,
-     198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
-     79, 247, 79, 85, 85, 85, 85, 89, 222, 89);
+  // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
+  WinAnsiToUp: array[138..255] of byte = (
+    83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
+    153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
+    168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
+    183, 184, 185, 186, 187, 188, 189, 190, 191, 65,  65,  65,  65,  65,  65,
+    198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,  79,  79,
+    79,  79,  215, 79,  85,  85,  85,  85,  89,  222, 223, 65,  65,  65,  65,
+    65,  65,  198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,
+    79,  79,  79,  79,  247, 79,  85,  85,  85,  85,  89,  222, 89);
 
 {$ifdef UU_COMPRESSED}
 
@@ -6991,6 +6991,10 @@ var
   i: PtrInt;
   c: AnsiChar;
 begin
+  // decompress 1KB static in the exe into 20KB UU[] array for Unicode Uppercase
+  {$ifdef UU_COMPRESSED}
+  InitializeUU;
+  {$endif UU_COMPRESSED}
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
     NormToNormByte[i] := i;
@@ -7052,9 +7056,6 @@ end;
 
 
 initialization
-  {$ifdef UU_COMPRESSED}
-  InitializeUU;
-  {$endif UU_COMPRESSED}
   InitializeUnit;
 
 
