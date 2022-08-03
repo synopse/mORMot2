@@ -4454,8 +4454,10 @@ var
   Lp, Ls: PtrInt;
   D: PUtf8Char;
 begin
-  if (P = nil) or
-     (PLen <= 0) then
+  if ((P = nil) or
+      (PLen <= 0)) and
+     (aPrefix = '') and
+     (aSuffix = '') then
     result := '""'
   else if (pointer(result) = pointer(P)) or
           NeedsJsonEscape(P, PLen) then
