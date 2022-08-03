@@ -516,11 +516,14 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
 
+type
+  THttpDateNowUtc = string[37];
+
 /// returns the current UTC timestamp as the full 'Date' HTTP header line
 // - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
 // - returns as a shortstring to avoid a memory allocation by caller
 // - use an internal cache for every second refresh
-function HttpDateNowUtc: TShort63;
+function HttpDateNowUtc: THttpDateNowUtc;
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -2330,11 +2333,11 @@ begin
 end;
 
 var
-  _HttpDateNowUtc: string[39];  // consume 37 chars
+  _HttpDateNowUtc: THttpDateNowUtc;
   _HttpDateNowUtcLock: TLightLock;
   _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
 
-function HttpDateNowUtc: TShort63;
+function HttpDateNowUtc: THttpDateNowUtc;
 var
   c: cardinal;
   T: TSynSystemTime;

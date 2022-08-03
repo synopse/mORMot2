@@ -172,7 +172,7 @@ type
     // ! TMongoRequestQuery.Create('admin.$cmd','buildinfo',[],1)
     // will query   { buildinfo: 1 }  to the  admin.$cmd  collection, i.e.
     // $ admin.$cmd.findOne( { buildinfo: 1 } )
-    procedure BsonWriteParam(const paramDoc: variant; const dbname: RawUtf8 = '');
+    procedure BsonWriteParam(const paramDoc: variant; const DbName: RawUtf8 = '');
     /// flush the content and return the whole binary encoded stream
     // - expect the TBsonWriter instance to have been created with reintroduced
     // Create() specific constructors inheriting from this TMongoRequest class
@@ -419,13 +419,13 @@ type
   // ! PMongoReplyHeader(aMongoReply)^.RequestID
   PMongoReplyHeader = ^TMongoReplyHeader;
   
+  /// internal low-level binary structure mapping the Msg header
   TMongoMsgHeader = packed record
     /// standard message header
     Header: TMongoWireHeader;
     /// response flags
     ResponseFlags: integer;
   end;
-
   PMongoMsgHeader = ^TMongoMsgHeader;
 
   /// map a MongoDB server reply message as sent by the database
@@ -1680,12 +1680,12 @@ begin
   Write4(WIRE_OPCODES[opCode]);
 end;
 
-procedure TMongoRequest.BsonWriteParam(const paramDoc: variant; const dbname: RawUtf8 = '');
+procedure TMongoRequest.BsonWriteParam(const paramDoc: variant; const DbName: RawUtf8);
 begin
   if TVarData(paramDoc).VType = varVariantByRef then
     BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^)
   else if VarIsStr(paramDoc) then
-    BsonWriteProjection(VariantToUtf8(paramDoc), dbname)
+    BsonWriteProjection(VariantToUtf8(paramDoc), DbName)
   else if (TVarData(paramDoc).VType = BsonVariantType.VarType) and
           (TBsonVariantData(paramDoc).VKind in [betDoc, betArray]) and
           (TBsonVariantData(paramDoc).VBlob <> nil) then
@@ -1940,10 +1940,10 @@ begin
   with PMongoReplyHeader(ReplyMessage)^ do
   begin
     if (Len < SizeOf(TMongoReplyHeader)) or
-       (Header.MessageLength <> Len) (*or
-       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len)*) then
+       (Header.MessageLength <> Len) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
-    if (Header.OpCode <> WIRE_OPCODES[opReply]) and (Header.OpCode <> WIRE_OPCODES[opMsg]) then
+    if (Header.OpCode <> WIRE_OPCODES[opReply]) and 
+       (Header.OpCode <> WIRE_OPCODES[opMsg]) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
     fRequestID := requestID;
     fResponseTo := responseTo;
@@ -1956,25 +1956,22 @@ begin
   with PMongoMsgHeader(ReplyMessage)^ do
   begin
     if (Len < SizeOf(TMongoReplyHeader)) or
-       (Header.MessageLength <> Len) (*or
-       (SizeOf(TMongoReplyHeader) + NumberReturned * 5 > Len)*) then
+       (Header.MessageLength <> Len) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
-    if (Header.OpCode <> WIRE_OPCODES[opReply]) and (Header.OpCode <> WIRE_OPCODES[opMsg]) then
+    if (Header.OpCode <> WIRE_OPCODES[opReply]) and
+       (Header.OpCode <> WIRE_OPCODES[opMsg]) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
     fRequestID := requestID;
     fResponseTo := responseTo;
     byte(fResponseFlags) := ResponseFlags;
-    //fCursorID := CursorID;
-    //fStartingFrom := StartingFrom;
     fNumberReturned := 1;
   end;
-
   {$ENDIF}
   fReply := ReplyMessage;
   {$IFNDEF MONGO_WIRE_MSG}
   fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
   {$ELSE}
-  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader)+1;
+  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader) + 1;
   {$ENDIF}
 
   Rewind;
@@ -2154,9 +2151,11 @@ begin
   end;
   if WithHeader and
      (Mode = modMongoShell) then
-    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,'{$IFNDEF MONGO_WIRE_MSG}+'CursorID:%,'{$ENDIF} +
+    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,'
+      {$IFNDEF MONGO_WIRE_MSG} + 'CursorID:%,' {$ENDIF} +
       'StartingFrom:%,NumberReturned:%,ReplyDocuments:[', [byte(ResponseFlags),
-      requestID, responseTo, {$IFNDEF MONGO_WIRE_MSG}CursorID,{$ENDIF} StartingFrom, DocumentCount]);
+      requestID, responseTo, {$IFNDEF MONGO_WIRE_MSG}CursorID,{$ENDIF}
+      StartingFrom, DocumentCount]);
   Rewind;
   while Next(b) do
   begin
@@ -2546,7 +2545,7 @@ begin
       finally
         raise EMongoRequestException.CreateUtf8(RECV_ERROR, [self, 'hdr'], self, Request);
       end;
-      {if Header.MessageLength > MONGODB_MAXMESSAGESIZE then
+      {if Header.MessageLength > MONGODB_MAXMESSAGESIZE then not needed with MONGO_WIRE_MSG
         raise EMongoRequestException.CreateUtf8('%.GetReply: MessageLength=%',
           [self, Header.MessageLength], self, Request);}
       SetLength(result, Header.MessageLength);

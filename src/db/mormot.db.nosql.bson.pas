@@ -812,7 +812,7 @@ type
     // - this method wil be faster than using a BsonWriteDoc(_ObjFast(...))
     procedure BsonWriteObject(const NameValuePairs: array of const);
     /// write a projection specified as fieldname:1 pairs as a BSON document
-    procedure BsonWriteProjection(const FieldNamesCsv: RawUtf8; const dbname: RawUtf8 = '');
+    procedure BsonWriteProjection(const FieldNamesCsv: RawUtf8; const DbName: RawUtf8 = '');
     /// write an object as query parameter
     // - will handle all SQL operators, including IN (), IS NULL or LIKE
     // - see @http://docs.mongodb.org/manual/reference/operator/query
@@ -2886,7 +2886,8 @@ begin
     ord(betDeprecatedSymbol):
       begin
         W.Add('"');
-        W.AddJsonEscape(Data.Text, Data.TextLen);
+        if Data.TextLen <> 0 then // otherwise AddJsonEscape() calls StrLen()
+          W.AddJsonEscape(Data.Text, Data.TextLen);
         W.Add('"');
       end;
     ord(betDoc),
@@ -3670,7 +3671,7 @@ begin
   BsonDocumentEnd;
 end;
 
-procedure TBsonWriter.BsonWriteProjection(const FieldNamesCsv: RawUtf8; const dbname: RawUtf8 = '');
+procedure TBsonWriter.BsonWriteProjection(const FieldNamesCsv, DbName: RawUtf8);
 var
   FieldNames: TRawUtf8DynArray;
   i: PtrInt;
@@ -3679,8 +3680,8 @@ begin
   BsonDocumentBegin;
   for i := 0 to high(FieldNames) do
     BsonWrite(FieldNames[i], 1);
-  if dbname <> '' then
-    BsonWriteUtf8('$db', dbname);
+  if DbName <> '' then
+    BsonWriteUtf8('$db', DbName);
   BsonDocumentEnd;
 end;
 
