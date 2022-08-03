@@ -63,7 +63,8 @@ type
   // - opGetMore: get more data from a previous query
   // - opDelete: delete documents
   // - opKillCursors: notify database client is done with a cursor
-  // - opMsg: new OP_MSG layout introduced in MongoDB 3.6
+  // - opMsg: new OP_MSG layout introduced in MongoDB 3.6 - replaces all other
+  // opcodes, which are deprecated since 5.0, and removed since 5.1/6.0
   TMongoOperation = (
     opReply,
     opMsgOld,
@@ -74,6 +75,60 @@ type
     opDelete,
     opKillCursors,
     opMsg);
+
+  {$ifdef MONGO_OLDPROTOCOL}
+
+  /// define how an opQuery operation will behave
+  // - if mqfTailableCursor is set, cursor is not closed when the last data
+  // is retrieved
+  // - if mqfSlaveOk is set, it will allow query of replica slave; normally
+  // this returns an error except for namespace "local"
+  // - mqfOplogReplay is internal replication use only - driver should not set
+  // - if mqfNoCursorTimeout is set, the server normally does not times out
+  // idle cursors after an inactivity period (10 minutes) to prevent
+  // excess memory use
+  // - if mqfAwaitData is to use with TailableCursor. If we are at the end
+  // of the data, block for a while rather than returning no data. After a
+  // timeout period, we do return as normal
+  // - if mqfExhaust is set, stream the data down full blast in multiple "more"
+  // packages, on the assumption that the client will fully read all data queried
+  // - if mqfPartial is set, it will get partial results from a mongos if
+  // some shards are down (instead of throwing an error)
+  TMongoQueryFlag = (
+    mqfTailableCursor = 1,
+    mqfSlaveOk,
+    mqfOplogReplay,
+    mqfNoCursorTimeout,
+    mqfAwaitData,
+    mqfExhaust,
+    mqfPartial);
+
+  /// define how a TMongoRequestQuery message will behave
+  TMongoQueryFlags = set of TMongoQueryFlag;
+
+  {$else}
+
+  /// flags that modify the format and behavior of opMsg execution content
+  // - mmfChecksumPresent indicates that a crc32c checksum is supplied
+  // - mmfMoreToCome is set when another message will follow this one without
+  // further action from the receiver. The receiver MUST NOT send another
+  // message until receiving one with mmfMoreToCome is not set as sends may
+  // block, causing deadlock. Requests with the mmfMoreToCome flag set will not
+  // receive a reply. Replies will only have this set in response to requests
+  // with the mmfExhaustAllowed bit set.
+  // - mmfExhaustAllowed indicates the client supports the mmfMoreToCome flag
+  // (currently never set, because we don't support it yet)
+  // - by definition, is used for TMongoQueryFlags and TMongoReplyCursorFlags
+  TMongoMsgFlag = (
+    mmfChecksumPresent,
+    mmfMoreToCome,
+    mmfExhaustAllowed = 16);
+  TMongoMsgFlags = set of TMongoMsgFlag;
+
+  TMongoQueryFlags = TMongoMsgFlags;
+  TMongoReplyCursorFlags = TMongoMsgFlags;
+
+  {$endif MONGO_OLDPROTOCOL}
 
   /// define how an opUpdate operation will behave
   // - if mufUpsert is set, the database will insert the supplied object into
@@ -108,34 +163,6 @@ type
 
   /// define how a TMongoRequestDelete message will behave
   TMongoDeleteFlags = set of TMongoDeleteFlag;
-
-  /// define how an opQuery operation will behave
-  // - if mqfTailableCursor is set, cursor is not closed when the last data
-  // is retrieved
-  // - if mqfSlaveOk is set, it will allow query of replica slave; normally
-  // this returns an error except for namespace "local"
-  // - mqfOplogReplay is internal replication use only - driver should not set
-  // - if mqfNoCursorTimeout is set, the server normally does not times out
-  // idle cursors after an inactivity period (10 minutes) to prevent
-  // excess memory use
-  // - if mqfAwaitData is to use with TailableCursor. If we are at the end
-  // of the data, block for a while rather than returning no data. After a
-  // timeout period, we do return as normal
-  // - if mqfExhaust is set, stream the data down full blast in multiple "more"
-  // packages, on the assumption that the client will fully read all data queried
-  // - if mqfPartial is set, it will get partial results from a mongos if
-  // some shards are down (instead of throwing an error)
-  TMongoQueryFlag = (
-    mqfTailableCursor = 1,
-    mqfSlaveOk,
-    mqfOplogReplay,
-    mqfNoCursorTimeout,
-    mqfAwaitData,
-    mqfExhaust,
-    mqfPartial);
-
-  /// define how a TMongoRequestQuery message will behave
-  TMongoQueryFlags = set of TMongoQueryFlag;
 
   /// abstract class used to create MongoDB Wire Protocol client messages
   // - see http://docs.mongodb.org/meta-driver/latest/legacy/mongodb-wire-protocol
@@ -329,6 +356,8 @@ type
       read fNumberToSkip;
   end;
 
+  {$ifdef MONGO_OLDPROTOCOL}
+
   /// a MongoDB client message to continue the query of one or more documents
   // in a collection, after a TMongoRequestQuery message
   TMongoRequestGetMore = class(TMongoRequest)
@@ -362,27 +391,11 @@ type
     procedure ToJson(W: TJsonWriter; Mode: TMongoJsonMode); override;
   end;
 
+  {$endif MONGO_OLDPROTOCOL}
 
   /// used to store the binary raw data a database response to a
   // TMongoRequestQuery / TMongoRequestGetMore client message
   TMongoReply = RawByteString;
-
-  /// define an opReply message execution content
-  // - mrfCursorNotFound will be set when getMore is called but the cursor id
-  // is not valid at the server; returned with zero results
-  // - mrfQueryFailure is set when the query failed - results consist of one
-  // document containing an "$err" field describing the failure
-  // - mrfShardConfigStale should not be used by client, just by Mongos
-  // - mrfAwaitCapable is set when the server supports the AwaitData Query
-  // option (always set since Mongod version 1.6)
-  TMongoReplyCursorFlag = (
-    mrfCursorNotFound,
-    mrfQueryFailure,
-    mrfShardConfigStale,
-    mrfAwaitCapable);
-
-  /// define a TMongoReplyCursor message execution content
-  TMongoReplyCursorFlags = set of TMongoReplyCursorFlag;
 
   /// internal low-level binary structure mapping all message headers
   TMongoWireHeader = packed record
@@ -398,6 +411,8 @@ type
   end;
 
   PMongoWireHeader = ^TMongoWireHeader;
+
+  {$ifdef MONGO_OLDPROTOCOL}
 
   /// internal low-level binary structure mapping the TMongoReply header
   // - used e.g. by TMongoReplyCursor and TMongoConnection.GetReply()
@@ -418,18 +433,54 @@ type
   // - so that you can write e.g.
   // ! PMongoReplyHeader(aMongoReply)^.RequestID
   PMongoReplyHeader = ^TMongoReplyHeader;
-  
+
+  /// define an opReply message execution content
+  // - mrfCursorNotFound will be set when getMore is called but the cursor id
+  // is not valid at the server; returned with zero results
+  // - mrfQueryFailure is set when the query failed - results consist of one
+  // document containing an "$err" field describing the failure
+  // - mrfShardConfigStale should not be used by client, just by Mongos
+  // - mrfAwaitCapable is set when the server supports the AwaitData Query
+  // option (always set since Mongod version 1.6)
+  TMongoReplyCursorFlag = (
+    mrfCursorNotFound,
+    mrfQueryFailure,
+    mrfShardConfigStale,
+    mrfAwaitCapable);
+
+  /// define a TMongoReplyCursor message execution content
+  TMongoReplyCursorFlags = set of TMongoReplyCursorFlag;
+
+  {$else}
+
+  /// the kind of sections for a opMsg content
+  // - mmkBody indicates that the section is encoded as a single BSON object:
+  // this is the standard command request and reply body
+  // - mmkSequence is used when there are several sections, encoded as the
+  // 32-bit size, then the ASCIIZ document identifier, then zero or more
+  // BSON objects, ending one the declared size has been reached
+  // - mmkInternal is used for internal purposes
+  TMongoMsgKind = (
+    mmkBody,
+    mmkSequence,
+    mmkInternal);
+
   /// internal low-level binary structure mapping the Msg header
   TMongoMsgHeader = packed record
     /// standard message header
     Header: TMongoWireHeader;
-    /// response flags
-    ResponseFlags: integer;
+    /// 32-bit query/response flags
+    Flags: TMongoMsgFlags;
+    /// how the following sections are defined
+    SectionKind: TMongoMsgKind;
   end;
   PMongoMsgHeader = ^TMongoMsgHeader;
 
+  {$endif MONGO_OLDPROTOCOL}
+
   /// map a MongoDB server reply message as sent by the database
   // - in response to TMongoRequestQuery / TMongoRequestGetMore messages
+  // - note: old opReply is removed since MongoDB 5.1 in favor of opMsg
   // - you can use the record's methods to retrieve information about a given
   // response, and navigate within all nested documents
   // - several TMongoReplyCursor instances may map the same TMongoReply content
@@ -444,12 +495,14 @@ type
     fRequestID: integer;
     fResponseTo: integer;
     fResponseFlags: TMongoReplyCursorFlags;
-    {$IFNDEF MONGO_WIRE_MSG}fCursorID: Int64;{$ENDIF}
     fStartingFrom: integer;
-    fNumberReturned: integer;
+    fDocumentCount: integer;
+    {$ifdef MONGO_OLDPROTOCOL}
+    fCursorID: Int64;
+    {$endif MONGO_OLDPROTOCOL}
     fDocuments: TPointerDynArray;
-    fCurrentPosition: integer;
     fFirstDocument, fCurrentDocument: PAnsiChar;
+    fCurrentPosition: integer;
     fLatestDocIndex: integer;
     fLatestDocValue: variant;
     procedure ComputeDocumentsList;
@@ -571,18 +624,21 @@ type
     /// access to the low-level binary reply message
     property Reply: TMongoReply
       read fReply;
+    {$ifdef MONGO_OLDPROTOCOL}
     /// cursor identifier if the client may need to perform further
     // TMongoRequestGetMore messages
     // - in the event that the result set of the query fits into one OP_REPLY
     // message, CursorID will be 0
-    {$IFNDEF MONGO_WIRE_MSG}property CursorID: Int64
-      read fCursorID;{$ENDIF}
+    // - deprecated since MongoDB 5.0, and removed in MongoDB 6.0
+    property CursorID: Int64
+      read fCursorID;
+    {$endif MONGO_OLDPROTOCOL}
     /// where in the cursor this reply is starting
     property StartingFrom: integer
       read fStartingFrom;
     /// number of documents in the reply
     property DocumentCount: integer
-      read fNumberReturned;
+      read fDocumentCount;
     /// points to the first document binary
     // - i.e. just after the Reply header
     property FirstDocument: PAnsiChar
@@ -692,7 +748,7 @@ type
     // methods to receive the whole document (you should better call those)
     // - the supplied Query instance will be released when not needed any more
     procedure GetRepliesAndFree(Query: TMongoRequestQuery;
-      OnEachReply: TOnMongoConnectionReply; var Opaque);
+      const OnEachReply: TOnMongoConnectionReply; var Opaque);
 
     /// send a query to the server, returning a TDocVariant instance containing
     // all the incoming data
@@ -1651,10 +1707,18 @@ implementation
 
 const
   WIRE_OPCODES: array[TMongoOperation] of integer = (
-    1, 1000, 2001, 2002, 2004, 2005, 2006, 2007, 2013);
+    1,     // opReply
+    1000,  // opMsgOld
+    2001,  // opUpdate
+    2002,  // opInsert
+    2004,  // opQuery
+    2005,  // opGetMore
+    2006,  // opDelete
+    2007,  // opKillCursors
+    2013); // opMsg
 
-  CLIENT_OPCODES =
-    [opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors, opMsg];
+  CLIENT_OPCODES = [
+    opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors, opMsg];
 
 var
   GlobalRequestID: integer;
@@ -1673,6 +1737,7 @@ begin
   else
     fRequestID := requestID;
   fResponseTo := responseTo;
+  // write TMongoWireHeader
   BSONDocumentBegin;
   fRequestOpCode := opCode;
   Write4(fRequestID);
@@ -1683,7 +1748,7 @@ end;
 procedure TMongoRequest.BsonWriteParam(const paramDoc: variant; const DbName: RawUtf8);
 begin
   if TVarData(paramDoc).VType = varVariantByRef then
-    BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^)
+    BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^, DbName)
   else if VarIsStr(paramDoc) then
     BsonWriteProjection(VariantToUtf8(paramDoc), DbName)
   else if (TVarData(paramDoc).VType = BsonVariantType.VarType) and
@@ -1696,8 +1761,8 @@ end;
 
 procedure TMongoRequest.ToBsonDocument(var result: TBsonDocument);
 begin
-  if (fRequestID = 0) or
-     (fRequestOpCode = opReply) then
+  if (fRequestOpCode = opReply) or
+     (fRequestID = 0) then
     raise EMongoException.CreateUtf8('No previous proper %.Create() call', [self]);
   if fBSONDocument = '' then
   begin
@@ -1742,6 +1807,7 @@ begin
     W.Free;
   end;
 end;
+
 
 
 { TMongoRequestUpdate }
@@ -1832,26 +1898,26 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUtf8;
   const Query, ReturnFieldsSelector: variant;
   NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
 begin
-  {$IFNDEF MONGO_WIRE_MSG}
+  {$ifdef MONGO_OLDPROTOCOL}
   inherited Create(FullCollectionName, opQuery, 0, 0);
-  {$ELSE}
-  inherited Create(FullCollectionName, opMsg, 0, 0);
-  {$ENDIF}
-  fNumberToReturn := NumberToReturn;
-  fNumberToSkip := NumberToSkip;
-  fQuery := TVarData(Query);
-  fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
-
-  {$IFNDEF MONGO_WIRE_MSG}
   WriteCollectionName(byte(Flags), FullCollectionName);
   Write4(NumberToSkip);
   Write4(NumberToReturn);
   BsonWriteParam(Query);
-  {$ELSE}
-  Write4(0);
-  Write1(0);
+  {$else}
+  // follow TMongoMsgHeader
+  inherited Create(FullCollectionName, opMsg, 0, 0); // write TMongoWireHeader
+  if Flags <> [] then
+    raise EMongoException.CreateUtf8(
+      '%.Create: unsupported flags=%',[self, integer(Flags)]);
+  Write4(integer(Flags));
+  Write1(ord(mmkBody)); // a single document follow
   BsonWriteParam(Query, fDatabaseName);
-  {$ENDIF}
+  {$endif MONGO_OLDPROTOCOL}
+  fNumberToReturn := NumberToReturn;
+  fNumberToSkip := NumberToSkip;
+  fQuery := TVarData(Query);
+  fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
   if TVarData(ReturnFieldsSelector).VType > varNull then
     BsonWriteParam(ReturnFieldsSelector);
 end;
@@ -1880,6 +1946,8 @@ begin
   W.Add('}');
 end;
 
+
+{$ifdef MONGO_OLDPROTOCOL}
 
 { TMongoRequestGetMore }
 
@@ -1928,6 +1996,8 @@ begin
   W.Add(']', '}');
 end;
 
+{$endif MONGO_OLDPROTOCOL}
+
 
 { TMongoReplyCursor }
 
@@ -1936,44 +2006,41 @@ var
   Len: integer;
 begin
   Len := length(ReplyMessage);
-  {$IFNDEF MONGO_WIRE_MSG}
+  {$ifdef MONGO_OLDPROTOCOL}
   with PMongoReplyHeader(ReplyMessage)^ do
   begin
     if (Len < SizeOf(TMongoReplyHeader)) or
        (Header.MessageLength <> Len) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
-    if (Header.OpCode <> WIRE_OPCODES[opReply]) and 
-       (Header.OpCode <> WIRE_OPCODES[opMsg]) then
+    if Header.OpCode <> WIRE_OPCODES[opReply] then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
     fRequestID := requestID;
     fResponseTo := responseTo;
     byte(fResponseFlags) := ResponseFlags;
     fCursorID := CursorID;
     fStartingFrom := StartingFrom;
-    fNumberReturned := NumberReturned;
+    fDocumentCount := NumberReturned;
   end;
-  {$ELSE}
+  fReply := ReplyMessage;
+  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
+  {$else}
   with PMongoMsgHeader(ReplyMessage)^ do
   begin
-    if (Len < SizeOf(TMongoReplyHeader)) or
+    if (Len < SizeOf(TMongoMsgHeader)) or
        (Header.MessageLength <> Len) then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
-    if (Header.OpCode <> WIRE_OPCODES[opReply]) and
-       (Header.OpCode <> WIRE_OPCODES[opMsg]) then
+    if Header.OpCode <> WIRE_OPCODES[opMsg] then
       raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
+    if SectionKind <> mmkBody then
+      raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(Kind=%)', [ord(SectionKind)]);
     fRequestID := requestID;
     fResponseTo := responseTo;
-    byte(fResponseFlags) := ResponseFlags;
-    fNumberReturned := 1;
+    fResponseFlags := ResponseFlags;
+    fDocumentCount := 1; // as for mmkBody
   end;
-  {$ENDIF}
   fReply := ReplyMessage;
-  {$IFNDEF MONGO_WIRE_MSG}
-  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoReplyHeader);
-  {$ELSE}
-  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader) + 1;
-  {$ENDIF}
-
+  fFirstDocument := PAnsiChar(pointer(fReply)) + SizeOf(TMongoMsgHeader);
+  {$endif MONGO_OLDPROTOCOL}
   Rewind;
   fLatestDocIndex := -1;
 end;
@@ -1986,9 +2053,9 @@ begin
   if fDocuments <> nil then
     exit;
   Len := length(fReply);
-  SetLength(fDocuments, DocumentCount);
+  SetLength(fDocuments, fDocumentCount);
   P := fFirstDocument;
-  for i := 0 to DocumentCount - 1 do
+  for i := 0 to fDocumentCount - 1 do
   begin
     fDocuments[i] := P;
     inc(P, PInteger(P)^); // fast "parsing" of all supplied documents
@@ -2036,7 +2103,7 @@ end;
 
 function TMongoReplyCursor.Next(out doc: PByte): boolean;
 begin
-  if fCurrentPosition < DocumentCount then
+  if fCurrentPosition < fDocumentCount then
   begin
     doc := PByte(fCurrentDocument);
     inc(fCurrentDocument, PInteger(fCurrentDocument)^);
@@ -2089,9 +2156,9 @@ var
 begin
   result := length(Dest);
   if (fReply = '') or
-     (DocumentCount <= 0) then
+     (fDocumentCount <= 0) then
     exit; // nothing to append
-  SetLength(Dest, result + DocumentCount);
+  SetLength(Dest, result + fDocumentCount);
   Rewind;
   while Next(b) do
   begin
@@ -2109,7 +2176,7 @@ var
   P: PAnsiChar;
 begin
   P := FirstDocument;
-  for i := 1 to DocumentCount do
+  for i := 1 to fDocumentCount do
   begin
     UInt32ToUtf8(Dest.Tag, name); // Dest.Tag = item number in array
     Dest.Tag := Dest.Tag + 1;
@@ -2127,9 +2194,9 @@ begin
     TDocVariant.NewFast(Variant(Dest), dvArray);
   result := Dest.Count;
   if (fReply = '') or
-     (DocumentCount <= 0) then
+     (fDocumentCount <= 0) then
     exit; // nothing to append
-  inc(result, DocumentCount);
+  inc(result, fDocumentCount);
   Dest.Capacity := result;
   Rewind;
   while Next(item) do
@@ -2144,18 +2211,24 @@ var
   b: PByte;
 begin
   if (fReply = '') or
-     (DocumentCount <= 0) then
+     (fDocumentCount <= 0) then
   begin
     W.AddNull;
     exit;
   end;
   if WithHeader and
      (Mode = modMongoShell) then
-    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,'
-      {$IFNDEF MONGO_WIRE_MSG} + 'CursorID:%,' {$ENDIF} +
-      'StartingFrom:%,NumberReturned:%,ReplyDocuments:[', [byte(ResponseFlags),
-      requestID, responseTo, {$IFNDEF MONGO_WIRE_MSG}CursorID,{$ENDIF}
-      StartingFrom, DocumentCount]);
+   {$ifdef MONGO_OLDPROTOCOL}
+   W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,CursorID:%,' +
+     'StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
+     [byte(ResponseFlags), requestID, responseTo, CursorID,
+      StartingFrom, fDocumentCount]);
+   {$else}
+   W.Add('{ReplyHeader:{ResponseFlags:"%",RequestID:%,ResponseTo:%,' +
+     'StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
+     [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)), requestID, responseTo,
+      StartingFrom, fDocumentCount]);
+   {$endif MONGO_OLDPROTOCOL}
   Rewind;
   while Next(b) do
   begin
@@ -2181,7 +2254,7 @@ var
   tmp: TTextWriterStackBuffer;
 begin
   if (fReply = '') or
-     (DocumentCount <= 0) then
+     (fDocumentCount <= 0) then
     result := 'null'
   else
   begin
@@ -2206,10 +2279,6 @@ end;
 
 
 { TMongoConnection }
-
-const
-  /// message big enough to retrieve the maximum MongoDB document size
-  MONGODB_MAXMESSAGESIZE = BSON_MAXDOCUMENTSIZE + SizeOf(TMongoReplyHeader);
 
 constructor TMongoConnection.Create(const aClient: TMongoClient;
   const aServerAddress: RawUtf8; aServerPort: integer);
@@ -2346,27 +2415,35 @@ begin
 end;
 
 procedure TMongoConnection.GetRepliesAndFree(Query: TMongoRequestQuery;
-  OnEachReply: TOnMongoConnectionReply; var Opaque);
+  const OnEachReply: TOnMongoConnectionReply; var Opaque);
 var
-  main, more: TMongoReplyCursor;
-  getMore: TMongoRequestGetMore;
+  main: TMongoReplyCursor;
+  {$ifdef MONGO_OLDPROTOCOL}
+  more: TMongoReplyCursor;
   count: integer;
+  getMore: TMongoRequestGetMore;
   cursorID: Int64;
+  {$endif MONGO_OLDPROTOCOL}
 begin
+  if not Assigned(Query) then
+    raise EMongoRequestException.Create('Query=nil', self);
   try
-    if not Assigned(Query) then
-      raise EMongoRequestException.Create('Query=nil', self);
     if not Assigned(OnEachReply) then
       raise EMongoRequestException.Create('OnEachReply=nil', self, Query);
+    {$ifdef MONGO_OLDPROTOCOL}
     count := Query.NumberToReturn; // 0 means default return size
+    {$endif MONGO_OLDPROTOCOL}
     GetCursor(Query, main);
     if main.DocumentCount > 0 then
     begin
       OnEachReply(Query, main, Opaque);
+      {$ifdef MONGO_OLDPROTOCOL}
       if count > 0 then
         dec(count, main.DocumentCount);
+      {$endif MONGO_OLDPROTOCOL}
     end;
-    cursorID := {$IFNDEF MONGO_WIRE_MSG}main.CursorID{$ELSE}0{$ENDIF};
+    {$ifdef MONGO_OLDPROTOCOL} // opGetMore is clearly deprecated
+    cursorID := main.CursorID;
     if cursorID <> 0 then
       if (Query.NumberToReturn = 0) or
          ((Query.NumberToReturn > 0) and
@@ -2384,7 +2461,7 @@ begin
               OnEachReply(Query, more, Opaque);
               dec(count, more.DocumentCount);
             end;
-            {$IFNDEF MONGO_WIRE_MSG}cursorID := more.CursorID;{$ENDIF}
+            cursorID := more.CursorID;
           finally
             getMore.Free;
           end;
@@ -2392,10 +2469,9 @@ begin
                (count <= 0)) or
               (cursorID = 0);
     if cursorID <> 0 then // if cursor not exhausted: need to kill it
-      {$IFNDEF MONGO_WIRE_MSG}
       SendAndFree(TMongoRequestKillCursor.Create(
         Query.FullCollectionName, [cursorID]), true);
-      {$ENDIF}
+    {$endif MONGO_OLDPROTOCOL}
   finally
     Query.Free;
   end;
@@ -2518,8 +2594,10 @@ begin
      (Client.LogReplyEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.LogReplyEvent, Result.ToJson(modMongoShell, True,
       Client.LogReplyEventMaxSize), Request);
+  {$ifdef MONGO_OLDPROTOCOL}
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure', self, Request, Result);
+  {$endif MONGO_OLDPROTOCOL}
 end;
 
 const
@@ -2545,9 +2623,6 @@ begin
       finally
         raise EMongoRequestException.CreateUtf8(RECV_ERROR, [self, 'hdr'], self, Request);
       end;
-      {if Header.MessageLength > MONGODB_MAXMESSAGESIZE then not needed with MONGO_WIRE_MSG
-        raise EMongoRequestException.CreateUtf8('%.GetReply: MessageLength=%',
-          [self, Header.MessageLength], self, Request);}
       SetLength(result, Header.MessageLength);
       PMongoWireHeader(result)^ := Header;
       DataLen := Header.MessageLength - SizeOf(Header);
@@ -3037,9 +3112,9 @@ begin
         'mechanism', 'SCRAM-SHA-1',
         'payload', bson,
         'autoAuthorize', 1
-        {$IFDEF MONGO_WIRE_MSG}
+        {$ifndef MONGO_OLDPROTOCOL}
         ,'$db', DatabaseName
-        {$ENDIF}
+        {$endif MONGO_OLDPROTOCOL}
         ]), res);
     CheckPayload;
     if err = '' then
@@ -3068,9 +3143,9 @@ begin
         'saslContinue', 1,
         'conversationId', res.conversationId,
         'payload', bson
-        {$IFDEF MONGO_WIRE_MSG}
+        {$ifndef MONGO_OLDPROTOCOL}
         ,'$db', DatabaseName
-        {$ENDIF}
+        {$endif MONGO_OLDPROTOCOL}
         ]), res);
     resp.Clear;
     CheckPayload;
@@ -3088,9 +3163,9 @@ begin
            'saslContinue', 1,
            'conversationId', res.conversationId,
            'payload', ''
-           {$IFDEF MONGO_WIRE_MSG}
+           {$ifndef MONGO_OLDPROTOCOL}
            ,'$db', DatabaseName
-           {$ENDIF}
+           {$endif MONGO_OLDPROTOCOL}
            ]), res);
       if (err = '') and
          not res.done then
@@ -3828,7 +3903,11 @@ end;
 
 
 initialization
+  {$ifdef MONGO_OLDPROTOCOL}
   Assert(SizeOf(TMongoReplyHeader) = 36);
+  {$else}
+  Assert(SizeOf(TMongoMsgHeader) = 21);
+  {$endif MONGO_OLDPROTOCOL}
 
 end.
 
