@@ -1073,6 +1073,9 @@ function Bson(const Format: RawUtf8; const Args, Params: array of const;
 // - if supplied variant is not a TDocVariant, raise an EBsonException
 function Bson(const doc: TDocVariantData): TBsonDocument; overload;
 
+/// store an array of variant content into BSON array encoded binary
+function BsonFrom(const docs: array of variant): TBsonDocument;
+
 /// store an array of integer into BSON encoded binary
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
 function BsonFromIntegers(const Integers: array of integer): TBsonDocument;
@@ -3465,7 +3468,7 @@ begin
     SetLength(fDocumentStackOffset, NextGrow(fDocumentStack));
   fDocumentStackOffset[fDocumentStack] := TotalWritten;
   inc(fDocumentStack);
-  Write4(0);
+  Write4(0); // will be overwritten by BsonDocumentEnd
 end;
 
 procedure TBsonWriter.BsonDocumentBegin(const name: RawUtf8; kind: TBsonElementType);
@@ -4234,6 +4237,23 @@ begin
   with TBsonWriter.Create(tmp{%H-}) do
   try
     BsonWriteDoc(doc);
+    ToBsonDocument(result);
+  finally
+    Free;
+  end;
+end;
+
+function BsonFrom(const docs: array of variant): TBsonDocument;
+var
+  i: PtrInt;
+  tmp: TTextWriterStackBuffer;
+begin
+  with TBsonWriter.Create(tmp{%H-}) do
+  try
+    BsonDocumentBegin;
+    for i := 0 to high(docs) do
+      BsonWriteVariant(UInt32ToUtf8(i), docs[i]);
+    BsonDocumentEnd;
     ToBsonDocument(result);
   finally
     Free;

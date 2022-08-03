@@ -1567,6 +1567,7 @@ end;
 function TRestStorageMongoDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
+  //TODO: https://www.mongodb.com/docs/v6.0/core/bulk-write-operations/
   result := false; // means BATCH mode not supported
   if Encoding in [encPost, encDelete] then
   begin
@@ -1597,6 +1598,7 @@ procedure TRestStorageMongoDB.InternalBatchStop;
 var
   docs: TBsonDocument;
 begin
+  //TODO: https://www.mongodb.com/docs/v6.0/core/bulk-write-operations/
   try
     case fBatchMethod of
       mPOST:
@@ -1608,8 +1610,9 @@ begin
           fCollection.Insert(docs);
         end;
       mDELETE:
+        if fBatchIDsCount <> 0 then
         begin
-          SetLength(fBatchIDs, fBatchIDsCount);
+          DynArrayFakeLength(fBatchIDs, fBatchIDsCount);
           fCollection.Remove(BsonVariant(['_id', BsonVariant(['$in',
             BsonVariantFromInt64s(TInt64DynArray(fBatchIDs))])]));
         end;

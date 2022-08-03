@@ -102,7 +102,8 @@ Efficient BSON Support for MongoDB Clients
 ### mormot.db.nosql.mongodb
 
 MongoDB Client for NoSQL Data Access
-- MongoDB Protocol Items
+- MongoDB Wire Protocol Definitions
+- MongoDB Protocol Classes
 - MongoDB Client Classes
 
 ### mormot.db.proxy
