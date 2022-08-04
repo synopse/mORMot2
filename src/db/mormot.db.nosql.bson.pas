@@ -458,6 +458,12 @@ type
     // binary value into the supplied Blob variable
     // - returns FALSE otherwise
     function ToBlob(const V: Variant; var Blob: RawByteString): boolean;
+    /// in-place append field(s) to a TBsonVariant document instance
+    // - if the supplied variant is a TBsonVariant betDoc, it will add the fields
+    // - if the supplied variant is a TDocVariant object, V will be replaced
+    // by a new TBsonVariant instance including the new fields
+    // - otherwise a new TBsonVariant betDoc is created with the fields
+    procedure AddItem(var V: variant; const NameValuePairs: array of const);
     /// convert a TBsonDocument binary content into a TBsonVariant of kind betDoc
     // - is the default property, so that you can write:
     // ! BsonVariantType[Bson(['BSON',_Arr(['awesome',5.05, 1986])])]
@@ -495,12 +501,14 @@ type
 
   /// how TBsonElement.AddMongoJson() method and AddMongoJson() and
   // VariantSaveMongoJson() functions will render their JSON content
-  // - modMongoStrict and modNoMongo will follow the JSON RFC specifications
+  // - modNoMongo will serialize dates as ISO-8601 strings, ObjectID as
+  // hexadecimal string and other MongoDB special objects in WrBase64() format,
+  // so won't supply any additional information about its BSON content
+  // - modMongoStrict will follow the MongoDB Extended JSON syntax - as
+  // {"$oid":"...} - for valid but verbose JSON with additional BSON information
   // - modMongoShell will use a syntax incompatible with JSON RFC, but more
   // common to MongoDB daily use - as 'ObjectId()' or '{ field: /acme.*corp/i }'
-  // - modMongoStrict will use the MongoDB Extended JSON syntax
-  // - modNoMongo will serialize dates as ISO-8601 strings, ObjectID as hexadecimal
-  // string and other MongoDB special objects in WrBase64() format
+  // - modMongoStrict and modNoMongo will follow the JSON RFC specifications
   // - see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   TMongoJsonMode = (
     modNoMongo,
@@ -805,14 +813,16 @@ type
     // - this method will call BsonDocumentBegin/BsonDocumentEnd internally
     // - will raise an EBsonException if doc is not a valid TDocVariant or null
     // or if the resulting binary content is bigger than BSON_MAXDOCUMENTSIZE
-    procedure BsonWriteDoc(const doc: TDocVariantData);
+    procedure BsonWriteDoc(const doc: TDocVariantData); overload;
+    /// write a BSON document stored in a TDocVariant or a TBsonVariant
+    procedure BsonWriteDoc(const doc: variant); overload;
     /// write an object specified as name/value pairs as a BSON document
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aBsonWriter.BsonWriteObject(['name','John','year',1972]);
     // - this method wil be faster than using a BsonWriteDoc(_ObjFast(...))
     procedure BsonWriteObject(const NameValuePairs: array of const);
     /// write a projection specified as fieldname:1 pairs as a BSON document
-    procedure BsonWriteProjection(const FieldNamesCsv: RawUtf8; const DbName: RawUtf8 = '');
+    procedure BsonWriteProjection(const FieldNamesCsv: RawUtf8);
     /// write an object as query parameter
     // - will handle all SQL operators, including IN (), IS NULL or LIKE
     // - see @http://docs.mongodb.org/manual/reference/operator/query
@@ -851,7 +861,7 @@ type
 
     /// to be called before a BSON document will be written
     // - each BsonDocumentBegin should be followed by its nested BsonDocumentEnd
-    procedure BsonDocumentBegin; overload;
+    procedure BsonDocumentBegin; overload; virtual;
     /// to be called before a BSON document will be written
     // - each BsonDocumentBegin should be followed by its nested BsonDocumentEnd
     // - you could create a new BSON object by specifying a name and its
@@ -867,7 +877,8 @@ type
     // which will be written when you call AdjustDocumentsSize()
     // - you can optional specify how many nested documents should be closed,
     // and/or if it should not write an ending betEof item
-    procedure BsonDocumentEnd(CloseNumber: integer = 1; WriteEndingZero: boolean = true);
+    procedure BsonDocumentEnd(CloseNumber: integer = 1;
+      WriteEndingZero: boolean = true); virtual;
     /// after all content has been written, call this method on the resulting
     // memory buffer to store all document size as expected by the standard
     procedure BsonAdjustDocumentsSize(BSON: PByteArray); virtual;
@@ -1157,7 +1168,6 @@ function BsonVariant(const doc: TDocVariantData): variant; overload;
 
 /// store an array of integer into a TBsonVariant betArray type instance
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
-
 function BsonVariantFromIntegers(const Integers: array of integer): variant;
 
 /// store an array of 64 bit integer into a TBsonVariant betArray type instance
@@ -1166,12 +1176,17 @@ function BsonVariantFromInt64s(const Integers: array of Int64): variant;
 
 /// parse the header of a BSON encoded binary buffer, and return its length
 // - BSON should point to a "int32 e_list #0" BSON document (like TBsonDocument)
-// - if ExpectedBSONLen is set, this function will check that the supplied
-// BSON content "int32" length matches the supplied value, and raise an
-// EBsonException if this comparison fails
+// - it will check that the supplied  BSON content "int32" length matches the
+// supplied value, and raise an EBsonException if this comparison fails
 // - as an alternative, consider using TBsonIterator, which wrap both a PByte
 // and a TBsonElement into one convenient item
-function BsonParseLength(var BSON: PByte; ExpectedBSONLen: integer = 0): integer;
+function BsonParseLength(var BSON: PByte; ExpectedBSONLen: integer): integer; overload;
+
+/// parse the header of a BSON encoded binary buffer, and return its length
+// - BSON should point to a "int32 e_list #0" BSON document (like TBsonDocument)
+// - as an alternative, consider using TBsonIterator, which wrap both a PByte
+// and a TBsonElement into one convenient item
+function BsonParseLength(var BSON: PByte): integer; overload;
 
 /// parse the next element in supplied BSON encoded binary buffer list
 // - BSON should point to the "e_list" of the "int32 e_list #0" BSON document
@@ -1197,11 +1212,15 @@ function BsonParseLength(var BSON: PByte; ExpectedBSONLen: integer = 0): integer
 function BsonParseNextElement(var BSON: PByte; var name: RawUtf8;
   var element: variant; DocArrayConversion: TBsonDocArrayConversion = asBsonVariant): boolean;
 
-/// search for a property by number in a a supplied BSON encoded binary buffer
+/// search for a property by number in a supplied BSON encoded binary buffer
 // - BSON should point to a "int32 e_list #0" BSON document (like TBsonDocument)
 // - returns FALSE if the list has too few elements (starting at index 0)
 // - otherwise, returns TRUE then let item point to the corresponding element
 function BsonPerIndexElement(BSON: PByte; index: integer; var item: TBsonElement): boolean;
+
+/// compute the number of items stored in a supplied BSON encoded binary buffer
+// - BSON should point to a "int32 e_list #0" BSON document (like TBsonDocument)
+function BsonGetCount(BSON: PByte): integer;
 
 /// convert a BSON document into a TDocVariant variant instance
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -2154,6 +2173,83 @@ begin
         Blob := ''
       else
         FastSetRawByteString(Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
+  end;
+end;
+
+procedure BsonAddItem(var Bson: TBsonDocument;
+  const NameValuePairs: array of const);
+var
+  W: TBsonWriter;
+  name: RawUtf8;
+  a, len, vallen: PtrInt;
+  P: PAnsiChar;
+  tmp: TTextWriterStackBuffer;
+begin
+  if (high(NameValuePairs) = 1) and
+     (NameValuePairs[1].VType = vtAnsiString) then
+  begin
+    // optimized for the ['$db', 'databasename'] usecase
+    VarRecToUtf8(NameValuePairs[0], name);
+    vallen := length(RawUtf8(NameValuePairs[1].VAnsiString));
+    len := length(Bson);
+    SetLength(Bson, len + length(name) + vallen + 7); // in-place resize
+    P := pointer(Bson);
+    PInteger(P)^ := length(Bson);
+    P[PInteger(P)^ - 1] := #0; // ending "\x00"
+    inc(P, len - 1); // overwrite ending "\x00"
+    P^ := AnsiChar(betString); // "\x02" e_name "\x00" int32 (byte*) "\x00"
+    MoveFast(pointer(name)^, P[1], length(name) + 1);
+    inc(P, length(name) + 2);
+    PInteger(P)^ := vallen + 1;
+    MoveFast(NameValuePairs[1].VAnsiString^, P[4], vallen + 1);
+  end
+  else
+  begin
+    // generic version for any kind of input
+    W := TBsonWriter.Create(tmp{%H-});
+    try
+      W.BsonDocumentBegin;
+      W.Write(@PIntegerArray(Bson)[1],
+        PInteger(Bson)^ - SizeOf(integer) - SizeOf(betEOF));
+      a := 0;
+      while a < high(NameValuePairs) do
+      begin
+        VarRecToUtf8(NameValuePairs[a], name);
+        W.BsonWrite(name, NameValuePairs[a + 1]);
+        inc(a, 2);
+      end;
+      W.BsonDocumentEnd;
+      W.ToBsonDocument(Bson);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+procedure TBsonVariant.AddItem(var V: variant;
+  const NameValuePairs: array of const);
+var
+  doc: TBsonDocument;
+begin
+  if TVarData(V).VType = varVariantByRef then
+    AddItem(PVariant(TVarData(V).VPointer)^, NameValuePairs)
+  else if (TVarData(V).VType = VarType) and
+          (TBsonVariantData(V).VKind = betDoc) then
+    // in-place add the new fields to the TBsonVariant document
+    BsonAddItem(TBsonDocument(TBsonVariantData(V).VBlob), NameValuePairs)
+  else
+  begin
+    if (TVarData(V).VType = DocVariantVType) and
+       TDocVariantData(V).IsObject then
+    begin
+      // use the existing TDocVariant object content
+      TDocVariantData(V).AddNameValuesToObject(NameValuePairs);
+      doc := Bson(TDocVariantData(V));
+    end
+    else
+      // create a new TBsonVariant document
+      doc := Bson(NameValuePairs);
+    FromBsonDocument(doc, V, betDoc);
   end;
 end;
 
@@ -3138,23 +3234,21 @@ begin
         // "\x02" e_name string
         ElementBytes := PInteger(bson)^ + SizeOf(integer); // int32 (byte*) "\x00"
         Data.TextLen := PInteger(bson)^ - 1;
-        inc(bson, SizeOf(integer));
-        Data.Text := pointer(bson);
+        Data.Text := @PIntegerArray(bson)[1];
       end;
     betDoc,
     betArray:
       begin
         // "\x03" e_name document
         ElementBytes := PInteger(bson)^;
-        inc(bson, SizeOf(integer)); // points to a "e_list #0"
-        Data.DocList := bson;
+        Data.DocList := @PIntegerArray(bson)[1]; // points to "e_list #0"
       end;
     betBinary:
       begin
         // "\x05" e_name int32 subtype (byte*)
-        ElementBytes := PInteger(bson)^ + (SizeOf(integer) + 1);
         Data.BlobLen := PInteger(bson)^;
-        inc(bson, SizeOf(integer));
+        ElementBytes := PInteger(bson)^ + (SizeOf(integer) + 1);
+        inc(PInteger(bson));
         Data.BlobSubType := TBsonElementBinaryType(bson^);
         inc(bson);
         Data.Blob := bson;
@@ -3172,9 +3266,9 @@ begin
       begin
         // "\x0F" e_name  int32 string document
         ElementBytes := PInteger(bson)^;
-        inc(bson, SizeOf(integer));
+        inc(PInteger(bson));
         Data.JavaScriptLen := PInteger(bson)^ - 1;
-        inc(bson, SizeOf(integer));
+        inc(PInteger(bson));
         Data.JavaScript := pointer(bson);
         inc(bson, Data.JavaScriptLen + 1);
         Data.ScopeDocument := bson;
@@ -3488,7 +3582,8 @@ begin
   BsonDocumentBegin(name);
 end;
 
-procedure TBsonWriter.BsonDocumentEnd(CloseNumber: integer; WriteEndingZero: boolean);
+procedure TBsonWriter.BsonDocumentEnd(
+  CloseNumber: integer; WriteEndingZero: boolean);
 begin
   while CloseNumber > 0 do
   begin
@@ -3674,7 +3769,22 @@ begin
   BsonDocumentEnd;
 end;
 
-procedure TBsonWriter.BsonWriteProjection(const FieldNamesCsv, DbName: RawUtf8);
+procedure TBsonWriter.BsonWriteDoc(const doc: variant);
+var
+  v: PBsonVariantData;
+begin
+  v := @doc;
+  while v.VType = varVariantByRef do
+    v := PVarData(v)^.VPointer;
+  if v.VType = DocVariantType.VarType then
+    BsonWriteDoc(PDocVariantData(v)^)
+  else if (v.VType = BsonVariantType.VarType) and
+          (v.VKind in [betDoc, betArray]) and
+          (v.VBlob <> nil) then
+    WriteBinary(RawByteString(v.VBlob));
+end;
+
+procedure TBsonWriter.BsonWriteProjection(const FieldNamesCsv: RawUtf8);
 var
   FieldNames: TRawUtf8DynArray;
   i: PtrInt;
@@ -3683,8 +3793,6 @@ begin
   BsonDocumentBegin;
   for i := 0 to high(FieldNames) do
     BsonWrite(FieldNames[i], 1);
-  if DbName <> '' then
-    BsonWriteUtf8('$db', DbName);
   BsonDocumentEnd;
 end;
 
@@ -3996,6 +4104,15 @@ begin
   inc(PInteger(BSON));
 end;
 
+function BsonParseLength(var BSON: PByte): integer;
+begin
+  if (BSON = nil) or
+     (PInteger(BSON)^ < SizeOf(integer)) then
+    raise EBsonException.Create('Incorrect supplied BSON document content');
+  result := PInteger(BSON)^;
+  inc(PInteger(BSON));
+end;
+
 function BsonParseNextElement(var BSON: PByte; var name: RawUtf8;
   var element: variant; DocArrayConversion: TBsonDocArrayConversion): boolean;
 var
@@ -4022,6 +4139,16 @@ begin
       else
         dec(index);
   result := false;
+end;
+
+function BsonGetCount(BSON: PByte): integer;
+var
+  item: TBsonElement;
+begin
+  BsonParseLength(BSON);
+  result := 0;
+  while item.FromNext(BSON) do
+    inc(result);
 end;
 
 procedure BsonToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer;
@@ -4496,8 +4623,8 @@ begin
   BsonVariantType.FromBsonDocument(tmp, result);
 end;
 
-function BsonVariant(const Format: RawUtf8; const Args, Params: array of const):
-  variant; overload;
+function BsonVariant(const Format: RawUtf8;
+  const Args, Params: array of const): variant; overload;
 var
   k: TBsonElementType;
   b: RawByteString;
