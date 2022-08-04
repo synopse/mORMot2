@@ -3373,11 +3373,17 @@ const
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
 
   /// a slightly faster alternative to Variants.Null function with TVarData
-  NullVarData: TVarData = (VType: varNull{%H-});
+  NullVarData:  TVarData = (VType: varNull{%H-});
+  FalseVarData: TVarData = (VType: varBoolean{%H-});
+  TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}1);
   
 var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
+  /// a slightly faster alternative to false constant when assigned to a variant
+  VarFalse: variant absolute FalseVarData;
+  /// a slightly faster alternative to true constant when assigned to a variant
+  VarTrue: variant absolute TrueVarData;
 
 {$ifdef HASINLINE}
 /// overloaded function which can be properly inlined to clear a variant
