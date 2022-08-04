@@ -2784,7 +2784,8 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 var
   vt: cardinal;
 begin
-  VarClear(Dest);
+  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
+    VarClear(Dest);
   vt := TVarData(Source).VType;
   if ((vt and varByRef) <> 0) or
      (vt in VTYPE_SIMPLE) then
@@ -2805,7 +2806,8 @@ var
   ct: TSynInvokeableVariantType;
 begin
   s := @Source;
-  VarClear(Dest);
+  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
+    VarClear(Dest);
   vt := s^.VType;
   while vt = varVariantByRef do
   begin
