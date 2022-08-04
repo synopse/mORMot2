@@ -3335,7 +3335,7 @@ begin
   if hsoIncludeDateHeader in fOptions then
   begin
     T.FromNowUtc;
-    T.ToHttpDate(tmp, 'GMT'#13#10, 'Date: ');
+    T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
     fHttpDateNowUtc := tmp; // (almost) atomic set
   end;
   // clean interned HTTP headers every 16 secs
