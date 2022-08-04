@@ -164,7 +164,7 @@ type
     /// initialize the table storage redirection for sharding over SQLite3 DB
     // - if no aShardRootFileName is set, the executable folder and stored class
     // table name would be used
-    // - will also register to the aServer.StaticDataServer[] internal array
+    // - will also register to the aServer.GetStaticStorage() internal list
     // - you may define some low-level tuning of SQLite3 process via aSynchronous
     // / aCacheSizePrevious / aCacheSizeLast / aMaxShardCount parameters, if
     // the default smOff / 1MB / 2MB / 100 values are not enough
@@ -1356,7 +1356,7 @@ function TRestOrmServerDB.TableMaxID(Table: TOrmClass): TID;
 var
   sql: RawUtf8;
 begin
-  if StaticTable[Table] <> nil then
+  if GetStorage(Table) <> nil then
     // select(max(RowID)) with proper SQL detection e.g. for ext/MongoDB
     result := inherited TableMaxID(Table)
   else
@@ -1373,7 +1373,7 @@ var
   sql: RawUtf8;
   res: Int64;
 begin
-  if StaticTable[Table] <> nil then
+  if GetStorage(Table) <> nil then
     // call overriden method for ext/MongoDB/in-memory, or EngineRetrieve()
     result := inherited MemberExists(Table, ID)
   else
@@ -2000,7 +2000,7 @@ begin
   result := false;
   if Value = nil then
     exit;
-  s := GetStaticTable(POrmClass(Value)^);
+  s := pointer(GetStorage(POrmClass(Value)^));
   if s <> nil then
     result := s.RetrieveBlobFields(Value)
   else if (DB <> nil) and

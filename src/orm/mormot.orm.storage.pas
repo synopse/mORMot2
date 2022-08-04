@@ -1124,7 +1124,7 @@ type
   // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
-  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // aServer.GetVirtualStorage(aClass).UpdateToFile for file creation or refresh
   // - file extension is set to '.json'
   TOrmVirtualTableJson = class(TOrmVirtualTable)
   protected
@@ -1182,7 +1182,7 @@ type
   // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
-  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // aServer.GetVirtualStorage(aClass).UpdateToFile for file creation or refresh
   // - binary format is more efficient in term of speed and disk usage than
   // the JSON format implemented by TOrmVirtualTableJson
   // - binary format will be set by TOrmVirtualTableJson.CreateTableInstance

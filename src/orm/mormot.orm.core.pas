@@ -1518,9 +1518,16 @@ type
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
       aRemoteRest: TRestOrmParent): TRestOrmParent; 
-    /// fast get the associated TRestStorageRemote from its index, if any
-    // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
-    function GetRemoteTable(TableIndex: integer): TRestOrmParent;
+    /// get the non-virtual TRestStorage instance for one TOrm class
+    // - set e.g. after OrmMapMongoDB(), OrmMapInMemory(),
+    // TRestStorageShardDB.Create or TRestOrmServer.RemoteDataCreate
+    function GetStaticStorage(aClass: TOrmClass): TRestOrmParent;
+    /// get the virtual TRestStorage instance for one TOrm class
+    // - i.e. in-memory or external SQL tables declared as SQLite3 virtual tables
+    function GetVirtualStorage(aClass: TOrmClass): TRestOrmParent;
+    /// get the in-memory or virtual TRestStorage instance for one TOrm class
+    // - will also follow TRestOrmServer.StaticVirtualTableDirect property
+    function GetStorage(aClass: TOrmClass): TRestOrmParent;
   end;
 
 
@@ -3758,7 +3765,7 @@ type
     // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
     // a TSqlDBConnectionProperties instance in mormot.orm.sql.pas, or by
-    // StaticMongoDBRegister() to a TMongoCollection instance, or by
+    // OrmMapMongoDB() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
     // ! if Server.Model.Props[TOrmArticle].ExternalDB.ConnectionProperties = nil then

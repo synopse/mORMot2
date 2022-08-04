@@ -1311,7 +1311,7 @@ var
   var
     n, i, ndx, added: integer;
     VD, VD2: TOrmDali1;
-    Rest: TRestOrm;
+    Rest: TRestOrmParent;
     Orm: TRestOrmServer;
     stor: TRestStorageInMemoryExternal;
     fn: TFileName;
@@ -1368,11 +1368,11 @@ var
         end;
         CheckUtf8(aClient.Orm.TableRowCount(aClass) = 1001, '% RowCount', [Msg]);
         Orm := Client.Server.OrmInstance as TRestOrmServer;
-        Rest := Orm.StaticVirtualTable[aClass];
+        Rest := Orm.GetVirtualStorage(aClass);
         check((Rest as TRestStorageInMemoryExternal).Modified);
         aClient.Orm.Commit; // write to file
         // try to read directly from file content
-        Rest := Orm.StaticVirtualTable[aClass];
+        Rest := Orm.GetVirtualStorage(aClass);
         if CheckFailed(Rest <> nil) then
           exit;
         fn := TRestStorageInMemoryExternal(Rest).FileName;
@@ -1761,8 +1761,7 @@ begin
             DeleteFile(WorkDir + 'People.data');
             OrmMapInMemory(Server.OrmInstance, TOrmPeople, 'People.data', true);
             json := Demo.ExecuteJson('SELECT * From People');
-            aStatic := (Server.OrmInstance as TRestOrmServer).
-              StaticDataServer[TOrmPeople] as TRestStorageInMemory;
+            aStatic := Server.Server.GetStaticStorage(TOrmPeople) as TRestStorageInMemory;
             check(aStatic <> nil);
             aStatic.LoadFromJson(json); // test Add() and JSON fast loading
             for i := 0 to aStatic.Count - 1 do

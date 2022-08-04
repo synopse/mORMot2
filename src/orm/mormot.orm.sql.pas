@@ -262,13 +262,13 @@ type
     function ComputeSql(var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 
     /// retrieve the REST server instance corresponding to an external TOrm
-    // - just map aServer.StaticVirtualTable[] and will return nil if not
+    // - just map aServer.GetVirtualStorage(aClass) and will return nil if not
     // a TRestStorageExternal
     // - you can use it e.g. to call MapField() method in a fluent interface
     class function Instance(aClass: TOrmClass;
       aServer: TRestOrmServer): TRestStorageExternal;
     /// retrieve the external database connection associated to a TOrm
-    // - just map aServer.StaticVirtualTable[] and will return nil if not
+    // - just map aServer.GetVirtualStorage(aClass) and will return nil if not
     // a TRestStorageExternal
     class function ConnectionProperties(aClass: TOrmClass;
       aServer: TRestOrmServer): TSqlDBConnectionProperties; overload;
@@ -1982,7 +1982,7 @@ begin
     result := nil
   else
   begin
-    result := TRestStorageExternal(aServer.StaticVirtualTable[aClass]);
+    result := TRestStorageExternal(aServer.GetVirtualStorage(aClass));
     if result <> nil then
       if not result.InheritsFrom(TRestStorageExternal) then
         result := nil;

@@ -3925,7 +3925,7 @@ begin
           else if (StaticOrm = nil) and
                   (orm.TransactionTable <> nil) then
           begin
-            fStaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+            fStaticOrm := pointer(orm.GetVirtualStorage(orm.TransactionTable));
             if fStaticOrm <> nil then
               fStaticOrm.TransactionBegin(Table, Session);
           end;
@@ -3943,7 +3943,7 @@ begin
         else if (StaticOrm = nil) and
                 (orm.TransactionTable <> nil) then
         begin
-          fStaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+          fStaticOrm := pointer(orm.GetVirtualStorage(orm.TransactionTable));
           if fStaticOrm <> nil then
             fStaticOrm.Commit(Session, false);
         end;
@@ -3961,7 +3961,7 @@ begin
         else if (StaticOrm = nil) and
                 (orm.TransactionTable <> nil) then
         begin
-          fStaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+          fStaticOrm := pointer(orm.GetVirtualStorage(orm.TransactionTable));
           if fStaticOrm <> nil then
             fStaticOrm.RollBack(Session);
         end;

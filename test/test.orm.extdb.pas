@@ -1177,9 +1177,9 @@ begin
         Check(aExternalClient.Server.Server.
           TableRowCount(TOrmPeopleExt) = 10925);
         Orm := aExternalClient.Server.OrmInstance as TRestOrmServer;
-        Check(Orm.StaticVirtualTable[TOrmPeople] = nil);
-        Check(Orm.StaticVirtualTable[TOrmPeopleExt] <> nil);
-        Check(Orm.StaticVirtualTable[TOrmOnlyBlob] <> nil);
+        Check(Orm.GetVirtualStorage(TOrmPeople) = nil);
+        Check(Orm.GetVirtualStorage(TOrmPeopleExt) <> nil);
+        Check(Orm.GetVirtualStorage(TOrmOnlyBlob) <> nil);
         for i := 1 to BatchID[high(BatchID)] do
         begin
           RExt.fLastChange := 0;
@@ -1337,9 +1337,9 @@ begin
       Check(aExternalClient.Orm.TableRowCount(TOrmPeople) = n);
       RInt1.ClearProperties;
       Orm := aExternalClient.Server.OrmInstance as TRestOrmServer;
-      Check(Orm.StaticVirtualTable[TOrmPeople] = nil);
-      Check(Orm.StaticVirtualTable[TOrmPeopleExt] <> nil);
-      Check(Orm.StaticVirtualTable[TOrmOnlyBlob] <> nil);
+      Check(Orm.GetVirtualStorage(TOrmPeople) = nil);
+      Check(Orm.GetVirtualStorage(TOrmPeopleExt) <> nil);
+      Check(Orm.GetVirtualStorage(TOrmOnlyBlob) <> nil);
       Check(aExternalClient.Orm.TableHasRows(TOrmPeople));
       Check(aExternalClient.Orm.TableRowCount(TOrmPeople) = n);
       RInt1.ClearProperties;
