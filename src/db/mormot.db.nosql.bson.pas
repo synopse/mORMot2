@@ -453,6 +453,8 @@ type
     procedure FromJson(json: PUtf8Char; var result: variant);
     /// returns TRUE if the supplied variant stores the supplied BSON kind of value
     function IsOfKind(const V: variant; Kind: TBsonElementType): boolean;
+    /// returns true if holds a betArray/betDoc with no items within
+    function IsVoid(const V: TVarData): boolean; override;
     /// retrieve a betBinary content stored in a TBsonVariant instance
     // - returns TRUE if the supplied variant is a betBinary, and set the
     // binary value into the supplied Blob variable
@@ -2153,6 +2155,13 @@ begin
       result := (self <> nil) and
                 (VType = VarType) and
                 (VKind = Kind);
+end;
+
+function TBsonVariant.IsVoid(const V: TVarData): boolean;
+begin
+  with TBsonVariantData(V) do
+    result := (VKind in [betDoc, betArray]) and
+              (length(RawByteString(VBlob)) <= 5);
 end;
 
 function TBsonVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;

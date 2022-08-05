@@ -297,6 +297,10 @@ type
     /// returns TRUE if the supplied variant is of the exact custom type
     function IsOfType(const V: variant): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns TRUE if the supplied custom variant is void
+    // - e.g. returns true for a TDocVariant or TBsonVariant with Count = 0
+    // - caller should have ensured that it is of the exact custom type
+    function IsVoid(const V: TVarData): boolean; virtual;
     /// identify how this custom type behave
     // - as set by the class constructor, to avoid calling any virtual method
     property Options: TSynInvokeableVariantTypeOptions
@@ -738,6 +742,8 @@ type
     // - this default implementation will do handle dvArray instance kind
     procedure Iterate(var Dest: TVarData; const V: TVarData;
       Index: integer); override;
+    /// returns true if this document has Count = 0
+    function IsVoid(const V: TVarData): boolean; override;
     /// low-level callback to access internal pseudo-methods
     // - mainly the _(Index: integer): variant method to retrieve an item
     // if the document is an array
@@ -2739,6 +2745,7 @@ end;
 function VarIsVoid(const V: Variant): boolean;
 var
   vt: cardinal;
+  custom: TSynInvokeableVariantType;
 begin
   vt := TVarData(V).VType;
   with TVarData(V) do
@@ -2768,7 +2775,11 @@ begin
       else if vt = DocVariantVType then
         result := TDocVariantData(V).Count = 0
       else
-        result := false;
+      begin
+        custom := FindSynVariantType(vt);
+        result := (custom <> nil) and
+                  custom.IsVoid(TVarData(V)); // e.g. TBsonVariant.IsVoid
+      end;
     end;
 end;
 
@@ -3636,6 +3647,11 @@ var
     result := false;
 end;
 
+function TSynInvokeableVariantType.IsVoid(const V: TVarData): boolean;
+begin
+  result := false; // not void by default
+end;
+
 function TSynInvokeableVariantType.FindSynVariantType(aVarType: cardinal;
   out CustomType: TSynInvokeableVariantType): boolean;
 var
@@ -3918,6 +3934,11 @@ begin
     Dest := TVarData(Data.VValue[Index])
   else
     TRttiVarData(Dest).VType := varEmpty;
+end;
+
+function TDocVariant.IsVoid(const V: TVarData): boolean;
+begin
+  result := TDocVariantData(V).Count > 0;
 end;
 
 function TDocVariant.DoProcedure(const V: TVarData; const Name: string;
