@@ -500,6 +500,7 @@ var
   MissingID: boolean;
   V: PVarData;
 begin
+  // parse input JSON
   Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
   if (Doc.Kind <> dvObject) and
      (Occasion <> ooInsert) then
@@ -507,12 +508,14 @@ begin
   if not (Occasion in [ooInsert, ooUpdate]) then
     raise EOrmMongoDB.CreateUtf8(
       'Unexpected %.DocFromJson(Occasion=%)', [self, ToText(Occasion)^]);
+  // handle fields names and values
   MissingID := true;
   for i := Doc.Count - 1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(Doc.Names[i])) then
     begin
+      // extract and rename ID/RowID input field
       Doc.Names[i] := fStoredClassMapping^.RowIDFieldName;
-      VariantToInt64(Doc.Values[i], Int64(result));
+      VariantToInt64(Doc.Values[i], Int64(result)); // extract
       if (Occasion = ooUpdate) or
          (result = 0) then
         // update does not expect any $set:{_id:..}
@@ -523,11 +526,14 @@ begin
     end
     else
     begin
+      // change field name to the external mapped name
       ndx := fStoredClassRecordProps.Fields.IndexByName(Doc.Names[i]);
       if ndx < 0 then
         raise EOrmMongoDB.CreateUtf8(
           '%.DocFromJson: unknown field name [%]', [self, Doc.Names[i]]);
       Doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
+      // normalize values from JSON high-level types into MongoDB native types
+      // using the ORM/pascal declared types
       info := fStoredClassRecordProps.Fields.List[ndx];
       V := @Doc.Values[i];
       case V^.VType of
@@ -670,8 +676,14 @@ begin
         result := 0
       else
       begin
-        inc(fBatchIDsCount);
+        {$ifdef MONGO_OLDPROTOCOL}
+        // OP_INSERT layout: just the documents the one after the other
         fBatchWriter.BsonWriteDoc(doc);
+        {$else}
+        // insert command layout: as a JSON array of documents
+        fBatchWriter.BsonWrite(UInt32ToUtf8(fBatchIDsCount), doc);
+        {$endif MONGO_OLDPROTOCOL}
+        inc(fBatchIDsCount);
       end
     else
     begin
@@ -1265,6 +1277,8 @@ var
       B.BsonDocumentBegin;
       if Stmt.OrderByField <> nil then
       begin
+        // we still use the old OP_QUERY layout: TMongoCollection.DoFind
+        // will translate it into the new find: command
         B.BsonDocumentBegin('$query');
         AddWhereClause(B);
         n := high(Stmt.OrderByField);
@@ -1583,9 +1597,15 @@ begin
       fBatchMethod := BATCH_METHOD[Encoding];
       case fBatchMethod of
         mPOST:
-          // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
-          fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
-          // 64KB buffer for fBatchWriter instead of 8KB GetTempBuffer^
+          begin
+            // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
+            fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
+            // 64KB buffer for fBatchWriter instead of 8KB GetTempBuffer^
+            {$ifndef MONGO_OLDPROTOCOL}
+            // insert: command layout expects a true BSON array
+            fBatchWriter.BsonDocumentBegin;
+            {$endif MONGO_OLDPROTOCOL}
+          end;
       end;
       result := true; // means BATCH mode is supported
     finally
@@ -1607,6 +1627,10 @@ begin
           // Add/Insert
           if fBatchWriter.TotalWritten = 0 then
             exit; // nothing to add
+          {$ifndef MONGO_OLDPROTOCOL}
+          // insert: command layout expects a true BSON array
+          fBatchWriter.BsonDocumentEnd;
+          {$endif MONGO_OLDPROTOCOL}
           fBatchWriter.ToBsonDocument(docs);
           fCollection.Insert(docs);
         end;
