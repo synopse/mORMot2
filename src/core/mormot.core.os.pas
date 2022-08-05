@@ -5329,14 +5329,14 @@ begin
   if (Stub = MAP_FAILED) or
      MemoryProtection then
   begin
-    // i.e. on OpenBSD, we can have w^x protection
+    // i.e. on OpenBSD or OSX M1, we can not have w^x protection
     Stub := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
     if Stub <> MAP_FAILED then
       MemoryProtection := True;
   end;
   if Stub = MAP_FAILED then
   {$endif OSWINDOWS}
-    raise EOSException.Create('ReserveExecutableMemory(): OS memory allocation failed');
+    raise EOSException.Create('ReserveExecutableMemory(): OS mmap failed');
   ObjArrayAdd(CurrentFakeStubBuffers, self);
 end;
 
@@ -5391,7 +5391,7 @@ begin
   else
     flags := PROT_READ or PROT_WRITE;
   if SynMProtect(PageAlignedFakeStub, SystemInfo.dwPageSize shl 1, flags) < 0 then
-     raise EOSException.Create('ReserveExecutableMemoryPageAccess(: SynMProtect write failure');
+     raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 {$else}
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
