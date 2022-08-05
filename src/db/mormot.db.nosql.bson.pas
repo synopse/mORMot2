@@ -402,6 +402,27 @@ type
   /// points to memory structure used for some special BSON storage as variant
   PBsonVariantData = ^TBsonVariantData;
 
+  /// define how betDoc/betArray BSON elements will be converted as variants
+  // - by default a TBsonVariant custom type will be returned, containing the
+  // raw BSON binary content of the embedded document or array
+  // - asDocVariantPerValue or asDocVariantPerReference could be used to
+  // create a tree of TDocVariant custom kind of variant, able to access
+  // to its nested properties via late-binding (asDocVariantPerReference being
+  // also much faster in some cases - but less safe - than asDocVariantPerValue)
+  // - asDocVariantPerValue will set JSON_[mDefault] settings:
+  // ! [dvoReturnNullForUnknownProperty]
+  // - asDocVariantPerReference will set JSON_[mFast]/JSON_FAST
+  // settings:
+  // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
+  // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference
+  // will include dvoInternalNames to the TDocVariant.Options
+  TBsonDocArrayConversion = (
+    asBsonVariant,
+    asDocVariantPerValue,
+    asDocVariantPerReference,
+    asDocVariantInternNamesPerValue,
+    asDocVariantInternNamesPerReference);
+
   /// custom variant type used to store some special BSON elements
   // - internal layout will follow TBsonVariantData
   // - handled kind of item are complex BSON types, like betObjectID, betBinary
@@ -466,6 +487,12 @@ type
     // by a new TBsonVariant instance including the new fields
     // - otherwise a new TBsonVariant betDoc is created with the fields
     procedure AddItem(var V: variant; const NameValuePairs: array of const);
+    /// search and extract a field name from a TBsonVariant document instance
+    // - if the supplied variant is a TBsonVariant betDoc, it will search for
+    // the supplied name, and return true and the found item as variant
+    // - otherwise, return false
+    function GetItem(const V: variant; const Name: RawUtf8;
+      out Value: variant; ValueAs: TBsonDocArrayConversion = asBsonVariant): boolean;
     /// convert a TBsonDocument binary content into a TBsonVariant of kind betDoc
     // - is the default property, so that you can write:
     // ! BsonVariantType[Bson(['BSON',_Arr(['awesome',5.05, 1986])])]
@@ -480,27 +507,6 @@ type
 { ************ TBsonElement / TBsonIterator for BSON Decoding }
 
 type
-  /// define how betDoc/betArray BSON elements will be converted as variants
-  // - by default a TBsonVariant custom type will be returned, containing the
-  // raw BSON binary content of the embedded document or array
-  // - asDocVariantPerValue or asDocVariantPerReference could be used to
-  // create a tree of TDocVariant custom kind of variant, able to access
-  // to its nested properties via late-binding (asDocVariantPerReference being
-  // also much faster in some cases - but less safe - than asDocVariantPerValue)
-  // - asDocVariantPerValue will set JSON_[mDefault] settings:
-  // ! [dvoReturnNullForUnknownProperty]
-  // - asDocVariantPerReference will set JSON_[mFast]/JSON_FAST
-  // settings:
-  // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
-  // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference
-  // will include dvoInternalNames to the TDocVariant.Options
-  TBsonDocArrayConversion = (
-    asBsonVariant,
-    asDocVariantPerValue,
-    asDocVariantPerReference,
-    asDocVariantInternNamesPerValue,
-    asDocVariantInternNamesPerReference);
-
   /// how TBsonElement.AddMongoJson() method and AddMongoJson() and
   // VariantSaveMongoJson() functions will render their JSON content
   // - modNoMongo will serialize dates as ISO-8601 strings, ObjectID as
@@ -1223,6 +1229,13 @@ function BsonPerIndexElement(BSON: PByte; index: integer; var item: TBsonElement
 /// compute the number of items stored in a supplied BSON encoded binary buffer
 // - BSON should point to a "int32 e_list #0" BSON document (like TBsonDocument)
 function BsonGetCount(BSON: PByte): integer;
+
+/// efficiently append some fields to a BSON document binary
+// - won't parse the input document, and even resize in-place if a single
+// name/textvalue pair is added, e.g. for ['$db', 'databasename']
+// - as usedd e.g. by TBsonVariant.AddItem()
+procedure BsonAddItem(var Bson: TBsonDocument;
+  const NameValuePairs: array of const);
 
 /// convert a BSON document into a TDocVariant variant instance
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -2185,56 +2198,6 @@ begin
   end;
 end;
 
-procedure BsonAddItem(var Bson: TBsonDocument;
-  const NameValuePairs: array of const);
-var
-  W: TBsonWriter;
-  name: RawUtf8;
-  a, len, vallen: PtrInt;
-  P: PAnsiChar;
-  tmp: TTextWriterStackBuffer;
-begin
-  if (high(NameValuePairs) = 1) and
-     (NameValuePairs[1].VType = vtAnsiString) then
-  begin
-    // optimized for the ['$db', 'databasename'] usecase
-    VarRecToUtf8(NameValuePairs[0], name);
-    vallen := length(RawUtf8(NameValuePairs[1].VAnsiString));
-    len := length(Bson);
-    SetLength(Bson, len + length(name) + vallen + 7); // in-place resize
-    P := pointer(Bson);
-    PInteger(P)^ := length(Bson);
-    P[PInteger(P)^ - 1] := #0; // ending "\x00"
-    inc(P, len - 1); // overwrite ending "\x00"
-    P^ := AnsiChar(betString); // "\x02" e_name "\x00" int32 (byte*) "\x00"
-    MoveFast(pointer(name)^, P[1], length(name) + 1);
-    inc(P, length(name) + 2);
-    PInteger(P)^ := vallen + 1;
-    MoveFast(NameValuePairs[1].VAnsiString^, P[4], vallen + 1);
-  end
-  else
-  begin
-    // generic version for any kind of input
-    W := TBsonWriter.Create(tmp{%H-});
-    try
-      W.BsonDocumentBegin;
-      W.Write(@PIntegerArray(Bson)[1],
-        PInteger(Bson)^ - SizeOf(integer) - SizeOf(betEOF));
-      a := 0;
-      while a < high(NameValuePairs) do
-      begin
-        VarRecToUtf8(NameValuePairs[a], name);
-        W.BsonWrite(name, NameValuePairs[a + 1]);
-        inc(a, 2);
-      end;
-      W.BsonDocumentEnd;
-      W.ToBsonDocument(Bson);
-    finally
-      W.Free;
-    end;
-  end;
-end;
-
 procedure TBsonVariant.AddItem(var V: variant;
   const NameValuePairs: array of const);
 var
@@ -2260,6 +2223,23 @@ begin
       doc := Bson(NameValuePairs);
     FromBsonDocument(doc, V, betDoc);
   end;
+end;
+
+function TBsonVariant.GetItem(const V: variant; const Name: RawUtf8;
+  out Value: variant; ValueAs: TBsonDocArrayConversion): boolean;
+var
+  item: TBsonElement;
+begin
+  if TVarData(V).VType = varVariantByRef then
+    result := GetItem(PVariant(TVarData(V).VPointer)^, Name, Value)
+  else if (TVarData(V).VType = VarType) and
+          (TBsonVariantData(V).VKind in [betDoc, betArray]) then
+  begin
+    {%H-}item.FromBsonVariant(@V);
+    result := item.DocItemToVariant(Name, Value, ValueAs);
+  end
+  else
+    result := false;
 end;
 
 procedure TBsonVariant.FromBinary(const Bin: RawByteString;
@@ -3293,30 +3273,34 @@ end;
 function TBsonElement.FromNext(var BSON: PByte): boolean;
 var
   P: PUtf8Char;
+  len: PtrInt;
 begin
-  if BSON = nil then
+  P := pointer(BSON);
+  if P = nil then
   begin
     result := false;
     exit;
   end;
-  Kind := TBsonElementType(BSON^);
-  case integer(Kind) of
+  Kind := TBsonElementType(P^);
+  case ord(P^) of
     ord(betEOF):
       result := false;
     ord(betFloat)..ord(betDecimal128),
     betMinKey,
     betMaxKey:
       begin
-        P := PUtf8Char(BSON) + 1;
+        inc(P);
         Name := P;
-        NameLen := StrLen(P);
-        BSON := pointer(P + NameLen + 1);
+        len := StrLen(P);
+        NameLen := len;
+        BSON := pointer(P + len + 1);
         FromBson(BSON);
-        if ElementBytes < 0 then
+        len := ElementBytes;
+        if len < 0 then
           raise EBsonException.CreateUtf8(
             'TBsonElement.FromNext: unexpected size % for type %',
-            [ElementBytes, ord(Kind)]);
-        inc(BSON, ElementBytes);
+            [len, ord(Kind)]);
+        inc(BSON, len);
         inc(Index);
         result := true;
       end;
@@ -3790,7 +3774,12 @@ begin
   else if (v.VType = BsonVariantType.VarType) and
           (v.VKind in [betDoc, betArray]) and
           (v.VBlob <> nil) then
-    WriteBinary(RawByteString(v.VBlob));
+    WriteBinary(RawByteString(v.VBlob))
+  else
+  begin
+    BsonDocumentBegin; // void int32 e_list "\x00"
+    BsonDocumentEnd;
+  end;
 end;
 
 procedure TBsonWriter.BsonWriteProjection(const FieldNamesCsv: RawUtf8);
@@ -4160,11 +4149,61 @@ begin
     inc(result);
 end;
 
+procedure BsonAddItem(var Bson: TBsonDocument;
+  const NameValuePairs: array of const);
+var
+  W: TBsonWriter;
+  name: RawUtf8;
+  a, len, vallen: PtrInt;
+  P: PAnsiChar;
+  tmp: TTextWriterStackBuffer;
+begin
+  if (high(NameValuePairs) = 1) and
+     (NameValuePairs[1].VType = vtAnsiString) then
+  begin
+    // optimized for the ['$db', 'databasename'] usecase
+    VarRecToUtf8(NameValuePairs[0], name);
+    vallen := length(RawUtf8(NameValuePairs[1].VAnsiString));
+    len := length(Bson);
+    SetLength(Bson, len + length(name) + vallen + 7); // in-place resize
+    P := pointer(Bson);
+    PInteger(P)^ := length(Bson);
+    P[PInteger(P)^ - 1] := #0; // ending "\x00"
+    inc(P, len - 1); // overwrite ending "\x00"
+    P^ := AnsiChar(betString); // "\x02" e_name "\x00" int32 (byte*) "\x00"
+    MoveFast(pointer(name)^, P[1], length(name) + 1);
+    inc(P, length(name) + 2);
+    PInteger(P)^ := vallen + 1;
+    MoveFast(NameValuePairs[1].VAnsiString^, P[4], vallen + 1);
+  end
+  else
+  begin
+    // generic version for any kind of input
+    W := TBsonWriter.Create(tmp{%H-});
+    try
+      W.BsonDocumentBegin;
+      W.Write(@PIntegerArray(Bson)[1],
+        PInteger(Bson)^ - SizeOf(integer) - SizeOf(betEOF));
+      a := 0;
+      while a < high(NameValuePairs) do
+      begin
+        VarRecToUtf8(NameValuePairs[a], name);
+        W.BsonWrite(name, NameValuePairs[a + 1]);
+        inc(a, 2);
+      end;
+      W.BsonDocumentEnd;
+      W.ToBsonDocument(Bson);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
 procedure BsonToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer;
   Option: TBsonDocArrayConversion);
 begin
   if Option = asBsonVariant then
-    raise EBsonException.Create('BsonToDoc(option=asBsonVariant) is not allowed');
+    raise EBsonException.Create('BsonToDoc: Option not allowed');
   VarClear(Result);
   BsonParseLength(BSON, ExpectedBSONLen);
   BsonItemsToDocVariant(betDoc, BSON, TDocVariantData(Result), Option);
