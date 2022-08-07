@@ -277,9 +277,10 @@ type
     fRequestID: integer;
     fResponseTo: integer;
     fNumberToReturn: integer;
-    fDatabaseName, fCollectionName, fFullCollectionName: RawUtf8;
+    fDatabaseName, fCollectionName: RawUtf8;
     fBsonDocument: TBsonDocument;
     {$ifdef MONGO_OLDPROTOCOL}
+    fFullCollectionName: RawUtf8;
     fRequestOpCode: TMongoOperation;
     /// append a query parameter as a BSON document
     // - param can be a TDocVariant, e.g. created with:
@@ -305,9 +306,12 @@ type
     // identifies this message: in case of opQuery or opGetMore messages, it will
     // be sent in the responseTo field from the database
     // - responseTo is the requestID taken from previous opQuery or opGetMore
+    {$ifdef MONGO_OLDPROTOCOL}
     constructor Create(const FullCollectionName: RawUtf8;
-      {$ifdef MONGO_OLDPROTOCOL} opCode: TMongoOperation; {$endif MONGO_OLDPROTOCOL}
-      requestID, responseTo: integer); reintroduce;
+      opCode: TMongoOperation; requestID, responseTo: integer); reintroduce;
+    {$else}
+    constructor Create(const Database, Collection: RawUtf8); reintroduce;
+    {$endif MONGO_OLDPROTOCOL}
     /// flush the content and return the whole binary encoded stream
     // - expect the TBsonWriter instance to have been created with reintroduced
     // Create() specific constructors inheriting from this TMongoRequest class
@@ -323,15 +327,18 @@ type
     /// retrieve the NumberToReturn parameter as set to the constructor
     property NumberToReturn: integer
       read fNumberToReturn;
+    /// the associated collection name, e.g. 'test'
+    // - for OP_MSG, only set for "find", "aggregate" or "getMore" commands
+    property CollectionName: RawUtf8
+      read fCollectionName;
+    {$ifdef MONGO_OLDPROTOCOL}
     /// the associated full collection name, e.g. 'db.test'
     property FullCollectionName: RawUtf8
       read fFullCollectionName;
+    {$endif MONGO_OLDPROTOCOL}
     /// the associated full collection name, e.g. 'db'
     property DatabaseName: RawUtf8
       read fDatabaseName;
-    /// the associated full collection name, e.g. 'test'
-    property CollectionName: RawUtf8
-      read fCollectionName;
   end;
 
   {$ifdef MONGO_OLDPROTOCOL}
@@ -504,8 +511,9 @@ type
     fCommand: variant;
   public
     /// initialize a MongoDB client message to access a database instance
-    // - ToReturn>=0 is set for DoFind, to unest any firstBatch/nextBatch arrays
-    constructor Create(const FullCollectionName: RawUtf8;
+    // - Collection is set for "find" and "aggregate" commands, to unest any
+    // firstBatch/nextBatch arrays, and specify the collection name for "getMore"
+    constructor Create(const Database, Collection: RawUtf8;
       const Command: variant; Flags: TMongoMsgFlags; ToReturn: integer); reintroduce;
     /// write the main parameters of the request as JSON
     procedure ToJson(W: TJsonWriter; Mode: TMongoJsonMode); override;
@@ -867,17 +875,25 @@ type
     // instance (since the associated TMongoRequestQuery.NumberToSkip=1)
     // - in case of any error, the error message is returned as text
     // - in case of success, this method will return ''
+    // - if you expects the result to return a cursor, e.g. for a "find" or
+    // "aggregate" command, you can specify aCollectionName so that the "cursor"
+    // response will be parsed and its nested batch array, and call "getMore"
+    // if needed
     function RunCommand(const aDatabaseName: RawUtf8;
       const command: variant; var returnedValue: variant;
-      flags: TMongoQueryFlags = []): RawUtf8; overload;
+      flags: TMongoQueryFlags = []; const aCollectionName: RawUtf8 = ''): RawUtf8; overload;
     /// run a database command, supplied as a TDocVariant, TBsonVariant or a
     // string, and return the raw BSON document array of received items
     // - this overloaded method can be used on huge content to avoid the slower
     // conversion to an array of TDocVariant instances
     // - in case of success, this method will return TRUE, or FALSE on error
+    // - if you expects the result to return a cursor, e.g. for a "find" or
+    // "aggregate" command, you can specify aCollectionName so that the "cursor"
+    // response will be parsed and its nested batch array, and call "getMore"
+    // if needed
     function RunCommand(const aDatabaseName: RawUtf8;
       const command: variant; var returnedValue: TBsonDocument;
-      flags: TMongoQueryFlags = []): boolean; overload;
+      flags: TMongoQueryFlags = []; const aCollectionName: RawUtf8 = ''): boolean; overload;
 
     /// return TRUE if the Open method has successfully been called
     property Opened: boolean
@@ -1233,15 +1249,23 @@ type
     // (since the associated TMongoRequestQuery.NumberToSkip=1)
     // - in case of any error, the error message is returned as text
     // - in case of success, this method will return ''
+    // - if you expects the result to return a cursor, e.g. for a "find" or
+    // "aggregate" command, you can specify collName so that the "cursor"
+    // response will be parsed and its nested batch array, and call "getMore"
+    // if needed
     function RunCommand(const command: variant;
-      var returnedValue: variant): RawUtf8; overload;
+      var returnedValue: variant; const collName: RawUtf8 = ''): RawUtf8; overload;
     /// run a database command, supplied as a TDocVariant, TBsonVariant or a
     // string, and return the raw BSON document array of received items
     // - this overloaded method can be used on huge content to avoid the slower
     // conversion to an array of TDocVariant instances
     // - in case of success, this method will return TRUE, or FALSE on error
+    // - if you expects the result to return a cursor, e.g. for a "find" or
+    // "aggregate" command, you can specify collName so that the "cursor"
+    // response will be parsed and its nested batch array, and call "getMore"
+    // if needed
     function RunCommand(const command: variant;
-      var returnedValue: TBsonDocument): boolean; overload;
+      var returnedValue: TBsonDocument; const collName: RawUtf8 = ''): boolean; overload;
 
     /// create the user in the database to which the user will belong
     // - you could specify the roles to use, for this database or others:
@@ -1863,9 +1887,10 @@ const
 
 {$endif MONGO_OLDPROTOCOL}
 
+
+{$ifdef MONGO_OLDPROTOCOL}
 constructor TMongoRequest.Create(const FullCollectionName: RawUtf8;
-  {$ifdef MONGO_OLDPROTOCOL} opCode: TMongoOperation; {$endif MONGO_OLDPROTOCOL}
-  requestID, responseTo: integer);
+  opCode: TMongoOperation; requestID, responseTo: integer);
 begin
   inherited Create(TRawByteStringStream);
   fFullCollectionName := FullCollectionName;
@@ -1879,16 +1904,27 @@ begin
   BsonDocumentBegin;
   Write4(fRequestID);
   Write4(fResponseTo);
-  {$ifdef MONGO_OLDPROTOCOL}
   if not (opCode in CLIENT_OPCODES) then
     raise EMongoException.CreateUtf8('Unexpected %.Create(opCode=%)',
       [self, ToText(opCode)^]);
   fRequestOpCode := opCode;
   Write4(WIRE_OPCODES[opCode]);
-  {$else}
-  Write4(OP_MSG); // always opMsg
-  {$endif MONGO_OLDPROTOCOL}
 end;
+{$else}
+constructor TMongoRequest.Create(const Database, Collection: RawUtf8);
+begin
+  inherited Create(TRawByteStringStream);
+  fDatabaseName := Database;
+  fCollectionName := Collection;
+  fRequestID := InterlockedIncrement(GlobalRequestID);
+  fResponseTo := 0;
+  // write TMongoWireHeader
+  BsonDocumentBegin;
+  Write4(fRequestID);
+  Write4(fResponseTo);
+  Write4(OP_MSG); // always opMsg
+end;
+{$endif MONGO_OLDPROTOCOL}
 
 procedure TMongoRequest.ToBsonDocument(var result: TBsonDocument);
 begin
@@ -1913,18 +1949,19 @@ begin
     exit;
   end;
   W.Add('{');
+  {$ifdef MONGO_OLDPROTOCOL} // always OP_MSG
   W.AddShort('collection:"');
   W.AddJsonEscape(pointer(fFullCollectionName));
-  {$ifdef MONGO_OLDPROTOCOL} // always OP_MSG
   W.AddShort('",opCode:');
   W.AddTypedJson(@fRequestOpCode, TypeInfo(TMongoOperation));
+  W.Add(',');
   {$endif MONGO_OLDPROTOCOL}
-  W.AddShort(',requestID:');
-  W.AddU(fRequestID);
+  W.AddShort('requestID:');
+  W.AddPointer(PtrUInt(fRequestID), '"');
   if fResponseTo <> 0 then
   begin
     W.AddShort(',responseTo:');
-    W.AddU(fResponseTo);
+    W.AddPointer(PtrUInt(fResponseTo), '"');
   end;
   W.Add('}');
 end;
@@ -2142,12 +2179,12 @@ end;
 
 { TMongoMsg }
 
-constructor TMongoMsg.Create(const FullCollectionName: RawUtf8;
+constructor TMongoMsg.Create(const Database, Collection: RawUtf8;
   const Command: variant; Flags: TMongoMsgFlags; ToReturn: integer);
 begin
   fNumberToReturn := ToReturn;
   // follow TMongoMsgHeader
-  inherited Create(FullCollectionName, 0, 0); // write TMongoWireHeader
+  inherited Create(Database, Collection); // write TMongoWireHeader
   Write4(integer(Flags));
   Write1(ord(mmkBody)); // a single document follow
   if VarIsStr(Command) then
@@ -2458,6 +2495,7 @@ var
   item: variant;
 begin
   if Dest.VarType <> DocVariantType.VarType then
+    // may be called from getMore
     TDocVariant.NewFast(Variant(Dest), dvArray);
   result := Dest.Count;
   if (fReply = '') or
@@ -2474,17 +2512,15 @@ end;
 
 procedure TMongoReplyCursor.AppendAllAsDocVariant(var Dest: variant);
 begin
-  VarClear(Dest);
   if (fReply <> '') and
      (fDocumentCount <> 0) then
     if (fDocumentCount = 1) and
        (fRequest.fNumberToReturn = 1) then
       BsonToDoc(fFirstDocument, Dest)
     else
-    begin
-      TDocVariantData(Dest).InitFast(fDocumentCount, dvArray);
-      AppendAllToDocVariant(TDocVariantData(Dest));
-    end;
+      AppendAllToDocVariant(TDocVariantData(Dest))
+    else
+      VarClear(Dest);
 end;
 
 procedure TMongoReplyCursor.FetchAllToJson(W: TJsonWriter; Mode: TMongoJsonMode;
@@ -2644,6 +2680,7 @@ procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequest;
   var result: variant);
 begin
   // TMongoMsg asked for mmkBody with a single document section
+  VarClear(result);
   SendAndGetRepliesAndFree(Query, ReplyDocVariant, result);
   //writeln('< ',result);
 end;
@@ -2781,9 +2818,9 @@ begin
     while reply.CursorID <> 0 do
     begin
       // https://www.mongodb.com/docs/manual/reference/command/getMore
-      msg := TMongoMsg.Create(Request.FullCollectionName,
+      msg := TMongoMsg.Create(Request.DatabaseName, Request.CollectionName,
         BsonVariant(['getMore',    reply.CursorID,
-                     'collection', Request.CollectionName,
+                     'collection',  Request.CollectionName,
                      'batchSize',  Client.FindBatchSize]),
         [], Request.NumberToReturn);
       try
@@ -2932,8 +2969,8 @@ begin
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure', self, Request, Result);
   {$else}
-  if Request.NumberToReturn >= 0 then
-    Result.ExtractBatch; // from DoFind()
+  if Request.CollectionName <> '' then
+    Result.ExtractBatch; // from "find", "aggregate" or "getMore" commands
   {$endif MONGO_OLDPROTOCOL}
 end;
 
@@ -2998,22 +3035,22 @@ begin
   end;
 end;
 
-function NewCommand(const collection: RawUtf8; const command: variant;
-  flags: TMongoQueryFlags): TMongoRequest;
+function NewCommand(const db: RawUtf8; const command: variant;
+  flags: TMongoQueryFlags; const aCollectionName: RawUtf8): TMongoRequest;
 begin
   {$ifdef MONGO_OLDPROTOCOL}
-  result := TMongoRequestQuery.Create(collection, command, null, 1, 0, flags);
+  result := TMongoRequestQuery.Create(db + '.$cmd', command, null, 1, 0, flags);
   {$else}
-  result := TMongoMsg.Create(collection, command, flags, 1);
+  result := TMongoMsg.Create(db, aCollectionName, command, flags, 1);
   {$endif MONGO_OLDPROTOCOL}
 end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUtf8;
   const command: variant; var returnedValue: variant;
-  flags: TMongoQueryFlags): RawUtf8;
+  flags: TMongoQueryFlags; const aCollectionName: RawUtf8): RawUtf8;
 begin
-  GetDocumentsAndFree(NewCommand(
-    aDatabaseName + '.$cmd', command, flags), returnedvalue);
+  GetDocumentsAndFree(
+    NewCommand(aDatabaseName, command, flags, aCollectionName), returnedvalue);
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok', 1) <> 0 then
       result := ''
@@ -3023,12 +3060,12 @@ end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUtf8;
   const command: variant; var returnedValue: TBsonDocument;
-  flags: TMongoQueryFlags): boolean;
+  flags: TMongoQueryFlags; const aCollectionName: RawUtf8): boolean;
 var
   item: TBsonElement;
 begin
-  returnedValue := GetBsonAndFree(NewCommand(
-    aDatabaseName + '.$cmd', command, flags));
+  returnedValue := GetBsonAndFree(
+    NewCommand(aDatabaseName, command, flags, aCollectionName));
   result := true;
   item.FromDocument(returnedValue);
   if item.DocItemToInteger('ok', 1) = 0 then
@@ -3751,15 +3788,17 @@ begin
 end;
 
 function TMongoDatabase.RunCommand(const command: variant;
-  var returnedValue: variant): RawUtf8;
+  var returnedValue: variant; const collName: RawUtf8): RawUtf8;
 begin
-  result := client.Connections[0].RunCommand(name, command, returnedValue);
+  result := client.Connections[0].RunCommand(
+    name, command, returnedValue, [], collName);
 end;
 
 function TMongoDatabase.RunCommand(const command: variant;
-  var returnedValue: TBsonDocument): boolean;
+  var returnedValue: TBsonDocument; const collName: RawUtf8): boolean;
 begin
-  result := client.Connections[0].RunCommand(name, command, returnedValue);
+  result := client.Connections[0].RunCommand(
+    name, command, returnedValue, [], collName);
 end;
 
 
@@ -3815,7 +3854,7 @@ begin
       res := res.firstBatch;
     {$else}
     Database.Client.GetOneReadConnection.GetDocumentsAndFree(
-       TMongoMsg.Create(fFullCollectionName, variant(cmd), [], maxInt), res);
+      TMongoMsg.Create(fDatabase.Name, fName, variant(cmd), [], maxInt), res);
     {$endif MONGO_OLDPROTOCOL}
   end
   else
@@ -4048,7 +4087,7 @@ begin
   cmd.AddValue('batchSize', fDatabase.Client.FindBatchSize);
   //writeln('> ', variant(cmd));
   result := TMongoMsg.Create(
-    fFullCollectionName, variant(cmd), Flags, NumberToReturn);
+    fDatabase.Name, fName, variant(cmd), Flags, NumberToReturn);
 end;
 
 {$endif MONGO_OLDPROTOCOL}
