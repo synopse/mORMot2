@@ -1025,7 +1025,7 @@ type
       User, Database: RawUtf8;
       EncryptedDigest: RawByteString;
     end;
-    fFindBatchSize: integer;
+    fFindBatchSize, fGetMoreBatchSize: integer;
     fLog: TSynLog;
     fLogRequestEvent: TSynLogInfo;
     fLogReplyEvent: TSynLogInfo;
@@ -1180,11 +1180,17 @@ type
     property GracefulReconnect: boolean
       read fGracefulReconnect.Enabled write fGracefulReconnect.Enabled;
     /// how many documents are returned at once from the server per OP_MSG
-    // - i.e. the "batchSize" argument as supplied to "find" and "getMore"
+    // - i.e. the "batchSize" argument as supplied to "find" and "aggregate"
     // - we override the default MongoDB of value of 101, which is fine for
     // a shell but less for a software client, by setting 65536 here
     property FindBatchSize: integer
       read fFindBatchSize write fFindBatchSize;
+    /// how many documents are returned at once from the server per OP_MSG
+    // - i.e. the "batchSize" argument as supplied to "getMore"
+    // - we override the default MongoDB of value of 101, which is fine for
+    // a shell but less for a software client, by setting 65536 here
+    property GetMoreBatchSize: integer
+      read fGetMoreBatchSize write fGetMoreBatchSize;
     /// how may bytes this client did received, among all its connections
     property BytesReceived: Int64
       read GetBytesReceived;
@@ -2821,7 +2827,7 @@ begin
       msg := TMongoMsg.Create(Request.DatabaseName, Request.CollectionName,
         BsonVariant(['getMore',    reply.CursorID,
                      'collection',  Request.CollectionName,
-                     'batchSize',  Client.FindBatchSize]),
+                     'batchSize',  Client.GetMoreBatchSize]),
         [], Request.NumberToReturn);
       try
         SendAndGetCursor(msg, reply);
@@ -3223,6 +3229,7 @@ begin
   fConnectionTimeOut := 30000;
   fConnectionTls := aTls;
   fFindBatchSize := 65536; // 65536 documents per find/getMore batch
+  fGetMoreBatchSize := fFindBatchSize;
   // overriden by "hello" command just after connection
   fServerMaxBsonObjectSize := 16777216;
   fServerMaxMessageSizeBytes := 48000000;
@@ -4084,7 +4091,8 @@ begin
     cmd.AddValue('limit', NumberToReturn);
   if NumberToSkip <> 0 then
     cmd.AddValue('skip', NumberToSkip);
-  cmd.AddValue('batchSize', fDatabase.Client.FindBatchSize);
+  if NumberToReturn > 100 then // default MongoDB batch size of 101
+    cmd.AddValue('batchSize', fDatabase.Client.FindBatchSize);
   //writeln('> ', variant(cmd));
   result := TMongoMsg.Create(
     fDatabase.Name, fName, variant(cmd), Flags, NumberToReturn);
