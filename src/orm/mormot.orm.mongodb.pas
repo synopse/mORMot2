@@ -1734,7 +1734,7 @@ var
   client: TMongoClient;
   database: TMongoDatabase;
   server, port, pwd: RawUtf8;
-  tls: boolean;
+  o: TMongoClientOptions;
   p: integer;
 begin
   result := nil;
@@ -1742,6 +1742,8 @@ begin
     exit;
   if IdemPChar(pointer(aDefinition.Kind), 'MONGODB') then
   begin
+    // kind=mongodb/mongodbs servername=server:port databasename=$db
+    // todo: https://www.mongodb.com/docs/manual/reference/connection-string ?
     Split(aDefinition.ServerName, ':', server, port);
     if (server = '') or
        (server[1] in ['?', '*']) or
@@ -1749,8 +1751,10 @@ begin
       // check mandatory MongoDB IP and Database
       exit;
     p := Utf8ToInteger(port, 1024, 65535, MONGODB_DEFAULTPORT);
-    tls := ord(aDefinition.Kind[8]) in [ord('S'), ord('s')]; // 'MongoDBS'
-    client := TMongoClient.Create(server, p, tls);
+    o := [];
+    if ord(aDefinition.Kind[8]) in [ord('S'), ord('s')] then // 'MongoDBS'
+      include(o, mcoTls);
+    client := TMongoClient.Create(server, p, o);
     try
       with aDefinition do
         if (User <> '') and

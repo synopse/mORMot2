@@ -641,7 +641,7 @@ end;
     // directly into JSON
     procedure FetchAllToJson(W: TJsonWriter;
       Mode: TMongoJsonMode = modMongoStrict; WithHeader: boolean = false;
-      MaxSize: cardinal = 0);
+      MaxSize: PtrUInt = 0);
     /// return all documents content as a JSON array, or one JSON object
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
@@ -923,6 +923,13 @@ type
   // - other items [1..] are the Secondary members
   TMongoConnectionDynArray = array of TMongoConnection;
 
+  /// the available options for a TMongoClient client
+  TMongoClientOption = (
+    mcoTls);
+
+  /// set of available options for a TMongoClient client
+  TMongoClientOptions = set of TMongoClientOption;
+
   /// define Read Preference Modes to a MongoDB replica set
   // - Important: All read preference modes except rpPrimary may return stale
   // data because secondaries replicate operations from the primary with some
@@ -1017,7 +1024,7 @@ type
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
     fConnectionTimeOut: cardinal;
-    fConnectionTls: boolean;
+    fOptions: TMongoClientOptions;
     fServerReadOnly: boolean;
     fServerMaxWireVersion: TMongoServerWireVersion;
     fGracefulReconnect: record
@@ -1046,19 +1053,20 @@ type
       ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
     function ReOpen: boolean;
   public
-    /// the optional low-level Tls parameters
-    // - used when fConnectionTls was set to TRUE
+    /// the optional low-level TLS parameters
+    // - used when mcoTls was included in client Options
     ConnectionTlsContext: TNetTlsContext;
     /// the optional low-level Proxy parameters
     ConnectionTunnel: TUri;
     /// prepare a connection to a MongoDB server or Replica Set
-    // - this constructor won't create the connection until the Open method
-    // is called
+    // - this constructor won't create the connection until the Open or
+    // OpenAuth method is called
     // - you can specify multiple hosts, as CSV values, if necessary
-    // - depending on the platform, you may request for a Tls secured connection
+    // - you may request for a mcoTls secured connection (optionally setting
+    // ConnectionTlsContext parameters)
     constructor Create(const Host: RawUtf8; Port: integer = MONGODB_DEFAULTPORT;
-      aTls: boolean = false; const SecondaryHostCsv: RawUtf8 = ''; const
-      SecondaryPortCsv: RawUtf8 = ''); overload;
+      aOptions: TMongoClientOptions = []; const SecondaryHostCsv: RawUtf8 = '';
+      const SecondaryPortCsv: RawUtf8 = ''); overload;
     /// connect to a database on a remote MongoDB primary server
     // - this method won't use authentication, and will return the corresponding
     // MongoDB database instance
@@ -1172,9 +1180,9 @@ type
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: cardinal
       read fConnectionTimeOut write fConnectionTimeOut;
-    /// if the socket connection is secured over Tls
-    property ConnectionTls: boolean
-      read fConnectionTls;
+    /// the options of this socket connection
+    property Options: TMongoClientOptions
+      read fOptions;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
     property GracefulReconnect: boolean
@@ -2553,7 +2561,7 @@ begin
     W.Add(
       '{ReplyHeader:{Flags:"%",RequestID:"%",ResponseTo:"%",Reply:',
       [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)),
-       pointer(requestID), pointer(responseTo)]);
+       {%H-}pointer(requestID), {%H-}pointer(responseTo)]);
     {$endif MONGO_OLDPROTOCOL}
   Rewind;
   while Next(b) do
@@ -2637,7 +2645,7 @@ begin
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
     fSocket := TCrtSocket.Open(fServerAddress, UInt32ToUtf8(fServerPort),
-      nlTcp, Client.ConnectionTimeOut, Client.ConnectionTls,
+      nlTcp, Client.ConnectionTimeOut, mcoTls in Client.Options,
       @Client.ConnectionTlsContext, @Client.ConnectionTunnel);
   except
     on E: Exception do
@@ -3221,7 +3229,7 @@ end;
 { TMongoClient }
 
 constructor TMongoClient.Create(const Host: RawUtf8; Port: integer;
-  aTls: boolean; const SecondaryHostCsv, SecondaryPortCsv: RawUtf8);
+  aOptions: TMongoClientOptions; const SecondaryHostCsv, SecondaryPortCsv: RawUtf8);
 const
   PROT: array[boolean] of string[1] = (
     '', 's');
@@ -3231,7 +3239,7 @@ var
   nHost, i: PtrInt;
 begin
   fConnectionTimeOut := 30000;
-  fConnectionTls := aTls;
+  fOptions := aOptions;
   fFindBatchSize := 65536; // 65536 documents per find/getMore batch
   fGetMoreBatchSize := fFindBatchSize;
   // overriden by "hello" command just after connection
@@ -3240,7 +3248,8 @@ begin
   fServerMaxWriteBatchSize := 100000;
   fLogReplyEventMaxSize := 1024;
   fGracefulReconnect.Enabled := true;
-  FormatUtf8('mongodb%://%:%', [PROT[aTls], Host, Port], fConnectionString);
+  FormatUtf8('mongodb%://%:%', [PROT[mcoTls in Options], Host, Port],
+    fConnectionString);
   CsvToRawUtf8DynArray(pointer(SecondaryHostCsv), secHost);
   nHost := length(secHost);
   SetLength(fConnections, nHost + 1);
