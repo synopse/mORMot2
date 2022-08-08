@@ -11,10 +11,9 @@ unit mormot.db.nosql.mongodb;
     - MongoDB Protocol Classes
     - MongoDB Client Classes
 
-   TODO:
-   - handle BULK commands support for MongoDB >=2.6 for faster writes
-     see http://blog.mongodb.org/post/84922794768
-   - GridFS support ?
+   Note: This drivers use the new OP_MSG/OP_COMPRESSED Wire protocol, mandatory
+   since MongoDB 5.1/6.0. Define MONGO_OLDPROTOCOL conditional for your project
+   if you want to connect to old < 3.6 MongoDB instances.
 
   *****************************************************************************
 }
