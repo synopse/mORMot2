@@ -39,6 +39,7 @@ uses
   mormot.core.perf,
   mormot.core.log,
   mormot.core.rtti,
+  mormot.lib.z,
   mormot.crypt.core,
   mormot.db.core,
   mormot.db.nosql.bson,
@@ -64,8 +65,9 @@ type
     /// retrieve the RequestID from the original request
     ResponseTo: integer;
     /// low-level code of the message
-    // - always equal to OP_MSG = 2013, unless MONGO_OLDPROTOCOL is set and
-    // SendAndGetReply() will map it to a high-level TMongoOperation
+    // - equal to OP_MSG = 2013, unless MONGO_OLDPROTOCOL is set and
+    // SendAndGetReply() will map it to a high-level TMongoOperation,
+    // or equal to OP_COMPRESSED = 2012 for a compressed message
     OpCode: integer;
   end;
 
@@ -189,22 +191,11 @@ function ToText(op: TMongoOperation): PShortString; overload;
   // - mmkSequence is used when there are several sections, encoded as the
   // 32-bit size, then the ASCIIZ document identifier, then zero or more
   // BSON objects, ending one the declared size has been reached
-  // - mmkInternal is used for internal purposes
+  // - mmkInternal is used for internal purposes and rejected by the server
   TMongoMsgKind = (
     mmkBody,
     mmkSequence,
     mmkInternal);
-
-  /// internal low-level binary structure mapping the Msg header
-  TMongoMsgHeader = packed record
-    /// standard message header
-    Header: TMongoWireHeader;
-    /// 32-bit query/response flags
-    Flags: TMongoMsgFlags;
-    /// how the following sections are defined
-    SectionKind: TMongoMsgKind;
-  end;
-  PMongoMsgHeader = ^TMongoMsgHeader;
 
   TMongoQueryFlags = TMongoMsgFlags;
   TMongoReplyCursorFlags = TMongoMsgFlags;
@@ -328,7 +319,7 @@ type
     property NumberToReturn: integer
       read fNumberToReturn;
     /// the associated collection name, e.g. 'test'
-    // - for OP_MSG, only set for "find", "aggregate" or "getMore" commands
+    // - for OP_MSG/OP_COMPRESSED, only set for "find", "aggregate" or "getMore"
     property CollectionName: RawUtf8
       read fCollectionName;
     {$ifdef MONGO_OLDPROTOCOL}
@@ -505,15 +496,17 @@ type
   {$else}
 
   /// a MongoDB client message to access a collection
-  // - implements the OP_MSG opcode for all its query or write process to the DB
+  // - implements the OP_MSG/OP_COMPRESSED opcodes for all its query or
+  // write process to the DB
   TMongoMsg = class(TMongoRequest)
   protected
     fCommand: variant;
+    fCompressed: integer; // zlib compression ratio, 0 if uncompressed
   public
     /// initialize a MongoDB client message to access a database instance
     // - Collection is set for "find" and "aggregate" commands, to unest any
     // firstBatch/nextBatch arrays, and specify the collection name for "getMore"
-    constructor Create(const Database, Collection: RawUtf8;
+    constructor Create(Client: TObject; const Database, Collection: RawUtf8;
       const Command: variant; Flags: TMongoMsgFlags; ToReturn: integer); reintroduce;
     /// write the main parameters of the request as JSON
     procedure ToJson(W: TJsonWriter; Mode: TMongoJsonMode); override;
@@ -550,6 +543,8 @@ end;
     {$ifdef MONGO_OLDPROTOCOL}
     fStartingFrom: integer;
     procedure ComputeDocumentsList;
+    {$else}
+    fCompressed: integer; // zlib compression ratio, 0 if uncompressed
     {$endif MONGO_OLDPROTOCOL}
     function GetOneDocument(index: integer): variant;
   public
@@ -722,6 +717,22 @@ end;
 
 
 { ************ MongoDB Client Classes }
+
+type
+  /// the available options for a TMongoClient client
+  // - mcoTls is to be defined if the TCP socket should use TLS encryption
+  // - mcoZlibCompressor is to be included if ZLIB compression is enabled
+  TMongoClientOption = (
+    mcoTls,
+    mcoZlibCompressor);
+
+  /// set of available options for a TMongoClient client
+  TMongoClientOptions = set of TMongoClientOption;
+
+const
+  /// the TMongoClient.Create default options
+  // - we enable zlib compression by default for messages > 1KB
+  MONGODB_DEFAULTOPTIONS = [mcoZlibCompressor];
 
 type
     /// event callback signature for iterative process of TMongoConnection
@@ -923,13 +934,6 @@ type
   // - other items [1..] are the Secondary members
   TMongoConnectionDynArray = array of TMongoConnection;
 
-  /// the available options for a TMongoClient client
-  TMongoClientOption = (
-    mcoTls);
-
-  /// set of available options for a TMongoClient client
-  TMongoClientOptions = set of TMongoClientOption;
-
   /// define Read Preference Modes to a MongoDB replica set
   // - Important: All read preference modes except rpPrimary may return stale
   // data because secondaries replicate operations from the primary with some
@@ -1033,6 +1037,7 @@ type
       EncryptedDigest: RawByteString;
     end;
     fFindBatchSize, fGetMoreBatchSize: integer;
+    fZlibSize, fZlibNumberToReturn, fZlibLevel: integer;
     fLog: TSynLog;
     fLogRequestEvent: TSynLogInfo;
     fLogReplyEvent: TSynLogInfo;
@@ -1065,7 +1070,8 @@ type
     // - you may request for a mcoTls secured connection (optionally setting
     // ConnectionTlsContext parameters)
     constructor Create(const Host: RawUtf8; Port: integer = MONGODB_DEFAULTPORT;
-      aOptions: TMongoClientOptions = []; const SecondaryHostCsv: RawUtf8 = '';
+      aOptions: TMongoClientOptions = MONGODB_DEFAULTOPTIONS;
+      const SecondaryHostCsv: RawUtf8 = '';
       const SecondaryPortCsv: RawUtf8 = ''); overload;
     /// connect to a database on a remote MongoDB primary server
     // - this method won't use authentication, and will return the corresponding
@@ -1180,13 +1186,26 @@ type
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: cardinal
       read fConnectionTimeOut write fConnectionTimeOut;
-    /// the options of this socket connection
+    /// the options of this MongoDB client connection
+    // - i.e. if TLS encryption or ZLib compression are enabled
     property Options: TMongoClientOptions
       read fOptions;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
     property GracefulReconnect: boolean
       read fGracefulReconnect.Enabled write fGracefulReconnect.Enabled;
+    /// after how many bytes of command mcoZlibCompressor is activated
+    // - default is 1024 (1KB), which is fair enough, especially with libflate
+    property ZlibSize: integer
+      read fZlibSize write fZlibSize;
+    /// after how many requested find rows mcoZlibCompressor is activated
+    // - default is 128, which is fair enough, especially with libflate
+    property ZlibNumberToReturn: integer
+      read fZlibNumberToReturn write fZlibNumberToReturn;
+    /// the zlib/deflate compression level used for mcoZlibCompressor
+    // - default is 1, which is the fastest, especially with libflate
+    property ZlibLevel: integer
+      read fZlibLevel write fZlibLevel;
     /// how many documents are returned at once from the server per OP_MSG
     // - i.e. the "batchSize" argument as supplied to "find" and "aggregate"
     // - we override the default MongoDB of value of 101, which is fine for
@@ -1897,7 +1916,10 @@ end;
 {$else}
 
 const
-  OP_MSG = 2013;
+  OP_COMPRESSED = 2012;
+  OP_MSG        = 2013;
+  
+  ZLIB_COMPRESSORID = 2;
 
 {$endif MONGO_OLDPROTOCOL}
 
@@ -1936,7 +1958,7 @@ begin
   BsonDocumentBegin;
   Write4(fRequestID);
   Write4(fResponseTo);
-  Write4(OP_MSG); // always opMsg
+  // OP_MSG/OP_COMPRESSED will be written by the inherited TMongoMsg.Create
 end;
 {$endif MONGO_OLDPROTOCOL}
 
@@ -1970,11 +1992,11 @@ begin
   W.AddTypedJson(@fRequestOpCode, TypeInfo(TMongoOperation));
   W.Add(',');
   {$endif MONGO_OLDPROTOCOL}
-  W.AddShort('requestID:');
+  W.AddShort('req:');
   W.AddPointer(PtrUInt(fRequestID), '"');
   if fResponseTo <> 0 then
   begin
-    W.AddShort(',responseTo:');
+    W.AddShort(',resp:');
     W.AddPointer(PtrUInt(fResponseTo), '"');
   end;
   W.Add('}');
@@ -2193,28 +2215,67 @@ end;
 
 { TMongoMsg }
 
-constructor TMongoMsg.Create(const Database, Collection: RawUtf8;
-  const Command: variant; Flags: TMongoMsgFlags; ToReturn: integer);
+constructor TMongoMsg.Create(Client: TObject;
+  const Database, Collection: RawUtf8; const Command: variant;
+  Flags: TMongoMsgFlags; ToReturn: integer);
+var
+  len: PtrInt;
+  cmd, comp: RawByteString;
+  c: PAnsiChar;
 begin
   fNumberToReturn := ToReturn;
   // follow TMongoMsgHeader
   inherited Create(Database, Collection); // write TMongoWireHeader
-  Write4(integer(Flags));
-  Write1(ord(mmkBody)); // a single document follow
   if VarIsStr(Command) then
     fCommand := BsonVariant([Command, 1]) // as expected by hello command e.g.
   else
     fCommand := Command;
-  BsonVariantType.AddItem(fCommand, ['$db', fDatabaseName]); // for OP_MSG
-  //writeln('> ',fCommand);
-  BsonWriteDoc(fCommand); // TBsonVariant or TDocVariant
+  BsonVariantType.AddItem(fCommand, ['$db', fDatabaseName]); // since OP_MSG
+  if not BsonVariantType.IsOfKind(fCommand, betDoc) then
+    raise EMongoException.CreateUtf8('%.Create: command?', [self]);
+  // generate the proper OP_MSG/OP_COMPRESSED content
+  cmd := RawByteString(TBsonVariantData(fCommand).VBlob);
+  len := length(cmd);
+  with Client as TMongoClient do
+  if (mcoZlibCompressor in Options) and
+     (len > ZlibSize) or
+     (ToReturn > ZlibNumberToReturn) then
+  begin
+    // compress cmd into an OP_COMPRESSED compatible structure
+    SetLength(cmd, len + 5);
+    c := pointer(cmd);
+    MoveFast(c^, c[5], len);
+    PInteger(c)^ := integer(Flags);
+    c[4] := AnsiChar(mmkBody);
+    comp := CompressZipString(c, len + 5, {level=}1, {zlib=}true);
+    // https://github.com/mongodb/specifications/blob/master/source/compression
+    Write4(OP_COMPRESSED);       // 2012
+    // end of standard message header
+    Write4(OP_MSG);              // originalOpcode
+    Write4(length(cmd));         // uncompressedSize
+    Write1(ZLIB_COMPRESSORID);   // compressorId (noop is rejected in practice)
+    Write(pointer(comp), length(comp));
+    fCompressed := PtrUInt(100 * length(comp)) div PtrUInt(len);
+  end
+  else
+  begin
+    // https://github.com/mongodb/specifications/blob/master/source/message
+    Write4(OP_MSG);
+    // end of standard message header
+    Write4(integer(Flags));
+    Write1(ord(mmkBody)); // a single document follow
+    //writeln('> ',fCommand);
+    Write(pointer(cmd), len);
+  end;
 end;
 
 procedure TMongoMsg.ToJson(W: TJsonWriter; Mode: TMongoJsonMode);
 begin
   inherited ToJson(W, Mode);
   W.CancelLastChar('}');
-  W.AddShort(',command:');
+  if fCompressed <> 0 then
+    W.Add(',zlib:%', [fCompressed]);
+  W.AddShorter(',cmd:');
   if AddMongoJson(fCommand, W, modMongoShell, 1024) then
     W.AddShorter('...') // huge Command has been truncated after 1KB
   else
@@ -2279,33 +2340,71 @@ end;
 
 {$else}
 
+type
+  TOpMsgHeader = packed record
+    Header: TMongoWireHeader;
+    Flags: TMongoMsgFlags;
+    SectionKind: TMongoMsgKind;
+  end;
+  TOpCompressedHeader = packed record
+    Header: TMongoWireHeader;
+    OriginalOpcode: integer;
+    UncompressedSize: integer;
+    CompressorId: byte;
+  end;
+
 procedure TMongoReplyCursor.Init(Request: TMongoRequest;
   const ReplyMessage: TMongoReply);
+const
+  _E: string[24] = 'TMongoReplyCursor.Init: ';
 var
   len: PtrInt;
+  msg: ^TOpMsgHeader;
+  cmp: ^TOpCompressedHeader;
 begin
   len := length(ReplyMessage);
-  with PMongoMsgHeader(ReplyMessage)^ do
+  msg := pointer(ReplyMessage);
+  if (len < SizeOf(TOpMsgHeader)) or
+     (msg.Header.MessageLength <> len) then
+    raise EMongoException.CreateUtf8('%len=%', [_E, len]);
+  fRequestID := msg.Header.RequestID;
+  fResponseTo := msg.Header.ResponseTo;
+  if msg.Header.OpCode = OP_COMPRESSED then
   begin
-    if (len < SizeOf(TMongoMsgHeader)) or
-       (Header.MessageLength <> len) then
-      raise EMongoException.CreateUtf8(
-        'TMongoReplyCursor.Init(len=%)', [len]);
-    if Header.OpCode <> OP_MSG then
-      raise EMongoException.CreateUtf8(
-        'TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
-    if SectionKind <> mmkBody then
-      raise EMongoException.CreateUtf8(
-        'TMongoReplyCursor.Init(Kind=%)', [ord(SectionKind)]);
-    fRequestID := requestID;
-    fResponseTo := responseTo;
-    fResponseFlags := ResponseFlags;
-  end;
+    // https://github.com/mongodb/specifications/blob/master/source/compression
+    cmp := pointer(msg);
+    if cmp.OriginalOpcode <> OP_MSG then
+      raise EMongoException.CreateUtf8('%orig=%', [_E, cmp.OriginalOpcode]);
+    if cmp.CompressorId <> ZLIB_COMPRESSORID then
+      raise EMongoException.CreateUtf8('%compressor=%', [_E, cmp.CompressorId]);
+    if (cmp.UncompressedSize < 5) or
+       (cmp.UncompressedSize > 16 shl 20) then
+      raise EMongoException.CreateUtf8('%size=%', [_E, cmp.UncompressedSize]);
+    FastSetRawByteString(fReply, nil, cmp.UncompressedSize);
+    if UncompressMem(
+        PAnsiChar(cmp) + SizeOf(cmp^), pointer(fReply), len - SizeOf(cmp^),
+        cmp.UncompressedSize, {zlib=}true) <> cmp.UncompressedSize then
+      raise EMongoException.CreateUtf8('%zlib decompression', [_E]);
+    msg := pointer(fReply);
+    dec(PByte(msg), SizeOf(msg.Header)); // header is not compressed
+    fFirstDocument := @PByteArray(msg)[SizeOf(msg^)];
+    fCompressed := PtrUInt(100 * len) div PtrUInt(length(fReply));
+  end
+  else if msg.Header.OpCode = OP_MSG then
+  begin
+    // https://github.com/mongodb/specifications/blob/master/source/message
+    fReply := ReplyMessage;
+    fFirstDocument := @PByteArray(fReply)[SizeOf(msg^)];
+    fCompressed := 0;
+  end
+  else
+    raise EMongoException.CreateUtf8('%OpCode=%', [_E, msg.Header.OpCode]);
+  if msg.SectionKind <> mmkBody then
+    raise EMongoException.CreateUtf8('%kind=%', [_E, ord(msg.SectionKind)]);
+  fResponseFlags := msg.Flags;
   fRequest := Request;
   fDocumentCount := 1; // as for mmkBody
   fCursorID := 0; // no need to call getMore
-  fReply := ReplyMessage;
-  fFirstDocument := @PByteArray(pointer(fReply))[SizeOf(TMongoMsgHeader)];
   Rewind;
   fLatestDocIndex := -1;
 end;
@@ -2552,17 +2651,22 @@ begin
   end;
   if WithHeader and
      (Mode = modMongoShell) then
+  begin
     {$ifdef MONGO_OLDPROTOCOL}
     W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:"%",ResponseTo:"%",' +
       'CursorID:%,StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
-      [byte(ResponseFlags), pointer(requestID), pointer(responseTo), CursorID,
+      [byte(ResponseFlags), pointer(RequestID), pointer(ResponseTo), CursorID,
        StartingFrom, fDocumentCount]);
     {$else}
-    W.Add(
-      '{ReplyHeader:{Flags:"%",RequestID:"%",ResponseTo:"%",Reply:',
-      [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)),
-       {%H-}pointer(requestID), {%H-}pointer(responseTo)]);
+    W.Add('{req:"%",resp:"%",',
+      [{%H-}pointer(RequestID), {%H-}pointer(ResponseTo)]);
+    if ResponseFlags <> [] then
+      W.Add('flags:"%",', [{%H-}pointer(integer(ResponseFlags))]);
+    if fCompressed <> 0 then
+      W.Add('zlib:%,', [fCompressed]);
+    W.AddShorter('doc:');
     {$endif MONGO_OLDPROTOCOL}
+  end;
   Rewind;
   while Next(b) do
   begin
@@ -2836,7 +2940,8 @@ begin
     while reply.CursorID <> 0 do
     begin
       // https://www.mongodb.com/docs/manual/reference/command/getMore
-      msg := TMongoMsg.Create(Request.DatabaseName, Request.CollectionName,
+      msg := TMongoMsg.Create(
+        Client, Request.DatabaseName, Request.CollectionName,
         BsonVariant(['getMore',    reply.CursorID,
                      'collection',  Request.CollectionName,
                      'batchSize',  Client.GetMoreBatchSize]),
@@ -3053,13 +3158,13 @@ begin
   end;
 end;
 
-function NewCommand(const db: RawUtf8; const command: variant;
+function NewCommand(c: TMongoClient; const db: RawUtf8; const command: variant;
   flags: TMongoQueryFlags; const aCollectionName: RawUtf8): TMongoRequest;
 begin
   {$ifdef MONGO_OLDPROTOCOL}
   result := TMongoRequestQuery.Create(db + '.$cmd', command, null, 1, 0, flags);
   {$else}
-  result := TMongoMsg.Create(db, aCollectionName, command, flags, 1);
+  result := TMongoMsg.Create(c, db, aCollectionName, command, flags, 1);
   {$endif MONGO_OLDPROTOCOL}
 end;
 
@@ -3068,7 +3173,8 @@ function TMongoConnection.RunCommand(const aDatabaseName: RawUtf8;
   flags: TMongoQueryFlags; const aCollectionName: RawUtf8): RawUtf8;
 begin
   GetDocumentsAndFree(
-    NewCommand(aDatabaseName, command, flags, aCollectionName), returnedvalue);
+    NewCommand(Client, aDatabaseName, command, flags, aCollectionName),
+    returnedvalue);
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok', 1) <> 0 then
       result := ''
@@ -3083,7 +3189,7 @@ var
   item: TBsonElement;
 begin
   returnedValue := GetBsonAndFree(
-    NewCommand(aDatabaseName, command, flags, aCollectionName));
+    NewCommand(Client, aDatabaseName, command, flags, aCollectionName));
   result := true;
   item.FromDocument(returnedValue);
   if item.DocItemToInteger('ok', 1) = 0 then
@@ -3242,6 +3348,9 @@ begin
   fOptions := aOptions;
   fFindBatchSize := 65536; // 65536 documents per find/getMore batch
   fGetMoreBatchSize := fFindBatchSize;
+  fZlibSize := 1024;
+  fZlibNumberToReturn := 128;
+  fZlibLevel := 1;
   // overriden by "hello" command just after connection
   fServerMaxBsonObjectSize := 16777216;
   fServerMaxMessageSizeBytes := 48000000;
@@ -3589,6 +3698,8 @@ end;
 procedure TMongoClient.AfterOpen;
 var
   w: integer;
+  c: TDocVariantData;
+  compression: PDocVariantData;
 begin
   if VarIsEmptyOrNull(fServerBuildInfo) then
   begin
@@ -3602,6 +3713,9 @@ begin
   if VarIsEmptyOrNull(fServerInfo) then
   begin
 // https://github.com/mongodb/specifications/blob/master/source/mongodb-handshake
+    c.InitFast(1, dvArray); // compression:[] is mandatory even void (specs)
+    if mcoZlibCompressor in fOptions then
+      c.AddItemText('zlib');
     fConnections[0].RunCommand('admin',
       BsonVariant(['hello', 1,
                    'client',
@@ -3621,7 +3735,9 @@ begin
                              'name', OSVersionShort,
                              'architecture', CPU_ARCH_TEXT,
                          '}',
-                     '}']),fServerInfo);
+                     '}',
+                   'compression', variant(c)
+      ]), fServerInfo);
     with _Safe(fServerInfo, dvObject)^ do
       if Count <> 0 then
       begin
@@ -3631,6 +3747,10 @@ begin
         GetAsInteger('maxWireVersion', w);
         byte(fServerMaxWireVersion) := w;
         GetAsBoolean('readOnly', fServerReadOnly);
+        if mcoZlibCompressor in fOptions then
+          if (not GetAsArray('compression', compression)) or
+             (compression.SearchItemByValue('zlib') < 0) then
+            exclude(fOptions, mcoZlibCompressor); // zlib unsupported on server
       end;
   end;
 end;
@@ -3890,7 +4010,8 @@ begin
       res := res.firstBatch;
     {$else}
     Database.Client.GetOneReadConnection.GetDocumentsAndFree(
-      TMongoMsg.Create(fDatabase.Name, fName, variant(cmd), [], maxInt), res);
+      TMongoMsg.Create(fDatabase.Client, fDatabase.Name, fName,
+        variant(cmd), [], maxInt), res);
     {$endif MONGO_OLDPROTOCOL}
   end
   else
@@ -4123,7 +4244,7 @@ begin
   if NumberToReturn > 100 then // default MongoDB batch size of 101
     cmd.AddValue('batchSize', fDatabase.Client.FindBatchSize);
   //writeln('> ', variant(cmd));
-  result := TMongoMsg.Create(
+  result := TMongoMsg.Create(fDatabase.Client,
     fDatabase.Name, fName, variant(cmd), Flags, NumberToReturn);
 end;
 
@@ -4524,7 +4645,7 @@ initialization
   {$ifdef MONGO_OLDPROTOCOL}
   Assert(SizeOf(TMongoReplyHeader) = 36);
   {$else}
-  Assert(SizeOf(TMongoMsgHeader) = 21);
+  Assert(SizeOf(TOpMsgHeader) = 21);
   {$endif MONGO_OLDPROTOCOL}
 
 end.

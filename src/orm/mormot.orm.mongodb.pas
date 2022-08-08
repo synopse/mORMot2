@@ -1751,8 +1751,8 @@ begin
       // check mandatory MongoDB IP and Database
       exit;
     p := Utf8ToInteger(port, 1024, 65535, MONGODB_DEFAULTPORT);
-    o := [];
-    if ord(aDefinition.Kind[8]) in [ord('S'), ord('s')] then // 'MongoDBS'
+    o := MONGODB_DEFAULTOPTIONS; // as set by default on TMongoClient.Create()
+    if aDefinition.Kind[8] in ['S', 's'] then // 'mongodbs'
       include(o, mcoTls);
     client := TMongoClient.Create(server, p, o);
     try
