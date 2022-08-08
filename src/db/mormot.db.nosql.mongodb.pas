@@ -2543,14 +2543,15 @@ begin
   if WithHeader and
      (Mode = modMongoShell) then
     {$ifdef MONGO_OLDPROTOCOL}
-    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,CursorID:%,' +
-      'StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
-      [byte(ResponseFlags), requestID, responseTo, CursorID,
+    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:"%",ResponseTo:"%",' +
+      'CursorID:%,StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
+      [byte(ResponseFlags), pointer(requestID), pointer(responseTo), CursorID,
        StartingFrom, fDocumentCount]);
     {$else}
     W.Add(
-      '{ReplyHeader:{Flags:"%",RequestID:%,ResponseTo:%,ReplyDocuments:[',
-      [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)), requestID, responseTo]);
+      '{ReplyHeader:{Flags:"%",RequestID:"%",ResponseTo:"%",ReplyDocuments:[',
+      [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)),
+       pointer(requestID), pointer(responseTo)]);
     {$endif MONGO_OLDPROTOCOL}
   Rewind;
   while Next(b) do
@@ -3588,11 +3589,27 @@ begin
   end;
   if VarIsEmptyOrNull(fServerInfo) then
   begin
+// https://github.com/mongodb/specifications/blob/master/source/mongodb-handshake
     fConnections[0].RunCommand('admin',
       BsonVariant(['hello', 1,
-                   'comment', FormatVariant('% on % using % %',
-       [Executable. Version.VersionInfo, Executable.Host,
-        SYNOPSE_FRAMEWORK_NAME, SYNOPSE_FRAMEWORK_FULLVERSION])]), fServerInfo);
+                   'client',
+                     '{',
+                         'application',
+                         '{',
+                             'name',    Executable.ProgramName,
+                         '}',
+                         'driver',
+                         '{',
+                             'name',    SYNOPSE_FRAMEWORK_NAME,
+                             'version', SYNOPSE_FRAMEWORK_VERSION,
+                         '}',
+                         'os',
+                         '{',
+                             'type', OS_TEXT,
+                             'name', OSVersionShort,
+                             'architecture', CPU_ARCH_TEXT,
+                         '}',
+                     '}']),fServerInfo);
     with _Safe(fServerInfo, dvObject)^ do
       if Count <> 0 then
       begin
