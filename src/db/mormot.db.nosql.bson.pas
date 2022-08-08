@@ -704,8 +704,9 @@ type
     // - this method will use by default the MongoDB Extended JSON syntax for
     // specific MongoDB objects but you may use modMongoShell if needed
     // - will raise an EBsonException if element is not correct
-    procedure AddMongoJson(W: TJsonWriter;
-      Mode: TMongoJsonMode = modMongoStrict); overload;
+    // - returns false on success, true if MaxSize has been reached
+    function AddMongoJson(W: TJsonWriter; Mode: TMongoJsonMode = modMongoStrict;
+      MaxSize: PtrUInt = 0): boolean; overload;
   end;
 
   PBsonElement = ^TBsonElement;
@@ -1277,14 +1278,17 @@ function BsonDocumentToJson(const BSON: TBsonDocument;
 // i.e. the item data as expected by TBsonElement.FromNext()
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-procedure BsonListToJson(BsonList: PByte; Kind: TBsonElementType;
-  W: TJsonWriter; Mode: TMongoJsonMode = modMongoStrict);
+// - returns false on success, true if MaxSize has been reached
+function BsonListToJson(BsonList: PByte; Kind: TBsonElementType;
+  W: TJsonWriter; Mode: TMongoJsonMode = modMongoStrict;
+  MaxSize: PtrUInt = 0): boolean;
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-procedure AddMongoJson(const Value: variant; W: TJsonWriter;
-  Mode: TMongoJsonMode = modMongoStrict); overload;
+// - returns false on success, true if MaxSize has been reached
+function AddMongoJson(const Value: variant; W: TJsonWriter;
+  Mode: TMongoJsonMode = modMongoStrict; MaxSize: PtrUInt = 0): boolean; overload;
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
 // - in addition to default modMongoStrict as rendered by VariantSaveJson(),
@@ -2962,10 +2966,12 @@ begin
     result := default;
 end;
 
-procedure TBsonElement.AddMongoJson(W: TJsonWriter; Mode: TMongoJsonMode);
+function TBsonElement.AddMongoJson(W: TJsonWriter; Mode: TMongoJsonMode;
+  MaxSize: PtrUInt): boolean;
 label
   Bin, regex;
 begin
+  result := false;
   case integer(Kind) of
     ord(betFloat):
       W.AddDouble(unaligned(PDouble(Element)^));
@@ -2980,7 +2986,7 @@ begin
       end;
     ord(betDoc),
     ord(betArray):
-      BsonListToJson(Data.DocList, Kind, W, Mode);
+      result := BsonListToJson(Data.DocList, Kind, W, Mode, MaxSize);
     ord(betObjectID):
       begin
         W.AddShort(BSON_JSON_OBJECTID[false, Mode]);
@@ -2990,25 +2996,32 @@ begin
     ord(betDeprecatedUndefined):
       W.AddShort(BSON_JSON_UNDEFINED[Mode = modMongoShell]);
     ord(betBinary):
-      case Mode of
-        modNoMongo:
-          W.WrBase64(Data.Blob, Data.BlobLen, {withmagic=}true);
-        modMongoStrict:
-          begin
-            W.AddShort(BSON_JSON_BINARY[false, false]);
-            W.WrBase64(Data.Blob, Data.BlobLen, false);
-            W.AddShort(BSON_JSON_BINARY[false, true]);
-            W.AddBinToHex(@Data.BlobSubType, 1);
-            W.AddShorter('"}');
-          end;
-        modMongoShell:
-          begin
-            W.AddShort(BSON_JSON_BINARY[true, false]);
-            W.AddBinToHex(@Data.BlobSubType, 1);
-            W.AddShort(BSON_JSON_BINARY[true, true]);
-            W.WrBase64(Data.Blob, Data.BlobLen, false);
-            W.AddShorter('")');
-          end;
+      begin
+        if (MaxSize = 0) or
+           (MaxSize > PtrUInt(Data.BlobLen)) then
+          MaxSize := Data.BlobLen
+        else
+          result := true; // truncated
+        case Mode of
+          modNoMongo:
+            W.WrBase64(Data.Blob, MaxSize, {withmagic=}true);
+          modMongoStrict:
+            begin
+              W.AddShort(BSON_JSON_BINARY[false, false]);
+              W.WrBase64(Data.Blob, MaxSize, false);
+              W.AddShort(BSON_JSON_BINARY[false, true]);
+              W.AddBinToHex(@Data.BlobSubType, 1);
+              W.AddShorter('"}');
+            end;
+          modMongoShell:
+            begin
+              W.AddShort(BSON_JSON_BINARY[true, false]);
+              W.AddBinToHex(@Data.BlobSubType, 1);
+              W.AddShort(BSON_JSON_BINARY[true, true]);
+              W.WrBase64(Data.Blob, MaxSize, false);
+              W.AddShorter('")');
+            end;                  
+        end;
       end;
     ord(betRegEx):
       case Mode of
@@ -4215,11 +4228,12 @@ begin
   BsonToDoc(pointer(BSON), result, length(BSON));
 end;
 
-procedure BsonListToJson(BsonList: PByte; Kind: TBsonElementType; W: TJsonWriter;
-  Mode: TMongoJsonMode);
+function BsonListToJson(BsonList: PByte; Kind: TBsonElementType; W: TJsonWriter;
+  Mode: TMongoJsonMode; MaxSize: PtrUInt): boolean;
 var
   item: TBsonElement;
 begin
+  result := true; // truncated
   case Kind of
     betDoc:
       if BsonList^ = byte(betEOF) then
@@ -4229,6 +4243,9 @@ begin
         W.Add('{');
         while item.FromNext(BsonList) do
         begin
+          if (MaxSize <> 0) and
+             (W.TextLength > MaxSize) then
+            exit;
           if Mode = modMongoShell then
           begin
             W.AddNoJsonEscape(item.Name, item.NameLen);
@@ -4236,7 +4253,8 @@ begin
           end
           else
             W.AddProp(item.Name, item.NameLen);
-          item.AddMongoJson(W, Mode);
+          if item.AddMongoJson(W, Mode, MaxSize) then
+            exit;
           W.AddComma;
         end;
         W.CancelLastComma;
@@ -4247,7 +4265,10 @@ begin
         W.Add('[');
         while item.FromNext(BsonList) do
         begin
-          item.AddMongoJson(W, Mode);
+          if ((MaxSize <> 0) and
+              (W.TextLength > MaxSize)) or
+             item.AddMongoJson(W, Mode, MaxSize) then
+            exit;
           W.AddComma;
         end;
         W.CancelLastComma;
@@ -4256,6 +4277,7 @@ begin
   else
     raise EBsonException.CreateUtf8('BsonListToJson(Kind=%)', [ord(Kind)]);
   end;
+  result := false; // not truncated 
 end;
 
 function BsonDocumentToJson(const BSON: TBsonDocument; Mode: TMongoJsonMode): RawUtf8;
@@ -4279,22 +4301,24 @@ begin
   end;
 end;
 
-procedure AddMongoJson(const Value: variant; W: TJsonWriter; Mode: TMongoJsonMode);
-
-  procedure AddCustom;
-  var
-    item: TBsonElement;
-    temp: RawByteString;
-  begin
-    item.FromVariant('', Value, temp);
-    item.AddMongoJson(W, Mode);
-  end;
-
+function AddMongoJson(const Value: variant; W: TJsonWriter;
+  Mode: TMongoJsonMode; MaxSize: PtrUInt): boolean;
+var
+  item: TBsonElement;
+  temp: pointer;
 begin
   if TVarData(Value).VType < $10F then
-    W.AddVariant(Value, twJsonEscape)
+  begin
+    W.AddVariant(Value, twJsonEscape);
+    result := false; // not truncated
+  end
   else
-    AddCustom; // sub-procedure to avoid implicit try..finally
+  begin
+    temp := nil;
+    item.FromVariant('', Value, RawByteString(temp));
+    result := item.AddMongoJson(W, Mode, MaxSize);
+    FastAssignNew(temp);
+  end;
 end;
 
 function VariantSaveMongoJson(const Value: variant; Mode: TMongoJsonMode): RawUtf8;
