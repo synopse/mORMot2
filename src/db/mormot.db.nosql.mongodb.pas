@@ -647,7 +647,7 @@ end;
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
     function ToJson(Mode: TMongoJsonMode = modMongoStrict;
-      WithHeader: boolean = false; MaxSize: cardinal = 0): RawUtf8;
+      WithHeader: boolean = false; MaxSize: PtrUInt = 0): RawUtf8;
     /// append all documents content to a dynamic array of TDocVariant
     // - return the new size of the Dest[] array
     function AppendAllToDocVariantDynArray(var Dest: TVariantDynArray): integer;
@@ -2207,8 +2207,10 @@ begin
   inherited ToJson(W, Mode);
   W.CancelLastChar('}');
   W.AddShort(',command:');
-  AddMongoJson(fCommand, W, modMongoShell);
-  W.Add('}');
+  if AddMongoJson(fCommand, W, modMongoShell, 1024) then
+    W.AddShorter('...') // huge Command has been truncated after 1KB
+  else
+    W.Add('}')
 end;
 
 
@@ -2530,7 +2532,7 @@ begin
 end;
 
 procedure TMongoReplyCursor.FetchAllToJson(W: TJsonWriter; Mode: TMongoJsonMode;
-  WithHeader: boolean; MaxSize: cardinal);
+  WithHeader: boolean; MaxSize: PtrUInt);
 var
   b: PByte;
 begin
@@ -2549,7 +2551,7 @@ begin
        StartingFrom, fDocumentCount]);
     {$else}
     W.Add(
-      '{ReplyHeader:{Flags:"%",RequestID:"%",ResponseTo:"%",ReplyDocuments:[',
+      '{ReplyHeader:{Flags:"%",RequestID:"%",ResponseTo:"%",Reply:',
       [ToHexShort(@ResponseFlags, SizeOf(ResponseFlags)),
        pointer(requestID), pointer(responseTo)]);
     {$endif MONGO_OLDPROTOCOL}
@@ -2557,22 +2559,23 @@ begin
   while Next(b) do
   begin
     inc(b, SizeOf(integer)); // points to the "e_list" of "int32 e_list #0"
-    BsonListToJson(b, betDoc, W, Mode);
-    W.AddComma;
-    if (MaxSize > 0) and
-       (W.TextLength > MaxSize) then
+    if BsonListToJson(b, betDoc, W, Mode, MaxSize) then
     begin
-      W.AddShorter('...');
-      break;
+      W.AddShorter('...'); // truncated
+      exit;
     end;
+    W.AddComma;
+    if (MaxSize <> 0) and
+       (W.TextLength > MaxSize) then
+      break;
   end;
   W.CancelLastComma;
   if WithHeader then
-    W.Add(']', '}');
+    W.Add({$ifdef MONGO_OLDPROTOCOL} ']', {$endif} '}');
 end;
 
 function TMongoReplyCursor.ToJson(Mode: TMongoJsonMode; WithHeader: boolean;
-  MaxSize: cardinal): RawUtf8;
+  MaxSize: PtrUInt): RawUtf8;
 var
   W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
@@ -2970,8 +2973,8 @@ begin
   if (Client.LogReplyEvent <> sllNone) and
      (Client.Log <> nil) and
      (Client.LogReplyEvent in Client.Log.Family.Level) then
-    Client.Log.Log(Client.LogReplyEvent, Result.ToJson(modMongoShell, True,
-      Client.LogReplyEventMaxSize), Request);
+    Client.Log.Log(Client.LogReplyEvent,
+      Result.ToJson(modMongoShell, True, Client.LogReplyEventMaxSize), Request);
   {$ifdef MONGO_OLDPROTOCOL}
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure', self, Request, Result);
