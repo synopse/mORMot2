@@ -2221,6 +2221,7 @@ constructor TMongoMsg.Create(Client: TObject;
 var
   len: PtrInt;
   cmd, comp: RawByteString;
+  usezlib: boolean;
   c: PAnsiChar;
 begin
   fNumberToReturn := ToReturn;
@@ -2237,9 +2238,10 @@ begin
   cmd := RawByteString(TBsonVariantData(fCommand).VBlob);
   len := length(cmd);
   with Client as TMongoClient do
-  if (mcoZlibCompressor in Options) and
-     (len > ZlibSize) or
-     (ToReturn > ZlibNumberToReturn) then
+    usezlib := (mcoZlibCompressor in Options) and
+               ((len > ZlibSize) or
+                (ToReturn > ZlibNumberToReturn));
+  if usezlib then
   begin
     // compress cmd into an OP_COMPRESSED compatible structure
     SetLength(cmd, len + 5);
