@@ -2345,6 +2345,18 @@ type
     /// TOnDynArraySortCompare callback used as fallback for unsupported items
     // - simple per-byte comparison over Size bytes
     function ValueFullCompare(const A, B): integer;
+    /// how many iterations could be done one a given value
+    // - returns -1 if the value is not iterable, or length(DynArray) or
+    // TStrings.Count or TList.Count
+    // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
+    function ValueIterateCount(Data: pointer): integer; virtual;
+    /// iterate over one sub-item of a given value
+    // - returns nil if the value is not iterable or Index is out of range
+    // - returns a pointer to the value, rkPerReference kinds being already
+    // resolved, so you can directly trans-type to string() or TObject()
+    // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
+    function ValueIterate(Data: pointer; Index: PtrUInt;
+      out Rtti: TRttiCustom): pointer; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -2708,6 +2720,7 @@ function FindCustomProp(p: PRttiCustomProp; name: pointer; namelen: TStrLen;
 var
   /// low-level access to the list of registered PRttiInfo/TRttiCustom/TRttiJson
   Rtti: TRttiCustomList;
+
 
 
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
@@ -7776,6 +7789,17 @@ end;
 function TRttiCustom.ValueFullCompare(const A, B): integer;
 begin
   result := MemCmp(@A, @B, fCache.ItemSize); // use SSE2 asm on Intel/AMD
+end;
+
+function TRttiCustom.ValueIterateCount(Data: pointer): integer;
+begin
+  result := -1; // unsupported
+end;
+
+function TRttiCustom.ValueIterate(Data: pointer; Index: PtrUInt;
+  out Rtti: TRttiCustom): pointer;
+begin
+  result := nil;
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;

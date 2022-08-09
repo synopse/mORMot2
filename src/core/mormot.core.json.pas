@@ -1857,6 +1857,17 @@ type
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
       ObjectListItemClass: TClass = nil);
+    /// how many iterations could be done one a given value
+    // - returns -1 if the value is not iterable, or length(DynArray) or
+    // TStrings.Count or TList.Count
+    function ValueIterateCount(Data: pointer): integer; override;
+    /// iterate over one sub-item of a given value
+    // - returns nil if the value is not iterable or Index is out of range
+    // - returns a pointer to the value, rkPerReference kinds being already
+    // resolved (since the TList/TStrings access is done via getter methods),
+    // so you can directly trans-type the result to string() or TObject()
+    function ValueIterate(Data: pointer; Index: PtrUInt;
+      out Rtti: TRttiCustom): pointer; override;
     /// efficient search of TRttiJson from a given RTTI TypeInfo()
     // - to be used instead of Rtti.Find() to return directly the TRttiJson instance
     class function Find(Info: PRttiInfo): TRttiJson;
@@ -10090,6 +10101,70 @@ begin
   end
   else
     Json := nil;
+end;
+
+function TRttiJson.ValueIterateCount(Data: pointer): integer;
+begin
+  result := -1; // unsupported
+  if Data <> nil then
+    case Kind of
+      rkDynArray:
+        result := length(PByteDynArray(Data)^); // length() is for all types
+      rkClass:
+        begin
+          Data := PPointer(Data)^; // TObject are stored by reference
+          if Data <> nil then
+           case ValueRtlClass of
+             vcCollection:
+               result := TCollection(Data).Count;
+             vcStrings:
+               result := TStrings(Data).Count;
+             vcObjectList,
+             vcList:
+               result := TList(Data).Count;
+             vcSynList:
+               result := TSynList(Data).Count;
+           end;
+        end;
+    end;
+end;
+
+function TRttiJson.ValueIterate(Data: pointer; Index: PtrUInt;
+  out Rtti: TRttiCustom): pointer;
+begin
+  result := nil;
+  if Data <> nil then
+    case Kind of
+      rkDynArray:
+        if Index < PtrUInt(length(PByteDynArray(Data)^)) then
+        begin
+          result := PAnsiChar(Data) + (PtrInt(Index) * ArrayRtti.Size);
+          Rtti := ArrayRtti; // also available for (most) unmanaged types
+          if ArrayRtti.Kind in rkPerReference then
+            result := PPointer(result)^; // resolved as for rkClass below
+        end;
+      rkClass:
+        begin
+          Data := PPointer(Data)^; // TObject are stored by reference
+          if Data <> nil then
+           case ValueRtlClass of
+             // getter methods do require resolved results
+             vcCollection:
+               if Index < PtrUInt(TCollection(Data).Count) then
+                 result := TCollection(Data).Items[Index];
+             vcStrings:
+               if Index < PtrUInt(TStrings(Data).Count) then
+                 result := pointer(TStrings(Data).Strings[Index]);
+             vcObjectList,
+             vcList:
+               if Index < PtrUInt(TList(Data).Count) then
+                 result := TList(Data).List[Index];
+             vcSynList:
+               if Index < PtrUInt(TSynList(Data).Count) then
+                 result := TSynList(Data).List[Index];
+           end;
+        end;
+    end;
 end;
 
 procedure TRttiJson.RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
