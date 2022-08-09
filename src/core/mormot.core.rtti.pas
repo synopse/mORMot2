@@ -297,6 +297,9 @@ const
      rkSet
     ];
 
+  /// types which are stored as pointers so are always accessed by reference
+  rkPerReference = rkStringTypes + [rkDynArray, rkInterface, rkClass];
+
   /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerates
   rkOrdinalTypes =
     rkHasRttiOrdTypes + [ {$ifdef FPC} rkQWord, {$endif} rkInt64 ];
@@ -2234,6 +2237,8 @@ type
     vcStrings,
     vcObjectList,
     vcList,
+    vcSynList,
+    vcRawUtf8List,
     vcESynException,
     vcException,
     vcObjectWithID);
@@ -2277,7 +2282,7 @@ type
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
-    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo);
+    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); virtual;
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinarySize: integer): TRttiCustom;
@@ -7476,6 +7481,7 @@ begin
     fValueRtlClass := vcException
   else if aClass.InheritsFrom(TObjectWithID) then
     fValueRtlClass := vcObjectWithID;
+  // vcSynList/vcRawUtf8List are set in overriden TRttiJson.SetValueClass
   // register the published properties of this class
   fProps.AddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then

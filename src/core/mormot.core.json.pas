@@ -1837,6 +1837,7 @@ type
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
+    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); override;
   public
     /// simple wrapper around TRttiJsonSave(fJsonSave)
     procedure RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
@@ -9922,11 +9923,6 @@ begin
         // customize JSON serialization
         if C = TSynList then
           fJsonSave := @_JS_TSynList
-        else if C = TRawUtf8List then
-        begin
-          fJsonSave := @_JS_TRawUtf8List;
-          fJsonLoad := @_JL_TRawUtf8List;
-        end
         else if C = TObjectWithID then
           fJsonLoad := @_JL_RttiObjectWithID; // also accepts "RowID" field
         C := C.ClassParent; // continue with the parent class
@@ -9942,6 +9938,11 @@ begin
         end;
       vcList:
         fJsonSave := @_JS_TList;
+      vcRawUtf8List:
+        begin
+          fJsonSave := @_JS_TRawUtf8List;
+          fJsonLoad := @_JL_TRawUtf8List;
+        end
     end;
   end
   else if rcfBinary in Flags then
@@ -9970,6 +9971,15 @@ begin
   if Assigned(fJsonReader.Code) then
     fJsonLoad := @_JL_RttiCustom;
   result := self;
+end;
+
+procedure TRttiJson.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
+begin
+  inherited SetValueClass(aClass, aInfo);
+  if aClass.InheritsFrom(TSynList) then
+    fValueRtlClass := vcSynList
+  else if aClass.InheritsFrom(TRawUtf8List) then
+    fValueRtlClass := vcRawUtf8List;
 end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
