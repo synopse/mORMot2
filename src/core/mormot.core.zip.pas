@@ -394,6 +394,7 @@ type
     procedure InfoStart(ExpectedSize: Int64; const Action, Name: TFileName);
     procedure SetZipNamePathDelim(Value: AnsiChar);
     function NormalizeZipName(const aZipName: TFileName): TFileName;
+    procedure NormalizeIntZipName(var intName: RawByteString);
   public
     /// initialize this class
     constructor Create;
@@ -1404,6 +1405,20 @@ begin
       fZipNamePathDelimString, [rfReplaceAll]);
 end;
 
+procedure TZipAbstract.NormalizeIntZipName(var intName: RawByteString);
+var
+  i, L: PtrInt;
+begin
+  // normalize TZipWriteEntry.intName
+  L := length(intName);
+  i := ByteScanIndex(pointer(intName), L, ord(fZipNamePathDelimReversed));
+  if i >= 0 then
+    repeat
+      inc(i);
+      if intName[i] = fZipNamePathDelimReversed then
+        intName[i] := fZipNamePathDelim;
+    until i = L;
+end;
 
 { TZipWrite }
 
@@ -1532,6 +1547,7 @@ begin
               dec(d^.h64.size, SizeOf(d^.h64.offset));
             end;
             SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
+            NormalizeIntZipName(d^.intName);
             inc(writepos, info.localsize + Int64(info.f64.zzipSize));
           end;
           inc(fCount);
@@ -1645,6 +1661,7 @@ begin
       h32.fileInfo.SetUtf8FileName;
     end;
     h32.fileInfo.nameLen := length(intName);
+    NormalizeIntZipName(intName);
     result := WriteRawHeader;
   end;
 end;
@@ -1664,6 +1681,8 @@ begin
     PFileInfo(P)^ := h32.fileInfo;
     inc(PFileInfo(P));
     MoveFast(pointer(intName)^, P^, h32.fileInfo.nameLen);
+    if ByteScanIndex(pointer(P), h32.fileInfo.nameLen, ord(fZipNamePathDelimReversed)) >= 0 then
+      raise ESynZip.CreateUtf8('%.WriteRawHeader(%)', [self, intName]); // paranoid
     inc(P, h32.fileInfo.nameLen);
     if h32.fileInfo.extraLen <> 0 then
       MoveFast(h64, P^, h32.fileInfo.extraLen);
