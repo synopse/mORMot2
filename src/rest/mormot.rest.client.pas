@@ -320,12 +320,14 @@ type
   /// store the information about the current session
   // - as set after a sucessfull TRestClientUri.SetUser() method
   TRestClientSession = record
+  private
     // for internal use
     Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUtf8;
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
+  public
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
     // - once authenticated, a TAuthUser instance is set, with its ID,
@@ -646,8 +648,8 @@ type
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
-    // - this version will use a GET with supplied parameters (which will be encoded
-    // with the URL)
+    // - this version will use a GET with supplied parameters (which will be
+    // encoded with the URL), and append the expected signature (if needed)
     function CallBackGet(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
       out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
@@ -656,8 +658,8 @@ type
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the UTF-8 decoded JSON result (server must reply with one
     // "result":"value" JSON object)
-    // - this version will use a GET with supplied parameters (which will be encoded
-    // with the URL)
+    // - this version will use a GET with supplied parameters (which will be
+    // encoded with the URL), and append the expected signature (if needed)
     function CallBackGetResult(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
       aTable: TOrmClass = nil; aID: TID = 0): RawUtf8;
@@ -2219,9 +2221,8 @@ begin
   try
     fRun.TimerDisable(SessionRenewEvent);
     InternalLog('SessionClose: notify server', sllTrace);
-    CallBackGet('auth', [
-      'userName', fSession.User.LogonName,
-      'session', fSession.ID], tmp);
+    CallBackGet('auth', ['userName', fSession.User.LogonName,
+                         'session',  fSession.ID], tmp);
   finally
     // back to no session, with default values
     fSession.ID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
@@ -2547,7 +2548,8 @@ function TRestClientUri.CallBackGetResult(const aMethodName: RawUtf8;
 var
   resp: RawUtf8;
 begin
-  if CallBackGet(aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
+  if CallBackGet(
+      aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
     result := JsonDecode(resp)
   else
     result := '';

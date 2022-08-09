@@ -69,7 +69,6 @@ type
   TAuthSession = class;
   TRestServer = class;
   TRestServerUriContext = class;
-  TRestServerAuthentication = class;
 
   /// exception raised in case of unexpected parsing error
   EParsingException = class(ESynException);
@@ -190,6 +189,7 @@ type
     fParameters: PUtf8Char;
     fParametersPos: integer;
     fSession: cardinal;
+    fSessionIndex: integer;
     fSessionOS: TOperatingSystemVersion; // 32-bit raw OS info
     fSessionGroup: TID;
     fSessionUser: TID;
@@ -1054,7 +1054,7 @@ type
     // - returns a session instance corresponding to the remote request, and
     // fill Ctxt.Session* members according to in-memory session information
     // - returns nil if this remote request does not match this authentication
-    // - method execution is protected by TRestServer.Sessions.ReadOnlyLock
+    // - method execution is protected by TRestServer.Sessions.Safe
     function RetrieveSession(
       Ctxt: TRestServerUriContext): TAuthSession; virtual; abstract;
     /// allow to tune the authentication process
@@ -2634,6 +2634,7 @@ begin
   fServer := aServer;
   fThreadServer := PerThreadRunningContextAddress;
   fThreadServer^.Request := self;
+  fSessionIndex := -1;
 end;
 
 destructor TRestServerUriContext.Destroy;
@@ -4754,10 +4755,11 @@ var
   uname: RawUtf8;
   sessid: cardinal;
   s: TAuthSession;
-  i: PtrInt;
-begin // fServer.Auth() method-based service made fServer.Sessions.WriteLock
+begin
+  // fServer.Auth() method-based service made fServer.Sessions.Safe.WriteLock
   result := false;
-  if fServer.fSessions = nil then
+  if (fServer.fSessions = nil) or
+     not fServer.fHandleAuthentication then
     exit;
   uname := Ctxt.InputUtf8OrVoid['UserName'];
   if uname = '' then
@@ -4768,17 +4770,16 @@ begin // fServer.Auth() method-based service made fServer.Sessions.WriteLock
   if sessid = 0 then
     exit;
   result := true; // recognized GET ModelRoot/auth?UserName=...&Session=...
-  // allow only to delete its own session - ticket [7723fa7ebd]
-  if sessid = Ctxt.Session then
+  // allow only to delete its own authenticated session
+  s := RetrieveSession(Ctxt); // parse signature
+  if (s <> nil) and
+     (Ctxt.fSessionIndex >= 0) and
+     (sessid = s.ID) and
+     (s.User.LogonName = uname) then
   begin
-    s := fServer.LockedSessionFind(sessid, @i);
-    if (s <> nil) and
-       (s.User.LogonName = uname) then
-      begin
-        Ctxt.fAuthSession := nil; // avoid GPF
-        fServer.LockedSessionDelete(i, Ctxt);
-        Ctxt.Success;
-      end;
+    Ctxt.fAuthSession := nil; // avoid GPF
+    fServer.LockedSessionDelete(Ctxt.fSessionIndex, Ctxt);
+    Ctxt.Success;
   end;
 end;
 
@@ -6349,7 +6350,8 @@ begin
   fStats.ClientConnect;
 end;
 
-function TRestServer.LockedSessionFind(aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
+function TRestServer.LockedSessionFind(
+  aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
 var
   tmp: array[0..3] of PtrInt; // store a fake TAuthSessionParent instance
   i: PtrInt;
@@ -6432,8 +6434,8 @@ begin
      (fSessions <> nil) and
      (Ctxt.Session > CONST_AUTHENTICATION_NOT_USED) then
   begin
-    // retrieve session from its ID
-    result := LockedSessionFind(Ctxt.Session, nil); // O(log(n)) binary search
+    // retrieve session from its ID using O(log(n)) binary search
+    result := LockedSessionFind(Ctxt.Session, @Ctxt.fSessionIndex);
     if result <> nil then
     begin
       // security check of session connection ID consistency
