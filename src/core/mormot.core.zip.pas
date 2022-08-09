@@ -398,6 +398,8 @@ type
     /// initialize this class
     constructor Create;
     /// the number of files inside a .zip archive
+    // - never trust the Entry[] array, which length is used as growing
+    // capacity so is likely to be bigger than the actual Count
     property Count: integer
       read fCount;
     /// how sub folders names are handled in the ZIP
@@ -492,6 +494,7 @@ type
       out Header: TLocalFileHeader): boolean;
 
     /// the files inside the .zip archive
+    // - use the Count property to find out how many files are stored
     property Entry: TZipReadEntryDynArray
       read fEntry;
   end;
@@ -640,6 +643,8 @@ type
       read fDest;
     /// the resulting file entries, ready to be written as a .zip catalog
     // - those will be appended after the data blocks at the end of the .zip file
+    // - this array is likely to have a capacity bigger than the actual Count:
+    // always use Count, not length(Entry) or "for entry in ZipWrite.Entry"
     property Entry: TZipWriteEntryDynArray
       read fEntry;
     /// mainly used during debugging - default false is safe and more efficient
@@ -2177,6 +2182,10 @@ begin
   end;
   if prev <> nil then
     prev^.nextlocaloffs := fCentralDirectoryOffset; // last file backward search
+  if fCount = 0 then
+    fEntry := nil
+  else
+    DynArrayFakeLength(fEntry, fCount); // so that length(Entry)=Count 
 end;
 
 constructor TZipRead.Create(Instance: THandle;
