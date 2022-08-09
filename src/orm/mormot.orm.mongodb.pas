@@ -1752,7 +1752,7 @@ begin
       exit;
     p := Utf8ToInteger(port, 1024, 65535, MONGODB_DEFAULTPORT);
     o := MONGODB_DEFAULTOPTIONS; // as set by default on TMongoClient.Create()
-    if aDefinition.Kind[8] in ['S', 's'] then // 'mongodbs'
+    if ord(aDefinition.Kind[8]) in [ord('S'), ord('s')] then // 'mongodbs'
       include(o, mcoTls);
     client := TMongoClient.Create(server, p, o);
     try
