@@ -539,6 +539,7 @@ end;
     fPosition: integer;
     fLatestDocIndex: integer;
     fLatestDocValue: variant;
+    fElapsedMS: Int64;
     {$ifdef MONGO_OLDPROTOCOL}
     fStartingFrom: integer;
     procedure ComputeDocumentsList;
@@ -550,7 +551,8 @@ end;
     /// initialize the cursor with a supplied binary reply from the server
     // - will raise an EMongoException if the content is not valid
     // - will populate all record fields with the supplied data
-    procedure Init(Request: TMongoRequest; const ReplyMessage: TMongoReply);
+    procedure Init(Request: TMongoRequest; const ReplyMessage: TMongoReply;
+      StartMS: Int64);
     {$ifndef MONGO_OLDPROTOCOL}
     /// extract the firstBatch/nextBatch: nested array after Init()
     procedure ExtractBatch;
@@ -2300,7 +2302,7 @@ end;
 {$ifdef MONGO_OLDPROTOCOL}
 
 procedure TMongoReplyCursor.Init(Request: TMongoRequest;
-  const ReplyMessage: TMongoReply);
+  const ReplyMessage: TMongoReply; StartMS: Int64);
 var
   Len: integer;
 begin
@@ -2309,9 +2311,11 @@ begin
   begin
     if (Len < SizeOf(TMongoReplyHeader)) or
        (Header.MessageLength <> Len) then
-      raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(len=%)', [Len]);
+      raise EMongoException.CreateUtf8(
+        'TMongoReplyCursor.Init(len=%)', [Len]);
     if Header.OpCode <> WIRE_OPCODES[opReply] then
-      raise EMongoException.CreateUtf8('TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
+      raise EMongoException.CreateUtf8(
+        'TMongoReplyCursor.Init(OpCode=%)', [Header.OpCode]);
     fRequestID := requestID;
     fResponseTo := responseTo;
     byte(fResponseFlags) := ResponseFlags;
@@ -2324,6 +2328,11 @@ begin
   fFirstDocument := @PByteArray(pointer(fReply))[SizeOf(TMongoReplyHeader)];
   Rewind;
   fLatestDocIndex := -1;
+  if StartMS <> 0 then
+  begin
+    QueryPerformanceMicroSeconds(fElapsedMS);
+    dec(fElapsedMS, StartMS);
+  end;
 end;
 
 procedure TMongoReplyCursor.ComputeDocumentsList;
@@ -2363,7 +2372,7 @@ type
   end;
 
 procedure TMongoReplyCursor.Init(Request: TMongoRequest;
-  const ReplyMessage: TMongoReply);
+  const ReplyMessage: TMongoReply; StartMS: Int64);
 const
   _E: string[24] = 'TMongoReplyCursor.Init: ';
 var
@@ -2417,6 +2426,11 @@ begin
   fCursorID := 0; // no need to call getMore
   Rewind;
   fLatestDocIndex := -1;
+  if StartMS <> 0 then
+  begin
+    QueryPerformanceMicroSeconds(fElapsedMS);
+    dec(fElapsedMS, StartMS);
+  end;
 end;
 
 procedure TMongoReplyCursor.ExtractBatch;
@@ -2665,16 +2679,16 @@ begin
     {$ifdef MONGO_OLDPROTOCOL}
     W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:"%",ResponseTo:"%",' +
       'CursorID:%,StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
-      [byte(ResponseFlags), pointer(RequestID), pointer(ResponseTo), CursorID,
-       StartingFrom, fDocumentCount]);
+      [byte(ResponseFlags), {%H-}pointer(RequestID), {%H-}pointer(ResponseTo),
+       CursorID, StartingFrom, fDocumentCount]);
     {$else}
-    W.Add('{req:"%",resp:"%",',
-      [{%H-}pointer(RequestID), {%H-}pointer(ResponseTo)]);
+    // not true JSON for logs is fine
+    W.Add('% %/% ', [MicroSecToString(fElapsedMS),
+      {%H-}pointer(ResponseTo), {%H-}pointer(RequestID)]);
     if ResponseFlags <> [] then
-      W.Add('flags:"%",', [{%H-}pointer(integer(ResponseFlags))]);
+      W.Add('flags:% ', [{%H-}pointer(integer(ResponseFlags))]);
     if fCompressed <> 0 then
-      W.Add('zlib:%,', [fCompressed]);
-    W.AddShorter('doc:');
+      W.Add('zlib:% ', [fCompressed]);
     {$endif MONGO_OLDPROTOCOL}
   end;
   Rewind;
@@ -2692,8 +2706,10 @@ begin
       break;
   end;
   W.CancelLastComma;
+  {$ifdef MONGO_OLDPROTOCOL}
   if WithHeader then
-    W.Add({$ifdef MONGO_OLDPROTOCOL} ']', {$endif} '}');
+    W.Add(']', '}');
+  {$endif MONGO_OLDPROTOCOL}
 end;
 
 function TMongoReplyCursor.ToJson(Mode: TMongoJsonMode; WithHeader: boolean;
@@ -3090,12 +3106,17 @@ procedure TMongoConnection.SendAndGetCursor(Request: TMongoRequest;
   var Result: TMongoReplyCursor);
 var
   reply: TMongoReply;
+  start: Int64;
 begin
-  SendAndGetReply(Request, reply);
-  Result.Init(Request, reply);
   if (Client.LogReplyEvent <> sllNone) and
      (Client.Log <> nil) and
      (Client.LogReplyEvent in Client.Log.Family.Level) then
+    QueryPerformanceMicroSeconds(start)
+  else
+    start := 0;
+  SendAndGetReply(Request, reply);
+  Result.Init(Request, reply, start);
+  if start <> 0 then
     Client.Log.Log(Client.LogReplyEvent,
       Result.ToJson(modMongoShell, True, Client.LogReplyEventMaxSize), Request);
   {$ifdef MONGO_OLDPROTOCOL}
