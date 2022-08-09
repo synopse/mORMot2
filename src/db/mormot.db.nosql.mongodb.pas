@@ -11,7 +11,7 @@ unit mormot.db.nosql.mongodb;
     - MongoDB Protocol Classes
     - MongoDB Client Classes
 
-   Note: This drivers use the new OP_MSG/OP_COMPRESSED Wire protocol, mandatory
+  Note: This driver uses the new OP_MSG/OP_COMPRESSED Wire protocol, mandatory
    since MongoDB 5.1/6.0. Define MONGO_OLDPROTOCOL conditional for your project
    if you want to connect to old < 3.6 MongoDB instances.
 
@@ -2218,10 +2218,11 @@ constructor TMongoMsg.Create(Client: TObject;
   const Database, Collection: RawUtf8; const Command: variant;
   Flags: TMongoMsgFlags; ToReturn: integer);
 var
-  len: PtrInt;
+  cmdlen, complen: PtrInt;
   cmd, comp: RawByteString;
-  usezlib: boolean;
+  level: integer;
   c: PAnsiChar;
+  mc: TMongoClient;
 begin
   fNumberToReturn := ToReturn;
   // follow TMongoMsgHeader
@@ -2235,28 +2236,35 @@ begin
     raise EMongoException.CreateUtf8('%.Create: command?', [self]);
   // generate the proper OP_MSG/OP_COMPRESSED content
   cmd := RawByteString(TBsonVariantData(fCommand).VBlob);
-  len := length(cmd);
-  with Client as TMongoClient do
-    usezlib := (mcoZlibCompressor in Options) and
-               ((len > ZlibSize) or
-                (ToReturn > ZlibNumberToReturn));
-  if usezlib then
+  cmdlen := length(cmd);
+  mc := Client as TMongoClient;
+  if (mcoZlibCompressor in mc.Options) and
+     ((cmdlen > mc.ZlibSize) or
+      (ToReturn > mc.ZlibNumberToReturn)) then
   begin
     // compress cmd into an OP_COMPRESSED compatible structure
-    SetLength(cmd, len + 5);
+    SetLength(cmd, cmdlen + 5);
     c := pointer(cmd);
-    MoveFast(c^, c[5], len);
+    MoveFast(c^, c[5], cmdlen);
     PInteger(c)^ := integer(Flags);
     c[4] := AnsiChar(mmkBody);
-    comp := CompressZipString(c, len + 5, {level=}1, {zlib=}true);
+    complen := zlibCompressMax(cmdlen + 5);
+    FastSetRawByteString(comp, nil, complen);
+    if cmdlen < 1024 then
+      level := Z_NO_COMPRESSION // not worth compressing on the wire
+      // but we use zlib anyway, otherwise the response is not compressed
+    else
+      level := mc.ZlibLevel;   // 1 (fastest) by default
+    // may use libdeflate on supported platforms
+    complen := CompressMem(c, pointer(comp), cmdlen + 5, complen, level, {zlib=}true);
     // https://github.com/mongodb/specifications/blob/master/source/compression
     Write4(OP_COMPRESSED);       // 2012
     // end of standard message header
     Write4(OP_MSG);              // originalOpcode
     Write4(length(cmd));         // uncompressedSize
     Write1(ZLIB_COMPRESSORID);   // compressorId (noop is rejected in practice)
-    Write(pointer(comp), length(comp));
-    fCompressed := PtrUInt(100 * length(comp)) div PtrUInt(len);
+    Write(pointer(comp), complen);
+    fCompressed := PtrUInt(100 * complen) div PtrUInt(cmdlen);
   end
   else
   begin
@@ -2266,7 +2274,7 @@ begin
     Write4(integer(Flags));
     Write1(ord(mmkBody)); // a single document follow
     //writeln('> ',fCommand);
-    Write(pointer(cmd), len);
+    Write(pointer(cmd), cmdlen);
   end;
 end;
 
@@ -2382,6 +2390,7 @@ begin
        (cmp.UncompressedSize > 16 shl 20) then
       raise EMongoException.CreateUtf8('%size=%', [_E, cmp.UncompressedSize]);
     FastSetRawByteString(fReply, nil, cmp.UncompressedSize);
+    // may use libdeflate on supported platforms
     if UncompressMem(
         PAnsiChar(cmp) + SizeOf(cmp^), pointer(fReply), len - SizeOf(cmp^),
         cmp.UncompressedSize, {zlib=}true) <> cmp.UncompressedSize then
@@ -3351,7 +3360,7 @@ begin
   fGetMoreBatchSize := fFindBatchSize;
   fZlibSize := 1024;
   fZlibNumberToReturn := 128;
-  fZlibLevel := 1;
+  fZlibLevel := Z_BEST_SPEED;
   // overriden by "hello" command just after connection
   fServerMaxBsonObjectSize := 16777216;
   fServerMaxMessageSizeBytes := 48000000;
