@@ -7,6 +7,14 @@ program MongoDBTests;
   {$APPTYPE CONSOLE}
 {$endif OSWINDOWS}
 
+{
+  Hints for Docker:
+  - sudo docker run --name mongodb -d -p 27017:27017 mongo:latest
+  - sudo docker exec -it mongodb bash
+  - sudo docker stop mongodb
+  - sudo docker rm mongodb
+
+}
 uses
   {$I mormot.uses.inc}
   mormot.core.log,

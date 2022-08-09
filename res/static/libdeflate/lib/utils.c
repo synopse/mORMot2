@@ -36,6 +36,8 @@
 #  include <stdlib.h>
 #endif
 
+//AB defined as external for RTL MM link
+
 void *
 libdeflate_malloc(size_t size);
 
