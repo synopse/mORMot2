@@ -911,6 +911,8 @@ function libdeflate_crc32; external;
 // original code is patched for proper linking and cdecl use
 // - see res/static/libdeflate for patched source and build instructions
 // - used libdeflatepas.a to avoid collision with libdeflate.a of libdeflate-dev
+// - we still use 1.7 old revision because latest 1.13 is actually... slower...
+// maybe due to the gcc compiler we use or unefficient compilation flags
 {$ifdef OSLINUX}
   {$ifdef CPUX86}
     {$linklib ..\..\static\i386-linux\libdeflatepas.a}
