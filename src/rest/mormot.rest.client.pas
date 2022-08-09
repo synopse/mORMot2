@@ -320,14 +320,18 @@ type
   /// store the information about the current session
   // - as set after a sucessfull TRestClientUri.SetUser() method
   TRestClientSession = record
+  {$ifdef HASINLINE}
   private
+  {$endif HASINLINE}
     // for internal use
     Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUtf8;
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
+  {$ifdef HASINLINE}
   public
+  {$endif HASINLINE}
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
     // - once authenticated, a TAuthUser instance is set, with its ID,
