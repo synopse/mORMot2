@@ -2524,11 +2524,13 @@ type
     /// register a given RTTI TypeInfo()
     // - returns a new (or existing if it was already registered) TRttiCustom
     // - if Info.Kind is rkDynArray, it will also register the nested rkRecord
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType
     function RegisterType(Info: PRttiInfo): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     /// register one or several RTTI TypeInfo()
     // - to ensure that those types will be recognized by text definition
     // - will just call RegisterType() for each Info[]
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType
     procedure RegisterTypes(const Info: array of PRttiInfo);
     /// recognize (and register if needed) a standard simple type
     // - will call TypeNameToStandardParserType() to check for known type names
@@ -2590,6 +2592,7 @@ type
     // - set BinarySize=-1 to unregister the binary serialization for the type
     // - not thread-safe: should be called once from the main thread, at startup,
     // e.g. in the initialization section of your types definition unit
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType
     function RegisterBinaryType(Info: PRttiInfo; BinarySize: integer = 0): TRttiCustom;
     /// register one or several RTTI TypeInfo() to be serialized as hexadecimal
     // - TypeInfo() and associated size information will here be defined by pairs:
@@ -2597,6 +2600,7 @@ type
     // - a wrapper around the RegisterBinaryType() method
     // - not thread-safe: should be called once from the main thread, at startup,
     // e.g. in the initialization section of your types definition unit
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
     // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
@@ -2659,12 +2663,14 @@ type
     // ! 'A,B,C integer D RawUtf8 E[E1,E2 double]'
     // - it will return the cached TRttiCustom instance corresponding to the
     // supplied RTTI text definition - i.e. the rkRecord if TypeInfo(SomeArray)
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromText()
     function RegisterFromText(DynArrayOrRecord: PRttiInfo;
       const RttiDefinition: RawUtf8): TRttiCustom; overload;
     /// define a custom serialization for several dynamic arrays or records
     // - the TypeInfo() and textual RTTI information will here be defined as
     // ([TypeInfo(TType1),_TType1, TypeInfo(TType2),_TType2]) pairs
     // - a wrapper around the overloaded RegisterFromText() method
+    // - match mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromText()
     procedure RegisterFromText(
       const TypeInfoTextDefinitionPairs: array of const); overload;
     /// register by name a custom serialization for a given dynamic array or record

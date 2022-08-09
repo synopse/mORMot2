@@ -797,6 +797,8 @@ type
   // - see TJsonWriter in mormot.core.json for proper JSON support
   // - see TResultsWriter in mormot.db.core for SQL resultset export
   // - see TOrmWriter in mormot.orm.core for ORM oriented serialization
+  // - note: mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromText()
+  // are moved into Rtti.RegisterFromText() as other similar methods
   TTextWriter = class
   protected
     fStream: TStream;
