@@ -1861,6 +1861,28 @@ type
 
 { ************ Text Formatting functions }
 
+type
+  /// a memory structure which avoids a temporary RawUtf8 allocation
+  // - used by VarRecToTempUtf8/VariantToTempUtf8 and FormatUtf8/FormatShort
+  TTempUtf8 = record
+    Len: PtrInt;
+    Text: PUtf8Char;
+    TempRawUtf8: pointer;
+    Temp: array[0..23] of AnsiChar;
+  end;
+  PTempUtf8 = ^TTempUtf8;
+
+/// convert any Variant into a JSON-compatible UTF-8 encoded temporary buffer
+// - this function would allocate a RawUtf8 in Res.TempRawUtf8 only if needed,
+// but use the supplied Res.Temp[] buffer for numbers to text conversion -
+// caller should ensure to make RawUtf8(Res.TempRawUtf8) := '' once done with it
+// - wasString is set if the V value was a text
+// - empty and null variants will be stored as 'null' text - as expected by JSON
+// - booleans will be stored as 'true' or 'false' - as expected by JSON
+// - custom variant types (e.g. TDocVariant) will be stored as JSON
+procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
+  var wasString: boolean);
+
 const
   /// which TVarRec.VType are numbers, i.e. don't need to be quoted
   // - vtVariant is a number by default, unless detected e.g. by VariantToUtf8()
@@ -1875,22 +1897,11 @@ const
 procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8;
   wasString: PBoolean = nil);
 
-type
-  /// a memory structure which avoids a temporary RawUtf8 allocation
-  // - used by VarRecToTempUtf8() and FormatUtf8()/FormatShort()
-  TTempUtf8 = record
-    Len: PtrInt;
-    Text: PUtf8Char;
-    TempRawUtf8: pointer;
-    Temp: array[0..23] of AnsiChar;
-  end;
-  PTempUtf8 = ^TTempUtf8;
-
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, using a specified temporary buffer
-// - this function would allocate a RawUtf8 in TempRawUtf8 only if needed,
+// - this function would allocate a RawUtf8 in Res.TempRawUtf8 only if needed,
 // but use the supplied Res.Temp[] buffer for numbers to text conversion -
-// caller should ensure to make RawUtf8(TempRawUtf8) := '' on the entry
+// caller should ensure to make RawUtf8(Res.TempRawUtf8) := '' once done with it
 // - it would return the number of UTF-8 bytes, i.e. Res.Len
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
@@ -9311,7 +9322,7 @@ begin // Res.Len has been set by caller
   end;
 end;
 
-procedure ToTempUtf8(V: double; var Res: TTempUtf8); overload;
+procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
 var
   tmp: shortstring;
 begin
@@ -9319,8 +9330,8 @@ begin
   BufToTempUtf8(@tmp[1], Res);
 end;
 
-procedure ToTempUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var Res: TTempUtf8); overload;
+procedure WideToTempUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var Res: TTempUtf8);
 var
   tmp: TSynTempBuffer;
 begin
@@ -9340,14 +9351,29 @@ begin
   end;
 end;
 
-procedure ToTempUtf8(V: PInt64; var Res: TTempUtf8); overload;
+procedure PtrIntToTempUtf8(V: PtrInt; var Res: TTempUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef CPU64}
-  if PQWord(V)^ <= high(SmallUInt32Utf8) then
-  {$else}
+  if PtrUInt(V) <= high(SmallUInt32Utf8) then
+  begin
+    Res.Text := pointer(SmallUInt32Utf8[V]);
+    Res.Len := PStrLen(Res.Text - _STRLEN)^;
+  end
+  else
+  begin
+    Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], V));
+    Res.Len := @Res.Temp[23] - Res.Text;
+  end;
+end;
+
+procedure Int64ToTempUtf8(V: PInt64; var Res: TTempUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+{$ifdef CPU64}
+  PtrIntToTempUtf8(V^, Res);
+{$else}
   if (PCardinalArray(V)^[0] <= high(SmallUInt32Utf8)) and
      (PCardinalArray(V)^[1] = 0) then
-  {$endif CPU64}
   begin
     Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
     Res.Len := PStrLen(Res.Text - _STRLEN)^;
@@ -9357,13 +9383,150 @@ begin
     Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V^));
     Res.Len := @Res.Temp[23] - Res.Text;
   end;
+{$endif CPU64}
+end;
+
+procedure QWordToTempUtf8(V: PQWord; var Res: TTempUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if V^ <= high(SmallUInt32Utf8) then
+  begin
+    Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
+    Res.Len := PStrLen(Res.Text - _STRLEN)^;
+  end
+  else
+  begin
+    Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V^));
+    Res.Len := @Res.Temp[23] - Res.Text;
+  end;
+end;
+
+procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
+  var wasString: boolean);
+var
+  tmp: TVarData;
+  vt: cardinal;
+begin
+  wasString := false;
+  Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
+  vt := TVarData(V).VType;
+  with TVarData(V) do
+    case vt of
+      varEmpty,
+      varNull:
+        begin
+          Res.Text := pointer(NULL_STR_VAR);
+          Res.Len := 4;
+        end;
+      varSmallint:
+        PtrIntToTempUtf8(VSmallInt, Res);
+      varShortInt:
+        PtrIntToTempUtf8(VShortInt, Res);
+      varWord:
+        PtrIntToTempUtf8(VWord, Res);
+      varLongWord:
+        {$ifdef CPU32}
+        if VLongWord > high(SmallUInt32Utf8) then
+        begin
+          Res.Text := PUtf8Char(StrUInt32(@Res.Temp[23], VLongWord));
+          Res.Len := @Res.Temp[23] - Res.Text;
+        end
+        else
+        {$endif CPU32}
+          PtrIntToTempUtf8(VLongWord, Res);
+      varByte:
+        PtrIntToTempUtf8(VByte, Res);
+      varBoolean:
+        if VBoolean then
+        begin
+          Res.Text := @BOOL_STR[true][1];
+          Res.Len := 4;
+        end
+        else
+        begin
+          Res.Text := @BOOL_STR[false][0];
+          Res.Len := 5;
+        end;
+      varInteger:
+        PtrIntToTempUtf8(VInteger, Res);
+      varInt64:
+        Int64ToTempUtf8(@VInt64, Res);
+      varWord64:
+        QWordToTempUtf8(@VInt64, Res);
+      varSingle:
+        DoubleToTempUtf8(VSingle, Res);
+      varDouble:
+        DoubleToTempUtf8(VDouble, Res);
+      varCurrency:
+        begin
+          Res.Len := Curr64ToPChar(VInt64, @Res.Temp);
+          Res.Text := @Res.Temp;
+        end;
+      varDate:
+        begin
+          wasString := true;
+          _VariantToUtf8DateTimeToIso8601(VDate, 'T', RawUtf8(Res.TempRawUtf8), false);
+          Res.Text := pointer(Res.TempRawUtf8);
+          Res.Len := length(RawUtf8(Res.TempRawUtf8));
+        end;
+      varString:
+        begin
+          wasString := true;
+          Res.Text := VString; // assume RawUtf8
+          Res.Len := length(RawUtf8(VString));
+        end;
+      {$ifdef HASVARUSTRING}
+      varUString:
+        begin
+          wasString := true;
+          WideToTempUtf8(VAny, length(UnicodeString(VAny)), Res);
+        end;
+      {$endif HASVARUSTRING}
+      varOleStr:
+        begin
+          wasString := true;
+          WideToTempUtf8(VAny, length(WideString(VAny)), Res);
+        end;
+    else
+      if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
+        // simple varByRef
+        VariantToTempUtf8(Variant(tmp), Res, wasString)
+      else if vt = varVariantByRef then{%H-}
+        // complex varByRef
+        VariantToTempUtf8(PVariant(VPointer)^, Res, wasString)
+      else if vt = varStringByRef then
+      begin
+        wasString := true;
+        Res.Text := PPointer(VString)^; // assume RawUtf8
+        Res.Len := length(PRawUtf8(VString)^);
+      end
+      else if vt = varOleStrByRef then
+      begin
+        wasString := true;
+        WideToTempUtf8(PPointer(VAny)^, length(PWideString(VAny)^), Res);
+      end
+      else
+      {$ifdef HASVARUSTRING}
+      if vt = varUStringByRef then
+      begin
+        wasString := true;
+        WideToTempUtf8(PPointer(VAny)^, length(PUnicodeString(VAny)^), Res);
+      end
+      else
+      {$endif HASVARUSTRING}
+      begin
+        // not recognizable vt -> seralize as JSON to handle also custom types
+        wasString := true;
+        _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
+        Res.Text := pointer(Res.TempRawUtf8);
+        Res.Len := length(RawUtf8(Res.TempRawUtf8));
+      end;
+   end;
 end;
 
 function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8;
   wasString: PBoolean): PtrInt;
 var
-  i: PtrInt;
-  v64: Int64;
   isString: boolean;
 begin
   isString := true;
@@ -9385,10 +9548,10 @@ begin
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      ToTempUtf8(V.VPWideChar, length(UnicodeString(V.VUnicodeString)), Res);
+      WideToTempUtf8(V.VPWideChar, length(UnicodeString(V.VUnicodeString)), Res);
     {$endif HASVARUSTRING}
     vtWideString:
-      ToTempUtf8(V.VPWideChar, length(WideString(V.VWideString)), Res);
+      WideToTempUtf8(V.VPWideChar, length(WideString(V.VWideString)), Res);
     vtPChar:
       begin
         // expect UTF-8 content
@@ -9402,9 +9565,9 @@ begin
         Res.Len := 1;
       end;
     vtPWideChar:
-      ToTempUtf8(V.VPWideChar, StrLenW(V.VPWideChar), Res);
+      WideToTempUtf8(V.VPWideChar, StrLenW(V.VPWideChar), Res);
     vtWideChar:
-      ToTempUtf8(@V.VWideChar, 1, Res);
+      WideToTempUtf8(@V.VWideChar, 1, Res);
     vtBoolean:
       begin
         isString := false;
@@ -9417,37 +9580,18 @@ begin
     vtInteger:
       begin
         isString := false;
-        i := V.VInteger;
-        if PtrUInt(i) <= high(SmallUInt32Utf8) then
-        begin
-          Res.Text := pointer(SmallUInt32Utf8[i]);
-          Res.Len := PStrLen(Res.Text - _STRLEN)^;
-        end
-        else
-        begin
-          Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], i));
-          Res.Len := @Res.Temp[23] - Res.Text;
-        end;
+        PtrIntToTempUtf8(V.VInteger, Res);
       end;
     vtInt64:
       begin
         isString := false;
-        ToTempUtf8(V.VInt64, Res);
+        Int64ToTempUtf8(V.VInt64, Res);
       end;
     {$ifdef FPC}
     vtQWord:
       begin
         isString := false;
-        if V.VQWord^ <= high(SmallUInt32Utf8) then
-        begin
-          Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V.VQWord)^]);
-          Res.Len := PStrLen(Res.Text - _STRLEN)^;
-        end
-        else
-        begin
-          Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V.VQWord^));
-          Res.Len := @Res.Temp[23] - Res.Text;
-        end;
+        QwordToTempUtf8(V.VQWord, Res);
       end;
       {$endif FPC}
     vtCurrency:
@@ -9459,7 +9603,7 @@ begin
     vtExtended:
       begin
         isString := false;
-        ToTempUtf8(V.VExtended^, Res);
+        DoubleToTempUtf8(V.VExtended^, Res);
       end;
     vtPointer, vtInterface:
       begin
@@ -9484,17 +9628,7 @@ begin
         Res.Len := ord(Res.Text[-1]);
       end;
     vtVariant:
-      if VariantToInt64(V.VVariant^, v64) then
-      begin
-        isString := false;
-        ToTempUtf8(@v64, Res);
-      end
-      else
-      begin
-        VariantToUtf8(V.VVariant^, RawUtf8(Res.TempRawUtf8), isString);
-        Res.Text := Res.TempRawUtf8;
-        Res.Len := length(RawUtf8(Res.TempRawUtf8));
-      end;
+      VariantToTempUtf8(V.VVariant^, Res, isString);
   else
     Res.Len := 0;
   end;
