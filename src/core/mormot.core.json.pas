@@ -7380,7 +7380,7 @@ begin
     else if not Ctxt.WasString then
       Ctxt.Valid := false
     else if not Base64MagicTryAndDecode(Ctxt.Value, Ctxt.ValueLen, Data^) then
-      FastSetRawByteString(Data^, Ctxt.Value, Ctxt.ValueLen); // allow text
+      FastSetRawByteString(Data^, Ctxt.Value, Ctxt.ValueLen); // with magic or not
 end;
 
 procedure _JL_RawJson(Data: PRawJson; var Ctxt: TJsonParserContext);
@@ -10138,7 +10138,7 @@ begin
       rkDynArray:
         if Index < PtrUInt(length(PByteDynArray(Data)^)) then
         begin
-          result := PAnsiChar(Data) + (PtrInt(Index) * ArrayRtti.Size);
+          result := PAnsiChar(Data) + (Index * PtrUInt(ArrayRtti.Size));
           Rtti := ArrayRtti; // also available for (most) unmanaged types
           if ArrayRtti.Kind in rkPerReference then
             result := PPointer(result)^; // resolved as for rkClass below
@@ -10151,10 +10151,17 @@ begin
              // getter methods do require resolved results
              vcCollection:
                if Index < PtrUInt(TCollection(Data).Count) then
+               begin
                  result := TCollection(Data).Items[Index];
+                 Rtti := fCollectionItemRtti;
+               end;
              vcStrings:
                if Index < PtrUInt(TStrings(Data).Count) then
+               begin
                  result := pointer(TStrings(Data).Strings[Index]);
+                 Rtti := PT_RTTI[ptString];
+                 exit;
+               end;
              vcObjectList,
              vcList:
                if Index < PtrUInt(TList(Data).Count) then
@@ -10162,6 +10169,13 @@ begin
              vcSynList:
                if Index < PtrUInt(TSynList(Data).Count) then
                  result := TSynList(Data).List[Index];
+             vcRawUtf8List:
+               if Index < PtrUInt(TRawUtf8List(Data).Count) then
+               begin
+                 result := TRawUtf8List(Data).TextPtr[Index];
+                 Rtti := PT_RTTI[ptRawUtf8];
+                 exit;
+               end;
            end;
         end;
     end;
@@ -10179,7 +10193,7 @@ end;
 
 class function TRttiJson.Find(Info: PRttiInfo): TRttiJson;
 begin
-  result := pointer(Rtti.Find(Info));
+  result := pointer(Rtti.FindType(Info));
 end;
 
 class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
@@ -10953,6 +10967,16 @@ begin
 end;
 
 
+type // local type definitions for their own RTTI to be found by name
+  RawUtf8 = type Utf8String;
+  {$ifdef CPU64}
+  PtrInt  = type Int64;
+  PtrUInt = type QWord;
+  {$else}
+  PtrInt  = type integer;
+  PtrUInt = type cardinal;
+  {$endif CPU64}
+
 procedure InitializeUnit;
 var
   i: PtrInt;
@@ -11018,6 +11042,8 @@ begin
   JSON_TOKENS['/']  := jtSlash;
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
+  // now we can register some local type alias to be found by name
+  Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt)]);
   GetDataFromJson := _GetDataFromJson;
 end;
 

@@ -2657,7 +2657,7 @@ type
     procedure SetValue(const Name, Value: RawUtf8);
     function GetTextCRLF: RawUtf8;
     procedure SetTextCRLF(const Value: RawUtf8);
-    procedure SetTextPtr(P,PEnd: PUtf8Char; const Delimiter: RawUtf8);
+    procedure SetTextPtr(P, PEnd: PUtf8Char; const Delimiter: RawUtf8);
     function GetTextPtr: PPUtf8CharArray;
       {$ifdef HASINLINE}inline;{$endif}
     function GetNoDuplicate: boolean;
