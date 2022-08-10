@@ -521,7 +521,7 @@ end;
 procedure TSynMustacheContext.AppendVariant(
   const Value: variant; UnEscape: boolean);
 var
-  ValueText: pointer;
+  tmp: TTempUtf8;
   wasString: boolean;
 begin
   if fEscapeInvert then
@@ -533,10 +533,10 @@ begin
       fWriter.AddVariant(Value, twNone)
     else
     begin
-      pointer(ValueText) := nil;
-      VariantToUtf8(Value, RawUtf8(ValueText), wasString);
-      fWriter.AddHtmlEscape(ValueText);
-      FastAssignNew(ValueText);
+      VariantToTempUtf8(Value, tmp, wasString);
+      fWriter.AddHtmlEscape(tmp.Text, tmp.Len);
+      if tmp.TempRawUtf8 <> nil then
+        FastAssignNew(tmp.TempRawUtf8);
     end;
 end;
 
