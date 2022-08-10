@@ -11309,15 +11309,29 @@ begin
 end;
 
 
-
-initialization
+procedure InitializeUnit;
+var
+  ptc: TRttiParserComplexType;
+begin
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftObject])     := @StrComp;
   pointer(@OrmFieldTypeComp[oftVariant])    := @StrComp;
   pointer(@OrmFieldTypeComp[oftNullable])   := @StrComp;
+  // refresh ORM types RTTI with actual type definitions
+  PTC_INFO[pctRecordReference] := TypeInfo(TRecordReference);
+  PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(TRecordReferenceToBeDeleted);
+  PTC_INFO[pctCreateTime]      := TypeInfo(TCreateTime);
+  PTC_INFO[pctModTime]         := TypeInfo(TModTime);
+  PTC_INFO[pctRecordVersion]   := TypeInfo(TRecordVersion);
+  for ptc := succ(low(ptc)) to high(ptc) do
+    PTC_RTTI[ptc] := Rtti.RegisterType(PTC_INFO[ptc]);
+end;
 
+
+initialization
+  InitializeUnit;
 
 end.
 

@@ -313,6 +313,7 @@ type
     /// will compute the next monotonic value for a TRecordVersion field
     function RecordVersionCompute: TRecordVersion;
     /// read only access to the current monotonic value for a TRecordVersion field
+    // - only useful for testing purposes
     function RecordVersionCurrent: TRecordVersion;
     /// synchronous master/slave replication from a slave TRest
     // - apply all the updates from another (distant) master TRestOrm for a given
