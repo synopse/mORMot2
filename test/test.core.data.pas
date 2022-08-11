@@ -537,16 +537,50 @@ type
     desc, template, expected: RawUtf8;
     data, partials: variant;
   end;
-
   TMustacheTests = packed record
     tests: array of TMustacheTest;
+  end;
+
+  TMustacheColors = packed record
+    header: RawUtf8;
+    items: array of packed record
+      name, url: RawUtf8;
+      first, link: boolean;
+    end;
+    empty: boolean;
+  end;
+  TMustacheLOR = packed record
+    users: array of packed record
+      rowid, resto: integer;
+      login, firstname, name, alias: RawUtf8;
+      connected: boolean;
+    end;
   end;
 
 const
   __TMustacheTest = 'desc,template,expected RawUtf8 data,partials variant';
   __TMustacheTests = 'tests array of TMustacheTest';
+  __TMustacheColors = 'header:RawUtf8 items:[name,url:RawUtf8 first,link:boolean] empty:boolean';
+  __TMustacheLOR = 'users:[rowid,resto:integer login,firstname,name,alias:RawUtf8 connected:boolean]';
   MUSTACHE_SPECS: array[0..4] of TFileName = (
     'interpolation', 'comments', 'sections', 'inverted', 'partials');
+  JSON_COLORS: RawUtf8 =
+    '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
+    '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
+    '"link":true,"url":"#Blue"}],"empty":true}';
+  RES_COLORS = '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
+    '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
+    '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>';
+  JSON_LOR: RawUtf8 = '{"users":[' +
+    '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet",' +
+      '"Alias":"safr","Connected":true,"Resto":0},'#13#10 +
+    '{"RowID":2,"Login":"saga","Firstname":"Samsagace","Name":"Gamegie",' +
+      '"Alias":"saga","Connected":false,"Resto":0},'#13#10 +
+    '{"RowID":3,"Login":"peto","Firstname":"Peregrin","Name":"Touque",' +
+      '"Alias":"peto","Connected":false,"Resto":0},'#13#10 +
+    '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc",' +
+      '"Alias":"mebr","Connected":true,"Resto":0}]}';
+  RES_LOR = '- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A;
 
 procedure TTestCoreProcess.MustacheRenderer;
 var
@@ -557,6 +591,8 @@ var
   doc: variant;
   html: RawUtf8;
   helpers: TSynMustacheHelpers;
+  colors: TMustacheColors;
+  lor: TMustacheLOR;
   guid: TGuid;
   spec, i: integer;
 begin
@@ -633,21 +669,21 @@ begin
     'Shown.{{^person}}Also shown!{{/person}}end');
   Check(mustache.SectionMaxCount = 1);
   html := mustache.RenderJson('{person2:2}');
-  Check(html = 'Shown.Also shown!end');
+  CheckEqual(html, 'Shown.Also shown!end');
   Check({%H-}helpers = nil, 'compiler initialized');
   mustache.HelperAdd(helpers, 'jsonhelper', MustacheHelper);
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:"a",b:10}}}');
   html := mustache.RenderJson('', nil, helpers);
-  Check(html = 'a=a,b=10');
+  CheckEqual(html, 'a=a,b=10');
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:"b",b:10} }}');
   html := mustache.RenderJson('', nil, helpers);
-  Check(html = 'a=b,b=10');
+  CheckEqual(html, 'a=b,b=10');
   mustache := TSynMustache.Parse(
     '{{{jsonhelper {a:"a",b:1}}}}');
   html := mustache.RenderJson('', nil, helpers);
-  check(html = 'a=a,b=1');
+  CheckEqual(html, 'a=a,b=1');
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:1,b:2} }},titi');
   html := mustache.RenderJson('', nil, helpers);
@@ -721,34 +757,29 @@ begin
   html := mustache.RenderJson('{}', nil, TSynMustache.HelpersGetStandardList);
   check((html <> '') and
         (TextToGuid(@html[2], @Guid) <> nil));
+  Rtti.RegisterFromText([
+    TypeInfo(TMustacheColors), __TMustacheColors,
+    TypeInfo(TMustacheLOR), __TMustacheLOR]);
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A +
     '{{#link}}'#$D#$A'<li><a href="{{url}}">{{name}}</a></li>'#$D#$A'{{/link}}'#$D#$A +
     '{{/items}}'#$D#$A#$D#$A'{{#empty}}'#$D#$A'<p>The list is empty.</p>'#$D#$A'{{/empty}}');
   Check(mustache.SectionMaxCount = 2);
-  html := mustache.RenderJson(
-    '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
-    '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
-    '"link":true,"url":"#Blue"}],"empty":true}');
-  Check(TrimU(html) =
-    '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
-    '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
-    '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>');
+  html := mustache.RenderJson(JSON_COLORS);
+  CheckEqual(TrimU(html), RES_COLORS, 'RenderJson');
+  Check(LoadJson(colors, JSON_COLORS, TypeInfo(TMustacheColors)));
+  html := mustache.RenderData(colors, TypeInfo(TMustacheColors));
+  CheckEqual(TrimU(html), RES_COLORS, 'RenderData1');
   mustache := TSynMustache.Parse(
     '{{#users}}'#$D#$A'{{^Connected}}'#$D#$A +
     '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#$D#$A'{{/Connected}}'#$D#$A'{{/users}}');
   Check(mustache.SectionMaxCount = 2);
-  html := mustache.RenderJson('{"users":[' +
-    '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet","Alias":"safr","Connected":true,"Resto":0},' +
-    #13#10 +
-    '{"RowID":2,"Login":"saga","Firstname":"Samsagace","Name":"Gamegie","Alias":"saga","Connected":false,"Resto":0},' +
-    #13#10 +
-    '{"RowID":3,"Login":"peto","Firstname":"Peregrin","Name":"Touque","Alias":"peto","Connected":false,"Resto":0},' +
-    #13#10 +
-    '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc","Alias":"mebr","Connected":true,"Resto":0}]}');
-  check(html =
-    '- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A);
+  html := mustache.RenderJson(JSON_LOR);
+  checkEqual(html, RES_LOR);
+  Check(LoadJson(lor, JSON_LOR, TypeInfo(TMustacheLOR)));
+  html := mustache.RenderData(lor, TypeInfo(TMustacheLOR));
+  checkEqual(html, RES_LOR, 'RenderData2');
 
   // run official {{mustache}} regression tests suite
   TRttiJson.RegisterFromText(TypeInfo(TMustacheTest), __TMustacheTest,
