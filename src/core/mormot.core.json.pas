@@ -1859,15 +1859,20 @@ type
       ObjectListItemClass: TClass = nil);
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
-    // TStrings.Count or TList.Count
+    // TRawUtf8List.Count or TList.Count or TSynList.Count
+    // - note that TStrings values are not supported, because they require a
+    // temporary string variable for their getter
     function ValueIterateCount(Data: pointer): integer; override;
     /// iterate over one sub-item of a given value
     // - returns nil if the value is not iterable or Index is out of range
-    // - returns a pointer to the value, rkPerReference kinds being already
-    // resolved (since the TList/TStrings access is done via getter methods),
-    // so you can directly trans-type the result to string() or TObject()
+    // - returns a pointer to the value, rkClass/rkLString kinds being already
+    // resolved (as the TList/TSynList/TRawUtf8List items are returned),
+    // so you can directly trans-type the result to TObject() or RawUtf8()
+    // - ResultRtti holds the type of the resolved result pointer
+    // - note that TStrings values are not supported, because they require a
+    // temporary string variable for their getter method
     function ValueIterate(Data: pointer; Index: PtrUInt;
-      out Rtti: TRttiCustom): pointer; override;
+      out ResultRtti: TRttiCustom): pointer; override;
     /// efficient search of TRttiJson from a given RTTI TypeInfo()
     // - to be used instead of Rtti.Find() to return directly the TRttiJson instance
     class function Find(Info: PRttiInfo): TRttiJson;
@@ -10115,22 +10120,23 @@ begin
           Data := PPointer(Data)^; // TObject are stored by reference
           if Data <> nil then
            case ValueRtlClass of
+             // vcStrings can't be supported since TStrings.Items[] is a getter
              vcCollection:
                result := TCollection(Data).Count;
-             vcStrings:
-               result := TStrings(Data).Count;
              vcObjectList,
              vcList:
                result := TList(Data).Count;
              vcSynList:
                result := TSynList(Data).Count;
+             vcRawUtf8List:
+               result := TRawUtf8List(Data).Count;
            end;
         end;
     end;
 end;
 
 function TRttiJson.ValueIterate(Data: pointer; Index: PtrUInt;
-  out Rtti: TRttiCustom): pointer;
+  out ResultRtti: TRttiCustom): pointer;
 begin
   result := nil;
   if Data <> nil then
@@ -10138,9 +10144,9 @@ begin
       rkDynArray:
         if Index < PtrUInt(length(PByteDynArray(Data)^)) then
         begin
-          result := PAnsiChar(Data) + (Index * PtrUInt(ArrayRtti.Size));
-          Rtti := ArrayRtti; // also available for (most) unmanaged types
-          if ArrayRtti.Kind in rkPerReference then
+          result := PPAnsiChar(Data)^ + (Index * PtrUInt(ArrayRtti.Size));
+          ResultRtti := ArrayRtti; // also available for (most) unmanaged types
+          if ArrayRtti.Kind in [rkClass, rkLString] then
             result := PPointer(result)^; // resolved as for rkClass below
         end;
       rkClass:
@@ -10153,27 +10159,28 @@ begin
                if Index < PtrUInt(TCollection(Data).Count) then
                begin
                  result := TCollection(Data).Items[Index];
-                 Rtti := fCollectionItemRtti;
-               end;
-             vcStrings:
-               if Index < PtrUInt(TStrings(Data).Count) then
-               begin
-                 result := pointer(TStrings(Data).Strings[Index]);
-                 Rtti := PT_RTTI[ptString];
-                 exit;
+                 ResultRtti := fCollectionItemRtti;
                end;
              vcObjectList,
              vcList:
                if Index < PtrUInt(TList(Data).Count) then
+               begin
                  result := TList(Data).List[Index];
+                 if result <> nil then
+                   ResultRtti := Rtti.RegisterClass(PClass(result)^);
+               end;
              vcSynList:
                if Index < PtrUInt(TSynList(Data).Count) then
+               begin
                  result := TSynList(Data).List[Index];
+                 if result <> nil then
+                   ResultRtti := Rtti.RegisterClass(PClass(result)^);
+               end;
              vcRawUtf8List:
                if Index < PtrUInt(TRawUtf8List(Data).Count) then
                begin
                  result := TRawUtf8List(Data).TextPtr[Index];
-                 Rtti := PT_RTTI[ptRawUtf8];
+                 ResultRtti := PT_RTTI[ptRawUtf8];
                  exit;
                end;
            end;
