@@ -271,13 +271,21 @@ const
 
 {$endif FPC}
 
-  /// maps long string in TRttiKind RTTI enumerates
+  /// maps string/text types in TRttiKind RTTI enumerates, excluding shortstring
   rkStringTypes =
     [rkLString,
      {$ifdef FPC}
      rkLStringOld,
      {$endif FPC}
      {$ifdef HASVARUSTRING}
+     rkUString,
+     {$endif HASVARUSTRING}
+     rkWString
+    ];
+
+  /// maps UTF-16 string in TRttiKind RTTI enumerates
+  rkWideStringTypes =
+    [{$ifdef HASVARUSTRING}
      rkUString,
      {$endif HASVARUSTRING}
      rkWString
@@ -2130,6 +2138,10 @@ type
     // - just redirect to FindCustomProp() low-level function
     function Find(const PropName: RawUtf8): PRttiCustomProp; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// locate a property/field by name
+    // - just redirect to FindCustomProp() low-level function
+    function Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// locate a property/field index by name
     function FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
     /// customize a property/field name
@@ -2310,6 +2322,7 @@ type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.variants process
     // - complex objects are converted into a TDocVariant, after JSON serialization
+    // - returns the size of the Data in bytes, i.e. Cache.ItemSize
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; virtual;
     /// fill a value from random - including strings and nested types
@@ -2323,16 +2336,20 @@ type
     function ValueFullCompare(const A, B): integer;
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
-    // TStrings.Count or TList.Count
+    // TRawUtf8List.Count or TList.Count or TSynList.Count
     // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
     function ValueIterateCount(Data: pointer): integer; virtual;
     /// iterate over one sub-item of a given value
     // - returns nil if the value is not iterable or Index is out of range
-    // - returns a pointer to the value, rkPerReference kinds being already
-    // resolved, so you can directly trans-type to string() or TObject()
+    // - returns a pointer to the value, rkClass/rkLString kinds being already
+    // resolved (as the TList/TSynList/TRawUtf8List items are returned),
+    // so you can directly trans-type the result to TObject() or RawUtf8()
+    // - ResultRtti holds the type of the resolved result pointer
+    // - note that TStrings values are not supported, because they require a
+    // temporary string variable for their getter method
     // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
     function ValueIterate(Data: pointer; Index: PtrUInt;
-      out Rtti: TRttiCustom): pointer; virtual;
+      out ResultRtti: TRttiCustom): pointer; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -2340,6 +2357,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
+    /// recursively search for 'one.two.three' nested properties
+    // - returns nil if not found
+    // - returns the property information and let Data point to its associated
+    // rkClass or rkRecord/rkObject owner
+    function PropFindByPath(var Data: pointer; FullName: PUtf8Char;
+      PathDelim: AnsiChar = '.'): PRttiCustomProp;
     /// register once an instance of a given class per RTTI
     // - thread-safe returns aObject, or an existing object (freeing aObject)
     // - just like PrivateSlot property, but for as many class as needed
@@ -6871,6 +6894,13 @@ begin
       PStrLen(PAnsiChar(result) - _STRLEN)^, Count);
 end;
 
+function TRttiCustomProps.Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp;
+begin
+  result := pointer(PropName);
+  if result <> nil then
+    result := FindCustomProp(pointer(List), PropName, PropNameLen, Count);
+end;
+
 function TRttiCustomProps.FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
 var
   p: PRttiCustomProp;
@@ -7555,6 +7585,7 @@ begin
     rkClass:
       result := IsObjectDefaultOrVoid(PObject(Data)^);
     else
+      // work for ordinal types and also for pointer/managed values
       begin
         result := false;
         s := fCache.Size;
@@ -7610,7 +7641,7 @@ begin
 end;
 
 function TRttiCustom.ValueIterate(Data: pointer; Index: PtrUInt;
-  out Rtti: TRttiCustom): pointer;
+  out ResultRtti: TRttiCustom): pointer;
 begin
   result := nil;
 end;
@@ -7624,6 +7655,39 @@ procedure TRttiCustom.PropsClear;
 begin
   Props.InternalClear;
   fFlags := fFlags - [rcfHasNestedProperties, rcfHasNestedManagedProperties];
+end;
+
+function TRttiCustom.PropFindByPath(var Data: pointer; FullName: PUtf8Char;
+  PathDelim: AnsiChar): PRttiCustomProp;
+var
+  rc: TRttiCustom;
+  n: ShortString;
+begin
+  rc := self;
+  repeat
+    result := nil;
+    if (rc = nil) or
+       (Data = nil) or
+       (Props.Count = 0) then
+      exit;
+    GetNextItemShortString(FullName, @n, PathDelim);
+    if n[0] in [#0, #254] then
+      exit;
+    result := Props.Find(@n[1], ord(n[0]));
+    if (result = nil) or
+       (FullName = nil) then
+      exit;
+    // search next path level
+    rc := result.Value;
+    if result.OffsetGet < 0 then
+      Data := nil
+    else if rc.Kind in rkRecordTypes then
+      inc(PAnsiChar(Data), result.OffsetGet)
+    else if rc.Kind = rkClass then
+      Data := PPointer(PAnsiChar(Data) + result.OffsetGet)^
+    else
+      Data := nil;
+  until false;
 end;
 
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;
