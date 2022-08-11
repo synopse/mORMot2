@@ -6182,6 +6182,12 @@ begin
       if IdemPropNameUSameLenNotNull(Name, 'array', 5) then
         result := ptArray;
     6:
+      {$ifdef FPC}
+      // TypeInfo(string)=TypeInfo(AnsiString) on FPC
+      if IdemPropNameUSameLenNotNull(Name, 'string', 6) then
+        result := ptString
+      else
+      {$endif FPC}
       if IdemPropNameUSameLenNotNull(Name, 'record', 6) then
         result := ptRecord;
     // TypeInfo(integer/cardinal)=TypeInfo(LongInt/LongWord) on FPC
