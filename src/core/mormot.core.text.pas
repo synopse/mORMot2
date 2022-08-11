@@ -989,7 +989,8 @@ type
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
     /// append some unicode chars to the buffer
-    // - WideCharCount is the unicode chars count, not the byte size
+    // - WideCharCount is the unicode chars count, not the byte size; if it is
+    // 0, then it will convert until an ending #0 (fastest way)
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
@@ -1058,6 +1059,9 @@ type
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
+    /// append some UTF-16chars, escaping all HTML special chars as expected
+    procedure AddHtmlEscapeW(Text: PWideChar;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some VCL/LCL chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
@@ -5839,6 +5843,7 @@ end;
 procedure TTextWriter.AddNoJsonEscapeW(WideChar: PWord; WideCharCount: integer);
 var
   PEnd: PtrUInt;
+  c: cardinal;
 begin
   if WideChar = nil then
     exit;
@@ -5846,11 +5851,12 @@ begin
     repeat
       if B >= BEnd then
         FlushToStream;
-      if WideChar^ = 0 then
-        break;
-      if WideChar^ <= 127 then
+      c := WideChar^;
+      if c = 0 then
+        break
+      else if c <= 127 then
       begin
-        B[1] := AnsiChar(ord(WideChar^));
+        B[1] := AnsiChar(c);
         inc(WideChar);
         inc(B);
       end
@@ -5863,11 +5869,12 @@ begin
     repeat
       if B >= BEnd then
         FlushToStream;
-      if WideChar^ = 0 then
-        break;
-      if WideChar^ <= 127 then
+      c := WideChar^;
+      if c = 0 then
+        break
+      else if c <= 127 then
       begin
-        B[1] := AnsiChar(ord(WideChar^));
+        B[1] := AnsiChar(c);
         inc(WideChar);
         inc(B);
         if PtrUInt(WideChar) < PEnd then
@@ -6460,6 +6467,22 @@ begin
       AddShorter(HTML_ESCAPED[esc[Text^]]);
     inc(Text);
   until false;
+end;
+
+procedure TTextWriter.AddHtmlEscapeW(Text: PWideChar;
+  Fmt: TTextWriterHtmlFormat);
+var
+  tmp: TSynTempBuffer;
+begin
+  if (Text = nil) or
+     (Fmt = hfNone) then
+  begin
+    AddNoJsonEscapeW(pointer(Text), 0);
+    exit;
+  end;
+  RawUnicodeToUtf8(Text, StrLenW(Text), tmp, [ccfNoTrailingZero]);
+  AddHtmlEscape(tmp.buf, tmp.Len, Fmt);
+  tmp.Done;
 end;
 
 procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
