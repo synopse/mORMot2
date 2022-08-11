@@ -3930,28 +3930,6 @@ const
   ASN1_PKEY_CTRL_SET1_TLS_ENCPT = $9;
   ASN1_PKEY_CTRL_GET1_TLS_ENCPT = $a;
   
-  EVP_PKEY_OP_UNDEFINED = 0;
-  EVP_PKEY_OP_SIGN = 1 shl 3;
-  EVP_PKEY_OP_VERIFY = 1 shl 4;
-  EVP_PKEY_OP_VERIFYRECOVER = 1 shl 5;
-  EVP_PKEY_OP_SIGNCTX = 1 shl 6;
-  EVP_PKEY_OP_VERIFYCTX = 1 shl 7;
-  EVP_PKEY_OP_ENCRYPT = 1 shl 8;
-  EVP_PKEY_OP_DECRYPT = 1 shl 9;
-  EVP_PKEY_OP_DERIVE = 1 shl 10;
-  EVP_PKEY_OP_TYPE_SIG = EVP_PKEY_OP_SIGN or
-                         EVP_PKEY_OP_VERIFY or
-                         EVP_PKEY_OP_VERIFYRECOVER or
-                         EVP_PKEY_OP_SIGNCTX or
-                         EVP_PKEY_OP_VERIFYCTX;
-  EVP_PKEY_OP_TYPE_CRYPT = EVP_PKEY_OP_ENCRYPT or
-                           EVP_PKEY_OP_DECRYPT;
-  EVP_PKEY_OP_TYPE_NOGEN = EVP_PKEY_OP_TYPE_SIG or
-                           EVP_PKEY_OP_TYPE_CRYPT or
-                           EVP_PKEY_OP_DERIVE;
-  EVP_PKEY_OP_TYPE_GEN = EVP_PKEY_OP_PARAMGEN or
-                         EVP_PKEY_OP_KEYGEN;
-  
   EVP_PKEY_CTRL_MD = 1;
   EVP_PKEY_CTRL_PEER_KEY = 2;
   EVP_PKEY_CTRL_PKCS7_ENCRYPT = 3;
@@ -14903,18 +14881,6 @@ function EVP_PKEY_verify_recover_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 
 function EVP_PKEY_verify_recover(ctx: PEVP_PKEY_CTX; rout: PByte; routlen: PPtrUInt; sig: PByte; siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_verify_recover';
-
-function EVP_PKEY_encrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_encrypt_init';
-
-function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; _out: PByte; outlen: PPtrUInt; _in: PByte; inlen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_encrypt';
-
-function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_decrypt_init';
-
-function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; _out: PByte; outlen: PPtrUInt; _in: PByte; inlen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_decrypt';
 
 function EVP_PKEY_check(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_check';

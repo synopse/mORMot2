@@ -1070,13 +1070,8 @@ type
   PEVP_CIPHER = type pointer;
   PPEVP_CIPHER = ^PEVP_CIPHER;
 
-  { EVP_PKEY }
-
   EVP_PKEY = object
   public
-    function RsaCrypt(Encrypt: Boolean; Content: RawByteString; MD: PEVP_MD): RawByteString;
-    function RsaEncrypt(Content: RawByteString; MD: PEVP_MD): RawByteString;
-    function RsaDecrypt(Content: RawByteString; MD: PEVP_MD): RawByteString;
     function PrivateToDer(const PassWord: SpiUtf8): RawByteString;
     function PublicToDer: RawByteString;
     function PrivateToPem(const PassWord: SpiUtf8): RawUtf8;
@@ -1086,11 +1081,14 @@ type
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
-    function RsaSeal(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
-    function RsaOpen(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
+    // methods below are for RSA algorithm only
+    function RsaSeal(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
+    function RsaOpen(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
+    function RsaEncrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
+    function RsaDecrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
   end;
 
   PEVP_PKEY = ^EVP_PKEY;
@@ -1837,11 +1835,11 @@ procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
 procedure EVP_PKEY_free(pkey: PEVP_PKEY); cdecl;
 function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input : PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
 function EVP_PKEY_encrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input : PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
 function EVP_DigestSignInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD;
   e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
 function EVP_DigestUpdate(ctx: PEVP_MD_CTX; d: pointer; cnt: PtrUInt): integer; cdecl;
@@ -2191,9 +2189,6 @@ function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
 procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
-function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; Padding: integer): integer; cdecl;
-function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; const md: PEVP_MD): integer; cdecl;
-function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; const md: PEVP_MD): integer; cdecl;
 function EVP_PKEY_derive_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer; cdecl;
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
@@ -2252,6 +2247,9 @@ function SSL_get_mode(s: PSSL): integer;
 
 function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
 function BN_num_bytes(bn: PBIGNUM): integer;
+function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
+function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function TmToDateTime(const t: tm): TDateTime;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
@@ -2774,9 +2772,9 @@ type
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
     EVP_PKEY_free: procedure(pkey: PEVP_PKEY); cdecl;
     EVP_PKEY_decrypt_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
-    EVP_PKEY_decrypt: function(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt; const input : PByte; inputLen: SizeUInt): integer; cdecl;
+    EVP_PKEY_decrypt: function(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt; input: PByte; inputLen: PtrUInt): integer; cdecl;
     EVP_PKEY_encrypt_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
-    EVP_PKEY_encrypt: function(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt; const input : PByte; inputLen: SizeUInt): integer; cdecl;
+    EVP_PKEY_encrypt: function(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt; input: PByte; inputLen: PtrUInt): integer; cdecl;
     EVP_DigestSignInit: function(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
     EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: PtrUInt): integer; cdecl;
     EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt): integer; cdecl;
@@ -3100,7 +3098,7 @@ const
     'EVP_PKEY_decrypt_init',
     'EVP_PKEY_decrypt',
     'EVP_PKEY_encrypt_init',
-    'EVP_PKEY_encrypt'
+    'EVP_PKEY_encrypt',
     'EVP_DigestSignInit',
     'EVP_DigestUpdate',
     'EVP_DigestSignFinal',
@@ -5058,8 +5056,8 @@ begin
   result := libcrypto.EVP_PKEY_decrypt_init(ctx);
 end;
 
-function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input: PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
 begin
   result := libcrypto.EVP_PKEY_decrypt(ctx, output, outlen, input, inputLen);
 end;
@@ -5069,30 +5067,10 @@ begin
   result := libcrypto.EVP_PKEY_encrypt_init(ctx);
 end;
 
-function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input: PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
 begin
   result := libcrypto.EVP_PKEY_encrypt(ctx, output, outlen, input, inputLen);
-end;
-
-function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; Padding: integer
-  ): integer; cdecl;
-begin
-  Result := libcrypto.RSA_pkey_ctx_ctrl(ctx, -1, EVP_PKEY_CTRL_RSA_PADDING, Padding, nil);
-end;
-
-function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; const md: PEVP_MD
-  ): integer; cdecl;
-begin
-  Result := libcrypto.RSA_pkey_ctx_ctrl(ctx, EVP_PKEY_OP_TYPE_SIG or EVP_PKEY_OP_TYPE_CRYPT,
-    EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
-end;
-
-function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; const md: PEVP_MD
-  ): integer; cdecl;
-begin
-  Result := libcrypto.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_TYPE_CRYPT,
-    EVP_PKEY_CTRL_RSA_OAEP_MD, 0, md);
 end;
 
 
@@ -6412,15 +6390,15 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_decrypt_init';
 
-function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input : PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_decrypt';
 
 function EVP_PKEY_encrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_encrypt_init';
 
-function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-  const input : PByte; inputLen: SizeUInt): integer; cdecl;
+function EVP_PKEY_encrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
+  input: PByte; inputLen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_encrypt';
 
 
@@ -6593,6 +6571,26 @@ end;
 function BN_num_bytes(bn: PBIGNUM): integer;
 begin
   result := (BN_num_bits(bn) + 7) shr 3;
+end;
+
+function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
+begin
+  result := libcrypto.RSA_pkey_ctx_ctrl(
+    ctx, -1, EVP_PKEY_CTRL_RSA_PADDING, padding, nil);
+end;
+
+function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+begin
+  result := libcrypto.RSA_pkey_ctx_ctrl(ctx, 
+    EVP_PKEY_OP_TYPE_SIG or
+    EVP_PKEY_OP_TYPE_CRYPT,
+    EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
+end;
+
+function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+begin
+  result := libcrypto.EVP_PKEY_CTX_ctrl(ctx,
+    EVP_PKEY_RSA, EVP_PKEY_OP_TYPE_CRYPT, EVP_PKEY_CTRL_RSA_OAEP_MD, 0, md);
 end;
 
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
@@ -6812,53 +6810,6 @@ begin
   end;
 end;
 
-function EVP_PKEY.RsaCrypt(Encrypt: Boolean; Content: RawByteString; MD: PEVP_MD
-  ): RawByteString;
-var
-  pkey_ctx: PEVP_PKEY_CTX;
-  output_len: SizeUInt;
-  output: PByte;
-  init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  crypt: function(ctx: PEVP_PKEY_CTX; output: PByte; outlen: PSizeUInt;
-         const input : PByte; inputLen: SizeUInt): integer; cdecl;
-begin
-  Result := '';
-  if @self = nil then
-    exit;
-  pkey_ctx := EVP_PKEY_CTX_new(@self, nil);
-  EOpenSsl.Check(Assigned(pkey_ctx), 'EVP_PKEY_CTX_new');
-
-  if Encrypt then
-  begin
-    init := @EVP_PKEY_encrypt_init;
-    crypt := @EVP_PKEY_encrypt;
-  end else
-  begin
-    init := @EVP_PKEY_decrypt_init;
-    crypt := @EVP_PKEY_decrypt;
-  end;
-
-  EOpenSsl.Check(init(pkey_ctx), 'EVP_PKEY_decrypt_init');
-  EOpenSsl.Check(EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_OAEP_PADDING), 'EVP_PKEY_CTX_set_rsa_padding');
-  EOpenSsl.Check(EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, md), 'EVP_PKEY_CTX_set_rsa_mgf1_md');
-  EOpenSsl.Check(EVP_PKEY_CTX_set_rsa_oaep_md(pkey_ctx, md), 'EVP_PKEY_CTX_set_rsa_oaep_md');
-  EOpenSsl.Check(crypt(pkey_ctx, output, @output_len, PByte(Content), Length(Content)), 'EVP_PKEY_decrypt');
-
-  FastSetRawByteString(Result, output, output_len);
-end;
-
-function EVP_PKEY.RsaEncrypt(Content: RawByteString; MD: PEVP_MD
-  ): RawByteString;
-begin
-  Result := RsaCrypt(True, Content, MD);
-end;
-
-function EVP_PKEY.RsaDecrypt(Content: RawByteString; MD: PEVP_MD
-  ): RawByteString;
-begin
-  Result := RsaCrypt(False, Content, MD);
-end;
-
 function EVP_PKEY.PrivateToDer(const PassWord: SpiUtf8): RawByteString;
 var
   bio: PBIO;
@@ -6964,6 +6915,20 @@ begin
   end;
 end;
 
+function EVP_PKEY.Size: integer;
+begin
+  if @self <> nil then
+    result := EVP_PKEY_size(@self)
+  else
+    result := 0;
+end;
+
+procedure EVP_PKEY.Free;
+begin
+  if @self <> nil then
+    EVP_PKEY_free(@self);
+end;
+
 function EVP_PKEY.RsaSeal(Cipher: PEVP_CIPHER;
   const Msg: RawByteString): RawByteString;
 var
@@ -6980,6 +6945,7 @@ begin
   l := length(Msg);
   if (@self = nil) or
      (l = 0) or
+     (l > 128 shl 20) or // fair limitation for in-memory encryption
      (Cipher = nil) then
     exit;
   ctx := EVP_CIPHER_CTX_new;
@@ -7050,19 +7016,72 @@ begin
   EVP_CIPHER_CTX_free(ctx);
 end;
 
-function EVP_PKEY.Size: integer;
+procedure RsaSetPadding(ctx: PEVP_PKEY_CTX; md: PEVP_MD);
 begin
-  if @self <> nil then
-    result := EVP_PKEY_size(@self)
-  else
-    result := 0;
+  EOpenSsl.Check(
+    EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING),
+    'EVP_PKEY_CTX_set_rsa_padding');
+  EOpenSsl.Check(
+    EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_mgf1_md');
+  EOpenSsl.Check(
+    EVP_PKEY_CTX_set_rsa_oaep_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_oaep_md');
 end;
 
-procedure EVP_PKEY.Free;
+function EVP_PKEY.RsaEncrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
+var
+  ctx: PEVP_PKEY_CTX;
+  len: PtrUInt;
 begin
-  if @self <> nil then
-    EVP_PKEY_free(@self);
+  // to be used used for a very small content since this may be very slow
+  result := '';
+  if @self = nil then
+    exit;
+  ctx := EVP_PKEY_CTX_new(@self, nil);
+  if assigned(ctx) then
+  try
+    EOpenSsl.Check(
+      EVP_PKEY_encrypt_init(ctx), 'EVP_PKEY_encrypt_init');
+    RsaSetPadding(ctx, MD);
+    EOpenSsl.Check( // first call to retrieve the maximum output length
+      EVP_PKEY_encrypt(ctx, nil, len, pointer(Content), Length(Content)),
+      'EVP_PKEY_encrypt1');
+    FastSetRawByteString(result, nil, len); // allocate
+    EOpenSsl.Check( // second call to make the actual encryption
+      EVP_PKEY_encrypt(ctx, pointer(result), len, pointer(Content), Length(Content)),
+      'EVP_PKEY_encrypt2');
+    FakeLength(result, len); // previous len was the max, now is final size
+  finally
+    EVP_PKEY_CTX_free(ctx);
+  end;
 end;
+
+function EVP_PKEY.RsaDecrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
+var
+  ctx: PEVP_PKEY_CTX;
+  len: PtrUInt;
+begin
+  result := '';
+  if @self = nil then
+    exit;
+  ctx := EVP_PKEY_CTX_new(@self, nil);
+  if assigned(ctx) then
+  try
+    EOpenSsl.Check(
+      EVP_PKEY_decrypt_init(ctx), 'EVP_PKEY_decrypt_init');
+    RsaSetPadding(ctx, MD);
+    EOpenSsl.Check(
+      EVP_PKEY_decrypt(ctx, nil, len, pointer(Content), Length(Content)),
+      'EVP_PKEY_decrypt1');
+    FastSetRawByteString(result, nil, len);
+    EOpenSsl.Check(
+      EVP_PKEY_decrypt(ctx, pointer(result), len, pointer(Content), Length(Content)),
+      'EVP_PKEY_decrypt2');
+    FakeLength(result, len);
+  finally
+    EVP_PKEY_CTX_free(ctx);
+  end;
+end;
+
 
 
 function IsPem(p: PUtf8Char; up: PUtf8Char): boolean;
