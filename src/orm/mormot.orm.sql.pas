@@ -139,7 +139,7 @@ type
     // the real external table columns (e.g. as TEXT for variant)
     // - returns 0 on error, or the Updated/Inserted ID
     function ExecuteFromJson(const SentData: RawUtf8; Occasion: TOrmOccasion;
-      UpdatedID: TID): TID;
+      UpdatedID: TID; BatchOptions: TRestBatchOptions): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JsonDecodedPrepareToSql(var Decoder: TJsonObjectDecoder;
       out ExternalFields: TRawUtf8DynArray; out Types: TSqlDBFieldTypeArray;
@@ -1196,6 +1196,7 @@ begin
     fBatchCount := 0;
     fBatchCapacity := 0;
     fBatchMethod := mNone;
+    fBatchOptions := [];
     StorageUnLock;
   end;
 end;
@@ -1245,7 +1246,7 @@ begin
     else
     begin
       // regular insert with EngineLockedNextID (UpdatedID=0)
-      result := ExecuteFromJson(SentData, ooInsert, 0);
+      result := ExecuteFromJson(SentData, ooInsert, 0, fBatchOptions);
       if (result > 0) and
          (Owner <> nil) then
       begin
@@ -1276,7 +1277,7 @@ begin
   else
   begin
     // regular update
-    result := ExecuteFromJson(SentData, ooUpdate, ID) = ID;
+    result := ExecuteFromJson(SentData, ooUpdate, ID, fBatchOptions) = ID;
     if result and
        (Owner <> nil) then
     begin
@@ -2025,7 +2026,7 @@ begin
 end;
 
 function TRestStorageExternal.ExecuteFromJson(const SentData: RawUtf8;
-  Occasion: TOrmOccasion; UpdatedID: TID): TID;
+  Occasion: TOrmOccasion; UpdatedID: TID; BatchOptions: TRestBatchOptions): TID;
 var
   Decoder: TJsonObjectDecoder;
   SQL: RawUtf8;
@@ -2077,7 +2078,7 @@ begin
         RecordVersionFieldHandle(Occasion, Decoder);
       // compute SQL statement and associated bound parameters
       SQL := JsonDecodedPrepareToSql(
-        Decoder, ExternalFields, Types, Occasion, [], {array=}false);
+        Decoder, ExternalFields, Types, Occasion, BatchOptions, {array=}false);
       if Occasion = ooUpdate then
         // Int64ToUtf8(var) fails on D2007
         Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
