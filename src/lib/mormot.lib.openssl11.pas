@@ -7152,9 +7152,7 @@ begin
   else
   begin
     pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-    if IsPem(PublicKey, '-----BEGIN RSA PUBLIC KEY') then
-      result := PEM_read_bio_RSAPublicKey(pub, nil, nil, PassNotNil(Password))
-    else if IsPem(PublicKey, '-----BEGIN') then
+    if IsPem(PublicKey, '-----BEGIN') then
       result := PEM_read_bio_PUBKEY(pub, nil, nil, PassNotNil(Password))
     else
       result := nil;
