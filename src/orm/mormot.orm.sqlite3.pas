@@ -1460,7 +1460,7 @@ begin
         fOwner.RecordVersionHandle(ooInsert, TableModelIndex, fJsonDecoder,
           props.RecordVersionField);
       sql := fJsonDecoder.EncodeAsSql(
-        'insert into ', sql, {update=}false, nil, dSQLite);
+        '', sql, {update=}false, @fBatch.Options, dSQLite);
       Finalize(fJsonDecoder); // release temp values memory ASAP
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -2713,6 +2713,7 @@ begin
       raise EOrmBatchException.CreateUtf8('%.InternalBatchStop(firstrow)', [self]);
   finally
     b^.Encoding := encDelete;
+    b^.Options := [];
     b^.ValuesCount := 0;
     b^.IDCount := 0;
     b^.Values := nil;
