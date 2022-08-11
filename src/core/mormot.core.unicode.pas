@@ -132,6 +132,10 @@ type
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   var result: RawUtf8; Flags: TCharConversionFlags = [ccfNoTrailingZero]); overload;
 
+/// convert a RawUnicode PWideChar into a UTF-8 temporary buffer
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: TSynTempBuffer; Flags: TCharConversionFlags); overload;
+
 /// convert a RawUnicode PWideChar into a UTF-8 string
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUtf8; overload;
@@ -1806,20 +1810,27 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: TSynTempBuffer; Flags: TCharConversionFlags);
+begin
+  if (WideChar = nil) or
+     (WideCharCount = 0) then
+    result.Init(0)
+  else
+  begin
+    result.Init(WideCharCount * 3);
+    result.Len := RawUnicodeToUtf8(
+      result.buf, result.len, WideChar, WideCharCount, Flags);
+  end;
+end;
+
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   var result: RawUtf8; Flags: TCharConversionFlags);
 var
   tmp: TSynTempBuffer;
 begin
-  if (WideChar = nil) or
-     (WideCharCount = 0) then
-    result := ''
-  else
-  begin
-    tmp.Init(WideCharCount * 3);
-    FastSetString(result, tmp.buf, RawUnicodeToUtf8(tmp.buf, tmp.len + 1,
-      WideChar, WideCharCount, Flags));
-    tmp.Done;
-  end;
+  RawUnicodeToUtf8(WideChar, WideCharCount, tmp, Flags);
+  FastSetString(result, tmp.buf, tmp.len);
+  tmp.Done;
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
