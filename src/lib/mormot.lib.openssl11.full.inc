@@ -4404,17 +4404,6 @@ const
   RSA_PSS_SALTLEN_MAX = -3;
   RSA_PSS_SALTLEN_MAX_SIGN = -2;
   
-  RSA_PKCS1_PADDING = 1;
-  RSA_SSLV23_PADDING = 2;
-  RSA_NO_PADDING = 3;
-  RSA_PKCS1_OAEP_PADDING = 4;
-  RSA_X931_PADDING = 5;
-  RSA_PKCS1_PSS_PADDING = 6;
-  RSA_PKCS1_PADDING_SIZE = 11;
-  RSA_FLAG_FIPS_METHOD = $0400;
-  RSA_FLAG_NON_FIPS_ALLOW = $0400;
-  RSA_FLAG_CHECKED = $0800;
-  
   DH_F_COMPUTE_KEY = 102;
   DH_F_DHPARAMS_PRINT_FP = 101;
   DH_F_DH_BUILTIN_GENPARAMS = 106;
@@ -15683,18 +15672,6 @@ function RSA_check_key(p1: PRSA): integer; cdecl;
 function RSA_check_key_ex(p1: PRSA; cb: PBN_GENCB): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_check_key_ex';
 
-function RSA_public_encrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_public_encrypt';
-
-function RSA_private_encrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_private_encrypt';
-
-function RSA_public_decrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_public_decrypt';
-
-function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_private_decrypt';
-
 procedure RSA_free(r: PRSA); cdecl;
   external LIB_CRYPTO name _PU + 'RSA_free';
 
@@ -15721,9 +15698,6 @@ function RSA_set_method(rsa: PRSA; meth: PRSA_METHOD): integer; cdecl;
 
 function RSA_PKCS1_OpenSSL(): PRSA_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_PKCS1_OpenSSL';
-
-function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_pkey_ctx_ctrl';
 
 function d2i_RSAPublicKey(a: PPRSA; _in: PPByte; len: integer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_RSAPublicKey';

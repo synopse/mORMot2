@@ -893,6 +893,17 @@ const
     MBSTRING_ASC,
     MBSTRING_UTF8);
 
+  RSA_PKCS1_PADDING = 1;
+  RSA_SSLV23_PADDING = 2;
+  RSA_NO_PADDING = 3;
+  RSA_PKCS1_OAEP_PADDING = 4;
+  RSA_X931_PADDING = 5;
+  RSA_PKCS1_PSS_PADDING = 6;
+  RSA_PKCS1_PADDING_SIZE = 11;
+  RSA_FLAG_FIPS_METHOD = $0400;
+  RSA_FLAG_NON_FIPS_ALLOW = $0400;
+  RSA_FLAG_CHECKED = $0800;
+
 type
   OSSL_HANDSHAKE_STATE = (
     TLS_ST_BEFORE = 0,
@@ -2049,6 +2060,16 @@ function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
+function RSA_public_encrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+function RSA_private_encrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+function RSA_public_decrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
 function d2i_PrivateKey_bio(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
 function i2d_PUBKEY_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
@@ -2928,6 +2949,11 @@ type
     PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPublicKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+    RSA_public_encrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+    RSA_private_encrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+    RSA_public_decrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+    RSA_private_decrypt: function(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+    RSA_pkey_ctx_ctrl: function(ctx: PEVP_PKEY_CTX; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
     i2d_PrivateKey_bio: function(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
     d2i_PrivateKey_bio: function(bp: PBIO; a: PPEVP_PKEY): PEVP_PKEY; cdecl;
     i2d_PUBKEY_bio: function(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
@@ -3018,7 +3044,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..309] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..314] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3243,6 +3269,11 @@ const
     'PEM_read_bio_PUBKEY',
     'PEM_read_bio_RSAPublicKey',
     'PEM_read_bio_RSAPrivateKey',
+    'RSA_public_encrypt',
+    'RSA_private_encrypt',
+    'RSA_public_decrypt',
+    'RSA_private_decrypt',
+    'RSA_pkey_ctx_ctrl',
     'i2d_PrivateKey_bio',
     'd2i_PrivateKey_bio',
     'i2d_PUBKEY_bio',
@@ -4495,6 +4526,36 @@ function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA;
 begin
   result := libcrypto.PEM_read_bio_RSAPrivateKey(bp, x, cb, u);
+end;
+
+function RSA_public_encrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer;
+begin
+  result := libcrypto.RSA_public_encrypt(flen, from, _to, rsa, padding);
+end;
+
+function RSA_private_encrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+begin
+  result := libcrypto.RSA_private_encrypt(flen, from, _to, rsa, padding);
+end;
+
+function RSA_public_decrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+begin
+  result := libcrypto.RSA_public_decrypt(flen, from, _to, rsa, padding);
+end;
+
+function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte;
+  rsa: PRSA; padding: integer): integer; cdecl;
+begin
+  result := libcrypto.RSA_private_decrypt(flen, from, _to, rsa, padding);
+end;
+
+function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+begin
+  result := libcrypto.RSA_pkey_ctx_ctrl(ctx, optype, cmd, p1, p2);
 end;
 
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer;
@@ -5972,6 +6033,21 @@ function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
+
+function RSA_public_encrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_public_encrypt';
+
+function RSA_private_encrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_private_encrypt';
+
+function RSA_public_decrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_public_decrypt';
+
+function RSA_private_decrypt(flen: integer; from: PByte; _to: PByte; rsa: PRSA; padding: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_private_decrypt';
+
+function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_pkey_ctx_ctrl';
 
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'i2d_PrivateKey_bio';
