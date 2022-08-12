@@ -2213,22 +2213,32 @@ begin
   end;
   if (fCount = 0) and
      (fParse.EndOfObject = ']') then
-  begin
-    // single op do not need a transaction nor InternalBatchStart/Stop
-    fRowCountPerTrans := 0;
-    SetLength(fResults, 1);
-    if fEncoding in BATCH_DIRECT then
+    // optimize a single op batch
+    if (fEncoding in BATCH_INSERT) and
+       (fBatchOptions * [boInsertOrIgnore, boInsertOrReplace] <> []) then
     begin
-      // InternalBatchDirectOne format requires JSON object fallback
-      fOrm.Model.TableProps[fRunTableIndex].Props.
-        SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID,
-          nil, fCommandDirectFormat, fValue);
-      if fEncoding = encPutHexID then
-        fEncoding := encPut
-      else
-        fEncoding := encPost;
-    end;
-  end
+      // single op which requires special INSERT syntax
+      fRowCountPerTrans := 0;        // no transaction needed
+      ExecuteValueCheckIfRestChange; // InternalBatchStart(fBatchOptions)
+      SetLength(fResults, 1);
+    end
+    else
+    begin
+      // single op which does not need a transaction nor InternalBatchStart/Stop
+      fRowCountPerTrans := 0;
+      SetLength(fResults, 1);
+      if fEncoding in BATCH_DIRECT then
+      begin
+        // InternalBatchDirectOne format requires JSON object fallback
+        fOrm.Model.TableProps[fRunTableIndex].Props.
+          SaveFieldsFromJsonArray(fValueDirect, fValueDirectFields, @fValueID,
+            nil, fCommandDirectFormat, fValue);
+        if fEncoding = encPutHexID then
+          fEncoding := encPut
+        else
+          fEncoding := encPost;
+      end;
+    end
   else
   begin
     // handle auto-committed transaction process
