@@ -4161,7 +4161,7 @@ begin
     for m := 0 to MethodsCount - 1 do
       with fMethods[m] do
       begin
-        WR.Add('{"method":"%","arguments":[',[URI]);
+        WR.Add('{"method":"%","arguments":[', [URI]);
         for a := 0 to High(Args) do
           Args[a].SerializeToContract(WR);
         WR.CancelLastComma;

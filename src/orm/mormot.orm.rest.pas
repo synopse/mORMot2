@@ -2070,7 +2070,7 @@ end;
 
 procedure TRestOrm.InternalBatchStop;
 begin
-  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
+  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchStop', [self]);
 end;
 
 function TRestOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
@@ -2082,7 +2082,8 @@ end;
 function TRestOrm.{%H-}InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
-  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchDirectOne',[self]);
+  raise EOrmBatchException.CreateUtf8(
+    'Unexpected %.InternalBatchDirectOne', [self]);
 end;
 
 function TRestOrm.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;

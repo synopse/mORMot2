@@ -1768,12 +1768,14 @@ end;
 
 //TODO : to be implemented in mormot.soa.client
 {
-function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientUri): boolean;
-var json: RawUtf8;
+function TServicesPublishedInterfacesList.RegisterFromServer(
+  Client: TRestClientUri): boolean;
+var
+  json: RawUtf8;
 begin
-  result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
+  result := Client.CallBackGet('stat', ['findservice', '*'], json) = HTTP_SUCCESS;
   if result and
-     (json<>'') then
+     (json <> '') then
     RegisterFromServerJson(json);
 end;
 }

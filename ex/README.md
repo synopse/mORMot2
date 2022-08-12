@@ -10,7 +10,20 @@ This sample will benchmark the ORM + REST layer of mORMot over several DB backen
 
 By default, will validate our *SQLite3* and in-memory storage layer, either directly or as virtual tables.
 
-You could enable additional engines by changing the conditional definitions in the main program source.
+You could enable additional engines by changing the conditional definitions in the main program source. Currently PostgreSQL has been validated with our internal driver - feedback is welcome for other engines!
+
+### mondgodb
+
+This sample will benchmark the ORM + REST layer of mORMot over a local (or remote) MongoDB instance.
+
+This code is a good entry point for what is possible with this unit in our framework, for both direct access or ORM/ODM access.
+And you would be able to guess the performance numbers you may achieve with your own project.
+
+Running a MongoDB database in a container is as easy as executing the following command:
+
+    sudo docker run --name mongodb -d -p 27017:27017 mongo:latest
+
+Then you will have a MongoDB server instance accessible on `localhost:27017`, so you could run the sample straight away.
 
 ### mvc-blog
 

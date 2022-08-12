@@ -1471,7 +1471,7 @@ var
   sav: integer;
 begin
 {  if not Assigned(fCommand) then
-    raise EOleDBException.CreateUtf8('%.Execute should be called before Step',[self]); }
+    raise EOleDBException.CreateUtf8('%.Execute should be called before Step', [self]); }
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;

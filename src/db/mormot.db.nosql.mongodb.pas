@@ -2126,7 +2126,7 @@ begin
   inherited Create(FullCollectionName, opMsg, 0, 0); // write TMongoWireHeader
   if Flags <> [] then
     raise EMongoException.CreateUtf8(
-      '%.Create: unsupported flags=%',[self, integer(Flags)]);
+      '%.Create: unsupported flags=%', [self, integer(Flags)]);
   Write4(integer(Flags));
   Write1(ord(mmkBody)); // a single document follow
   BsonWriteParam(Query, fDatabaseName);

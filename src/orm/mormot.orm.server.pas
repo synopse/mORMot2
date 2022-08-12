@@ -487,7 +487,8 @@ type
     fCommandDirectSupport: TRestOrmBatchDirect;
     fCommandDirectFormat: TSaveFieldsAsObject;
     fFlags: set of (
-      fNeedAcquireExecutionWrite, fAcquiredExecutionWrite,
+      fNeedAcquireExecutionWrite,
+      fAcquiredExecutionWrite,
       fRunMainTrans);
     fRunningBatchRest: TRestOrm;
     fRunningRest: TRestOrm;
@@ -2213,20 +2214,16 @@ begin
   end;
   if (fCount = 0) and
      (fParse.EndOfObject = ']') then
+  begin
     // optimize a single op batch
+    fRowCountPerTrans := 0;        // no transaction needed
+    SetLength(fResults, 1);
     if (fEncoding in BATCH_INSERT) and
        (fBatchOptions * [boInsertOrIgnore, boInsertOrReplace] <> []) then
-    begin
       // single op which requires special INSERT syntax
-      fRowCountPerTrans := 0;        // no transaction needed
-      ExecuteValueCheckIfRestChange; // InternalBatchStart(fBatchOptions)
-      SetLength(fResults, 1);
-    end
+      ExecuteValueCheckIfRestChange // InternalBatchStart(fBatchOptions)
     else
-    begin
       // single op which does not need a transaction nor InternalBatchStart/Stop
-      fRowCountPerTrans := 0;
-      SetLength(fResults, 1);
       if fEncoding in BATCH_DIRECT then
       begin
         // InternalBatchDirectOne format requires JSON object fallback
@@ -2238,7 +2235,7 @@ begin
         else
           fEncoding := encPost;
       end;
-    end
+  end
   else
   begin
     // handle auto-committed transaction process

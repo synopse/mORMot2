@@ -633,7 +633,7 @@ const
   // - even if a dynamic array can handle PtrInt length, consider other patterns
   _DAMAXSIZE = $5fffffff;
 
-/// same as SetLength() but without any memory resize - len should be > 0
+/// like SetLength() but without any memory resize - WARNING: len should be > 0
 procedure DynArrayFakeLength(var arr; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
