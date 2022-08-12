@@ -6385,7 +6385,7 @@ var
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
-  B: PUtf8Char;
+  beg: PUtf8Char;
   esc: ^TAnsiCharToByte;
 begin
   if Text = nil then
@@ -6397,10 +6397,10 @@ begin
   end;
   esc := @HTML_ESC[Fmt];
   repeat
-    B := Text;
+    beg := Text;
     while esc[Text^] = 0 do
       inc(Text);
-    AddNoJsonEscape(B, Text - B);
+    AddNoJsonEscape(beg, Text - beg);
     if Text^ = #0 then
       exit
     else
@@ -6440,7 +6440,7 @@ end;
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
   Fmt: TTextWriterHtmlFormat);
 var
-  B: PUtf8Char;
+  beg: PUtf8Char;
   esc: ^TAnsiCharToByte;
 begin
   if (Text = nil) or
@@ -6454,11 +6454,11 @@ begin
   inc(TextLen, PtrInt(Text)); // TextLen = final PtrInt(Text)
   esc := @HTML_ESC[Fmt];
   repeat
-    B := Text;
+    beg := Text;
     while (PtrUInt(Text) < PtrUInt(TextLen)) and
           (esc[Text^] = 0) do
       inc(Text);
-    AddNoJsonEscape(B, Text - B);
+    AddNoJsonEscape(beg, Text - beg);
     if PtrUInt(Text) = PtrUInt(TextLen) then
       exit;
     if Text^ = #0 then

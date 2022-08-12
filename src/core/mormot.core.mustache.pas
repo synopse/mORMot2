@@ -429,6 +429,7 @@ type
     procedure RenderContext(Context: TSynMustacheContext;
       TagStart, TagEnd: integer; Partials: TSynMustachePartials;
       NeverFreePartials: boolean);
+
     /// renders the {{mustache}} template from a variant defined context
     // - the context is given via a custom variant type implementing
     // TSynInvokeableVariantType.Lookup, e.g. TDocVariant or TSMVariant
@@ -487,6 +488,7 @@ type
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
       EscapeInvert: boolean = false): RawUtf8; overload;
+
     /// renders the {{mustache}} template from a variable defined context
     // - the context is given via a local variable and RTTI, which may be
     // a record, a class, a variant, or a dynamic array instance
@@ -813,7 +815,8 @@ begin
           if Value.VType >= varNull then
             exit;
         end
-        else if IdemPChar(pointer(ValueName), '-INDEX') then
+        else if PCardinal(ValueName)^ and $dfdfdfdf = (ord('-') and $df) +
+               ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
         begin
           // {{-index}}
           Value.VType := varInteger;
@@ -955,14 +958,6 @@ begin
     begin
       d := Data;
       rc := Info;
-      if (d <> nil) and
-         (ListCount > 0) then
-      begin
-        d := rc.ValueIterate(d, ListCurrent, rc);
-        if (d <> nil) and
-           (rc.Kind in [rkClass, rkLString]) then
-          d := @d; // as expected by ValueToVariant()
-      end;
       exit;
     end;
   // recursive search of {{value}}
@@ -974,7 +969,8 @@ begin
       if (d <> nil) and
          (ListCount >= 0) then
         // within a list
-        if IdemPChar(pointer(ValueName), '-INDEX') then
+        if PCardinal(ValueName)^ and $dfdfdfdf = (ord('-') and $df) +
+             ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
         begin
           // {{-index}}
           d := @Temp.Data.VInteger;
@@ -1051,13 +1047,16 @@ begin
       UnEscape := not UnEscape;
     if UnEscape or
        (rc.Kind in rkNumberTypes) then
+      // no HTML escape needed for numbers
       fWriter.AddRttiCustomJson(d, rc, twNone, [])
+    // try direct UTF-8 and UTF-16 strings rendering
     else if rc.Kind = rkLString then
-      fWriter.AddHtmlEscape(PPointer(d)^, length(PRawUtf8(d)^))
+      fWriter.AddHtmlEscape(PPointer(d)^) // faster with no length
     else if rc.Kind in rkWideStringTypes then
       fWriter.AddHtmlEscapeW(PPointer(d)^)
     else
     begin
+      // use a temporary variant for any complex content (including JSON)
       rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
       if fEscapeInvert then
         UnEscape := not UnEscape;
