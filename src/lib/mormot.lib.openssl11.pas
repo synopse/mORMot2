@@ -1086,9 +1086,11 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     // methods below are for RSA algorithm only
     function RsaSeal(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
-    function RsaOpen(Cipher: PEVP_CIPHER; const Msg: RawByteString): RawByteString;
+    function RsaOpen(Cipher: PEVP_CIPHER; const Msg: RawByteString;
+      CodePage: integer = CP_RAWBYTESTRING): RawByteString;
     function RsaEncrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
-    function RsaDecrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
+    function RsaDecrypt(const Content: RawByteString; MD: PEVP_MD;
+      CodePage: integer = CP_RAWBYTESTRING): RawByteString;
   end;
 
   PEVP_PKEY = ^EVP_PKEY;
@@ -6980,7 +6982,7 @@ begin
 end;
 
 function EVP_PKEY.RsaOpen(Cipher: PEVP_CIPHER;
-  const Msg: RawByteString): RawByteString;
+  const Msg: RawByteString; CodePage: integer): RawByteString;
 var
   ctx: PEVP_CIPHER_CTX;
   p: PByte;
@@ -7006,7 +7008,7 @@ begin
   if EVP_OpenInit(ctx, Cipher, p, ekl, pointer(Msg), @self) = OPENSSLSUCCESS then
   begin
     inc(p, ekl);
-    FastSetRawByteString(result, nil, l);
+    FastSetStringCP(result, nil, l, CodePage);
     l := length(Msg) - (PAnsiChar(p) - pointer(Msg));
     if (EVP_DecryptUpdate(ctx, pointer(result), @lu, p, l) <> OPENSSLSUCCESS) or
        (EVP_OpenFinal(ctx, @PByteArray(result)[{%H-}lu], @lf) <> OPENSSLSUCCESS) or
@@ -7055,7 +7057,8 @@ begin
   end;
 end;
 
-function EVP_PKEY.RsaDecrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
+function EVP_PKEY.RsaDecrypt(const Content: RawByteString; MD: PEVP_MD;
+  CodePage: integer): RawByteString;
 var
   ctx: PEVP_PKEY_CTX;
   len: PtrUInt;
@@ -7072,7 +7075,7 @@ begin
     EOpenSsl.Check(
       EVP_PKEY_decrypt(ctx, nil, len, pointer(Content), Length(Content)),
       'EVP_PKEY_decrypt1');
-    FastSetRawByteString(result, nil, len);
+    FastSetStringCP(result, nil, len, CodePage);
     EOpenSsl.Check(
       EVP_PKEY_decrypt(ctx, pointer(result), len, pointer(Content), Length(Content)),
       'EVP_PKEY_decrypt2');
