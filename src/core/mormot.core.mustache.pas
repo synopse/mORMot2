@@ -501,6 +501,29 @@ type
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
       EscapeInvert: boolean = false): RawUtf8;
+    /// renders the {{mustache}} template from a variable defined context
+    // - the context is given via a local variable and RTTI, which may be
+    // a record, a class, a variant, or a dynamic array instance
+    // - you can specify a list of partials via TSynMustachePartials.CreateOwned,
+    // a list of Expression Helpers, or a custom {{"English text}} callback
+    // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
+    // and {{{value}} escaping chars (may be useful e.g. for code generation)
+    function RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
+      Partials: TSynMustachePartials = nil;
+      Helpers: TSynMustacheHelpers = nil;
+      const OnTranslate: TOnStringTranslate = nil;
+      EscapeInvert: boolean = false): RawUtf8;
+    /// renders the {{mustache}} template from a dynamic array variable
+    // - the supplied array is available within a {{..}} main section
+    // - you can specify a list of partials via TSynMustachePartials.CreateOwned,
+    // a list of Expression Helpers, or a custom {{"English text}} callback
+    // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
+    // and {{{value}} escaping chars (may be useful e.g. for code generation)
+    function RenderDataArray(const Value: TDynArray;
+      Partials: TSynMustachePartials = nil;
+      Helpers: TSynMustacheHelpers = nil;
+      const OnTranslate: TOnStringTranslate = nil;
+      EscapeInvert: boolean = false): RawUtf8;
 
     /// read-only access to the raw {{mustache}} template content
     property Template: RawUtf8
@@ -1775,21 +1798,27 @@ end;
 function TSynMustache.RenderData(const Value; ValueTypeInfo: PRttiInfo;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+begin
+  result := RenderDataRtti(
+    @Value, Rtti.RegisterType(ValueTypeInfo), Partials, Helpers, OnTranslate, EscapeInvert);
+end;
+
+function TSynMustache.RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
+  Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
+  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
-  rc: TRttiCustom;
   ctx: TSynMustacheContextData;
   tmp: TTextWriterStackBuffer;
 begin
-  rc := Rtti.RegisterType(ValueTypeInfo);
-  if rc = nil then
+  if ValueRtti = nil then
     raise ESynMustache.CreateUtf8('%.RenderData: invalid TypeInfo', [self]);
   ctx := fCachedContextData; // thread-safe reuse of shared rendering context
   if ctx.fReuse.TryLock then
-    ctx.PushContext(@Value, rc)
+    ctx.PushContext(Value, ValueRtti)
   else
     ctx := TSynMustacheContextData.Create(
       self, TJsonWriter.CreateOwnedStream(tmp), SectionMaxCount,
-      @Value, rc, true);
+      Value, ValueRtti, true);
   try
     ctx.Helpers := Helpers;
     ctx.OnStringTranslate := OnTranslate;
@@ -1802,6 +1831,15 @@ begin
     else
       ctx.Free;
   end;
+end;
+
+function TSynMustache.RenderDataArray(const Value: TDynArray;
+  Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
+  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+begin
+  DynArrayFakeLength(Value.Value^, Value.Count); // as RenderDataRtti() expects
+  result := RenderDataRtti(
+    Value.Value, Value.Info, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
 destructor TSynMustache.Destroy;
