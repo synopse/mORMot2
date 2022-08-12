@@ -945,9 +945,9 @@ begin
   begin
     Data := Value;
     Info := Rtti;
-    ListCurrent := -1;
     if Rtti <> nil then
       ListCount := Rtti.ValueIterateCount(Value);
+    ListCurrent := -1;
   end;
   inc(fContextCount);
 end;
@@ -1027,7 +1027,7 @@ begin
           // search property name in rkRecord/rkObject or rkClass
           p := rc.PropFindByPath(d, pointer(ValueName), fPathDelim);
           if (p <> nil) and
-             (p^.OffsetGet >= 0)  then
+             (p^.OffsetGet >= 0) then // we don't support getters yet
           begin
             rc := p^.Value;
             inc(PAnsiChar(d), p^.OffsetGet);
@@ -1836,8 +1836,12 @@ end;
 function TSynMustache.RenderDataArray(const Value: TDynArray;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+var
+  n: PtrInt;
 begin
-  DynArrayFakeLength(Value.Value^, Value.Count); // as RenderDataRtti() expects
+  n := Value.Count;
+  if n <> 0 then
+    DynArrayFakeLength(Value.Value^, n); // as RenderDataRtti() expects
   result := RenderDataRtti(
     Value.Value, Value.Info, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
