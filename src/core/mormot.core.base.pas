@@ -8231,7 +8231,7 @@ var
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   if _EntropyGlobal.L = 0 then
-    CreateGuid(_EntropyGlobal.guid); // some rich initial value
+    sysutils.CreateGuid(_EntropyGlobal.guid); // some rich initial value
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
