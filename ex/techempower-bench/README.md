@@ -118,20 +118,20 @@ http://localhost:8080/rawdb
 
 ### QUERIES
 
-**Multiple Database Queries**: A variation of previous Testand also uses the World table. Multiple rows are fetched to more dramatically punish the database driver and connection pool. At the highest queries-per-request tested (20), this test demonstrates all frameworks' convergence toward zero requests-per-second as database activity increases.
+**Multiple Database Queries**: A variation of the [previous Test](#db), also using the same World table. Multiple rows are fetched to more dramatically punish the database driver and connection pool. At the highest queries-per-request tested (20), this test demonstrates all frameworks' convergence toward zero requests-per-second as database activity increases.
 
 http://localhost:8080/queries?queries=##
 http://localhost:8080/rawqueries?queries=##
 
 ### CACHED QUERIES
 
-**Caching**: Exercises the platform or framework's in-memory caching of information sourced from a database. For implementation simplicity, the requirements are very similar to the multiple database query test (previous test), but use a separate database table and are fairly generous/forgiving, allowing for each platform or framework's best practices to be applied.
+**Caching**: Exercises the platform or framework's in-memory caching of information sourced from a database. For implementation simplicity, the requirements are very similar to the [multiple database query test](#queries), but use a separate database table and are fairly generous/forgiving, allowing for each platform or framework's best practices to be applied.
 
 http://localhost:8080/cached_queries?count=##
 
 ### UPDATE
 
-**Database Updates**: A variation of the Multiple Database Queries Test that exercises the ORM's persistence of objects and the database driver's performance at running UPDATE statements or similar. The spirit of this test is to exercise a variable number of read-then-write style database operations.
+**Database Updates**: A variation of the [multiple database query test](#queries) that exercises the ORM's persistence of objects and the database driver's performance at running UPDATE statements or similar. The spirit of this test is to exercise a variable number of read-then-write style database operations.
 
 http://localhost:8080/update?queries=##
 http://localhost:8080/rawupdate?queries=##
