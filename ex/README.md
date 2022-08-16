@@ -39,12 +39,6 @@ Demonstrate a SOA service and clients over WebSockets, using binary transfer wit
 
 You will see the console output of the server logs, with all threads and events, in real time.
 
-### techempower-bench
-
-Contains a [TechEmpower Framework Benchmarks](https://www.techempower.com/benchmarks) compliant implementation using *mORMot*.
-
-It is a good example of what could be done to achieve the best performance with *mORMot*, and to compare with alternatives in some realistic scenarios. And we can be proud of our little rodent for sure - especially in respect to performance and pascal code expressiveness.
-
 ### ThirdPartyDemos
 
 This folder contains sub-folders with some example code committed by third party mORMot users.

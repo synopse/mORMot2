@@ -45,9 +45,9 @@ In the meanwhile, we ran our own tests, with comparison with the fastest known f
 We profiled the mORMot framework code, and made some improvements, visible in the following numbers (taken from 2022/07 to 2022/08):
 
 ```
-┌──────────────┬────────────┬────────────┬────────────┬────────────┬────────────┐────────────┐────────────┐
+┌--------------┬------------┬------------┬------------┬------------┬------------┐------------┐------------┐
 │   (index)    │mormot(0720)│mormot(0730)│mormot(0801)│mormot(0802)│mormot(0813)│ drogon     │ lithium    │
-├──────────────┼────────────┼────────────┼────────────┼────────────┼────────────┤────────────┤────────────┤
+├--------------┼------------┼------------┼------------┼------------┼------------┤------------┤------------┤
 │   fortune    │   74318    │   90500    │   91287    │   113073   │   126055   │   176131   │   90064    │
 │  plaintext   │   920198   │   977024   │   986253   │  1436231   │  1373177   │  3583444   │  3388906   │
 │      db      │   111119   │   116756   │   117624   │   153009   │   154033   │   176776   │   99463    │
@@ -55,7 +55,7 @@ We profiled the mORMot framework code, and made some improvements, visible in th
 │     json     │   422771   │   446284   │   458358   │   590979   │   584294   │   554328   │   544247   │
 │    query     │   106665   │   113516   │   114842   │   148187   │   149122   │   171092   │   94638    │
 │ cached-query │   384818   │   416903   │   419020   │   547307   │   551230   │            │   528433   │
-└──────────────┴────────────┴────────────┴────────────┴────────────┴────────────┘────────────┘────────────┘
+└--------------┴------------┴------------┴------------┴------------┴------------┘------------┘------------┘
 ```
 
 Note that drogon and lithium are not full ORM frameworks. They are C++ templates engines, with pre-generated code. So they don't use RTTI or a separated Mustache template as mORMot. The *fortune* test is interresting: it runs a query on PostgreSQL of several lines using the mORMot ORM, then add a line at runtime, sort the items by name, then run it using a Mustache template - over a HTTP kept-alive connection. This is certainly a realistic approach.
