@@ -1952,6 +1952,7 @@ begin
   mounts := StringFromFile(POSIXMOUNTPOINTS, {hasnosize=}true);
   n := 0;
   p := pointer(mounts);
+  if p <> nil then
   repeat
     fs :=  GetNextItem(p);
     mnt := GetNextItem(p);
