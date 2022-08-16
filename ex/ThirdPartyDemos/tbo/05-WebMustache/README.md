@@ -34,7 +34,7 @@ In the fifth article of the mORMot introduction series, two components of the li
 
 Mustache is called Logic-less, with the reasoning: " We call it logic-less because there are no if statements, else clauses, or for loops ". It works by expanding tags that represent data - none, single or whole lists - in a template. This tool is powerful when creating HTML for WebApps.
 
-The contained references to the documentation link to the currently [available mORMot1 help](https://translate.google.com/website?sl=auto&tl=en&hl=de&client=webapp&u=https://synopse.info/files/html/Synopse+mORMot+Framework+SAD+1.18.html). mORMot2 is used for the example. Class and function names may differ slightly. Attached is the source code and the executable program. Disclaimer: The source code is neither tested nor optimized. It should work with Delphi 10.4 or later. The use of the materials provided is at your own risk.
+The contained references to the documentation link to the currently [available mORMot1 help](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_81). mORMot2 is used for the example. Class and function names may differ slightly. Attached is the source code and the executable program. Disclaimer: The source code is neither tested nor optimized. It should work with Delphi 10.4 or later. The use of the materials provided is at your own risk.
 
 The sample application is a simple editor. Depending on the compiler directive, the TMemo or TSynEdit component is used. The input is prepared with the help of the mORMot Mustache Renderer and as HTML via the integrated HTTP serverPage rendered in Edge browser. With the example source code for the program you get:
 - A built-in HTTP server for HTTP/1.0, HTTP/1.1, HTTPS with self-signed or custom certificate.
@@ -48,7 +48,7 @@ HTTP server and REST server are separate in mORMot, two concepts that can each b
 
 The classes `THttpServer`, `THttpAsyncServer` and `THttpApiServer` are available for implementing an HTTP server. The `THttpServer` is a socket-based server. It uses a thread pool for short-lived HTTP/1.0 requests and one thread per connection for HTTP/1.1. The `THttpAsyncServer` is fully event driven and capable of handling thousands of simultaneous connections. Only available under Windows, `THttpApiServer` is based on the `http.sys` module. This module is also used in IIS and .NET. 
 
-The socket-based servers support TLS natively. OpenSSL is used if present, otherwise the Windows Schannel API. If you are interested in more, the two articles [New Async HTTP/WebSocket Server on mORMot 2](https://translate.google.com/website?sl=auto&tl=en&hl=de&client=webapp&u=https://blog.synopse.info/?post/2022/05/21/New-Async-HTTP/WebSocket-Server-on-mORMot-2) and [Native TLS Support for mORMot 2 REST or WebSockets Servers](https://translate.google.com/website?sl=auto&tl=en&hl=de&client=webapp&u=https://blog.synopse.info/?post/2022/07/09/Included-TLS-Support-for-mORMot-REST-or-WebSockets) are recommended.
+The socket-based servers support TLS natively. OpenSSL is used if present, otherwise the Windows Schannel API. If you are interested in more, the two articles [New Async HTTP/WebSocket Server on mORMot 2](https://blog.synopse.info/?post/2022/05/21/New-Async-HTTP/WebSocket-Server-on-mORMot-2) and [Native TLS Support for mORMot 2 REST or WebSockets Servers](https://blog.synopse.info/?post/2022/07/09/Included-TLS-Support-for-mORMot-REST-or-WebSockets) are recommended.
 
 ## HTTP server
 
@@ -142,7 +142,7 @@ If the context is a list, it will be traversed from the first to the last elemen
 
 Example: A list of personal data (objects) is to be run through and the name (variable) of each person is to be output. Solution: ```{{#Persons}}{{Name}}<br>{{/Persons}}```. Outside of a section, the full path must be specified for variables. For the context person: ```{{Person.Name}}```.
 
-Partials correspond to Pascal include files. Everything important can be read here: [Mustache template engine](https://translate.google.com/website?sl=auto&tl=en&hl=de&client=webapp&u=https://synopse.info/files/html/Synopse%2520mORMot%2520Framework%2520SAD%25201.18.html%23TITL_81). 
+Partials correspond to Pascal include files. Everything important can be read here: [Mustache template engine](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_81). 
 
 All theory is gray - this is how it looks in practice:
 

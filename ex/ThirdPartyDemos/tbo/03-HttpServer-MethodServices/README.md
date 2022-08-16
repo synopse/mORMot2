@@ -30,8 +30,9 @@ Arnaud Bouchez describes his work as a client-server ORM/SOA framework and write
 
 The implementation happens on the principles of these architecture principles . If the terms SOA and RESTful architecture do not mean much to you, you can read about them at the following links:
 
-    Wikipedia: [Service-Oriented Architecture](https://en.wikipedia.org/wiki/Service-oriented_architecture) , mORMot Help: [Service-Oriented Architecture](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_17)
-    Wikipedia: [Representational State Transfer](https://en.wikipedia.org/wiki/Representational_state_transfer) , mORMot Help: [Representational state transfer](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_9)
+Wikipedia: [Service-Oriented Architecture](https://en.wikipedia.org/wiki/Service-oriented_architecture) , mORMot Help: [Service-Oriented Architecture](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_17)
+
+Wikipedia: [Representational State Transfer](https://en.wikipedia.org/wiki/Representational_state_transfer) , mORMot Help: [Representational state transfer](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_9)
 
 The sample application server and client is intended to present as much functionality as possible with just a few lines of source code. This is about concepts, not about a finished copy-paste solution. The contained references to the documentation link to the currently available mORMot1 help. mORMot2 is used for the example . Class and function names may differ slightly.
 

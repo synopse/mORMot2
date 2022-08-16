@@ -135,7 +135,7 @@ begin
   sqlWhere := FormatUtf8(' % MATCH ? ORDER BY rank DESC ', [' SearchTable '], [SearchPhrase]);
    if FRestServer.Server.FTSMatch(TOrmFileSearch, sqlWhere, searchIDs) then
 ```
-Note: The `FormatUtf8()` function is similar to the Delphi `Format()` function. An additional feature is that there are arguments are marked with `%` (and not `%s %d`...), and results into SQL values enclosed with `:():` markers. This marker is used in the ORM for optimization.
+Note: The `FormatUtf8()` function is similar to the Delphi `Format()` function. An additional feature is that there are two sets of arguments. First inserted arguments are marked with `%` (and not `%s %d`...), and `?` is also used as place holder for SQL values, which will be enclosed with `:():` markers. This marker is detected by the ORM storage engines, and the values will be replaced with bound SQL parameters at runtime - for best performance, reuse of the prepared statements, and also good security - since such bound parameters are not subject to SQL injection.
 
 ## Field with meta data
 
@@ -151,7 +151,7 @@ begin
   metaData.Birthday := EncodeDate(' Top Secret! ');
 ```
   
-In SQLite from version 3.38.0 this can be queried with the following SQL syntax:
+In SQLite from version 3.38.0 this can be queried with the following SQL extended syntax:
 ```
 Schema: SELECT * FROM File WHERE MetaData->>'$.Creator'='Thomas' ORDER BY ...
 ```
