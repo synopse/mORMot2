@@ -3,9 +3,10 @@
 This is a sample extracted from a [Delphi Praxis Forum page](https://www.delphipraxis.net/210980-mormot-einfuehrung-methodenbasierte-services-server-und-client.html).
 
 With the example code you get:
-- A ZIP file as data storage, which can optionally store entries encrypted with AES.
+- An HTTP server for HTTP/1.0/1.1 requests.
+- Authentication of the user on the server and creation of a user-specific directory.
+- Login with the client to the server and exchange content list and image documents.
 - Connection of a progress indicator with the help of a mediator.
-- Introducing a function that can AES encrypt and decrypt a file.
 - Acceleration in saving and reading graphic formats JPEG, PNG, GIF, TIFF.
 - And some little things more...
 
