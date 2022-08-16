@@ -5,12 +5,10 @@
 This folder contains a TFB implementation using the [mORMot2](https://github.com/synopse/mORMot2) FreePascal/Delphi framework.
 It builds using [FreePascal](https://www.freepascal.org/) compiler and developed using [Lazarus IDE](https://www.lazarus-ide.org/)
 
- - [raw.pas](src/raw.pas) is a low-level implementation with or without ORM.
- 
  
 ### Test Type Implementation Source Code
 
-* [Raw implementation for all tests](src/raw.pas)
+[Raw implementation for all tests](raw.pas) with or without ORM.
 
 ## Important Libraries
 The tests were run with:
@@ -92,36 +90,56 @@ Also note that those tests use PostgreSQL. In most mORMot configurations, a typi
 
 ## Test URLs
 
-See [this TFB reference page](https://github.com/TechEmpower/FrameworkBenchmarks/wiki/Project-Information-Framework-Tests-Overview) about the corresponding requirements of each test URL.
+See [this TFB reference page](https://github.com/TechEmpower/FrameworkBenchmarks/wiki/Project-Information-Framework-Tests-Overview) about the corresponding requirements of each test URL. In short, the DB queries should be serialized (data rows should be retrieved one by one), and some explicit steps are detailed during each process.
+
+The plain URI are using the ORM, and the `/raw*` URI have a direct access to the DB layer without the ORM, and tuned SQL, so are slightly faster.
 
 ### JSON
+
+**JSON Serialization**: Exercises the framework fundamentals including keep-alive support, request routing, request header parsing, object instantiation, JSON serialization, response header generation, and request count throughput.
 
 http://localhost:8080/json
 
 ### PLAINTEXT
 
+**Plaintext**: An exercise of the request-routing fundamentals only, designed to demonstrate the capacity of high-performance platforms in particular. Requests will be sent using HTTP pipelining. The response payload is still small, meaning good performance is still necessary in order to saturate the gigabit Ethernet of the test environment.
+
 http://localhost:8080/plaintext
 
 Note: `mORMot` HTTP server does not support [HTTP pipelining](https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x#http_pipelining),
-so numbers is not so impressive here. But pipelining is clearly something I have never seen on production. The other tests, e.g.  the `cached_query` test are more representative.
+so numbers is not so impressive here. But pipelining is clearly something we have never seen on production. The other tests, e.g.  the `cached_query` test are more representative.
 
 ### DB
 
+**Single Database Query**: Exercises the framework's object-relational mapper (ORM), random number generator, database driver, and database connection pool.
+
 http://localhost:8080/db
+http://localhost:8080/rawdb
 
-### QUERY
+### QUERIES
 
-http://localhost:8080/query?queries=
+**Multiple Database Queries**: A variation of previous Testand also uses the World table. Multiple rows are fetched to more dramatically punish the database driver and connection pool. At the highest queries-per-request tested (20), this test demonstrates all frameworks' convergence toward zero requests-per-second as database activity increases.
 
-### CACHED QUERY
+http://localhost:8080/queries?queries=##
+http://localhost:8080/rawqueries?queries=##
 
-http://localhost:8080/cached_query?queries=
+### CACHED QUERIES
+
+**Caching**: Exercises the platform or framework's in-memory caching of information sourced from a database. For implementation simplicity, the requirements are very similar to the multiple database query test (previous test), but use a separate database table and are fairly generous/forgiving, allowing for each platform or framework's best practices to be applied.
+
+http://localhost:8080/cached_queries?count=##
 
 ### UPDATE
 
-http://localhost:8080/update?queries=
+**Database Updates**: A variation of the Multiple Database Queries Test that exercises the ORM's persistence of objects and the database driver's performance at running UPDATE statements or similar. The spirit of this test is to exercise a variable number of read-then-write style database operations.
+
+http://localhost:8080/update?queries=##
+http://localhost:8080/rawupdate?queries=##
 
 ### FORTUNES
 
+**Fortunes**: Exercises the ORM, database connectivity, dynamic-size collections, sorting, server-side templates, XSS countermeasures, and character encoding.
+
 http://localhost:8080/fortunes
+http://localhost:8080/rawfortunes
 
