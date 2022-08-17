@@ -10986,7 +10986,7 @@ type // local type definitions for their own RTTI to be found by name
 
 procedure InitializeUnit;
 var
-  i: PtrInt;
+  i: integer; // not PtrInt since has just been overriden
   c: AnsiChar;
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
