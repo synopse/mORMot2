@@ -454,12 +454,14 @@ type
   // e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithm over WebSockets
   // - hsrWebsockets communication was made using WebSockets
   // - hsrInProcess is done when run from the same process, i.e. on server side
+  // - hsrConnectionUpgrade is set when "connection: upgrade" is within headers
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,
     hsrSecured,
     hsrWebsockets,
-    hsrInProcess);
+    hsrInProcess,
+    hsrConnectionUpgrade);
 
   /// the THttpServerRequest connection attributes
   THttpServerRequestFlags = set of THttpServerRequestFlag;

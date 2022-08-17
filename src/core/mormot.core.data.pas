@@ -2506,6 +2506,7 @@ function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// search if the WebSocketUpgrade() header is present
+// - consider checking the hsrConnectionUpgrade flag instead
 function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
 
 

@@ -3119,7 +3119,8 @@ begin
     result := fServer.OnBeforeBody(
       fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
       fRemoteIP, fHttp.BearerToken, fHttp.ContentLength,
-      HTTPREMOTEFLAGS[fServer.Sock.TLS.Enabled]);
+      HTTP_TLS_FLAGS[fServer.Sock.TLS.Enabled] +
+      HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags]);
 end;
 
 procedure THttpAsyncConnection.DoReject(status: integer);
@@ -3197,7 +3198,8 @@ begin
   result := soClose;
   remoteid := fHandle;
   fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
-  flags := HTTPREMOTEFLAGS[Assigned(fSecure)];
+  flags := HTTP_TLS_FLAGS[Assigned(fSecure)] +
+           HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
   if fRequest = nil then // only create if not rejected by OnBeforeBody
     fRequest := THttpServerRequest.Create(
       fServer, remoteid, nil, flags, @fConnectionOpaque)

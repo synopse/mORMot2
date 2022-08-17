@@ -332,9 +332,13 @@ type
 
 const
   /// used to compute the request ConnectionFlags from the socket TLS state
-  HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+  HTTP_TLS_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [],
     [hsrHttps, hsrSecured]);
+  /// used to compute the request ConnectionFlags from connection: upgrade header
+  HTTP_UPG_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+    [],
+    [hsrConnectionUpgrade]);
 
 /// some pre-computed CryptCertAlgoOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
@@ -2220,7 +2224,9 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   // compute the response
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
-    HTTPREMOTEFLAGS[ClientSock.TLS.Enabled], @ClientSock.fConnectionOpaque);
+    HTTP_TLS_FLAGS[ClientSock.TLS.Enabled] +
+    HTTP_UPG_FLAGS[hfConnectionUpgrade in ClientSock.Http.HeaderFlags],
+    @ClientSock.fConnectionOpaque);
   try
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
     DoRequest(req);
@@ -2422,7 +2428,8 @@ begin
         HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
         status := fServer.OnBeforeBody(Http.CommandUri, Http.CommandMethod,
           Http.Headers, Http.ContentType, fRemoteIP, Http.BearerToken,
-          Http.ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
+          Http.ContentLength, HTTP_TLS_FLAGS[TLS.Enabled] +
+          HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -3260,7 +3267,8 @@ begin
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
-            ctxt.ConnectionFlags := HTTPREMOTEFLAGS[req^.pSslInfo <> nil];
+            ctxt.ConnectionFlags := HTTP_TLS_FLAGS[req^.pSslInfo <> nil];
+            // no HTTP_UPG_FLAGS[]: plain THttpApiServer doesn't support upgrade
             ctxt.fConnectionID := req^.ConnectionID;
             // ctxt.fConnectionOpaque is not supported by http.sys
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(

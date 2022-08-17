@@ -1090,12 +1090,14 @@ type
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
   // - llfInProcess is done when run from the same process, i.e. on server side
+  // - llfConnectionUpgrade is set when "connection: upgrade" is within headers
   // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
     llfWebsockets,
-    llfInProcess);
+    llfInProcess,
+    llfConnectionUpgrade);
 
   /// some flags set by the caller to notify low-level context
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
