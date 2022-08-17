@@ -375,6 +375,9 @@ type
     function Data: PDynArray; inline;
   end;
 
+  /// meta-class of TIListParent types
+  TIListParentClass = class of TIListParent;
+
   /// generics-based collection storage
   // - high level wrapper around our regular TDynArray implementing IList<T>
   // - main factory is Collections.NewList<T> class function, which returns a
@@ -556,6 +559,9 @@ type
     property ValueTypeInfo: PRttiInfo
       read GetValueTypeInfo;
   end;
+
+  /// meta-class of TIKeyValueParent type definitions
+  TIKeyValueParentClass = class of TIKeyValueParent;
 
   /// thread-safe generics-based dictionary holding key/value pairs
   // - is a high level wrapper around our regular TSynDictionary
@@ -1299,7 +1305,7 @@ begin
 end;
 
 procedure TIKeyValue<TKey, TValue>.Add(const key: TKey;
-const value: TValue);
+  const value: TValue);
 begin
   AddOne(@key, @value);
 end;
@@ -1379,59 +1385,53 @@ end;
 class procedure Collections.NewOrdinal(aSize: integer; aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   // IList<T> will assume ordinal parameters are passed in a consistent way
   case aSize of
     1:
-      obj := TIList<Byte>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<Byte>;
     2:
-      obj := TIList<Word>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<Word>;
     4:
-      obj := TIList<Integer>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<Integer>;
     8:
-      obj := TIList<Int64>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIList<THash128>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<THash128>;
     32:
-      obj := TIList<THash256>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<THash256>;
     64:
-      obj := TIList<THash512>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+      p := TIList<THash512>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainList(aItemTypeInfo);
+    p := RaiseUseNewPlainList(aItemTypeInfo);
   end;
+  p := TIListParentClass(p).Create(
+      aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
   // all IList<T> share the same VMT -> assign once
-  IList<Byte>(result) := TIList<Byte>(obj);
+  IList<Byte>(result) := TIList<Byte>(p);
 end;
 
 class procedure Collections.NewFloat(aOptions: TListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aItemTypeInfo^.RttiFloat of
     rfSingle:
-      obj := TIList<Single>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptSingle);
+      p := TIList<Single>;
     rfDouble:
-      obj := TIList<Double>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptDouble);
+      p := TIList<Double>;
     rfCurr:
-      obj := TIList<Currency>.Create(
-        aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptCurrency);
+      p := TIList<Currency>;
   else
-    obj := RaiseUseNewPlainList(aItemTypeInfo);
+    p := RaiseUseNewPlainList(aItemTypeInfo);
   end;
-  IList<Double>(result) := TIList<Double>(obj);
+  p := TIListParentClass(p).Create(
+      aDynArrayTypeInfo, aItemTypeInfo, aOptions, ptNone);
+  IList<Double>(result) := TIList<Double>(p);
 end;
 
 class procedure Collections.NewLString(aOptions: TListOptions;
@@ -1478,7 +1478,7 @@ class procedure Collections.NewOrdinalOrdinal(
   const aContext: TNewKeyValueContext; aSizeKey, aSizeValue: integer;
   var result);
 var
-  obj: pointer;
+  p: pointer;
 label
   err;
 begin
@@ -1487,16 +1487,16 @@ begin
     1:
       case aSizeValue of
         1:
-          obj := TIKeyValue<Byte, Byte>.Create(aContext);
+          p := TIKeyValue<Byte, Byte>;
         2:
-          obj := TIKeyValue<Byte, Word>.Create(aContext);
+          p := TIKeyValue<Byte, Word>;
         4:
-          obj := TIKeyValue<Byte, Integer>.Create(aContext);
+          p := TIKeyValue<Byte, Integer>;
         8:
-          obj := TIKeyValue<Byte, Int64>.Create(aContext);
+          p := TIKeyValue<Byte, Int64>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<Byte, THash128>.Create(aContext);
+          p := TIKeyValue<Byte, THash128>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
@@ -1504,16 +1504,16 @@ begin
     2:
       case aSizeValue of
         1:
-          obj := TIKeyValue<Word, Byte>.Create(aContext);
+          p := TIKeyValue<Word, Byte>;
         2:
-          obj := TIKeyValue<Word, Word>.Create(aContext);
+          p := TIKeyValue<Word, Word>;
         4:
-          obj := TIKeyValue<Word, Integer>.Create(aContext);
+          p := TIKeyValue<Word, Integer>;
         8:
-          obj := TIKeyValue<Word, Int64>.Create(aContext);
+          p := TIKeyValue<Word, Int64>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<Word, THash128>.Create(aContext);
+          p := TIKeyValue<Word, THash128>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
@@ -1523,36 +1523,36 @@ begin
       case aSizeValue of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<Integer, Byte>.Create(aContext);
+          p := TIKeyValue<Integer, Byte>;
         2:
-          obj := TIKeyValue<Integer, Word>.Create(aContext);
+          p := TIKeyValue<Integer, Word>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<Integer, Integer>.Create(aContext);
+          p := TIKeyValue<Integer, Integer>;
         8:
-          obj := TIKeyValue<Integer, Int64>.Create(aContext);
+          p := TIKeyValue<Integer, Int64>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<Integer, THash128>.Create(aContext);
+          p := TIKeyValue<Integer, THash128>;
         {$endif SPECIALIZE_HASH}
       else
-err:    obj := RaiseUseNewPlainKeyValue(aContext);
+err:    p := RaiseUseNewPlainKeyValue(aContext);
       end;
     8:
       case aSizeValue of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<Int64, Byte>.Create(aContext);
+          p := TIKeyValue<Int64, Byte>;
         2:
-          obj := TIKeyValue<Int64, Word>.Create(aContext);
+          p := TIKeyValue<Int64, Word>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<Int64, Integer>.Create(aContext);
+          p := TIKeyValue<Int64, Integer>;
         8:
-          obj := TIKeyValue<Int64, Int64>.Create(aContext);
+          p := TIKeyValue<Int64, Int64>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<Int64, THash128>.Create(aContext);
+          p := TIKeyValue<Int64, THash128>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
@@ -1562,16 +1562,16 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
       case aSizeValue of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<THash128, Byte>.Create(aContext);
+          p := TIKeyValue<THash128, Byte>;
         2:
-          obj := TIKeyValue<THash128, Word>.Create(aContext);
+          p := TIKeyValue<THash128, Word>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<THash128, Integer>.Create(aContext);
+          p := TIKeyValue<THash128, Integer>;
         8:
-          obj := TIKeyValue<THash128, Int64>.Create(aContext);
+          p := TIKeyValue<THash128, Int64>;
         16:
-          obj := TIKeyValue<THash128, THash128>.Create(aContext);
+          p := TIKeyValue<THash128, THash128>;
       else
         goto err;
       end;
@@ -1579,14 +1579,15 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
   else
     goto err;
   end;
+  p := TIKeyValueParentClass(p).Create(aContext);
   // all IKeyValue<TKey, TValue> share the same VMT -> assign once
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}p);
 end;
 
 class procedure Collections.NewOrdinalFloat(const aContext: TNewKeyValueContext;
   aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 label
   err;
 begin
@@ -1595,17 +1596,17 @@ begin
       case aSizeKey of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<Byte, Single>.Create(aContext);
+          p := TIKeyValue<Byte, Single>;
         2:
-          obj := TIKeyValue<Word, Single>.Create(aContext);
+          p := TIKeyValue<Word, Single>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<Integer, Single>.Create(aContext);
+          p := TIKeyValue<Integer, Single>;
         8:
-          obj := TIKeyValue<Int64, Single>.Create(aContext);
+          p := TIKeyValue<Int64, Single>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<THash128, Single>.Create(aContext);
+          p := TIKeyValue<THash128, Single>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
@@ -1614,17 +1615,17 @@ begin
       case aSizeKey of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<Byte, Double>.Create(aContext);
+          p := TIKeyValue<Byte, Double>;
         2:
-          obj := TIKeyValue<Word, Double>.Create(aContext);
+          p := TIKeyValue<Word, Double>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<Integer, Double>.Create(aContext);
+          p := TIKeyValue<Integer, Double>;
         8:
-          obj := TIKeyValue<Int64, Double>.Create(aContext);
+          p := TIKeyValue<Int64, Double>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<THash128, Double>.Create(aContext);
+          p := TIKeyValue<THash128, Double>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
@@ -1633,464 +1634,480 @@ begin
       case aSizeKey of
         {$ifdef SPECIALIZE_SMALL}
         1:
-          obj := TIKeyValue<Byte, Currency>.Create(aContext);
+          p := TIKeyValue<Byte, Currency>;
         2:
-          obj := TIKeyValue<Word, Currency>.Create(aContext);
+          p := TIKeyValue<Word, Currency>;
         {$endif SPECIALIZE_SMALL}
         4:
-          obj := TIKeyValue<Integer, Currency>.Create(aContext);
+          p := TIKeyValue<Integer, Currency>;
         8:
-          obj := TIKeyValue<Int64, Currency>.Create(aContext);
+          p := TIKeyValue<Int64, Currency>;
         {$ifdef SPECIALIZE_HASH}
         16:
-          obj := TIKeyValue<THash128, Currency>.Create(aContext);
+          p := TIKeyValue<THash128, Currency>;
         {$endif SPECIALIZE_HASH}
       else
         goto err;
       end;
   else
-err: obj := RaiseUseNewPlainKeyValue(aContext);
+err: p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewOrdinalLString(
   const aContext: TNewKeyValueContext; aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeKey of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Byte, RawByteString>.Create(aContext);
+      p := TIKeyValue<Byte, RawByteString>;
     2:
-      obj := TIKeyValue<Word, RawByteString>.Create(aContext);
+      p := TIKeyValue<Word, RawByteString>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Integer, RawByteString>.Create(aContext);
+      p := TIKeyValue<Integer, RawByteString>;
     8:
-      obj := TIKeyValue<Int64, RawByteString>.Create(aContext);
+      p := TIKeyValue<Int64, RawByteString>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<THash128, RawByteString>.Create(aContext);
+      p := TIKeyValue<THash128, RawByteString>;
     32:
-      obj := TIKeyValue<THash256, RawByteString>.Create(aContext);
+      p := TIKeyValue<THash256, RawByteString>;
     64:
-      obj := TIKeyValue<THash512, RawByteString>.Create(aContext);
+      p := TIKeyValue<THash512, RawByteString>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 {$ifdef SPECIALIZE_WSTRING}
 class procedure Collections.NewOrdinalWString(
   const aContext: TNewKeyValueContext; aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeKey of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Byte, WideString>.Create(aContext);
+      p := TIKeyValue<Byte, WideString>;
     2:
-      obj := TIKeyValue<Word, WideString>.Create(aContext);
+      p := TIKeyValue<Word, WideString>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Integer, WideString>.Create(aContext);
+      p := TIKeyValue<Integer, WideString>;
     8:
-      obj := TIKeyValue<Int64, WideString>.Create(aContext);
+      p := TIKeyValue<Int64, WideString>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<THash128, WideString>.Create(aContext);
+      p := TIKeyValue<THash128, WideString>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 {$endif SPECIALIZE_WSTRING}
 
 class procedure Collections.NewOrdinalUString(
   const aContext: TNewKeyValueContext; aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeKey of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Byte, UnicodeString>.Create(aContext);
+      p := TIKeyValue<Byte, UnicodeString>;
     2:
-      obj := TIKeyValue<Word, UnicodeString>.Create(aContext);
+      p := TIKeyValue<Word, UnicodeString>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Integer, UnicodeString>.Create(aContext);
+      p := TIKeyValue<Integer, UnicodeString>;
     8:
-      obj := TIKeyValue<Int64, UnicodeString>.Create(aContext);
+      p := TIKeyValue<Int64, UnicodeString>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<THash128, UnicodeString>.Create(aContext);
+      p := TIKeyValue<THash128, UnicodeString>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewOrdinalInterface(
   const aContext: TNewKeyValueContext; aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeKey of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Byte, IInterface>.Create(aContext);
+      p := TIKeyValue<Byte, IInterface>;
     2:
-      obj := TIKeyValue<Word, IInterface>.Create(aContext);
+      p := TIKeyValue<Word, IInterface>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Integer, IInterface>.Create(aContext);
+      p := TIKeyValue<Integer, IInterface>;
     8:
-      obj := TIKeyValue<Int64, IInterface>.Create(aContext);
+      p := TIKeyValue<Int64, IInterface>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<THash128, IInterface>.Create(aContext);
+      p := TIKeyValue<THash128, IInterface>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewOrdinalVariant(
   const aContext: TNewKeyValueContext; aSizeKey: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeKey of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Byte, Variant>.Create(aContext);
+      p := TIKeyValue<Byte, Variant>;
     2:
-      obj := TIKeyValue<Word, Variant>.Create(aContext);
+      p := TIKeyValue<Word, Variant>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Integer, Variant>.Create(aContext);
+      p := TIKeyValue<Integer, Variant>;
     8:
-      obj := TIKeyValue<Int64, Variant>.Create(aContext);
+      p := TIKeyValue<Int64, Variant>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<THash128, Variant>.Create(aContext);
+      p := TIKeyValue<THash128, Variant>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewLStringOrdinal(
   const aContext: TNewKeyValueContext; aSizeValue: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeValue of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<RawByteString, Byte>.Create(aContext);
+      p := TIKeyValue<RawByteString, Byte>;
     2:
-      obj := TIKeyValue<RawByteString, Word>.Create(aContext);
+      p := TIKeyValue<RawByteString, Word>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<RawByteString, Integer>.Create(aContext);
+      p := TIKeyValue<RawByteString, Integer>;
     8:
-      obj := TIKeyValue<RawByteString, Int64>.Create(aContext);
+      p := TIKeyValue<RawByteString, Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<RawByteString, THash128>.Create(aContext);
+      p := TIKeyValue<RawByteString, THash128>;
     32:
-      obj := TIKeyValue<RawByteString, THash256>.Create(aContext);
+      p := TIKeyValue<RawByteString, THash256>;
     64:
-      obj := TIKeyValue<RawByteString, THash512>.Create(aContext);
+      p := TIKeyValue<RawByteString, THash512>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewLStringManaged(
   const aContext: TNewKeyValueContext; aValue: TTypeKind; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aValue of
     tkFloat:
       case aContext.ValueItemTypeInfo^.RttiFloat of
         rfSingle:
-          obj := TIKeyValue<RawByteString, Single>.Create(aContext);
+          p := TIKeyValue<RawByteString, Single>;
         rfDouble:
-          obj := TIKeyValue<RawByteString, Double>.Create(aContext);
+          p := TIKeyValue<RawByteString, Double>;
         rfCurr:
-          obj := TIKeyValue<RawByteString, Currency>.Create(aContext);
+          p := TIKeyValue<RawByteString, Currency>;
       else
-        obj := RaiseUseNewPlainKeyValue(aContext);
+        p := RaiseUseNewPlainKeyValue(aContext);
       end;
     tkLString:
-      obj := TIKeyValue<RawByteString, RawByteString>.Create(aContext);
+      p := TIKeyValue<RawByteString, RawByteString>;
     {$ifdef SPECIALIZE_WSTRING}
     tkWString:
-      obj := TIKeyValue<RawByteString, WideString>.Create(aContext);
+      p := TIKeyValue<RawByteString, WideString>;
     {$endif SPECIALIZE_WSTRING}
     tkUString:
-      obj := TIKeyValue<RawByteString, UnicodeString>.Create(aContext);
+      p := TIKeyValue<RawByteString, UnicodeString>;
     tkInterface:
-      obj := TIKeyValue<RawByteString, IInterface>.Create(aContext);
+      p := TIKeyValue<RawByteString, IInterface>;
     tkVariant:
-      obj := TIKeyValue<RawByteString, Variant>.Create(aContext);
+      p := TIKeyValue<RawByteString, Variant>;
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 {$ifdef SPECIALIZE_WSTRING}
 class procedure Collections.NewWStringOrdinal(
   const aContext: TNewKeyValueContext; aSizeValue: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeValue of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<WideString, Byte>.Create(aContext);
+      p := TIKeyValue<WideString, Byte>;
     2:
-      obj := TIKeyValue<WideString, Word>.Create(aContext);
+      p := TIKeyValue<WideString, Word>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<WideString, Integer>.Create(aContext);
+      p := TIKeyValue<WideString, Integer>;
     8:
-      obj := TIKeyValue<WideString, Int64>.Create(aContext);
+      p := TIKeyValue<WideString, Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<WideString, THash128>.Create(aContext);
+      p := TIKeyValue<WideString, THash128>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewWStringManaged(
   const aContext: TNewKeyValueContext; aValue: TTypeKind; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aValue of
     tkFloat:
       case aContext.ValueItemTypeInfo^.RttiFloat of
         rfSingle:
-          obj := TIKeyValue<WideString, Single>.Create(aContext);
+          p := TIKeyValue<WideString, Single>;
         rfDouble:
-          obj := TIKeyValue<WideString, Double>.Create(aContext);
+          p := TIKeyValue<WideString, Double>;
       else
-        obj := RaiseUseNewPlainKeyValue(aContext);
+        p := RaiseUseNewPlainKeyValue(aContext);
       end;
     tkLString:
-      obj := TIKeyValue<WideString, RawByteString>.Create(aContext);
+      p := TIKeyValue<WideString, RawByteString>;
     tkWString:
-      obj := TIKeyValue<WideString, WideString>.Create(aContext);
+      p := TIKeyValue<WideString, WideString>;
     tkUString:
-      obj := TIKeyValue<WideString, UnicodeString>.Create(aContext);
+      p := TIKeyValue<WideString, UnicodeString>;
     tkInterface:
-      obj := TIKeyValue<WideString, IInterface>.Create(aContext);
+      p := TIKeyValue<WideString, IInterface>;
     tkVariant:
-      obj := TIKeyValue<WideString, Variant>.Create(aContext);
+      p := TIKeyValue<WideString, Variant>;
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 {$endif SPECIALIZE_WSTRING}
 
 class procedure Collections.NewUStringOrdinal(
   const aContext: TNewKeyValueContext; aSizeValue: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeValue of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<UnicodeString, Byte>.Create(aContext);
+      p := TIKeyValue<UnicodeString, Byte>;
     2:
-      obj := TIKeyValue<UnicodeString, Word>.Create(aContext);
+      p := TIKeyValue<UnicodeString, Word>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<UnicodeString, Integer>.Create(aContext);
+      p := TIKeyValue<UnicodeString, Integer>;
     8:
-      obj := TIKeyValue<UnicodeString, Int64>.Create(aContext);
+      p := TIKeyValue<UnicodeString, Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<UnicodeString, THash128>.Create(aContext);
+      p := TIKeyValue<UnicodeString, THash128>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewUStringManaged(
   const aContext: TNewKeyValueContext; aValue: TTypeKind; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aValue of
     tkFloat:
       case aContext.ValueItemTypeInfo^.RttiFloat of
         rfSingle:
-          obj := TIKeyValue<UnicodeString, Single>.Create(aContext);
+          p := TIKeyValue<UnicodeString, Single>;
         rfDouble:
-          obj := TIKeyValue<UnicodeString, Double>.Create(aContext);
+          p := TIKeyValue<UnicodeString, Double>;
         rfCurr:
-          obj := TIKeyValue<UnicodeString, Currency>.Create(aContext);
+          p := TIKeyValue<UnicodeString, Currency>;
       else
-        obj := RaiseUseNewPlainKeyValue(aContext);
+        p := RaiseUseNewPlainKeyValue(aContext);
       end;
     tkLString:
-      obj := TIKeyValue<UnicodeString, RawByteString>.Create(aContext);
+      p := TIKeyValue<UnicodeString, RawByteString>;
     {$ifdef SPECIALIZE_WSTRING}
     tkWString:
-      obj := TIKeyValue<UnicodeString, WideString>.Create(aContext);
+      p := TIKeyValue<UnicodeString, WideString>;
     {$endif SPECIALIZE_WSTRING}
     tkUString:
-      obj := TIKeyValue<UnicodeString, UnicodeString>.Create(aContext);
+      p := TIKeyValue<UnicodeString, UnicodeString>;
     tkInterface:
-      obj := TIKeyValue<UnicodeString, IInterface>.Create(aContext);
+      p := TIKeyValue<UnicodeString, IInterface>;
     tkVariant:
-      obj := TIKeyValue<UnicodeString, Variant>.Create(aContext);
+      p := TIKeyValue<UnicodeString, Variant>;
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewInterfaceOrdinal(
   const aContext: TNewKeyValueContext; aSizeValue: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeValue of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<IInterface, Byte>.Create(aContext);
+      p := TIKeyValue<IInterface, Byte>;
     2:
-      obj := TIKeyValue<IInterface, Word>.Create(aContext);
+      p := TIKeyValue<IInterface, Word>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<IInterface, Integer>.Create(aContext);
+      p := TIKeyValue<IInterface, Integer>;
     8:
-      obj := TIKeyValue<IInterface, Int64>.Create(aContext);
+      p := TIKeyValue<IInterface, Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<IInterface, THash128>.Create(aContext);
+      p := TIKeyValue<IInterface, THash128>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewInterfaceManaged(
   const aContext: TNewKeyValueContext; aValue: TTypeKind; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aValue of
     tkFloat:
       case aContext.ValueItemTypeInfo^.RttiFloat of
         rfSingle:
-          obj := TIKeyValue<IInterface, Single>.Create(aContext);
+          p := TIKeyValue<IInterface, Single>;
         rfDouble:
-          obj := TIKeyValue<IInterface, Double>.Create(aContext);
+          p := TIKeyValue<IInterface, Double>;
       else
-        obj := RaiseUseNewPlainKeyValue(aContext);
+        p := RaiseUseNewPlainKeyValue(aContext);
       end;
     tkLString:
-      obj := TIKeyValue<IInterface, RawByteString>.Create(aContext);
+      p := TIKeyValue<IInterface, RawByteString>;
     {$ifdef SPECIALIZE_WSTRING}
     tkWString:
-      obj := TIKeyValue<IInterface, WideString>.Create(aContext);
+      p := TIKeyValue<IInterface, WideString>;
     {$endif SPECIALIZE_WSTRING}
     tkUString:
-      obj := TIKeyValue<IInterface, UnicodeString>.Create(aContext);
+      p := TIKeyValue<IInterface, UnicodeString>;
     tkInterface:
-      obj := TIKeyValue<IInterface, IInterface>.Create(aContext);
+      p := TIKeyValue<IInterface, IInterface>;
     tkVariant:
-      obj := TIKeyValue<IInterface, Variant>.Create(aContext);
+      p := TIKeyValue<IInterface, Variant>;
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewVariantOrdinal(
   const aContext: TNewKeyValueContext; aSizeValue: integer; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aSizeValue of
     {$ifdef SPECIALIZE_SMALL}
     1:
-      obj := TIKeyValue<Variant, Byte>.Create(aContext);
+      p := TIKeyValue<Variant, Byte>;
     2:
-      obj := TIKeyValue<Variant, Word>.Create(aContext);
+      p := TIKeyValue<Variant, Word>;
     {$endif SPECIALIZE_SMALL}
     4:
-      obj := TIKeyValue<Variant, Integer>.Create(aContext);
+      p := TIKeyValue<Variant, Integer>;
     8:
-      obj := TIKeyValue<Variant, Int64>.Create(aContext);
+      p := TIKeyValue<Variant, Int64>;
     {$ifdef SPECIALIZE_HASH}
     16:
-      obj := TIKeyValue<Variant, THash128>.Create(aContext);
+      p := TIKeyValue<Variant, THash128>;
     {$endif SPECIALIZE_HASH}
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class procedure Collections.NewVariantManaged(
   const aContext: TNewKeyValueContext; aValue: TTypeKind; var result);
 var
-  obj: pointer;
+  p: pointer;
 begin
   case aValue of
     tkFloat:
       case aContext.ValueItemTypeInfo^.RttiFloat of
         rfSingle:
-          obj := TIKeyValue<Variant, Single>.Create(aContext);
+          p := TIKeyValue<Variant, Single>;
         rfDouble:
-          obj := TIKeyValue<Variant, Double>.Create(aContext);
+          p := TIKeyValue<Variant, Double>;
       else
-        obj := RaiseUseNewPlainKeyValue(aContext);
+        p := RaiseUseNewPlainKeyValue(aContext);
       end;
     tkLString:
-      obj := TIKeyValue<Variant, RawByteString>.Create(aContext);
+      p := TIKeyValue<Variant, RawByteString>;
     {$ifdef SPECIALIZE_WSTRING}
     tkWString:
-      obj := TIKeyValue<Variant, WideString>.Create(aContext);
+      p := TIKeyValue<Variant, WideString>;
     {$endif SPECIALIZE_WSTRING}
     tkUString:
-      obj := TIKeyValue<Variant, UnicodeString>.Create(aContext);
+      p := TIKeyValue<Variant, UnicodeString>;
     tkInterface:
-      obj := TIKeyValue<Variant, IInterface>.Create(aContext);
+      p := TIKeyValue<Variant, IInterface>;
     tkVariant:
-      obj := TIKeyValue<Variant, Variant>.Create(aContext);
+      p := TIKeyValue<Variant, Variant>;
   else
-    obj := RaiseUseNewPlainKeyValue(aContext);
+    p := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>({%H-}obj);
+  p := TIKeyValueParentClass(p).Create(aContext);
+  IKeyValue<Int64, Int64>(result) := TIKeyValue<Int64, Int64>(p);
 end;
 
 class function Collections.NewList<T>(aOptions: TListOptions;
