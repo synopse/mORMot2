@@ -5463,7 +5463,7 @@ function TSynLibrary.Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
 var
   P: PAnsiChar;
-  tmp: RawUtf8;
+  name, search: RawUtf8;
 {$ifdef OSPOSIX}
   dlinfo: dl_info;
 {$endif OSPOSIX}
@@ -5475,17 +5475,19 @@ begin
     exit; // avoid GPF
   P := pointer(ProcName);
   repeat
-    tmp := GetNextItem(P); // try all alternate names
-    if tmp = '' then
+    name := GetNextItem(P); // try all alternate names
+    if name = '' then
       break;
-    if tmp[1] = '?' then
+    if name[1] = '?' then
     begin
       RaiseExceptionOnFailure := nil;
-      delete(tmp, 1, 1);
+      delete(name, 1, 1);
     end;
-    if Prefix <> '' then
-      tmp := Prefix + tmp;
-    Entry^ := LibraryResolve(fHandle, pointer(tmp));
+    search := Prefix + name;
+    Entry^ := LibraryResolve(fHandle, pointer(search));
+    if (Entry^ = nil) and
+       (Prefix <> '') then // try without the prefix
+      Entry^ := LibraryResolve(fHandle, pointer(name));
     result := Entry^ <> nil;
   until result;
   {$ifdef OSPOSIX}

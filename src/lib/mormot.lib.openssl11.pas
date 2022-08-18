@@ -5162,6 +5162,11 @@ begin
         Executable.ProgramFilePath + lib3,
         Executable.ProgramFilePath + lib1,
       {$endif OSWINDOWS}
+      {$ifdef OSDARWIN}
+        // MacOS X has no standard system OpenSSL library: try in exe folder
+        Executable.ProgramFilePath + lib1,
+      {$endif OSDARWIN}
+        // finally try if the library is available somewhere in the system
         lib3,
         lib1
       {$ifdef OSPOSIX}
@@ -5196,6 +5201,10 @@ begin
         Executable.ProgramFilePath + lib3,
         Executable.ProgramFilePath + lib1,
       {$endif OSWINDOWS}
+      {$ifdef OSDARWIN}
+        // MacOS X has no standard system OpenSSL library: try in exe folder
+        Executable.ProgramFilePath + lib1,
+      {$endif OSDARWIN}
         lib3,
         lib1
       {$ifdef OSPOSIX}
