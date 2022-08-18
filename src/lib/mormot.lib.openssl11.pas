@@ -84,6 +84,7 @@ type
     function GetOpenSsl: string;
     class procedure CheckFailed(caller: TObject; const method: shortstring;
       errormsg: PRawUtf8; ssl: pointer);
+    class procedure TryNotAvailable(caller: TClass; const method: shortstring);
   public
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
     class procedure Check(caller: TObject; const method: shortstring;
@@ -97,6 +98,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: shortstring);
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// the last error code from OpenSSL, after Check() failure
     property LastError: integer
@@ -207,6 +209,11 @@ var
     osslUnTested,
     osslAvailable,
     osslNotAvailable);
+
+  /// the error message triggerred by OpenSslIsAvailable when loading OpenSSL
+  // - is replicated as a global variable to allow early initialization before
+  // mormot.core.log exception interception is enabled
+  openssl_initialize_errormsg: string;
 
 {$endif OPENSSLSTATIC}
 
@@ -5227,9 +5234,14 @@ begin
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,
           [OpenSslVersionHexa, libcrypto.LibraryPath]);
+      openssl_initialize_errormsg := ''; // no error with these lib paths
     except
-      FreeAndNil(libssl);
-      FreeAndNil(libcrypto);
+      on E: Exception do
+      begin
+        FreeAndNil(libssl);
+        FreeAndNil(libcrypto);
+        openssl_initialize_errormsg := E.Message;
+      end;
     end;
   finally
     if libssl = nil then // flag should be set the last
@@ -9057,14 +9069,24 @@ begin
   raise exc;
 end;
 
+class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: shortstring);
+var
+  name: shortstring;
+begin
+  if OpenSslIsAvailable then
+    exit;
+  if caller = nil then
+    name := method
+  else
+    name := ClassNameShort(caller)^ + '.' + method;
+  raise CreateFmt('%s: OpenSSL ' + LIB_TXT + ' not available [%s]',
+    [name, openssl_initialize_errormsg])
+end;
+
 class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: shortstring);
 begin
-  if not OpenSslIsAvailable then
-    if caller = nil then
-      raise CreateFmt('%s: OpenSSL ' + LIB_TXT + ' not available', [method])
-    else
-      raise CreateFmt('%s.%s: OpenSSL ' + LIB_TXT + ' not available',
-        [ClassNameShort(caller)^, method]);
+  if openssl_initialized <> osslAvailable then
+    TryNotAvailable(caller, method);
 end;
 
 function EOpenSsl.GetOpenSsl: string;
