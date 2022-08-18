@@ -1098,7 +1098,8 @@ var
 // - uses internally a cache unless nocache is true
 // - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
 function GetDiskPartitionsText(nocache: boolean = false;
-  withfreespace: boolean = false; nospace: boolean = false): RawUtf8;
+  withfreespace: boolean = false; nospace: boolean = false;
+  nomount: boolean = false): RawUtf8;
 
 /// returns a JSON object containing basic information about the computer
 // - including Host, User, CPU, OS, freemem, freedisk...
@@ -2758,7 +2759,8 @@ end;
 var
   _DiskPartitions: TDiskPartitions;
 
-function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUtf8;
+function GetDiskPartitionsText(
+  nocache, withfreespace, nospace, nomount: boolean): RawUtf8;
 var
   i: PtrInt;
   parts: TDiskPartitions;
@@ -2766,6 +2768,7 @@ var
   function GetInfo(var p: TDiskPartition): ShortString;
   const
     F: array[boolean] of RawUtf8 = ('% % (% / %)', '% % (%/%)');
+    N: array[boolean] of RawUtf8 = ('% % / %', '% %/%');
   var
     av, fr, tot: QWord;
   begin
@@ -2773,6 +2776,9 @@ var
        not GetDiskInfo(p.mounted, av, fr, tot) then
       FormatShort('% % (%)',
         [p.mounted, p.name, KB(p.size, nospace)], result)
+    else if nomount then
+      FormatShort(N[nospace],
+        [p.mounted, KB(fr, nospace), KB(tot, nospace)], result)
     else
       FormatShort(F[nospace],
         [p.mounted, p.name, KB(fr, nospace), KB(tot, nospace)], result);

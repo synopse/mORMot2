@@ -6114,7 +6114,8 @@ begin
       {$endif OSWINDOWS}
       'memused',   KB(m.AllocatedUsed.Bytes),
       'memfree',   free,
-      'diskfree',  GetDiskPartitionsText({nocache=}false, {withfree=}true, {nospace=}true),
+      'diskfree',  GetDiskPartitionsText(
+        {nocache=}false, {withfree=}true, {nospace=}true, {nomount=}true),
       'exception', GetLastExceptions(10)]);
   finally
     m.Free;
