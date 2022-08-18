@@ -1976,6 +1976,8 @@ begin
   //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         if n = length(result) then
           SetLength(result, NextGrow(n));
+        if length(fs) > 24 then
+          fs := copy(fs, 1, 24) + '..';
         result[n].name := fs;
         result[n].mounted := fn;
         result[n].size := tot;
