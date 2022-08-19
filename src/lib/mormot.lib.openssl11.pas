@@ -5001,6 +5001,7 @@ function EVP_PKEY_derive_init(ctx: PEVP_PKEY_CTX): integer;
 begin
   result := libcrypto.EVP_PKEY_derive_init(ctx);
 end;
+
 function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 begin
   result := libcrypto.EVP_PKEY_derive_set_peer(ctx, peer);

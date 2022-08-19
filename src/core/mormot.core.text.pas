@@ -2607,7 +2607,8 @@ function RawUtf8ToGuid(const text: RawByteString): TGuid; overload;
 function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean; overload;
 
 /// trim any space and '{' '-' '}' chars from input to get a 32-char TGuid hexa
-// - and return true if the result is actually a 128-bit lowercase hexadecimal
+// - change in-place the text into lowercase hexadecimal
+// - returns true if resulting text is a 128-bit cleaned hexa, false otherwise
 function TrimGuid(var text: RawUtf8): boolean;
 
 /// read a TStream content into a String
@@ -11407,9 +11408,9 @@ begin
       #1..' ', '-', '{', '}': // trim spaces and GUID/UUID separators
         continue;
       'A'..'F':
-        inc(c, 32);
+        inc(c, 32);    // convert to lower-case
       'a'..'f', '0'..'9':
-        ;
+        ;              // valid hexadecimal char
     else
       result := false; // not a true hexadecimal content
     end;
