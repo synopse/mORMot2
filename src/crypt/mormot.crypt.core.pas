@@ -8405,7 +8405,6 @@ type
     BitsInQueue: integer;
     BitsAvailableForSqueezing: integer;
     procedure Init(aAlgo: TSha3Algo);
-    procedure InitSponge(aRate, aCapacity: integer);
     procedure AbsorbQueue;
     procedure Absorb(Data: PByteArray; databitlen: integer);
     procedure AbsorbFinal(Data: PByteArray; databitlen: integer);
@@ -8416,38 +8415,21 @@ type
   end;
   PSha3Context = ^TSha3Context;
 
-procedure TSha3Context.Init(aAlgo: TSha3Algo);
-begin
-  case aAlgo of
-    SHA3_224:
-      InitSponge(1152, 448);
-    SHA3_256:
-      InitSponge(1088, 512);
-    SHA3_384:
-      InitSponge(832, 768);
-    SHA3_512:
-      InitSponge(576, 1024);
-    SHAKE_128:
-      InitSponge(1344, 256);
-    SHAKE_256:
-      InitSponge(1088, 512);
-  else
-    raise ESynCrypto.CreateUtf8('Unexpected TSha3Context.Init(%)', [ord(aAlgo)]);
-  end;
-  Algo := aAlgo;
-end;
+const
+  SHA3_DEF_LEN: array[TSha3Algo] of integer = (
+    224, 256, 384, 512, 256, 512);
 
-procedure TSha3Context.InitSponge(aRate, aCapacity: integer);
+procedure TSha3Context.Init(aAlgo: TSha3Algo);
+var
+  bits: integer;
 begin
-  if (aRate + aCapacity <> 1600) or
-     (aRate <= 0) or
-     (aRate >= 1600) or
-     ((aRate and 63) <> 0) then
-    raise ESynCrypto.CreateUtf8('Unexpected TSha3Context.Init(%,%)',
-      [aRate, aCapacity]);
   FillCharFast(self, SizeOf(self), 0);
-  Rate := aRate;
-  Capacity := aCapacity;
+  bits := SHA3_DEF_LEN[aAlgo];
+  if aAlgo < SHAKE_128 then
+    bits := bits shl 1;
+  Rate := cKeccakPermutationSize - bits;
+  Capacity := bits;
+  Algo := aAlgo;
 end;
 
 procedure TSha3Context.AbsorbQueue;
@@ -8656,10 +8638,6 @@ procedure TSha3.Final(out Digest: THash512; NoInit: boolean);
 begin
   Final(@Digest, 512, NoInit);
 end;
-
-const
-  SHA3_DEF_LEN: array[TSha3Algo] of integer = (
-    224, 256, 384, 512, 256, 512);
 
 procedure TSha3.Final(Digest: pointer; DigestBits: integer; NoInit: boolean);
 begin
