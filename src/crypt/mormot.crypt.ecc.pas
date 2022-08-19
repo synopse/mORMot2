@@ -5062,7 +5062,6 @@ type
       const privpwd: RawUtf8 = ''): boolean; override;
     function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const pub, sig: RawByteString): boolean; override;
-    function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
   end;
 
 
@@ -5135,22 +5134,6 @@ begin
   result := Ecc256r1Verify(key, digest.Lo, sign);
 end;
 
-function TCryptAsymInternal.SharedSecret(const pub, priv: RawByteString): RawByteString;
-var
-  keypub: TEccPublicKey;
-  keypriv: TEccPrivateKey;
-  sec: TEccSecretKey;
-begin
-  if PemDerRawToEcc(priv, keypriv) and
-     PemDerRawToEcc(pub, keypub) and
-     Ecc256r1SharedSecret(keypub, keypriv, sec) then
-    // accept signature and public key in raw, PEM or DER format
-    FastSetRawByteString(result{%H-}, @sec, SizeOf(sec))
-  else
-    result := '';
-  FillZero(sec);
-end;
-
 
 type
   /// 'syn-es256' ICryptCert algorithm
@@ -5212,6 +5195,7 @@ type
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override;
     function PrivateKeyHandle: pointer; override;
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
@@ -5669,6 +5653,27 @@ begin
     result := EciesOpen(Cipher, pk^, Message)
   else
     result := '';
+end;
+
+function TCryptCertInternal.SharedSecret(const pub: ICryptCert): RawByteString;
+var
+  pk: PEccPrivateKey;
+  sec: TEccSecretKey;
+begin
+  pk := GetEccPrivateKey({checkzero=}true);
+  if (pk <> nil) and
+     Assigned(pub) and
+     pub.Instance.InheritsFrom(TCryptCertInternal) and
+     (pub.Handle <> nil) and
+     (cuKeyAgreement in TEccCertificate(pub.Handle).Usage) and
+     ((fEcc = nil) or
+      (cuKeyAgreement in fEcc.Usage)) and
+     Ecc256r1SharedSecret(
+        TEccCertificate(pub.Handle).Content.Head.Signed.PublicKey, pk^, sec) then
+       FastSetRawByteString(result{%H-}, @sec, SizeOf(sec))
+     else
+       result := '';
+  FillZero(sec);
 end;
 
 function TCryptCertInternal.Handle: pointer;

@@ -1711,7 +1711,6 @@ type
       const privpwd: RawUtf8 = ''): boolean; override;
     function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const pub, sig: RawByteString): boolean; override;
-    function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
   end;
 
 
@@ -1759,12 +1758,6 @@ function TCryptAsymOsl.Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt
 begin
   result := OpenSslVerify(Algo(hasher),
     '', msg, pointer(pub), pointer(sig), msglen, length(pub), length(sig));
-end;
-
-function TCryptAsymOsl.SharedSecret(const pub, priv: RawByteString): RawByteString;
-begin
-  result := ''; // not implemented yet
-  //result := OpenSslSharedSecret(fEvpType, fBitsOrCurve, pub, priv, '');
 end;
 
 
@@ -1826,6 +1819,7 @@ type
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override;
     function PrivateKeyHandle: pointer; override;
   end;
@@ -2347,10 +2341,36 @@ begin
       result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
     else if (AsymAlgo = caaES256) and
             GetEs256Private(fPrivKey, priv) then
-    begin
+    try
       result := EciesOpen(Cipher, priv, Message);
+    finally
       FillZero(priv);
     end;
+end;
+
+function TCryptCertOpenSsl.SharedSecret(const pub: ICryptCert): RawByteString;
+var
+  priv: TEccPrivateKey;
+  sec: TEccSecretKey;
+begin
+  result := '';
+  try
+    if (fPrivKey <> nil) and
+       Assigned(pub) and
+       pub.Instance.InheritsFrom(TCryptCertOpenSsl) and
+       (pub.Handle <> nil) and
+       PX509(pub.Handle).HasUsage(kuKeyAgreement) and
+       ((fX509 = nil) or
+        fX509.HasUsage(kuKeyAgreement)) then
+      if AsymAlgo = caaES256 then
+        if GetEs256Private(fPrivKey, priv) and
+           Ecc256r1SharedSecret(
+             GetEs256Public(PX509(pub.Handle).GetPublicKey), priv, sec) then
+          FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
+  finally
+    FillZero(priv);
+    FillZero(sec);
+  end;
 end;
 
 function TCryptCertOpenSsl.Handle: pointer;

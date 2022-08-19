@@ -1187,10 +1187,6 @@ type
     // algorithm, or the specific hashername
     function Verify(const msg, pub, sig: TBytes;
       const hashername: RawUtf8 = ''): boolean; overload;
-    /// compute a shared secret from local private key and a public key
-    // - used for encryption with no key transmission
-    // - returns '' if this algorithm doesn't support this feature (e.g. RSA)
-    function SharedSecret(const pub, priv: RawByteString): RawByteString; virtual;
   end;
 
   /// exception class raised by our High-Level Certificates Process
@@ -1457,7 +1453,7 @@ type
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
     // transport then our EVP_PKEY.RsaSeal encoding, then both 'x509-es256' and
-    // 'syn-es256' use our EciesSeal ES256 encoding
+    // 'syn-es256' use our EciesSeal() ES256 encoding
     // - returns '' if this feature is not supported
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
@@ -1465,10 +1461,16 @@ type
     // - not all algorithms support key transport, only RSA and ES256 by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
     // transport then our EVP_PKEY.RsaOpen decoding, then both 'x509-es256' and
-    // 'syn-es256' use our EciesOpen ES256 decoding
+    // 'syn-es256' use our EciesOpen() ES256 decoding
     // - returns '' if this feature is not supported, or Message is incorrect
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
+    /// compute a shared secret from the private key of this certificate and the
+    // public key of another certificate
+    // - used for encryption with no key transmission
+    // - returns '' if this algorithm doesn't support this feature (e.g. RSA)
+    // - the caller should always apply a cryptographic hash over the result
+    function SharedSecret(const pub: ICryptCert): RawByteString;
     /// returns true if the Certificate contains a private key secret
     function HasPrivateSecret: boolean;
     /// retrieve the public key as raw binary
@@ -1557,6 +1559,7 @@ type
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
+    function SharedSecret(const pub: ICryptCert): RawByteString; virtual;
     function AsymAlgo: TCryptAsymAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
@@ -4501,11 +4504,6 @@ begin
   result := Verify(Hasher(hashername), pointer(msg), length(msg), p, s);
 end;
 
-function TCryptAsym.SharedSecret(const pub, priv: RawByteString): RawByteString;
-begin
-  result := ''; // unsupported
-end;
-
 
 { TCryptCertAlgo }
 
@@ -4706,6 +4704,11 @@ begin
     Audience^ := pl.U['aud'];
   if Payload <> nil then
     Payload^ := pl;
+end;
+
+function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
+begin
+  result := ''; // unsupported by default
 end;
 
 function TCryptCert.AsymAlgo: TCryptAsymAlgo;
