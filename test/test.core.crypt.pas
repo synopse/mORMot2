@@ -2352,9 +2352,6 @@ begin
     Check(priv2 <> '');
     Check(pub <> pub2);
     Check(priv <> priv2);
-    s := asy.SharedSecret(pub, priv2);
-    if s <> '' then
-      CheckEqual(asy.SharedSecret(pub2, priv), s, asy.AlgoName);
   end;
   // validate Cert High-Level Algorithms Factory
   alg := TCryptCertAlgo.Instances;
@@ -2483,9 +2480,10 @@ begin
       checkEqual(c3.GetPrivateKey, c1.GetPrivateKey);
       Check(not c3.IsEqual(c1));
     end;
+    checkEqual(c1.SharedSecret(nil), '', 'shared(nil)');
     // validate signed certificate with c1 as CA
     c3 := crt.New;
-    c3.Generate([cuDataEncipherment], 'signed', c1);
+    c3.Generate([cuDataEncipherment, cuKeyAgreement], 'signed', c1);
     Check(not c3.IsEqual(c1));
     Check(not c3.IsEqual(c2));
     Check(not c3.IsSelfSigned);
@@ -2504,18 +2502,28 @@ begin
       CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding');
     end;
     c2 := crt.New;
-    c2.Generate([cuDigitalSignature], 'self.signed', nil);
+    c2.Generate([cuDigitalSignature, cuKeyAgreement], 'self.signed', nil);
     Check(c2.IsSelfSigned);
     if c2.GetAuthorityKey <> c2.GetSubjectKey then
       CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
     if crt.AlgoName <> 'syn-es256-v1' then
-      Check(c2.GetUsage = [cuDigitalSignature]);
+      Check(c2.GetUsage = [cuDigitalSignature, cuKeyAgreement]);
     Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
     Check(c2.Verify(nil) = cvValidSelfSigned, 'self2');
     c2.Sign(c1); // change signature
     CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
     Check(c2.Verify(c1) = cvValidSigned, 'self3');
     Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
+    if crt.AlgoName = 'syn-es256-v1' then
+      check(c1.SharedSecret(c3) = c3.SharedSecret(c1), 'c1.GetUsage=CU_ALL')
+    else
+    begin
+      checkEqual(c1.SharedSecret(c3), '', 'c1(c3) no cuKeyAgreement');
+      checkEqual(c3.SharedSecret(c1), '', 'c3(c1) no cuKeyAgreement');
+    end;
+    s := c2.SharedSecret(c3);
+    check(c3.SharedSecret(c2) = s, 'sharedsecret');
+    check( (s <> '') = (crt.AsymAlgo = caaES256), 'caaES256=sharedsecret');
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
