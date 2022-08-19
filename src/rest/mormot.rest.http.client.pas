@@ -1021,14 +1021,14 @@ begin
         BinaryOptions := aWebSocketsBinaryOptions;
         Ajax := aWebSocketsAjax;
       end;
+      if Assigned(fOnWebSocketsUpgraded) then
+        fOnWebSocketsUpgraded(self); // e.g. to register some callbacks
       if sockets.Settings^.ClientRestoreCallbacks and
          (prevconn <> 0) then
         // call TServiceContainerServer.FakeCallbackReplaceConnectionID
         if CallBack(mPOST, 'CacheFlush/_replaceconn_',
             Int64ToUtf8(prevconn), result) = HTTP_SUCCESS then
           result := ''; // on error, log result = server response
-      if Assigned(fOnWebSocketsUpgraded) then
-        fOnWebSocketsUpgraded(self); // e.g. to register some callbacks
       inc(fUpgradeCount);
     end;
   end;
