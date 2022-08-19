@@ -1410,7 +1410,7 @@ type
     // of this certificate instance
     // - you could later on verify this text signature according to the public
     // key of this certificate, using ICryptCert.Verify() or ICryptStore.Verify()
-    // - this certificate should have the kuDigitalSignature usage
+    // - this certificate should have the cuDigitalSignature usage
     // - returns '' on failure, e.g. if this Certificate has no private key
     // - returns the binary signature of the Data buffer
     function Sign(Data: pointer; Len: integer): RawByteString; overload;
@@ -1419,11 +1419,11 @@ type
     // - just a wrapper around the overloaded Sign() function
     function Sign(const Data: RawByteString): RawByteString; overload;
     /// sign this certificate with the private key of one CA
-    // - Authority certificate should have the kuKeyCertSign usage
+    // - Authority certificate should have the cuKeyCertSign usage
     procedure Sign(const Authority: ICryptCert); overload;
     /// verify a digital signature of some digital content
     // - will use the public key of this certificate
-    // - this certificate should have the kuDigitalSignature usage
+    // - this certificate should have the cuDigitalSignature usage
     // - see ICryptStore.Verify() for a complete CA chain validation
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; overload;
@@ -1433,11 +1433,11 @@ type
       const Signature, Data: RawByteString): TCryptCertValidity; overload;
     /// verify another certificate signature with this certificate public key
     // (if self-signed), or a supplied Authority reference
-    // - Authority certificate should have the kuKeyCertSign usage
+    // - Authority certificate should have the cuKeyCertSign usage
     function Verify(const Authority: ICryptCert): TCryptCertValidity; overload;
     /// compute a new JWT for a given payload using this certificate private key
     // - will use the private key and Sign() to compute the signature
-    // - this certificate should have the kuDigitalSignature usage
+    // - this certificate should have the cuDigitalSignature usage
     // - same signature than the reusable TJwtAbstract.Compute() method
     // - returns '' on error, e.g. if HasPrivateSecret is false
     function JwtCompute(const DataNameValue: array of const;
@@ -1445,7 +1445,7 @@ type
       const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
       ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
     /// verify a JWT signature from the public key of this certificate
-    // - this certificate should have the kuDigitalSignature usage
+    // - this certificate should have the cuDigitalSignature usage
     // - can optionally return the payload fields
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData = nil): TCryptCertValidity;
@@ -1455,6 +1455,7 @@ type
     // transport then our EVP_PKEY.RsaSeal encoding, then both 'x509-es256' and
     // 'syn-es256' use our EciesSeal() ES256 encoding
     // - returns '' if this feature is not supported
+    // - certificate should have cuDataEncipherment or cuEncipherOnly usage
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
     /// decrypt a message using the private key of this certificate
@@ -1463,12 +1464,14 @@ type
     // transport then our EVP_PKEY.RsaOpen decoding, then both 'x509-es256' and
     // 'syn-es256' use our EciesOpen() ES256 decoding
     // - returns '' if this feature is not supported, or Message is incorrect
+    // - certificate should have cuDataEncipherment or cuDecipherOnly usage
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString;
     /// compute a shared secret from the private key of this certificate and the
     // public key of another certificate
-    // - used for encryption with no key transmission
+    // - used e.g. to initialize network encryption with no key transmission
     // - returns '' if this algorithm doesn't support this feature (e.g. RSA)
+    // - both current and pub certificates should have cuKeyAgreement usage
     // - the caller should always apply a cryptographic hash over the result
     function SharedSecret(const pub: ICryptCert): RawByteString;
     /// returns true if the Certificate contains a private key secret
