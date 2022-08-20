@@ -1,8 +1,6 @@
 /*
  * hc_matchfinder.h - Lempel-Ziv matchfinding with a hash table of linked lists
  *
- * Originally public domain; changes after 2016-09-07 are copyrighted.
- *
  * Copyright 2016 Eric Biggers
  *
  * Permission is hereby granted, free of charge, to any person
@@ -75,7 +73,7 @@
  * chain for length 3+ matches, the algorithm just checks for one close length 3
  * match, then focuses on finding length 4+ matches.
  *
- * The longest_match() and skip_positions() functions are inlined into the
+ * The longest_match() and skip_bytes() functions are inlined into the
  * compressors that use them.  This isn't just about saving the overhead of a
  * function call.  These functions are intended to be called from the inner
  * loops of compressors, where giving the compiler more control over register
@@ -131,11 +129,7 @@ struct hc_matchfinder {
 	 * the node for the sequence with position 'pos' is 'next_tab[pos]'.  */
 	mf_pos_t next_tab[MATCHFINDER_WINDOW_SIZE];
 
-}
-#ifdef _aligned_attribute
-  _aligned_attribute(MATCHFINDER_MEM_ALIGNMENT)
-#endif
-;
+} MATCHFINDER_ALIGNED;
 
 /* Prepare the matchfinder for a new input buffer.  */
 static forceinline void
@@ -164,9 +158,9 @@ hc_matchfinder_slide_window(struct hc_matchfinder *mf)
  *	Location of a pointer which points to the place in the input data the
  *	matchfinder currently stores positions relative to.  This may be updated
  *	by this function.
- * @cur_pos
- *	The current position in the input buffer relative to @in_base (the
- *	position of the sequence being matched against).
+ * @in_next
+ *	Pointer to the next position in the input buffer, i.e. the sequence
+ *	being matched against.
  * @best_len
  *	Require a match longer than this length.
  * @max_len
@@ -187,15 +181,15 @@ hc_matchfinder_slide_window(struct hc_matchfinder *mf)
  * 'best_len' was found.
  */
 static forceinline u32
-hc_matchfinder_longest_match(struct hc_matchfinder * const restrict mf,
-			     const u8 ** const restrict in_base_p,
-			     const u8 * const restrict in_next,
+hc_matchfinder_longest_match(struct hc_matchfinder * const mf,
+			     const u8 ** const in_base_p,
+			     const u8 * const in_next,
 			     u32 best_len,
 			     const u32 max_len,
 			     const u32 nice_len,
 			     const u32 max_search_depth,
-			     u32 * const restrict next_hashes,
-			     u32 * const restrict offset_ret)
+			     u32 * const next_hashes,
+			     u32 * const offset_ret)
 {
 	u32 depth_remaining = max_search_depth;
 	const u8 *best_matchptr = in_next;
@@ -353,26 +347,24 @@ out:
  *	Location of a pointer which points to the place in the input data the
  *	matchfinder currently stores positions relative to.  This may be updated
  *	by this function.
- * @cur_pos
- *	The current position in the input buffer relative to @in_base.
- * @end_pos
- *	The end position of the input buffer, relative to @in_base.
+ * @in_next
+ *	Pointer to the next position in the input buffer.
+ * @in_end
+ *	Pointer to the end of the input buffer.
+ * @count
+ *	The number of bytes to advance.  Must be > 0.
  * @next_hashes
  *	The precomputed hash codes for the sequence beginning at @in_next.
  *	These will be used and then updated with the precomputed hashcodes for
  *	the sequence beginning at @in_next + @count.
- * @count
- *	The number of bytes to advance.  Must be > 0.
- *
- * Returns @in_next + @count.
  */
-static forceinline const u8 *
-hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
-			      const u8 ** const restrict in_base_p,
-			      const u8 *in_next,
-			      const u8 * const in_end,
-			      const u32 count,
-			      u32 * const restrict next_hashes)
+static forceinline void
+hc_matchfinder_skip_bytes(struct hc_matchfinder * const mf,
+			  const u8 ** const in_base_p,
+			  const u8 *in_next,
+			  const u8 * const in_end,
+			  const u32 count,
+			  u32 * const next_hashes)
 {
 	u32 cur_pos;
 	u32 hash3, hash4;
@@ -380,7 +372,7 @@ hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
 	u32 remaining = count;
 
 	if (unlikely(count + 5 > in_end - in_next))
-		return &in_next[count];
+		return;
 
 	cur_pos = in_next - *in_base_p;
 	hash3 = next_hashes[0];
@@ -405,8 +397,6 @@ hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
 	prefetchw(&mf->hash4_tab[hash4]);
 	next_hashes[0] = hash3;
 	next_hashes[1] = hash4;
-
-	return in_next;
 }
 
 #endif /* LIB_HC_MATCHFINDER_H */

@@ -1,5 +1,5 @@
 /*
- * x86/cpu_features.c - feature detection for x86 processors
+ * x86/cpu_features.c - feature detection for x86 CPUs
  *
  * Copyright 2016 Eric Biggers
  *
@@ -28,9 +28,7 @@
 #include "../cpu_features_common.h" /* must be included first */
 #include "cpu_features.h"
 
-#if X86_CPU_FEATURES_ENABLED
-
-volatile u32 _cpu_features = 0;
+#if HAVE_DYNAMIC_X86_CPU_FEATURES
 
 /* With old GCC versions we have to manually save and restore the x86_32 PIC
  * register (ebx).  See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47602  */
@@ -82,18 +80,18 @@ static const struct cpu_feature x86_cpu_feature_table[] = {
 	{X86_CPU_FEATURE_AVX,		"avx"},
 	{X86_CPU_FEATURE_AVX2,		"avx2"},
 	{X86_CPU_FEATURE_BMI2,		"bmi2"},
-	{X86_CPU_FEATURE_AVX512BW,	"avx512bw"},
 };
 
-/* Initialize _cpu_features with bits for interesting processor features. */
-void setup_cpu_features(void)
+volatile u32 libdeflate_x86_cpu_features = 0;
+
+/* Initialize libdeflate_x86_cpu_features. */
+void libdeflate_init_x86_cpu_features(void)
 {
 	u32 features = 0;
 	u32 dummy1, dummy2, dummy3, dummy4;
 	u32 max_function;
 	u32 features_1, features_2, features_3, features_4;
 	bool os_avx_support = false;
-	bool os_avx512_support = false;
 
 	/* Get maximum supported function  */
 	cpuid(0, 0, &max_function, &dummy2, &dummy3, &dummy4);
@@ -115,13 +113,6 @@ void setup_cpu_features(void)
 		os_avx_support = IS_ALL_SET(xcr0,
 					    XCR0_BIT_SSE |
 					    XCR0_BIT_AVX);
-
-		os_avx512_support = IS_ALL_SET(xcr0,
-					       XCR0_BIT_SSE |
-					       XCR0_BIT_AVX |
-					       XCR0_BIT_OPMASK |
-					       XCR0_BIT_ZMM_HI256 |
-					       XCR0_BIT_HI16_ZMM);
 	}
 
 	if (os_avx_support && IS_SET(features_2, 28))
@@ -139,14 +130,11 @@ void setup_cpu_features(void)
 	if (IS_SET(features_3, 8))
 		features |= X86_CPU_FEATURE_BMI2;
 
-	if (os_avx512_support && IS_SET(features_3, 30))
-		features |= X86_CPU_FEATURE_AVX512BW;
-
 out:
 	disable_cpu_features_for_testing(&features, x86_cpu_feature_table,
 					 ARRAY_LEN(x86_cpu_feature_table));
 
-	_cpu_features = features | X86_CPU_FEATURES_KNOWN;
+	libdeflate_x86_cpu_features = features | X86_CPU_FEATURES_KNOWN;
 }
 
-#endif /* X86_CPU_FEATURES_ENABLED */
+#endif /* HAVE_DYNAMIC_X86_CPU_FEATURES */

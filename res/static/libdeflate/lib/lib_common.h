@@ -12,23 +12,7 @@
 
 #define BUILDING_LIBDEFLATE
 
-#include "common_defs.h"
-
-/*
- * Prefix with "_libdeflate_" all global symbols which are not part of the API
- * and don't already have a "libdeflate" prefix.  This avoids exposing overly
- * generic names when libdeflate is built as a static library.
- *
- * Note that the chosen prefix is not really important and can be changed
- * without breaking library users.  It was just chosen so that the resulting
- * symbol names are unlikely to conflict with those from any other software.
- * Also note that this fixup has no useful effect when libdeflate is built as a
- * shared library, since these symbols are not exported.
- */
-#define SYM_FIXUP(sym)			_libdeflate_##sym
-#define deflate_get_compression_level	SYM_FIXUP(deflate_get_compression_level)
-#define _cpu_features			SYM_FIXUP(_cpu_features)
-#define setup_cpu_features		SYM_FIXUP(setup_cpu_features)
+#include "../common_defs.h"
 
 void *libdeflate_malloc(size_t size);
 void libdeflate_free(void *ptr);
@@ -60,8 +44,26 @@ void *memmove(void *dest, const void *src, size_t n);
 
 int memcmp(const void *s1, const void *s2, size_t n);
 #define memcmp(s1, s2, n)	__builtin_memcmp((s1), (s2), (n))
+
+#undef LIBDEFLATE_ENABLE_ASSERTIONS
 #else
 #include <string.h>
 #endif
+
+/*
+ * Runtime assertion support.  Don't enable this in production builds; it may
+ * hurt performance significantly.
+ */
+#ifdef LIBDEFLATE_ENABLE_ASSERTIONS
+void libdeflate_assertion_failed(const char *expr, const char *file, int line);
+#define ASSERT(expr) { if (unlikely(!(expr))) \
+	libdeflate_assertion_failed(#expr, __FILE__, __LINE__); }
+#else
+#define ASSERT(expr) (void)(expr)
+#endif
+
+#define CONCAT_IMPL(a, b)	a##b
+#define CONCAT(a, b)		CONCAT_IMPL(a, b)
+#define ADD_SUFFIX(name)	CONCAT(name, SUFFIX)
 
 #endif /* LIB_LIB_COMMON_H */

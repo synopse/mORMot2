@@ -46,8 +46,8 @@
 
 #include <limits.h>
 
+#include "lib_common.h"
 #include "deflate_constants.h"
-#include "unaligned.h"
 
 #include "libdeflate.h"
 
@@ -99,11 +99,6 @@
 #define OFFSET_ENOUGH		402	/* enough 32 8 15	*/
 
 /*
- * Type for codeword lengths.
- */
-typedef u8 len_t;
-
-/*
  * The main DEFLATE decompressor structure.  Since this implementation only
  * supports full buffer decompression, this structure does not store the entire
  * decompression state, but rather only some arrays that are too large to
@@ -121,12 +116,12 @@ struct libdeflate_decompressor {
 	 */
 
 	union {
-		len_t precode_lens[DEFLATE_NUM_PRECODE_SYMS];
+		u8 precode_lens[DEFLATE_NUM_PRECODE_SYMS];
 
 		struct {
-			len_t lens[DEFLATE_NUM_LITLEN_SYMS +
-				   DEFLATE_NUM_OFFSET_SYMS +
-				   DEFLATE_MAX_LENS_OVERRUN];
+			u8 lens[DEFLATE_NUM_LITLEN_SYMS +
+				DEFLATE_NUM_OFFSET_SYMS +
+				DEFLATE_MAX_LENS_OVERRUN];
 
 			u32 precode_decode_table[PRECODE_ENOUGH];
 		} l;
@@ -204,25 +199,27 @@ typedef machine_word_t bitbuf_t;
  *
  * If we would overread the input buffer, we just don't read anything, leaving
  * the bits zeroed but marking them filled.  This simplifies the decompressor
- * because it removes the need to distinguish between real overreads and
- * overreads that occur only because of the decompressor's own lookahead.
+ * because it removes the need to always be able to distinguish between real
+ * overreads and overreads caused only by the decompressor's own lookahead.
  *
- * The disadvantage is that real overreads are not detected immediately.
- * However, this is safe because the decompressor is still guaranteed to make
- * forward progress when presented never-ending 0 bits.  In an existing block
- * output will be getting generated, whereas new blocks can only be uncompressed
- * (since the type code for uncompressed blocks is 0), for which we check for
- * previous overread.  But even if we didn't check, uncompressed blocks would
- * fail to validate because LEN would not equal ~NLEN.  So the decompressor will
- * eventually either detect that the output buffer is full, or detect invalid
- * input, or finish the final block.
+ * We do still keep track of the number of bytes that have been overread, for
+ * two reasons.  First, it allows us to determine the exact number of bytes that
+ * were consumed once the stream ends or an uncompressed block is reached.
+ * Second, it allows us to stop early if the overread amount gets so large (more
+ * than sizeof bitbuf) that it can only be caused by a real overread.  (The
+ * second part is arguably unneeded, since libdeflate is buffer-based; given
+ * infinite zeroes, it will eventually either completely fill the output buffer
+ * or return an error.  However, we do it to be slightly more friendly to the
+ * not-recommended use case of decompressing with an unknown output size.)
  */
 #define FILL_BITS_BYTEWISE()					\
 do {								\
-	if (likely(in_next != in_end))				\
+	if (likely(in_next != in_end)) {			\
 		bitbuf |= (bitbuf_t)*in_next++ << bitsleft;	\
-	else							\
-		overrun_count++;				\
+	} else {						\
+		overread_count++;				\
+		SAFETY_CHECK(overread_count <= sizeof(bitbuf));	\
+	}							\
 	bitsleft += 8;						\
 } while (bitsleft <= BITBUF_NBITS - 8)
 
@@ -307,16 +304,16 @@ if (!HAVE_BITS(n)) {						\
  */
 #define ALIGN_INPUT()							\
 do {									\
-	SAFETY_CHECK(overrun_count <= (bitsleft >> 3));			\
-	in_next -= (bitsleft >> 3) - overrun_count;			\
-	overrun_count = 0;						\
+	SAFETY_CHECK(overread_count <= (bitsleft >> 3));		\
+	in_next -= (bitsleft >> 3) - overread_count;			\
+	overread_count = 0;						\
 	bitbuf = 0;							\
 	bitsleft = 0;							\
 } while(0)
 
 /*
  * Read a 16-bit value from the input.  This must have been preceded by a call
- * to ALIGN_INPUT(), and the caller must have already checked for overrun.
+ * to ALIGN_INPUT(), and the caller must have already checked for overread.
  */
 #define READ_U16() (tmp16 = get_unaligned_le16(in_next), in_next += 2, tmp16)
 
@@ -554,7 +551,7 @@ static const u32 offset_decode_results[DEFLATE_NUM_OFFSET_SYMS] = {
  */
 static bool
 build_decode_table(u32 decode_table[],
-		   const len_t lens[],
+		   const u8 lens[],
 		   const unsigned num_syms,
 		   const u32 decode_results[],
 		   const unsigned table_bits,
@@ -889,39 +886,40 @@ copy_word_unaligned(const void *src, void *dst)
  *****************************************************************************/
 
 typedef enum libdeflate_result (*decompress_func_t)
-	(struct libdeflate_decompressor * restrict d,
-	 const void * restrict in, size_t in_nbytes,
-	 void * restrict out, size_t out_nbytes_avail,
+	(struct libdeflate_decompressor *d,
+	 const void *in, size_t in_nbytes, void *out, size_t out_nbytes_avail,
 	 size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret);
 
+#define FUNCNAME deflate_decompress_default
+#define ATTRIBUTES
+#include "decompress_template.h"
+
+/* Include architecture-specific implementation(s) if available. */
 #undef DEFAULT_IMPL
-#undef DISPATCH
+#undef arch_select_decompress_func
 #if defined(__i386__) || defined(__x86_64__)
 #  include "x86/decompress_impl.h"
 #endif
 
 #ifndef DEFAULT_IMPL
-#  define FUNCNAME deflate_decompress_default
-#  define ATTRIBUTES
-#  include "decompress_template.h"
 #  define DEFAULT_IMPL deflate_decompress_default
 #endif
 
-#ifdef DISPATCH
+#ifdef arch_select_decompress_func
 static enum libdeflate_result
-dispatch(struct libdeflate_decompressor * restrict d,
-	 const void * restrict in, size_t in_nbytes,
-	 void * restrict out, size_t out_nbytes_avail,
-	 size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret);
+dispatch_decomp(struct libdeflate_decompressor *d,
+		const void *in, size_t in_nbytes,
+		void *out, size_t out_nbytes_avail,
+		size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret);
 
-static volatile decompress_func_t decompress_impl = dispatch;
+static volatile decompress_func_t decompress_impl = dispatch_decomp;
 
-/* Choose the fastest implementation at runtime */
+/* Choose the best implementation at runtime. */
 static enum libdeflate_result
-dispatch(struct libdeflate_decompressor * restrict d,
-	 const void * restrict in, size_t in_nbytes,
-	 void * restrict out, size_t out_nbytes_avail,
-	 size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret)
+dispatch_decomp(struct libdeflate_decompressor *d,
+		const void *in, size_t in_nbytes,
+		void *out, size_t out_nbytes_avail,
+		size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret)
 {
 	decompress_func_t f = arch_select_decompress_func();
 
@@ -929,13 +927,13 @@ dispatch(struct libdeflate_decompressor * restrict d,
 		f = DEFAULT_IMPL;
 
 	decompress_impl = f;
-	return (*f)(d, in, in_nbytes, out, out_nbytes_avail,
-		    actual_in_nbytes_ret, actual_out_nbytes_ret);
+	return f(d, in, in_nbytes, out, out_nbytes_avail,
+		 actual_in_nbytes_ret, actual_out_nbytes_ret);
 }
 #else
-#  define decompress_impl DEFAULT_IMPL /* only one implementation, use it */
+/* The best implementation is statically known, so call it directly. */
+#  define decompress_impl DEFAULT_IMPL
 #endif
-
 
 /*
  * This is the main DEFLATE decompression routine.  See libdeflate.h for the
@@ -946,9 +944,9 @@ dispatch(struct libdeflate_decompressor * restrict d,
  * at runtime.
  */
 LIBDEFLATEEXPORT enum libdeflate_result LIBDEFLATEAPI
-libdeflate_deflate_decompress_ex(struct libdeflate_decompressor * restrict d,
-				 const void * restrict in, size_t in_nbytes,
-				 void * restrict out, size_t out_nbytes_avail,
+libdeflate_deflate_decompress_ex(struct libdeflate_decompressor *d,
+				 const void *in, size_t in_nbytes,
+				 void *out, size_t out_nbytes_avail,
 				 size_t *actual_in_nbytes_ret,
 				 size_t *actual_out_nbytes_ret)
 {
@@ -957,9 +955,9 @@ libdeflate_deflate_decompress_ex(struct libdeflate_decompressor * restrict d,
 }
 
 LIBDEFLATEEXPORT enum libdeflate_result LIBDEFLATEAPI
-libdeflate_deflate_decompress(struct libdeflate_decompressor * restrict d,
-			      const void * restrict in, size_t in_nbytes,
-			      void * restrict out, size_t out_nbytes_avail,
+libdeflate_deflate_decompress(struct libdeflate_decompressor *d,
+			      const void *in, size_t in_nbytes,
+			      void *out, size_t out_nbytes_avail,
 			      size_t *actual_out_nbytes_ret)
 {
 	return libdeflate_deflate_decompress_ex(d, in, in_nbytes,

@@ -89,7 +89,6 @@ libdeflate_aligned_free(void *ptr)
 		libdeflate_free(((void **)ptr)[-1]);
 }
 
-
 /*
  * Implementations of libc functions for freestanding library builds.
  * Normal library builds don't use these.  Not optimized yet; usually the
@@ -152,3 +151,14 @@ memcmp(const void *s1, const void *s2, size_t n)
 	return 0;
 }
 #endif /* FREESTANDING */
+
+#ifdef LIBDEFLATE_ENABLE_ASSERTIONS
+#include <stdio.h>
+#include <stdlib.h>
+void
+libdeflate_assertion_failed(const char *expr, const char *file, int line)
+{
+	fprintf(stderr, "Assertion failed: %s at %s:%d\n", expr, file, line);
+	abort();
+}
+#endif /* LIBDEFLATE_ENABLE_ASSERTIONS */
