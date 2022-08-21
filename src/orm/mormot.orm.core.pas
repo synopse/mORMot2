@@ -4223,6 +4223,9 @@ type
     // - use SafeRoot function is you are not sure that the TOrmModel is not nil
     property Root: RawUtf8
       read fRoot write SetRoot;
+    /// the Root URI path of this Database Model, uppercase converted
+    property RootUpper: RawUtf8
+      read fRootUpper;
     /// the associated ORM information about all handled TOrm class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].OrmProps values

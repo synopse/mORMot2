@@ -486,8 +486,9 @@ type
   PRestClientCallbackItem = ^TRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TRestClientCallbacks = class(TSynPersistentLock)
+  TRestClientCallbacks = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
@@ -1687,7 +1688,7 @@ begin
     result := true;
     aItem := List[i];
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1705,7 +1706,7 @@ begin
       exit;
     List[i].ReleasedFromServer := True; // just flag it -> delay deletion
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
   result := true;
 end;
@@ -1736,7 +1737,7 @@ begin
   if (self = nil) or
      (Count = 0) then
     exit;
-  Safe.Lock;
+  fSafe.Lock;
   try
     for i := Count - 1 downto 0 do
       if List[i].Instance = aInstance then
@@ -1745,7 +1746,7 @@ begin
         else
           break;
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1754,7 +1755,7 @@ procedure TRestClientCallbacks.DoRegister(aID: TRestClientCallbackID;
 begin
   if aID <= 0 then
     exit;
-  Safe.Lock;
+  fSafe.Lock;
   try
     if length(List) >= Count then
       SetLength(List, Count + 32);
@@ -1766,7 +1767,7 @@ begin
     end;
     inc(Count);
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -2289,9 +2290,9 @@ end;
 procedure TRestClientUri.InternalNotificationMethodExecute(
   var Ctxt: TRestUriParams);
 var
-  url, root, interfmethod, interf, id, method, frames: RawUtf8;
+  url, interfmethod, interf, id, method, frames: RawUtf8;
   callback: TRestClientCallbackItem;
-  methodIndex: integer;
+  methodIndex, rootLen: PtrInt;
   WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   ok: boolean;
@@ -2344,8 +2345,10 @@ begin
   if url[1] = '/' then
     system.delete(url, 1, 1);
   // 'root/BidirCallback.AsyncEvent/1' into root/interfmethod/id
-  Split(Split(url, '/', root), '/', interfmethod, id);
-  if not IdemPropNameU(root, fModel.Root) then
+  rootLen := length(fModel.Root) + 1;
+  if not IdemPChar(pointer(url), pointer(fModel.RootUpper)) or
+     (url[rootLen] <> '/') or
+     not Split(copy(url, rootLen + 1, 1024), '/', interfmethod, id) then
     exit;
   callback.ID := GetInteger(pointer(id));
   if callback.ID <= 0 then
