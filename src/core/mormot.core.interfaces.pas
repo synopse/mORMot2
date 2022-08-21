@@ -592,7 +592,7 @@ type
     // - will return -1 if the method is not known
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
-    function FindMethodIndex(const aMethodName: RawUtf8): integer;
+    function FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
     /// find a particular method in internal Methods[] list
     // - just a wrapper around FindMethodIndex() returing a PInterfaceMethod
     // - will return nil if the method is not known
@@ -606,7 +606,7 @@ type
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
-    function CheckMethodIndex(const aMethodName: RawUtf8): integer; overload;
+    function CheckMethodIndex(const aMethodName: RawUtf8): PtrInt; overload;
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
@@ -4179,7 +4179,7 @@ begin
   end;
 end;
 
-function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): integer;
+function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
 begin
   if (self = nil) or
      (aMethodName = '') then
@@ -4225,7 +4225,7 @@ begin
     result := -1;
 end;
 
-function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUtf8): integer;
+function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUtf8): PtrInt;
 begin
   if self = nil then
     raise EInterfaceFactory.Create('TInterfaceFactory(nil).CheckMethodIndex');

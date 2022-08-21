@@ -93,7 +93,8 @@ function OnlyChar(const text: RawUtf8; only: TSynAnsicharSet): RawUtf8;
 function TrimControlChars(const text: RawUtf8): RawUtf8;
 
 /// split a RawUtf8 string into two strings, according to SepStr separator
-// - if SepStr is not found, LeftStr=Str and RightStr=''
+// - returns true and LeftStr/RightStr if they were separated by SepStr
+// - if SepStr is not found, LeftStr=Str and RightStr='' and returns false
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
 function Split(const Str, SepStr: RawUtf8; var LeftStr, RightStr: RawUtf8;
   ToUpperCase: boolean = false): boolean; overload;
