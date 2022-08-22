@@ -5145,9 +5145,13 @@ begin
     if openssl_initialized = osslAvailable then
       // set it once, but allow to retry given libnames
       exit;
+    // initialize library loaders
     libcrypto := TLibCrypto.Create;
     libssl := TLibSsl.Create;
     try
+      // MacOS X and Windows have no system OpenSSL: also try in exe folder
+      libcrypto.TryFromExecutableFolder := OS_KIND in [osOSX, osWindows];
+      libssl.TryFromExecutableFolder := libcrypto.TryFromExecutableFolder;
       // attempt to load libcrypto
       if libcryptoname = '' then
       begin
@@ -5165,16 +5169,7 @@ begin
       libcrypto.TryLoadLibrary([
         // first try with the global variable
         OpenSslDefaultCrypto,
-      {$ifdef OSWINDOWS}
-        // try the 3.x / 1.1.1 libcrypto*.dll in the local executable folder
-        Executable.ProgramFilePath + lib3,
-        Executable.ProgramFilePath + lib1,
-      {$endif OSWINDOWS}
-      {$ifdef OSDARWIN}
-        // MacOS X has no standard system OpenSSL library: try in exe folder
-        Executable.ProgramFilePath + lib1,
-      {$endif OSDARWIN}
-        // finally try if the library is available somewhere in the system
+        // try the library somewhere in the system or on specified path
         lib3,
         lib1
       {$ifdef OSPOSIX}
@@ -5204,15 +5199,7 @@ begin
       libssl.TryLoadLibrary([
         // first try with the global variable
         OpenSslDefaultSsl,
-      {$ifdef OSWINDOWS}
-        // first try the 3.x / 1.1.1 libssl*.dll in the local executable folder
-        Executable.ProgramFilePath + lib3,
-        Executable.ProgramFilePath + lib1,
-      {$endif OSWINDOWS}
-      {$ifdef OSDARWIN}
-        // MacOS X has no standard system OpenSSL library: try in exe folder
-        Executable.ProgramFilePath + lib1,
-      {$endif OSDARWIN}
+        // try the library somewhere in the system or on specified path
         lib3,
         lib1
       {$ifdef OSPOSIX}
