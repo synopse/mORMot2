@@ -633,12 +633,12 @@ type
     // a given 256-bit key over a small memory block
     // - wrapper which creates a TAesAbsract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash256;
-      Encrypt: boolean): RawByteString; overload;
+      Encrypt: boolean; IVAtBeginning: boolean = true): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication from
     // a given 128-bit key over a small memory block
     // - wrapper which creates a TAesAbstract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash128;
-      Encrypt: boolean): RawByteString; overload;
+      Encrypt: boolean; IVAtBeginning: boolean = true): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
     // the curent AES instance over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
@@ -648,7 +648,7 @@ type
     // - TAesCfc/TAesOfc will store a header with its own CRC, so detection
     // of most invalid formats (e.g. from fuzzing input) will occur before any
     // AES/MAC process - for TAesGcm, authentication requires decryption
-    function MacAndCrypt(const Data: RawByteString; Encrypt: boolean;
+    function MacAndCrypt(const Data: RawByteString; Encrypt, IVAtBeginning: boolean;
       const Associated: RawByteString = ''): RawByteString;
 
     {$ifndef PUREMORMOT2}
@@ -5281,7 +5281,7 @@ begin
 end;
 
 function TAesAbstract.MacAndCrypt(const Data: RawByteString;
-  Encrypt: boolean; const Associated: RawByteString): RawByteString;
+  Encrypt, IVAtBeginning: boolean; const Associated: RawByteString): RawByteString;
 const
   VERSION = 1;
   CRCSIZ = SizeOf(THash256) * 2; // nonce+mac hashes
@@ -5294,6 +5294,45 @@ var
   P: PByte;
 begin
   result := ''; // e.g. MacSetNonce not supported
+  if (fAlgoMode = mGCM) and
+     InheritsFrom(TAesGcmAbstract) then
+  begin
+    // for AES-GCM, no nonce needed: use standard encrypted + tag layout
+    if Encrypt then
+    begin
+      len := length(Data);
+      enclen := EncryptPkcs7Length(len, IVAtBeginning);
+      SetLength(result, enclen + SizeOf(TAesBlock));
+      P := pointer(result);
+      if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
+      begin
+        result := '';
+        exit;
+      end;
+      if Associated <> '' then
+        TAesGcmAbstract(self).AesGcmAad(pointer(Associated), length(Associated));
+      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
+        result := '';
+    end
+    else
+    begin
+      enclen := length(Data);
+      if enclen < SizeOf(TAesBlock) * 2 then
+        exit;
+      dec(enclen, SizeOf(TAesBlock));
+      P := pointer(Data);
+      result := DecryptPkcs7Buffer(P, enclen, IVAtBeginning, {raiseexc=}false);
+      if result <> '' then
+      begin
+        if Associated <> '' then
+          TAesGcmAbstract(self).AesGcmAad(pointer(Associated), length(Associated));
+        if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
+          result := '';
+      end;
+    end;
+  end
+  else
+  // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
     TAesPrng.Main.FillRandom(nonce);
@@ -5302,11 +5341,10 @@ begin
       exit;
     // inlined EncryptPkcs7() + RecordSave()
     len := length(Data);
-    enclen := EncryptPkcs7Length(len, {ivatbeg=}true);
+    enclen := EncryptPkcs7Length(len, IVAtBeginning);
     SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen);
     P := ToVarUInt32(enclen, @rcd^.data);
-    if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, {ivatbeg=}true) and
-       // compute header
+    if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) and
        MacEncryptGetTag(rcd.mac) then
     begin
       rcd.nonce := nonce;
@@ -5317,7 +5355,7 @@ begin
   end
   else
   begin
-    // validate header
+    // decrypt: validate header
     enclen := length(Data);
     if (enclen <= SIZ) or
        (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
@@ -5330,7 +5368,7 @@ begin
       exit;
     // decrypt and check MAC
     if MacSetNonce({encrypt=}false, pcd^.nonce, Associated) then
-      result := DecryptPkcs7Buffer(P, len, {ivatbeg=}true, {raiseexc=}false);
+      result := DecryptPkcs7Buffer(P, len, IVAtBeginning, {raiseexc=}false);
     if result <> '' then
       if not MacDecryptCheckTag(pcd^.mac) then
       begin
@@ -5341,26 +5379,26 @@ begin
 end;
 
 class function TAesAbstract.MacEncrypt(const Data: RawByteString;
-  const Key: THash256; Encrypt: boolean): RawByteString;
+  const Key: THash256; Encrypt, IVAtBeginning: boolean): RawByteString;
 var
   aes: TAesAbstract;
 begin
   aes := Create(Key);
   try
-    result := aes.MacAndCrypt(Data, Encrypt);
+    result := aes.MacAndCrypt(Data, Encrypt, IVAtBeginning);
   finally
     aes.Free;
   end;
 end;
 
 class function TAesAbstract.MacEncrypt(const Data: RawByteString;
-  const Key: THash128; Encrypt: boolean): RawByteString;
+  const Key: THash128; Encrypt, IVAtBeginning: boolean): RawByteString;
 var
   aes: TAesAbstract;
 begin
   aes := Create(Key);
   try
-    result := aes.MacAndCrypt(Data, Encrypt);
+    result := aes.MacAndCrypt(Data, Encrypt, IVAtBeginning);
   finally
     aes.Free;
   end;
