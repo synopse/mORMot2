@@ -2695,6 +2695,7 @@ type
   protected
     fHandle: TLibHandle;
     fLibraryPath: TFileName;
+    fTryFromExecutableFolder: boolean;
     {$ifdef OSPOSIX}
     fLibraryPathTested: boolean;
     {$endif OSPOSIX}
@@ -2728,6 +2729,9 @@ type
     // - on POSIX, contains the full path (via dladdr) once Resolve() is called
     property LibraryPath: TFileName
       read fLibraryPath;
+    /// if set, and no path is specified, will try from Executable.ProgramFilePath
+    property TryFromExecutableFolder: boolean
+      read fTryFromExecutableFolder write fTryFromExecutableFolder;
   end;
 
 
@@ -5551,8 +5555,9 @@ var
   i, j: PtrInt;
   lib, libs: TFileName;
   {$ifdef OSWINDOWS}
-  nwd, cwd: TFileName;
+  cwd,
   {$endif OSWINDOWS}
+  nwd: TFileName;
 begin
   for i := 0 to high(aLibrary) do
   begin
@@ -5568,8 +5573,19 @@ begin
       end;
     if not result then
       continue; // don't try twice the same library name
+    if fTryFromExecutableFolder then
+    begin
+      nwd := ExtractFilePath(lib);
+      if (nwd = '') and
+         FileExists(Executable.ProgramFilePath + lib) then
+      begin
+        lib := Executable.ProgramFilePath + lib;
+        nwd := Executable.ProgramFilePath;
+      end;
+    end
+    else
     {$ifdef OSWINDOWS}
-    nwd := ExtractFilePath(lib);
+      nwd := ExtractFilePath(lib);
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
