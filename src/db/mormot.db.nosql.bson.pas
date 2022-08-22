@@ -346,6 +346,8 @@ type
     bbtOldUUID,
     bbtUUID,
     bbtMD5,
+    bbtEncryptedBsonValue, { MongoDB 4.2 introduced client side encryption }
+    bbtCompressedBsonColumn,
     bbtUser = $80);
 
   {$A-}
@@ -4745,6 +4747,8 @@ initialization
   Assert(ord(betDecimal128) = $13);
   Assert(ord(bbtGeneric) = $00);
   Assert(ord(bbtMD5) = $05);
+  Assert(ord(bbtEncryptedBsonValue) = $06);
+  Assert(ord(bbtCompressedBsonColumn) = $07);
   Assert(ord(bbtUser) = $80);
   Assert(SizeOf(TBsonObjectID) = 12);
   Assert(SizeOf(TBsonVariantData) = SizeOf(variant));
