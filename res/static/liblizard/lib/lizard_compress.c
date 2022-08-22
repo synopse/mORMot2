@@ -358,7 +358,9 @@ Lizard_stream_t* Lizard_initStream(Lizard_stream_t* ctx, int compressionLevel)
     if (!ctx)
     {
         ctx = (Lizard_stream_t*)pas_malloc(sizeof(Lizard_stream_t) + hashTableSize + chainTableSize + LIZARD_COMPRESS_ADD_BUF + LIZARD_COMPRESS_ADD_HUF);
-        if (!ctx) { printf("ERROR: Cannot allocate %d MB (compressionLevel=%d)\n", (int)(sizeof(Lizard_stream_t) + hashTableSize + chainTableSize)>>20, compressionLevel); return 0; }
+        if (!ctx) { 
+          //AB printf("ERROR: Cannot allocate %d MB (compressionLevel=%d)\n", (int)(sizeof(Lizard_stream_t) + hashTableSize + chainTableSize)>>20, compressionLevel);
+          return 0; }
         LIZARD_LOG_COMPRESS("Allocated %d MB (compressionLevel=%d)\n", (int)(sizeof(Lizard_stream_t) + hashTableSize + chainTableSize)>>20, compressionLevel); 
         ctx->allocatedMemory = sizeof(Lizard_stream_t) + hashTableSize + chainTableSize + LIZARD_COMPRESS_ADD_BUF + (U32)LIZARD_COMPRESS_ADD_HUF;
       //  printf("pas_malloc from=%p to=%p hashTable=%p hashEnd=%p chainTable=%p chainEnd=%p\n", ctx, ((BYTE*)ctx)+sizeof(Lizard_stream_t) + hashTableSize + chainTableSize, ctx->hashTable, ((BYTE*)ctx->hashTable) + hashTableSize, ctx->chainTable, ((BYTE*)ctx->chainTable)+chainTableSize);
