@@ -95,6 +95,11 @@ end;
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
   external kernel32 name 'GetProcAddress';
 
+function LibraryError: string;
+begin
+  result := IntToStr(GetLastError); // enough for basic troubleshouting
+end;
+
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
   {$ifdef HASINLINE} inline; {$endif} 
 begin

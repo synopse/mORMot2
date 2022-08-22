@@ -163,6 +163,11 @@ begin
   result := dlsym(Lib, ProcName);
 end;
 
+function LibraryError: string;
+begin
+  result := dlerror;
+end;
+
 
 { TIcuLibrary }
 

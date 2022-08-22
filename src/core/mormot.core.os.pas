@@ -1808,6 +1808,9 @@ procedure LibraryClose(Lib: TLibHandle);
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
+/// raw cross-platform library resolution error, e.g. after LibraryOpen
+function LibraryError: string;
+
 
 const
   /// redefined here to avoid dependency to the Windows or SyncObjs units
@@ -5553,11 +5556,11 @@ function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass): boolean;
 var
   i, j: PtrInt;
-  lib, libs: TFileName;
   {$ifdef OSWINDOWS}
   cwd,
   {$endif OSWINDOWS}
-  nwd: TFileName;
+  lib, libs, nwd: TFileName;
+  err: string;
 begin
   for i := 0 to high(aLibrary) do
   begin
@@ -5610,6 +5613,9 @@ begin
       libs := lib
     else
       libs := libs + ', ' + lib;
+    err := LibraryError;
+    if err <> '' then
+      libs := libs + ' [' + err + ']';
   end;
   result := false;
   if aRaiseExceptionOnFailure <> nil then
