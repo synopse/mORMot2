@@ -4330,9 +4330,9 @@ begin
   if encrypt then
     include(fFlags, fEncrypt);
   if algo.fMode = mGcm then
-    include(fFlags, fAesGcm)
-  else if algo.fMode in AES_AEAD then
-    include(fFlags, fAesAead);
+    include(fFlags, fAesGcm);
+  if algo.fMode in AES_AEAD then
+    include(fFlags, fAesAead); // mCfc,mOfc,mCtc,mGcm
 end;
 
 destructor TCryptAesCipher.Destroy;
@@ -4359,36 +4359,9 @@ begin
   result := false;
   if src = '' then
     exit;
-  if fAesGcm in fFlags then
-  begin
-    // standard GCM algorithm with trailing 128-bit GMAC
-    if (aeadinfo <> '') and
-       not fAes.InheritsFrom(TAesGcm) then
-      raise ECrypt.CreateUtf8('% does not properly support AEAD information: ' +
-        'use AES-%-GCM-INT instead', [fAes, TCryptAesInternal(fCryptAlgo).fBits]);
-    if fEncrypt in fFlags then
-    begin
-      dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags, GMAC_SIZE);
-      if aeadinfo <> '' then
-        TAesGcmAbstract(fAes).AesGcmAad(pointer(aeadinfo), length(aeadinfo));
-      result := (dst <> '') and
-                TAesGcmAbstract(fAes).AesGcmFinal( // append GMAC to dst
-                   PAesBlock(@PByteArray(dst)[length(dst) - GMAC_SIZE])^)
-    end
-    else
-    begin
-      dst := fAes.DecryptPkcs7(src, fIVAtBeg in fFlags, false, GMAC_SIZE);
-      if aeadinfo <> '' then
-        TAesGcmAbstract(fAes).AesGcmAad(pointer(aeadinfo), length(aeadinfo));
-      result := (dst <> '') and
-                TAesGcmAbstract(fAes).AesGcmFinal( // validate GMAC from src
-                  PAesBlock(@PByteArray(src)[length(src) - GMAC_SIZE])^);
-    end;
-    exit;
-  end
-  else if fAesAead in fFlags then
-    // our proprietary mCfc,mOfc,mCtc AEAD algorithms using 256-bit crc32c
-    dst := fAes.MacAndCrypt(src, fEncrypt in fFlags, aeadinfo)
+  if fAesAead in fFlags then
+    // mCfc/mOfc/mCtc/mGcm AEAD algorithms using 128-bit GMAC or 256-bit crc32c
+    dst := fAes.MacAndCrypt(src, fEncrypt in fFlags, fIVAtBeg in fFlags, aeadinfo)
   // standard encryption with no AEAD/checksum
   else if fEncrypt in fFlags then
     dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags)
@@ -4403,9 +4376,6 @@ begin
   result := false;
   if src = nil then
     exit;
-  if fAesAead in fFlags then
-    raise ECrypt.CreateUtf8('%.Process(TBytes) is unsupported for %',
-      [self, fCryptAlgo.AlgoName]); // MacAndCrypt() requires RawByteString
   if fAesGcm in fFlags then
   begin
     // standard GCM algorithm with trailing 128-bit GMAC
@@ -4427,6 +4397,9 @@ begin
     end;
     exit;
   end
+  else if fAesAead in fFlags then
+    raise ECrypt.CreateUtf8('%.Process(TBytes) is unsupported for %',
+      [self, fCryptAlgo.AlgoName]) // MacAndCrypt() requires RawByteString
   // standard encryption with no AEAD/checksum
   else if fEncrypt in fFlags then
     dst := fAes.EncryptPkcs7(src, fIVAtBeg in fFlags)
