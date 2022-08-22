@@ -837,7 +837,8 @@ type
   // and another for decryption, with PKCS7 padding and no MAC/AEAD validation
   TProtocolAes = class(TInterfacedObject, IProtocol)
   protected
-    fSafe: TRTLCriticalSection; // no need of TSynLocker padding
+    fSafe: TLightLock; // no need of whole TRTLCriticalSection
+    fAheadMode: boolean;
     fAes: array[boolean] of TAesAbstract; // [false]=decrypt [true]=encrypt
   public
     /// initialize this encryption protocol with the given AES settings
@@ -3397,20 +3398,16 @@ constructor TProtocolAes.Create(aClass: TAesAbstractClass;
   const aKey; aKeySize: cardinal);
 begin
   inherited Create;
-  InitializeCriticalSection(fSafe);
   if aClass = nil then
     aClass := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
   fAes[false] := aClass.Create(aKey, aKeySize);
-  if fAes[false].AlgoMode in [mCfc, mOfc, mCtc, mGcm] then
-    raise ESynCrypto.CreateUtf8('%.Create: incompatible % AEAD mode',
-      [self, fAes[false].AlgoName]);
+  fAheadMode := fAes[false].AlgoMode in [mCfc, mOfc, mCtc, mGcm];
   fAes[true] := fAes[false].CloneEncryptDecrypt;
 end;
 
 constructor TProtocolAes.CreateFrom(aAnother: TProtocolAes);
 begin
   inherited Create;
-  InitializeCriticalSection(fSafe);
   fAes[false] := aAnother.fAes[false].Clone;
   fAes[true] := fAes[false].CloneEncryptDecrypt;
 end;
@@ -3420,7 +3417,6 @@ begin
   fAes[false].Free;
   if fAes[true] <> fAes[false] then
     fAes[true].Free; // fAes[false].CloneEncryptDecrypt may return self
-  DeleteCriticalSection(fSafe);
   inherited Destroy;
 end;
 
@@ -3433,10 +3429,13 @@ end;
 function TProtocolAes.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   try
     try
-      aPlain := fAes[false].DecryptPkcs7(aEncrypted, {iv=}true, {raise=}false);
+      if fAheadMode then
+        aPlain := fAes[false].MacAndCrypt(aEncrypted, {enc=}false, {iv=}true, '')
+      else
+        aPlain := fAes[false].DecryptPkcs7(aEncrypted, {iv=}true, {raise=}false);
       if aPlain = '' then
         result := sprBadRequest
       else
@@ -3445,18 +3444,21 @@ begin
       result := sprInvalidMAC;
     end;
   finally
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
 procedure TProtocolAes.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
 begin
-  EnterCriticalSection(fSafe);
+  fSafe.Lock;
   try
-    aEncrypted := fAes[true].EncryptPkcs7(aPlain, {iv=}true);
+    if fAheadMode then
+      aEncrypted := fAes[true].MacAndCrypt(aPlain, {enc=}true, {iv=}true, '')
+    else
+      aEncrypted := fAes[true].EncryptPkcs7(aPlain, {iv=}true);
   finally
-    LeaveCriticalSection(fSafe);
+    fSafe.UnLock;
   end;
 end;
 
