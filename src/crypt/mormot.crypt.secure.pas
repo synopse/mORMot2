@@ -1444,12 +1444,12 @@ type
     function JwtCompute(const DataNameValue: array of const;
       const Issuer: RawUtf8 = ''; const Subject: RawUtf8 = '';
       const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
-      ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
+      ExpirationMinutes: integer = 0; Signature: PRawByteString = nil): RawUtf8;
     /// verify a JWT signature from the public key of this certificate
     // - this certificate should have the cuDigitalSignature usage
-    // - can optionally return the payload fields
+    // - can optionally return the payload fields and/or the signature
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
-      Payload: PDocVariantData = nil): TCryptCertValidity;
+      Payload: PDocVariantData = nil; Signature: PRawByteString = nil): TCryptCertValidity;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
@@ -1556,9 +1556,9 @@ type
       overload; virtual; abstract;
     function JwtCompute(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
-      ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8; virtual;
+      ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
-      Payload: PDocVariantData): TCryptCertValidity; virtual;
+      Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -4600,10 +4600,11 @@ end;
 
 function TCryptCert.JwtCompute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
-  ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
+  ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8;
 var
   payload: TDocVariantData;
-  headpayload, sig: RawUtf8;
+  headpayload: RawUtf8;
+  sig: RawByteString;
 begin
   result := '';
   if not HasPrivateSecret then
@@ -4626,17 +4627,17 @@ begin
   headpayload := BinToBase64Uri(FormatUtf8('{"alg":"%"}',
                    [(fCryptAlgo as TCryptCertAlgo).JwtName])) + '.' +
                  BinToBase64Uri(payload.ToJson);
-  sig := BinToBase64Uri(Sign(headpayload));
+  sig := self.Sign(headpayload);
   if sig = '' then
     exit;
   if Signature <> nil then
     Signature^ := sig;
-  result := headpayload + '.' + sig;
+  result := headpayload + '.' + BinToBase64Uri(sig);
 end;
 
 function TCryptCert.JwtVerify(const Jwt: RawUtf8;
   Issuer, Subject, Audience: PRawUtf8;
-  Payload: PDocVariantData): TCryptCertValidity;
+  Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity;
 var
   P, S: PUtf8Char;
   pl: TDocVariantData;
@@ -4662,6 +4663,8 @@ begin
   if (payl = '') or
      (sig = '') then
     exit;
+  if Signature <> nil then
+    Signature^ := sig;
   if pl.InitJsonInPlace(pointer(payl), JSON_FAST) = nil then
     exit;
   result := cvInvalidDate;
