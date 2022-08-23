@@ -633,12 +633,12 @@ type
     // a given 256-bit key over a small memory block
     // - wrapper which creates a TAesAbsract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash256;
-      Encrypt: boolean; IVAtBeginning: boolean = true): RawByteString; overload;
+      Encrypt: boolean; const Associated: RawByteString = ''): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication from
     // a given 128-bit key over a small memory block
     // - wrapper which creates a TAesAbstract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash128;
-      Encrypt: boolean; IVAtBeginning: boolean = true): RawByteString; overload;
+      Encrypt: boolean; const Associated: RawByteString = ''): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
     // the curent AES instance over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
@@ -5379,26 +5379,26 @@ begin
 end;
 
 class function TAesAbstract.MacEncrypt(const Data: RawByteString;
-  const Key: THash256; Encrypt, IVAtBeginning: boolean): RawByteString;
+  const Key: THash256; Encrypt: boolean; const Associated: RawByteString): RawByteString;
 var
   aes: TAesAbstract;
 begin
   aes := Create(Key);
   try
-    result := aes.MacAndCrypt(Data, Encrypt, IVAtBeginning);
+    result := aes.MacAndCrypt(Data, Encrypt, {ivatbeginning=}true, Associated);
   finally
     aes.Free;
   end;
 end;
 
 class function TAesAbstract.MacEncrypt(const Data: RawByteString;
-  const Key: THash128; Encrypt, IVAtBeginning: boolean): RawByteString;
+  const Key: THash128; Encrypt: boolean; const Associated: RawByteString): RawByteString;
 var
   aes: TAesAbstract;
 begin
   aes := Create(Key);
   try
-    result := aes.MacAndCrypt(Data, Encrypt, IVAtBeginning);
+    result := aes.MacAndCrypt(Data, Encrypt, {ivatbeginning=}true, Associated);
   finally
     aes.Free;
   end;

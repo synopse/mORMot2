@@ -2423,17 +2423,17 @@ begin
     free := TSynMonitorMemory.FreeAsText;
   with SystemInfo do
     result := JsonEncode([
-      'host', Executable.Host,
-      'user', Executable.User,
-      'os', OSVersionText,
-      'cpu', CpuInfoText,
-      'bios', BiosInfoText,
+      'host',        Executable.Host,
+      'user',        Executable.User,
+      'os',          OSVersionText,
+      'cpu',         CpuInfoText,
+      'bios',        BiosInfoText,
       {$ifdef OSWINDOWS}{$ifdef CPU32}'wow64', IsWow64, {$endif}{$endif OSWINDOWS}
       'cpufeatures', CpuFeaturesText,
-      'processcpu', cpu,
-      'processmem', mem,
-      'freemem', free,
-      'disk', GetDiskPartitionsText({nocache=}false, {withfree=}true)]);
+      'processcpu',  cpu,
+      'processmem',  mem,
+      'freemem',     free,
+      'disk',        GetDiskPartitionsText({nocache=}false, {withfree=}true)]);
 end;
 
 {$ifdef NOEXCEPTIONINTERCEPT}
