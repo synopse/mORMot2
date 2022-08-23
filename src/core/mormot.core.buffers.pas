@@ -6804,7 +6804,7 @@ begin
         '=':
           begin
             // trim unsignificant trailing '=' characters
-            SetLength(base64, P - pointer(base64));
+            FakeLength(base64, P - pointer(base64));
             break;
           end;
       end;
