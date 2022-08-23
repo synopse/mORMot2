@@ -5298,6 +5298,8 @@ begin
      InheritsFrom(TAesGcmAbstract) then
   begin
     // for AES-GCM, no nonce needed: use standard encrypted + tag layout
+    if not MacSetNonce(encrypt, nonce{%H-}, Associated) then
+      exit; // AEAD data should be assigned to fAssociated before cipher blocks
     if Encrypt then
     begin
       len := length(Data);
@@ -5305,13 +5307,6 @@ begin
       SetLength(result, enclen + SizeOf(TAesBlock));
       P := pointer(result);
       if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
-      begin
-        result := '';
-        exit;
-      end;
-      if Associated <> '' then
-        TAesGcmAbstract(self).AesGcmAad(pointer(Associated), length(Associated));
-      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
         result := '';
     end
     else
@@ -5322,14 +5317,10 @@ begin
       dec(enclen, SizeOf(TAesBlock));
       P := pointer(Data);
       result := DecryptPkcs7Buffer(P, enclen, IVAtBeginning, {raiseexc=}false);
-      if result <> '' then
-      begin
-        if Associated <> '' then
-          TAesGcmAbstract(self).AesGcmAad(pointer(Associated), length(Associated));
-        if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
-          result := '';
-      end;
     end;
+    if result <> '' then
+      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
+        result := '';
   end
   else
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
