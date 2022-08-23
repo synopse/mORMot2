@@ -5564,6 +5564,7 @@ var
 begin
   for i := 0 to high(aLibrary) do
   begin
+    // check library name
     lib := aLibrary[i];
     if lib = '' then
       continue;
@@ -5576,19 +5577,16 @@ begin
       end;
     if not result then
       continue; // don't try twice the same library name
-    if fTryFromExecutableFolder then
+    // open the library
+    nwd := ExtractFilePath(lib);
+    if fTryFromExecutableFolder  and
+       (nwd = '') and
+       FileExists(Executable.ProgramFilePath + lib) then
     begin
-      nwd := ExtractFilePath(lib);
-      if (nwd = '') and
-         FileExists(Executable.ProgramFilePath + lib) then
-      begin
-        lib := Executable.ProgramFilePath + lib;
-        nwd := Executable.ProgramFilePath;
-      end;
-    end
-    else
+      lib := Executable.ProgramFilePath + lib;
+      nwd := Executable.ProgramFilePath;
+    end;
     {$ifdef OSWINDOWS}
-      nwd := ExtractFilePath(lib);
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
@@ -5609,6 +5607,7 @@ begin
         fLibraryPath := lib;
       exit;
     end;
+    // handle any error
     if {%H-}libs = '' then
       libs := lib
     else
