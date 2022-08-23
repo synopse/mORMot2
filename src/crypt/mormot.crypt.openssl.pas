@@ -909,7 +909,7 @@ end;
 
 procedure TAesGcmOsl.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  fAes.UpdEvp({encrypt=}true, Buf, nil, Len);
+  fAes.UpdEvp(fStarted = stEnc, Buf, nil, Len);
 end;
 
 function TAesGcmOsl.AesGcmFinal(var tag: TAesBlock): boolean;
