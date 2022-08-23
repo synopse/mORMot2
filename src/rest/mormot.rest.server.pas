@@ -2422,8 +2422,13 @@ function ServiceRunningContext: PServiceRunningContext;
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
-function CurrentServerNonce(Ctxt: TRestServerUriContext;
-  Previous: boolean = false): RawUtf8;
+function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean = false): RawUtf8;
+  overload;
+
+/// returns a safe 256-bit nonce, changing every 5 minutes
+// - can return the (may be cached) value as hexadecimal text or THash256 binary
+procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
+  Nonce: PRawUtf8; Nonce256: PHash256); overload;
 
 /// this function can be exported from a DLL to remotely access to a TRestServer
 // - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
@@ -4985,19 +4990,54 @@ end;
 
 var
   ServerNonceSafe: TLightLock;
-  ServerNonceHash: TSha3; // faster than THmacSha256 on small input
+  ServerNonceHasher: TSha3; // faster than THmacSha256 on small input
   ServerNonceCache: array[boolean] of record
     tix: cardinal;
     res: RawUtf8;
+    hash: THash256;
   end;
 
-function CurrentServerNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
+procedure CurrentServerNonceCompute(ticks: cardinal; previous: boolean;
+  nonce: PRawUtf8; nonce256: PHash256);
+var
+  hex: RawUtf8;
+  sha3: TSha3;
+  tmp: THash256;
+begin
+  if ServerNonceHasher.Algorithm <> SHA3_256 then
+  begin
+    // first time used: initialize the private secret for this process lifetime
+    TAesPrng.Fill(tmp); // random seed
+    sha3.Init(SHA3_256);
+    sha3.Update(@tmp, SizeOf(tmp));
+    ServerNonceSafe.Lock;
+    if ServerNonceHasher.Algorithm <> SHA3_256 then // atomic init
+      ServerNonceHasher := sha3;
+    ServerNonceSafe.UnLock;
+  end;
+  // compute and cache the new nonce for this timestamp
+  sha3 := ServerNonceHasher; // thread-safe SHA-3 sponge reuse
+  sha3.Update(@ticks, SizeOf(ticks));
+  sha3.Final(tmp, true);
+  hex := BinToHexLower(@tmp, SizeOf(tmp));
+  if nonce <> nil then
+    nonce^ := hex;
+  if nonce256 <> nil then
+    nonce256^ := tmp;
+  with ServerNonceCache[previous] do
+  begin
+    tix := ticks;
+    hash := tmp;
+    res := hex;
+  end;
+end;
+
+procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
+  Nonce: PRawUtf8; Nonce256: PHash256);
 var
   ticks: cardinal;
-  hash: TSha3;
-  res: THash256;
 begin
-  ticks := Ctxt.TickCount64 shr 18; // 4.3 minutes resolution
+  ticks := Ctxt.TickCount64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
   if Previous then
     dec(ticks);
   with ServerNonceCache[Previous] do
@@ -5005,38 +5045,27 @@ begin
        (res <> '') then  // check for res='' since ticks may be 0 at startup
     begin
       // very efficiently retrieval from cache
-      result := res;
-      exit;
-    end;
-  if ServerNonceHash.Algorithm <> SHA3_256 then
-  begin
-    // first time used: initialize the private secret for this process lifetime
-    RandomBytes(@res, SizeOf(res)); // good enough as seed
-    hash.Init(SHA3_256);
-    hash.Update(@res, SizeOf(res));
-    ServerNonceSafe.Lock;
-    if ServerNonceHash.Algorithm <> SHA3_256 then
-      ServerNonceHash := hash;
-    ServerNonceSafe.UnLock;
-  end;
-  hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
-  hash.Update(@ticks, SizeOf(ticks));
-  hash.Final(res, true);
-  result := BinToHexLower(@res, SizeOf(res));
-  with ServerNonceCache[Previous] do
-  begin
-    tix := ticks;
-    res := result;
-  end;
+      if Nonce256 <> nil then
+        Nonce256^ := hash;
+      if Nonce <> nil then
+        Nonce^ := res;
+    end
+    else
+      // we need to (re)compute this value
+      CurrentServerNonceCompute(ticks, Previous, Nonce, Nonce256);
 end;
 
+function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
+begin
+  CurrentNonce(Ctxt, Previous, @result, nil);
+end;
 
 
 { TRestServerAuthenticationDefault }
 
 function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerUriContext): boolean;
 var
-  uname, pwd, cltnonce: RawUtf8;
+  uname, pwd, nonce: RawUtf8;
   usr: TAuthUser;
   os: TOperatingSystemVersion;
 begin
@@ -5044,23 +5073,23 @@ begin
   if AuthSessionRelease(Ctxt) then
     exit;
   uname := Ctxt.InputUtf8OrVoid['UserName'];
-  cltnonce := Ctxt.InputUtf8OrVoid['ClientNonce'];
+  nonce := Ctxt.InputUtf8OrVoid['ClientNonce'];
   if (uname <> '') and
-     (length(cltnonce) > 32) then
+     (length(nonce) > 32) then
   begin
     // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
     usr := GetUser(Ctxt, uname);
     if usr <> nil then
     try
       // decode TRestClientAuthenticationDefault.ClientComputeSessionKey nonce
-      if (length(cltnonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
-         (cltnonce[9] = '_') and
-         HexDisplayToBin(pointer(cltnonce), @os, SizeOf(os)) and
+      if (length(nonce) = (SizeOf(os) + SizeOf(TAesBlock)) * 2 + 1) and
+         (nonce[9] = '_') and
+         HexDisplayToBin(pointer(nonce), @os, SizeOf(os)) and
          (os.os <= high(os.os)) then
         Ctxt.fSessionOS := os;
       // check if match TRestClientUri.SetUser() algorithm
       pwd := Ctxt.InputUtf8OrVoid['Password'];
-      if CheckPassword(Ctxt, usr, cltnonce, pwd) then
+      if CheckPassword(Ctxt, usr, nonce, pwd) then
         // setup a new TAuthSession
         SessionCreate(Ctxt, usr)
         // SessionCreate would call Ctxt.AuthenticationFailed on error
@@ -5074,7 +5103,7 @@ begin
   end
   else if uname <> '' then
     // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-    Ctxt.Results([CurrentServerNonce(Ctxt)])
+    Ctxt.Results([CurrentNonce(Ctxt)])
   else
     // parameters does not match any expected layout -> try next authentication
     result := false;
@@ -5089,10 +5118,10 @@ begin
   salt := aClientNonce + User.LogonName + User.PasswordHashHexa;
   result := IsHex(aPassWord, SizeOf(THash256)) and
     (IdemPropNameU(aPassWord,
-      Sha256(fServer.Model.Root + CurrentServerNonce(Ctxt, false) + salt)) or
+      Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}false) + salt)) or
      // if current nonce failed, tries with previous 5 minutes' nonce
      IdemPropNameU(aPassWord,
-      Sha256(fServer.Model.Root + CurrentServerNonce(Ctxt, true)  + salt)));
+       Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}true)  + salt)));
 end;
 
 

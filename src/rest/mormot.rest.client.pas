@@ -930,7 +930,7 @@ type
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
     {$endif OSWINDOWS}
-    /// called by IsOpen when the raw connection is established
+    /// called by IsOpen when the raw connection is (re)established
     property OnConnected: TOnClientNotify
       read fOnConnected write fOnConnected;
     /// called by IsOpen when it failed to connect

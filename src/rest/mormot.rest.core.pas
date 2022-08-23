@@ -4026,8 +4026,8 @@ begin
   if HandleErrorAsRegularResult or
      StatusCodeIsSuccess(Status) then
   begin
-    fCall^.OutStatus := Status;
     fCall^.OutBody := Result;
+    fCall^.OutStatus := Status;
     if CustomHeader <> '' then
       fCall^.OutHead := CustomHeader
     else if fCall^.OutHead = '' then
