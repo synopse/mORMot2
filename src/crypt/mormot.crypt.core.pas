@@ -1608,6 +1608,10 @@ type
   TAesPrngClass = class of TAesPrngAbstract;
 
   /// which sources uses TAesPrng.GetEntropy() to gather its entropy
+  // - gesSystemAndUser uses OS and mORMot random sources
+  // - gesSystemOnly and gesSystemOnlyMayBlock use OS random sources, the later
+  // may block on some systems (so keep it small)
+  // - gesUserOnly uses mORMot random sources, and 512-bit of OS source once
   TAesPrngGetEntropySource = (
     gesSystemAndUser,
     gesSystemOnly,
@@ -1681,7 +1685,7 @@ type
     // and system information, mormot.core.base XorEntropy)
     // - Source will mix one or both of those entropy sources - note that
     // gesSystemAndUser is the default, but gesUserOnly is the fastest, and
-    // also derivated from OS entropy at least once at startup
+    // also derivated from 512-bit of OS entropy at least once at startup
     // - to gather randomness, use TAesPrng.Main.FillRandom() or TAesPrng.Fill()
     // methods, NOT this class function (which will be much slower, BTW)
     class function GetEntropy(Len: integer;
@@ -7319,7 +7323,7 @@ end;
 
 constructor TAesPrng.Create;
 begin
-  fSeedEntropySource := gesUserOnly; // fastest and safe enough (seeded from OS)
+  fSeedEntropySource := gesUserOnly; // fastest and safe (seeded once from OS)
   Create({pbkdf2rounds=}16);
 end;
 
@@ -7339,8 +7343,8 @@ begin
 end;
 
 var
-  // some system-derivated forward-secure seed for TAesPrng.GetEntropy
-  _OSEntropySeed: THash128;
+  // 512-bit of system-derivated forward-secure seed for TAesPrng.GetEntropy
+  _OSEntropySeed: THash512Rec;
 
 class function TAesPrng.GetEntropy(
   Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
@@ -7361,19 +7365,6 @@ begin
     end;
     // XOR with some userland entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
-    // randomness and entropy from mormot.core.base
-    RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
-    sha3.Update(@data, SizeOf(data));
-    XorEntropy(data); // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
-    sha3.Update(@data, SizeOf(data));
-    // include some official system-derivated entropy source
-    if IsZero(_OSEntropySeed) then
-      // retrieve kernel randomness once - even in gesUserOnly mode
-      FillSystemRandom(@_OSEntropySeed, SizeOf(_OSEntropySeed), {block=}false)
-    else
-      // forward security - may be using AesNiHash128
-      DefaultHasher128(@_OSEntropySeed, @data, SizeOf(data));
-    sha3.Update(@_OSEntropySeed, SizeOf(_OSEntropySeed));
     // system/process information used as salt/padding from mormot.core.os
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
@@ -7381,7 +7372,21 @@ begin
     sha3.Update(@Executable.Hash.b, SizeOf(Executable.Hash.b));
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    // append low-level Operating System entropy from mormot.core.os
+    // 512-bit randomness and entropy from mormot.core.base
+    RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
+    sha3.Update(@data, SizeOf(data));
+    // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
+    XorEntropy(data);
+    sha3.Update(@data, SizeOf(data));
+    // 512-bit of official system-derivated entropy source
+    if IsZero(_OSEntropySeed.b) then
+      // retrieve 512-bit of kernel randomness once - even in gesUserOnly mode
+      FillSystemRandom(@_OSEntropySeed, SizeOf(_OSEntropySeed), {block=}false)
+    else
+      // 128-bit of forward security - may be using AesNiHash128
+      DefaultHasher128(@_OSEntropySeed, @data, SizeOf(data));
+    sha3.Update(@_OSEntropySeed, SizeOf(_OSEntropySeed));
+    // 512-bit of low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
     sha3.Update(@data, SizeOf(data));
     FillZero(data.b);

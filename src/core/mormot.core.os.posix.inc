@@ -1837,7 +1837,7 @@ begin
   DoHash128File(e.h0, '/proc/self/statm');
   DoHash128File(e.h0, '/proc/self/stat');
   DoHash128File(e.h1, '/proc/stat');
-  // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
+  // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
   DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
