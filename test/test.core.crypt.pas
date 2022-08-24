@@ -1076,7 +1076,7 @@ begin
           {$endif USE_OPENSSL}
           bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
           bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM:
-            AES[b].MacAndCrypt(data, {encrypt=}true);
+            AES[b].MacAndCrypt(data, {encrypt=}true, {ivatbeg=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
           bSHAKE256:
