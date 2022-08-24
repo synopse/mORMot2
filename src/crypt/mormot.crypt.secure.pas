@@ -1714,7 +1714,7 @@ type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
   // - could be seen as a certificates store of the poor (tm)
   // - per usage lookup is in O(1) so faster than iterative ICryptCert.GetUsage
-  // - should be initialized by zero at startup, e.g. as a TObject field
+  // - should be initialized by Clear at startup, or set as a TObject field
   {$ifdef USERECORDWITHMETHODS}
   TCryptCertPerUsage = record
   {$else}
@@ -1723,9 +1723,13 @@ type
   public
     /// the stored ICryptCert Instances
     List: array of ICryptCert;
+    /// all usages currently stored in this list
+    Usages: TCryptCertUsages;
     /// lookup table used by GetUsage()/PerUsage()
     // - 0 means no certificate, or store the index in Cert[] + 1
     CertPerUsage: array[TCryptCertUsage] of byte;
+    /// reset all storage and indexes
+    procedure Clear;
     /// register the certificate to the internal list
     // - if another certificate has already an usage, it is overwritten and
     // the duplicated usage(s) are returned - so the typical pattern is to add
@@ -1738,6 +1742,11 @@ type
     /// fast lookup of a certificate per its usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
       {$ifdef HASINLINE} inline; {$endif}
+    /// save all items as a CRLF separated list of PEM certificates
+    function AsPem: RawUtf8;
+    /// clear and load a CRLF separated list of PEM certificates
+    // - returns the duplicated usages found during adding certificates
+    function FromPem(algo: TCryptCertAlgo; const pem: RawUtf8): TCryptCertUsages;
   end;
 
 const
@@ -4802,6 +4811,13 @@ end;
 
 { TCryptCertPerUsage }
 
+procedure TCryptCertPerUsage.Clear;
+begin
+  List := nil;
+  Usages := [];
+  FillCharFast(CertPerUsage, SizeOf(CertPerUsage), 0);
+end;
+
 function TCryptCertPerUsage.Add(const cert: ICryptCert): TCryptCertUsages;
 var
   u: TCryptCertUsage;
@@ -4817,6 +4833,7 @@ begin
   for u := low(u) to high(u) do
     if u in result then
     begin
+      include(Usages, u);
       if CertPerUsage[u] = 0 then
         exclude(result, u);
       CertPerUsage[u] := n; // replace any existing certificate
@@ -4841,6 +4858,38 @@ end;
 function TCryptCertPerUsage.PerUsage(u: TCryptCertUsage): ICryptCert;
 begin
   GetUsage(u, result);
+end;
+
+function TCryptCertPerUsage.AsPem: RawUtf8;
+var
+  i: PtrInt;
+begin
+  result := '';
+  for i := 0 to length(List) - 1 do
+    result  := result + List[i].Save(cccCertOnly, '', ccfPem) + (CRLF + CRLF);
+end;
+
+function TCryptCertPerUsage.FromPem(
+  algo: TCryptCertAlgo; const pem: RawUtf8): TCryptCertUsages;
+var
+  P: PUtf8Char;
+  one: RawUtf8;
+  c: ICryptCert;
+begin
+  Clear;
+  result := [];
+  if algo = nil then
+    exit;
+  P := pointer(pem);
+  while P <> nil do
+  begin
+    one := NextPem(P);
+    if one = '' then
+      break;
+    c := algo.Load(one);
+    if c <> nil then
+      result := result + Add(c);
+  end;
 end;
 
 
