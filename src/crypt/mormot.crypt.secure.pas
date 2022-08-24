@@ -1711,6 +1711,35 @@ type
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
+  /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
+  // - could be seen as a certificates store of the poor (tm)
+  // - per usage lookup is in O(1) so faster than iterative ICryptCert.GetUsage
+  // - should be initialized by zero at startup, e.g. as a TObject field
+  {$ifdef USERECORDWITHMETHODS}
+  TCryptCertPerUsage = record
+  {$else}
+  TCryptCertPerUsage = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the stored ICryptCert Instances
+    List: array of ICryptCert;
+    /// lookup table used by GetUsage()/PerUsage()
+    // - 0 means no certificate, or store the index in Cert[] + 1
+    CertPerUsage: array[TCryptCertUsage] of byte;
+    /// register the certificate to the internal list
+    // - if another certificate has already an usage, it is overwritten and
+    // the duplicated usage(s) are returned - so the typical pattern is to add
+    // the certificate in reverse order of authority, i.e. first the CA as root
+    // cuKeyCertSign, then less specialized cuKeyCertSign certificates
+    // - if no certificate usage is duplicated, returns []
+    function Add(const cert: ICryptCert): TCryptCertUsages;
+    /// fast lookup of a certificate per its usage
+    function GetUsage(u: TCryptCertUsage; out cert: ICryptCert): boolean;
+    /// fast lookup of a certificate per its usage
+    function PerUsage(u: TCryptCertUsage): ICryptCert;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
 const
   /// the JWT algorithm names according to our known asymmetric algorithms
   // - as implemented e.g. by TJwtAbstractOsl
@@ -4768,6 +4797,50 @@ begin
   result := New;
   if not result.Load(Binary) then
     result := nil;
+end;
+
+
+{ TCryptCertPerUsage }
+
+function TCryptCertPerUsage.Add(const cert: ICryptCert): TCryptCertUsages;
+var
+  u: TCryptCertUsage;
+  n: PtrInt;
+begin
+  n := length(List);
+  if n = 255 then
+    raise ECryptCert.Create('TCryptCertPerUsage.Add overflow'); // paranoid
+  SetLength(List, n + 1);
+  List[n] := cert;
+  inc(n); // CertPerUsage[u] stores index + 1
+  result := cert.GetUsage;
+  for u := low(u) to high(u) do
+    if u in result then
+    begin
+      if CertPerUsage[u] = 0 then
+        exclude(result, u);
+      CertPerUsage[u] := n; // replace any existing certificate
+    end;
+end;
+
+function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
+  out cert: ICryptCert): boolean;
+var
+  i: PtrInt;
+begin
+  i := CertPerUsage[u];
+  if i = 0 then
+    result := false
+  else
+  begin
+    cert := List[i - 1];
+    result := true;
+  end;
+end;
+
+function TCryptCertPerUsage.PerUsage(u: TCryptCertUsage): ICryptCert;
+begin
+  GetUsage(u, result);
 end;
 
 
