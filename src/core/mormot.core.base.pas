@@ -8238,7 +8238,12 @@ begin
   e.r[1].c0 := e.r[1].c0 xor lec^.rs1; // perfect forward security
   e.r[1].c1 := e.r[1].c1 xor lec^.rs2;
   e.r[1].c2 := e.r[1].c2 xor lec^.rs3;
-  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
+  // any threadvar is thread-specific, so PtrUInt(lec) identifies this thread
+  {$ifdef CPUINTELARM}
+  e.r[1].c3 := e.r[1].c3 xor crc32c(PtrUInt(lec), @CpuFeatures, SizeOf(CpuFeatures));
+  {$else}
+  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec);
+  {$endif CPUINTELARM}
   // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
   // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
   CreateGuid(guid.guid);
