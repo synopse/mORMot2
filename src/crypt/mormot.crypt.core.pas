@@ -5293,7 +5293,7 @@ var
   pcd: PMacAndCryptData absolute Data;
   rcd: PMacAndCryptData absolute result;
   nonce: THash256;
-  P: PByte;
+  P: PByteArray;
 begin
   result := ''; // e.g. MacSetNonce not supported
   if (fAlgoMode = mGCM) and
@@ -5321,7 +5321,7 @@ begin
       result := DecryptPkcs7Buffer(P, enclen, IVAtBeginning, {raiseexc=}false);
     end;
     if result <> '' then
-      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(P + enclen)^) then
+      if not TAesGcmAbstract(self).AesGcmFinal(PAesBlock(@P[enclen])^) then
         result := '';
   end
   else
@@ -5336,7 +5336,7 @@ begin
     len := length(Data);
     enclen := EncryptPkcs7Length(len, IVAtBeginning);
     SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen);
-    P := ToVarUInt32(enclen, @rcd^.data);
+    P := pointer(ToVarUInt32(enclen, @rcd^.data));
     if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) and
        MacEncryptGetTag(rcd.mac) then
     begin
@@ -5355,7 +5355,7 @@ begin
       exit;
     // inlined RecordLoad() for safety
     P := @pcd^.data;
-    len := FromVarUInt32(P);
+    len := FromVarUInt32(PByte(P));
     if enclen - len <> PtrUInt(PAnsiChar(P) - pointer(Data)) then
       // to avoid buffer overflow
       exit;
