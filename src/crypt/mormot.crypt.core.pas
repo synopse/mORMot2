@@ -1325,6 +1325,7 @@ type
   end;
 
 /// cypher/decypher any buffer using AES and PKCS7 padding, from a key buffer
+// - on decryption, returns '' in case of invalid input
 function AesPkcs7(const src: RawByteString; encrypt: boolean; const key;
   keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil): RawByteString; overload;
 
@@ -6795,7 +6796,7 @@ begin
       if encrypt then
         result := aes.EncryptPkcs7(src, IV = nil)
       else
-        result := aes.DecryptPkcs7(src, IV = nil);
+        result := aes.DecryptPkcs7(src, IV = nil, {raiseexc=}false);
     finally
       aes.Free;
     end;
@@ -7009,7 +7010,7 @@ begin
       end
       else
       begin
-        Data := DecryptPkcs7(Data, true);
+        Data := DecryptPkcs7(Data, {ivatbeg=}true, {raiseexc=}true);
         if CompressSynLZ(Data, false) = '' then
         begin
           result := '';
