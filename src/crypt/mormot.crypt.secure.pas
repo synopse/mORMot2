@@ -1714,6 +1714,7 @@ type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
   // - could be seen as a certificates store of the poor (tm)
   // - per usage lookup is in O(1) so faster than iterative ICryptCert.GetUsage
+  // - also features simple PEM / binary serialization methods
   // - should be initialized by Clear at startup, or set as a TObject field
   {$ifdef USERECORDWITHMETHODS}
   TCryptCertPerUsage = record
@@ -1731,22 +1732,31 @@ type
     /// reset all storage and indexes
     procedure Clear;
     /// register the certificate to the internal list
+    // - returns the duplicated usages
+    // - if no usage(s) was already set as in the added one, returns []
     // - if another certificate has already an usage, it is overwritten and
-    // the duplicated usage(s) are returned - so the typical pattern is to add
-    // the certificate in reverse order of authority, i.e. first the CA as root
-    // cuKeyCertSign, then less specialized cuKeyCertSign certificates
-    // - if no certificate usage is duplicated, returns []
+    // the duplicated usage(s) are returned
+    // - so the typical pattern is to add the certificate in inverse order of
+    // authority, i.e. first the CA as root cuKeyCertSign, then the less
+    // specialized cuKeyCertSign certificates - so that the weaker certificate
+    // is returned by PerUsage/GetUsage for the actual process
     function Add(const cert: ICryptCert): TCryptCertUsages;
     /// fast lookup of a certificate per its usage
     function GetUsage(u: TCryptCertUsage; out cert: ICryptCert): boolean;
     /// fast lookup of a certificate per its usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
       {$ifdef HASINLINE} inline; {$endif}
-    /// save all items as a CRLF separated list of PEM certificates
+    /// save all items as a CRLF separated list of cccCertOnly PEM certificates
     function AsPem: RawUtf8;
     /// clear and load a CRLF separated list of PEM certificates
     // - returns the duplicated usages found during adding certificates
     function FromPem(algo: TCryptCertAlgo; const pem: RawUtf8): TCryptCertUsages;
+    /// save all items as a single binary blob of cccCertOnly certificates
+    // - binary layout is just 32-bit length followed by the DER serialization
+    function AsBinary: RawByteString;
+    /// clear and load a binary blob of certificates saved by AsBinary
+    // - returns the duplicated usages found during adding certificates
+    function FromBinary(algo: TCryptCertAlgo; const bin: RawByteString): TCryptCertUsages;
   end;
 
 const
@@ -4814,8 +4824,7 @@ end;
 procedure TCryptCertPerUsage.Clear;
 begin
   List := nil;
-  Usages := [];
-  FillCharFast(CertPerUsage, SizeOf(CertPerUsage), 0);
+  FillCharFast(self, SizeOf(self), 0);
 end;
 
 function TCryptCertPerUsage.Add(const cert: ICryptCert): TCryptCertUsages;
@@ -4889,6 +4898,48 @@ begin
     c := algo.Load(one);
     if c <> nil then
       result := result + Add(c);
+  end;
+end;
+
+function TCryptCertPerUsage.AsBinary: RawByteString;
+var
+  i: PtrInt;
+  s: TRawByteStringStream;
+begin
+  s := TRawByteStringStream.Create;
+  try
+    for i := 0 to length(List) - 1 do
+      WriteStringToStream(s, List[i].Save(cccCertOnly, '', ccfBinary));
+    result := s.DataString;
+  finally
+    s.Free;
+  end;
+end;
+
+function TCryptCertPerUsage.FromBinary(algo: TCryptCertAlgo;
+  const bin: RawByteString): TCryptCertUsages;
+var
+  s: TRawByteStringStream;
+  one: RawByteString;
+  c: ICryptCert;
+begin
+  Clear;
+  result := [];
+  if (algo = nil) or
+     (bin = '') then
+    exit;
+  s := TRawByteStringStream.Create(bin);
+  try
+    repeat
+      one := ReadStringFromStream(s, 65536);
+      if one = '' then
+        break;
+      c := algo.Load(one);
+      if c <> nil then
+        result := result + Add(c);
+    until false;
+  finally
+    s.Free;
   end;
 end;
 
