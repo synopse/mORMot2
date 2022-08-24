@@ -7383,6 +7383,7 @@ begin
     // append low-level Operating System entropy from mormot.core.os
     XorOSEntropy(data); // detailed system cpu and memory info + system random
     sha3.Update(@data, SizeOf(data));
+    FillZero(data.b);
     // XOR previously retrieved OS entropy using SHA-3 in 256-bit XOF mode
     result := sha3.Cypher(fromos);
   finally
@@ -8719,13 +8720,14 @@ end;
 function TSha3.FullStr(Algo: TSha3Algo; Buffer: pointer;
   Len, DigestBits: integer): RawUtf8;
 var
-  tmp: RawByteString;
+  tmp: THash512;
 begin
   if DigestBits = 0 then
     DigestBits := SHA3_DEF_LEN[Algo];
-  SetLength(tmp, DigestBits shr 3);
-  Full(Algo, Buffer, Len, pointer(tmp), DigestBits);
-  result := mormot.core.text.BinToHex(tmp);
+  if DigestBits > 512 then
+    raise ESynCrypto.CreateUtf8('TSha3.FullStr(bits=%)?', [DigestBits]);
+  Full(Algo, Buffer, Len, @tmp, DigestBits);
+  result := mormot.core.text.BinToHex(@tmp, DigestBits shr 3);
   FillZero(tmp);
 end;
 
