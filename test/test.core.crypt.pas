@@ -2193,7 +2193,7 @@ var
   a, i: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
-  n, h, nprev, aead, pub, priv, pub2, priv2, jwt, iss, sub: RawUtf8;
+  n, h, nprev, aead, pub, priv, pub2, priv2, jwt, iss, sub, s2, s3: RawUtf8;
   r, s: RawByteString;
   aes: TAesAbstract;
   key: THash256;
@@ -2205,6 +2205,7 @@ var
   en, de: ICryptCipher;
   crt: TCryptCertAlgo;
   c1, c2, c3, c4: ICryptCert;
+  fields: TCryptCertFields;
   str: TCryptStoreAlgo;
   st1, st2, st3: ICryptStore;
   cpe: TCryptCertPerUsage;
@@ -2484,11 +2485,15 @@ begin
     end;
     checkEqual(c1.SharedSecret(nil), '', 'shared(nil)');
     // validate signed certificate with c1 as CA
+    s3 := GuidToRawUtf8(RandomGuid);
+    Check(TrimGuid(s3));
     c3 := crt.New;
-    c3.Generate([cuDataEncipherment, cuKeyAgreement], 'signed', c1);
+    c3.Generate([cuDataEncipherment, cuKeyAgreement], s3, c1);
     Check(not c3.IsEqual(c1));
     Check(not c3.IsEqual(c2));
     Check(not c3.IsSelfSigned);
+    if crt.AlgoName <> 'syn-es256-v1' then
+      CheckEqual(c3.GetSubject, s3);
     Check(c3.HasPrivateSecret);
     CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
     Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
@@ -2503,9 +2508,14 @@ begin
       r := c3.Encrypt(n, 'aes-128-cbc');
       CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding');
     end;
+    s2 := GuidToRawUtf8(RandomGuid);
+    Check(TrimGuid(s2));
     c2 := crt.New;
-    c2.Generate([cuDigitalSignature, cuKeyAgreement], 'self.signed', nil);
+    fields.CommonName := s2;
+    c2.Generate([cuDigitalSignature, cuKeyAgreement], '', nil, 30, -1, @fields);
     Check(c2.IsSelfSigned);
+    if crt.AlgoName <> 'syn-es256-v1' then
+      CheckEqual(c2.GetSubject, s2);
     if c2.GetAuthorityKey <> c2.GetSubjectKey then
       CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
     if crt.AlgoName <> 'syn-es256-v1' then

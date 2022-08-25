@@ -5287,7 +5287,7 @@ begin
      (Fields <> nil) then
     sub := Fields^.CommonName; // like TCryptCertOpenSsl.Generate()
   fEcc := TEccCertificateSecret.CreateNew(
-    auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
+    auth, '', ExpireDays, start, true, Usages, sub, fMaxVersion);
   result := self;
 end;
 
