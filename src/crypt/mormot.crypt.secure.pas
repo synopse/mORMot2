@@ -4859,7 +4859,7 @@ function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
 var
   i: PtrInt;
 begin
-  i := CertPerUsage[u]; // stores index + 1
+  i := CertPerUsage[u]; // contains index + 1
   if i = 0 then
     result := false
   else
@@ -4909,7 +4909,7 @@ end;
 function TCryptCertPerUsage.AsBinary: RawByteString;
 var
   i: PtrInt;
-  tmp: TTextWriterStackBuffer;
+  tmp: TTextWriterStackBuffer; // no allocation for a few certificates
   s: TBufferWriter;
 begin
   s := TBufferWriter.Create(tmp);
