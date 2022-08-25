@@ -4832,13 +4832,18 @@ var
   u: TCryptCertUsage;
   n: PtrInt;
 begin
+  result := [];
+  if cert = nil then
+    exit;
+  result := cert.GetUsage;
+  if result = [] then
+    exit;
   n := length(List);
   if n = 255 then
     raise ECryptCert.Create('TCryptCertPerUsage.Add overflow'); // paranoid
   SetLength(List, n + 1);
   List[n] := cert;
   inc(n); // CertPerUsage[u] stores index + 1
-  result := cert.GetUsage;
   for u := low(u) to high(u) do
     if u in result then
     begin

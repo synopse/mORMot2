@@ -2533,6 +2533,10 @@ begin
     check(cpe.Usages = []);
     check(not cpe.GetUsage(cuCA, c4));
     check(c4 = nil);
+    check(cpe.Add(nil) = []);
+    check(cpe.Usages = []);
+    check(not cpe.GetUsage(cuCA, c4));
+    check(c4 = nil);
     check(cpe.Add(c1) = []);
     check(cpe.Usages = c1.GetUsage);
     if cpe.Usages = CU_ALL then // 'syn-es256-v1'
