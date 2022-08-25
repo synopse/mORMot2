@@ -233,10 +233,10 @@ type
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
     fAccessControlAllowCredential: boolean;
-    fRootRedirectToURI: array[boolean] of RawUtf8;
     fUse: TRestHttpServerUse;
-    fLog: TSynLogClass;
     fOptions: TRestHttpServerOptions;
+    fRootRedirectToURI: array[boolean] of RawUtf8;
+    fLog: TSynLogClass;
     fOnCustomRequest: TOnRestHttpServerRequest;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;

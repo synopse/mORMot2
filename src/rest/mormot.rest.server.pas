@@ -2422,8 +2422,9 @@ function ServiceRunningContext: PServiceRunningContext;
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
-function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean = false): RawUtf8;
-  overload;
+function CurrentNonce(Ctxt: TRestServerUriContext;
+  Previous: boolean = false): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns a safe 256-bit nonce, changing every 5 minutes
 // - can return the (may be cached) value as hexadecimal text or THash256 binary
@@ -5006,9 +5007,9 @@ var
 begin
   if ServerNonceHasher.Algorithm <> SHA3_256 then
   begin
-    // first time used: initialize the private secret for this process lifetime
+    // first time used: initialize the private secret
     sha3.Init(SHA3_256);
-    TAesPrng.Fill(tmp); // random seed
+    TAesPrng.Fill(tmp); // random seed for this process lifetime
     sha3.Update(@tmp, SizeOf(tmp));
     ServerNonceSafe.Lock;
     if ServerNonceHasher.Algorithm <> SHA3_256 then // atomic init
