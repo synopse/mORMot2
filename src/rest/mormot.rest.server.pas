@@ -5043,20 +5043,23 @@ begin
   if Previous then
     dec(ticks);
   with ServerNonceCache[Previous] do
+  begin
+    ServerNonceSafe.Lock;
     if (ticks = tix) and
        (res <> '') then  // check for res='' since ticks may be 0 at startup
     begin
       // fast retrieval from cache as binary or hexadecimal
-      ServerNonceSafe.Lock;
       if Nonce256 <> nil then
         Nonce256^ := hash;
       if Nonce <> nil then
         Nonce^ := res;
       ServerNonceSafe.UnLock;
-    end
-    else
-      // we need to (re)compute this value
-      CurrentServerNonceCompute(ticks, Previous, Nonce, Nonce256);
+      exit;
+    end;
+    ServerNonceSafe.UnLock;
+    // we need to (re)compute this value
+    CurrentServerNonceCompute(ticks, Previous, Nonce, Nonce256);
+  end;
 end;
 
 function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
