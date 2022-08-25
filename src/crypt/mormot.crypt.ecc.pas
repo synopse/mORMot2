@@ -5257,11 +5257,12 @@ function TCryptCertInternal.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
+  sub: RawUtf8;
   start: TDateTime;
   a: TCryptCert;
   auth: TEccCertificateSecret;
 begin
-  // note: Fields is unsupported (yet)
+  // note: only Fields^.CommonName is supported if no Subjects is set (yet)
   if fEcc <> nil then
     RaiseErrorGenerate('duplicated call');
   if ValidDays = 0 then
@@ -5281,6 +5282,10 @@ begin
       RaiseError('Generate: Authority holds % which has no private key', [a]);
     auth := TCryptCertInternal(a).fEcc as TEccCertificateSecret;
   end;
+  sub := Subjects;
+  if (sub = '') and
+     (Fields <> nil) then
+    sub := Fields^.CommonName; // like TCryptCertOpenSsl.Generate()
   fEcc := TEccCertificateSecret.CreateNew(
     auth, '', ExpireDays, start, true, Usages, Subjects, fMaxVersion);
   result := self;
