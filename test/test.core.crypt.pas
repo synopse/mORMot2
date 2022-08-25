@@ -2204,12 +2204,14 @@ var
   asy: TCryptAsym;
   en, de: ICryptCipher;
   crt: TCryptCertAlgo;
-  c1, c2, c3: ICryptCert;
+  c1, c2, c3, c4: ICryptCert;
   str: TCryptStoreAlgo;
   st1, st2, st3: ICryptStore;
+  cpe: TCryptCertPerUsage;
   alg: TCryptAlgos;
   fmt: TCryptCertFormat;
   cv: TCryptCertValidity;
+  u: TCryptCertUsage;
   namelen: integer;
   names: RawUtf8;
 
@@ -2524,6 +2526,72 @@ begin
     s := c2.SharedSecret(c3);
     check(c3.SharedSecret(c2) = s, 'sharedsecret');
     check( (s <> '') = (crt.AsymAlgo = caaES256), 'caaES256=sharedsecret');
+    // c1 has [cuCA, cuDigitalSignature, cuKeyCertSign]
+    // c2 has [cuDigitalSignature, cuKeyAgreement]
+    // c3 has [cuDataEncipherment, cuKeyAgreement]
+    cpe.Clear;
+    check(cpe.Usages = []);
+    check(not cpe.GetUsage(cuCA, c4));
+    check(c4 = nil);
+    check(cpe.Add(c1) = []);
+    check(cpe.Usages = c1.GetUsage);
+    if cpe.Usages = CU_ALL then // 'syn-es256-v1'
+    begin
+      for u := low(u) to high(u) do
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c1);
+      end;
+      check(cpe.Add(c2) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+      for u := low(u) to high(u) do
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c2);
+      end;
+      check(cpe.Add(c3) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+      for u := low(u) to high(u) do
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c3);
+      end;
+    end
+    else
+    begin
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(not cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = nil);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c1);
+      check(not cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = nil);
+      check(cpe.Add(c2) = [cuDigitalSignature]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement]);
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = c2);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c2);
+      check(not cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = nil);
+      check(cpe.Add(c3) = [cuKeyAgreement]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement, cuDataEncipherment]);
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = c3);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c2);
+      check(cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = c3);
+    end;
+    cpe.Clear;
+    check(cpe.Usages = []);
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
