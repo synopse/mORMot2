@@ -4859,7 +4859,7 @@ function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
 var
   i: PtrInt;
 begin
-  i := CertPerUsage[u];
+  i := CertPerUsage[u]; // stores index + 1
   if i = 0 then
     result := false
   else

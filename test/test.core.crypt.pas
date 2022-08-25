@@ -2535,17 +2535,26 @@ begin
     check(c4 = nil);
     check(cpe.Add(nil) = []);
     check(cpe.Usages = []);
-    check(not cpe.GetUsage(cuCA, c4));
-    check(c4 = nil);
+    for u := low(u) to high(u) do
+    begin
+      check(not cpe.GetUsage(u, c4));
+      check(c4 = nil);
+    end;
     check(cpe.Add(c1) = []);
     check(cpe.Usages = c1.GetUsage);
-    if cpe.Usages = CU_ALL then // 'syn-es256-v1'
-    begin
-      for u := low(u) to high(u) do
+    for u := low(u) to high(u) do
+      if u in cpe.Usages then
       begin
         check(cpe.GetUsage(u, c4));
         check(c4 = c1);
+      end
+      else
+      begin
+        check(not cpe.GetUsage(u, c4));
+        check(c4 = nil);
       end;
+    if cpe.Usages = CU_ALL then // 'syn-es256-v1'
+    begin
       check(cpe.Add(c2) = CU_ALL);
       check(cpe.Usages = CU_ALL);
       for u := low(u) to high(u) do
@@ -2574,6 +2583,8 @@ begin
       check(cpe.Add(c2) = [cuDigitalSignature]);
       check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
         cuKeyAgreement]);
+      for u := low(u) to high(u) do
+        check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
       check(cpe.GetUsage(cuCA, c4));
       check(c4 = c1);
       check(cpe.GetUsage(cuKeyAgreement, c4));
@@ -2585,6 +2596,8 @@ begin
       check(cpe.Add(c3) = [cuKeyAgreement]);
       check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
         cuKeyAgreement, cuDataEncipherment]);
+      for u := low(u) to high(u) do
+        check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
       check(cpe.GetUsage(cuCA, c4));
       check(c4 = c1);
       check(cpe.GetUsage(cuKeyAgreement, c4));
