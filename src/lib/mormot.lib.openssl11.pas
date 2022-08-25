@@ -1920,8 +1920,10 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_RE
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
-procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS); cdecl;
-function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
+procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS);
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
+  {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
 function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
@@ -3783,7 +3785,7 @@ begin
 end;
 
 function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS;
-   _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
+  _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
 begin
   result := libcrypto.d2i_BASIC_CONSTRAINTS(a, _in, len);
 end;
