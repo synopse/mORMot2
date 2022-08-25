@@ -2607,8 +2607,27 @@ begin
       check(cpe.GetUsage(cuDataEncipherment, c4));
       check(c4 = c3);
     end;
+    s := cpe.AsBinary;
+    check(s <> '');
     cpe.Clear;
     check(cpe.Usages = []);
+    check(cpe.AsBinary = '');
+    if crt.AlgoName = 'syn-es256-v1' then
+    begin
+      check(cpe.FromBinary(crt, s) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+    end
+    else
+    begin
+      check(cpe.FromBinary(crt, s) = [cuDigitalSignature, cuKeyAgreement]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement, cuDataEncipherment]);
+    end;
+    for u := low(u) to high(u) do
+    begin
+      check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
+      check((c4 <> nil) = (u in cpe.Usages));
+    end;
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);

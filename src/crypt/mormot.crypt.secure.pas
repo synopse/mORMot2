@@ -1752,7 +1752,7 @@ type
     // - returns the duplicated usages found during adding certificates
     function FromPem(algo: TCryptCertAlgo; const pem: RawUtf8): TCryptCertUsages;
     /// save all items as a single binary blob of cccCertOnly certificates
-    // - binary layout is just 32-bit length followed by the DER serialization
+    // - binary layout is TBufferWriter.WriteVar() of all DER serialization
     function AsBinary: RawByteString;
     /// clear and load a binary blob of certificates saved by AsBinary
     // - returns the duplicated usages found during adding certificates
@@ -4909,13 +4909,14 @@ end;
 function TCryptCertPerUsage.AsBinary: RawByteString;
 var
   i: PtrInt;
-  s: TRawByteStringStream;
+  tmp: TTextWriterStackBuffer;
+  s: TBufferWriter;
 begin
-  s := TRawByteStringStream.Create;
+  s := TBufferWriter.Create(tmp);
   try
     for i := 0 to length(List) - 1 do
-      WriteStringToStream(s, List[i].Save(cccCertOnly, '', ccfBinary));
-    result := s.DataString;
+      s.Write(List[i].Save(cccCertOnly, '', ccfBinary));
+    result := s.FlushTo;
   finally
     s.Free;
   end;
@@ -4924,8 +4925,7 @@ end;
 function TCryptCertPerUsage.FromBinary(algo: TCryptCertAlgo;
   const bin: RawByteString): TCryptCertUsages;
 var
-  s: TRawByteStringStream;
-  one: RawByteString;
+  s: TFastReader;
   c: ICryptCert;
 begin
   Clear;
@@ -4933,18 +4933,12 @@ begin
   if (algo = nil) or
      (bin = '') then
     exit;
-  s := TRawByteStringStream.Create(bin);
-  try
-    repeat
-      one := ReadStringFromStream(s, 65536);
-      if one = '' then
-        break;
-      c := algo.Load(one);
-      if c <> nil then
-        result := result + Add(c);
-    until false;
-  finally
-    s.Free;
+  s.Init(bin);
+  while not s.EOF do
+  begin
+    c := algo.Load(s.VarString);
+    if c <> nil then
+      result := result + Add(c);
   end;
 end;
 
