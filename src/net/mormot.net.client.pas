@@ -353,11 +353,6 @@ type
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
     {$endif DOMAINRESTAUTH}
 
-    /// by default, the client is identified as IE 5.5, which is very
-    // friendly welcome by most servers :(
-    // - you can specify a custom value here
-    property UserAgent: RawUtf8
-      read fUserAgent write fUserAgent;
     /// the optional 'Accept: ' header value
     property Accept: RawUtf8
       read fAccept write fAccept;
@@ -391,9 +386,6 @@ type
     /// contain the body data retrieved from the server - from inherited Http
     property Content: RawByteString
       read Http.Content;
-    /// contain the body data length retrieved from the server - from inherited Http
-    property ContentLength: Int64
-      read Http.ContentLength;
     /// contain the response headers retrieved from the server - from inherited Http
     property Headers: RawUtf8
       read Http.Headers;
@@ -413,6 +405,18 @@ type
     /// optional callback called after each Request()
     property OnAfterRequest: TOnHttpClientSocketRequest
       read fOnAfterRequest write fOnAfterRequest;
+  published
+    /// by default, the client is identified as IE 5.5, which is very
+    // friendly welcome by most servers :(
+    // - you can specify a custom value here
+    property UserAgent: RawUtf8
+      read fUserAgent write fUserAgent;
+    /// contain the body data length retrieved from the server
+    property ContentLength: Int64
+      read Http.ContentLength;
+    /// contain the body type retrieved from the server
+    property ContentType: RawUtf8
+      read Http.ContentType;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
