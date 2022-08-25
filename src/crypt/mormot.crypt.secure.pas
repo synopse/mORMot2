@@ -1728,7 +1728,7 @@ type
     Usages: TCryptCertUsages;
     /// lookup table used by GetUsage()/PerUsage()
     // - 0 means no certificate, or store the index in Cert[] + 1
-    CertPerUsage: array[TCryptCertUsage] of byte;
+    Index: array[TCryptCertUsage] of byte;
     /// reset all storage and indexes
     procedure Clear;
     /// register the certificate to the internal list
@@ -1791,9 +1791,29 @@ const
   CV_VALIDSIGN =
     [cvValidSigned, cvValidSelfSigned];
 
+  /// a two-char identifier of Certificate usage
+  // - as used by ToText(u: TCryptCertUsages, from_cu_text=true)
+  CU_TEXT: array[TCryptCertUsage, 0..1] of AnsiChar = (
+    'ca',  //  cuCA
+    'eo',  //  cuEncipherOnly
+    'rs',  //  cuCrlSign
+    'ks',  //  cuKeyCertSign
+    'ka',  //  cuKeyAgreement
+    'de',  //  cuDataEncipherment
+    'ke',  //  cuKeyEncipherment
+    'nr',  //  cuNonRepudiation
+    'ds',  //  cuDigitalSignature
+    'do',  //  cuDecipherOnly
+    'ts',  //  cuTlsServer
+    'tc',  //  cuTlsClient
+    'em',  //  cuEmail
+    'cs',  //  cuCodeSign
+    'os',  //  cuOcspSign
+    'tm'); //  cuTimestamp
+
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
-function ToText(u: TCryptCertUsages): ShortString; overload;
+function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
 function ToText(v: TCryptCertValidity): PShortString; overload;
 
 /// main resolver of the randomness generators
@@ -4623,8 +4643,12 @@ end;
 
 procedure TCryptCert.SaveToFile(const Dest: TFileName; Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat);
+var
+  s: RawByteString;
 begin
-  FileFromString(Save(Content, PrivatePassword, Format), Dest);
+  s := Save(Content, PrivatePassword, Format);
+  FileFromString(s, Dest);
+  FillZero(s); // may be a private key with no password :(
 end;
 
 function TCryptCert.IsEqual(const another: ICryptCert): boolean;
@@ -4848,9 +4872,9 @@ begin
     if u in result then
     begin
       include(Usages, u);
-      if CertPerUsage[u] = 0 then
+      if Index[u] = 0 then
         exclude(result, u);
-      CertPerUsage[u] := n; // replace any existing certificate
+      Index[u] := n; // replace any existing certificate
     end;
 end;
 
@@ -4859,7 +4883,7 @@ function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
 var
   i: PtrInt;
 begin
-  i := CertPerUsage[u]; // contains index + 1
+  i := Index[u]; // contains index + 1
   if i = 0 then
     result := false
   else
@@ -4954,9 +4978,19 @@ begin
   result := GetEnumName(TypeInfo(TCryptCertUsage), ord(u));
 end;
 
-function ToText(u: TCryptCertUsages): ShortString;
+function ToText(u: TCryptCertUsages; from_cu_text: boolean): ShortString;
+var
+  cu: TCryptCertUsage;
 begin
-  GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
+  if from_cu_text then
+  begin
+    result := '';
+    for cu := low(cu) to high(cu) do
+      if cu in u then
+        AppendShortBuffer(@CU_TEXT[cu], 2, result);
+  end
+  else
+    GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
 end;
 
 function ToText(v: TCryptCertValidity): PShortString;

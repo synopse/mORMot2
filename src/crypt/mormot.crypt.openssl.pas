@@ -2240,7 +2240,7 @@ begin
     EOpenSslCert.Check(X509_set_issuer_name(fX509, X509_get_subject_name(a)));
     if not fX509.SetExtension(NID_authority_key_identifier, 'keyid:always', a) then
       RaiseError('Sign: AKID'); // see RFC 3280
-    if fX509.Sign(auth.fPrivKey, auth.GetMD) = 0 then
+    if fX509.Sign(auth.fPrivKey, auth.GetMD) = {size=} 0 then
       RaiseError('Sign: CA Sign');
   end
   else
@@ -2676,7 +2676,7 @@ end;
 
 function ToText(u: TX509Usages): ShortString;
 begin
-  result := ToText(TCryptCertUsages(u)); // both sets do match
+  result := ToText(TCryptCertUsages(u), {cu_text}false); // both sets do match
 end;
 
 function X509Algo(x: PX509): TCryptAsymAlgo;
