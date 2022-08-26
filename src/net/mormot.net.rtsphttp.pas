@@ -88,7 +88,7 @@ type
     fPendingGet: TRawUtf8List;
     function GetHttpPort: RawUtf8;
     // creates TPostConnection and TRtspConnection instances for a given stream
-    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
+    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
@@ -234,7 +234,7 @@ type
   end;
 
 function TRtspOverHttpServer.ConnectionCreate(aSocket: TNetSocket;
-  const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
+  const aRemoteIp: TNetAddr; out aConnection: TAsyncConnection): boolean;
 var
   log: ISynLog;
   sock, get, old: TProxySocket;
@@ -267,7 +267,7 @@ begin
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
-      sock.RemoteIP := aRemoteIp;
+      aRemoteIp.IP(sock.fRemoteIP);
       sock.CreateSockIn; // faster header process (released below once not needed)
       parse := sock.GetRequest({withBody=}false, {headertix=}0);
       if (parse = grHeaderReceived) and
