@@ -503,6 +503,7 @@ function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 const
   /// this constant is used by TRestHttpServer to return a nice /favicon.ico
   FAVICON_BINARY: RawByteString =
+    RawByteString( // for Delphi Unicode :(
     #$00#$00#$01#$00#$01#$00#$18#$18#$10#$00#$01#$00#$04#$00#$e8#$01 +
     #$00#$00#$16#$00#$00#$00#$28#$00#$00#$00#$18#$00#$00#$00#$30#$00 +
     #$00#$00#$01#$00#$04#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
@@ -534,7 +535,7 @@ const
     #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
     #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$80#$00 +
     #$00#$00#$80#$00#$01#$00#$c0#$00#$01#$00#$e0#$00#$03#$00#$e0#$00 +
-    #$07#$00#$f0#$00#$07#$00#$fc#$00#$1f#$00#$ff#$00#$7f#$00;
+    #$07#$00#$f0#$00#$07#$00#$fc#$00#$1f#$00#$ff#$00#$7f#$00);
 
 // could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
 function UrlFavicon(P: PUtf8Char): boolean;
