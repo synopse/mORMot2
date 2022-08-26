@@ -616,6 +616,46 @@ type
   end;
   {$M-}
 
+  /// store a list of IPv4 which should be rejected at connection
+  // - more tuned than TIPBan for checking just after accept()
+  // - used e.g. for hsoBan40xIP
+  THttpAcceptBan = class(TSynPersistent)
+  protected
+    fLock: TLightLock; // may block only in IdleEverySecond
+    fCount, fCurrent: integer;
+    fIP: array of TCardinalDynArray; // one list per second
+    fSeconds, fMax, fWhiteIP: cardinal;
+    fTotal: Int64;
+  public
+    /// initialize the thread-safe storage process
+    // - banseconds should be a power-of-two <= 128
+    // - maxpersecond is the maximum number of banned IPs remembered per second
+    constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
+      whiteip: cardinal = cLocalhost32); reintroduce;
+    /// register an IP4 to be rejected
+    function BanIP(ip4: cardinal): boolean; overload;
+    /// register an IP4 to be rejected
+    procedure BanIP(const ip4: RawUtf8); overload;
+    /// fast check if this IP4 is to be rejected
+    function IsBanned(const addr: TNetAddr): boolean;
+    /// register an IP4 if status in >= 400 (but not 401/403)
+    function ShouldBan(status, ip4: cardinal): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// called every second to remove deprecated bans from the list
+    // - implemented via a round-robin list of per-second banned IPs
+    procedure IdleEverySecond;
+  published
+    /// total number of banned IP4 since the beginning
+    property Total: Int64
+      read fTotal;
+    /// current number of banned IP4
+    property Count: integer
+      read fCount;
+    /// how many seconds a banned IP4 should be rejected
+    property Seconds: cardinal
+      read fSeconds;
+  end;
+
 
 implementation
 
@@ -1913,6 +1953,113 @@ end;
 procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);
 begin
   AppendLine(fOutCustomHeaders, Values);
+end;
+
+
+{ THttpAcceptBan }
+
+constructor THttpAcceptBan.Create(banseconds: cardinal; maxpersecond: cardinal;
+  whiteip: cardinal);
+var
+  i: PtrInt;
+begin
+  if not (banseconds in [1, 2, 4, 8, 16, 32, 64, 128]) then
+    raise EHttpSocket.CreateFmt(
+      '%.Create: banseconds=% should be a small power of two',
+      [ClassNameShort(self)^, banseconds]);
+  fSeconds := banseconds;
+  fMax := maxpersecond;
+  fWhiteIP := whiteip;
+  SetLength(fIP, banseconds); // default 4
+  for i := 0 to banseconds - 1 do
+    SetLength(fIP[i], maxpersecond + 1); // 1st item is the count
+end;
+
+function THttpAcceptBan.BanIP(ip4: cardinal): boolean;
+var
+  P: PCardinalArray;
+begin
+  if (self = nil) or
+     (ip4 = 0) or
+     (ip4 = fWhiteIP) then
+   result := false
+  else
+  begin
+    fLock.Lock;
+    P := pointer(fIP[fCurrent]); // 1st item is the count
+    if P[0] < fMax then
+    begin
+      inc(P[0]);
+      inc(fCount);
+    end;
+    P[P[0]] := ip4;
+    inc(fTotal);
+    fLock.UnLock;
+    result := true;
+  end;
+end;
+
+procedure THttpAcceptBan.BanIP(const ip4: RawUtf8);
+var
+  c: cardinal;
+begin
+  if IPToCardinal(pointer(ip4), c) then
+    BanIP(c);
+end;
+
+function THttpAcceptBan.IsBanned(const addr: TNetAddr): boolean;
+var
+  s: ^PCardinalArray;
+  P: PCardinalArray;
+  ip4, n: cardinal;
+begin
+  result := false;
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  ip4 := addr.IP4;
+  if ip4 = 0 then
+    exit;
+  fLock.Lock;
+  s := pointer(fIP);
+  n := fMax;
+  repeat
+    P := s^;
+    inc(s);
+    if (P[0] <> 0) and // 1st item is the count
+       IntegerScanExists(@P[1], P[0], ip4) then // O(n) SSE2 asm on i386/x86_64
+    begin
+      result := true;
+      break;
+    end;
+    dec(n);
+  until n = 0;
+  fLock.UnLock;
+end;
+
+function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
+begin
+  result := (self <> nil) and
+            ((status = HTTP_BADREQUEST) or  // naive heuristic
+             (status > HTTP_FORBIDDEN)) and // allow 401/403 retry
+            BanIP(ip4)
+end;
+
+procedure THttpAcceptBan.IdleEverySecond;
+var
+  n: PtrInt;
+  p: PCardinal;
+begin
+  if self = nil then
+    exit;
+  n := fSeconds - 1; // power of two mask
+  fLock.Lock;
+  n := (fCurrent + 1) and n; // per-second round robin
+  fCurrent := n;
+  p := @fIP[n][0]; // 1st item is the count
+  dec(fCount, p^);
+  p^ := 0;         // the oldest slot becomes the current (no memory move)
+  fLock.UnLock;
 end;
 
 
