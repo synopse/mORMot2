@@ -341,8 +341,9 @@ type
   TAsyncConnection = class(TPollAsyncConnection)
   protected
     fLastOperation: TAsyncConnectionSec;
+    fRemoteIP4: cardinal; // may contain cLocalhost32 = 127.0.0.1
+    fRemoteIP: RawUtf8;   // never contains '127.0.0.1'
     fOwner: TAsyncConnections;
-    fRemoteIP: RawUtf8;
     // called after TAsyncConnections.LastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     // - should finish quickly and be non-blocking
@@ -351,9 +352,9 @@ type
   public
     /// initialize this instance
     constructor Create(aOwner: TAsyncConnections;
-      const aRemoteIP: RawUtf8); reintroduce; virtual;
+      const aRemoteIP: TNetAddr); reintroduce; virtual;
     /// reuse this instance for a new incoming connection
-    procedure Recycle(const aRemoteIP: RawUtf8); virtual;
+    procedure Recycle(const aRemoteIP: TNetAddr); virtual;
     /// read-only access to the associated connections list
     property Owner: TAsyncConnections
       read fOwner;
@@ -499,7 +500,7 @@ type
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
     procedure DoGC;
-    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
+    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
       aAddAndSubscribe: boolean = true): boolean; virtual;
@@ -772,7 +773,7 @@ type
     function DoRequest: TPollAsyncSocketOnReadWrite;
   public
     /// reuse this instance for a new incoming connection
-    procedure Recycle(const aRemoteIP: RawUtf8); override;
+    procedure Recycle(const aRemoteIP: TNetAddr); override;
   end;
 
   /// event-driven process of HTTP/WebSockets connections
@@ -1613,16 +1614,16 @@ end;
 { TAsyncConnection }
 
 constructor TAsyncConnection.Create(aOwner: TAsyncConnections;
-  const aRemoteIP: RawUtf8);
+  const aRemoteIP: TNetAddr);
 begin
   fOwner := aOwner;
   inherited Create;
-  if aRemoteIP <> IP4local then
-    fRemoteIP := aRemoteIP;
+  fRemoteIP4 := aRemoteIP.IP4;
+  aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
   include(fFlags, fWasActive); // by definition
 end;
 
-procedure TAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   fWaitCounter := 0;
   fLockMax := false;
@@ -1632,8 +1633,8 @@ begin
   FillCharFast(fRW, SizeOf(fRW), 0);
   fSecure := nil;
   fLastOperation := 0;
-  if aRemoteIP <> IP4local then
-    fRemoteIP := aRemoteIP;
+  fRemoteIP4 := aRemoteIP.IP4;
+  aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
 end;
 
 function TAsyncConnection.OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;
@@ -2047,20 +2048,21 @@ function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
 var
   res: TNetResult;
   client: TNetSocket;
+  addr: TNetAddr;
 begin
   result := nil;
   if Terminated then
     exit;
   with fThreadClients do
     res := NewSocket(Address, Port, nlTcp, {bind=}false, timeout, timeout,
-      timeout, {retry=}0, client);
+      timeout, {retry=}0, client, @addr);
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
     raise EAsyncConnections.CreateUtf8('%: %:% connection failure (%)',
       [self, fThreadClients.Address, fThreadClients.Port, ToText(res)^]);
   // create and register the async connection as in TAsyncServer.Execute
-  if not ConnectionCreate(client, {ip=}'', result) then
+  if not ConnectionCreate(client, addr, result) then
     client.ShutdownAndClose({rdwr=}false)
   else if not fClients.Start(result) then
     FreeAndNil(result);
@@ -2140,7 +2142,7 @@ begin
 end;
 
 function TAsyncConnections.ConnectionCreate(aSocket: TNetSocket;
-  const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
+  const aRemoteIp: TNetAddr; out aConnection: TAsyncConnection): boolean;
 begin
   // you can override this class then call ConnectionNew
   if Terminated then
@@ -2839,7 +2841,7 @@ begin
             break;
           // if we reached here, we have accepted a connection -> process
           start := 0;
-          if ConnectionCreate(client, sin.IP, connection) then
+          if ConnectionCreate(client, sin, connection) then
           begin
             // no log here, because already done in ConnectionNew and Start()
             // may do connection.Free in atpReadPending background -> log before
@@ -2940,7 +2942,7 @@ begin
   // inherited AfterCreate; // void parent method
 end;
 
-procedure THttpAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+procedure THttpAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   inherited Recycle(aRemoteIP);
   fConnectionOpaque.Value := nil;
