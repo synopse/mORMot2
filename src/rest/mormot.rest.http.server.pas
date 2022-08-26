@@ -238,6 +238,7 @@ type
     fRootRedirectToURI: array[boolean] of RawUtf8;
     fLog: TSynLogClass;
     fOnCustomRequest: TOnRestHttpServerRequest;
+    fFavicon: RawByteString;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
       ReplicateAllowHeaders: boolean);
@@ -458,6 +459,10 @@ type
     // so allow any kind of custom routing or process
     property OnCustomRequest: TOnRestHttpServerRequest
       read fOnCustomRequest write fOnCustomRequest;
+    /// you can set here some binary to be returned on GET /favicon.ico
+    // - you can use e.g. FAVICON_BINARY constant below
+    property Favicon: RawByteString
+      read fFavicon write fFavicon;
   published
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer,
@@ -495,6 +500,45 @@ type
 function ToText(use: TRestHttpServerUse): PShortString; overload;
 function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 
+const
+  /// this constant is used by TRestHttpServer to return a nice /favicon.ico
+  FAVICON_BINARY: RawByteString =
+    #$00#$00#$01#$00#$01#$00#$18#$18#$10#$00#$01#$00#$04#$00#$e8#$01 +
+    #$00#$00#$16#$00#$00#$00#$28#$00#$00#$00#$18#$00#$00#$00#$30#$00 +
+    #$00#$00#$01#$00#$04#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
+    #$00#$00#$00#$00#$00#$00#$10#$00#$00#$00#$00#$00#$00#$00#$01#$02 +
+    #$ef#$00#$05#$05#$08#$00#$55#$55#$55#$00#$03#$03#$c3#$00#$8c#$8c +
+    #$8c#$00#$ff#$ff#$ff#$00#$6d#$6d#$71#$00#$a3#$a3#$ab#$00#$09#$09 +
+    #$9b#$00#$35#$35#$36#$00#$00#$00#$2b#$00#$08#$08#$4f#$00#$cb#$cb +
+    #$cb#$00#$00#$00#$71#$00#$0f#$2d#$f8#$00#$00#$6e#$fd#$00#$55#$55 +
+    #$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$57#$62 +
+    #$22#$67#$55#$55#$55#$55#$55#$55#$55#$52#$67#$7c#$cc#$77#$66#$55 +
+    #$55#$55#$55#$55#$56#$64#$42#$11#$11#$12#$44#$64#$55#$55#$55#$55 +
+    #$22#$61#$11#$11#$11#$11#$19#$66#$65#$55#$55#$52#$22#$11#$11#$1a +
+    #$aa#$11#$11#$12#$26#$55#$55#$76#$21#$11#$ab#$dd#$dd#$db#$a1#$11 +
+    #$22#$c5#$55#$64#$11#$1a#$d8#$33#$33#$88#$da#$11#$16#$25#$54#$76 +
+    #$11#$ad#$83#$30#$00#$33#$8d#$a1#$14#$7c#$c2#$41#$11#$b8#$30#$00 +
+    #$00#$00#$38#$b1#$11#$42#$42#$61#$1a#$d3#$00#$00#$00#$00#$33#$da +
+    #$11#$62#$22#$21#$1b#$83#$00#$00#$e0#$00#$03#$8a#$11#$22#$92#$91 +
+    #$1b#$83#$00#$0f#$fe#$00#$03#$8a#$11#$22#$92#$91#$1b#$83#$00#$0e +
+    #$fe#$00#$03#$8a#$11#$22#$22#$21#$1a#$83#$00#$00#$00#$0e#$03#$da +
+    #$11#$29#$49#$61#$4a#$d3#$30#$00#$00#$00#$38#$d1#$11#$29#$52#$61 +
+    #$99#$b8#$33#$0e#$e0#$03#$38#$b1#$79#$66#$5c#$44#$11#$1b#$83#$33 +
+    #$33#$33#$8b#$19#$94#$65#$55#$44#$91#$11#$bd#$67#$77#$8d#$b1#$11 +
+    #$24#$45#$55#$56#$41#$11#$96#$bb#$bb#$b6#$91#$19#$46#$55#$55#$5c +
+    #$24#$91#$94#$cc#$cc#$c4#$11#$24#$25#$55#$55#$55#$c2#$77#$11#$11 +
+    #$11#$11#$97#$72#$c5#$55#$55#$55#$55#$67#$77#$74#$44#$77#$74#$65 +
+    #$55#$55#$55#$55#$55#$55#$47#$7c#$cc#$74#$45#$55#$55#$55#$ff#$ff +
+    #$ff#$00#$ff#$80#$ff#$00#$fe#$00#$3f#$00#$f8#$00#$0f#$00#$f0#$00 +
+    #$07#$00#$e0#$00#$03#$00#$c0#$00#$01#$00#$c0#$00#$01#$00#$80#$00 +
+    #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
+    #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$80#$00 +
+    #$00#$00#$80#$00#$01#$00#$c0#$00#$01#$00#$e0#$00#$03#$00#$e0#$00 +
+    #$07#$00#$f0#$00#$07#$00#$fc#$00#$1f#$00#$ff#$00#$7f#$00;
+
+// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
+function UrlFavicon(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ************ TRestHttpRemoteLogServer to Receive Remote Log Stream }
@@ -855,6 +899,7 @@ begin
     if aThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
   {$endif USEHTTPSYS}
+  fFavicon := FAVICON_BINARY; // nice default icon from browser :)
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
@@ -1059,23 +1104,36 @@ begin
       '; Path=/' + Server.Model.Root, '; Path=/')
 end;
 
+function UrlFavicon(P: PUtf8Char): boolean;
+begin
+  result := (P <> nil) and
+        (PCardinalArray(P)[0] =
+           ord('/') + ord('f') shl 8 + ord('a') shl 16 + ord('v') shl 24) and
+        (PCardinalArray(P)[1] =
+           ord('i') + ord('c') shl 8 + ord('o') shl 16 + ord('n') shl 24) and
+        (PCardinalArray(P)[2] =
+           ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
+        (P[12] = #0);
+end;
+
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
-  tls, matchcase: boolean;
+  tls, matchcase, isget: boolean;
   match: TRestModelMatch;
   i: PtrInt;
   P: PUtf8Char;
   serv: TRestServer;
 begin
   tls := hsrHttps in Ctxt.ConnectionFlags;
+  isget := Ctxt.Method = 'GET';
   if (self = nil) or
      (pointer(fDBServers) = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else if ((Ctxt.Url = '') or
            (PWord(Ctxt.Url)^ = ord('/'))) and
-          (Ctxt.Method = 'GET') then
+          isget then
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
     if fRootRedirectToUri[tls] <> '' then
     begin
@@ -1084,6 +1142,14 @@ begin
     end
     else
       result := HTTP_BADREQUEST
+  else if isGet and
+          (fFavicon <> '') and
+          UrlFavicon(pointer(Ctxt.Url)) then
+  begin
+    Ctxt.OutContent := fFavicon;
+    Ctxt.OutContentType := 'image/x-icon';
+    result := HTTP_SUCCESS;
+  end
   else if Ctxt.Method = 'OPTIONS' then
   begin
     // handle CORS
@@ -1095,6 +1161,7 @@ begin
   end
   else if (Ctxt.Method = '') or
           ((rsoOnlyJsonRequests in fOptions) and
+           not isGet and
            not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST
@@ -1106,7 +1173,7 @@ begin
     result := HTTP_NOTACCEPTABLE
   else
   begin
-    // compute URI
+    // compute the REST-oriented request information
     call.OutStatus := 0; // see call.Init
     call.OutInternalState := 0;
     call.RestAccessRights := nil;
@@ -1513,6 +1580,9 @@ begin
   end;
 end;
 
+
+initialization
+  assert(length(FAVICON_BINARY) = 510);
 
 end.
 

@@ -343,6 +343,7 @@ const
     [],
     [hsrConnectionUpgrade]);
 
+
 /// some pre-computed CryptCertAlgoOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
 // - as used e.g. by secTLSSelfSigned with the SChannel API on server side
@@ -4725,6 +4726,7 @@ begin
 end;
 
 {$endif USEWININET}
+
 
 end.
 

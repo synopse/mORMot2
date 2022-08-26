@@ -2851,7 +2851,7 @@ begin
             len := ord(HTTP_BANIP_RESPONSE[0]);
             client.Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
             client.ShutdownAndClose({rdwr=}false);    // reject before TLS setup
-            break;
+            continue;
           end;
           inc(fAccepted);
           if (fClients.fRead.Count > fMaxConnections) or
@@ -3176,7 +3176,8 @@ begin
   Send(pointer(fHttp.CommandResp), len); // no polling nor ProcessWrite
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
-  if fServer.Async.Banned.BanIP(fRemoteIP4) then
+  if (fHttp.CommandUri <> '/favicon.ico') and
+     fServer.Async.Banned.BanIP(fRemoteIP4) then
   begin
     fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
       [status, fRemoteIP, fServer.Async.Banned], self);
