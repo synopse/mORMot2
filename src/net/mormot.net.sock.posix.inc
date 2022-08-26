@@ -391,7 +391,7 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  ip4: sockaddr absolute Addr;
+  addr4: sockaddr absolute Addr;
 begin
   FillCharFast(Addr, SizeOf(Addr), 0);
   result := nrNotFound;
@@ -413,8 +413,8 @@ begin
     exit;
   end;
   // check supplied port
-  ip4.sin_port := htons(GetCardinal(pointer(addrport)));
-  if (ip4.sin_port = 0) and
+  addr4.sin_port := htons(GetCardinal(pointer(addrport)));
+  if (addr4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
   // handle simple cases
@@ -423,14 +423,14 @@ begin
      (address = c6Localhost) or
      PropNameEquals(address, 'localhost') then
   begin
-    ip4.sin_family := AF_INET;
-    PCardinal(@ip4.sin_addr)^ := cLocalhost32; // 127.0.0.1
+    addr4.sin_family := AF_INET;
+    PCardinal(@addr4.sin_addr)^ := cLocalhost32; // 127.0.0.1
     exit;
   end
   else if (address = cAnyHost) or
           (address = c6AnyHost) then
   begin
-    ip4.sin_family := AF_INET; // 0.0.0.0
+    addr4.sin_family := AF_INET; // 0.0.0.0
     exit;
   end;
   // resolve name or IP (getaddrinfo is more recent, but addrinfo is not fixed)
@@ -439,10 +439,10 @@ begin
     result := nrNotFound
   else
   begin
-    ip4.sin_family := h^.h_addrtype;
+    addr4.sin_family := h^.h_addrtype;
     case h^.h_addrtype of
       AF_INET:
-         ip4.sin_addr := h^.h_addr^^;
+         addr4.sin_addr := h^.h_addr^^;
       AF_INET6:
          psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else

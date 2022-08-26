@@ -146,7 +146,11 @@ type
   public
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     function Family: TNetFamily;
-    function IP(localasvoid: boolean = false): RawUtf8;
+    procedure IP(var res: RawUtf8; localasvoid: boolean = false); overload;
+    function IP(localasvoid: boolean = false): RawUtf8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    function IP4: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
@@ -1354,11 +1358,11 @@ begin
   end;
 end;
 
-function TNetAddr.IP(localasvoid: boolean): RawUtf8;
+procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
 var
   tmp: ShortString;
 begin
-  result := '';
+  res := '';
   with PSockAddr(@Addr)^ do
     case sa_family of
       AF_INET:
@@ -1370,14 +1374,14 @@ begin
         begin
           // '127.0.0.1' loopback -> no memory allocation
           if not localasvoid then
-            result := IP4local;
+            res := IP4local;
           exit;
         end;
       {$ifdef OSPOSIX}
       AF_UNIX:
         begin
           if not localasvoid then
-            result := IP4local; // by definition, unix sockets are local
+            res := IP4local; // by definition, unix sockets are local
           exit;
         end;
       {$endif OSPOSIX}
@@ -1387,7 +1391,21 @@ begin
   IPShort(tmp, {withport=}false);
   if not localasvoid or
      (tmp <> c6Localhost) then
-    FastSetString(result, @tmp[1], ord(tmp[0]));
+    FastSetString(res, @tmp[1], ord(tmp[0]));
+end;
+
+function TNetAddr.IP(localasvoid: boolean): RawUtf8;
+begin
+  IP(result, localasvoid);
+end;
+
+function TNetAddr.IP4: cardinal;
+begin
+  with PSockAddr(@Addr)^ do
+    if sa_family = AF_INET then
+      result := cardinal(sin_addr) // may return cLocalhost32 = 127.0.0.1
+    else
+      result := 0; // AF_INET6 or AF_UNIX returns 0
 end;
 
 function TNetAddr.IPShort(withport: boolean): ShortString;
