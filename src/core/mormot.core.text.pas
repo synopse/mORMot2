@@ -11179,7 +11179,7 @@ begin
       exit;
     b[i] := c;
   end;
-  if PCardinal(@b)^ <> $0100007f then
+  if PCardinal(@b)^ <> $0100007f then // may be e.g. '127.000.000.001'
   begin
     aValue := PCardinal(@b)^;
     result := true;

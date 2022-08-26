@@ -3115,7 +3115,7 @@ begin
     fServer.IncStat(grOversizedPayload);
   end
   else if Assigned(fServer.OnBeforeBody) then
-    // custom validation (e.g. banned IP or missing/invalid BearerToken)
+    // custom validation (e.g. missing/invalid URL or BearerToken)
     result := fServer.OnBeforeBody(
       fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
       fRemoteIP, fHttp.BearerToken, fHttp.ContentLength,
@@ -3125,16 +3125,16 @@ end;
 
 procedure THttpAsyncConnection.DoReject(status: integer);
 var
-  reason, resp: RawUtf8;
   len: integer;
 begin
-  StatusCodeToReason(status, reason);
-  // (use fHttp.CommandResp/Uri as temp var to avoid local RawUtf8 allocation)
+  StatusCodeToReason(status, fHttp.UserAgent);
+  // (use fHttp fields as temp var to avoid local RawUtf8 allocation)
   FormatUtf8('HTTP/1.0 % %'#13#10 + TEXT_CONTENT_TYPE_HEADER + #13#10#13#10 +
     '% Server rejected % request as % %',
-      [reason, fHttp.Host, fHttp.CommandUri, status, reason], resp);
-  len := length(resp);
-  Send(pointer(resp), len); // no polling nor ProcessWrite
+      [status, fHttp.UserAgent, fHttp.Host, fHttp.CommandUri,
+       status, fHttp.UserAgent], fHttp.CommandResp);
+  len := length(fHttp.CommandResp);
+  Send(pointer(fHttp.CommandResp), len); // no polling nor ProcessWrite
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
 end;

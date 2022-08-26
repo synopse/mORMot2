@@ -2261,11 +2261,8 @@ end;
 
 class procedure TSynMustache.NewGuid(const Value: variant;
   out Result: variant);
-var
-  g: TGuid;
 begin
-  RandomGuid(g);
-  RawUtf8ToVariant(GuidToRawUtf8(g), Result);
+  RawUtf8ToVariant(GuidToRawUtf8(RandomGuid), Result);
 end;
 
 class procedure TSynMustache.ExtractFileName(const Value: variant;
