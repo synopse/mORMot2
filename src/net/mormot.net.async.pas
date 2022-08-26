@@ -641,6 +641,7 @@ type
     fExecuteAcceptOnly: boolean; // writes in another thread (THttpAsyncServer)
     fExecuteMessage: RawUtf8;
     fSockPort: RawUtf8;
+    fBanned: THttpAcceptBan; // for hsoBan40xIP
     procedure OnFirstReadDoTls(Sender: TPollAsyncConnection);
     procedure SetExecuteState(State: THttpServerExecuteState); virtual;
     procedure Execute; override;
@@ -783,6 +784,11 @@ type
     procedure IdleEverySecond; override;
     procedure SetExecuteState(State: THttpServerExecuteState); override;
     procedure Execute; override;
+  published
+    /// set if hsoBan40xIP has been defined
+    // - indicates e.g. how many accept() have been rejected from their IP
+    property Banned: THttpAcceptBan
+      read fBanned;
   end;
 
   /// meta-class of THttpAsyncConnections type
@@ -829,6 +835,18 @@ type
     property Async: THttpAsyncConnections
       read fAsync;
   end;
+
+
+
+var
+  /// how many seconds THttpAsyncConnections.Ban40xIP() should reject IPs
+  // - should be a power of two
+  // - if set to 0, the whole hsoBan40xIP feature is disabled
+  Ban40xIPSeconds: integer = 4;
+
+  /// the maximum number of rejected IP per second
+  // - used to reduce memory allocation and O(n) search speed
+  Ban40xIPMax: cardinal = 1024;
 
 
 implementation
@@ -2715,6 +2733,7 @@ begin
           (GetTickCount64 > endtix);
   end;
   FreeAndNilSafe(fServer);
+  FreeAndNil(fBanned);
   DoLog(sllTrace, 'Destroy finished', [], self);
 end;
 
@@ -2816,6 +2835,17 @@ begin
             DoLog(sllCustom1, 'Execute: Accept(%) retry', [fServer.Port], self);}
           if res = nrRetry then
             break; // 10 seconds timeout
+          if (fBanned <> nil) and
+             (fBanned.Count <> 0) and
+             fBanned.IsBanned(sin) then
+          begin
+            if acoVerboseLog in fOptions then
+              DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);
+            len := ord(HTTP_BANIP_RESPONSE[0]);
+            client.Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
+            client.ShutdownAndClose({rdwr=}false);    // reject before TLS setup
+            break;
+          end;
           inc(fAccepted);
           if (fClients.fRead.Count > fMaxConnections) or
              (fClients.fRead.PendingCount > fMaxPending) then
@@ -3139,6 +3169,12 @@ begin
   Send(pointer(fHttp.CommandResp), len); // no polling nor ProcessWrite
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
+  if fServer.Async.Banned.BanIP(fRemoteIP4) then
+  begin
+    fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
+      [status, fRemoteIP, fServer.Async.Banned], self);
+    fServer.IncStat(grBanned);
+  end;
 end;
 
 function THttpAsyncConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
@@ -3219,6 +3255,14 @@ begin
     fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
       [fKeepAliveSec], self);
     include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
+  end
+  // trigger optional hsoBan40xIP temporary IP4 bans on unexpected request
+  else if fServer.fAsync.Banned.ShouldBan(fRequest.RespStatus, fRemoteIP4) then
+  begin
+    fOwner.DoLog(sllTrace, 'DoRequest=%: BanIP(%) %',
+      [fRequest.RespStatus, fRemoteIP, fServer.fAsync.Banned], self);
+    fServer.IncStat(grBanned);
+    include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
   end;
   // compute the response for the HTTP state machine
   output := fRequest.SetupResponse(fHttp, fServer.fCompressGz,
@@ -3248,9 +3292,14 @@ end;
 
 procedure THttpAsyncConnections.IdleEverySecond;
 begin
+  // GC of connection memory
   inherited IdleEverySecond;
+  // high-level THttpAsyncServer process
   if fAsyncServer <> nil then
     fAsyncServer.IdleEverySecond;
+  // reset the hsoBan40xIP items of the oldest list
+  if fBanned <> nil then
+    fBanned.IdleEverySecond;
 end;
 
 procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
@@ -3300,6 +3349,8 @@ begin
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
+  if hsoBan40xIP in ProcessOptions then
+    fAsync.fBanned := THttpAcceptBan.Create(Ban40xIPSeconds, Ban40xIPMax, 0);
   // launch this TThread instance
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);

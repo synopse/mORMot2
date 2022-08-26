@@ -101,7 +101,7 @@ type
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   public
     /// reuse this instance for a new incoming connection
-    procedure Recycle(const aRemoteIP: RawUtf8); override;
+    procedure Recycle(const aRemoteIP: TNetAddr); override;
   end;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
@@ -331,7 +331,7 @@ begin
   end;
 end;
 
-procedure TWebSocketAsyncConnection.Recycle(const aRemoteIP: RawUtf8);
+procedure TWebSocketAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   inherited Recycle(aRemoteIP);
   EndProcess;
