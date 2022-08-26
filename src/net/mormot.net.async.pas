@@ -839,14 +839,21 @@ type
 
 
 var
-  /// how many seconds THttpAsyncConnections.Ban40xIP() should reject IPs
-  // - should be a power of two
+  /// how many seconds THttpAsyncConnections should reject banned IPs
+  // - should be a power of two, with a default of 4
   // - if set to 0, the whole hsoBan40xIP feature is disabled
+  // - this global variable should be set before THttpAsyncServer.Create call
   Ban40xIPSeconds: integer = 4;
 
   /// the maximum number of rejected IP per second
   // - used to reduce memory allocation and O(n) search speed
+  // - this global variable should be set before THttpAsyncServer.Create call
   Ban40xIPMax: cardinal = 1024;
+
+  /// a 32-bit IPv4 address which is white-listed and never banned
+  // - is 127.0.0.1, i.e. the loopback, as default
+  // - this global variable should be set before THttpAsyncServer.Create call
+  Ban40xIPWhite: cardinal = cLocalhost32;
 
 
 implementation
@@ -3350,7 +3357,8 @@ begin
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
   fAsync.fAsyncServer := self;
   if hsoBan40xIP in ProcessOptions then
-    fAsync.fBanned := THttpAcceptBan.Create(Ban40xIPSeconds, Ban40xIPMax, 0);
+    fAsync.fBanned := THttpAcceptBan.Create(
+      Ban40xIPSeconds, Ban40xIPMax, Ban40xIPWhite);
   // launch this TThread instance
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
