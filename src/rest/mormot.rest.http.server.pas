@@ -777,6 +777,8 @@ begin
     include(hso, hsoIncludeDateHeader);
   if rsoNoXPoweredHeader in fOptions then
     include(hso, hsoNoXPoweredHeader);
+  if rsoBan40xIP in fOptions then
+    include(hso, hsoBan40xIP);
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);

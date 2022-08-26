@@ -2480,6 +2480,8 @@ type
   // to debug the low-level server process - to be enabled only when required
   // - rsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - rsoIncludeDateHeader will let all answers include a Date: ... HTTP header
+  // - rsoBan40xIP will reject any IP for a few seconds after a 4xx error code
+  // is returned (but 401/403) - only implemented by THttpAsyncServer for now
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoOnlyValidUtf8,
@@ -2490,7 +2492,8 @@ type
     rsoCompressGZip,
     rsoLogVerbose,
     rsoNoXPoweredHeader,
-    rsoIncludeDateHeader);
+    rsoIncludeDateHeader,
+    rsoBan40xIP);
 
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;

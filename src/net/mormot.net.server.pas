@@ -106,6 +106,8 @@ type
   // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
+  // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
+  // is returned (but 401/403) - only implemented by THttpAsyncServer for now
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -114,7 +116,8 @@ type
     hsoCreateSuspended,
     hsoLogVerbose,
     hsoIncludeDateHeader,
-    hsoEnableTls);
+    hsoEnableTls,
+    hsoBan40xIP);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -368,6 +371,7 @@ type
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
   // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
+  // - grBanned is triggered by the hsoBan40xIP option
   THttpServerSocketGetRequestResult = (
     grError,
     grException,
@@ -376,7 +380,8 @@ type
     grTimeout,
     grHeaderReceived,
     grBodyReceived,
-    grUpgraded);
+    grUpgraded,
+    grBanned);
 
   {$M+} // to have existing RTTI for published properties
   THttpServer = class;
@@ -666,6 +671,9 @@ type
     /// how many HTTP connections were upgraded e.g. to WebSockets
     property StatUpgraded: integer
       index grUpgraded read GetStat;
+    /// how many HTTP connections have been not accepted by hsoBan40xIP option
+    property StatBanned: integer
+      index grBanned read GetStat;
   end;
 
   /// meta-class of our THttpServerSocketGeneric classes
@@ -2397,7 +2405,7 @@ begin
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
     Http.Content := '';
-    // get headers
+    // get and parse HTTP request header
     GetHeader(noheaderfilter);
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
@@ -2454,7 +2462,7 @@ begin
       // client waits for the server to parse the headers and return 100
       // before sending the request body
       SockSendFlush('HTTP/1.1 100 Continue'#13#10#13#10);
-    // now the server could retrieve the request body
+    // now the server could retrieve the HTTP request body
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
