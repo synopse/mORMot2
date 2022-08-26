@@ -150,7 +150,7 @@ type
     function IP(localasvoid: boolean = false): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     function IP4: cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
