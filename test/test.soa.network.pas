@@ -285,6 +285,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
         check(noAnswer1 = noAnswer2);
         check(C2.URL = 'url');
         check(C2.Method = 'POST');
+        check(IsPost(C2.Method));
         check(C2.InHeaders = 'headers');
         check(C2.InContentType = contentType);
         check(C2.InContent = content);

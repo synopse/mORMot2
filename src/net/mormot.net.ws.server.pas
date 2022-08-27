@@ -341,7 +341,7 @@ var
 begin
   if (hfConnectionUpgrade in ClientSock.Http.HeaderFlags) and
      ClientSock.KeepAliveClient and
-     IdemPropNameU('GET', ClientSock.Method) and
+     IsGet(ClientSock.Method) and
      IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
   begin
     // upgrade and run fProcess.ProcessLoop

@@ -119,6 +119,18 @@ function HttpMethodWithNoBody(const method: RawUtf8): boolean;
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
+/// quick check for case-sensitive 'GET' HTTP method name
+function IsGet(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// quick check for case-sensitive 'POST' HTTP method name
+function IsPost(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
+function IsUrlFavicon(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 const
   /// pseudo-header containing the current Synopse mORMot framework version
   XPOWEREDNAME = 'X-Powered-By';
@@ -814,6 +826,29 @@ begin
                      ord('D') shl 24)) and $dfdfdfdf) = 0) or
             (((c xor cardinal(ord('O') + ord('P') shl 8 + ord('T') shl 16 +
                      ord('I') shl 24)) and $dfdfdfdf) = 0);
+end;
+
+function IsGet(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+end;
+
+function IsPost(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ =
+    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
+end;
+
+function IsUrlFavicon(P: PUtf8Char): boolean;
+begin
+  result := (P <> nil) and
+        (PCardinalArray(P)[0] =
+           ord('/') + ord('f') shl 8 + ord('a') shl 16 + ord('v') shl 24) and
+        (PCardinalArray(P)[1] =
+           ord('i') + ord('c') shl 8 + ord('o') shl 16 + ord('n') shl 24) and
+        (PCardinalArray(P)[2] =
+           ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
+        (P[12] = #0);
 end;
 
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;

@@ -3176,7 +3176,8 @@ begin
   Send(pointer(fHttp.CommandResp), len); // no polling nor ProcessWrite
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
-  if (fHttp.CommandUri <> '/favicon.ico') and
+  if (fServer.Async.Banned <> nil) and
+     not IsUrlFavicon(pointer(fHttp.CommandUri)) and
      fServer.Async.Banned.BanIP(fRemoteIP4) then
   begin
     fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',

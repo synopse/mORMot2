@@ -2413,7 +2413,7 @@ begin
       fKeepAliveClient := false;
     if (Http.ContentLength < 0) and
        (KeepAliveClient or
-       (Http.CommandMethod = 'GET')) then
+        IsGet(Http.CommandMethod)) then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
        (GetTickCount64 > headerMaxTix) then

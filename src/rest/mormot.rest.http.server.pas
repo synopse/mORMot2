@@ -502,8 +502,7 @@ function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 
 const
   /// this constant is used by TRestHttpServer to return a nice /favicon.ico
-  FAVICON_BINARY: RawByteString =
-    RawByteString( // for Delphi Unicode :(
+  FAVICON_BINARY: RawByteString = RawByteString( // for Delphi Unicode :(
     #$00#$00#$01#$00#$01#$00#$18#$18#$10#$00#$01#$00#$04#$00#$e8#$01 +
     #$00#$00#$16#$00#$00#$00#$28#$00#$00#$00#$18#$00#$00#$00#$30#$00 +
     #$00#$00#$01#$00#$04#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
@@ -536,10 +535,6 @@ const
     #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$80#$00 +
     #$00#$00#$80#$00#$01#$00#$c0#$00#$01#$00#$e0#$00#$03#$00#$e0#$00 +
     #$07#$00#$f0#$00#$07#$00#$fc#$00#$1f#$00#$ff#$00#$7f#$00);
-
-// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
-function UrlFavicon(P: PUtf8Char): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ************ TRestHttpRemoteLogServer to Receive Remote Log Stream }
@@ -1105,36 +1100,24 @@ begin
       '; Path=/' + Server.Model.Root, '; Path=/')
 end;
 
-function UrlFavicon(P: PUtf8Char): boolean;
-begin
-  result := (P <> nil) and
-        (PCardinalArray(P)[0] =
-           ord('/') + ord('f') shl 8 + ord('a') shl 16 + ord('v') shl 24) and
-        (PCardinalArray(P)[1] =
-           ord('i') + ord('c') shl 8 + ord('o') shl 16 + ord('n') shl 24) and
-        (PCardinalArray(P)[2] =
-           ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
-        (P[12] = #0);
-end;
-
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
-  tls, matchcase, isget: boolean;
+  tls, matchcase, get: boolean;
   match: TRestModelMatch;
   i: PtrInt;
   P: PUtf8Char;
   serv: TRestServer;
 begin
   tls := hsrHttps in Ctxt.ConnectionFlags;
-  isget := Ctxt.Method = 'GET';
+  get := IsGet(Ctxt.Method);
   if (self = nil) or
      (pointer(fDBServers) = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
-  else if ((Ctxt.Url = '') or
-           (PWord(Ctxt.Url)^ = ord('/'))) and
-          isget then
+  else if get and
+          ((Ctxt.Url = '') or
+           (PWord(Ctxt.Url)^ = ord('/'))) then
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
     if fRootRedirectToUri[tls] <> '' then
     begin
@@ -1143,9 +1126,9 @@ begin
     end
     else
       result := HTTP_BADREQUEST
-  else if isGet and
+  else if get and
           (fFavicon <> '') and
-          UrlFavicon(pointer(Ctxt.Url)) then
+          IsUrlFavicon(pointer(Ctxt.Url)) then
   begin
     Ctxt.OutContent := fFavicon;
     Ctxt.OutContentType := 'image/x-icon';
@@ -1162,7 +1145,7 @@ begin
   end
   else if (Ctxt.Method = '') or
           ((rsoOnlyJsonRequests in fOptions) and
-           not isGet and
+           not get and
            not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST

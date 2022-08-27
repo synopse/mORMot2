@@ -296,7 +296,7 @@ begin
             else if fPendingGet[i] = cookie then
               found := i;
           end;
-          if IdemPropNameU(sock.Method, 'GET') then
+          if IsGet(sock.Method) then
           begin
             if found >= 0 then
               PendingDelete(found, 'duplicated')
@@ -318,7 +318,7 @@ begin
               result := true;
             end;
           end
-          else if IdemPropNameU(sock.Method, 'POST') then
+          else if IsPost(sock.Method) then
           begin
             if found < 0 then
             begin

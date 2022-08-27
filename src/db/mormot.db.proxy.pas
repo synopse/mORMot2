@@ -1906,8 +1906,8 @@ function TSqlDBServerAbstract.Process(Ctxt: THttpServerRequestAbstract): cardina
 var
   o: RawUtf8;
 begin
-  if (Ctxt.Method <> 'POST') or
-     (Ctxt.InContent = '') or
+  if (Ctxt.InContent = '') or
+     not IsPost(Ctxt.Method) or
      not IdemPropNameU(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;
