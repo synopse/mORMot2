@@ -1802,7 +1802,10 @@ type
 {$endif OSWINDOWS}
 
 /// raw cross-platform library loading function
-// - alternative to LoadLibrary() Windows API and FPC RTL
+// - alternative to LoadLibrary() and SafeLoadLibrary() Windows API and RTL
+// - on Windows, set the SEM_NOOPENFILEERRORBOX and SEM_FAILCRITICALERRORS flags
+// to avoid unexpected message boxes (which should not happen e.g. on a service)
+// - on Win32, reset the FPU flags after load as required with some libraries
 // - consider inheriting TSynLibrary if you want to map a set of API functions
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 
@@ -5599,7 +5602,7 @@ begin
       cwd := GetCurrentDir;
       SetCurrentDir(nwd); // change the current folder at loading on Windows
     end;
-    fHandle := SafeLoadLibrary(lib);
+    fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box 
     if nwd <> '' then
       SetCurrentDir(cwd{%H-});
     {$else}

@@ -2447,7 +2447,7 @@ begin
   try
     if WinHttpApi.LibraryHandle <> 0 then
       exit; // thread-safe test
-    WinHttpApi.LibraryHandle := SafeLoadLibrary(winhttpdll);
+    WinHttpApi.LibraryHandle := LibraryOpen(winhttpdll);
     if WinHttpApi.LibraryHandle = 0 then
       if RaiseOnError then
         raise EWinHttp.CreateFmt('Unable to load library %s', [winhttpdll])
@@ -2493,7 +2493,7 @@ begin
   if WebSocketApi.LibraryHandle <> 0 then
     exit; // already loaded
   WebSocketApi.WebSocketEnabled := false;
-  WebSocketApi.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
+  WebSocketApi.LibraryHandle := LibraryOpen(WEBSOCKET_DLL);
   if WebSocketApi.LibraryHandle = 0 then
     exit;
   P := @@WebSocketApi.AbortHandle;

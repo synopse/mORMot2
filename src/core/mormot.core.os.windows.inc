@@ -77,12 +77,29 @@ begin
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, @DefaultCharVar, nil);
 end;
 
-
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 var
   tmp: TW32Temp;
+  err: DWORD;
+  {$ifdef CPUX86}
+  x87cw: word;
+  {$endif CPUX86}
 begin
+  // note: GetErrorMode() is not available on XP
+  err := SetErrorMode(SEM_NOOPENFILEERRORBOX or SEM_FAILCRITICALERRORS);
+  {$ifdef CPUX86}
+  asm
+      fnstcw x87cw
+  end;
+  {$endif CPUX86}
   result := Windows.LoadLibraryW(W32(LibraryName, tmp));
+  {$ifdef CPUX86}
+  asm
+      fnclex
+      fldcw x87cw
+  end;
+  {$endif CPUX86}
+  SetErrorMode(err);
 end;
 
 procedure LibraryClose(Lib: TLibHandle);
