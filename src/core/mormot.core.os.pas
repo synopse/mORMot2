@@ -5999,7 +5999,6 @@ begin
   info.SmbMinorVersion := p^.MinVers;
   info.DmiRevision := p^.Revision; // 0 = SMBIOS 2.1
   info.Length := p^.StructLength;
-  //writeln('GetRawSmbios32');
 end;
 
 function GetRawSmbios64(p: PSmbEntryPoint64; var info: TRawSmbiosInfo): PtrUInt;
@@ -6020,7 +6019,6 @@ begin
   info.SmbMinorVersion := p^.MinVers;
   info.DmiRevision := p^.Revision; // 1 = SMBIOS 3.0
   info.Length := p^.StructMaxLength;
-  //writeln('GetRawSmbios64');
 end;
 
 // caller should then try to decode SMB from pointer(result) + Info.Len
@@ -6031,7 +6029,6 @@ begin
   result := 0;
   if mem = '' then
     exit;
-  FileFromString(mem, 'lowmem.data');
   p := pointer(mem);
   pend := @PByteArray(mem)[length(mem) - SizeOf(p^)];
   repeat
@@ -6063,7 +6060,7 @@ begin
   Finalize(info.Data);
   FillCharFast(info, SizeOf(info), 0);
   // first try to read system EFI entries
-  mem := GetSmbMem;
+  mem := GetSmbEfiMem;
   if mem = '' then
     // fallback to raw memory reading (won't work on modern/EFI systems)
     mem := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);

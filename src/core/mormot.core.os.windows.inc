@@ -2767,7 +2767,7 @@ begin
   result := GetRawSmbiosFromMem(info);
 end;
 
-function GetSmbMem: RawByteString;
+function GetSmbEfiMem: RawByteString;
 begin
   result := '';
 end;

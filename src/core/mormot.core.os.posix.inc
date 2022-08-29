@@ -1713,7 +1713,7 @@ const
 function kenv(action: integer; name, value: PAnsiChar; len: integer): integer;
   cdecl external clib name 'kenv';
 
-function GetSmbMem: RawByteString;
+function GetSmbEfiMem: RawByteString;
 var
   tmp: array[byte] of AnsiChar;
   xaddr: PtrUInt;
@@ -1728,7 +1728,7 @@ end;
 
 {$else}
 
-function GetSmbMem: RawByteString;
+function GetSmbEfiMem: RawByteString;
 begin
   result := '';
 end;
@@ -2627,7 +2627,7 @@ begin
   result := gettimeofday(tp, tzp);
 end;
 
-function GetSmbMem: RawByteString;
+function GetSmbEfiMem: RawByteString;
 var
   efi, addr: RawUtf8;
   xaddr: cardinal;
