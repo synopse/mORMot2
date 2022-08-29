@@ -1607,6 +1607,13 @@ begin
   end;
 end;
 
+function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
+
+function GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+begin
+  result := GetRawSmbiosFromMem(info);
+end;
+
 function SeemsRealPointer(p: pointer): boolean;
 begin
   // let the GPF happen silently in the kernel (validated on Linux only)
@@ -1696,6 +1703,37 @@ begin
   else
     result := '';
 end;
+
+{$ifdef OSFREEBSD}
+
+const
+  KENV_GET = 0;
+  KENV_SET = 1;
+
+function kenv(action: integer; name, value: PAnsiChar; len: integer): integer;
+  cdecl external clib name 'kenv';
+
+function GetSmbMem: RawByteString;
+var
+  tmp: array[byte] of AnsiChar;
+  xaddr: PtrUInt;
+begin
+  result := '';
+  if kenv(KENV_GET, 'hint.smbios.0.mem', @tmp, SizeOf(tmp)) < 0 then
+    exit;
+  xaddr := PosixParseHex32(@tmp); // typical value is '0xf05b0'
+  if xaddr <> 0 then
+    result := ReadSystemMemory(xaddr, 1024); // 32 bytes is enough
+end;
+
+{$else}
+
+function GetSmbMem: RawByteString;
+begin
+  result := '';
+end;
+
+{$endif OSFREEBSD}
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
@@ -2587,6 +2625,25 @@ function gettimeofday_c(tp: ptimeval; tzp: ptimezone): cint;
 begin
   // it is much faster to not use the Linux syscall but the libc vDSO call
   result := gettimeofday(tp, tzp);
+end;
+
+function GetSmbMem: RawByteString;
+var
+  efi, addr: RawUtf8;
+  xaddr: cardinal;
+begin
+  // retrieve raw EFI information from systab
+  result := '';
+  xaddr := 0;
+  efi := StringFromFile('/sys/firmware/efi/systab', {nosize=}true);
+  if efi = '' then
+    efi := StringFromFile('/proc/efi/systab'{nosize=}); // old Linux up to 2.6.6
+  if efi = '' then
+    exit;
+  FindNameValue(efi, 'SMBIOS', addr);
+  xaddr := PosixParseHex32(pointer(addr));
+  if xaddr <> 0 then
+    result := ReadSystemMemory(xaddr, 1024); // 32 bytes is enough
 end;
 
 {$endif OSLINUX}

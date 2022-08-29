@@ -2735,6 +2735,44 @@ begin
   end;
 end;
 
+function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
+
+const
+  _RSMB_ = $52534D42;
+
+function GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+var
+  h: HMODULE;
+  siz: DWORD;
+  tmp: RawByteString;
+  get: function(sig, id: DWORD; buf: pointer; siz: DWORD): PtrUInt; stdcall;
+begin
+  // first try to use Vista+ API which supports EFI
+  h := GetModuleHandle(kernel32);
+  get := GetProcAddress(h, 'GetSystemFirmwareTable');
+  if Assigned(get) then
+  begin
+    siz := get(_RSMB_, 0, nil, 0);
+    if siz > SizeOf(info) then
+    begin
+      FastSetRawByteString(tmp, nil, siz);
+      get(_RSMB_, 0, pointer(tmp), siz);
+      MoveFast(PByteArray(tmp)[0], info, SizeOf(info) - SizeOf(pointer));
+      dec(siz, SizeOf(Info) - SizeOf(pointer));
+      FastSetRawByteString(info.data, @PByteArray(tmp)[SizeOf(info)], siz);
+      result := true;
+      exit;
+    end;
+  end;
+  // on XP, try to read directly from physical memory via ntdl.dll low-level API
+  result := GetRawSmbiosFromMem(info);
+end;
+
+function GetSmbMem: RawByteString;
+begin
+  result := '';
+end;
+
 threadvar
   OleDBCoinitialized: integer;
 
@@ -3599,6 +3637,7 @@ type
       RelationGroup: (Reserved: array [0..1] of QWord);
   end;
   {$A+}
+
 
 {$ifndef UNICODE}
 function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
