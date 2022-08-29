@@ -89,14 +89,14 @@ begin
   err := SetErrorMode(SEM_NOOPENFILEERRORBOX or SEM_FAILCRITICALERRORS);
   {$ifdef CPUX86}
   asm
-      fnstcw x87cw
+      fnstcw x87cw // save x87 flags
   end;
   {$endif CPUX86}
   result := Windows.LoadLibraryW(W32(LibraryName, tmp));
   {$ifdef CPUX86}
   asm
-      fnclex
-      fldcw x87cw
+      fnclex       // clear pending x87 exceptions
+      fldcw x87cw  // restore flags (Visual C++ librairies usually change them)
   end;
   {$endif CPUX86}
   SetErrorMode(err);

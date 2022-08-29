@@ -292,7 +292,7 @@ type
   /// Exception types raised by this mormot.core.os unit
   EOSException = class(ExceptionWithProps);
 
-  /// the recognized operating systems
+  /// the known operating systems
   // - it will also recognize most Linux distributions
   TOperatingSystem = (
     osUnknown,
@@ -640,8 +640,8 @@ function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 
 /// convert a 32-bit Operating System type into its full text representation
-// including the kernel revision (not the distribution version) on POSIX systems
-// - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu 5.4.0'
+// - including the kernel revision (not the distribution version) on POSIX systems
+// - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu Linux 5.4.0'
 function ToTextOS(osint32: integer): RawUtf8;
 
 type
@@ -4246,8 +4246,8 @@ begin
     result := RawUtf8(Format('%s %d', [result, osv.winbuild]));
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
-    // include the kernel number to the distribution name, e.g. 'Ubuntu 5.4.0'
-    result := RawUtf8(Format('%s %d.%d.%d', [result, osv.utsrelease[2],
+    // include kernel number to the distribution name, e.g. 'Ubuntu Linux 5.4.0'
+    result := RawUtf8(Format('%s Linux %d.%d.%d', [result, osv.utsrelease[2],
       osv.utsrelease[1], osv.utsrelease[0]]));
 end;
 
