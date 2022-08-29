@@ -2752,14 +2752,13 @@ begin
   get := GetProcAddress(h, 'GetSystemFirmwareTable');
   if Assigned(get) then
   begin
-    siz := get(_RSMB_, 0, nil, 0);
+    siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
     if siz > SizeOf(info) then
     begin
       FastSetRawByteString(tmp, nil, siz);
       get(_RSMB_, 0, pointer(tmp), siz);
-      MoveFast(PByteArray(tmp)[0], info, SizeOf(info) - SizeOf(pointer));
-      dec(siz, SizeOf(Info) - SizeOf(pointer));
-      FastSetRawByteString(info.data, @PByteArray(tmp)[SizeOf(info)], siz);
+      PInt64(@info)^ := PInt64(tmp)^; // header fields = 64-bit
+      FastSetRawByteString(info.data, @PInt64Array(tmp)[1], siz - SizeOf(Int64));
       result := true;
       exit;
     end;

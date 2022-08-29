@@ -5965,6 +5965,7 @@ type
     BcdRevision: byte;
   end;
   PSmbEntryPoint32 = ^TSmbEntryPoint32;
+
   TSmbEntryPoint64 = packed record
     Anch4: cardinal; // = SMB_ANCHOR4
     Anch5: byte;     // = SMB_ANCHOR5
