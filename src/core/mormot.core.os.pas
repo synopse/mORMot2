@@ -2556,6 +2556,13 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 // syscall on POSIX systems (validated on Linux only)
 function SeemsRealPointer(p: pointer): boolean;
 
+/// fill a buffer with a copy of some low-level system memory
+// - used e.g. by GetRawSmbios() on XP or Linux/POSIX
+// - will allow to read up to 4MB of memory
+// - use low-level ntdll.dll API on Windows, or reading /dev/mem on POSIX - so
+// expect sudo/root rights on most systems
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files

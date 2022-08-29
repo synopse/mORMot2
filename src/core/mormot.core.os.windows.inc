@@ -2378,11 +2378,68 @@ type
   {$Z1}
 
   NTSTATUS = integer;
+  PVOID = pointer;
+  PPVOID = ^PVOID;
 
-function NtQueryInformationProcess(ProcessHandle: THandle;
-  ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
-  ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS;
-    stdcall; external ntdll name 'NtQueryInformationProcess';
+  OBJECT_ATTRIBUTES = record
+    Length: ULONG;
+    RootDirectory: THandle;
+    ObjectName: PUNICODE_STRING;
+    Attributes: ULONG;
+    SecurityDescriptor: Pointer;       // Points to type SECURITY_DESCRIPTOR
+    SecurityQualityOfService: Pointer; // Points to type SECURITY_QUALITY_OF_SERVICE
+  end;
+  POBJECT_ATTRIBUTES = ^OBJECT_ATTRIBUTES;
+
+var
+  // low-level (undocumented) ntdll.dll functions - accessed via late-binding
+  NtQueryInformationProcess: function(ProcessHandle: THandle;
+    ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
+    ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS; stdcall;
+  RtlInitUnicodeString: function(var DestinationString: UNICODE_STRING;
+    const SourceString: PWideChar): NTSTATUS; stdcall;
+  NtOpenSection: function (SectionHandle: PHANDLE; DesiredAccess: ACCESS_MASK;
+    ObjectAttributes: POBJECT_ATTRIBUTES): NTSTATUS; stdcall;
+  NtMapViewOfSection: function (SectionHandle, ProcessHandle: THandle;
+    BaseAddress: PPVOID; ZeroBits: ULONG; CommitSize: ULONG;
+    var SectionOffset: TLargeInteger; ViewSize: PULONG; InheritDisposition: DWORD;
+    AllocationType: ULONG; Protect: ULONG): NTSTATUS; stdcall;
+  NtUnmapViewOfSection: function (ProcessHandle: THandle;
+    BaseAddress: PVOID): NTSTATUS; stdcall;
+
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+var
+  memfile: UNICODE_STRING;
+  att: OBJECT_ATTRIBUTES;
+  mem: THandle;
+  add: TLargeInteger;
+  virt: pointer;
+begin
+  result := '';
+  if (size <= 4 shl 20) and // map up to 4MB
+     Assigned(RtlInitUnicodeString) and
+     Assigned(NtOpenSection) and
+     Assigned(NtMapViewOfSection) and
+     Assigned(NtUnmapViewOfSection) then
+  begin
+    RtlInitUnicodeString(memfile, '\device\physicalmemory');
+    FillCharFast(att, SizeOf(att), 0);
+    att.Length := SizeOf(att);
+    att.ObjectName := @memfile;
+    att.Attributes := $40; // OBJ_CASE_INSENSITIVE
+    if NtOpenSection(@mem, SECTION_MAP_READ, @att) <> 0 then
+      exit;
+    add := address;
+    virt := nil;
+    if NtMapViewOfSection(mem, THandle(-1), @virt, 0, size, add, @size,
+         1, 0, PAGE_READONLY) = 0 then
+    begin
+      FastSetRawByteString(result, virt, size);
+      NtUnmapViewOfSection(THandle(-1), virt);
+    end;
+    CloseHandle(mem);
+  end;
+end;
 
 function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer;
   lpBuffer: Pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
@@ -2401,7 +2458,8 @@ begin
   result := false;
   Finalize(aInfo);
   FillCharFast(aInfo, SizeOf(aInfo), 0);
-  if APID = 0 then
+  if (APID = 0) and
+     Assigned(NtQueryInformationProcess) then
     exit;
   prochandle := OpenProcess(
     PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, FALSE, aPid);
@@ -3754,7 +3812,11 @@ begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
-    Windows.FreeLibrary(h);
+    NtQueryInformationProcess := GetProcAddress(h, 'NtQueryInformationProcess');
+    RtlInitUnicodeString := GetProcAddress(h, 'RtlInitUnicodeString');
+    NtOpenSection := GetProcAddress(h, 'NtOpenSection');
+    NtMapViewOfSection := GetProcAddress(h, 'NtMapViewOfSection');
+    NtUnmapViewOfSection := GetProcAddress(h, 'NtUnmapViewOfSection');
   end;
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;

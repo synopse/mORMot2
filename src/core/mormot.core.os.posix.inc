@@ -1615,6 +1615,31 @@ begin
             (fpgeterrno <> ESysEFAULT);
 end;
 
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+var
+  mem: cInt;
+  map: pointer;
+begin
+  result := '';
+  if size > 4 shl 20 then
+    exit; // map up to 4MB
+  mem := FpOpen('/dev/mem', O_RDONLY, 0);
+  {$ifdef OSDARWIN}
+  if mem <= 0 then
+    // may work as alternative if "sudo pmset hibernatemode 1" has been set
+    mem := FpOpen('/private/var/vm/sleepimage', O_RDONLY, 0);
+  {$endif OSDARWIN}
+  if mem <= 0 then
+    exit;
+  map := Fpmmap(nil, size, PROT_READ, MAP_SHARED, mem, address);
+  if map <> MAP_FAILED then
+  begin
+    FastSetRawByteString(result, map, size);
+    Fpmunmap(map, size);
+  end;
+  FpClose(mem);
+end;
+
 {$ifdef OSBSDDARWIN}
 
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
