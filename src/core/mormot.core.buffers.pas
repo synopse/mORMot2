@@ -1141,6 +1141,11 @@ function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): b
 // - will check supplied text is a valid Base64 encoded stream
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; out data: TBytes): boolean; overload;
 
+/// conversion from Base64 encoded text into binary data, ignoring spaces
+// - returns '' if s was not a valid Base64-encoded input once spaces are trimmed
+// - consider PemToDer() from mormot.crypt.secure if you need to read PEM content
+function Base64ToBinTrim(const s: RawByteString): RawByteString;
+
 /// raw function for efficient binary to Base64 encoding of the main block
 // - don't use this function, but rather the BinToBase64() overloaded functions
 // - on FPC x86_64, detect and use AVX2 asm for very high throughput (11GB/s)
@@ -6624,6 +6629,11 @@ begin
   result := (bin <> nil) and
             (Base64ToBinLength(base64, base64len) = binlen) and
             Base64Decode(base64, bin, base64len shr 2); // may use AVX2
+end;
+
+function Base64ToBinTrim(const s: RawByteString): RawByteString;
+begin
+  result := Base64ToBin(TrimControlChars(s));
 end;
 
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
