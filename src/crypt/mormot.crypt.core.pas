@@ -1685,7 +1685,7 @@ type
     // and system information, mormot.core.base XorEntropy)
     // - Source will mix one or both of those entropy sources - note that
     // gesSystemAndUser is the default, but gesUserOnly is the fastest, and
-    // also derivated from 512-bit of OS entropy at least once at startup
+    // also derivated from 512-bit of OS entropy retrieved once at startup
     // - to gather randomness, use TAesPrng.Main.FillRandom() or TAesPrng.Fill()
     // methods, NOT this class function (which will be much slower, BTW)
     class function GetEntropy(Len: integer;
@@ -7358,7 +7358,7 @@ var
   sha3: TSha3;
 begin
   try
-    // retrieve some initial entropy from OS
+    // retrieve some initial entropy from OS (but for gesUserOnly)
     SetLength(fromos, Len);
     if Source <> gesUserOnly then
       FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
@@ -7397,7 +7397,7 @@ begin
       begin
         // 512-bit of perfect forward security using AES-CTR diffusion
         safe.Lock;
-        aes.DoBlocksCtr(@data.r[2], @bits, @bits, SizeOf(bits) shr AesBlockShift);
+        aes.DoBlocksCtr({iv=}@data, @bits, @bits, SizeOf(bits) shr AesBlockShift);
         data := bits;
         safe.UnLock;
       end;
