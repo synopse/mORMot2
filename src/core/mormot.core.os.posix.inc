@@ -1729,11 +1729,52 @@ begin
     result := ReadSystemMemory(xaddr, 1024); // 32 bytes is enough
 end;
 
+const
+  _KNOWN: array[0..14] of record
+    id: TSmbiosBasicInfo;
+    fn: string;
+  end = (
+    (id: sbiBiosVendor;        fn: 'bios.vendor'),
+    (id: sbiBiosVersion;       fn: 'bios.version'),
+    (id: sbiBiosDate;          fn: 'bios.reldate'),
+    (id: sbiManufacturer;      fn: 'system.maker'),
+    (id: sbiProductName;       fn: 'system.product'),
+    (id: sbiVersion;           fn: 'system.version'),
+    (id: sbiSerial;            fn: 'system.serial'),
+    (id: sbiUuid;              fn: 'system.uuid'),
+    (id: sbiSku;               fn: 'system.sku'),
+    (id: sbiFamily;            fn: 'system.family'),
+    (id: sbiBoardManufacturer; fn: 'planar.maker'),
+    (id: sbiBoardProductName;  fn: 'planar.product'),
+    (id: sbiBoardVersion;      fn: 'planar.version'),
+    (id: sbiBoardSerial;       fn: 'planar.serial'),
+    (id: sbiBoardAssetTag;     fn: 'planar.tag')
+  );
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+var
+  i: PtrInt;
+  tmp: array[byte] of AnsiChar;
+begin
+  for i := 0 to high(_KNOWN) do
+    with _KNOWN[i] do
+      if kenv(KENV_GET, PAnsiChar('smbios.' + fn), @tmp, SizeOf(tmp)) >= 0 then
+        info[id] := TrimU(tmp);
+  info[sbiCpuVersion] := CpuInfoText;
+end;
+
 {$else}
+
+// I don't know how to implement those on buggy Mac OS
 
 function GetSmbEfiMem: RawByteString;
 begin
   result := '';
+end;
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+  info[sbiCpuVersion] := CpuInfoText;
 end;
 
 {$endif OSFREEBSD}
@@ -1908,6 +1949,38 @@ begin
   DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
+end;
+
+const
+  _KNOWN: array[0..14] of record
+    id: TSmbiosBasicInfo;
+    fn: string;
+  end = (
+    (id: sbiBiosVendor;        fn: 'bios_vendor'),
+    (id: sbiBiosVersion;       fn: 'bios_version'),
+    (id: sbiBiosDate;          fn: 'bios_date'),
+    (id: sbiManufacturer;      fn: 'sys_vendor'),
+    (id: sbiProductName;       fn: 'product_name'),
+    (id: sbiVersion;           fn: 'product_version'),
+    (id: sbiSerial;            fn: 'product_serial'),
+    (id: sbiUuid;              fn: 'product_uuid'),
+    (id: sbiSku;               fn: 'product_sku'),
+    (id: sbiFamily;            fn: 'product_family'),
+    (id: sbiBoardManufacturer; fn: 'board_vendor'),
+    (id: sbiBoardProductName;  fn: 'board_name'),
+    (id: sbiBoardVersion;      fn: 'board_version'),
+    (id: sbiBoardSerial;       fn: 'board_serial'),
+    (id: sbiBoardAssetTag;     fn: 'board_asset_tag')
+  );
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(_KNOWN) do
+    with _KNOWN[i] do
+      info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
+  info[sbiCpuVersion] := CpuInfoText;
 end;
 
 {$endif OSBSDDARWIN}

@@ -1187,8 +1187,10 @@ var
   _SmbiosRetrieved: boolean;
 
 /// retrieve SMBIOS information as text
-// - only the main values are decoded - see momort.core.perf for a more complete
+// - only the main values are decoded - see mormot.core.perf for a more complete
 // DMI/SMBIOS decoder
+// - on POSIX, requires root to access full SMBIOS information - will fallback
+// reading /sys/class/dmi/id/* on Linux or kenv() on FreeBSD for most entries
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -6132,8 +6134,11 @@ begin
     if not _SmbiosRetrieved then
     begin
        _SmbiosRetrieved := true;
-      if GetRawSmbios(raw) then
-        DecodeSmbios(raw, _Smbios);
+      if not GetRawSmbios(raw) or
+         not DecodeSmbios(raw, _Smbios) then
+        // if not root on POSIX SMBIOS is not available
+        // -> try to get what the OS exposes (Linux or FreeBSD)
+        DirectSmbiosInfo(_Smbios);
     end;
   finally
     GlobalUnLock;
@@ -6248,8 +6253,6 @@ begin
     else
       repeat
         len := StrLen(s);
-        if len = 0 then
-          break; // string table ends with void string (#0)
         if cur^ <> sbiUndefined then
         begin
           if info[cur^] = '' then // only set the first occurence if multiple
@@ -6257,9 +6260,9 @@ begin
           //writeln(ord(cur^), ' = ', info[cur^]);
           cur^ := sbiUndefined; // reset slot in lines[]
         end;
-        s := @s[len + 1];
+        s := @s[len + 1]; // next string
         inc(cur);
-      until s[0] = 0;
+      until s[0] = 0; // end of string table
     inc(PByte(s));
   until false;
   result := info[sbiBiosVendor] <> '';
