@@ -6263,7 +6263,7 @@ begin
         s := @s[len + 1]; // next string
         inc(cur);
       until s[0] = 0; // end of string table
-    inc(PByte(s));
+    inc(PByte(s)); // go to next structure
   until false;
   result := info[sbiBiosVendor] <> '';
 end;
