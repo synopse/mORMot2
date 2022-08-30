@@ -1625,11 +1625,12 @@ end;
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   mem: cInt;
-  map: pointer;
+  map: PAnsiChar;
+  off: PtrUInt;
 begin
   result := '';
   if size > 4 shl 20 then
-    exit; // map up to 4MB
+    exit; // read up to 4MB
   mem := FpOpen('/dev/mem', O_RDONLY, 0);
   {$ifdef OSDARWIN}
   if mem <= 0 then
@@ -1638,11 +1639,13 @@ begin
   {$endif OSDARWIN}
   if mem <= 0 then
     exit;
-  map := Fpmmap(nil, size, PROT_READ, MAP_SHARED, mem, address);
+  // Fpmmap() is more complex but works around problems using plain read() calls
+  off := address mod SystemInfo.dwPageSize;
+  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
   if map <> MAP_FAILED then
   begin
-    FastSetRawByteString(result, map, size);
-    Fpmunmap(map, size);
+    FastSetRawByteString(result, map + off, size);
+    Fpmunmap(map, off + size);
   end;
   FpClose(mem);
 end;
@@ -2643,7 +2646,7 @@ begin
   FindNameValue(efi, 'SMBIOS', addr);
   xaddr := PosixParseHex32(pointer(addr));
   if xaddr <> 0 then
-    result := ReadSystemMemory(xaddr, 1024); // 32 bytes is enough
+    result := ReadSystemMemory(xaddr, 32); // 32 bytes is enough
 end;
 
 {$endif OSLINUX}

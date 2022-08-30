@@ -181,6 +181,7 @@ Performance Monitoring functions shared by all framework units
 - `TSynMonitor` Process Information Classes
 - `TSynMonitorUsage` Process Information Database Storage
 - Operating System Monitoring
+- `DMI`/`SMBIOS` Binary Decoder
 - `TSynFPUException` Wrapper for FPU Flags Preservation
 
 ### mormot.core.threads
