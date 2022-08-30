@@ -1182,6 +1182,7 @@ function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): b
 
 // some global definitions for proper caching and inlining of GetSmbios()
 procedure ComputeGetSmbios;
+procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; ver: cardinal);
 var
   _Smbios: TSmbiosBasicInfos;
   _SmbiosRetrieved: boolean;
@@ -6154,15 +6155,31 @@ end;
 
 {.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(
 
+procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; ver: cardinal);
+var
+  uid: TGuid;
+begin
+  uid := src^;
+  if not IsZero(@uid, SizeOf(uid)) and // 0 means not supported
+     ((PCardinalArray(@uid)[0] <> $ffffffff) or // ff means not set
+      (PCardinalArray(@uid)[1] <> $ffffffff) or
+      (PCardinalArray(@uid)[2] <> $ffffffff) or
+      (PCardinalArray(@uid)[3] <> $ffffffff)) then
+  begin
+    {$ifdef SMB_UUID_SWAP4} // "wmic csproduct get uuid" don't swap
+    if ver >= $0206 then // see dmi_system_uuid() in dmidecode.c
+      uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
+    {$endif SMB_UUID_SWAP4}
+    dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
+  end;
+end;
+
 function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
 var
   lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
-  {$ifdef SMB_UUID_SWAP4}
   ver: cardinal;
-  {$endif SMB_UUID_SWAP4}
   len: PtrInt;
   cur: ^TSmbiosBasicInfo;
-  uid: TGuid;
   s: PByteArray;
 begin
   result := false;
@@ -6170,9 +6187,7 @@ begin
   s := pointer(raw.Data);
   if s = nil then
     exit;
-  {$ifdef SMB_UUID_SWAP4}
   ver := raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion;
-  {$endif SMB_UUID_SWAP4}
   FillCharFast(lines, SizeOf(lines), 0);
   repeat
     //writeln('type=',s[0], ' length=', s[1]);
@@ -6194,20 +6209,7 @@ begin
           lines[s[7]] := sbiSerial;
           if s[1] >= $18 then // 2.1+
           begin
-            uid := PGuid(@s[8])^;
-            if not IsZero(@uid, SizeOf(uid)) and // 0 means not supported
-               ((PCardinalArray(@uid)[0] <> $ffffffff) or // ff means not set
-                (PCardinalArray(@uid)[1] <> $ffffffff) or
-                (PCardinalArray(@uid)[2] <> $ffffffff) or
-                (PCardinalArray(@uid)[3] <> $ffffffff)) then
-            begin
-              {$ifdef SMB_UUID_SWAP4} // "wmic csproduct get uuid" don't swap
-              if ver >= $0206 then // see dmi_system_uuid() in dmidecode.c
-                uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
-              {$endif SMB_UUID_SWAP4}
-              info[sbiUuid] := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
-              //writeln(info[sbiUuid]);
-            end;
+            DecodeSmbiosUuid(@s[8], info[sbiUuid], ver);
             if s[1] >= $1a then // 2.4+
             begin
               lines[s[$19]] := sbiSku;

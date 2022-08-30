@@ -3899,8 +3899,6 @@ end;
 
 { ************ DMI/SMBIOS Binary Decoder }
 
-{.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(
-
 const
   _ROMSIZ: array[0..3] of string[2] = ('MB', 'GB', '??', '??');
   _VOLT:   array[0..3] of string[3] = ('5', '3.3', '2.9', '?');
@@ -3926,14 +3924,10 @@ function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo): boo
 var
   s: PByteArray;
   cur: PPRawUtf8;
-  n: cardinal;
+  n, ver: cardinal;
   len, i: PtrInt;
   lines: array[byte] of PRawUtf8; // efficient string decoding
-  uid: TGuid;
   cache: array of TSmbiosCache; // linked in 2nd pass
-  {$ifdef SMB_UUID_SWAP4}
-  ver: cardinal;
-  {$endif SMB_UUID_SWAP4}
 
   procedure FillCache(var dest: TSmbiosCache);
   var
@@ -3953,9 +3947,7 @@ begin
   s := pointer(raw.Data);
   if s = nil then
     exit;
-  {$ifdef SMB_UUID_SWAP4}
   ver := raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion;
-  {$endif SMB_UUID_SWAP4}
   // first pass will fill the main info structures
   FillCharFast(lines, SizeOf(lines), 0);
   repeat
@@ -3992,19 +3984,7 @@ begin
           lines[s[7]] := @info.System.Serial;
           if s[1] >= $18 then // 2.1+
           begin
-            uid := PGuid(@s[8])^;
-            if not IsZero(@uid, SizeOf(uid)) and // 0 means not supported
-               ((PCardinalArray(@uid)[0] <> $ffffffff) or // ff means not set
-                (PCardinalArray(@uid)[1] <> $ffffffff) or
-                (PCardinalArray(@uid)[2] <> $ffffffff) or
-                (PCardinalArray(@uid)[3] <> $ffffffff)) then
-            begin
-              {$ifdef SMB_UUID_SWAP4} // "wmic csproduct get uuid" don't swap
-              if ver >= $0206 then // see dmi_system_uuid() in dmidecode.c
-                uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
-              {$endif SMB_UUID_SWAP4}
-              info.System.UUID := ToUtf8(uid);
-            end;
+            DecodeSmbiosUuid(@s[8], info.System.UUID, ver);
             info.System.WakupType := TSmbiosSystemWakeup(s[$18]);
             if s[1] >= $1a then // 2.4+
             begin
