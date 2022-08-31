@@ -1576,6 +1576,8 @@ type
     // - we use an ordinal and not an enumerate because there are too much types
     Family: cardinal;
     /// 2.0+ Processor 64-bit ID (i)
+    // - we don't parse the Intel CpuID flags, because only 32-bit values are
+    // truncated here so are much less than all TIntelCpuFeatures information
     ID: RawUtf8;
     /// 2.0+ Manufacturer (m)
     Manufacturer: RawUtf8;
