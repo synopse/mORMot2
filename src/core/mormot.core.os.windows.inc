@@ -2740,7 +2740,7 @@ function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
 const
   _RSMB_ = $52534D42;
 
-function GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
 var
   h: HMODULE;
   siz: DWORD;

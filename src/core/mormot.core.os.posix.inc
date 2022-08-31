@@ -1609,7 +1609,7 @@ end;
 
 function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
 
-function GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
 begin
   result := GetRawSmbiosFromMem(info);
 end;

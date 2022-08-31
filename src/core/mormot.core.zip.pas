@@ -288,7 +288,7 @@ type
   PLocalFileHeader = ^TLocalFileHeader;
 
   //// last header structure, as used in .zip file format
-  // - this header ends the file and is used to find the TFileHeader entries
+  // - those 22 bytes end the file and are used to find the TFileHeader entries
   TLastHeader = record
     /// $06054b50 PK#5#6 = LASTHEADER_SIGNATURE_INC -
     signature: cardinal;

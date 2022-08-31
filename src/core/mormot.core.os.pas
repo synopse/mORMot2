@@ -1115,7 +1115,7 @@ function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean = false; now: cardinal = 0): RawUtf8; overload;
 
 type
-  /// the raw SMBIOS information as retrieved by GetRawSmbios()
+  /// the raw SMBIOS information as filled by GetRawSmbios
   TRawSmbiosInfo = record
     /// some flag only set by GetSystemFirmwareTable() Windows API
     Reserved: byte;
@@ -1131,7 +1131,11 @@ type
     Data: RawByteString;
   end;
 
-/// retrieve the SMBIOS raw information as a single binary blob
+var
+  /// global variable filled by GetRawSmbios from SMBIOS binary information
+  RawSmbios: TRawSmbiosInfo;
+
+/// retrieve the SMBIOS raw information as a single RawSmbios gloabl binary blob
 // - will try the Windows API if available, or search and parse the main system
 // memory with UEFI redirection if needed - via /systab system file on Linux, or
 // kenv() on FreeBSD (only fully tested to work on Windows XP+ and Linux)
@@ -1140,7 +1144,7 @@ type
 // - the current user should have enough rights to read the main system memory,
 // which means it should be root on most Operating Systems - so it could be
 // a good idea to read it once, and persist the information on disk
-function GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+function GetRawSmbios: boolean;
 
 type
   /// the basic SMBIOS fields supported by GetSmbios/DecodeSmbios functions
@@ -1179,7 +1183,7 @@ type
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
 
-/// decode basic SMBIOS information as text from a GetRawSmbios() binary blob
+/// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
 function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
 
 // some global definitions for proper caching and inlining of GetSmbios()
@@ -2640,7 +2644,7 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 function SeemsRealPointer(p: pointer): boolean;
 
 /// fill a buffer with a copy of some low-level system memory
-// - used e.g. by GetRawSmbios() on XP or Linux/POSIX
+// - used e.g. by GetRawSmbios on XP or Linux/POSIX
 // - will allow to read up to 4MB of memory
 // - use low-level ntdll.dll API on Windows, or reading /dev/mem on POSIX - so
 // expect sudo/root rights on most systems
@@ -6129,16 +6133,14 @@ begin
 end;
 
 procedure ComputeGetSmbios;
-var
-  raw: TRawSmbiosInfo;
 begin
   GlobalLock; // thread-safe retrieval
   try
     if not _SmbiosRetrieved then
     begin
        _SmbiosRetrieved := true;
-      if not GetRawSmbios(raw) or
-         not DecodeSmbios(raw, _Smbios) then
+      if not _GetRawSmbios(RawSmbios) or // OS specific call
+         not DecodeSmbios(RawSmbios, _Smbios) then
         // if not root on POSIX SMBIOS is not available
         // -> try to get what the OS exposes (Linux or FreeBSD)
         DirectSmbiosInfo(_Smbios);
@@ -6148,10 +6150,17 @@ begin
   end;
 end;
 
+function GetRawSmbios: boolean;
+begin
+  if not _SmbiosRetrieved then
+    ComputeGetSmbios; // fill both RawSmbios and _Smbios[]
+  result := RawSmbios.Data <> '';
+end;
+
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
 begin
   if not _SmbiosRetrieved then
-    ComputeGetSmbios;
+    ComputeGetSmbios; // fill both RawSmbios and _Smbios[]
   result := _Smbios[info];
 end;
 

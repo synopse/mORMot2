@@ -2044,10 +2044,14 @@ type
     Battery: array of TSmbiosBattery;
   end;
 
-/// retrieve and decode SMBIOS data into high-level usable information
-// - on POSIX, requires root to access full SMBIOS information
+var
+  /// global variable filled by GetSmbiosInfo from SMBIOS binary information
+  Smbios: TSmbiosInfo;
+
+/// retrieve and decode DMI/SMBIOS data into high-level Smbios global variable
+// - on POSIX, requires root to access SMBIOS raw memory so may return false
 // - see also mormot.core.os.pas GetSmbios() more limited function
-function GetSmbiosInfo(out info: TSmbiosInfo): boolean;
+function GetSmbiosInfo: boolean;
 
 /// decode SMBIOS raw binary into high-level usable information
 // - see also mormot.core.os.pas DecodeSmbios() more limited function
@@ -3974,12 +3978,24 @@ end;
 
 { ************ DMI/SMBIOS Binary Decoder }
 
-function GetSmbiosInfo(out info: TSmbiosInfo): boolean;
 var
-  raw: TRawSmbiosInfo;
+  GetSmbiosInfoChecked: boolean;
+
+function GetSmbiosInfo: boolean;
 begin
-  result := GetRawSmbios(raw) and
-            DecodeSmbiosInfo(raw, info);
+  if not GetSmbiosInfoChecked then
+  begin
+    GlobalLock;
+    try
+      if not GetSmbiosInfoChecked then
+        if GetRawSmbios then
+          DecodeSmbiosInfo(RawSmbios, Smbios);
+      GetSmbiosInfoChecked := true;
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := Smbios.Bios.VendorName <> '';
 end;
 
 const
