@@ -5122,9 +5122,8 @@ begin
         if (i >= Ctxt.Info.Cache.EnumMin) and
            GetBitPtr(Data, i) then
         begin
-          Ctxt.W.Add('"');
-          Ctxt.W.AddShort(PS^);
-          Ctxt.W.Add('"', ',');
+          Ctxt.AddShort(PS);
+          Ctxt.W.Add(',');
         end;
         inc(PByte(PS), PByte(PS)^ + 1); // next
       end;
