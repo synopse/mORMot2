@@ -6216,6 +6216,18 @@ begin
   result := _Smbios[info];
 end;
 
+{$ifndef FPC} // missing convenient RTL function in Delphi
+function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
+begin
+  try
+    uuid := StringToGUID(s);
+    result := true;
+  except
+    result := false;
+  end;
+end;
+{$endif FPC}
+
 procedure GetComputerUuid(out uuid: TGuid);
 var
   i: TSmbiosBasicInfo;
@@ -6227,7 +6239,7 @@ begin
   if not _SmbiosRetrieved then
     ComputeGetSmbios; // maybe from local SMB_CACHE file for non-root
   if (_Smbios[sbiUuid] <> '') and
-     TryStringToGUID('{' + _Smbios[sbiUuid] + '}', uuid) then
+     TryStringToGUID('{' + string(_Smbios[sbiUuid]) + '}', uuid) then
     exit;
   // did we already compute this UUID?
   fn := UUID_CACHE;
@@ -6257,8 +6269,6 @@ begin
     FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
 end;
 
-{.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(
-
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
 var
   uid: TGuid;
@@ -6270,9 +6280,12 @@ begin
       (PCardinalArray(@uid)[2] <> $ffffffff) or
       (PCardinalArray(@uid)[3] <> $ffffffff)) then
   begin
-    {$ifdef SMB_UUID_SWAP4} // "wmic csproduct get uuid" don't swap
-    // see dmi_system_uuid() in dmidecode.c
-    if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion >= $0206 then
+    // GUIDToString() already displays the first 4 bytes as little-endian
+    // so we don't need to swap those bytes as dmi_system_uuid() in dmidecode.c
+    // - without those 2 lines, result matches "wmic csproduct get uuid"
+    // on Windows XP or 10, and "dmidecode" output on both Delphi and FPC
+    {$ifdef SMB_UUID_SWAP4}
+    if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206 then
       uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
     {$endif SMB_UUID_SWAP4}
     dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
