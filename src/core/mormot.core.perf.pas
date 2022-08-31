@@ -2005,7 +2005,11 @@ type
   /// SMBIOS High-Level Information
   // - low-level DMI structures are decoded into ready-to-be-used text and sets
   // - when serialized as JSON, fields have very short identifiers
-  // (e.g. "b":{"n:"...});
+  // (e.g. "b":{"n:"...})
+  // - for serialization as binary or JSON in short or human readable form:
+  // ! b := BinarySave(@info, TypeInfo(TSmbiosInfo), rkRecordTypes);
+  // ! SaveJson(info, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
+  // ! SaveJson(info, TypeInfo(TSmbiosInfo), [twoTrimLeftEnumSets, twoEnumSetsAsTextInRecord], s);
   TSmbiosInfo = packed record
     /// decoded BIOS Information (Type 0) structure (b)
     Bios: TSmbiosBios;
