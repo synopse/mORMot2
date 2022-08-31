@@ -931,6 +931,11 @@ begin
     fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
 end;
 
+procedure FileSetSticky(const FileName: TFileName);
+begin
+  fpchmod(FileName, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+end;
+
 function FileSize(const FileName: TFileName): Int64;
 var
   st: TStat;
@@ -1646,7 +1651,7 @@ begin
   s := info.Data;
   CompressSynLZ(s, true); // SynLZ + Hash32 to avoid tampered file
   FileFromString(s, SMB_CACHE);
-  fpchmod(SMB_CACHE, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+  FileSetSticky(SMB_CACHE);
   DeleteFile(UUID_CACHE); // this file is now superfluous and maybe inconsistent
 end;
 

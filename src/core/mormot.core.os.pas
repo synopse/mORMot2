@@ -1207,6 +1207,7 @@ function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
 // - otherwise, will compute a genuine hash from known hardware information
 // (CPU, Bios, MAC) and store it in a local file for the next access, e.g. into
 // '/var/tmp/.synopse.uid' on POSIX
+// - note: some BIOS have no UUID, so we fallback to our hardware hash on those
 procedure GetComputerUuid(out uuid: TGuid);
 
 
@@ -2251,6 +2252,13 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 // no "hidden" file attribute, but you should define a FileName starting by '.'
 // - on Windows, will set the "hidden" file attribue
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
+
+/// set the "sticky bit" on a file or directory
+// - on POSIX, a "sticky" folder will ensure that its nested files will be
+// deleted by their owner; and a "sticky" file will ensure e.g. that no
+// /var/tmp file is deleted by systemd during its clean up phases
+// - on Windows, will set the Hidden and System file attributes
+procedure FileSetSticky(const FileName: TFileName);
 
 /// get a file size, from its name
 // - returns 0 if file doesn't exist
@@ -6246,9 +6254,7 @@ begin
   u.c3 := crc32c(u.c3, pointer(Executable.Host), length(Executable.Host));
   {$endif OSLINUX}
   if FileFromBuffer(@u, SizeOf(u), fn) then
-    {$ifdef OSPOSIX} // use S_ISVTX so that file is not removed from /var/tmp
-    fpchmod(fn, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
-    {$endif OSPOSIX}
+    FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
 end;
 
 {.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(
