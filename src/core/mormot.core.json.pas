@@ -5415,7 +5415,8 @@ begin
             (p^.OrdinalDefault = NO_DEFAULT) or
             not p^.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
-           (not (woDontStoreVoid in c.Options) or
+           (not ((woDontStoreVoid in c.Options) or
+                 (twoIgnoreDefaultInRecord in c.W.CustomOptions)) or
             not p^.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
