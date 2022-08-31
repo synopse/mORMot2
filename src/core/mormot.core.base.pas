@@ -3309,6 +3309,11 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 // data is corrupted during transmission, will instantly return ''
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
 
+/// return the Hash32() 32-bit CRC of CompressSynLZ() uncompressed data
+// - will first check the CRC of the supplied compressed Data
+// - returns 0 if the CRC of the compressed Data is not correct
+function CompressSynLZGetHash32(const Data: RawByteString): cardinal;
+
 /// simple Run-Length-Encoding compression of a memory buffer
 // - SynLZ is not good with input of a lot of redundant bytes, e.g. chunks of
 // zeros: you could pre-process RleCompress/RleUnCompress such data before SynLZ
@@ -9684,6 +9689,20 @@ begin
       {%H-}tmp.Done;
     end;
   result := 'synlz';
+end;
+
+function CompressSynLZGetHash32(const Data: RawByteString): cardinal;
+var
+  DataLen: integer;
+  P: PAnsiChar;
+begin
+  DataLen := length(Data);
+  P := pointer(Data);
+  if (DataLen <= 8) or
+     (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
+    result := 0
+  else
+    result := PCardinal(P)^;
 end;
 
 const
