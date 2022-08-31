@@ -2051,7 +2051,9 @@ function GetSmbiosInfo(out info: TSmbiosInfo): boolean;
 
 /// decode SMBIOS raw binary into high-level usable information
 // - see also mormot.core.os.pas DecodeSmbios() more limited function
-function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo): boolean;
+// - optionally intern the strings, e.g. if you maintain several SMBIOS instances
+function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
+  intern: TRawUtf8Interning = nil): boolean;
 
 
 { ************ TSynFpuException Wrapper for FPU Flags Preservation }
@@ -3996,13 +3998,14 @@ begin
   KBU(r, res);
 end;
 
-function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo): boolean;
+function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
+  intern: TRawUtf8Interning): boolean;
 var
   s: PByteArray;
   cur: PPRawUtf8;
   n, ver, cap: cardinal;
   q: QWord;
-  len, i: PtrInt;
+  len, trimright, i: PtrInt;
   lines: array[byte] of PRawUtf8; // efficient string decoding
   cache: array of TSmbiosCache; // linked in 2nd pass
 
@@ -4298,7 +4301,7 @@ begin
               if s[1] >= $15 then // 2.2+
               begin
                 n := PWord(@s[$12])^;
-                FormatUtf8('%/%/%', [
+                FormatUtf8('%/%/%', [ // mm/dd/yyyy as in info.Bios.BuildDate
                   UInt2DigitsToShortFast((n shr 5) and 15),
                   UInt2DigitsToShortFast(n and 31),
                   1980 + n shr 9], ManufactureDate);
@@ -4306,7 +4309,8 @@ begin
                 if s[$15] > 1 then
                   cap := cap * s[$15]; // Design Capacity Multiplier
               end;
-              FormatUtf8('% W/H', [cap div 1000], Capacity);
+              FormatUtf8('%.% W/H',
+                [cap div 1000, (cap mod 1000) div 100], Capacity);
             end;
           end;
         end;
@@ -4328,7 +4332,11 @@ begin
         len := StrLen(s);
         if cur^ <> nil then
         begin
-          FastSetString(cur^^, s, len);
+          trimright := len;
+          while (trimright <> 0) and
+                (s[trimright - 1] <= ord(' ')) do
+            dec(trimright);
+          intern.Unique(cur^^, pointer(s), trimright);
           cur^ := nil; // reset slot in lines[]
         end;
         s := @s[len + 1]; // next string
