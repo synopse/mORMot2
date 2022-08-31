@@ -1149,6 +1149,8 @@ type
     sbiUndefined,
     sbiBiosVendor,
     sbiBiosVersion,
+    sbiBiosFirmware,
+    sbiBiosRelease,
     sbiBiosDate,
     sbiManufacturer,
     sbiProductName,
@@ -6200,6 +6202,11 @@ begin
           lines[s[4]] := sbiBiosVendor;
           lines[s[5]] := sbiBiosVersion;
           lines[s[8]] := sbiBiosDate;
+          if s[1] >= $17 then // 2.4+
+          begin
+            info[sbiBiosRelease]  := RawUtf8(Format('%d.%d', [s[$14], s[$15]]));
+            info[sbiBiosFirmware] := RawUtf8(Format('%d.%d', [s[$16], s[$17]]));
+          end;
         end;
       1: // System Information (type 1)
         begin
