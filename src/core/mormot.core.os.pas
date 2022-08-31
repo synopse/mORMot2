@@ -2399,6 +2399,9 @@ function StringFromFolders(const Folders: array of TFileName;
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean = false; FileDate: TDateTime = 0): boolean;
 
+/// create a File from a memory buffer content
+function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
+
 /// compute an unique temporary file name
 // - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
@@ -4965,6 +4968,32 @@ begin
     FileSetDate(FileName, DateTimeToFileDate(FileDate));
   {$endif OSWINDOWS}
   result := true;
+end;
+
+function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
+var
+  F: THandle;
+  written: PtrInt;
+begin
+  result := false;
+  if FileName = '' then
+    exit;
+  F := FileCreate(FileName);
+  if PtrInt(F) < 0 then
+    exit;
+  result := true;
+  while Len > 0 do
+  begin
+    written := FileWrite(F, Buf^, Len);
+    if written <= 0 then
+    begin
+      result := false;
+      break;
+    end;
+    dec(Len, written);
+    inc(PByte(Buf), written);
+  end;
+  FileClose(F);
 end;
 
 var
