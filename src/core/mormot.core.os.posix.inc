@@ -2693,7 +2693,19 @@ end;
 
 { ****************** Gather Operating System Information }
 
-{$ifndef OSANDROID}
+{$ifdef OSANDROID}
+
+function GetSmbEfiMem: RawByteString;
+begin
+  result := '';
+end;
+
+function getpagesize: integer;
+begin
+  result := 4096;
+end;
+
+{$else}
 function getpagesize: integer; cdecl; external clib;
 {$endif OSANDROID}
 
@@ -2953,11 +2965,7 @@ begin
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
-  {$ifdef OSANDROID}
-  SystemInfo.dwPageSize := 4096;
-  {$else}
   SystemInfo.dwPageSize := getpagesize; // call libc API
-  {$endif OSANDROID}
   {$ifdef OSBSDDARWIN}
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
