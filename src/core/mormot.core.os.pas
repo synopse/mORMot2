@@ -1202,6 +1202,13 @@ var
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// retrieve a genuine 128-bit UUID identifier for this computer
+// - first try GetSmbios(sbiUuid), i.e. the SMBIOS System UUID
+// - otherwise, will compute a genuine hash from known hardware information
+// (CPU, Bios, MAC) and store it in a local file for the next access, e.g. into
+// '/var/tmp/.synopse.uid' on POSIX
+procedure GetComputerUuid(out uuid: TGuid);
+
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
 
@@ -6199,6 +6206,49 @@ begin
   if not _SmbiosRetrieved then
     ComputeGetSmbios; // fill both RawSmbios and _Smbios[]
   result := _Smbios[info];
+end;
+
+procedure GetComputerUuid(out uuid: TGuid);
+var
+  i: TSmbiosBasicInfo;
+  u: THash128Rec absolute uuid;
+  s: RawByteString;
+  fn: TFileName;
+begin
+  // first try to retrieve the Machine BIOS UUID
+  if not _SmbiosRetrieved then
+    ComputeGetSmbios; // maybe from local SMB_CACHE file for non-root
+  if (_Smbios[sbiUuid] <> '') and
+     TryStringToGUID('{' + _Smbios[sbiUuid] + '}', uuid) then
+    exit;
+  // did we already compute this UUID?
+  fn := UUID_CACHE;
+  s := StringFromFile(fn);
+  if length(s) = SizeOf(u) then
+  begin
+    uuid := PGuid(s)^;
+    exit;
+  end;
+  // no known UUID: compute and store a 128-bit hash from hardware information
+  {$ifdef CPUINTELARM}
+  crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b);
+  {$else}
+  FillZero(u.b);
+  {$endif CPUINTELARM}
+  for i := low(i) to high(i) do // some of _Smbios[] may have been retrieved
+    u.c[ord(i) and 3] := crc32c(u.c[ord(i) and 3], pointer(_Smbios[i]), length(_Smbios[i]));
+  u.c0 := crc32c(u.c0, pointer(CpuInfoText), length(CpuInfoText));
+  u.c1 := crc32c(u.c1, pointer(CpuCacheText), length(CpuCacheText));
+  u.c2 := crc32c(u.c2, pointer(BiosInfoText), length(BiosInfoText));
+  {$ifdef OSLINUX}
+  HashLocalMacAddresses(u, 3);
+  {$else}
+  u.c3 := crc32c(u.c3, pointer(Executable.Host), length(Executable.Host));
+  {$endif OSLINUX}
+  if FileFromBuffer(@u, SizeOf(u), fn) then
+    {$ifdef OSPOSIX} // use S_ISVTX so that file is not removed from /var/tmp
+    fpchmod(fn, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+    {$endif OSPOSIX}
 end;
 
 {.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(

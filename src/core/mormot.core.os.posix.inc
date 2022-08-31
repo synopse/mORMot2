@@ -2771,6 +2771,37 @@ begin
     result := ReadSystemMemory(xaddr, 32); // 32 bytes is enough
 end;
 
+// on Android, /sys/class/net is not readable from the standard user :(
+procedure HashLocalMacAddresses(var u: THash128Rec; n: PtrInt);
+var
+  SR: TSearchRec;
+  fn: TFileName;
+  f: RawUtf8;
+begin
+  if FindFirst('/sys/class/net/*', faDirectory, SR) <> 0 then
+    exit;
+  repeat
+    if (SR.Name <> 'lo') and
+       SearchRecValidFolder(SR) then
+    begin
+      fn := '/sys/class/net/' + SR.Name;
+      f := StringFromFile(fn + '/flags', {nosize=}true);
+      if (length(f) > 2) and // e.g. '0x40' or '0x1043'
+         not IdemPChar(pointer(SR.Name), 'DOCKER') and
+         (PosixParseHex32(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
+      begin
+        f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
+        if f <> '' then
+        begin
+          u.c[n] := crc32c(u.c[n], pointer(f), length(f));
+          n := (n + 1) and 3;
+        end;
+      end;
+    end;
+  until FindNext(SR) <> 0;
+  FindClose(SR);
+end;
+
 {$endif OSLINUX}
 
 {$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code

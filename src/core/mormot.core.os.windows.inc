@@ -3683,6 +3683,11 @@ begin
   end
 end;
 
+function UUID_CACHE: TFileName;
+begin // where to cache our computed UUID as a local file
+  result := GetSystemPath(spCommonData) + 'synopse.uuid';
+end;
+
 procedure InitializeSpecificUnit;
 var
   h: THandle;
