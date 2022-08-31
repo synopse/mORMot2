@@ -1188,7 +1188,7 @@ function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): b
 
 // some global definitions for proper caching and inlining of GetSmbios()
 procedure ComputeGetSmbios;
-procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; ver: cardinal);
+procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
 var
   _Smbios: TSmbiosBasicInfos;
   _SmbiosRetrieved: boolean;
@@ -6166,7 +6166,7 @@ end;
 
 {.$define SMB_UUID_SWAP4} // seems not needed on Windows or Linux :(
 
-procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; ver: cardinal);
+procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
 var
   uid: TGuid;
 begin
@@ -6178,7 +6178,8 @@ begin
       (PCardinalArray(@uid)[3] <> $ffffffff)) then
   begin
     {$ifdef SMB_UUID_SWAP4} // "wmic csproduct get uuid" don't swap
-    if ver >= $0206 then // see dmi_system_uuid() in dmidecode.c
+    // see dmi_system_uuid() in dmidecode.c
+    if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion >= $0206 then
       uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
     {$endif SMB_UUID_SWAP4}
     dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
@@ -6188,7 +6189,6 @@ end;
 function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
 var
   lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
-  ver: cardinal;
   len: PtrInt;
   cur: ^TSmbiosBasicInfo;
   s: PByteArray;
@@ -6198,10 +6198,8 @@ begin
   s := pointer(raw.Data);
   if s = nil then
     exit;
-  ver := raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion;
   FillCharFast(lines, SizeOf(lines), 0);
   repeat
-    //writeln('type=',s[0], ' length=', s[1]);
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) then // length
       break;
@@ -6225,7 +6223,7 @@ begin
           lines[s[7]] := sbiSerial;
           if s[1] >= $18 then // 2.1+
           begin
-            DecodeSmbiosUuid(@s[8], info[sbiUuid], ver);
+            DecodeSmbiosUuid(@s[8], info[sbiUuid], raw);
             if s[1] >= $1a then // 2.4+
             begin
               lines[s[$19]] := sbiSku;
@@ -6275,7 +6273,6 @@ begin
         begin
           if info[cur^] = '' then // only set the first occurence if multiple
             FastSetString(info[cur^], s, len);
-          //writeln(ord(cur^), ' = ', info[cur^]);
           cur^ := sbiUndefined; // reset slot in lines[]
         end;
         s := @s[len + 1]; // next string

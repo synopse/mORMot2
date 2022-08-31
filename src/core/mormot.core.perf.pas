@@ -4019,7 +4019,7 @@ function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
 var
   s: PByteArray;
   cur: PPRawUtf8;
-  n, ver, cap: cardinal;
+  n, cap: cardinal;
   q: QWord;
   len, trimright, i: PtrInt;
   lines: array[byte] of PRawUtf8; // efficient string decoding
@@ -4043,7 +4043,6 @@ begin
   s := pointer(raw.Data);
   if s = nil then
     exit;
-  ver := raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion;
   // first pass will fill the main info structures
   FillCharFast(lines, SizeOf(lines), 0);
   repeat
@@ -4081,7 +4080,7 @@ begin
           lines[s[7]] := @info.System.Serial;
           if s[1] >= $18 then // 2.1+
           begin
-            DecodeSmbiosUuid(@s[8], info.System.UUID, ver);
+            DecodeSmbiosUuid(@s[8], info.System.UUID, raw);
             info.System.WakupType := TSmbiosSystemWakeup(s[$18]);
             if s[1] >= $1a then // 2.4+
             begin
