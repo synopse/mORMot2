@@ -1142,8 +1142,8 @@ var
 // - follow DSP0134 3.6.0 System Management BIOS (SMBIOS) Reference Specification
 // with both SMBIOS 2.1 (32-bit) or SMBIOS 3.0 (64-bit) entry points
 // - the current user should have enough rights to read the main system memory,
-// which means it should be root on most Operating Systems - so it could be
-// a good idea to read it once, and persist the information on disk
+// which means it should be root on most POSIX Operating Systems - so we persist
+// this raw binary in /var/tmp/.synopse.smb to retrieve it from non-root user
 function GetRawSmbios: boolean;
 
 type
@@ -1198,6 +1198,7 @@ var
 // DMI/SMBIOS decoder
 // - on POSIX, requires root to access full SMBIOS information - will fallback
 // reading /sys/class/dmi/id/* on Linux or kenv() on FreeBSD for most entries
+// if we found no previous root-retrieved cache in local /var/tmp/.synopse.smb
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -6168,11 +6169,18 @@ begin
     if not _SmbiosRetrieved then
     begin
        _SmbiosRetrieved := true;
-      if not _GetRawSmbios(RawSmbios) or // OS specific call
-         not DecodeSmbios(RawSmbios, _Smbios) then
-        // if not root on POSIX SMBIOS is not available
-        // -> try to get what the OS exposes (Linux or FreeBSD)
-        DirectSmbiosInfo(_Smbios);
+      if _GetRawSmbios(RawSmbios) then // OS specific call
+         if DecodeSmbios(RawSmbios, _Smbios) then
+         begin
+           // we were able to retrieve and decode SMBIOS information
+           {$ifdef OSPOSIX}
+           _AfterDecodeSmbios(RawSmbios); // persist in SMB_CACHE for non-root
+           {$endif OSPOSIX}
+           exit;
+         end;
+      // if not root on POSIX, SMBIOS is not available
+      // -> try to get what the OS exposes (Linux or FreeBSD)
+      DirectSmbiosInfo(_Smbios);
     end;
   finally
     GlobalUnLock;

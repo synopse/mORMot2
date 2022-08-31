@@ -1609,9 +1609,45 @@ end;
 
 function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
 
+const
+  // on POSIX, we store the SMBIOS data in a local cache for non-root users
+  SMB_CACHE = '/var/tmp/.synopse.smb';
+  SMB_FLAGS = $010003ff; // assume 3.0 SMB is good enough
+  // local storage of fallback UUID
+  UUID_CACHE = '/var/tmp/.synopse.uid';
+  // note: /var/tmp is cleaned up by systemd after 30 days so we set S_ISVTX
+  //   see https://systemd.io/TEMPORARY_DIRECTORIES
+
 function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
 begin
   result := GetRawSmbiosFromMem(info);
+  if result then
+    exit;
+  info.Data := StringFromFile(SMB_CACHE);
+  if info.Data = '' then
+    exit;
+  if CompressSynLZ(info.Data, false) = '' then
+    info.Data := ''; // tampered file
+  if info.Data = '' then
+    exit;
+  PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
+  info.Length := length(info.Data);
+  result := true;
+end;
+
+procedure _AfterDecodeSmbios(const info: TRawSmbiosInfo);
+var
+  s: RawByteString;
+begin
+  if (PCardinal(@info)^ = SMB_FLAGS) or
+     (CompressSynLZGetHash32(StringFromFile(SMB_CACHE)) = Hash32(info.Data)) then
+    exit;
+  // cache raw SMBIOS data for non-root users
+  s := info.Data;
+  CompressSynLZ(s, true); // SynLZ + Hash32 to avoid tampered file
+  FileFromString(s, SMB_CACHE);
+  fpchmod(SMB_CACHE, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+  DeleteFile(UUID_CACHE); // this file is now superfluous and maybe inconsistent
 end;
 
 function SeemsRealPointer(p: pointer): boolean;
@@ -1774,6 +1810,7 @@ end;
 
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
+  // on MAC: call  system_profiler SPHardwareDataType
   info[sbiCpuVersion] := CpuInfoText;
 end;
 
