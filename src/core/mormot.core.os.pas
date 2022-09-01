@@ -1116,6 +1116,7 @@ function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
 
 type
   /// the raw SMBIOS information as filled by GetRawSmbios
+  // - first 4 bytes are $010003ff on POSIX if read from /var/tmp/.synopse.smb
   TRawSmbiosInfo = record
     /// some flag only set by GetSystemFirmwareTable() Windows API
     Reserved: byte;
@@ -1149,6 +1150,7 @@ function GetRawSmbios: boolean;
 type
   /// the basic SMBIOS fields supported by GetSmbios/DecodeSmbios functions
   // - only include the first occurence for board/cpu/battery types
+  // - see TSmbiosInfo in mormot.core.perf.pas for more complete decoding
   TSmbiosBasicInfo = (
     sbiUndefined,
     sbiBiosVendor,
@@ -1178,12 +1180,14 @@ type
     sbiBatteryManufacturer,
     sbiBatteryName,
     sbiBatteryVersion,
-    sbiBatteryChemistry);
+    sbiBatteryChemistry
+  );
 
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
+// - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
 function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
 
 // some global definitions for proper caching and inlining of GetSmbios()
@@ -1194,8 +1198,8 @@ var
   _SmbiosRetrieved: boolean;
 
 /// retrieve SMBIOS information as text
-// - only the main values are decoded - see mormot.core.perf for a more complete
-// DMI/SMBIOS decoder
+// - only the main values are decoded - see GetSmbiosInfo in mormot.core.perf
+// for a more complete DMI/SMBIOS decoder
 // - on POSIX, requires root to access full SMBIOS information - will fallback
 // reading /sys/class/dmi/id/* on Linux or kenv() on FreeBSD for most entries
 // if we found no previous root-retrieved cache in local /var/tmp/.synopse.smb

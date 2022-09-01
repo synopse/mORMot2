@@ -1115,6 +1115,8 @@ function GetLastExceptions(Depth: integer = 0): variant; overload;
 { ************ DMI/SMBIOS Binary Decoder }
 
 type
+  /// general features identified by this BIOS (c)
+  // - i.e. TSmbiosBios.Characteristics field
   TSmbiosBiosFlags = set of (
     sbfReserved0,
     sbfReserved1,
@@ -1178,6 +1180,8 @@ type
     sbfR59
   );
 
+  /// Identifies the event that caused the system to power up (w)
+  // - i.e. TSmbiosSystem.WakeupType field
   TSmbiosSystemWakeup = (
     sswReserved,
     sswOther,
@@ -1190,6 +1194,8 @@ type
     sswAcPowerRestored
   );
 
+  /// Feature flags (f)
+  // - i.e. TSmbiosBoard.Features
   TSmbiosBoardFeatures = set of (
     sbfHostingBoard,
     sbfRequiresDaugtherBoard,
@@ -1198,6 +1204,8 @@ type
     sbfSwappable
   );
 
+  /// Type of Board (t)
+  // - i.e. TSmbiosBoard.BoardType
   TSmbiosBoardType = (
     sbtUndefined,
     sbtUnknown,
@@ -1218,16 +1226,22 @@ type
   /// BIOS Information (Type 0) structure
   TSmbiosBios = packed record
     /// 2.0+ BIOS Vendor's Name (n)
+    // - e.g. 'LENOVO'
     VendorName: RawUtf8;
     /// 2.0+ BIOS Version text (v)
+    // - e.g. 'N1QET95W (1.70)'
     Version: RawUtf8;
-    /// 2.0+ BIOS Release Date (b)
+    /// 2.0+ BIOS Release Date in MM/DD/YYYY format (b)
+    // - e.g. '05/25/2022'
     BuildDate: RawUtf8;
     /// 2.0/2.4+ ROM Size as text (s)
+    // - e.g. '16 MB'
     RomSize: RawUtf8;
     /// 2.4+ release version of the BIOS as text (r)
+    // - e.g. '1.70'
     Release: RawUtf8;
     /// 2.4+ release version of the embedded controller firmware (f)
+    // - e.g. '1.36'
     Firmware: RawUtf8;
     /// general features identified by this BIOS (c)
     Characteristics: TSmbiosBiosFlags;
@@ -1236,18 +1250,25 @@ type
   /// System Information (Type 1) structure
   TSmbiosSystem = packed record
     /// 2.0+ Manufacturer (m)
+    // - e.g. 'LENOVO'
     Manufacturer: RawUtf8;
     /// 2.0+ Product Name (p)
+    // - e.g. '20HES23B0U'
     ProductName: RawUtf8;
     /// 2.0+ Version (v)
+    // - e.g. 'ThinkPad T470'
     Version: RawUtf8;
     /// 2.0+ Serial Number (s)
+    // - e.g. 'DZ4BS0A7'
     Serial: RawUtf8;
     /// 2.1+ Universal Unique Identifier (u)
+    // - e.g. '02CD5F81-145E-41DB-9C53-784582A49845'
     UUID: RawUtf8;
     /// 2.4+ Product ID or Purchase Order Number, i.e. Sale identifier (k)
+    // - e.g. 'LENOVO_MT_20HE_BU_Think_FM_ThinkPad'
     SKU: RawUtf8;
     /// 2.4+ Computer Family, with similar branding and cosmetic features (f)
+    // - e.g. 'ThinkPad T470'
     Family: RawUtf8;
     /// 2.1+ Identifies the event that caused the system to power up (w)
     WakupType: TSmbiosSystemWakeup;
@@ -1256,25 +1277,31 @@ type
   /// Baseboard (or Module) Information (Type 2) structure (m)
   TSmbiosBoard = packed record
     /// Manufacturer (m)
+    // - e.g. 'LENOVO'
     Manufacturer: RawUtf8;
     /// Product (p)
+    // - e.g. '20HES23B0U'
     Product: RawUtf8;
     /// Version (v)
+    // - e.g. 'SDK0J40697 WIN'
     Version: RawUtf8;
     /// Serial Number (s)
+    // - e.g. 'B2MA42A351A'
     Serial: RawUtf8;
     /// Asset Tag (a)
+    // - e.g. 'Not Available'
     AssetTag: RawUtf8;
     /// Location within the BaseBoard Chassis (l)
+    // - e.g. 'Not Available'
     Location: RawUtf8;
     /// Feature flags (f)
     Features: TSmbiosBoardFeatures;
     /// Type of Board (t)
     BoardType: TSmbiosBoardType;
-    /// Other structures contained in this Baseboard (c)
-    //Contains: array of TSmbiosHandle;
   end;
 
+  /// Chassis Type (t)
+  // - i.e. TSmbiosChassis.ChassisType field
   TSmbiosChassisType = (
     sctUndefined,
     sctOther,
@@ -1315,6 +1342,8 @@ type
     sctStickPC
   );
 
+  /// State of the Chassis when it was last booted
+  // - i.e. TSmbiosChassis.BootUpState/PowerState/ThermalState fields
   TSmbiosChassisState = (
     scsUndefined,
     scsOther,
@@ -1325,6 +1354,8 @@ type
     scsNonRecoverable
   );
 
+  /// Physical Security Status (p)
+  // - i.e. TSmbiosChassis.Security field
   TSmbiosChassisSecurityState = (
     scssUndefined,
     scssOther,
@@ -1341,12 +1372,16 @@ type
     /// 2.0+ Chassis Type (t)
     ChassisType: TSmbiosChassisType;
     /// 2.0+ Manufacturer (m)
+    // - e.g. 'LENOVO'
     Manufacturer: RawUtf8;
     /// 2.0+ Version (v)
+    // - e.g. 'None'
     Version: RawUtf8;
     /// 2.0+ Serial Number (s)
+    // - e.g. 'PS1DKS29'
     Serial: RawUtf8;
     /// 2.0+ Asset Tag (a)
+    // - e.g. 'No Asset Information'
     AssetTag: RawUtf8;
     /// 2.1+ State of the Chassis when it was last booted (b)
     BootUpState: TSmbiosChassisState;
@@ -1364,6 +1399,8 @@ type
     PowerCords: byte;
   end;
 
+  /// Processor type (t)
+  // - i.e. TSmbiosProcessor.ProcessorType field
   TSmbiosProcessorType = (
     sptUndefined,
     sptOther,
@@ -1374,6 +1411,8 @@ type
     sptVideo
   );
 
+  /// CPU Status (u)
+  // - i.e. TSmbiosProcessor.Status field
   TSmbiosProcessorStatus = (
     spsUnknown,
     spsEnabled,
@@ -1382,6 +1421,8 @@ type
     spsIdle
   );
 
+  /// Processor Characteristics (h)
+  // - i.e. TSmbiosProcessor.Flags field
   TSmbiosProcessorFlags = set of (
     spfReserved,
     spfUnknown,
@@ -1395,6 +1436,8 @@ type
     spfArm64SocID
   );
 
+  /// Socket Upgrade (p)
+  // - i.e. TSmbiosProcessor.Upgrade field
   TSmbiosProcessorUpgrade = (
     spuReserved,
     spuOther,
@@ -1471,6 +1514,8 @@ type
     spuBGA5773
   );
 
+  /// Cache Location, relative to the CPU module (l)
+  // - i.e. TSmbiosCache.Location field
   TSmbiosCacheLocation = (
     sclInternal,
     sclExternal,
@@ -1478,6 +1523,8 @@ type
     sclUnknown
   );
 
+  /// Cache Operational Mode (o)
+  // - i.e. TSmbiosCache.OperationalMode field
   TSmbiosCacheMode = (
     scmWriteThrough,
     scmWriteBack,
@@ -1485,6 +1532,8 @@ type
     scmUnknown
   );
 
+  /// Current/Supported SRAM type (c/r)
+  // - i.e. TSmbiosCache.Sram/SupportedSram fields
   TSmbiosCacheSramType = set of (
     sstSramOther,
     sstSramUnknown,
@@ -1495,6 +1544,8 @@ type
     sstAsynchronous
   );
 
+  /// Error Correction Type (e)
+  // - i.e. TSmbiosCache.Ecc field
   TSmbiosCacheEcc = (
     sceUndefined,
     sceUnknown,
@@ -1505,6 +1556,8 @@ type
     sceMultiBitEcc
   );
 
+  /// System Cache Type (t)
+  // - i.e. TSmbiosCache.CacheType field
   TSmbiosCacheType = (
     sctUndefinedCache,
     sctOtherCache,
@@ -1514,6 +1567,8 @@ type
     sctUnified
   );
 
+  /// Cache Associativity (a)
+  // - i.e. TSmbiosCache.Associativity field
   TSmbiosCacheAssociativity = (
     scaUndefined,
     scaOther,
@@ -1537,6 +1592,7 @@ type
     /// low-level handle used for linking into TSmbiosProcessor
     Handle: word;
     /// 2.0+  Reference Designation of this Socket (d)
+    // - e.g. 'L1 Cache'
     SocketDesignation: RawUtf8;
     /// 2.0+ Cache Level 1-8 (v)
     Level: byte;
@@ -1549,8 +1605,10 @@ type
     /// 2.0+ Operational Mode (o)
     OperationalMode: TSmbiosCacheMode;
     /// 2.0+/3.1+ Installed Size in bytes (s)
+    // - e.g. '128 KB'
     Size: RawUtf8;
     /// 2.0+/3.1+ Maxium Size in bytes (m)
+    // - e.g. '128 KB'
     MaxSize: RawUtf8;
     /// 2.0+ Current SRAM type (c)
     Sram: TSmbiosCacheSramType;
@@ -1569,23 +1627,32 @@ type
   /// Processor Information (Type 4) structure
   TSmbiosProcessor = packed record
     /// 2.0+  Reference Designation of this Socket (d)
+    // - e.g. 'U3E1'
     SocketDesignation: RawUtf8;
     /// 2.0+ Processor type (t)
     ProcessorType: TSmbiosProcessorType;
     /// 2.0+/2.6+ Processor family (f)
     // - we use an ordinal and not an enumerate because there are too much types
+    // - see "Table 23 – Processor Information: Processor Family field" in
+    // DSP0134 SMBIOS Reference Specification 3.6.0 page 49 to 55
+    // - the Version (v) field gives much more intelligible information
     Family: cardinal;
-    /// 2.0+ Processor 64-bit ID (i)
+    /// 2.0+ Processor 64-bit ID as hexadecimal (i)
     // - we don't parse the Intel CpuID flags, because only 32-bit values are
     // truncated here so are much less than all TIntelCpuFeatures information
+    // - e.g. 'e9060800fffbebbf'
     ID: RawUtf8;
     /// 2.0+ Manufacturer (m)
+    // - e.g. 'Intel(R) Corporation'
     Manufacturer: RawUtf8;
     /// 2.0+ Version (v)
+    // - e.g. 'Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz'
     Version: RawUtf8;
     /// 2.0+ Voltage (g)
+    // - e.g. '1.0V'
     Voltage: RawUtf8;
     /// 2.0+ CPU Status (u)
+    // - e.g. 'Enabled'
     Status: TSmbiosProcessorStatus;
     /// 2.0+ CPU socket populated (l)
     Populated: boolean;
@@ -1598,10 +1665,13 @@ type
     /// 2.1+ L3 Cache (3)
     L3Cache: TSmbiosCache;
     /// 2.3+ Serial Number (s)
+    // - e.g. ''
     Serial: RawUtf8;
     /// 2.3+ Asset Tag (a)
+    // - e.g. 'None'
     AssetTag: RawUtf8;
     /// 2.3+ Part Number (n)
+    // - e.g. 'None'
     PartNumber: RawUtf8;
     /// 2.5+/3.0+ Number of Core per Socket (c)
     CoreCount: cardinal;
@@ -1615,6 +1685,8 @@ type
     Flags: TSmbiosProcessorFlags;
   end;
 
+  /// Internal/External Connector Type (j/f)
+  // - i.e. TSmbiosConnector.InternalType/ExternalType fields
   TSmbiosConnectorType = (
     sctNone,
     sctCentronics,
@@ -1659,6 +1731,8 @@ type
     sctPC98Full
   );
 
+  /// Describes the function of the Port (p)
+  // - i.e. TSmbiosConnector.PortType field
   TSmbiosConnectorPort = (
     scpNone,
     scpParallelXTAT,
@@ -1701,10 +1775,12 @@ type
   /// Port Connector Information (Type 8) structure
   TSmbiosConnector = packed record
     /// 2.0+ Internal Reference Designator (i)
+    // - e.g. ''
     InternalName: RawUtf8;
     /// 2.0+ Internal Connector Type (j)
     InternalType: TSmbiosConnectorType;
     /// 2.0+ External Reference Designator (e)
+    // - e.g. 'USB 1'
     ExternalName: RawUtf8;
     /// 2.0+ External Connector Type (f)
     ExternalType: TSmbiosConnectorType;
@@ -1712,7 +1788,9 @@ type
     PortType: TSmbiosConnectorPort;
   end;
 
-  // sstPC98C20 = A0H
+  /// Slot Type (t)
+  // - i.e. TSmbiosSlot.SlotType field
+  // - warning: sstPC98C20 and following are encoded as A0H and next bytes
   TSmbiosSlotType = (
     sstUndefined,
     sstOther,
@@ -1795,6 +1873,8 @@ type
     sst3UE3FormFactor
   );
 
+  /// Data Bus Width (w)
+  // - i.e. TSmbiosSlot.Width field
   TSmbiosSlotWidth = (
     sswUndefinedSlotWidth,
     sswOtherSlotWidth,
@@ -1804,18 +1884,19 @@ type
     ssw32bit,
     ssw64bit,
     ssw128bit,
-    sswx1,
-    sswx2,
-    sswx4,
-    sswx8,
-    sswx12,
-    sswx16,
-    sswx32
+    sswX1,
+    sswX2,
+    sswX4,
+    sswX8,
+    sswX12,
+    sswX16,
+    sswX32
   );
 
   /// System Slot (Type 9) structure
   TSmbiosSlot = packed record
     /// 2.0+ Slot Designation (d)
+    // - e.g. 'Media Card Slot'
     Designation: RawUtf8;
     /// 2.0+ Slot Type (t)
     SlotType: TSmbiosSlotType;
@@ -1823,6 +1904,8 @@ type
     Width: TSmbiosSlotWidth;
   end;
 
+  /// Memory Implementation form factor (f)
+  // - i.e. TSmbiosMemory.FormFactor field
   TSmbiosMemoryFormFactor = (
     smfUndefined,
     smfOther,
@@ -1843,6 +1926,8 @@ type
     smfDie
   );
 
+  /// Type of Memory used by this Device (t)
+  // - i.e. TSmbiosMemory.MemoryType field
   TSmbiosMemoryType = (
     smtUndefined,
     smtOther,
@@ -1883,6 +1968,8 @@ type
     smtHBM3
   );
 
+  /// Features of this Memory Type (e)
+  // - i.e. TSmbiosMemory.Details field
   TSmbiosMemoryDetails = set of (
     smdReserved,
     smdOther,
@@ -1910,6 +1997,7 @@ type
     /// 2.1+ Data width, in bits (d)
     DataWidth: word;
     /// 2.1+/2.7+ Size of the memory device, in Bytes (s)
+    // - e.g. '16 GB'
     Size: RawUtf8;
     /// 2.1+ Implementation form factor (f)
     FormFactor: TSmbiosMemoryFormFactor;
@@ -1920,21 +2008,30 @@ type
     /// 2.1+ Features of this Memory Type (e)
     Details: TSmbiosMemoryDetails;
     /// 2.1+ Device Locator (l)
+    // - e.g. 'ChannelA-DIMM0'
     Locator: RawUtf8;
     /// 2.1+ Bank Locator (b)
+    // - e.g. 'BANK 0'
     Bank: RawUtf8;
     /// 2.3+ Manufacturer (m)
+    // - e.g. 'Samsung'
     Manufacturer: RawUtf8;
     /// 2.3+ Serial Number (n)
+    // - e.g. '6543DB8A'
     Serial: RawUtf8;
     /// 2.3+ Asset Tag (a)
+    // - e.g. ''None
     AssetTag: RawUtf8;
     /// 2.3+ Part Number (p)
+    // - e.g. 'M761A3L43CB1-CRC'
     PartNumber: RawUtf8;
     /// 2.3+/3.3+ Maximum Capable Speed, in Megatransfers per Seconds (c)
+    // - e.g. 2133
     MtPerSec: cardinal;
   end;
 
+  /// Type of Pointing Device (t)
+  // - i.e. TSmbiosPointingDevice.DeviceType field
   TSmbiosPointingType = (
     sptUndefinedDevice,
     sptOtherDevice,
@@ -1948,6 +2045,8 @@ type
     sptOpticalSensor
   );
 
+  /// Interface of Pointing Device (i)
+  // - i.e. TSmbiosPointingDevice.InterfaceType field
   TSmbiosPointingInterface = (
     spiUndefined,
     spiOther,
@@ -1978,25 +2077,36 @@ type
   /// Portable Battery (Type 22) structure
   TSmbiosBattery = packed record
     /// 2.1+ Location (l)
+    // - e.g. 'Front'
     Location: RawUtf8;
     /// 2.1+ Manufacturer (m)
+    // - e.g. 'SANYO'
     Manufacturer: RawUtf8;
     /// 2.1+ Serial Number (s)
+    // - e.g. ''
     Serial: RawUtf8;
     /// 2.1+ Name (n)
+    // - e.g. '01AV419'
     Name: RawUtf8;
     /// 2.1+ Version (v)
+    // - e.g. '03.01'
     Version: RawUtf8;
     /// 2.1+ Design Capacity in mW/h (c)
+    // - e.g. '24.0 W/H'
     Capacity: RawUtf8;
     /// 2.1+ Design Capacity in mV (g)
+    // - e.g. '11.5 V'
     Voltage: RawUtf8;
     /// 2.2+ Identifies the battery chemistry (h)
+    // - e.g. 'LION'
     Chemistry: RawUtf8;
-    /// 2.2+ Manufacture Date (d)
+    /// 2.2+ Manufacture Date in 'DD/MM/YYYY' format (d)
+    // - e.g. '05/12/2017'
     ManufactureDate: RawUtf8;
   end;
 
+  /// decoded Hardware Security (Type 24) status
+  // - i.e. TSmbiosInfo.Security fields
   TSmbiosSecurityStatus = (
     sssDisabled,
     sssEnabled,
@@ -2004,10 +2114,10 @@ type
     sssUnknown
   );
 
-  /// SMBIOS High-Level Information
+  /// High-Level Decoded SMBIOS Information
   // - low-level DMI structures are decoded into ready-to-be-used text and sets
   // - when serialized as JSON, fields have very short identifiers
-  // (e.g. "b":{"n:"...})
+  // (e.g. "b":{"n:"...}) which are marked in each field comment (e.g. (b) and (n))
   // - for serialization as binary or JSON in short or human readable form:
   // ! b := BinarySave(@info, TypeInfo(TSmbiosInfo), rkRecordTypes);
   // ! SaveJson(info, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
