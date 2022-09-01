@@ -2233,6 +2233,11 @@ type
     PointingDevice: array of TSmbiosPointingDevice;
     /// decoded Portable Battery (Type 22) structure (w)
     Battery: array of TSmbiosBattery;
+    /// decoded OEM Strings (Type 11) and System Configuration options (Type 12)
+    // structures (o)
+    // - contains free-form strings defined by the OEM
+    // - e.g. ['vboxVer_6.1.36','vboxRev_152435'] for a Virtual Box VM
+    Oem: TRawUtf8DynArray;
   end;
 
 var
@@ -4442,6 +4447,32 @@ begin
             Width := TSmbiosSlotWidth(s[6]);
           end;
         end;
+      11, // OEM Strings (type 11) and
+      12: // System Configuration options (type 12)
+        if s[4] <> 0 then
+        begin
+          i := length(info.Oem);
+          SetLength(info.Oem, i + s[4]);
+          // we just parse the strings table here
+          s := @s[s[1]];
+          if s[0] = 0 then
+            inc(PByte(s))
+          else
+            repeat
+              len := StrLen(s);
+              if (len <> 0) and
+                 (i < length(info.Oem)) then
+              begin
+                FastSetString(info.Oem[i], s, len);
+                inc(i);
+              end;
+              s := @s[len + 1]; // next string
+            until s[0] = 0;
+          inc(PByte(s));
+          if length(info.Oem) <> i then
+            SetLength(info.Oem, i);
+          continue;
+        end;
       16: // Physical Memory Array (type 16)
         begin
           i := length(info.Memory);
@@ -4695,7 +4726,8 @@ const
     'm:array of TSmbiosBoard e:array of TSmbiosChassis ' +
     'p:array of TSmbiosProcessor r:array of TSmbiosMemoryArray ' +
     'c:array of TSmbiosConnector t:array of TSmbiosSlot ' +
-    'd:[' + _TSmbiosPointingDevice + '] w:array of TSmbiosBattery' ;
+    'd:[' + _TSmbiosPointingDevice + '] w:array of TSmbiosBattery ' +
+    'o:array of RawUtf8';
 
 procedure InitializeUnit;
 begin
