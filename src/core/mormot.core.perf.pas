@@ -1636,7 +1636,7 @@ type
     // - see "Table 23 – Processor Information: Processor Family field" in
     // DSP0134 SMBIOS Reference Specification 3.6.0 page 49 to 55
     // - the Version (v) field gives much more intelligible information
-    Family: cardinal;
+    Family: word;
     /// 2.0+ Processor 64-bit ID as hexadecimal (i)
     // - we don't parse the Intel CpuID flags, because only 32-bit values are
     // truncated here so are much less than all TIntelCpuFeatures information
@@ -1658,6 +1658,15 @@ type
     Populated: boolean;
     /// 2.0+ Socket Upgrade (p)
     Upgrade: TSmbiosProcessorUpgrade;
+    /// 2.0+ External Clock in MHz (x)
+    // - e.g. 100
+    ExtClock: word;
+    /// 2.0+ Maximum Capable Speed in MHz (z)
+    // - e.g. 2700
+    MaxSpeed: word;
+    /// 2.0+ System Boot Speed in MHZ (k)
+    // - e.g. 2600
+    BootSpeed: word;
     /// 2.1+ L1 Cache (1)
     L1Cache: TSmbiosCache;
     /// 2.1+ L2 Cache (2)
@@ -1674,13 +1683,16 @@ type
     // - e.g. 'None'
     PartNumber: RawUtf8;
     /// 2.5+/3.0+ Number of Core per Socket (c)
-    CoreCount: cardinal;
+    // - e.g. 2
+    CoreCount: word;
     /// 2.5+/3.0+ Number of Enabled Cores per Socket (e)
-    CoreEnabled: cardinal;
+    // - e.g. 2
+    CoreEnabled: word;
     /// 2.5+/3.0+ Number of Thread Count per Socket (r)
-    ThreadCount: cardinal;
+    // - e.g. 4 for 2 cores / 4 threads
+    ThreadCount: word;
     /// 3.6+ Number of Enabled Threads per Socket (b)
-    ThreadEnabled: cardinal;
+    ThreadEnabled: word;
     /// 2.5+ Processor Characteristics (h)
     Flags: TSmbiosProcessorFlags;
   end;
@@ -2027,7 +2039,7 @@ type
     PartNumber: RawUtf8;
     /// 2.3+/3.3+ Maximum Capable Speed, in Megatransfers per Seconds (c)
     // - e.g. 2133
-    MtPerSec: cardinal;
+    MtPerSec: word;
   end;
 
   /// Type of Pointing Device (t)
@@ -4271,6 +4283,9 @@ begin
               n := n and 127;
               FormatUtf8('%.%V', [n div 10, n mod 10], Voltage);
             end;
+            ExtClock := PWord(@s[$12])^;
+            MaxSpeed := PWord(@s[$14])^;
+            BootSpeed := PWord(@s[$16])^;
             Status := TSmbiosProcessorStatus(s[$18] and 7);
             Populated := s[$18] and 64 <> 0;
             Upgrade := TSmbiosProcessorUpgrade(s[$19]);
@@ -4551,14 +4566,15 @@ const
   _TSmbiosCache = 'h:word d:RawUtf8 v:byte b,k:boolean l:TSmbiosCacheLocation ' +
     'o:TSmbiosCacheMode s,m:RawUtf8 c,r:TSmbiosCacheSramType n:byte ' +
     'e:TSmbiosCacheEcc t:TSmbiosCacheType a:TSmbiosCacheAssociativity';
-  _TSmbiosProcessor = 'd:RawUtf8 t:TSmbiosProcessorType f:cardinal i,m,v,g:RawUtf8 ' +
+  _TSmbiosProcessor = 'd:RawUtf8 t:TSmbiosProcessorType f:word i,m,v,g:RawUtf8 ' +
     'u:TSmbiosProcessorStatus l:boolean p:TSmbiosProcessorUpgrade ' +
-    '1,2,3:TSmbiosCache s,a,n:RawUtf8 c,e,r,b:cardinal h:TSmbiosProcessorFlags';
+    'x,z,k:word 1,2,3:TSmbiosCache s,a,n:RawUtf8 c,e,r,b:word ' +
+    'h:TSmbiosProcessorFlags';
   _TSmbiosConnector = 'i:RawUtf8 j:TSmbiosConnectorType e:RawUtf8 ' +
     'f:TSmbiosConnectorType p:TSmbiosConnectorPort';
   _TSmbiosSlot = 'd:RawUtf8 t:TSmbiosSlotType w:TSmbiosSlotWidth';
   _TSmbiosMemory = 'w,d:word s:RawUtf8 f:TSmbiosMemoryFormFactor r:byte ' +
-    't:TSmbiosMemoryType e:TSmbiosMemoryDetails l,b,m,n,a,p:RawUtf8 c:cardinal';
+    't:TSmbiosMemoryType e:TSmbiosMemoryDetails l,b,m,n,a,p:RawUtf8 c:word';
   _TSmbiosPointingDevice = // no RTTI -> embedded within _TSmbiosInfo
     't:TSmbiosPointingType i:TSmbiosPointingInterface b:byte';
   _TSmbiosBattery = 'l,m,s,n,v,c,g,h,d:RawUtf8';
