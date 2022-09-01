@@ -1589,8 +1589,6 @@ type
 
   /// Cache Information (Type 7) structure
   TSmbiosCache = packed record
-    /// low-level handle used for linking into TSmbiosProcessor
-    Handle: word;
     /// 2.0+  Reference Designation of this Socket (d)
     // - e.g. 'L1 Cache'
     SocketDesignation: RawUtf8;
@@ -2042,6 +2040,74 @@ type
     MtPerSec: word;
   end;
 
+  /// Physical location of the Memory Array
+  // - whether on the system board or an add-in board
+  // - i.e. TSmbiosMemoryArray.Location field
+  // - warning: salPC98C20 and later are encoded as $a0 and following bytes
+  TSmbiosMemoryArrayLocation = (
+    salUndefined,
+    salOther,
+    salUnknown,
+    salMotherBoard,
+    salIsa,
+    salEisa,
+    salPci,
+    salMca,
+    salPcmcia,
+    salProprietary,
+    salNuBus,
+    salPC98C20,
+    salPC98C24,
+    salPC98E,
+    salPC98LocalBus,
+    salCXL
+  );
+
+  /// Function for which the Memory Array is used
+  // - i.e. TSmbiosMemoryArray.Use field
+  TSmbiosMemoryArrayUse = (
+    sauUndefined,
+    sauOther,
+    sauUnknown,
+    sauSystem,
+    sauVideo,
+    sauFlash,
+    sauNonVolatileRam,
+    sauCache
+  );
+
+  /// Primary hardware error correction or detection method supported
+  // - i.e. TSmbiosMemoryArray.Ecc field
+  TSmbiosMemoryArrayEcc = (
+    saeUndefined,
+    saeOther,
+    saeUnknown,
+    saeNone,
+    saeParity,
+    saeSingleBitEcc,
+    saeMultiBitEcc,
+    saeCRC
+  );
+
+  /// Physical Memory Array (Type 16) structure
+  TSmbiosMemoryArray = packed record
+    /// 2.1+ Physical location of the Memory Array (l)
+    Location: TSmbiosMemoryArrayLocation;
+    /// 2.1+ Function for which the Memory Array is used (u)
+    Use: TSmbiosMemoryArrayUse;
+    /// 2.1+ Primary hardware error correction or detection method supported
+    // by this Memory Array (e)
+    Ecc: TSmbiosMemoryArrayEcc;
+    /// 2.1+/2.7+ Maximum Capacity in bytes (c)
+    // - e.g. '32 GB'
+    MaxCapacity: RawUtf8;
+    /// 2.1+ Number of slots or sockets available for Memory Devices in
+    // this Memory Array (n)
+    DeviceCount: word;
+    /// the Memory Device (Type 17) structure part of this Memory Array (d)
+    Device: array of TSmbiosMemory;
+  end;
+
   /// Type of Pointing Device (t)
   // - i.e. TSmbiosPointingDevice.DeviceType field
   TSmbiosPointingType = (
@@ -2156,12 +2222,13 @@ type
     Chassis: array of TSmbiosChassis;
     /// decoded Processors Information (Type 4) structure (p)
     Processor: array of TSmbiosProcessor;
+    /// decoded Physical Memory Array (type 16) structure (r)
+    // - which has nested Memory Device (Type 17) structures
+    Memory: array of TSmbiosMemoryArray;
     /// decoded Port Connectors Information (Type 8) structure (c)
     Connector: array of TSmbiosConnector;
     /// decoded System Slots (Type 9) structure (t)
     Slot: array of TSmbiosSlot;
-    /// decoded Memory Device (Type 17) structure (r)
-    Memory: array of TSmbiosMemory;
     /// decoded Built-in Pointing Device (Type 21) (d)
     PointingDevice: array of TSmbiosPointingDevice;
     /// decoded Portable Battery (Type 22) structure (w)
@@ -4138,6 +4205,13 @@ begin
   KBU(r, res);
 end;
 
+function GetHandleIndex(const a: TWordDynArray; h: cardinal): PtrInt;
+begin
+  result := WordScanIndex(pointer(a), length(a), h);
+  if result < 0 then
+    result := 0; // add to the first item if handle is incorrect
+end;
+
 function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
   intern: TRawUtf8Interning): boolean;
 var
@@ -4147,20 +4221,11 @@ var
   q: QWord;
   len, trimright, i: PtrInt;
   lines: array[byte] of PRawUtf8; // efficient string decoding
-  cache: array of TSmbiosCache; // linked in 2nd pass
-
-  procedure FillCache(var dest: TSmbiosCache);
-  var
-    i: PtrInt;
-  begin
-    for i := 0 to high(cache) do
-      if cache[i].Handle = dest.Handle then
-      begin
-        dest := cache[i];
-        break;
-      end;
-  end;
-
+  // linked in 2nd pass:
+  cache: array of TSmbiosCache;
+  mem: array of TSmbiosMemory;
+  cacheh, memh, arrh: TWordDynArray;
+  proc: array of record l1, l2, l3: word; end;
 begin
   Finalize(info);
   result := false;
@@ -4256,8 +4321,10 @@ begin
         end;
       4: // Processor Information (type 4)
         begin
-          SetLength(info.Processor, length(info.Processor) + 1);
-          with info.Processor[high(info.Processor)] do
+          i := length(info.Processor);
+          SetLength(proc, i + 1);
+          SetLength(info.Processor, i + 1);
+          with info.Processor[i] do
           begin
             lines[s[4]] := @SocketDesignation;
             lines[s[7]] := @Manufacturer;
@@ -4291,9 +4358,12 @@ begin
             Upgrade := TSmbiosProcessorUpgrade(s[$19]);
             if s[1] >= $1e then // 2.1+
             begin
-              L1Cache.Handle := PWord(@s[$1a])^; // resolved in 2nd pass
-              L2Cache.Handle := PWord(@s[$1c])^;
-              L3Cache.Handle := PWord(@s[$1e])^;
+              with proc[high(proc)] do
+              begin
+                l1 := PWord(@s[$1a])^; // resolved in 2nd pass
+                l2 := PWord(@s[$1c])^;
+                l3 := PWord(@s[$1e])^;
+              end;
               if s[1] >= $26 then // 2.5+
               begin
                 CoreCount := s[$23];
@@ -4319,10 +4389,12 @@ begin
       // type 5 and 6 are obsolete
       7: // Cache Information (type 7)
         begin
-          SetLength(cache, length(cache) + 1);
-          with cache[high(cache)] do
+          i := length(cache);
+          SetLength(cacheh, i + 1);
+          cacheh[i] := PWord(@s[2])^; // for late binding within info.Processor[]
+          SetLength(cache, i + 1);
+          with cache[i] do
           begin
-            Handle := PWord(@s[2])^; // for late binding within info.Processor[]
             lines[s[4]] := @SocketDesignation;
             Level := (s[5] and 7) + 1;
             Socketed := (s[5] and 8) <> 0;
@@ -4370,10 +4442,37 @@ begin
             Width := TSmbiosSlotWidth(s[6]);
           end;
         end;
+      16: // Physical Memory Array (type 16)
+        begin
+          i := length(info.Memory);
+          SetLength(arrh, i + 1);
+          arrh[i] := PWord(@s[2])^; // to be searched by mem/memh
+          SetLength(info.Memory, i + 1);
+          with info.Memory[i] do
+          begin
+            if s[4] >= $a0 then
+              Location := TSmbiosMemoryArrayLocation(s[4] - $a0 + ord(salPC98C20))
+            else
+              Location := TSmbiosMemoryArrayLocation(s[4]);
+            Use := TSmbiosMemoryArrayUse(s[5]);
+            Ecc := TSmbiosMemoryArrayEcc(s[6]);
+            DeviceCount := PWord(@s[$0d])^;
+            q := PCardinal(@s[7])^;
+            if (s[1] > $10) and
+               (q = $80000000) then
+              q := PQWord(@s[$0f])^ // 2.7+
+            else
+              q := q shl 10; // s[7] was in KB
+            KBU(q, MaxCapacity);
+          end;
+        end;
       17: // Memory Device (type 17)
         begin
-          SetLength(info.Memory, length(info.Memory) + 1);
-          with info.Memory[high(info.Memory)] do
+          i := length(mem);
+          SetLength(memh, i + 1);
+          memh[i] := PWord(@s[4])^; // the associated Memory Array in arrh[]
+          SetLength(mem, i + 1);
+          with mem[i] do
           begin
             TotalWidth := PWord(@s[8])^;
             DataWidth := PWord(@s[$0a])^;;
@@ -4486,14 +4585,25 @@ begin
       until s[0] = 0; // end of string table
     inc(PByte(s)); // go to next structure
   until false;
-  // 2nd pass will link all cache[] to info.Processor[]
+  // 2nd pass will link all cache/mem to info.Processor/Memory
   for i := 0 to high(info.Processor) do
-    with info.Processor[i] do
+    with info.Processor[i], proc[i] do
     begin
-      FillCache(L1Cache);
-      FillCache(L2Cache);
-      FillCache(L3Cache);
+      L1Cache := cache[GetHandleIndex(cacheh, l1)];
+      L2Cache := cache[GetHandleIndex(cacheh, l2)];
+      L3Cache := cache[GetHandleIndex(cacheh, l3)];
     end;
+  if mem <> nil then
+  begin
+    if info.Memory = nil then
+      SetLength(info.Memory, 1); // at least once Memory Array
+    for i := 0 to high(mem) do
+      with info.Memory[GetHandleIndex(arrh, memh[i])] do
+      begin
+        SetLength(Device, length(Device) + 1);
+        Device[high(Device)] := mem[i];
+      end;
+  end;
   result := info.Bios.VendorName <> '';
 end;
 
@@ -4563,7 +4673,7 @@ const
   _TSmbiosBoard = 'm,p,v,s,a,l:RawUtf8 f:TSmbiosBoardFeatures t:TSmbiosBoardType';
   _TSmbiosChassis = 'l:boolean t:TSmbiosChassisType m,v,s,a:RawUtf8 ' +
     'b,w,h:TSmbiosChassisState p:TSmbiosChassisSecurityState o:cardinal u,c:byte';
-  _TSmbiosCache = 'h:word d:RawUtf8 v:byte b,k:boolean l:TSmbiosCacheLocation ' +
+  _TSmbiosCache = 'd:RawUtf8 v:byte b,k:boolean l:TSmbiosCacheLocation ' +
     'o:TSmbiosCacheMode s,m:RawUtf8 c,r:TSmbiosCacheSramType n:byte ' +
     'e:TSmbiosCacheEcc t:TSmbiosCacheType a:TSmbiosCacheAssociativity';
   _TSmbiosProcessor = 'd:RawUtf8 t:TSmbiosProcessorType f:word i,m,v,g:RawUtf8 ' +
@@ -4575,14 +4685,16 @@ const
   _TSmbiosSlot = 'd:RawUtf8 t:TSmbiosSlotType w:TSmbiosSlotWidth';
   _TSmbiosMemory = 'w,d:word s:RawUtf8 f:TSmbiosMemoryFormFactor r:byte ' +
     't:TSmbiosMemoryType e:TSmbiosMemoryDetails l,b,m,n,a,p:RawUtf8 c:word';
+  _TSmbiosMemoryArray = 'l:TSmbiosMemoryArrayLocation u:TSmbiosMemoryArrayUse ' +
+    'e:TSmbiosMemoryArrayEcc c:RawUtf8 n:word d:array of TSmbiosMemory';
   _TSmbiosPointingDevice = // no RTTI -> embedded within _TSmbiosInfo
     't:TSmbiosPointingType i:TSmbiosPointingInterface b:byte';
   _TSmbiosBattery = 'l,m,s,n,v,c,g,h,d:RawUtf8';
   _TSmbiosSecurity = 'f,a,k,p:TSmbiosSecurityStatus';
   _TSmbiosInfo = 'b:TSmbiosBios s:TSmbiosSystem h:{' + _TSmbiosSecurity + '} ' +
     'm:array of TSmbiosBoard e:array of TSmbiosChassis ' +
-    'p:array of TSmbiosProcessor c:array of TSmbiosConnector ' +
-    't:array of TSmbiosSlot r:array of TSmbiosMemory ' +
+    'p:array of TSmbiosProcessor r:array of TSmbiosMemoryArray ' +
+    'c:array of TSmbiosConnector t:array of TSmbiosSlot ' +
     'd:[' + _TSmbiosPointingDevice + '] w:array of TSmbiosBattery' ;
 
 procedure InitializeUnit;
@@ -4610,8 +4722,9 @@ begin
     TypeInfo(TSmbiosConnectorPort),        TypeInfo(TSmbiosSlotType),
     TypeInfo(TSmbiosSlotWidth),            TypeInfo(TSmbiosMemoryFormFactor),
     TypeInfo(TSmbiosMemoryType),           TypeInfo(TSmbiosMemoryDetails),
-    TypeInfo(TSmbiosSecurityStatus),       TypeInfo(TSmbiosPointingType),
-    TypeInfo(TSmbiosPointingInterface)
+    TypeInfo(TSmbiosMemoryArrayLocation),  TypeInfo(TSmbiosMemoryArrayUse),
+    TypeInfo(TSmbiosMemoryArrayEcc),       TypeInfo(TSmbiosSecurityStatus),
+    TypeInfo(TSmbiosPointingType),         TypeInfo(TSmbiosPointingInterface)
   ]);
   Rtti.RegisterFromText([
     TypeInfo(TSmbiosBios),            _TSmbiosBios,
@@ -4623,6 +4736,7 @@ begin
     TypeInfo(TSmbiosConnector),       _TSmbiosConnector,
     TypeInfo(TSmbiosSlot),            _TSmbiosSlot,
     TypeInfo(TSmbiosMemory),          _TSmbiosMemory,
+    TypeInfo(TSmbiosMemoryArray),     _TSmbiosMemoryArray,
     TypeInfo(TSmbiosBattery),         _TSmbiosBattery,
     TypeInfo(TSmbiosInfo),            _TSmbiosInfo
   ]);
