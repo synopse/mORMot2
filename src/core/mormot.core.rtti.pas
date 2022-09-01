@@ -7107,7 +7107,8 @@ var
   rc: PRttiClass;
   rp: PRttiProp;
   rs: PRttiProps;
-  n, p: PtrInt;
+  p: PRttiCustomProp;
+  n, c: PtrInt;
 begin
   if (ClassInfo = nil) or
      (ClassInfo^.Kind <> rkClass) then
@@ -7117,19 +7118,32 @@ begin
     // put parent properties first
     AddFromClass(rc^.ParentInfo, true);
   rs := rc^.RttiProps;
-  p := rs^.PropCount;
-  if p = 0 then
+  n := rs^.PropCount;
+  if n = 0 then
     exit;
-  n := Count;
-  NotInheritedIndex := n;
-  inc(Count, p);
-  SetLength(List, Count);
+  c := Count;
+  NotInheritedIndex := c;
+  SetLength(List, c + n);
   rp := rs^.PropList;
   repeat
-    inc(Size, List[n].InitFrom(rp));
+    if c = 0 then
+      p := nil
+    else
+      p := FindCustomProp(pointer(List), @rp^.Name^[1], ord(rp^.Name^[0]), c);
+    if p = nil then
+    begin // first time we encounter this property
+      inc(Size, List[c].InitFrom(rp));
+      inc(c)
+    end
+    else // this property has been redefined in a sub-class
+      p^.InitFrom(rp);
     rp := rp^.Next;
-    inc(n)
-  until n = Count;
+    dec(n);
+  until n = 0;
+  if c = Count then
+    exit;
+  Count := c;
+  DynArrayFakeLength(List, c);
 end;
 
 procedure TRttiCustomProps.SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
