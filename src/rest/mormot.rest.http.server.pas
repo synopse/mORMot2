@@ -621,9 +621,9 @@ begin
   try
     n := length(fDBServers);
     for i := 0 to n - 1 do
-      if (fDBServers[i].Server.Model.
-           UriMatch(aServer.Model.Root, false) <> rmNoMatch) and
-         (fDBServers[i].Security = aSecurity) then
+      if (fDBServers[i].Security = aSecurity) and
+         (fDBServers[i].Server.Model.
+           UriMatch(aServer.Model.Root, false) <> rmNoMatch) then
         exit; // register only once per URI Root address and per protocol
     {$ifdef USEHTTPSYS}
     if fUse in HTTP_API_MODES then

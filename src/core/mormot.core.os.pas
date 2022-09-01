@@ -6401,7 +6401,7 @@ begin
       until s[0] = 0; // end of string table
     inc(PByte(s)); // go to next structure
   until false;
-  // compute the exact DMI/SMBIOS size, and adjust the length
+  // compute the exact DMI/SMBIOS size, and adjust the raw.Data length
   result := PtrUInt(s) - PtrUInt(raw.Data);
   raw.Length := result;
   if length(raw.Data) <> result then

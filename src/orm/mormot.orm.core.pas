@@ -3930,8 +3930,8 @@ type
   private
     fTables: TOrmClassDynArray;
     fRoot: RawUtf8;
-    fRootUpper: RawUtf8;
     fTablesMax: integer;
+    fRootLen: integer;
     fTableProps: TOrmModelPropertiesObjArray;
     fCustomCollationForAll: array[TOrmFieldType] of RawUtf8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
@@ -4043,6 +4043,7 @@ type
     // 'root/sub' matches exactly Root='root'), or with character case
     // approximation (e.g. 'Root/sub' approximates Root='root')
     function UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the URI corresponding to a given table, i.e. 'root/table'
     function GetUri(aTable: TOrmClass): RawUtf8;
     /// return the 'root/table/ID' URI
@@ -4186,6 +4187,9 @@ type
 
     /// returns the Root property, or '' if the instance is nil
     function SafeRoot: RawUtf8;
+    /// direct access to length(Root) when parsing
+    property RootLen: integer
+      read fRootLen;
     /// compute the URI for a class in this Model, as 'ModelRoot/SqlTableName'
     // - set also GetUri/GetUriID/GetUriCallback methods
     property Uri[aClass: TOrmClass]: RawUtf8
@@ -4223,9 +4227,6 @@ type
     // - use SafeRoot function is you are not sure that the TOrmModel is not nil
     property Root: RawUtf8
       read fRoot write SetRoot;
-    /// the Root URI path of this Database Model, uppercase converted
-    property RootUpper: RawUtf8
-      read fRootUpper;
     /// the associated ORM information about all handled TOrm class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].OrmProps values
@@ -9534,17 +9535,20 @@ procedure TOrmModel.SetRoot(const aRoot: RawUtf8);
 var
   i: PtrInt;
 begin
-  for i := 1 to length(aRoot) do // allow RFC URI + '/' for URI-fragment
+  fRootLen := length(aRoot);
+  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
       raise EModelException.CreateUtf8(
         '%.Root=[%] contains URI unfriendly char #% [%]',
         [self, aRoot, ord(aRoot[i]), aRoot[i]]);
   if (aRoot <> '') and
-     (aRoot[length(aRoot)] = '/') then
-    fRoot := copy(aRoot, 1, Length(aRoot) - 1)
+     (aRoot[fRootLen] = '/') then
+  begin
+    dec(fRootLen);
+    fRoot := copy(aRoot, 1, fRootLen) // trim trailing '/'
+  end
   else
     fRoot := aRoot;
-  UpperCaseCopy(fRoot, fRootUpper);
 end;
 
 constructor TOrmModel.Create(const Tables: array of TOrmClass;
@@ -9797,24 +9801,25 @@ begin
 end;
 
 function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
-var
-  UriLen: PtrInt;
 begin
   result := rmNoMatch;
   if (self = nil) or
      (fRoot = '') or
-     (Uri = '') then
+     (PtrUInt(Uri) = 0) or
+     (PStrLen(PtrUInt(Uri) - _STRLEN)^ < fRootLen) then
     exit;
-  if IdemPChar(pointer(Uri), pointer(fRootUpper)) then
+  if CheckCase then
   begin
-    UriLen := length(fRoot);
-    if Uri[UriLen + 1] in [#0, '/', '?'] then
-      if CheckCase and
-         CompareMemFixed(pointer(Uri), pointer(fRoot), UriLen) then
-        result := rmMatchExact
-      else
-        result := rmMatchWithCaseChange;
-  end;
+    if not CompareMemFixed(pointer(Uri), pointer(fRoot), fRootLen) then
+      exit;
+  end
+  else if not IdemPropNameUSameLenNotNull(pointer(fRoot), pointer(Uri), fRootLen) then
+    exit;
+  if Uri[fRootLen + 1] in [#0, '/', '?'] then
+    if CheckCase then
+      result := rmMatchExact
+    else
+      result := rmMatchWithCaseChange;
 end;
 
 function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;

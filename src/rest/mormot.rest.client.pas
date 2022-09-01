@@ -2292,7 +2292,7 @@ procedure TRestClientUri.InternalNotificationMethodExecute(
 var
   url, interfmethod, interf, id, method, frames: RawUtf8;
   callback: TRestClientCallbackItem;
-  methodIndex, rootLen: PtrInt;
+  methodIndex: PtrInt;
   WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   ok: boolean;
@@ -2345,10 +2345,9 @@ begin
   if url[1] = '/' then
     system.delete(url, 1, 1);
   // 'root/BidirCallback.AsyncEvent/1' into root/interfmethod/id
-  rootLen := length(fModel.Root) + 1;
-  if not IdemPChar(pointer(url), pointer(fModel.RootUpper)) or
-     (url[rootLen] <> '/') or
-     not Split(copy(url, rootLen + 1, 1024), '/', interfmethod, id) then
+  if (fModel.UriMatch(url, false) = rmNoMatch) or
+     (url[fModel.RootLen + 1] <> '/') or
+     not Split(copy(url, fModel.RootLen + 2, 1024), '/', interfmethod, id) then
     exit;
   callback.ID := GetInteger(pointer(id));
   if callback.ID <= 0 then
