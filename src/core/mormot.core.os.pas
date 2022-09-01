@@ -1180,7 +1180,8 @@ type
     sbiBatteryManufacturer,
     sbiBatteryName,
     sbiBatteryVersion,
-    sbiBatteryChemistry
+    sbiBatteryChemistry,
+    sbiOem
   );
 
   /// the text fields stored by GetSmbios/DecodeSmbios functions
@@ -6303,17 +6304,19 @@ var
   lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
   len: PtrInt;
   cur: ^TSmbiosBasicInfo;
-  s: PByteArray;
+  s, sEnd: PByteArray;
 begin
   result := 0;
   Finalize(info);
   s := pointer(raw.Data);
   if s = nil then
     exit;
+  sEnd := @s[length(raw.Data)];
   FillCharFast(lines, SizeOf(lines), 0);
   repeat
     if (s[0] = 127) or // type (127=EOT)
-       (s[1] < 4) then // length
+       (s[1] < 4) or   // length
+       (PtrUInt(@s[s[1]]) > PtrUInt(sEnd)) then
     begin
       s := @s[2]; // go to the exact end of DMI/SMBIOS input
       break;
@@ -6366,6 +6369,9 @@ begin
             lines[s[$22]] := sbiCpuPartNumber;
           end;
         end;
+      11: // OEM Strings (Type 11) - keep only the first
+        if s[4] <> 0 then
+          lines[1] := sbiOem; // e.g. 'vboxVer_6.1.36'
       22: // Portable Battery (type 22) - keep only the first
         if s[1] >= $0f then // 2.1+
         begin
