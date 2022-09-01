@@ -1126,7 +1126,7 @@ type
     SmbMinorVersion: byte;
     /// typically 0 for SMBIOS 2.1, 1 for SMBIOS 3.0
     DmiRevision: byte;
-    /// the (maximum) length of encoded binary in data
+    /// the length of encoded binary in data
     Length: DWORD;
     /// low-level binary of the SMBIOS Structure Table
     Data: RawByteString;
@@ -1188,7 +1188,9 @@ type
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
 // - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
-function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
+// - returns the total size of DMI/SMBIOS information in raw.data (may be lower)
+// - will also adjust raw.Length and truncate raw.Data to the actual useful size
+function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
 
 // some global definitions for proper caching and inlining of GetSmbios()
 procedure ComputeGetSmbios;
@@ -6189,7 +6191,7 @@ begin
     begin
        _SmbiosRetrieved := true;
       if _GetRawSmbios(RawSmbios) then // OS specific call
-         if DecodeSmbios(RawSmbios, _Smbios) then
+         if DecodeSmbios(RawSmbios, _Smbios) <> 0 then
          begin
            // we were able to retrieve and decode SMBIOS information
            {$ifdef OSPOSIX}
@@ -6296,14 +6298,14 @@ begin
   end;
 end;
 
-function DecodeSmbios(const raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): boolean;
+function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
 var
   lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
   len: PtrInt;
   cur: ^TSmbiosBasicInfo;
   s: PByteArray;
 begin
-  result := false;
+  result := 0;
   Finalize(info);
   s := pointer(raw.Data);
   if s = nil then
@@ -6312,7 +6314,10 @@ begin
   repeat
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) then // length
+    begin
+      s := @s[2]; // go to the exact end of DMI/SMBIOS input
       break;
+    end;
     case s[0] of
       0: // Bios Information (type 0)
         begin
@@ -6390,7 +6395,11 @@ begin
       until s[0] = 0; // end of string table
     inc(PByte(s)); // go to next structure
   until false;
-  result := info[sbiBiosVendor] <> '';
+  // compute the exact DMI/SMBIOS size, and adjust the length
+  result := PtrUInt(s) - PtrUInt(raw.Data);
+  raw.Length := result;
+  if length(raw.Data) <> result then
+    FakeLength(raw.Data, result);
 end;
 
 
