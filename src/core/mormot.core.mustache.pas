@@ -818,7 +818,7 @@ var
 begin
   result := msNothing;
   if ValueName = '.' then
-    // {.} -> context = self
+    // {{.}} -> context = self
     with fContext[fContextCount - 1] do
     begin
       if ListCount > 0 then
@@ -973,14 +973,6 @@ var
   i: PtrInt;
 begin
   result := true; // mark found on direct exit
-  if ValueName = '.' then
-    // {.} -> context = self
-    with fContext[fContextCount - 1] do
-    begin
-      d := Data;
-      rc := Info;
-      exit;
-    end;
   // recursive search of {{value}}
   for i := fContextCount - 1 downto 0 do
     with fContext[i] do
@@ -993,7 +985,7 @@ begin
         if PCardinal(ValueName)^ and $dfdfdfdf = (ord('-') and $df) +
              ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
         begin
-          // {{-index}}
+          // {{-index}} pseudo name
           d := @Temp.Data.VInteger;
           rc := PT_RTTI[ptInteger];
           PInteger(d)^ := ListCurrent;
@@ -1003,6 +995,9 @@ begin
         end
         else
           d := rc.ValueIterate(d, ListCurrent, rc); // rkClass is dereferenced
+      if ValueName = '.' then
+        // {{.}} -> context = self
+        exit;
       if d <> nil then
       begin
         // we found a value in this context: lookup by {{name1.name2.name3}}
