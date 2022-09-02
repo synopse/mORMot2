@@ -2350,6 +2350,14 @@ type
     // - implemented in TRttiJson for proper knowledge of TSynList/TRawUtf8List
     function ValueIterate(Data: pointer; Index: PtrUInt;
       out ResultRtti: TRttiCustom): pointer; virtual;
+    /// lookup a value by a path name e.g. 'one.two.three' nested values
+    // - for a record/class, will search for a property name
+    // - for a TDocVariant/TBsonVariant, calls TSynInvokeableVariantType.IntGet
+    // - for an enumeration or set, will return true/false about the enum name
+    // - for a string, Data^ will be compared to the name
+    // - implemented in TRttiJson for proper knowledge of our variants
+    function ValueByPath(var Data: pointer; Path: PUtf8Char; var Temp: TVarData;
+      PathDelim: AnsiChar = '.'): TRttiCustom; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -7662,6 +7670,12 @@ end;
 
 function TRttiCustom.ValueIterate(Data: pointer; Index: PtrUInt;
   out ResultRtti: TRttiCustom): pointer;
+begin
+  result := nil;
+end;
+
+function TRttiCustom.ValueByPath(var Data: pointer; Path: PUtf8Char;
+  var Temp: TVarData; PathDelim: AnsiChar): TRttiCustom;
 begin
   result := nil;
 end;
