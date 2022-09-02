@@ -1423,7 +1423,7 @@ begin
         if withport then
         begin
           AppendShortChar(':', result);
-          AppendShortInteger(port, result);
+          AppendShortCardinal(port, result);
         end;
       end;
     AF_INET6:
@@ -2063,13 +2063,14 @@ end;
 
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 begin
-  str(ip4addr[0], s);
+  s[0] := #0;
+  AppendShortCardinal(ip4addr[0], s);
   AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[1], s);
+  AppendShortCardinal(ip4addr[1], s);
   AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[2], s);
+  AppendShortCardinal(ip4addr[2], s);
   AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[3], s);
+  AppendShortCardinal(ip4addr[3], s);
 end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);

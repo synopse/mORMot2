@@ -627,13 +627,13 @@ begin
   text[0] := #2;
   text[1] := AnsiChar(f + ord('0')); // first integer is 0,1,2
   text[2] := '.';
-  AppendShortInteger(v - f * 40, text);
+  AppendShortCardinal(v - f * 40, text);
   inc(text[0]);
   text[ord(text[0])] := '.';
   while p <> nil do // process the remaining integers
   begin
     p := FromVarUInt32Safe(p, pmax, v);
-    AppendShortInteger(v, text);
+    AppendShortCardinal(v, text);
     inc(text[0]);
     text[ord(text[0])] := '.';
   end;

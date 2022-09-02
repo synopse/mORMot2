@@ -3516,7 +3516,7 @@ begin
   if line > 0 then
   begin
     AppendShort(' (', result);
-    AppendShortInteger(line, result);
+    AppendShortCardinal(line, result);
     AppendShortChar(')', result);
   end;
 end;

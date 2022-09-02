@@ -3685,6 +3685,15 @@ var
   crc, u32, n: cardinal;
   Timer: TPrecisionTimer;
 begin
+  a := '';
+  AppendShortCardinal(0, a);
+  check(a = '0');
+  for i := 1 to 10 do
+    AppendShortCardinal(i, a);
+  check(a = '012345678910');
+  for i := 11 to 150 do
+    AppendShortCardinal(i, a);
+  CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
   n := 100000;
   Timer.Start;
   crc := 0;

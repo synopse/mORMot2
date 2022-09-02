@@ -785,8 +785,8 @@ procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
-/// simple concatenation of a 32-bit integer as text into a shorstring
-procedure AppendShortInteger(value: integer; var dest: ShortString);
+/// simple concatenation of a 32-bit unsigned integer as text into a shorstring
+procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
 /// simple concatenation of a 64-bit integer as text into a shorstring
 procedure AppendShortInt64(value: Int64; var dest: ShortString);
@@ -4375,20 +4375,32 @@ begin
   dest[ord(dest[0])] := chr;
 end;
 
-procedure AppendShortInteger(value: integer; var dest: ShortString);
+procedure AppendShortTemp24(value, temp: PAnsiChar; dest: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  temp: ShortString;
+  valuelen, destlen, newlen: PtrInt;
 begin
-  str(value, temp); // fast enough for our purpose
-  AppendShort(temp, dest);
+  valuelen := temp - value;
+  destlen := ord(dest[0]);
+  newlen := valuelen + destlen;
+  if newlen > 255 then
+    exit;
+  dest[0] := AnsiChar(newlen);
+  MoveFast(value^, dest[destlen + 1], valuelen);
+end;
+
+procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
+var
+  tmp: array[0..23] of AnsiChar;
+begin
+  AppendShortTemp24(StrUInt32(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortInt64(value: Int64; var dest: ShortString);
 var
-  temp: ShortString;
+  tmp: array[0..23] of AnsiChar;
 begin
-  str(value, temp);
-  AppendShort(temp, dest);
+  AppendShortTemp24(StrInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: ShortString);
