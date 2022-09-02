@@ -1050,7 +1050,11 @@ begin
     end;
   // try to resolve the name at runtime via the OnGetGlobalData callback
   if Assigned(OnGetGlobalData) then
-    result := OnGetGlobalData(self, ValueName, firstdata, firstrc)
+  begin
+    d := firstdata;
+    rc := firstrc;
+    result := OnGetGlobalData(self, ValueName, d, rc);
+  end
   else
     result := false; // not found
 end;
