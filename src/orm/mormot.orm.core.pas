@@ -9806,7 +9806,7 @@ begin
   if (self = nil) or
      (fRoot = '') or
      (PtrUInt(Uri) = 0) or
-     (PStrLen(PtrUInt(Uri) - _STRLEN)^ < fRootLen) then
+     ({%H-}PStrLen(PtrUInt(Uri) - _STRLEN)^ < TStrLen(fRootLen)) then
     exit;
   if CheckCase then
   begin

@@ -1135,7 +1135,6 @@ var
   AR: TRecs;
   AF: TFVs;
   AF2: TFV2s;
-  h: cardinal;
   i, j, k, Len, count, AIcount: integer;
   U, U2: RawUtf8;
   P: PUtf8Char;
@@ -1212,7 +1211,7 @@ const
     Check(length(IA) = D.Capacity);
     for i := 0 to 16256 do
       Check(IA[i] = i * 5);
-    CheckHash(D.SaveTo, $57B23EC4, 'test64k');
+    CheckHash(D.SaveTo, $55A23EC0, 'test64k');
   end;
 
   procedure TestCities;
@@ -1312,7 +1311,7 @@ begin
     Check(not IntegerScanExists(Pointer(AI), AIP.Count, i + 2000));
   end;
   Test := AIP.SaveTo;
-  CheckHash(Test, $712CA318, 'hash32i');
+  CheckHash(Test, $60DCA314, 'hash32i');
   PI := IntegerDynArrayLoadFrom(pointer(Test), AIcount);
   Check(AIcount = 1001);
   Check(PI <> nil);
@@ -1371,7 +1370,7 @@ begin
   for i := 0 to AIP.Count - 1 do
     Check(AIP.Find(i) = i);
   Test := AIP.SaveTo;
-  CheckHash(Test, $67E62807, 'hash32b');
+  CheckHash(Test, $69562803, 'hash32b');
   AIP.Reverse;
   for i := 0 to 50000 do
     Check(AI[i] = 50000 - i);
@@ -1380,7 +1379,7 @@ begin
   AIP.Compare := SortDynArrayInteger;
   AIP.Sort;
   Test := AIP.SaveTo;
-  CheckHash(Test, $67E62807, 'hash32c');
+  CheckHash(Test, $69562803, 'hash32c');
   AIP.Reverse;
   AIP.Slice(AI2, 2000, 1000);
   Check(length(AI2) = 2000);
@@ -1433,11 +1432,7 @@ begin
     Check(AVP.IndexOf(V) = i);
   end;
   Test := AVP.SaveTo;
-  {$ifdef CPU64}
-  CheckHash(Test, 1847370524, 'hash64d');
-  {$else}
-  CheckHash(Test, $712CA318, 'hash32d');
-  {$endif CPU64}
+  CheckHash(Test, {$ifdef CPU64} $2CB4A314 {$else} $60DCA314 {$endif}, 'AVP.SaveTo');
   // validate TRawUtf8DynArray
   AUP.Init(TypeInfo(TRawUtf8DynArray), AU);
   for i := 0 to 1000 do
@@ -1677,20 +1672,8 @@ begin
     Check(AFP.IndexOf(F) = i);
   end;
   Test := AFP.SaveTo;
-  {$ifdef CPU64}
-    {$ifdef FPC}
-    h := 2648774601;
-    {$else}
-    h := 1157949341;
-    {$endif FPC}
-  {$else}
-    {$ifdef UNICODE}
-    h := 3723814805;
-    {$else}
-    h := $CAA117C1;
-    {$endif UNICODE}
-  {$endif CPU64}
-  CheckHash(Test, h, 'hash32h');
+  // binary follows the in-memory layout and here Main/Detailed are string
+  CheckHash(Test, {$ifdef UNICODE} $080CE771 {$else} $0001179D {$endif}, 'hash32h');
   for i := 0 to 1000 do
   begin
     Fill(F, i);

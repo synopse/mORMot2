@@ -5561,7 +5561,7 @@ label
   raw;
 begin
   Info := Info^.DynArrayItemType(itemsize);
-  Dest.WriteVarUInt32(itemsize); // may vary on 32-bit/64-bit compatibility
+  Dest.Write1(0); // warning: store itemsize=0 (mORMot 1 ignores it anyway)
   Dest.Write1(DelphiType(Info));
   Data := PPointer(Data)^; // de-reference pointer to array data
   if Data = nil then
@@ -5614,7 +5614,7 @@ end;
 function DynArrayLoadHeader(var Source: TFastReader;
   ArrayInfo, ItemInfo: PRttiInfo): integer;
 begin
-  Source.VarNextInt; // ignore stored itemsize for 32-bit/64-bit compatibility
+  Source.VarNextInt; // ignore stored itemsize (0 stored now)
   if Source.NextByte <> DelphiType(ItemInfo) then
     Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
   result := Source.VarUInt32;

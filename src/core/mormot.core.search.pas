@@ -4822,8 +4822,8 @@ begin
   iteminfo := aTypeInfo^.DynArrayItemType(ElemSize);
   if (iteminfo <> nil) or
      (Source = nil) or
-     (Source[0] <> AnsiChar(ElemSize)) or
-     (Source[1]<>#0) then
+     // (Source[0] <> AnsiChar(ElemSize)) or mORMot 2 stores elemsize=0
+     (Source[1] <> #0) then
     exit; // invalid type information or Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
@@ -4838,7 +4838,7 @@ var
 begin
   result := nil;
   if (Source = nil) or
-     (Source[0] <> #4) or
+     // (Source[0] <> #4) or mORMot 2 stores elemsize=0
      (Source[1] <> #0) then
     exit; // invalid Source content
   inc(Source, 2);
@@ -4854,9 +4854,9 @@ var
 begin
   if (Value = nil) or
      (ValueLen = 0) or
-     (Source = nil) or
-     (Source[0] <> AnsiChar(SizeOf(PtrInt)))
-     {$ifndef FPC} or (Source[1] <> AnsiChar(rkLString)){$endif} then
+     (Source = nil) then
+     // (Source[0] <> AnsiChar(SizeOf(PtrInt))) mORMot 2 stores elemsize=0
+     // {$ifndef FPC} or (Source[1] <> AnsiChar(rkLString)){$endif}
   begin
     result := -1;
     exit; // invalid Source or Value content
