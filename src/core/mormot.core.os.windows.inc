@@ -64,6 +64,26 @@ end;
 
 {$endif UNICODE}
 
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+begin
+  result := RawUtf8(format(Fmt, Args));
+end;
+
+// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
+var
+  tmp: TSynTempBuffer;
+begin
+  if Len <= 0 then
+    exit;
+  tmp.Init(Len * 3);
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // RTL function is good enough
+  if Len > 0 then
+    dec(Len); // UnicodeToUtf8() result includes the null terminator
+  FastSetString(res, tmp.buf, Len);
+  tmp.Done;
+end;
+
 const
   DefaultCharVar: AnsiChar = '?';
 
@@ -1261,21 +1281,6 @@ begin
   until n > 8192;
 end;
 
-// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-begin
-  if Len <= 0 then
-    exit;
-  tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // RTL function is good enough
-  if Len > 0 then
-    dec(Len); // UnicodeToUtf8() result includes the null terminator
-  FastSetString(res, tmp.buf, Len);
-  tmp.Done;
-end;
-
 function GetErrorText(error: longint): RawUtf8;
 var
   Len: integer;
@@ -1775,12 +1780,6 @@ begin
     Utf8ToConsoleDoConv(S, result);
 end;
 
-procedure FormatU(const fmt: string; const args: array of const;
-  var result: RawUtf8);
-begin
-  result := RawUtf8(format(fmt, args));
-end;
-
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
 var
@@ -1851,7 +1850,7 @@ begin
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          FormatU('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
+          LanguageInfo := _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]]);
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -3674,25 +3673,6 @@ begin
    end;
 end;
 
-function KB(Size: cardinal): shortstring;
-begin
-  if Size >= 1 shl 30 then
-  begin
-    str(Size shr 30, result);
-    result := result + 'GB';
-  end
-  else if Size >= 1 shl 20 then
-  begin
-    str(Size shr 20, result);
-    result := result + 'MB';
-  end
-  else
-  begin
-    str(Size shr 10, result);
-    result := result + 'KB';
-  end
-end;
-
 function UUID_CACHE: TFileName;
 begin // where to cache our computed UUID as a local file
   result := GetSystemPath(spCommonData) + 'synopse.uuid';
@@ -3851,13 +3831,11 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      FormatU('Windows %s (%d.%d.%d)',
-        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber],
-        OSVersionText)
+      OSVersionText := _fmt('Windows %s (%d.%d.%d)',
+        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber])
     else
-      FormatU('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
-         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber],
-         OSVersionText);
+      OSVersionText := _fmt('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
+         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]);
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
@@ -3938,7 +3916,7 @@ begin
       CpuCacheSize := CpuCache[i].Size;
       if CpuCacheSize <> 0 then // append the biggest level Cache size
       begin
-        cpu := RawUtf8(format('%s %s cache', [cpu, KB(CpuCacheSize)]));
+        cpu := _fmt('%s %s cache', [cpu, _oskb(CpuCacheSize)]);
         break;
       end;
     end;
@@ -3946,15 +3924,13 @@ begin
       with CpuCache[i] do
         if Count <> 0 then       
           if Count = 1 then
-            CpuCacheText := RawUtf8(
-              format('%s L%d=%s ', [CpuCacheText, i, KB(Size)]))
+            CpuCacheText := _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
           else
-            CpuCacheText := RawUtf8(
-              format('%s L%d=%d*%s ', [CpuCacheText, i, Count, KB(Size)]));
+            CpuCacheText := _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
     TrimSelf(CpuCacheText);
   end;
-  FormatU('%d x %s (' + CPU_ARCH_TEXT + ')',
-    [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
+  CpuInfoText := _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
+    [SystemInfo.dwNumberOfProcessors, cpu]);
   // writeln(CpuInfoText); writeln(CpuCacheText);
 end;
 

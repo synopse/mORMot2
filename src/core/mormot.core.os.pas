@@ -2815,6 +2815,9 @@ function PosixParseHex32(p: PAnsiChar): integer;
 
 {$endif OSWINDOWS}
 
+// internal function to avoid linking mormot.core.buffers.pas
+function _oskb(Size: cardinal): string;
+
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
@@ -4331,6 +4334,27 @@ begin
   result := false;
 end;
 
+function _oskb(Size: cardinal): string;
+const
+  _U: array[0..2] of string[3] = ('GB', 'MB', 'KB');
+var
+  u, v: cardinal;
+begin
+  u := 0;
+  v := Size shr 30;
+  if v = 0 then
+  begin
+    inc(u);
+    v := Size shr 20;
+    if v = 0 then
+    begin
+      inc(u);
+      v := Size shr 10;
+    end;
+  end;
+  result := format('%d%s', [v, _U[u]]);
+end;
+
 
 { ****************** Gather Operating System Information }
 
@@ -4363,12 +4387,12 @@ begin
   if (osv.os = osWindows) and
      (osv.winbuild <> 0) then
     // include the Windows build number, e.g. 'Windows 11 64-bit 22000'
-    result := RawUtf8(Format('%s %d', [result, osv.winbuild]));
+    result := _fmt('%s %d', [result, osv.winbuild]);
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
     // include kernel number to the distribution name, e.g. 'Ubuntu Linux 5.4.0'
-    result := RawUtf8(Format('%s Linux %d.%d.%d', [result, osv.utsrelease[2],
-      osv.utsrelease[1], osv.utsrelease[0]]));
+    result := _fmt('%s Linux %d.%d.%d', [result, osv.utsrelease[2],
+      osv.utsrelease[1], osv.utsrelease[0]]);
 end;
 
 const
@@ -5825,8 +5849,8 @@ begin
   else
   begin
     if fVersionInfo = '' then
-      fVersionInfo := RawUtf8(Format('%s %s (%s)', [ExtractFileName(fFileName),
-        DetailedOrVoid, BuildDateTimeString]));
+      fVersionInfo := _fmt('%s %s (%s)', [ExtractFileName(fFileName),
+        DetailedOrVoid, BuildDateTimeString]);
     result := fVersionInfo;
   end;
 end;
@@ -5839,9 +5863,9 @@ begin
   begin
     if fUserAgent = '' then
     begin
-      fUserAgent := RawUtf8(Format('%s/%s%s', [
+      fUserAgent := _fmt('%s/%s%s', [
         GetFileNameWithoutExtOrPath(fFileName), DetailedOrVoid,
-        OS_INITIAL[OS_KIND]]));
+        OS_INITIAL[OS_KIND]]);
       {$ifdef OSWINDOWS}
       if OSVersion in WINDOWS_32 then
         fUserAgent := fUserAgent + '32';
@@ -5933,8 +5957,8 @@ begin
     end
     else
       Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
-    ProgramFullSpec := RawUtf8(Format('%s %s (%s)', [ProgramFileName,
-      Version.Detailed, Version.BuildDateTimeString]));
+    ProgramFullSpec := _fmt('%s %s (%s)', [ProgramFileName,
+      Version.Detailed, Version.BuildDateTimeString]);
     Hash.c0 := Version.Version32;
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
@@ -6262,7 +6286,7 @@ begin
   {$else}
   FillZero(u.b);
   {$endif CPUINTELARM}
-  if RawSmbios.Data <> '' then // some bios, but without uuid (happens)
+  if RawSmbios.Data <> '' then // some bios have no uuid
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
   for i := low(i) to high(i) do // some of _Smbios[] may have been retrieved
     u.c[ord(i) and 3] := crc32c(u.c[ord(i) and 3], pointer(_Smbios[i]), length(_Smbios[i]));
@@ -6320,7 +6344,7 @@ begin
        (s[1] < 4) or   // length
        (PtrUInt(@s[s[1]]) > PtrUInt(sEnd)) then
     begin
-      s := @s[2]; // go to the exact end of DMI/SMBIOS input
+      s := @s[2]; // truncate to the exact end of DMI/SMBIOS input
       break;
     end;
     case s[0] of
@@ -6331,8 +6355,8 @@ begin
           lines[s[8]] := sbiBiosDate;
           if s[1] >= $17 then // 2.4+
           begin
-            info[sbiBiosRelease]  := RawUtf8(Format('%d.%d', [s[$14], s[$15]]));
-            info[sbiBiosFirmware] := RawUtf8(Format('%d.%d', [s[$16], s[$17]]));
+            info[sbiBiosRelease]  := _fmt('%d.%d', [s[$14], s[$15]]);
+            info[sbiBiosFirmware] := _fmt('%d.%d', [s[$16], s[$17]]);
           end;
         end;
       1: // System Information (type 1)

@@ -141,6 +141,11 @@ begin
   FastSetString(result, S, P - S);
 end;
 
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+begin
+  result := RawUtf8(format(Fmt, Args));
+end;
+
 
 { ****************** Unicode, Time, File process }
 var
@@ -1459,7 +1464,7 @@ begin
       // detect translation
       if VI.VarFileInfo.Count > 0 then
         with VI.VarFileInfo.Items[0] do
-          LanguageInfo := Format('%.4x%.4x', [language, codepage]);
+          LanguageInfo := _fmt('%.4x%.4x', [language, codepage]);
       if LanguageInfo = '' then
       begin
         // take first language
@@ -1743,7 +1748,7 @@ var
   avg: TLoadAvg;
 begin
   if getloadavg(avg, 3) = 3 then
-    result := Format('%g %g %g', [avg[0], avg[1], avg[2]])
+    result := _fmt('%g %g %g', [avg[0], avg[1], avg[2]])
   else
     result := '';
 end;
@@ -2310,7 +2315,7 @@ procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogInfo;
   si_code: integer;
-  text: ShortString; // code below has no memory allocation
+  text: string[4]; // code below has no memory allocation
 begin
   if Assigned(SynDaemonInterceptLog) then
   begin
@@ -2324,7 +2329,7 @@ begin
       SIGABRT:
         text := 'ABRT';
     else
-      str(Sig, text);
+      text := 'SIG';
     end;
     if Sig = SIGTERM then
       // polite quit
@@ -2952,25 +2957,6 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 {$endif OSLINUXANDROID}
 {$endif CPUAARCH64}
 
-function KB(Size: cardinal): shortstring;
-begin
-  if Size >= 1 shl 30 then
-  begin
-    str(Size shr 30, result);
-    result := result + 'GB';
-  end
-  else if Size >= 1 shl 20 then
-  begin
-    str(Size shr 20, result);
-    result := result + 'MB';
-  end
-  else
-  begin
-    str(Size shr 10, result);
-    result := result + 'KB';
-  end
-end;
-
 procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
@@ -3018,7 +3004,8 @@ begin
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[1].Size;
   if CpuCacheSize <> 0 then
-    CpuCacheText := 'L1=' + KB(CpuCache[1].Size) + ' L2=' + KB(CpuCache[2].Size);
+    CpuCacheText := 'L1=' + _oskb(CpuCache[1].Size) +
+                   ' L2=' + _oskb(CpuCache[2].Size);
   {$endif OSDARWIN}
   {$else}
   {$ifdef OSANDROID}
@@ -3156,7 +3143,7 @@ begin
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   if CpuCacheSize <> 0 then
-    CpuInfoText := KB(CpuCacheSize) + ' cache';
+    CpuInfoText := _oskb(CpuCacheSize) + ' cache';
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
@@ -3181,10 +3168,10 @@ begin
   if SystemInfo.dwNumberOfProcessors = 0 then
     SystemInfo.dwNumberOfProcessors := 1;
   if modname = nil then
-    CpuInfoText := Format('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
+    CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
       [SystemInfo.dwNumberOfProcessors, CpuInfoText])
   else
-    CpuInfoText := Format('%d x %s %s (' + CPU_ARCH_TEXT + ')',
+    CpuInfoText := _fmt('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
