@@ -6262,13 +6262,15 @@ begin
   {$else}
   FillZero(u.b);
   {$endif CPUINTELARM}
+  if RawSmbios.Data <> '' then // some bios, but without uuid (happens)
+    crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
   for i := low(i) to high(i) do // some of _Smbios[] may have been retrieved
     u.c[ord(i) and 3] := crc32c(u.c[ord(i) and 3], pointer(_Smbios[i]), length(_Smbios[i]));
   u.c0 := crc32c(u.c0, pointer(CpuInfoText), length(CpuInfoText));
   u.c1 := crc32c(u.c1, pointer(CpuCacheText), length(CpuCacheText));
   u.c2 := crc32c(u.c2, pointer(BiosInfoText), length(BiosInfoText));
   {$ifdef OSLINUX}
-  HashLocalMacAddresses(u, 3);
+  HashLocalMacAddresses(u, 3); // from /sys/class/net
   {$else}
   u.c3 := crc32c(u.c3, pointer(Executable.Host), length(Executable.Host));
   {$endif OSLINUX}

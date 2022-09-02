@@ -88,7 +88,6 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         // xmm0..xmm5 are volatile on both Win64 and SystemV ABI
         // xmm6 and up are also volatile on SystemV ABI so allow more bytes
         {$ifdef SYSVABI}
-        // more registers increases code size ([dst+$80]) so are not used
         cmp     al, $50
         jbe     @sml50
         movups  xmm6, oword ptr [src + $50]
@@ -98,6 +97,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     al, $70
         jbe     @sml70
         movups  xmm8, oword ptr [src + $70]
+        // more registers increases code size ([dst+$80]) so are not used
         movups  oword ptr [dst + $70], xmm8
 @sml70: movups  oword ptr [dst + $60], xmm7
 @sml60: movups  oword ptr [dst + $50], xmm6

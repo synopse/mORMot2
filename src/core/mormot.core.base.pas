@@ -5776,7 +5776,7 @@ begin
   high := len - 1;
 end;
 
-procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlinedS
+procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlined
 var
   Y100: cardinal;
 begin
