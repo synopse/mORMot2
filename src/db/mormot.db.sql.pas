@@ -656,7 +656,8 @@ type
   /// a custom variant type used to have direct access to a result row content
   // - use ISqlDBRows.RowData method to retrieve such a Variant
   TSqlDBRowVariantType = class(TSynInvokeableVariantType)
-  protected
+  public
+    /// overriden method for actual getter by name implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   end;

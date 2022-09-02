@@ -2704,9 +2704,6 @@ type
   // - the associated TOrmTable must stay allocated as long as this variant
   // is used, otherwise random GPF issues may occur
   TOrmTableRowVariant = class(TSynInvokeableVariantType)
-  protected
-    function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   public
     /// Table Row variant into JSON serialization
     procedure ToJson(W: TJsonWriter; Value: PVarData); override;
@@ -2720,6 +2717,9 @@ type
     /// allow to loop over the mapped TOrmTable rows
     procedure Iterate(var Dest: TVarData; const V: TVarData;
       Index: integer); override;
+    /// overriden method for actual getter by name implementation
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
   end;
 
 

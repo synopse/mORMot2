@@ -225,11 +225,6 @@ type
       CallDesc: PCallDesc; Params: Pointer); override;
     {$endif ISDELPHIXE7}
     {$endif FPC_VARIANTSETVAR}
-    /// override those abstract methods for getter/setter implementation
-    function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
-    function IntSet(const Instance, Value: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
   public
     /// virtual constructor which should set the custom type Options
     constructor Create; virtual;
@@ -301,6 +296,12 @@ type
     // - e.g. returns true for a TDocVariant or TBsonVariant with Count = 0
     // - caller should have ensured that it is of the exact custom type
     function IsVoid(const V: TVarData): boolean; virtual;
+    /// override this abstract method for actual getter by name implementation
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
+    /// override this abstract method for actual setter by name implementation
+    function IntSet(const Instance, Value: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
     /// identify how this custom type behave
     // - as set by the class constructor, to avoid calling any virtual method
     property Options: TSynInvokeableVariantTypeOptions
@@ -583,12 +584,6 @@ type
     fInternSafe: TLightLock;
     function CreateInternNames: TRawUtf8Interning;
     function CreateInternValues: TRawUtf8Interning;
-    /// fast getter implementation
-    function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
-    /// fast setter implementation
-    function IntSet(const Instance, Value: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// initialize a variant instance to store some document-based content
     // - by default, every internal value will be copied, so access of nested
@@ -774,6 +769,12 @@ type
     // - redirect to case-sensitive FastVarDataComp() comparison
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
+    /// overriden method for actual getter by name implementation
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
+    /// overriden method for actual setter by name implementation
+    function IntSet(const Instance, Value: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   end;
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
@@ -3783,7 +3784,7 @@ begin
         not (vt in [varEmpty..varDate, varBoolean, varShortInt..varWord64])) then
       NeedJsonEscape(PVariant(V)^, result, Escape)
     else
-      VariantToUtf8(PVariant(V)^, result, dummy); // simple values are never escaped
+      VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
   end
   else
     cv.ToJson(V, result);
