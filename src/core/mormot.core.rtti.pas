@@ -2241,19 +2241,19 @@ type
     fCache: TRttiCache;
     fParser: TRttiParserType;
     fParserComplex: TRttiParserComplexType;
+    fValueRtlClass: TRttiValueClass;
+    fArrayFirstField: TRttiParserType;
     fFlags: TRttiCustomFlags;
     fPrivateSlot: pointer;
-    fPrivateSlots: TObjectDynArray;
-    fPrivateSlotsSafe: TLightLock;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
-    fSetRandom: TRttiCustomRandom;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
-    fValueRtlClass: TRttiValueClass;
-    fArrayFirstField: TRttiParserType;
+    fSetRandom: TRttiCustomRandom;
+    fPrivateSlots: TObjectDynArray;
+    fPrivateSlotsSafe: TLightLock;
     // used by mormot.core.json.pas
     fBinarySize: integer;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
@@ -7693,7 +7693,7 @@ begin
     GetNextItemShortString(FullName, @n, PathDelim);
     if n[0] in [#0, #254] then
       exit;
-    result := Props.Find(@n[1], ord(n[0]));
+    result := FindCustomProp(pointer(Props.List), @n[1], ord(n[0]), Props.Count);
     if (result = nil) or
        (FullName = nil) then
       exit;

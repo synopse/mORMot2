@@ -2787,12 +2787,12 @@ begin
     exit;
   repeat
     if (SR.Name <> 'lo') and
+       not IdemPChar(pointer(SR.Name), 'DOCKER') and
        SearchRecValidFolder(SR) then
     begin
       fn := '/sys/class/net/' + SR.Name;
       f := StringFromFile(fn + '/flags', {nosize=}true);
       if (length(f) > 2) and // e.g. '0x40' or '0x1043'
-         not IdemPChar(pointer(SR.Name), 'DOCKER') and
          (PosixParseHex32(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
       begin
         f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
