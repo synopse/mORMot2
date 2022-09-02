@@ -220,6 +220,16 @@ type
       SectionMaxCount: integer; const aDocument: variant; OwnWriter: boolean);
   end;
 
+  TSynMustacheContextData = class;
+
+  /// TSynMustacheContextData.OnGetGlobalData callback signature
+  // - Data and Rtti are filled with the {{.}} current context at call
+  // - implementation should lookup ValueName and set Data/Rtti with result=true
+  // - warning: the returned Data pointer should remain active until the
+  // Mustache rendering task is completed
+  TOnGetGlobalData = function(Sender: TSynMustacheContextData;
+    const ValueName: RawUtf8; var Data: pointer; var Rtti: TRttiCustom): boolean;
+
   /// handle {{mustache}} template rendering context from RTTI and variables
   // - the context is given via our RTTI information
   TSynMustacheContextData = class(TSynMustacheContext)
@@ -231,6 +241,7 @@ type
       ListCurrent: integer;
       Temp: TRttiVarData;
     end;
+    fOnGetGlobalData: TOnGetGlobalData;
     procedure PushContext(Value: pointer; Rtti: TRttiCustom);
     function GotoNextListItem: boolean; override;
     function GetDataFromContext(const ValueName: RawUtf8;
@@ -250,6 +261,10 @@ type
     constructor Create(Owner: TSynMustache; WR: TJsonWriter;
       SectionMaxCount: integer; Value: pointer; ValueRtti: TRttiCustom;
       OwnWriter: boolean);
+    /// callback to get data at runtime from a global name
+    // - when the Value variable provided to TSynMustache.RenderData is not enough
+    property OnGetGlobalData: TOnGetGlobalData
+      read fOnGetGlobalData write fOnGetGlobalData;
   end;
 
   /// maintain a list of {{mustache}} partials
@@ -497,6 +512,7 @@ type
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function RenderData(const Value; ValueTypeInfo: PRttiInfo;
+      const OnGetData: TOnGetGlobalData = nil;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
@@ -509,6 +525,7 @@ type
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
+      const OnGetData: TOnGetGlobalData = nil;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
@@ -520,6 +537,7 @@ type
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function RenderDataArray(const Value: TDynArray;
+      const OnGetData: TOnGetGlobalData = nil;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
@@ -971,9 +989,11 @@ function TSynMustacheContextData.GetDataFromContext(const ValueName: RawUtf8;
   out rc: TRttiCustom; out d: pointer): boolean;
 var
   i: PtrInt;
+  firstdata, firstrc: pointer; // OnGetGlobalData is filled with self context
 begin
   result := true; // mark found on direct exit
   // recursive search of {{value}}
+  firstdata := nil;
   for i := fContextCount - 1 downto 0 do
     with fContext[i] do
     begin
@@ -994,10 +1014,16 @@ begin
           exit;
         end
         else
+          // the current context is the current list item
           d := rc.ValueIterate(d, ListCurrent, rc); // rkClass is dereferenced
       if ValueName = '.' then
         // {{.}} -> context = self
         exit;
+      if firstdata = nil then
+      begin
+        firstdata := d; // for OnGetGlobalData() below
+        firstrc := rc;
+      end;
       if d <> nil then
       begin
         // we found a value in this context: lookup by {{name1.name2.name3}}
@@ -1007,7 +1033,11 @@ begin
           exit;
       end;
     end;
-  result := false; // not found
+  // try to resolve the name at runtime via the OnGetGlobalData callback
+  if Assigned(OnGetGlobalData) then
+    result := OnGetGlobalData(self, ValueName, firstdata, firstrc)
+  else
+    result := false; // not found
 end;
 
 function TSynMustacheContextData.GetVarDataFromContext(
@@ -1019,7 +1049,7 @@ begin
   // called for Helpers() support: AppendValue() is used for regular values
   if GetDataFromContext(ValueName, rc, d) then
   begin
-    // found {{.}} or {{value}} data
+    // found {{.}} or {{value}} or {{value1.value2.value3}} data
     result := msNothing;
     rc.ValueToVariant(d, Value, @JSON_[mFastFloat]);
   end
@@ -1768,14 +1798,16 @@ begin
 end;
 
 function TSynMustache.RenderData(const Value; ValueTypeInfo: PRttiInfo;
+  const OnGetData: TOnGetGlobalData;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 begin
-  result := RenderDataRtti(
-    @Value, Rtti.RegisterType(ValueTypeInfo), Partials, Helpers, OnTranslate, EscapeInvert);
+  result := RenderDataRtti(@Value, Rtti.RegisterType(ValueTypeInfo),
+    OnGetData, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
 function TSynMustache.RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
+  const OnGetData: TOnGetGlobalData;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
@@ -1792,6 +1824,7 @@ begin
       self, TJsonWriter.CreateOwnedStream(tmp), SectionMaxCount,
       Value, ValueRtti, true);
   try
+    ctx.OnGetGlobalData := OnGetData;
     ctx.Helpers := Helpers;
     ctx.OnStringTranslate := OnTranslate;
     ctx.EscapeInvert := EscapeInvert;
@@ -1806,6 +1839,7 @@ begin
 end;
 
 function TSynMustache.RenderDataArray(const Value: TDynArray;
+  const OnGetData: TOnGetGlobalData;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
@@ -1814,8 +1848,8 @@ begin
   n := Value.Count;
   if n <> 0 then
     DynArrayFakeLength(Value.Value^, n); // as RenderDataRtti() expects
-  result := RenderDataRtti(
-    Value.Value, Value.Info, Partials, Helpers, OnTranslate, EscapeInvert);
+  result := RenderDataRtti(Value.Value, Value.Info,
+    OnGetData, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
 destructor TSynMustache.Destroy;
