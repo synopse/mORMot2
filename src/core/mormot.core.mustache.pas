@@ -1009,6 +1009,7 @@ begin
   result := true; // mark found on direct exit
   // recursive search of {{value}}
   firstdata := nil;
+  firstrc := nil; // makes Delphi compiler happy
   for i := fContextCount - 1 downto 0 do
     with fContext[i] do
     begin
@@ -1034,15 +1035,16 @@ begin
       if PWord(ValueName)^ = ord('.') then
         // {{.}} -> context = self
         exit;
-      if firstdata = nil then
-      begin
-        firstdata := d; // for OnGetGlobalData() below
-        firstrc := rc;
-      end;
       if d <> nil then
       begin
-        // we found a value in this context: lookup by {{name1.name2.name3}}
-        // on nested variant, record/class properties, string or set/enum
+        // we found a value in this context
+        if firstdata = nil then
+        begin
+          firstdata := d; // for OnGetGlobalData() below
+          firstrc := rc;
+        end;
+        // recursive lookup by {{name1.name2.name3}} against nested variant
+        // fields, record/class properties, or string/set/enum values
         rc := rc.ValueByPath(d, pointer(ValueName), Temp.Data, fPathDelim);
         if rc <> nil then
           exit;
@@ -1051,7 +1053,7 @@ begin
   // try to resolve the name at runtime via the OnGetGlobalData callback
   if Assigned(OnGetGlobalData) then
   begin
-    d := firstdata;
+    d := firstdata; // provide the {{.}} self context to the callback
     rc := firstrc;
     result := OnGetGlobalData(self, ValueName, d, rc);
   end
@@ -1291,12 +1293,12 @@ end;
 type
   TSynMustacheParser = class
   protected
-    fTagStart, fTagStop: word;
+    fTagStartChars, fTagStopChars: word;
     fPos, fPosMin, fPosMax, fPosTagStart: PUtf8Char;
     fTagCount: PtrInt;
     fTemplate: TSynMustache;
     fScanStart, fScanEnd: PUtf8Char;
-    function Scan(ExpectedTag: Word): boolean;
+    function Scan(ExpectedTag: cardinal): boolean;
     procedure AddTag(aKind: TSynMustacheTagKind;
       aStart: PUtf8Char = nil; aEnd: PUtf8Char = nil);
   public
@@ -1380,10 +1382,10 @@ begin
               begin
                 aEnd := P;
                 fPos := P;
-                if not Scan(fTagStop) then
+                if not Scan(fTagStopChars) then
                   raise ESynMustache.CreateUtf8('Unfinished {{%', [aStart]);
                 if (aKind = mtVariableUnescape) and
-                   (fTagStop = $7d7d) and
+                   (fTagStopChars = $7d7d) and
                    (PWord(fPos - 1)^ = $7d7d) then
                   // {{{name}}} -> point after }}}
                   inc(fPos);
@@ -1439,8 +1441,8 @@ begin
     raise ESynMustache.CreateUtf8('DelimiterStart="%"', [DelimiterStart]);
   if length(DelimiterStop) <> 2 then
     raise ESynMustache.CreateUtf8('DelimiterStop="%"', [DelimiterStop]);
-  fTagStart := PWord(DelimiterStart)^;
-  fTagStop := PWord(DelimiterStop)^;
+  fTagStartChars := PWord(DelimiterStart)^;
+  fTagStopChars := PWord(DelimiterStop)^;
 end;
 
 function GotoNextTag(P, PMax: PUtf8Char; ExpectedTag: Word): PUtf8Char;
@@ -1460,7 +1462,7 @@ begin
   result := nil;
 end;
 
-function TSynMustacheParser.Scan(ExpectedTag: Word): boolean;
+function TSynMustacheParser.Scan(ExpectedTag: cardinal): boolean;
 var
   P: PUtf8Char;
 begin
@@ -1503,7 +1505,7 @@ begin
   fPosMin := P;
   fPosMax := PEnd - 1;
   repeat
-    if not Scan(fTagStart) then
+    if not Scan(fTagStartChars) then
       break;
     fPosTagStart := fScanEnd;
     AddTag(mtText);
@@ -1536,7 +1538,7 @@ begin
     end;
     if Kind <> mtVariable then
       inc(fPos);
-    if not Scan(fTagStop) then
+    if not Scan(fTagStopChars) then
       raise ESynMustache.CreateUtf8('Unfinished {{tag [%]', [fPos]);
     case Kind of
       mtSetDelimiter:
@@ -1545,13 +1547,13 @@ begin
              (fScanEnd[-1] <> '=') then
             raise ESynMustache.Create(
               'mtSetDelimiter syntax is e.g. {{=<% %>=}}');
-          fTagStart := PWord(fScanStart)^;
-          fTagStop := PWord(fScanStart + 3)^;
+          fTagStartChars := PWord(fScanStart)^;
+          fTagStopChars := PWord(fScanStart + 3)^;
           continue; // do not call AddTag(Kind=mtSetDelimiter)
         end;
       mtVariableUnescape:
         if (Symbol = '{') and
-           (fTagStop = $7d7d) and
+           (fTagStopChars = $7d7d) and
            (PWord(fPos - 1)^ = $7d7d) then
           // {{{name}}} -> point after }}}
           inc(fPos);
