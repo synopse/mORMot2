@@ -250,6 +250,8 @@ type
     procedure Iso8601DateAndTime;
     /// test the TSynTimeZone class and its cross-platform local time process
     procedure TimeZones;
+    /// test the SMBIOS decoding features
+    procedure DmiSmbios;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -5339,6 +5341,132 @@ begin
     tz.Free;
   end;
   CheckSame(local, UtcToLocal(dt, 'Romance Standard Time'));
+end;
+
+const
+  _REFSMB = // real export from a Lenovo T470 laptop
+    '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' +
+    'AgB////////////////////////////////////////AAAAAAAAfwT//gAA';
+
+procedure TTestCoreBase.DmiSmbios;
+var
+  uid: TGUID;
+  raw: TRawSmbiosInfo;
+  os:  TSmbiosBasicInfos;
+  dec: TSmbiosInfo;
+  s: RawUtf8;
+  b: RawByteString;
+
+  procedure CheckAgainst(const full: TSmbiosInfo; const os: TSmbiosBasicInfos);
+  begin
+    CheckEqual(full.Bios.VendorName, os[sbiBiosVendor]);
+    CheckEqual(full.Bios.Version, os[sbiBiosVersion]);
+    CheckEqual(full.Bios.Release, os[sbiBiosRelease]);
+    CheckEqual(full.Bios.Firmware, os[sbiBiosFirmware]);
+    CheckEqual(full.Bios.BuildDate, os[sbiBiosDate]);
+    CheckEqual(full.System.ProductName, os[sbiProductName]);
+    CheckEqual(full.System.Version, os[sbiVersion]);
+    CheckEqual(full.System.Uuid, os[sbiUuid]);
+    if full.Processor <> nil then
+      CheckEqual(full.Processor[0].Manufacturer, os[sbiCpuManufacturer]);
+    if full.Battery <> nil then
+      CheckEqual(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer]);
+    if full.Oem <> nil then
+      CheckEqual(full.Oem[0], os[sbiOem]);
+  end;
+
+begin
+  CheckEqual(SizeOf(TSmbiosBiosFlags), 8);
+  CheckEqual(SizeOf(TSmbiosMemory) - 7 * SizeOf(RawUtf8), 11);
+  CheckEqual(SizeOf(TSmbiosMemoryArray) - 2 * SizeOf(pointer), 5);
+  // validate actual retrieval from this computer
+  GetComputerUuid(uid); // retrieve main SMBIOS and its UUID, or generate it
+  Check(_SmbiosRetrieved);
+  Check(not IsZero(THash128(uid)), 'machine UUID');
+  GetSmbiosInfo; // parse using mormot.core.perf
+  CheckAgainst(Smbios, _smbios);
+  if Smbios.System.Uuid <> '' then
+    CheckEqual(ToUtf8(uid), Smbios.System.Uuid, 'uuid');
+  // validate from reference binary export, decoding into binary or json
+  raw.Data := Base64ToBin(_REFSMB);
+  if CheckFailed(raw.Data <> '', '_REFSMB') or
+     CheckFailed(CompressSynLZ(raw.Data, false) <> '', '_REFSMB synlz') then
+    exit;
+  PCardinal(@raw)^ := $010003ff;
+  CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
+  Check(DecodeSmbiosInfo(raw, dec), 'DecodeSmbiosInfo');
+  CheckAgainst(dec, os);
+  CheckHash(BinarySave(@dec.Bios,
+    TypeInfo(TSmbiosBios), rkRecordTypes), $9362A439, 'Bios');
+  CheckHash(BinarySave(@dec.System,
+    TypeInfo(TSmbiosSystem), rkRecordTypes), $A5E69307, 'System');
+  CheckHash(BinarySave(@dec.Board[0],
+    TypeInfo(TSmbiosBoard), rkRecordTypes), $25B6CB6C, 'Board');
+  CheckHash(BinarySave(@dec.Chassis[0],
+    TypeInfo(TSmbiosChassis), rkRecordTypes), $25633E53, 'Chassis');
+  CheckHash(BinarySave(@dec.Processor[0],
+    TypeInfo(TSmbiosProcessor), rkRecordTypes), $03E34B17, 'Proc');
+  b := BinarySave(@dec.Memory[0], TypeInfo(TSmbiosMemoryArray), rkRecordTypes);
+  //FileFromString(b, Executable.ProgramFilePath + CPU_ARCH_TEXT + '.dat');
+  CheckEqual(length(b), 137, 'MemoryArray Len');
+  CheckHash(b, $87CADDDA, 'MemoryArray');
+  SaveJson(dec.Memory[0], TypeInfo(TSmbiosMemoryArray),
+    [twoIgnoreDefaultInRecord], s);
+  CheckEqual(s, '{"l":3,"u":3,"e":3,"c":"32 GB","n":2,"d":[{"w":64,"d":64,' +
+    '"s":"16 GB","f":13,"r":2,"t":26,"e":16512,"l":"ChannelA-DIMM0","b":"B' +
+    'ANK 0","m":"Samsung","n":"3597D84C","a":"None","p":"M471A2K43CB1-CRC"' +
+    ',"c":2133},{"s":"0 B","f":2,"t":2,"l":"ChannelB-DIMM0","b":"BANK 2"}]}',
+    'MemoryArray Json');
+  CheckHash(BinarySave(@dec.Memory[0].Device[0],
+    TypeInfo(TSmbiosMemory), rkRecordTypes), $895CE535, 'Memory');
+  CheckHash(BinarySave(@dec.Connector[0],
+    TypeInfo(TSmbiosConnector), rkRecordTypes), $129D5265, 'Conn');
+  CheckHash(BinarySave(@dec.Slot[0],
+    TypeInfo(TSmbiosSlot), rkRecordTypes), $0BE08E2D, 'Slot');
+  CheckHash(BinarySave(@dec.Battery[0],
+    TypeInfo(TSmbiosBattery), rkRecordTypes), $7FDA54A0, 'Battery');
+  CheckHash(BinarySave(@dec,
+    TypeInfo(TSmbiosInfo), rkRecordTypes), $807823B2, 'BinarySave');
+  SaveJson(dec, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
+  CheckHash(s, $7A3BEEB8, 'BinarySave');
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}

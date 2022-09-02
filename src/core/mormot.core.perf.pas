@@ -1263,10 +1263,10 @@ type
     Serial: RawUtf8;
     /// 2.1+ Universal Unique Identifier (u)
     // - e.g. '02CD5F81-145E-41DB-9C53-784582A49845'
-    UUID: RawUtf8;
+    Uuid: RawUtf8;
     /// 2.4+ Product ID or Purchase Order Number, i.e. Sale identifier (k)
     // - e.g. 'LENOVO_MT_20HE_BU_Think_FM_ThinkPad'
-    SKU: RawUtf8;
+    Sku: RawUtf8;
     /// 2.4+ Computer Family, with similar branding and cosmetic features (f)
     // - e.g. 'ThinkPad T470'
     Family: RawUtf8;
@@ -4233,6 +4233,7 @@ var
   proc: array of record l1, l2, l3: word; end;
 begin
   Finalize(info);
+  FillCharFast(info, SizeOf(info), 0);
   result := false;
   s := pointer(raw.Data);
   if s = nil then
@@ -4274,7 +4275,7 @@ begin
           lines[s[7]] := @info.System.Serial;
           if s[1] >= $18 then // 2.1+
           begin
-            DecodeSmbiosUuid(@s[8], info.System.UUID, raw);
+            DecodeSmbiosUuid(@s[8], info.System.Uuid, raw);
             info.System.WakupType := TSmbiosSystemWakeup(s[$18]);
             if s[1] >= $1a then // 2.4+
             begin
