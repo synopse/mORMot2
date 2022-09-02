@@ -971,8 +971,6 @@ function TSynMustacheContextData.GetDataFromContext(const ValueName: RawUtf8;
   out rc: TRttiCustom; out d: pointer): boolean;
 var
   i: PtrInt;
-  vt: TSynInvokeableVariantType;
-  p: PRttiCustomProp;
 begin
   result := true; // mark found on direct exit
   if ValueName = '.' then
@@ -1006,34 +1004,13 @@ begin
         else
           d := rc.ValueIterate(d, ListCurrent, rc); // rkClass is dereferenced
       if d <> nil then
-        // we found a value in this context: lookup by {{name}}
-        if rc.Kind = rkVariant then
-        begin
-          rc := nil;
-          // caller should try TDocVariant/TBsonVariant name lookup
-          if DocVariantType.FindSynVariantType(PVarData(d)^.VType, vt) then
-          begin
-            vt.Lookup(Temp.Data, PVarData(d)^, pointer(ValueName), fPathDelim);
-            if Temp.VType <> varEmpty then
-            begin
-              d := @Temp;
-              rc := PT_RTTI[ptVariant];
-              exit;
-            end;
-          end;
-        end
-        else if rc.Props.Count <> 0 then
-        begin
-          // search property name in rkRecord/rkObject or rkClass
-          p := rc.PropFindByPath(d, pointer(ValueName), fPathDelim);
-          if (p <> nil) and
-             (p^.OffsetGet >= 0) then // we don't support getters yet
-          begin
-            rc := p^.Value;
-            inc(PAnsiChar(d), p^.OffsetGet);
-            exit;
-          end;
-        end;
+      begin
+        // we found a value in this context: lookup by {{name1.name2.name3}}
+        // on nested variant, record/class properties, string or set/enum
+        rc := rc.ValueByPath(d, pointer(ValueName), Temp.Data, fPathDelim);
+        if rc <> nil then
+          exit;
+      end;
     end;
   result := false; // not found
 end;
