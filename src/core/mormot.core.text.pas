@@ -2506,19 +2506,6 @@ function UInt2DigitsToShort(Value: byte): TShort4;
 function UInt2DigitsToShortFast(Value: byte): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a 32-bit integer (storing a IP4 address) into its full notation
-// - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
-function IP4Text(ip4: cardinal): ShortString; overload;
-
-/// convert a 128-bit buffer (storing an IP6 address) into its full notation
-// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(ip6: PHash128): ShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// convert a 128-bit buffer (storing an IP6 address) into its full notation
-// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-procedure IP6Text(ip6: PHash128; result: PShortString); overload;
-
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
 // - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
 // - returns FALSE on parsing error, also setting aValue=0
@@ -11120,47 +11107,6 @@ begin
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
-function IP4Text(ip4: cardinal): ShortString;
-var
-  b: array[0..3] of byte absolute ip4;
-begin
-  if ip4 = 0 then
-    result := ''
-  else
-    FormatShort('%.%.%.%', [b[0], b[1], b[2], b[3]], result);
-end;
-
-procedure IP6Text(ip6: PHash128; result: PShortString);
-var
-  i: integer;
-  p: PByte;
-  tab: ^TByteToWord;
-begin
-  if IsZero(ip6^) then
-    result^ := ''
-  else
-  begin
-    result^[0] := AnsiChar(39);
-    p := @result^[1];
-    tab := @TwoDigitsHexWBLower;
-    for i := 0 to 7 do
-    begin
-      PWord(p)^ := tab[ip6^[0]];
-      inc(p, 2);
-      PWord(p)^ := tab[ip6^[1]];
-      inc(p, 2);
-      inc(PWord(ip6));
-      p^ := ord(':');
-      inc(p);
-    end;
-  end;
-end;
-
-function IP6Text(ip6: PHash128): ShortString;
-begin
-  IP6Text(ip6, @result);
-end;
-
 function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean;
 var
   i, c: cardinal;
@@ -11508,7 +11454,9 @@ begin
     {$endif FPC}
 end;
 
-
+const // should be local for better code generation
+  HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
 procedure InitializeUnit;
 var
@@ -11518,9 +11466,6 @@ var
   P: PAnsiChar;
   B: PByteArray;
   tmp: array[0..15] of AnsiChar;
-const
-  HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 begin
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do

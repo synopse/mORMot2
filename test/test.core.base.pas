@@ -455,11 +455,53 @@ var
   Bits64: Int64 absolute Bits;
   Si, i: integer;
   c: cardinal;
+  s: shortstring;
+  txt: RawUtf8;
+  ip: THash128Rec;
   {$ifdef FPC}
   u: PtrUInt;
   timer: TPrecisionTimer;
   {$endif FPC}
 begin
+  FillZero(ip.b);
+  Check(IsZero(ip.b));
+  IP4Short(@ip, s);
+  Check(s = '0.0.0.0');
+  IP4Text(@ip, txt);
+  CheckEqual(txt, '');
+  IP6Short(@ip, s);
+  Check(s = '::', '::');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '');
+  ip.b[15] := 1;
+  IP6Short(@ip, s);
+  Check(s = '::1', '::1');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '127.0.0.1', 'IPv6 loopback');
+  ip.b[0] := 1;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::1');
+  ip.b[15] := 0;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::');
+  ip.b[6] := $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100:0:0:7000::');
+  for i := 0 to 7 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607::');
+  for i := 8 to 15 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607:809:a0b:c0d:e0f');
+  for i := 0 to 15 do
+    ip.b[i] := i or $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '7071:7273:7475:7677:7879:7a7b:7c7d:7e7f');
+  Check(mormot.core.text.HexToBin('200100B80A0B12F00000000000000001', PByte(@ip), 16));
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '2001:b8:a0b:12f0::1');
   {$ifdef CPUINTEL}
   GetBitsCountPtrInt := @GetBitsCountPurePascal;
   TestPopCnt('pas');

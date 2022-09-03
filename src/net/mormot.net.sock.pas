@@ -47,7 +47,7 @@ const
   cAnyHost = '0.0.0.0';
   cBroadcast = '255.255.255.255';
   c6Localhost = '::1';
-  c6AnyHost = '::0';
+  c6AnyHost = '::';
   c6Broadcast = 'ffff::1';
   cAnyPort = '0';
   cLocalhost32 = $0100007f;
@@ -301,13 +301,28 @@ type
 function IsPublicIP(ip4: cardinal): boolean;
 
 /// convert an IPv4 raw value into a ShortString text
+// - won't use the Operating System network layer API so works on XP too
+// - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 
 /// convert an IPv4 raw value into a RawUtf8 text
+// - zero '0.0.0.0' address  (i.e. bound to any host) is returned as ''
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 
-/// convert an IPv6 full address into a ShortString text
-procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
+/// convert an IPv6 raw value into a ShortString text
+// - will shorten the address using the regular 0 removal scheme, e.g.
+// 2001:00b8:0a0b:12f0:0000:0000:0000:0001 returns '2001:b8:a0b:12f0::1'
+// - zero is returned as '::' and loopback as '::1'
+// - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+// - won't use the Operating System network layer API so is fast and consistent
+procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+
+/// convert an IPv6 raw value into a RawUtf8 text
+// - zero '::' address  (i.e. bound to any host) is returned as ''
+// - loopback address is returned as its '127.0.0.1' IPv4 representation
+// for consistency with our high-level HTTP/REST code
+// - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
 // - returns e.g. '12:50:b6:1e:c6:aa'
@@ -1359,39 +1374,27 @@ begin
 end;
 
 procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
-var
-  tmp: ShortString;
 begin
   res := '';
-  with PSockAddr(@Addr)^ do
-    case sa_family of
-      AF_INET:
-        // check most common used values
-        if cardinal(sin_addr) = 0 then
-          // '0.0.0.0' bound to any host -> ''
-          exit
-        else if cardinal(sin_addr) = cLocalhost32 then
-        begin
-          // '127.0.0.1' loopback -> no memory allocation
-          if not localasvoid then
-            res := IP4local;
-          exit;
-        end;
-      {$ifdef OSPOSIX}
-      AF_UNIX:
-        begin
-          if not localasvoid then
-            res := IP4local; // by definition, unix sockets are local
-          exit;
-        end;
-      {$endif OSPOSIX}
-      else
+  case PSockAddr(@Addr)^.sa_family of
+    AF_INET:
+      IP4Text(@PSockAddr(@Addr)^.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
+    AF_INET6:
+      IP6Text(@PSockAddrIn6(@Addr)^.sin6_addr, res); // detect :: and ::1
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      begin
+        if not localasvoid then
+          res := IP4local; // by definition, unix sockets are local
         exit;
-    end;
-  IPShort(tmp, {withport=}false);
-  if not localasvoid or
-     (tmp <> c6Localhost) then
-    FastSetString(res, @tmp[1], ord(tmp[0]));
+      end;
+    {$endif OSPOSIX}
+  else
+    exit;
+  end;
+  if localasvoid and
+     (pointer(res) = pointer(IP4local)) then
+    res := '';
 end;
 
 function TNetAddr.IP(localasvoid: boolean): RawUtf8;
@@ -1418,21 +1421,24 @@ begin
   result[0] := #0;
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      begin
-        IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
-        if withport then
-        begin
-          AppendShortChar(':', result);
-          AppendShortCardinal(port, result);
-        end;
-      end;
+      IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
     AF_INET6:
-      IP6Short(@Addr, result, withport);
+      IP6Short(@PSockAddrIn6(@Addr)^.sin6_addr, result);
     {$ifdef OSPOSIX}
     AF_UNIX:
-      SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
-        mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
+      begin
+        SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
+          mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
+        exit; // no port
+      end;
     {$endif OSPOSIX}
+  else
+    exit;
+  end;
+  if withport then
+  begin
+    AppendShortChar(':', result);
+    AppendShortCardinal(port, result);
   end;
 end;
 
@@ -1479,16 +1485,15 @@ begin
 end;
 
 function TNetAddr.IsEqualAfter64(const another: TNetAddr): boolean;
-var
-  fam: cardinal;
 begin
-  fam := PSockAddr(@Addr)^.sa_family;
-  if fam = AF_INET then
-      result := true // SizeOf(sockaddr_in) = SizeOf(Int64) = 8
-  else if fam = AF_INET6 then
-    result := CompareMemFixed(@Addr[8], @another.Addr[8], SizeOf(sockaddr_in6) - 8)
+  case PSockAddr(@Addr)^.sa_family of
+    AF_INET:
+      result := true; // SizeOf(sockaddr_in) = SizeOf(Int64) = 8
+    AF_INET6:
+      result := CompareMemFixed(@Addr[8], @another.Addr[8], SizeOf(sockaddr_in6) - 8)
   else
     result := false;
+  end;
 end;
 
 function TNetAddr.IsEqual(const another: TNetAddr): boolean;
@@ -2045,6 +2050,9 @@ end;
 
 { ******************** Mac and IP Addresses Support }
 
+const // should be local for better code generation
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+
 function IsPublicIP(ip4: cardinal): boolean;
 begin
   result := false;
@@ -2065,12 +2073,16 @@ procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 begin
   s[0] := #0;
   AppendShortCardinal(ip4addr[0], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortCardinal(ip4addr[1], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortCardinal(ip4addr[2], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortCardinal(ip4addr[3], s);
+  PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
 end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
@@ -2081,7 +2093,7 @@ begin
     // '0.0.0.0' bound to any host -> ''
     result := ''
   else if PCardinal(ip4addr)^ = cLocalhost32 then
-    // '127.0.0.1' loopback -> no memory allocation
+    // '127.0.0.1' loopback (no memory allocation)
     result := IP4local
   else
   begin
@@ -2090,38 +2102,134 @@ begin
   end;
 end;
 
-procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
+procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+// this code is faster than any other inet_ntop6() I could find around
 var
-  host: array[0..NI_MAXHOST] of AnsiChar;
-  serv: array[0..NI_MAXSERV] of AnsiChar;
-  flags, hostlen, servlen: integer;
+  i: PtrInt;
+  trimlead: boolean;
+  c, n: byte;
+  p: PAnsiChar;
+  zeros, current: record pos, len: ShortInt; end;
+  tab: PAnsiChar;
 begin
-  s[0] := #0;
-  hostlen := NI_MAXHOST;
-  servlen := NI_MAXSERV;
-  if withport then
-    flags := NI_NUMERICHOST + NI_NUMERICSERV
-  else
-    flags := NI_NUMERICHOST;
-  if getnameinfo(psockaddr, SizeOf(sockaddr_in6), host{%H-}, hostlen,
-       serv{%H-}, servlen, flags) = NO_ERROR then
-  begin
-    SetString(s, PAnsiChar(@host), mormot.core.base.StrLen(@host));
-    if withport then
+  // find longest run of 0000: for :: shortening
+  zeros.pos := -1;
+  zeros.len := 0;
+  current.pos := -1;
+  current.len := 0;
+  for i := 0 to 7 do
+    if PWordArray(ip6addr)[i] = 0 then
+      if current.pos < 0 then
+      begin
+        current.pos := i;
+        current.len := 1;
+      end
+      else
+        inc(current.len)
+    else if current.pos >= 0 then
     begin
-      AppendShortChar(':', s);
-      AppendShortBuffer(PAnsiChar(@serv), -1, s);
+      if (zeros.pos < 0) or
+         (current.len > zeros.len) then
+        zeros := current;
+      current.pos := -1;
     end;
-  end;
+  if (current.pos >= 0) and
+     ((zeros.pos < 0) or
+      (current.len > zeros.len)) then
+    zeros := current;
+  if (zeros.pos >= 0) and
+     (zeros.len < 2) then
+    zeros.pos := -1;
+  // convert to hexa
+  p := @s[1];
+  tab := @HexCharsLower;
+  n := 0;
+  repeat
+    if n = byte(zeros.pos) then
+    begin
+      // shorten double zeros to ::
+      if n = 0 then
+      begin
+        p^ := ':';
+        inc(p);
+      end;
+      p^ := ':';
+      inc(p);
+      ip6addr := @PWordArray(ip6addr)[zeros.len];
+      inc(n, zeros.len);
+      if n = 8 then
+        break;
+    end
+    else
+    begin
+      // write up to 4 hexa chars, triming leading 0
+      trimlead := true;
+      c := ip6addr^[0] shr 4;
+      if c <> 0 then
+      begin
+        p^ := tab[c];
+        inc(p);
+        trimlead := false;
+      end;
+      c := ip6addr^[0]; // in two steps for FPC
+      c := c and 15;
+      if ((c <> 0) and trimlead) or
+         not trimlead then
+      begin
+        p^ := tab[c];
+        inc(p);
+        trimlead := false;
+      end;
+      c := ip6addr^[1] shr 4;
+      if ((c <> 0) and trimlead) or
+         not trimlead then
+      begin
+        p^ := tab[c];
+        inc(p);
+      end;
+      c := ip6addr^[1];
+      c := c and 15; // last hexa char is always there
+      p^ := tab[c];
+      inc(p);
+      inc(PWord(ip6addr));
+      inc(n);
+      if n = 8 then
+        break;
+      p^ := ':';
+      inc(p);
+    end;
+  until false;
+  p^ := #0; // make null-terminated (won't hurt)
+  s[0] := AnsiChar(p - @s[1]);
 end;
 
-const
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
+var
+  s: ShortString;
+begin
+  if (PInt64(ip6addr)^ = 0) and
+     (PInt64(@ip6addr[7])^ = 0) then // start with 15 zeros?
+    case ip6addr[15] of
+      0: // IPv6 :: bound to any host -> ''
+        begin
+          result := '';
+          exit;
+        end;
+      1: // IPv6 ::1 -> '127.0.0.1' loopback (with no memory allocation)
+        begin
+          result := IP4local;
+          exit;
+        end;
+    end;
+  IP6Short(ip6addr, s);
+  FastSetString(result, @s[1], ord(s[0]));
+end;
 
 function MacToText(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
   i: PtrInt;
+  c: byte;
   tab: PAnsichar;
 begin
   FastSetString(result, nil, (maclen * 3) - 1);
@@ -2131,7 +2239,8 @@ begin
   i := 0;
   repeat
     P[0] := tab[mac[i] shr 4];
-    P[1] := tab[mac[i] and $F];
+    c := mac[i];
+    P[1] := tab[c and 15];
     if i = maclen then
       break;
     P[2] := ':'; // as in Linux
@@ -2176,6 +2285,7 @@ function MacToHex(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
   i: PtrInt;
+  c: byte;
   tab: PAnsichar;
 begin
   FastSetString(result, nil, maclen * 2);
@@ -2185,7 +2295,8 @@ begin
   i := 0;
   repeat
     P[0] := tab[mac[i] shr 4];
-    P[1] := tab[mac[i] and $F];
+    c := mac[i];
+    P[1] := tab[c and 15];
     if i = maclen then
       break;
     inc(P, 2);

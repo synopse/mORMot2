@@ -97,6 +97,8 @@ type
   // - we extend it to PtrInt for our TNetSocketWrap cast
   TSocket = PtrInt;
 
+  PSockAddrIn6 = ^sockaddr_in6;
+
   THostEnt = record
     h_name: PAnsiChar;
     h_aliases: PPAnsiChar;
@@ -613,7 +615,6 @@ var
   list, info: pifaddrs;
   n: PtrInt;
   s: RawUtf8;
-  ss: ShortString;
 begin
   result := nil;
   n := 0;
@@ -641,15 +642,13 @@ begin
                         IP4Text(@sin_addr, s);
                     tiaIPv4Private:
                       if not IsPublicIP(integer(sin_addr)) then
-                        IP4Text(@sin_addr,s);
+                        IP4Text(@sin_addr, s);
                   end;
           AF_INET6:
             if kind in [tiaAny, tiaIPv6] then
-            begin
-              IP6Short(info^.ifa_addr, ss, false);
-              if Pos('%', ss) = 0 then
-                FastSetString(s, @ss[1], ord(ss[0]));
-            end;
+              with PSockAddrIn6(info^.ifa_addr)^ do
+                if sin6_scope_id = 0 then // don't include scoped IPv6
+                  IP6Text(@sin6_addr, s);
         end;
         if s <> '' then
         begin
