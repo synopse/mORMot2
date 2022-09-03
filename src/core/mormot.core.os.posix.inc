@@ -2782,12 +2782,13 @@ begin
 end;
 
 // on Android, /sys/class/net is not readable from the standard user :(
-procedure HashLocalMacAddresses(var u: THash128Rec; n: PtrInt);
+function _GetSystemMacAddress: TRawUtf8DynArray;
 var
   SR: TSearchRec;
   fn: TFileName;
   f: RawUtf8;
 begin
+  result := nil;
   if FindFirst('/sys/class/net/*', faDirectory, SR) <> 0 then
     exit;
   repeat
@@ -2803,8 +2804,8 @@ begin
         f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
         if f <> '' then
         begin
-          u.c[n] := crc32c(u.c[n], pointer(f), length(f));
-          n := (n + 1) and 3;
+          SetLength(result, length(result) + 1);
+          result[high(result)] := f;
         end;
       end;
     end;
@@ -2989,6 +2990,7 @@ begin
   fpuname(uts);
   SystemInfo.dwPageSize := getpagesize; // call libc API
   {$ifdef OSBSDDARWIN}
+  // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
   FastSetString(BiosInfoText, beg, StrLen(beg));
@@ -2996,6 +2998,7 @@ begin
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
   {$ifdef OSDARWIN}
+  // pure MACOS branch
   CpuCache[1].LineSize := fpsysctlhwint(HW_CACHELINE);
   CpuCache[1].Size := fpsysctlhwint(HW_L1DCACHESIZE);
   CpuCache[2].LineSize := fpsysctlhwint(HW_CACHELINE);
@@ -3009,11 +3012,14 @@ begin
   {$endif OSDARWIN}
   {$else}
   {$ifdef OSANDROID}
+  // pure ANDROID branch
   release := GetSystemProperty('ro.build.version.release');
   prod := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
                         GetSystemProperty('ro.product.name') + ' ' +
                         GetSystemProperty('ro.product.device')));
   {$else}
+  // pure LINUX branch
+  GetSystemMacAddress := _GetSystemMacAddress;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then

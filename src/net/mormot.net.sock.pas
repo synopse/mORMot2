@@ -2228,8 +2228,7 @@ end;
 function MacToText(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
-  i: PtrInt;
-  c: byte;
+  i, c: PtrInt;
   tab: PAnsichar;
 begin
   FastSetString(result, nil, (maclen * 3) - 1);
@@ -2238,9 +2237,10 @@ begin
   P := pointer(result);
   i := 0;
   repeat
-    P[0] := tab[mac[i] shr 4];
     c := mac[i];
-    P[1] := tab[c and 15];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
     if i = maclen then
       break;
     P[2] := ':'; // as in Linux
@@ -2284,8 +2284,7 @@ end;
 function MacToHex(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
-  i: PtrInt;
-  c: byte;
+  i, c: PtrInt;
   tab: PAnsichar;
 begin
   FastSetString(result, nil, maclen * 2);
@@ -2294,9 +2293,10 @@ begin
   P := pointer(result);
   i := 0;
   repeat
-    P[0] := tab[mac[i] shr 4];
     c := mac[i];
-    P[1] := tab[c and 15];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
     if i = maclen then
       break;
     inc(P, 2);
@@ -2400,6 +2400,23 @@ begin
     Text[true] := wo;
     result := Text[WithoutName];
   end;
+end;
+
+function _GetSystemMacAddress: TRawUtf8DynArray;
+var
+  i, n: PtrInt;
+  addr: TMacAddressDynArray;
+begin
+  addr := GetMacAddresses({UpAndDown=}true);
+  SetLength(result, length(addr));
+  n := 0;
+  for i := 0 to length(addr) - 1 do
+    if not NetStartWith(pointer(addr[i].Name), 'DOCKER') then
+    begin
+      result[n] := addr[i].Address;
+      inc(n);
+    end;
+  SetLength(result, n);
 end;
 
 
@@ -4418,6 +4435,7 @@ initialization
   assert(SizeOf(TNetAddr) >=
     {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
+  GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
 
 finalization

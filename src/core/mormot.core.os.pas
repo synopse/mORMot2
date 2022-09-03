@@ -1048,6 +1048,13 @@ procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 var
   GetExecutableLocation: function(aAddress: pointer): ShortString;
 
+var
+  /// retrieve the MAC addresses of all hardware network adapters
+  // - mormot.net.sock.pas will inject here its own cross-platform version
+  // - this unit will include a simple parser of /sys/class/net/* for Linux only
+  // - as used by GetComputerUuid()
+  GetSystemMacAddress: function: TRawUtf8DynArray;
+
 
 type
   /// identify an operating system folder for GetSystemPath()
@@ -6261,10 +6268,20 @@ end;
 
 procedure GetComputerUuid(out uuid: TGuid);
 var
-  i: TSmbiosBasicInfo;
+  n, i: PtrInt;
   u: THash128Rec absolute uuid;
   s: RawByteString;
   fn: TFileName;
+  mac: TRawUtf8DynArray;
+
+  procedure crctext(const s: RawUtf8);
+  begin
+    if s = '' then
+      exit;
+    u.c[n] := crc32c(u.c[n], pointer(s), length(s));
+    n := (n + 1) and 3;
+  end;
+
 begin
   // first try to retrieve the Machine BIOS UUID
   if not _SmbiosRetrieved then
@@ -6288,16 +6305,22 @@ begin
   {$endif CPUINTELARM}
   if RawSmbios.Data <> '' then // some bios have no uuid
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
-  for i := low(i) to high(i) do // some of _Smbios[] may have been retrieved
-    u.c[ord(i) and 3] := crc32c(u.c[ord(i) and 3], pointer(_Smbios[i]), length(_Smbios[i]));
-  u.c0 := crc32c(u.c0, pointer(CpuInfoText), length(CpuInfoText));
-  u.c1 := crc32c(u.c1, pointer(CpuCacheText), length(CpuCacheText));
-  u.c2 := crc32c(u.c2, pointer(BiosInfoText), length(BiosInfoText));
-  {$ifdef OSLINUX}
-  HashLocalMacAddresses(u, 3); // from /sys/class/net
-  {$else}
-  u.c3 := crc32c(u.c3, pointer(Executable.Host), length(Executable.Host));
-  {$endif OSLINUX}
+  n := 0;
+  for i := 0 to length(_Smbios) - 1 do // some of _Smbios[] may be set
+    crctext(PRawUtf8Array(@_Smbios)[i]);
+  crctext(CpuCacheText);
+  crctext(BiosInfoText);
+  crctext(CpuInfoText);
+  if Assigned(GetSystemMacAddress) then
+  begin
+    // from mormot.net.sock or mormot.core.os.posix.inc for Linux only
+    mac := GetSystemMacAddress;
+    for i := 0 to high(mac) do
+      crctext(mac[i]);
+  end
+  else
+    // fallback if mormot.net.sock is not included (very unlikely)
+    crctext(Executable.Host);
   if FileFromBuffer(@u, SizeOf(u), fn) then
     FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
 end;
