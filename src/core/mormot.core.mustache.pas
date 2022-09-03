@@ -1015,6 +1015,9 @@ begin
     begin
       d := Data;
       rc := Info;
+      if PWord(ValueName)^ = ord('.') then
+        // {{.}} -> context = self
+        exit;
       if (d <> nil) and
          (ListCount >= 0) then
         // within a list
@@ -1032,9 +1035,6 @@ begin
         else
           // the current context is the current list item
           d := rc.ValueIterate(d, ListCurrent, rc); // rkClass is dereferenced
-      if PWord(ValueName)^ = ord('.') then
-        // {{.}} -> context = self
-        exit;
       if d <> nil then
       begin
         // we found a value in this context
