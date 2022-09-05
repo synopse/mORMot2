@@ -2030,6 +2030,20 @@ function SaveJson(const Value; TypeInfo: PRttiInfo;
 function SaveJson(const Value; const TypeName: RawUtf8;
   Options: TTextWriterOptions = []): RawUtf8; overload;
 
+{$ifdef FPC}
+/// special global function exported to Lazarus for runtime evaluation, within
+// latest trunk fpdebug, of any variable as JSON, using mORMot RTTI
+// - the "JsonForDebug" function name is recognized by recent fpdebug, and
+// called and try to serialize a variable as JSON in Lazarus debug windows - see
+// https://wiki.freepascal.org/IDE_Window:_Ide_Options_-_Backend_Value_Converter
+// - this function will recognize 1) all type names registered to mORMot RTTI
+// (using Rtti.Register*() methods), 2) T* class types guessing from their VMT,
+// 3) I* types recognized as interface, and their associated "as TObject" class
+// instance will be serialized
+procedure JsonForDebug(Value: pointer; var TypeName: RawUtf8;
+  out JsonResultText: RawUtf8);
+{$endif FPC}
+
 /// save record into its JSON serialization as saved by TJsonWriter.AddRecordJson
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
@@ -10570,6 +10584,46 @@ begin
   else
     SaveJson(Value, nfo.Cache.Info, Options, result);
 end;
+
+{$ifdef FPC}
+procedure JsonForDebug(Value: pointer; var TypeName: RawUtf8;
+  out JsonResultText: RawUtf8);
+var
+  nfo: TRttiCustom;
+  vmt: PAnsiChar;
+begin
+  if (TypeName <> '') and
+     (Value <> nil) then
+  try
+    nfo := Rtti.RegisterTypeFromName(TypeName); // from Rtti.Register*() functions
+    {$ifdef HASINTERFACEASTOBJECT} // we target FPC/Lazarus anyway
+    if (nfo = nil) and
+       (TypeName[1] = 'I') then // guess class instance from interface variable
+      nfo := Rtti.RegisterClass(PInterface(Value)^ as TObject);
+    {$endif HASINTERFACEASTOBJECT}
+    if (nfo = nil) and
+       (TypeName[1] = 'T') then
+    begin
+      vmt := PPointer(Value)^; // guess if seems to be a real TObject instance
+      if (vmt <> nil) and
+         SeemsRealPointer(vmt) and
+         (PPtrInt(vmt + vmtInstanceSize)^ >= sizeof(vmt)) and
+         SeemsRealPointer(PPointer(vmt + vmtClassName)^) and
+         IdemPropName(PShortString(vmt + vmtClassName)^,
+           pointer(TypeName), length(TypeName)) then
+        nfo := Rtti.RegisterClass(TClass(pointer(vmt)));
+    end;
+    if nfo <> nil then
+    begin
+      SaveJson(Value^, nfo.Cache.Info, [twoEnumSetsAsBooleanInRecord],
+        JsonResultText, [woEnumSetsAsText]);
+      exit;
+    end;
+  except // especially if Value is no class
+    JsonResultText := ''; // impossible to serialization this value
+  end;
+end;
+{$endif FPC}
 
 function RecordSaveJson(const Rec; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean): RawUtf8;
