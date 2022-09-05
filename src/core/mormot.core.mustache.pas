@@ -969,11 +969,14 @@ begin
 end;
 
 procedure TSynMustacheContextData.PushContext(Value: pointer; Rtti: TRttiCustom);
+var
+  n: PtrInt;
 begin
-  if fContextCount >= length(fContext) then
+  n := fContextCount;
+  if n >= length(fContext) then
     // was roughtly set by SectionMaxCount
-    SetLength(fContext, fContextCount + 32);
-  with fContext[fContextCount] do
+    SetLength(fContext, n + 32);
+  with fContext[n] do
   begin
     Data := Value;
     Info := Rtti;
@@ -985,10 +988,13 @@ begin
 end;
 
 function TSynMustacheContextData.GotoNextListItem: boolean;
+var
+  n: PtrInt;
 begin
   result := false;
-  if fContextCount > 0 then
-    with fContext[fContextCount - 1] do
+  n := fContextCount;
+  if n > 0 then
+    with fContext[n - 1] do
       if ListCount >= 0 then
       begin
         inc(ListCurrent);

@@ -501,40 +501,21 @@ function ToText(use: TRestHttpServerUse): PShortString; overload;
 function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 
 const
-  /// this constant is used by TRestHttpServer to return a nice /favicon.ico
-  FAVICON_BINARY: RawByteString = RawByteString( // for Delphi Unicode :(
-    #$00#$00#$01#$00#$01#$00#$18#$18#$10#$00#$01#$00#$04#$00#$e8#$01 +
-    #$00#$00#$16#$00#$00#$00#$28#$00#$00#$00#$18#$00#$00#$00#$30#$00 +
-    #$00#$00#$01#$00#$04#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
-    #$00#$00#$00#$00#$00#$00#$10#$00#$00#$00#$00#$00#$00#$00#$01#$02 +
-    #$ef#$00#$05#$05#$08#$00#$55#$55#$55#$00#$03#$03#$c3#$00#$8c#$8c +
-    #$8c#$00#$ff#$ff#$ff#$00#$6d#$6d#$71#$00#$a3#$a3#$ab#$00#$09#$09 +
-    #$9b#$00#$35#$35#$36#$00#$00#$00#$2b#$00#$08#$08#$4f#$00#$cb#$cb +
-    #$cb#$00#$00#$00#$71#$00#$0f#$2d#$f8#$00#$00#$6e#$fd#$00#$55#$55 +
-    #$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$55#$57#$62 +
-    #$22#$67#$55#$55#$55#$55#$55#$55#$55#$52#$67#$7c#$cc#$77#$66#$55 +
-    #$55#$55#$55#$55#$56#$64#$42#$11#$11#$12#$44#$64#$55#$55#$55#$55 +
-    #$22#$61#$11#$11#$11#$11#$19#$66#$65#$55#$55#$52#$22#$11#$11#$1a +
-    #$aa#$11#$11#$12#$26#$55#$55#$76#$21#$11#$ab#$dd#$dd#$db#$a1#$11 +
-    #$22#$c5#$55#$64#$11#$1a#$d8#$33#$33#$88#$da#$11#$16#$25#$54#$76 +
-    #$11#$ad#$83#$30#$00#$33#$8d#$a1#$14#$7c#$c2#$41#$11#$b8#$30#$00 +
-    #$00#$00#$38#$b1#$11#$42#$42#$61#$1a#$d3#$00#$00#$00#$00#$33#$da +
-    #$11#$62#$22#$21#$1b#$83#$00#$00#$e0#$00#$03#$8a#$11#$22#$92#$91 +
-    #$1b#$83#$00#$0f#$fe#$00#$03#$8a#$11#$22#$92#$91#$1b#$83#$00#$0e +
-    #$fe#$00#$03#$8a#$11#$22#$22#$21#$1a#$83#$00#$00#$00#$0e#$03#$da +
-    #$11#$29#$49#$61#$4a#$d3#$30#$00#$00#$00#$38#$d1#$11#$29#$52#$61 +
-    #$99#$b8#$33#$0e#$e0#$03#$38#$b1#$79#$66#$5c#$44#$11#$1b#$83#$33 +
-    #$33#$33#$8b#$19#$94#$65#$55#$44#$91#$11#$bd#$67#$77#$8d#$b1#$11 +
-    #$24#$45#$55#$56#$41#$11#$96#$bb#$bb#$b6#$91#$19#$46#$55#$55#$5c +
-    #$24#$91#$94#$cc#$cc#$c4#$11#$24#$25#$55#$55#$55#$c2#$77#$11#$11 +
-    #$11#$11#$97#$72#$c5#$55#$55#$55#$55#$67#$77#$74#$44#$77#$74#$65 +
-    #$55#$55#$55#$55#$55#$55#$47#$7c#$cc#$74#$45#$55#$55#$55#$ff#$ff +
-    #$ff#$00#$ff#$80#$ff#$00#$fe#$00#$3f#$00#$f8#$00#$0f#$00#$f0#$00 +
-    #$07#$00#$e0#$00#$03#$00#$c0#$00#$01#$00#$c0#$00#$01#$00#$80#$00 +
-    #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00 +
-    #$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$00#$80#$00 +
-    #$00#$00#$80#$00#$01#$00#$c0#$00#$01#$00#$e0#$00#$03#$00#$e0#$00 +
-    #$07#$00#$f0#$00#$07#$00#$fc#$00#$1f#$00#$ff#$00#$7f#$00);
+  /// decoded into FAvIconBinary function result
+  // - using Base64 encoding is the easiest with Delphi and RawByteString :)
+  _FAVICON_BINARY: RawUtf8 =
+    'aQOi9AjOyJ+H/gMAAAEAAQAYGBAAAQAEAOgBAAAWAAAAKAAAABgAAAAwAAAAAQAEWhEAEFoH' +
+    'AAEC7wAFBQgAVVVVAAMDwwCMjIwA////AG1tcQCjo6sACQmbADU1NgAAACsACAhPAMvLywAA' +
+    'AHEADy34AABu/QBaEFVXYiJnWgdVUmd8zHdmWgVVVmRCERESRGRaBFUiYVoEERlmZVVVUiIR' +
+    'ERqqERESJlVVdiERq93d26ERIsVVZBEa2DMziNoRFiVUdhGtgzAAM42hFHzCQRG4MAAAADix' +
+    'EUJCYRrTWgQAM9oRYiIhG4MAAOAAA4oRIpKRG4MAD/4AA4oRIpKRG4MADv4AA4oRIiIhGoMA' +
+    'AAAOA9oRKUlhStMwAAAAONERKVJhmbgzDuADOLF5ZlxEERuDMzMzixmUZVVEkRG9Z3eNsREk' +
+    'RVVWQRGWu7u2kRlGVVVcJJGUzMzEESQlVVVVwndaBBGXcsVaBFVnd3REd3RlWgZVR3zMdEVV' +
+    'VVX///8A/4D/AP4APwD4AA8A8AAHAOAAAwDAAAEAwAABAIBaHwCAAAAAgAABAMAAAQDgAAMA' +
+    '4AAHAPAABwD8AB8A/wB/AA==';
+
+/// used by TRestHttpServer to return a nice /favicon.ico
+function FAvIconBinary: RawByteString;
 
 
 { ************ TRestHttpRemoteLogServer to Receive Remote Log Stream }
@@ -599,6 +580,16 @@ end;
 function ToText(sec: TRestHttpServerSecurity): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRestHttpServerSecurity), ord(sec));
+end;
+
+var
+  _FAvIconBinary: RawByteString;
+
+function FAvIconBinary: RawByteString;
+begin
+  if _FAvIconBinary = '' then
+    _FAvIconBinary := AlgoRle.Decompress(Base64ToBin(_FAVICON_BINARY));
+  result := _FAvIconBinary;
 end;
 
 
@@ -895,7 +886,7 @@ begin
     if aThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
   {$endif USEHTTPSYS}
-  fFavicon := FAVICON_BINARY; // nice default icon from browser :)
+  fFavicon := FAvIconBinary; // nice default icon from browser :)
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
@@ -1566,7 +1557,7 @@ end;
 
 
 initialization
-  assert(length(FAVICON_BINARY) = 510);
+  //assert(length(FAvIconBinary) = 510);
 
 end.
 
