@@ -11184,6 +11184,7 @@ procedure InitializeUnit;
 var
   i: integer; // not PtrInt since has just been overriden
   c: AnsiChar;
+  {$ifdef FPC} dummy: RawUtf8; {$endif}
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
   JSON_ESCAPE[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
@@ -11248,6 +11249,9 @@ begin
   // now we can register some local type alias to be found by name
   Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt)]);
   GetDataFromJson := _GetDataFromJson;
+  {$ifdef FPC} // we need to call it once so that it is linked to the executable
+  JsonForDebug(nil, dummy, dummy);
+  {$endif FPC}
 end;
 
 
