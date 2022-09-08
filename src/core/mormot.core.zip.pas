@@ -2833,7 +2833,7 @@ procedure InternalFileAppend(const ctxt: ShortString;
   const onadd: TOnZipWriteAdd; const zipfiles: array of TFileName;
   level: integer; keepdigitalsign: boolean);
 const
-  CERTIFICATE_ENTRY_OFFSET = 148;
+  CERTIFICATE_ENTRY_OFFSET = 152;
 var
   M, A, O: TStream;
   i, read: PtrInt;
