@@ -2922,6 +2922,7 @@ begin
       begin
         // the certificate length should be 64-bit aligned -> pad the payload
         ASize := O.Position - APos;
+        buf[0] := 0;
         while ASize and 7 <> 0 do
         begin
           O.WriteBuffer(buf[0], 1);
