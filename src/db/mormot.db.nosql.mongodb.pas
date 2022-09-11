@@ -2234,6 +2234,10 @@ begin
   else
     fCommand := Command;
   BsonVariantType.AddItem(fCommand, ['$db', fDatabaseName]); // since OP_MSG
+  // since OP_MSG mqfSlaveOk TMongoQueryFlag was replaced by Global Command Argument
+  // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst
+  BsonVariantType.AddItem(fCommand, ['$readPreference', _OBJ(['mode', 'primaryPreferred'])]);
+
   if not BsonVariantType.IsOfKind(fCommand, betDoc) then
     raise EMongoException.CreateUtf8('%.Create: command?', [self]);
   // generate the proper OP_MSG/OP_COMPRESSED content
