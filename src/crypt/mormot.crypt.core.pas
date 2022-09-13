@@ -478,7 +478,7 @@ type
     fAlgoMode: TAesMode;
     fIVUpdated: boolean; // so you can chain Encrypt/Decrypt() calls
     procedure AfterCreate; virtual; // circumvent Delphi bug about const aKey
-    function DecryptPkcs7Len(var InputLen, ivsize: integer; Input: pointer;
+    function DecryptPkcs7Len(var InputLen, ivsize: PtrInt; Input: pointer;
       IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
   public
     /// Initialize AES context for cypher
@@ -607,7 +607,7 @@ type
     // - if IVAtBeginning is TRUE, the Initialization Vector will be taken
     // from the beginning of the input binary buffer
     // - if RaiseESynCryptoOnError=false, returns '' on any decryption error
-    function DecryptPkcs7Buffer(Input: pointer; InputLen: integer;
+    function DecryptPkcs7Buffer(Input: pointer; InputLen: PtrInt;
       IVAtBeginning: boolean; RaiseESynCryptoOnError: boolean = true): RawByteString;
 
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
@@ -5123,7 +5123,7 @@ begin
   begin
     // we know that our classes update the IV/MAC so we can call Encrypt() twice
     by16 := InputLen + padding - 16;
-    Encrypt(Input, Output, by16); // avoid a huge MoveFast()
+    Encrypt(Input, Output, by16); // avoid a (potentially huge) MoveFast()
     inc(PByte(Input), by16);
     inc(PByte(Output), by16);
     dec(InputLen, by16);
@@ -5134,7 +5134,7 @@ begin
   result := true;
 end;
 
-function TAesAbstract.DecryptPkcs7Len(var InputLen, ivsize: integer;
+function TAesAbstract.DecryptPkcs7Len(var InputLen, ivsize: PtrInt;
   Input: pointer; IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
 var
   needed: integer;
@@ -5163,10 +5163,11 @@ begin
   result := true;
 end;
 
-function TAesAbstract.DecryptPkcs7Buffer(Input: pointer; InputLen: integer;
+function TAesAbstract.DecryptPkcs7Buffer(Input: pointer; InputLen: PtrInt;
   IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var
-  ivsize, padding: integer;
+  ivsize, i: PtrInt;
+  padding: byte;
   P: PAnsiChar;
 begin
   result := '';
@@ -5174,11 +5175,19 @@ begin
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
   FastSetRawByteString(result, nil, InputLen);
+  Decrypt(@PByteArray(Input)^[ivsize], pointer(result), InputLen);
   P := pointer(result);
-  Decrypt(@PByteArray(Input)^[ivsize], P, InputLen);
-  padding := ord(P[InputLen - 1]); // result[1..len]
-  if (padding = 0) or
-     (padding > SizeOf(TAesBlock)) then
+  padding := ord(P[InputLen - 1]); // padding = 1..16
+  if padding <> 0 then
+    if padding > SizeOf(TAesBlock) then
+      padding := 0
+    else for i := InputLen - 2 downto InputLen - padding do
+      if ord(P[i]) <> padding then
+      begin
+        padding := 0; // all padded bytes should match the padding length
+        break;
+      end;
+  if padding = 0 then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
@@ -5204,7 +5213,7 @@ end;
 function TAesAbstract.DecryptPkcs7(const Input: TBytes;
   IVAtBeginning, RaiseESynCryptoOnError: boolean; TrailerLen: PtrInt): TBytes;
 var
-  len, ivsize, padding: integer;
+  len, ivsize, padding: PtrInt;
 begin
   result := nil;
   len := length(Input) - TrailerLen;
@@ -5214,7 +5223,8 @@ begin
   SetLength(result, len);
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), len);
   padding := result[len - 1]; // result[0..len-1]
-  if padding > SizeOf(TAesBlock) then
+  if (padding = 0) or
+     (padding > SizeOf(TAesBlock)) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
