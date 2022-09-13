@@ -2756,7 +2756,7 @@ begin
   MoveFast(pointer(Stuff)^, PCardinalArray(value)[2], len);
   x.SetExtension(NID_netscape_comment, value); // free-form text comment
   x.Sign(key, EVP_sha1); // self-signed
-  result := x.ToBinary;  // DER format is as proper SEQ $30 ASN1 block
+  result := x.ToBinary;  // DER format is a proper SEQ $30 ASN1 block
   x.Free;
 end;
 

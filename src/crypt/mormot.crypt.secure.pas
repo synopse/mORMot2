@@ -5403,8 +5403,76 @@ type
   end;
 
 const
-  CERTIFICATE_ENTRY_OFFSET = 152;
+  PE_ENTRY_OFFSET = $3c;
+  CERTIFICATE_ENTRY_OFFSET = $98;
   WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
+
+function FindExeCertificate(const MainFile: TFileName; OutFile: TFileStream;
+  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
+var
+  M: TStream;
+  i, read: PtrInt;
+  certoffs, certlenoffs, certlen: cardinal;
+  firstbuf: boolean;
+  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
+begin
+  result := '';
+  firstbuf := true;
+  M := TFileStream.Create(MainFile, fmOpenRead or fmShareDenyNone);
+  try
+    repeat
+      read := M.Read(buf{%H-}, SizeOf(buf));
+      if firstbuf then
+      begin
+        // search for COFF/PE header in the first block
+        if read < 1024 then
+          raise EStuffExe.CreateUtf8('% read error', [MainFile]);
+        i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
+        if (i >= read) or
+           (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
+          raise EStuffExe.CreateUtf8('% is not a PE executable', [MainFile]);
+        // parse PE header
+        inc(i, CERTIFICATE_ENTRY_OFFSET);
+        certoffs := PCardinal(@buf[i])^;
+        certlenoffs := i + 4;
+        certlen := PCardinal(@buf[certlenoffs])^;
+        if (certoffs = 0) or
+           (certlen = 0) then
+           raise EStuffExe.CreateUtf8('% has no signature', [MainFile]);
+        // parse certificate table
+        if certoffs + certlen <> M.Size then
+          raise EStuffExe.CreateUtf8(
+            '% should end with a certificate', [MainFile]);
+        M.Seek(certoffs, soBeginning);
+        if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
+           (wc.dwLength <> certlen) or
+           (wc.wRevision <> $200) or
+           (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
+          raise EStuffExe.CreateUtf8('% unsupported signature', [MainFile]);
+        // read original signature
+        dec(certlen, SizeOf(wc));
+        SetLength(result, certlen);
+        if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
+          raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
+        while result[certlen] = #0 do
+          dec(certlen);
+        FakeLength(result, certlen); // trim ending #0 used for padding
+        if lenoffs <> nil then
+          lenoffs^ := certlenoffs;
+        if offs <> nil then
+          offs^ := certoffs;
+        if Outfile = nil then
+          break;
+        M.Seek(read, soBeginning);
+        firstbuf := false; // do it once
+      end;
+      if read > 0 then
+        OutFile.WriteBuffer(buf, read);
+    until read < SizeOf(buf);
+  finally
+    M.Free;
+  end;
+end;
 
 function Asn1Len(var p: PByte): PtrUInt;
 begin
@@ -5453,73 +5521,6 @@ begin
     inc(fixme);
     dec(n);
   until n = 0;
-end;
-
-function FindExeCertificate(const MainFile: TFileName; OutFile: TFileStream;
-  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
-var
-  M: TStream;
-  i, read: PtrInt;
-  certoffs, certlenoffs, certlen: cardinal;
-  firstbuf: boolean;
-  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
-begin
-  result := '';
-  firstbuf := true;
-  M := TFileStream.Create(MainFile, fmOpenRead or fmShareDenyNone);
-  try
-    repeat
-      read := M.Read(buf{%H-}, SizeOf(buf));
-      if firstbuf then
-      begin
-        // search for COFF/PE header in the first block
-        if read < 1024 then
-          raise EStuffExe.CreateUtf8('% read error', [MainFile]);
-        i := PCardinal(@buf[$3c])^; // read DOS header offset
-        if (i >= read) or
-           (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
-          raise EStuffExe.CreateUtf8('% is not a PE executable', [MainFile]);
-        // parse PE header
-        inc(i, CERTIFICATE_ENTRY_OFFSET);
-        certoffs := PCardinal(@buf[i])^;
-        certlenoffs := i + 4;
-        certlen := PCardinal(@buf[certlenoffs])^;
-        if (certoffs = 0) or
-           (certlen = 0) then
-           raise EStuffExe.CreateUtf8('% has no signature', [MainFile]);
-        // parse certificate table
-        if certoffs + certlen <> M.Size then
-          raise EStuffExe.CreateUtf8(
-            '% should end with a certificate', [MainFile]);
-        M.Seek(certoffs, soBeginning);
-        if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
-           (wc.dwLength <> certlen) or
-           (wc.wRevision <> $200) or
-           (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
-          raise EStuffExe.CreateUtf8('% unsupported signature', [MainFile]);
-        // read original signature
-        dec(certlen, SizeOf(wc));
-        SetLength(result, certlen);
-        if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
-          raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
-        while result[certlen] = #0 do
-          dec(certlen);
-        FakeLength(result, certlen); // trim ending #0 used for padding
-        if lenoffs <> nil then
-          lenoffs^ := certlenoffs;
-        if offs <> nil then
-          offs^ := certoffs;
-        if Outfile = nil then
-          break;
-        M.Seek(read, soBeginning);
-        firstbuf := false; // do it once
-      end;
-      if read > 0 then
-        OutFile.WriteBuffer(buf, read);
-    until read < SizeOf(buf);
-  finally
-    M.Free;
-  end;
 end;
 
 const
@@ -5634,7 +5635,7 @@ begin
 end;
 
 const
-  // compressed from mormot.crypt.openssl _CreateDummyCertificate()
+  // compressed from mormot.crypt.openssl a _CreateDummyCertificate() call
   _DUMMY: array[0..405] of byte = (
     $30, $82, $02, $BA, $30, $82, $02, $62, $A0, $03, $02, $01, $02, $02, $14,
     $20, $75, $2B, $9B, $18, $86, $4E, $B4, $C2, $DA, $6C, $CE, $9D, $C9, $62,
@@ -5675,6 +5676,7 @@ var
   p: PAnsiChar;
   fixme: array[0..6] of PAnsiChar;
 begin
+  // limitation: CertName is ignored and 'Dummy Cert' is forced
   result := '';
   FastSetRawByteString(dummy, nil, _DUMMYLEN);
   if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
