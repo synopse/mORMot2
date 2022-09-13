@@ -2097,19 +2097,20 @@ type
 
 var
   /// low-level function used by StuffExeCertificate()
-  // - properly implemented by mormot.crypt.openssl.pas
+  // - properly implemented by mormot.crypt.openssl.pas, but this unit
+  // has a stand-alone version using a pre-generated certificate
   CreateDummyCertificate: function(const Stuff: RawUtf8; const CertName: RawUtf8;
     Marker: cardinal): RawByteString;
 
 /// create a NewFile executable from adding some text to MainFile digital signature
-// - the text will be stuffed within a dummy certificate to the digital
-// signature, so you don't need to sign the executable again
+// - the text will be stuffed within a dummy certificate inside the existing
+// digital signature, so you don't need to sign the executable again
 // - FileAppend() method of mormot.core.zip has been disallowed in latest Windows
 // versions, so this method is the right way for adding some information to
 // a Windows signed executable
 // - raise EStuffExe if MainFile has no supported signature, or is already stuffed
-// - this function requires mormot.crypt.openssl to be available to properly
-// implement CreateDummyCertificate() low-level function
+// - this function does not require mormot.crypt.openssl but may use it if
+// available to generate a genuine dummy certificate
 // - use FindStuffExeCertificate() to retrieve the stuffed text
 procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
   const Stuff: RawUtf8);
@@ -2118,7 +2119,7 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
 // executable digital signature
 // - raise EStuffExe if MainFile has no supported signature
 // - returns the stuffed text, or '' if no text has been included
-// - this function does not require mormot.crypt.openssl to be available
+// - this function does not require mormot.crypt.openssl
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
 
 
@@ -5405,13 +5406,19 @@ const
   CERTIFICATE_ENTRY_OFFSET = 152;
   WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
 
-function Asn1Len(var p: PByte): PtrInt;
+function Asn1Len(var p: PByte): PtrUInt;
 begin
   result := p^;
   inc(p);
   if result <= $7f then
     exit;
   result := result and $7f;
+  if result = 1 then
+  begin
+    result := p^;
+    inc(p);
+    exit;
+  end;
   if result <> 2 then
     raise EStuffExe.CreateUtf8('Parsing error: Asn1Len=%', [result]);
   result := p^;
@@ -5432,6 +5439,22 @@ begin
     inc(p, result);
 end;
 
+procedure Asn1FixMe(fixme: PPAnsiChar; n: cardinal; added: PtrInt;
+  const MainFile: TFileName);
+var
+  one: PAnsiChar;
+begin
+  repeat
+    one := fixme^;
+    if one[1] <> #$82 then
+      raise EStuffExe.CreateUtf8('Wrong fixme in %', [MainFile])
+    else
+      PWord(one + 2)^ := swap(word(PtrInt(swap(PWord(one + 2)^)) + added));
+    inc(fixme);
+    dec(n);
+  until n = 0;
+end;
+
 function FindExeCertificate(const MainFile: TFileName; OutFile: TFileStream;
   out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
 var
@@ -5447,29 +5470,24 @@ begin
   try
     repeat
       read := M.Read(buf{%H-}, SizeOf(buf));
-      if read < 0 then
-        raise EStuffExe.CreateUtf8('% read error', [MainFile]);
       if firstbuf then
       begin
         // search for COFF/PE header in the first block
-        i := 0;
-        repeat
-          if i >= read - (CERTIFICATE_ENTRY_OFFSET + 8) then
-            raise EStuffExe.CreateUtf8(
-              '% is not a PE executable', [MainFile]);
-          if PCardinal(@buf[i])^ = ord('P') + ord('E') shl 8 then
-            break; // typical DOS header is $100
-          inc(i);
-        until false;
+        if read < 1024 then
+          raise EStuffExe.CreateUtf8('% read error', [MainFile]);
+        i := PCardinal(@buf[$3c])^; // read DOS header offset
+        if (i >= read) or
+           (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
+          raise EStuffExe.CreateUtf8('% is not a PE executable', [MainFile]);
         // parse PE header
         inc(i, CERTIFICATE_ENTRY_OFFSET);
         certoffs := PCardinal(@buf[i])^;
         certlenoffs := i + 4;
         certlen := PCardinal(@buf[certlenoffs])^;
+        if (certoffs = 0) or
+           (certlen = 0) then
+           raise EStuffExe.CreateUtf8('% has no signature', [MainFile]);
         // parse certificate table
-        if certlen > SizeOf(buf) then
-          raise EStuffExe.CreateUtf8('% has % certificate',
-            [MainFile, KB(certlen)]);
         if certoffs + certlen <> M.Size then
           raise EStuffExe.CreateUtf8(
             '% should end with a certificate', [MainFile]);
@@ -5478,7 +5496,7 @@ begin
            (wc.dwLength <> certlen) or
            (wc.wRevision <> $200) or
            (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
-          raise EStuffExe.CreateUtf8('% has no certificate', [MainFile]);
+          raise EStuffExe.CreateUtf8('% unsupported signature', [MainFile]);
         // read original signature
         dec(certlen, SizeOf(wc));
         SetLength(result, certlen);
@@ -5519,8 +5537,8 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
   const Stuff: RawUtf8);
 var
   O: TFileStream;
-  certoffs, certlenoffs, added: cardinal;
-  i, certslen, certsend: PtrInt;
+  certoffs, certlenoffs: cardinal;
+  certslen, certsend: PtrInt;
   sig, newcert: RawByteString;
   p: PAnsiChar;
   wc: WIN_CERTIFICATE;
@@ -5532,8 +5550,6 @@ begin
      (length(Stuff) > 32000) or
      (StrLen(pointer(Stuff)) <> length(Stuff)) then
     raise EStuffExe.CreateUtf8('Stuff should be pure Text for %', [MainFile]);
-  if not Assigned(CreateDummyCertificate) then
-    raise EStuffExe.CreateUtf8('mormot.crypt.openssl is needed for %', [MainFile]);
   certoffs := 0;
   certlenoffs := 0;
   O := TFileStream.Create(NewFile, fmCreate);
@@ -5567,12 +5583,9 @@ begin
         raise EStuffExe.CreateUtf8('Wrong cert ending in %', [MainFile]);
       // append the stuffed data within a dummy certificate
       newcert := CreateDummyCertificate(Stuff, _CERTNAME_, _MARKER_);
-      added := length(newcert);
-      for i := 0 to high(fixme) do
-        if fixme[i][1] <> #$82 then
-          raise EStuffExe.CreateUtf8('Wrong fixme % in %', [i, MainFile])
-        else
-          PWord(fixme[i] + 2)^ := swap(word(swap(PWord(fixme[i] + 2)^) + added));
+      if newcert = '' then
+        raise EStuffExe.CreateUtf8('CreateDummyCertificate for %', [MainFile]);
+      Asn1FixMe(@fixme, length(fixme), length(newcert), MainFile);
       insert(newcert, sig, certsend + 1);
       // write back the stuffed signature
       wc.dwLength := length(sig) + SizeOf(wc);
@@ -5597,8 +5610,7 @@ end;
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
 var
   wc: WIN_CERTIFICATE;
-  i, j: PtrInt;
-  len: integer;
+  i, j, len: PtrInt;
   P: PAnsiChar;
   cert: RawByteString;
 begin
@@ -5611,13 +5623,81 @@ begin
   for j := i to length(cert) - 16 do
     if PCardinal(P + j)^ = _MARKER_ then
     begin
-      len := 0;
-      if mormot.core.text.HexToBin(P + j + 4, @len, 2) then
+      len := 0; // length is encoded as hexadecimal
+      if mormot.core.text.HexToBin(P + j + 4, @len, 2) and
+         (len + j + 8 < length(cert)) then
+      begin
         FastSetString(result, P + j + 8, len);
-      exit;
+        exit;
+      end;
     end;
 end;
 
+const
+  // compressed from mormot.crypt.openssl _CreateDummyCertificate()
+  _DUMMY: array[0..405] of byte = (
+    $30, $82, $02, $BA, $30, $82, $02, $62, $A0, $03, $02, $01, $02, $02, $14,
+    $20, $75, $2B, $9B, $18, $86, $4E, $B4, $C2, $DA, $6C, $CE, $9D, $C9, $62,
+    $D0, $71, $5D, $85, $58, $30, $09, $06, $07, $2A, $86, $48, $CE, $3D, $04,
+    $01, $30, $15, $31, $13, $30, $11, $06, $03, $55, $04, $03, $0C, $0A, $44,
+    $75, $6D, $6D, $79, $20, $43, $65, $72, $74, $30, $1E, $17, $0D, $30, $30,
+    $30, $31, $30, $31, $5A, $06, $30, $5A, $01, $5A, $17, $0D, $30, $30, $30,
+    $31, $30, $31, $5A, $06, $30, $5A, $01, $5A, $30, $15, $31, $13, $30, $11,
+    $06, $03, $55, $04, $03, $0C, $0A, $44, $75, $6D, $6D, $79, $20, $43, $65,
+    $72, $74, $30, $59, $30, $13, $06, $07, $2A, $86, $48, $CE, $3D, $02, $01,
+    $06, $08, $2A, $86, $48, $CE, $3D, $03, $01, $07, $03, $42, $00, $04, $16,
+    $62, $8E, $6C, $AC, $1A, $03, $79, $17, $AE, $FE, $58, $65, $36, $6B, $9A,
+    $E5, $F8, $EC, $07, $A4, $71, $03, $B7, $7D, $BC, $53, $70, $E6, $14, $17,
+    $CC, $7E, $0F, $FF, $69, $52, $BB, $FB, $66, $91, $EC, $8E, $50, $9E, $35,
+    $5E, $61, $95, $38, $8C, $6B, $BE, $9F, $4B, $55, $DA, $85, $1D, $07, $E8,
+    $77, $47, $AF, $A3, $82, $01, $8F, $30, $82, $01, $8B, $30, $0F, $06, $03,
+    $55, $1D, $13, $01, $01, $FF, $04, $05, $30, $03, $01, $01, $FF, $30, $1D,
+    $06, $03, $55, $1D, $0E, $04, $16, $04, $14, $DA, $39, $A3, $EE, $5E, $6B,
+    $4B, $0D, $32, $55, $BF, $EF, $95, $60, $18, $90, $AF, $D8, $07, $09, $30,
+    $0E, $06, $03, $55, $1D, $0F, $01, $01, $FF, $04, $04, $03, $02, $02, $04,
+    $30, $82, $01, $47, $06, $09, $60, $86, $48, $01, $86, $F8, $42, $01, $0D,
+    $04, $82, $01, $38, $16, $82, $01, $34, $A5, $AB, $02, $01, $32, $43, $30,
+    $31, $5A, $FF, $2D, $5A, $2D, $2D, $30, $09, $06, $07, $2A, $86, $48, $CE,
+    $3D, $04, $01, $03, $47, $00, $30, $44, $02, $20, $3D, $5E, $56, $CB, $E2,
+    $2A, $1E, $CA, $1B, $BD, $7D, $E7, $A5, $95, $3B, $D0, $AA, $DF, $20, $9F,
+    $DF, $7E, $0F, $CE, $52, $BF, $4E, $F4, $7C, $A9, $3C, $13, $02, $20, $1E,
+    $30, $A4, $D6, $65, $D7, $D8, $6C, $04, $C9, $54, $5F, $C1, $B4, $65, $44,
+    $18, $65, $D9, $EF, $F5, $88, $62, $FD, $14, $85, $D7, $14, $AD, $93, $E2,
+    $46);
+  _DUMMYLEN = 702;
+  _DUMMYSTUFFLEN = 300; // > 255 so that Asn1FixMe() has $82 lengths
+
+function _CreateDummyCertificate(const Stuff: RawUtf8;
+  const CertName: RawUtf8; Marker: cardinal): RawByteString;
+var
+  dummy: RawByteString;
+  len: PtrInt;
+  p: PAnsiChar;
+  fixme: array[0..6] of PAnsiChar;
+begin
+  result := '';
+  FastSetRawByteString(dummy, nil, _DUMMYLEN);
+  if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
+    exit;
+  p := pointer(dummy);
+  if (PCardinal(p + 310)^ <> $0102aba5) or
+     (PCardinal(p + 318)^ <> $2d2d2d2d) then
+    exit;
+  fixme[0] := p;
+  fixme[1] := p + 4;
+  fixme[2] := p + 215;
+  fixme[3] := p + 219;
+  fixme[4] := p + 287;
+  fixme[5] := p + 302;
+  fixme[6] := p + 306;
+  PCardinal(p + 310)^ := Marker;
+  len := length(Stuff);
+  mormot.core.text.BinToHex(@len, p + 314, 2);
+  Asn1FixMe(@fixme, 7, len - _DUMMYSTUFFLEN, 'CreateDummyCertificate');
+  delete(dummy, 319, _DUMMYSTUFFLEN);
+  insert(Stuff, dummy, 319);
+  result := dummy;
+end;
 
 
 procedure InitializeUnit;
@@ -5626,6 +5706,7 @@ begin
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
+  CreateDummyCertificate := _CreateDummyCertificate;
 end;
 
 procedure FinalizeUnit;

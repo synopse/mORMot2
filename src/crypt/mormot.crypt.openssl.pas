@@ -2740,7 +2740,6 @@ var
   len: integer;
   value: RawUtf8;
 begin
-  EOpenSsl.CheckAvailable(nil, 'CreateDummyCertificate');
   x := NewCertificate;
   x.SetBasic(true);
   x.SetUsage([kuKeyCertSign]);
@@ -2769,7 +2768,7 @@ begin
   if (TAesFast[mGcm] = TAesGcmOsl) or
      not OpenSslIsAvailable then
     exit;
-  // set the fastest AES implementation classes
+  // set the fastest AES implementation classes according to the actual platform
   TAesFast[mGcm] := TAesGcmOsl;
   {$ifdef HASAESNI}
     // mormot.crypt.core x86_64 asm is faster than OpenSSL - but GCM
@@ -2785,12 +2784,13 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
-  // redirects raw mormot.crypt.ecc256r1 functions to the much faster OpenSSL
+  // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
+  // register OpenSSL methods to our high-level cryptographic catalog
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for osa := low(osa) to high(osa) do
   begin
@@ -2798,6 +2798,8 @@ begin
     CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
   end;
   CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
+  CreateDummyCertificate := _CreateDummyCertificate;
 end;
 
 procedure FinalizeUnit;
@@ -2810,7 +2812,6 @@ end;
 
 
 initialization
-  CreateDummyCertificate := _CreateDummyCertificate;
 
 finalization
   FinalizeUnit;

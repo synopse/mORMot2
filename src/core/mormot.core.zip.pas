@@ -682,24 +682,24 @@ procedure FileAppend(const MainFile, AppendFile: TFileName); overload;
 
 /// add AppendFile after the end of MainFile into NewFile
 // - could be used e.g. to add a .zip to an executable
-// - if PreserveWinDigSign is set, the Windows PE digital signature is kept
-// https://blog.barthe.ph/2009/02/22/change-signed-executable/ - but this legacy
-// "append" method is now rejected by Windows, so StuffExeCertificate() from
-// mormot.crypt.secure/mormot.crypt.openssl is to be used instead
+// - if PreserveWinDigSign is set, the Windows PE digital signature is kept using
+// https://blog.barthe.ph/2009/02/22/change-signed-executable legacy method -
+// but such naive "append" is now rejected by Windows, so StuffExeCertificate()
+// from mormot.crypt.secure is to be used instead
 procedure FileAppend(const MainFile, AppendFile, NewFile: TFileName;
   PreserveWinDigSign: boolean = false); overload;
 
 /// zip a folder content after the end of MainFile into NewFile
-// - PreserveWinDigSign is rejected by modern Windows, so StuffExeCertificate()
-// from mormot.crypt.secure/mormot.crypt.openssl is to be used instead
+// - PreserveWinDigSign legacy method is rejected by modern Windows, so
+// StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFolder(const MainFile, NewFile, ZipFolder: TFileName;
   const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
   CompressionLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
   PreserveWinDigSign: boolean = false);
 
 /// zip a some files after the end of MainFile into NewFile
-// - PreserveWinDigSign is rejected by modern Windows, so StuffExeCertificate()
-// from mormot.crypt.secure/mormot.crypt.openssl is to be used instead
+// - PreserveWinDigSign legacy method is rejected by modern Windows, so
+// StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFiles(const MainFile, NewFile: TFileName;
   const ZipFiles: array of TFileName; RemovePath: boolean = true;
   CompressionLevel: integer = 6; PreserveWinDigSign: boolean = false);
