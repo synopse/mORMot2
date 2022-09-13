@@ -15,6 +15,7 @@ unit mormot.crypt.secure;
     - TBinaryCookieGenerator Simple Cookie Generator
     - Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories
     - Minimal PEM/DER Encoding/Decoding
+    - Windows Executable Digital Signature Stuffing
 
    Uses optimized mormot.crypt.core.pas for its actual process.
 
@@ -2087,7 +2088,39 @@ function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
 function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 
 
-{ ************** High-Level (X509) Certificates Process }
+
+{ ************** Windows Executable Digital Signature Stuffing }
+
+type
+  /// exception raised by StuffExeCertificate() in case of processing error
+  EStuffExe = class(ESynException);
+
+var
+  /// low-level function used by StuffExeCertificate()
+  // - properly implemented by mormot.crypt.openssl.pas
+  CreateDummyCertificate: function(const Stuff: RawUtf8; const CertName: RawUtf8;
+    Marker: cardinal): RawByteString;
+
+/// create a NewFile executable from adding some text to MainFile digital signature
+// - the text will be stuffed within a dummy certificate to the digital
+// signature, so you don't need to sign the executable again
+// - FileAppend() method of mormot.core.zip has been disallowed in latest Windows
+// versions, so this method is the right way for adding some information to
+// a Windows signed executable
+// - raise EStuffExe if MainFile has no supported signature, or is already stuffed
+// - this function requires mormot.crypt.openssl to be available to properly
+// implement CreateDummyCertificate() low-level function
+// - use FindStuffExeCertificate() to retrieve the stuffed text
+procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
+  const Stuff: RawUtf8);
+
+/// retrieve the text inserted by StuffExeCertificate() into the Windows
+// executable digital signature
+// - raise EStuffExe if MainFile has no supported signature
+// - returns the stuffed text, or '' if no text has been included
+// - this function does not require mormot.crypt.openssl to be available
+function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
+
 
 
 implementation
@@ -5356,6 +5389,235 @@ begin
   MoveFast(P^, buf[pos], buflen);
   result := P + buflen;
 end;
+
+
+
+{ ************** Windows Executable Digital Signature Stuffing }
+
+type
+  // see http://msdn.microsoft.com/en-us/library/ms920091
+  WIN_CERTIFICATE = record
+    dwLength: DWORD;
+    wRevision, wCertType: word;
+  end;
+
+const
+  CERTIFICATE_ENTRY_OFFSET = 152;
+  WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
+
+function Asn1Len(var p: PByte): PtrInt;
+begin
+  result := p^;
+  inc(p);
+  if result <= $7f then
+    exit;
+  result := result and $7f;
+  if result <> 2 then
+    raise EStuffExe.CreateUtf8('Parsing error: Asn1Len=%', [result]);
+  result := p^;
+  inc(p);
+  result := (result shl 8) + p^;
+  inc(p);
+end;
+
+function Asn1Next(var p: PAnsiChar; expected: byte; moveafter: boolean;
+  const Ctxt: shortstring): PtrInt;
+begin
+  if p^ <> AnsiChar(expected) then
+    raise EStuffExe.CreateUtf8('Parsing %: % instead of %',
+      [Ctxt, byte(p^), expected]);
+  inc(p);
+  result := Asn1Len(PByte(p));
+  if moveafter then
+    inc(p, result);
+end;
+
+function FindExeCertificate(const MainFile: TFileName; OutFile: TFileStream;
+  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
+var
+  M: TStream;
+  i, read: PtrInt;
+  certoffs, certlenoffs, certlen: cardinal;
+  firstbuf: boolean;
+  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
+begin
+  result := '';
+  firstbuf := true;
+  M := TFileStream.Create(MainFile, fmOpenRead or fmShareDenyNone);
+  try
+    repeat
+      read := M.Read(buf{%H-}, SizeOf(buf));
+      if read < 0 then
+        raise EStuffExe.CreateUtf8('% read error', [MainFile]);
+      if firstbuf then
+      begin
+        // search for COFF/PE header in the first block
+        i := 0;
+        repeat
+          if i >= read - (CERTIFICATE_ENTRY_OFFSET + 8) then
+            raise EStuffExe.CreateUtf8(
+              '% is not a PE executable', [MainFile]);
+          if PCardinal(@buf[i])^ = ord('P') + ord('E') shl 8 then
+            break; // typical DOS header is $100
+          inc(i);
+        until false;
+        // parse PE header
+        inc(i, CERTIFICATE_ENTRY_OFFSET);
+        certoffs := PCardinal(@buf[i])^;
+        certlenoffs := i + 4;
+        certlen := PCardinal(@buf[certlenoffs])^;
+        // parse certificate table
+        if certlen > SizeOf(buf) then
+          raise EStuffExe.CreateUtf8('% has % certificate',
+            [MainFile, KB(certlen)]);
+        if certoffs + certlen <> M.Size then
+          raise EStuffExe.CreateUtf8(
+            '% should end with a certificate', [MainFile]);
+        M.Seek(certoffs, soBeginning);
+        if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
+           (wc.dwLength <> certlen) or
+           (wc.wRevision <> $200) or
+           (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
+          raise EStuffExe.CreateUtf8('% has no certificate', [MainFile]);
+        // read original signature
+        dec(certlen, SizeOf(wc));
+        SetLength(result, certlen);
+        if M.Read(pointer(result)^, certlen) <> certlen then
+          raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
+        while result[certlen] = #0 do
+          dec(certlen);
+        FakeLength(result, certlen); // trim ending #0 used for padding
+        if lenoffs <> nil then
+          lenoffs^ := certlenoffs;
+        if offs <> nil then
+          offs^ := certoffs;
+        if Outfile = nil then
+          break;
+        M.Seek(read, soBeginning);
+        firstbuf := false; // do it once
+      end;
+      if read > 0 then
+        OutFile.WriteBuffer(buf, read);
+    until read < SizeOf(buf);
+  finally
+    M.Free;
+  end;
+end;
+
+const
+  _CERTNAME_ = 'Dummy Cert';
+  _MARKER_ = $0102aba5;
+
+const
+  ASN1_INT = $02;
+  ASN1_OID = $06;
+  ASN1_SEQ = $30;
+  ASN1_SET = $31;
+  ASN1_ARR = $a0;
+
+procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
+  const Stuff: RawUtf8);
+var
+  O: TFileStream;
+  certoffs, certlenoffs, added: cardinal;
+  i, certslen, certsend: PtrInt;
+  sig, newcert: RawByteString;
+  p: PAnsiChar;
+  wc: WIN_CERTIFICATE;
+  fixme: array[0..3] of PAnsiChar;
+begin
+  if NewFile = MainFile then
+    raise EStuffExe.CreateUtf8('MainFile=NewFile=%', [MainFile]);
+  if (Stuff = '') or
+     (length(Stuff) > 32000) or
+     (StrLen(pointer(Stuff)) <> length(Stuff)) then
+    raise EStuffExe.CreateUtf8('Stuff should be pure Text for %', [MainFile]);
+  if not Assigned(CreateDummyCertificate) then
+    raise EStuffExe.CreateUtf8('mormot.crypt.openssl is needed for %', [MainFile]);
+  certoffs := 0;
+  certlenoffs := 0;
+  O := TFileStream.Create(NewFile, fmCreate);
+  try
+    try
+      // copy MainFile source file, parsing the PE header and cert chain
+      sig := FindExeCertificate(MainFile, O, wc, @certlenoffs, @certoffs);
+      if length(sig) < 4000 then
+        raise EStuffExe.CreateUtf8('No signature found in %', [MainFile]);
+      if PosEx(_CERTNAME_, sig) <> 0 then
+        raise EStuffExe.CreateUtf8('% is already stuffed', [MainFile]);
+      // parse the original PKCS#7 signed data
+      p := pointer(sig);
+      fixme[0] := p;
+      if Asn1Next(p, ASN1_SEQ, {moveafter=}false, 'SEQ') + 4 > length(sig) then
+        raise EStuffExe.CreateUtf8('Truncated signature in %', [MainFile]);
+      Asn1Next(p, ASN1_OID, true,  'OID');
+      fixme[1] := p;
+      Asn1Next(p, ASN1_ARR, false, 'ARR');
+      fixme[2] := p;
+      Asn1Next(p, ASN1_SEQ, false, 'PKCS#7');
+      Asn1Next(p, ASN1_INT, true,  'Version');
+      Asn1Next(p, ASN1_SET, true,  'Digest');
+      Asn1Next(p, ASN1_SEQ, true,  'Context');
+      fixme[3] := p;
+      certslen := Asn1Next(p, ASN1_ARR, false, 'Certs');
+      inc(p, certslen);
+      certsend := p - pointer(sig);
+      Asn1Next(p, ASN1_SET, true, 'SignerInfo');
+      if p - pointer(sig) > length(sig) then
+        raise EStuffExe.CreateUtf8('Wrong cert ending in %', [MainFile]);
+      // append the stuffed data within a dummy certificate
+      newcert := CreateDummyCertificate(Stuff, _CERTNAME_, _MARKER_);
+      added := length(newcert);
+      for i := 0 to high(fixme) do
+        if fixme[i][1] <> #$82 then
+          raise EStuffExe.CreateUtf8('Wrong fixme % in %', [i, MainFile])
+        else
+          PWord(fixme[i] + 2)^ := swap(word(swap(PWord(fixme[i] + 2)^) + added));
+      insert(newcert, sig, certsend + 1);
+      // write back the stuffed signature
+      wc.dwLength := length(sig) + SizeOf(wc);
+      while wc.dwLength and 7 <> 0 do // 64-bit padding
+      begin
+        inc(wc.dwLength);
+        SetLength(sig, wc.dwLength);    // padded with #0
+      end;
+      O.Seek(certlenoffs, soBeginning); // in PE header
+      O.WriteBuffer(wc.dwLength, 4);
+      O.Seek(certoffs, soBeginning);    // in the certificate table
+      O.WriteBuffer(wc, SizeOf(wc));
+      O.WriteBuffer(pointer(sig)^, wc.dwLength - SizeOf(wc));
+    except
+      DeleteFile(NewFile); // aborted file is clearly invalid
+    end;
+  finally
+    O.Free;
+  end;
+end;
+
+function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
+var
+  wc: WIN_CERTIFICATE;
+  i, j: PtrInt;
+  len: integer;
+  P: PAnsiChar;
+  cert: RawByteString;
+begin
+  result := '';
+  cert := FindExeCertificate(FileName, nil, wc, nil, nil);
+  i := PosEx(_CERTNAME_, cert);
+  if i = 0 then
+    exit;
+  P := pointer(Cert);
+  for j := i to length(cert) - 16 do
+    if PCardinal(P + j)^ = _MARKER_ then
+    begin
+      len := 0;
+      if mormot.core.text.HexToBin(P + j + 4, @len, 2) then
+        FastSetString(result, P + j + 8, len);
+      exit;
+    end;
+end;
+
 
 
 procedure InitializeUnit;

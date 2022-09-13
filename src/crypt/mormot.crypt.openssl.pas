@@ -1983,7 +1983,7 @@ begin
         fX509 := x; // as expected by next line
         Sign(Authority);
       except
-        fX509 := nil; // on erorr, rollback (and call x.Free)
+        fX509 := nil; // on error, rollback (and call x.Free)
       end;
     //writeln('IsSelfSigned=',x.IsSelfSigned);
     // the certificate was generated so can be stored within this instance
@@ -2730,6 +2730,37 @@ begin
     raise EOpenSslCert.Create('Unexpected X509Algo()');
 end;
 
+function _CreateDummyCertificate(const Stuff: RawUtf8;
+  const CertName: RawUtf8; Marker: cardinal): RawByteString;
+const
+  EXPIRED_DATE = '20000101000000Z'; // won't be taken into account anyway
+var
+  x: PX509;
+  key: PEVP_PKEY;
+  len: integer;
+  value: RawUtf8;
+begin
+  EOpenSsl.CheckAvailable(nil, 'CreateDummyCertificate');
+  x := NewCertificate;
+  x.SetBasic(true);
+  x.SetUsage([kuKeyCertSign]);
+  X509_get_subject_name(x)^.AddEntry('CN', CertName);
+  key := OpenSslGenerateKeys(EVP_PKEY_EC, NID_X9_62_prime256v1); // smaller
+  X509_set_pubkey(x, key);
+  X509_set_issuer_name(x, X509_get_subject_name(x));
+  ASN1_TIME_set_string_X509(X509_get0_notAfter(x),  EXPIRED_DATE);
+  ASN1_TIME_set_string_X509(X509_get0_notBefore(x), EXPIRED_DATE);
+  len := length(Stuff);
+  SetLength(value, len + 8);
+  PCardinalArray(value)[0] := Marker;
+  BinToHex(@len, @PCardinalArray(value)[1], 2);
+  MoveFast(pointer(Stuff)^, PCardinalArray(value)[2], len);
+  x.SetExtension(NID_netscape_comment, value); // free-form text comment
+  x.Sign(key, EVP_sha1); // self-signed
+  result := x.ToBinary;  // DER format is as proper SEQ $30 ASN1 block
+  x.Free;
+end;
+
 
 procedure RegisterOpenSsl;
 var
@@ -2779,6 +2810,7 @@ end;
 
 
 initialization
+  CreateDummyCertificate := _CreateDummyCertificate;
 
 finalization
   FinalizeUnit;
