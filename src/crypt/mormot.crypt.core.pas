@@ -5163,12 +5163,31 @@ begin
   result := true;
 end;
 
+function CheckPadding(P: PByte): PtrInt;
+var
+  padding, n: byte;
+begin
+  padding := P^;
+  result := 0; // error
+  if (padding = 0) or
+     (padding > SizeOf(TAesBlock)) then
+    exit;
+  n := padding;
+  repeat
+    dec(P);
+    dec(n);
+    if n = 0 then
+      break;
+    if P^ <> padding then
+      exit; // all padded bytes should equal the padding length
+  until false;
+  result := padding;
+end;
+
 function TAesAbstract.DecryptPkcs7Buffer(Input: pointer; InputLen: PtrInt;
   IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var
-  ivsize, i: PtrInt;
-  padding: byte;
-  P: PAnsiChar;
+  ivsize, padding: PtrInt;
 begin
   result := '';
   if not DecryptPkcs7Len(InputLen, ivsize, Input,
@@ -5176,17 +5195,7 @@ begin
     exit;
   FastSetRawByteString(result, nil, InputLen);
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), InputLen);
-  P := pointer(result);
-  padding := ord(P[InputLen - 1]); // padding = 1..16
-  if padding <> 0 then
-    if padding > SizeOf(TAesBlock) then
-      padding := 0
-    else for i := InputLen - 2 downto InputLen - padding do
-      if ord(P[i]) <> padding then
-      begin
-        padding := 0; // all padded bytes should match the padding length
-        break;
-      end;
+  padding := CheckPadding(@PByteArray(result)^[InputLen - 1]);
   if padding = 0 then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
@@ -5222,9 +5231,8 @@ begin
     exit;
   SetLength(result, len);
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), len);
-  padding := result[len - 1]; // result[0..len-1]
-  if (padding = 0) or
-     (padding > SizeOf(TAesBlock)) then
+  padding := CheckPadding(@PByteArray(result)^[len - 1]);
+  if padding = 0 then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
