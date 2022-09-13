@@ -2001,6 +2001,7 @@ type
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     Lines: TInt64DynArray;              // store TDebugUnit.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
+    filesdir: TIntegerDynArray;
     isdwarf64, debugtoconsole: boolean;
     debug: TDebugFile;
     map: TMemoryMap;
@@ -2317,7 +2318,7 @@ var
   prevaddr, prevfile, prevline: cardinal;
   unitlen: QWord;
   opcodeextlen, headerlen: PtrInt;
-  dirsn, filesn, linesn: integer;
+  dirsn, filedirsn, filesn, linesn: integer;
   state: TDwarfMachineState;
   c: ansichar;
   unsorted: boolean;
@@ -2325,7 +2326,6 @@ var
   header32: TDwarfLineInfoHeader32;
   u: PDebugUnit;
   s: ShortString;
-  filesdir: array[0..15] of byte;
   numoptable: array[1..255] of byte;
 begin
   // check if DWARF 32-bit or 64-bit format
@@ -2379,14 +2379,14 @@ begin
     AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
   until false;
   filesn := 0;
+  filedirsn := 0;
   repeat
     ReadString(s);
     if s[0] = #0 then
       break;
-    if filesn <= high(filesdir) then
-      filesdir[filesn] := read.VarUInt32;
-    read.VarNextInt(2); // we ignore the attributes
     AddRawUtf8(files, filesn, ShortStringToUtf8(s));
+    AddInteger(filesdir, filedirsn, read.VarUInt32);
+    read.VarNextInt(2); // we ignore the attributes
   until false;
   // main decoding loop
   ReadInit(file_offset + headerlen, unitlen - headerlen);
@@ -2499,8 +2499,7 @@ begin
           u := debug.fUnits.NewPtr;
           u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
             Ansi7ToString(files[prevfile])));
-          if (prevfile <= high(filesdir)) and
-             ({%H-}filesdir[prevfile] > 0) then
+          if filesdir[prevfile] > 0 then
             u^.FileName := dirs[filesdir[prevfile] - 1];
           u^.FileName := u^.FileName + files[prevfile];
           u^.Symbol.Start := state.address;
