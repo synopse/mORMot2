@@ -7636,18 +7636,18 @@ var
   ch: AnsiChar;
   pStart, pStop: PUtf8Char;
 label
-  Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4, AfterTestT, AfterTest0, Ret, Exit;
+  s2, s6, tt, t0, t1, t2, t3, t4, s0, s1, fnd, quit;
 begin
   result := 0;
   if (p = nil) or
      (pSub = nil) or
      (PtrInt(Offset) <= 0) then
-    goto Exit;
+    goto quit;
   len := PStrLen(p - _STRLEN)^;
   lenSub := PStrLen(pSub - _STRLEN)^ - 1;
   if (len < lenSub + PtrInt(Offset)) or
      (lenSub < 0) then
-    goto Exit;
+    goto quit;
   pStop := p + len;
   inc(p, lenSub);
   inc(pSub, lenSub);
@@ -7656,67 +7656,58 @@ begin
   ch := pSub[0];
   lenSub := -lenSub;
   if p < pStop then
-    goto Loop6;
+    goto s6;
   dec(p, 4);
-  goto Loop2;
-Loop6: // check 6 chars per loop iteration
+  goto s2;
+s6: // check 6 chars per loop iteration
   if ch = p[-4] then
-    goto Test4;
+    goto t4;
   if ch = p[-3] then
-    goto Test3;
+    goto t3;
   if ch = p[-2] then
-    goto Test2;
+    goto t2;
   if ch = p[-1] then
-    goto Test1;
-Loop2:
-  if ch = p[0] then
-    goto Test0;
-AfterTest0:
-  if ch = p[1] then
-    goto TestT;
-AfterTestT:
-  inc(p, 6);
+    goto t1;
+s2:if ch = p[0] then
+    goto t0;
+s1:if ch = p[1] then
+    goto tt;
+s0:inc(p, 6);
   if p < pStop then
-    goto Loop6;
+    goto s6;
   dec(p, 4);
   if p >= pStop then
-    goto Exit;
-  goto Loop2;
-Test4:
-  dec(p, 2);
-Test2:
-  dec(p, 2);
-  goto Test0;
-Test3:
-  dec(p, 2);
-Test1:
-  dec(p, 2);
-TestT:
-  len := lenSub;
+    goto quit;
+  goto s2;
+t4:dec(p, 2);
+t2:dec(p, 2);
+  goto t0;
+t3:dec(p, 2);
+t1:dec(p, 2);
+tt:len := lenSub;
   if lenSub <> 0 then
     repeat
       if (pSub[len] <> p[len + 1]) or
          (pSub[len + 1] <> p[len + 2]) then
-        goto AfterTestT;
+        goto s0;
       inc(len, 2);
     until len >= 0;
   inc(p, 2);
   if p <= pStop then
-    goto Ret;
-  goto Exit;
-Test0:
-  len := lenSub;
+    goto fnd;
+  goto quit;
+t0:len := lenSub;
   if lenSub <> 0 then
     repeat
       if (pSub[len] <> p[len]) or
          (pSub[len + 1] <> p[len + 1]) then
-        goto AfterTest0;
+        goto s1;
       inc(len, 2);
     until len >= 0;
   inc(p);
-Ret:
+fnd:
   result := p - pStart;
-Exit:
+quit:
 end;
 
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt;
