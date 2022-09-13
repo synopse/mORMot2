@@ -5397,7 +5397,7 @@ end;
 type
   // see http://msdn.microsoft.com/en-us/library/ms920091
   WIN_CERTIFICATE = record
-    dwLength: DWORD;
+    dwLength: cardinal;
     wRevision, wCertType: word;
   end;
 
@@ -5482,7 +5482,7 @@ begin
         // read original signature
         dec(certlen, SizeOf(wc));
         SetLength(result, certlen);
-        if M.Read(pointer(result)^, certlen) <> certlen then
+        if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
           raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
         while result[certlen] = #0 do
           dec(certlen);
