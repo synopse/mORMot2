@@ -694,6 +694,7 @@ type
   /// event callback executed periodically by TSynBackgroundThreadProcess
   // - Msg is '' if there is no pending message in this task FIFO
   // - Msg is set for each pending message in this task FIFO
+  // - on mORMot 1, there was a TWaitEvent parameter which is now removed
   TOnSynBackgroundTimerProcess = procedure(Sender: TSynBackgroundTimer;
     const Msg: RawUtf8) of object;
 
