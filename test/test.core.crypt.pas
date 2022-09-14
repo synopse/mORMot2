@@ -1544,6 +1544,8 @@ begin
       Check(k = TPemKind(i and 7));
       CheckEqual(NextPem(P, @k), '');
     end;
+    b64 := UnZeroedRawUtf8(tmp);
+    Check(ZeroedRawUtf8(b64) = tmp, 'UnZeroedRawUtf8');
     tmp := tmp + AnsiChar(Random32(255));
   end;
   enc.Init;
