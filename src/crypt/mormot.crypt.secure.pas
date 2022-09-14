@@ -528,7 +528,7 @@ type
   // - used e.g. to implement TJwtSynSignerAbstract
   TSynSigner = object
   private
-    ctxt: packed array[1..SHA3ContextSize] of byte; // enough space for all
+    ctxt: packed array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all
   public
     /// the size, in bytes, of the digital signature of this algorithm
     // - potential values are 20, 28, 32, 48 and 64
@@ -613,7 +613,7 @@ type
   TSynHasher = object
   private
     fAlgo: THashAlgo;
-    ctxt: array[1..SHA3ContextSize] of byte; // enough space for all algorithms
+    ctxt: array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all algorithms
   public
     /// initialize the internal hashing structure for a specific algorithm
     // - returns false on unknown/unsupported algorithm

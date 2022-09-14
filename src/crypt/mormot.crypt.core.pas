@@ -1799,10 +1799,10 @@ function CryptDataForCurrentUser(const Data, AppSecret: RawByteString;
 
 const
   /// hide TSha1/TSha256 complex code by storing the SHA-1/SHA-2 context as buffer
-  SHAContextSize = 108;
+  SHA_CONTEXT_SIZE = 108;
 
   /// hide TSha3Context complex code by storing the Keccak/SHA-3 Sponge as buffer
-  SHA3ContextSize = 412;
+  SHA3_CONTEXT_SIZE = 412;
 
 type
   /// 256-bit (32 bytes) memory block for SHA-256 hash digest storage
@@ -1823,7 +1823,7 @@ type
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSha256 = object
   private
-    Context: packed array[1..SHAContextSize] of byte;
+    Context: packed array[1..SHA_CONTEXT_SIZE] of byte;
   public
     /// initialize SHA-256 context for hashing
     procedure Init;
@@ -1964,7 +1964,7 @@ type
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSha3 = object
   private
-    Context: packed array[1..SHA3ContextSize] of byte;
+    Context: packed array[1..SHA3_CONTEXT_SIZE] of byte;
   public
     /// initialize SHA-3 context for hashing
     // - in practice, you may use SHA3_256 or SHA3_512 to return THash256
@@ -2179,7 +2179,7 @@ type
   // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSha1 = object
   private
-    Context: packed array[1..SHAContextSize] of byte;
+    Context: packed array[1..SHA_CONTEXT_SIZE] of byte;
   public
     /// initialize SHA-1 context for hashing
     procedure Init;
@@ -2836,10 +2836,10 @@ implementation
 { we need to define now some shared types and constants used also from asm }
 
 const
-  AesMaxRounds = 14;
+  AES_ROUNDS = 14;
 
 type
-  TKeyArray = packed array[0..AesMaxRounds] of TAesBlock;
+  TKeyArray = packed array[0..AES_ROUNDS] of TAesBlock;
 
   TAesContextDoBlock = procedure(const Ctxt, Source, Dest);
 
@@ -2866,14 +2866,14 @@ type
     KeyBits: word;   // Number of bits in key (128/192/256)
   end;
 
-  TSHAHash = packed record
+  TShaHash = packed record
     // will use A..E with TSha1, A..H with TSha256
     A, B, C, D, E, F, G, H: cardinal;
   end;
 
-  TSHAContext = packed record
+  TShaContext = packed record
     // Working hash (TSha256.Init expect this field to be the first)
-    Hash: TSHAHash;
+    Hash: TShaHash;
     // 64bit msg length
     MLen: QWord;
     // Block buffer
@@ -2885,7 +2885,7 @@ type
 // helper types for better code generation
 type
   TWA4 = TBlock128;     // AES block as array of cardinal
-  TAWk = packed array[0..4 * (AesMaxRounds + 1) - 1] of cardinal; // Key as array of cardinal
+  TAWk = packed array[0..4 * (AES_ROUNDS + 1) - 1] of cardinal; // Key as array of cardinal
   PWA4 = ^TWA4;
   PAWk = ^TAWk;
 
@@ -2920,6 +2920,9 @@ var
 {$ifdef CPUX86}
   {$include mormot.crypt.core.asmx86.inc}
 {$endif}
+
+// AARCH64 hardware acceleration is done via linked .o files of C intrinsics
+// - see USEARMCRYPTO conditional and armv8.o / sha256armv8.o statics
 
 
 { ****************** Low-Level Memory Buffers Helper Functions }
@@ -4488,7 +4491,6 @@ begin
       x.c0 := (x.c0 shl 8) xor t;
     end;
     for j := 0 to 7 do
-    begin
       if c and ($80 shr j) <> 0 then
       begin
         x.c3 := x.c3 xor p[j].c3;
@@ -4496,7 +4498,6 @@ begin
         x.c1 := x.c1 xor p[j].c1;
         x.c0 := x.c0 xor p[j].c0;
       end;
-    end;
   end;
   a := x.b;
 end;
@@ -7814,11 +7815,11 @@ end;
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
 
-procedure Sha256CompressPas(var Hash: TSHAHash; Data: pointer);
+procedure Sha256CompressPas(var Hash: TShaHash; Data: pointer);
 // Actual hashing function
 var
   HW: packed record
-    H: TSHAHash;
+    H: TShaHash;
     W: array[0..63] of cardinal;
   end;
   {$ifndef ASMX86}
@@ -7893,7 +7894,7 @@ begin
     sha256_block_data_order(@Hash, Data, 1) // from sha256armv8.o
   else
   {$endif USEARMCRYPTO}
-    Sha256CompressPas(TSHAHash(Hash), Data);
+    Sha256CompressPas(TShaHash(Hash), Data);
 end;
 
 
@@ -7901,7 +7902,7 @@ end;
 
 procedure TSha256.Init;
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
 begin
   Data.Hash.A := $6a09e667;
   Data.Hash.B := $bb67ae85;
@@ -7916,7 +7917,7 @@ end;
 
 procedure TSha256.Update(Buffer: pointer; Len: integer);
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
   aLen: integer;
 begin
   if Buffer = nil then
@@ -7967,7 +7968,7 @@ end;
 procedure TSha256.Final(out Digest: TSha256Digest; NoInit: boolean);
 // finalize SHA-256 calculation, clear context
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
 begin
   // append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
@@ -9890,7 +9891,7 @@ end;
 
 { TSha1 }
 
-procedure sha1Compress(var Hash: TSHAHash; Data: PByteArray);
+procedure sha1Compress(var Hash: TShaHash; Data: PByteArray);
 var
   A, B, C, D, E, X: cardinal;
   W: array[0..79] of cardinal;
@@ -10081,7 +10082,7 @@ end;
 
 procedure TSha1.Final(out Digest: TSha1Digest; NoInit: boolean);
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
 begin
   // 1. append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
@@ -10118,7 +10119,7 @@ end;
 
 procedure TSha1.Init;
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
 begin
   Data.Hash.A := $67452301;
   Data.Hash.B := $EFCDAB89;
@@ -10130,7 +10131,7 @@ end;
 
 procedure TSha1.Update(Buffer: pointer; Len: integer);
 var
-  Data: TSHAContext absolute Context;
+  Data: TShaContext absolute Context;
   aLen: integer;
 begin
   if Buffer = nil then
@@ -10299,7 +10300,7 @@ end;
 
 procedure RawSha1Compress(var Hash; Data: pointer);
 begin
-  sha1Compress(TSHAHash(Hash), Data);
+  sha1Compress(TShaHash(Hash), Data);
 end;
 
 procedure Pbkdf2HmacSha1(const password, salt: RawByteString; count: integer;
@@ -11102,8 +11103,8 @@ begin
   assert(SizeOf(TAes) = AES_CONTEXT_SIZE);
   assert(SizeOf(TAesContext) = AES_CONTEXT_SIZE);
   assert(AES_CONTEXT_SIZE <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
-  assert(SizeOf(TSHAContext) = SHAContextSize);
-  assert(SizeOf(TSha3Context) = SHA3ContextSize);
+  assert(SizeOf(TShaContext) = SHA_CONTEXT_SIZE);
+  assert(SizeOf(TSha3Context) = SHA3_CONTEXT_SIZE);
   assert(1 shl AesBlockShift = SizeOf(TAesBlock));
   {$ifndef PUREMORMOT2}
   assert(SizeOf(TAesFullHeader) = SizeOf(TAesBlock));

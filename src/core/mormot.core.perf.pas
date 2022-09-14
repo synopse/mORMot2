@@ -2246,6 +2246,7 @@ var
 
 /// retrieve and decode DMI/SMBIOS data into high-level Smbios global variable
 // - on POSIX, requires root to access SMBIOS raw memory so may return false
+// unless the information has been already read as root and cached locally
 // - see also mormot.core.os.pas GetSmbios() more limited function
 function GetSmbiosInfo: boolean;
 
