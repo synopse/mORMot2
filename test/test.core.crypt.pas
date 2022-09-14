@@ -1548,6 +1548,11 @@ begin
     Check(ZeroedRawUtf8(b64) = tmp, 'UnZeroedRawUtf8');
     tmp := tmp + AnsiChar(Random32(255));
   end;
+  Check(ZeroedRawUtf8(UnZeroedRawUtf8(#0)) = #0, 'unz0');
+  Check(ZeroedRawUtf8(UnZeroedRawUtf8(#0#0)) = #0#0, 'unz1');
+  Check(ZeroedRawUtf8(UnZeroedRawUtf8(#0'~'#0)) = #0'~'#0, 'unz2');
+  Check(ZeroedRawUtf8(UnZeroedRawUtf8(#0#0'~~')) = #0#0'~~', 'unz3');
+  Check(ZeroedRawUtf8(UnZeroedRawUtf8('~'#0#0'~~')) = '~'#0#0'~~', 'unz4');
   enc.Init;
   dec.Init;
   tmp := RandomString(1 shl 20);

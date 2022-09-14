@@ -4144,9 +4144,8 @@ begin
     result := bin; // nothing to convert
     exit;
   end;
-  if c < 0 then
-    c := z
-  else if z < c then
+  if (c < 0) or
+     (z < c) then
     c := z;
   FastSetString(result, nil, len shl 1);
   d := pointer(result);
