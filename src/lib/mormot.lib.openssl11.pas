@@ -130,7 +130,7 @@ const
   {$else}
     {$ifdef OSANDROID}
       {$define NOOPENSSL3} // unsupported yet
-      {$ifdef CPUARM}
+      {$ifdef CPU32}
       LIB_CRYPTO1 = 'libcrypto-android32.a';
       LIB_SSL1 = 'libssl-android32.a';
       _PU = '';
@@ -140,26 +140,32 @@ const
       LIB_SSL1 = 'libssl-android64.a';
       _PU = '';
       {$define OPENSSLSTATIC}
-      {$endif CPUARM}
+      {$endif CPU32}
     {$else}
       {$ifdef OSDARWIN}
         {$define NOOPENSSL3} // unsupported yet
-        {$ifdef CPUX86}
-        LIB_CRYPTO1 = 'libssl-merged-osx32.dylib';
-        LIB_SSL1 = 'libssl-merged-osx32.dylib';
-        _PU = '_';
-        {$endif CPUX86}
-        {$ifdef CPUX64}
-        LIB_CRYPTO1 = 'libssl-merged-osx64.dylib';
-        LIB_SSL1 = 'libssl-merged-osx64.dylib';
-        _PU = '_';
-        {$endif CPUX64}
-        {$ifdef CPUX64_static}
-        LIB_CRYPTO1 = 'libcrypto-osx64.a';
-        LIB_SSL1 = 'libssl-osx64.a';
-        _PU = '';
-        {$define OPENSSLSTATIC}
-        {$endif CPUX64}
+        {$ifdef CPUINTEL}
+          {$ifdef CPUX86}
+          LIB_CRYPTO1 = 'libssl-merged-osx32.dylib';
+          LIB_SSL1 = 'libssl-merged-osx32.dylib';
+          _PU = '_';
+          {$endif CPUX86}
+          {$ifdef CPUX64}
+          LIB_CRYPTO1 = 'libssl-merged-osx64.dylib';
+          LIB_SSL1 = 'libssl-merged-osx64.dylib';
+          _PU = '_';
+          {$endif CPUX64}
+          {$ifdef CPUX64_static}
+          LIB_CRYPTO1 = 'libcrypto-osx64.a';
+          LIB_SSL1 = 'libssl-osx64.a';
+          _PU = '';
+          {$define OPENSSLSTATIC}
+          {$endif CPUX64_static}
+        {$else}
+          LIB_CRYPTO1 = 'libcrypto.1.1.dylib'; // typically ARM64
+          LIB_SSL1 = 'libssl.1.1.dylib';
+          _PU = '';
+        {$endif CPUINTEL}
       {$else}
         {$ifdef OSLINUX}
         // specific versions on Linux

@@ -1545,6 +1545,7 @@ begin
       CheckEqual(NextPem(P, @k), '');
     end;
     b64 := UnZeroed(tmp);
+    Check(StrLen(pointer(b64)) = length(b64), 'unz');
     Check(Zeroed(b64) = tmp, 'UnZeroed');
     tmp := tmp + AnsiChar(Random32(255));
   end;
