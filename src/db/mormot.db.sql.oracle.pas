@@ -1226,7 +1226,7 @@ begin
     {$ifndef SYNDB_SILENCE}
     SynDBLog.Add.Log(sllDB, 'Destroy: stats = % row(s) in %',
       [TotalRowsRetrieved, fTimeElapsed.Stop], self);
-    {$endif}
+    {$endif SYNDB_SILENCE}
   finally
     inherited;
   end;

@@ -205,7 +205,7 @@ type
     {$A8} // un-packed records
   {$else}
     {$A-} // packed records
-  {$endif}
+  {$endif CPU64}
   TSqlDBOleDBStatementParam = record
     /// storage used for BLOB (ftBlob) values
     // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
@@ -242,7 +242,7 @@ type
   end;
   {$ifdef CPU64}
     {$A-} // packed records
-  {$endif}
+  {$endif CPU64}
   POleDBStatementParam = ^TSqlDBOleDBStatementParam;
 
   /// used to store properties about TSqlDBOleDBStatement Parameters

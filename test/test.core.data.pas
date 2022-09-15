@@ -5109,7 +5109,7 @@ begin
     begin
       {$ifdef VERBOSE}
       writeln(i, ' ', GetEnumName(i)^, ' ', GetEnumNameTrimed(i));
-      {$endif}
+      {$endif VERBOSE}
       tmp := GetEnumNameTrimed(i);
       Check(GetEnumNameValue(GetEnumName(i)^) = i);
       Check(GetEnumNameTrimedValue(tmp) = i);

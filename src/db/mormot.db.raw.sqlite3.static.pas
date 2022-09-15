@@ -173,7 +173,7 @@ uses
       {$linklib ..\..\static\x86_64-darwin\libsqlite3.a}
     {$else}
       {$linklib ..\..\static\i386-darwin\libsqlite3.a}
-    {$endif}
+    {$endif CPU64}
   {$endif OSDARWIN}
 
   {$ifdef OSANDROID}
@@ -238,7 +238,7 @@ uses
     {$else}
       // compiled with the free Borland C++ Compiler 5.5
       {$L ..\..\static\delphi\sqlite3.obj}
-    {$endif}
+    {$endif CPU64}
   {$endif OSWINDOWS}
 
 // those functions will be called only under Delphi + Win32/Win64

@@ -1502,7 +1502,7 @@ asm
         db      $66, $0F, $38, $DE, $FA
         db      $66, $0F, $38, $DE, $FB
         db      $66, $0F, $38, $DE, $FC
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 3]
         movups  xmm1, [eax + 16 * 2]
         movups  xmm2, [eax + 16 * 1]

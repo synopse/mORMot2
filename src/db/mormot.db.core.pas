@@ -3289,7 +3289,7 @@ begin
   SetInt64(P, result);
   {$else}
   SetInt64(P, PInt64(@result)^);
-  {$endif}
+  {$endif VER3_0}
 {$endif CPU64}
 end;
 

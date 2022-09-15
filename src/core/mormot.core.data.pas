@@ -5401,7 +5401,7 @@ begin
       Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
     roUQWord:
       Compared := ord(PQWord(A)^ > PQWord(B)^) - ord(PQWord(A)^ < PQWord(B)^);
-    {$endif}
+    {$endif FPC_NEWRTTI}
   end;
   result := ORDTYPE_SIZE[ro];
 end;

@@ -119,7 +119,7 @@ type
   // - secTLS will use HTTPS secure connection
   // - secTLSSelfSigned will use HTTPS secure connection with a (temporary)
   // self-signed certificate - so clients should set IgnoreTlsCertificateErrors
-  // - secSynShaAes will use our proprietary SHA-256 / AES-256-CTR encryption
+  // - secSynShaAes will use a proprietary SHA-256 / AES-256-CTR encryption
   // identified as 'synshaaes' as ACCEPT-ENCODING: header parameter - but since
   // encodings are optional in HTTP, it is not possible to rely on it for securing
   // the line which may be plain, so this is marked as deprecated - use HTTPS or

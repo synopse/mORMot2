@@ -149,7 +149,7 @@ type
   QWord = UInt64;
   {$else}
   QWord = type Int64;
-  {$endif}
+  {$endif UNICODE}
   /// points to an unsigned Int64
   PQWord = ^QWord;
   
@@ -166,7 +166,7 @@ type
   TThreadID = cardinal;
   /// compatibility definition with FPC and newer Delphi
   PUInt64 = ^UInt64;
-  {$endif}
+  {$endif ISDELPHIXE2}
 
 {$endif FPC}
 

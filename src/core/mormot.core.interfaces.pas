@@ -1916,7 +1916,7 @@ const
   MAX_EXECSTACK = 60 * 4;
   {$else}
   MAX_EXECSTACK = 1024;
-  {$endif}
+  {$endif CPUARM}
 {$endif CPU64}
 
 {$ifdef CPUX86}

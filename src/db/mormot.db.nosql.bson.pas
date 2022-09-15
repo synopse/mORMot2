@@ -4193,7 +4193,7 @@ begin
   end
   else
   begin
-    // generic version for any kind of input
+    // generic version for any kind of input - with full reallocation
     W := TBsonWriter.Create(tmp{%H-});
     try
       W.BsonDocumentBegin;

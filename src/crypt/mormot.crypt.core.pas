@@ -2139,7 +2139,7 @@ type
     state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
     {$else}
     state: array[byte] of byte; // on ARM, keep the CPU cache usage low
-    {$endif}
+    {$endif CPUINTEL}
     currI, currJ: PtrInt;
   public
     /// initialize the RC4 encryption/decryption

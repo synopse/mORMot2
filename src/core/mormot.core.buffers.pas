@@ -3012,7 +3012,7 @@ begin
   if p^ > $7f then
   begin
     result := PtrUInt(p^) and $7F;
-  {$endif}
+  {$endif CPU64}
     n := 0;
     inc(p);
     repeat
@@ -3168,7 +3168,7 @@ begin
     if result and 1 <> 0 then
     {$else}
     if PCardinal(@result)^ and 1 <> 0 then
-    {$endif}
+    {$endif CPU64}
       // 1->1, 3->2..
       result := result shr 1 + 1
     else
@@ -3522,7 +3522,7 @@ begin
 e:begin
     {$ifdef ISDELPHI}
     result := 0; // avoid paranoid compiler hint
-    {$endif}
+    {$endif ISDELPHI}
     ErrorOverflow;
   end;
   c := ord(P^) shl 28;
@@ -3603,7 +3603,7 @@ begin
 e:begin
     {$ifdef ISDELPHI}
     result := 0; // avoid hint
-    {$endif}
+    {$endif ISDELPHI}
     ErrorOverflow;
   end;
   c := s^ shl 28;

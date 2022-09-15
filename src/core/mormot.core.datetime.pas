@@ -2715,7 +2715,7 @@ begin
     lo := Value;
     {$else}
     lo := PCardinal(@Value)^;
-    {$endif}
+    {$endif CPU64}
     if lo and (1 shl (6 + 6 + 5) - 1) = 0 then
       // no Time: just convert date
       Dest := DateToIso8601PChar(Dest, Expanded,
@@ -2727,7 +2727,7 @@ begin
     if lo shr (6 + 6 + 5) = 0 then
     {$else}
     if Value shr (6 + 6 + 5) = 0 then
-    {$endif}
+    {$endif CPU64}
       // no Date: just convert time
       Dest := TimeToIso8601PChar(Dest, Expanded,
         (lo shr (6 + 6)) and 31,

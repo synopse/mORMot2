@@ -763,6 +763,7 @@ type
     function Send(Request: TMongoRequest): boolean;
     function GetOpened: boolean;
     function GetLocked: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     // will call TMongoReplyCursor.FetchAllToJson(TJsonWriter(Opaque))
     procedure ReplyJsonStrict(Request: TMongoRequest;
       const Reply: TMongoReplyCursor; var Opaque);

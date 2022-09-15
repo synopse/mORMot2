@@ -1624,7 +1624,7 @@ begin
   // however, mORMots own static works perfect
   Check(1 = 0, 'Not (yet) supported on Darwin !!');
   exit;
-  {$endif}
+  {$endif NOSQLITE3STATIC}
   {$endif OSDARWIN}
   DeleteFile(WorkDir + 'servicelog.db');
   Log := TRestServerDB.CreateWithOwnModel([TOrmServiceLog], WorkDir + 'servicelog.db');
