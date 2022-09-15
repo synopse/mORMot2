@@ -5397,21 +5397,34 @@ end;
 
 function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;
   const PrivatePassword: SpiUtf8): RawByteString;
+var
+  pk, pks: RawByteString;
 begin
-  FastSetRawByteString(result{%H-}, @Input, SizeOf(Input));
-  if PrivatePassword <> '' then
-    result := AesPkcs7(MainAesPrng.AFSplit(result, 31),
-      {encrypt=}true, PrivatePassword, 'synecc', 1000);
+  FastSetRawByteString(pk{%H-}, @Input, SizeOf(Input));
+  if PrivatePassword = '' then
+    result := pk
+  else
+  begin
+    pks := MainAesPrng.AFSplit(pk, 31);
+    FillZero(pk);
+    result := AesPkcs7(pks, {encrypt=}true, PrivatePassword, 'synecc', 1000);
+    FillZero(pks);
+  end;
 end;
 
 function EccPrivateKeyDecrypt(const Input: RawByteString;
   const PrivatePassword: SpiUtf8): RawByteString;
+var
+  pks: RawByteString;
 begin
   if PrivatePassword = '' then
     result := Input
   else
-    result := TAesPrng.AFUnSplit(AesPkcs7(Input,
-      {encrypt=}false, PrivatePassword, 'synecc', 1000), 31);
+  begin
+    pks := AesPkcs7(Input, {encrypt=}false, PrivatePassword, 'synecc', 1000);
+    result := TAesPrng.AFUnSplit(pks, 31);
+    FillZero(pks);
+  end;
 end;
 
 function TCryptCertInternal.GetEccPrivateKey(checkZero: boolean): PEccPrivateKey;
