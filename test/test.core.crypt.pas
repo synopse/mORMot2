@@ -1557,8 +1557,13 @@ begin
   enc.Init;
   dec.Init;
   tmp := RandomString(1 shl 20);
-  Check(Zeroed(UnZeroed(tmp)) = tmp, 'unz1MB');
+  tmp2 := Zeroed(UnZeroed(tmp));
+  {$ifdef FPC}
+  SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug
+  {$endif FPC}
+  Check(tmp2 = tmp, 'unz1MB');
   b64 := '';
+  tmp2 := '';
   SetLength(b64, BinToBase64Length(length(tmp)));
   SetLength(tmp2, length(tmp));
   L := 0;
