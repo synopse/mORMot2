@@ -23,10 +23,15 @@ implementation // compile a void unit if NOSYNDBZEOS conditional is set
 
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 
+{$I ..\mormot.defines.inc}
+
 // for best performance: tune your project options or Zeos.inc
 // by defining MORMOT2 and leverage best of mORMot and ZEOS !
 
-{$I ..\mormot.defines.inc}
+{$if defined(ZEOS73UP) and defined(MORMOT2)}
+  // use direct IZResultSet.ColumnsToJson() export
+  {$define ZDBC_COLUMNSTOJSON}
+{$ifend}
 
 uses
   types,
@@ -251,15 +256,15 @@ type
   TSqlDBZeosStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fStatement: IZPreparedStatement;
-    fResultSet: IZResultSet;
+    fResultSet: IZResultSet; 
     fResultInfo: IZResultSetMetaData;
-    {$if defined(ZEOS73UP) and defined(MORMOT2)}
+    {$ifdef ZDBC_COLUMNSTOJSON}
     fJSONComposeOptions: TZJSONComposeOptions;
-    {$ifend}
+    {$endif ZDBC_COLUMNSTOJSON}
   public
-    {$if defined(ZEOS73UP) and defined(MORMOT2)}
+    {$ifdef ZDBC_COLUMNSTOJSON}
     procedure AfterConstruction; override;
-    {$ifend}
+    {$endif ZDBC_COLUMNSTOJSON}
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
@@ -312,7 +317,7 @@ type
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-  {$if defined(ZEOS73UP) and defined(MORMOT2)}
+  {$ifdef ZDBC_COLUMNSTOJSON}
   public
     /// the ColumnsToJson options provided by ZDBC
     // - jcoEndJsonObject:
@@ -337,7 +342,7 @@ type
     property JSONComposeOptions: TZJSONComposeOptions
       read fJSONComposeOptions write fJSONComposeOptions
       default [jcoEndJsonObject];
-  {$ifend}
+  {$endif ZDBC_COLUMNSTOJSON}
   end;
 
 var
@@ -711,11 +716,22 @@ begin
       F.ColumnTypeNative := SynUnicodeToUtf8(
         res.GetUnicodeString(TableColColumnTypeNameIndex));
       {$endif ZEOS72UP}
-      F.ColumnType := TZSQLTypeToTSqlDBFieldType(
-        TZSQLType(res.GetInt(TableColColumnTypeIndex)));
-      F.ColumnLength := res.GetInt(TableColColumnSizeIndex);  // for char or date types this is the maximum number of characters
-      F.ColumnPrecision := res.GetInt(TableColColumnSizeIndex);  // for numeric or decimal types this is precision
-      F.ColumnScale := res.GetInt(TableColColumnDecimalDigitsIndex);  // the number of fractional digits
+      // the number of fractional digits
+      if res.IsNull(TableColColumnDecimalDigitsIndex) then
+        F.ColumnScale := -1
+      else
+        F.ColumnScale := res.GetInt(TableColColumnDecimalDigitsIndex);
+      if PosEx('/*', F.ColumnTypeNative) > 0 then
+        // circumvent https://synopse.info/forum/viewtopic.php?id=6353
+        F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, F.ColumnScale)
+      else
+        // use Zeos/ZDBC type recognition
+        F.ColumnType := TZSQLTypeToTSqlDBFieldType(
+          TZSQLType(res.GetInt(TableColColumnTypeIndex)));
+      // for char or date types this is the maximum number of characters
+      F.ColumnLength := res.GetInt(TableColColumnSizeIndex);
+      // for numeric or decimal types this is precision
+      F.ColumnPrecision := res.GetInt(TableColColumnSizeIndex);
       FA.Add(F);
     end;
     if n > 0 then
@@ -742,20 +758,40 @@ function TSqlDBZeosConnectionProperties.TZSQLTypeToTSqlDBFieldType(
   aNativeType: TZSQLType): TSqlDBFieldType;
 begin
   case aNativeType of
-    stBoolean, stByte, stShort, stInteger, stLong
-    {$ifdef ZEOS72UP}, stSmall, stWord, stLongWord, stULong {$endif ZEOS72UP}:
+    stBoolean,
+    stByte,
+    stShort,
+    stInteger,
+    stLong
+    {$ifdef ZEOS72UP},
+    stSmall,
+    stWord,
+    stLongWord,
+    stULong
+    {$endif ZEOS72UP}:
       result := ftInt64;
-    stFloat, stDouble:
+    stFloat,
+    stDouble:
       result := ftDouble;
     stBigDecimal
-    {$ifdef ZEOS72UP}, stCurrency {$endif ZEOS72UP}:
+    {$ifdef ZEOS72UP},
+    stCurrency
+    {$endif ZEOS72UP}:
       result := ftCurrency;
-    stDate, stTime, stTimestamp:
+    stDate,
+    stTime,
+    stTimestamp:
       result := ftDate;
-    {$ifdef ZEOS72UP}stGUID, {$endif ZEOS72UP}
-    stString, stUnicodeString, stAsciiStream, stUnicodeStream:
+    {$ifdef ZEOS72UP}
+    stGUID,
+    {$endif ZEOS72UP}
+    stString,
+    stUnicodeString,
+    stAsciiStream,
+    stUnicodeStream:
       result := ftUtf8;
-    stBytes, stBinaryStream:
+    stBytes,
+    stBinaryStream:
       result := ftBlob;
   else
     raise ESqlDBZeos.CreateUtf8('%: unexpected TZSQLType "%"', [self,
@@ -775,9 +811,9 @@ begin
     aLibraryLocationAppendExePath);
 end;
 
-class function TSqlDBZeosConnectionProperties.URI(const aProtocol, aServerName:
-  RawUtf8; const aLibraryLocation: TFileName; aLibraryLocationAppendExePath:
-  boolean): RawUtf8;
+class function TSqlDBZeosConnectionProperties.URI(
+  const aProtocol, aServerName: RawUtf8; const aLibraryLocation: TFileName;
+  aLibraryLocationAppendExePath: boolean): RawUtf8;
 begin
   // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   result := TrimU(aProtocol);
@@ -792,7 +828,6 @@ begin
       result := result + ';LibLocation='
     else
       result := result + '?LibLocation=';
-
     if aLibraryLocationAppendExePath then
       result := result + StringToUtf8(Executable.ProgramFilePath);
     result := result + StringToUtf8(aLibraryLocation);
@@ -842,6 +877,7 @@ begin
     end;
   end;
 end;
+
 procedure TSqlDBZeosConnection.Disconnect;
 begin
   try
@@ -878,6 +914,7 @@ begin
   fDatabase.SetAutoCommit(false);
   {$endif ZEOS73UP}
 end;
+
 procedure TSqlDBZeosConnection.Commit;
 begin
   inherited Commit;
@@ -1215,13 +1252,13 @@ begin
   end;
 end;
 
-{$if defined(ZEOS73UP) and defined(MORMOT2)}
+{$ifdef ZDBC_COLUMNSTOJSON}
 procedure TSqlDBZeosStatement.AfterConstruction;
 begin
   inherited;
   fJSONComposeOptions := [jcoEndJsonObject];
 end;
-{$ifend}
+{$endif ZDBC_COLUMNSTOJSON}
 
 function TSqlDBZeosStatement.ColumnBlob(Col: integer): RawByteString;
 var
@@ -1313,16 +1350,23 @@ begin
 end;
 
 {$ifdef ZEOS72UP}
+{$ifdef ZDBC_COLUMNSTOJSON}
 
 procedure TSqlDBZeosStatement.ColumnsToJson(WR: TResultsWriter);
+begin
+  // direct export into JSON from internal ZDBC buffers for each provider 
+  fResultSet.ColumnsToJson(WR, fJSONComposeOptions);
+end;
 
-{$if not (defined(ZEOS73UP) and defined(MORMOT2))}
+{$else}
+
+procedure TSqlDBZeosStatement.ColumnsToJson(WR: TResultsWriter);
 var
   col: integer;
   P: PAnsiChar;
   Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
 
-  procedure WriteIZBlob;
+  procedure WriteIZBlob; // sub-function to avoid local stack temp variables
   var
     blob: IZBlob;
     raw: RawByteString;
@@ -1331,13 +1375,9 @@ var
     raw := blob.GetString;
     WR.WrBase64(pointer(raw), length(raw), {withmagic=}true); // withMagic=true
   end;
-{$ifend}
 
 begin
-  // take care of the layout of internal ZDBC buffers for each provider
-  {$if defined(ZEOS73UP) and defined(MORMOT2)}
-  fResultSet.ColumnsToJson(WR, fJSONComposeOptions);
-  {$else}
+  // manual care of the layout of internal ZDBC buffers for each provider
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount - 1 do
@@ -1409,7 +1449,7 @@ begin
       else
         raise ESqlDBException.CreateUtf8(
           '%.ColumnsToJson: invalid ColumnType(#% "%")=%',
-          [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
+          [self, col, WR.ColNames[col], ord(fColumns[col].ColumnType)]);
       end;
     end;
     WR.AddComma;
@@ -1417,9 +1457,9 @@ begin
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
     WR.Add('}');
-  {$ifend}
 end;
 
+{$endif ZDBC_COLUMNSTOJSON}
 {$endif ZEOS72UP}
 
 initialization
