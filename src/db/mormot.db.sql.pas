@@ -4353,7 +4353,8 @@ begin
         end;
       end
   else
-    begin  // OWNER.PROCNAME
+    begin
+      // OWNER.PROCNAME
       Split(aProcName, '.', Owner, ProcName);
       if ProcName = '' then
       begin
@@ -4361,7 +4362,7 @@ begin
         SetSchemaNameToOwner(Owner);
       end
       else if fDbms = dMSSQL then
-      // discard ;1 when MSSQL stored procedure name is ProcName;1
+        // discard ;1 when MSSQL stored procedure name is ProcName;1
         Split(ProcName, ';', ProcName);
     end;
   end;
@@ -4405,9 +4406,9 @@ begin
     dFirebird:
       begin
         result := // see http://edn.embarcadero.com/article/25259
-          'select a.rdb$field_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,'
-          + ' b.rdb$field_length, b.rdb$field_length, abs(b.rdb$field_scale) as rdb$field_scale,'
-          + ' (select count(*) from rdb$indices i, rdb$index_segments s' +
+          'select a.rdb$field_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
+          ' b.rdb$field_length, b.rdb$field_length, abs(b.rdb$field_scale) as rdb$field_scale,' +
+          ' (select count(*) from rdb$indices i, rdb$index_segments s' +
           ' where i.rdb$index_name=s.rdb$index_name and i.rdb$index_name not like ''RDB$%''' +
           ' and i.rdb$relation_name=a.rdb$relation_name) as index_count ' +
           'from rdb$relation_fields a left join rdb$fields b on a.rdb$field_source=b.rdb$field_name' +
@@ -4419,8 +4420,8 @@ begin
       begin
         result :=
           'select FIELD_NAME, FIELD_TYPE_SQL, FIELD_LENGTH, FIELD_UNITS,' +
-          ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = '''
-          + aTableName + '''';
+          ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = ''' +
+          aTableName + '''';
         exit;
       end;
   else
@@ -4560,8 +4561,8 @@ begin
     dOracle:
       fmt := 'select' + '  case P.OBJECT_TYPE' +
         '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
-        '  else P.OBJECT_NAME end NAME_ROUTINE ' + 'from SYS.ALL_PROCEDURES P '
-        + 'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
+        '  else P.OBJECT_NAME end NAME_ROUTINE ' + 'from SYS.ALL_PROCEDURES P ' +
+        'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
     dMSSQL,
     dMySQL,
     dPostgreSQL:
@@ -4576,7 +4577,7 @@ begin
       begin
         // NOT TESTED !!!
         result := 'select P.PROCEDURE_NAME NAME_ROUTINE ' +
-          'from #PROCEDURES P ' + 'order by NAME_ROUTINE';
+          'from #PROCEDURES P order by NAME_ROUTINE';
         exit;
       end;
   else
