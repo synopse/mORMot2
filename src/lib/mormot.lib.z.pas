@@ -1177,9 +1177,18 @@ end;
 // we need some wrappers to fix any parameter or ABI issue
 {$ifdef LIBDEFLATESTATIC}
 
-function crc(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef CPUX86}
+function crc32zlib(crc: TZCRC; buf: pointer; len: cardinal): TZCRC; cdecl;
+  external name 'crc32';
+{$endif CPUX86}
+
+function crc(input: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := libdeflate_crc32(crc, buf, len);
+  {$ifdef CPUX86} // circumvent weird bug on Linux i386 - ABI? stack? :(
+  result := crc32zlib(input, buf, len);
+  {$else}
+  result := libdeflate_crc32(input, buf, len);
+  {$endif CPUX86}
 end;
 
 function adler(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;

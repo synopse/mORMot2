@@ -1439,6 +1439,7 @@ class procedure TRestClientAuthenticationSignedUri.ClientSessionSign(
   Sender: TRestClientUri; var Call: TRestUriParams);
 var
   nonce, blankURI: RawUtf8;
+  sign: cardinal;
 begin
   if (Sender = nil) or
      (Sender.Session.ID = 0) or
@@ -1453,9 +1454,9 @@ begin
   begin
     fSession.LastTick64 := GetTickCount64;
     nonce := CardinalToHexLower(fSession.LastTick64 shr 8); // 256 ms resolution
-    Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(
-      Sender.fComputeSignature(fSession.PrivateKey, Pointer(nonce),
-        Pointer(blankURI), length(blankURI)));
+    sign := Sender.fComputeSignature(fSession.PrivateKey, Pointer(nonce),
+      Pointer(blankURI), length(blankURI));
+    Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(sign);
   end;
 end;
 
