@@ -8414,11 +8414,13 @@ begin
   while p <> nil do
   begin
     GetNext(p, '=', #0, nam);
+    if p = nil then
+      break;
     GetNext(p, ',', '/', result);
     if nam = id then
       exit;
   end;
-  result := '';
+  result := ''; // id not found
 end;
 
 function X509.GetSubject(const id: RawUtf8): RawUtf8;
