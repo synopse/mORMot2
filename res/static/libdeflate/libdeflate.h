@@ -10,33 +10,36 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	13
-#define LIBDEFLATE_VERSION_STRING	"1.13"
+#define LIBDEFLATE_VERSION_MINOR	14
+#define LIBDEFLATE_VERSION_STRING	"1.14"
 
 #include <stddef.h>
 #include <stdint.h>
 
 /*
- * On Windows, if you want to link to the DLL version of libdeflate, then
- * #define LIBDEFLATE_DLL.  Note that the calling convention is "cdecl".
+ * On Windows, you must define LIBDEFLATE_STATIC if you are linking to the
+ * static library version of libdeflate instead of the DLL.  On other platforms,
+ * LIBDEFLATE_STATIC has no effect.
  */
-#ifdef LIBDEFLATE_DLL
-#  ifdef BUILDING_LIBDEFLATE
-#    define LIBDEFLATEEXPORT	LIBEXPORT
-#  elif defined(_WIN32) || defined(__CYGWIN__)
+#ifdef _WIN32
+#  if defined(LIBDEFLATE_STATIC)
+#    define LIBDEFLATEEXPORT
+#  elif defined(BUILDING_LIBDEFLATE)
+#    define LIBDEFLATEEXPORT	__declspec(dllexport)
+#  else
 #    define LIBDEFLATEEXPORT	__declspec(dllimport)
 #  endif
-#endif
-#ifndef LIBDEFLATEEXPORT
-#  define LIBDEFLATEEXPORT
+#else
+#  define LIBDEFLATEEXPORT	__attribute__((visibility("default")))
 #endif
 
-#if defined(BUILDING_LIBDEFLATE) && defined(__GNUC__) && \
-	defined(_WIN32) && !defined(_WIN64)
+#if defined(BUILDING_LIBDEFLATE) && defined(__GNUC__) && defined(__i386__)
     /*
-     * On 32-bit Windows, gcc assumes 16-byte stack alignment but MSVC only 4.
-     * Realign the stack when entering libdeflate to avoid crashing in SSE/AVX
-     * code when called from an MSVC-compiled application.
+     * On i386, gcc assumes that the stack is 16-byte aligned at function entry.
+     * However, some compilers (e.g. MSVC) and programming languages (e.g.
+     * Delphi) only guarantee 4-byte alignment when calling functions.  Work
+     * around this ABI incompatibility by realigning the stack pointer when
+     * entering libdeflate.  This prevents crashes in SSE/AVX code.
      */
 #  define LIBDEFLATEAPI	__attribute__((force_align_arg_pointer))
 #else
@@ -72,10 +75,35 @@ libdeflate_alloc_compressor(int compression_level);
 
 /*
  * libdeflate_deflate_compress() performs raw DEFLATE compression on a buffer of
- * data.  The function attempts to compress 'in_nbytes' bytes of data located at
- * 'in' and write the results to 'out', which has space for 'out_nbytes_avail'
- * bytes.  The return value is the compressed size in bytes, or 0 if the data
- * could not be compressed to 'out_nbytes_avail' bytes or fewer.
+ * data.  It attempts to compress 'in_nbytes' bytes of data located at 'in' and
+ * write the results to 'out', which has space for 'out_nbytes_avail' bytes.
+ * The return value is the compressed size in bytes, or 0 if the data could not
+ * be compressed to 'out_nbytes_avail' bytes or fewer (but see note below).
+ *
+ * If compression is successful, then the output data is guaranteed to be a
+ * valid DEFLATE stream that decompresses to the input data.  No other
+ * guarantees are made about the output data.  Notably, different versions of
+ * libdeflate can produce different compressed data for the same uncompressed
+ * data, even at the same compression level.  Do ***NOT*** do things like
+ * writing tests that compare compressed data to a golden output, as this can
+ * break when libdeflate is updated.  (This property isn't specific to
+ * libdeflate; the same is true for zlib and other compression libraries too.)
+ *
+ * Note: due to a performance optimization, libdeflate_deflate_compress()
+ * currently needs a small amount of slack space at the end of the output
+ * buffer.  As a result, it can't actually report compressed sizes very close to
+ * 'out_nbytes_avail'.  This doesn't matter in real-world use cases, and
+ * libdeflate_deflate_compress_bound() already includes the slack space.
+ * However, it does mean that testing code that redundantly compresses data
+ * using an exact-sized output buffer won't work as might be expected:
+ *
+ *	out_nbytes = libdeflate_deflate_compress(c, in, in_nbytes, out,
+ *						 libdeflate_deflate_compress_bound(in_nbytes));
+ *	// The following assertion will fail.
+ *	assert(libdeflate_deflate_compress(c, in, in_nbytes, out, out_nbytes) != 0);
+ *
+ * To avoid this, either don't write tests like the above, or make sure to
+ * include at least 9 bytes of slack space in 'out_nbytes_avail'.
  */
 LIBDEFLATEEXPORT size_t LIBDEFLATEAPI
 libdeflate_deflate_compress(struct libdeflate_compressor *compressor,
