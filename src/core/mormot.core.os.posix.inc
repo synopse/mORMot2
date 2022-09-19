@@ -1682,6 +1682,9 @@ begin
   if mem <= 0 then
     // may work as alternative if "sudo pmset hibernatemode 1" has been set
     mem := FpOpen('/private/var/vm/sleepimage', O_RDONLY, 0);
+  // see also low-level reading SMBIOS from I/O Registry on macOS:
+  // https://github.com/cavaliercoder/dmidecode-osx/commit/b181bb57c2494c52a2c
+  // but https://github.com/acidanthera/dmidecode/blob/master/util.c#L163 fails
   {$endif OSDARWIN}
   if mem <= 0 then
     exit;
