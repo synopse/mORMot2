@@ -8585,8 +8585,6 @@ type
   PPasync_job_st = ^Pasync_job_st;
   Pasync_wait_ctx_st = pointer;
   PPasync_wait_ctx_st = ^Pasync_wait_ctx_st;
-  Prsa_st = pointer;
-  PPrsa_st = ^Prsa_st;
   Pdsa_st = pointer;
   PPdsa_st = ^Pdsa_st;
   Pdh_st = pointer;
@@ -14561,9 +14559,6 @@ function EVP_PKEY_get0_siphash(pkey: PEVP_PKEY; len: PPtrUInt): PByte; cdecl;
 function EVP_PKEY_set1_RSA(pkey: PEVP_PKEY; key: Prsa_st): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_set1_RSA';
 
-function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_get0_RSA';
-
 function EVP_PKEY_get1_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_get1_RSA';
 
@@ -15386,9 +15381,6 @@ function EC_KEY_can_sign(eckey: PEC_KEY): integer; cdecl;
 function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key_affine_coordinates';
 
-function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_key2buf';
-
 function EC_KEY_oct2key(key: PEC_KEY; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_oct2key';
 
@@ -15556,9 +15548,6 @@ function RSA_set0_crt_params(r: PRSA; dmp1: PBIGNUM; dmq1: PBIGNUM; iqmp: PBIGNU
 
 function RSA_set0_multi_prime_params(r: PRSA; primes: PPBIGNUM; exps: PPBIGNUM; coeffs: PPBIGNUM; pnum: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RSA_set0_multi_prime_params';
-
-procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
-  external LIB_CRYPTO name _PU + 'RSA_get0_key';
 
 procedure RSA_get0_factors(r: PRSA; p: PPBIGNUM; q: PPBIGNUM); cdecl;
   external LIB_CRYPTO name _PU + 'RSA_get0_factors';

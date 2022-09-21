@@ -1104,6 +1104,10 @@ type
     function RsaEncrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
     function RsaDecrypt(const Content: RawByteString; MD: PEVP_MD;
       CodePage: integer = CP_RAWBYTESTRING): RawByteString;
+    procedure RsaGetPubKey(out e, n: RawByteString);
+    // methods below are for ECC algorithm only
+    procedure EccGetPubKeyCompressed(out k: RawByteString);
+    procedure EccGetPubKeyUncompressed(out x, y: RawByteString);
   end;
 
   PEVP_PKEY = ^EVP_PKEY;
@@ -1160,6 +1164,7 @@ type
   BIGNUM = object
   public
     function ToDecimal: RawUtf8;
+    procedure ToBin(out bin: RawByteString);
     procedure Free;
   end;
 
@@ -1189,6 +1194,9 @@ type
      *  which solution of the quadratic equation y is  *)
     POINT_CONVERSION_HYBRID = 6);
   Ppoint_conversion_form_t = ^point_conversion_form_t;
+
+  Prsa_st = pointer;
+  PPrsa_st = ^Prsa_st;
 
   buf_mem_st = record
     length: PtrUInt;
@@ -2186,6 +2194,10 @@ function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
 function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM; cdecl;
 function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
 function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
+function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
+procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
+function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
 function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
@@ -3070,6 +3082,10 @@ type
     EC_KEY_get0_private_key: function(key: PEC_KEY): PBIGNUM; cdecl;
     EC_KEY_set_private_key: function(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
     EC_KEY_get0_public_key: function(key: PEC_KEY): PEC_POINT; cdecl;
+    EC_KEY_key2buf: function(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+    EVP_PKEY_get0_RSA: function(pkey: PEVP_PKEY): Prsa_st; cdecl;
+    RSA_get0_key: procedure(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
+    X509_REQ_add_extensions: function(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
     EC_POINT_point2buf: function(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
     BN_bn2bin: function(a: PBIGNUM; _to: pointer): integer; cdecl;
     ECDSA_size: function(eckey: PEC_KEY): integer; cdecl;
@@ -3101,7 +3117,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..318] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..322] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3394,6 +3410,10 @@ const
     'EC_KEY_get0_private_key',
     'EC_KEY_set_private_key',
     'EC_KEY_get0_public_key',
+    'EC_KEY_key2buf',
+    'EVP_PKEY_get0_RSA',
+    'RSA_get0_key',
+    'X509_REQ_add_extensions',
     'EC_POINT_point2buf',
     'BN_bn2bin',
     'ECDSA_size',
@@ -4927,6 +4947,27 @@ begin
   result := libcrypto.EC_KEY_get0_public_key(key);
 end;
 
+function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t;
+  pbuf: PPByte; ctx: PBN_CTX): PtrUInt;
+begin
+  result := libcrypto.EC_KEY_key2buf(key, form, pbuf, ctx);
+end;
+
+function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st;
+begin
+  result := libcrypto.EVP_PKEY_get0_RSA(pkey);
+end;
+
+procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM);
+begin
+  libcrypto.RSA_get0_key(r, n, e, d);
+end;
+
+function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer;
+begin
+  result := libcrypto.X509_REQ_add_extensions(req, exts);
+end;
+
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt;
 begin
@@ -6320,6 +6361,18 @@ function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
 function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get0_public_key';
 
+function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_key2buf';
+
+function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_get0_RSA';
+
+procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
+  external LIB_CRYPTO name _PU + 'RSA_get0_key';
+
+function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_REQ_add_extensions';
+
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
@@ -7102,6 +7155,50 @@ begin
   finally
     EVP_PKEY_CTX_free(ctx);
   end;
+end;
+
+procedure EVP_PKEY.RsaGetPubKey(out e, n: RawByteString);
+var
+  n_num: PBIGNUM;
+  e_num: PBIGNUM;
+begin
+  if @self = nil then
+    exit;
+  RSA_get0_key(EVP_PKEY_get0_RSA(@self), @n_num, @e_num, nil);
+  e_num.ToBin(e);
+  n_num.ToBin(n);
+end;
+
+procedure EVP_PKEY.EccGetPubKeyCompressed(out k: RawByteString);
+var
+  pub: PByte;
+  publen: integer;
+begin
+  if @self = nil then
+    exit;
+  pub := nil;
+  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(@self),
+    POINT_CONVERSION_COMPRESSED, @pub, nil);
+  FastSetRawByteString(k, pub, publen);
+  OPENSSL_free(pub);
+end;
+
+procedure EVP_PKEY.EccGetPubKeyUncompressed(out x, y: RawByteString);
+var
+  pub: PAnsiChar;
+  publen: integer;
+begin
+  if @self = nil then
+    exit;
+  pub := nil;
+  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(@self),
+    POINT_CONVERSION_UNCOMPRESSED, @pub, nil);
+  if publen = 0 then
+    exit;
+  publen := (publen - 1) shr 1; // skip first byte, it's key compression marker
+  FastSetRawByteString(x, pub + 1, publen);
+  FastSetRawByteString(y, pub + publen + 1, publen);
+  OPENSSL_free(pub);
 end;
 
 
@@ -8175,6 +8272,17 @@ begin
   OpenSSL_Free(tmp);
 end;
 
+procedure BIGNUM.ToBin(out bin: RawByteString);
+var
+  len: integer;
+begin
+  if @self = nil then
+    exit;
+  len := BN_num_bytes(@self);
+  FastSetRawByteString(bin, nil, len);
+  BN_bn2bin(@self, pointer(bin));
+end;
+
 procedure BIGNUM.Free;
 begin
   if @self <> nil then
@@ -8202,6 +8310,7 @@ begin
   if @self <> nil then
     ASN1_INTEGER_free(@self);
 end;
+
 
 { ASN1_OBJECT }
 

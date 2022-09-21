@@ -1344,8 +1344,8 @@ begin
   if k = nil then
     exit;
   pub := nil;
-  publen := EC_POINT_point2buf(prime256v1grp,
-    EC_KEY_get0_public_key(k), POINT_CONVERSION_COMPRESSED, @pub, nil);
+  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(k),
+    POINT_CONVERSION_COMPRESSED, @pub, nil);
   if publen = SizeOf(PublicKey) then
   begin
     MoveFast(pub^, PublicKey, SizeOf(PublicKey));
