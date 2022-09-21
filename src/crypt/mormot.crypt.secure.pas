@@ -1456,7 +1456,8 @@ type
     // and self-sign the request using its own private key
     // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
     // a Let's Encrypt compatible way
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8;
+      const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
@@ -1566,7 +1567,8 @@ type
       ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity; virtual;
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString; virtual;
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8; const PrivateKeyPassword: SpiUtf8;
+      out PrivateKeyPem: RawUtf8): RawByteString; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -1782,6 +1784,9 @@ const
     'PS384',  // caaPS384
     'PS512',  // caaPS512
     'EdDSA'); // caaEdDSA
+
+  /// the known asymmetric algorithms which implement ECC cryptography
+  CAA_ECC = [caaES256, caaES384, caaES512, caaES256K, caaEdDSA];
 
   /// the known asymmetric algorithms which implement RSA cryptography
   CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
@@ -4800,7 +4805,8 @@ begin
     Payload^ := pl;
 end;
 
-function TCryptCert.CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
+function TCryptCert.CreateSelfSignedCsr(const DnsCsv: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
 begin
   result := ''; // unsupported by default
 end;

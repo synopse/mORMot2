@@ -398,7 +398,7 @@ function JsonArrayItem(P: PUtf8Char; Index: integer): PUtf8Char;
 // - this will handle any kind of arrays, including those with nested
 // JSON objects or arrays
 // - warning: incoming P^ should point to the first char AFTER the initial '['
-// (which may be a closing ']')
+// (which may be a closing ']') - calling e.g. NextNotSpaceCharIs()
 // - returns false if the supplied input is invalid
 // - returns true on success, with Values[] pointing to each unescaped value,
 // may be a JSON string, object, array of constant

@@ -1814,7 +1814,8 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString; override;
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8; const PrivateKeyPassword: SpiUtf8;
+      out PrivateKeyPem: RawUtf8): RawByteString; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -2310,7 +2311,8 @@ begin
       result := cvValidSelfSigned
 end;
 
-function TCryptCertOpenSsl.CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
+function TCryptCertOpenSsl.CreateSelfSignedCsr(const DnsCsv: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
 var
   dns: TRawUtf8DynArray;
   key: PEVP_PKEY;
@@ -2323,6 +2325,8 @@ begin
     RaiseError('CreateSelfSignedCsr: NewPrivateKey');
   try
     result := key.CreateSelfSignedCsr(GetMD, dns);
+    if result <> '' then
+      PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
   finally
     key.Free;
   end;
