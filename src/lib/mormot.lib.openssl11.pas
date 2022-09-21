@@ -1164,7 +1164,9 @@ type
   BIGNUM = object
   public
     function ToDecimal: RawUtf8;
-    procedure ToBin(out bin: RawByteString);
+    function BinLength: integer;
+    procedure ToBin(bin: PByte); overload;
+    procedure ToBin(out bin: RawByteString); overload;
     procedure Free;
   end;
 
@@ -8272,15 +8274,24 @@ begin
   OpenSSL_Free(tmp);
 end;
 
-procedure BIGNUM.ToBin(out bin: RawByteString);
-var
-  len: integer;
+function BIGNUM.BinLength: integer;
 begin
   if @self = nil then
-    exit;
-  len := BN_num_bytes(@self);
-  FastSetRawByteString(bin, nil, len);
-  BN_bn2bin(@self, pointer(bin));
+    result := 0
+  else
+    result := BN_num_bytes(@self);
+end;
+
+procedure BIGNUM.ToBin(bin: PByte);
+begin
+  if @self <> nil then
+    BN_bn2bin(@self, bin);
+end;
+
+procedure BIGNUM.ToBin(out bin: RawByteString);
+begin
+  FastSetRawByteString(bin, nil, BinLength);
+  ToBin(pointer(bin));
 end;
 
 procedure BIGNUM.Free;

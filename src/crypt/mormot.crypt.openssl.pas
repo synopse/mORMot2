@@ -1344,8 +1344,7 @@ begin
   if k = nil then
     exit;
   pub := nil;
-  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(k),
-    POINT_CONVERSION_COMPRESSED, @pub, nil);
+  publen := EC_KEY_key2buf(k, POINT_CONVERSION_COMPRESSED, @pub, nil);
   if publen = SizeOf(PublicKey) then
   begin
     MoveFast(pub^, PublicKey, SizeOf(PublicKey));
@@ -1364,11 +1363,11 @@ begin
   if k = nil then
     exit;
   priv := EC_KEY_get0_private_key(k);
-  privlen := BN_num_bytes(priv);
+  privlen := priv.BinLength;
   if (privlen <= 0) or
      (privlen > SizeOf(PrivateKey)) then
     exit;
-  BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
+  priv.ToBin(@PrivateKey[SizeOf(PrivateKey) - privlen]);
   result := true;
 end;
 
