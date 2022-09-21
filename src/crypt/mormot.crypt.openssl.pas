@@ -1363,7 +1363,7 @@ begin
   if k = nil then
     exit;
   priv := EC_KEY_get0_private_key(k);
-  privlen := priv.BinLength;
+  privlen := priv.Size;
   if (privlen <= 0) or
      (privlen > SizeOf(PrivateKey)) then
     exit;
@@ -1814,6 +1814,7 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -2307,6 +2308,24 @@ begin
       result := cvInvalidSignature
     else if auth = fX509 then
       result := cvValidSelfSigned
+end;
+
+function TCryptCertOpenSsl.CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
+var
+  dns: TRawUtf8DynArray;
+  key: PEVP_PKEY;
+begin
+  CsvToRawUtf8DynArray(pointer(DnsCsv), dns, ',', {trim=}true);
+  if dns = nil then
+    RaiseError('CreateSelfSignedCsr: void DnsCsv');
+  key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
+  if key = nil then
+    RaiseError('CreateSelfSignedCsr: NewPrivateKey');
+  try
+    result := key.CreateSelfSignedCsr(GetMD, dns);
+  finally
+    key.Free;
+  end;
 end;
 
 function TCryptCertOpenSsl.Encrypt(const Message: RawByteString;

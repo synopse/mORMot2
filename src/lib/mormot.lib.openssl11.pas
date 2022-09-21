@@ -1094,6 +1094,8 @@ type
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
+    function CreateSelfSignedCsr(Algo: PEVP_MD;
+      Subjects: TRawUtf8DynArray): RawByteString;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1164,7 +1166,7 @@ type
   BIGNUM = object
   public
     function ToDecimal: RawUtf8;
-    function BinLength: integer;
+    function Size: integer;
     procedure ToBin(bin: PByte); overload;
     procedure ToBin(out bin: RawByteString); overload;
     procedure Free;
@@ -1329,6 +1331,7 @@ type
     function GetName: PX509_NAME;
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
+    procedure AddExtension(nid: integer; const value: RawUtf8);
     // return the size of the signature in bytes for success and zero for failure
     function Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
     procedure Free;
@@ -6991,6 +6994,40 @@ begin
   end;
 end;
 
+function EVP_PKEY.CreateSelfSignedCsr(Algo: PEVP_MD; Subjects: TRawUtf8DynArray): RawByteString;
+var
+  cn, altnames: RawUtf8;
+  req: PX509_REQ;
+  names: PX509_NAME;
+  i: PtrInt;
+begin
+  // same logic as in TCryptCertOpenSsl.Generate
+  result := '';
+  if (@self = nil) or
+     (Subjects = nil) then
+    exit;
+  cn := Subjects[0];
+  for i := 0 to length(Subjects) - 1 do // in-place modified
+  begin
+    if PosExChar(':', Subjects[i]) = 0 then
+      Subjects[i] := 'DNS:' + Subjects[i]; // e.g. DNS: email: IP: URI:
+    if altnames <> '' then
+      altnames := altnames + ',';
+    altnames := altnames + Subjects[i];
+  end;
+  req := NewCertificateRequest;
+  try
+    names := X509_REQ_get_subject_name(req);
+    names^.AddEntry('CN', cn);
+    req.AddExtension(NID_subject_alt_name, altnames);
+    X509_REQ_set_pubkey(req, @self);
+    req.Sign(@self, Algo);
+    result := req^.ToBinary();
+  finally
+    req.Free;
+  end;
+end;
+
 function EVP_PKEY.Size: integer;
 begin
   if @self <> nil then
@@ -7395,6 +7432,23 @@ end;
 function X509_REQ.ToPem: RawUtf8;
 begin
   result := BioSave(@self, @PEM_write_bio_X509_REQ, CP_UTF8);
+end;
+
+procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
+var
+  ex: PX509_EXTENSION;
+  exts: Pstack_st_X509_EXTENSION;
+begin
+  if @self = nil then
+    exit;
+  ex := X509V3_EXT_conf_nid(nil, nil, nid, pointer(value));
+  if ex = nil then
+    exit;
+  exts := NewOpenSslStack;
+  exts.Add(ex);
+  X509_REQ_add_extensions(@self, exts);
+  exts.Free;
+  ex.Free;
 end;
 
 function X509_REQ.Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
@@ -8274,7 +8328,7 @@ begin
   OpenSSL_Free(tmp);
 end;
 
-function BIGNUM.BinLength: integer;
+function BIGNUM.Size: integer;
 begin
   if @self = nil then
     result := 0
@@ -8290,7 +8344,7 @@ end;
 
 procedure BIGNUM.ToBin(out bin: RawByteString);
 begin
-  FastSetRawByteString(bin, nil, BinLength);
+  FastSetRawByteString(bin, nil, Size);
   ToBin(pointer(bin));
 end;
 

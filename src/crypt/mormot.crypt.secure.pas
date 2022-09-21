@@ -1451,6 +1451,12 @@ type
     // - can optionally return the payload fields and/or the signature
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData = nil; Signature: PRawByteString = nil): TCryptCertValidity;
+    /// compute a new Certificate Signing Request for a set of DNS names
+    // - will include the current public key of this certificate to the request,
+    // and self-sign the request using its own private key
+    // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
+    // a Let's Encrypt compatible way
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
@@ -1560,6 +1566,7 @@ type
       ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity; virtual;
+    function CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -4791,6 +4798,11 @@ begin
     Audience^ := pl.U['aud'];
   if Payload <> nil then
     Payload^ := pl;
+end;
+
+function TCryptCert.CreateSelfSignedCsr(const DnsCsv: RawUtf8): RawByteString;
+begin
+  result := ''; // unsupported by default
 end;
 
 function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
