@@ -52,7 +52,8 @@ type
   /// let TPollAsyncSockets.OnRead/AfterWrite shutdown the socket if needed
   TPollAsyncSocketOnReadWrite = (
     soContinue,
-    soClose);
+    soClose
+  );
 
   /// low-level flags used by the state machine about one TPollAsyncConnection
   // - fWasActive is set by TAsyncConnections.IdleEverySecond to purge rd/wr
@@ -71,7 +72,8 @@ type
     fSubWrite,
     fInList,
     fReadPending,
-    fFromGC);
+    fFromGC
+  );
 
   /// abstract parent to store information aboout one TPollAsyncSockets connection
   TPollAsyncConnection = class(TSynPersistent)
@@ -171,7 +173,8 @@ type
   // - as translated from homonymous high-level acoWritePollOnly
   // TAsyncConnectionsOptions item
   TPollAsyncSocketsOptions = set of (
-    paoWritePollOnly);
+    paoWritePollOnly
+  );
 
   TPollConnectionSockets = class(TPollSockets)
   protected
@@ -399,7 +402,8 @@ type
   TAsyncConnectionsThreadProcess = (
     atpReadSingle,
     atpReadPoll,
-    atpReadPending);
+    atpReadPending
+  );
 
   TAsyncConnectionsThreadProcesses = set of TAsyncConnectionsThreadProcess;
 
@@ -451,7 +455,8 @@ type
     acoWritePollOnly,
     acoDebugReadWriteLog,
     acoNoConnectionTrack,
-    acoEnableTls);
+    acoEnableTls
+  );
 
   /// to implement generational garbage collector of asynchronous connections
   TAsyncConnectionsGC = record
