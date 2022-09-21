@@ -754,7 +754,7 @@ begin
   fOptions := aOptions;
   inherited Create; // may have been overriden
   SetAccessControlAllowOrigin(''); // deny CORS by default
-  fHosts.Init(false);
+  fHosts.Init({casesensitive=}false);
   fDomainName := aDomainName;
   // aPort='publicip:port' or 'unix:/path/to/myapp.socket' or 'port'
   fPort := aPort;
@@ -858,10 +858,10 @@ begin
     if aSecurity = secTLSSelfSigned then
     begin
       InitNetTlsContextSelfSignedServer(net {, caaES256}); // RSA is more common
-      tls := @net;
+      TLS := @net;
     end;
     try
-      THttpServerSocketGeneric(fHttpServer).WaitStarted({sec=}30, tls);
+      THttpServerSocketGeneric(fHttpServer).WaitStarted({sec=}30, TLS);
     finally
       if aSecurity = secTLSSelfSigned then
       begin
@@ -1094,38 +1094,46 @@ end;
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
-  tls, matchcase, get: boolean;
+  tls, matchcase: boolean;
   match: TRestModelMatch;
   i: PtrInt;
   P: PUtf8Char;
   serv: TRestServer;
 begin
-  tls := hsrHttps in Ctxt.ConnectionFlags;
-  get := IsGet(Ctxt.Method);
+  // validate non-REST kind of requests
   if (self = nil) or
      (pointer(fDBServers) = nil) or
      fShutdownInProgress then
-    result := HTTP_NOTFOUND
-  else if get and
-          ((Ctxt.Url = '') or
-           (PWord(Ctxt.Url)^ = ord('/'))) then
-    // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
-    if fRootRedirectToUri[tls] <> '' then
-    begin
-      Ctxt.AddOutHeader(['Location: ', fRootRedirectToUri[tls]]);
-      result := HTTP_TEMPORARYREDIRECT;
-    end
-    else
-      result := HTTP_BADREQUEST
-  else if get and
-          (fFavicon <> '') and
-          IsUrlFavicon(pointer(Ctxt.Url)) then
   begin
-    Ctxt.OutContent := fFavicon;
-    Ctxt.OutContentType := 'image/x-icon';
-    result := HTTP_SUCCESS;
-  end
-  else if Ctxt.Method = 'OPTIONS' then
+    result := HTTP_NOTFOUND;
+    exit;
+  end;
+  tls := hsrHttps in Ctxt.ConnectionFlags;
+  if IsGet(Ctxt.Method) then
+    if (Ctxt.Url = '') or
+       (PWord(Ctxt.Url)^ = ord('/')) then
+      // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
+      if fRootRedirectToUri[tls] <> '' then
+      begin
+        Ctxt.AddOutHeader(['Location: ', fRootRedirectToUri[tls]]);
+        result := HTTP_TEMPORARYREDIRECT;
+        exit;
+      end
+      else
+      begin
+        result := HTTP_BADREQUEST; // we need an URI to identify the REST server
+        exit;
+      end
+    else if (fFavicon <> '') and
+            IsUrlFavicon(pointer(Ctxt.Url)) then
+    begin
+      // GET /favicon.ico
+      Ctxt.OutContent := fFavicon;
+      Ctxt.OutContentType := 'image/x-icon';
+      result := HTTP_SUCCESS;
+      exit;
+    end;
+  if Ctxt.Method = 'OPTIONS' then
   begin
     // handle CORS
     if fAccessControlAllowOrigin = '' then
@@ -1133,135 +1141,142 @@ begin
     else
       ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}true);
     result := HTTP_NOCONTENT;
-  end
-  else if (Ctxt.Method = '') or
-          ((rsoOnlyJsonRequests in fOptions) and
-           not get and
-           not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
-    // wrong Input parameters or not JSON request: 400 BAD REQUEST
-    result := HTTP_BADREQUEST
-  else if (Ctxt.InContent <> '') and
-          (rsoOnlyValidUtf8 in fOptions) and
-          (IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER) or
-           IdemPChar(pointer(Ctxt.InContentType), 'TEXT/')) and
-          not IsValidUtf8(Ctxt.InContent) then // may use AVX2
-    result := HTTP_NOTACCEPTABLE
-  else
+    exit;
+  end;
+  if (Ctxt.Method = '') or
+     ((rsoOnlyJsonRequests in fOptions) and
+      not IsGet(Ctxt.Method) and
+      not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
   begin
-    // compute the REST-oriented request information
-    call.OutStatus := 0; // see call.Init
-    call.OutInternalState := 0;
-    call.RestAccessRights := nil;
-    call.LowLevelConnectionID := Ctxt.ConnectionID;
-    call.LowLevelConnectionOpaque := pointer(Ctxt.ConnectionOpaque);
-    call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
-    call.LowLevelRemoteIP := Ctxt.RemoteIP;
-    call.LowLevelBearerToken := Ctxt.AuthBearer;
-    call.LowLevelUserAgent := Ctxt.UserAgent;
-    if fHosts.Count > 0 then
-      ComputeHostUrl(Ctxt, call.Url) // handle any virtual host domain
-    else
-      Ctxt.Host := ''; // no AdjustHostUrl() below
-    if call.Url = '' then
-    begin
-      call.Url := Ctxt.Url;
-      if (call.Url <> '') and
-         (call.Url[1] = '/') then
-        delete(call.Url, 1, 1); // normalize URI
-    end;
-    call.Method := Ctxt.Method;
-    call.InHead := Ctxt.InHeaders;
-    call.InBody := Ctxt.InContent;
-    // allow custom URI routing before TRestServer instances
-    serv := nil;
-    if (not Assigned(fOnCustomRequest)) or
-       (not fOnCustomRequest(call)) then
-    begin
-      // search and call any matching TRestServer instance
-      result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
-      match := rmNoMatch;
-      matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
-      if fDBSingleServer <> nil then
-        // optimized for the most common case of a single DB server
-        with fDBSingleServer^ do
+    // wrong Input parameters or not JSON request: 400 BAD REQUEST
+    result := HTTP_BADREQUEST;
+    exit;
+  end;
+  if (Ctxt.InContent <> '') and
+     (rsoOnlyValidUtf8 in fOptions) and
+     (IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER) or
+      IdemPChar(pointer(Ctxt.InContentType), 'TEXT/')) and
+     not IsValidUtf8(Ctxt.InContent) then // may use AVX2
+  begin
+    // rsoOnlyValidUtf8 rejection
+    result := HTTP_NOTACCEPTABLE;
+    exit;
+  end;
+  // compute the REST-oriented request information
+  call.OutStatus := 0; // see call.Init
+  call.OutInternalState := 0;
+  call.RestAccessRights := nil;
+  call.LowLevelConnectionID := Ctxt.ConnectionID;
+  call.LowLevelConnectionOpaque := pointer(Ctxt.ConnectionOpaque);
+  call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
+  call.LowLevelRemoteIP := Ctxt.RemoteIP;
+  call.LowLevelBearerToken := Ctxt.AuthBearer;
+  call.LowLevelUserAgent := Ctxt.UserAgent;
+  if fHosts.Count > 0 then
+    // handle any virtual host domain
+    ComputeHostUrl(Ctxt, call.Url)
+  else
+    // no AdjustHostUrl() below
+    Ctxt.Host := '';
+  if call.Url = '' then
+  begin
+    call.Url := Ctxt.Url;
+    if (call.Url <> '') and
+       (call.Url[1] = '/') then
+      delete(call.Url, 1, 1); // normalize URI
+  end;
+  call.Method := Ctxt.Method;
+  call.InHead := Ctxt.InHeaders;
+  call.InBody := Ctxt.InContent;
+  // allow custom URI routing before TRestServer instances
+  serv := nil;
+  if (not Assigned(fOnCustomRequest)) or
+     (not fOnCustomRequest(call)) then
+  begin
+    // search and call any matching TRestServer instance
+    result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
+    match := rmNoMatch;
+    matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
+    if fDBSingleServer <> nil then
+      // optimized for the most common case of a single DB server
+      with fDBSingleServer^ do
+      begin
+        if (Security in SEC_TLS) = tls then
         begin
-          if (Security in SEC_TLS) = tls then
-          begin
-            match := Server.Model.UriMatch(call.Url, matchcase);
-            if match = rmNoMatch then
-              if rsoAllowSingleServerNoRoot in fOptions then
-              begin
-                match := rmMatchExact; // forge proper 'modelroot/url'
-                call.Url := Server.Model.Root + '/' + call.Url;
-              end
-              else
-                exit;
-            call.RestAccessRights := RestAccessRights;
-            serv := Server;
-          end;
-        end
-      else
-      begin
-        // thread-safe use of dynamic fDBServers[] array
-        fSafe.ReadLock;
-        try
-          for i := 0 to length(fDBServers) - 1 do
-            with fDBServers[i] do
-              if (Security in SEC_TLS) = tls then
-              begin
-                // registered for http or https
-                match := Server.Model.UriMatch(call.Url, matchcase);
-                if match = rmNoMatch then
-                  continue;
-                call.RestAccessRights := RestAccessRights;
-                serv := Server;
-                break;
-              end;
-        finally
-          fSafe.ReadUnLock;
+          match := Server.Model.UriMatch(call.Url, matchcase);
+          if match = rmNoMatch then
+            if rsoAllowSingleServerNoRoot in fOptions then
+            begin
+              match := rmMatchExact; // forge proper 'modelroot/url'
+              call.Url := Server.Model.Root + '/' + call.Url;
+            end
+            else
+              exit;
+          call.RestAccessRights := RestAccessRights;
+          serv := Server;
         end;
-      end;
-      if (match = rmNoMatch) or
-         (serv = nil) then
-        exit;
-      if matchcase and
-         (match = rmMatchWithCaseChange) then
-      begin
-        // force redirection to exact Server.Model.Root case sensitivity
-        call.OutStatus := HTTP_TEMPORARYREDIRECT;
-        call.OutHead := 'Location: /' + call.Url;
-        MoveFast(pointer(serv.Model.Root)^, PByteArray(call.OutHead)[11],
-          length(serv.Model.Root)); // overwrite url root from Model.Root
       end
-      else
-        // call matching TRestServer.Uri()
-        serv.Uri(call);
-    end;
-    // set output content
-    result := call.OutStatus;
-    Ctxt.OutContent := call.OutBody;
-    Ctxt.OutContentType := call.OutBodyType;
-    P := pointer(call.OutHead);
-    if IdemPChar(P, 'CONTENT-TYPE: ') then
+    else
     begin
-      // change mime type if modified in HTTP header (e.g. GET blob fields)
-      Ctxt.OutContentType := GetNextLine(P + 14, P);
-      FastSetString(call.OutHead, P, StrLen(P));
+      // thread-safe use of dynamic fDBServers[] array
+      fSafe.ReadLock;
+      try
+        for i := 0 to length(fDBServers) - 1 do
+          with fDBServers[i] do
+            if (Security in SEC_TLS) = tls then
+            begin
+              // registered for http or https
+              match := Server.Model.UriMatch(call.Url, matchcase);
+              if match = rmNoMatch then
+                continue;
+              call.RestAccessRights := RestAccessRights;
+              serv := Server;
+              break;
+            end;
+      finally
+        fSafe.ReadUnLock;
+      end;
+    end;
+    if (match = rmNoMatch) or
+       (serv = nil) then
+      exit;
+    if matchcase and
+       (match = rmMatchWithCaseChange) then
+    begin
+      // force redirection to exact Server.Model.Root case sensitivity
+      call.OutStatus := HTTP_TEMPORARYREDIRECT;
+      call.OutHead := 'Location: /' + call.Url;
+      MoveFast(pointer(serv.Model.Root)^, PByteArray(call.OutHead)[11],
+        length(serv.Model.Root)); // overwrite url root from Model.Root
     end
     else
-      // default content type is JSON
-      Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-    // handle HTTP redirection and cookies over virtual hosts
-    if Ctxt.Host <> '' then
-      AdjustHostUrl(call, serv, Ctxt.Host);
-    TrimSelf(call.OutHead);
-    Ctxt.OutCustomHeaders := call.OutHead;
-    if call.OutInternalState <> 0 then
-      Ctxt.AddOutHeader(['Server-InternalState: ', call.OutInternalState]);
-    // handle optional CORS origin
-    if fAccessControlAllowOrigin <> '' then
-      ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
+      // call matching TRestServer.Uri()
+      serv.Uri(call);
   end;
+  // set output content
+  result := call.OutStatus;
+  Ctxt.OutContent := call.OutBody;
+  Ctxt.OutContentType := call.OutBodyType;
+  P := pointer(call.OutHead);
+  if IdemPChar(P, 'CONTENT-TYPE: ') then
+  begin
+    // change mime type if modified in HTTP header (e.g. GET blob fields)
+    Ctxt.OutContentType := GetNextLine(P + 14, P);
+    FastSetString(call.OutHead, P, StrLen(P));
+  end
+  else
+    // default content type is JSON
+    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
+  // handle HTTP redirection and cookies over virtual hosts
+  if Ctxt.Host <> '' then
+    AdjustHostUrl(call, serv, Ctxt.Host);
+  TrimSelf(call.OutHead);
+  Ctxt.OutCustomHeaders := call.OutHead;
+  if call.OutInternalState <> 0 then
+    Ctxt.AddOutHeader(['Server-InternalState: ', call.OutInternalState]);
+  // handle optional CORS origin
+  if fAccessControlAllowOrigin <> '' then
+    ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
 end;
 
 procedure TRestHttpServer.HttpThreadTerminate(Sender: TThread);
