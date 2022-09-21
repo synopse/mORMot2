@@ -1763,7 +1763,7 @@ begin
             partial := fInternalPartials.GetPartial(Value);
             if (partial = nil) and
                (Context.fOwner <> self) then
-               // recursive call
+              // recursive call
               partial := Context.fOwner.fInternalPartials.GetPartial(Value);
             if (partial = nil) and
                (Context.Partials <> nil) then

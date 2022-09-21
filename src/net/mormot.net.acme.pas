@@ -164,8 +164,8 @@ type
     // ACME_LETSENCRYPT_URL (for production) or ACME_LETSENCRYPT_DEBUG_URL
     // (for testing)
     // - aCert is the certificate used to identify the client account
-    constructor Create(const aDirectoryUrl: RawUtf8; const aCert: ICryptCert;
-      const aContact, aDomain, aSubjects: RawUtf8);
+    constructor Create(const aCert: ICryptCert;
+      const aDirectoryUrl, aContact, aDomain, aSubjects: RawUtf8);
     /// finalize the instance
     destructor Destroy; override;
     /// register account and applying for Certificate Issuance
@@ -433,8 +433,8 @@ end;
 
 { TAcmeClient }
 
-constructor TAcmeClient.Create(const aDirectoryUrl: RawUtf8;
-  const aCert: ICryptCert; const aContact, aDomain, aSubjects: RawUtf8);
+constructor TAcmeClient.Create(const aCert: ICryptCert;
+  const aDirectoryUrl, aContact, aDomain, aSubjects: RawUtf8);
 begin
   fDirectoryUrl := aDirectoryUrl;
   fContact := aContact;
