@@ -987,11 +987,11 @@ type
   protected
     fHttp: THttpClientSocket;
     fHttps: THttpRequest;
-    fProxy, fHeaders, fUserAgent: RawUtf8;
+    fUri, fProxy, fHeaders, fUserAgent: RawUtf8;
     fBody: RawByteString;
     fSocketTLS: TNetTlsContext;
     fOnlyUseClientSocket: boolean;
-    fTimeOut: integer;
+    fTimeOut, fStatus: integer;
   public
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
@@ -1014,6 +1014,9 @@ type
     /// returns the HTTP body as returned by a previous call to Request()
     property Body: RawByteString
       read fBody;
+    /// returns the HTTP status code after a Request() call
+    property Status: integer
+      read fStatus;
     /// returns the HTTP headers as returned by a previous call to Request()
     property Headers: RawUtf8
       read fHeaders;
@@ -3174,10 +3177,12 @@ function TSimpleHttpClient.Request(const uri: RawUtf8; const method: RawUtf8;
 var
   u: TUri;
 begin
+  fUri := uri;
   if u.From(uri) then
     result := RawRequest(u, method, header, data, datatype, keepalive)
   else
     result := HTTP_NOTFOUND;
+  fStatus := result;
 end;
 
 function TSimpleHttpClient.SocketTLS: PNetTlsContext;
