@@ -436,6 +436,7 @@ end;
 constructor TAcmeClient.Create(const aCert: ICryptCert;
   const aDirectoryUrl, aContact, aDomain, aSubjects: RawUtf8);
 begin
+  inherited Create;
   fDirectoryUrl := aDirectoryUrl;
   fContact := aContact;
   fDomain := aDomain;
@@ -446,6 +447,7 @@ end;
 destructor TAcmeClient.Destroy;
 begin
   FreeAndNil(fHttpClient);
+  inherited Destroy;
 end;
 
 procedure TAcmeClient.ReadDirectory;

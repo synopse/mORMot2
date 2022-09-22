@@ -7216,7 +7216,7 @@ begin
   if @self = nil then
     exit;
   pub := nil;
-  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(@self),
+  publen := EC_KEY_key2buf(EVP_PKEY_get0_EC_KEY(@self),
     POINT_CONVERSION_COMPRESSED, @pub, nil);
   FastSetRawByteString(k, pub, publen);
   OPENSSL_free(pub);
@@ -7230,7 +7230,7 @@ begin
   if @self = nil then
     exit;
   pub := nil;
-  publen := EC_KEY_key2buf(EC_KEY_get0_public_key(@self),
+  publen := EC_KEY_key2buf(EVP_PKEY_get0_EC_KEY(@self),
     POINT_CONVERSION_UNCOMPRESSED, @pub, nil);
   if publen = 0 then
     exit;
