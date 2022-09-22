@@ -1777,6 +1777,8 @@ type
   {$endif OSWINDOWS}
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
+  SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: PPointer): integer; cdecl;
+  SSL_CTX_callback_ctrl_ = procedure; cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
@@ -1810,6 +1812,7 @@ function SSL_CTX_use_certificate_chain_file(ctx: PSSL_CTX; _file: PUtf8Char): in
 function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
    protos: PByte; protos_len: cardinal): integer; cdecl;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
 function SSL_shutdown(s: PSSL): integer; cdecl;
 function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
@@ -1828,6 +1831,7 @@ function SSL_get_state(ssl: PSSL): OSSL_HANDSHAKE_STATE; cdecl;
 function SSL_pending(s: PSSL): integer; cdecl;
 function SSL_set_cipher_list(s: PSSL; str: PUtf8Char): integer; cdecl;
 procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
+function SSL_get_servername(s: PSSL; typ: integer): PUtf8Char; cdecl;
 function SSL_clear(s: PSSL): integer; cdecl;
 function TLS_client_method(): PSSL_METHOD; cdecl;
 function TLS_server_method(): PSSL_METHOD; cdecl;
@@ -2276,6 +2280,8 @@ function SSL_CTX_set_max_proto_version(ctx: PSSL_CTX; version: integer): integer
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
   {$ifdef HASINLINE} inline; {$endif}
+function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_mode(s: PSSL; version: integer): integer;
 function SSL_get_mode(s: PSSL): integer;
 
@@ -2452,6 +2458,7 @@ type
     SSL_CTX_use_certificate_chain_file: function(ctx: PSSL_CTX; _file: PUtf8Char): integer; cdecl;
     SSL_CTX_set_alpn_protos: function(ctx: PSSL_CTX; protos: PByte; protos_len: cardinal): integer; cdecl;
     SSL_CTX_ctrl: function(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
+    SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
     SSL_shutdown: function(s: PSSL): integer; cdecl;
     SSL_get_error: function(s: PSSL; ret_code: integer): integer; cdecl;
@@ -2470,6 +2477,7 @@ type
     SSL_pending: function(s: PSSL): integer; cdecl;
     SSL_set_cipher_list: function(s: PSSL; str: PUtf8Char): integer; cdecl;
     SSL_get0_alpn_selected: procedure(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
+    SSL_get_servername: function(s: PSSL; typ: integer): PUtf8Char; cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     TLS_client_method: function(): PSSL_METHOD; cdecl;
     TLS_server_method: function(): PSSL_METHOD; cdecl;
@@ -2489,7 +2497,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..48] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..50] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2506,6 +2514,7 @@ const
     'SSL_CTX_use_certificate_chain_file',
     'SSL_CTX_set_alpn_protos',
     'SSL_CTX_ctrl',
+    'SSL_CTX_callback_ctrl',
     'SSL_new',
     'SSL_shutdown',
     'SSL_get_error',
@@ -2524,6 +2533,7 @@ const
     'SSL_pending',
     'SSL_set_cipher_list',
     'SSL_get0_alpn_selected',
+    'SSL_get_servername',
     'SSL_clear',
     'TLS_client_method',
     'TLS_server_method',
@@ -2623,6 +2633,11 @@ begin
   result := libssl.SSL_CTX_ctrl(ctx, cmd, larg, parg);
 end;
 
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer;
+begin
+  result := libssl.SSL_CTX_callback_ctrl(p1, p2, p3);
+end;
+
 function SSL_new(ctx: PSSL_CTX): PSSL;
 begin
   result := libssl.SSL_new(ctx);
@@ -2711,6 +2726,11 @@ end;
 procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal);
 begin
   libssl.SSL_get0_alpn_selected(ssl, data, len);
+end;
+
+function SSL_get_servername(s: PSSL; typ: integer): PUtf8Char;
+begin
+  result := libssl.SSL_get_servername(s, typ);
 end;
 
 function SSL_clear(s: PSSL): integer;
@@ -5365,6 +5385,9 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_ctrl';
 
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_callback_ctrl';
+
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
   external LIB_SSL name _PU + 'SSL_new';
 
@@ -5418,6 +5441,9 @@ function SSL_set_cipher_list(s: PSSL; str: PUtf8Char): integer; cdecl;
 
 procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
   external LIB_SSL name _PU + 'SSL_get0_alpn_selected';
+
+function SSL_get_servername(s: PSSL; typ: integer): PUtf8Char; cdecl;
+  external LIB_SSL name _PU + 'SSL_get_servername';
 
 function SSL_clear(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_clear';
@@ -6630,6 +6656,12 @@ function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
 begin
   result := SSL_ctrl(s, SSL_CTRL_SET_TLSEXT_HOSTNAME,
     TLSEXT_NAMETYPE_host_name, pointer(name));
+end;
+
+function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): integer;
+begin
+  result := SSL_CTX_callback_ctrl(
+    ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, SSL_CTX_callback_ctrl_(cb));
 end;
 
 function SSL_set_mode(s: PSSL; version: integer): integer;

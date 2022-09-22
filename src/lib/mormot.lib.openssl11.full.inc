@@ -11205,7 +11205,6 @@ type
   SSL_CTX_set_srp_client_pwd_callback_cb = function(p1: PSSL; p2: pointer): PUtf8Char; cdecl;
   SSL_CTX_set_srp_verify_param_callback_cb = function(p1: PSSL; p2: pointer): integer; cdecl;
   SSL_CTX_set_srp_username_callback_cb = function(p1: PSSL; p2: PInteger; p3: pointer): integer; cdecl;
-  SSL_CTX_callback_ctrl_ = procedure(); cdecl;
   SSL_CTX_set_tmp_dh_callback_dh = function(ssl: PSSL; is_export: integer; keylength: integer): Pdh_st; cdecl;
   SSL_CTX_set_not_resumable_session_callback_cb = function(ssl: PSSL; is_forward_secure: integer): integer; cdecl;
   SSL_CTX_set_record_padding_callback_cb = function(ssl: PSSL; typ: integer; len: PtrUInt; arg: pointer): Qword; cdecl;
@@ -23826,9 +23825,6 @@ function SSL_write_early_data(s: PSSL; buf: pointer; num: PtrUInt; written: PPtr
 function SSL_callback_ctrl(p1: PSSL; p2: integer; p3: SSL_callback_ctrl_): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_callback_ctrl';
 
-function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_callback_ctrl';
-
 function SSL_get_early_data_status(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_early_data_status';
 
@@ -24479,9 +24475,6 @@ function SSL_CTX_set_tlsext_max_fragment_length(ctx: PSSL_CTX; mode: byte): inte
 
 function SSL_set_tlsext_max_fragment_length(ssl: PSSL; mode: byte): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_tlsext_max_fragment_length';
-
-function SSL_get_servername(s: PSSL; typ: integer): PUtf8Char; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_servername';
 
 function SSL_get_servername_type(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_servername_type';

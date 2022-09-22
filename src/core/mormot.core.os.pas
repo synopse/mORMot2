@@ -7677,7 +7677,7 @@ begin
   {$ifndef NOEXCEPTIONINTERCEPT}
   _RawLogException := nil;
   RawExceptionIntercepted := true;
-  {$endif}
+  {$endif NOEXCEPTIONINTERCEPT}
 end;
 
 
