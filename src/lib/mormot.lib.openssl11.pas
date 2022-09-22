@@ -620,6 +620,11 @@ const
   TLS_MAX_VERSION = TLS1_3_VERSION;
   TLS_ANY_VERSION = $10000;
 
+  SSL_TLSEXT_ERR_OK = 0;
+  SSL_TLSEXT_ERR_ALERT_WARNING = 1;
+  SSL_TLSEXT_ERR_ALERT_FATAL = 2;
+  SSL_TLSEXT_ERR_NOACK = 3;
+
   X509_FILETYPE_PEM = 1;
   X509_FILETYPE_ASN1 = 2;
   X509_FILETYPE_DEFAULT = 3;
@@ -1777,7 +1782,7 @@ type
   {$endif OSWINDOWS}
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
-  SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: PPointer): integer; cdecl;
+  SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
   SSL_CTX_callback_ctrl_ = procedure; cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
@@ -1814,6 +1819,7 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
+function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
 function SSL_shutdown(s: PSSL): integer; cdecl;
 function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
@@ -2282,6 +2288,8 @@ function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): integer;
   {$ifdef HASINLINE} inline; {$endif}
+function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_mode(s: PSSL; version: integer): integer;
 function SSL_get_mode(s: PSSL): integer;
 
@@ -2460,6 +2468,7 @@ type
     SSL_CTX_ctrl: function(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
     SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
+    SSL_set_SSL_CTX: function(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
     SSL_shutdown: function(s: PSSL): integer; cdecl;
     SSL_get_error: function(s: PSSL; ret_code: integer): integer; cdecl;
     SSL_ctrl: function(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
@@ -2497,7 +2506,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..50] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..51] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2516,6 +2525,7 @@ const
     'SSL_CTX_ctrl',
     'SSL_CTX_callback_ctrl',
     'SSL_new',
+    'SSL_set_SSL_CTX',
     'SSL_shutdown',
     'SSL_get_error',
     'SSL_ctrl',
@@ -2641,6 +2651,11 @@ end;
 function SSL_new(ctx: PSSL_CTX): PSSL;
 begin
   result := libssl.SSL_new(ctx);
+end;
+
+function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX;
+begin
+  result := libssl.SSL_set_SSL_CTX(ssl, ctx);
 end;
 
 function SSL_shutdown(s: PSSL): integer;
@@ -5391,6 +5406,9 @@ function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_c
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
   external LIB_SSL name _PU + 'SSL_new';
 
+function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
+  external LIB_SSL name _PU + 'SSL_set_SSL_CTX';
+
 function SSL_shutdown(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_shutdown';
 
@@ -6662,6 +6680,11 @@ function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_serve
 begin
   result := SSL_CTX_callback_ctrl(
     ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, SSL_CTX_callback_ctrl_(cb));
+end;
+
+function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
+begin
+  result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG, 0, arg);
 end;
 
 function SSL_set_mode(s: PSSL; version: integer): integer;
@@ -9586,8 +9609,26 @@ begin
     @Context.LastError);
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
-    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
+    v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
   SSL_CTX_set_min_proto_version(fCtx, v);
+end;
+
+function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
+var
+  servername: PUtf8Char;
+  ctx: PNetTlsContext absolute arg;
+  new: PSSL_CTX;
+begin
+  result := SSL_TLSEXT_ERR_OK;
+  if not Assigned(ctx) or
+     not Assigned(ctx.OnAcceptServerName) then
+    exit; // use default context/certificate
+  servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+  if servername = nil then
+    exit;
+  new := ctx.OnAcceptServerName(ctx, s, servername);
+  if new <> nil then
+    SSL_set_SSL_CTX(s, new); // switching server context
 end;
 
 procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
@@ -9597,6 +9638,12 @@ begin
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new(TLS_server_method);
   SetupCtx(Context, {bind=}true);
+  // allow SNI per-server certificate via OnAcceptServerName callback
+  if Assigned(Context.OnAcceptServerName) then
+  begin
+    SSL_CTX_set_tlsext_servername_callback(fCtx, AfterAcceptSNI);
+    SSL_CTX_set_tlsext_servername_arg(fCtx, @Context);
+  end;
   // this global context fCtx will be reused by AfterAccept()
   Context.AcceptCert := fCtx;
 end;
@@ -9608,8 +9655,11 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
 begin
   // we don't handle any fContext here on server-side connections
   fSocket := Socket;
+  fContext := @BoundContext; // may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
+  // safe and simple context for the callbacks
+  _PeerVerify := self;
   // prepare TLS connection properties from AfterBind() global context
   if BoundContext.AcceptCert = nil then
     raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');

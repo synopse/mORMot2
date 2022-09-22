@@ -410,6 +410,16 @@ type
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 
+  /// callback raised by INetTls.AfterAccept for SNI resolution
+  // - should check the ServerName and return the proper certificate context,
+  // typically one OpenSSL PSSL_CTX instance
+  // - if the ServerName has no match, and the default certificate is good
+  // enough, should return nil
+  // - on any error, should raise an exception
+  // - TLS is an opaque structure, typically OpenSSL PSSL
+  TOnNetTlsAcceptServerName = function(Context: PNetTlsContext; TLS: pointer;
+    const ServerName: RawUtf8): pointer of object;
+
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
@@ -510,9 +520,13 @@ type
     /// called by INetTls.AfterConnection to retrieve a private password
     // - not used on SChannel
     OnPrivatePassword: TOnNetTlsGetPassword;
+    /// called by INetTls.AfterAccept to set a server/host-specific certificate
+    // - not used on SChannel
+    OnAcceptServerName: TOnNetTlsAcceptServerName;
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
     // bound server certificate context into each accepted connection
     // - so that certificates are decoded only once in AfterBind
+    // - is typically a PSSL_CTX on OpenSSL
     AcceptCert: pointer;
   end;
 

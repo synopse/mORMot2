@@ -7321,11 +7321,6 @@ const
   TLSEXT_max_fragment_length_4096 = 4;
   TLSEXT_MAXLEN_host_name = 255;
   
-  SSL_TLSEXT_ERR_OK = 0;
-  SSL_TLSEXT_ERR_ALERT_WARNING = 1;
-  SSL_TLSEXT_ERR_ALERT_FATAL = 2;
-  SSL_TLSEXT_ERR_NOACK = 3;
-  
   TLS1_CK_PSK_WITH_RC4_128_SHA = $0300008A;
   TLS1_CK_PSK_WITH_3DES_EDE_CBC_SHA = $0300008B;
   TLS1_CK_PSK_WITH_AES_128_CBC_SHA = $0300008C;
@@ -23992,9 +23987,6 @@ function SSL_get1_session(ssl: PSSL): PSSL_SESSION; cdecl;
 
 function SSL_get_SSL_CTX(ssl: PSSL): PSSL_CTX; cdecl;
   external LIB_SSL name _PU + 'SSL_get_SSL_CTX';
-
-function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
-  external LIB_SSL name _PU + 'SSL_set_SSL_CTX';
 
 procedure SSL_set_info_callback(ssl: PSSL; cb: SSL_set_info_callback_cb); cdecl;
   external LIB_SSL name _PU + 'SSL_set_info_callback';
