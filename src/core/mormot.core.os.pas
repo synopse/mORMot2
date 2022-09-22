@@ -7674,8 +7674,10 @@ begin
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   DeleteCriticalSection(ConsoleCriticalSection);
   DeleteCriticalSection(GlobalCriticalSection);
+  {$ifndef NOEXCEPTIONINTERCEPT}
   _RawLogException := nil;
   RawExceptionIntercepted := true;
+  {$endif}
 end;
 
 
