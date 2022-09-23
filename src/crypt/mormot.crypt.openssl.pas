@@ -1774,6 +1774,9 @@ type
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
     function FromHandle(Handle: pointer): ICryptCert; override;
+    function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+      const PrivateKeyPassword: SpiUtf8;
+      out PrivateKeyPem: RawUtf8): RawByteString; override;
   end;
 
   /// class implementing ICryptCert using OpenSSL X509
@@ -1814,8 +1817,6 @@ type
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8; const PrivateKeyPassword: SpiUtf8;
-      out PrivateKeyPem: RawUtf8): RawByteString; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -1890,6 +1891,25 @@ begin
     instance.fX509 := Handle;
   end;
   result := instance;
+end;
+
+function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
+var
+  key: PEVP_PKEY;
+begin
+  if Subjects = nil then
+    raise EOpenSslCert.Create('CreateSelfSignedCsr: void DnsCsv');
+  key := NewPrivateKey;
+  if key = nil then
+    raise EOpenSslCert.Create('CreateSelfSignedCsr: NewPrivateKey');
+  try
+    result := key.CreateSelfSignedCsr(fHash, Subjects);
+    if result <> '' then
+      PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
+  finally
+    key.Free;
+  end;
 end;
 
 
@@ -2117,6 +2137,7 @@ begin
   begin
     // input only include the private key as DER or PEM
     fPrivKey.Free;
+    fPrivKey := nil;
     fPrivKey := LoadPrivateKey(saved, PrivatePassword);
     if fPrivKey <> nil then
       if (fX509 = nil) or // can load just the privkey
@@ -2309,27 +2330,6 @@ begin
       result := cvInvalidSignature
     else if auth = fX509 then
       result := cvValidSelfSigned
-end;
-
-function TCryptCertOpenSsl.CreateSelfSignedCsr(const DnsCsv: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
-var
-  dns: TRawUtf8DynArray;
-  key: PEVP_PKEY;
-begin
-  CsvToRawUtf8DynArray(pointer(DnsCsv), dns, ',', {trim=}true);
-  if dns = nil then
-    RaiseError('CreateSelfSignedCsr: void DnsCsv');
-  key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
-  if key = nil then
-    RaiseError('CreateSelfSignedCsr: NewPrivateKey');
-  try
-    result := key.CreateSelfSignedCsr(GetMD, dns);
-    if result <> '' then
-      PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
-  finally
-    key.Free;
-  end;
 end;
 
 function TCryptCertOpenSsl.Encrypt(const Message: RawByteString;

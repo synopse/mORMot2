@@ -1452,13 +1452,6 @@ type
     // - can optionally return the payload fields and/or the signature
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData = nil; Signature: PRawByteString = nil): TCryptCertValidity;
-    /// compute a new Certificate Signing Request for a set of DNS names
-    // - will include the current public key of this certificate to the request,
-    // and self-sign the request using its own private key
-    // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
-    // a Let's Encrypt compatible way
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8;
-      const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
@@ -1570,8 +1563,6 @@ type
       ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity; virtual;
-    function CreateSelfSignedCsr(const DnsCsv: RawUtf8; const PrivateKeyPassword: SpiUtf8;
-      out PrivateKeyPem: RawUtf8): RawByteString; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -1614,6 +1605,14 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
+    /// factory for a new Certificate Signing Request over a set of (DNS) names
+    // - will generate a new public/private key pair, then forge a request with
+    // the public key, self-signing the request using the new PrivateKeyPem
+    // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
+    // a Let's Encrypt compatible way
+    function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+      const PrivateKeyPassword: SpiUtf8;
+      out PrivateKeyPem: RawUtf8): RawByteString; virtual;
     /// return the corresponding JWT algorithm name, computed from AsymAlgo
     // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
     function JwtName: RawUtf8;
@@ -4619,6 +4618,12 @@ begin
   result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
 end;
 
+function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
+begin
+  result := ''; // unsupported by default
+end;
+
 function TCryptCertAlgo.JwtName: RawUtf8;
 begin
   result := CAA_JWT[fOsa];
@@ -4808,13 +4813,6 @@ begin
   if Payload <> nil then
     Payload^ := pl;
 end;
-
-function TCryptCert.CreateSelfSignedCsr(const DnsCsv: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
-begin
-  result := ''; // unsupported by default
-end;
-
 function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
 begin
   result := ''; // unsupported by default
