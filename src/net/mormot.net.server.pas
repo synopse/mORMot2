@@ -682,6 +682,14 @@ type
   // TWebSocketServerRest or THttpAsyncServer classes
   THttpServerSocketGenericClass = class of THttpServerSocketGeneric;
 
+  /// called from THttpServerSocket.GetRequest before OnBeforeBody
+  // - this THttpServer-specific callback allow quick and dirty action on the
+  // raw socket, to bypass the whole THttpServer.Process high-level action
+  // - should return true if the action has been handled, and response has
+  // been sent directly via ClientSock.SockSend/SockSendFlush (as HTTP/1.0)
+  // - should return false to continue as usual with THttpServer.Process
+  TOnHttpServerHeaderParsed = function(ClientSock: THttpServerSocket): boolean of object;
+
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads from a ThreadPool
@@ -694,7 +702,7 @@ type
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
   // and "proxy_request_buffering on" options for best performance, and
   // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
-  // - under windows, will trigger the firewall UAC popup at first run
+  // - under Windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
@@ -704,13 +712,16 @@ type
   protected
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TSynObjectListLocked;
-    fHttpQueueLength: cardinal;
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
+    fHttpQueueLength: cardinal;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerSendBufferSize: integer;
     fExecuteState: THttpServerExecuteState;
+    fMonoThread: boolean;
+    fOnHeaderParsed: TOnHttpServerHeaderParsed;
+    fOnAcceptIdle: TNotifyEvent;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -733,6 +744,13 @@ type
       ProcessOptions: THttpServerOptions = []); override;
     /// release all memory and handlers
     destructor Destroy; override;
+    /// low-level callback called before OnBeforeBody and allow quick execution
+    // directly from THttpServerSocket.GetRequest
+    property OnHeaderParsed: TOnHttpServerHeaderParsed
+      read fOnHeaderParsed write fOnHeaderParsed;
+    /// low-level callback called after 10 seconds of inactive Accept()
+    property OnAcceptIdle: TNotifyEvent
+      read fOnAcceptIdle write fOnAcceptIdle;
   published
     /// will contain the current number of connections to the server
     property ServerConnectionActive: integer
@@ -2068,7 +2086,7 @@ begin
       Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
     if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
        {dobind=}false, 10, 10, 10, 0, dummy) = nrOK then
-      // Windows TCP/UDP socket may not release Accept() until connected
+      // Windows TCP/UDP socket may not release Accept() until something happen
       dummy.ShutdownAndClose({rdwr=}false);
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
@@ -2155,6 +2173,12 @@ begin
       begin
         cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down
+      end;
+      if res = nrRetry then // every 10 seconds
+      begin
+        if Assigned(fOnAcceptIdle) then
+          fOnAcceptIdle(self);
+        continue;
       end;
       OnConnect;
       {$ifdef MONOTHREAD}
@@ -2423,6 +2447,13 @@ begin
     end;
     if fServer <> nil then
     begin
+      // allow THttpServer.OnHeaderParsed low-level callback
+      if Assigned(fServer.fOnHeaderParsed) and
+        fServer.fOnHeaderParsed(self) then
+      begin
+        result := grRejected; // the callback made its own SockSend() response
+        exit;
+      end;
       // validate allowed PayLoad size and OnBeforeBody callback
       if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
@@ -2432,6 +2463,7 @@ begin
         result := grOversizedPayload;
         exit;
       end;
+      // allow OnBeforeBody callback for quick response
       if Assigned(fServer.OnBeforeBody) then
       begin
         HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
