@@ -7884,35 +7884,42 @@ begin
           // record ... end
           ee := eeEndKeyWord;
         ptNone:
-          // unknown type name -> try from T*DynArray/T*s pattern
+          // unknown type name -> try from TArray<*>/T*DynArray/T*s patterns
           begin
-            aname := pointer(typname);
-            alen := length(typname);
-            if (alen > 12) and
-               (IdemPropName('DynArray', aname + alen - 8, 8) or
-                IdemPropName('ObjArray', aname + alen - 8, 8)) then
-              dec(alen, 8)
-            else if (alen > 3) and
-                    (aname[aLen] in ['s', 'S']) then
-              dec(alen)
+            if IdemPropNameU(typname, 'TArray') and
+               (P^ = '<') then
+            begin
+              // try generic syntax TArray<##>
+              inc(P);
+              if GetNextFieldProp(P, typname) and
+                 (P^ = '>') then
+              begin
+                inc(P);
+                ac := Rtti.RegisterTypeFromName(typname);
+              end;
+            end
             else
             begin
-              {$ifdef HASGENERICSSYNTAX}
-              if (alen > 7) and
-                 (aname[alen] = '>') and
-                 IdemPropName('TArray<', aname, 7) then
-                // try TArray<T> -> T
-                ac := Rtti.RegisterTypeFromName(aname + 7, alen - 8);
-              {$endif HASGENERICSSYNTAX}
-              alen := 0;
-            end;
-            if alen > 0 then
-            begin
-              // try TIntegerDynArray/TIntegers -> integer
-              ac := Rtti.RegisterTypeFromName(@PByteArray(typname)[1], alen - 1);
-              if ac = nil then
-                // try TMyTypeDynArray/TMyTypes -> TMyType
-                ac := Rtti.RegisterTypeFromName(pointer(typname), alen);
+              // try T##DynArray/T##s patterns
+              aname := pointer(typname);
+              alen := length(typname);
+              if (alen > 10) and
+                 (IdemPropName('DynArray', aname + alen - 8, 8) or
+                  IdemPropName('ObjArray', aname + alen - 8, 8)) then
+                dec(alen, 8)
+              else if (alen > 3) and
+                      (aname[aLen] in ['s', 'S']) then
+                dec(alen)
+              else
+                alen := 0;
+              if alen > 0 then
+              begin
+                // try TIntegerDynArray/TIntegers -> integer
+                ac := Rtti.RegisterTypeFromName(@PByteArray(typname)[1], alen - 1);
+                if ac = nil then
+                  // try TMyTypeObjArray/TMyTypes -> TMyType
+                  ac := Rtti.RegisterTypeFromName(pointer(typname), alen);
+              end;
             end;
             if ac = nil then
               raise ERttiException.CreateUtf8(

@@ -559,7 +559,7 @@ type
 
 const
   __TMustacheTest = 'desc,template,expected RawUtf8 data,partials variant';
-  __TMustacheTests = 'tests array of TMustacheTest';
+  __TMustacheTests = 'tests TArray<TMustacheTest>';
   __TMustacheColors = 'header:RawUtf8 items:[name,url:RawUtf8 first,link:boolean] empty:boolean';
   __TMustacheLOR = 'users:[rowid,resto:integer login,firstname,name,alias:RawUtf8 connected:boolean]';
   MUSTACHE_SPECS: array[0..4] of TFileName = (
