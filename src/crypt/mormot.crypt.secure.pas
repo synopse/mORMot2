@@ -1321,6 +1321,7 @@ type
     cccPrivateKeyOnly);
 
   TCryptCert = class;
+  TCryptCertAlgo = class;
 
   /// abstract interface to a Certificate, as returned by Cert() factory
   // - may be X509 or not, OpenSSL implemented or not, e.g. for syn-es256
@@ -1500,6 +1501,8 @@ type
     function IsEqual(const another: ICryptCert): boolean;
     /// the high-level asymmetric algorithm used for this certificate
     function AsymAlgo: TCryptAsymAlgo;
+    /// the high-level asymmetric algorithm class used for this certificate
+    function CertAlgo: TCryptCertAlgo;
     /// access to the low-level implementation class
     function Instance: TCryptCert;
     /// access to the low-level implementation handle of the certificate
@@ -1575,6 +1578,7 @@ type
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function SharedSecret(const pub: ICryptCert): RawByteString; virtual;
     function AsymAlgo: TCryptAsymAlgo; virtual;
+    function CertAlgo: TCryptCertAlgo;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
     function PrivateKeyHandle: pointer; virtual; abstract;
@@ -4819,6 +4823,11 @@ end;
 function TCryptCert.AsymAlgo: TCryptAsymAlgo;
 begin
   result := (fCryptAlgo as TCryptCertAlgo).AsymAlgo;
+end;
+
+function TCryptCert.CertAlgo: TCryptCertAlgo;
+begin
+  result := fCryptAlgo as TCryptCertAlgo;
 end;
 
 function TCryptCert.Instance: TCryptCert;
