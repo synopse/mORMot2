@@ -619,7 +619,7 @@ type
     // - call this method several times to register several folders
     procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
     /// milliseconds delay to reject a connection due to too long header retrieval
-    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
+    // - default is 0, i.e. not checked (typical behind a reverse proxy)
     property HeaderRetrieveAbortDelay: cardinal
       read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// the low-level thread execution thread
@@ -2073,7 +2073,8 @@ begin
     fHttpQueueLength := 1000;
   end
   else if ServerThreadPoolCount < 0 then
-    fMonoThread := true;
+    fMonoThread := true; // accept() + recv() + send() in a single thread
+    // setting fHeaderRetrieveAbortDelay may be a good idea
 end;
 
 destructor THttpServer.Destroy;
@@ -2409,7 +2410,6 @@ var
   P: PUtf8Char;
   status: cardinal;
   pending: integer;
-  reason: RawUtf8;
   noheaderfilter: boolean;
 begin
   result := grError;
@@ -2487,12 +2487,12 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          StatusCodeToReason(status, reason);
+          StatusCodeToReason(status, Http.CommandResp);
           if Assigned(OnLog) then
             OnLog(sllTrace, 'GetRequest: rejected by OnBeforeBody=% %',
-              [status, reason], self);
-          SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10,
-            reason, ' ', status]);
+              [status, Http.CommandResp], self);
+          SockSend(['HTTP/1.0 ', status, ' ', Http.CommandResp, #13#10#13#10,
+            Http.CommandResp, ' ', status]);
           SockSendFlush('');
           result := grRejected;
           exit;

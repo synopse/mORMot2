@@ -1185,7 +1185,7 @@ type
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
-    function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
+    function PeerAddress(LocalAsVoid: boolean = false): RawUtf8;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
     function PeerPort: TNetPort;
     /// set the TCP_NODELAY option for the connection
@@ -3664,7 +3664,7 @@ begin
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif OSLINUX}
   if aClientAddr <> nil then
-    fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
+    aClientAddr^.IP(fRemoteIP, RemoteIPLocalHostAsVoidInServers);
   {$ifdef OSLINUX}
   if Assigned(OnLog) then
     OnLog(sllTrace, 'Accept(%:%) sock=% %',
@@ -4432,12 +4432,12 @@ begin
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
 
-function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawByteString;
+function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawUtf8;
 begin
   if fPeerAddr = nil then
     result := ''
   else
-    result := fPeerAddr^.IP(LocalAsVoid);
+    fPeerAddr^.IP(result, LocalAsVoid);
 end;
 
 function TCrtSocket.PeerPort: TNetPort;
