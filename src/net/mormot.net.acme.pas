@@ -11,6 +11,7 @@ unit mormot.net.acme;
     - JWS HTTP-client implementation
     - ACME client implementation
     - Let's Encrypt TLS / HTTPS Encryption Certificates Support
+    - HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
 
   *****************************************************************************
 
@@ -42,6 +43,7 @@ uses
   mormot.crypt.secure,
   mormot.lib.openssl11,
   mormot.net.sock,
+  mormot.net.http,
   mormot.net.client, // for TJwsHttpClient
   mormot.net.server; // for HTTP-01 challenge server
 
@@ -203,19 +205,19 @@ type
     function CompleteDomainRegistration(out aCert, aPrivateKey: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8): TAcmeStatus;
     /// will run StartDomainRegistration and wait until it is completed
-    // - low-level wrapper using any TOnAcmeChallenges callback
+    // - low-level wrapper using any TOnAcmeChallenge callback
     // - won't execute function CompleteDomainRegistration() if OutSignedCert
     // or OutPrivateKey are not set
     function RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
       const OutSignedCert, OutPrivateKey: TFileName;
-      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus; overload;
+      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
     /// will run StartDomainRegistration and wait until it is completed
     // - ChallengeWwwFolder is a local folder where to store the temporary
     // challenges, to be served by an external web server, e.g. nginx - the
     // method will append ACME_CHALLENGE_PATH to the supplied local folder name
-    function RegisterAndWait(
+    function RegisterAndWaitFolder(
       const ChallengeWwwFolder, OutSignedCert, OutPrivateKey: TFileName;
-      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus; overload;
+      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
     /// make this instance thread-safe
     property Safe: TLightLock
       read fSafe;
@@ -285,7 +287,7 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynPersistentRWLightLock)
+  TAcmeLetsEncrypt = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
@@ -296,6 +298,7 @@ type
     fRenewBeforeEndDays: integer;
     fRenewWaitForSeconds: integer;
     fOnChallenge: TOnAcmeChallenge;
+    fRenewing: boolean;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
   public
@@ -307,6 +310,8 @@ type
     constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
       const aDirectoryUrl, aAlgo: RawUtf8;
       const aPrivateKeyPassword: SpiUtf8); reintroduce;
+    /// finalize the certificates management
+    destructor Destroy; override;
     /// read the certificates from the local storage folder
     procedure LoadFromKeyStoreFolder;
     /// validate the stored certificates
@@ -317,8 +322,6 @@ type
     procedure CheckCertificates(Sender: TObject = nil);
     /// validate the stored certificates in a background thread
     procedure CheckCertificatesBackground;
-    /// finalize the domain
-    destructor Destroy; override;
     /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
     // global variable of mormot.net.sock
     function OnNetTlsAcceptServerName(Context: PNetTlsContext; TLS: pointer;
@@ -351,6 +354,42 @@ type
     /// make the internal Client list thread-safe
     property Safe: TLightLock
       read fSafe;
+  end;
+
+
+{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+
+type
+  /// handle one or several Let's Encrypt domains certificates with an
+  // associated HTTP server running on port 80
+  // - will support HTTP-01 challenge answers when renewing is active
+  // - will redirect any plain HTTP port 80 request to HTTPS port 443
+  // - at startup, then twice a day, will try to renew the certificates in the
+  // background, following RenewBeforeEndDays property policy
+  TAcmeLetsEncryptServer = class(TAcmeLetsEncrypt)
+  protected
+    fHttpServer: THttpServer;
+    fNextCheckTix: Int64;
+    function OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
+    procedure OnAcceptIdle(Sender: TObject);
+  public
+    /// initialize certificates management and HTTP server with Let's Encrypt
+    // - if aDirectoryUrl is not '', will use the "staging" environment - you
+    // should specify ACME_LETSENCRYPT_URL on production
+    // - if aAlgo is '', will use 'x509-es256' as default
+    // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
+    // - by default, the HTTP server will consume a single thread, but you can
+    // set aHttpServerThreadCount >= 0 to use a thread pool for heavy load
+    // - will raise an exception if port 80 is not available for binding (e.g.
+    // if the user is not root on Linux/POSIX)
+    constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
+      const aDirectoryUrl, aAlgo: RawUtf8; const aPrivateKeyPassword: SpiUtf8;
+      aHttpServerThreadCount: integer = -1); reintroduce;
+    /// finalize the certificates management and the associated HTTP server
+    destructor Destroy; override;
+    /// the associated HTTP server running on port 80
+    property HttpServer: THttpServer
+      read fHttpServer;
   end;
 
 
@@ -903,7 +942,7 @@ begin
     end;
 end;
 
-function TAcmeClient.RegisterAndWait(const ChallengeWwwFolder, OutSignedCert,
+function TAcmeClient.RegisterAndWaitFolder(const ChallengeWwwFolder, OutSignedCert,
   OutPrivateKey: TFileName; const aPrivateKeyPassword: SpiUtf8;
   WaitForSec: integer): TAcmeStatus;
 begin
@@ -983,16 +1022,16 @@ end;
 function TAcmeLetsEncryptClient.GetServerContext: PSSL_CTX;
 begin
   // client made fSafe.Lock
-  result := nil;
-  if fRenewing then
-    exit; // not the right time for sure
   result := fCtx;
-  if result <> nil then
-    exit; // most of time, quick return from cache
+  if (result <> nil) or // most of time, quick return from cache
+     not FileExists(fSignedCert) or
+     not FileExists(fPrivKey) then
+    exit;
   // will be assigned by SSL_set_SSL_CTX() which requires only a certificate
   result := SSL_CTX_new(TLS_server_method);
   // cut-down version of TOpenSslNetTls.SetupCtx
-  if result.SetCertificateFiles(fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
+  if result.SetCertificateFiles(
+       fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
     fCtx := result
   else
   begin
@@ -1102,39 +1141,46 @@ begin
   // renew the needed certificates
   log.Log(sllDebug, 'CheckCertificates: renew %',
     [Plural('certificate', length(needed))], self);
-  for i := 0 to length(needed) - 1 do
-  begin
-    c := GetClientLocked(needed[i]); // lookup by subject
-    if c = nil then
-      continue; // paranoid
-    if c.fRenewing then
+  fRenewing := true;
+  try
+    for i := 0 to length(needed) - 1 do
     begin
-      c.Safe.UnLock;
-      continue; // unlikely race condition
-    end;
-    res := asPending;
-    c.fRenewing := true;
-    c.Safe.UnLock; // allow e.g. OnNetTlsAcceptChallenge() lookup
-    try
-      res := c.RegisterAndWait(nil,
-        c.fSignedCert, c.fPrivKey, fPrivateKeyPassword, fRenewWaitForSeconds);
-      if res = asValid then
-        c.ClearCtx;
-    except
-      res := asInvalid;
-    end;
-    c.fRenewing := false;
-    if res <> asValid then
-      exit;
-    // validate and pre-load this new certificate
-    c.Safe.Lock; // as expected by c.GetServerContext
-    try
-      if c.GetServerContext = nil then
+      c := GetClientLocked(needed[i]); // lookup by subject
+      if c = nil then
+        continue; // paranoid
+      if c.fRenewing then
+      begin
+        c.Safe.UnLock;
+        continue; // (unlikely) race condition
+      end;
+      c.fRenewing := true;
+      c.Safe.UnLock; // allow e.g. OnNetTlsAcceptChallenge() lookup
+      try
+        res := c.RegisterAndWait(nil,
+          c.fSignedCert, c.fPrivKey, fPrivateKeyPassword, fRenewWaitForSeconds);
+        if res = asValid then
+          c.ClearCtx;
+      except
         res := asInvalid;
-    except
-      res := asInvalid;
+      end;
+      c.fRenewing := false;
+      if res = asValid then
+      begin
+        // validate and pre-load this new certificate
+        c.Safe.Lock; // as expected by c.GetServerContext
+        try
+          if c.GetServerContext = nil then
+            res := asInvalid;
+        except
+          res := asInvalid;
+        end;
+        c.Safe.UnLock; // no need to restart the server :)
+      end;
+      log.Log(sllTrace, 'CheckCertificates: % = %',
+        [needed[i], ToText(res)^], self);
     end;
-    c.Safe.UnLock; // no need to restart the server :)
+  finally
+    fRenewing := false;
   end;
 end;
 
@@ -1198,6 +1244,8 @@ var
   len: PtrInt;
 begin
   result := false;
+  if not fRenewing then
+    exit; // no challenge currently happening
   P := pointer(uri);
   len := length(uri) - ACME_CHALLENGE_PATH_LEN;
   if (fClient = nil) or
@@ -1211,6 +1259,77 @@ begin
     finally
       client.Safe.UnLock;
     end;
+end;
+
+
+{ **************** HTTP-01 Let's Encrypt Challenges HTTP Server on port 80 }
+
+{ TAcmeLetsEncryptServer }
+
+constructor TAcmeLetsEncryptServer.Create(aLog: TSynLogClass;
+  const aKeyStoreFolder: TFileName; const aDirectoryUrl, aAlgo: RawUtf8;
+  const aPrivateKeyPassword: SpiUtf8; aHttpServerThreadCount: integer);
+begin
+  fHttpServer := THttpServer.Create('80', nil, nil, 'Http 80 Server',
+    aHttpServerThreadCount);
+  inherited Create(aLog, aKeyStoreFolder, aDirectoryUrl, aAlgo,
+    aPrivateKeyPassword);
+  fHttpServer.OnHeaderParsed := OnHeaderParsed;
+  fHttpServer.OnAcceptIdle := OnAcceptIdle;
+  // we don't set fHeaderRetrieveAbortDelay because we only parse the headers
+  OnAcceptIdle(self); // try to renew (if needed) now in the background
+end;
+
+destructor TAcmeLetsEncryptServer.Destroy;
+begin
+  fHttpServer.Free;
+  inherited Destroy;
+end;
+
+function TAcmeLetsEncryptServer.OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
+begin
+  // quick process of HTTP requests on port 80 into HTTP/1.0 responses
+  if PCardinal(ClientSock.Http.CommandUri)^ =
+            ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24 then
+    if fRenewing and
+       OnNetTlsAcceptChallenge(ClientSock.Http.Host,
+         ClientSock.Http.CommandUri, ClientSock.Http.CommandResp) then
+      // return HTTP-01 challenge content
+      ClientSock.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
+    else
+      // no redirection for inactive /.well-known/acme-challenge/<Token> URIs
+      ClientSock.SockSend('HTTP/1.0 404 Not Found')
+  else
+  begin
+    // redirect GET or POST on port 80 to port 443 using 301 or 308 response
+    if IsGet(ClientSock.Http.CommandMethod) then
+      ClientSock.SockSend('HTTP/1.0 301 Moved Permanently')
+    else
+      ClientSock.SockSend('HTTP/1.0 308 Permanent Redirect');
+    ClientSock.SockSend([
+      'Location: https://', ClientSock.Http.Host, ClientSock.Http.CommandUri]);
+    ClientSock.Http.CommandResp := 'Back to HTTPS';
+  end;
+  ClientSock.SockSend([
+    'Server: ', fHttpServer.ServerName, #13#10 +
+    'Content-Length: ', length(ClientSock.Http.CommandResp), #13#10 +
+    'Connection: Close'#13#10]);
+  ClientSock.SockSendFlush(ClientSock.Http.CommandResp);
+  result := true; // no regular OnRequest() event, closing the connection
+end;
+
+procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject);
+var
+  tix: Int64;
+begin
+  if fRenewing or
+     (fRenewBeforeEndDays <= 0) then
+    exit;
+  tix := GetTickCount64;
+  if tix < fNextCheckTix then
+    exit;
+  fNextCheckTix := tix + (MSecsPerDay shr 1); // retry every half a day
+  CheckCertificatesBackground;
 end;
 
 
