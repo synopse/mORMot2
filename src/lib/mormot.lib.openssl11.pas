@@ -1120,7 +1120,7 @@ type
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
     function CreateSelfSignedCsr(Algo: PEVP_MD;
-      Subjects: TRawUtf8DynArray): RawByteString;
+      const Subjects: TRawUtf8DynArray): RawByteString;
     function Size: integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -7129,9 +7129,10 @@ begin
   end;
 end;
 
-function EVP_PKEY.CreateSelfSignedCsr(Algo: PEVP_MD; Subjects: TRawUtf8DynArray): RawByteString;
+function EVP_PKEY.CreateSelfSignedCsr(Algo: PEVP_MD;
+  const Subjects: TRawUtf8DynArray): RawByteString;
 var
-  cn, altnames: RawUtf8;
+  s, cn, altnames: RawUtf8;
   req: PX509_REQ;
   names: PX509_NAME;
   i: PtrInt;
@@ -7141,14 +7142,16 @@ begin
   if (@self = nil) or
      (Subjects = nil) then
     exit;
-  cn := Subjects[0];
+  cn := Subjects[0]; // first subject is the X509 Common Name
   for i := 0 to length(Subjects) - 1 do // in-place modified
   begin
-    if PosExChar(':', Subjects[i]) = 0 then
-      Subjects[i] := 'DNS:' + Subjects[i]; // e.g. DNS: email: IP: URI:
+    s := Subjects[i];
+    if PosExChar(':', s) = 0 then
+      s := 'DNS:' + s; // e.g. DNS: email: IP: URI:
     if altnames <> '' then
-      altnames := altnames + ',';
-    altnames := altnames + Subjects[i];
+      altnames := altnames + ',' + s
+    else
+      altnames := s;
   end;
   req := NewCertificateRequest;
   try
@@ -9708,7 +9711,9 @@ begin
     exit;
   new := ctx.OnAcceptServerName(ctx, s, servername);
   if new <> nil then
-    SSL_set_SSL_CTX(s, new); // switching server context
+    // switching server context
+    if SSL_set_SSL_CTX(s, new) = nil then // note: only change certificates
+      result := SSL_TLSEXT_ERR_NOACK;
 end;
 
 procedure TOpenSslNetTls.AfterBind(var Context: TNetTlsContext);
