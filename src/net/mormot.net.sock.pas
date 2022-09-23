@@ -564,6 +564,13 @@ type
   /// signature of a factory for a new TLS encrypted layer
   TOnNewNetTls = function: INetTls;
 
+  /// event called by HTTPS server to publish HTTP-01 challenges on port 80
+  // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
+  // - the server should send back the returned content as response with
+  // application/octet-stream (i.e. BINARY_CONTENT_TYPE)
+  TOnNetTlsAcceptChallenge = function(const domain, uri: RawUtf8;
+    var content: RawUtf8): boolean;
+
 
 /// initialize a stack-allocated TNetTlsContext instance
 procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
@@ -575,6 +582,18 @@ var
   // - on Windows, this unit will set a factory using the system SChannel API
   // - on other targets, could be set by the mormot.lib.openssl11.pas unit
   NewNetTls: TOnNewNetTls;
+
+  /// global callback set to TNetTlsContext.AfterAccept from InitNetTlsContext()
+  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
+  // - any HTTPS server should also publish a HTTP server on port 80 to serve
+  // HTTP-01 challenges via the OnNetTlsAcceptChallenge callback
+  OnNetTlsAcceptServerName: TOnNetTlsAcceptServerName;
+
+  /// global callback used for HTTP-01 Let's Encrypt challenges
+  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
+  // - any HTTPS server should also publish a HTTP server on port 80 to serve
+  // HTTP-01 challenges associated with the OnNetTlsAcceptServerName callback
+  OnNetTlsAcceptChallenge: TOnNetTlsAcceptChallenge;
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -2446,6 +2465,8 @@ begin
   TLS.PrivateKeyFile := RawUtf8(PrivateKeyFile);
   TLS.PrivatePassword := PrivateKeyPassword;
   TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
+  if Server then
+    TLS.OnAcceptServerName := OnNetTlsAcceptServerName; // e.g. mormot.net.acme
 end;
 
 
