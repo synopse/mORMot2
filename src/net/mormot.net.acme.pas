@@ -37,6 +37,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.log,
+  mormot.core.threads,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.lib.openssl11,
@@ -313,7 +314,9 @@ type
     // and generate or renew them in order
     // - follow RenewWaitForSeconds timeout for each certificate
     // - this blocking process could take some time (several seconds per domain)
-    procedure CheckCertificates;
+    procedure CheckCertificates(Sender: TObject = nil);
+    /// validate the stored certificates in a background thread
+    procedure CheckCertificatesBackground;
     /// finalize the domain
     destructor Destroy; override;
     /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
@@ -1133,6 +1136,11 @@ begin
     end;
     c.Safe.UnLock; // no need to restart the server :)
   end;
+end;
+
+procedure TAcmeLetsEncrypt.CheckCertificatesBackground;
+begin
+  TLoggedWorkThread.Create(fLog, 'CheckCertificates', self, CheckCertificates, nil)
 end;
 
 function TAcmeLetsEncrypt.GetClient(
