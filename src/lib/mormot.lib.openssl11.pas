@@ -1095,7 +1095,15 @@ type
   PSSL_SESSION = type pointer;
   PPSSL_SESSION = ^PSSL_SESSION;
 
-  PSSL_CTX = type pointer;
+  SSL_CTX = object
+  public
+    function SetCertificateFiles(const Cert, Key: TFileName;
+      const KeyPassword: SpiUtf8): boolean;
+    procedure Free;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  PSSL_CTX = ^SSL_CTX;
   PPSSL_CTX = ^PSSL_CTX;
 
   PEVP_MD = type pointer;
@@ -6989,6 +6997,25 @@ begin
 end;
 
 
+{ SSL_CTX }
+
+function SSL_CTX.SetCertificateFiles(const Cert, Key: TFileName;
+  const KeyPassword: SpiUtf8): boolean;
+begin
+  SSL_CTX_use_certificate_file(@self, pointer(Cert), SSL_FILETYPE_PEM);
+  if KeyPassword <> '' then
+    SSL_CTX_set_default_passwd_cb_userdata(@self, pointer(KeyPassword));
+  SSL_CTX_use_PrivateKey_file(@self, pointer(Key), SSL_FILETYPE_PEM);
+  result := SSL_CTX_check_private_key(@self) = OPENSSLSUCCESS;
+end;
+
+procedure SSL_CTX.Free;
+begin
+  if @self <> nil then
+    SSL_CTX_free(@self);
+end;
+
+
 { EVP_PKEY }
 
 type
@@ -9786,7 +9813,7 @@ begin
     fSsl.Free;
   end;
   if fCtx <> nil then
-    SSL_CTX_free(fCtx); // client or AfterBind server context
+    fCtx.Free; // client or AfterBind server context
   inherited Destroy;
 end;
 
@@ -9890,7 +9917,7 @@ begin
         result := s.PeerCertificates({acquire=}true);
     finally
       s.Free;
-      SSL_CTX_free(c);
+      c.Free;
     end;
   finally
     ns.ShutdownAndClose(true);

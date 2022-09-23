@@ -939,7 +939,7 @@ end;
 procedure TAcmeLetsEncryptClient.ClearCtx;
 begin
   if fCtx <> nil then
-    SSL_CTX_free(fCtx);
+    fCtx.Free;
   fCtx := nil;
 end;
 
@@ -955,17 +955,13 @@ begin
   // will be assigned by SSL_set_SSL_CTX() which requires only a certificate
   result := SSL_CTX_new(TLS_server_method);
   // cut-down version of TOpenSslNetTls.SetupCtx
-  SSL_CTX_use_certificate_file(result, pointer(fSignedCert), SSL_FILETYPE_PEM);
-  if fOwner.fPrivateKeyPassword <> '' then
-    SSL_CTX_set_default_passwd_cb_userdata(result, pointer(fOwner.fPrivateKeyPassword));
-  SSL_CTX_use_PrivateKey_file(result, pointer(fPrivKey), SSL_FILETYPE_PEM);
-  if SSL_CTX_check_private_key(result) <> OPENSSLSUCCESS then
+  if result.SetCertificateFiles(fSignedCert, fPrivKey, fOwner.fPrivateKeyPassword) then
+    fCtx := result
+  else
   begin
-    SSL_CTX_free(result);
+    result.Free;
     result := nil; // silently fallback to main certificate
-    exit;
   end;
-  fCtx := result;
 end;
 
 
