@@ -76,23 +76,6 @@ const
   CRYPTO_MEM_CHECK_ON = $1;
   CRYPTO_MEM_CHECK_ENABLE = $2;
   CRYPTO_MEM_CHECK_DISABLE = $3;
-  CRYPTO_EX_INDEX_SSL = 0;
-  CRYPTO_EX_INDEX_SSL_CTX = 1;
-  CRYPTO_EX_INDEX_SSL_SESSION = 2;
-  CRYPTO_EX_INDEX_X509 = 3;
-  CRYPTO_EX_INDEX_X509_STORE = 4;
-  CRYPTO_EX_INDEX_X509_STORE_CTX = 5;
-  CRYPTO_EX_INDEX_DH = 6;
-  CRYPTO_EX_INDEX_DSA = 7;
-  CRYPTO_EX_INDEX_EC_KEY = 8;
-  CRYPTO_EX_INDEX_RSA = 9;
-  CRYPTO_EX_INDEX_ENGINE = 10;
-  CRYPTO_EX_INDEX_UI = 11;
-  CRYPTO_EX_INDEX_BIO = 12;
-  CRYPTO_EX_INDEX_APP = 13;
-  CRYPTO_EX_INDEX_UI_METHOD = 14;
-  CRYPTO_EX_INDEX_DRBG = 15;
-  CRYPTO_EX_INDEX__COUNT = 16;
   OPENSSL_ENGINES_DIR = 5;
   CRYPTO_LOCK = 1;
   CRYPTO_UNLOCK = 2;
@@ -8548,7 +8531,6 @@ type
   PPossl_store_info_st = ^Possl_store_info_st;
   Possl_store_search_st = pointer;
   PPossl_store_search_st = ^Possl_store_search_st;
-  Pstack_st_void = pointer;
   PPstack_st_void = ^Pstack_st_void;
   Pbio_addrinfo_st = pointer;
   PPbio_addrinfo_st = ^Pbio_addrinfo_st;
@@ -9070,18 +9052,9 @@ type
   PCRYPTO_RWLOCK = pointer;
   PPCRYPTO_RWLOCK = ^PCRYPTO_RWLOCK;
 
-  crypto_ex_data_st = record
-    sk: Pstack_st_void;
-  end;
-  CRYPTO_EX_DATA = crypto_ex_data_st;
-  PCRYPTO_EX_DATA = ^CRYPTO_EX_DATA;
-
   sk_void_compfunc = function(a: PPointer; b: PPointer): integer; cdecl;
   sk_void_freefunc = procedure(a: pointer); cdecl;
   sk_void_copyfunc = function(a: pointer): pointer; cdecl;
-  PCRYPTO_EX_new = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
-  PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
-  PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: integer; argp: pointer): integer; cdecl;
 
   crypto_threadid_st = record
     dummy: integer;
@@ -11374,9 +11347,6 @@ function SSLeay_version(typ: integer): PUtf8Char; cdecl;
 
 function OPENSSL_issetugid(): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_issetugid';
-
-function CRYPTO_get_ex_new_index(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_new_index';
 
 function CRYPTO_free_ex_index(class_index: integer; idx: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_free_ex_index';
@@ -24014,12 +23984,6 @@ function SSL_SESSION_set1_master_key(sess: PSSL_SESSION; _in: PByte; len: PtrUIn
 
 function SSL_SESSION_get_max_fragment_length(sess: PSSL_SESSION): byte; cdecl;
   external LIB_SSL name _PU + 'SSL_SESSION_get_max_fragment_length';
-
-function SSL_set_ex_data(ssl: PSSL; idx: integer; data: pointer): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_set_ex_data';
-
-function SSL_get_ex_data(ssl: PSSL; idx: integer): pointer; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_ex_data';
 
 function SSL_SESSION_set_ex_data(ss: PSSL_SESSION; idx: integer; data: pointer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_SESSION_set_ex_data';

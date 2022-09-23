@@ -196,6 +196,8 @@ var
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. '1010106F'
   OpenSslVersionHexa: string;
+  /// internal PSSL data reference slot - for SSL_get_ex_data/SSL_set_ex_data
+  OpenSslExIndexSsl: integer;
 
 {$ifdef OPENSSLSTATIC}
 
@@ -270,6 +272,24 @@ function OpenSslInitialize(
 
 const
   OPENSSLSUCCESS = 1;
+
+  CRYPTO_EX_INDEX_SSL = 0;
+  CRYPTO_EX_INDEX_SSL_CTX = 1;
+  CRYPTO_EX_INDEX_SSL_SESSION = 2;
+  CRYPTO_EX_INDEX_X509 = 3;
+  CRYPTO_EX_INDEX_X509_STORE = 4;
+  CRYPTO_EX_INDEX_X509_STORE_CTX = 5;
+  CRYPTO_EX_INDEX_DH = 6;
+  CRYPTO_EX_INDEX_DSA = 7;
+  CRYPTO_EX_INDEX_EC_KEY = 8;
+  CRYPTO_EX_INDEX_RSA = 9;
+  CRYPTO_EX_INDEX_ENGINE = 10;
+  CRYPTO_EX_INDEX_UI = 11;
+  CRYPTO_EX_INDEX_BIO = 12;
+  CRYPTO_EX_INDEX_APP = 13;
+  CRYPTO_EX_INDEX_UI_METHOD = 14;
+  CRYPTO_EX_INDEX_DRBG = 15;
+  CRYPTO_EX_INDEX__COUNT = 16;
 
   EVP_CIPH_NO_PADDING = $100;
   EVP_CTRL_GCM_GET_TAG = $10;
@@ -1217,6 +1237,13 @@ type
   BUF_MEM = buf_mem_st;
   PBUF_MEM = ^BUF_MEM;
 
+  Pstack_st_void = pointer;
+  crypto_ex_data_st = record
+    sk: Pstack_st_void;
+  end;
+  CRYPTO_EX_DATA = crypto_ex_data_st;
+  PCRYPTO_EX_DATA = ^CRYPTO_EX_DATA;
+
   asn1_string_st = object
   public
     function Data: pointer;
@@ -1791,6 +1818,10 @@ type
   dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
   dyn_MEM_free_fn = procedure(p1: pointer; p2: PUtf8Char; p3: integer); cdecl;
 
+  PCRYPTO_EX_new = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
+  PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
+  PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: integer; argp: pointer): integer; cdecl;
+
 
 { ******************** OpenSSL Library Functions }
 
@@ -1824,6 +1855,8 @@ function SSL_shutdown(s: PSSL): integer; cdecl;
 function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
+function SSL_set_ex_data(ssl: PSSL; idx: integer; data: pointer): integer; cdecl;
+function SSL_get_ex_data(ssl: PSSL; idx: integer): pointer; cdecl;
 function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
 function SSL_get_peer_cert_chain(s: PSSL): Pstack_st_X509; cdecl;
 procedure SSL_free(ssl: PSSL); cdecl;
@@ -1863,6 +1896,9 @@ function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; 
 function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
   f: dyn_MEM_free_fn): integer; cdecl;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
+function CRYPTO_get_ex_new_index(class_index: integer;
+  argl: integer; argp: pointer; new_func: PCRYPTO_EX_new;
+  dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
 procedure ERR_remove_state(pid: cardinal); cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
@@ -2268,6 +2304,8 @@ function SSL_error(error: integer): RawUtf8; overload;
 procedure SSL_error(error: integer; var result: RawUtf8); overload;
 function SSL_error_short(error: integer): ShortString;
 function SSL_is_fatal_error(error: integer): boolean;
+function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
+  dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 procedure WritelnSSL_error; // very useful when debugging
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
@@ -2356,12 +2394,12 @@ procedure PX509DynArrayFree(var X509: PX509DynArray);
 function NewCertificate: PX509;
 
 /// unserialize a new X509 Certificate Instance
-// - from DER binary as serialized by X509.ToBinary, or PEM format
+// - from DER binary as serialized by X509.ToBinary, or PEM text format
 // - use LoadCertificate(PemToDer()) to load a PEM certificate
 function LoadCertificate(const Der: RawByteString): PX509;
 
-/// unserialize one or several new X509 Certificate Instance from PEM
-// - from PEM concatenated content
+/// unserialize one or several new X509 Certificate Instance(s) from PEM
+// - from PEM concatenated text content
 // - once done with the X509 instances, free them e.g. using PX509DynArrayFree()
 function LoadCertificates(const Pem: RawUtf8): PX509DynArray;
 
@@ -2473,6 +2511,8 @@ type
     SSL_get_error: function(s: PSSL; ret_code: integer): integer; cdecl;
     SSL_ctrl: function(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
     SSL_set_bio: procedure(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
+    SSL_set_ex_data: function(ssl: PSSL; idx: integer; data: pointer): integer; cdecl;
+    SSL_get_ex_data: function(ssl: PSSL; idx: integer): pointer; cdecl;
     SSL_get_peer_certificate: function(s: PSSL): PX509; cdecl;
     SSL_get_peer_cert_chain: function(s: PSSL): Pstack_st_X509; cdecl;
     SSL_free: procedure(ssl: PSSL); cdecl;
@@ -2506,7 +2546,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..51] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..53] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2530,6 +2570,8 @@ const
     'SSL_get_error',
     'SSL_ctrl',
     'SSL_set_bio',
+    'SSL_set_ex_data',
+    'SSL_get_ex_data',
     'SSL_get1_peer_certificate SSL_get_peer_certificate', // OpenSSL 3.0 / 1.1.1
     'SSL_get_peer_cert_chain',
     'SSL_free',
@@ -2676,6 +2718,16 @@ end;
 procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO);
 begin
   libssl.SSL_set_bio(s, rbio, wbio);
+end;
+
+function SSL_set_ex_data(ssl: PSSL; idx: integer; data: pointer): integer;
+begin
+  result := libssl.SSL_set_ex_data(ssl, idx, data);
+end;
+
+function SSL_get_ex_data(ssl: PSSL; idx: integer): pointer;
+begin
+  result := libssl.SSL_get_ex_data(ssl, idx);
 end;
 
 function SSL_get_peer_certificate(s: PSSL): PX509;
@@ -2832,6 +2884,7 @@ type
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
     CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
+    CRYPTO_get_ex_new_index: function(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
     ERR_remove_state: procedure(pid: cardinal); cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
     ERR_get_error: function(): cardinal; cdecl;
@@ -3157,10 +3210,11 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..322] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..323] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
+    'CRYPTO_get_ex_new_index',
     'ERR_remove_state',
     'ERR_error_string_n',
     'ERR_get_error',
@@ -3499,6 +3553,12 @@ end;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer);
 begin
   libcrypto.CRYPTO_free(ptr, _file, line);
+end;
+
+function CRYPTO_get_ex_new_index(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
+begin
+  result := libcrypto.CRYPTO_get_ex_new_index(
+    class_index, argl, argp, new_func, dup_func, free_func);
 end;
 
 procedure ERR_remove_state(pid: cardinal);
@@ -5313,6 +5373,7 @@ begin
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,
           [OpenSslVersionHexa, libcrypto.LibraryPath]);
+      OpenSslExIndexSsl := SSL_get_ex_new_index(0, nil, nil, nil, nil);
       openssl_initialize_errormsg := ''; // no error with these lib paths
     except
       on E: Exception do
@@ -5421,6 +5482,12 @@ function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; c
 procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
   external LIB_SSL name _PU + 'SSL_set_bio';
 
+function SSL_set_ex_data(ssl: PSSL; idx: integer; data: pointer): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_set_ex_data';
+
+function SSL_get_ex_data(ssl: PSSL; idx: integer): pointer; cdecl;
+  external LIB_SSL name _PU + 'SSL_get_ex_data';
+
 function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
   external LIB_SSL name _PU + 'SSL_get_peer_certificate';
 
@@ -5520,6 +5587,11 @@ function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_free';
+
+function CRYPTO_get_ex_new_index(class_index: integer; argl: integer;
+  argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup;
+  free_func: PCRYPTO_EX_free): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_new_index';
 
 procedure ERR_remove_state(pid: cardinal); cdecl;
   external LIB_CRYPTO name _PU + 'ERR_remove_state';
@@ -6529,6 +6601,8 @@ function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
   const libprefix: RawUtf8): boolean;
 begin
   OpenSslVersion := OpenSSL_version_num;
+  OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
+  OpenSslExIndexSsl := SSL_get_ex_new_index(0, nil, nil, nil, nil);
   result := true;
 end;
 
@@ -6595,6 +6669,12 @@ begin
     exit;
   ERR_error_string_n(err, @tmp, SizeOf(tmp));
   DisplayError('%s', [tmp]);
+end;
+
+function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
+  dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
+begin
+  result := CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_SSL, l, p, newf, dupf, freef);
 end;
 
 function Digest(md: PEVP_MD; buf: pointer; buflen: integer;
