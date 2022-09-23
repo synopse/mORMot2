@@ -1053,6 +1053,19 @@ type
       read fLogClass;
   end;
 
+  /// a class able to run some process in a background thread
+  // - with proper logging and eventual ending notification
+  TLoggedWorkThread = class(TLoggedThread)
+  protected
+    fSender: TObject;
+    fOnExecute, fOnExecuted: TNotifyEvent;
+    procedure DoExecute; override;
+  public
+    /// this constructor will directly start the thread in background
+    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent); reintroduce;
+  end;
+
   TSynThreadPool = class;
 
   /// defines the work threads used by TSynThreadPool
@@ -1207,6 +1220,7 @@ const
 
 
 implementation
+
 
 { ************ Thread-Safe TSynQueue and TPendingTaskList }
 
@@ -3083,6 +3097,9 @@ begin
     DoExecute;
   except
     // ignore any exception during processing method
+    on E: Exception do
+      if iLog <> nil then
+        iLog.Log(sllDebug, 'Execute aborted by %', [E], self);
   end;
   fProcessing := false;
   if fLog <> nil then
@@ -3104,6 +3121,28 @@ begin
 end;
 
 
+{ TLoggedWorkThread }
+
+procedure TLoggedWorkThread.DoExecute;
+begin
+  if Assigned(fOnExecute) then
+    try
+      fOnExecute(fSender);
+    finally
+      if Assigned(fOnExecuted) then
+        fOnExecuted(fSender);
+    end;
+end;
+
+constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
+  const ProcessName: RawUtf8; Sender: TObject;
+  const OnExecute, OnExecuted: TNotifyEvent);
+begin
+  fSender := Sender;
+  fOnExecute := OnExecute;
+  fOnExecuted := OnExecuted;
+  inherited Create({suspended=}false, Logger, ProcessName);
+end;
 
 
 { TSynThreadPool }
