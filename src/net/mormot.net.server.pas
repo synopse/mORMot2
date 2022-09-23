@@ -738,6 +738,10 @@ type
       ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
   public
     /// create a socket-based HTTP Server, ready to be bound and listening on a port
+    // - ServerThreadPoolCount < 0 would use a single thread to rule them all
+    // - ServerThreadPoolCount = 0 would create one thread per connection
+    // - ServerThreadPoolCount > 0 would leverage the thread pool, and create
+    // one thread only for kept-alive or upgraded connections
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
@@ -2053,9 +2057,9 @@ constructor THttpServer.Create(const aPort: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 begin
-  fInternalHttpServerRespList := TSynObjectListLocked.Create({ownobject=}false);
   if fThreadPool <> nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
+  fInternalHttpServerRespList := TSynObjectListLocked.Create({ownobject=}false);
   if fThreadRespClass = nil then
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
@@ -2067,7 +2071,9 @@ begin
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
-  end;
+  end
+  else if ServerThreadPoolCount < 0 then
+    fMonoThread := true;
 end;
 
 destructor THttpServer.Destroy;
@@ -2135,18 +2141,13 @@ begin
   fHttpQueueLength := aValue;
 end;
 
-{ $define MONOTHREAD}
-// define this not to create a thread at every connection (not recommended)
-
 procedure THttpServer.Execute;
 var
   cltsock: TNetSocket;
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  {$ifdef MONOTHREAD}
   endtix: Int64;
-  {$endif MONOTHREAD}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -2181,46 +2182,54 @@ begin
         continue;
       end;
       OnConnect;
-      {$ifdef MONOTHREAD}
-      try
-        cltservsock := fSocketClass.Create(self);
+      if fMonoThread then
+        // ServerThreadPoolCount < 0 would use a single thread to rule them all
+        // - may be defined when the server is expected to have very low usage,
+        // e.g. for port 80 to 443 redirection or to implement Let's Encrypt
+        // HTTP-01 challenges (also on port 80) using OnHeaderParsed callback
         try
-          cltservsock.AcceptRequest(cltsock, @cltaddr);
-          if hsoEnableTls in fOptions then
-            cltservsock.DoTlsAfter(cstaAccept);
-          endtix := fHeaderRetrieveAbortDelay;
-          if endtix > 0 then
-            inc(endtix, GetTickCount64);
-          if cltservsock.GetRequest({withbody=}true, endtix)
-              in [grBodyReceived, grHeaderReceived] then
-            Process(cltservsock, 0, self);
-          OnDisconnect;
-        finally
-          cltservsock.Free;
-        end;
-      except
-        on E: Exception do
-          // do not stop thread on TLS or socket error
-          fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
-      end;
-      {$else}
-      if Assigned(fThreadPool) then
+          cltservsock := fSocketClass.Create(self);
+          try
+            cltservsock.AcceptRequest(cltsock, @cltaddr);
+            if hsoEnableTls in fOptions then
+              cltservsock.DoTlsAfter(cstaAccept);
+            endtix := fHeaderRetrieveAbortDelay;
+            if endtix > 0 then
+              inc(endtix, GetTickCount64);
+            case cltservsock.GetRequest({withbody=}true, endtix) of
+              grBodyReceived,
+              grHeaderReceived:
+                begin
+                  include(cltservsock.Http.HeaderFlags, hfConnectionClose);
+                  Process(cltservsock, 0, self);
+                end;
+            end;
+            OnDisconnect;
+          finally
+            cltservsock.Free;
+          end;
+        except
+          on E: Exception do
+            // do not stop thread on TLS or socket error
+            fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
+        end
+      else if Assigned(fThreadPool) then
       begin
-        // use thread pool to process the request header, and probably its body
+        // ServerThreadPoolCount > 0 will use the thread pool to process the
+        // request header, and probably its body unless kept-alive or upgraded
+        // - this is the most efficient way of using this server
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
             {waitoncontention=}true) then
-        begin
           // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)
-        end;
       end
       else
-        // default implementation creates one thread for each incoming socket
+        // ServerThreadPoolCount = 0 is a (somewhat resource hungry) fallback
+        // implementation with one thread for each incoming socket
         fThreadRespClass.Create(cltsock, cltaddr, self);
-      {$endif MONOTHREAD}
     end;
   except
     on E: Exception do
