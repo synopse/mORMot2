@@ -1133,16 +1133,6 @@ begin
       result := HTTP_SUCCESS;
       exit;
     end;
-  if Ctxt.Method = 'OPTIONS' then
-  begin
-    // handle CORS
-    if fAccessControlAllowOrigin = '' then
-      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Origin:'
-    else
-      ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}true);
-    result := HTTP_NOCONTENT;
-    exit;
-  end;
   if (Ctxt.Method = '') or
      ((rsoOnlyJsonRequests in fOptions) and
       not IsGet(Ctxt.Method) and
@@ -1150,6 +1140,17 @@ begin
   begin
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST;
+    exit;
+  end;
+  if PCardinal(Ctxt.Method)^ =
+    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24 then
+  begin
+    // handle CORS
+    if fAccessControlAllowOrigin = '' then
+      Ctxt.OutCustomHeaders := 'Access-Control-Allow-Origin:'
+    else
+      ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}true);
+    result := HTTP_NOCONTENT;
     exit;
   end;
   if (Ctxt.InContent <> '') and
