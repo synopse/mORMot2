@@ -1289,8 +1289,9 @@ end;
 function TAcmeLetsEncryptServer.OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
 begin
   // quick process of HTTP requests on port 80 into HTTP/1.0 responses
-  if PCardinal(ClientSock.Http.CommandUri)^ =
-            ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24 then
+  if (ClientSock.Http.CommandUri <> '') and
+     (PCardinal(ClientSock.Http.CommandUri)^ =
+            ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
     if fRenewing and
        OnNetTlsAcceptChallenge(ClientSock.Http.Host,
          ClientSock.Http.CommandUri, ClientSock.Http.CommandResp) then
@@ -1323,6 +1324,7 @@ var
   tix: Int64;
 begin
   if fRenewing or
+     (fClient = nil) or
      (fRenewBeforeEndDays <= 0) then
     exit;
   tix := GetTickCount64;
