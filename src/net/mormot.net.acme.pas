@@ -1111,6 +1111,7 @@ var
   i: PtrInt;
   c: TAcmeLetsEncryptClient;
   cc: ICryptCert;
+  ctx: PSSL_CTX;
   needed: TRawUtf8DynArray; // no long standing fSafe.Lock
   expired: TDateTime;
   res: TAcmeStatus;
@@ -1118,6 +1119,7 @@ var
 begin
   log := fLog.Enter(self, 'CheckCertificates');
   if (self = nil) or
+     (fClient = nil) or
      (fRenewBeforeEndDays <= 0) then
     exit;
   // quickly retrieve all certificates which need generation/renewal
@@ -1169,11 +1171,17 @@ begin
         // validate and pre-load this new certificate
         c.Safe.Lock; // as expected by c.GetServerContext
         try
+          ctx := c.fCtx;
+          c.fCtx := nil;
           if c.GetServerContext = nil then
             res := asInvalid;
         except
           res := asInvalid;
         end;
+        if res = asValid then
+          ctx.Free // replace with the new certificate: dispose of the old one
+        else
+          c.fCtx := ctx; // restore the old certificate (which may work)
         c.Safe.UnLock; // no need to restart the server :)
       end;
       log.Log(sllTrace, 'CheckCertificates: % = %',
@@ -1303,13 +1311,18 @@ begin
   else
   begin
     // redirect GET or POST on port 80 to port 443 using 301 or 308 response
-    if IsGet(ClientSock.Http.CommandMethod) then
+    if IsGet(ClientSock.Http.CommandMethod) or
+       (PCardinal(ClientSock.Http.CommandMethod)^ =
+        ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24) then
       ClientSock.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       ClientSock.SockSend('HTTP/1.0 308 Permanent Redirect');
     ClientSock.SockSend([
       'Location: https://', ClientSock.Http.Host, ClientSock.Http.CommandUri]);
-    ClientSock.Http.CommandResp := 'Back to HTTPS';
+    if IsGet(ClientSock.Http.CommandMethod) then
+      ClientSock.Http.CommandResp := 'Back to HTTPS'
+    else
+      ClientSock.Http.CommandResp := '';
   end;
   ClientSock.SockSend([
     'Server: ', fHttpServer.ServerName, #13#10 +
