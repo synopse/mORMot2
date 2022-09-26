@@ -269,6 +269,7 @@ type
     fDomainJson, fReferenceCert, fSignedCert, fPrivKey: TFileName;
     fOwner: TAcmeLetsEncrypt;
     fCtx: PSSL_CTX;
+    fRedirectHttps: RawUtf8;
     fRenewing: boolean;
     procedure ClearCtx;
     // internal method called by TAcmeLetsEncrypt.OnNetTlsAcceptServerName
@@ -370,6 +371,7 @@ type
   protected
     fHttpServer: THttpServer;
     fNextCheckTix: Int64;
+    fRedirectHttps: integer;
     function OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
     procedure OnAcceptIdle(Sender: TObject);
   public
@@ -387,6 +389,9 @@ type
       aHttpServerThreadCount: integer = -1); reintroduce;
     /// finalize the certificates management and the associated HTTP server
     destructor Destroy; override;
+    /// allow to specify the https URI to redirect from any request on port 80
+    // - Redirection should include the full URI, e.g. 'https://blog.synopse.info'
+    function Redirect(const Domain, Redirection: RawUtf8): boolean;
     /// the associated HTTP server running on port 80
     property HttpServer: THttpServer
       read fHttpServer;
@@ -1294,7 +1299,30 @@ begin
   inherited Destroy;
 end;
 
+function TAcmeLetsEncryptServer.Redirect(
+  const Domain, Redirection: RawUtf8): boolean;
+var
+  client: TAcmeLetsEncryptClient;
+begin
+  result := false;
+  client := GetClientLocked(domain);
+  if client <> nil then
+    try
+      if (Redirection <> '') <> (client.fRedirectHttps <> '') then
+        if Redirection = '' then
+          LockedDec32(@fRedirectHttps)
+        else
+          LockedInc32(@fRedirectHttps);
+      client.fRedirectHttps := Redirection;
+      result := true;
+    finally
+      client.Safe.UnLock;
+    end;
+end;
+
 function TAcmeLetsEncryptServer.OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
+var
+  client: TAcmeLetsEncryptClient;
 begin
   // quick process of HTTP requests on port 80 into HTTP/1.0 responses
   if (ClientSock.Http.CommandUri <> '') and
@@ -1317,8 +1345,25 @@ begin
       ClientSock.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       ClientSock.SockSend('HTTP/1.0 308 Permanent Redirect');
-    ClientSock.SockSend([
-      'Location: https://', ClientSock.Http.Host, ClientSock.Http.CommandUri]);
+    if fRedirectHttps = 0 then
+      client := nil // no Redirect() currently active
+    else
+      client := GetClientLocked(ClientSock.Http.Host);
+    if client <> nil then
+    begin
+      ClientSock.Http.Upgrade := client.fRedirectHttps;
+      client.Safe.UnLock;
+      if ClientSock.Http.Upgrade = '' then
+        client := nil;
+    end;
+    if client <> nil then
+      // redirect to the customized URI for this host
+      ClientSock.SockSend([
+        'Location: ', ClientSock.Http.Upgrade])
+    else
+      // redirect to the same URI but on HTTPS host
+      ClientSock.SockSend([
+        'Location: https://', ClientSock.Http.Host, ClientSock.Http.CommandUri]);
     if IsGet(ClientSock.Http.CommandMethod) then
       ClientSock.Http.CommandResp := 'Back to HTTPS'
     else
