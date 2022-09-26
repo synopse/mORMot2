@@ -1670,7 +1670,7 @@ const
      {$ifdef USE_PROV_RSA_AES} ,
      // 10/17     11/18
      TAesEcbApi, TAesCbcApi
-     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant
+     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant?
 var
   A: TAes;
   st, orig, crypted, s2, s3, s4: RawByteString;
@@ -1732,13 +1732,13 @@ begin
             RandomBytes(@mac1, SizeOf(mac1));
             Check(one.MacEncryptGetTag(mac1));
             //writeln(m,' ',k,' ',Sha256DigestToString(mac1)); writeln(TEST_AES_MAC[m, k]);
-            //CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
+            CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
           end
           else if gcm then
           begin
             RandomBytes(@tag1, SizeOf(tag1));
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
-            // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
+            //writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
               FormatUtf8('TEST_AES_TAG % %', [ks, one.AlgoName]));
           end;
