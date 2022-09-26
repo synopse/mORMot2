@@ -382,11 +382,12 @@ type
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
     // - by default, the HTTP server will consume a single thread, but you can
     // set aHttpServerThreadCount >= 0 to use a thread pool for heavy load
+    // - aPort can be set to something else than 80, e.g. behind a reverse proxy
     // - will raise an exception if port 80 is not available for binding (e.g.
     // if the user is not root on Linux/POSIX)
     constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
       const aDirectoryUrl, aAlgo: RawUtf8; const aPrivateKeyPassword: SpiUtf8;
-      aHttpServerThreadCount: integer = -1); reintroduce;
+      aHttpServerThreadCount: integer = -1; const aPort: RawUtf8 = '80'); reintroduce;
     /// finalize the certificates management and the associated HTTP server
     destructor Destroy; override;
     /// allow to specify the https URI to redirect from any request on port 80
@@ -1281,9 +1282,10 @@ end;
 
 constructor TAcmeLetsEncryptServer.Create(aLog: TSynLogClass;
   const aKeyStoreFolder: TFileName; const aDirectoryUrl, aAlgo: RawUtf8;
-  const aPrivateKeyPassword: SpiUtf8; aHttpServerThreadCount: integer);
+  const aPrivateKeyPassword: SpiUtf8; aHttpServerThreadCount: integer;
+  const aPort: RawUtf8);
 begin
-  fHttpServer := THttpServer.Create('80', nil, nil, 'Http 80 Server',
+  fHttpServer := THttpServer.Create(aPort, nil, nil, 'Acme Server',
     aHttpServerThreadCount);
   inherited Create(aLog, aKeyStoreFolder, aDirectoryUrl, aAlgo,
     aPrivateKeyPassword);
