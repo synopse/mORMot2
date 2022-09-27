@@ -5102,8 +5102,8 @@ begin
       pwd := Ctxt.InputUtf8OrVoid['Password'];
       if CheckPassword(Ctxt, usr, nonce, pwd) then
         // setup a new TAuthSession
-        SessionCreate(Ctxt, usr)
         // SessionCreate would call Ctxt.AuthenticationFailed on error
+        SessionCreate(Ctxt, usr)
       else
         Ctxt.AuthenticationFailed(afInvalidPassword);
     finally

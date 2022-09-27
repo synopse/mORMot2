@@ -1103,9 +1103,10 @@ type
     // - if the MacEncrypt pattern is not convenient for your purpose
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
+    // - you can customize the tag length in bytes, if 16 if too big
     // - warning: by design, you should always call AesGcmFinal() after
     // Encrypt/Decrypt before reusing this instance
-    function AesGcmFinal(var Tag: TAesBlock): boolean; virtual; abstract;
+    function AesGcmFinal(var Tag: TAesBlock; TagLen: integer = 16): boolean; virtual; abstract;
   end;
 
   /// meta-class of TAesGcmAbstract types
@@ -1149,7 +1150,7 @@ type
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
-    function AesGcmFinal(var Tag: TAesBlock): boolean; override;
+    function AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean; override;
   end;
 
 {$ifdef USE_PROV_RSA_AES}
@@ -6419,12 +6420,13 @@ begin
     fGcm.Add_AAD(Buf, Len);
 end;
 
-function TAesGcm.AesGcmFinal(var tag: TAesBlock): boolean;
+function TAesGcm.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
 var
   decoded: THash128Rec;
 begin
   result := false;
-  if fStarted = stNone then
+  if (fStarted = stNone) or
+     (cardinal(TagLen) > 16) then
     exit;
   {$ifdef USEGCMAVX}
   if flagAVX in fGcm.flags then
@@ -6441,11 +6443,12 @@ begin
   case fStarted of
     stEnc:
       begin
-        tag := decoded.b;
+        FillZero(Tag);
+        MoveFast(decoded.b, Tag, TagLen);
         result := true;
       end;
     stDec:
-      result := IsEqual(decoded.b, tag);
+      result := IsEqual(decoded.b, Tag, TagLen);
   end;
   fStarted := stNone; // allow reuse of this fGcm instance
 end;

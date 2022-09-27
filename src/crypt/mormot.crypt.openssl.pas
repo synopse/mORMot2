@@ -218,7 +218,7 @@ type
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
-    function AesGcmFinal(var tag: TAesBlock): boolean; override;
+    function AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean; override;
   end;
 
 
@@ -912,30 +912,33 @@ begin
   fAes.UpdEvp(fStarted = stEnc, Buf, nil, Len);
 end;
 
-function TAesGcmOsl.AesGcmFinal(var tag: TAesBlock): boolean;
+function TAesGcmOsl.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
 var
   outl: integer;
   dummy: TAesBlock;
 begin
+  result := false;
+  if (fStarted = stNone) or
+     (cardinal(TagLen) > 16) then
+    exit;
   case fStarted of
     stEnc:
       begin
         EOpenSslCrypto.Check(self, 'AesGcmFinal enc',
           EVP_CipherFinal_ex(fAes.Ctx[true], @dummy, @outl));
+        FillZero(Tag);
         EOpenSslCrypto.Check(self, 'AesGcmFinal enctag',
-          EVP_CIPHER_CTX_ctrl(fAes.Ctx[true], EVP_CTRL_GCM_GET_TAG, 16, @tag));
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[true], EVP_CTRL_GCM_GET_TAG, TagLen, @Tag));
         result := true;
       end;
     stDec:
       begin
         EOpenSslCrypto.Check(self, 'AesGcmFinal dectag',
-          EVP_CIPHER_CTX_ctrl(fAes.Ctx[false], EVP_CTRL_GCM_SET_TAG, 16, @tag));
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[false], EVP_CTRL_GCM_SET_TAG, TagLen, @Tag));
         outl := 16;
         result := (EVP_CipherFinal_ex(fAes.Ctx[false], @dummy, @outl) > 0) and
                   (outl = 0);
       end
-  else
-    result := false;
   end;
   fStarted := stNone; // allow reuse of this fAes instance
 end;
