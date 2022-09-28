@@ -1673,13 +1673,21 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer;
   var aPtrArrayCount: integer): PtrInt; overload;
 
 /// wrapper to add once an item to a array of pointer dynamic array storage
-function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): PtrInt; overload;
+
+/// wrapper to add once an item to a array of pointer dynamic array storage
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
+  var aPtrArrayCount: integer): PtrInt; overload;
+
+/// wrapper to insert an item to a array of pointer dynamic array storage
+function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
+  var aPtrArrayCount: integer): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): integer; overload;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger = nil); overload;
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil); overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -1706,6 +1714,15 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - this overloaded function will use a separated variable to store the items
+// count, so will be slightly faster: but you should call SetLength() when done,
+// to have a stand-alone array as expected by our ORM/SOA serialziation
+// - return the index of the item in the dynamic array
+function ObjArrayAddCount(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// wrapper to add items to a T*ObjArray dynamic array storage
 // - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
 // - return the new number of the items in aDestObjArray
@@ -1717,24 +1734,18 @@ function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 // - return the new number of the items in aDestObjArray
 function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
 
-/// wrapper to add an item to a T*ObjArray dynamic array storage
-// - this overloaded function will use a separated variable to store the items
-// count, so will be slightly faster: but you should call SetLength() when done,
-// to have a stand-alone array as expected by our ORM/SOA serialziation
-// - return the index of the item in the dynamic array
-function ObjArrayAddCount(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer): PtrInt;
-
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - if the object is already in the array (searching by address/reference,
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject); overload;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage and Count
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer); overload;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 // - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
 // - will first check if aSourceObjArray[] items are not already in aDestObjArray
@@ -6783,10 +6794,10 @@ begin
   inc(aPtrArrayCount);
 end;
 
-function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
 begin
   n := length(a);
   result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
@@ -6797,16 +6808,42 @@ begin
   result := n;
 end;
 
-procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger);
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
+  var aPtrArrayCount: integer): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aPtrArray), aPtrArrayCount, PtrUInt(aItem));
+  if result < 0 then
+    result := PtrArrayAdd(aPtrArray, aItem, aPtrArrayCount);
+end;
+
+function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
+  var aPtrArrayCount: integer): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
+begin
+  n := aPtrArrayCount;
+  if length(a) = n then
+    SetLength(a, NextGrow(n));
+  if PtrUInt(aIndex) < PtrUInt(n) then
+    MoveFast(a[aIndex], a[aIndex + 1], (n - aIndex) * SizeOf(pointer))
+  else
+    aIndex := n;
+  a[aIndex] := aItem;
+  inc(aPtrArrayCount);
+  result := aIndex;
+end;
+
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger);
+var
+  a: TPointerDynArray absolute aPtrArray;
+  n: PtrInt;
 begin
   if aCount = nil then
     n := length(a)
   else
     n := aCount^;
-  if cardinal(aIndex) >= cardinal(n) then
+  if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
   dec(n);
   if n > aIndex then
@@ -6817,10 +6854,10 @@ begin
     aCount^ := n;
 end;
 
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): integer;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
 begin
   if aCount = nil then
     n := length(a)
@@ -6850,12 +6887,13 @@ end;
 { wrapper functions to T*ObjArr types }
 
 function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
-var
-  a: TObjectDynArray absolute aObjArray;
 begin
-  result := length(a);
-  SetLength(a, result + 1);
-  a[result] := aItem;
+  result := PtrArrayAdd(aObjArray, aItem);
+end;
+
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
+begin
+  result := PtrArrayAdd(aObjArray, aItem, aObjArrayCount);
 end;
 
 function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
@@ -6877,35 +6915,15 @@ begin
   TObjectDynArray(aSourceObjArray) := nil; // aSourceObjArray[] changed ownership
 end;
 
-function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
-var
-  a: TObjectDynArray absolute aObjArray;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): PtrInt;
 begin
-  result := aObjArrayCount;
-  if result = length(a) then
-    SetLength(a, NextGrow(result));
-  a[result] := aItem;
-  inc(aObjArrayCount);
+  result := PtrArrayAddOnce(aObjArray, aItem);
 end;
 
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
-var
-  a: TObjectDynArray absolute aObjArray;
-  n: PtrInt;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt;
 begin
-  n := length(a);
-  if not PtrUIntScanExists(pointer(a), n, PtrUInt(aItem)) then
-  begin
-    SetLength(a, n + 1);
-    a[n] := aItem;
-  end;
-end;
-
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer);
-begin
-  if not PtrUIntScanExists(pointer(aObjArray), aObjArrayCount, PtrUInt(aItem)) then
-    ObjArrayAddCount(aObjArray, aItem, aObjArrayCount);
+  result := PtrArrayAddOnce(aObjArray, aItem, aObjArrayCount);
 end;
 
 function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;

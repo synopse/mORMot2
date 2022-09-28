@@ -3147,19 +3147,8 @@ begin
 end;
 
 function TSynList.Insert(item: pointer; index: PtrInt): PtrInt;
-var
-  n: PtrInt;
 begin
-  n := fCount;
-  if length(fList) = n then
-    SetLength(fList, NextGrow(n));
-  if PtrUInt(index) < PtrUInt(n) then
-    MoveFast(fList[index], fList[index + 1], (n - index) * SizeOf(pointer))
-  else
-    index := n;
-  fList[index] := item;
-  inc(fCount);
-  result := index;
+  result := PtrArrayInsert(fList, item, index, fCount);
 end;
 
 procedure TSynList.Clear;
