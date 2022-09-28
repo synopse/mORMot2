@@ -2644,7 +2644,7 @@ var
 begin
   SynAnsiConvertListLock.ReadLock; // concurrent read lock
   i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-    SynAnsiConvertListCount, aCodePage);
+    SynAnsiConvertListCount, aCodePage); // SSE2 asm on i386 and x86_64
   if i >= 0 then
     result := SynAnsiConvertList[i]
   else
@@ -2659,7 +2659,7 @@ begin
   SynAnsiConvertListLock.WriteLock;
   try
     i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-      SynAnsiConvertListCount, aCodePage);
+      SynAnsiConvertListCount, aCodePage); // search again for thread safety
     if i >= 0 then
     begin
       result := SynAnsiConvertList[i]; // avoid any (unlikely) race condition

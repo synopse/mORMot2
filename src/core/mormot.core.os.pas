@@ -5531,7 +5531,7 @@ begin
   if Stub = MAP_FAILED then
   {$endif OSWINDOWS}
     raise EOSException.Create('ReserveExecutableMemory(): OS mmap failed');
-  ObjArrayAdd(CurrentFakeStubBuffers, self);
+  PtrArrayAdd(CurrentFakeStubBuffers, self);
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -6486,8 +6486,8 @@ begin
     try
       with InternalGarbageCollection do
         if not SearchExisting or
-           (ObjArrayFind(Instances, Count, Instance) < 0) then
-          ObjArrayAddCount(Instances, Instance, Count);
+           not PtrUIntScanExists(pointer(Instances), Count, PtrUInt(Instance)) then
+          PtrArrayAdd(Instances, Instance, Count);
     finally
       GlobalUnLock;
     end;
