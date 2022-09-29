@@ -714,10 +714,6 @@ var
 var
   c: PEVP_CIPHER_CTX;
 begin
-  if (BufOut <> nil) and
-     (Count and AesBlockMod <> 0) then
-    raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
-      [Owner, 'UpdEvp', Count]);
   outl := 0;
   c := Ctx[DoEncrypt];
   EOpenSslCrypto.Check(Owner, 'UpdEvp',

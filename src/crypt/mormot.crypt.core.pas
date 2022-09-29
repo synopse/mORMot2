@@ -1386,6 +1386,13 @@ const
   // because we don't handle the additional AEAD information yet
   AES_PKCS7WRITER = [mCbc .. mGcm] - AES_AEAD;
 
+var
+  /// low-level flags to globally disable some asm optimization at runtime
+  DisabledAsm: set of (
+    daAesNiSse41,
+    daAesNiSse42,
+    daAesGcmAvx,
+    daKeccakAvx2);
 
 function ToText(algo: TAesMode): PShortString; overload;
 
@@ -4166,7 +4173,8 @@ begin
       256:
         ctx.DoBlock := @AesNiEncrypt256;
     end;
-    if cfSSE41 in CpuFeatures then
+    if (cfSSE41 in CpuFeatures) and
+       not (daAesNiSse41 in DisabledAsm) then
       include(ctx.Flags, aesNiSse41); // for PSHUF and PINSR opcodes
     {$ifdef USEAESNI32}
     case KeySize of
@@ -5771,7 +5779,8 @@ begin
   inherited AfterCreate;
   {$ifdef USEAESNI64}
   fAesNiSse42 := (cfAESNI in CpuFeatures) and
-                 (cfSSE42 in CpuFeatures);
+                 (cfSSE42 in CpuFeatures) and
+                 not (daAesNiSse42 in DisabledAsm);
   {$endif USEAESNI64}
 end;
 
@@ -6312,7 +6321,8 @@ begin
   cf := @CpuFeatures;
   if (cfCLMUL in cf^) and
      (cfSSE41 in cf^) and
-     (cfAESNI in cf^) then
+     (cfAESNI in cf^) and
+     not (daAesGcmAvx in DisabledAsm) then
   begin
     // 8x interleaved aesni + pclmulqdq x86_64 asm
     include(fGcm.flags, flagAVX);
@@ -6386,7 +6396,8 @@ begin
       blocks := onepass shr AesBlockShift;
       ctr := bswap32(TAesContext(fGcm.aes).iv.c3) + blocks;
       GCM_IncCtr(TAesContext(fGcm.aes).iv.b); // should be done before
-      AesNiEncryptCtrNist32(BufIn, BufOut, blocks, @fGcm.aes, @TAesContext(fGcm.aes).iv);
+      AesNiEncryptCtrNist32(
+        BufIn, BufOut, blocks, @fGcm.aes, @TAesContext(fGcm.aes).iv);
       TAesContext(fGcm.aes).iv.c3 := bswap32(ctr);
       // GMAC done after encryption
       if fStarted = stEnc then
@@ -6400,7 +6411,7 @@ begin
   end
   else
   {$endif USEGCMAVX}
-    // regular TAesGcmEngine process
+    // regular TAesGcmEngine process (allowing non-16-bytes Count)
     if fStarted = stEnc then
       result := fGcm.Encrypt(BufIn, BufOut, Count)
     else
@@ -8301,7 +8312,8 @@ var
   i: PtrInt;
 begin
   {$ifdef ASMX64AVXNOCONST}
-  if cpuAVX2 in X64CpuFeatures then
+  if (cpuAVX2 in X64CpuFeatures) and
+     not (daKeccakAvx2 in DisabledAsm) then
   begin
     B[0] := A[0]; // AVX2 asm has a diverse state order to perform its rotations
     B[1] := A[1];
