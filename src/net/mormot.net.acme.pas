@@ -79,6 +79,8 @@ type
     constructor Create(aLog: TSynLogClass; const aCert: ICryptCert);
     /// perform a HEAD request, not signed/authenticated
     function Head(const aUrl: RawUtf8): RawJson;
+    /// perform a GET request, not signed/authenticated
+    function Get(const aUrl: RawUtf8): RawJson;
     /// perform a POST request, with a signed JWS body as plain JSON
     function Post(const aUrl: RawUtf8; const aJson: RawJson): RawJson; overload;
     /// perform a POST request, with a signed JWS body as key/value pairs
@@ -506,6 +508,12 @@ begin
   result := GetNonceAndBody;
 end;
 
+function TJwsHttpClient.Get(const aUrl: RawUtf8): RawJson;
+begin
+  Request(aUrl, 'GET');
+  result := GetNonceAndBody;
+end;
+
 function TJwsHttpClient.Post(const aUrl: RawUtf8; const aJson: RawJson): RawJson;
 var
   x, y: RawByteString;
@@ -664,7 +672,7 @@ var
 begin
   // In order to help clients configure themselves with the right URLs for
   // each ACME operation, ACME servers provide a directory object
-  resp := fHttpClient.Head(fDirectoryUrl);
+  resp := fHttpClient.Get(fDirectoryUrl);
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'ReadDirectory %', [resp], self);
   JsonDecode(pointer(resp), [
