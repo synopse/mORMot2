@@ -1035,8 +1035,8 @@ const
 
   // the github release tag associated with this EXPECTED_SQLITE3_VERSION
   // - you could download the static for this exact mORMot source revision e.g. as
-  // https://github.com/synopse/mORMot2/releases/download/2.0.4099/mormot2static.7z
-  EXPECTED_RELEASE_TAG = '2.0.4099';
+  // https://github.com/synopse/mORMot2/releases/download/2.0.4148/mormot2static.7z
+  EXPECTED_RELEASE_TAG = '2.0.4148';
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
