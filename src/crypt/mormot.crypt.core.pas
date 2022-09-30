@@ -1388,6 +1388,7 @@ const
 
 var
   /// low-level flags to globally disable some asm optimization at runtime
+  // - flags are platform-dependent and may have no effect
   DisabledAsm: set of (
     daAesNiSse41,
     daAesNiSse42,
