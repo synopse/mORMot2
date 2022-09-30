@@ -41,10 +41,12 @@ type
   // - tcoLogInSubFolder will log within a '[executable]\log\' sub-folder
   // - tcoLogVerboseRotate will force the log files to rotate - could be set if
   // you expect test logs to be huge, bigger than what LogView supports
+  // - tcoLogNotHighResolution will log the current time as plain ISO-8601 text
   TSynTestOption = (
     tcoLogEachCheck,
     tcoLogInSubFolder,
-    tcoLogVerboseRotate);
+    tcoLogVerboseRotate,
+    tcoLogNotHighResolution);
 
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
@@ -1368,7 +1370,7 @@ begin
   begin
     Level := withLogs;
     PerThreadLog := ptIdentifiedInOneFile;
-    HighResolutionTimestamp := true;
+    HighResolutionTimestamp := not (tcoLogNotHighResolution in options);
     if (tcoLogVerboseRotate in options) and
        (Level = LOG_VERBOSE) then
     begin
