@@ -130,7 +130,7 @@ type
     function TestVariants(const Text: RawUtf8; V1: Variant;
       var V2: variant): variant;
     /// test (maybe huge) RawJson content
-    function TestRawJson(len, value: integer): RawJson;
+    function TestRawJson(len, value: integer; const j: RawJson): RawJson;
     /// test in/out collections
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
@@ -354,7 +354,7 @@ type
     function TestBlob(n: TComplexNumber): TServiceCustomAnswer;
     function TestVariants(const Text: RawUtf8;
       V1: Variant; var V2: variant): variant;
-    function TestRawJson(len, value: integer): RawJson;
+    function TestRawJson(len, value: integer; const j: RawJson): RawJson;
     procedure Collections(Item: TCollTest; var List: TCollTestsI;
       out Copy: TCollTestsI);
     destructor Destroy; override;
@@ -609,10 +609,19 @@ begin
   VariantLoadJson(Result, Text);
 end;
 
-function TServiceComplexCalculator.TestRawJson(len, value: integer): RawJson;
+const
+  _TESTRAWJSON = '["toto"]';
+
+function TServiceComplexCalculator.TestRawJson(
+  len, value: integer; const j: RawJson): RawJson;
 begin
   if len < 0 then
     len := 0;
+  if j <> _TESTRAWJSON then
+  begin
+    result:= '';
+    exit;
+  end;
   FastSetString(RawUtf8(result), nil, len + 2);
   result[1] := '"';
   FillcharFast(PByteArray(result)[1], len, value);
@@ -930,7 +939,7 @@ begin
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
   n := 1000;
-  s := Inst.CC.TestRawJson(n, 49);
+  s := Inst.CC.TestRawJson(n, 49, _TESTRAWJSON);
   Check(length(s) = n + 2);
   CheckEqual(Hash32(s), 4223609852); // n = 1000
   //CheckEqual(Hash32(s), 2508875362); // n = 100000000
@@ -967,7 +976,7 @@ begin
       CheckSame(V1, C3.Real);
       CheckSame(V2, C3.Real + c);
       Check(VariantSaveJson(V3) = s);
-      s := Inst.CC.TestRawJson(c, c and 31 + 48);
+      s := Inst.CC.TestRawJson(c, c and 31 + 48, _TESTRAWJSON);
       Check(length(s) = integer(c + 2));
       Check(IsValidJson(s));
       if s <> '' then
