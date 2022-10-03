@@ -11145,31 +11145,33 @@ end;
 function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
   i: PtrInt;
+  tab: PWordArray;
 begin
   // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+  tab := @TwoDigitsHexWB;
   for i := 3 downto 0 do
   begin
-    PWord(P)^ := TwoDigitsHexWB[guid[i]];
+    PWord(P)^ := tab[guid[i]];
     inc(P, 2);
   end;
   inc(PByte(guid), 4);
   for i := 1 to 2 do
   begin
     P[0] := '-';
-    PWord(P + 1)^ := TwoDigitsHexWB[guid[1]];
-    PWord(P + 3)^ := TwoDigitsHexWB[guid[0]];
+    PWord(P + 1)^ := tab[guid[1]];
+    PWord(P + 3)^ := tab[guid[0]];
     inc(PByte(guid), 2);
     inc(P, 5);
   end;
   P[0] := '-';
-  PWord(P + 1)^ := TwoDigitsHexWB[guid[0]];
-  PWord(P + 3)^ := TwoDigitsHexWB[guid[1]];
+  PWord(P + 1)^ := tab[guid[0]];
+  PWord(P + 3)^ := tab[guid[1]];
   P[5] := '-';
   inc(PByte(guid), 2);
   inc(P, 6);
   for i := 0 to 5 do
   begin
-    PWord(P)^ := TwoDigitsHexWB[guid[i]];
+    PWord(P)^ := tab[guid[i]];
     inc(P, 2);
   end;
   result := P;
