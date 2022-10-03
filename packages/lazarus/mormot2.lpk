@@ -47,7 +47,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="102">
+    <Files Count="103">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -457,6 +457,10 @@
         <Filename Value="../../src/net/mormot.net.acme.pas"/>
         <UnitName Value="mormot.net.acme"/>
       </Item102>
+      <Item103>
+        <Filename Value="../../src/db/mormot.db.rad.ui.cds.pas"/>
+        <UnitName Value="mormot.db.rad.ui.cds"/>
+      </Item103>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>

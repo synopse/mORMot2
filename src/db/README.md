@@ -89,6 +89,11 @@ Efficient Read/Only `TDataSet` for ORM and JSON Process
 - `TOrmTableDataSet` for `TOrmTable`/JSON access
 - JSON/ORM to `TDataSet` Wrappers Functions
 
+### mormot.db.rad.ui.cds
+
+Efficient Read/Write `TClientDataSet` for ORM and JSON Process
+- Fill a VCL TClientDataset from `TOrmTable`/`TOrmTableJson` data
+
 ### mormot.db.nosql.bson
 
 Efficient BSON Support for MongoDB Clients
