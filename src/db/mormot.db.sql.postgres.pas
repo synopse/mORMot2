@@ -578,7 +578,7 @@ begin
     include(fCache, scOnServer);
     TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
-    SqlLogEnd(' cached as %', [fPreparedStmtName]);
+    SqlLogEnd(' c=%', [fPreparedStmtName]);
   end
   else
     SqlLogEnd;
@@ -687,10 +687,10 @@ begin
     fCurrentRow := -1;
     if fColumn.Count = 0 then // if columns exist then statement is already cached
       BindColumns;
-    SqlLogEnd(' % rows=%', [fPreparedStmtName, fTotalRowsRetrieved]);
+    SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
   end
   else
-    SqlLogEnd(' %', [fPreparedStmtName]);
+    SqlLogEnd(' c=%', [fPreparedStmtName]);
 end;
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;

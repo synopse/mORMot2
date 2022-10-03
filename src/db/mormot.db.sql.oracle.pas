@@ -2345,7 +2345,7 @@ begin
     end;
   finally
     fTimeElapsed.FromExternalMicroSeconds(
-      SqlLogEnd(' cache=%', [ord(scOnServer in fCache)]));
+      SqlLogEnd(' c=%', [ord(scOnServer in fCache)]));
   end;
 end;
 

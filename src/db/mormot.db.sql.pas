@@ -6791,14 +6791,14 @@ begin
         FormatShort16(' wr=%', [UpdateCount], tmp);
       Msg := @tmp;
     end;
-    fSqlLogLog.Log(fSqlLogLevel, 'ExecutePrepared %% %',
+    fSqlLogLog.Log(fSqlLogLevel, 'ExecutePrepared t=%% q=%',
       [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
   end
   else
   begin
     if Msg = nil then
       Msg := @tmp;
-    fSqlLogLog.Log(fSqlLogLevel, 'Prepare %% %',
+    fSqlLogLog.Log(fSqlLogLevel, 'Prepare t=%% q=%',
       [fSqlLogTimer.Stop, Msg^, fSql], self);
   end;
   result := fSqlLogTimer.LastTimeInMicroSec;
@@ -7232,7 +7232,7 @@ begin
     Disconnect;
   except
     on E: Exception do
-      SynDBLog.Add.Log(sllError, E);
+      SynDBLog.Add.Log(sllError, 'e=%', [E]);
   end;
   inherited;
 end;

@@ -715,7 +715,7 @@ begin
     begin
       fParamCount := fStatement.ParamCount;
       SetLength(fLogSQLValues, fParamCount);
-      SqlLogEnd(' %', [fDB.FileNameWithoutPath]);
+      SqlLogEnd(' f=%', [fDB.FileNameWithoutPath]);
     end;
   finally
     fDB.UnLock;
