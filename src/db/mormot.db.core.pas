@@ -758,7 +758,7 @@ function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
 // - return 'RowID' if none found
-function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
 
 /// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
@@ -2184,7 +2184,7 @@ begin
   result := 'SELECT ' + result + ' FROM ' + TableName + SqlFromWhere(Where);
 end;
 
-function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
   i: integer;

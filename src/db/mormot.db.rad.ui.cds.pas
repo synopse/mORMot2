@@ -82,14 +82,14 @@ function ToClientDataSet(
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 function JsonToClientDataSet(
-  aOwner: TComponent; const aJson: RawUTF8; aClient: TRest = nil
+  aOwner: TComponent; const aJson: RawUtf8; aClient: TRest = nil
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): TClientDataSet; overload;
 
 /// convert a JSON result into a new TClientDataSet
 // - this overloaded method allows to specify the TOrm class types
 // associated with the supplied JSON
 function JsonToClientDataSet(
-  aOwner: TComponent; const aJson: RawUTF8;
+  aOwner: TComponent; const aJson: RawUtf8;
   const Tables: array of TOrmClass; aClient: TRest = nil
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): TClientDataSet; overload;
 
@@ -123,7 +123,7 @@ function ToClientDataSet(
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 function JsonToClientDataSet(
-  aDataSet: TClientDataSet; const aJson: RawUTF8; aClient: TRest = nil;
+  aDataSet: TClientDataSet; const aJson: RawUtf8; aClient: TRest = nil;
   aMode: TClientDataSetMode = cdsReplace; aLogChange: boolean = false
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): boolean; overload;
 
@@ -144,7 +144,7 @@ end;
 
 {************ Fill a TClientDataset from TOrmTable/TOrmTableJson data }
 
-function JsonToClientDataSet(aDataSet: TClientDataSet; const aJson: RawUTF8;
+function JsonToClientDataSet(aDataSet: TClientDataSet; const aJson: RawUtf8;
   aClient: TRest; aMode: TClientDataSetMode; aLogChange: boolean
   {$ifndef UNICODE}; aForceWideString: boolean{$endif}): boolean;
 var
@@ -159,7 +159,7 @@ begin
   end;
 end;
 
-function JsonToClientDataSet(aOwner: TComponent; const aJson: RawUTF8;
+function JsonToClientDataSet(aOwner: TComponent; const aJson: RawUtf8;
   aClient: TRest {$ifndef UNICODE}; aForceWideString: boolean{$endif}): TClientDataSet;
 var
   T: TOrmTableJson;
@@ -173,7 +173,7 @@ begin
   end;
 end;
 
-function JsonToClientDataSet(aOwner: TComponent; const aJson: RawUTF8;
+function JsonToClientDataSet(aOwner: TComponent; const aJson: RawUtf8;
   const Tables: array of TOrmClass; aClient: TRest
   {$ifndef UNICODE}; aForceWideString: boolean{$endif}): TClientDataSet;
 var

@@ -7222,7 +7222,7 @@ begin
   if not result then
     exit;
   AddRawUtf8(fTrueTypeFonts, TtfName);
-  QuickSortRawUTF8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
+  QuickSortRawUtf8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
 end;
 
 procedure TPdfDocument.FreeDoc;

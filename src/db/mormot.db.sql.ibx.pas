@@ -615,7 +615,7 @@ var
   const
     cMaxStm = 50;  // max statements in execute block, FB max is 255
   var
-    oldSQL: RawUTF8;
+    oldSQL: RawUtf8;
     aPar: TRawUtf8DynArray;
     aParTyp: TRawUtf8DynArray;
     iP, iA, iStart, iEnd, iCnt, iStmCount: integer;
