@@ -430,15 +430,15 @@
         <UnitName Value="mormot.soa.server"/>
       </Item95>
       <Item96>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.pas"/>
         <UnitName Value="mormot.db.rad.ui"/>
       </Item96>
       <Item97>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.orm.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.orm.pas"/>
         <UnitName Value="mormot.db.rad.ui.orm"/>
       </Item97>
       <Item98>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.sql.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.sql.pas"/>
         <UnitName Value="mormot.db.rad.ui.sql"/>
       </Item98>
       <Item99>
