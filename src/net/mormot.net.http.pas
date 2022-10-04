@@ -202,6 +202,9 @@ type
   end;
 
   /// low-level reusable State Machine to parse and process any HTTP content
+  // - shared e.g. by all our (web)socket-based HTTP client and server classes
+  // - reduce memory allocations as much as possible, and parse the most used
+  // headers in explicit fields
   {$ifdef USERECORDWITHMETHODS}
   THttpRequestContext = record
   {$else}
@@ -1013,7 +1016,7 @@ begin
       inc(p);
       if v1 = 255 then
       begin
-        result := (result shl 4) or v0; // odd number of hexa chars supplied
+        result := (result shl 4) or v0; // odd number of hexa chars input
         break;
       end;
       result := (result shl 8) or (integer(v0) shl 4) or v1;

@@ -42,7 +42,6 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,

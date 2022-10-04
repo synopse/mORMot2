@@ -43,7 +43,6 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
-  mormot.core.search,
   mormot.core.zip,     // for ODS export
   mormot.crypt.secure, // for TSynUniqueIdentifierBits
   mormot.db.core;

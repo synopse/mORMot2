@@ -36,7 +36,6 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.orm.base,
