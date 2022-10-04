@@ -2003,7 +2003,8 @@ type
   // - rcfIsManaged is set if a value of this type expects finalization
   // - rcfObjArray is for T*ObjArray dynamic arrays
   // - rcfBinary is for hexadecimal serialization of integers
-  // - rcfJsonString when is to be serialized as text (ptStringTypes or rcfBinary)
+  // - rcfJsonString when is to be serialized as text and properly JSON-escaped
+  // (ptStringTypes or rcfBinary, but excluding ptRawJson)
   // - rcfWithoutRtti is set if was created purely by text, and uses fake RTTI
   // - rcfSpi identifies types containing Sensitive Personal Information
   // (e.g. a bank card number or a plain password) which should be hidden
@@ -7559,7 +7560,7 @@ begin
   if (fArrayRtti <> nil) and
      (rcfIsManaged in fArrayRtti.Flags) then
     include(fFlags, rcfArrayItemManaged);
-  if aParser in ptStringTypes then
+  if aParser in (ptStringTypes - [ptRawJson]) then
     include(fFlags, rcfJsonString);
   fClassNewInstance := @_New_NotImplemented;
   result := self;

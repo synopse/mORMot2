@@ -2726,8 +2726,9 @@ begin
   case ValueType of
     imvBoolean:
       WR.AddShorter('false,');
-    imvObject:
-      WR.AddShorter('null,'); // may raise an error on the client side
+    imvObject,
+    imvRawJson:
+      WR.AddShorter('null,'); // may raise an error on client side for imvObject
     imvInterface:
       WR.AddShorter('0,');
     imvDynArray:

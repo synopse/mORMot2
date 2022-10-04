@@ -440,7 +440,7 @@ begin
   // see pg_type.h (most used first)
   MapOid(INT4OID, ftInt64);
   MapOid(INT8OID, ftInt64);
-  MapOid(TEXTOID, ftUtf8);
+  MapOid(TEXTOID, ftUtf8); // other char types will be ftUtf8 as fallback
   MapOid(FLOAT8OID, ftDouble);
   MapOid(TIMESTAMPOID, ftDate);
   MapOid(BYTEAOID, ftBlob);
