@@ -6240,7 +6240,7 @@ begin
            exit;
          end;
       // if not root on POSIX, SMBIOS is not available
-      // -> try to get what the OS exposes (Linux or FreeBSD)
+      // -> try to get what the OS exposes (Linux, MacOS or FreeBSD)
       DirectSmbiosInfo(_Smbios);
     end;
   finally
@@ -6352,6 +6352,12 @@ begin
     if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206 then
       uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
     {$endif SMB_UUID_SWAP4}
+    {$ifdef OSDARWIN}
+    // mandatory to match IOPlatformUUID value from ioreg :(
+    uid.D1 := bswap32(uid.D1);
+    uid.D2 := swap(uid.D2);
+    uid.D3 := swap(uid.D3);
+    {$endif OSDARWIN}
     dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
   end;
 end;

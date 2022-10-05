@@ -2006,6 +2006,7 @@ begin
 end;
 
 const
+  // note: reading /sys/class/dmi/id/* is likely to require root access
   _KNOWN: array[0..14] of record
     id: TSmbiosBasicInfo;
     fn: string;
