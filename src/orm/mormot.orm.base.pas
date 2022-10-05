@@ -10666,8 +10666,8 @@ begin
   result := nil;
 end;
 
-function TOrmPropertiesAbstract.BlobFieldPropFromUtf8(PropName: PUtf8Char;
-  PropNameLen: integer): PRttiProp;
+function TOrmPropertiesAbstract.BlobFieldPropFromUtf8(
+  PropName: PUtf8Char; PropNameLen: integer): PRttiProp;
 var
   i: PtrInt;
 begin

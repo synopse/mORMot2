@@ -1993,6 +1993,14 @@ begin
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
 end;
 
+{$ifdef OSANDROID}
+
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+end;
+
+{$else} // pure Linux
+
 const
   // note: reading /sys/class/dmi/id/* is likely to require root access
   _KNOWN: array[0..14] of record
@@ -2041,6 +2049,8 @@ begin
     end;
   end;
 end;
+
+{$endif OSANDROID}
 
 {$endif OSBSDDARWIN}
 

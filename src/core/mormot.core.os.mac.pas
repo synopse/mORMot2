@@ -23,6 +23,7 @@ interface
 {$ifdef OSDARWIN} // do-nothing unit on other systems
 
 {$modeswitch cvar}
+
 {$linkframework IOKit}
 
 uses
@@ -95,7 +96,6 @@ begin
       FastSetString(result, str, StrLen(str));
     end;
     CFRelease(ref);
-    writeln(id,' = ',result);
   except
   end;
 end;
@@ -114,7 +114,8 @@ begin
       _Get('IOPlatformSerialNumber', result);
     sbiBoardSerial:
       _Get('board-id', result);
-    sbiManufacturer:
+    sbiManufacturer,
+    sbiBiosVendor:
       _Get('manufacturer', result);
     sbiProductName:
       _Get('product-name', result);
@@ -134,6 +135,7 @@ var
   serv: io_service_t;
   prop: CFMutableDictionaryRef;
 begin
+  // by definition, won't return anything if there is no SMBIOS, e.g. on Mac M1
   result := '';
   try
     // first try the IORegistryEntryFromPath() way
