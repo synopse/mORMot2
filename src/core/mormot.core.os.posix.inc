@@ -1674,37 +1674,6 @@ begin
             (fpgeterrno <> ESysEFAULT);
 end;
 
-function ReadSystemMemory(address, size: PtrUInt): RawByteString;
-var
-  mem: cInt;
-  map: PAnsiChar;
-  off: PtrUInt;
-begin
-  result := '';
-  if size > 4 shl 20 then
-    exit; // read up to 4MB
-  mem := FpOpen('/dev/mem', O_RDONLY, 0);
-  {$ifdef OSDARWIN}
-  if mem <= 0 then
-    // may work as alternative if "sudo pmset hibernatemode 1" has been set
-    mem := FpOpen('/private/var/vm/sleepimage', O_RDONLY, 0);
-  // see also low-level reading SMBIOS from I/O Registry on macOS:
-  // https://github.com/cavaliercoder/dmidecode-osx/commit/b181bb57c2494c52a2c
-  // but https://github.com/acidanthera/dmidecode/blob/master/util.c#L163 fails
-  {$endif OSDARWIN}
-  if mem <= 0 then
-    exit;
-  // Fpmmap() is more complex but works around problems using plain read() calls
-  off := address mod SystemInfo.dwPageSize;
-  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
-  if map <> MAP_FAILED then
-  begin
-    FastSetRawByteString(result, map + off, size);
-    Fpmunmap(map, off + size);
-  end;
-  FpClose(mem);
-end;
-
 {$ifdef OSBSDDARWIN}
 
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
@@ -1827,11 +1796,42 @@ begin
   result := '';
 end;
 
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+begin
+  result := '';
+end;
+
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
 end;
 
 {$endif OSFREEBSD}
+
+{$ifndef OSDARWIN} // on POSIX systems, /dev/mem is usually available from root
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+var
+  mem: cInt;
+  map: PAnsiChar;
+  off: PtrUInt;
+begin
+  result := '';
+  if size > 4 shl 20 then
+    exit; // read up to 4MB
+  mem := FpOpen('/dev/mem', O_RDONLY, 0);
+  if mem <= 0 then
+    exit;
+  // Fpmmap() is more complex but works around problems using plain read() calls
+  off := address mod SystemInfo.dwPageSize;
+  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
+  if map <> MAP_FAILED then
+  begin
+    FastSetRawByteString(result, map + off, size);
+    Fpmunmap(map, off + size);
+  end;
+  FpClose(mem);
+end;
+{$endif OSDARWIN}
+
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
