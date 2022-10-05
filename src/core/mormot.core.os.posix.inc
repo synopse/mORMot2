@@ -1651,7 +1651,17 @@ begin
   result := true;
 end;
 
-procedure _AfterDecodeSmbios(const info: TRawSmbiosInfo);
+procedure PosInjectSmbiosInfo(var info: TSmbiosBasicInfos);
+var
+  i: TSmbiosBasicInfo;
+begin
+  if Assigned(PosixInject.GetSmbios) then // e.g. from mormot.core.os.mac
+    for i := succ(low(i)) to high(i) do
+      if _Smbios[i] = '' then
+        info[i] := PosixInject.GetSmbios(i);
+end;
+
+procedure _AfterDecodeSmbios(var info: TRawSmbiosInfo);
 var
   s: RawByteString;
 begin
@@ -1807,32 +1817,6 @@ end;
 
 {$endif OSFREEBSD}
 
-{$ifndef OSDARWIN} // on POSIX systems, /dev/mem is usually available from root
-function ReadSystemMemory(address, size: PtrUInt): RawByteString;
-var
-  mem: cInt;
-  map: PAnsiChar;
-  off: PtrUInt;
-begin
-  result := '';
-  if size > 4 shl 20 then
-    exit; // read up to 4MB
-  mem := FpOpen('/dev/mem', O_RDONLY, 0);
-  if mem <= 0 then
-    exit;
-  // Fpmmap() is more complex but works around problems using plain read() calls
-  off := address mod SystemInfo.dwPageSize;
-  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
-  if map <> MAP_FAILED then
-  begin
-    FastSetRawByteString(result, map + off, size);
-    Fpmunmap(map, off + size);
-  end;
-  FpClose(mem);
-end;
-{$endif OSDARWIN}
-
-
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
   FillCharFast(info, SizeOf(info), 0);
@@ -1870,7 +1854,7 @@ begin
   e.i[7] := e.i[7] xor us;
 end;
 
-{$else}
+{$else} // Linux-specific code
 
 const
   // function DirectoryFileNames(const Folder: TFileName): TFileNameDynArray; ?
@@ -2039,9 +2023,32 @@ end;
 
 {$endif OSBSDDARWIN}
 
-procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+{$ifndef OSDARWIN} // on POSIX systems, /dev/mem may be available from root
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
-  i: TSmbiosBasicInfo;
+  mem: cInt;
+  map: PAnsiChar;
+  off: PtrUInt;
+begin
+  result := '';
+  if size > 4 shl 20 then
+    exit; // read up to 4MB
+  mem := FpOpen('/dev/mem', O_RDONLY, 0);
+  if mem <= 0 then
+    exit;
+  // Fpmmap() is more complex but works around problems using plain read() calls
+  off := address mod SystemInfo.dwPageSize;
+  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
+  if map <> MAP_FAILED then
+  begin
+    FastSetRawByteString(result, map + off, size);
+    Fpmunmap(map, off + size);
+  end;
+  FpClose(mem);
+end;
+{$endif OSDARWIN}
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
   _DirectSmbiosInfo(info);
   // from this very same .inc file
@@ -2049,9 +2056,7 @@ begin
     info[sbiCpuVersion] := CpuInfoText;
   // e.g. from mormot.core.os.mac
   if Assigned(PosixInject.GetSmbios) then
-    for i := succ(low(i)) to high(i) do
-      if _Smbios[i] = '' then
-        info[i] := PosixInject.GetSmbios(i);
+    PosInjectSmbiosInfo(info);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
