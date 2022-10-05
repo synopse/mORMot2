@@ -2245,8 +2245,10 @@ var
   Smbios: TSmbiosInfo;
 
 /// retrieve and decode DMI/SMBIOS data into high-level Smbios global variable
-// - on POSIX, requires root to access SMBIOS raw memory so may return false
-// unless the information has been already read as root and cached locally
+// - on POSIX, requires at least once root to access SMBIOS raw memory
+// so may return false unless the information has been cached locally
+// - if there is no SMBIOS information (e.g. not enough current user rights),
+// will call MergeSmbiosInfo() to try and fill Smbios from _Smbios items
 // - see also mormot.core.os.pas GetSmbios() more limited function
 function GetSmbiosInfo: boolean;
 
@@ -2255,6 +2257,10 @@ function GetSmbiosInfo: boolean;
 // - optionally intern the strings, e.g. if you maintain several SMBIOS instances
 function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
   intern: TRawUtf8Interning = nil): boolean;
+
+/// append TSmbiosBasicInfos fields to TSmbiosInfo
+// - use basic[] values if info fields are void
+procedure MergeSmbiosInfo(const basic: TSmbiosBasicInfos; var info: TSmbiosInfo);
 
 
 { ************ TSynFpuException Wrapper for FPU Flags Preservation }
@@ -4185,14 +4191,84 @@ begin
     GlobalLock;
     try
       if not GetSmbiosInfoChecked then
-        if GetRawSmbios then
+      begin
+        if GetRawSmbios then // fill both RawSmbios and _Smbios[]
           DecodeSmbiosInfo(RawSmbios, Smbios);
+        MergeSmbiosInfo(_Smbios, Smbios);
+      end;
       GetSmbiosInfoChecked := true;
     finally
       GlobalUnLock;
     end;
   end;
   result := Smbios.Bios.VendorName <> '';
+end;
+
+procedure MergeOne(const basic: RawUtf8; var field: RawUtf8);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if (field = '') and
+     (basic <> '') then
+    field := basic;
+end;
+
+procedure MergeSmbiosInfo(const basic: TSmbiosBasicInfos; var info: TSmbiosInfo);
+begin
+  MergeOne(basic[sbiBiosVendor], info.Bios.VendorName);
+  MergeOne(basic[sbiBiosVersion], info.Bios.Version);
+  MergeOne(basic[sbiBiosDate], info.Bios.BuildDate);
+  MergeOne(basic[sbiBiosRelease], info.Bios.Release);
+  MergeOne(basic[sbiBiosFirmware], info.Bios.Firmware);
+  MergeOne(basic[sbiManufacturer], info.System.Manufacturer);
+  MergeOne(basic[sbiProductName], info.System.ProductName);
+  MergeOne(basic[sbiVersion], info.System.Version);
+  MergeOne(basic[sbiSerial], info.System.Serial);
+  MergeOne(basic[sbiUuid], info.System.Uuid);
+  MergeOne(basic[sbiSku], info.System.Sku);
+  MergeOne(basic[sbiFamily], info.System.Family);
+  if info.Board = nil then
+  begin
+    SetLength(info.Board, 1);
+    with info.Board[0] do
+    begin
+      MergeOne(basic[sbiBoardManufacturer], Manufacturer);
+      MergeOne(basic[sbiBoardProductName], Product);
+      MergeOne(basic[sbiBoardVersion], Version);
+      MergeOne(basic[sbiBoardSerial], Serial);
+      MergeOne(basic[sbiBoardAssetTag], AssetTag);
+      MergeOne(basic[sbiBoardLocation], Location);
+    end;
+  end;
+  if info.Processor = nil then
+  begin
+    SetLength(info.Processor, 1);
+    with info.Processor[0] do
+    begin
+      MergeOne(basic[sbiCpuAssetTag], AssetTag);
+      MergeOne(basic[sbiCpuManufacturer], Manufacturer);
+      MergeOne(basic[sbiCpuPartNumber], PartNumber);
+      MergeOne(basic[sbiCpuSerial], Serial);
+      MergeOne(basic[sbiCpuVersion], Version);
+    end;
+  end;
+  if info.Battery = nil then
+  begin
+    SetLength(info.Battery, 1);
+    with info.Battery[0] do
+    begin
+      MergeOne(basic[sbiBatteryChemistry], Chemistry);
+      MergeOne(basic[sbiBatteryLocation], Location);
+      MergeOne(basic[sbiBatteryManufacturer], Manufacturer);
+      MergeOne(basic[sbiBatteryName], Name);
+      MergeOne(basic[sbiBatteryVersion], Version);
+    end;
+  end;
+  if (info.Oem = nil) and
+     (basic[sbiOem] <> '') then
+  begin
+    SetLength(info.Oem, 1);
+    info.Oem[0] := basic[sbiOem];
+  end;
 end;
 
 const
