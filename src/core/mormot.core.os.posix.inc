@@ -1781,7 +1781,7 @@ end;
 const
   _KNOWN: array[0..14] of record
     id: TSmbiosBasicInfo;
-    fn: string;
+    fn: RawUtf8;
   end = (
     (id: sbiBiosVendor;        fn: 'bios.vendor'),
     (id: sbiBiosVersion;       fn: 'bios.version'),
@@ -1800,7 +1800,7 @@ const
     (id: sbiBoardAssetTag;     fn: 'planar.tag')
   );
 
-procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
   tmp: array[byte] of AnsiChar;
@@ -1809,22 +1809,20 @@ begin
     with _KNOWN[i] do
       if kenv(KENV_GET, PAnsiChar('smbios.' + fn), @tmp, SizeOf(tmp)) >= 0 then
         info[id] := TrimU(tmp);
-  info[sbiCpuVersion] := CpuInfoText;
 end;
 
 {$else}
 
-// I don't know how to implement those on buggy Mac OS
+// help is needed to implement those on buggy Mac OS
+// may fallback to PosixInject wrappers from mormot.core.os.mac
 
 function GetSmbEfiMem: RawByteString;
 begin
   result := '';
 end;
 
-procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
-  // on MAC: call  system_profiler SPHardwareDataType
-  info[sbiCpuVersion] := CpuInfoText;
 end;
 
 {$endif OSFREEBSD}
@@ -2023,17 +2021,26 @@ const
     (id: sbiBoardAssetTag;     fn: 'board_asset_tag')
   );
 
-procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
 begin
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
       info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
-  info[sbiCpuVersion] := CpuInfoText;
 end;
 
 {$endif OSBSDDARWIN}
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+  _DirectSmbiosInfo(info);
+  if (_Smbios[sbiUuid] = '') and
+     Assigned(PosixInject.GetUuid) then
+    info[sbiUuid] := PosixInject.GetUuid; // e.g. from mormot.core.os.mac
+  if info[sbiCpuVersion] = '' then
+    info[sbiCpuVersion] := CpuInfoText;
+end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 begin

@@ -1849,6 +1849,13 @@ var
 
 {$endif OSLINUX}
 
+var
+  /// allow runtime-binding of complex OS API calls
+  // - used e.g. by mormot.core.os.mac.pas to inject its own methods
+  PosixInject: record
+    GetUuid: function: RawUtf8;
+  end;
+
 {$endif OSWINDOWS}
 
 
@@ -6292,7 +6299,7 @@ begin
   // did we already compute this UUID?
   fn := UUID_CACHE;
   s := StringFromFile(fn);
-  if length(s) = SizeOf(u) then
+  if length(s) = SizeOf(uuid) then
   begin
     uuid := PGuid(s)^;
     exit;
