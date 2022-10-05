@@ -1853,7 +1853,8 @@ var
   /// allow runtime-binding of complex OS API calls
   // - used e.g. by mormot.core.os.mac.pas to inject its own methods
   PosixInject: record
-    GetUuid: function: RawUtf8;
+    GetSmbios: function(info: TSmbiosBasicInfo): RawUtf8;
+    GetSmbiosData: function: RawByteString;
   end;
 
 {$endif OSWINDOWS}

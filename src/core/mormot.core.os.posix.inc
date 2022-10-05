@@ -1633,14 +1633,20 @@ begin
   result := GetRawSmbiosFromMem(info);
   if result then
     exit;
-  info.Data := StringFromFile(SMB_CACHE);
-  if info.Data = '' then
-    exit;
-  if CompressSynLZ(info.Data, false) = '' then
+  PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
+  info.Data := StringFromFile(SMB_CACHE); // cache is better than PosixInject
+  if (info.Data <> '') and
+     (CompressSynLZ(info.Data, false) = '') then
     info.Data := ''; // tampered file
   if info.Data = '' then
+    if Assigned(PosixInject.GetSmbiosData) then
+    begin
+      info.Data := PosixInject.GetSmbiosData; // e.g. from mormot.core.os.mac
+      if info.Data <> '' then
+        PCardinal(@info)^ := SMB_FLAGS - 1; // mark retrieved from PosixInject
+    end;
+  if info.Data = '' then
     exit;
-  PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
   info.Length := length(info.Data);
   result := true;
 end;
@@ -2033,13 +2039,18 @@ end;
 {$endif OSBSDDARWIN}
 
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+var
+  i: TSmbiosBasicInfo;
 begin
   _DirectSmbiosInfo(info);
-  if (_Smbios[sbiUuid] = '') and
-     Assigned(PosixInject.GetUuid) then
-    info[sbiUuid] := PosixInject.GetUuid; // e.g. from mormot.core.os.mac
+  // from this very same .inc file
   if info[sbiCpuVersion] = '' then
     info[sbiCpuVersion] := CpuInfoText;
+  // e.g. from mormot.core.os.mac
+  if Assigned(PosixInject.GetSmbios) then
+    for i := succ(low(i)) to high(i) do
+      if _Smbios[i] = '' then
+        info[i] := PosixInject.GetSmbios(i);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
