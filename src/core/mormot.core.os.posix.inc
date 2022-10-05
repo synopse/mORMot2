@@ -1665,6 +1665,10 @@ procedure _AfterDecodeSmbios(var info: TRawSmbiosInfo);
 var
   s: RawByteString;
 begin
+  // complete information e.g. from mormot.core.os.mac
+  if Assigned(PosixInject.GetSmbios) then
+    PosInjectSmbiosInfo(_Smbios);
+  // check if require persistence after some HW changes
   if (PCardinal(@info)^ = SMB_FLAGS) or
      (CompressSynLZGetHash32(StringFromFile(SMB_CACHE)) = Hash32(info.Data)) then
     exit;
