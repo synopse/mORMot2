@@ -691,7 +691,9 @@ begin
         with psockaddr_dl(info^.ifa_addr)^ do
           if sdl_alen = 6 then
             // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
-            mac := MacToText(@sdl_data[sdl_nlen]);
+            if PCardinal(@sdl_data[sdl_nlen])^ <> 2 then
+              // iOS7+ return always 02:00:00:00:00:00 as MAC addresses :(
+              mac := MacToText(@sdl_data[sdl_nlen]);
         if mac <> '' then
       {$else}
          (info^.ifa_addr^.sa_family = AF_PACKET) then
