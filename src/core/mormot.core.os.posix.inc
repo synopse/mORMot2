@@ -2016,13 +2016,30 @@ const
     (id: sbiBoardAssetTag;     fn: 'board_asset_tag')
   );
 
+procedure ParseHex(p: PAnsiChar; b: PByte; n: integer); forward;
+
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
+  u: RawUtf8;
+  g: TGuid;
 begin
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
       info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
+  if info[sbiUuid] = '' then
+  begin
+    u := StringFromFile('/var/lib/dbus/machine-id');
+    if u = '' then
+      u := StringFromFile('/etc/machine-id');
+    u := TrimU(u);
+    if length(u) = 32 then
+    begin
+      FillZero(g{%H-});
+      ParseHex(pointer(u), @g, 16);
+      info[sbiUuid] := RawUtf8(UpperCase(copy(GUIDToString(g), 2, 36)));
+    end;
+  end;
 end;
 
 {$endif OSBSDDARWIN}
@@ -2941,6 +2958,25 @@ begin
     end;
     result := (result shl 8) or (v0 shl 4) or v1;
   until false;
+end;
+
+procedure ParseHex(p: PAnsiChar; b: PByte; n: integer);
+var
+  v0, v1: integer;
+begin
+  repeat // caller ensured p<>nil and b<>nil and n>0
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+      break;
+    inc(p);
+    b^ := (v0 shl 4) or v1;
+    inc(b);
+    dec(n);
+  until n = 0;
 end;
 
 procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
