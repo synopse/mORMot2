@@ -10,7 +10,7 @@ unit mormot.core.os.mac;
   - Gather MacOS Specific Operating System Information
   
    This unit uses MacOSAll and link several toolkits, so is not included
-   in mormot.core.os.pas to reduce executable size, but inject this methods
+   in mormot.core.os.pas to reduce executable size, but inject these methods
    at runtime: just include "uses mormot.core.os.mac" in programs needing it.
 
   *****************************************************************************

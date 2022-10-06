@@ -6171,7 +6171,7 @@ begin
   info.Length := p^.StructMaxLength;
 end;
 
-// caller should then try to decode SMB from pointer(result) + Info.Len
+// caller should then try to decode SMB from pointer(result) + info.Len
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): QWord;
 var
   p, pend: PSmbEntryPoint32;

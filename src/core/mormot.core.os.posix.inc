@@ -1657,7 +1657,7 @@ var
 begin
   if Assigned(PosixInject.GetSmbios) then // e.g. from mormot.core.os.mac
     for i := succ(low(i)) to high(i) do
-      if _Smbios[i] = '' then
+      if info[i] = '' then
         info[i] := PosixInject.GetSmbios(i);
 end;
 
