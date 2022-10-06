@@ -7548,7 +7548,6 @@ begin
           stmt := NewStatement;
           stmt.Prepare(sql, false);
         end;
-        Rows.ReleaseRows;
         // write row data
         stmt.BindFromRows(ColumnForcedTypes, Rows);
         stmt.ExecutePrepared;
@@ -7558,6 +7557,7 @@ begin
       if WithinTransaction then
         Commit;
     finally
+      Rows.ReleaseRows;
       stmt.Free;
       InternalProcess(speNonActive);
     end;
