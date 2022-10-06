@@ -2838,6 +2838,11 @@ function _oskb(Size: cardinal): string;
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 
+/// direct conversion of a console OEM-encoded string into UTF-8 encoded string
+// - under Windows, will use the CP_OEMCP encoding
+// - under Linux, will expect the console to be defined with UTF-8 encoding
+function ConsoleToUtf8(const S: RawByteString): RawUtf8;
+
 
 type
   /// encapsulate cross-platform loading of library files

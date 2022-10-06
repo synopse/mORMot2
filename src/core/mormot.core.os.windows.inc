@@ -1780,6 +1780,27 @@ begin
     Utf8ToConsoleDoConv(S, result);
 end;
 
+procedure ConsoleToUtf8DoConv(const Console: RawByteString; var Utf8: RawUtf8);
+var
+  utf16: SynUnicode;
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(length(Console) * 4);
+  OemToCharBuffW(pointer(Console), tmp.buf, length(Console) + 1); // +1 = ending #0
+  SetString(utf16, PWideChar(tmp.buf), StrLenW(tmp.Buf));
+  tmp.Done;
+  Utf8 := UTF8Encode(utf16);
+end;
+
+function ConsoleToUtf8(const S: RawByteString): RawUtf8;
+begin
+  if IsAnsiCompatible(S) then
+    result := S // no conversion needed
+  else
+    ConsoleToUtf8DoConv(S, result);
+end;
+
+
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
 var

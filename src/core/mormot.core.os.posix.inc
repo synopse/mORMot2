@@ -1434,6 +1434,11 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
+function ConsoleToUtf8(const S: RawByteString): RawUtf8;
+begin
+  result := S; // expect a UTF-8 console under Linux/BSD
+end;
+
 {$I+}
 
 
