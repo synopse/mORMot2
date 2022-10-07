@@ -2763,6 +2763,57 @@ begin
   end;
 end;
 
+// FPC popen(text/file) are an overkill here
+function popen(cmd, rw: PAnsiChar): pointer;
+  cdecl; external clib;
+function pclose(f: pointer):longint;
+  cdecl; external clib;
+function fileno(f: pointer): THandle;
+  cdecl; external clib;
+
+function RunRedirect(const cmd: TFileName;
+  const onoutput: TOnRedirect): RawUtf8;
+var
+  f: pointer;
+  fd: THandle;
+  u: RawUtf8;
+  n, l: TSsize;
+  tmp: array[word] of byte; // 64KB stack buffer
+begin
+  result := '';
+  u := RawUtf8(cmd);
+  f := popen(pointer(u), 'r');
+  if f = nil then
+    exit;
+  fd := fileno(f);
+  FpFcntl(fd, F_SETFL, O_NONBLOCK);
+  l := 0;
+  repeat
+    n := fpread(fd, tmp, SizeOf(tmp));
+    if (n < 0) and
+       (errno = ESysEAGAIN) then
+    begin
+      if Assigned(onoutput) and
+         onoutput('') then
+        break; // returned true to stop the execution
+      SleepHiRes(10);
+      continue;
+    end
+    else if n = 0 then
+      break; // pipe closed = execution finished
+    SetLength(result, l + n);
+    MoveFast(tmp, PByteArray(result)[l], n);
+    inc(l, n);
+    if Assigned(onoutput) then
+    begin
+      FastSetString(u, @tmp, n);
+      if onoutput(u) then
+        break; // returned true to stop the execution, or false to continue
+    end;
+  until false;
+  pclose(f);
+end;
+
 
 { ****************** Gather Operating System Information }
 

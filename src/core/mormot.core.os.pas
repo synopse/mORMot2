@@ -4175,18 +4175,32 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg4: TFileName = ''; const arg5: TFileName = '';
   const env: TFileName = ''; envaddexisting: boolean = false): integer;
 
+type
+  /// callback used by RunRedirect() to notify of console output at runtime
+  // - newly console output text is given as UTF-8 on all platforms
+  // - should return true to stop the execution, or false to continue
+  TOnRedirect = function(const text: RawUtf8): boolean of object;
+
 /// like fpSystem, but cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
-// - waitfordelay/processid are implemented on Windows only
+// - waitfordelay/processid/onoutput are implemented on Windows only
+// - parsed is implemented on POSIX only
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
+  {$ifdef OSWINDOWS}
+  waitfordelayms: cardinal = INFINITE; processid: PHandle = nil;
+  redirected: PRawUtf8 = nil; const onoutput: TOnRedirect = nil
+  {$else}
   parsed: PParseCommands = nil
-  {$ifdef OSWINDOWS} ;
-  waitfordelayms: cardinal = INFINITE; processid: PHandle = nil
   {$endif OSWINDOWS}): integer;
 
+/// execute a command, returning its output console as UTF-8 text
+// - calling libc popen/pclose on POSIX, or CreateProcessW on Windows
+// - return '' on cmd execution error
+function RunRedirect(const cmd: TFileName;
+  const onoutput: TOnRedirect = nil): RawUtf8;
 
 
 

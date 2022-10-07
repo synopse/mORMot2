@@ -3516,6 +3516,9 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
+function GetFileSizeEx(hFile: THandle; var FileSize: Int64): BOOL;
+  stdcall; external kernel32;
+
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2, arg3, arg4, arg5, env: TFileName; envaddexisting: boolean): integer;
 begin
@@ -3545,16 +3548,21 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
-  envaddexisting: boolean; parsed: PParseCommands; waitfordelayms: cardinal;
-  processid: PHandle): integer;
+  envaddexisting: boolean; waitfordelayms: cardinal; processid: PHandle;
+  redirected: PRawUtf8; const onoutput: TOnRedirect): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
+  security: TSecurityAttributes;
   exe, path: TFileName;
+  rd, wr: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
-  exitcode: cardinal;
-  i: integer;
+  output: RawByteString;
+  endtix, pending: Int64;
+  exitcode, n: cardinal;
+  i, l, ulen: PtrInt;
+  tmp: TSynTempBuffer;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   result := -1;
@@ -3598,19 +3606,73 @@ begin
     else
       UniqueString(wenv);
   end;
+  security.nLength := SizeOf(security);
+  security.bInheritHandle := true;
+  security.lpSecurityDescriptor := nil;
   // launch the process
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
+  if redirected <> nil then
+    if CreatePipe(rd, wr, @security, 0) then
+    begin
+      SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+      startupinfo.wShowWindow := SW_HIDE;
+      startupinfo.hStdOutput := wr;
+      startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+    end
+    else
+      redirected := nil;
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
-  if CreateProcessW(nil, pointer(wcmd), nil, nil, false,
+  if CreateProcessW(nil, pointer(wcmd), @security, @security, true,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
       DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
     if processid <> nil then
       processid^ := processinfo.hProcess;
-    if waitfor then
+    if redirected <> nil then
+    begin
+      // see https://stackoverflow.com/a/25725197/458259
+      l := 0;
+      ulen := 0;
+      if waitfordelayms = INFINITE then
+        endtix := 0
+      else
+        endtix := GetTickCount64 + waitfordelayms;
+      repeat
+        exitcode := WaitForSingleObject(processinfo.hProcess, 200);
+        Win32Check(exitcode <> WAIT_FAILED);
+        repeat
+          Win32Check(GetFileSizeEx(rd, pending));
+          if pending = 0 then
+            break;
+          n := 0;
+          Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
+          if n <= 0 then
+            break;
+          SetLength(output, PtrInt(n) + l);
+          MoveFast(tmp, PByteArray(output)[l], n);
+          inc(l, n);
+          if Assigned(onoutput) then
+          begin
+            redirected^ := ConsoleToUtf8(output);
+            if onoutput(copy(redirected^, ulen + 1, maxInt)) then
+              break; // returned true to stop the execution, or false to continue
+            ulen := length(redirected^); // incremental valid UTF-8 output
+          end;
+        until false;
+      until (exitcode = WAIT_OBJECT_0) or
+            ((endtix <> 0) and
+             (GetTickCount64 > endtix));
+      if redirected^ = '' then
+        redirected^ := ConsoleToUtf8(output);
+      if GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := exitcode       // waited for process to end -> return code
+      else
+        result := -GetLastError; // was not able to retrieve exit code
+    end
+    else if waitfor then
       if WaitForSingleObject(processinfo.hProcess, waitfordelayms) = WAIT_FAILED then
         if waitfordelayms <> INFINITE then
           result := -1 // still runing after waitfordelayms
@@ -3627,6 +3689,17 @@ begin
   end
   else
     result := -GetLastError;
+  if redirected <> nil then
+  begin
+    CloseHandle(rd);
+    CloseHandle(wr);
+  end;
+end;
+
+function RunRedirect(const cmd: TFileName; const onoutput: TOnRedirect): RawUtf8;
+begin
+  result := '';
+  RunCommand(cmd, true, '', false, INFINITE, nil, @result, onoutput);
 end;
 
 
