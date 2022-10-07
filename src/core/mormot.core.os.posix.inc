@@ -2799,7 +2799,7 @@ begin
       SleepHiRes(10);
       continue;
     end
-    else if n = 0 then
+    else if n <= 0 then
       break; // pipe closed = execution finished
     SetLength(result, l + n);
     MoveFast(tmp, PByteArray(result)[l], n);
