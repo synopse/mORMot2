@@ -3623,7 +3623,7 @@ begin
     else
       redirected := nil;
   FillCharFast(processinfo, SizeOf(processinfo), 0);
-  // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
+  // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
   if CreateProcessW(nil, pointer(wcmd), @security, @security, true,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
       DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
@@ -3646,7 +3646,12 @@ begin
         repeat
           Win32Check(GetFileSizeEx(rd, pending));
           if pending = 0 then
+          begin
+            if Assigned(onoutput) and
+               onoutput('') then
+              exitcode := WAIT_OBJECT_0; // returned true to abort the execution
             break;
+          end;
           n := 0;
           Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
           if n <= 0 then
@@ -3658,7 +3663,10 @@ begin
           begin
             redirected^ := ConsoleToUtf8(output);
             if onoutput(copy(redirected^, ulen + 1, maxInt)) then
+            begin
+              exitcode := WAIT_OBJECT_0;
               break; // returned true to stop the execution, or false to continue
+            end;
             ulen := length(redirected^); // incremental valid UTF-8 output
           end;
         until false;

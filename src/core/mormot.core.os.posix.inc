@@ -2795,7 +2795,7 @@ begin
     begin
       if Assigned(onoutput) and
          onoutput('') then
-        break; // returned true to stop the execution
+        break; // returned true to abort the execution
       SleepHiRes(10);
       continue;
     end

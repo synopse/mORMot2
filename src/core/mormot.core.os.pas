@@ -4179,6 +4179,7 @@ type
   /// callback used by RunRedirect() to notify of console output at runtime
   // - newly console output text is given as UTF-8 on all platforms
   // - should return true to stop the execution, or false to continue
+  // - on idle state, is called with text='' to allow execution abort
   TOnRedirect = function(const text: RawUtf8): boolean of object;
 
 /// like fpSystem, but cross-platform
