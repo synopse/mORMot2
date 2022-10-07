@@ -22,8 +22,17 @@ end;
 
 {$else}
 
+const
+  /// FPC system hardcoded MAX_PATH = 260 :(
+  // - but more than 260 chars are possible with the \\?\..... prefix
+  // or by disabling the limitation in registry since Windows 10, version 1607
+  // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+  // - 2047 chars seems big enough in practice - POSIX uses 4096
+  W32_MAX = 2047;
+
 type
-  TW32Temp = array[0..MAX_PATH] of WideChar; // no temp alloc for ASCII names
+  /// 2KB stack buffer for no heap allocation during UTF-16 encoding
+  TW32Temp = array[0..W32_MAX] of WideChar;
 
 procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
 var
@@ -32,6 +41,11 @@ var
 begin
   // identical to FPC RTL, which converts to UnicodeString before Wide API call 
   U := SynUnicode(FileName); // let the RTL + OS do the conversion
+  // switch to extended-length path if needed, allowing up to 32,767 widechars
+  len := length(U);
+  if len > MAX_PATH then
+    U := '\\?\' + U;
+  // move to TW32Temp stack buffer
   len := length(U) * 2 + 2;  // +2 to include trailing #0
   if len > SizeOf(Temp) then
     Temp[0] := #0 // avoid buffer overflow (will be rejected by Windows anyway)
@@ -48,15 +62,14 @@ begin
     result := nil
   else
   begin
-    if IsAnsiCompatible(pointer(FileName), len) then
-    begin
+    if (len < MAX_PATH) and
+       IsAnsiCompatible(pointer(FileName), len) then
       // most common case doesn't need any Unicode conversion
-      if len > MAX_PATH then
-        len := 0;
       for i := 0 to len do // include trailing #0
-        PWordArray(@Temp)[i] := PByteArray(FileName)[i];
-    end
+        PWordArray(@Temp)[i] := PByteArray(FileName)[i]
     else
+      // use a temporary SynUnicode variable for complex UTF-16 conversion
+      // or if MAX_PATH is reached and \\?\ prefix is needed for extended length
       W32Convert(FileName, Temp);
     result := @Temp;
   end;
