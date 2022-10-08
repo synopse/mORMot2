@@ -3704,10 +3704,11 @@ begin
   end;
 end;
 
-function RunRedirect(const cmd: TFileName; const onoutput: TOnRedirect): RawUtf8;
+function RunRedirect(const cmd: TFileName; const onoutput: TOnRedirect;
+  waitfordelayms: cardinal): RawUtf8;
 begin
   result := '';
-  RunCommand(cmd, true, '', false, INFINITE, nil, @result, onoutput);
+  RunCommand(cmd, true, '', false, waitfordelayms, nil, @result, onoutput);
 end;
 
 

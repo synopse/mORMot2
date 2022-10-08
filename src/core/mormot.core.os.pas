@@ -4201,7 +4201,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - calling libc popen/pclose on POSIX, or CreateProcessW on Windows
 // - return '' on cmd execution error
 function RunRedirect(const cmd: TFileName;
-  const onoutput: TOnRedirect = nil): RawUtf8;
+  const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE): RawUtf8;
 
 
 

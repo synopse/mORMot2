@@ -2772,12 +2772,13 @@ function fileno(f: pointer): THandle;
   cdecl; external clib;
 
 function RunRedirect(const cmd: TFileName;
-  const onoutput: TOnRedirect): RawUtf8;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
 var
   f: pointer;
   fd: THandle;
   u: RawUtf8;
   n, l: TSsize;
+  endtix: Int64;
   tmp: array[word] of byte; // 64KB stack buffer
 begin
   result := '';
@@ -2787,6 +2788,10 @@ begin
     exit;
   fd := fileno(f);
   FpFcntl(fd, F_SETFL, O_NONBLOCK);
+  if waitfordelayms = INFINITE then
+    endtix := 0
+  else
+    endtix := GetTickCount64 + waitfordelayms;
   l := 0;
   repeat
     n := fpread(fd, tmp, SizeOf(tmp));
@@ -2797,20 +2802,23 @@ begin
          onoutput('') then
         break; // returned true to abort the execution
       SleepHiRes(10);
-      continue;
     end
     else if n <= 0 then
-      break; // pipe closed = execution finished
-    SetLength(result, l + n);
-    MoveFast(tmp, PByteArray(result)[l], n);
-    inc(l, n);
-    if Assigned(onoutput) then
+      break // pipe closed = execution finished
+    else
     begin
-      FastSetString(u, @tmp, n);
-      if onoutput(u) then
-        break; // returned true to stop the execution, or false to continue
+      SetLength(result, l + n);
+      MoveFast(tmp, PByteArray(result)[l], n);
+      inc(l, n);
+      if Assigned(onoutput) then
+      begin
+        FastSetString(u, @tmp, n);
+        if onoutput(u) then
+          break; // returned true to stop the execution, or false to continue
+      end;
     end;
-  until false;
+  until (endtix <> 0) and
+        (GetTickCount64 > endtix);
   pclose(f);
 end;
 
