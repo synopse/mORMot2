@@ -3647,7 +3647,7 @@ begin
           begin
             if Assigned(onoutput) and
                onoutput('') then
-              exitcode := WAIT_OBJECT_0; // returned true to abort the execution
+              exitcode := WAIT_OBJECT_0; // returned true to abort
             break;
           end;
           n := 0;
@@ -3663,11 +3663,11 @@ begin
             if onoutput(copy(redirected^, ulen + 1, maxInt)) then
             begin
               exitcode := WAIT_OBJECT_0;
-              break; // returned true to stop the execution, or false to continue
+              break; // returned true to stop the execution
             end;
             ulen := length(redirected^); // incremental valid UTF-8 output
           end;
-        until false;
+        until n < SizeOf(tmp);
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
              (GetTickCount64 > endtix));

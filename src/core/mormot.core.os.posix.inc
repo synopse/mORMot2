@@ -2793,7 +2793,7 @@ begin
     begin
       if Assigned(onoutput) and
          onoutput('') then
-        break; // returned true to abort the execution
+        endtix := 1; // returned true to abort -> kill()
       SleepHiRes(10);
     end
     else if n <= 0 then
@@ -2807,7 +2807,7 @@ begin
       begin
         FastSetString(u, @tmp, n);
         if onoutput(u) then
-          break; // returned true to stop the execution, or false to continue
+          endtix := 1; // force kill() on abort
       end;
     end;
     if (endtix <> 0) and
