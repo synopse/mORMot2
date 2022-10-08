@@ -500,13 +500,14 @@ begin
   FileTimestampUtc := FileTimeToUnixMSTime(FA.ftLastWriteTime) // no local time
 end;
 
+function GetFileSizeEx(hFile: THandle; var FileSize: Int64): BOOL;
+  stdcall; external kernel32;
+
 function FileSize(F: THandle): Int64;
-var
-  res: Int64Rec absolute result;
 begin
-  result := 0;
-  if PtrInt(F) > 0 then
-    res.Lo := GetFileSize(F, @res.Hi);
+  if (PtrInt(F) <= 0) or
+     not GetFileSizeEx(F, result) then
+    result := 0;
 end;
 
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
@@ -3514,9 +3515,6 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
   stdcall; external kernel32;
 
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
-  stdcall; external kernel32;
-
-function GetFileSizeEx(hFile: THandle; var FileSize: Int64): BOOL;
   stdcall; external kernel32;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
