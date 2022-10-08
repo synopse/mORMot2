@@ -4198,7 +4198,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
   {$endif OSWINDOWS}): integer;
 
 /// execute a command, returning its output console as UTF-8 text
-// - calling libc popen/pclose on POSIX, or CreateProcessW on Windows
+// - calling FPC RTL popen/pclose on POSIX, or CreateProcessW on Windows
 // - return '' on cmd execution error
 function RunRedirect(const cmd: TFileName;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE): RawUtf8;

@@ -2763,30 +2763,23 @@ begin
   end;
 end;
 
-// FPC popen(text/file) are an overkill here
-function popen(cmd, rw: PAnsiChar): pointer;
-  cdecl; external clib;
-function pclose(f: pointer):longint;
-  cdecl; external clib;
-function fileno(f: pointer): THandle;
-  cdecl; external clib;
-
 function RunRedirect(const cmd: TFileName;
   const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
 var
-  f: pointer;
+  // note: FPC popen(file) allows access to the pid whereas clib popen() won't
+  f: file;
   fd: THandle;
+  pid: cint;
   u: RawUtf8;
   n, l: TSsize;
   endtix: Int64;
   tmp: array[word] of byte; // 64KB stack buffer
 begin
   result := '';
-  u := RawUtf8(cmd);
-  f := popen(pointer(u), 'r');
-  if f = nil then
+  if popen(f, cmd, 'r') <> 0 then
     exit;
-  fd := fileno(f);
+  fd := TFileRec(f).Handle;
+  pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
   FpFcntl(fd, F_SETFL, O_NONBLOCK);
   if waitfordelayms = INFINITE then
     endtix := 0
@@ -2817,8 +2810,13 @@ begin
           break; // returned true to stop the execution, or false to continue
       end;
     end;
-  until (endtix <> 0) and
-        (GetTickCount64 > endtix);
+    if (endtix <> 0) and
+       (GetTickCount64 > endtix) then
+    begin
+      fpkill(pid, SIGKILL); // abort process execution after timeout
+      break;
+    end;
+  until false;
   pclose(f);
 end;
 
