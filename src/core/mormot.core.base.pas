@@ -2797,6 +2797,9 @@ type
 // - can be used as an alternative to several Random32 function calls
 function Lecuyer: PLecuyer;
 
+/// internal function used e.g. by TLecuyer.FillShort/FillShort31
+procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - this function will use well documented and proven Pierre L'Ecuyer software
 // generator - which happens to be faster (and safer) than RDRAND opcode (which
@@ -8404,32 +8407,43 @@ begin
   until bytes = 0;
 end;
 
-procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+var
+  len: PtrUInt;
 begin
-  if size > 255 then
-    size := 255;
-  Fill(@dest, size + 1);
-  size := PByte(@dest)^ mod size;
-  dest[0] := AnsiChar(size);
+  dec(size);
+  len := dest[0];
+  if size = 32 then
+    size := len and 31
+  else
+    size := len mod size; // first random byte will make length
+  dest[0] := size;
   if size <> 0 then
     repeat
-      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
+      dest[size] := (cardinal(dest[size]) and 63) + 32;
       dec(size);
     until size = 0;
 end;
 
+procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+begin
+  if size = 0 then
+  begin
+    dest[0] := #0;
+    exit;
+  end;
+  if size > 255 then
+    size := 256
+  else
+    inc(size);
+  Fill(@dest, size);
+  FillAnsiStringFromRandom(@dest, size);
+end;
+
 procedure TLecuyer.FillShort31(var dest: TShort31);
-var
-  size: PtrUInt;
 begin
   Fill(@dest, 32);
-  size := PByte(@dest)^ and 31;
-  dest[0] := AnsiChar(size);
-  if size <> 0 then
-    repeat
-      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
-      dec(size);
-    until size = 0;
+  FillAnsiStringFromRandom(@dest, 32);
 end;
 
 procedure Random32Seed(entropy: pointer; entropylen: PtrInt);

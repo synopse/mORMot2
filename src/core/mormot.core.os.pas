@@ -7439,9 +7439,8 @@ end;
 
 procedure TLecuyerThreadSafe.FillShort31(var dest: TShort31);
 begin
-  Safe.Lock;
-  Generator.FillShort31(dest);
-  Safe.UnLock;
+  Fill(@dest, 32);
+  FillAnsiStringFromRandom(@dest, 32);
 end;
 
 
