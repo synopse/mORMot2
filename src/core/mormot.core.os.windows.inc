@@ -3702,11 +3702,15 @@ begin
   end;
 end;
 
-function RunRedirect(const cmd: TFileName; const onoutput: TOnRedirect;
-  waitfordelayms: cardinal): RawUtf8;
+function RunRedirect(const cmd: TFileName; exitcode: PInteger;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
+var
+  res: integer;
 begin
   result := '';
-  RunCommand(cmd, true, '', false, waitfordelayms, nil, @result, onoutput);
+  res := RunCommand(cmd, true, '', false, waitfordelayms, nil, @result, onoutput);
+  if exitcode <> nil then
+    exitcode^ := res;
 end;
 
 

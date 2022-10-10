@@ -2770,13 +2770,13 @@ begin
   end;
 end;
 
-function RunRedirect(const cmd: TFileName;
+function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
 var
   // note: FPC popen(file) allows access to the pid whereas clib popen() won't
   f: file;
   fd: THandle;
-  pid: cint;
+  pid, res: cint;
   u: RawUtf8;
   n, l: TSsize;
   wait: cardinal;
@@ -2825,7 +2825,9 @@ begin
       break;
     end;
   until false;
-  pclose(f);
+  res := pclose(f);
+  if exitcode <> nil then
+    exitcode^ := res;
 end;
 
 

@@ -4202,7 +4202,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - return '' on cmd execution error, or the whole output console content
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
-function RunRedirect(const cmd: TFileName;
+function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE): RawUtf8;
 
 
