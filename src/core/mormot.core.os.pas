@@ -4179,7 +4179,7 @@ type
   /// callback used by RunRedirect() to notify of console output at runtime
   // - newly console output text is given as UTF-8 on all platforms
   // - should return true to stop the execution, or false to continue
-  // - on idle state, is called with text='' to allow execution abort
+  // - on idle state (each 200ms), is called with text='' to allow execution abort
   TOnRedirect = function(const text: RawUtf8): boolean of object;
 
 /// like fpSystem, but cross-platform
@@ -4199,7 +4199,9 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 
 /// execute a command, returning its output console as UTF-8 text
 // - calling FPC RTL popen/pclose on POSIX, or CreateProcessW on Windows
-// - return '' on cmd execution error
+// - return '' on cmd execution error, or the whole output console content
+// - will optionally call onoutput() to notify the new output state
+// - can abort if onoutput() callback returns false, or waitfordelayms expires
 function RunRedirect(const cmd: TFileName;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE): RawUtf8;
 

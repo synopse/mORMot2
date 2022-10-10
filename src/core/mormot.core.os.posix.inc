@@ -2779,6 +2779,7 @@ var
   pid: cint;
   u: RawUtf8;
   n, l: TSsize;
+  wait: cardinal;
   endtix: Int64;
   tmp: array[word] of byte; // 64KB stack buffer
 begin
@@ -2787,36 +2788,36 @@ begin
     exit;
   fd := TFileRec(f).Handle;
   pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
-  FpFcntl(fd, F_SETFL, O_NONBLOCK);
+  wait := 200;
   if waitfordelayms = INFINITE then
     endtix := 0
   else
+  begin
     endtix := GetTickCount64 + waitfordelayms;
+    if waitfordelayms < wait then
+      wait := waitfordelayms;
+  end;
   l := 0;
   repeat
-    n := fpread(fd, tmp, SizeOf(tmp));
-    if (n < 0) and
-       (errno = ESysEAGAIN) then
+    if WaitReadPending(fd, wait) then
     begin
-      if Assigned(onoutput) and
-         onoutput('') then
-        endtix := 1; // returned true to abort -> kill()
-      SleepHiRes(10);
-    end
-    else if n <= 0 then
-      break // pipe closed = execution finished
-    else
-    begin
+      n := fpread(fd, tmp, SizeOf(tmp));
+      if n <= 0 then
+        break; // pipe closed = execution finished
       SetLength(result, l + n);
       MoveFast(tmp, PByteArray(result)[l], n);
       inc(l, n);
+      FastSetString(u, @tmp, n); write(u);
       if Assigned(onoutput) then
       begin
         FastSetString(u, @tmp, n);
         if onoutput(u) then
           endtix := 1; // force kill() on abort
       end;
-    end;
+    end
+    else if Assigned(onoutput) and // idle
+            onoutput('') then
+      endtix := 1; // returned true to abort -> kill()
     if (endtix <> 0) and
        (GetTickCount64 > endtix) then
     begin
