@@ -292,6 +292,12 @@ begin
     Check(o.IDValue <= MAX);
   for o in lo.Range(-5) do
     Check(o.IDValue > MAX - 5);
+  o := nil; // iterative Pop(o) will release the previous o<>nil instances
+  for i := 0 to MAX do
+    Check(lo.Pop(o, [popFromHead]));
+  Check(not lo.Pop(o, [popFromHead]));
+  o.Free; // but we still need to release the last o instance
+  CheckEqual(lo.Count, 0);
   lo := Collections.NewList<TObjectWithID>([loCreateUniqueIndex]);
   for i := 0 to MAX do
     Check(lo.Add(TObjectWithID.CreateWithID(i)) = i);
