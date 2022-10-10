@@ -2807,7 +2807,6 @@ begin
       SetLength(result, l + n);
       MoveFast(tmp, PByteArray(result)[l], n);
       inc(l, n);
-      FastSetString(u, @tmp, n); write(u);
       if Assigned(onoutput) then
       begin
         FastSetString(u, @tmp, n);
@@ -2822,12 +2821,16 @@ begin
        (GetTickCount64 > endtix) then
     begin
       fpkill(pid, SIGKILL); // abort process execution after timeout
+      pid := 0;
       break;
     end;
   until false;
   res := pclose(f);
   if exitcode <> nil then
-    exitcode^ := res;
+    if pid = 0 then
+      exitcode^ := -1
+    else
+      exitcode^ := res;
 end;
 
 
