@@ -8412,11 +8412,11 @@ var
   len: PtrUInt;
 begin
   dec(size);
-  len := dest[0];
-  if size = 32 then
-    size := len and 31
+  len := dest[0];  // first random byte will make length
+  if size = 31 then
+    size := len and 31 // optimized for FillShort31()
   else
-    size := len mod size; // first random byte will make length
+    size := len mod size;
   dest[0] := size;
   if size <> 0 then
     repeat
