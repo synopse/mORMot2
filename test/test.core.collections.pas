@@ -210,51 +210,51 @@ begin
   for i in li do
     Check(i < 0);
   li.Capacity := MAX + 1;       // faster Add() thanks to pre-allocation
-  Check(li.Count = 0);
+  CheckEqual(li.Count, 0);
   for i in li do
     Check(i < 0);
   for i in li.Range(-5) do
     Check(i < 0);
   for i := 0 to MAX do          // populate with some data
-    Check(li.Add(i) = i);
+    CheckEqual(li.Add(i), i);
   for i := 0 to li.Count - 1 do // regular Items[] access
-    Check(li[i] = i);
+    CheckEqual(li[i], i);
   for i in li do                // use an enumerator - safe and clean
     Check(cardinal(i) <= MAX);
   for i in li.Range(-5) do      // use an enumerator for the last 5 items
     Check(i > MAX - 5);
   for i in li do
-    Check(li.IndexOf(i) = i);   // O(n) brute force search
+    CheckEqual(li.IndexOf(i), i);   // O(n) brute force search
   for i in li do
-    Check(li.Find(i) = i);      // O(n) brute force search
+    CheckEqual(li.Find(i), i);      // O(n) brute force search
   pi := li.First;
   for i := 0 to li.Count - 1 do // fastest method
   begin
-    Check(pi^ = i);
+    CheckEqual(pi^, i);
     inc(pi);
   end;
   li := Collections.NewList<integer>([loCreateUniqueIndex]);
   li.Capacity := MAX + 1;
   for i := 0 to MAX do          // populate with some data
-    Check(li.Add(i) = i);
+    CheckEqual(li.Add(i), i);
   for i in li do                // use an enumerator - safe and clean
     Check(cardinal(i) <= MAX);
   for i in li do
-    Check(li.IndexOf(i) = i);   // O(n) brute force search
+    CheckEqual(li.IndexOf(i), i);   // O(n) brute force search
   for i in li do
-    Check(li.Find(i) = i);      // O(1) hash table search
+    CheckEqual(li.Find(i), i);      // O(1) hash table search
   // manual IList<double> validation
   ld := Collections.NewList<double>;
   for d in ld do
     Check(d < 0);
   ld.Capacity := MAX + 1;       // faster Add() thanks to pre-allocation
-  Check(ld.Count = 0);
+  CheckEqual(ld.Count, 0);
   for d in ld do
     Check(d < 0);
   for d in ld.Range(-5) do
     Check(d < 0);
   for i := 0 to MAX do          // populate with some data
-    Check(ld.Add(i) = i);
+    CheckEqual(ld.Add(i), i);
   for i := 0 to ld.Count - 1 do // regular Items[] access
     Check(ld[i] = i);
   for d in ld do                // use an enumerator - safe and clean
@@ -274,24 +274,31 @@ begin
   ld := Collections.NewList<double>([loCreateUniqueIndex]);
   ld.Capacity := MAX + 1;
   for i := 0 to MAX do          // populate with some data
-    Check(ld.Add(i) = i);
+    CheckEqual(ld.Add(i), i);
   for d in ld do                // use an enumerator - safe and clean
     Check(d <= MAX);
   for d in ld do
-    Check(ld.IndexOf(d) = trunc(d));   // O(n) brute force search
+    CheckEqual(ld.IndexOf(d), trunc(d));   // O(n) brute force search
   for d in ld do
-    Check(ld.Find(d) = trunc(d));      // O(1) hash table search
+    CheckEqual(ld.Find(d), trunc(d));      // O(1) hash table search
   // manual IList<TObjectWithID> validation
   lo := Collections.NewList<TObjectWithID>;
   lo.Capacity := MAX + 1;
   for i := 0 to MAX do
     Check(lo.Add(TObjectWithID.CreateWithID(i)) = i);
+  CheckEqual(lo.Count, MAX + 1);
   for i := 0 to lo.Count - 1 do
-    Check(lo[i].IDValue = i);
+    CheckEqual(lo[i].IDValue, i);
   for o in lo do
     Check(o.IDValue <= MAX);
   for o in lo.Range(-5) do
     Check(o.IDValue > MAX - 5);
+  i := 0;
+  for o in lo do
+  begin
+    CheckEqual(lo.Find(o), i); // O(n) lookup by address
+    inc(i);
+  end;
   o := nil; // iterative Pop(o) will release the previous o<>nil instances
   for i := 0 to MAX do
     Check(lo.Pop(o, [popFromHead]));
@@ -301,10 +308,13 @@ begin
   lo := Collections.NewList<TObjectWithID>([loCreateUniqueIndex]);
   for i := 0 to MAX do
     Check(lo.Add(TObjectWithID.CreateWithID(i)) = i);
+  CheckEqual(lo.Count, MAX + 1);
   for i := 0 to MAX do
-    Check(lo.Add(lo[i]) = i); // duplicate found by loCreateUniqueIndex
+    CheckEqual(lo.Add(lo[i]), i); // duplicate found by loCreateUniqueIndex
+  for i := 0 to MAX do
+    CheckEqual(lo.Find(lo[i]), i); // O(1) lookup via loCreateUniqueIndex
   for i := 0 to lo.Count - 1 do
-    Check(lo[i].IDValue = i);
+    CheckEqual(lo[i].IDValue, i);
   for o in lo do
     Check(o.IDValue <= MAX);
   for o in lo.Range(-5) do
@@ -320,8 +330,8 @@ begin
   begin
     s := TClassWithoutRtti.Create;
     s.Soup := UInt32ToUtf8(i);
-    Check(ls.Add(s) = i);
-    check(ls[i] <> nil);
+    CheckEqual(ls.Add(s), i);
+    Check(ls[i] <> nil);
    end;
    for i := 0 to ls.Count - 1 do
      Check(Utf8ToInteger(ls[i].Soup) = i);
@@ -342,19 +352,19 @@ begin
   i := 0;
   for u in lu do                // use an enumerator - safe and clean
   begin
-    Check(Utf8ToInteger(u) = i);
+    CheckEqual(Utf8ToInteger(u), i);
     inc(i);
   end;
   for u in lu.Range(-5) do      // use an enumerator for the last 5 items
     Check(Utf8ToInteger(u) > MAX - 5);
   for u in lu do
-    Check(lu.IndexOf(u) = Utf8ToInteger(u));   // O(n) brute force search
+    CheckEqual(lu.IndexOf(u), Utf8ToInteger(u));   // O(n) brute force search
   for u in lu do
-    Check(lu.Find(u) = Utf8ToInteger(u));      // O(n) brute force search
+    CheckEqual(lu.Find(u), Utf8ToInteger(u));      // O(n) brute force search
   pu := lu.First;
   for i := 0 to lu.Count - 1 do // fastest method
   begin
-    Check(Utf8ToInteger(pu^) = i);
+    CheckEqual(Utf8ToInteger(pu^), i);
     inc(pu);
   end;
   lu := Collections.NewList<RawUtf8>([loCreateUniqueIndex]);
@@ -362,11 +372,11 @@ begin
   for i := 0 to MAX do          // populate with some data
     Check(lu.Add(UInt32ToUtf8(i)) = i);
   i := 0;
-  for u in lu do                // use an enumerator - safe and clean
+  for u in lu do                    // use an enumerator - safe and clean
   begin
-    Check(Utf8ToInteger(u) = i);
-    Check(lu.IndexOf(u) = i);   // O(n) brute force search
-    Check(lu.Find(u) = i);      // O(1) hash table search
+    CheckEqual(Utf8ToInteger(u), i);
+    CheckEqual(lu.IndexOf(u), i);   // O(n) brute force search
+    CheckEqual(lu.Find(u), i);      // O(1) hash table search
     inc(i);
   end;
   // minimal THash128 compilation check
@@ -386,13 +396,13 @@ begin
   for i := 0 to MAX do
   begin
     r.Error := IntToStr(i);
-    Check(lr.Add(r) = i);
+    CheckEqual(lr.Add(r), i);
     check(lr[i].Error = r.Error);
    end;
   for i := 0 to lr.Count - 1 do
     Check(lr[i].TestName = 'n');
   for i := 0 to lr.Count - 1 do
-    Check(StrToInt(lr[i].Error) = i);
+    CheckEqual(StrToInt(lr[i].Error), i);
   // validate and benchmark all main types using a generic sub method
   // call NewList<> here to circumvent FPC_64 internal error 2010021502 :(
   // - error appears only if T is coming through TestOne<T> generic method

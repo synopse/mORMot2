@@ -152,11 +152,11 @@ type
     // - raise ESynList if loCreateUniqueIndex is set: use Remove() then Add()
     procedure Insert(ndx: PtrInt; const value: T);
     /// delete one item inside the collection from its index
-    // - the deleted item is finalized if necessary
+    // - the deleted item is finalized unless loNoFinalize was defined
     // - raise ESynList if loCreateUniqueIndex is defined: use Remove()
     function Delete(ndx: PtrInt): boolean;
     /// delete one item inside the collection from its value
-    // - the deleted item is finalized if necessary
+    // - the deleted item is finalized unless loNoFinalize was defined
     // - is the proper way of deleting an item if loCreateUniqueIndex is defined
     function Remove(const value: T): boolean;
     /// get and remove the last item stored in the collection
@@ -164,9 +164,12 @@ type
     // - Add+Pop implement a LIFO (Last-In-First-Out) stack by default
     // - Add+Pop implement a FIFO (First-In-First-Out) stack if popFromHead is
     // set - but slower, since all existing data is moved in memory by Pop()
-    // - returns true if the item was successfully copied and removed
+    // - returns true if the item was successfully copied and removed from the list
+    // - the existing dest is finalized/release before copying the poped value,
+    // unless loNoFinalize was defined
     function Pop(var dest: T; opt: TListPop = []): boolean;
     /// delete all stored items
+    // - the items are released/cleared unless loNoFinalize was defined
     procedure Clear;
     /// will reverse all collection items, in place
     procedure Reverse;
