@@ -2819,18 +2819,18 @@ function ConsoleReadBody: RawByteString;
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
-// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 // when using Windows API
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
 
 {$else}
 
-// internal function to avoid linking mormot.core.buffers.pas
+/// internal function to avoid linking mormot.core.buffers.pas
 function PosixParseHex32(p: PAnsiChar): integer;
 
 {$endif OSWINDOWS}
 
-// internal function to avoid linking mormot.core.buffers.pas
+/// internal function to avoid linking mormot.core.buffers.pas
 function _oskb(Size: cardinal): string;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string

@@ -1390,13 +1390,20 @@ begin
   // not implemented yet - but not needed either
 end;
 
-function UnixKeyPending: boolean;
+function WaitReadPending(fd, timeout: integer): boolean;
 var
-  fdsin: tfdSet;
+  p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
+  // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
-  fpFD_ZERO(fdsin);
-  fpFD_SET(StdInputHandle, fdsin);
-  result := fpSelect(StdInputHandle + 1, @fdsin, nil, nil, 0) > 0;
+  p.fd := fd;
+  p.events := POLLIN or POLLPRI;
+  p.revents := 0;
+  result := FpPoll(@p, 1, timeout) > 0;
+end;
+
+function UnixKeyPending: boolean;
+begin
+  result := WaitReadPending(StdInputHandle, 0);
 end;
 
 procedure ConsoleWaitForEnterKey;
