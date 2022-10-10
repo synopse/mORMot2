@@ -43,7 +43,9 @@ begin
   U := SynUnicode(FileName); // let the RTL + OS do the conversion
   // switch to extended-length path if needed, allowing up to 32,767 widechars
   len := length(U);
-  if len > MAX_PATH then
+  if (len > MAX_PATH) and
+     (PCardinal(FileName)^ <>
+       ord('\') + ord('\') shl 8 + ord('?') shl 16 + ord('\') shl 24) then
     U := '\\?\' + U;
   // move to TW32Temp stack buffer
   len := length(U) * 2 + 2;  // +2 to include trailing #0
