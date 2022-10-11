@@ -87,7 +87,7 @@ begin
   li.Capacity := MAX;
   timer.Start;
   for n := 0 to MAX - 1 do
-    Check(li.Add(cop[n]) = n);
+    CheckEqual(li.Add(cop[n]), n);
   NotifyTestSpeed('add %    ',  [name], MAX, 0, @timer, ONLYLOG);
   CheckEqual(li.Count, MAX);
   //timer.Start;
@@ -116,7 +116,7 @@ begin
     Check(li[n] = cop[n]);
     {$else}
     i := li[n];
-    Check(da.ItemCompare(@i, @cop[n]) = 0, 'getitem');
+    CheckEqual(da.ItemCompare(@i, @cop[n]), 0, 'getitem');
     {$endif USEEQUALOP}
   end;
   NotifyTestSpeed('getitem %', [name], MAX, 0, @timer, ONLYLOG);
@@ -127,12 +127,12 @@ begin
     {$ifdef USEEQUALOP}
     Check(i = cop[n]);
     {$else}
-    Check(da.ItemCompare(@i, @cop[n]) = 0, 'in');
+    CheckEqual(da.ItemCompare(@i, @cop[n]), 0, 'in');
     {$endif USEEQUALOP}
     inc(n);
   end;
   NotifyTestSpeed('in %     ', [name], MAX, 0, @timer, ONLYLOG);
-  Check(n = MAX);
+  CheckEqual(n, MAX);
   NotifyTestSpeed(' IList<%>', [name], MAX * 5, 0, @all, {onlylog=}false);
   timer.Start; // Sort is excluded of main "all" timer since is misleading
   li.Sort;
@@ -165,13 +165,13 @@ begin
   {$else}
   begin
     i := li[li.Find(cop[n])];
-    Check(da.ItemCompare(@i, @cop[n]) = 0, 'sorted find');
+    CheckEqual(da.ItemCompare(@i, @cop[n]), 0, 'sorted find');
   end;
   {$endif USEEQUALOP}
   NotifyTestSpeed('find %   ', [name], MAX, 0, @timer, ONLYLOG);
-  Check(li.Count = MAX);
+  CheckEqual(li.Count, MAX);
   li.Clear;
-  Check(li.Count = 0);
+  CheckEqual(li.Count, 0);
 end;
 
 type
