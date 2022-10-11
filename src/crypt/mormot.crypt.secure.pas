@@ -5691,7 +5691,7 @@ const
     $18, $65, $d9, $ef, $f5, $88, $62, $fd, $14, $85, $d7, $14, $ad, $93, $e2,
     $46);
   _DUMMYLEN = 702;
-  _DUMMYSTUFFLEN = 300; // > 255 so that Asn1FixMe() has $82 lengths
+  _DUMMYSTUFFLEN = 300; // > 255 since Asn1FixMe() expects $82 lengths
 
 function _CreateDummyCertificate(const Stuff: RawUtf8;
   const CertName: RawUtf8; Marker: cardinal): RawByteString;

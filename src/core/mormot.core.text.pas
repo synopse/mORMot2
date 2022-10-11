@@ -4999,7 +4999,7 @@ constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
 begin
   fStream := TRawByteStringStream.Create; // inlined SetStream()
   fCustomOptions := [twoStreamIsOwned];
-  SetBuffer(aBuf, aBufSize);
+  SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
 constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
