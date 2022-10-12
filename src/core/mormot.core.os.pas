@@ -1052,7 +1052,7 @@ var
   /// retrieve the MAC addresses of all hardware network adapters
   // - mormot.net.sock.pas will inject here its own cross-platform version
   // - this unit will include a simple parser of /sys/class/net/* for Linux only
-  // - as used by GetComputerUuid()
+  // - as used e.g. by GetComputerUuid() fallback if SMBIOS is not available
   GetSystemMacAddress: function: TRawUtf8DynArray;
 
 

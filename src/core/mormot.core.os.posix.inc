@@ -2041,25 +2041,13 @@ procedure ParseHex(p: PAnsiChar; b: PByte; n: integer); forward;
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
-  u: RawUtf8;
-  g: TGuid;
 begin
   for i := 0 to high(_KNOWN) do
     with _KNOWN[i] do
       info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
-  if info[sbiUuid] = '' then
-  begin
-    u := StringFromFile('/var/lib/dbus/machine-id');
-    if u = '' then
-      u := StringFromFile('/etc/machine-id');
-    u := TrimU(u);
-    if length(u) = 32 then
-    begin
-      FillZero(g{%H-});
-      ParseHex(pointer(u), @g, 16);
-      info[sbiUuid] := RawUtf8(UpperCase(copy(GUIDToString(g), 2, 36)));
-    end;
-  end;
+  // note: /var/lib/dbus/machine-id and /etc/machine-id are SW generated from
+  // random at system install so do NOT match sbiUuid HW DMI value - see
+  // https://www.freedesktop.org/software/systemd/man/machine-id.html
 end;
 
 {$endif OSANDROID}
