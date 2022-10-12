@@ -347,6 +347,10 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
+/// flush the GetIPAddresses/GetMacAddresses internal cache
+// - may be set to force detection after HW configuration change
+procedure MacIPAddressFlush;
+
 
 type
   /// interface name/address pairs as returned by GetMacAddresses
@@ -2340,6 +2344,7 @@ end;
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
   IPAddresses: array[TIPAddress] of record
+    Safe: TLightLock;
     Text: RawUtf8;
     Tix: integer;
   end;
@@ -2352,6 +2357,20 @@ var
     Text: array[{WithoutName=}boolean] of RawUtf8;
   end;
 
+procedure MacIPAddressFlush;
+var
+  ip: TIPAddress;
+begin
+  for ip := low(ip) to high(ip) do
+   IPAddresses[ip].Tix := 0;
+  MacAddresses[false].Text[false] := '';
+  MacAddresses[false].Text[true] := '';
+  MacAddresses[false].Searched := false;
+  MacAddresses[true].Text[false] := '';
+  MacAddresses[true].Text[true] := '';
+  MacAddresses[true].Searched := false;
+end;
+
 function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
 var
   ip: TRawUtf8DynArray;
@@ -2361,27 +2380,32 @@ begin
   result := '';
   with IPAddresses[Kind] do
   begin
-    if Sep = ' ' then
-    begin
-      now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
-      if now <> Tix then
-        Tix := now
-      else
+    Safe.Lock;
+    try
+      if Sep = ' ' then
       begin
-        result := Text;
-        if result <> '' then
-          exit; // return the value from cache
+        now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
+        if now <> Tix then
+          Tix := now
+        else
+        begin
+          result := Text;
+          if result <> '' then
+            exit; // return the value from cache
+        end;
       end;
+      // we need to ask the OS for the current IP addresses
+      ip := GetIPAddresses(Kind);
+      if ip = nil then
+        exit;
+      result := ip[0];
+      for i := 1 to high(ip) do
+        result := result + Sep + ip[i];
+      if Sep = ' ' then
+        Text := result;
+    finally
+      Safe.UnLock;
     end;
-    // we need to ask the OS for the current IP addresses
-    ip := GetIPAddresses(Kind);
-    if ip = nil then
-      exit;
-    result := ip[0];
-    for i := 1 to high(ip) do
-      result := result + Sep + ip[i];
-    if Sep = ' ' then
-      Text := result;
   end;
 end;
 
@@ -2429,8 +2453,10 @@ begin
       end;
     SetLength(w, length(w) - 1);
     SetLength(wo, length(wo) - 1);
+    Safe.Lock; // to avoid memory leak
     Text[false] := w;
     Text[true] := wo;
+    Safe.UnLock;
     result := Text[WithoutName];
   end;
 end;

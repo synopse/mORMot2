@@ -6328,13 +6328,13 @@ begin
     exit;
   end;
   // no known UUID: compute and store a 128-bit hash from hardware information
-  // /etc/machine-id is no viable alternative since it is randomgen from SW
+  // note: /etc/machine-id is no viable alternative since it is from SW random
   {$ifdef CPUINTELARM}
   crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b);
   {$else}
   FillZero(u.b);
   {$endif CPUINTELARM}
-  if RawSmbios.Data <> '' then // some bios have no uuid
+  if RawSmbios.Data <> '' then // some bios have no uuid but some HW info
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
   n := 0;
   for i := 0 to length(_Smbios) - 1 do // some of _Smbios[] may be set
