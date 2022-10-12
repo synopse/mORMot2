@@ -6328,6 +6328,7 @@ begin
     exit;
   end;
   // no known UUID: compute and store a 128-bit hash from hardware information
+  // /etc/machine-id is no viable alternative since it is randomgen from SW
   {$ifdef CPUINTELARM}
   crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b);
   {$else}
@@ -6347,12 +6348,12 @@ begin
     mac := GetSystemMacAddress;
     for i := 0 to high(mac) do
       crctext(mac[i]);
+    if FileFromBuffer(@u, SizeOf(u), fn) then // only MAC make it HW unique
+      FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
   end
   else
     // fallback if mormot.net.sock is not included (very unlikely)
     crctext(Executable.Host);
-  if FileFromBuffer(@u, SizeOf(u), fn) then
-    FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
 end;
 
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
