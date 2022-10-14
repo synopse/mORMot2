@@ -44,6 +44,8 @@ uses
 { ************ Shared Database Fields and Values Definitions }
 
 const
+  {$undef MAX_SQLFIELDS_64}
+
   /// maximum number of fields in a database Table
   // - default is 64, but can be set to 64, 128, 192 or 256
   // adding MAX_SQLFIELDS_128, MAX_SQLFIELDS_192 or MAX_SQLFIELDS_256
@@ -62,6 +64,7 @@ const
   MAX_SQLFIELDS = 256;
   {$else}
   MAX_SQLFIELDS = 64;
+  {$define MAX_SQLFIELDS_64}
   {$endif MAX_SQLFIELDS_256}
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
@@ -214,6 +217,10 @@ function IsZero(const Fields: TFieldBits): boolean; overload;
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
 function IsEqual(const A, B: TFieldBits): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return TRUE if Fields equals ALL_FIELDS constant
+function IsAllFields(const Fields: TFieldBits): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast initialize a TFieldBits with 0
@@ -1461,6 +1468,15 @@ begin
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
   {$endif CPU64}
+end;
+
+function IsAllFields(const Fields: TFieldBits): boolean;
+begin
+  {$ifdef MAX_SQLFIELDS_64}
+  result := PInt64(@Fields)^ = -1;
+  {$else}
+  result := IsEqual(Fields, ALL_FIELDS);
+  {$endif MAX_SQLFIELDS_64}
 end;
 
 procedure FillZero(var Fields: TFieldBits);
