@@ -375,6 +375,23 @@ type
   /// used to determine the exact class type of a TSynPersistent
   TSynPersistentClass = class of TSynPersistent;
 
+
+  {$ifdef HASITERATORS}
+  /// abstract pointer Enumerator
+  TPointerEnumerator = record
+  private
+    Curr, After: PPointer;
+    function GetCurrent: pointer; inline;
+  public
+    procedure Init(Values: PPointerArray; Count: PtrUInt); inline;
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TPointerEnumerator; inline;
+    /// returns the current pointer value
+    property Current: pointer
+      read GetCurrent;
+  end;
+  {$endif HASITERATORS}
+
   {$M+}
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
@@ -404,6 +421,10 @@ type
     function Exists(item: pointer): boolean; virtual;
     /// fast delete one item in the list
     function Remove(item: pointer): PtrInt; virtual;
+    {$ifdef HASITERATORS}
+    /// an enumerator able to compile "for .. in list do" statements
+    function GetEnumerator: TPointerEnumerator;
+    {$endif HASITERATORS}
     /// how many items are stored in this TList instance
     property Count: integer
       read fCount;
@@ -3128,6 +3149,42 @@ begin
     AssignError(nil);
 end;
 
+{$ifdef HASITERATORS}
+
+{ TPointerEnumerator }
+
+procedure TPointerEnumerator.Init(Values: PPointerArray; Count: PtrUInt);
+begin
+  if Count = 0 then
+  begin
+    Curr := nil;
+    After := nil;
+  end
+  else
+  begin
+    Curr := pointer(Values);
+    After := @Values[Count];
+    dec(Curr);
+  end;
+end;
+
+function TPointerEnumerator.MoveNext: Boolean;
+begin
+  inc(Curr);
+  result := PtrUInt(Curr) < PtrUInt(After);
+end;
+
+function TPointerEnumerator.GetCurrent: pointer;
+begin
+  result := Curr^;
+end;
+
+function TPointerEnumerator.GetEnumerator: TPointerEnumerator;
+begin
+  result := self;
+end;
+
+{$endif HASITERATORS}
 
 { TSynList }
 
@@ -3189,6 +3246,15 @@ begin
   if result >= 0 then
     Delete(result);
 end;
+
+{$ifdef HASITERATORS}
+
+function TSynList.GetEnumerator: TPointerEnumerator;
+begin
+  result.Init(pointer(fList), fCount);
+end;
+
+{$endif HASITERATORS}
 
 
 { TSynObjectList }
