@@ -2935,9 +2935,11 @@ type
     function FieldBitsFromBlobField(aBlobField: PRttiProp;
       var Bits: TFieldBits): boolean;
     /// compute the CSV field names text from a set of bits
+    procedure CsvFromFieldBits(const Bits: TFieldBits; out Result: RawUtf8); overload;
+    /// compute the CSV field names text from a set of bits with optional prefix/suffix
     procedure CsvFromFieldBits(const Prefix: array of const;
       const Bits: TFieldBits; const BitsSuffix: ShortString;
-      const Suffix: array of const; out Result: RawUtf8);
+      const Suffix: array of const; out Result: RawUtf8); overload;
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromRawUtf8(const aFields: array of RawUtf8;
@@ -11151,12 +11153,38 @@ begin
 end;
 {$endif PUREMORMOT2}
 
+procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Bits: TFieldBits;
+  out Result: RawUtf8);
+var
+  l, f: PtrInt;
+  p: PUtf8Char;
+begin
+  l := 0;
+  for f := 0 to Fields.Count - 1 do
+    if byte(f) in Bits then
+      inc(l, length(Fields.List[f].Name) + 1);
+  if l = 0 then
+    exit;
+  FastSetString(Result, nil, l - 1); // allocate once for all
+  p := pointer(Result);
+  for f := 0 to Fields.Count - 1 do
+    if byte(f) in Bits then
+    begin
+      l := length(Fields.List[f].Name);
+      MoveFast(pointer(Fields.List[f].Name)^, p^, l);
+      inc(p, l);
+      p^ := ',';
+      inc(p);
+    end;
+  p[-1] := #0; // overwrite last ','
+end;
+
 procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Prefix: array of const;
   const Bits: TFieldBits; const BitsSuffix: ShortString;
   const Suffix: array of const; out Result: RawUtf8);
 var
   f: PtrInt;
-  W: TJsonWriter;
+  W: TJsonWriter; // TJsonWriter.Add(Prefix) so TTextWriter is not enough
   temp: TTextWriterStackBuffer;
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
