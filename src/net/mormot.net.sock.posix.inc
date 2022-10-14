@@ -514,7 +514,7 @@ function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: system.PInteger): TNetEvents;
 var
   res: integer;
-  p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
+  p: TPollFD; // select() limits p.fd<FD_SETSIZE=1024 on POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
   result := [neError];
