@@ -2935,11 +2935,11 @@ type
     function FieldBitsFromBlobField(aBlobField: PRttiProp;
       var Bits: TFieldBits): boolean;
     /// compute the CSV field names text from a set of bits
-    procedure CsvFromFieldBits(const Bits: TFieldBits; out Result: RawUtf8); overload;
+    function CsvTextFromFieldBits(const Bits: TFieldBits): RawUtf8;
     /// compute the CSV field names text from a set of bits with optional prefix/suffix
     procedure CsvFromFieldBits(const Prefix: array of const;
       const Bits: TFieldBits; const BitsSuffix: ShortString;
-      const Suffix: array of const; out Result: RawUtf8); overload;
+      const Suffix: array of const; out Result: RawUtf8);
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromRawUtf8(const aFields: array of RawUtf8;
@@ -11153,8 +11153,7 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-procedure TOrmPropertiesAbstract.CsvFromFieldBits(const Bits: TFieldBits;
-  out Result: RawUtf8);
+function TOrmPropertiesAbstract.CsvTextFromFieldBits(const Bits: TFieldBits): RawUtf8;
 var
   l, f: PtrInt;
   p: PUtf8Char;
@@ -11164,9 +11163,12 @@ begin
     if byte(f) in Bits then
       inc(l, length(Fields.List[f].Name) + 1);
   if l = 0 then
+  begin
+    result := '';
     exit;
-  FastSetString(Result, nil, l - 1); // allocate once for all
-  p := pointer(Result);
+  end;
+  FastSetString(result, nil, l - 1); // allocate once for all
+  p := pointer(result);
   for f := 0 to Fields.Count - 1 do
     if byte(f) in Bits then
     begin

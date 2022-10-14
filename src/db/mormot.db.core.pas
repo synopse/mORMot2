@@ -311,6 +311,7 @@ type
 
 const
   /// special TFieldBits value containing all field bits set to 1
+  // - see also IsAllFields() wrapper function
   ALL_FIELDS: TFieldBits = [0 .. MAX_SQLFIELDS - 1];
 
   /// convert identified field types into high-level ORM types
