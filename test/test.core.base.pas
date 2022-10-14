@@ -179,6 +179,8 @@ type
   published
     /// test the new RecordCopy() using our fast RTTI
     procedure _RecordCopy;
+    /// test the TSynList class
+    procedure _TSynList;
     /// test the TRawUtf8List class
     procedure _TRawUtf8List;
     /// test the TDynArray object and methods
@@ -2305,6 +2307,45 @@ begin
   Check(A.Dyn[9] = C.Dyn[9]);
   {Check(A.Dyn[0]=0) bug in original VCL?}
   Check(C.Dyn[0] = 10);
+end;
+
+procedure TTestCoreBase._TSynList;
+const
+  MAX = 1000;
+var
+  {$ifdef FPC}
+  p: TOrm; // FPC can iterate over pointers as class instances but not Delphi :(
+  {$else}
+  p: pointer;
+  {$endif FPC}
+  i: PtrInt;
+  l: TSynList;
+begin
+  l := TSynList.Create;
+  try
+   CheckEqual(l.Count, 0);
+   Check(not l.Exists(nil));
+   Check(l.IndexOf(nil) < 0);
+   for i := 0 to MAX - 1 do
+     CheckEqual(l.Add(pointer(i)), i);
+   CheckEqual(l.Count, MAX);
+   Check(l.Exists(nil));
+   for i := 0 to MAX - 1 do
+     Check(l[i] = pointer(i));
+   CheckEqual(l.IndexOf(nil), 0);
+   p := l[MAX - 1];
+   CheckEqual(l.IndexOf(p), MAX - 1);
+   {$ifdef HASITERATORS}
+   i := 0;
+   for p in l do
+   begin
+     CheckEqual(PtrInt(p), i);
+     inc(i);
+   end;
+   {$endif HASITERATORS}
+  finally
+    l.Free;
+  end;
 end;
 
 procedure TTestCoreBase.UrlEncoding;
