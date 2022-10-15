@@ -1011,8 +1011,8 @@ type
     procedure ForEach(WillModifyContent: boolean;
       const OnEachProcess: TOnFindWhereEqual; Dest: pointer);
     /// allow background write into another persistence of modified TOrm
-    // - you should define a TrackedFields: TFieldBits property and register its
-    // offset in TOrm as TrackChanges(@TOrmClass(nil).TrackedFields, OrmWriter);
+    // - you should define a TrackedFields: TFieldBits public field and register
+    // its offset as TrackChanges(@TOrmClass(nil).TrackedFields, OrmWriter);
     // - then AddOne/UpdateOne will be tracked - but not DeleteOne
     // - if you manually update one record, call TrackChangeUpdated() overloads
     procedure TrackChanges(FieldBitsOffset: pointer; const Persistence: IRestOrm);
