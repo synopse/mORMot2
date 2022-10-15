@@ -8000,6 +8000,11 @@ var
   len, i: PtrInt;
 begin
   len := length(Str);
+  if len = 0 then
+  begin
+    result := '';
+    exit;
+  end;
   if StartPos > len then
     StartPos := len
   else if StartPos <= 0 then
