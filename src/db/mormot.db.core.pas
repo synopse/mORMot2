@@ -1539,15 +1539,19 @@ end;
 procedure FieldBitsToIndex(const Fields: TFieldBits;
   out Index: TFieldIndexDynArray; MaxLength: PtrInt);
 var
-  i: PtrInt;
+  i, n: PtrInt;
   p: ^TFieldIndex;
 begin
   if MaxLength > MAX_SQLFIELDS then
     raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
-  SetLength(Index, FieldBitCount(Fields, MaxLength));
+  if IsAllFields(Fields) then
+    n := MaxLength
+  else
+    n := FieldBitCount(Fields, MaxLength);
+  SetLength(Index, n);
   p := pointer(Index);
   for i := 0 to MaxLength - 1 do
-    if FieldBitSet(Fields, i) then
+    if FieldBitGet(Fields, i) then
     begin
       p^ := i;
       inc(p);
