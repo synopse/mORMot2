@@ -226,7 +226,7 @@ function IsAllFields(const Fields: TFieldBits): boolean;
 /// faster alternative to "byte(Index) in Fields" expression
 // - warning: no Index range check is done
 // - similar to GetBitPtr(), but optimized for default MAX_SQLFIELDS=64
-function FieldBitSet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+function FieldBitGet(const Fields: TFieldBits; Index: PtrUInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// faster alternative to "GetBitsCount(Fields, MaxFIelds)" expression
@@ -1490,7 +1490,7 @@ begin
   {$endif MAX_SQLFIELDS_64}
 end;
 
-function FieldBitSet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+function FieldBitGet(const Fields: TFieldBits; Index: PtrUInt): boolean;
 begin
   {$if defined(MAX_SQLFIELDS_64) and defined(CPU64)}
   result := PInt64(@Fields)^ and (Int64(1) shl Index) <> 0;

@@ -2272,7 +2272,7 @@ begin
     SetLength(fUniquePerField, fields.Count);
     n := 0;
     for f := 0 to fields.Count - 1 do
-      if FieldBitSet(fStoredClassRecordProps.IsUniqueFieldsBits, f) then
+      if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, f) then
       begin
         fUnique[n] := TRestStorageInMemoryUnique.Create(self, fields.List[f]);
         fUniquePerField[f] := fUnique[n];

@@ -11160,7 +11160,7 @@ var
 begin
   l := 0;
   for f := 0 to Fields.Count - 1 do
-    if FieldBitSet(Bits, f) then
+    if FieldBitGet(Bits, f) then
       inc(l, length(Fields.List[f].Name) + 1);
   if l = 0 then
   begin
@@ -11170,7 +11170,7 @@ begin
   FastSetString(result, nil, l - 1); // allocate once for all
   p := pointer(result);
   for f := 0 to Fields.Count - 1 do
-    if FieldBitSet(Bits, f) then
+    if FieldBitGet(Bits, f) then
     begin
       l := length(Fields.List[f].Name);
       MoveFast(pointer(Fields.List[f].Name)^, p^, l);
@@ -11193,7 +11193,7 @@ begin
   try
     W.Add(Prefix, twNone);
     for f := 0 to Fields.Count - 1 do
-      if FieldBitSet(Bits, f) then
+      if FieldBitGet(Bits, f) then
       begin
         W.AddString(Fields.List[f].Name);
         if BitsSuffix <> '' then
