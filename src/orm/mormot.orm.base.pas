@@ -11016,7 +11016,7 @@ begin
     for f := 0 to high(BlobFields) do
       if BlobFields[f].PropInfo = aBlobField then
       begin
-        Include(Bits, BlobFields[f].PropertyIndex);
+        FieldBitSet(Bits, BlobFields[f].PropertyIndex);
         result := true;
         exit;
       end;
@@ -11041,7 +11041,7 @@ begin
     ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
-    include(Bits, ndx);
+    FieldBitSet(Bits, ndx);
   end;
   result := true;
 end;
@@ -11078,7 +11078,7 @@ begin
     ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
-    include(Bits, ndx);
+    FieldBitSet(Bits, ndx);
   end;
   result := true;
 end;
@@ -11113,7 +11113,7 @@ begin
     ndx := Fields.IndexByName(aFields[f]);
     if ndx < 0 then
       exit; // invalid field name
-    include(Bits, ndx);
+    FieldBitSet(Bits, ndx);
   end;
   result := true;
 end;
@@ -11147,7 +11147,7 @@ begin
     ndx := Fields.IndexByName(pointer(aFields[f]));
     if ndx < 0 then
       exit; // invalid field name
-    include(Bits, ndx);
+    FieldBitSet(Bits, ndx);
   end;
   result := true;
 end;

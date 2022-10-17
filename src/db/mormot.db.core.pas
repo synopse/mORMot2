@@ -229,6 +229,11 @@ function IsAllFields(const Fields: TFieldBits): boolean;
 function FieldBitGet(const Fields: TFieldBits; Index: PtrUInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// faster alternative to "include(Fields, Index)" expression
+// - warning: no Index range check is done
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// faster alternative to "GetBitsCount(Fields, MaxFIelds)" expression
 function FieldBitCount(const Fields: TFieldBits; MaxFields: integer = MAX_SQLFIELDS): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1499,6 +1504,21 @@ begin
   {$ifend MAX_SQLFIELDS_64 and CPU64}
 end;
 
+{$if defined(MAX_SQLFIELDS_64) and defined(CPU64)}
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+begin
+  PInt64(@Fields)^ := PInt64(@Fields)^ or (Int64(1) shl Index);
+end;
+{$else}
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+var
+  p: PInteger;
+begin
+  p := @PIntegerArray(@Fields)[Index shr 5];
+  p^ := p^ or (1 shl (Index and 31));
+end;
+{$ifend MAX_SQLFIELDS_64 and CPU64}
+
 function FieldBitCount(const Fields: TFieldBits; MaxFields: integer): PtrInt;
 begin
   {$ifdef MAX_SQLFIELDS_64}
@@ -1582,12 +1602,12 @@ end;
 procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
   out Fields: TFieldBits);
 var
-  i: integer;
+  i: PtrInt;
 begin
   FillZero(Fields{%H-});
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
-      include(Fields, Index[i]);
+      FieldBitSet(Fields, Index[i]);
 end;
 
 function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits;
@@ -3296,7 +3316,7 @@ begin
     if f^.Field = 0 then
       withID := true
     else
-      include(Fields, f^.Field - 1);
+      FieldBitSet(Fields, f^.Field - 1);
     if (SubFields <> nil) and
        fHasSelectSubFields then
       SubFields^[f^.Field] := f^.SubField;

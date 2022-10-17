@@ -6131,7 +6131,7 @@ begin
         i := IndexByName(aName);
         if i >= 0 then
         begin // only map if column name is a valid field
-          include(fTableMapFields, i);
+          FieldBitSet(fTableMapFields, i);
           AddMap(aRecord, List[i], aIndex);
         end;
       end;
@@ -6428,7 +6428,7 @@ begin
     for f := 0 to Fields.Count - 1 do
       if FieldBitGet(CopiableFieldsBits, f) and
          not Fields.List[f].IsValueVoid(self) then
-        include(result, f);
+        FieldBitSet(result, f);
 end;
 
 constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
@@ -6616,7 +6616,7 @@ begin
       begin
         field.SetValue(self, Value, ValueLen, wasString);
         if FieldBits <> nil then
-          Include(FieldBits^, field.PropertyIndex);
+          FieldBitSet(FieldBits^, field.PropertyIndex);
       end;
     end;
 end;
@@ -9087,7 +9087,7 @@ begin
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then
     begin
-      include(IsUniqueFieldsBits, i);
+      FieldBitSet(IsUniqueFieldsBits, i);
       // must trim() text value before storage, and validate for unicity
       if F.OrmFieldType in [oftUtf8Text, oftAnsiText] then
         AddFilterOrValidate(i, TSynFilterTrim.Create);
@@ -9095,7 +9095,7 @@ begin
     end;
     // get corresponding properties content
     include(fHasTypeFields, F.OrmFieldType);
-    include(FieldBits[F.OrmFieldType], i);
+    FieldBitSet(FieldBits[F.OrmFieldType], i);
     case F.OrmFieldType of
       oftUnknown:
         ;
@@ -9156,14 +9156,14 @@ begin
         end;
       oftCreateTime:
         begin
-          include(ComputeBeforeAddFieldsBits, i);
+          FieldBitSet(ComputeBeforeAddFieldsBits, i);
           goto Small;
         end;
       oftModTime,
       oftSessionUserID:
         begin
-          include(ComputeBeforeAddFieldsBits, i);
-          include(ComputeBeforeUpdateFieldsBits, i);
+          FieldBitSet(ComputeBeforeAddFieldsBits, i);
+          FieldBitSet(ComputeBeforeUpdateFieldsBits, i);
           goto Small;
         end;
       oftRecordVersion:
@@ -9179,15 +9179,15 @@ begin
         goto Simple;
     else
       begin
-Small:  include(SmallFieldsBits, i);
+Small:  FieldBitSet(SmallFieldsBits, i);
         // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         SimpleFieldSelect[nSimple].Field := i + 1; // [0]=ID
-        include(SimpleFieldsBits[ooSelect], i);
+        FieldBitSet(SimpleFieldsBits[ooSelect], i);
         fSqlTableSimpleFieldsNoRowID := fSqlTableSimpleFieldsNoRowID + F.Name + ',';
         fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
-Copiabl:include(CopiableFieldsBits, i);
+Copiabl:FieldBitSet(CopiableFieldsBits, i);
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
@@ -10378,7 +10378,7 @@ begin
     begin
       fRowIDFieldName := InternalExternalPairs[i * 2 + 1];
       if IdemPropNameU(fRowIDFieldName, 'ID') then
-        include(fFieldNamesMatchInternal, 0)
+        FieldBitSet(fFieldNamesMatchInternal, 0)
       else     // [0]=ID
         exclude(fFieldNamesMatchInternal, 0);
     end
@@ -10387,7 +10387,7 @@ begin
       fExtFieldNames[f] := InternalExternalPairs[i * 2 + 1];
       fExtFieldNamesUnQuotedSql[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
       if IdemPropNameU(fExtFieldNames[f], fProps.Fields.List[f].Name) then
-        include(fFieldNamesMatchInternal, f + 1)
+        FieldBitSet(fFieldNamesMatchInternal, f + 1)
       else // [0]=ID  [1..n]=fields[i-1]
         exclude(fFieldNamesMatchInternal, f + 1);
     end;

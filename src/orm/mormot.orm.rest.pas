@@ -2658,10 +2658,10 @@ function TOrmTableWritable.UpdatesToBatch(
 var
   c: TOrmClass;
   rec: TOrm;
-  r: PtrInt;
+  r, f, p: PtrInt;
   def, def32, bits: TFieldBits;
   props: TIntegerDynArray;
-  upd, updlast, b, f, p: integer;
+  upd, updlast, b: integer;
 begin
   result := 0;
   c := QueryRecordType;
@@ -2711,7 +2711,7 @@ begin
             if p < 0 then
               raise EOrmTable.CreateUtf8(
                 '%.UpdatesToBatch: Unexpected %.%', [self, c, Results[f]]);
-            include(bits, p);
+            FieldBitSet(bits, p);
           end;
           b := b shl 1;
         end;

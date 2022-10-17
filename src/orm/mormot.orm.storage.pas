@@ -3837,7 +3837,7 @@ begin
     if fTrackChangesFieldBitsOffset <> 0 then
     begin
       FillZero(upd);
-      include(upd, P.PropertyIndex);
+      FieldBitSet(upd, P.PropertyIndex);
       InternalTrackChangeUpdated(fValue[i], upd);
     end;
     fModified := true;
@@ -3922,7 +3922,7 @@ begin
          (ndx <> 0) then
       begin
         FillZero(upd);
-        include(upd, ndx - 1);
+        FieldBitSet(upd, ndx - 1);
         InternalTrackChangeUpdated(rec, upd);
       end;
   end;
