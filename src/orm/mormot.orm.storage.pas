@@ -2322,7 +2322,11 @@ var
   b: PFieldBits;
 begin
   b := pointer(PAnsiChar(aRec) + fTrackChangesFieldBitsOffset);
+  {$if SizeOf(TFieldBits) = 8}
+  PInt64(b)^ := PInt64(b)^ or PInt64(@Fields)^;
+  {$else}
   b^ := b^ + Fields;
+  {$ifend}
 end;
 
 function TRestStorageInMemory.IDToIndex(ID: TID): PtrInt;
@@ -2520,8 +2524,9 @@ begin
       raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed', [self, aIndex]);
     if fMaxID = 0 then
       fMaxID := FindMaxID(pointer(fValue), fCount);
-    if fTrackChangesFieldBitsOffset <> 0 then
-      AddInt64Once(fTrackChangesDeleted, fTrackChangesDeletedCount, id);
+    if (fTrackChangesFieldBitsOffset <> 0) and
+       not Int64ScanExists(pointer(fTrackChangesDeleted), fTrackChangesDeletedCount, id) then
+      AddInt64(fTrackChangesDeleted, fTrackChangesDeletedCount, id);
       // note: any previous Add/Update are deleted with rec since TrackChanges
       // is part of it - no need to manually clean them
     fModified := true;
@@ -2993,6 +2998,7 @@ begin
   if (FieldBitsOffset = nil) or
      (PtrUInt(FieldBitsOffset) > PtrUInt(fStoredClass.InstanceSize)) then
     raise ERestStorage.CreateUtf8('%.TrackChanges(%)', [self, FieldBitsOffset]);
+  Persistence.Model.GetTableIndexExisting(fStoredClass); // ensure support table
   fTrackChangesFieldBitsOffset := PtrUInt(FieldBitsOffset);
   fTrackChangesPersistence := Persistence;
 end;
