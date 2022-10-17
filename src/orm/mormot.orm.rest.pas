@@ -694,7 +694,8 @@ begin
     fields := props.CopiableFieldsBits
   else
     fields := props.SimpleFieldsBits[ooInsert];
-  if not ForceID and IsZero(fields) then
+  if not ForceID and
+     IsZero(fields) then
     result := ''
   else
     GetJsonValue(Value, ForceID, fields, result);
@@ -1541,9 +1542,9 @@ begin
         if IsZero(bits) then
           // get all simple fields if none supplied, like MultiFieldValues()
           bits := SimpleFieldsBits[ooSelect];
-        if bits - SimpleFieldsBits[ooSelect] = [] then
+        if bits - SimpleFieldsBits[ooSelect] = [] then // only simple fields
         begin
-          Rec := Table.Create(self, ID); // use the cache
+          Rec := Table.Create(self, ID); // we can use the cache
           try
             Rec.GetAsDocVariant(true, bits, result, nil, {"id"=}true);
           finally
