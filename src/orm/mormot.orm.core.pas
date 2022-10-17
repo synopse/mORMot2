@@ -6546,14 +6546,14 @@ begin
     if POrmClass(aRecord)^ = POrmClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Count - 1 do
-      if byte(f) in aRecordFieldBits then
+      if FieldBitSet(aRecordFieldBits, f) then
         D.List[f].CopyValue(aRecord, self);
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-name field lookup
   S := aRecord.OrmProps.Fields;
   for i := 0 to S.Count - 1 do
-    if byte(i) in aRecordFieldBits then
+    if FieldBitSet(aRecordFieldBits, i) then
     begin
       SP := S.List[i];
       if D.List[i].Name = SP.Name then
@@ -6883,7 +6883,7 @@ var
 begin
   with Orm.Fields do
     for f := 0 to Count - 1 do
-      if byte(f) in aFields then
+      if FieldBitSet(aFields, f) then
         List[f].GetBinary(self, W);
 end;
 
@@ -7006,7 +7006,7 @@ begin
   nfo := pointer(P.Fields.List);
   for i := 0 to P.Fields.Count - 1 do
   begin
-    if byte(i) in Fields then
+    if FieldBitSet(Fields, i) then
     begin
       W.Add('"');
       W.AddNoJsonEscape(pointer(nfo^.Name), length(nfo^.Name));
@@ -7266,7 +7266,7 @@ begin
           if SQL <> '' then
           begin
             result := result + Name + SQL;
-            if byte(i) in IsUniqueFieldsBits then
+            if FieldBitSet(IsUniqueFieldsBits, i) then
               insert(' UNIQUE', result, length(result) - 1);
           end;
         end;
@@ -7424,7 +7424,7 @@ begin
     else if not FieldBitsFromCsv(aFieldsCsv, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in bits) and
+      if FieldBitSet(bits, f) and
          (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, 0, false); // clear field value
   end;
@@ -8165,7 +8165,7 @@ begin
     doc.Values[i] := fID;
   end;
   for f := 0 to Fields.Count - 1 do
-    if byte(f) in withFields then
+    if FieldBitSet(withFields, f) then
     begin
       i := doc.InternalAdd(Fields.List[f].Name);
       Fields.List[f].GetVariant(self, doc.Values[i]);
@@ -10171,10 +10171,10 @@ begin // similar to TOrmMapping.ComputeSql
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
-          if byte(f) in SimpleFieldsBits[ooUpdate] then
+          if FieldBitSet(SimpleFieldsBits[ooUpdate], f) then
             SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
-          if byte(f) in IsUniqueFieldsBits then
+          if FieldBitSet(IsUniqueFieldsBits, f) then
           begin
             // must trim() text value before storage, and validate for unicity
             if OrmFieldType in [oftUtf8Text, oftAnsiText] then
@@ -10441,7 +10441,7 @@ type
           if OrmFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
               cTableSimpleFields:
-                if byte(f) in SimpleFieldsBits[ooSelect] then
+                if FieldBitSet(SimpleFieldsBits[ooSelect], f) then
                 begin
                   if withTableName then
                     W.AddStrings([TableName, '.']);
@@ -10452,7 +10452,7 @@ type
                   W.AddComma;
                 end;
               cUpdateSimple:
-                if byte(f) in SimpleFieldsBits[ooSelect] then
+                if FieldBitSet(SimpleFieldsBits[ooSelect], f) then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
               cUpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);
@@ -11185,7 +11185,7 @@ begin
      (fields * props.FieldBits[oftBlob] <> []) then
     for f := 1 to length(props.BlobFields) do
     begin
-      if (blob^.PropertyIndex in fields) and
+      if FieldBitSet(fields, blob^.PropertyIndex) and
          blob^.IsValueVoid(Value) then
         exclude(fields, blob^.PropertyIndex);
       inc(blob);

@@ -223,6 +223,16 @@ function IsEqual(const A, B: TFieldBits): boolean; overload;
 function IsAllFields(const Fields: TFieldBits): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// faster alternative to "byte(Index) in Fields" expression
+// - warning: no Index range check is done
+// - similar to GetBitPtr(), but optimized for default MAX_SQLFIELDS=64
+function FieldBitSet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// faster alternative to "GetBitsCount(Fields, MaxFIelds)" expression
+function FieldBitCount(const Fields: TFieldBits; MaxFields: integer = MAX_SQLFIELDS): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast initialize a TFieldBits with 0
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
@@ -1480,6 +1490,29 @@ begin
   {$endif MAX_SQLFIELDS_64}
 end;
 
+function FieldBitSet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+begin
+  {$if defined(MAX_SQLFIELDS_64) and defined(CPU64)}
+  result := PInt64(@Fields)^ and (Int64(1) shl Index) <> 0;
+  {$else}
+  result := PIntegerArray(@Fields)[Index shr 5] and (1 shl (Index and 31)) <> 0;
+  {$ifend MAX_SQLFIELDS_64 and CPU64}
+end;
+
+function FieldBitCount(const Fields: TFieldBits; MaxFields: integer): PtrInt;
+begin
+  {$ifdef MAX_SQLFIELDS_64}
+  {$ifdef CPU64}
+  result := GetBitsCountPtrInt(PtrInt(Fields));
+  {$else}
+  result := GetBitsCountPtrInt(PIntegerArray(@Fields)[0]) +
+            GetBitsCountPtrInt(PIntegerArray(@Fields)[1]);
+  {$endif CPU64}
+  {$else}
+  result := GetBitsCount(Fields, MaxFields);
+  {$endif MAX_SQLFIELDS_64}
+end;
+
 procedure FillZero(var Fields: TFieldBits);
 begin
   {$ifdef MAX_SQLFIELDS_128}
@@ -1511,10 +1544,10 @@ var
 begin
   if MaxLength > MAX_SQLFIELDS then
     raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
-  SetLength(Index, GetBitsCount(Fields, MaxLength));
+  SetLength(Index, FieldBitCount(Fields, MaxLength));
   p := pointer(Index);
   for i := 0 to MaxLength - 1 do
-    if byte(i) in Fields then
+    if FieldBitSet(Fields, i) then
     begin
       p^ := i;
       inc(p);

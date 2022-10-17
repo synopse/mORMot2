@@ -2381,6 +2381,7 @@ asm     .noframe
         {$endif WIN64ABI}
 {$endif FPC}
 end;
+
 function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc

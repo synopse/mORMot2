@@ -2736,7 +2736,7 @@ begin
   if not IsEqual(b^.SimpleFields, Fields) then
   begin
     b^.SimpleFields := Fields;
-    b^.UpdateFieldsCount := GetBitsCount(Fields, Props.Fields.Count) + 1;
+    b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
     Props.CsvFromFieldBits(['update ', Props.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);
   end;
@@ -2812,7 +2812,7 @@ begin
   if fBatch^.SimpleFieldsCount = 0 then
   begin
     fBatch^.SimpleFields := Fields;
-    fBatch^.SimpleFieldsCount := GetBitsCount(Fields, SizeOf(Fields) shl 3) + 1;
+    fBatch^.SimpleFieldsCount := FieldBitCount(Fields) + 1;
   end;
   AddID(fBatch^.ID, fBatch^.IDCount, result);
   ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);

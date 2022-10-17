@@ -928,7 +928,7 @@ begin
         for f := 0 to high(stmt.OrderByField) do
         begin
           W.AddString(fStoredClassMapping^.FieldNameByIndex(stmt.OrderByField[f] - 1));
-          if byte(f) in stmt.OrderByFieldDesc then
+          if FieldBitSet(stmt.OrderByFieldDesc, f) then
             W.AddShorter(' desc');
           W.AddComma;
         end;

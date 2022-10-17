@@ -2228,7 +2228,7 @@ function GetBitsCountPas(value: PtrInt): PtrInt;
 /// compute how many bits are set in a given pointer-sized integer
 // - the PopCnt() intrinsic under FPC doesn't have any fallback on older CPUs,
 // and default implementation is 5 times slower than our GetBitsCountPas() on x64
-// - this redirected function will use fast SSE4.2 popcnt opcode, if available
+// - this redirected function will use fast SSE4.2 "popcnt" opcode, if available
 var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 /// compute how many bytes are needed to store a given number of bits

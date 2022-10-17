@@ -2265,14 +2265,14 @@ begin
     end;
   // initialize fUnique[] fUniquePerField[] lookup tables
   fields := fStoredClassRecordProps.Fields;
-  n := GetBitsCount(fStoredClassRecordProps.IsUniqueFieldsBits, fields.Count);
+  n := FieldBitCount(fStoredClassRecordProps.IsUniqueFieldsBits);
   if n > 0 then
   begin
     SetLength(fUnique, n);
     SetLength(fUniquePerField, fields.Count);
     n := 0;
     for f := 0 to fields.Count - 1 do
-      if byte(f) in fStoredClassRecordProps.IsUniqueFieldsBits then
+      if FieldBitSet(fStoredClassRecordProps.IsUniqueFieldsBits, f) then
       begin
         fUnique[n] := TRestStorageInMemoryUnique.Create(self, fields.List[f]);
         fUniquePerField[f] := fUnique[n];
