@@ -745,6 +745,8 @@ type
     fValues: TDynArrayHashed; // hashed by ID
     fTrackChangesFieldBitsOffset: PtrUInt;
     fTrackChangesPersistence: IRestOrm;
+    fTrackChangesDeleted: TInt64DynArray; // TIDDynArray
+    fTrackChangesDeletedCount: integer;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
       aFields: PFieldBits): boolean;
     procedure RaiseGetItemOutOfRange(Index: integer);
@@ -1013,7 +1015,7 @@ type
     /// allow background write into another persistence of modified TOrm
     // - you should define a TrackedFields: TFieldBits public field and register
     // its offset as TrackChanges(@TOrmClass(nil).TrackedFields, OrmWriter);
-    // - then AddOne/UpdateOne will be tracked - but not DeleteOne
+    // - then AddOne/UpdateOne/DeleteOne methods will be tracked
     // - if you manually update one record, call TrackChangeUpdated() overloads
     procedure TrackChanges(FieldBitsOffset: pointer; const Persistence: IRestOrm);
     /// after TrackChanges, refresh a TOrm manually updated in-place
@@ -1023,7 +1025,7 @@ type
     procedure TrackChangeUpdated(aRec: TOrm; const Fields: array of PUtf8Char); overload;
     /// send all TrackChanges modifications into the associated Persistence
     // - could be called from a background thread, e.g. once a few seconds
-    // - returns false on error, true if changes have been pushed
+    // - returns false on error, true if changes have been pushed (or nothing to do)
     function TrackChangesAndFlush: boolean;
     /// low-level TOnFindWhereEqual callback doing nothing
     class procedure DoNothingEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
@@ -2495,6 +2497,7 @@ end;
 function TRestStorageInMemory.DeleteOne(aIndex: integer): boolean;
 var
   f: PtrInt;
+  id: TID;
   rec: TOrm;
 begin
   if cardinal(aIndex) >= cardinal(fCount) then
@@ -2502,12 +2505,13 @@ begin
   else
   begin
     rec := fValue[aIndex];
-    if rec.IDValue = fMaxID then
+    id := rec.IDValue;
+    if id = fMaxID then
       fMaxID := 0; // recompute
     if fOwner <> nil then
       // notify BEFORE deletion
       fOwner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
-        rec.IDValue, '', nil, nil);
+        id, '', nil, nil);
     for f := 0 to length(fUnique) - 1 do
       if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
         raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
@@ -2516,6 +2520,10 @@ begin
       raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed', [self, aIndex]);
     if fMaxID = 0 then
       fMaxID := FindMaxID(pointer(fValue), fCount);
+    if fTrackChangesFieldBitsOffset <> 0 then
+      AddInt64Once(fTrackChangesDeleted, fTrackChangesDeletedCount, id);
+      // note: any previous Add/Update are deleted with rec since TrackChanges
+      // is part of it - no need to manually clean them
     fModified := true;
     result := true;
   end;
@@ -3017,7 +3025,7 @@ function TRestStorageInMemory.TrackChangesAndFlush: boolean;
 var
   batch: TRestBatch;
   b: PFieldBits;
-  off: PtrInt;
+  off, i: PtrInt;
   log: ISynLog;
   p, pEnd: POrm; // this is the fastest pattern to iterate over the list
 begin
@@ -3034,6 +3042,12 @@ begin
     // fill the batch instance with pending tracked changes
     StorageLock({modify=}false);
     try
+      // delete any previous value before any Add/Update
+      for i := 0 to fTrackChangesDeletedCount - 1 do
+        batch.Delete(fTrackChangesDeleted[i]);
+      if fTrackChangesDeletedCount > 10000 then
+        fTrackChangesDeleted := nil;  // release memory only if > 16KB
+      fTrackChangesDeletedCount := 0; // flush
       // first loop is for all Add() - to generate multi-insert if possible
       p := pointer(fValue);
       pEnd := @fValue[Count];
@@ -3049,7 +3063,7 @@ begin
         end;
         inc(p);
       end;
-      // second loop is for all Update() - not worth regrouping by fieldbits
+      // next loop is for all Update() - not worth regrouping by fieldbits
       p := pointer(fValue);
       while p <> pEnd do
       begin
