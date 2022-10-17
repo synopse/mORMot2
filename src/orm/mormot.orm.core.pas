@@ -6348,11 +6348,13 @@ begin
 end;
 
 constructor TOrm.Create;
-begin
-  with OrmProps do // don't call inherited Create but OrmProps custom setup
-    if pointer(ManyFields) <> nil then
-      // auto-instanciate any TOrmMany instance
-      ManyFieldsCreate(self, pointer(ManyFields));
+var
+  props: TOrmProperties;
+begin // don't call inherited Create but make TOrmProperties custom setup
+  props := OrmProps;
+  if props.ManyFields <> nil then
+    // auto-instanciate any TOrmMany instance
+    ManyFieldsCreate(self, pointer(props.ManyFields));
 end;
 
 destructor TOrm.Destroy;
@@ -6378,8 +6380,8 @@ begin
     for i := 0 to length(props.DynArrayFields) - 1 do
       with props.DynArrayFields[i] do
         if ObjArray <> nil then
-          ObjArrayClear(PropInfo^.GetFieldAddr(self)^);
-  inherited Destroy;
+          ObjArrayClear(pointer(PAnsiChar(self) + GetterIsFieldPropOffset)^);
+  // no need to call inherited Destroy;
 end;
 
 constructor TOrm.Create(const aSimpleFields: array of const; aID: TID);
@@ -6524,7 +6526,7 @@ procedure TOrm.FillFrom(aRecord: TOrm);
 begin
   if (self <> nil) and
      (aRecord <> nil) then
-    FillFrom(aRecord, aRecord.OrmProps.CopiableFieldsBits);
+    FillFrom(aRecord, aRecord.Orm.CopiableFieldsBits);
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
@@ -6551,7 +6553,7 @@ begin
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-name field lookup
-  S := aRecord.OrmProps.Fields;
+  S := aRecord.Orm.Fields;
   for i := 0 to S.Count - 1 do
     if FieldBitGet(aRecordFieldBits, i) then
     begin
