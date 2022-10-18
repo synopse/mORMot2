@@ -2416,7 +2416,7 @@ begin
   for f := 0 to length(fUnique) - 1 do
     with fUnique[f] do
       if (aFields = nil) or
-          (byte(PropInfo.PropertyIndex) in aFields^) then
+         FieldBitGet(aFields^, PropInfo.PropertyIndex) then
       begin
         ndx := Find(aRec);
         if (ndx >= 0) and
@@ -2727,7 +2727,7 @@ begin
     // nothing to search (e.g. oftUnknown or oftMany)
     exit;
   // use fUnique[] hash array for O(1) search if available
-  if WhereField in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, WhereField) then
   begin
     if FoundOffset <= 0 then
     begin
@@ -3808,7 +3808,7 @@ begin
   P := fStoredClassProps.Prop[FieldName];
   if P = nil then
     exit;
-  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
     InternalLog('EngineUpdateFieldIncrement(%) on UNIQUE %.%',
       [ID, fStoredClass, P.Name], sllDB);
@@ -3878,7 +3878,7 @@ begin
   P := fStoredClassRecordProps.Fields.ByRawUtf8Name(SetFieldName);
   if P = nil then
     exit; // don't allow setting ID field, which is Read Only
-  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
     InternalLog('EngineUpdateField on UNIQUE %.%', [fStoredClass, P.Name], sllDB);
     exit; { TODO : allow update UNIQUE field? }
