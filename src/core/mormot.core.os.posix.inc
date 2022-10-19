@@ -682,6 +682,28 @@ begin
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
+// try to stabilize MacOS pthreads API calls
+
+function GetCurrentThreadId: TThreadID;
+begin
+  result := system.GetCurrentThreadID();
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := system.TryEnterCriticalSection(cs);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.EnterCriticalSection(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.LeaveCriticalSection(cs);
+end;
+
 {$else}
 
 
@@ -3120,7 +3142,9 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
+  {$ifndef OSDARWIN}
   tm: TThreadManager;
+  {$endif OSDARWIN}
 begin
   // retrieve Kernel and Hardware information
   StdOutIsTTY := (IsATTY(StdOutputHandle) = 1) and
@@ -3323,17 +3347,18 @@ begin
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  GetThreadManager(tm); // for inlined RTL calls (avoid one level of redirection)
-  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
-  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
-  @EnterCriticalSection    := @tm.EnterCriticalSection;
-  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
   {$else}
+  // for inlined RTL calls (avoid one level of redirection)
+  GetThreadManager(tm);
+  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
+  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
+  @EnterCriticalSection    := @tm.EnterCriticalSection;
+  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;

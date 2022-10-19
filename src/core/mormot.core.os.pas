@@ -1958,6 +1958,13 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 
 {$ifdef OSPOSIX}
 
+{$ifdef OSDARWIN} // try to stabilize MacOS pthreads API calls
+function GetCurrentThreadId: TThreadID; inline;
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; inline;
+procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
+{$else}
+
 /// returns the unique ID of the current running thread
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager call
 var GetCurrentThreadId: function: TThreadID;
@@ -1975,6 +1982,7 @@ var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager call
 var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
+{$endif OSDARWIN}
 {$endif OSPOSIX}
 
 /// returns TRUE if the supplied mutex has been initialized
