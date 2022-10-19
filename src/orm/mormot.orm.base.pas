@@ -2712,7 +2712,8 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// return the number of TOrmTable rows to browse
-    function IterateCount(const V: TVarData): integer; override;
+    function IterateCount(const V: TVarData;
+      GetObjectAsValues: boolean): integer; override;
     /// allow to loop over the mapped TOrmTable rows
     procedure Iterate(var Dest: TVarData; const V: TVarData;
       Index: integer); override;
@@ -10231,7 +10232,8 @@ begin
   W.AddVariant(tmp, twJsonEscape);
 end;
 
-function TOrmTableRowVariant.IterateCount(const V: TVarData): integer;
+function TOrmTableRowVariant.IterateCount(const V: TVarData;
+  GetObjectAsValues: boolean): integer;
 begin
   result := TOrmTableRowVariantData(V).VTable.fRowCount;
 end;

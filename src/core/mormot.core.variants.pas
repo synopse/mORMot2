@@ -282,8 +282,9 @@ type
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
     // - this default implementation will return -1 (meaning this is not an array)
-    // - overridden method could implement it, e.g. for TDocVariant of kind dvArray
-    function IterateCount(const V: TVarData): integer; virtual;
+    // - overridden method could implement it, e.g. for TDocVariant of kind
+    // dvArray - or dvObject (ignoring names) if GetObjectAsValues is true
+    function IterateCount(const V: TVarData; GetObjectAsValues: boolean): integer; virtual;
     /// allow to loop over an array document
     // - Index should be in 0..IterateCount-1 range
     // - this default implementation will do nothing
@@ -731,7 +732,8 @@ type
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
     // - this overridden method will implement it for dvArray instance kind
-    function IterateCount(const V: TVarData): integer; override;
+    function IterateCount(const V: TVarData;
+      GetObjectAsValues: boolean): integer; override;
     /// allow to loop over an array document
     // - Index should be in 0..IterateCount-1 range
     // - this default implementation will do handle dvArray instance kind
@@ -3372,7 +3374,8 @@ begin
   inherited Create; // call RegisterCustomVariantType(self)
 end;
 
-function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
+function TSynInvokeableVariantType.IterateCount(const V: TVarData;
+  GetObjectAsValues: boolean): integer;
 begin
   result := -1; // this is not an array
 end;
@@ -3915,11 +3918,14 @@ begin
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
-function TDocVariant.IterateCount(const V: TVarData): integer;
+function TDocVariant.IterateCount(const V: TVarData;
+  GetObjectAsValues: boolean): integer;
 var
   Data: TDocVariantData absolute V;
 begin
-  if Data.IsArray then
+  if Data.IsArray or
+     (GetObjectAsValues and
+      Data.IsObject) then
     result := Data.VCount
   else
     result := -1;
@@ -3929,9 +3935,8 @@ procedure TDocVariant.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
 var
   Data: TDocVariantData absolute V;
-begin
-  if Data.IsArray and
-     (cardinal(Index) < cardinal(Data.VCount)) then
+begin // note: IterateCount() may accept IsObject values[]
+  if cardinal(Index) < cardinal(Data.VCount) then
     Dest := TVarData(Data.VValue[Index])
   else
     TRttiVarData(Dest).VType := varEmpty;
