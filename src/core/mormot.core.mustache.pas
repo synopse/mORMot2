@@ -814,7 +814,7 @@ begin
       ListCount := -1
     else
     begin
-      ListCount := DocumentType.IterateCount(aDoc, {GetObjectAsValues=}true);
+      ListCount := DocumentType.IterateCount(aDoc, {GetObjectAsValues=}false);
       if fContextCount = 0 then
         ListCurrentDocument := aDoc; // allow {#.}...{/.} at first level
     end;
