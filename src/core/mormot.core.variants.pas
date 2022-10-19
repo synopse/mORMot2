@@ -1056,7 +1056,10 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const aItems: TVariantDynArray;
       aOptions: TDocVariantOptions = [];
-      aItemsCopiedByReference: boolean = true);
+      aItemsCopiedByReference: boolean = true; aCount: integer = -1);
+    /// initialize a variant array instance from an object Values[]
+    procedure InitArrayFromObjectValues(const aObject: variant;
+      aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
     /// initialize a variant instance to store some RawUtf8 array content
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions); overload;
@@ -5000,18 +5003,32 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFromVariants(const aItems: TVariantDynArray;
-  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean; aCount: integer);
 begin
   if aItems = nil then
     TRttiVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(aItems);
+    if aCount < 0 then
+      VCount := length(aItems)
+    else
+      VCount := aCount;
     VValue := aItems; // fast by-reference copy of VValue[]
     if not aItemsCopiedByReference then
       InitCopy(variant(self), aOptions);
   end;
+end;
+
+procedure TDocVariantData.InitArrayFromObjectValues(const aObject: variant;
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
+var
+  dv: PDocVariantData;
+begin
+  if _SafeObject(aObject, dv) then
+    InitArrayFromVariants(dv^.Values, aOptions, aItemsCopiedByReference, dv^.Count)
+  else
+    TRttiVarData(self).VType := varNull;
 end;
 
 procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
