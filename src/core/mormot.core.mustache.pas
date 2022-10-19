@@ -339,7 +339,7 @@ type
   // over {things:["Peanut butter", "Pen spinning", "Handstands"]} renders as
   // "My favorite things:\n1. Peanut butter\n2. Pen spinning\n3. Handstands\n"
   // - you could use {{-index0}} for 0-based index value
-  // - handles -first  -last  and  -odd  pseudo-section keys, e.g.
+  // - handles -first -last and -odd  pseudo-section keys, e.g.
   // "{{#things}}{{^-first}}, {{/-first}}{{.}}{{/things}}"
   // over {things:["one", "two", "three"]} renders as 'one, two, three'
   // - allows inlined partial templates , to be defined e.g. as
@@ -933,7 +933,8 @@ begin
   void := (c <= varNull) or
           ((c = varBoolean) and
            (Value.VWord = 0));
-  if result <> msNothing then
+  if (result <> msNothing) and // helper?
+     (c < varFirstCustom) then // simple helper values are not pushed
   begin
     if void then
       result := msNothing;
@@ -942,17 +943,18 @@ begin
   PushContext(Value);
   if void then
     // null or false value will not display the section
-    exit;
-  with fContext[fContextCount - 1] do
-    if ListCount < 0 then
-      // single item
-      result := msSingle
-    else if ListCount = 0 then
-      // empty list will not display the section
-      exit
-    else
-      // non-empty list
-      result := msList;
+    result := msNothing
+  else
+    with fContext[fContextCount - 1] do
+      if ListCount < 0 then
+        // single item
+        result := msSingle
+      else if ListCount = 0 then
+        // empty list will not display the section
+        result := msNothing
+      else
+        // non-empty list
+        result := msList;
 end;
 
 
@@ -1176,10 +1178,11 @@ begin
     if result = msNothing then
       d := nil
     else
-      rc := PT_RTTI[ptVariant];
+      rc := PT_RTTI[ptVariant]; // use temp variant value from helper
   end;
   void := IsVoidContext(d, rc);
-  if result <> msNothing then
+  if (result <> msNothing) and // helper?
+     (tmp.VType < varFirstCustom) then // simple helper values are not pushed
   begin
     if void then
       result := msNothing;
@@ -1190,17 +1193,18 @@ begin
   PushContext(d, rc);
   if void then
     // null or false value will not display the section
-    exit;
-  with fContext[fContextCount - 1] do
-    if ListCount < 0 then
-      // single item
-      result := msSingle
-    else if ListCount = 0 then
-      // empty list will not display the section
-      exit
-    else
-      // non-empty list
-      result := msList;
+    result := msNothing
+  else
+    with fContext[fContextCount - 1] do
+      if ListCount < 0 then
+        // single item
+        result := msSingle
+      else if ListCount = 0 then
+        // empty list will not display the section
+        result := msNothing
+      else
+        // non-empty list
+        result := msList;
 end;
 
 
