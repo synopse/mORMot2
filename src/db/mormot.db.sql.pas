@@ -8163,7 +8163,8 @@ constructor TSqlDBStatementWithParamsAndColumns.Create(
   aConnection: TSqlDBConnection);
 begin
   inherited Create(aConnection);
-  if aConnection.Properties.EnsureColumnNameUnique then
+  if (aConnection <> nil) and
+     aConnection.Properties.EnsureColumnNameUnique then
     fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray),
       fColumns, ptRawUtf8, @fColumnCount, {caseinsens=}true)
   else
@@ -8176,14 +8177,16 @@ begin
   if fColumnCount = 0 then
     exit;
   fColumn.Clear;
-  if fConnection.Properties.EnsureColumnNameUnique then
+  if (fConnection <> nil) and
+     fConnection.Properties.EnsureColumnNameUnique then
     fColumn.ForceReHash;
 end;
 
 function TSqlDBStatementWithParamsAndColumns.AddColumn(
   const ColName: RawUtf8): PSqlDBColumnProperty;
 begin
-  if fConnection.Properties.EnsureColumnNameUnique then
+  if (fConnection <> nil) and
+     fConnection.Properties.EnsureColumnNameUnique then
     result := fColumn.AddAndMakeUniqueName(ColName)
   else
   begin
@@ -8197,7 +8200,8 @@ function TSqlDBStatementWithParamsAndColumns.ColumnIndex(
 var
   c: PSqlDBColumnProperty;
 begin
-  if fConnection.Properties.EnsureColumnNameUnique then
+  if (fConnection <> nil) and
+     fConnection.Properties.EnsureColumnNameUnique then
     result := fColumn.FindHashed(aColumnName)
   else
   begin
