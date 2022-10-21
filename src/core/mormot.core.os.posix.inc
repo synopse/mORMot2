@@ -2794,7 +2794,7 @@ var
   tmp: array[word] of byte; // 64KB stack buffer
 begin
   result := '';
-  if popen(f, cmd, 'r') <> 0 then
+  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd
     exit;
   fd := TFileRec(f).Handle;
   pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
@@ -2819,7 +2819,7 @@ begin
       inc(l, n);
       if Assigned(onoutput) then
       begin
-        FastSetString(u, @tmp, n);
+        FastSetString(u, @tmp, n); // assume console output is UTF-8 on POSIX
         if onoutput(u) then
           endtix := 1; // force kill() on abort
       end;

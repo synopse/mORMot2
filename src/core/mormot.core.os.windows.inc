@@ -3425,21 +3425,27 @@ end;
   - Args points to an array of pointers that point to null-terminated
     argument strings. The first argument in the array is the name of the service,
     and subsequent arguments are any strings passed to the service by the process
-    that called the StartService function to start the service.  }
+    that called the StartService function to start the service. Args can
+    be nil if there are no arguments. }
     
-procedure ServiceProc(ArgCount: integer; Args: PPChar); stdcall;
+procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
 var
   i: PtrInt;
 begin
-  dec(ArgCount); // first argument is the service name to be ignored
-  if (ArgCount < 0) or
-     not Assigned(ServiceSingle) then
+  if not Assigned(ServiceSingle) then
     exit;
-  SetLength(ServiceSingle.fArgsList, ArgCount);
-  for i := 0 to ArgCount - 1 do
+  dec(ArgCount); // first argument is the service name to be ignored
+  if (Args = nil) or
+     (integer(ArgCount) <= 0) then
+    Finalize(ServiceSingle.fArgsList) // no argument
+  else
   begin
-    inc(Args);
-    ServiceSingle.fArgsList[i] := Args^; // convert to string
+    SetLength(ServiceSingle.fArgsList, ArgCount);
+    for i := 0 to ArgCount - 1 do
+    begin
+      inc(Args); // first was service name
+      ServiceSingle.fArgsList[i] := Args^; // convert to string
+    end;
   end;
   ServiceSingle.fStatusHandle := RegisterServiceCtrlHandler(
     pointer(ServiceSingle.fSName), @ServiceSingle.ControlHandler);

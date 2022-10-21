@@ -3700,7 +3700,7 @@ type
   SERVICE_STATUS_HANDLE = cardinal;
   TServiceTableEntry = record
     lpServiceName: PChar;
-    lpServiceProc: procedure(ArgCount: integer; Args: PPChar); stdcall;
+    lpServiceProc: procedure(ArgCount: cardinal; Args: PPChar); stdcall;
   end;
   PServiceTableEntry = ^TServiceTableEntry;
 
@@ -3972,6 +3972,7 @@ type
     property ArgCount: Integer
       read GetArgCount;
     /// List of arguments passed to the service by the service controler
+    // - Idx is in range 0..ArgCount - 1
     property Args[Idx: Integer]: string
       read GetArgs;
     /// Any data You wish to associate with the service object
