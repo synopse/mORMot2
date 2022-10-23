@@ -441,6 +441,31 @@ type
   /// set of restrictions on PDF document operations
   TPdfEncryptionPermissions = set of TPdfEncryptionPermission;
 
+const
+  /// allow all actions for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_ALL: TPdfEncryptionPermissions =
+    [Low(TPdfEncryptionPermission)..high(TPdfEncryptionPermission)];
+
+  /// disable modification and annotation of a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOMODIF: TPdfEncryptionPermissions = [epPrinting,
+    epContentCopy, epPrintingHighResolution, epFillingForms,
+    epContentExtraction, epDocumentAssembly];
+
+  /// disable printing for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERSMISSION_NOPRINT: TPdfEncryptionPermissions = [epGeneralEditing,
+    epContentCopy, epAuthoringComment, epContentExtraction, epDocumentAssembly];
+
+  /// disable content extraction or copy for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOCOPY: TPdfEncryptionPermissions = [epPrinting,
+    epAuthoringComment, epPrintingHighResolution, epFillingForms];
+
+  /// disable printing and content extraction or copy for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOCOPYNORPRINT: TPdfEncryptionPermissions = [];
 {$endif USE_PDFSECURITY}
 
 const
