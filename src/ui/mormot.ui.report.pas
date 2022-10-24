@@ -1,218 +1,32 @@
-/// Reporting unit
-// - this unit is a part of the freeware Synopse framework,
-// licensed under a MPL/GPL/LGPL tri-license; version 1.18
+/// Reporting unit with UI Preview and PDF Export
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.ui.report;
 
 (*
-    This file is part of Synopse framework.
+  *****************************************************************************
 
-    Synopse framework. Copyright (C) 2022 Arnaud Bouchez
-      Synopse Informatique - https://synopse.info
+    Simple Report Engine with UI Preview and PDF Export
+    - Shared Functions used during Report Rendering
+    - TGdiPages Report Engine
+    - TRenderPages Prototype - unfinished 
 
-  *** BEGIN LICENSE BLOCK *****
-  Version: MPL 1.1/GPL 2.0/LGPL 2.1
+    Forked and heavily patched from TPages component (c) 2003 Angus Johnson
 
-  The contents of this file are subject to the Mozilla Public License Version
-  1.1 (the "License"); you may not use this file except in compliance with
-  the License. You may obtain a copy of the License at
-  http://www.mozilla.org/MPL
-
-  Software distributed under the License is distributed on an "AS IS" basis,
-  WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-  for the specific language governing rights and limitations under the License.
-
-  The Original Code is Synopse framework.
-
-  The Initial Developer of the Original Code is Angus Johnson.
-
-  Portions created by the Initial Developer are Copyright (C) 2003
-  the Initial Developer. All Rights Reserved.
-  Portions created by Arnaud Bouchez for Synopse are Copyright (C) 2022
-  Arnaud Bouchez. All Rights Reserved.
-
-  Contributor(s):
-  - Celery
-  - Kevinday
-  - Leo
-  - Mike Lamusse (mogulza)
-
-  Alternatively, the contents of this file may be used under the terms of
-  either the GNU General Public License Version 2 or later (the "GPL"), or
-  the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-  in which case the provisions of the GPL or the LGPL are applicable instead
-  of those above. If you wish to allow use of your version of this file only
-  under the terms of either the GPL or the LGPL, and not to allow others to
-  use your version of this file under the terms of the MPL, indicate your
-  decision by deleting the provisions above and replace them with the notice
-  and other provisions required by the GPL or the LGPL. If you do not delete
-  the provisions above, a recipient may use your version of this file under
-  the terms of any one of the MPL, the GPL or the LGPL.
-
-  ***** END LICENSE BLOCK *****
-
-
-    Initial Notes and Copyright:
-   ******************************
-
- Component Name:  TPages
- Module:          Pages
- Description:     Report writer and previewer
- Version:         1.6
- Date:            25-MAY-2004 (initial version)
- Target:          Win32, Delphi 3 - Delphi 7
- Author:          Angus Johnson, http://www.angusj.com
- Copyright        (c) 2003 Angus Johnson
-
- Notes:
-   * TGDIPages is designed as a simple lightweight report writer. Reports are
-     created in code, they are not banded, nor are they directly linked to
-     TDatasets. If you're looking for a dataset aware report writer then
-     TGDIPages is not for you. TGDIPages is a visual component based on a
-     TScrollbox, though it isn't necessary to view reports prior to printing.
-
-   * Main features include:
-     + Text can be output either wrapped between page margins, in columns
-       or at specified offsets.
-     + Multiple alignment options -
-         > left, right and justified in non-columned text
-         > left, right and currency in columned text
-     + Tabs to Assigned tabstops
-     + Multi-line page headers, footers and column headers
-     + Multiple fonts can be used.
-     + Angled text output
-     + Single, line & half, and double line spacing
-     + Methods for printing bitmaps, metafiles, lines, boxes and arrows
-     + Page numbering can be redefined
-     + Text output 'groups' prevent blocks of text spanning across pages
-     + Designed around a TScrollbox descendant preview window with:
-       mouse click zoom control; keyboard handling of lineup, linedown,
-       pageup and pagedown srolling; mouse wheel scrolling.
-
-   * In order to get the best print quality, TGDIPages uses the selected
-     printer driver's resolution to prepare reports.
-     If a report will be printed to a different printer (eg by using a
-     PrintDialog), it's preferable to change to that printer object BEFORE
-     preparing the report. Otherwise, the report will be stretch down to the
-     printer canvas resulting in a slight degradation in print quality.
-
-
-  Enhanced for the freeware Synopse framework:
- **********************************************
-
-  - Windows XP, Vista and Seven compatibility adding
-  - fix printing metafiles and page groups on some printer (with bad drivers)
-  - optionnaly use antialiaised drawing (via SynGdiPlus unit)
-  - popup menu creation, with zoom, print or copy features (and custom entries)
-  - direct PDF export (if a PDF printer is installed, or via SynPdf unit)
-  - direct page export to clipboard as text
-  - optional Black and White / Duplex mode (with out TPrinterNew custom class)
-  - new useful methods for easy text adding (especially column definition)
-  - new fast double buffering drawing
-  - full Unicode text process (even before Delphi 2009)
-  - speed up and various bug fixes to work with Delphi 5 up to XE3
-
-  Modifications (c) 2009-2022 Arnaud Bouchez
-
-  Version 1.4 - February 8, 2010
-  - whole Synopse SQLite3 database framework released under the GNU Lesser
-    General Public License version 3, instead of generic "Public Domain"
-
-  Version 1.6
-  - new version, using our SynGdiPlus unit: if the GDI+ is available,
-    it will use it to render the page using its AntiAliased engine;
-    under Windows 98 or 2000, no antialiasing will occur, but the program
-    will still run (since our SynGdiPlus unit use dynamic linking of the
-    gdiplus.dll library);
-    if only GDI+ 1.0 is available (i.e. with a Windows XP without any Office
-    2003/2007 installed) a pure Delphi version of GDI+ drawing is used, which
-    should not be able to convert 100% of page content, but should work on
-    most cases
-
-  Version 1.8
-  - some fixes for compilation under Delphi 2009/2010
-
-  Version 1.9
-  - new AppendRichEdit method to draw RichEdit content
-  - new WordWrapLeftCols property used to optionaly word wrap caLeft columns
-    into multiple lines, i.e. if the text is wider than the column width, its
-    content is wrapped to the next line (set to false by default) - this
-    also will handle #13/#10 in column text as a "go to next line" command
-
-  Version 1.9.2
-  - fix font color issue in header and footers
-  - safety additional code to avoid any division per 0 exception
-
-  Version 1.11
-  - fixed issue in TGDIPages.AppendRichEdit - see user feedback from
-    https://synopse.info/forum/viewtopic.php?pid=671#p671
-  - added Author, Subject and Keywords optional parameters to TGDIPages.ExportPDF
-
-  Version 1.12
-  - fixed one issue (in SynGdiPlus) for displaying bitmaps in anti-aliased mode
-    and displaying underlined or stroken out text - new ForceInternalAntiAliased
-    method (true by default) using SynGdiPlus instead of GDI+ 1.1 native conversion
-  - OnStringToUnicodeEvent is now called for all text, whatever the alignment is
-  - new property BiDiMode, for formatting the text in right to left order
-  - added new DrawBMP overloaded method to add some bitmap as a (centered)
-    paragraph, with some optional legend - bitmaps are now cached and reused
-    in the exported PDF, if the same one is drawn multiple time in the document
-  - added new AddBookMark, AddOutline and AddLink methods (working also with
-    the PDF export using SynPdf) :)
-  - live navigation via links in the preview screen, and via the new 'Bookmarks'
-    popup menu entry
-  - additional ExportPDF* properties used during PDF export
-  - introducing the new TRenderPages class, for high-quality document rendering
-    (used e.g. within SynProject for document preview and PDF generation,
-    with basic understanding of the rtf format)
-
-  Version 1.15
-  - fixed an endless loop in TGDIPages.DrawTextAcrossCols when wrapping text
-  - fixed an issue in TGDIPages.DrawTextAcrossCols when test is exported to pdf
-    (wrong clipping region set)
-  - if TGDIPages.WordWrapLeftCols=TRUE, won't wrap column headers
-
-  Version 1.16
-  - includes new TSynAnsiConvert classes for handling Ansi charsets
-  - some minor fixes (e.g. preview landscape or keys for popup menu)
-  - fix issue in TGDIPages.AppendRichEdit() when called on a blank page
-  - enhanced the print preview screen with a left-sided button bar
-  - new TGdiPages.RenderGraphic method (accepting both TBitmap and TMetaFile)
-
-  Version 1.17
-  - now whole text process is UNICODE-ready, even on pre-Delphi-2009 versions
-  - now implements font fall-back in internal Anti-Aliaised drawing,
-    if the new ForceInternalAntiAliasedFontFallBack property is set to TRUE
-
-  Version 1.18
-  - renamed SQLite3Pages.pas to mORMotReport.pas
-  - TGdiPages now handles several page layouts per report - see new overloaded
-    TGDIPages.NewPageLayout() methods and also Orientation property which now
-    allows several page orientations per report - feature request [204b698b3d]
-  - now internal page content (TMetaFile) is compressed using our SynLZ
-    algorithm: we were able to generate reports with more than 20,000 pages!
-  - added optional EndOfPagePositions parameter to TGDIPages.AppendRichEdit()
-  - speed up and memory resource decrease for pdf export of huge reports
-  - fixed issue about disabled Zoom menu entry if no Outline is defined
-  - fixed unexpected exception with TGDIPages.DrawText() and huge string
-  - proper function TGDIPages.GetLineHeight() computation - from kln feedback
-  - added ExportPDFBackground and ExportPDFGeneratePDF15File properties
-  - added ExportPDFEncryptionLevel/User/OwnerPassword/Permissions properties to
-    optionally export report as 40 bit or 128 bit encrypted pdf
-  - added setter method for ZoomStatus property (during preview) - [dd656b470b]
-  - added TGDIPages.ExportPDFStream() method - to be used e.g. on servers
-  - fixed [cfdc644038] about truncated parenthesis in pdf export for caCurrency
-  - fixed [e7ffb69131] about TGDIPages.DrawGraphic() when the TGraphic is Empty
-  - allow preview as a blank colored component at design time (thanks to Celery)
-  - added VisibleButtons optional parameter to TGDIPages.ShowPreviewForm method
-    as requested by [4d64a52675]
-  - added withNewLine optional parameter to DrawText*() methods so that you
-    may be able to append some text without creating a new paragraph - from a
-    proposal patch by Mike Lamusse (mogulza): thanks for sharing!
-  - added TGDIPages.DrawColumnLine method - thanks kevinday for the patch
-
+  *****************************************************************************
 *)
 
 interface
+
+{$I ..\mormot.defines.inc}
+
+{$ifdef OSPOSIX}
+
+// do-nothing-unit on non Windows system
+
+implementation
+
+{$else}
 
 {.$define MOUSE_CLICK_PERFORM_ZOOM} // old not user-friendly behavior
 {.$define RENDERPAGES} // TRenderBox and TRenderPages are not yet finished
@@ -222,35 +36,118 @@ interface
 // slower but smoother (need the GDI+ library, best with version 1.1)
 
 {.$define USEPDFPRINTER}
-// do not use the Synopse PDF engine, in Delphi code, but a PDF virtual printer
+// do not use the Synopse PDF engine, in Delphi code, but a doPdf virtual printer
 
-{.$define PRINTERNEW}
-// if our custom Printer.pas unit is installed, use TPrinterNew class instead
-// of TPrinter to allow Black&White and Duplex printing
-// -> disabled by default, should be enabled globaly from the Project Options
-
-{$ifndef ENHANCEDRTL}
-  {$undef PRINTERNEW}
-  // Black&White and Duplex printing are only available with our Enhanced RTL
-{$endif}
-
-{$I ..\mormot.defines.inc}
+{$define USE_UNISCRIBE}
+// the same conditional as in mormot.ui.pdf
+{$ifdef NO_USE_UNISCRIBE}
+  // this special conditional can be set globaly for an application which does
+  // not need the UniScribe features
+  {$undef USE_UNISCRIBE}
+{$endif USE_UNISCRIBE}
 
 uses
+  windows,
+  messages,
+  sysutils,
+  classes,
+  contnrs,
+  graphics,
+  controls,
+  dialogs,
+  forms,
+  stdctrls,
+  extctrls,
+  winspool,
+  printers,
+  menus,
+  shellapi,
+  richedit,
+  {$ifdef ISDELPHIXE3}
+  system.uitypes,
+  {$endif ISDELPHIXE3}
   mormot.core.base,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.zip,
-{$ifndef USEPDFPRINTER}
+  types,
+  clipbrd,
+  {$ifdef FPC}
+  lcltype,
+  lclproc,
+  lclintf,
+  rtlconsts,
+  {$else}
+  consts,
+  {$endif FPC}
+  {$ifndef USEPDFPRINTER}
   mormot.ui.pdf,
-{$endif}
-  Windows, Messages, SysUtils, Classes, Contnrs,
-{$ifdef GDIPLUSDRAW}
+  {$endif USEPDFPRINTER}
+  {$ifdef GDIPLUSDRAW}
+  mormot.lib.gdiplus,
   mormot.ui.gdiplus,
-{$endif}
-  Graphics, Controls, Dialogs, Forms, StdCtrls,
-  ExtCtrls, WinSpool, Printers, Menus, ShellAPI, RichEdit;
+  {$endif GDIPLUSDRAW}
+  mormot.ui.core; // for TMetaFile definition
+
+
+{ ****************** Shared Functions used during Report Rendering }
+
+resourcestring
+  sPDFFile = 'Acrobat File';
+  sPageN = 'Page %d / %d';
+  /// used to create the popup menu of the report
+  // - should match TGdiPagePreviewButton order
+  sReportPopupMenu1 = '&Next page,&Previous page,&Go to Page...,&Zoom...,'+
+    '&Bookmarks,Copy Page as &Text,P&rint,PDF &Export,&Close,Page fit,Page width';
+  /// used to create the pages browsing menu of the report
+  sReportPopupMenu2 = 'Pages %d to %d,Page %d';
+
+
+const
+  /// minimum gray border with around preview page
+  GRAY_MARGIN = 10;
+
+  /// TGdiPages.Zoom property value for "Page width" layout during preview
+  PAGE_WIDTH = -1;
+  /// TGdiPages.Zoom property value for "Page fit" layout during preview
+  PAGE_FIT   = -2;
+
+  //TEXT FORMAT FLAGS...
+  FORMAT_DEFAULT    = $0;
+  //fontsize bits 0-7  .'. max = 255
+  FORMAT_SIZE_MASK  = $FF;
+  //alignment bits 8-9
+  FORMAT_ALIGN_MASK = $300;
+  FORMAT_LEFT       = $0;
+  FORMAT_RIGHT      = $100;
+  FORMAT_CENTER     = $200;
+  FORMAT_JUSTIFIED  = $300;
+  //fontstyle bits 10-12
+  FORMAT_BOLD       = $400;
+  FORMAT_UNDERLINE  = $800;
+  FORMAT_ITALIC     = $1000;
+  //undefined bit 13
+  FORMAT_UNDEFINED  = $2000;
+  //line flags bits 14-15
+  FORMAT_SINGLELINE = $8000;
+  FORMAT_DOUBLELINE = $4000;
+  FORMAT_LINES      = $C000;
+  //DrawTextAt XPos 16-30 bits  (max value = ~64000)
+  FORMAT_XPOS_MASK  = $FFFF0000;
+
+  PAPERSIZE_A4_WIDTH = 210;
+  PAPERSIZE_A4_HEIGHT = 297;
+
+procedure SetCurrentPrinterAsDefault;
+function CurrentPrinterName: string;
+function CurrentPrinterPaperSize: string;
+procedure UseDefaultPrinter;
+
+procedure Register;
+
+
+{ ****************** TGdiPages Report Engine }
 
 const
   MAXCOLS = 20;
@@ -261,21 +158,37 @@ const
   PAGENUMBER = '<<pagenumber>>';
 
 type
+  /// Exception class raised by this unit
+  EReport = class(ESynException);
 
   /// text paragraph alignment
-  TTextAlign = (taLeft,taRight,taCenter,taJustified);
+  TTextAlign = (
+    taLeft,
+    taRight,
+    taCenter,
+    taJustified);
 
   /// text column alignment
-  TColAlign = (caLeft,caRight,caCenter, caCurrency);
+  TColAlign = (
+    caLeft,
+    caRight,
+    caCenter,
+    caCurrency);
 
   /// text line spacing
-  TLineSpacing = (lsSingle, lsOneAndHalf, lsDouble);
+  TLineSpacing = (
+    lsSingle,
+    lsOneAndHalf,
+    lsDouble);
 
   /// available zoom mode
   // - zsPercent is used with a zoom percentage (e.g. 100% or 50%)
   // - zsPageFit fits the page to the report
   // - zsPageWidth zooms the page to fit the report width on screen
-  TZoomStatus = (zsPercent, zsPageFit, zsPageWidth);
+  TZoomStatus = (
+    zsPercent,
+    zsPageFit,
+    zsPageWidth);
 
   /// Event triggered when a new page is added
   TNewPageEvent = procedure(Sender: TObject; PageNumber: integer) of object;
@@ -292,9 +205,13 @@ type
 
   /// available known paper size for NewPageLayout() method
   TGdiPagePaperSize = (
-    psA4, psA5, psA3, psLetter, psLegal);
+    psA4,
+    psA5,
+    psA3,
+    psLetter,
+    psLegal);
 
-  TGDIPages = class;
+  TGdiPages = class;
 
   /// a report layout state, as used by SaveLayout/RestoreSavedLayout methods
   TSavedState = record
@@ -312,8 +229,8 @@ type
     Text: SynUnicode;
     State: TSavedState;
     /// initialize the header or footer parameters with current report state
-    constructor Create(Report: TGDIPages; doubleline: boolean;
-      const aText: SynUnicode=''; IsText: boolean=false);
+    constructor Create(Report: TGdiPages; doubleline: boolean;
+      const aText: SynUnicode = ''; IsText: boolean = false);
   end;
 
   /// internal format of a text column
@@ -332,10 +249,10 @@ type
   end;
 
   /// internal structure used to store bookmarks or links
-  TGDIPagereference = class
+  TGdiPageReference = class
   public
     /// the associated page number (starting at 1)
-    Page: Integer;
+    Page: integer;
     /// graphical coordinates of the hot zone
     // - for bookmarks, Top is the Y position
     // - for links, the TRect will describe the hot region
@@ -346,11 +263,11 @@ type
     /// initialize the structure with the current page
     constructor Create(PageNumber: integer; Left, Top, Right, Bottom: integer);
     /// compute the coordinates on screen into Preview
-    procedure ToPreview(Pages: TGDIPages);
+    procedure ToPreview(Pages: TGdiPages);
   end;
 
   /// contains one page
-  TGDIPageContent = record
+  TGdiPageContent = record
     /// SynLZ-compressed content of the page
     MetaFileCompressed: RawByteString;
     /// text equivalent of the page
@@ -364,12 +281,20 @@ type
   end;
 
   /// used to store all pages of the report
-  TGDIPageContentDynArray = array of TGDIPageContent;
+  TGdiPageContentDynArray = array of TGdiPageContent;
 
   /// the available menu items
   TGdiPagePreviewButton = (
-    rNone, rNextPage, rPreviousPage, rGotoPage, rZoom, rBookmarks,
-    rPageAsText, rPrint, rExportPDF, rClose);
+    rNone,
+    rNextPage,
+    rPreviousPage,
+    rGotoPage,
+    rZoom,
+    rBookmarks,
+    rPageAsText,
+    rPrint,
+    rExportPdf,
+    rClose);
 
   /// set of menu items
   TGdiPagePreviewButtons = set of TGdiPagePreviewButton;
@@ -379,14 +304,14 @@ type
   // - allow preview and printing, and direct pdf export
   // - handle bookmark, outlines and links inside the document
   // - page coordinates are in mm's
-  TGDIPages = class(TScrollBox)
+  TGdiPages = class(TScrollBox)
   protected
     fPreviewSurface: TPagePaintbox;
-    fCanvas: TMetafileCanvas;
+    fCanvas: TMetaFileCanvas;
     fCanvasText: string;
     fBeforeGroupText: string;
-    fGroupPage: TMetafile;
-    fPages: TGDIPageContentDynArray;
+    fGroupPage: TMetaFile;
+    fPages: TGdiPageContentDynArray;
     fHeaderLines: TObjectList;
     fFooterLines: TObjectList;
     fColumns: array of TColRec;
@@ -394,9 +319,9 @@ type
       headers: TSynUnicodeDynArray;
       flags: integer;
     end;
-{$ifdef MOUSE_CLICK_PERFORM_ZOOM}
+    {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
     fZoomTimer: TTimer;
-{$endif}
+    {$endif MOUSE_CLICK_PERFORM_ZOOM}
     fPtrHdl: THandle;
     fTabCount: integer;
     fCurrentPrinter: string;
@@ -415,29 +340,29 @@ type
     fBiDiMode: TBiDiMode;
     fPageMarginsPx: TRect;
     fHasPrinterInstalled: boolean;
-{$ifdef USEPDFPRINTER}
+    {$ifdef USEPDFPRINTER}
     fHasPDFPrinterInstalled: boolean;
     fPDFPrinterIndex: integer;
-{$else}
-    fForceJPEGCompression: Integer;
-    fExportPDFApplication: string;
-    fExportPDFAuthor: string;
-    fExportPDFSubject: string;
-    fExportPDFKeywords: string;
-    fExportPDFEmbeddedTTF: boolean;
-    fExportPDFA1: boolean;
-    fExportPDFBackground: TGraphic;
+    {$else}
+    fForceJPEGCompression: integer;
+    fExportPdfApplication: string;
+    fExportPdfAuthor: string;
+    fExportPdfSubject: string;
+    fExportPdfKeywords: string;
+    fExportPdfEmbeddedTTF: boolean;
+    fExportPdfLevel: TPdfALevel;
+    fExportPdfBackground: TGraphic;
     {$ifndef NO_USE_UNISCRIBE}
-    fExportPDFUseUniscribe: boolean;
-    {$endif}
-    fExportPDFUseFontFallBack: boolean;
-    fExportPDFFontFallBackName: string;
-    fExportPDFEncryptionLevel: TPdfEncryptionLevel;
-    fExportPDFEncryptionUserPassword: string;
-    fExportPDFEncryptionOwnerPassword: string;
-    fExportPDFEncryptionPermissions: TPdfEncryptionPermissions;
-    fExportPDFGeneratePDF15File: boolean;
-{$endif}
+    fExportPdfUseUniscribe: boolean;
+    {$endif NO_USE_UNISCRIBE}
+    fExportPdfUseFontFallBack: boolean;
+    fExportPdfFontFallBackName: string;
+    fExportPdfEncryptionLevel: TPdfEncryptionLevel;
+    fExportPdfEncryptionUserPassword: string;
+    fExportPdfEncryptionOwnerPassword: string;
+    fExportPdfEncryptionPermissions: TPdfEncryptionPermissions;
+    fExportPdfGeneratePdf15File: boolean;
+    {$endif USEPDFPRINTER}
     fPrinterPxPerInch: TPoint;
     fPhysicalSizePx: TPoint;           //size of page in printer pixels
     fPhysicalOffsetPx: TPoint;         //size of non-printing margins in pixels
@@ -506,8 +431,8 @@ type
     procedure SetYPos(YPos: integer);
     procedure NewPageInternal; virtual;
     function  CreateMetaFile(aWidth, aHeight: integer): TMetaFile;
-    function  CreateMetafileCanvas(Page: TMetafile): TMetafileCanvas;
-    procedure UpdateMetafileCanvasFont(aCanvas: TMetafileCanvas);
+    function  CreateMetafileCanvas(Page: TMetaFile): TMetaFileCanvas;
+    procedure UpdateMetafileCanvasFont(aCanvas: TMetaFileCanvas);
     function  TextFormatsToFlags: integer;
     procedure SetFontWithFlags(flags: integer);
     function  GetPageMargins: TRect;
@@ -530,39 +455,40 @@ type
     procedure LineInternal(start, finish : integer; doubleline : boolean); overload;
     procedure LineInternal(aty, start, finish : integer; doubleline : boolean); overload;
     procedure PrintFormattedLine(s: SynUnicode; flags: integer;
-      const aBookmark: string=''; const aLink: string=''; withNewLine: boolean=true;
-      aLinkNoBorder: boolean=false);
-    procedure LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean=true);
+      const aBookmark: string = ''; const aLink: string = '';
+      withNewLine: boolean = true; aLinkNoBorder: boolean = false);
+    procedure LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean = true);
     procedure RightOrCenterWrap(const s: SynUnicode);
     procedure GetTextLimitsPx(var LeftOffset, RightOffset: integer);
     procedure HandleTabsAndPrint(const leftstring: SynUnicode;
       var rightstring: SynUnicode; leftOffset, rightOffset: integer);
     procedure PreviewPaint(Sender: TObject);
     procedure PreviewMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
+      Shift: TShiftState; X, Y: integer);
     procedure PreviewMouseUp(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure PreviewMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+      Shift: TShiftState; X, Y: integer);
+    procedure PreviewMouseMove(Sender: TObject; Shift: TShiftState; X, Y: integer);
     function GetLeftMargin: integer;
     procedure SetLeftMargin(const Value: integer);
     function GetRightMarginPos: integer;
     function GetSavedState: TSavedState;
     procedure SetSavedState(const SavedState: TSavedState);
     /// can be used internaly (for instance by fPagesToFooterState)
-    property SavedState: TSavedState read GetSavedState write SetSavedState;
+    property SavedState: TSavedState
+      read GetSavedState write SetSavedState;
   protected
     fMousePos: TPoint;
-{$ifndef MOUSE_CLICK_PERFORM_ZOOM}
+    {$ifndef MOUSE_CLICK_PERFORM_ZOOM}
     fButtonDown, fButtonDownScroll: TPoint;
-{$endif}
-    /// Strings[] are the bookmark names, and Objects[] are TGDIPagereference
+    {$endif MOUSE_CLICK_PERFORM_ZOOM}
+    /// Strings[] are the bookmark names, and Objects[] are TGdiPageReference
     // to get the Y position
     fBookmarks: TStringList;
-    /// Strings[] are the bookmark names, and Objects[] are TGDIPagereference to
+    /// Strings[] are the bookmark names, and Objects[] are TGdiPageReference to
     // get the hot region
     fLinks: TStringList;
     fLinksCurrent: integer;
-    /// Strings[] are the outline titles, and Objects[] are TGDIPagereference
+    /// Strings[] are the outline titles, and Objects[] are TGdiPageReference
     // to get the Y position of the destination
     fOutline: TStringList;
     fInternalUnicodeString: SynUnicode;
@@ -576,12 +502,12 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure CreateWnd; override;
     procedure Resize; override;
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    {$IFNDEF VER100}
-    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean; override; //no mousewheel support in Delphi 3
-    {$ENDIF}
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
+    {$ifndef FPC}
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: integer;
+      MousePos: TPoint): boolean; override; //no mousewheel support in Delphi 3
+    {$endif FPC}
     procedure PopupMenuPopup(Sender: TObject);
     procedure CheckHeaderDone; virtual;
     // warning: PW buffer is overwritten at the next method call
@@ -612,26 +538,9 @@ type
     /// if true the preview will not use GDI+ library to draw anti-aliaised graphics
     // - this may be slow on old computers, so caller can disable it on demand
     ForceNoAntiAliased: boolean;
-    /// if true, drawing will NOT to use native GDI+ 1.1 conversion
-    // - we found out that GDI+ 1.1 was not as good as our internal conversion
-    // function written in Delphi, e.g. for underlined fonts
-    // - so this property is set to true by default for proper display on screen
-    // - will only be used if ForceNoAntiAliased is false, of course
-    ForceInternalAntiAliased: boolean;
-    /// if true, internal text drawing will use a font-fallback mechanism
-    // for characters not existing within the current font (just as with GDI)
-    // - is disabled by default, but could be set to TRUE to force enabling
-    // TGDIPlusFull.ForceUseDrawString property
-    ForceInternalAntiAliasedFontFallBack: boolean;
+    /// refine how GDI+ library rendering is done
+    AntiAliasedOptions: TEmfConvertOptions;
 
-{$ifdef PRINTERNEW}
-    // the PrintPages() will use this parameter to force black and white, or
-    // color mode, whatever the global printer setting is
-    ForcePrintColorMode: (printColorDefault, printBW, printColor);
-    // the PrintPages() will use this parameter to force duplex mode,
-    // whatever the global printer setting is
-    ForcePrintDuplexMode: (printDuplexDefault, printSimplex, printDuplex);
-{$endif}
     /// if true, the headers are copied only once to the text
     ForceCopyTextAsWholeContent: boolean;
     /// customize text conversion before drawing
@@ -641,7 +550,7 @@ type
     /// set group page fill method
     // - if set to true, the groups will be forced to be placed on the same page
     // (this was the original default "Pages" component behavior, but this
-    // is not usual in page composition, so is disabled by default in TGDIPages)
+    // is not usual in page composition, so is disabled by default in TGdiPages)
     // - if set to false, the groups will force a page feed if there is not
     // enough place for 20 lines on the current page (default behavior)
     GroupsMustBeOnSamePage: boolean;
@@ -666,40 +575,41 @@ type
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // - by default, will write a paragraph, unless withNewLine is set to false,
     // so that the next DrawText() will continue drawing at the current position
-    procedure DrawText(const s: string; withNewLine: boolean=true);
+    procedure DrawText(const s: string; withNewLine: boolean = true);
       {$ifdef HASINLINE}inline;{$endif}
     /// draw some UTF-8 text as a paragraph, with the current alignment
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // - by default, will write a paragraph, unless withNewLine is set to false,
     // so that the next DrawText() will continue drawing at the current position
-    procedure DrawTextU(const s: RawUTF8; withNewLine: boolean=true);
+    procedure DrawTextU(const s: RawUtf8; withNewLine: boolean = true);
       {$ifdef HASINLINE}inline;{$endif}
     /// draw some Unicode text as a paragraph, with the current alignment
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // - by default, will write a paragraph, unless withNewLine is set to false,
     // so that the next DrawText() will continue drawing at the current position
-    procedure DrawTextW(const s: SynUnicode; withNewLine: boolean=true);
+    procedure DrawTextW(const s: SynUnicode; withNewLine: boolean = true);
     /// draw some text as a paragraph, with the current alignment
     // - this method use format() like parameterss
     procedure DrawTextFmt(const s: string; const Args: array of const;
-      withNewLine: boolean=true);
+      withNewLine: boolean = true);
     /// get the formating flags associated to a Title
     function TitleFlags: integer;
     /// draw some text as a paragraph title
     // - the outline level can be specified, if UseOutline property is enabled
     // - if aBookmark is set, a bookmark is created at this position
     // - if aLink is set, a link to the specified bookmark name (in aLink) is made
-    procedure DrawTitle(const s: SynUnicode; DrawBottomLine: boolean=false; OutlineLevel: Integer=0;
-      const aBookmark: string=''; const aLink: string=''; aLinkNoBorder: boolean=false);
+    procedure DrawTitle(const s: SynUnicode; DrawBottomLine: boolean = false;
+      OutlineLevel: integer = 0; const aBookmark: string = '';
+      const aLink: string = ''; aLinkNoBorder: boolean = false);
     /// draw one line of text, with the current alignment
-    procedure DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string='';
-      CheckPageNumber: boolean=false; aLinkNoBorder: boolean=false);
+    procedure DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string = '';
+      CheckPageNumber: boolean = false; aLinkNoBorder: boolean = false);
     /// draw one line of text, with a specified Angle and X Position
     procedure DrawAngledTextAt(const s: SynUnicode; XPos, Angle: integer);
     /// draw a square box at the given coordinates
@@ -707,7 +617,7 @@ type
     /// draw a filled square box at the given coordinates
     procedure DrawBoxFilled(left,top,right,bottom: integer; Color: TColor);
     /// Stretch draws a bitmap image at the specified page coordinates in mm's
-    procedure DrawBMP(rec: TRect; bmp: TBitmap); overload;
+    procedure DrawBmp(rec: TRect; bmp: TBitmap); overload;
     /// add the bitmap at the specified X position
     // - if there is not enough place to draw the bitmap, go to next page
     // - then the current Y position is updated
@@ -715,22 +625,24 @@ type
     // - if bLeft is maxInt, the bitmap is centered to the page width
     // - bitmap is stretched (keeping aspect ratio) for the resulting width to
     // match the bWidth parameter (in mm)
-    procedure DrawBMP(bmp: TBitmap; bLeft, bWidth: integer; const Legend: string=''); overload;
+    procedure DrawBmp(bmp: TBitmap; bLeft, bWidth: integer;
+      const Legend: string = ''); overload;
     /// Stretch draws a metafile image at the specified page coordinates in mm's
-    procedure DrawMeta(rec: TRect; meta: TMetafile);
+    procedure DrawMeta(rec: TRect; meta: TMetaFile);
     /// add the graphic (bitmap or metafile) at the specified X position
-    // - handle only TBitmap and TMetafile kind of TGraphic
+    // - handle only TBitmap and TMetaFile kind of TGraphic
     // - if there is not enough place to draw the bitmap, go to next page
     // - then the current Y position is updated
     // - bLeft (in mm) is calculated in reference to the LeftMargin position
     // - if bLeft is maxInt, the bitmap is centered to the page width
     // - bitmap is stretched (keeping aspect ratio) for the resulting width to
     // match the bWidth parameter (in mm)
-    procedure DrawGraphic(graph: TGraphic; bLeft, bWidth: integer; const Legend: SynUnicode='');
+    procedure DrawGraphic(graph: TGraphic; bLeft, bWidth: integer;
+      const Legend: SynUnicode = '');
     /// draw an Arrow
     procedure DrawArrow(Point1, Point2: TPoint; HeadSize: integer; SolidHead: boolean);
     /// draw a Line, either simple or double, between the left & right margins
-    procedure DrawLine(doubleline: boolean=false);
+    procedure DrawLine(doubleline: boolean = false);
     /// draw a Dashed Line between the left & right margins
     procedure DrawDashedLine;
     /// draw a Line, following a column layout
@@ -743,7 +655,8 @@ type
     // - you can specify optionally a pointer to a TIntegerDynArray variable,
     // which will be filled with the position of each page last char: it may
     // be handy e.g. to add some cross-reference table about the rendered content
-    procedure AppendRichEdit(RichEditHandle: HWnd; EndOfPagePositions: PIntegerDynArray=nil);
+    procedure AppendRichEdit(RichEditHandle: HWnd;
+      EndOfPagePositions: PIntegerDynArray = nil);
     /// jump some line space between paragraphs
     // - Increments the current Y Position the equivalent of a single line
     // relative to the current font height and line spacing
@@ -761,7 +674,7 @@ type
     /// restore last saved font and alignment
     procedure RestoreSavedLayout; virtual;
     /// jump to next page, i.e. force a page break
-    procedure NewPage(ForceEndGroup: boolean=false);
+    procedure NewPage(ForceEndGroup: boolean = false);
     /// jump to next page, but only if some content is pending
     procedure NewPageIfAnyContent;
     /// change the page layout for the upcoming page
@@ -769,14 +682,14 @@ type
     // - can change the default margin if margin*>=0
     // - can change the default non-printable printer margin if nonPrintable*>=0
     procedure NewPageLayout(sizeWidthMM, sizeHeightMM: integer;
-      nonPrintableWidthMM: integer=-1; nonPrintableHeightMM: integer=-1); overload;
+      nonPrintableWidthMM: integer = -1; nonPrintableHeightMM: integer = -1); overload;
     /// change the page layout for the upcoming page
     // - will then force a page break by a call to NewPage(true) method
     // - can change the default margin if margin*>=0
     // - can change the default non-printable printer margin if nonPrintable*>=0
     procedure NewPageLayout(paperSize: TGdiPagePaperSize;
-      orientation: TPrinterOrientation=poPortrait;
-      nonPrintableWidthMM: integer=-1; nonPrintableHeightMM: integer=-1); overload;
+      orientation: TPrinterOrientation = poPortrait;
+      nonPrintableWidthMM: integer = -1; nonPrintableHeightMM: integer = -1); overload;
     /// begin a Group: stops the contents from being split across pages
     // - BeginGroup-EndGroup text blocks can't be nested
     procedure BeginGroup;
@@ -791,20 +704,20 @@ type
     // - if PrintFrom=-1 or PrintTo=-1, then a printer dialog is displayed
     function PrintPages(PrintFrom, PrintTo: integer): boolean;
     /// export the current report as PDF file
-{$ifdef USEPDFPRINTER}
+    {$ifdef USEPDFPRINTER}
     // - uses an external 'PDF' printer
-{$else}
+    {$else}
     // - uses internal PDF code, from Synopse PDF engine (handle bookmarks,
     // outline and twin bitmaps) - in this case, a file name can be set
-{$endif}
-    function ExportPDF(aPdfFileName: TFileName; ShowErrorOnScreen: boolean;
-      LaunchAfter: boolean=true): boolean;
-{$ifndef USEPDFPRINTER}
+    {$endif USEPDFPRINTER}
+    function ExportPdf(aPdfFileName: TFileName; ShowErrorOnScreen: boolean;
+      LaunchAfter: boolean = true): boolean;
+    {$ifndef USEPDFPRINTER}
     /// export the current report as PDF in a specified stream
     // - uses internal PDF code, from Synopse PDF engine (handle bookmarks,
     // outline and twin bitmaps) - in this case, a file name can be set
-    function ExportPDFStream(aDest: TStream): boolean;
-{$endif}
+    function ExportPdfStream(aDest: TStream): boolean;
+    {$endif USEPDFPRINTER}
     /// show a form with the preview, allowing the user to browse pages and
     // print the report
     // - you can customize the buttons and popup menu actions displayed on
@@ -867,43 +780,47 @@ type
     // - if a column need to be right aligned or currency aligned,
     // use SetColumnAlign() method below
     // - individual column may be printed in bold with SetColumnBold() method
-    procedure AddColumns(const PercentWidth: array of integer; align: TColAlign=caLeft);
+    procedure AddColumns(const PercentWidth: array of integer;
+      align: TColAlign = caLeft);
     /// register some column headers, with the current font formating
     // - Column headers will appear just above the first text output in
     // columns on each page
     // - you can call this method several times in order to have diverse
     // font formats across the column headers
     procedure AddColumnHeaders(const headers: array of SynUnicode;
-      WithBottomGrayLine: boolean=false; BoldFont: boolean=false;
-      RowLineHeight: integer=0; flags: integer=0);
+      WithBottomGrayLine: boolean = false; BoldFont: boolean = false;
+      RowLineHeight: integer = 0; flags: integer = 0);
     /// register some column headers, with the current font formating
     // - Column headers will appear just above the first text output in
     // columns on each page
-    // - call this method once with all columns text as CSV
-    procedure AddColumnHeadersFromCSV(var CSV: PWideChar;
-      WithBottomGrayLine: boolean; BoldFont: boolean=false; RowLineHeight: integer=0);
+    // - call this method once with all columns text as Csv
+    procedure AddColumnHeadersFromCsv(var Csv: PWideChar;
+      WithBottomGrayLine: boolean; BoldFont: boolean = false;
+      RowLineHeight: integer = 0);
     /// draw some text, split across every columns
     // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
     // row is printed on white with this background color (e.g. to highlight errors)
     procedure DrawTextAcrossCols(const StringArray: array of SynUnicode;
-      BackgroundColor: TColor=clNone); overload;
+      BackgroundColor: TColor = clNone); overload;
     /// draw some text, split across every columns
     // - you can specify an optional bookmark name to be used to link a column
     // content via a AddLink() call
     // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
     // row is printed on white with this background color (e.g. to highlight errors)
     procedure DrawTextAcrossCols(const StringArray, LinkArray: array of SynUnicode;
-      BackgroundColor: TColor=clNone); overload;
+      BackgroundColor: TColor = clNone); overload;
     /// draw some text, split across every columns
     // - this method expect the text to be separated by commas
     // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
     // row is printed on white with this background color (e.g. to highlight errors)
-    procedure DrawTextAcrossColsFromCSV(var CSV: PWideChar; BackgroundColor: TColor=clNone);
+    procedure DrawTextAcrossColsFromCsv(var Csv: PWideChar;
+      BackgroundColor: TColor = clNone);
     /// draw (double if specified) lines at the bottom of all currency columns
     procedure DrawLinesInCurrencyCols(doublelines: boolean);
 
     /// retrieve the current Column count
-    property ColumnCount: integer read GetColumnCount;
+    property ColumnCount: integer
+      read GetColumnCount;
     /// retrieve the attributes of a specified column
     function GetColumnInfo(index: integer): TColRec;
     /// individually set column alignment
@@ -926,20 +843,21 @@ type
     /// create a bookmark entry at the current position of the current page
     // - return false if this bookmark name was already existing, true on success
     // - if aYPosition is not 0, the current Y position will be used
-    function AddBookMark(const aBookmarkName: string; aYPosition: integer=0): Boolean; virtual;
+    function AddBookMark(const aBookmarkName: string;
+      aYPosition: integer = 0): boolean; virtual;
     /// go to the specified bookmark
     // - returns true if the bookmark name was existing and reached
-    function GotoBookmark(const aBookmarkName: string): Boolean; virtual;
+    function GotoBookmark(const aBookmarkName: string): boolean; virtual;
     /// create an outline entry at the current position of the current page
     // - if aYPosition is not 0, the current Y position will be used
-    procedure AddOutline(const aTitle: string; aLevel: Integer;
-      aYPosition: integer=0; aPageNumber: integer=0); virtual;
+    procedure AddOutline(const aTitle: string; aLevel: integer;
+      aYPosition: integer = 0; aPageNumber: integer = 0); virtual;
     /// create a link entry at the specified coordinates of the current page
     // - coordinates are specified in mm
     // - the bookmark name is not checked by this method: a bookmark can be
     // linked before being marked in the document
     procedure AddLink(const aBookmarkName: string; aRect: TRect;
-      aPageNumber: integer=0; aNoBorder: boolean=false); virtual;
+      aPageNumber: integer = 0; aNoBorder: boolean = false); virtual;
 
     /// convert a rect of mm into pixel canvas units
     function MmToPrinter(const R: TRect): TRect;
@@ -956,12 +874,14 @@ type
     /// return the width of the specified text, in mm
     function TextWidth(const Text: SynUnicode): integer;
     /// the current Text Alignment, during text adding
-    property TextAlign: TTextAlign read fAlign write SetTextAlign;
+    property TextAlign: TTextAlign
+      read fAlign write SetTextAlign;
     /// specifies the reading order (bidirectional mode) of the box
     // - only bdLeftToRight and bdRightToLeft are handled
     // - this will be used by DrawText[At], DrawTitle, AddTextToHeader/Footer[At],
     // DrawTextAcrossCols, SaveLayout/RestoreSavedLayout methods
-    property BiDiMode: TBiDiMode read fBiDiMode write fBiDiMode;
+    property BiDiMode: TBiDiMode
+      read fBiDiMode write fBiDiMode;
     /// create a meta file and its associated canvas for displaying a picture
     // - you must release manually both Objects after usage
     function CreatePictureMetaFile(Width, Height: integer;
@@ -975,44 +895,58 @@ type
     /// access to all pages content
     // - numerotation begin with Pages[0] for page 1
     // - the Pages[] property should be rarely needed
-    property Pages: TGDIPageContentDynArray read fPages;
+    property Pages: TGdiPageContentDynArray
+      read fPages;
     /// add an item to the popup menu
     // - used mostly internaly to add page browsing
     // - default OnClick event is to go to page set by the Tag property
-    function NewPopupMenuItem(const aCaption: string; Tag: integer=0;
-      SubMenu: TMenuItem=nil; OnClick: TNotifyEvent=nil; ImageIndex: integer=-1): TMenuItem;
+    function NewPopupMenuItem(const aCaption: string; Tag: integer = 0;
+      SubMenu: TMenuItem = nil; OnClick: TNotifyEvent = nil;
+      ImageIndex: integer = -1): TMenuItem;
     /// this is the main popup menu item click event
     procedure PopupMenuItemClick(Sender: TObject);
     /// can be used to draw directly using GDI commands
     // - The Canvas property should be rarely needed
-    property Canvas: TMetaFileCanvas read fCanvas;
+    property Canvas: TMetaFileCanvas
+      read fCanvas;
     /// Distance (in mm's) from the top of the page to the top of the next line
-    property CurrentYPos: integer read GetYPos write SetYPos;
+    property CurrentYPos: integer
+      read GetYPos write SetYPos;
     /// get current line height (mm)
-    property LineHeight: integer read GetLineHeightMm;
+    property LineHeight: integer
+      read GetLineHeightMm;
     /// the name of the current selected printer
     // - note that Printers.SetPrinter() should be set BEFORE calling BeginDoc,
     // otherwise you may have a "canvas does not allow drawing" error
-    property PrinterName: string read fCurrentPrinter;
+    property PrinterName: string
+      read fCurrentPrinter;
     /// the index of the previewed page
     // - please note that the first page is 1 (not 0)
-    property Page: integer read fCurrPreviewPage write SetPage;
+    property Page: integer
+      read fCurrPreviewPage write SetPage;
     /// total number of pages
-    property PageCount: integer read GetPageCount;
+    property PageCount: integer
+      read GetPageCount;
     /// Size of each margin relative to its corresponding edge in mm's
-    property PageMargins: TRect read GetPageMargins write SetPageMargins;
+    property PageMargins: TRect
+      read GetPageMargins write SetPageMargins;
     /// Size of the left margin relative to its corresponding edge in mm's
-    property LeftMargin: integer read GetLeftMargin write SetLeftMargin;
+    property LeftMargin: integer
+      read GetLeftMargin write SetLeftMargin;
     /// Position of the right margin, in mm
-    property RightMarginPos: integer read GetRightMarginPos;
+    property RightMarginPos: integer
+      read GetRightMarginPos;
     /// get the current selected paper size, in mm's
-    property PaperSize: TSize read GetPaperSize;
+    property PaperSize: TSize
+      read GetPaperSize;
     /// number of pixel per inch, for X and Y directions
-    property PrinterPxPerInch: TPoint read fPrinterPxPerInch;
-{$ifdef USEPDFPRINTER}
+    property PrinterPxPerInch: TPoint
+      read fPrinterPxPerInch;
+    {$ifdef USEPDFPRINTER}
     /// true if any printer appears to be a PDF printer
-    property HasPDFPrinterInstalled: boolean read fHasPDFPrinterInstalled;
-{$else}
+    property HasPDFPrinterInstalled: boolean
+      read fHasPDFPrinterInstalled;
+    {$else}
     /// this property can force saving all bitmaps as JPEG in exported PDF
     // - by default, this property is set to 0 by the constructor of this class,
     // meaning that the JPEG compression is not forced, and the engine will use
@@ -1021,79 +955,90 @@ type
     // - 60 is the prefered way e.g. for publishing PDF over the internet
     // - 80/90 is a good ration if you want to have a nice PDF to see on screen
     // - of course, this doesn't affect vectorial (i.e. emf) pictures
-    property ExportPDFForceJPEGCompression: integer read fForceJPEGCompression write fForceJPEGCompression;
+    property ExportPdfForceJPEGCompression: integer
+      read fForceJPEGCompression write fForceJPEGCompression;
     /// optional application name used during Export to PDF
     // - if not set, global Application.Title will be used
-    property ExportPDFApplication: string read fExportPDFApplication write fExportPDFApplication;
+    property ExportPdfApplication: string
+      read fExportPdfApplication write fExportPdfApplication;
     /// optional Author name used during Export to PDF
-    property ExportPDFAuthor: string read fExportPDFAuthor write fExportPDFAuthor;
+    property ExportPdfAuthor: string
+      read fExportPdfAuthor write fExportPdfAuthor;
     /// optional Subject text used during Export to PDF
-    property ExportPDFSubject: string read fExportPDFSubject write fExportPDFSubject;
+    property ExportPdfSubject: string
+      read fExportPdfSubject write fExportPdfSubject;
     /// optional Keywords name used during Export to PDF
-    property ExportPDFKeywords: string read fExportPDFKeywords write fExportPDFKeywords;
-    /// if set to TRUE, the used True Type fonts will be embedded to the exported PDF
+    property ExportPdfKeywords: string
+      read fExportPdfKeywords write fExportPdfKeywords;
+    /// if set to true, the used true Type fonts will be embedded to the exported PDF
     // - not set by default, to save disk space and produce tiny PDF
-    property ExportPDFEmbeddedTTF: boolean read fExportPDFEmbeddedTTF write fExportPDFEmbeddedTTF;
-    /// if set to TRUE, the exported PDF is made compatible with PDF/A-1 requirements
-    property ExportPDFA1: Boolean read fExportPDFA1 write fExportPDFA1;
+    property ExportPdfEmbeddedTTF: boolean
+      read fExportPdfEmbeddedTTF write fExportPdfEmbeddedTTF;
+    /// allow to export as PDF compatible with PDF/A requirements
+    property ExportPdfLevel: TPdfALevel
+      read fExportPdfLevel write fExportPdfLevel;
     /// an optional background image, to be exported on every pdf page
     // - note that no private copy of the TGraphic instance is made: the caller
     // has to manage it, and free it after the pdf is generated
-    property ExportPDFBackground: TGraphic read fExportPDFBackground write fExportPDFBackground;
+    property ExportPdfBackground: TGraphic
+      read fExportPdfBackground write fExportPdfBackground;
     {$ifndef NO_USE_UNISCRIBE}
     /// set if the exporting PDF engine must use the Windows Uniscribe API to
     // render Ordering and/or Shaping of the text
     // - useful for Hebrew, Arabic and some Asiatic languages handling
-    // - set to FALSE by default, for faster content generation
-    property ExportPDFUseUniscribe: boolean read fExportPDFUseUniscribe write fExportPDFUseUniscribe;
-    {$endif}
+    // - set to false by default, for faster content generation
+    property ExportPdfUseUniscribe: boolean
+      read fExportPdfUseUniscribe write fExportPdfUseUniscribe;
+    {$endif NO_USE_UNISCRIBE}
     /// used to define if the exported PDF document will handle "font fallback" for
     // characters not existing in the current font: it will avoid rendering
     // block/square symbols instead of the correct characters (e.g. for Chinese text)
     // - will use the font specified by FontFallBackName property to add any
     // Unicode glyph not existing in the currently selected font
-    // - default value is TRUE
-    property ExportPDFUseFontFallBack: boolean read fExportPDFUseFontFallBack
-      write fExportPDFUseFontFallBack;
+    // - default value is true
+    property ExportPdfUseFontFallBack: boolean
+      read fExportPdfUseFontFallBack write fExportPdfUseFontFallBack;
     /// set the font name to be used for missing characters in exported PDF document
-    // - used only if UseFontFallBack is TRUE
+    // - used only if UseFontFallBack is true
     // - default value is 'Arial Unicode MS', if existing
-    property ExportPDFFontFallBackName: string read fExportPDFFontFallBackName
-      write fExportPDFFontFallBackName;
+    property ExportPdfFontFallBackName: string
+      read fExportPdfFontFallBackName write fExportPdfFontFallBackName;
     /// set encryption level to be used in exporting PDF document
-    property ExportPDFEncryptionLevel: TPdfEncryptionLevel
-      read fExportPDFEncryptionLevel write fExportPDFEncryptionLevel;
+    property ExportPdfEncryptionLevel: TPdfEncryptionLevel
+      read fExportPdfEncryptionLevel write fExportPdfEncryptionLevel;
     /// set encryption user password to be used in exporting PDF document
     // - leave it to '' unless you want the user to be asked for this password
     // at document opening
-    // - ExportPDFEncryptionLevel = elRC4_40/elRC4_128 expects only ASCII-7 chars
-    property ExportPDFEncryptionUserPassword: string
-      read fExportPDFEncryptionUserPassword write fExportPDFEncryptionUserPassword;
+    // - ExportPdfEncryptionLevel = elRC4_40/elRC4_128 expects only ASCII-7 chars
+    property ExportPdfEncryptionUserPassword: string
+      read fExportPdfEncryptionUserPassword write fExportPdfEncryptionUserPassword;
     /// set encryption owner password to be used in exporting PDF document
     // - it is mandatory to set it to a non void value - by default, is set to
     // 'SynopsePDFEngine' by should be overridden for security
-    // - ExportPDFEncryptionLevel = elRC4_40/elRC4_128 expects only ASCII-7 chars
-    property ExportPDFEncryptionOwnerPassword: string
-      read fExportPDFEncryptionOwnerPassword write fExportPDFEncryptionOwnerPassword;
+    // - ExportPdfEncryptionLevel = elRC4_40/elRC4_128 expects only ASCII-7 chars
+    property ExportPdfEncryptionOwnerPassword: string
+      read fExportPdfEncryptionOwnerPassword write fExportPdfEncryptionOwnerPassword;
     /// set encryption Permissions to be used in exporting PDF document
     // - can be either one of the PDF_PERMISSION_ALL / PDF_PERMISSION_NOMODIF /
     // PDF_PERSMISSION_NOPRINT / PDF_PERMISSION_NOCOPY /
     // PDF_PERMISSION_NOCOPYNORPRINT set of options
     // - default value is PDF_PERMISSION_ALL (i.e. no restriction)
-    property ExportPDFEncryptionPermissions: TPdfEncryptionPermissions
-      read fExportPDFEncryptionPermissions write fExportPDFEncryptionPermissions;
-    /// set to TRUE to export in PDF 1.5 format, which may produce smaller files
-    property ExportPDFGeneratePDF15File: Boolean
-      read fExportPDFGeneratePDF15File write fExportPDFGeneratePDF15File;
-{$endif}
+    property ExportPdfEncryptionPermissions: TPdfEncryptionPermissions
+      read fExportPdfEncryptionPermissions write fExportPdfEncryptionPermissions;
+    /// set to true to export in PDF 1.5 format, which may produce smaller files
+    property ExportPdfGeneratePdf15File: boolean
+      read fExportPdfGeneratePdf15File write fExportPdfGeneratePdf15File;
+    {$endif USEPDFPRINTER}
     /// the current page number, during text adding
     // - Page is used during preview, after text adding
-    property VirtualPageNum: integer read fVirtualPageNum write fVirtualPageNum;
+    property VirtualPageNum: integer
+      read fVirtualPageNum write fVirtualPageNum;
     /// true if any header as been drawn, that is if something is to be printed
-    property HeaderDone: boolean read fHeaderDone;
+    property HeaderDone: boolean
+      read fHeaderDone;
 {    /// used to set if columns must be delimited at their bottom with a gray line
-    property ColumnsWithBottomGrayLine: boolean read fColumnsWithBottomGrayLine
-      write fColumnsWithBottomGrayLine; }
+    property ColumnsWithBottomGrayLine: boolean
+      read fColumnsWithBottomGrayLine write fColumnsWithBottomGrayLine; }
   published
     /// accounting standard layout for caCurrency columns:
     // - convert all negative sign into parentheses
@@ -1108,29 +1053,36 @@ type
     // - if the text contains some #13/#10 characters, it will be splitted into
     // individual lines
     // - this is disabled by default
-    property WordWrapLeftCols: boolean read fWordWrapLeftCols write fWordWrapLeftCols;
+    property WordWrapLeftCols: boolean
+      read fWordWrapLeftCols write fWordWrapLeftCols;
     /// if set, any DrawTitle() call will create an Outline entry
     // - used e.g. for PDF generation
     // - this is enabled by default
-    property UseOutlines: boolean read fUseOutlines write fUseOutlines;
+    property UseOutlines: boolean
+      read fUseOutlines write fUseOutlines;
     /// left justification hang indentation
-    property HangIndent: integer read fHangIndent write fHangIndent;
+    property HangIndent: integer
+      read fHangIndent write fHangIndent;
     /// Line spacing: can be lsSingle, lsOneAndHalf or lsDouble
-    property LineSpacing: TLineSpacing read fLineSpacing write fLineSpacing;
+    property LineSpacing: TLineSpacing
+      read fLineSpacing write fLineSpacing;
     /// the paper orientation
-    property Orientation: TPrinterOrientation read GetOrientation write SetOrientation;
+    property Orientation: TPrinterOrientation
+      read GetOrientation write SetOrientation;
     /// the current Zoom value, according to the zoom status
     // - you can use PAGE_WIDTH and PAGE_FIT constants to force the corresponding
     // zooming mode (similar to ZoomStatus property setter)
     // - set this property will work only when the report is already shown
     // in preview mode, not before ShowPreviewForm method call
-    property Zoom: integer read fZoom write SetZoom;
+    property Zoom: integer
+      read fZoom write SetZoom;
     /// the current Zoom procedure, i.e. zsPercent, zsPageFit or zsPageWidth
     // - set this property will define the Zoom at PAGE_WIDTH or PAGE_FIT
     // special constant, if needed
     // - set this property will work only when the report is already shown
     // in preview mode, not before ShowPreviewForm method call
-    property ZoomStatus: TZoomStatus read fZoomStatus write SetZoomStatus;
+    property ZoomStatus: TZoomStatus
+      read fZoomStatus write SetZoomStatus;
     /// if set to true, we reduce the precision for better screen display
     property ForceScreenResolution: boolean
       read fForceScreenResolution write fForceScreenResolution;
@@ -1169,17 +1121,20 @@ type
       read fZoomChangedEvent write fZoomChangedEvent;
   end;
 
+  
+{ ****************** TRenderPages Prototype - unfinished }
+
 {$ifdef RENDERPAGES}
   TRenderPages = class;
 
   /// a TRenderPages additional layout state
   // - used by the overridden SaveLayout/RestoreSavedLayout methods
   TSavedStateRender = record
-    FirstLineIndent: Integer;
-    Before: Integer;
-    After: Integer;
-    RightIndent: Integer;
-    LeftIndent: Integer;
+    FirstLineIndent: integer;
+    Before: integer;
+    After: integer;
+    RightIndent: integer;
+    LeftIndent: integer;
   end;
 
   PRenderBoxWord = ^TRenderBoxWord;
@@ -1281,8 +1236,8 @@ type
     // - if CurrentPageOnly is true, will only flush the content which will fit on
     // the current page - the fLayout[] array will contain remaining boxes;
     // - if CurrentPageOnly is false, this will flush all content to multiple pages
-    procedure Flush(Left, Top: Integer; CurrentPageOnly: boolean;
-      ForcedHeightBottomCentered: Integer; ForcedAtBottom: boolean);
+    procedure Flush(Left, Top: integer; CurrentPageOnly: boolean;
+      ForcedHeightBottomCentered: integer; ForcedAtBottom: boolean);
     /// render the text paragraph, but go to the next line
     // - similar to the <br /> HTML tag or the \line RTF command
     procedure NewLine;
@@ -1300,44 +1255,52 @@ type
     // - if no previous call to RdrSetCurrentStateAsDefault has been made,
     // the font is reset to a 12 point, with no bold/italic/underline attributes
     // - similar to the \plain RTF command
-    procedure Plain; {$ifdef HASINLINE}inline;{$endif}
+    procedure Plain;
+      {$ifdef HASINLINE}inline;{$endif}
     /// reset paragraph formatting properties to a default value
     // - similar to the \pard RTF command
-    procedure Pard; {$ifdef HASINLINE}inline;{$endif}
+    procedure Pard;
+      {$ifdef HASINLINE}inline;{$endif}
     /// reset both paragraph and font formatting properties to a default value
     // - similar to the \pard\plain RTF command
-    procedure PardPlain; {$ifdef HASINLINE}inline;{$endif}
+    procedure PardPlain;
+      {$ifdef HASINLINE}inline;{$endif}
     /// shortcut to the owner TRenderPages
-    property Owner: TRenderPages read fOwner;
+    property Owner: TRenderPages
+      read fOwner;
     /// shortcut to the owner TRenderPages.Font
-    property Font: TFont read fOwnerFont;
+    property Font: TFont
+      read fOwnerFont;
     /// specifies the reading order (bidirectional mode) of the box
     // - only bdLeftToRight and bdRightToLeft are handled
-    property BiDiMode: TBiDiMode read FBiDiMode write FBiDiMode;
+    property BiDiMode: TBiDiMode
+      read FBiDiMode write FBiDiMode;
     /// current width of the "box", in pixels
     // - must be set before any call to InternalRender
-    property Width: integer read fWidth write fWidth;
+    property Width: integer
+      read fWidth write fWidth;
     /// current resulting height of the "box", in pixels
     // - will be calculated from current text if necessary
-    property Height: integer read GetHeight;
+    property Height: integer
+      read GetHeight;
   end;
 
   /// Report class specified in high-quality document rendering
   // - this class add some methods for creating a document at the character
-  // level (whereas standard TGDIPages allows reporting at paragraph level)
+  // level (whereas standard TGdiPages allows reporting at paragraph level)
   // - can be used e.g. to render some RTF-like content
   // - column handling is much more sophisticated than AddColumn*() methods
   // - uses the Windows Uniscribe API to handle right-to-left scripting and
   // process complex scripts (like Arabic)
   // - uses internaly some TeX-like algorithms like widows and orphans, and
   // an optional external hyphenation engine (like our hyphen unit)
-  TRenderPages = class(TGDIPages)
+  TRenderPages = class(TGdiPages)
   protected
-    fParagraphFirstLineIndent: Integer;
-    fParagraphBefore: Integer;
-    fParagraphAfter: Integer;
-    fParagraphRightIndent: Integer;
-    fParagraphLeftIndent: Integer;
+    fParagraphFirstLineIndent: integer;
+    fParagraphBefore: integer;
+    fParagraphAfter: integer;
+    fParagraphRightIndent: integer;
+    fParagraphLeftIndent: integer;
     fSavedRender: array of TSavedStateRender;
     fDefaultState: TSavedState;
     fDefaultStateRender: TSavedStateRender;
@@ -1369,22 +1332,24 @@ type
     procedure RdrParagraph;
     /// create a new table at the current position
     // - return false on error (e.g. a table was opened but not yet ended)
-    function RdrTableBegin(const PercentWidth: array of integer): Boolean;
+    function RdrTableBegin(const PercentWidth: array of integer): boolean;
     /// get a particular column
     // - return the 'box' handling the layout of the column: use its
     // AddText/NewLine/Link*/Plain/Pard methods  methods to add some formatted text
-    function RdrTableColumn(aColumnIndex: Integer): TRenderBox; {$ifdef HASINLINE}inline;{$endif}
+    function RdrTableColumn(aColumnIndex: integer): TRenderBox;
+      {$ifdef HASINLINE}inline;{$endif}
     /// end a previously opened table
     // - will draw all columns to the documents
     // - return false on error (e.g. a table was not opened)
-    function RdrTableEnd: Boolean;
+    function RdrTableEnd: boolean;
     /// the main paragraph 'box' of the document
     // - its AddText/NewLine/Link*/Plain/Pard methods  methods to add some
     // formatted text
     // - the paragraph will be flushed to the main document with the RdrParagraph
     // method will be called
-    property Rdr: TRenderBox read fRdr;
-  public { some overridden methods }
+    property Rdr: TRenderBox
+      read fRdr;
+  public 
     /// creates the reporting component
     constructor Create(AOwner: TComponent); override;
     /// finalize the component, releasing all used memory and associated TRenderBox
@@ -1401,170 +1366,133 @@ type
     procedure RestoreSavedLayout; override;
   public
     /// current paragraph "space before" spacing (in mm, the default is 0)
-    property ParagraphBefore: Integer read fParagraphBefore write fParagraphBefore;
+    property ParagraphBefore: integer
+      read fParagraphBefore write fParagraphBefore;
     /// current paragraph "space after" spacing (in mm, the default is 0)
-    property ParagraphAfter: Integer read fParagraphAfter write fParagraphAfter;
+    property ParagraphAfter: integer
+      read fParagraphAfter write fParagraphAfter;
     /// current paragraph first-line indent (in mm, the default is 0)
-    property ParagraphFirstLineIndent: Integer
+    property ParagraphFirstLineIndent: integer
       read fParagraphFirstLineIndent write fParagraphFirstLineIndent;
     /// current paragraph left indent (in mm, the default is 0)
-    property ParagraphLeftIndent: Integer
+    property ParagraphLeftIndent: integer
       read fParagraphLeftIndent write fParagraphLeftIndent;
     /// current paragraph right indent (in mm, the default is 0)
-    property ParagraphRightIndent: Integer
+    property ParagraphRightIndent: integer
       read fParagraphRightIndent write fParagraphRightIndent;
   end;
 {$endif RENDERPAGES}
 
-resourcestring
-  sPDFFile = 'Acrobat File';
-  sPageN = 'Page %d / %d';
-  /// used to create the popup menu of the report
-  // - should match TGdiPagePreviewButton order
-  sReportPopupMenu1 = '&Next page,&Previous page,&Go to Page...,&Zoom...,'+
-    '&Bookmarks,Copy Page as &Text,P&rint,PDF &Export,&Close,Page fit,Page width';
-  /// used to create the pages browsing menu of the report
-  sReportPopupMenu2 = 'Pages %d to %d,Page %d';
-
-const
-  /// minimum gray border with around preview page
-  GRAY_MARGIN = 10;
-
-  /// TGdiPages.Zoom property value for "Page width" layout during preview
-  PAGE_WIDTH = -1;
-  /// TGdiPages.Zoom property value for "Page fit" layout during preview
-  PAGE_FIT   = -2;
-
-  //TEXT FORMAT FLAGS...
-  FORMAT_DEFAULT    = $0;
-  //fontsize bits 0-7  .'. max = 255
-  FORMAT_SIZE_MASK  = $FF;
-  //alignment bits 8-9
-  FORMAT_ALIGN_MASK = $300;
-  FORMAT_LEFT       = $0;
-  FORMAT_RIGHT      = $100;
-  FORMAT_CENTER     = $200;
-  FORMAT_JUSTIFIED  = $300;
-  //fontstyle bits 10-12
-  FORMAT_BOLD       = $400;
-  FORMAT_UNDERLINE  = $800;
-  FORMAT_ITALIC     = $1000;
-  //undefined bit 13
-  FORMAT_UNDEFINED  = $2000;
-  //line flags bits 14-15
-  FORMAT_SINGLELINE = $8000;
-  FORMAT_DOUBLELINE = $4000;
-  FORMAT_LINES      = $C000;
-  //DrawTextAt XPos 16-30 bits  (max value = ~64000)
-  FORMAT_XPOS_MASK  = $FFFF0000;
-
-  PAPERSIZE_A4_WIDTH = 210;
-  PAPERSIZE_A4_HEIGHT = 297;
-
-
-procedure SetCurrentPrinterAsDefault;
-function CurrentPrinterName: string;
-function CurrentPrinterPaperSize: string;
-procedure UseDefaultPrinter;
-
-procedure Register;
-
 
 implementation
 
-uses
-  {$ifdef ISDELPHIXE3}System.UITypes,{$endif}
-  Types, Clipbrd, Consts;
 
-// Miscellaneous functions ...
+{ ****************** Shared Functions used during Report Rendering }
 
-function TextExtent(Canvas: TCanvas; const Text: SynUnicode; Len: integer=0): TSize;
+function TextExtent(Canvas: TCanvas; const Text: SynUnicode; Len: integer = 0): TSize;
 begin
-  Result.cX := 0;
-  Result.cY := 0;
-  if Len=0 then
+  result.cX := 0;
+  result.cY := 0;
+  if Len = 0 then
     Len := length(Text);
-  GetTextExtentPoint32W(Canvas.Handle, pointer(Text), Len, Result);
+  GetTextExtentPoint32W(Canvas.Handle, pointer(Text), Len, result);
 end;
 
-function TextWidthC(Canvas: TCanvas; const Text: SynUnicode): Integer;
+function TextWidthC(Canvas: TCanvas; const Text: SynUnicode): integer;
 begin
-  Result := TextExtent(Canvas,Text).cX;
+  result := TextExtent(Canvas, Text).cX;
 end;
 
-procedure TextOut(Canvas: TCanvas; X,Y: integer; Text: PWideChar; Len: integer); overload;
+procedure TextOut(Canvas: TCanvas; X, Y: integer; Text: PWideChar; Len: integer);
+  overload;
 begin
-  ExtTextOutW(Canvas.Handle,X,Y,Canvas.TextFlags,nil,Text,Len,nil);
+  ExtTextOutW(
+    Canvas.Handle, X, Y, TextFlags(Canvas), nil, Text, Len, nil);
 end;
 
-procedure TextOut(Canvas: TCanvas; X,Y: integer; const Text: SynUnicode); overload;
+procedure TextOut(Canvas: TCanvas; X, Y: integer; const Text: SynUnicode);
+  overload;
 begin
-  ExtTextOutW(Canvas.Handle,X,Y,Canvas.TextFlags,nil,pointer(Text),Length(Text),nil);
+  ExtTextOutW(
+    Canvas.Handle, X, Y, TextFlags(Canvas), nil, pointer(Text), Length(Text), nil);
 end;
 
 procedure Register;
 begin
-  RegisterComponents('Samples', [TGDIPages]);
+  RegisterComponents('Samples', [TGdiPages]);
 end;
 
 function ConvertNegsToParentheses(const ValStr: SynUnicode): SynUnicode;
 begin
   result := ValStr;
-  if (result = '') or (result[1] <> '-') then
+  if (result = '') or
+     (result[1] <> '-') then
     exit;
   result[1] := '(';
-  result := result+')';
+  result := result + ')';
 end;
 
 function PrinterDriverExists: boolean;
-var Flags, Count, NumInfo: dword;
-    Level: Byte;
+var
+  Flags, Count, NumInfo: dword;
+  Level: Byte;
 begin
   // avoid using fPrinter.printers.Count as this will raise an
   // exception if no printer driver is installed...
   Count := 0;
   try
-    if Win32Platform = VER_PLATFORM_WIN32_NT then begin
+    if Win32Platform = VER_PLATFORM_WIN32_NT then
+    begin
       Flags := PRINTER_ENUM_CONNECTIONS or PRINTER_ENUM_LOCAL;
       Level := 4;
-    end else begin
+    end
+    else
+    begin
       Flags := PRINTER_ENUM_LOCAL;
       Level := 5;
     end;
     EnumPrinters(Flags, nil, Level, nil, 0, Count, NumInfo);
   except
   end;
-  result := (count > 0);
+  result := (Count > 0);
 end;
 
 function RightTrim(const S: SynUnicode): SynUnicode;
-var i: integer;
+var
+  i: PtrInt;
 begin
-  i := Length(s);
-  while (i > 0) and (ord(S[i])<=32) do dec(i);
-  SetString(result,PWideChar(pointer(S)),i);
+  i := Length(S);
+  while (i > 0) and
+        (ord(S[i]) <= 32) do
+    dec(i);
+  SetString(result, PWideChar(pointer(S)), i);
 end;
 
 function LowerCaseU(const S: SynUnicode): SynUnicode;
-var i: integer;
+var
+  i: PtrInt;
 begin
-  SetString(result,PWideChar(pointer(S)),length(S));
-  for i := 0 to length(S)-1 do
+  SetString(result, PWideChar(pointer(S)), length(S));
+  for i := 0 to length(S) - 1 do
     if PWordArray(result)[i] in [ord('A')..ord('Z')] then
-      dec(PWordArray(result)[i],32);
+      dec(PWordArray(result)[i], 32);
 end;
 
-function Max(a,b: integer): integer;
+function Max(a, b: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if a > b then
-    result := a else
+    result := a
+  else
     result := b;
 end;
 
-function Min(a,b: integer): integer;
+function Min(a, b: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if a < b then
-    result := a else
+    result := a
+  else
     result := b;
 end;
 
@@ -1574,17 +1502,20 @@ begin
 end;
 
 function GetDefaultPrinterName: string;
-var Device : array[byte] of char;
-    p,p2: PChar;
+var
+  Device: array[byte] of char;
+  p, p2: PChar;
 begin
   GetProfileString('windows', 'device', '', Device, 255);
   p2 := Device;
-  while p2^ = ' ' do inc(p2);
+  while p2^ = ' ' do
+    inc(p2);
   p := p2;
-  while not (ord(p2^) in [0,ord(',')]) do inc(p2);
+  while not (ord(p2^) in [0, ord(',')]) do
+    inc(p2);
   SetLength(result, p2 - p);
   if p2 > p then
-   move(p^, pointer(result)^, p2 - p);
+    MoveFast(p^, pointer(result)^, p2 - p);
 end;
 
 function GetDriverForPrinter(Device: PChar; Driver: PChar): boolean;
@@ -1595,14 +1526,14 @@ var
   DriverPath: string;
 begin
   result := false;
-  if not OpenPrinter(Device,PrintHandle, nil) then exit;
+  if not OpenPrinter(Device, PrintHandle, nil) then
+    exit;
   try
-    getmem(DriverInfo2,1024);
+    getmem(DriverInfo2, 1024);
     try
       if GetPrinterDriver(PrintHandle, nil, 2, DriverInfo2, 1024, cnt) then
       begin
-        DriverPath :=
-          changefileext(extractfilename(DriverInfo2.pDriverPath),'');
+        DriverPath := changefileext(extractfilename(DriverInfo2.pDriverPath), '');
         strpcopy(Driver, DriverPath);
         result := true;
       end;
@@ -1615,9 +1546,10 @@ begin
 end;
 
 procedure SetCurrentPrinterAsDefault;
-var Device, Driver, Port: array[byte] of char;
-    DefaultPrinter: string;
-    hDeviceMode: THandle;
+var
+  Device, Driver, Port: array[byte] of char;
+  DefaultPrinter: string;
+  hDeviceMode: THandle;
 begin
   DefaultPrinter := GetDefaultPrinterName;
   Printer.GetPrinter(Device, Driver, Port, hDeviceMode);
@@ -1626,24 +1558,26 @@ begin
   if Driver[0] = #0 then
     if not GetDriverForPrinter(Device, Driver) then
       exit;  // oops !
-  DefaultPrinter := FormatString('%,%,%',[Device, Driver, Port]);
-  WriteProfileString( 'windows', 'device', pointer(DefaultPrinter) );
+  DefaultPrinter := FormatString('%,%,%', [Device, Driver, Port]);
+  WriteProfileString('windows', 'device', pointer(DefaultPrinter));
   Device := 'windows';
   SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, PtrInt(@Device));
 end;
 
 function CurrentPrinterName: string;
-var Device, Driver, Port: array[byte] of char;
-    hDeviceMode: THandle;
+var
+  Device, Driver, Port: array[byte] of char;
+  hDeviceMode: THandle;
 begin
   Printer.GetPrinter(Device, Driver, Port, hDeviceMode);
   result := trim(Device);
 end;
 
 function CurrentPrinterPaperSize: string;
-var PtrHdl: THandle;
-    PtrPPI: TPoint;
-    size: TSize;
+var
+  PtrHdl: THandle;
+  PtrPPI: TPoint;
+  size: TSize;
 begin
   try
     PtrHdl := Printer.Handle;
@@ -1659,89 +1593,181 @@ begin
     begin
       //landscape ...
       case cy of
-        148: if cx = 210 then result := 'A5 (210 x 148mm)';
-        210: if cx = 297 then result := 'A4 (297 x 210mm)';
-        216: if cx = 279 then result := 'Letter (11 x 8.5")'
-             else if cx = 356 then result := 'Legal (14 x 8.5")';
-        297: if cx = 420 then result := 'A3 (420 x 297mm)';
+        148:
+          if cx = 210 then
+            result := 'A5 (210 x 148mm)';
+        210:
+          if cx = 297 then
+            result := 'A4 (297 x 210mm)';
+        216:
+          if cx = 279 then
+            result := 'Letter (11 x 8.5")'
+          else if cx = 356 then
+            result := 'Legal (14 x 8.5")';
+        297:
+          if cx = 420 then
+            result := 'A3 (420 x 297mm)';
       end;
-    end else
+    end
+    else
     begin
       //portrait ...
       case cx of
-        148: if cy = 210 then result := 'A5 (148 x 210mm)';
-        210: if cy = 297 then result := 'A4 (210 x 297mm)';
-        216: if cy = 279 then result := 'Letter (8.5 x 11")'
-             else if cy = 356 then result := 'Legal (8.5 x 14")';
-        297: if cy = 420 then result := 'A3 (297 x 420mm)';
+        148:
+          if cy = 210 then
+            result := 'A5 (148 x 210mm)';
+        210:
+          if cy = 297 then
+            result := 'A4 (210 x 297mm)';
+        216:
+          if cy = 279 then
+            result := 'Letter (8.5 x 11")'
+          else if cy = 356 then
+            result := 'Legal (8.5 x 14")';
+        297:
+          if cy = 420 then
+            result := 'A3 (297 x 420mm)';
       end;
     end;
     if result = '' then
-      result := FormatString('Custom (% x %mm)',[cx, cy]);
+      result := FormatString('Custom (% x %mm)', [cx, cy]);
   end;
 end;
 
+function GetNextItemW(var P: PWideChar): SynUnicode;
+var
+  S: PWideChar;
+begin
+  if P = nil then
+    result := ''
+  else
+  begin
+    S := P;
+    while (S^ <> #0) and (S^ <> ',') do
+      inc(S);
+    SetString(result, P, S - P);
+    if S^ <> #0 then
+      P := S + 1
+    else
+      P := nil;
+  end;
+end;
+
+function GetNextItemS(var P: PChar): string;
+var
+  S: PChar;
+begin
+  if P = nil then
+    result := ''
+  else
+  begin
+    S := P;
+    while (S^ <> #0) and (S^ <> ',') do
+      inc(S);
+    SetString(result, P, S - P);
+    if S^ <> #0 then
+      P := S + 1
+    else
+      P := nil;
+  end;
+end;
+
+function CsvToArray(var Csv: PWideChar; n: PtrInt): TSynUnicodeDynArray;
+var
+  i: PtrInt;
+begin
+  SetLength(result, n);
+  for i := 0 to n - 1 do
+    result[i] := GetNextItemW(Csv);
+end;
+
+/// round inverted color to white or black
+function clAlways(cl: TColor): TColor;
+begin
+  if ((GetRValue(cardinal(cl)) * 2) +
+      (GetGValue(cardinal(cl)) * 3) +
+      (GetBValue(cardinal(cl)) * 2)) < 600 then
+    result := clWhite
+  else
+    result := clBlack;
+end;
+
+function HasCRLF(const s: SynUnicode): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to length(s) - 1 do
+    if s[i + 1] < ' ' then
+      exit;
+  result := false;
+end;
 
 // This declaration modifies Delphi's declaration of GetTextExtentExPoint
 // so that the variable to receive partial string extents (p6) is ignored ...
-function GetTextExtentExPointNoPartialsW(DC: HDC; p2: PWideChar; p3, p4: Integer;
-  var p5: Integer; p6: pointer; var p7: TSize): BOOL; stdcall;
+function GetTextExtentExPointNoPartialsW(DC: HDC; p2: PWideChar; p3, p4: integer;
+  var p5: integer; p6: pointer; var p7: TSize): BOOL; stdcall;
     external gdi32 name 'GetTextExtentExPointW';
 
 // TrimLine: Splits off from LS any characters beyond the allowed width
 // breaking at the end of a word if possible. Leftover chars -> RS.
 procedure TrimLine(Canvas: TCanvas; var ls: SynUnicode; out rs: SynUnicode;
-                   LineWidthInPxls: integer);
-var i,len,NumCharWhichFit: integer;
-    dummy: TSize;
+  LineWidthInPxls: integer);
+var
+  i, len, NumCharWhichFit: integer;
+  dummy: TSize;
+
   function Fits: boolean;
   begin
-    result := GetTextExtentExPointNoPartialsW(Canvas.Handle,
-      pointer(ls),len,LineWidthInPxls,NumCharWhichFit,nil,dummy);
+    result := GetTextExtentExPointNoPartialsW(Canvas.Handle, pointer(ls), len,
+      LineWidthInPxls, NumCharWhichFit, nil, dummy);
   end;
+
 begin
   len := length(ls);
   if len = 0 then
     exit;
-
   // get the number of characters which will fit within LineWidth...
-  if len>1024 then
+  if len > 1024 then
     len := 1024; // speed up the API call: we expect only one line of text
   if not Fits then // fix API error (too big text) by rough binary approximation
     repeat
       len := len shr 1;
-    until (len=0) or Fits;
-
+    until (len = 0) or
+          Fits;
   if NumCharWhichFit = length(ls) then
     exit; // if everything fits then stop here
-
   // find the end of the last whole word which will fit...
   i := NumCharWhichFit;
-  while (NumCharWhichFit > 0) and (ls[NumCharWhichFit] > ' ') do
+  while (NumCharWhichFit > 0) and
+        (ls[NumCharWhichFit] > ' ') do
     dec(NumCharWhichFit);
-  if (NumCharWhichFit = 0) then NumCharWhichFit := i;
-
-  i := NumCharWhichFit+1;
+  if (NumCharWhichFit = 0) then
+    NumCharWhichFit := i;
+  i := NumCharWhichFit + 1;
   // ignore trailing blanks in LS...
-  while (ls[NumCharWhichFit] <= ' ') do dec(NumCharWhichFit);
+  while ls[NumCharWhichFit] <= ' ' do
+    dec(NumCharWhichFit);
   // ignore beginning blanks in RS...
   len := length(ls); // may have been reduced if len>1024 or on API error
-  while (i < len) and (ls[i] <= ' ') do inc(i);
-  rs := copy(ls,i,len);
-  ls := copy(ls,1,NumCharWhichFit);        //nb: assign ls AFTER rs here
+  while (i < len) and
+        (ls[i] <= ' ') do
+    inc(i);
+  rs := copy(ls, i, len);
+  ls := copy(ls, 1, NumCharWhichFit);        //nb: assign ls AFTER rs here
 end;
 
 
 procedure PrintBitmap(Canvas: TCanvas; DestRect: TRect; Bitmap: TBitmap);
-var BitmapHeader:  pBitmapInfo;
-    BitmapImage :  POINTER;
-    HeaderSize  :  dword;
-    ImageSize   :  dword;
+var
+  BitmapHeader: pBitmapInfo;
+  BitmapImage: pointer;
+  HeaderSize, ImageSize: dword;
 begin
   // we expect the bitmap to be stored as DIB in the TMetaFile content
-  GetDIBSizes(Bitmap.Handle,HeaderSize,ImageSize);
-  GetMem(BitmapHeader,HeaderSize);
-  GetMem(BitmapImage,ImageSize);
+  GetDIBSizes(Bitmap.Handle, HeaderSize, ImageSize);
+  GetMem(BitmapHeader, HeaderSize);
+  GetMem(BitmapImage, ImageSize);
   try
     GetDIB(Bitmap.Handle, Bitmap.Palette, BitmapHeader^, BitmapImage^);
     // will create a EMR_STRETCHDIBITS record, ready for SynPdf and SynGdiPlus
@@ -1765,121 +1791,128 @@ end;
 // This DrawArrow() function is based on code downloaded from
 // http://www.efg2.com/Lab/Library/Delphi/Graphics/Algorithms.htm
 // (The original author is unknown)
-procedure DrawArrowInternal(Canvas: TCanvas;
-  FromPoint, ToPoint: TPoint; HeadSize: integer; SolidArrowHead: boolean);
+procedure DrawArrowInternal(Canvas: TCanvas; const FromPoint, ToPoint: TPoint;
+  HeadSize: integer; SolidArrowHead: boolean);
 var
-  xbase           :  integer;
-  xLineDelta      :  integer;
-  xLineUnitDelta  :  Double;
-  xNormalDelta    :  integer;
-  xNormalUnitDelta:  Double;
-  ybase           :  integer;
-  yLineDelta      :  integer;
-  yLineUnitDelta  :  Double;
-  yNormalDelta    :  integer;
-  yNormalUnitDelta:  Double;
-  SavedBrushColor :  TColor;
+  xbase: integer;
+  xLineDelta: integer;
+  xLineUnitDelta: double;
+  xNormalDelta: integer;
+  xNormalUnitDelta: double;
+  ybase: integer;
+  yLineDelta: integer;
+  yLineUnitDelta: double;
+  yNormalDelta: integer;
+  yNormalUnitDelta: double;
+  SavedBrushColor: TColor;
 begin
-  with FromPoint do Canvas.MoveTo(x,y);
-  with ToPoint do Canvas.LineTo(x,y);
-
+  with FromPoint do
+    Canvas.MoveTo(x, y);
+  with ToPoint do
+    Canvas.LineTo(x, y);
   xLineDelta := ToPoint.X - FromPoint.X;
   yLineDelta := ToPoint.Y - FromPoint.Y;
-
-  xLineUnitDelta := xLineDelta / SQRT( SQR(xLineDelta) + SQR(yLineDelta) );
-  yLineUnitDelta := yLineDelta / SQRT( SQR(xLineDelta) + SQR(yLineDelta) );
-
+  xLineUnitDelta := xLineDelta / SQRT(SQR(xLineDelta) + SQR(yLineDelta));
+  yLineUnitDelta := yLineDelta / SQRT(SQR(xLineDelta) + SQR(yLineDelta));
   // (xBase,yBase) is where arrow line is perpendicular to base of triangle
-  xBase := ToPoint.X - ROUND(HeadSize * xLineUnitDelta);
-  yBase := ToPoint.Y - ROUND(HeadSize * yLineUnitDelta);
-
-  xNormalDelta :=  yLineDelta;
+  xbase := ToPoint.X - round(HeadSize * xLineUnitDelta);
+  ybase := ToPoint.Y - round(HeadSize * yLineUnitDelta);
+  xNormalDelta := yLineDelta;
   yNormalDelta := -xLineDelta;
-  xNormalUnitDelta := xNormalDelta / SQRT( SQR(xNormalDelta) + SQR(yNormalDelta) );
-  yNormalUnitDelta := yNormalDelta / SQRT( SQR(xNormalDelta) + SQR(yNormalDelta) );
-
+  xNormalUnitDelta := xNormalDelta / SQRT(SQR(xNormalDelta) + SQR(yNormalDelta));
+  yNormalUnitDelta := yNormalDelta / SQRT(SQR(xNormalDelta) + SQR(yNormalDelta));
   SavedBrushColor := Canvas.Brush.Color;
   if SolidArrowHead then
     Canvas.Brush.Color := Canvas.Pen.Color;
-  Canvas.Polygon([ToPoint,
-    Point(xBase + ROUND(HeadSize*xNormalUnitDelta),
-      yBase + ROUND(HeadSize*yNormalUnitDelta)),
-    Point(xBase - ROUND(HeadSize*xNormalUnitDelta),
-      yBase - ROUND(HeadSize*yNormalUnitDelta)) ]);
+  Canvas.Polygon([
+    ToPoint,
+    Point(xbase + round(HeadSize * xNormalUnitDelta),
+         ybase + round(HeadSize * yNormalUnitDelta)),
+    Point(xbase - round(HeadSize * xNormalUnitDelta),
+          ybase - round(HeadSize * yNormalUnitDelta))]);
   Canvas.Brush.Color := SavedBrushColor;
 end;
 
 
+{ ****************** TGdiPages Report Engine }
 
 { TPagePaintBox }
 
 procedure TPagePaintBox.WMEraseBkgnd(var Message: TWmEraseBkgnd);
 begin
-  Message.Result := 1; // no erasing is necessary after this method call
+  Message.result := 1; // no erasing is necessary after this method call
 end;
 
 
-{ TGDIPages }
+{ TGdiPages }
 
-procedure TGDIPages.SetAnyCustomPagePx;
+procedure TGdiPages.SetAnyCustomPagePx;
 begin
-  if Int64(fCustomPageSize)<>-1 then
+  if Int64(fCustomPageSize) <> -1 then
     fPhysicalSizePx := fCustomPageSize;
-  if Int64(fCustomNonPrintableOffset)<>-1 then
+  if Int64(fCustomNonPrintableOffset) <> -1 then
     fPhysicalOffsetPx := fCustomNonPrintableOffset;
-  if Int64(fCustomPageMargins.TopLeft)<>-1 then
+  if Int64(fCustomPageMargins.TopLeft) <> -1 then
     fPageMarginsPx := fCustomPageMargins;
-  if Int64(fCustomPxPerInch)<>-1 then
+  if Int64(fCustomPxPerInch) <> -1 then
     fPrinterPxPerInch := fCustomPxPerInch;
-  fDefaultLineWidth := (fPrinterPxPerInch.y*25) div 2540;
+  fDefaultLineWidth := (fPrinterPxPerInch.y * 25) div 2540;
 end;
 
-procedure TGDIPages.GetPrinterParams;
-var i: integer;
+procedure TGdiPages.GetPrinterParams;
+var
+  i: integer;
 begin
-  if Self=nil then exit;
-  if not fForceScreenResolution and fHasPrinterInstalled then
-    try
-      fCurrentPrinter := CurrentPrinterName;
-      if (Printer.orientation <> fOrientation) then
-        Printer.orientation := fOrientation;
-      fPtrHdl := Printer.Handle;
-      fPrinterPxPerInch.x := GetDeviceCaps(fPtrHdl, LOGPIXELSX);
-      fPrinterPxPerInch.y := GetDeviceCaps(fPtrHdl, LOGPIXELSY);
-      fPhysicalSizePx.x := GetDeviceCaps(fPtrHdl, PHYSICALWIDTH);
-      fPhysicalOffsetPx.x := GetDeviceCaps(fPtrHdl,PHYSICALOFFSETX);
-      fPhysicalSizePx.y := GetDeviceCaps(fPtrHdl, PHYSICALHEIGHT);
-      fPhysicalOffsetPx.y := GetDeviceCaps(fPtrHdl,PHYSICALOFFSETY);
-      fDefaultLineWidth := (fPrinterPxPerInch.y*25) div 2540; // 0.25 mm
-      exit; // if a printer was found then that's all that's needed
-    except
-      fHasPrinterInstalled := false;
-    end;
-
+  if self = nil then
+    exit;
+  if not fForceScreenResolution and
+    fHasPrinterInstalled then
+  try
+    fCurrentPrinter := CurrentPrinterName;
+    if Printer.orientation <> fOrientation then
+      Printer.orientation := fOrientation;
+    fPtrHdl := Printer.Handle;
+    fPrinterPxPerInch.x := GetDeviceCaps(fPtrHdl, LOGPIXELSX);
+    fPrinterPxPerInch.y := GetDeviceCaps(fPtrHdl, LOGPIXELSY);
+    fPhysicalSizePx.x   := GetDeviceCaps(fPtrHdl, PHYSICALWIDTH);
+    fPhysicalOffsetPx.x := GetDeviceCaps(fPtrHdl, PHYSICALOFFSETX);
+    fPhysicalSizePx.y   := GetDeviceCaps(fPtrHdl, PHYSICALHEIGHT);
+    fPhysicalOffsetPx.y := GetDeviceCaps(fPtrHdl, PHYSICALOFFSETY);
+    fDefaultLineWidth   := (fPrinterPxPerInch.y * 25) div 2540; // 0.25 mm
+    exit; // if a printer was found then that's all that's needed
+  except
+    fHasPrinterInstalled := false;
+  end;
   // ForceScreenResolution or no Printer: use screen resolution
-  if fHasPrinterInstalled then begin
+  if fHasPrinterInstalled then
+  begin
     if (Printer.orientation <> fOrientation) then
       Printer.orientation := fOrientation;
     fPtrHdl := printer.Handle;
-    fPhysicalSizePx.X := round(GetDeviceCaps(fPtrHdl, PHYSICALWIDTH) *
-        screen.pixelsperinch / GetDeviceCaps(fPtrHdl, LOGPIXELSX));
-    fPhysicalSizePx.Y := round(GetDeviceCaps(fPtrHdl, PHYSICALHEIGHT) *
-        screen.pixelsperinch / GetDeviceCaps(fPtrHdl, LOGPIXELSY));
-  end else begin
+    fPhysicalSizePx.X := round(
+      GetDeviceCaps(fPtrHdl, PHYSICALWIDTH) * Screen.PixelsPerInch /
+      GetDeviceCaps(fPtrHdl, LOGPIXELSX));
+    fPhysicalSizePx.Y := round(
+      GetDeviceCaps(fPtrHdl, PHYSICALHEIGHT) * Screen.PixelsPerInch /
+      GetDeviceCaps(fPtrHdl, LOGPIXELSY));
+  end
+  else
+  begin
     // if no printer drivers installed use the screen as device context and
     // assume A4 page size...
     fPtrHdl := 0; //GetDC(0);
-    fPhysicalSizePx.X := MulDiv(PAPERSIZE_A4_WIDTH*10,screen.pixelsperinch,254);
-    fPhysicalSizePx.Y := MulDiv(PAPERSIZE_A4_HEIGHT*10,screen.pixelsperinch,254);
+    fPhysicalSizePx.X := MulDiv(PAPERSIZE_A4_WIDTH * 10, Screen.PixelsPerInch, 254);
+    fPhysicalSizePx.Y := MulDiv(PAPERSIZE_A4_HEIGHT * 10, Screen.PixelsPerInch, 254);
   end;
   //assume 6mm non-printing offsets...
-  fPhysicalOffsetPx.X := MulDiv(60,screen.pixelsperinch,254);
-  fPhysicalOffsetPx.Y := MulDiv(60,screen.pixelsperinch,254);
-  fPrinterPxPerInch.X := screen.pixelsperinch;
-  fPrinterPxPerInch.Y := screen.pixelsperinch;
+  fPhysicalOffsetPx.X := MulDiv(60, Screen.PixelsPerInch, 254);
+  fPhysicalOffsetPx.Y := MulDiv(60, Screen.PixelsPerInch, 254);
+  fPrinterPxPerInch.X := Screen.PixelsPerInch;
+  fPrinterPxPerInch.Y := Screen.PixelsPerInch;
   //fDefaultLineWidth ==> 0.3 mm
-  fDefaultLineWidth := (fPrinterPxPerInch.y*3) div 254;
-  if not fHasPrinterInstalled and (fOrientation = poLandscape) then begin
+  fDefaultLineWidth := (fPrinterPxPerInch.y * 3) div 254;
+  if not fHasPrinterInstalled and (fOrientation = poLandscape) then
+  begin
     // no Printer.Orientation -> swap width & height if Landscape page layout
     i := fPhysicalSizePx.x;
     fPhysicalSizePx.x := fPhysicalSizePx.y;
@@ -1887,33 +1920,36 @@ begin
   end;
 end;
 
-procedure TGDIPages.SetMetaFileForPage(PageIndex: integer; MetaFile: TMetaFile);
-var stream: TRawByteStringStream;
+procedure TGdiPages.SetMetaFileForPage(PageIndex: integer; MetaFile: TMetaFile);
+var
+  stream: TRawByteStringStream;
 begin
-  if cardinal(PageIndex)>=cardinal(length(fPages)) then
+  if cardinal(PageIndex) >= cardinal(length(fPages)) then
     exit;
   stream := TRawByteStringStream.Create;
   try
     MetaFile.SaveToStream(stream);
     fPages[PageIndex].MetaFileCompressed := stream.DataString;
-    CompressSynLZ(fPages[PageIndex].MetaFileCompressed,true);
+    CompressSynLZ(fPages[PageIndex].MetaFileCompressed, true);
   finally
     stream.Free;
   end;
 end;
 
-function TGDIPages.GetMetaFileForPage(PageIndex: integer): TMetaFile;
-var tmp: RawByteString;
-    stream: TStream;
+function TGdiPages.GetMetaFileForPage(PageIndex: integer): TMetaFile;
+var
+  tmp: RawByteString;
+  stream: TStream;
 begin
-  if fMetaFileForPage=nil then
-    fMetaFileForPage := TMetafile.Create else
+  if fMetaFileForPage = nil then
+    fMetaFileForPage := TMetaFile.Create
+  else
     fMetaFileForPage.Clear;
   result := fMetaFileForPage;
-  if cardinal(PageIndex)>=cardinal(length(fPages)) then
+  if cardinal(PageIndex) >= cardinal(length(fPages)) then
     exit;
   tmp := fPages[PageIndex].MetaFileCompressed;
-  CompressSynLZ(tmp,false);
+  CompressSynLZ(tmp, false);
   stream := TRawByteStringStream.Create(tmp);
   try
     fMetaFileForPage.LoadFromStream(stream);
@@ -1922,233 +1958,290 @@ begin
   end;
 end;
 
-function TGDIPages.PrinterPxToScreenPxX(PrinterPx: integer): integer;
+function TGdiPages.PrinterPxToScreenPxX(PrinterPx: integer): integer;
 begin
-  if (Self=nil) or (fPrinterPxPerInch.x=0) then
-    result := 0 else
-    result := (PrinterPx*screen.pixelsperinch*fZoom) div (fPrinterPxPerInch.x*100);
+  if (self = nil) or
+     (fPrinterPxPerInch.x = 0) then
+    result := 0
+  else
+    result := (PrinterPx * Screen.PixelsPerInch * fZoom) div
+              (fPrinterPxPerInch.x * 100);
 end;
 
-function TGDIPages.PrinterPxToScreenPxY(PrinterPx: integer): integer;
+function TGdiPages.PrinterPxToScreenPxY(PrinterPx: integer): integer;
 begin
-  if (Self=nil) or (fPrinterPxPerInch.y=0) then
-    result := 0 else
-    result := (PrinterPx*screen.pixelsperinch*fZoom) div (fPrinterPxPerInch.y*100);
+  if (self = nil) or
+     (fPrinterPxPerInch.y = 0) then
+    result := 0
+  else
+    result := (PrinterPx * Screen.PixelsPerInch * fZoom) div
+              (fPrinterPxPerInch.y * 100);
 end;
 
-function TGDIPages.MmToPrinterPxX(mm: integer): integer;
+function TGdiPages.MmToPrinterPxX(mm: integer): integer;
 begin
-  if Self=nil then
-    result := 0 else
-    result := ((mm*10) * fPrinterPxPerInch.x) div 254;
+  if self = nil then
+    result := 0
+  else
+    result := ((mm * 10) * fPrinterPxPerInch.x) div 254;
 end;
 
-function TGDIPages.MmToPrinterPxY(mm: integer): integer;
+function TGdiPages.MmToPrinterPxY(mm: integer): integer;
 begin
-  if Self=nil then
-    result := 0 else
-    result := ((mm*10) * fPrinterPxPerInch.y) div 254;
+  if self = nil then
+    result := 0
+  else
+    result := ((mm * 10) * fPrinterPxPerInch.y) div 254;
 end;
 
-function TGDIPages.PrinterPxToMmX(px: integer): integer;
+function TGdiPages.PrinterPxToMmX(px: integer): integer;
 begin
-  if (Self=nil) or (fPrinterPxPerInch.x=0) then
-    result := 0 else
-    result := (px*254) div (fPrinterPxPerInch.x*10);
+  if (self = nil) or (fPrinterPxPerInch.x = 0) then
+    result := 0
+  else
+    result := (px * 254) div (fPrinterPxPerInch.x * 10);
 end;
 
-function TGDIPages.PrinterPxToMmY(px: integer): integer;
+function TGdiPages.PrinterPxToMmY(px: integer): integer;
 begin
-  if (Self=nil) or (fPrinterPxPerInch.y=0) then
-    result := 0 else
-    result := (px*254) div (fPrinterPxPerInch.y*10);
+  if (self = nil) or (fPrinterPxPerInch.y = 0) then
+    result := 0
+  else
+    result := (px * 254) div (fPrinterPxPerInch.y * 10);
 end;
 
-procedure TGDIPages.ResizeAndCenterPaintbox;
-var l,t, i: integer;
-    siz: TPoint;
+procedure TGdiPages.ResizeAndCenterPaintbox;
+var
+  l, t, i: integer;
+  siz: TPoint;
 begin
-  if cardinal(page-1)<cardinal(length(fPages)) then
-    siz := fPages[page-1].SizePx else
+  if cardinal(page - 1) < cardinal(length(fPages)) then
+    siz := fPages[page - 1].SizePx
+  else
     siz := fPhysicalSizePx;
   // center the paintbox according to the new size
-  with fPreviewSurface do begin
-    siz.X := PrinterPxToScreenPxX(siz.X)+GRAY_MARGIN*2;
-    siz.Y := PrinterPxToScreenPxY(siz.Y)+GRAY_MARGIN*2;
-    l := Max((Self.ClientWidth - siz.X) div 2,0) - HorzScrollbar.Position;
-    t := Max((Self.ClientHeight - siz.Y) div 2,0) - VertScrollbar.Position;
-    SetBounds(l,t,siz.X,siz.Y);
+  with fPreviewSurface do
+  begin
+    siz.X := PrinterPxToScreenPxX(siz.X) + GRAY_MARGIN * 2;
+    siz.Y := PrinterPxToScreenPxY(siz.Y) + GRAY_MARGIN * 2;
+    l := Max((self.ClientWidth - siz.X) div 2, 0) - HorzScrollbar.Position;
+    t := Max((self.ClientHeight - siz.Y) div 2, 0) - VertScrollbar.Position;
+    SetBounds(l, t, siz.X, siz.Y);
   end;
   // resize any hot link
-  for i := 0 to fLinks.Count-1 do
-    TGDIPagereference(fLinks.Objects[i]).ToPreview(Self);
+  for i := 0 to fLinks.Count - 1 do
+    TGdiPageReference(fLinks.Objects[i]).ToPreview(self);
 end;
 
-function TGDIPages.GetOrientation: TPrinterOrientation;
+function TGdiPages.GetOrientation: TPrinterOrientation;
 begin
-  if (Self=nil) or (fPhysicalSizePx.x > fPhysicalSizePx.y) then
-    result := poLandscape else
+  if (self = nil) or
+     (fPhysicalSizePx.x > fPhysicalSizePx.y) then
+    result := poLandscape
+  else
     result := poPortrait;
 end;
 
-procedure TGDIPages.SetTextAlign(Value: TTextAlign);
+procedure TGdiPages.SetTextAlign(Value: TTextAlign);
 begin
-  if Self<>nil then
+  if self <> nil then
     fAlign := Value;
 end;
 
-procedure TGDIPages.SetOrientation(orientation: TPrinterOrientation);
+procedure TGdiPages.SetOrientation(orientation: TPrinterOrientation);
 begin
-  if (Self<>nil) and (fOrientation<>orientation) then begin
+  if (self <> nil) and
+     (fOrientation <> orientation) then
+  begin
     fOrientation := orientation;
-    if fPages<>nil then begin
+    if fPages <> nil then
+    begin
       // changed orientation after start writing -> customize with inversed size
-     fCustomPageSize.X := fPhysicalSizePx.Y;
-     fCustomPageSize.Y := fPhysicalSizePx.X;
-     fCustomPxPerInch.X := fPrinterPxPerInch.Y;
-     fCustomPxPerInch.Y := fPrinterPxPerInch.X;
-     fCustomNonPrintableOffset.X := fPhysicalOffsetPx.Y;
-     fCustomNonPrintableOffset.Y := fPhysicalOffsetPx.X;
+      fCustomPageSize.X := fPhysicalSizePx.Y;
+      fCustomPageSize.Y := fPhysicalSizePx.X;
+      fCustomPxPerInch.X := fPrinterPxPerInch.Y;
+      fCustomPxPerInch.Y := fPrinterPxPerInch.X;
+      fCustomNonPrintableOffset.X := fPhysicalOffsetPx.Y;
+      fCustomNonPrintableOffset.Y := fPhysicalOffsetPx.X;
     end;
   end;
 end;
 
-procedure TGDIPages.NewPageLayout(sizeWidthMM, sizeHeightMM: integer;
-  nonPrintableWidthMM: integer=-1; nonPrintableHeightMM: integer=-1);
+procedure TGdiPages.NewPageLayout(sizeWidthMM, sizeHeightMM,
+  nonPrintableWidthMM, nonPrintableHeightMM: integer);
 begin
-  if Self=nil then
+  if self = nil then
     exit;
   fCustomPageSize.X := MmToPrinterPxX(sizeWidthMM);
   fCustomPageSize.Y := MmToPrinterPxY(sizeHeightMM);
-  if (nonPrintableWidthMM>=0) and (nonPrintableHeightMM>=0) then begin
+  if (nonPrintableWidthMM >= 0) and
+     (nonPrintableHeightMM >= 0) then
+  begin
     fCustomNonPrintableOffset.X := MmToPrinterPxX(nonPrintableWidthMM);
     fCustomNonPrintableOffset.Y := MmToPrinterPxY(nonPrintableHeightMM);
   end;
-  if fPages<>nil then // force new page if already some content
+  if fPages <> nil then // force new page if already some content
     NewPage(true);
 end;
 
-procedure TGDIPages.NewPageLayout(paperSize: TGdiPagePaperSize;
-  orientation: TPrinterOrientation=poPortrait;
-  nonPrintableWidthMM: integer=-1; nonPrintableHeightMM: integer=-1);
-var Siz,NonPrint: TPoint;
-const // psA4, psA5, psA3, psLetter, psLegal
-  SIZES: array[TGdiPagePaperSize] of TPoint = (
-   (x:210;y:297),(x:148;y:210),(x:297;y:420),(x:216;y:279),(x:216;y:356));
+const 
+  SIZES: array[TGdiPagePaperSize] of TPoint = ((
+    x: 210; // psA4
+    y: 297
+  ), (
+    x: 148; // psA5
+    y: 210
+  ), (
+    x: 297; // psA3
+    y: 420
+  ), (
+    x: 216; // psLetter
+    y: 279
+  ), (
+    x: 216; // psLegal
+    y: 356
+  ));
+
+procedure TGdiPages.NewPageLayout(paperSize: TGdiPagePaperSize;
+  orientation: TPrinterOrientation;
+  nonPrintableWidthMM, nonPrintableHeightMM: integer);
+var
+  Siz, NonPrint: TPoint;
 begin
-  if orientation=poPortrait then begin
+  if orientation = poPortrait then
+  begin
     Siz := SIZES[paperSize];
     NonPrint.X := nonPrintableWidthMM;
     NonPrint.Y := nonPrintableHeightMM;
-  end else begin
+  end
+  else
+  begin
     Siz.X := SIZES[paperSize].Y;
     Siz.Y := SIZES[paperSize].X;
     NonPrint.X := nonPrintableHeightMM;
     NonPrint.Y := nonPrintableWidthMM;
   end;
-  NewPageLayout(Siz.X,Siz.Y,NonPrint.X,NonPrint.Y);
+  NewPageLayout(Siz.X, Siz.Y, NonPrint.X, NonPrint.Y);
 end;
 
-procedure TGDIPages.SetPage(NewPreviewPage: integer);
+procedure TGdiPages.SetPage(NewPreviewPage: integer);
 begin
-  if Self=nil then exit;
+  if self = nil then
+    exit;
   if NewPreviewPage > length(fPages) then
-    NewPreviewPage := length(fPages) else
-  if NewPreviewPage < 1 then
+    NewPreviewPage := length(fPages)
+  else if NewPreviewPage < 1 then
     NewPreviewPage := 1;
-  if (Pages = nil) or (fCurrPreviewPage = NewPreviewPage) then
+  if (Pages = nil) or
+     (fCurrPreviewPage = NewPreviewPage) then
     exit;
   fCurrPreviewPage := NewPreviewPage;
   fLinksCurrent := -1;
   FreeAndNil(PreviewSurfaceBitmap); // force double buffering Bitmap recreate
   ResizeAndCenterPaintbox; // if page size changed
-  PreviewPaint(Self);
+  PreviewPaint(self);
   if Assigned(fPreviewPageChangedEvent) then
-    fPreviewPageChangedEvent(Self);
-  if PreviewForm<>nil then begin
-    PreviewPageCountLabel.Caption := format(sPageN,[Page,PageCount]);
-    PreviewButtons[ord(rNextPage)-1].Enabled := Page<PageCount;
-    PreviewButtons[ord(rPreviousPage)-1].Enabled := Page>1;
+    fPreviewPageChangedEvent(self);
+  if PreviewForm <> nil then
+  begin
+    PreviewPageCountLabel.Caption := format(sPageN, [Page, PageCount]);
+    PreviewButtons[ord(rNextPage) - 1].Enabled := Page < PageCount;
+    PreviewButtons[ord(rPreviousPage) - 1].Enabled := Page > 1;
   end;
 end;
 
-function TGDIPages.GetPageCount: integer;
+function TGdiPages.GetPageCount: integer;
 begin
-  if Self=nil then
-    result := 0 else
+  if self = nil then
+    result := 0
+  else
     result := length(fPages);
 end;
 
-function TGDIPages.GetLineHeight: integer;
-var tm: TTextMetric;
-    DC: HDC;
+function TGdiPages.GetLineHeight: integer;
+var
+  tm: TTextMetric;
+  DC: HDC;
 begin
-  if Self=nil then begin
+  if self = nil then
+  begin
     result := 0;
     exit;
   end;
-  if fLineHeight = 0 then begin
-    if not Assigned(fCanvas) then begin
+  if fLineHeight = 0 then
+  begin
+    if not Assigned(fCanvas) then
+    begin
       // if no current fCanvas: use the Screen resolution (very fast)
       DC := GetDC(0);
-      GetTextMetrics(DC,tm);
-      ReleaseDC(0,DC);
-    end else
-      GetTextMetrics(fCanvas.Handle,tm);
-    fLineHeight := ((tm.tmHeight+tm.tmExternalLeading)*9)shr 3;
+      GetTextMetrics(DC, tm);
+      ReleaseDC(0, DC);
+    end
+    else
+      GetTextMetrics(fCanvas.Handle, tm);
+    fLineHeight := ((tm.tmHeight + tm.tmExternalLeading) * 9) shr 3;
   end;
-  if fInHeaderOrFooter then
-    result := fLineHeight else
+  result := fLineHeight;
+  if not fInHeaderOrFooter then
     case fLineSpacing of
-      lsSingle:     result := fLineHeight;
-      lsOneAndHalf: result := (fLineHeight*3) shr 1;
-      else          result := fLineHeight*2;
+      lsOneAndHalf:
+        result := (result * 3) shr 1;
+      lsDouble:
+        result := result * 2;
     end;
 end;
 
-function TGDIPages.GetLineHeightMm: integer;
+function TGdiPages.GetLineHeightMm: integer;
 begin
-  if Self=nil then
-    result := 0 else
+  if self = nil then
+    result := 0
+  else
     result := PrinterPxToMmY(GetLineHeight);
 end;
 
-procedure TGDIPages.CheckHeaderDone;
+procedure TGdiPages.CheckHeaderDone;
 begin
   if not fHeaderDone then
     DoHeader;
 end;
 
-procedure TGDIPages.CheckYPos;
+procedure TGdiPages.CheckYPos;
 begin
-  if Self=nil then exit;
-  if fInHeaderOrFooter then exit;
+  if self = nil then
+    exit;
+  if fInHeaderOrFooter then
+    exit;
   CheckHeaderDone;
-  if not HasSpaceForLines(1) then begin
+  if not HasSpaceForLines(1) then
+  begin
     NewPageInternal;
     // nb: header is done inside a group, so we must check for it
     CheckHeaderDone;
   end;
 end;
 
-function TGDIPages.GetYPos: integer;
+function TGdiPages.GetYPos: integer;
 begin
-  if (Self=nil) or (fPrinterPxPerInch.y=0) then
-    result := 0 else
-    result := (fCurrentYPos*254) div (fPrinterPxPerInch.y*10);
+  if (self = nil) or
+     (fPrinterPxPerInch.y = 0) then
+    result := 0
+  else
+    result := (fCurrentYPos * 254) div (fPrinterPxPerInch.y * 10);
 end;
 
-procedure TGDIPages.SetYPos(YPos: integer);
+procedure TGdiPages.SetYPos(YPos: integer);
 begin
-  if Self=nil then exit;
+  if self = nil then
+    exit;
   if fCurrentYPos >= fPhysicalSizePx.y then
     NewPageInternal;
   fCurrentYPos := MmToPrinterPxY(YPos);
 end;
 
-function TGDIPages.GetSavedState: TSavedState;
+function TGdiPages.GetSavedState: TSavedState;
 begin
-  with result do begin
+  with result do
+  begin
     Flags := TextFormatsToFlags;
     FontName := Font.Name;
     FontColor := Font.Color;
@@ -2158,9 +2251,10 @@ begin
   end;
 end;
 
-procedure TGDIPages.SetSavedState(const SavedState: TSavedState);
+procedure TGdiPages.SetSavedState(const SavedState: TSavedState);
 begin
-  with SavedState do begin
+  with SavedState do
+  begin
     SetFontWithFlags(Flags);
     Font.Name := FontName;
     Font.Color := FontColor;
@@ -2170,128 +2264,147 @@ begin
   end;
 end;
 
-procedure TGDIPages.SaveLayout;
+procedure TGdiPages.SaveLayout;
 begin
-  if Self=nil then exit; // avoid GPF
-  if fSavedCount>=length(fSaved) then
-    SetLength(fSaved,fSavedCount+20);
+  if self = nil then
+    exit; // avoid GPF
+  if fSavedCount >= length(fSaved) then
+    SetLength(fSaved, fSavedCount + 20);
   fSaved[fSavedCount] := SavedState;
   inc(fSavedCount);
 end;
 
-procedure TGDIPages.RestoreSavedLayout;
+procedure TGdiPages.RestoreSavedLayout;
 begin
-  if Self=nil then exit; // avoid GPF
-  if fSavedCount<=0 then
+  if self = nil then
+    exit; // avoid GPF
+  if fSavedCount <= 0 then
     exit;
   dec(fSavedCount);
   SavedState := fSaved[fSavedCount];
 end;
 
-function TGDIPages.CreateMetaFile(aWidth, aHeight: integer): TMetaFile;
+function TGdiPages.CreateMetaFile(aWidth, aHeight: integer): TMetaFile;
 begin
-  result := TMetafile.Create;
-  if Self=nil then exit;
+  result := TMetaFile.Create;
+  if self = nil then
+    exit;
   result.Enhanced := true;
   result.Width := aWidth;
   result.Height := aHeight;
 end;
 
-procedure TGDIPages.FlushPageContent;
-var n: integer;
+procedure TGdiPages.FlushPageContent;
+var
+  n: PtrInt;
 begin
   n := length(fPages);
-  if n>0 then begin
-    with fPages[n-1] do begin
+  if n > 0 then
+  begin
+    with fPages[n - 1] do
+    begin
       Text := fCanvasText;
       SizePx := fPhysicalSizePx;
       MarginPx := fPageMarginsPx;
       OffsetPx := fPhysicalOffsetPx;
     end;
-    if fCurrentMetaFile<>nil then begin
-      SetMetaFileForPage(n-1,fCurrentMetaFile);
+    if fCurrentMetaFile <> nil then
+    begin
+      SetMetaFileForPage(n - 1, fCurrentMetaFile);
       FreeAndNil(fCurrentMetaFile);
     end;
   end;
 end;
 
-procedure TGDIPages.NewPageInternal;
-var n: integer;
-    UsedGroupSpace: integer;
-    InGroup: boolean;
-    GroupText: string;
+procedure TGdiPages.NewPageInternal;
+var
+  n: integer;
+  UsedGroupSpace: integer;
+  InGroup: boolean;
+  GroupText: string;
 begin
-  if Self=nil then exit;
+  if self = nil then
+    exit;
   UsedGroupSpace := 0; //stops a warning
   InGroup := Assigned(fGroupPage);
-  if InGroup then begin // close the Group Canvas
+  if InGroup then
+  begin
+    // close the Group Canvas
     UsedGroupSpace := fCurrentYPos;
     FreeAndNil(fCanvas); // now recreate/redraw a fresh fCanvas for DoFooter
     fCanvas := CreateMetafileCanvas(fCurrentMetaFile);
-    fCanvas.Draw(0,0,fCurrentMetaFile); // re-draw last page
+    fCanvas.Draw(0, 0, fCurrentMetaFile); // re-draw last page
     GroupText := fCanvasText;
     fCanvasText := fBeforeGroupText;
   end;
   DoFooter;
-  //create a new metafile and its canvas ...
+  // create a new metafile and its canvas ...
   if Assigned(fCanvas) then
     FreeAndNil(fCanvas);
   FlushPageContent;
   SetAnyCustomPagePx;
   //NewPage.MMWidth := (fPhysicalSizePx.x*2540) div fPrinterPxPerInch.x;
   //NewPage.MMHeight := (fPhysicalSizePx.y*2540) div fPrinterPxPerInch.y;
-  n := Length(fPages)+1;
-  SetLength(fPages,n);
-  fCurrentMetaFile := CreateMetaFile(fPhysicalSizePx.x,fPhysicalSizePx.y);
+  n := Length(fPages) + 1;
+  SetLength(fPages, n);
+  fCurrentMetaFile := CreateMetaFile(fPhysicalSizePx.x, fPhysicalSizePx.y);
   fCanvas := CreateMetafileCanvas(fCurrentMetaFile);
   fCanvasText := '';
   inc(fVirtualPageNum);
   fCurrentYPos := fPageMarginsPx.top;
   if Assigned(fStartNewPage) then
-    fStartNewPage(Self,n);
+    fStartNewPage(self, n);
   fHeaderDone := false;
   fColumnHeaderPrinted := false; // when next col. started add header
-  if InGroup then begin // draw the group at the begining of new page + EndGroup
+  if InGroup then
+  begin
+    // draw the group at the begining of new page + EndGroup
     DoHeader;
-    if fColumnsUsedInGroup then begin
+    if fColumnsUsedInGroup then
+    begin
       //The next line is a workaround to stop an endless loop. CheckYPos (called
       //via PrintColumnHeaders) thinks we're still drawing on fGroupPage as it's
       //still Assigned so can flag "out of room" and try to create another page.
       fGroupVerticalSpace := fPhysicalSizePx.y;
       if not fColumnHeaderInGroup then
-        PrintColumnHeaders else
+        PrintColumnHeaders
+      else
         fColumnHeaderPrinted := true;
     end;
-    fCanvas.Draw(0,fCurrentYPos,fGroupPage);
+    fCanvas.Draw(0, fCurrentYPos, fGroupPage);
     FreeAndNil(fGroupPage); // idem as EndGroup
-    inc(fCurrentYPos,UsedGroupSpace);
-    fCanvasText := fCanvasText+GroupText;
+    inc(fCurrentYPos, UsedGroupSpace);
+    fCanvasText := fCanvasText + GroupText;
   end;
 end;
 
-function TGDIPages.CreateMetafileCanvas(Page: TMetafile): TMetafileCanvas;
+function TGdiPages.CreateMetafileCanvas(Page: TMetaFile): TMetaFileCanvas;
 begin
-  result := TMetafileCanvas.Create(Page,fPtrHdl);
-  if Self=nil then exit;
+  result := TMetaFileCanvas.Create(Page, fPtrHdl);
+  if self = nil then
+    exit;
   UpdateMetafileCanvasFont(result);
-  result.Pen.Width := fPrinterPxPerInch.y div screen.PixelsPerInch;
+  result.Pen.Width := fPrinterPxPerInch.y div Screen.PixelsPerInch;
 end;
 
-procedure TGDIPages.UpdateMetafileCanvasFont(aCanvas: TMetafileCanvas);
+procedure TGdiPages.UpdateMetafileCanvasFont(aCanvas: TMetaFileCanvas);
 begin
   // next 2 lines are a printer bug workaround - 23Mar2000
-  aCanvas.Font.Size := Font.Size+1;
+  aCanvas.Font.Size := Font.Size + 1;
   aCanvas.Font.PixelsPerInch := fPrinterPxPerInch.y;
   aCanvas.Font := Font;
 end;
 
-function TGDIPages.TextFormatsToFlags: integer;
+function TGdiPages.TextFormatsToFlags: integer;
 begin
-  result := min(max(font.size,4),FORMAT_SIZE_MASK); { size between 4 and 255 }
+  result := min(max(font.size, 4), FORMAT_SIZE_MASK); // size between 4 and 255 
   case fAlign of
-    taRight:     result := result or FORMAT_RIGHT;
-    taCenter:    result := result or FORMAT_CENTER;
-    taJustified: result := result or FORMAT_JUSTIFIED;
+    taRight:
+      result := result or FORMAT_RIGHT;
+    taCenter:
+      result := result or FORMAT_CENTER;
+    taJustified:
+      result := result or FORMAT_JUSTIFIED;
   end;
   if fsBold in font.style then
     result := result or FORMAT_BOLD;
@@ -2301,107 +2414,120 @@ begin
     result := result or FORMAT_ITALIC;
 end;
 
-procedure TGDIPages.SetFontWithFlags(flags: integer);
-var fontstyle: TFontStyles;
+procedure TGdiPages.SetFontWithFlags(flags: integer);
+var
+  fontstyle: TFontStyles;
 begin
-  if flags and FORMAT_SIZE_MASK<>Font.Size then
+  if flags and FORMAT_SIZE_MASK <> Font.Size then
     Font.size := flags and FORMAT_SIZE_MASK;
   if (flags and FORMAT_BOLD) <> 0 then
-    fontstyle := [fsBold] else
+    fontstyle := [fsBold]
+  else
     fontstyle := [];
   if (flags and FORMAT_UNDERLINE) <> 0 then
-    include(fontstyle,fsUnderline);
+    include(fontstyle, fsUnderline);
   if (flags and FORMAT_ITALIC) <> 0 then
-    include(fontstyle,fsItalic);
-  if Font.Style<>fontstyle then
+    include(fontstyle, fsItalic);
+  if Font.Style <> fontstyle then
     Font.Style := fontstyle;
   case flags and FORMAT_ALIGN_MASK of
-    FORMAT_RIGHT:     falign := taRight;
-    FORMAT_CENTER:    falign := taCenter;
-    FORMAT_JUSTIFIED: falign := taJustified;
-    else              falign := taLeft;
+    FORMAT_RIGHT:
+      fAlign := taRight;
+    FORMAT_CENTER:
+      fAlign := taCenter;
+    FORMAT_JUSTIFIED:
+      fAlign := taJustified;
+  else
+    fAlign := taLeft;
   end;
 end;
 
-function TGDIPages.HasSpaceForLines(Count: integer): boolean;
+function TGdiPages.HasSpaceForLines(Count: integer): boolean;
 begin
-  if Self=nil then
-    result := false else // avoid GPF
-  if Assigned(fGroupPage) then
-    result := fCurrentYPos + GetLineHeight*Count < fGroupVerticalSpace else
-    result := fCurrentYPos + GetLineHeight*Count <
-      fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight;
+  if self = nil then
+    result := false // avoid GPF
+  else if Assigned(fGroupPage) then
+    result := fCurrentYPos + GetLineHeight * Count < fGroupVerticalSpace
+  else
+    result := fCurrentYPos + GetLineHeight * Count <
+                fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight;
 end;
 
-function TGDIPages.HasSpaceFor(mm: integer): boolean;
+function TGdiPages.HasSpaceFor(mm: integer): boolean;
 begin
-  if Self=nil then
-    result := false else begin // avoid GPF
+  if self = nil then
+    result := false // avoid GPF
+  else
+  begin 
     mm := fCurrentYPos + MmToPrinterPxY(mm);
     if Assigned(fGroupPage) then
-      result := mm < fGroupVerticalSpace else
+      result := mm < fGroupVerticalSpace
+    else
       result := mm < fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight;
   end;
 end;
 
-procedure TGDIPages.DoHeader;
+procedure TGdiPages.DoHeader;
 begin
   fHeaderDone := true;
-  if (fHeaderLines.Count = 0) then exit;
+  if (fHeaderLines.Count = 0) then
+    exit;
   SaveLayout;
   fInHeaderOrFooter := true;
   try
     if Assigned(fStartPageHeader) then
-      fStartPageHeader(Self);
+      fStartPageHeader(self);
     Font.Color := clBlack;
     DoHeaderFooterInternal(fHeaderLines);
     if Assigned(fEndPageHeader) then
-      fEndPageHeader(Self);
+      fEndPageHeader(self);
     GetLineHeight;
-    inc(fCurrentYPos,fLineHeight shr 2); // add a small header gap
-    fHeaderHeight := fCurrentYPos-fPageMarginsPx.Top;
+    inc(fCurrentYPos, fLineHeight shr 2); // add a small header gap
+    fHeaderHeight := fCurrentYPos - fPageMarginsPx.Top;
   finally
     fInHeaderOrFooter := false;
     RestoreSavedLayout;
   end;
 end;
 
-procedure TGDIPages.DoFooter;
+procedure TGdiPages.DoFooter;
 begin
-  if (fFooterLines.Count = 0) then exit;
+  if (fFooterLines.Count = 0) then
+    exit;
   SaveLayout;
   fInHeaderOrFooter := true;
   try
-  fCurrentYPos :=
-    fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight + fFooterGap;
-  if Assigned(fStartPageFooter) then
-    fStartPageFooter(Self);
-  DoHeaderFooterInternal(fFooterLines);
-  if Assigned(fEndPageFooter) then
-    fEndPageFooter(Self);
+    fCurrentYPos := fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight +
+      fFooterGap;
+    if Assigned(fStartPageFooter) then
+      fStartPageFooter(self);
+    DoHeaderFooterInternal(fFooterLines);
+    if Assigned(fEndPageFooter) then
+      fEndPageFooter(self);
   finally
     fInHeaderOrFooter := false;
     RestoreSavedLayout;
   end;
 end;
 
-procedure TGDIPages.DoHeaderFooterInternal(Lines: TObjectList);
-var i: integer;
+procedure TGdiPages.DoHeaderFooterInternal(Lines: TObjectList);
+var
+  i: integer;
 begin
   SaveLayout;
   try
-    for i := 0 to Lines.Count -1 do
+    for i := 0 to Lines.Count - 1 do
       with THeaderFooter(Lines[i]) do
       begin
         SavedState := State;
-        PrintFormattedLine(Text, State.Flags);
+        PrintFormattedLine(Text, state.Flags);
       end;
   finally
     RestoreSavedLayout;
   end;
 end;
 
-procedure TGDIPages.CalcFooterGap;
+procedure TGdiPages.CalcFooterGap;
 begin
   GetLineHeight;
   // make sure there's a gap of at least 1/4 of a lineheight
@@ -2410,193 +2536,221 @@ begin
   fFooterHeight := fFooterGap;
 end;
 
-function TGDIPages.GetColumnRec(col: integer): TColRec;
+function TGdiPages.GetColumnRec(col: integer): TColRec;
 begin
-  if Cardinal(col)<Cardinal(length(fColumns)) then
-    result := fColumns[col] else begin
+  if cardinal(col) < cardinal(length(fColumns)) then
+    result := fColumns[col]
+  else
+  begin
     result.ColLeft := 0;
     result.ColRight := 0;
   end;
 end;
 
-procedure TGDIPages.PrintColumnHeaders;
+procedure TGdiPages.PrintColumnHeaders;
 var
-  i,SavedFontSize,FontCol: integer;
+  i, SavedFontSize, FontCol: integer;
   SavedFontStyle: TFontStyles;
   SavedAlign: TTextAlign;
   SavedWordWrapLeftCols: boolean;
-
 begin
-  if (fColumnHeaderList = nil) or (fColumns=nil) then exit;
+  if (fColumnHeaderList = nil) or (fColumns = nil) then
+    exit;
   CheckYPos;
-
-  fColumnHeaderPrinted := true;   //stops an endless loop
+  fColumnHeaderPrinted := true;   // stops an endless loop
   SavedFontSize := Font.size;
   SavedFontStyle := font.style;
   SavedAlign := fAlign;
   SavedWordWrapLeftCols := WordWrapLeftCols;
   WordWrapLeftCols := false;
-
   if Assigned(fStartColumnHeader) then
-    fStartColumnHeader(Self);
+    fStartColumnHeader(self);
   FontCol := fCanvas.Font.Color;
-  for i := 0 to High(fColumnHeaderList) do begin
+  for i := 0 to High(fColumnHeaderList) do
+  begin
     SetFontWithFlags(fColumnHeaderList[i].flags);
     fCanvas.Font.Color := clBlack;
     fDrawTextAcrossColsDrawingHeader := true;
-    DrawTextAcrossCols(fColumnHeaderList[i].headers,[],clNone);
+    DrawTextAcrossCols(fColumnHeaderList[i].headers, [], clNone);
     fDrawTextAcrossColsDrawingHeader := false;
   end;
   fCanvas.Font.Color := FontCol;
   if Assigned(fEndColumnHeader) then
-    fEndColumnHeader(Self);
+    fEndColumnHeader(self);
   // add a small space below the column headers
   // inc(fCurrentYPos,fLineHeight shr 2);
-
   Font.Size := SavedFontSize;
   Font.Style := SavedFontStyle;
   fAlign := SavedAlign;
   WordWrapLeftCols := SavedWordWrapLeftCols;
   if Assigned(fGroupPage) then
     fColumnHeaderInGroup := true;
-  fColumnHeaderPrintedAtLeastOnce :=
-    ForceCopyTextAsWholeContent; // don't reproduce headers every page
+  fColumnHeaderPrintedAtLeastOnce := ForceCopyTextAsWholeContent; // not on every page
 end;
 
-procedure TGDIPages.SetZoomStatus(aZoomStatus: TZoomStatus);
-var zoom: integer;
+procedure TGdiPages.SetZoomStatus(aZoomStatus: TZoomStatus);
+var
+  zoom: integer;
 begin
-  if (self=nil) or (aZoomStatus=fZoomStatus) then
+  if (self = nil) or
+     (aZoomStatus = fZoomStatus) then
     exit;
   case aZoomStatus of
-    zsPageFit:   zoom := PAGE_FIT;
-    zsPageWidth: zoom := PAGE_WIDTH;
-    else         zoom := fZoom;
+    zsPageFit:
+      zoom := PAGE_FIT;
+    zsPageWidth:
+      zoom := PAGE_WIDTH;
+  else
+    zoom := fZoom;
   end;
   SetZoom(zoom);
 end;
 
-procedure TGDIPages.SetZoom(Zoom: integer);
-var scrollIncrement, zoomW, zoomH: integer;
-    siz: TPoint;
+procedure TGdiPages.SetZoom(Zoom: integer);
+var
+  scrollIncrement, zoomW, zoomH: integer;
+  siz: TPoint;
 begin
-  if (Self=nil) or (zoom < PAGE_FIT) or (zoom in [0..9]) or (zoom > 200) then
+  if (self = nil) or
+     (Zoom < PAGE_FIT) or
+     (Zoom in [0..9]) or
+     (Zoom > 200) then
     exit;
   fLinksCurrent := -1;
   FreeAndNil(PreviewSurfaceBitmap);
-
-  if (not handleallocated) or (fZoom=Zoom) or
-     (cardinal(page-1)>=cardinal(length(fPages))) then
+  if (not handleallocated) or
+     (fZoom = Zoom) or
+     (cardinal(Page - 1) >= cardinal(length(fPages))) then
     exit;
-
   // calculate the new fZoom ...
-  siz := fPages[page-1].SizePx;
-  if (siz.x=0) or (siz.y=0) then  // in case of potential div per 0 -> do it later
-    exit else
-  if zoom = PAGE_FIT then begin
-    ZoomW := trunc((clientWidth-GRAY_MARGIN*2)*fPrinterPxPerInch.x*
-               100/siz.x/screen.pixelsperinch);
-    ZoomH := trunc((clientHeight-GRAY_MARGIN*2)*fPrinterPxPerInch.y*
-               100/siz.y/screen.pixelsperinch);
-    //choose the smallest of width% and height% to fit on page (but min 10%)
-    fZoom := Max(Min(ZoomW,ZoomH),10);
-  end else
-  if zoom = PAGE_WIDTH then
-    fZoom := trunc((clientWidth-GRAY_MARGIN*2)*fPrinterPxPerInch.x*
-               100/siz.x/screen.pixelsperinch) else
+  siz := fPages[Page - 1].SizePx;
+  if (siz.x = 0) or
+     (siz.y = 0) then
+    exit // in case of potential div per 0 -> do it later
+  else if Zoom = PAGE_FIT then
+  begin
+    zoomW := trunc((clientWidth - GRAY_MARGIN * 2) * fPrinterPxPerInch.x * 100 /
+      siz.x / Screen.PixelsPerInch);
+    zoomH := trunc((clientHeight - GRAY_MARGIN * 2) * fPrinterPxPerInch.y * 100 /
+      siz.y / Screen.PixelsPerInch);
+    // choose the smallest of width% and height% to fit on page (but min 10%)
+    fZoom := Max(Min(zoomW, zoomH), 10);
+  end
+  else if Zoom = PAGE_WIDTH then
+    fZoom := trunc((clientWidth - GRAY_MARGIN * 2) * fPrinterPxPerInch.x * 100 /
+      siz.x / Screen.PixelsPerInch)
+  else
     fZoom := Zoom;
-
   // ZoomStatus required when resizing...
-  if zoom = PAGE_FIT then
-    fZoomStatus := zsPageFit else
-  if zoom = PAGE_WIDTH then
-    fZoomStatus := zsPageWidth else
+  if Zoom = PAGE_FIT then
+    fZoomStatus := zsPageFit
+  else if Zoom = PAGE_WIDTH then
+    fZoomStatus := zsPageWidth
+  else
     fZoomStatus := zsPercent;
-
   scrollIncrement := PrinterPxToScreenPxY(GetLineHeight);
   HorzScrollbar.Increment := scrollIncrement;
   VertScrollbar.Increment := scrollIncrement;
-
   // resize and center preview surface...
   ResizeAndCenterPaintbox;
-
+  // notify custom event
   if Assigned(fZoomChangedEvent) then
-    fZoomChangedEvent(Self, fZoom, fZoomStatus);
+    fZoomChangedEvent(self, fZoom, fZoomStatus);
 end;
 
 const
   ZOOMSTEP = 20;
 
-procedure TGDIPages.ZoomTimerInternal(X,Y: integer; ZoomIn: boolean);
+procedure TGdiPages.ZoomTimerInternal(X, Y: integer; ZoomIn: boolean);
 var
   OldZoom: integer;
   pt, siz: TPoint;
 begin
-  if (Self=nil) or (fPhysicalSizePx.x=0) or (fPhysicalSizePx.y=0) then
-    Exit;
-  if page>0 then
-    siz := fPages[page-1].SizePx else
+  if (self = nil) or
+     (fPhysicalSizePx.x = 0) or
+     (fPhysicalSizePx.y = 0) then
+    exit;
+  if page > 0 then
+    siz := fPages[page - 1].SizePx
+  else
     siz := fPhysicalSizePx;
   OldZoom := fZoom;
-  sendmessage(handle,WM_SETREDRAW,0,0);
+  sendmessage(handle, WM_SETREDRAW, 0, 0);
   try
-    if ZoomIn then begin
-{$ifdef MOUSE_CLICK_PERFORM_ZOOM}
+    if ZoomIn then
+    begin
+    {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
       if fZoom >= 200 then
-        fZoomTimer.enabled := false else      //(maximum 200%)
-{$else}if fZoom < 200 then {$endif}
-        Zoom := ((fZoom + ZOOMSTEP) div ZOOMSTEP)*ZOOMSTEP;                //to nearest ZOOMSTEP%
-    end else begin
+        fZoomTimer.enabled := false
+      else      //(maximum 200%)
+    {$else}
+      if fZoom < 200 then
+    {$endif MOUSE_CLICK_PERFORM_ZOOM}
+        Zoom := ((fZoom + ZOOMSTEP) div ZOOMSTEP) * ZOOMSTEP; // nearest 
+    end
+    else
+    begin
       if (fZoom > 20) then
-        Zoom := ((fZoom - ZOOMSTEP) div ZOOMSTEP)*ZOOMSTEP else //(minimum 20%)
-{$ifdef MOUSE_CLICK_PERFORM_ZOOM}
+        Zoom := ((fZoom - ZOOMSTEP) div ZOOMSTEP) * ZOOMSTEP
+      else //(minimum 20%)
+    {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
         fZoomTimer.enabled := false;
-{$endif}
+    {$endif MOUSE_CLICK_PERFORM_ZOOM}
     end;
     if fZoom = OldZoom then
       exit;
     // work out click pos relative to page (as x & y percentages)
-    pt.x := ((X-fPreviewSurface.left-GRAY_MARGIN)*100) div PrinterPxToScreenPxX(siz.x);
-    pt.x := min(max(pt.x,0),100);
-    pt.y := ((Y-fPreviewSurface.top-GRAY_MARGIN)*100) div PrinterPxToScreenPxY(siz.y);
-    pt.y := min(max(pt.y,0),100);
+    pt.x := ((X - fPreviewSurface.left - GRAY_MARGIN) * 100) div
+      PrinterPxToScreenPxX(siz.x);
+    pt.x := min(max(pt.x, 0), 100);
+    pt.y := ((Y - fPreviewSurface.top - GRAY_MARGIN) * 100) div
+      PrinterPxToScreenPxY(siz.y);
+    pt.y := min(max(pt.y, 0), 100);
     // finally, adjust scrollbar positions based on click pos ...
-    with HorzScrollbar do position := (pt.x*(range-clientwidth)) div 100;
-    with VertScrollbar do position := (pt.y*(range-clientheight)) div 100;
+    with HorzScrollbar do
+      position := (pt.x * (range - clientwidth)) div 100;
+    with VertScrollbar do
+      position := (pt.y * (range - clientheight)) div 100;
   finally
-    SendMessage(handle,WM_SETREDRAW,1,0);
+    SendMessage(handle, WM_SETREDRAW, 1, 0);
   end;
   Invalidate;
 end;
 
-procedure TGDIPages.ZoomTimer(Sender: TObject);
+procedure TGdiPages.ZoomTimer(Sender: TObject);
 var
   CursorPos: TPoint;
 begin
   GetCursorPos(CursorPos);
   CursorPos := ScreenToClient(CursorPos);
-  ZoomTimerInternal(CursorPos.x,CursorPos.y, fZoomIn);
+  ZoomTimerInternal(CursorPos.x, CursorPos.y, fZoomIn);
 end;
 
-procedure TGDIPages.LineInternal(start, finish : integer; doubleline : boolean);
+procedure TGdiPages.LineInternal(start, finish : integer; doubleline : boolean);
 begin
   LineInternal(fCurrentYPos + (GetLineHeight shr 1), start, finish, doubleline);
 end;
 
-procedure TGDIPages.LineInternal(aty, start, finish : integer; doubleline : boolean);
-var Y: integer;
+procedure TGdiPages.LineInternal(aty, start, finish: integer; doubleline: boolean);
+var
+  Y: integer;
 begin
-  if (Self <> nil) and (fCanvas <> nil) then
-    with fCanvas do begin
-      Pen.Width := MulDiv(fDefaultLineWidth, Self.Font.size, 8);
-      if fsBold in Self.Font.style then Pen.Width := Pen.Width + 1;
-      if doubleline then begin
+  if (self <> nil) and (fCanvas <> nil) then
+    with fCanvas do
+    begin
+      Pen.Width := MulDiv(fDefaultLineWidth, self.Font.size, 8);
+      if fsBold in self.Font.style then
+        Pen.Width := Pen.Width + 1;
+      if doubleline then
+      begin
         Y := aty - (Pen.Width);
         MoveTo(start, Y);
         LineTo(finish, Y);
         MoveTo(start, Y + (Pen.Width * 2));
         LineTo(finish, Y + (Pen.Width * 2));
-      end else begin
+      end
+      else
+      begin
         Y := aty - (Pen.Width shr 1);
         MoveTo(start, Y);
         LineTo(finish, Y);
@@ -2604,84 +2758,97 @@ begin
     end;
 end;
 
-procedure TGDIPages.PrintFormattedLine(s: SynUnicode; flags: integer;
-  const aBookmark: string; const aLink: string; withNewLine,aLinkNoBorder: boolean);
-var i, xpos: integer;
-    leftOffset, rightOffset: integer;
+procedure TGdiPages.PrintFormattedLine(s: SynUnicode; flags: integer;
+  const aBookmark: string; const aLink: string;
+  withNewLine, aLinkNoBorder: boolean);
+var
+  i, xpos: integer;
+  leftOffset, rightOffset: integer;
 begin
   s := RightTrim(s);
-  i := pos(PAGENUMBER,LowerCaseU(s));
-  if i > 0 then begin
-    delete(s,i,14);
-    insert(UTF8ToSynUnicode(Int32ToUtf8(fVirtualPageNum)),s,i);
+  i := pos(PAGENUMBER, LowerCaseU(s));
+  if i > 0 then
+  begin
+    delete(s, i, 14);
+    insert(Utf8ToSynUnicode(Int32ToUtf8(fVirtualPageNum)), s, i);
   end;
   if flags <> FORMAT_DEFAULT then
     SetFontWithFlags(flags);
   CheckYPos;
   fCurrentTextTop := fCurrentYPos;
   fCurrentTextPage := PageCount;
-  GetTextLimitsPx(leftOffset,rightOffset);
-  if flags and (FORMAT_SINGLELINE or FORMAT_DOUBLELINE)<>0 then begin
-    LineInternal(leftOffset,rightOffset,flags and FORMAT_DOUBLELINE=FORMAT_DOUBLELINE);
+  GetTextLimitsPx(leftOffset, rightOffset);
+  if flags and (FORMAT_SINGLELINE or FORMAT_DOUBLELINE) <> 0 then
+  begin
+    LineInternal(leftOffset, rightOffset,
+      flags and FORMAT_DOUBLELINE = FORMAT_DOUBLELINE);
     NewLine;
-  end else
-  if s = '' then begin
+  end
+  else if s = '' then
+  begin
     if withNewLine then
       NewLine;
-  end else
-  if (flags and FORMAT_XPOS_MASK <> 0) then begin
-    xpos := ((flags and FORMAT_XPOS_MASK) shr 16)-2;
-    if xpos<0 then
-      xpos := RightMarginPos else
+  end
+  else if (flags and FORMAT_XPOS_MASK) <> 0 then
+  begin
+    xpos := ((flags and FORMAT_XPOS_MASK) shr 16) - 2;
+    if xpos < 0 then
+      xpos := RightMarginPos
+    else
       inc(xpos);
-    DrawTextAt(s,xpos);
-  end else
-  if (falign in  [taLeft,taJustified]) then
-    LeftOrJustifiedWrap(s,withNewLine) else
+    DrawTextAt(s, xpos);
+  end
+  else if fAlign in [taLeft, taJustified] then
+    LeftOrJustifiedWrap(s, withNewLine)
+  else
     RightOrCenterWrap(s);
-  if aBookmark<>'' then
-    AddBookMark(aBookmark,fCurrentTextTop);
-  if aLink<>'' then
-    AddLink(aLink,Rect(PrinterPxToMmX(leftOffset),PrinterPxToMmY(fCurrentTextTop),
-      PrinterPxToMmX(rightOffset),PrinterPxToMmY(fCurrentTextTop+fLineHeight)),
-      fCurrentTextPage,aLinkNoBorder);
+  if aBookmark <> '' then
+    AddBookMark(aBookmark, fCurrentTextTop);
+  if aLink <> '' then
+    AddLink(aLink, Rect(
+        PrinterPxToMmX(leftOffset),
+        PrinterPxToMmY(fCurrentTextTop),
+        PrinterPxToMmX(rightOffset),
+        PrinterPxToMmY(fCurrentTextTop + fLineHeight)),
+      fCurrentTextPage, aLinkNoBorder);
     // first line of written text is added
 end;
 
-procedure TGDIPages.LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean);
-var indent, leftOffset, rightOffset, LineWidth: integer;
-    leftstring, rightstring: SynUnicode;
-    firstLoop: boolean;
+procedure TGdiPages.LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean);
+var
+  indent, leftOffset, rightOffset, LineWidth: integer;
+  leftstring, rightstring: SynUnicode;
+  firstLoop: boolean;
 begin
   leftstring := s;
-  Indent := MmToPrinterPxX(fHangIndent);
+  indent := MmToPrinterPxX(fHangIndent);
   firstLoop := true;
   repeat
     CheckYPos;
-    GetTextLimitsPx(leftOffset,rightOffset);
-    LineWidth := rightOffset-leftOffset;
-
+    GetTextLimitsPx(leftOffset, rightOffset);
+    LineWidth := rightOffset - leftOffset;
     // offset leftOffset if hang-indenting...
-    if Indent<>0 then
-      if firstLoop then begin
+    if indent <> 0 then
+      if firstLoop then
+      begin
         firstLoop := false;
-        if (Indent < 0) then begin
-          inc(leftOffset,-Indent);
-          dec(LineWidth,-Indent);
+        if (indent < 0) then
+        begin
+          inc(leftOffset, -indent);
+          dec(LineWidth, -indent);
         end;
-      end else
-      if (Indent > 0) and (Indent < LineWidth) then begin
-        inc(leftOffset,Indent);
-        dec(LineWidth,Indent);
+      end
+      else if (indent > 0) and (indent < LineWidth) then
+      begin
+        inc(leftOffset, indent);
+        dec(LineWidth, indent);
       end;
-
     // dump overrun into rightstring...
-    TrimLine(fCanvas,leftstring,rightstring,LineWidth);
-
+    TrimLine(fCanvas, leftstring, rightstring, LineWidth);
     // HandleTabsAndPrint: prints leftstring after adjusting for tabs and
     // prepending any further text overrun into rightstring ...
     HandleTabsAndPrint(leftstring, rightstring, leftOffset, rightOffset);
-    if length(rightstring)=0 then
+    if rightstring = '' then
       break;
     leftstring := rightstring;
     NewLine;
@@ -2690,60 +2857,67 @@ begin
     NewLine;
 end;
 
-procedure TGDIPages.RightOrCenterWrap(const s: SynUnicode);
-var i,leftOffset,rightOffset, LineWidth: integer;
-    leftstring,rightstring: SynUnicode;
-    offset: integer;
+procedure TGdiPages.RightOrCenterWrap(const s: SynUnicode);
+var
+  i, leftOffset, rightOffset, LineWidth: integer;
+  leftstring, rightstring: SynUnicode;
+  offset: integer;
 begin
   leftstring := s;
   // remove tabs and replace by spaces
-  i := pos(#9,leftstring);
-  while i > 0 do begin
-    delete(leftstring,i,1);
-    insert('    ',leftstring,i);
-    i := pos(#9,leftstring);
+  i := pos(#9, leftstring);
+  while i > 0 do
+  begin
+    delete(leftstring, i, 1);
+    insert('    ', leftstring, i);
+    i := pos(#9, leftstring);
   end;
   // write text
-  SetBkMode(fCanvas.Handle,TRANSPARENT);
+  SetBkMode(fCanvas.Handle, TRANSPARENT);
   repeat
-    GetTextLimitsPx(leftOffset,rightOffset);
-    LineWidth := rightOffset-leftOffset;
-    TrimLine(fCanvas,leftstring,rightstring,LineWidth);
-    case falign of
-      taRight:  Offset := rightOffset-TextWidthC(fCanvas,leftstring)-1;
-      taCenter: Offset := leftOffset+
-        (rightOffset-leftOffset-TextWidthC(fCanvas,leftstring))div 2;
-      else Offset := 0; // should never happen - ?? add assert
+    GetTextLimitsPx(leftOffset, rightOffset);
+    LineWidth := rightOffset - leftOffset;
+    TrimLine(fCanvas, leftstring, rightstring, LineWidth);
+    case fAlign of
+      taRight:
+        offset := rightOffset - TextWidthC(fCanvas, leftstring) - 1;
+      taCenter:
+        offset := leftOffset +
+          (rightOffset - leftOffset - TextWidthC(fCanvas, leftstring)) div 2;
+    else
+      offset := 0; // should never happen - ?? add assert
     end;
     CheckYPos;
-    TextOut(fCanvas,Offset,fCurrentYPos,leftstring);
-    if length(rightstring) = 0 then break;
+    TextOut(fCanvas, offset, fCurrentYPos, leftstring);
+    if rightstring = '' then
+      break;
     leftstring := rightstring;
     NewLine;
   until false;
   NewLine;
 end;
 
-procedure TGDIPages.GetTextLimitsPx(var LeftOffset, RightOffset: integer);
+procedure TGdiPages.GetTextLimitsPx(var LeftOffset, RightOffset: integer);
 begin
   // Offsets (in Printer pixels) based on current page margins
   LeftOffset := fPageMarginsPx.left;
   if fForcedLeftOffset <> -1 then
-    leftOffset := fForcedLeftOffset;
-  RightOffset := fPhysicalSizePx.x-fPageMarginsPx.right;
+    LeftOffset := fForcedLeftOffset;
+  RightOffset := fPhysicalSizePx.x - fPageMarginsPx.right;
   if RightOffset < LeftOffset then
-    raise Exception.Create('GetTextLimitsPx: wrong margins');
+    raise EReport.CreateUtf8('%.GetTextLimitsPx: wrong margins', [self]);
 end;
 
-procedure TGDIPages.HandleTabsAndPrint(const leftstring: SynUnicode;
+procedure TGdiPages.HandleTabsAndPrint(const leftstring: SynUnicode;
   var rightstring: SynUnicode; leftOffset, rightOffset: integer);
 const
-    // if a tabstop is very close to the right margin, it may spoil justifying...
-    MIN_CHAR_WIDTH_PX = 5;
-var i, spacecount, linewidth, tabPos, tabIndex, PWLen: integer;
-    ls, rs: SynUnicode;
-    size: TSize;
-    PW: PWideChar;
+  // if a tabstop is very close to the right margin, it may spoil justifying...
+  MIN_CHAR_WIDTH_PX = 5;
+var
+  i, spacecount, linewidth, tabPos, tabIndex, PWLen: integer;
+  ls, rs: SynUnicode;
+  size: TSize;
+  PW: PWideChar;
 begin
   // handles tabs one at a time and prints text into the available space...
   // (unfortunately there's no equivalent GetTextExtentExPoint() for tabbed text
@@ -2752,259 +2926,305 @@ begin
   // chars that will fit within the specified space)
   ls := leftstring;
   linewidth := rightOffset - leftOffset;
-  tabPos := pos(#9,ls);
-  SetBkMode(fCanvas.Handle,TRANSPARENT);
-  while tabPos > 0 do begin // and still room to print
+  tabPos := pos(#9, ls);
+  SetBkMode(fCanvas.Handle, TRANSPARENT);
+  while tabPos > 0 do
+  begin // and still room to print
     // split line at the tab ...
     if rs <> '' then
-        rs := copy(ls,tabPos+1,length(ls)) + ' '+ rs else
-        rs := copy(ls,tabPos+1,length(ls));
+      rs := copy(ls, tabPos + 1, length(ls)) + ' ' + rs
+    else
+      rs := copy(ls, tabPos + 1, length(ls));
     // add a trailing space so next the tabstop is at least one space away ...
-    ls := copy(ls,1,tabPos-1)+' ';
+    ls := copy(ls, 1, tabPos - 1) + ' ';
     // get offset of next tabstop ...
-    size := TextExtent(fCanvas,ls,tabPos);
+    size := TextExtent(fCanvas, ls, tabPos);
     i := leftOffset + size.cx; //minimum pos for next tabstop
     tabIndex := 0;
     while tabIndex < MAXTABS do
       if fTab[tabIndex] > i then
-        break else
+        break
+      else
         inc(tabIndex);
     if (tabIndex = MAXTABS) or
-      (fTab[tabIndex] >= rightOffset - MIN_CHAR_WIDTH_PX) then begin
+       (fTab[tabIndex] >= rightOffset - MIN_CHAR_WIDTH_PX) then
+    begin
       // no tabstop found to align 'rs' to, so ...
       // rather than left aligning 'ls', remove its appended space and
       // break out ready to print it ? align left&right justified.
-      SetLength(ls,length(ls)-1);
+      SetLength(ls, length(ls) - 1);
       break;
     end;
     // tabstop found so DrawText 'ls' simply left aligned ...
-    TextOut(fCanvas,leftOffset,fCurrentYPos,ls);
+    TextOut(fCanvas, leftOffset, fCurrentYPos, ls);
     leftOffset := fTab[tabIndex];
     linewidth := rightOffset - leftOffset;
     ls := rs;
-    TrimLine(fCanvas,ls,rs,linewidth);
-    tabPos := pos(#9,ls);
+    TrimLine(fCanvas, ls, rs, linewidth);
+    tabPos := pos(#9, ls);
   end;
   if rs <> '' then
-    rightstring := rs + ' '+ rightstring;
-
+    rightstring := rs + ' ' + rightstring;
   // OK, no TABS now in ls...
-  InternalUnicodeString(ls,PW,PWLen,@size);
+  InternalUnicodeString(ls, PW, PWLen, @size);
   // print ls into (remaining) linewidth at (leftOffset, fCurrentYPos)
-  if (falign = taLeft) or (rightstring = '') then begin // left aligned
-    if BiDiMode=bdRightToLeft then
-      leftOffset := rightOffset-size.cx;
-    TextOut(fCanvas,leftOffset,fCurrentYPos,PW,PWLen);
-    fForcedLeftOffset := leftOffset+size.cx;
+  if (fAlign = taLeft) or
+     (rightstring = '') then
+  begin
+    // left aligned
+    if BiDiMode = bdRightToLeft then
+      leftOffset := rightOffset - size.cx;
+    TextOut(fCanvas, leftOffset, fCurrentYPos, PW, PWLen);
+    fForcedLeftOffset := leftOffset + size.cx;
     // don't care about line width: it should be always equal or smaller,
     // and we are left aligned
-  end else begin // justified
+  end
+  else
+  begin
+    // justified
     spacecount := 0;
     for i := 1 to length(ls) do
       if ls[i] = ' ' then
         inc(spacecount);
-    if spacecount>0 then
+    if spacecount > 0 then
       SetTextJustification(fCanvas.Handle, linewidth - size.cx, spacecount);
-    TextOut(fCanvas,leftOffset,fCurrentYPos,PW,PWLen);
-    SetTextJustification(fCanvas.Handle,0,0);
+    TextOut(fCanvas, leftOffset, fCurrentYPos, PW, PWLen);
+    SetTextJustification(fCanvas.Handle, 0, 0);
   end;
 end;
 
-procedure TGDIPages.PreviewPaint(Sender: TObject);
-var R: TRect;
-    P1,P2: TPoint;
-    metapage: TMetaFile;
+procedure TGdiPages.PreviewPaint(Sender: TObject);
+var
+  R: TRect;
+  P1, P2: TPoint;
+  metapage: TMetaFile;
 begin
-  if csDesigning in ComponentState then begin // no preview at design time
+  if csDesigning in ComponentState then
+  begin
+    // no preview at design time
     R := fPreviewSurface.ClientRect;
     fPreviewSurface.Canvas.Brush.Color := Color;
     fPreviewSurface.Canvas.FillRect(R);
     exit;
   end;
-  if not Visible then begin
+  if not Visible then
+  begin
     FreeAndNil(PreviewSurfaceBitmap);
     exit;
   end;
-  if PreviewSurfaceBitmap<>nil then
-    fPreviewSurface.Canvas.Draw(0,0,PreviewSurfaceBitmap) else
-  with fPreviewSurface do begin
-    // paint the page white with a dark gray line around it
-    R := ClientRect;
-    PreviewSurfaceBitmap := TBitmap.Create;
-    PreviewSurfaceBitmap.Width := R.Right;
-    PreviewSurfaceBitmap.Height := R.Bottom;
-    with PreviewSurfaceBitmap.Canvas do begin
-      Brush.Color := Color; // background color
-      FillRect(R);
-      InflateRect(R,-GRAY_MARGIN,-GRAY_MARGIN);
-      Brush.Color := clWhite;
-      Pen.Width := 1;
-      Pen.Color := clGray;
-      Rectangle(R);
-      Refresh;
+  if PreviewSurfaceBitmap <> nil then
+    fPreviewSurface.Canvas.Draw(0, 0, PreviewSurfaceBitmap)
+  else
+    with fPreviewSurface do
+    begin
+      // paint the page white with a dark gray line around it
+      R := ClientRect;
+      PreviewSurfaceBitmap := TBitmap.Create;
+      PreviewSurfaceBitmap.Width := R.Right;
+      PreviewSurfaceBitmap.Height := R.Bottom;
+      with PreviewSurfaceBitmap.Canvas do
+      begin
+        Brush.Color := Color; // background color
+        FillRect(R);
+        InflateRect(R, -GRAY_MARGIN, -GRAY_MARGIN);
+        Brush.Color := clWhite;
+        Pen.Width := 1;
+        Pen.Color := clGray;
+        Rectangle(R);
+        Refresh;
+      end;
+      // draw the metafile on the page
+      if (fPages <> nil) and (cardinal(Page - 1) <= cardinal(High(fPages))) and
+        (fPages[Page - 1].MetaFileCompressed <> '') then
+      begin
+        // note: we must use a temporary TMetaFile, otherwise the Pages[] content
+        // is changed (screen dpi is changed but not reset in nested emf) and the
+        // resulting report is incorrect on most printers, due to a driver bug :(
+        metapage := GetMetaFileForPage(Page - 1);
+      {$ifdef GDIPLUSDRAW}
+        // anti-aliased drawing using GDI+
+        if not ForceNoAntiAliased then
+          DrawAntiAliased(metapage, PreviewSurfaceBitmap.Canvas.Handle, R,
+            AntiAliasedOptions)
+        else
+      {$endif GDIPLUSDRAW}
+          // fast direct GDI painting, with no antialiaising:
+          PreviewSurfaceBitmap.Canvas.StretchDraw(R, metapage);
+        PreviewSurfaceBitmap.Canvas.Refresh;
+      end;
+      // draw the change-page grey "arrow" buttons
+      if Page > 1 then
+      begin
+        P1.X := R.Left + 10;
+        P2.X := R.Left + 1;
+        PageLeftButton.X := P2.X;
+        P1.Y := R.Top + 11;
+        P2.Y := P1.Y;
+        PageLeftButton.Y := P1.Y - 10;
+        DrawArrowInternal(PreviewSurfaceBitmap.Canvas, P1, P2, 10, true);
+      end
+      else
+        PageLeftButton.X := 0;
+      if Page < PageCount then
+      begin
+        P1.X := R.Right - 10;
+        PageRightButton.X := P1.X;
+        P2.X := R.Right - 1;
+        P1.Y := R.Top + 11;
+        P2.Y := P1.Y;
+        PageRightButton.Y := P1.Y - 10;
+        DrawArrowInternal(PreviewSurfaceBitmap.Canvas, P1, P2, 10, true);
+      end
+      else
+        PageRightButton.X := 0;
+      //draw the page shadows
+      R.Top := GRAY_MARGIN + 3;
+      R.Left := ClientWidth - GRAY_MARGIN;
+      R.Bottom := ClientHeight - GRAY_MARGIN + 3;
+      R.Right := R.Left + 3;
+      PreviewSurfaceBitmap.Canvas.brush.color := clGray;
+      PreviewSurfaceBitmap.Canvas.FillRect(R);
+      R.Top := ClientHeight - GRAY_MARGIN;
+      R.Left := GRAY_MARGIN + 3;
+      R.Bottom := R.Top + 3;
+      R.Right := ClientWidth - GRAY_MARGIN + 3;
+      PreviewSurfaceBitmap.Canvas.brush.color := clGray;
+      PreviewSurfaceBitmap.Canvas.FillRect(R);
+      Canvas.Draw(0, 0, PreviewSurfaceBitmap)
     end;
-    // draw the metafile on the page
-    if (fPages<>nil) and (cardinal(Page-1)<=cardinal(High(fPages))) and
-       (fPages[Page-1].MetaFileCompressed<>'') then begin
-      // note: we must use a temporary TMetaFile, otherwise the Pages[] content
-      // is changed (screen dpi is changed but not reset in nested emf) and the
-      // resulting report is incorrect on most printers, due to a driver bug :(
-      metapage := GetMetaFileForPage(Page-1);
-{$ifdef GDIPLUSDRAW} // anti aliased drawing:
-      if not ForceNoAntiAliased then
-//        DrawEmfGdip(PreviewSurfaceBitmap.Canvas.Handle,metapage,R,
-//          ForceInternalAntiAliased,ForceInternalAntiAliasedFontFallBack) else
-        DrawAntiAliased(metapage,PreviewSurfaceBitmap.Canvas.Handle,R) else
-{$endif} // fast direct GDI painting, with no antialiaising:
-        PreviewSurfaceBitmap.Canvas.StretchDraw(R,metapage);
-      PreviewSurfaceBitmap.Canvas.Refresh;
-    end;
-    // draw the change page grey "arrow" buttons
-    if Page>1 then begin
-      P1.X := R.Left+10;
-      P2.X := R.Left+1;
-      PageLeftButton.X := P2.X;
-      P1.Y := R.Top+11;
-      P2.Y := P1.Y;
-      PageLeftButton.Y := P1.Y-10;
-      DrawArrowInternal(PreviewSurfaceBitmap.Canvas,P1,P2,10,true);
-    end else
-      PageLeftButton.X := 0;
-    if Page<PageCount then begin
-      P1.X := R.Right-10;
-      PageRightButton.X := P1.X;
-      P2.X := R.Right-1;
-      P1.Y := R.Top+11;
-      P2.Y := P1.Y;
-      PageRightButton.Y := P1.Y-10;
-      DrawArrowInternal(PreviewSurfaceBitmap.Canvas,P1,P2,10,true);
-    end else
-      PageRightButton.X := 0;
-    //draw the page shadows
-    R.Top := GRAY_MARGIN+3;
-    R.Left := ClientWidth-GRAY_MARGIN;
-    R.Bottom := ClientHeight-GRAY_MARGIN+3;
-    R.Right := R.Left+3;
-    PreviewSurfaceBitmap.Canvas.brush.color := clGray;
-    PreviewSurfaceBitmap.Canvas.FillRect(R);
-    R.Top := ClientHeight-GRAY_MARGIN;
-    R.Left := GRAY_MARGIN+3;
-    R.Bottom := R.Top+3;
-    R.Right := ClientWidth-GRAY_MARGIN+3;
-    PreviewSurfaceBitmap.Canvas.brush.color := clGray;
-    PreviewSurfaceBitmap.Canvas.FillRect(R);
-    Canvas.Draw(0,0,PreviewSurfaceBitmap)
-  end;
-  if fLinksCurrent>=0 then
+  if fLinksCurrent >= 0 then
     fPreviewSurface.Canvas.DrawFocusRect(
-      TGDIPagereference(fLinks.Objects[fLinksCurrent]).Preview);
+      TGdiPageReference(fLinks.Objects[fLinksCurrent]).Preview);
 end;
 
-procedure TGDIPages.PreviewMouseDown(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
-var i: integer;
+procedure TGdiPages.PreviewMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: integer);
+var
+  i: integer;
 begin
-  if Button=mbRight then begin
-    if PopupMenu<>nil then begin
-      with fPreviewSurface.ClientToScreen(Point(X,Y)) do
-        PopupMenu.Popup(X,Y);
+  if Button = mbRight then
+  begin
+    if PopupMenu <> nil then
+    begin
+      with fPreviewSurface.ClientToScreen(Point(X, Y)) do
+        PopupMenu.Popup(X, Y);
       exit;
     end;
-  end else
-  if Button=mbLeft then begin
-    if fLinksCurrent>=0 then begin
+  end
+  else if Button = mbLeft then
+  begin
+    if fLinksCurrent >= 0 then
+    begin
       fPreviewSurface.Canvas.DrawFocusRect(
-        TGDIPagereference(fLinks.Objects[fLinksCurrent]).Preview);
+        TGdiPageReference(fLinks.Objects[fLinksCurrent]).Preview);
       i := fLinksCurrent;
       fLinksCurrent := -1;
       GotoBookmark(fLinks[i]);
-    end else
-    if (PageLeftButton.X<>0) and
-       (cardinal(X-PageLeftButton.X)<10) and
-       (cardinal(Y-PageLeftButton.Y)<20) then begin
-      Page := Page-1;
+    end
+    else if (PageLeftButton.X <> 0) and
+            (cardinal(X - PageLeftButton.X) < 10) and
+            (cardinal(Y - PageLeftButton.Y) < 20) then
+    begin
+      Page := Page - 1;
       exit;
-    end else
-    if (PageRightButton.X<>0) and
-       (cardinal(X-PageRightButton.X)<10) and
-       (cardinal(Y-PageRightButton.Y)<20) then begin
-      Page := Page+1;
+    end
+    else if (PageRightButton.X <> 0) and
+            (cardinal(X - PageRightButton.X) < 10) and
+            (cardinal(Y - PageRightButton.Y) < 20) then
+    begin
+      Page := Page + 1;
       exit;
     end;
   end;
-  if (Button=mbLeft) and (ssDouble in Shift) then
+  if (Button = mbLeft) and
+      (ssDouble in Shift) then
     // allows dblclick to alternate between PAGE_FIT and PAGE_WIDTH
     if ZoomStatus = zsPageWidth then
-      Zoom := PAGE_FIT else
-      Zoom := PAGE_WIDTH else
+      Zoom := PAGE_FIT
+    else
+      Zoom := PAGE_WIDTH
+  else
 {$ifndef MOUSE_CLICK_PERFORM_ZOOM}
-  if Button=mbLeft then begin
-    fButtonDown.X := (X shr 3)shl 3; // move 8 pixels by 8 pixels
-    fButtonDown.Y := (Y shr 3)shl 3;
+  if Button = mbLeft then
+  begin
+    fButtonDown.X := (X shr 3) shl 3; // move 8 pixels by 8 pixels
+    fButtonDown.Y := (Y shr 3) shl 3;
     fButtonDownScroll.X := HorzScrollBar.Position;
     fButtonDownScroll.Y := VertScrollBar.Position;
     Screen.Cursor := crHandPoint;
   end;
-{$endif}
-  //pass the TPaintbox mouse-down event messages to Self (TScrollBox) ...
-  MouseDown(Button,Shift,X+fPreviewSurface.left,Y+fPreviewSurface.Top);
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
+  // pass the TPaintbox mouse-down event messages to self (TScrollBox) ...
+  MouseDown(Button, Shift, X + fPreviewSurface.left, Y + fPreviewSurface.Top);
 end;
 
-procedure TGDIPages.PreviewMouseUp(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+procedure TGdiPages.PreviewMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: integer);
 begin
-  //pass the TPaintbox mouse-up event messages to Self (TScrollBox) ...
-  MouseUp(Button,Shift,X+fPreviewSurface.left,Y+fPreviewSurface.Top);
+  // pass the TPaintbox mouse-up event messages to self (TScrollBox) ...
+  MouseUp(Button, Shift, X + fPreviewSurface.left, Y + fPreviewSurface.Top);
 end;
 
-procedure TGDIPages.PreviewMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+procedure TGdiPages.PreviewMouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: integer);
 {$ifndef MOUSE_CLICK_PERFORM_ZOOM}
-var BX, V: integer;
-{$endif}
-var i: integer;
+var
+  BX, V: integer;
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
+var
+  i: integer;
 begin
-  fMousePos.X := X+fPreviewSurface.left;
-  fMousePos.Y := Y+fPreviewSurface.Top;
-  if fLinksCurrent>=0 then begin
+  fMousePos.X := X + fPreviewSurface.left;
+  fMousePos.Y := Y + fPreviewSurface.Top;
+  if fLinksCurrent >= 0 then
+  begin
     fPreviewSurface.Canvas.DrawFocusRect(
-      TGDIPagereference(fLinks.Objects[fLinksCurrent]).Preview);
+      TGdiPageReference(fLinks.Objects[fLinksCurrent]).Preview);
     fLinksCurrent := -1;
   end;
 {$ifndef MOUSE_CLICK_PERFORM_ZOOM}
-  if fButtonDown.X>=0 then begin
-    X := (X shr 3)shl 3; // move 8 pixels by 8 pixels
-    Y := (Y shr 3)shl 3;
-{    OutputDebugString(pointer(format(
-        'X=%d Y=%d ScrlIni X=%d Y=%d ScrlCurr X=%d Y=%d ',
-        [X,Y,fButtonDownScroll.X,fButtonDownScroll.Y,
-        HorzScrollBar.Position,VertScrollBar.Position]))); }
+  if fButtonDown.X >= 0 then
+  begin
+    X := (X shr 3) shl 3; // move 8 pixels by 8 pixels
+    Y := (Y shr 3) shl 3;
     BX := fButtonDown.X;
     fButtonDown.X := -1; // avoid endless recursive call
-    V := fButtonDownScroll.X-X+BX;
-    if (V>=0) and (HorzScrollBar.Position<>V) and (V<HorzScrollBar.Range) then begin
+    V := fButtonDownScroll.X - X + BX;
+    if (V >= 0) and
+       (HorzScrollBar.Position <> V) and
+       (V < HorzScrollBar.Range) then
+    begin
       HorzScrollBar.Position := V;
       fButtonDownScroll.X := V;
     end;
-    V := fButtonDownScroll.Y-Y+fButtonDown.Y;
-    if (V>=0) and (VertScrollBar.Position<>V) and (V<VertScrollBar.Range) then begin
+    V := fButtonDownScroll.Y - Y + fButtonDown.Y;
+    if (V >= 0) and
+       (VertScrollBar.Position <> V) and
+       (V < VertScrollBar.Range) then
+    begin
       VertScrollBar.Position := V;
       fButtonDownScroll.Y := V;
     end;
     fButtonDown.X := BX;
     exit;
-  end else
-{$endif}
-  for i := 0 to fLinks.Count-1 do
-    with TGDIPagereference(fLinks.Objects[i]) do
-      if (Page=Self.Page) and (X>=Preview.Left) and (X<Preview.Right) and
-         (Y>=Preview.Top) and (Y<Preview.Bottom) then begin
-        fLinksCurrent := i;
-        fPreviewSurface.Canvas.DrawFocusRect(Preview);
-        break;
-      end;
+  end
+  else
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
+    for i := 0 to fLinks.Count - 1 do
+      with TGdiPageReference(fLinks.Objects[i]) do
+        if (Page = self.Page) and
+           (X >= Preview.Left) and
+           (X < Preview.Right) and
+           (Y >= Preview.Top) and
+           (Y < Preview.Bottom) then
+        begin
+          fLinksCurrent := i;
+          fPreviewSurface.Canvas.DrawFocusRect(Preview);
+          break;
+        end;
 end;
 
-procedure TGDIPages.CMFontChanged(var Msg: TMessage);
+procedure TGdiPages.CMFontChanged(var Msg: TMessage);
 begin
   inherited;
   if Assigned(fCanvas) then
@@ -3012,225 +3232,250 @@ begin
   fLineHeight := 0; // force recalculation of lineheight
 end;
 
-procedure TGDIPages.WMGetDlgCode(var Message: TWMGetDlgCode);
+procedure TGdiPages.WMGetDlgCode(var Message: TWMGetDlgCode);
 begin
-  Message.Result := DLGC_WANTARROWS;
+  Message.result := DLGC_WANTARROWS;
 end;
 
-procedure TGDIPages.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TGdiPages.KeyDown(var Key: Word; Shift: TShiftState);
 
-  procedure SetPageAndPosition(newpage,newpos: integer);
+  procedure SetPageAndPosition(newpage, newpos: integer);
   begin
-    perform(WM_SETREDRAW,0,0);
+    perform(WM_SETREDRAW, 0, 0);
     Page := newpage;
     VertScrollbar.position := newpos;
-    perform(WM_SETREDRAW,1,0);
+    perform(WM_SETREDRAW, 1, 0);
     refresh;
   end;
 
 var
-  OldPosition,lh: integer;
+  OldPosition, lh: integer;
 begin
   lh := PrinterPxToScreenPxY(GetLineHeight);
   case Key of
-  VK_DOWN:
-    with VertScrollbar do begin
-      OldPosition := Position;
-      position := position + lh;
-      if (Position = OldPosition) and (Page < PageCount) then
-        SetPageAndPosition(Page+1,0);
-    end;
-  VK_UP:
-    with VertScrollbar do begin
-      OldPosition := Position;
-      position := position - lh;
-      if (Position = OldPosition) and (Page > 1) then
-        SetPageAndPosition(Page-1,range);
-    end;
-  VK_RIGHT:
-    with HorzScrollbar do
-      position := position + max(lh,0);
-  VK_LEFT:
-    with HorzScrollbar do
-      position := position - min(lh,range);
-  VK_NEXT:
-    with VertScrollbar do
-      if (shift = [ssCtrl]) and (Page < PageCount) then
-        SetPageAndPosition(PageCount,0)
-      else begin
+    VK_DOWN:
+      with VertScrollbar do
+      begin
         OldPosition := Position;
-        position := position + max(clientheight - lh,0);
-        if (Position = OldPosition) and (Page < PageCount) then
-          SetPageAndPosition(Page+1,0);
+        position := position + lh;
+        if (Position = OldPosition) and
+           (Page < PageCount) then
+          SetPageAndPosition(Page + 1, 0);
       end;
-  VK_PRIOR:
-    with VertScrollbar do begin
-      if (shift = [ssCtrl]) and (Page > 1) then
-          SetPageAndPosition(1,0)
-      else begin
+    VK_UP:
+      with VertScrollbar do
+      begin
         OldPosition := Position;
-        position := position - max(clientheight-lh,0);
-        if (Position = OldPosition) and (Page > 1) then
-          SetPageAndPosition(Page-1,range);
+        position := position - lh;
+        if (Position = OldPosition) and
+           (Page > 1) then
+          SetPageAndPosition(Page - 1, range);
       end;
-    end;
-  VK_ADD, VK_SUBTRACT, 187, 189:
-    if ssCtrl in Shift then begin
-      fZoomIn := Key in [VK_ADD,187]; // Ctrl+ Ctrl- are standard zoom IN/OUT
-      ZoomTimer(nil);
-    end;
-  VK_ESCAPE:
-    if PreviewForm<>nil then
-      PreviewForm.Close; // ESC will close preview form (if any)
+    VK_RIGHT:
+      with HorzScrollbar do
+        position := position + max(lh, 0);
+    VK_LEFT:
+      with HorzScrollbar do
+        position := position - min(lh, range);
+    VK_NEXT:
+      with VertScrollbar do
+        if (Shift = [ssCtrl]) and
+           (Page < PageCount) then
+          SetPageAndPosition(PageCount, 0)
+        else
+        begin
+          OldPosition := Position;
+          position := position + max(clientheight - lh, 0);
+          if (Position = OldPosition) and
+             (Page < PageCount) then
+            SetPageAndPosition(Page + 1, 0);
+        end;
+    VK_PRIOR:
+      with VertScrollbar do
+      begin
+        if (Shift = [ssCtrl]) and (Page > 1) then
+          SetPageAndPosition(1, 0)
+        else
+        begin
+          OldPosition := Position;
+          position := position - max(clientheight - lh, 0);
+          if (Position = OldPosition) and
+             (Page > 1) then
+            SetPageAndPosition(Page - 1, range);
+        end;
+      end;
+    VK_ADD,
+    VK_SUBTRACT,
+    187,
+    189:
+      if ssCtrl in Shift then
+      begin
+        fZoomIn := Key in [VK_ADD, 187]; // Ctrl+ Ctrl- are standard zoom IN/OUT
+        ZoomTimer(nil);
+      end;
+    VK_ESCAPE:
+      if PreviewForm <> nil then
+        PreviewForm.Close; // ESC will close preview form (if any)
   end;
   inherited;
 end;
 
-procedure TGDIPages.CreateWnd;
+procedure TGdiPages.CreateWnd;
 begin
   inherited CreateWnd;
   // force page repositioning  +/-resizing
   case ZoomStatus of
-    zsPercent:   ResizeAndCenterPaintbox;
-    zsPageWidth: zoom := PAGE_WIDTH;
-    else         zoom := PAGE_FIT;
+    zsPercent:
+      ResizeAndCenterPaintbox;
+    zsPageWidth:
+      zoom := PAGE_WIDTH;
+  else
+    zoom := PAGE_FIT;
   end;
 end;
 
-procedure TGDIPages.Resize;
+procedure TGdiPages.Resize;
 begin
   // force page repositioning  +/-resizing
   case ZoomStatus of
-    zsPercent:   ResizeAndCenterPaintbox;
-    zsPageWidth: zoom := PAGE_WIDTH;
-    else         zoom := PAGE_FIT;
+    zsPercent:
+      ResizeAndCenterPaintbox;
+    zsPageWidth:
+      zoom := PAGE_WIDTH;
+  else
+    zoom := PAGE_FIT;
   end;
   inherited Resize;
 end;
 
-procedure TGDIPages.MouseDown(Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+procedure TGdiPages.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 begin
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
   // allow overriding of default mouse handling...
-  if not Assigned(OnMouseDown) then begin
+  if not Assigned(OnMouseDown) then
+  begin
     fZoomIn := (Button = mbLeft);
     ZoomTimerInternal(X, Y, fZoomIn);
     fZoomTimer.Enabled := true;
   end;
-{$endif}
-  if Button=mbLeft then begin
-    if PopupMenu<>nil then begin
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
+  if Button = mbLeft then
+  begin
+    if PopupMenu <> nil then
+    begin
       with fPreviewSurface do
-      if (X<Left) or (X>Left+Width) then
-      with Self.ClientToScreen(Point(X,Y)) do
-        Self.PopupMenu.Popup(X,Y);
+        if (X < Left) or
+           (X > Left + Width) then
+          with self.ClientToScreen(Point(X, Y)) do
+            self.PopupMenu.Popup(X, Y);
     end;
   end;
-  if canfocus and not focused then
+  if canfocus and
+     not focused then
     Setfocus;
   inherited;
 end;
 
-procedure TGDIPages.MouseUp(Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+procedure TGdiPages.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 begin
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
-  fZoomTimer.enabled := false;
+  fZoomTimer.enabled := false; 
 {$else}
-  fButtonDown.X := -1; // so MouseMove() won't scroll paintbox
+  fButtonDown.X := -1;
+  // so MouseMoveFast() won't scroll paintbox
   Screen.Cursor := crDefault;
-{$endif}
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
   inherited;
 end;
 
-{$IFNDEF VER100}
-function TGDIPages.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
-      MousePos: TPoint): Boolean;
-var key: word;
+{$ifndef FPC}
+function TGdiPages.DoMouseWheel(Shift: TShiftState; WheelDelta: integer;
+  MousePos: TPoint): boolean;
+var
+  key: word;
 begin
   //treat mousewheel events as if a down-arrow or up-arrow event ...
-  if Shift=[] then begin
+  if Shift = [] then
+  begin
     if WheelDelta < 0 then
-      key := VK_DOWN else
+      key := VK_DOWN
+    else
       key := VK_UP;
-    KeyDown(Key,[]);
-  end else
-  if Shift=[ssCtrl] then
-    ZoomTimerInternal(fMousePos.X,fMousePos.Y,(WheelDelta>0));
-  Result := true;
+    KeyDown(key, []);
+  end
+  else if Shift = [ssCtrl] then
+    ZoomTimerInternal(fMousePos.X, fMousePos.Y, (WheelDelta > 0));
+  result := true;
 end;
-{$ENDIF}
+{$endif FPC}
 
-constructor TGDIPages.Create(AOwner: TComponent);
+constructor TGdiPages.Create(AOwner: TComponent);
 {$ifdef USEPDFPRINTER}
-var i: integer;
-    aName: string;
-{$endif}
+var
+  i: integer;
+  aName: string;
+{$endif USEPDFPRINTER}
 begin
   inherited Create(AOwner);
-  SetLength(fTab,MAXTABS);
-  {$ifndef WIN64} // Win64 gdiplus.dll raises some unexpected errors
-  ForceInternalAntiAliased := true; // GDI+ 1.1 ConvertToEmfPlus is buggy
-  {$endif}
+  SetLength(fTab, MAXTABS);
   PopupMenuClass := TPopupMenu;
   // DoubleBuffered := true; // avoiding flicker is done in Paint method
   Height := 150;
   width := 200;
   ControlStyle := ControlStyle - [csAcceptsControls];
-  if (AOWner<>nil) and AOWner.InheritsFrom(TCustomForm) then
-    Color := TCustomForm(AOwner).Color else
+  if (AOwner <> nil) and
+     AOwner.InheritsFrom(TCustomForm) then
+    Color := TCustomForm(AOwner).Color
+  else
     Color := clLtGray;
-  HorzScrollBar.Tracking := True;
-  VertScrollBar.Tracking := True;
+  HorzScrollBar.Tracking := true;
+  VertScrollBar.Tracking := true;
   tabstop := true;
-
   Font.Name := 'Tahoma';
   Font.Size := 12;
   fLineSpacing := lsSingle;
   fOrientation := poPortrait;
   fUseOutlines := true;
-
   fHeaderLines := TObjectList.Create;
   fFooterLines := TObjectList.Create;
-
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
-  fZoomTimer := TTimer.create(Self);
+  fZoomTimer := TTimer.create(self);
   fZoomTimer.Interval := 200;
   fZoomTimer.OnTimer := ZoomTimer;
   fZoomTimer.enabled := false;
 {$else}
-  fButtonDown.X := -1; // so MouseMove() won't scroll paintbox
-{$endif}
+  fButtonDown.X := -1; // so MouseMoveFast() won't scroll paintbox
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
   Int64(fCustomPxPerInch) := -1;
   Int64(fCustomPageSize) := -1;
   Int64(fCustomNonPrintableOffset) := -1;
   Int64(fCustomPageMargins.TopLeft) := -1;
-
-  fHasPrinterInstalled := not (csDesigning in componentState)
-    and PrinterDriverExists;
+  fHasPrinterInstalled := not (csDesigning in componentState) and
+    PrinterDriverExists;
 {$ifdef USEPDFPRINTER}
   fPDFPrinterIndex := -1;
   if fHasPrinterInstalled then
-    for i := 0 to Printer.Printers.Count-1 do begin
+    for i := 0 to Printer.Printers.Count - 1 do
+    begin
       aName := Printer.Printers[i];
-      if pos('doPDF',aName)=1 then begin
+      if pos('doPDF', aName) = 1 then
+      begin
         fPDFPrinterIndex := i;
         break;
-      end else
-      if pos('PDF',aName)>0 then
+      end
+      else if pos('PDF', aName) > 0 then
         fPDFPrinterIndex := i;
     end;
-  fHasPDFPrinterInstalled := (fPDFPrinterIndex<>-1);
+  fHasPDFPrinterInstalled := (fPDFPrinterIndex <> -1); 
 {$else}
-  fExportPDFUseFontFallBack := true;
-  fExportPDFEncryptionPermissions := PDF_PERMISSION_ALL;
-  fExportPDFEncryptionOwnerPassword := 'SynopsePDFEngine'+SYNOPSE_FRAMEWORK_VERSION;
-{$endif}
+  fExportPdfUseFontFallBack := true;
+  fExportPdfEncryptionPermissions := PDF_PERMISSION_ALL;
+  fExportPdfEncryptionOwnerPassword := 'mORMot ' + SYNOPSE_FRAMEWORK_VERSION;
+{$endif USEPDFPRINTER}
   GetPrinterParams; // necessary, but will also be updated in BeginDoc()
   fCanvas := nil;
-  fPreviewSurface := TPagePaintbox.Create(Self);
-  fPreviewSurface.parent := Self;
+  fPreviewSurface := TPagePaintbox.Create(self);
+  fPreviewSurface.parent := self;
   fPreviewSurface.OnPaint := PreviewPaint;
   fPreviewSurface.OnMouseDown := PreviewMouseDown;
   fPreviewSurface.OnMouseUp := PreviewMouseUp;
@@ -3243,7 +3488,7 @@ begin
   fForcedLeftOffset := -1;
 end;
 
-destructor TGDIPages.Destroy;
+destructor TGdiPages.Destroy;
 begin
   Clear;
   fHeaderLines.free;
@@ -3252,7 +3497,7 @@ begin
   PreviewSurfaceBitmap.Free;
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
   fZoomTimer.free;
-{$endif}
+{$endif MOUSE_CLICK_PERFORM_ZOOM}
   fOutline.Free;
   fLinks.Free;
   fBookmarks.Free;
@@ -3261,154 +3506,183 @@ begin
   inherited Destroy;
 end;
 
-procedure TGDIPages.Invalidate;
+procedure TGdiPages.Invalidate;
 begin
   FreeAndNil(PreviewSurfaceBitmap); // invalidate custom double buffering
   inherited;
 end;
 
-procedure TGDIPages.BeginDoc;
+procedure TGdiPages.BeginDoc;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   Clear;
   GetPrinterParams; // essential as Printers.printer object may have changed
   fHangIndent := 0;
   fAlign := taLeft;
-  SetPageMargins(Rect(10,10,10,10));
+  SetPageMargins(Rect(10, 10, 10, 10));
   fVirtualPageNum := 0;
   Application.ProcessMessages;
   NewPageInternal;  // create a blank page
   // preview resize in case Printers.printer object has changed
   case ZoomStatus of
-    zsPercent:   zoom := fzoom;
-    zsPageWidth: zoom := PAGE_WIDTH;
-    else zoom := PAGE_FIT;
+    zsPercent:
+      SetZoom(fZoom);
+    zsPageWidth:
+      SetZoom(PAGE_WIDTH);
+  else
+    SetZoom(PAGE_FIT);
   end;
-  fButtonDown.X := -1; // so MouseMove() won't scroll paintbox
+  fButtonDown.X := -1; // so MouseMoveFast() won't scroll paintbox
 end;
 
-procedure TGDIPages.DrawText(const s: string; withNewLine : boolean);
+procedure TGdiPages.DrawText(const s: string; withNewLine: boolean);
 begin
   DrawTextW(StringToSynUnicode(s), withNewLine);
 end;
 
-procedure TGDIPages.DrawTextW(const s: SynUnicode; withNewLine: boolean);
-var P, Start: PWideChar;
-    tmpStr: SynUnicode;
+procedure TGdiPages.DrawTextW(const s: SynUnicode; withNewLine: boolean);
+var
+  P, Start: PWideChar;
+  tmpStr: SynUnicode;
 begin
-  if Self=nil then exit;
+  if self = nil then
+    exit;
   CheckYPos;
-  if s = '' then begin
+  if s = '' then
+  begin
     if withNewLine then
       NewLine;
-  end else begin
+  end
+  else
+  begin
     // split NewLine characters (#13 or #13#10) into multi lines
     P := pointer(s);
-    while P^ <> #0 do begin
+    while P^ <> #0 do
+    begin
       Start := P;
-      while not (ord(P^) in [0, 10, 13]) do Inc(P);
-      SetString(tmpStr, Start, P-Start);
+      while not (ord(P^) in [0, 10, 13]) do
+        inc(P);
+      SetString(tmpStr, Start, P - Start);
       if not fInHeaderOrFooter then
-        fCanvasText := fCanvasText+SynUnicodeToString(tmpStr)+#13#10;
+        fCanvasText := fCanvasText + SynUnicodeToString(tmpStr) + #13#10;
       PrintFormattedLine(tmpStr, FORMAT_DEFAULT, '', '', withNewLine);
-      if P^ = #13 then Inc(P);
-      if P^ = #10 then Inc(P);
+      if P^ = #13 then
+        inc(P);
+      if P^ = #10 then
+        inc(P);
     end;
   end;
 end;
 
-procedure TGDIPages.DrawTextU(const s: RawUTF8; withNewLine: boolean);
+procedure TGdiPages.DrawTextU(const s: RawUtf8; withNewLine: boolean);
 begin
-  DrawTextW(UTF8ToSynUnicode(s),withNewLine);
+  DrawTextW(Utf8ToSynUnicode(s), withNewLine);
 end;
 
-procedure TGDIPages.DrawTitle(const s: SynUnicode; DrawBottomLine: boolean;
-  OutlineLevel: Integer; const aBookmark,aLink: string; aLinkNoBorder: boolean);
-var H: integer;
-    str: string;
+procedure TGdiPages.DrawTitle(const s: SynUnicode; DrawBottomLine: boolean;
+  OutlineLevel: integer; const aBookmark, aLink: string; aLinkNoBorder: boolean);
+var
+  H: integer;
+  str: string;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckYPos;
   SaveLayout;
   try
     str := SynUnicodeToString(s);
     if not fInHeaderOrFooter then
-      fCanvasText := fCanvasText+str+#13#10; // copy as text
-    PrintFormattedLine(s,TitleFlags,aBookMark,aLink,true,aLinkNoBorder);
+      fCanvasText := fCanvasText + str + #13#10; // copy as text
+    PrintFormattedLine(s, TitleFlags, aBookmark, aLink, true, aLinkNoBorder);
     if UseOutlines then
-      AddOutline(str,OutlineLevel,fCurrentTextTop,fCurrentTextPage);
-    if DrawBottomLine then begin
-      H := (GetLineHeight*15) shr 5;
+      AddOutline(str, OutlineLevel, fCurrentTextTop, fCurrentTextPage);
+    if DrawBottomLine then
+    begin
+      H := (GetLineHeight * 15) shr 5;
       dec(fCurrentYPos, H);
-      LineInternal(fPageMarginsPx.left, fPhysicalSizePx.x-fPageMarginsPx.right, false);
-      inc(fCurrentYPos, H*2);
+      LineInternal(fPageMarginsPx.left, fPhysicalSizePx.x - fPageMarginsPx.right, false);
+      inc(fCurrentYPos, H * 2);
     end;
   finally
     RestoreSavedLayout;
-  end;
+  end;                    
 end;
 
-procedure TGDIPages.DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string;
-  CheckPageNumber,aLinkNoBorder: boolean);
-var i: integer;
-    R: TRect;
-    Size: TSize;
+procedure TGdiPages.DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string;
+  CheckPageNumber, aLinkNoBorder: boolean);
+var
+  i: integer;
+  R: TRect;
+  Size: TSize;
 begin
-  if (Self=nil) or (s='') then exit;
+  if (self = nil) or
+     (s = '') then
+    exit;
   CheckYPos;
-  if CheckPageNumber then begin
-    i := pos(PAGENUMBER,LowerCaseU(s));
-    if i > 0 then begin
-      Delete(s,i,14);
-      Insert(UTF8ToSynUnicode(Int32ToUtf8(fVirtualPageNum)),s,i);
+  if CheckPageNumber then
+  begin
+    i := pos(PAGENUMBER, LowerCaseU(s));
+    if i > 0 then
+    begin
+      Delete(s, i, 14);
+      Insert(Utf8ToSynUnicode(Int32ToUtf8(fVirtualPageNum)), s, i);
     end;
   end;
-  SetBkMode(fCanvas.Handle,TRANSPARENT);
-  Size := TextExtent(fCanvas,s);
+  SetBkMode(fCanvas.Handle, TRANSPARENT);
+  Size := TextExtent(fCanvas, s);
   R.Left := MmToPrinterPxX(XPos);
-  case falign of
-    taRight:  dec(R.Left,Size.cx+1);
-    taCenter: dec(R.Left,Size.cx shr 1+1);
+  case fAlign of
+    taRight:
+      dec(R.Left, Size.cx + 1);
+    taCenter:
+      dec(R.Left, Size.cx shr 1 + 1);
   end;
   R.Top := fCurrentYPos;
-  TextOut(fCanvas,R.Left,R.Top,s);
+  TextOut(fCanvas, R.Left, R.Top, s);
   if not fInHeaderOrFooter then // copy as text on a new line
-    fCanvasText := fCanvasText+SynUnicodeToString(s)+#13#10;
-  if aLink<>'' then begin
-    R.Right := R.Left+Size.cx;
-    R.Bottom := R.Top+Size.cy;
-    AddLink(aLink,PrinterToMM(R),0,aLinkNoBorder);
+    fCanvasText := fCanvasText + SynUnicodeToString(s) + #13#10;
+  if aLink <> '' then
+  begin
+    R.Right := R.Left + Size.cx;
+    R.Bottom := R.Top + Size.cy;
+    AddLink(aLink, PrinterToMM(R), 0, aLinkNoBorder);
   end;
 end;
 
-procedure TGDIPages.DrawAngledTextAt(const s: SynUnicode; XPos, Angle: integer);
+procedure TGdiPages.DrawAngledTextAt(const s: SynUnicode; XPos, Angle: integer);
 var
   lf: TLogFont;
-  OldFontHdl,NewFontHdl: HFont;
+  OldFontHdl, NewFontHdl: HFont;
 begin
-  if (s='') or (Self=nil) then exit; // avoid GPF
+  if (s = '') or
+     (self = nil) then
+    exit; // avoid GPF
   CheckYPos;
   XPos := MmToPrinterPxX(XPos);
-  SetBkMode(fCanvas.Handle,TRANSPARENT);
-  with fCanvas do begin
-    if GetObject(Font.Handle, SizeOf(lf), @lf) = 0 then exit;
+  SetBkMode(fCanvas.Handle, TRANSPARENT);
+  with fCanvas do
+  begin
+    if GetObject(Font.Handle, SizeOf(lf), @lf) = 0 then
+      exit;
     lf.lfEscapement := Angle * 10;
     lf.lfOrientation := Angle * 10;
     lf.lfOutPrecision := OUT_TT_ONLY_PRECIS;
     NewFontHdl := CreateFontIndirect(lf);
-    OldFontHdl := selectObject(handle,NewFontHdl);
+    OldFontHdl := selectObject(handle, NewFontHdl);
   end;
-  TextOut(fCanvas,XPos,fCurrentYPos,s);
-  selectObject(fCanvas.handle,OldFontHdl);
+  TextOut(fCanvas, XPos, fCurrentYPos, s);
+  selectObject(fCanvas.handle, OldFontHdl);
   DeleteObject(NewFontHdl);
   if not fInHeaderOrFooter then
-    fCanvasText := fCanvasText+s+#13#10; // copy as text on a new line
+    fCanvasText := fCanvasText + s + #13#10; // copy as text on a new line
 end;
 
-function TGDIPages.MmToPrinter(const R: TRect): TRect;
+function TGdiPages.MmToPrinter(const R: TRect): TRect;
 begin
-  if Self=nil then begin
-    FillChar(result,sizeof(result),0);
+  if self = nil then
+  begin
+    FillCharFast(result, SizeOf(result), 0);
     exit; // avoid GPF
   end;
   result.left := MmToPrinterPxX(R.left);
@@ -3417,10 +3691,11 @@ begin
   result.bottom := MmToPrinterPxY(R.bottom);
 end;
 
-function TGDIPages.PrinterToMM(const R: TRect): TRect;
+function TGdiPages.PrinterToMM(const R: TRect): TRect;
 begin
-  if Self=nil then begin
-    FillChar(result,sizeof(result),0);
+  if self = nil then
+  begin
+    FillCharFast(result, SizeOf(result), 0);
     exit; // avoid GPF
   end;
   result.left := PrinterPxToMmX(R.left);
@@ -3429,138 +3704,160 @@ begin
   result.bottom := PrinterPxToMmY(R.bottom);
 end;
 
-procedure TGDIPages.DrawBox(left,top,right,bottom: integer);
+procedure TGdiPages.DrawBox(left, top, right, bottom: integer);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   left := MmToPrinterPxX(left);
   top := MmToPrinterPxY(top);
   right := MmToPrinterPxX(right);
   bottom := MmToPrinterPxY(bottom);
-  with fCanvas do begin
-    Pen.Width := MulDiv(fDefaultLineWidth,Self.Font.Size,8);
-    if fsBold in Self.Font.style then
-      Pen.Width := Pen.Width +1;
-    MoveTo(left,top);
-    LineTo(right,top);
-    LineTo(right,bottom);
-    LineTo(left,bottom);
-    LineTo(left,top);
+  with fCanvas do
+  begin
+    Pen.Width := MulDiv(fDefaultLineWidth, self.Font.Size, 8);
+    if fsBold in self.Font.style then
+      Pen.Width := Pen.Width + 1;
+    MoveTo(left, top);
+    LineTo(right, top);
+    LineTo(right, bottom);
+    LineTo(left, bottom);
+    LineTo(left, top);
   end;
 end;
 
-procedure TGDIPages.DrawBoxFilled(left,top,right,bottom: integer; Color: TColor);
-var SavedBrushColor: TColor;
+procedure TGdiPages.DrawBoxFilled(left, top, right, bottom: integer; Color: TColor);
+var
+  SavedBrushColor: TColor;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
-  left := MmToPrinterPxX(left);
-  top := MmToPrinterPxY(top);
-  right := MmToPrinterPxX(right);
+  left   := MmToPrinterPxX(left);
+  top    := MmToPrinterPxY(top);
+  right  := MmToPrinterPxX(right);
   bottom := MmToPrinterPxY(bottom);
-  with fCanvas do begin
-    Pen.Width := MulDiv(fDefaultLineWidth,Self.Font.Size,8);
-    if fsBold in Self.Font.style then
-      Pen.Width := Pen.Width +1;
+  with fCanvas do
+  begin
+    Pen.Width := MulDiv(fDefaultLineWidth, self.Font.Size, 8);
+    if fsBold in self.Font.style then
+      Pen.Width := Pen.Width + 1;
     SavedBrushColor := Brush.Color;
     brush.Color := Color;
-    rectangle(left,top,right,bottom);
+    rectangle(left, top, right, bottom);
     Brush.Color := SavedBrushColor;
   end;
 end;
 
-procedure TGDIPages.DrawBMP(rec: TRect; bmp: TBitmap);
+procedure TGdiPages.DrawBmp(rec: TRect; bmp: TBitmap);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   PrintBitmap(fCanvas, MmToPrinter(rec), bmp);
 end;
 
-procedure TGDIPages.DrawBMP(bmp: TBitmap; bLeft, bWidth: integer; const Legend: string);
+procedure TGdiPages.DrawBmp(bmp: TBitmap; bLeft, bWidth: integer;
+  const Legend: string);
 begin
-  DrawGraphic(bmp,bLeft,bWidth,Legend);
+  DrawGraphic(bmp, bLeft, bWidth, Legend);
 end;
 
-procedure TGDIPages.DrawGraphic(graph: TGraphic; bLeft, bWidth: integer;
-  const Legend: SynUnicode);
-var R: TRect;
-    H: Integer;
+procedure TGdiPages.DrawGraphic(graph: TGraphic; bLeft, bWidth: integer;
+ const Legend: SynUnicode);
+var
+  R: TRect;
+  H: integer;
 begin
-  if (self=nil) or (graph=nil) or graph.Empty then
+  if (self = nil) or (graph = nil) or graph.Empty then
     exit; // avoid GPF
   // compute position and draw bitmap
-  if bLeft=maxInt then // do center
-    bLeft := PrinterPxToMmX(fPageMarginsPx.Left+
-      (fPhysicalSizePx.x-fPageMarginsPx.Right-fPageMarginsPx.Left-MmToPrinterPxX(bWidth))shr 1) else
-    inc(bLeft,LeftMargin);
+  if bLeft = maxInt then
+    // center graphic
+    bLeft := PrinterPxToMmX(fPageMarginsPx.Left +
+       (fPhysicalSizePx.x - fPageMarginsPx.Right - fPageMarginsPx.Left -
+        MmToPrinterPxX(bWidth)) shr 1)
+  else
+    // draw left-aligned
+    inc(bLeft, LeftMargin);
   R.Left := bLeft;
-  R.Right := bLeft+bWidth;
-  R.Bottom := (graph.Height*bWidth) div graph.Width;
-  if Legend<>'' then
-    H := LineHeight else
+  R.Right := bLeft + bWidth;
+  R.Bottom := (graph.Height * bWidth) div graph.Width;
+  if Legend <> '' then
+    H := LineHeight
+  else
     H := 0;
-  if not HasSpaceFor(R.Bottom+H) then begin
+  if not HasSpaceFor(R.Bottom + H) then
+  begin
     NewPage;
     DoHeader;
     NewHalfLine;
   end;
   R.Top := CurrentYPos;
-  Inc(R.Bottom,R.Top);
+  inc(R.Bottom, R.Top);
   if graph.InheritsFrom(TBitmap) then
-    DrawBMP(R,graph as TBitmap) else
-  if graph.InheritsFrom(TMetaFile) then
-    DrawMeta(R,graph as TMetaFile);
+    DrawBmp(R, graph as TBitmap)
+  else if graph.InheritsFrom(TMetaFile) then
+    DrawMeta(R, graph as TMetaFile);
   CurrentYPos := R.Bottom;
   // draw optional caption bottom
-  if Legend<>'' then begin
+  if Legend <> '' then
+  begin
     SaveLayout;
     TextAlign := taCenter;
     Font.Style := [];
-    Font.Size := (Font.Size*3)shr 2; // smaller font for caption text
+    Font.Size := (Font.Size * 3) shr 2; // smaller font for caption text
     DrawTextW(Legend);
     RestoreSavedLayout;
-  end else
+  end
+  else
     NewHalfLine;
 end;
-
-procedure TGDIPages.DrawMeta(rec: TRect; meta: TMetafile);
-var old: Integer;
+                          
+procedure TGdiPages.DrawMeta(rec: TRect; meta: TMetaFile);
+var
+  old: integer;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   rec := MmToPrinter(rec);
   old := SaveDC(fCanvas.Handle);   // ensure safe metafile embedding
   PlayEnhMetaFile(fCanvas.Handle, meta.Handle, rec);
-  RestoreDC(fCanvas.Handle,old);
+  RestoreDC(fCanvas.Handle, old);
 end;
 
-procedure TGDIPages.DrawArrow(Point1, Point2: TPoint;
-      HeadSize: integer; SolidHead: boolean);
+procedure TGdiPages.DrawArrow(Point1, Point2: TPoint; HeadSize: integer;
+  SolidHead: boolean);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   Point1.X := MmToPrinterPxX(Point1.X);
   Point1.Y := MmToPrinterPxY(Point1.Y);
   Point2.X := MmToPrinterPxX(Point2.X);
   Point2.Y := MmToPrinterPxY(Point2.Y);
-  HeadSize := MmToPrinterPxX(max(HeadSize,0));
-  fCanvas.Pen.Width := MulDiv(fDefaultLineWidth,Self.Font.Size, 8);
+  HeadSize := MmToPrinterPxX(max(HeadSize, 0));
+  fCanvas.Pen.Width := MulDiv(fDefaultLineWidth, self.Font.Size, 8);
   DrawArrowInternal(fCanvas, Point1, Point2, HeadSize, SolidHead);
 end;
 
-procedure TGDIPages.DrawLine(doubleline: boolean);
+procedure TGdiPages.DrawLine(doubleline: boolean);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
-  LineInternal(fPageMarginsPx.left, fPhysicalSizePx.x-fPageMarginsPx.right, doubleline);
+  LineInternal(
+    fPageMarginsPx.left, fPhysicalSizePx.x - fPageMarginsPx.right, doubleline);
   NewLine;
 end;
 
-procedure TGDIPages.DrawDashedLine;
+procedure TGdiPages.DrawDashedLine;
 var
   Y: integer;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   with fCanvas do
   begin
@@ -3568,94 +3865,106 @@ begin
     Pen.Style := psDash;
     Y := fCurrentYPos + (GetLineHeight shr 1) - (Pen.Width shr 1);
     MoveTo(fPageMarginsPx.left, Y);
-    LineTo(fPhysicalSizePx.x-fPageMarginsPx.right, Y);
+    LineTo(fPhysicalSizePx.x - fPageMarginsPx.right, Y);
     Pen.Style := psSolid;
   end;
   NewLine;
 end;
 
-procedure TGDIPages.DrawColumnLine(ColIndex: integer; aAtTop: boolean;
+procedure TGdiPages.DrawColumnLine(ColIndex: integer; aAtTop: boolean;
   aDoDoubleLine: boolean);
-var Y: integer;
+var
+  Y: integer;
 begin
   if aAtTop then
-    Y := fCurrentYPos - 1 else
+    Y := fCurrentYPos - 1
+  else
     Y := fCurrentYPos + fLineHeight + 1;
   with fColumns[ColIndex] do
     LineInternal(Y, ColLeft, ColRight, aDoDoubleLine);
 end;
 
-procedure TGDIPages.NewLine;
+procedure TGdiPages.NewLine;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   inc(fCurrentYPos, GetLineHeight);
   fForcedLeftOffset := -1;
 //  fCanvasText := fCanvasText+#13#10;
 end;
 
-procedure TGDIPages.NewHalfLine;
+procedure TGdiPages.NewHalfLine;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
   inc(fCurrentYPos, GetLineHeight shr 1);
 //  fCanvasText := fCanvasText+#13#10;
 end;
 
-procedure TGDIPages.NewLines(count: integer);
+procedure TGdiPages.NewLines(count: integer);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckHeaderDone;
-  if count < 1 then exit;
-  inc(fCurrentYPos, GetLineHeight* count);
+  if count < 1 then
+    exit;
+  inc(fCurrentYPos, GetLineHeight * count);
 //  fCanvasText := fCanvasText+#13#10;
 end;
 
-procedure TGDIPages.NewPage(ForceEndGroup: boolean);
+procedure TGdiPages.NewPage(ForceEndGroup: boolean);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if ForceEndGroup then
-    EndGroup else
-  if Assigned(fGroupPage) then
-    raise Exception.Create('Cannot call NewPage within a group block.');
+    EndGroup
+  else if Assigned(fGroupPage) then
+    raise EReport.CreateUtf8(
+      'Cannot call %.NewPage within a group block', [self]);
   CheckHeaderDone;
   NewPageInternal;
 end;
 
-procedure TGDIPages.NewPageIfAnyContent;
+procedure TGdiPages.NewPageIfAnyContent;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if fHeaderDone then
     NewPage;
 end;
 
-procedure TGDIPages.BeginGroup;
+procedure TGdiPages.BeginGroup;
 begin
-  if Self=nil then exit; // avoid GPF
-  if not fHeaderDone then exit; // i.e. haven't even started a page yet
+  if self = nil then
+    exit; // avoid GPF
+  if not fHeaderDone then
+    exit; // i.e. haven't even started a page yet
   if Assigned(fGroupPage) then
-    raise Exception.create('Group already started!');
-
-  if not GroupsMustBeOnSamePage then begin
+    raise EReport.CreateUtf8('%.BeginGroup: Group already started', [self]);
+  if not GroupsMustBeOnSamePage then
+  begin
     // Group "light" implementation
     if fHeaderDone and not HasSpaceForLines(20) then
       NewPageInternal;
     exit;
   end;
-
-  //make sure there's room for at least 2 lines otherwise just start a new page
-  //(a group surely contains at least 2 lines )
-  if not HasSpaceForLines(2) then begin
+  // make sure there's room for at least 2 lines otherwise just start a new page
+  // (a group surely contains at least 2 lines )
+  if not HasSpaceForLines(2) then
+  begin
     NewPageInternal;
     exit;
   end;
-  fGroupVerticalSpace :=
-    fPhysicalSizePx.y - fCurrentYPos - fPageMarginsPx.bottom - fFooterHeight;
+  fGroupVerticalSpace := fPhysicalSizePx.y - fCurrentYPos -
+                          fPageMarginsPx.bottom - fFooterHeight;
   fColumnsUsedInGroup := false;
   fColumnHeaderInGroup := false;
   if Assigned(fCanvas) then
     FreeAndNil(fCanvas);
-  fGroupPage := CreateMetaFile(fPhysicalSizePx.x,fGroupVerticalSpace + fPhysicalOffsetPx.Y);
+  fGroupPage := CreateMetaFile(
+    fPhysicalSizePx.x, fGroupVerticalSpace + fPhysicalOffsetPx.Y);
   fCanvas := CreateMetafileCanvas(fGroupPage);
   fGroupVerticalPos := fCurrentYPos;
   fCurrentYPos := 0;
@@ -3663,162 +3972,154 @@ begin
   fCanvasText := '';
 end;
 
-procedure TGDIPages.EndGroup;
+procedure TGdiPages.EndGroup;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if not Assigned(fGroupPage) then
     exit;
   FreeAndNil(fCanvas); //closes fGroupPage canvas
   fCanvas := CreateMetafileCanvas(fCurrentMetaFile);
-  fCanvas.Draw(0,0,fCurrentMetaFile);     //re-draw the last page
-  fCanvas.Draw(0,fGroupVerticalPos,fGroupPage); //add the Group data
+  fCanvas.Draw(0, 0, fCurrentMetaFile);     //re-draw the last page
+  fCanvas.Draw(0, fGroupVerticalPos, fGroupPage); //add the Group data
   FreeAndNil(fGroupPage);                       //destroy Group metafile
-  inc(fCurrentYPos,fGroupVerticalPos);
-  fCanvasText := fBeforeGroupText+fCanvasText;
+  inc(fCurrentYPos, fGroupVerticalPos);
+  fCanvasText := fBeforeGroupText + fCanvasText;
   fBeforeGroupText := '';
 end;
 
-function TGDIPages.CurrentGroupPosStart: integer;
+function TGdiPages.CurrentGroupPosStart: integer;
 begin
-  if Self=nil then
-    result := 0 else begin
+  if self = nil then
+    result := 0
+  else
+  begin
     if Assigned(fGroupPage) then
-      result := fGroupVerticalPos else
+      result := fGroupVerticalPos
+    else
       result := fPageMarginsPx.top;
     result := PrinterPXtoMmY(result);
   end;
 end;
 
-function GetNextItemW(var P: PWideChar): SynUnicode;
-var S: PWideChar;
-begin
-  if P=nil then
-    result := '' else begin
-    S := P;
-    while (S^<>#0) and (S^<>',') do
-      inc(S);
-    SetString(result,P,S-P);
-    if S^<>#0 then
-      P := S+1 else
-      P := nil;
-  end;
-end;
-
-function GetNextItemS(var P: PChar): string;
-var S: PChar;
-begin
-  if P=nil then
-    result := '' else begin
-    S := P;
-    while (S^<>#0) and (S^<>',') do
-      inc(S);
-    SetString(result,P,S-P);
-    if S^<>#0 then
-      P := S+1 else
-      P := nil;
-  end;
-end;
-
 const // zoom percentages for popup menu entries
-  MenuZoom: array[0..6] of byte = (25,50,75,100,125,150,200);
+  MenuZoom: array[0..6] of byte = (25, 50, 75, 100, 125, 150, 200);
 
-procedure TGDIPages.EndDoc;
-var PC: PChar;
-    i, n, aX: integer;
-    Men: TGdiPagePreviewButton;
-    M, Root: TMenuItem;
-    Page: TMetaFile;
-    s: string;
+procedure TGdiPages.EndDoc;
+var
+  PC: PChar;
+  i, n, aX: integer;
+  Men: TGdiPagePreviewButton;
+  M, Root: TMenuItem;
+  Page: TMetaFile;
+  s: string;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   fLinksCurrent := -1;
   EndGroup;
   DoFooter;
   if Assigned(fCanvas) then
     FreeAndNil(fCanvas);
   n := length(fPages);
-  if (n>1) and not HeaderDone then begin
+  if (n > 1) and
+     not HeaderDone then
+  begin
     // cancel the last page if it hasn't been started ...
     FreeAndNil(fCurrentMetaFile);
     dec(n);
-    SetLength(fPages,n);
-  end else
+    SetLength(fPages, n);
+  end
+  else
     FlushPageContent;
-  if (n>0) and (fPagesToFooterText<>'') then
+  if (n > 0) and
+     (fPagesToFooterText <> '') then
     // add 'Page #/#' caption at the specified position
-    for i := 0 to n-1 do begin
-      Page := CreateMetaFile(fPages[i].SizePx.X,fPages[i].SizePx.Y);
+    for i := 0 to n - 1 do
+    begin
+      Page := CreateMetaFile(fPages[i].SizePx.X, fPages[i].SizePx.Y);
       try
         fCanvas := CreateMetafileCanvas(Page);
-        fCanvas.Draw(0,0,GetMetaFileForPage(i)); // re-draw the original page
-        s := format(fPagesToFooterText,[i+1,n]); // add 'Page #/#' caption
+        fCanvas.Draw(0, 0, GetMetaFileForPage(i)); // re-draw the original page
+        s := format(fPagesToFooterText, [i + 1, n]); // add 'Page #/#' caption
         aX := fPagesToFooterAt.X;
-        if aX<0 then
-          aX := fPages[i].SizePx.X-fPages[i].MarginPx.Right;
+        if aX < 0 then
+          aX := fPages[i].SizePx.X - fPages[i].MarginPx.Right;
         SavedState := fPagesToFooterState;
-        if TextAlign=taRight then
-          dec(aX,fCanvas.TextWidth(s));
+        if TextAlign = taRight then
+          dec(aX, fCanvas.TextWidth(s));
         with fPages[i] do
-          fCanvas.TextOut(aX,SizePx.Y-MarginPx.bottom-fFooterHeight+
-            fFooterGap+fPagesToFooterAt.Y,s);
+          fCanvas.TextOut(aX, SizePx.Y - MarginPx.bottom - fFooterHeight +
+            fFooterGap + fPagesToFooterAt.Y, s);
         FreeAndNil(fCanvas);
-        SetMetaFileForPage(i,Page); // replace page content
+        SetMetaFileForPage(i, Page); // replace page content
       finally
         Page.Free;
       end;
     end;
   // OK, all Metafile pages have now been created and added to Pages[]
   if Assigned(fOnDocumentProducedEvent) then
-    fOnDocumentProducedEvent(Self); // notify report just generated
+    fOnDocumentProducedEvent(self); // notify report just generated
   fCurrPreviewPage := 1;
   if Assigned(fPreviewPageChangedEvent) then
-    fPreviewPageChangedEvent(Self); // notify page changed
+    fPreviewPageChangedEvent(self); // notify page changed
   Invalidate;
   // update popup menu content
-  if PopupMenu=nil then // caller may have created a TPopupMenu instance
-    PopupMenu := PopupMenuClass.Create(Self) else
+  if PopupMenu = nil then // caller may have created a TPopupMenu instance
+    PopupMenu := PopupMenuClass.Create(self)
+  else
     PopupMenu.Items.Clear;
   PopupMenu.OnPopup := PopupMenuPopup;
   PC := pointer(string(sReportPopupMenu1));
   // 'Next,Previous,GotoPage,Zoom,Bookmarks,CopyasText,Print,PDF,Close,Pagefit,Pagewidth'
   for Men := rNextPage to rClose do
-      NewPopupMenuItem(GetNextItemS(PC),-ord(Men)).Enabled :=
-        (Men<rPrint) or (Men=rClose) or
-        ( (Men=rPrint) and fHasPrinterInstalled) or
-        ( (Men=rExportPDF) {$ifdef USEPDFPRINTER}and fHasPDFPrinterInstalled{$endif});
-  PopupMenu.Items[ord(rClose)-1].Visible := false;
-  M := PopupMenu.Items[ord(rZoom)-1];
-  NewPopupMenuItem(GetNextItemS(PC),-1000-PAGE_FIT,M);
-  NewPopupMenuItem(GetNextItemS(PC),-1000-PAGE_WIDTH,M);
+    NewPopupMenuItem(GetNextItemS(PC), -ord(Men)).Enabled :=
+      (Men < rPrint) or
+      (Men = rClose) or
+      ((Men = rPrint) and fHasPrinterInstalled) or
+      ((Men = rExportPdf) {$ifdef USEPDFPRINTER} and fHasPDFPrinterInstalled{$endif});
+  PopupMenu.Items[ord(rClose) - 1].Visible := false;
+  M := PopupMenu.Items[ord(rZoom) - 1];
+  NewPopupMenuItem(GetNextItemS(PC), -1000 - PAGE_FIT, M);
+  NewPopupMenuItem(GetNextItemS(PC), -1000 - PAGE_WIDTH, M);
   for i := 0 to high(MenuZoom) do
-    NewPopupMenuItem(format('%d %%',[MenuZoom[i]]),-1000-MenuZoom[i],M);
-  Root := PopupMenu.Items[ord(rBookmarks)-1];
-  if UseOutlines and (fOutline.Count>0) then begin
+    NewPopupMenuItem(format('%d %%', [MenuZoom[i]]), -1000 - MenuZoom[i], M);
+  Root := PopupMenu.Items[ord(rBookmarks) - 1];
+  if UseOutlines and
+     (fOutline.Count > 0) then
+  begin
     Root.Enabled := true;
     M := Root;
-    for i := 0 to fOutline.Count-1 do
-    with TGDIPagereference(fOutline.Objects[i]) do begin
-      while (M<>Root) and (cardinal(-2000-M.Tag)<cardinal(fOutline.Count)) and
-         (Rect.Bottom<=TGDIPagereference(fOutline.Objects[-2000-M.Tag]).Rect.Bottom) do
-        M := M.Parent;
-      M := NewPopupMenuItem(fOutline[i],-2000-i,M);
-    end;
-  end else
+    for i := 0 to fOutline.Count - 1 do
+      with TGdiPageReference(fOutline.Objects[i]) do
+      begin
+        while (M <> Root) and
+              (cardinal(-2000 - M.Tag) < cardinal(fOutline.Count)) and
+              (Rect.Bottom <=
+                TGdiPageReference(fOutline.Objects[-2000 - M.Tag]).Rect.Bottom) do
+          M := M.Parent;
+        M := NewPopupMenuItem(fOutline[i], -2000 - i, M);
+      end;
+  end
+  else
     Root.Enabled := false;
 end;
 
-function TGDIPages.PrintPages(PrintFrom, PrintTo: integer): boolean;
-var i: integer;
-    rec: TRect;
-    CheckCurrentPtr: string;
-    UseStretchDraw: boolean;
-    BMP: TBitmap;
+function TGdiPages.PrintPages(PrintFrom, PrintTo: integer): boolean;
+var
+  i: integer;
+  rec: TRect;
+  CheckCurrentPtr: string;
+  UseStretchDraw: boolean;
+  Bmp: TBitmap;
 begin
   result := false;
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if not fHasPrinterInstalled then
-    raise Exception.Create('No printer driver is currently installed.');
-  if PrintFrom<0 then
+    raise EReport.CreateUtf8(
+      '%.PrintPages: no printer driver is currently installed', [self]);
+  if PrintFrom < 0 then
     with TPrintDialog.Create(nil) do
     try
       Options := [poPageNums];
@@ -3837,77 +4138,76 @@ begin
   // ideally, the user has changed printers BEFORE generating a report, but
   // if they want a report sent to a different printer then use StretchDraw ...
   CheckCurrentPtr := CurrentPrinterName;
-  if CheckCurrentPtr <> fCurrentPrinter then begin
+  if CheckCurrentPtr <> fCurrentPrinter then
+  begin
     GetPrinterParams; // also updates fCurrentPrinter
     UseStretchDraw := true;
-  end else
+  end
+  else
     UseStretchDraw := false;
-  PrintFrom := max(PrintFrom-1,0);
-  if PrintTo=0 then
-    PrintTo := high(fPages) else
-    PrintTo := min(PrintTo-1,high(fPages));
-{$ifdef PRINTERNEW} // set enhanced TPrinterNew class color/BW or duplex mode
-  with PrinterNew do begin
-    if ForcePrintColorMode<>printColorDefault then begin
-      if (ForcePrintColorMode=printColor) and HasColorMode then
-        ColorMode := true else
-      if ForcePrintColorMode=printBW then
-        ColorMode := false;
-    end;
-    if ForcePrintDuplexMode<>printDuplexDefault then begin
-      if (ForcePrintDuplexMode=printDuplex) and HasDuplexMode then
-        DuplexMode := true else
-      if ForcePrintDuplexMode=printSimplex then
-        DuplexMode := false;
-    end;
-{$else}
-  with Printer do begin
-{$endif}
-    if Caption='' then
+  PrintFrom := max(PrintFrom - 1, 0);
+  if PrintTo = 0 then
+    PrintTo := high(fPages)
+  else
+    PrintTo := min(PrintTo - 1, high(fPages));
+  with Printer do
+  begin
+    if Caption = '' then
     {$ifndef USEPDFPRINTER}
-      if ExportPDFApplication<>'' then
-        Title := ExportPDFApplication else
-    {$endif}
-        Title := Application.Title else
+      if ExportPdfApplication <> '' then
+        Title := ExportPdfApplication
+      else
+    {$endif USEPDFPRINTER}
+        Title := Application.Title
+    else
       Title := Caption;
-    Orientation := Self.Orientation; // just in case fPrinter changed
+    Orientation := self.Orientation; // just in case fPrinter changed
     BeginDoc;
     try
       Screen.Cursor := crHourGlass;
-      if ForcePrintAsBitmap then begin // very slow printing
-        BMP := TBitmap.Create;
+      if ForcePrintAsBitmap then
+      begin
+        // slow/non-efficient printing as bitmap
+        Bmp := TBitmap.Create;
         try
-          BMP.Width := GetDeviceCaps(handle, PHYSICALWIDTH);
-          BMP.Height := GetDeviceCaps(handle, PHYSICALHEIGHT);
+          Bmp.Width := GetDeviceCaps(handle, PHYSICALWIDTH);
+          Bmp.Height := GetDeviceCaps(handle, PHYSICALHEIGHT);
           for i := PrintFrom to PrintTo do
-          with fPages[i] do begin
-            BMP.Canvas.StretchDraw(Rect(0,0,Bmp.Width,Bmp.Height),GetMetaFileForPage(i));
-            Canvas.Draw(-OffsetPx.x,-OffsetPx.y,BMP);
-            if i<PrintTo then
-              NewPage;
-          end;
+            with fPages[i] do
+            begin
+              Bmp.Canvas.StretchDraw(Rect(0, 0, Bmp.Width, Bmp.Height),
+                GetMetaFileForPage(i));
+              Canvas.Draw(-OffsetPx.x, -OffsetPx.y, Bmp);
+              if i < PrintTo then
+                NewPage;
+            end;
         finally
-          BMP.Free;
+          Bmp.Free;
         end;
-      end else
-      for i := PrintFrom to PrintTo do begin
-        // nb: the printer's page origin is fPhysicalOffsetPx so it's
-        //     necessary to offset our rect by -OffsetPx ...
-        if ForceScreenResolution then begin
-          rec := Rect(0, 0, GetDeviceCaps(handle, PHYSICALWIDTH),
-            GetDeviceCaps(handle, PHYSICALHEIGHT));
-          OffsetRect(rec, -GetDeviceCaps(handle,PHYSICALOFFSETX),
-            -GetDeviceCaps(handle,PHYSICALOFFSETY));
-          Canvas.StretchDraw(rec,GetMetaFileForPage(i));
-        end else
-        with fPages[i] do
-        if UseStretchDraw then
-          Canvas.StretchDraw(Rect(-OffsetPx.x,-OffsetPx.y,
-            SizePx.x-OffsetPx.x, SizePx.y-OffsetPx.y),GetMetaFileForPage(i)) else
-          Canvas.Draw(-OffsetPx.x,-OffsetPx.y,GetMetaFileForPage(i));
-        if i<PrintTo then
-          NewPage;
-      end;
+      end
+      else
+        for i := PrintFrom to PrintTo do
+        begin
+          // nb: the printer's page origin is fPhysicalOffsetPx so it's
+          //     necessary to offset our rect by -OffsetPx ...
+          if ForceScreenResolution then
+          begin
+            rec := Rect(0, 0, GetDeviceCaps(handle, PHYSICALWIDTH),
+              GetDeviceCaps(handle, PHYSICALHEIGHT));
+            OffsetRect(rec, -GetDeviceCaps(handle, PHYSICALOFFSETX), -
+              GetDeviceCaps(handle, PHYSICALOFFSETY));
+            Canvas.StretchDraw(rec, GetMetaFileForPage(i));
+          end
+          else
+            with fPages[i] do
+              if UseStretchDraw then
+                Canvas.StretchDraw(Rect(-OffsetPx.x, -OffsetPx.y, SizePx.x -
+                  OffsetPx.x, SizePx.y - OffsetPx.y), GetMetaFileForPage(i))
+              else
+                Canvas.Draw(-OffsetPx.x, -OffsetPx.y, GetMetaFileForPage(i));
+          if i < PrintTo then
+            NewPage;
+        end;
       EndDoc;
     finally
       Screen.Cursor := crDefault;
@@ -3915,162 +4215,188 @@ begin
   end;
 end;
 
-
-procedure TGDIPages.SetTabStops(const tabs: array of integer);
-var i: integer;
+procedure TGdiPages.SetTabStops(const tabs: array of integer);
+var
+  i: PtrInt;
 begin
-  if Self=nil then exit; // avoid GPF
-  FillChar(fTab[0],MAXTABS*sizeof(fTab[0]),0);
-  fTabCount := min(high(tabs)+1,MAXTABS);
-  //ignore trailing 0 tabs in array ...
-  if (fTabCount > 0) then
-    while (fTabCount > 0) and (tabs[fTabCount-1] = 0) do
-      dec(fTabCount);
-
-  if (fTabCount > 1) then begin
-    if (tabs[0] <= 0) then
-      raise Exception.Create('Tabs stops must be greater than 0.');
+  if self = nil then
+    exit; // avoid GPF
+  FillCharFast(fTab[0], MAXTABS * SizeOf(fTab[0]), 0);
+  fTabCount := min(high(tabs) + 1, MAXTABS);
+  // ignore trailing 0 tabs in array ...
+  while (fTabCount > 0) and
+        (tabs[fTabCount - 1] = 0) do
+    dec(fTabCount);
+  if fTabCount > 1 then
+  begin
+    if tabs[0] <= 0 then
+      raise EReport.CreateUtf8(
+        '%.SetTableStops(%): Tabs stops must be greater than 0',
+        [self, tabs[0]]);
     fTab[0] := MmToPrinterPxX(tabs[0]);
-    for i := 1 to fTabCount -1 do
-      if tabs[i] > tabs[i-1] then
-        fTab[i] := MmToPrinterPxX(tabs[i]) else
-        raise Exception.Create('Tabs stops must be in ascending order');
-  end else
-  if fTabCount = 1 then begin
-    //if one tab set then use that tab as the interval for subsequent tabs
-    for i := 0 to MAXTABS-1 do
-      fTab[i] := MmToPrinterPxX((i+1)*tabs[0]);
+    for i := 1 to fTabCount - 1 do
+      if tabs[i] > tabs[i - 1] then
+        fTab[i] := MmToPrinterPxX(tabs[i])
+      else
+        raise EReport.CreateUtf8(
+          '%.SetTableStops(%): Tabs stops must be in ascending order',
+          [self, tabs[i]]);
+  end
+  else if fTabCount = 1 then
+  begin
+    // if one tab set then use that tab as the interval for subsequent tabs
+    for i := 0 to MAXTABS - 1 do
+      fTab[i] := MmToPrinterPxX((i + 1) * tabs[0]);
     fTabCount := MAXTABS;
-  end else begin
-    //if no tabs set then default to tabs every 20mm
-    for i := 0 to MAXTABS-1 do fTab[i] := MmToPrinterPxX((i+1)*20);
+  end
+  else
+  begin
+    // if no tabs set then default to tabs every 20mm
+    for i := 0 to MAXTABS - 1 do
+      fTab[i] := MmToPrinterPxX((i + 1) * 20);
     fTabCount := MAXTABS;
   end;
 end;
 
-
-function TGDIPages.GetPageMargins: TRect;
+function TGdiPages.GetPageMargins: TRect;
 begin
-  if Self=nil then
-    FillChar(result,sizeof(result),0) else
-    with result do begin
-      Left := PrinterPxToMmX(fPageMarginsPx.left);
-      Top := PrinterPxToMmY(fPageMarginsPx.top);
-      Right := PrinterPxToMmX(fPageMarginsPx.right);
-      Bottom := PrinterPxToMmY(fPageMarginsPx.bottom);
+  if self = nil then
+    FillCharFast(result, SizeOf(result), 0)
+  else
+    with result do
+    begin
+      left := PrinterPxToMmX(fPageMarginsPx.left);
+      top := PrinterPxToMmY(fPageMarginsPx.top);
+      right := PrinterPxToMmX(fPageMarginsPx.right);
+      bottom := PrinterPxToMmY(fPageMarginsPx.bottom);
     end;
 end;
 
-procedure TGDIPages.SetPageMargins(Rect: TRect);
+procedure TGdiPages.SetPageMargins(Rect: TRect);
 begin
   fPageMarginsPx := MmToPrinter(Rect);
-  if not fHeaderDone then
+  if not fHeaderDone then                       
     fCurrentYPos := fPageMarginsPx.top;
 end;
 
-function TGDIPages.GetLeftMargin: integer;
+function TGdiPages.GetLeftMargin: integer;
 begin
-  if Self=nil then
-    result := 0 else
+  if self = nil then
+    result := 0
+  else
     result := PrinterPxToMmX(fPageMarginsPx.left);
 end;
 
-procedure TGDIPages.SetLeftMargin(const Value: integer);
+procedure TGdiPages.SetLeftMargin(const Value: integer);
 begin
-  if Self=nil then exit;
+  if self = nil then
+    exit;
   fPageMarginsPx.Left := MmToPrinterPxX(Value);
 end;
 
-function TGDIPages.GetPaperSize: TSize;
+function TGdiPages.GetPaperSize: TSize;
 begin
-  if Self=nil then
-    FillChar(result,sizeof(result),0) else begin
+  if self = nil then
+    FillCharFast(result, SizeOf(result), 0)
+  else
+  begin
     result.cx := PrinterPxToMmX(fPhysicalSizePx.X);
     result.cy := PrinterPxToMmY(fPhysicalSizePx.Y);
   end;
 end;
 
-procedure TGDIPages.AddLineToHeader(doubleline: boolean);
+procedure TGdiPages.AddLineToHeader(doubleline: boolean);
 begin
-  if Self=nil then exit; // avoid GPF
-  fHeaderLines.Add(THeaderFooter.Create(Self,doubleline));
+  if self = nil then
+    exit; // avoid GPF
+  fHeaderLines.Add(THeaderFooter.Create(self, doubleline));
 end;
 
-procedure TGDIPages.AddLineToFooter(doubleline: boolean);
+procedure TGdiPages.AddLineToFooter(doubleline: boolean);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if fFooterLines.Count = 0 then
     CalcFooterGap;
-  fFooterLines.Add(THeaderFooter.Create(Self,doubleline));
+  fFooterLines.Add(THeaderFooter.Create(self, doubleline));
   inc(fFooterHeight, GetLineHeight);
 end;
 
-
-procedure TGDIPages.AddTextToHeader(const s: SynUnicode);
+procedure TGdiPages.AddTextToHeader(const s: SynUnicode);
 begin
-  if Self<>nil then
-    fHeaderLines.Add(THeaderFooter.Create(Self,false,s,true));
+  if self <> nil then
+    fHeaderLines.Add(THeaderFooter.Create(self, false, s, true));
 end;
 
-procedure TGDIPages.AddTextToHeaderAt(const s: SynUnicode; XPos: integer);
-var Head: THeaderFooter;
+procedure TGdiPages.AddTextToHeaderAt(const s: SynUnicode; XPos: integer);
+var
+  Head: THeaderFooter;
 begin
-  if Self=nil then exit; // avoid GPF
-  Head := THeaderFooter.Create(Self,false,s,true);
-  Head.State.Flags := Head.State.Flags or ((XPos+2) shl 16);
+  if self = nil then
+    exit; // avoid GPF
+  Head := THeaderFooter.Create(self, false, s, true);
+  Head.State.Flags := Head.State.Flags or ((XPos + 2) shl 16);
   fHeaderLines.Add(Head);
 end;
 
-procedure TGDIPages.AddTextToFooter(const s: SynUnicode);
+procedure TGdiPages.AddTextToFooter(const s: SynUnicode);
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if fFooterLines.Count = 0 then
     CalcFooterGap;
-  fFooterLines.Add(THeaderFooter.Create(Self,false,s,true));
+  fFooterLines.Add(THeaderFooter.Create(self, false, s, true));
   inc(fFooterHeight, GetLineHeight);
 end;
 
-procedure TGDIPages.AddTextToFooterAt(const s: SynUnicode; XPos: integer);
-var Foot: THeaderFooter;
+procedure TGdiPages.AddTextToFooterAt(const s: SynUnicode; XPos: integer);
+var
+  Foot: THeaderFooter;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   //todo - can't print at 0mm from left edge so raise exception
   if fFooterLines.Count = 0 then
     CalcFooterGap;
-  Foot := THeaderFooter.Create(Self,false,s,true);
-  Foot.State.Flags := Foot.State.Flags or ((XPos+2) shl 16);
+  Foot := THeaderFooter.Create(self, false, s, true);
+  Foot.State.Flags := Foot.State.Flags or ((XPos + 2) shl 16);
   fFooterLines.Add(Foot);
 end;
 
-procedure TGDIPages.AddPagesToFooterAt(const PageText: string;
-  XPos,YPosMultiplier: integer);
+procedure TGdiPages.AddPagesToFooterAt(const PageText: string; XPos,
+  YPosMultiplier: integer);
 begin
-  if fPagesToFooterText<>'' then
+  if fPagesToFooterText <> '' then
     exit; // only add once
   fPagesToFooterText := PageText;
-  if XPos<0 then
-    fPagesToFooterAt.X := -1 else
+  if XPos < 0 then
+    fPagesToFooterAt.X := -1
+  else
     fPagesToFooterAt.X := MmToPrinterPxX(XPos);
   fPagesToFooterAt.Y := fFooterHeight * YPosMultiplier;
   fPagesToFooterState := SavedState;
 end;
 
-function TGDIPages.GetColumnCount: integer;
+function TGdiPages.GetColumnCount: integer;
 begin
-  if Self=nil then
-    result := 0 else
+  if self = nil then
+    result := 0
+  else
     result := length(fColumns);
 end;
 
-function TGDIPages.GetColumnInfo(index: integer): TColRec;
+function TGdiPages.GetColumnInfo(index: integer): TColRec;
 begin
-  if Self=nil then begin
-    FillChar(result,sizeof(result),0);
+  if self = nil then
+  begin
+    FillCharFast(result, SizeOf(result), 0);
     exit;
   end;
-  if cardinal(index)>=cardinal(Length(fColumns)) then
-    raise Exception.create('GetColumnInfo: index out of range');
-  with fColumns[index] do begin
+  if cardinal(index) >= cardinal(Length(fColumns)) then
+    raise EReport.CreateUtf8(
+      '%.GetColumnInfo(%): index out of range', [self, index]);
+  with fColumns[index] do
+  begin
     result.ColLeft := PrinterPxToMmX(ColLeft);
     result.ColRight := PrinterPxToMmX(ColRight);
     result.ColAlign := ColAlign;
@@ -4078,33 +4404,44 @@ begin
   end;
 end;
 
-procedure TGDIPages.SetColumnAlign(index: integer; align: TColAlign);
+procedure TGdiPages.SetColumnAlign(index: integer; align: TColAlign);
 begin
-  if Self=nil then exit; // avoid GPF
-  if cardinal(index)>=cardinal(Length(fColumns)) then
-    raise Exception.create('SetColumnAlign: index out of range') else
+  if self = nil then
+    exit; // avoid GPF
+  if cardinal(index) >= cardinal(Length(fColumns)) then
+    raise EReport.CreateUtf8(
+      '%.SetColumnAlign(%): index out of range', [self, index])
+  else
     fColumns[index].ColAlign := align;
 end;
 
-procedure TGDIPages.SetColumnBold(index: integer);
+procedure TGdiPages.SetColumnBold(index: integer);
 begin
-  if Self=nil then exit; // avoid GPF
-  if cardinal(index)>=cardinal(Length(fColumns)) then
-    raise Exception.create('SetColumnAlign: index out of range') else
+  if self = nil then
+    exit; // avoid GPF
+  if cardinal(index) >= cardinal(Length(fColumns)) then
+    raise EReport.CreateUtf8(
+      '%.SetColumnBold(%): index out of range', [self, index])
+  else
     fColumns[index].ColBold := true;
 end;
 
-procedure TGDIPages.AddColumn(left, right: integer; align: TColAlign; bold: boolean);
-var n: integer;
+procedure TGdiPages.AddColumn(left, right: integer; align: TColAlign; bold: boolean);
+var
+  n: PtrInt;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   left := MmToPrinterPxX(left);
   right := MmToPrinterPxX(right);
   n := length(fColumns);
-  if (n>0) and (left<fColumns[n-1].ColRight) then
-    raise Exception.create('Columns overlap!');
-  SetLength(fColumns,n+1);
-  with fColumns[n] do begin
+  if (n > 0) and
+     (left < fColumns[n - 1].ColRight) then
+    raise EReport.CreateUtf8(
+      '%.AddColumn(%,%): columns overlap', [self, left, right]);
+  SetLength(fColumns, n + 1);
+  with fColumns[n] do
+  begin
     ColLeft := left;
     ColRight := right;
     ColAlign := align;
@@ -4112,28 +4449,33 @@ begin
   end;
 end;
 
-procedure TGDIPages.AddColumns(const PercentWidth: array of integer; align: TColAlign);
-var i, sum, left, right, ww, n: integer;
+procedure TGdiPages.AddColumns(const PercentWidth: array of integer; align: TColAlign);
+var
+  i, sum, left, right, ww, n: integer;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   ClearColumns;
   sum := 0;
   for i := 0 to high(PercentWidth) do
-    inc(sum,abs(PercentWidth[i]));
-  if sum<=0 then
+    inc(sum, abs(PercentWidth[i]));
+  if sum <= 0 then
     exit;
   left := fPageMarginsPx.left;
-  ww := fPhysicalSizePx.x-left-fPageMarginsPx.right;
+  ww := fPhysicalSizePx.x - left - fPageMarginsPx.right;
   n := length(fColumns);
-  SetLength(fColumns,n+length(PercentWidth));
-  for i := 0 to high(PercentWidth) do begin
-    right := left+(abs(PercentWidth[i])*ww) div sum;
+  SetLength(fColumns, n + length(PercentWidth));
+  for i := 0 to high(PercentWidth) do
+  begin
+    right := left + (abs(PercentWidth[i]) * ww) div sum;
     // manual adding (no mm conversion -> exact width)
-    with fColumns[i+n] do begin
+    with fColumns[i + n] do
+    begin
       ColLeft := left;
       ColRight := right;
-      if PercentWidth[i]<0 then
-        ColAlign := caCenter  else
+      if PercentWidth[i] < 0 then
+        ColAlign := caCenter
+      else
         ColAlign := align;
       ColBold := false;
     end;
@@ -4141,21 +4483,23 @@ begin
   end;
 end;
 
-procedure TGDIPages.AddColumnHeaders(const headers: array of SynUnicode;
-  WithBottomGrayLine: boolean=false; BoldFont: boolean=false;
-  RowLineHeight: integer=0; flags: integer=0);
-var n,i: integer;
+procedure TGdiPages.AddColumnHeaders(const headers: array of SynUnicode;
+  WithBottomGrayLine, BoldFont: boolean; RowLineHeight, flags: integer);
+var
+  n, i: integer;
 begin
-  if Self=nil then exit; // avoid GPF
-  if flags=0 then begin
+  if self = nil then
+    exit; // avoid GPF
+  if flags = 0 then
+  begin
     if BoldFont then
       Font.Style := [fsBold];
     flags := TextFormatsToFlags;
   end;
   n := length(fColumnHeaderList);
-  SetLength(fColumnHeaderList,n+1);
+  SetLength(fColumnHeaderList, n + 1);
   fColumnHeaderList[n].flags := flags;
-  SetLength(fColumnHeaderList[n].headers,Length(headers));
+  SetLength(fColumnHeaderList[n].headers, Length(headers));
   for i := 0 to high(headers) do
     fColumnHeaderList[n].headers[i] := headers[i];
   fColumnHeaderPrinted := false;
@@ -4166,131 +4510,123 @@ begin
     Font.Style := [];
 end;
 
-function CSVToArray(var CSV: PWideChar; n: integer): TSynUnicodeDynArray;
-var i: integer;
-begin
-  SetLength(result,n);
-  for i := 0 to n-1 do
-    result[i] := GetNextItemW(CSV);
-end;
-
-procedure TGDIPages.AddColumnHeadersFromCSV(var CSV: PWideChar;
+procedure TGdiPages.AddColumnHeadersFromCsv(var Csv: PWideChar;
   WithBottomGrayLine, BoldFont: boolean; RowLineHeight: integer);
 begin
-  if Self<>nil then // avoid GPF
-    AddColumnHeaders(CSVToArray(CSV,length(fColumns)),
-      WithBottomGrayLine,BoldFont,RowLineHeight);
+  if self <> nil then // avoid GPF
+    AddColumnHeaders(CsvToArray(Csv, length(fColumns)), WithBottomGrayLine,
+      BoldFont, RowLineHeight);
 end;
 
-procedure TGDIPages.DrawTextAcrossColsFromCSV(var CSV: PWideChar; BackgroundColor: TColor=clNone);
-begin
-  if Self<>nil then // avoid GPF
-    DrawTextAcrossCols(CSVToArray(CSV,length(fColumns)),[],BackgroundColor);
-end;
-
-/// round inverted color to white or black
-function clAlways(cl: TColor): TColor;
-begin
-  if ((GetRValue(cardinal(cl)) * 2) +
-      (GetGValue(cardinal(cl)) * 3) +
-      (GetBValue(cardinal(cl)) * 2)) < 600 then
-    result := clWhite else
-    result := clBlack;
-end;
-
-procedure TGDIPages.DrawTextAcrossCols(const StringArray: array of SynUnicode;
+procedure TGdiPages.DrawTextAcrossColsFromCsv(var Csv: PWideChar;
   BackgroundColor: TColor);
 begin
-  DrawTextAcrossCols(StringArray,[],BackgroundColor);
+  if self <> nil then // avoid GPF
+    DrawTextAcrossCols(CsvToArray(Csv, length(fColumns)), [], BackgroundColor);
 end;
 
-procedure TGDIPages.DrawTextAcrossCols(const StringArray, LinkArray: array of SynUnicode;
+procedure TGdiPages.DrawTextAcrossCols(const StringArray: array of SynUnicode;
   BackgroundColor: TColor);
-
-function HasCRLF(const s: SynUnicode): boolean;
-var i: integer;
 begin
-  result := true;
-  for i := 0 to length(s)-1 do
-    if s[i+1]<' ' then
-      exit;
-  result := false;
+  DrawTextAcrossCols(StringArray, [], BackgroundColor);
 end;
 
-function WrapText(s: SynUnicode; MaxWidth: integer; Lines: PSynUnicodeDynArray): integer;
-var j,k,sp: integer;
-begin
-  result := 0; // returns the line count
-  if Lines<>nil then
-    SetLength(Lines^,0);
-  repeat
-    if HasCRLF(s) or (TextWidthC(fCanvas,s)>MaxWidth) then begin
-      j := 1;
-      k := 1;
-      sp := 0;
-      while (j<length(s)) and (TextWidthC(fCanvas,copy(s,1,j))<MaxWidth) do begin
-        k := j; // store last fitting character index
-        if s[j]<=' ' then begin
-          sp := j; // mark space (=word delimiter) found
-          if s[j]<' ' then
-            break; // #13,#10 will force word wrap here = next line
+procedure TGdiPages.DrawTextAcrossCols(
+  const StringArray, LinkArray: array of SynUnicode; BackgroundColor: TColor);
+
+  function WrapText(s: SynUnicode; MaxWidth: integer;
+    Lines: PSynUnicodeDynArray): integer;
+  var
+    j, k, sp: integer;
+  begin
+    result := 0; // returns the line count
+    if Lines <> nil then
+      SetLength(Lines^, 0);
+    repeat
+      if HasCRLF(s) or (TextWidthC(fCanvas, s) > MaxWidth) then
+      begin
+        j := 1;
+        k := 1;
+        sp := 0;
+        while (j < length(s)) and
+              (TextWidthC(fCanvas, copy(s, 1, j)) < MaxWidth) do
+        begin
+          k := j; // store last fitting character index
+          if s[j] <= ' ' then
+          begin
+            sp := j; // mark space (=word delimiter) found
+            if s[j] < ' ' then
+              break; // #13,#10 will force word wrap here = next line
+          end;
+          inc(j);
         end;
-        inc(j);
+        if sp = 0 then
+          sp := k; // if no space found, use character wrapping
+      end
+      else
+        sp := length(s) + 1;
+      if sp <= 1 then
+        sp := 2;
+      if Lines <> nil then
+      begin
+        SetLength(Lines^, length(Lines^) + 1);
+        Lines^[high(Lines^)] := copy(s, 1, sp - 1);
       end;
-      if sp=0 then
-        sp := k; // if no space found, use character wrapping
-    end else
-      sp := length(s)+1;
-    if sp<=1 then
-      sp := 2;
-    if Lines<>nil then begin
-      SetLength(Lines^,length(Lines^)+1);
-      Lines^[high(Lines^)] := copy(s,1,sp-1);
-    end;
-    inc(result); // update lines count
-    s := trim(copy(s,sp,maxInt)); // trim ' ',#13,#10 for next line
-  until s='';
-end;
+      inc(result); // update lines count
+      s := trim(copy(s, sp, maxInt)); // trim ' ',#13,#10 for next line
+    until s = '';
+  end;
 
-var RowRect: TRect;
-    lh: integer;
-    max, i, j, k, c, H, ParenthW, LinesCount, X: integer;
-    s: SynUnicode;
-    line: string;
-    Lines: TSynUnicodeDynArray;
-    PW: PWideChar;
-    PWLen, Options: integer;
-    size: TSize;
-    r: TRect;
+var
+  RowRect: TRect;
+  lh: integer;
+  max, i, j, k, c, H, ParenthW, LinesCount, X: integer;
+  s: SynUnicode;
+  line: string;
+  Lines: TSynUnicodeDynArray;
+  PW: PWideChar;
+  PWLen, Options: integer;
+  size: TSize;
+  r: TRect;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   max := high(fColumns);
-  if (max<0) or (length(StringArray)=0) then
+  if (max < 0) or
+     (length(StringArray) = 0) then
     exit; // no column defined
-  if High(StringArray)<max then
+  if High(StringArray) < max then
     max := High(StringArray);
-  if max<0 then
+  if max < 0 then
     exit; // nothing to draw
   // check enough place for this column content on the page
   lh := GetLineHeight;
   CheckYPos;
   LinesCount := 1; // by default, one line of text will be written
-  if WordWrapLeftCols then begin // check if stay on current page after word wrap
+  if WordWrapLeftCols then
+  begin
+    // check if stay on current page after word wrap
     for j := 0 to max do
-    with fColumns[j] do
-    if (ColAlign=caLeft) and (ColRight>ColLeft) and
-       (HasCRLF(StringArray[j]) or
-        (TextWidthC(fCanvas,StringArray[j])>ColRight-ColLeft)) then begin
-      k := WrapText(StringArray[j],ColRight-ColLeft,nil); // calculate line counts
-      if k>LinesCount then
-        LinesCount := k; // calculate maximum line count
-    end;
-    if (LinesCount>1) and not HasSpaceForLines(LinesCount) then begin
+      with fColumns[j] do
+        if (ColAlign = caLeft) and
+           (ColRight > ColLeft) and
+           (HasCRLF(StringArray[j]) or
+            (TextWidthC(fCanvas, StringArray[j]) > ColRight - ColLeft)) then
+        begin
+          // calculate line counts
+          k := WrapText(StringArray[j], ColRight - ColLeft, nil);
+          if k > LinesCount then
+            LinesCount := k; // calculate maximum line count
+        end;
+    if (LinesCount > 1) and not HasSpaceForLines(LinesCount) then
+    begin
       NewPageInternal;
       CheckHeaderDone;
     end;
   end;
-  if (fColumnHeaderList<>nil) and not fColumnHeaderPrinted then begin
+  if (fColumnHeaderList <> nil) and
+     not fColumnHeaderPrinted then
+  begin
     i := length(fColumnHeaderList) + 2;
     if not HasSpaceForLines(i) then
       NewPageInternal;
@@ -4301,115 +4637,140 @@ begin
     fColumnsUsedInGroup := true;
   ParenthW := fCanvas.TextWidth(')');
   RowRect.Top := fCurrentYPos;
-  RowRect.Bottom := RowRect.Top+lh*LinesCount;
+  RowRect.Bottom := RowRect.Top + lh * LinesCount;
   RowRect.Right := fColumns[max].ColRight;
-  if BackgroundColor<>clNone then
-  with fCanvas do begin
-    Brush.Style := bsSolid;
-    Brush.Color := BackgroundColor;
-    RowRect.Left := fColumns[0].ColLeft;
-    FillRect(RowRect);
-    Brush.Style := bsClear;
-    Font.Color := clAlways(BackgroundColor);
-  end;
+  if BackgroundColor <> clNone then
+    with fCanvas do
+    begin
+      Brush.Style := bsSolid;
+      Brush.Color := BackgroundColor;
+      RowRect.Left := fColumns[0].ColLeft;
+      FillRect(RowRect);
+      Brush.Style := bsClear;
+      Font.Color := clAlways(BackgroundColor);
+    end;
   // main loop, used to write column content
   line := '';
-  for i := 0 to max do begin
+  for i := 0 to max do
+  begin
     s := StringArray[i];
-    line := line+SynUnicodeToString(s)+#9; // add column content + tab for report text
-    if s<>'' then
-    with fColumns[i], fCanvas do
-    if ColRight>ColLeft then begin
-      if ColBold then
-        Font.Style := Font.Style+[fsBold];
-      Options := ETO_CLIPPED or TextFlags; // unicode version of TextRect()
-      if Brush.Style <> bsClear then
-        Options := Options or ETO_OPAQUE;
-      InternalUnicodeString(s,PW,PWLen,@size);
-      if (ColAlign=caCenter) and (size.cx>ColRight-ColLeft) then
-        // overlapping centered -> draw right aligned
-        RowRect.Left := ColRight-size.cx-ParenthW else
-      case ColAlign of
-        caLeft: begin
-          RowRect.Left := ColLeft;
-          if WordWrapLeftCols and (ColRight>ColLeft) and
-             (HasCRLF(s) or (size.cx>ColRight-ColLeft)) then begin
-            // handle optional left aligned column content word wrap
-            WrapText(s,ColRight-ColLeft,@Lines); // word wrap s into Lines[]
-            dec(RowRect.Left,ParenthW);
-            for j := 0 to high(Lines) do begin
-              InternalUnicodeString(Lines[j],PW,PWLen,@size);
-              if BiDiMode=bdRightToLeft then
-                X := ColRight-size.cx-ParenthW else
-                X := ColLeft;
-              RowRect.Top := fCurrentYPos+lh*j;
-              ExtTextOutW(Handle,X,RowRect.Top,Options,@RowRect,PW,PWLen,nil);
+    line := line + SynUnicodeToString(s) + #9; // add column content + tab for report text
+    if s <> '' then
+      with fColumns[i], fCanvas do
+        if ColRight > ColLeft then
+        begin
+          if ColBold then
+            Font.Style := Font.Style + [fsBold];
+          Options := ETO_CLIPPED {$ifndef FPC} or TextFlags{$endif};
+          if Brush.Style <> bsClear then
+            Options := Options or ETO_OPAQUE;
+          InternalUnicodeString(s, PW, PWLen, @size);
+          if (ColAlign = caCenter) and
+             (size.cx > ColRight - ColLeft) then
+            // overlapping centered -> draw right aligned
+            RowRect.Left := ColRight - size.cx - ParenthW
+          else
+            case ColAlign of
+              caLeft:
+                begin
+                  RowRect.Left := ColLeft;
+                  if WordWrapLeftCols and
+                     (ColRight > ColLeft) and
+                     (HasCRLF(s) or
+                      (size.cx > ColRight - ColLeft)) then
+                  begin
+                    // handle optional left aligned column content word wrap
+                    WrapText(s, ColRight - ColLeft, @Lines); // word wrap s into Lines[]
+                    dec(RowRect.Left, ParenthW);
+                    for j := 0 to high(Lines) do
+                    begin
+                      InternalUnicodeString(Lines[j], PW, PWLen, @size);
+                      if BiDiMode = bdRightToLeft then
+                        X := ColRight - size.cx - ParenthW
+                      else
+                        X := ColLeft;
+                      RowRect.Top := fCurrentYPos + lh * j;
+                      ExtTextOutW(Handle, X, RowRect.Top, Options, @RowRect, PW,
+                        PWLen, nil);
+                    end;
+                    RowRect.Top := fCurrentYPos;
+                    if ColBold then
+                      Font.Style := Font.Style - [fsBold];
+                    Continue; // text was written as word-wrap -> write next column
+                  end
+                  else if BiDiMode = bdRightToleft then
+                    RowRect.Left := ColRight - size.cx - ParenthW;
+                end;
+              caCenter:
+                RowRect.Left := ColLeft + (ColRight - ColLeft - size.cx) shr 1;
+              caRight:
+                if BiDiMode = bdLeftToRight then
+                  RowRect.Left := ColRight - size.cx - ParenthW;
+              caCurrency:
+                begin
+                  if fNegsToParenthesesInCurrCols then
+                    InternalUnicodeString(ConvertNegsToParentheses(s), PW, PWLen, @size);
+                  RowRect.Left := ColRight - size.cx - ParenthW;
+                  // no bdRightToleft handling necessary for caCurrency
+                end;
             end;
-            RowRect.Top := fCurrentYPos;
-            if ColBold then
-              Font.Style := Font.Style-[fsBold];
-            Continue; // text was written as word-wrap -> write next column
-          end else
-          if BiDiMode=bdRightToleft then
-            RowRect.Left := ColRight-size.cx-ParenthW;
+          dec(RowRect.Left, ParenthW);
+          ExtTextOutW(Handle, RowRect.Left + ParenthW, fCurrentYPos,
+            Options, @RowRect, PW, PWLen, nil);
+          if (i < length(LinkArray)) and
+             (LinkArray[i] <> '') then
+          begin
+            r.Left := PrinterPxToMmX(RowRect.Left);
+            r.Top := PrinterPxToMmX(RowRect.Top);
+            r.right := PrinterPxToMmX(RowRect.left +
+              (RowRect.right - fColumns[0].ColLeft) div (max + 1));
+            r.Bottom := PrinterPxToMmX(RowRect.Bottom);
+            AddLink(LinkArray[i], r);
+          end;
+          inc(RowRect.Left, size.cx + ParenthW);
+          if ColBold then
+            Font.Style := Font.Style - [fsBold];
         end;
-        caCenter:
-          RowRect.Left := ColLeft+(ColRight-ColLeft-size.cx)shr 1;
-        caRight:
-          if BiDiMode=bdLeftToRight then
-            RowRect.Left := ColRight-size.cx-ParenthW;
-        caCurrency: begin
-          if fNegsToParenthesesInCurrCols then
-            InternalUnicodeString(ConvertNegsToParentheses(s),PW,PWLen,@size);
-          RowRect.Left := ColRight-size.cx-ParenthW;
-          // no bdRightToleft handling necessary for caCurrency
-        end;
-      end;
-      dec(RowRect.Left,ParenthW);
-      ExtTextOutW(Handle,RowRect.Left+ParenthW,fCurrentYPos,Options,@RowRect,PW,PWLen,nil);
-      if (i<length(LinkArray)) and (LinkArray[i]<>'') then begin
-        r.Left := PrinterPxToMmX(rowrect.Left);
-        r.Top := PrinterPxToMmX(rowrect.Top);
-        r.right := PrinterPxToMmX(rowrect.left+(rowrect.right-fColumns[0].ColLeft) div (max+1));
-        r.Bottom := PrinterPxToMmX(rowrect.Bottom);
-        AddLink(LinkArray[i],r);
-      end;
-      inc(RowRect.Left,size.cx+ParenthW);
-      if ColBold then
-        Font.Style := Font.Style-[fsBold];
-    end;
   end;
   if not fDrawTextAcrossColsDrawingHeader or
-     not fColumnHeaderPrintedAtLeastOnce then begin
+     not fColumnHeaderPrintedAtLeastOnce then
+  begin
     line[length(line)] := #13; // overwrite last #9
-    line := line+#10;
-    fCanvasText := fCanvasText+line; // append columns content to report text
+    line := line + #10;
+    fCanvasText := fCanvasText + line; // append columns content to report text
   end;
-  if BackgroundColor<>clNone then
+  if BackgroundColor <> clNone then
     fCanvas.Font.Color := clBlack;
-  if not fDrawTextAcrossColsDrawingHeader and (fColumnsRowLineHeight>LinesCount) then
+  if not fDrawTextAcrossColsDrawingHeader and
+     (fColumnsRowLineHeight > LinesCount) then
     // custom space for Row before bottom gray line
     LinesCount := fColumnsRowLineHeight;
   for i := 2 to LinesCount do
     NewLine;
-  if fColumnsWithBottomGrayLine and (RowRect.Right<>0) then begin
+  if fColumnsWithBottomGrayLine and
+     (RowRect.Right <> 0) then
+  begin
     c := fCanvas.Pen.Color;
     fCanvas.Pen.Color := clLtGray;
-    H := lh shr 1-(lh*15)shr 4;
+    H := lh shr 1 - (lh * 15) shr 4;
     dec(fCurrentYPos, H);
-    LineInternal(GetColumnRec(0).ColLeft,RowRect.Right,false);
+    LineInternal(GetColumnRec(0).ColLeft, RowRect.Right, false);
     inc(fCurrentYPos, H);
     fCanvas.Pen.Color := c;
   end;
   NewLine;
 end;
 
-procedure TGDIPages.DrawLinesInCurrencyCols(doublelines: boolean);
-var i: integer;
+procedure TGdiPages.DrawLinesInCurrencyCols(doublelines: boolean);
+var
+  i: PtrInt;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   CheckYPos;
-  if (fColumnHeaderList<>nil) and not fColumnHeaderPrinted then begin
+  if (fColumnHeaderList <> nil) and
+     not fColumnHeaderPrinted then
+  begin
     i := length(fColumnHeaderList) + 2;
     if not HasSpaceForLines(i) then
       NewPageInternal;
@@ -4422,28 +4783,32 @@ begin
   NewLine;
 end;
 
-procedure TGDIPages.ColumnHeadersNeeded;
+procedure TGdiPages.ColumnHeadersNeeded;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   fColumnHeaderPrinted := false;
 end;
 
-procedure TGDIPages.Clear;
 procedure ClearObjects(List: TStringList);
-var i: integer;
+var
+  i: PtrInt;
 begin
-  for i := 0 to List.Count-1 do
+  for i := 0 to List.Count - 1 do
     List.Objects[i].Free;
   List.Clear;
 end;
+
+procedure TGdiPages.Clear;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   if Assigned(fCanvas) then
     FreeAndNil(fCanvas);
   if Assigned(fGroupPage) then
     FreeAndNil(fGroupPage);
   FreeAndNil(fCurrentMetaFile);
-  SetLength(fPages,0);
+  SetLength(fPages, 0);
   ClearObjects(fBookmarks);
   ClearObjects(fLinks);
   ClearObjects(fOutline);
@@ -4456,153 +4821,182 @@ begin
   fSavedCount := 0;
 end;
 
-procedure TGDIPages.ClearHeaders;
+procedure TGdiPages.ClearHeaders;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   fHeaderLines.Clear;
 end;
 
-procedure TGDIPages.ClearFooters;
+procedure TGdiPages.ClearFooters;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   fFooterLines.Clear;
   fPagesToFooterText := '';
 end;
 
-procedure TGDIPages.ClearColumns;
+procedure TGdiPages.ClearColumns;
 begin
-  if Self=nil then exit; // avoid GPF
-  SetLength(fColumns,0);
+  if self = nil then
+    exit; // avoid GPF
+  SetLength(fColumns, 0);
   ClearColumnHeaders;
 end;
 
-procedure TGDIPages.ClearColumnHeaders;
+procedure TGdiPages.ClearColumnHeaders;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   fColumnHeaderList := nil;
 end;
 
-function TGDIPages.CreatePictureMetaFile(Width, Height: integer;
+function TGdiPages.CreatePictureMetaFile(Width, Height: integer;
   out MetaCanvas: TCanvas): TMetaFile;
 begin
-  if Self=nil then
-    result := nil else begin
-    result := CreateMetaFile(MmToPrinterPxX(Width),MmToPrinterPxY(Height));
+  if self = nil then
+    result := nil
+  else
+  begin
+    result := CreateMetaFile(MmToPrinterPxX(Width), MmToPrinterPxY(Height));
     MetaCanvas := CreateMetafileCanvas(result);
   end;
 end;
 
-procedure TGDIPages.DrawTextFmt(const s: string; const Args: array of const;
+procedure TGdiPages.DrawTextFmt(const s: string; const Args: array of const;
   withNewLine: boolean);
 begin
-  DrawText(format(s,Args),withNewLine);
+  DrawText(format(s, Args), withNewLine);
 end;
 
-function TGDIPages.TitleFlags: integer;
+function TGdiPages.TitleFlags: integer;
 begin
-  result := ((Font.Size*12) div 10) or FORMAT_BOLD or FORMAT_LEFT;
+  result := ((Font.Size * 12) div 10) or FORMAT_BOLD or FORMAT_LEFT;
 end;
 
-function TGDIPages.TextWidth(const Text: SynUnicode): integer;
+function TGdiPages.TextWidth(const Text: SynUnicode): integer;
 begin
-  if Self=nil then
-    result := 0 else begin
-    if fCanvas=nil then
-      result := TextWidthC(Canvas,Text) else
-      result := TextWidthC(fCanvas,Text);
+  if self = nil then
+    result := 0
+  else
+  begin
+    if fCanvas = nil then
+      result := TextWidthC(Canvas, Text)
+    else
+      result := TextWidthC(fCanvas, Text);
     result := PrinterPxToMmX(result);
   end;
 end;
 
-procedure TGDIPages.ShowPreviewForm(VisibleButtons: TGdiPagePreviewButtons);
-  procedure CopyMenus(Source,Dest: TMenuItem);
-  var i: integer;
-      Sub: TMenuItem;
-  begin
-    for i := 0 to Source.Count-1 do
-    with Source.Items[i] do begin
-      Sub := TMenuItem.Create(PreviewForm);
+procedure CopyMenus(Owner: TComponent; Source, Dest: TMenuItem);
+var
+  i: integer;
+  Sub: TMenuItem;
+begin
+  for i := 0 to Source.Count - 1 do
+    with Source.Items[i] do
+    begin
+      Sub := TMenuItem.Create(Owner);
       Sub.Tag := Tag;
       Sub.OnClick := OnClick;
       Sub.Caption := Caption;
       Dest.Add(Sub);
-      CopyMenus(Source.Items[i],Sub);
+      CopyMenus(Owner, Source.Items[i], Sub);
     end;
-  end;
-const PANELWIDTH = 128;
-var OldParent: TWinControl;
-    i,y,W: integer;
-    M: TMenuItem;
-    LeftPanel: TPanel;
+end;
+
+procedure TGdiPages.ShowPreviewForm(VisibleButtons: TGdiPagePreviewButtons);
+const
+  PANELWIDTH = 128;
+var
+  OldParent: TWinControl;
+  i, y, W: integer;
+  M: TMenuItem;
+  LeftPanel: TPanel;
 begin
-  if Self=nil then exit; // avoid GPF
+  if self = nil then
+    exit; // avoid GPF
   PreviewForm := TForm.Create(nil);
   try
     PreviewForm.Position := poScreenCenter;
-    PreviewForm.Height := Screen.Height-64;
+    PreviewForm.Height := Screen.Height - 64;
     PreviewForm.Caption := Caption;
     PreviewForm.Font.Name := 'Tahoma';
-    with PaperSize do begin
-      if cy=0 then
-        y := 1 else
+    with PaperSize do
+    begin
+      if cy = 0 then
+        y := 1
+      else
         y := cy;
-      PreviewForm.Width := (cx*PreviewForm.Height) div y+(64+PANELWIDTH);
+      PreviewForm.Width := (cx * PreviewForm.Height) div y + (64 + PANELWIDTH);
     end;
-    if PreviewForm.Width>Screen.WorkAreaWidth then
+    if PreviewForm.Width > Screen.WorkAreaWidth then
       PreviewForm.WindowState := wsMaximized;
     LeftPanel := TPanel.Create(PreviewForm);
     LeftPanel.Parent := PreviewForm;
     LeftPanel.Width := PANELWIDTH;
     LeftPanel.Align := alLeft;
-    W := LeftPanel.ClientWidth-8;
+    W := LeftPanel.ClientWidth - 8;
     PreviewPageCountLabel := TLabel.Create(PreviewForm);
     PreviewPageCountLabel.Transparent := true;
     PreviewPageCountLabel.Parent := LeftPanel;
-    PreviewPageCountLabel.SetBounds(4,24,W-4,24);
+    PreviewPageCountLabel.SetBounds(4, 24, W - 4, 24);
     PreviewPageCountLabel.Alignment := Classes.taCenter;
     PreviewPageCountLabel.AutoSize := false;
-    PreviewPageCountLabel.Caption := format(sPageN,[Page,PageCount]);
+    PreviewPageCountLabel.Caption := format(sPageN, [Page, PageCount]);
     PopupMenuPopup(nil); // refresh PopupMenu.Items[]
-    SetLength(PreviewButtons,PopupMenu.Items.Count);
+    SetLength(PreviewButtons, PopupMenu.Items.Count);
     y := 48;
-    for i := 0 to High(PreviewButtons) do begin
+    for i := 0 to High(PreviewButtons) do
+    begin
       M := PopupMenu.Items[i];
       PreviewButtons[i] := TButton.Create(PreviewForm);
-      with PreviewButtons[i] do begin
+      with PreviewButtons[i] do
+      begin
         Parent := LeftPanel;
-        SetBounds(4,y,W,32);
+        SetBounds(4, y, W, 32);
         Enabled := M.Enabled;
         Caption := M.Caption;
         Tag := M.Tag;
         OnClick := PopupMenuItemClick;
-        if M.Count>0 then begin
+        if M.Count > 0 then
+        begin
           PopupMenu := PopupMenuClass.Create(PreviewForm);
-          CopyMenus(M,PopupMenu.Items);
+          CopyMenus(PreviewForm, M, PopupMenu.Items);
         end;
-        if TGdiPagePreviewButton(i+1) in VisibleButtons then
-          case TGdiPagePreviewButton(i+1) of
-          rPrint: begin
-            Height := 60;
-            inc(y,64);
-            Default := true;
-          end;
-          rClose, rNextPage, rPreviousPage: begin
-            Height := 48;
-            inc(y,52);
-          end;
-          rGotoPage, rZoom, rBookmarks, rExportPDF:
-            inc(y,48);
+        if TGdiPagePreviewButton(i + 1) in VisibleButtons then
+          case TGdiPagePreviewButton(i + 1) of
+            rPrint:
+              begin
+                Height := 60;
+                inc(y, 64);
+                Default := true;
+              end;
+            rClose,
+            rNextPage,
+            rPreviousPage:
+              begin
+                Height := 48;
+                inc(y, 52);
+              end;
+            rGotoPage,
+            rZoom,
+            rBookmarks,
+            rExportPdf:
+              inc(y, 48);
           else
-            inc(y,36);
-          end else begin
-            M.Visible := false;
-            Visible := false;
-          end;
+            inc(y, 36);
+          end
+        else
+        begin
+          M.Visible := false;
+          Visible := false;
+        end;
       end;
     end;
     OldParent := Parent;
     Parent := PreviewForm;
-    Align := alClient;
+    align := alClient;
     Zoom := PAGE_FIT;
     try
       PreviewForm.ActiveControl := self;
@@ -4616,15 +5010,17 @@ begin
   end;
 end;
 
-function TGDIPages.GetRightMarginPos: integer;
+function TGdiPages.GetRightMarginPos: integer;
 begin
-  result := PrinterPxToMmX(fPhysicalSizePx.x-fPageMarginsPx.right);
+  result := PrinterPxToMmX(fPhysicalSizePx.x - fPageMarginsPx.right);
 end;
 
-function TGDIPages.NewPopupMenuItem(const aCaption: string; Tag: integer;
+function TGdiPages.NewPopupMenuItem(const aCaption: string; Tag: integer;
   SubMenu: TMenuItem; OnClick: TNotifyEvent; ImageIndex: integer): TMenuItem;
 begin
-  if (Self=nil) or (PopupMenu=nil) then begin
+  if (self = nil) or
+     (PopupMenu = nil) then
+  begin
     result := nil;
     exit;
   end;
@@ -4632,120 +5028,143 @@ begin
   result.Caption := aCaption;
   result.Tag := Tag;
   if Assigned(OnClick) then
-    result.OnClick := OnClick else
+    result.OnClick := OnClick
+  else
     result.OnClick := PopupMenuItemClick;
-  if ImageIndex>=0 then
+  if ImageIndex >= 0 then
     result.ImageIndex := ImageIndex;
-  if SubMenu=nil then
-    PopupMenu.Items.Add(result) else
+  if SubMenu = nil then
+    PopupMenu.Items.Add(result)
+  else
     SubMenu.Add(result);
 end;
 
-procedure TGDIPages.PopupMenuItemClick(Sender: TObject);
-var Comp: TComponent absolute Sender;
-    i: Integer;
+procedure TGdiPages.PopupMenuItemClick(Sender: TObject);
+var
+  Comp: TComponent absolute Sender;
+  i: integer;
 begin
   if not Sender.InheritsFrom(TComponent) then
     exit;
   if Assigned(OnPopupMenuClick) then
-  if (Comp.Tag=0) or (Comp.Tag>PageCount) then
-     OnPopupMenuClick(Sender); // only notify custom events
+    if (Comp.Tag = 0) or
+       (Comp.Tag > PageCount) then
+      OnPopupMenuClick(Sender); // only notify custom events
   case -Comp.Tag of
     ord(rNone):
       exit;
     ord(rNextPage):
-      Page := Page+1;
+      Page := Page + 1;
     ord(rPreviousPage):
-      Page := Page-1;
+      Page := Page - 1;
     ord(rPageAsText):
-      if Page>0 then
-        Clipboard.AsText := fPages[Page-1].Text;
+      if Page > 0 then
+        Clipboard.AsText := fPages[Page - 1].Text;
     ord(rPrint):
-      if PrintPages(-1,-1) then
-        if PreviewForm<>nil then
+      if PrintPages(-1, -1) then
+        if PreviewForm <> nil then
           PreviewForm.Close;
-    ord(rExportPDF):
-      ExportPDF('',true);
+    ord(rExportPdf):
+      ExportPdf('', true);
     ord(rClose):
-      if PreviewForm<>nil then
+      if PreviewForm <> nil then
         PreviewForm.Close;
-    ord(rGotoPage), ord(rZoom), ord(rBookmarks):
-      if Sender.InheritsFrom(TButton) and (PreviewButtons<>nil) then
-      with PreviewButtons[-1-Comp.Tag],
-         PreviewForm.ClientToScreen(Point(Left,Top+Height)) do
-        PopupMenu.Popup(X,Y);
-    991..1999: // allow -1000-PAGE_WIDTH
-      Zoom := -1000-Comp.Tag;
-    2000..4000: begin // allow -2000-OutlineIndex
-      i := -2000-Comp.Tag;
-      if cardinal(i)<cardinal(fOutline.Count) then
-        with TGDIPagereference(fOutline.Objects[i]) do
-          GotoPosition(Page,Rect.Top);
-    end;
-    else
-      if Cardinal(Comp.Tag)<=Cardinal(PageCount) then
-        Page := Comp.Tag;
+    ord(rGotoPage),
+    ord(rZoom),
+    ord(rBookmarks):
+      if Sender.InheritsFrom(TButton) and
+         (PreviewButtons <> nil) then
+        with PreviewButtons[-1 - Comp.Tag], PreviewForm.ClientToScreen(
+               Point(left, top + Height)) do
+          PopupMenu.Popup(X, Y);
+    991..1999:
+      // handle -1000-PAGE_WIDTH
+      Zoom := -1000 - Comp.Tag;
+    2000..4000:
+      begin
+        // handle -2000-OutlineIndex
+        i := -2000 - Comp.Tag;
+        if cardinal(i) < cardinal(fOutline.Count) then
+          with TGdiPageReference(fOutline.Objects[i]) do
+            GotoPosition(Page, Rect.Top);
+      end;
+  else
+    if cardinal(Comp.Tag) <= cardinal(PageCount) then
+      Page := Comp.Tag;
   end;
-  if PreviewForm<>nil then
+  if PreviewForm <> nil then
     SetFocus;
 end;
 
-procedure TGDIPages.InternalUnicodeString(const s: SynUnicode;
-  var PW: PWideChar; var PWLen: integer; size: PSize);
+procedure TGdiPages.InternalUnicodeString(const s: SynUnicode; var PW: PWideChar;
+  var PWLen: integer; size: PSize);
 begin
-  if Assigned(OnStringToUnicode) then begin
+  if Assigned(OnStringToUnicode) then
+  begin
     fInternalUnicodeString := OnStringToUnicode(s);
     PW := pointer(fInternalUnicodeString);
     PWLen := length(fInternalUnicodeString);
-  end else begin
+  end
+  else
+  begin
     PW := pointer(s);
     PWLen := length(s);
   end;
-  if size<>nil then begin
+  if size <> nil then
+  begin
     size^.cx := 0;
     size^.cy := 0;
-    GetTextExtentPoint32W(fCanvas.Handle,PW,PWLen,size^);
+    GetTextExtentPoint32W(fCanvas.Handle, PW, PWLen, size^);
   end;
 end;
 
-procedure TGDIPages.PopupMenuPopup(Sender: TObject);
-var P: PChar;
-    PageFromTo, PageN: string;
-    M,M2: TMenuItem;
-    i,j,k: integer;
-procedure AddPage(Menu: TMenuItem);
-begin
-  NewPopupMenuItem(format(PageN,[i]),i,Menu).Enabled := i<>Page;
-end;
+procedure TGdiPages.PopupMenuPopup(Sender: TObject);
+var
+  P: PChar;
+  PageFromTo, PageN: string;
+  M, M2: TMenuItem;
+  i, j, k: integer;
+
+  procedure AddPage(Menu: TMenuItem);
+  begin
+    NewPopupMenuItem(format(PageN, [i]), i, Menu).Enabled := i <> Page;
+  end;
+
 begin
   with PopupMenu.Items do
-    if Count=0 then
-      exit else
-    while Count>ord(rClose) do
-      Delete(ord(rClose)); // delete after "Close" entry
-  PopupMenu.Items[Ord(rNextPage)-1].Enabled := Page<PageCount;
-  PopupMenu.Items[Ord(rPreviousPage)-1].Enabled := Page>1;
-  M := PopupMenu.Items[Ord(rGoToPage)-1];
-  while M.Count>0 do
+    if count = 0 then
+      exit
+    else
+      while count > ord(rClose) do
+        Delete(ord(rClose)); // delete after "Close" entry
+  PopupMenu.Items[Ord(rNextPage) - 1].Enabled := Page < PageCount;
+  PopupMenu.Items[Ord(rPreviousPage) - 1].Enabled := Page > 1;
+  M := PopupMenu.Items[Ord(rGoToPage) - 1];
+  while M.Count > 0 do
     M.Delete(0);
-  M.Enabled := PageCount>1;
-  if PageCount>=1 then begin // add 'Go to Page' sub menus (group by 10 pages)
+  M.Enabled := PageCount > 1;
+  if PageCount >= 1 then
+  begin // add 'Go to Page' sub menus (group by 10 pages)
     P := pointer(string(sReportPopupMenu2));
     PageFromTo := GetNextItemS(P); // Pages %d to %d
     PageN := GetNextItemS(P);      // Page %d
-    if PageCount>10 then begin
-      for j := 0 to PageCount div 10 do begin
-        k := j*10+1;
-        if k>PageCount then
+    if PageCount > 10 then
+    begin
+      for j := 0 to PageCount div 10 do
+      begin
+        k := j * 10 + 1;
+        if k > PageCount then
           break;
-        M2 := NewPopupMenuItem(format(PageFromTo,[k,k+9]),-800,M);
+        M2 := NewPopupMenuItem(format(PageFromTo, [k, k + 9]), -800, M);
         // Tag=-800 -> no OnClick event triggered for this entry
-        for i := k to k+9 do
-          if i>PageCount then
-            break else
+        for i := k to k + 9 do
+          if i > PageCount then
+            break
+          else
             AddPage(M2);
       end;
-    end else
+    end
+    else
       for i := 1 to PageCount do
         AddPage(M);
   end;
@@ -4754,60 +5173,62 @@ begin
 end;
 
 {$ifndef USEPDFPRINTER}
-function TGDIPages.ExportPDFStream(aDest: TStream): boolean;
-var PDF: TPDFDocument;
-    BackgroundImage: TPdfImage;
-    page: TPdfPage;
-    lvl: TPdfALevel;
-    i: integer;
+function TGdiPages.ExportPdfStream(aDest: TStream): boolean;
+var
+  PDF: TPdfDocument;
+  BackgroundImage: TPdfImage;
+  page: TPdfPage;
+  i: integer;
 begin
-  if ExportPDFA1 then
-    lvl := pdfa1A else
-    lvl := pdfaNone;
   try
-    PDF := TPDFDocument.Create(UseOutlines,0,lvl,
-      TPdfEncryption.New(ExportPDFEncryptionLevel,ExportPDFEncryptionUserPassword,
-        ExportPDFEncryptionOwnerPassword,ExportPDFEncryptionPermissions));
+    PDF := TPdfDocument.Create(UseOutlines, 0, ExportPdfLevel,
+      TPdfEncryption.New(ExportPdfEncryptionLevel,
+        ExportPdfEncryptionUserPassword, ExportPdfEncryptionOwnerPassword,
+        ExportPdfEncryptionPermissions));
     try
-      PDF.GeneratePDF15File := ExportPDFGeneratePDF15File;
+      PDF.GeneratePdf15File := ExportPdfGeneratePdf15File;
       //PDF.CompressionMethod := cmNone;
-      with PDF.Info do begin
+      with PDF.Info do
+      begin
         Title := SysUtils.Trim(Caption);
-        if ExportPDFApplication='' then
-          Creator := trim(Application.Title) else
-          Creator := trim(ExportPDFApplication);
-        Author := ExportPDFAuthor;
-        Subject := ExportPDFSubject;
-        Keywords := ExportPDFKeywords;
+        if ExportPdfApplication = '' then
+          Creator := trim(Application.Title)
+        else
+          Creator := trim(ExportPdfApplication);
+        Author := ExportPdfAuthor;
+        Subject := ExportPdfSubject;
+        Keywords := ExportPdfKeywords;
       end;
-      PDF.EmbeddedTTF := ExportPDFEmbeddedTTF;
+      PDF.EmbeddedTTF := ExportPdfEmbeddedTTF;
       {$ifndef NO_USE_UNISCRIBE}
-      PDF.UseUniscribe := ExportPDFUseUniscribe;
-      {$endif}
-      PDF.UseFontFallBack := ExportPDFUseFontFallBack;
-      if ExportPDFFontFallBackName<>'' then
-        PDF.FontFallBackName := ExportPDFFontFallBackName;
-      PDF.ForceJPEGCompression := ExportPDFForceJPEGCompression;
-      if ExportPDFBackground=nil then
-        BackgroundImage := nil else begin
-        BackgroundImage := TPdfImage.Create(PDF,ExportPDFBackground,true);
-        PDF.AddXObject('BackgroundImage',BackgroundImage);
+      PDF.UseUniscribe := ExportPdfUseUniscribe;
+      {$endif NO_USE_UNISCRIBE}
+      PDF.UseFontFallBack := ExportPdfUseFontFallBack;
+      if ExportPdfFontFallBackName <> '' then
+        PDF.FontFallBackName := ExportPdfFontFallBackName;
+      PDF.ForceJPEGCompression := ExportPdfForceJPEGCompression;
+      if ExportPdfBackground = nil then
+        BackgroundImage := nil
+      else
+      begin
+        BackgroundImage := TPdfImage.Create(PDF, ExportPdfBackground, true);
+        PDF.AddXObject('BackgroundImage', BackgroundImage);
       end;
       PDF.SaveToStreamDirectBegin(aDest);
-      for i := 0 to PageCount-1 do
-      with Pages[i] do begin
+      for i := 0 to PageCount - 1 do
+        with Pages[i] do
+        begin
         // this loop will do all the magic :)
-        PDF.DefaultPageWidth := PdfCoord(25.4*SizePx.X/fPrinterPxPerInch.x);
-        PDF.DefaultPageHeight := PdfCoord(25.4*SizePx.Y/fPrinterPxPerInch.y);
-        page := PDF.AddPage;
-        if BackgroundImage<>nil then
-          PDF.Canvas.DrawXObject(0,0,page.PageWidth,page.PageHeight,
-            'BackgroundImage');
-        RenderMetaFile(PDF.Canvas,GetMetaFileForPage(i),
-          Screen.PixelsPerInch/fPrinterPxPerInch.x,
-          Screen.PixelsPerInch/fPrinterPxPerInch.y);
-        PDF.SaveToStreamDirectPageFlush;
-      end;
+          PDF.DefaultPageWidth := PdfCoord(25.4 * SizePx.X / fPrinterPxPerInch.x);
+          PDF.DefaultPageHeight := PdfCoord(25.4 * SizePx.Y / fPrinterPxPerInch.y);
+          page := PDF.AddPage;
+          if BackgroundImage <> nil then
+            PDF.Canvas.DrawXObject(0, 0, page.PageWidth, page.PageHeight,
+              'BackgroundImage');
+          RenderMetaFile(PDF.Canvas, GetMetaFileForPage(i), Screen.PixelsPerInch
+            / fPrinterPxPerInch.x, Screen.PixelsPerInch / fPrinterPxPerInch.y);
+          PDF.SaveToStreamDirectPageFlush;
+        end;
       PDF.SaveToStreamDirectEnd;
     finally
       PDF.Free;
@@ -4817,44 +5238,53 @@ begin
     result := false;
   end;
 end;
-{$endif}
+{$endif USEPDFPRINTER}
 
-function TGDIPages.ExportPDF(aPdfFileName: TFileName; ShowErrorOnScreen: boolean;
+function TGdiPages.ExportPdf(aPdfFileName: TFileName; ShowErrorOnScreen,
   LaunchAfter: boolean): boolean;
 {$ifdef USEPDFPRINTER}
-var DefaultPrinter: integer;
+var
+  DefaultPrinter: integer;
 {$else}
-function ValidFileName(const FN: TFileName): TFileName;
-var i: integer;
-begin
-  result := FN;
-  for i := length(result) downto 1 do
-    if ord(result[i]) in [ord('/'),ord(':'),ord('\'),ord('.')] then
-      delete(result,i,1);
-  i := length(Result);
-  while (i>0) and (ord(result[i]) in [ord(' '),ord('-')]) do dec(i);
-  SetLength(Result,i);
-  result := trim(result);
-end;
-var PDFFileName: TFileName;
-    PDFFile: TFileStream;
+
+  function ValidFileName(const FN: TFileName): TFileName;
+  var
     i: integer;
-    Name: string;
-    TempDir: TFileName;
-{$endif}
+  begin
+    result := FN;
+    for i := length(result) downto 1 do
+      if ord(result[i]) in [ord('/'), ord(':'), ord('\'), ord('.')] then
+        delete(result,i,1);
+    i := length(result);
+    while (i > 0) and
+          (ord(result[i]) in [ord(' '), ord('-')]) do
+      dec(i);
+    SetLength(result, i);
+      result := trim(result);
+  end;
+
+var
+  PDFFileName: TFileName;
+  PDFFile:
+  TFileStream;
+  i: integer;
+  Name: string;
+  TempDir: TFileName;
+{$endif USEPDFPRINTER}
 begin
-  result := False;
-  if Self=nil then
+  result := false;
+  if self = nil then
     exit;
-  if PageCount>10 then
+  if PageCount > 10 then
     Screen.Cursor := crHourGlass;
 {$ifdef USEPDFPRINTER}
-  if HasPDFPrinterInstalled then begin
+  if HasPDFPrinterInstalled then
+  begin
     DefaultPrinter := Printer.PrinterIndex;
     Printer.PrinterIndex := fPDFPrinterIndex;
-    PrintPages(0,0);
+    PrintPages(0, 0);
     Printer.PrinterIndex := DefaultPrinter;
-  end;
+  end; 
 {$else}
   // use the Synopse PDF engine
   if aPdfFileName='' then
@@ -4865,183 +5295,203 @@ begin
     Title := Caption;
     FileName := ValidFileName(Caption);
     DefaultExt := 'pdf';
-    Options := [ofOverwritePrompt,ofHideReadOnly,ofEnableSizing];
+    Options := [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing];
     repeat
       if not Execute then
         exit;
       PDFFileName := FileName;
       i := FileCreate(PDFFileName); // test file create (pdf not already opened)
-      if i>0 then break;
-      MessageBox(0,pointer(Format(SIniFileWriteError,[PDFFileName])),nil,MB_ICONERROR);
+      if i > 0 then
+        break;
+      MessageBox(0, pointer(Format(SIniFileWriteError,[PDFFileName])),
+        nil, MB_ICONERROR);
     until false;
     FileClose(i);
   finally
     SetCurrentDir(TempDir); // allow unplug e.g. any USB
     Free;
-  end else
+  end
+  else
     PDFFileName := aPdfFileName;
   try
-    PDFFile := TFileStream.Create(PDFFileName,fmCreate);
+    PDFFile := TFileStream.Create(PDFFileName, fmCreate);
     try
-      ExportPDFStream(PDFFile);
+      ExportPdfStream(PDFFile);
     finally
       PDFFile.Free;
     end;
     if LaunchAfter then
-      ShellExecute(Application.MainForm.Handle,'open',Pointer(PDFFileName),
-        nil,nil,SW_NORMAL);
+      ShellExecute(Application.MainForm.Handle, 'open',
+        pointer(PDFFileName), nil, nil, SW_NORMAL);
   except
-    on E: Exception do begin // show any error raised during PDF creation
+    on E: Exception do
+    begin
+      // show any error raised during PDF creation
       if ShowErrorOnScreen then
-        MessageBox(0,pointer(E.Message),Pointer(Name),MB_ICONERROR);
+        MessageBox(0, pointer(E.Message), pointer(Name), MB_ICONERROR);
       exit;
     end;
   end;
-{$endif}
+{$endif USEPDFPRINTER}
   result := true;
-  if PageCount>10 then
+  if PageCount > 10 then
     Screen.Cursor := crDefault;
 end;
 
-procedure TGDIPages.WMEraseBkgnd(var Message: TWmEraseBkgnd);
-var R: TRect;
+procedure TGdiPages.WMEraseBkgnd(var Message: TWmEraseBkgnd);
+var
+  R: TRect;
 begin
-  Message.Result := 1; // no erasing is necessary after this method call
-  if Message.DC=0 then exit;
+  Message.result := 1; // no erasing is necessary after this method call
+  if Message.DC = 0 then
+    exit;
   // erase outside the preview surface
   R.Left := 0;
   R.Right := fPreviewSurface.left;
   R.Top := 0;
   R.Bottom := Height;
-  FillRect(Message.DC,R,Brush.Handle);
-  R.Left := R.Right+fPreviewSurface.Width;
+  FillRect(Message.DC, R, Brush.Handle);
+  R.Left := R.Right + fPreviewSurface.Width;
   R.Right := Width;
-  FillRect(Message.DC,R,Brush.Handle);
+  FillRect(Message.DC, R, Brush.Handle);
   R.Left := 0;
   R.Bottom := fPreviewSurface.Top;
-  FillRect(Message.DC,R,Brush.Handle);
-  R.Top := fPreviewSurface.Top+fPreviewSurface.Height;
+  FillRect(Message.DC, R, Brush.Handle);
+  R.Top := fPreviewSurface.Top + fPreviewSurface.Height;
   R.Bottom := Height;
-  FillRect(Message.DC,R,Brush.Handle);
+  FillRect(Message.DC, R, Brush.Handle);
 end;
 
-procedure TGDIPages.AppendRichEdit(RichEditHandle: HWnd;
+procedure TGdiPages.AppendRichEdit(RichEditHandle: HWnd;
   EndOfPagePositions: PIntegerDynArray);
-var Range: TFormatRange;
-    LogX, LogY, LastChar, MaxLen, OldMap: integer;
-    TextLenEx: TGetTextLengthEx; // RichEdit 2.0 Window Class
+var
+  Range: TFormatRange;
+  LogX, LogY, LastChar, MaxLen, OldMap: integer;
+  TextLenEx: TGetTextLengthEx; // RichEdit 2.0 Window Class
 begin
-  if (Self<>nil) and (fCanvas<>nil) then
-  with Range do begin
-    LogX := GetDeviceCaps(fCanvas.Handle, LOGPIXELSX);
-    LogY := GetDeviceCaps(fCanvas.Handle, LOGPIXELSY);
-    rcPage.Left := (fPageMarginsPx.Left*1440) div LogX;
-    rcPage.Right := ((fPhysicalSizePx.x-fPageMarginsPx.Right)*1440) div LogX;
-    rcPage.Top := ((fPageMarginsPx.Top+fHeaderHeight)*1440) div LogY;
-    rcPage.Bottom := ((fPhysicalSizePx.y-fPageMarginsPx.Bottom-fFooterHeight)*1440) div LogY;
-    CheckHeaderDone;
-    rc := rcPage;
-    rc.Top := (fCurrentYPos*1440) div LogY;
-    LastChar := 0;
-    TextLenEx.flags := GTL_DEFAULT;
-    TextLenEx.codepage := CP_ACP;
-    MaxLen := SendMessage(RichEditHandle, EM_GETTEXTLENGTHEX, PtrInt(@TextLenEx), 0);
-    chrg.cpMax := -1;
-    OldMap := SetMapMode(hdc, MM_TEXT);
-    try
-      SendMessage(RichEditHandle, EM_FORMATRANGE, 0, 0);
-      repeat
-        chrg.cpMin := LastChar;
-        hdc := fCanvas.Handle;
-        hdcTarget := hdc;
-        LastChar := SendMessage(RichEditHandle, EM_FORMATRANGE, 1, PtrInt(@Range));
-        if EndOfPagePositions<>nil then
-          AddInteger(EndOfPagePositions^,LastChar);
-        if cardinal(LastChar)>=cardinal(MaxLen) then
-          break;
-        NewPageInternal;
-        DoHeader;
-        rc := rcPage;
-      until false;
-      fCurrentYPos := (rc.Bottom*LogY) div 1440;
-    finally
-      SendMessage(RichEditHandle, EM_FORMATRANGE, 0, 0);
-      SetMapMode(hdc, OldMap);
+  if (self <> nil) and
+     (fCanvas <> nil) then
+    with Range do
+    begin
+      LogX := GetDeviceCaps(fCanvas.Handle, LOGPIXELSX);
+      LogY := GetDeviceCaps(fCanvas.Handle, LOGPIXELSY);
+      rcPage.Left := (fPageMarginsPx.Left * 1440) div LogX;
+      rcPage.Right :=
+        ((fPhysicalSizePx.x - fPageMarginsPx.Right) * 1440) div LogX;
+      rcPage.Top := ((fPageMarginsPx.Top + fHeaderHeight) * 1440) div LogY;
+      rcPage.Bottom :=
+        ((fPhysicalSizePx.y - fPageMarginsPx.Bottom - fFooterHeight) * 1440) div LogY;
+      CheckHeaderDone;
+      rc := rcPage;
+      rc.Top := (fCurrentYPos * 1440) div LogY;
+      LastChar := 0;
+      TextLenEx.flags := GTL_DEFAULT;
+      TextLenEx.codepage := CP_ACP;
+      MaxLen := SendMessage(
+        RichEditHandle, EM_GETTEXTLENGTHEX, PtrInt(@TextLenEx), 0);
+      chrg.cpMax := -1;
+      OldMap := SetMapMode(hdc, MM_TEXT);
+      try
+        SendMessage(RichEditHandle, EM_FORMATRANGE, 0, 0);
+        repeat
+          chrg.cpMin := LastChar;
+          hdc := fCanvas.Handle;
+          hdcTarget := hdc;
+          LastChar := SendMessage(
+            RichEditHandle, EM_FORMATRANGE, 1, PtrInt(@Range));
+          if EndOfPagePositions <> nil then
+            AddInteger(EndOfPagePositions^, LastChar);
+          if cardinal(LastChar) >= cardinal(MaxLen) then
+            break;
+          NewPageInternal;
+          DoHeader;
+          rc := rcPage;
+        until false;
+        fCurrentYPos := (rc.Bottom * LogY) div 1440;
+      finally
+        SendMessage(RichEditHandle, EM_FORMATRANGE, 0, 0);
+        SetMapMode(hdc, OldMap);
+      end;
     end;
-  end;
 end;
 
-function TGDIPages.AddBookMark(const aBookmarkName: string; aYPosition: integer=0): boolean;
+function TGdiPages.AddBookMark(const aBookmarkName: string;
+  aYPosition: integer): boolean;
 begin
-  if fBookmarks.IndexOf(aBookmarkName)>=0 then // avoid duplicate bookmarks
-    result := false else begin
-    if aYPosition=0 then begin
+  if fBookmarks.IndexOf(aBookmarkName) >= 0 then // avoid duplicate bookmarks
+    result := false
+  else
+  begin
+    if aYPosition = 0 then
+    begin
       CheckYPos;
       aYPosition := fCurrentYPos;
     end;
     fBookMarks.AddObject(aBookmarkName,
-      TGDIPagereference.Create(PageCount,0,aYPosition,0,0));
+      TGdiPageReference.Create(PageCount, 0, aYPosition, 0, 0));
     {$ifndef USEPDFPRINTER}
-    fCanvas.MoveTo(0,aYPosition);
-    GDICommentBookmark(fCanvas.Handle,StringToUTF8(aBookmarkName));
-    {$endif}
+    fCanvas.MoveTo(0, aYPosition);
+    GdiCommentBookmark(fCanvas.Handle, StringToUtf8(aBookmarkName));
+    {$endif USEPDFPRINTER}
     result := true;
   end;
 end;
 
-procedure TGDIPages.GotoPosition(aPage: integer; aYPos: integer);
+procedure TGdiPages.GotoPosition(aPage, aYPos: integer);
 begin
   Page := aPage;
   HorzScrollbar.Position := 0;
-  VertScrollbar.Position := (aYPos*VertScrollbar.Range) div fPhysicalSizePx.y
+  VertScrollbar.Position := (aYPos * VertScrollbar.Range) div fPhysicalSizePx.y
 end;
 
-function TGDIPages.GotoBookmark(const aBookmarkName: string): Boolean;
-var i: integer;
+function TGdiPages.GotoBookmark(const aBookmarkName: string): boolean;
+var
+  i: integer;
 begin
   i := fBookmarks.IndexOf(aBookmarkName);
-  result := i>=0;
+  result := i >= 0;
   if result then
-    with TGDIPagereference(fBookmarks.Objects[i]) do
-      GotoPosition(Page,Rect.Top);
+    with TGdiPageReference(fBookmarks.Objects[i]) do
+      GotoPosition(Page, Rect.Top);
 end;
 
-procedure TGDIPages.AddOutline(const aTitle: string; aLevel: Integer;
-  aYPosition: integer=0; aPageNumber: integer=0);
+procedure TGdiPages.AddOutline(const aTitle: string;
+  aLevel, aYPosition, aPageNumber: integer);
 begin
-  if aPageNumber=0 then
+  if aPageNumber = 0 then
     aPageNumber := PageCount;
-  if aYPosition=0 then begin
+  if aYPosition = 0 then
+  begin
     CheckYPos;
     aYPosition := fCurrentYPos;
   end;
   fOutline.AddObject(aTitle,
-    TGDIPagereference.Create(aPageNumber,0,aYPosition,0,aLevel));
+    TGdiPageReference.Create(aPageNumber, 0, aYPosition, 0, aLevel));
   {$ifndef USEPDFPRINTER}
-  fCanvas.MoveTo(0,aYPosition);
-  GDICommentOutline(fCanvas.Handle, StringToUtf8(aTitle),aLevel);
-  {$endif}
+  fCanvas.MoveTo(0, aYPosition);
+  GdiCommentOutline(fCanvas.Handle, StringToUtf8(aTitle), aLevel);
+  {$endif USEPDFPRINTER}
 end;
 
-procedure TGDIPages.AddLink(const aBookmarkName: string; aRect: TRect;
+procedure TGdiPages.AddLink(const aBookmarkName: string; aRect: TRect;
   aPageNumber: integer; aNoBorder: boolean);
 begin
-  if aPageNumber=0 then
+  if aPageNumber = 0 then
     aPageNumber := PageCount;
   aRect := MmToPrinter(aRect);
   with aRect do
-    fLinks.AddObject(aBookmarkName,
-      TGDIPagereference.Create(aPageNumber,Left,Top,Right,Bottom));
+    fLinks.AddObject(aBookmarkName, TGdiPageReference.Create(
+      aPageNumber, left, top, right, bottom));
   {$ifndef USEPDFPRINTER}
-  GDICommentLink(fCanvas.Handle,StringToUtf8(aBookmarkName),aRect,aNoBorder);
-  {$endif}
+  GdiCommentLink(fCanvas.Handle, StringToUtf8(aBookmarkName), aRect, aNoBorder);
+  {$endif USEPDFPRINTER} 
 end;
 
 
-{ TGDIPagereference }
+{ TGdiPageReference }
 
-constructor TGDIPagereference.Create(PageNumber: integer; Left, Top, Right,
-  Bottom: integer);
+constructor TGdiPageReference.Create(
+  PageNumber, Left, Top, Right, Bottom: integer);
 begin
   inherited Create;
   Page := PageNumber;
@@ -5051,34 +5501,39 @@ begin
   Rect.Bottom := Bottom;
 end;
 
-procedure TGDIPagereference.ToPreview(Pages: TGDIPages);
-var W,H: integer;
+procedure TGdiPageReference.ToPreview(Pages: TGdiPages);
+var
+  W, H: integer;
 begin // do it for all pages (zoom is not reset between page shift)
-  if Page<>0 then
-    with Pages.fPreviewSurface do begin
-      W := Width-GRAY_MARGIN*2;
-      H := Height-GRAY_MARGIN*2;
-      Preview.Left := GRAY_MARGIN+(Rect.Left*W) div Pages.fPhysicalSizePx.x;
-      Preview.Right := GRAY_MARGIN+(Rect.Right*W) div Pages.fPhysicalSizePx.x;
-      Preview.Top := GRAY_MARGIN+(Rect.Top*H) div Pages.fPhysicalSizePx.y;
-      Preview.Bottom := GRAY_MARGIN+(Rect.Bottom*H) div Pages.fPhysicalSizePx.y;
+  if Page <> 0 then
+    with Pages.fPreviewSurface do
+    begin
+      W := Width - GRAY_MARGIN * 2;
+      H := Height - GRAY_MARGIN * 2;
+      Preview.Left := GRAY_MARGIN + (Rect.Left * W) div Pages.fPhysicalSizePx.x;
+      Preview.Right := GRAY_MARGIN + (Rect.Right * W) div Pages.fPhysicalSizePx.x;
+      Preview.Top := GRAY_MARGIN + (Rect.Top * H) div Pages.fPhysicalSizePx.y;
+      Preview.Bottom := GRAY_MARGIN + (Rect.Bottom * H) div Pages.fPhysicalSizePx.y;
     end;
 end;
 
 
 { THeaderFooter }
 
-constructor THeaderFooter.Create(Report: TGDIPages; doubleline: boolean;
-  const aText: SynUnicode=''; IsText: boolean=false);
+constructor THeaderFooter.Create(Report: TGdiPages; doubleline: boolean;
+  const aText: SynUnicode; IsText: boolean);
 begin
   Text := aText;
-  State := Report.SavedState;
+  state := Report.SavedState;
   if not IsText then
     if doubleline then
-      State.Flags := State.Flags or FORMAT_DOUBLELINE else
-      State.Flags := State.Flags or FORMAT_SINGLELINE;
+      state.Flags := state.Flags or FORMAT_DOUBLELINE
+    else
+      state.Flags := state.Flags or FORMAT_SINGLELINE;
 end;
 
+
+{ ****************** TRenderPages Prototype - unfinished }
 
 {$ifdef RENDERPAGES}
 
@@ -5108,12 +5563,15 @@ begin
 end;
 
 function TRenderPages.GetCurrentFontCacheIndex: integer;
-var F: TFont;
+var
+  F: TFont;
 begin
-  for result := 0 to fFontCache.Count-1 do
+  for result := 0 to fFontCache.Count - 1 do
     with TFont(fFontCache.List[result]) do
-      if (Color=Font.Color) and (Height=Font.Height) and (Style=Font.Style) and
-         (Name=Font.Name) then
+      if (Color = Font.Color) and
+         (Height = Font.Height) and
+         (Style = Font.Style) and
+         (Name = Font.Name) then
         exit;
   F := TFont.Create;
   F.Assign(Font);
@@ -5121,23 +5579,27 @@ begin
 end;
 
 function TRenderPages.GetCurrentFontCacheIndexAndSelect: integer;
-var H: HDC;
+var
+  H: HDC;
 begin
   result := GetCurrentFontCacheIndex;
   H := Canvas.Handle;
-  with TFont(fFontCache[result]) do begin // same as TCanvas.CreateFont
-    SelectObject(H,Handle);
-    SetTextColor(H,ColorToRGB(Color));
-    if length(fFontCacheSpace)<fFontCache.Count then
-      SetLength(fFontCacheSpace,fFontCache.Count+20);
-    if fFontCacheSpace[result].cx=0 then
-      GetTextExtentPoint32W(H,' ',1,fFontCacheSpace[result]);
+  with TFont(fFontCache[result]) do
+  begin
+    // same as TCanvas.CreateFont
+    SelectObject(H, Handle);
+    SetTextColor(H, ColorToRGB(Color));
+    if length(fFontCacheSpace) < fFontCache.Count then
+      SetLength(fFontCacheSpace, fFontCache.Count + 20);
+    if fFontCacheSpace[result].cx = 0 then
+      GetTextExtentPoint32W(H, ' ', 1, fFontCacheSpace[result]);
   end;
 end;
 
 function TRenderPages.GetSavedRender: TSavedStateRender;
 begin
-  with result do begin
+  with result do
+  begin
     FirstLineIndent := ParagraphFirstLineIndent;
     Before := ParagraphBefore;
     After := ParagraphAfter;
@@ -5154,22 +5616,24 @@ end;
 
 procedure TRenderPages.RdrParagraph;
 begin
-  if ParagraphBefore<>0 then
-    CurrentYPos := CurrentYPos+ParagraphBefore;
-  Rdr.Flush(fPageMarginsPx.left,fCurrentYPos,false,0,False);
-  if ParagraphAfter<>0 then
-    CurrentYPos := CurrentYPos+ParagraphAfter;
+  if ParagraphBefore <> 0 then
+    CurrentYPos := CurrentYPos + ParagraphBefore;
+  Rdr.Flush(fPageMarginsPx.left, fCurrentYPos, false, 0, false);
+  if ParagraphAfter <> 0 then
+    CurrentYPos := CurrentYPos + ParagraphAfter;
 end;
 
 procedure TRenderPages.RdrPard;
-var State: TSavedState;
+var
+  State: TSavedState;
 begin
-  if self=nil then
+  if self = nil then
     exit;
   fAlign := taLeft;
   SetSavedRender(fDefaultStateRender);
   State := SavedState;
-  if State.Flags<>fDefaultState.Flags then begin
+  if State.Flags <> fDefaultState.Flags then
+  begin
     State.Flags := fDefaultState.Flags;
     SavedState := State; // will set FORMAT_RIGHT/CENTER/JUSTIFIED
   end;
@@ -5177,24 +5641,30 @@ end;
 
 procedure TRenderPages.RdrPardPlain;
 begin
-  if self=nil then
+  if self = nil then
     exit;
-  if fDefaultState.FontName='' then
-    RdrPlain else
+  if fDefaultState.FontName = '' then
+    RdrPlain
+  else
     SavedState := fDefaultState;
   SetSavedRender(fDefaultStateRender);
 end;
 
 procedure TRenderPages.RdrPlain;
-var State: TSavedState;
+var
+  State: TSavedState;
 begin
-  if self=nil then
+  if self = nil then
     exit;
-  if (fDefaultState.FontName='') or (fDefaultState.Flags=0) then begin
+  if (fDefaultState.FontName = '') or
+     (fDefaultState.Flags = 0) then
+  begin
     Font.Size := 12;
     Font.Style := [];
     Font.Color := clBlack;
-  end else begin
+  end
+  else
+  begin
     State := fDefaultState;
     State.Flags :=
       // void FORMAT_RIGHT/CENTER/JUSTIFIED
@@ -5211,57 +5681,62 @@ begin
   fDefaultStateRender := GetSavedRender;
 end;
 
-function TRenderPages.RdrTableBegin(const PercentWidth: array of integer): Boolean;
-var i, sum, w: integer;
-    col: TRenderBox;
+function TRenderPages.RdrTableBegin(const PercentWidth: array of integer): boolean;
+var
+  i, sum, w: integer;
+  col: TRenderBox;
 begin
-  result := (Self<>nil) and (fRdrCol.Count=0);
+  result := (self <> nil) and (fRdrCol.Count = 0);
   if not result then
     exit;
   sum := 0;
   for i := 0 to high(PercentWidth) do
-    inc(sum,PercentWidth[i]);
-  if sum<=0 then begin
+    inc(sum, PercentWidth[i]);
+  if sum <= 0 then
+  begin
     result := false;
     exit;
   end;
-  w := fPhysicalSizePx.x-fPageMarginsPx.Left-fPageMarginsPx.right;
-  for i := 0 to high(PercentWidth) do begin
+  w := fPhysicalSizePx.x - fPageMarginsPx.Left - fPageMarginsPx.right;
+  for i := 0 to high(PercentWidth) do
+  begin
     col := TRenderBox.Create(self);
-    col.Width := (w*100)div sum;
+    col.Width := (w * 100) div sum;
     fRdrCol.Add(col);
   end;
 end;
 
-function TRenderPages.RdrTableColumn(aColumnIndex: Integer): TRenderBox;
+function TRenderPages.RdrTableColumn(aColumnIndex: integer): TRenderBox;
 begin
-  if (Self=nil) or (cardinal(aColumnIndex)>=cardinal(fRdrCol.Count-1)) then
-    result := nil else
+  if (self = nil) or
+     (cardinal(aColumnIndex) >= cardinal(fRdrCol.Count - 1)) then
+    result := nil
+  else
     result := TRenderBox(fRdrCol.List[aColumnIndex]);
 end;
 
-function TRenderPages.RdrTableEnd: Boolean;
+function TRenderPages.RdrTableEnd: boolean;
 begin
-  result := (Self<>nil) and (fRdrCol.Count>0);
+  result := (self <> nil) and (fRdrCol.Count > 0);
   if not result then
     exit;
-
   fRdrCol.Clear;
 end;
 
 procedure TRenderPages.RestoreSavedLayout;
 begin
-  if Self=nil then exit; // avoid GPF
-  if fSavedCount>=length(fSavedRender) then
-    Setlength(fSavedRender,fSavedCount+20);
+  if self = nil then
+    exit; // avoid GPF
+  if fSavedCount >= length(fSavedRender) then
+    Setlength(fSavedRender, fSavedCount + 20);
   fSavedRender[fSavedCount] := GetSavedRender;
   inherited;
 end;
 
 procedure TRenderPages.SaveLayout;
 begin
-  if Self=nil then exit; // avoid GPF
-  if fSavedCount<=0 then
+  if (self = nil) or
+     (fSavedCount <= 0) then
     exit;
   inherited;
   SetSavedRender(fSavedRender[fSavedCount]);
@@ -5269,7 +5744,8 @@ end;
 
 procedure TRenderPages.SetSavedRender(const State: TSavedStateRender);
 begin
- with State do begin
+  with State do
+  begin
     ParagraphFirstLineIndent := FirstLineIndent;
     ParagraphBefore := Before;
     ParagraphAfter := After;
@@ -5282,26 +5758,31 @@ end;
 { TRenderBox }
 
 procedure TRenderBox.AddText(const s: string);
-var PW: PWideChar;
-    PWLen: integer;
+var
+  PW: PWideChar;
+  PWLen: integer;
 begin
-  if (self=nil) or (Owner=nil) then
+  if (self = nil) or
+     (Owner = nil) then
     exit; // avoid GPF
   // convert text to unicode and add to fText[] internal buffer
-  Owner.InternalUnicodeString(StringToSynUnicode(s),PW,PWLen,nil);
-  AddText(PW,PWLen);
+  Owner.InternalUnicodeString(StringToSynUnicode(s), PW, PWLen, nil);
+  AddText(PW, PWLen);
 end;
 
 procedure TRenderBox.AddText(PW: PWideChar; PWLen: integer);
-var PDBeg, PD: PWideChar;
-    aFontIndex, aFontSpaceWidth: integer;
+var
+  PDBeg, PD: PWideChar;
+  aFontIndex, aFontSpaceWidth: integer;
 begin
-  if (self=nil) or (Owner=nil) or (PWLen=0) then
+  if (self = nil) or
+     (Owner = nil) or
+     (PWLen = 0) then
     exit; // avoid GPF
-  if PWLen+fTextLen>length(fText) then
-    SetLength(fText,length(fText)+PWLen+1024);
+  if PWLen + fTextLen > length(fText) then
+    SetLength(fText, length(fText) + PWLen + 1024);
   PD := @fText[fTextLen];
-  inc(fTextLen,PWLen);
+  inc(fTextLen, PWLen);
   // create associated word markers
   aFontIndex := Owner.GetCurrentFontCacheIndexAndSelect;
   aFontSpaceWidth := Owner.fFontCacheSpace[aFontIndex].cx;
@@ -5309,38 +5790,46 @@ begin
     PDBeg := PD;
     while true do
       case integer(PW^) of
-        0, 32: break;
-        1..31: if PD<>PDBeg then break else Inc(PW);
-        else begin
+        0, 32:
+          break;
+        1..31:
+          if PD <> PDBeg then
+            break
+          else
+            inc(PW);
+      else
+        begin
           PD^ := PW^;
           inc(PW);
           inc(PD);
         end;
       end;
-    if fBoxCount>=Length(fBox) then
-      SetLength(fBox,fBoxCount+200);
-    with fBox[fBoxCount] do begin
-      TextOffset := PD-@fText[0];
-      TextLength := PD-PDBeg;
+    if fBoxCount >= Length(fBox) then
+      SetLength(fBox, fBoxCount + 200);
+    with fBox[fBoxCount] do
+    begin
+      TextOffset := PD - @fText[0];
+      TextLength := PD - PDBeg;
       FontIndex := aFontIndex;
       FontSpaceWidth := aFontSpaceWidth;
-      GetTextExtentPoint32W(Owner.Canvas.Handle,PDBeg,TextLength,Size);
+      GetTextExtentPoint32W(Owner.Canvas.Handle, PDBeg, TextLength, Size);
       SpaceAfterCount := 0;
-      while integer(PW^) in [1..32] do begin
+      while integer(PW^) in [1..32] do
+      begin
         PD^ := ' ';
-        inc(PW);
         inc(PD);
+        inc(PW);
         inc(SpaceAfterCount);
       end;
       LinkNumber := fLinksBookMarkNameCurrent;
     end;
     inc(fBoxCount);
-  until PW^=#0;
+  until PW^ = #0;
 end;
 
 procedure TRenderBox.Clear;
 begin
-  if Self=nil then
+  if self = nil then
     exit;
   Finalize(fLinksBookMarkName);
   Finalize(fBox);
@@ -5368,34 +5857,38 @@ end;
 // the current page - then the fLayout[] array will contain remaining boxes; otherwise,
 // this will flush all content to multiple pages
 
-procedure TRenderBox.Flush(Left, Top: Integer; CurrentPageOnly: boolean;
-  ForcedHeightBottomCentered: Integer; ForcedAtBottom: boolean);
-var H, Y, i, fitLayout: integer;
-    WillBreak: boolean;
+procedure TRenderBox.Flush(Left, Top: integer; CurrentPageOnly: boolean;
+  ForcedHeightBottomCentered: integer; ForcedAtBottom: boolean);
+var
+  H, Y, i, fitLayout: integer;
+  WillBreak: boolean;
 begin
-  if (self=nil) or (Owner=nil) then
+  if (self = nil) or
+     (Owner = nil) then
     exit; // avoid GPF
   H := GetHeight; // will populate fLayout[] from fBox[] if necessary
   { render on document Canvas }
   WillBreak := false;
-  fitLayout := fLayoutCount-1;
+  fitLayout := fLayoutCount - 1;
   for i := 0 to fitLayout do
-    if fLayout[i].Top>=H then begin
-      fitLayout := i-1;
+    if fLayout[i].Top >= H then
+    begin
+      fitLayout := i - 1;
       WillBreak := true;
       break;
     end;
-
-  { TODO : handle TGDIPagereference creation from fLayout[].LastBox.LinkNumber }
+  { TODO : handle TGdiPageReference creation from fLayout[].LastBox.LinkNumber }
   // reset internal TRenderBox content
   Clear;
 end;
 
 function TRenderBox.GetHeight: integer;
 begin
-  if self=nil then
-    result := 0 else begin
-    if fHeight=0 then
+  if self = nil then
+    result := 0
+  else
+  begin
+    if fHeight = 0 then
       // need to recalculate the layout to refresh the resulting Height
       InternalRender;
     result := fHeight;
@@ -5403,118 +5896,138 @@ begin
 end;
 
 procedure TRenderBox.InternalRender;
-var ndx, ndxFirst: integer;
-    X, Y, H, W, LineW: integer;
-    txt: PWideChar;
-    Box: PRenderBoxWord;
-    LineLayout, LineNdx: integer;
-procedure AddLayout(DoLineFeed, LastLine: boolean);
-var nspace, Adjust, i, j, aLeft, n: Integer;
+var
+  ndx, ndxFirst: integer;
+  X, Y, H, W, LineW: integer;
+  txt: PWideChar;
+  Box: PRenderBoxWord;
+  LineLayout, LineNdx: integer;
+
+  procedure AddLayout(DoLineFeed, LastLine: boolean);
+  var
+    nspace, Adjust, i, j, aLeft, n: integer;
     align: TTextAlign;
     TmpLayout: array of TRenderBoxLayout;
-begin
-  if fLayoutCount>=length(fLayout) then
-    SetLength(fLayout,fLayoutCount+50);
-  with fLayout[fLayoutCount] do begin
-    Text := txt;
-    with Box^ do
-      txt := @fText[TextOffset+TextLength]; // txt^ points to ' ' after text
-    Length := txt-Text;
-    Left := X;
-    Top := Y;
-    Width := W;
-    LineIndex := LineNdx;
-    LastBox := Box;
-    BreakExtra := 0;
-    BreakCount := 0;
-  end;
-  if DoLineFeed then begin
-    // we must handle the line feed layout
-    Align := Owner.TextAlign;
-    Adjust := LineW-(X+W);
-    if (Adjust<=0) or
-       // force left align if wider than expected (i.e. overpass right margin)
-       (LastLine and (Align=taJustified)) then
-       // last line of justified paragraph is never justified
-      Align := taLeft;
-    if BiDiMode=bdRightToLeft then begin
-      case Align of
-        taLeft:  Align := taRight;
-        taRight: Align := taLeft;
-      end;
-      n := fLayoutCount-LineLayout+1;
-      if n>1 then begin
-        // multi layouts: change logical to visual order for RTL languages
-        SetLength(TmpLayout,n);
-        Move(fLayout[LineLayout],TmpLayOut[0],n*sizeof(TmpLayOut[0]));
-        aLeft := fLayout[LineLayout].Left;
-        for i := 0 to n-1 do begin
-          move(TmpLayout[i],fLayout[fLayoutCount-i],sizeof(TmpLayOut[0]));
-          with fLayout[fLayoutCount-i] do begin
-            Left := aLeft;
-            Inc(aLeft,Width+LastBox^.FontSpaceWidth*LastBox^.SpaceAfterCount);
+  begin
+    if fLayoutCount >= length(fLayout) then
+      SetLength(fLayout, fLayoutCount + 50);
+    with fLayout[fLayoutCount] do
+    begin
+      Text := txt;
+      with Box^ do
+        txt := @fText[TextOffset + TextLength]; // txt^ points to ' ' after text
+      Length := txt - Text;
+      Left := X;
+      Top := Y;
+      Width := W;
+      LineIndex := LineNdx;
+      LastBox := Box;
+      BreakExtra := 0;
+      BreakCount := 0;
+    end;
+    if DoLineFeed then
+    begin
+      // we must handle the line feed layout
+      align := Owner.TextAlign;
+      Adjust := LineW - (X + W);
+      if (Adjust <= 0) or
+         // force left align if wider than expected (i.e. overpass right margin)
+         (LastLine and
+          (align = taJustified)) then
+        // last line of justified paragraph is never justified
+        align := taLeft;
+      if BiDiMode = bdRightToLeft then
+      begin
+        case align of
+          taLeft:
+            align := taRight;
+          taRight:
+            align := taLeft;
+        end;
+        n := fLayoutCount - LineLayout + 1;
+        if n > 1 then
+        begin
+          // multi layouts: change logical to visual order for RTL languages
+          SetLength(TmpLayout, n);
+          MoveFast(fLayout[LineLayout], TmpLayout[0], n * SizeOf(TmpLayout[0]));
+          aLeft := fLayout[LineLayout].Left;
+          for i := 0 to n - 1 do
+          begin
+            MoveFast(TmpLayout[i], fLayout[fLayoutCount - i], SizeOf(TmpLayout[0]));
+            with fLayout[fLayoutCount - i] do
+            begin
+              Left := aLeft;
+              inc(aLeft, Width + LastBox^.FontSpaceWidth * LastBox^.SpaceAfterCount);
+            end;
           end;
         end;
       end;
-    end;
-    case Align of
-      taRight:
-        for i := LineLayout to fLayoutCount do
-          inc(fLayout[i].Left,Adjust);
-      taCenter: begin
-        Adjust := Adjust div 2;
-        for i := LineLayout to fLayoutCount do
-          inc(fLayout[i].Left,Adjust);
-      end;
-      taJustified:
-      if Adjust>0 then begin
-        // compute SetTextJustification() values and update Left position
-        aLeft := fLayout[LineLayout].Left;
-        nspace := 0;
-        for i := LineLayout to fLayoutCount do
-          with fLayout[i] do begin
-            for j := 0 to Length-1 do
-              if Text[j]=' ' then
-                inc(BreakCount);
-            inc(nspace,BreakCount);
-          end;
-        if nspace>0 then
+      case align of
+        taRight:
           for i := LineLayout to fLayoutCount do
-          with fLayout[i] do begin
-            Left := aLeft;
-            BreakExtra := (Adjust*BreakCount) div nspace;
-            dec(Width,LastBox^.FontSpaceWidth*BreakCount-BreakExtra);
-            inc(aLeft,Width);
+            inc(fLayout[i].Left, Adjust);
+        taCenter:
+          begin
+            Adjust := Adjust div 2;
+            for i := LineLayout to fLayoutCount do
+              inc(fLayout[i].Left, Adjust);
+          end;
+        taJustified:
+          if Adjust > 0 then
+          begin
+            // compute SetTextJustification() values and update Left position
+            aLeft := fLayout[LineLayout].Left;
+            nspace := 0;
+            for i := LineLayout to fLayoutCount do
+              with fLayout[i] do
+              begin
+                for j := 0 to Length - 1 do
+                  if Text[j] = ' ' then
+                    inc(BreakCount);
+                inc(nspace, BreakCount);
+              end;
+            if nspace > 0 then
+              for i := LineLayout to fLayoutCount do
+                with fLayout[i] do
+                begin
+                  Left := aLeft;
+                  BreakExtra := (Adjust * BreakCount) div nspace;
+                  dec(Width, LastBox^.FontSpaceWidth * BreakCount - BreakExtra);
+                  inc(aLeft, Width);
+                end;
           end;
       end;
+      for i := LineLayout to fLayoutCount do
+        fLayout[i].Height := H; // same height for all fLayout[] of this line
+      with Owner do
+        X := MmToPrinterPxX(ParagraphLeftIndent);
+      inc(Y, H);
+      H := 0; // force recalculate line height
+      LineLayout := fLayoutCount;
+      inc(LineNdx);
+    end
+    else
+    begin
+      // just append this "word" box to fLayout[fLayoutCount]
+      with Box^ do
+        // compute next position
+        inc(X, W + FontSpaceWidth * SpaceAfterCount);
     end;
-    for i := LineLayout to fLayoutCount do
-      fLayout[i].Height := H; // same height for all fLayout[] of this line
-    with Owner do
-      X := MmToPrinterPxX(ParagraphLeftIndent);
-    inc(Y,H);
-    H := 0; // force recalculate line height
-    LineLayout := fLayoutCount;
-    inc(LineNdx);
-  end else begin
-    // just append this "word" box to fLayout[fLayoutCount]
-    with Box^ do
-      // compute next position
-      inc(X,W+FontSpaceWidth*SpaceAfterCount);
+    inc(fLayoutCount);
+    ndxFirst := ndx + 1;
+    W := 0;
   end;
-  inc(fLayoutCount);
-  ndxFirst := ndx+1;
-  W := 0;
-end;
+
 begin // compute TRenderBoxWord.X/Y and fHeight
   fHeight := 0;
   fLayoutCount := 0;
-  SetLength(fLayout,fBoxCount shr 2);
-  if fBoxCount=0 then
+  SetLength(fLayout, fBoxCount shr 2);
+  if fBoxCount = 0 then
     exit; // no text added
-  with Owner do begin
+  with Owner do
+  begin
     X := MmToPrinterPxX(ParagraphFirstLineIndent);
-    LineW := self.fWidth-MmToPrinterPxX(ParagraphRightIndent);
+    LineW := self.fWidth - MmToPrinterPxX(ParagraphRightIndent);
   end;
   LineNdx := 0;
   Y := 0;
@@ -5523,40 +6036,45 @@ begin // compute TRenderBoxWord.X/Y and fHeight
   LineLayout := 0;
   txt := @fText[0];
   ndxFirst := 0;
-  for ndx := 0 to fBoxCount-1 do begin
+  for ndx := 0 to fBoxCount - 1 do
+  begin
     Box := @fBox[ndx];
-    if Box^.Size.cy>H then
+    if Box^.Size.cy > H then
       H := Box^.Size.cy;
-    inc(W,Box^.Size.cx);
-    if ndx=fBoxCount-1 then
+    inc(W, Box^.Size.cx);
+    if ndx = fBoxCount - 1 then
       // reached last box -> flush pending line content
-      AddLayout(true,true) else
-    with fBox[ndx+1] do
-      if X+W+Size.cx>LineW then
-        // not enough space in current line -> flush+adjust and go to next line
-        AddLayout(true,false) else
-      if (FontIndex<>Box^.FontIndex) or (LinkNumber<>Box^.LinkNumber) then
-        // text formatting or Link will change -> add a layout box
-        AddLayout(false,false);
+      AddLayout(true, true)
+    else
+      with fBox[ndx + 1] do
+        if X + W + Size.cx > LineW then
+          // not enough space in current line -> flush and go to next line
+          AddLayout(true, false)
+        else if (FontIndex <> Box^.FontIndex) or
+                (LinkNumber <> Box^.LinkNumber) then
+          // text formatting or Link will change -> add a layout box
+          AddLayout(false, false);
   end;
   fHeight := Y;
 end;
 
 procedure TRenderBox.LinkBegin(const aBookmarkName: string);
-
 begin
-  if (self=nil) or (Owner=nil) then
+  if (self = nil) or
+     (Owner = nil) then
     exit; // avoid GPF
   LinkEnd; // no nested links
-  fLinksBookMarkNameCurrent := Length(fLinksBookMarkName)+1;
-  SetLength(fLinksBookMarkName,fLinksBookMarkNameCurrent);
-  fLinksBookMarkName[fLinksBookMarkNameCurrent-1] := aBookmarkName;
+  fLinksBookMarkNameCurrent := Length(fLinksBookMarkName) + 1;
+  SetLength(fLinksBookMarkName, fLinksBookMarkNameCurrent);
+  fLinksBookMarkName[fLinksBookMarkNameCurrent - 1] := aBookmarkName;
 end;
 
 function TRenderBox.LinkEnd: boolean;
 begin
   result := false;
-  if (self=nil) or (Owner=nil) or (fLinksBookMarkNameCurrent=0) then
+  if (self = nil) or
+     (Owner = nil) or
+     (fLinksBookMarkNameCurrent = 0) then
     exit; // avoid GPF
   fLinksBookMarkNameCurrent := 0;
   result := true;
@@ -5564,30 +6082,35 @@ end;
 
 procedure TRenderBox.NewLine;
 begin
-  if (self=nil) or (Owner=nil) then
+  if (self = nil) or
+     (Owner = nil) then
     exit; // avoid GPF
-
 end;
 
 procedure TRenderBox.Pard;
 begin
-  if (self<>nil) and (Owner<>nil) then // avoid GPF
+  if (self <> nil) and
+     (Owner <> nil) then // avoid GPF
     Owner.RdrPard;
 end;
 
 procedure TRenderBox.PardPlain;
 begin
-  if (self<>nil) and (Owner<>nil) then // avoid GPF
+  if (self <> nil) and
+     (Owner <> nil) then // avoid GPF
     Owner.RdrPardPlain;
 end;
 
 procedure TRenderBox.Plain;
 begin
-  if (self<>nil) and (Owner<>nil) then // avoid GPF
+  if (self <> nil) and
+     (Owner <> nil) then // avoid GPF
     Owner.RdrPlain;
 end;
 
 {$endif RENDERPAGES}
+
+{$endif OSPOSIX}
 
 end.
 
