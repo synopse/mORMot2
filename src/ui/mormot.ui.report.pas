@@ -12,6 +12,7 @@ unit mormot.ui.report;
     - TRenderPages Prototype - unfinished 
 
     Forked and heavily patched from TPages component (c) 2003 Angus Johnson
+    Note: not yet compatible with FPC due to a lot of Windowsims and VCLisms
 
   *****************************************************************************
 *)
@@ -20,11 +21,17 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef OSPOSIX}
+{$if defined(OSPOSIX) or defined(FPC)}
 
-// do-nothing-unit on non Windows system
+// do-nothing-unit on non Delphi + Windows system
+// = not yet compatible with FPC/LCL due to a lot of Windowsims and VCLisms :(
+procedure Register;
 
 implementation
+
+procedure Register;
+begin
+end;
 
 {$else}
 
@@ -1432,6 +1439,19 @@ begin
   result := result + ')';
 end;
 
+{$ifdef FPC}
+// some WinSpool redefinitions to match Delphi signature
+function EnumPrinters(Flags: DWORD; Name: PChar; Level: DWORD;
+  pPrinterEnum: Pointer; cbBuf: DWORD; var pcbNeeded, pcReturned: DWORD): BOOL; stdcall;
+  external 'winspool.drv' name 'EnumPrintersA';
+function OpenPrinter(pPrinterName: PChar; var phPrinter: THandle;
+  pDefault: PPrinterDefaults): BOOL; stdcall;
+  external 'winspool.drv' name 'EnumPrintersA';
+function GetPrinterDriver(hPrinter: THandle; pEnvironment: PChar; Level: DWORD;
+  pDriverInfo: Pointer; cbBuf: DWORD; var pcbNeeded: DWORD): BOOL; stdcall;
+  external 'winspool.drv' name 'EnumPrintersA';
+{$endif FPC}
+
 function PrinterDriverExists: boolean;
 var
   Flags, Count, NumInfo: dword;
@@ -1518,7 +1538,7 @@ begin
     MoveFast(p^, pointer(result)^, p2 - p);
 end;
 
-function GetDriverForPrinter(Device: PChar; Driver: PChar): boolean;
+function GetDriverForPrinter(Device, Driver: PChar): boolean;
 var
   PrintHandle: THandle;
   DriverInfo2: PDriverInfo2;
@@ -1529,21 +1549,41 @@ begin
   if not OpenPrinter(Device, PrintHandle, nil) then
     exit;
   try
-    getmem(DriverInfo2, 1024);
+    Getmem(DriverInfo2, 1024);
     try
-      if GetPrinterDriver(PrintHandle, nil, 2, DriverInfo2, 1024, cnt) then
+      if GetPrinterDriver(
+        PrintHandle, nil, 2, DriverInfo2, 1024, cnt) then
       begin
         DriverPath := changefileext(extractfilename(DriverInfo2.pDriverPath), '');
         strpcopy(Driver, DriverPath);
         result := true;
       end;
     finally
-      freemem(DriverInfo2);
+      Freemem(DriverInfo2);
     end;
   finally
     ClosePrinter(PrintHandle);
   end;
 end;
+
+{$ifdef FPC}
+
+procedure SetCurrentPrinterAsDefault;
+begin
+  // not implemented yet
+end;
+
+function CurrentPrinterName: string;
+begin
+  result := Printer.PrinterName;
+end;
+
+function CurrentPrinterPaperSize: string;
+begin
+  result := Printer.PaperSize.PaperName;
+end;
+
+{$else}
 
 procedure SetCurrentPrinterAsDefault;
 var
@@ -1633,6 +1673,8 @@ begin
       result := FormatString('Custom (% x %mm)', [cx, cy]);
   end;
 end;
+
+{$endif FPC}
 
 function GetNextItemW(var P: PWideChar): SynUnicode;
 var
@@ -1758,7 +1800,13 @@ begin
 end;
 
 
-procedure PrintBitmap(Canvas: TCanvas; DestRect: TRect; Bitmap: TBitmap);
+{$ifdef FPC}
+procedure PrintBitmap(Canvas: TCanvas; const DestRect: TRect; Bitmap: TBitmap);
+begin
+  Canvas.StretchDraw(DestRect.Rect, Bitmap);
+end;
+{$else}
+procedure PrintBitmap(Canvas: TCanvas; const DestRect: TRect; Bitmap: TBitmap);
 var
   BitmapHeader: pBitmapInfo;
   BitmapImage: pointer;
@@ -1786,7 +1834,7 @@ begin
     FreeMem(BitmapImage)
   end;
 end;
-
+{$endif FPC}
 
 // This DrawArrow() function is based on code downloaded from
 // http://www.efg2.com/Lab/Library/Delphi/Graphics/Algorithms.htm
@@ -3769,7 +3817,9 @@ var
   R: TRect;
   H: integer;
 begin
-  if (self = nil) or (graph = nil) or graph.Empty then
+  if (self = nil) or
+     (graph = nil) or
+     graph.Empty then
     exit; // avoid GPF
   // compute position and draw bitmap
   if bLeft = maxInt then
@@ -6110,7 +6160,7 @@ end;
 
 {$endif RENDERPAGES}
 
-{$endif OSPOSIX}
+{$ifend OSPOSIX+FPC}
 
 end.
 

@@ -281,7 +281,7 @@ procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
 procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   const Text: string; Align: TAlignment = taLeftJustify; NoControlChar: boolean = false);
 
-/// alternative to the VCL Canvas.TextFlas property
+/// alternative to the VCL Canvas.TextFlas property for text output
 function TextFlags(Canvas: TCanvas): integer;
 
 {$ifdef OSWINDOWS}
