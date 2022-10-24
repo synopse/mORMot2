@@ -1889,18 +1889,23 @@ begin
     result := 0;
     exit;
   end;
-  if ForceID or
-     (Value.IDValue = 0) then
-  begin
-    result := Add(Value, true, ForceID);
-    if (result <> 0) or
+  WriteLock; // make this atomic
+  try
+    if ForceID or
        (Value.IDValue = 0) then
-      exit;
+    begin
+      result := Add(Value, true, ForceID);
+      if (result <> 0) or
+         (Value.IDValue = 0) then
+        exit;
+    end;
+    if Update(Value) then
+      result := Value.IDValue
+    else
+      result := 0;
+  finally
+    WriteUnlock;
   end;
-  if Update(Value) then
-    result := Value.IDValue
-  else
-    result := 0;
 end;
 
 function TRestOrm.UpdateField(Table: TOrmClass; ID: TID;
@@ -1918,7 +1923,6 @@ function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUtf8; const WhereFieldValue: array of const;
   const FieldName: RawUtf8; const FieldValue: array of const): boolean;
 var
-  t: integer;
   SetValue, WhereValue: RawUtf8;
 begin
   result := false;
@@ -1928,9 +1932,8 @@ begin
     exit;
   VarRecToInlineValue(WhereFieldValue[0], WhereValue);
   VarRecToInlineValue(FieldValue[0], SetValue);
-  t := fModel.GetTableIndexExisting(Table);
-  result := EngineUpdateField(t, FieldName, SetValue,
-    WhereFieldName, WhereValue);
+  result := EngineUpdateField(fModel.GetTableIndexExisting(Table),
+    FieldName, SetValue, WhereFieldName, WhereValue);
   // warning: this may not update the internal cache
 end;
 
@@ -1949,13 +1952,12 @@ function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
   const FieldName: RawUtf8; const FieldValue: variant): boolean;
 var
-  t: integer;
   value, where: RawUtf8;
 begin
   VariantToInlineValue(WhereFieldValue, where);
   VariantToInlineValue(FieldValue, value);
-  t := fModel.GetTableIndexExisting(Table);
-  result := EngineUpdateField(t, FieldName, value, WhereFieldName, where);
+  result := EngineUpdateField(fModel.GetTableIndexExisting(Table),
+    FieldName, value, WhereFieldName, where);
   // warning: this may not update the internal cache
 end;
 
@@ -2696,7 +2698,7 @@ begin
       if rec.IDValue = 0 then
         raise EOrmTable.CreateUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
       upd := fUpdatedRowsFields[r];
-      if upd = 0 then // more than 32 fields -> send all mapped
+      if upd = 0 then // more than 32 fields -> include all fields to batch
         bits := def32
       else if upd <> updlast then
       begin
