@@ -84,9 +84,9 @@ uses
   {$endif OSWINDOWS}
   {$ifdef USE_GRAPHICS_UNIT}
     {$ifdef FPC}
-    LCLType,
-    LCLProc,
-    LCLIntf,
+    lcltype,
+    lclproc,
+    lclintf,
     rtlconsts,
     {$ifdef USE_METAFILE}
     mormot.ui.core, // for TMetaFile definition

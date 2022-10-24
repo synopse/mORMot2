@@ -39,3 +39,13 @@ High Performance PDF Engine for Windows
 - Internal classes mapping PDF objects
 - `TPdfDocument TPdfPage` main rendering classes
 - `TPdfDocumentGdi` for GDI/`TCanvas` rendering support
+
+### mormot.ui.report
+
+Simple Report Engine with UI Preview and PDF Export
+- Shared Functions used during Report Rendering
+- `TGdiPages` Report Engine
+- `TRenderPages` Prototype - unfinished 
+
+Forked and heavily patched from `TPages` component (c) 2003 Angus Johnson
+
