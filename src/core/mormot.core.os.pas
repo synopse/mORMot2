@@ -3942,6 +3942,7 @@ type
     procedure CtrlHandle(Code: cardinal);
     function GetControlHandler: TServiceControlHandler;
     procedure SetControlHandler(const Value: TServiceControlHandler);
+    procedure ServiceProc(ArgCount: integer; Args: PPChar);
   public
     /// this method is the main service entrance, from the OS point of view
     // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
@@ -3953,6 +3954,9 @@ type
     // start the services
     // - caller must free the TService instance when it's no longer used
     constructor Create(const aServiceName, aDisplayName: string); reintroduce; virtual;
+    /// internal method redirecting to WindowsServiceLog global variable
+    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+     const Args: array of const; Instance: TObject);
     /// Reports new status to the system
     function ReportStatus(dwState, dwExitCode, dwWait: cardinal): BOOL;
     /// Installs the service in the database

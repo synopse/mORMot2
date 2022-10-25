@@ -2830,7 +2830,7 @@ procedure CoUninitialize; stdcall; external 'ole32.dll';
 
 procedure CoInit;
 begin
-  inc(OleDBCoInitialized); // is a threadvar: no InterlockedIncrrement() needed
+  inc(OleDBCoInitialized); // is a threadvar: no InterlockedIncrement() needed
   if OleDBCoInitialized = 1 then
     CoInitialize(nil);
 end;
@@ -2876,14 +2876,13 @@ constructor TServiceController.CreateNewService(
   DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
 var
   exeName: TFileName;
-  backupError: cardinal;
+  level: TSynLogInfo;
 begin
   inherited Create;
   if Path = '' then
   begin
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllError,
-        'CreateNewService("%","%") with Path=""', [Name, DisplayName], self);
+    TService.DoLog(sllError,
+      'CreateNewService(''%'',''%'') with no Path', [Name, DisplayName], self);
     exit;
   end;
   if TargetComputer = '' then
@@ -2893,10 +2892,9 @@ begin
       if (copy(exeName, 1, 12) <> '\\localhost\') or
          (exeName[14] <> '$') then
       begin
-        if Assigned(WindowsServiceLog) then
-          WindowsServiceLog(sllError,
-            'CreateNewService("%","%") on remote drive: Path="%" is %',
-            [Name, DisplayName, Path, exeName], self);
+        TService.DoLog(sllError,
+          'CreateNewService(''%'',''%'') on remote drive: Path=% is %',
+          [Name, DisplayName, Path, exeName], self);
         exit;
       end;
       system.delete(exeName, 1, 12); // \\localhost\c$\... -> c:\...
@@ -2909,31 +2907,24 @@ begin
     pointer(TargetComputer), pointer(DatabaseName), SC_MANAGER_ALL_ACCESS);
   if fSCHandle = 0 then
   begin
-    backupError := GetLastError;
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-        [TargetComputer, DatabaseName, fName], self);
-    SetLastError(backupError);
+    TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+      [TargetComputer, DatabaseName, fName], self);
     exit;
   end;
   fHandle := CreateService(fSCHandle,
     pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
     ErrorControl, pointer({%H-}exeName), pointer(OrderGroup), nil,
     pointer(Dependencies), pointer(Username), pointer(Password));
-  if fHandle = 0 then
-  begin
-    backupError := GetLastError;
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError,
-        'CreateService("%","%","%")', [Name, DisplayName, Path], self);
-    SetLastError(backupError);
-  end;
+  if fHandle <> 0 then
+    level := sllInfo // success
+  else
+    level := sllLastError;
+  TService.DoLog(level,
+    'CreateService(''%'',''%'',''%'')', [Name, DisplayName, exeName], self);
 end;
 
 constructor TServiceController.CreateOpenService(
   const TargetComputer, DataBaseName, Name: string; DesiredAccess: cardinal);
-var
-  backupError: cardinal;
 begin
   inherited Create;
   fName := RawUtf8(Name);
@@ -2941,21 +2932,13 @@ begin
     pointer(TargetComputer), pointer(DataBaseName), GENERIC_READ);
   if fSCHandle = 0 then
   begin
-    backupError := GetLastError;
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-        [TargetComputer, DataBaseName, fName], self);
-    SetLastError(backupError);
+    TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+      [TargetComputer, DataBaseName, fName], self);
     exit;
   end;
   fHandle := OpenService(fSCHandle, pointer(Name), DesiredAccess);
   if fHandle = 0 then
-  begin
-    backupError := GetLastError;
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'OpenService("%")', [Name], self);
-    SetLastError(backupError);
-  end;
+    TService.DoLog(sllLastError, 'OpenService(%)', [Name], self);
 end;
 
 function TServiceController.Delete: boolean;
@@ -2967,16 +2950,22 @@ begin
       result := CloseServiceHandle(fHandle);
       fHandle := 0;
     end
-    else if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'DeleteService("%")', [fName], self);
+    else
+      TService.DoLog(sllLastError, 'DeleteService(%)', [fName], self);
 end;
 
 destructor TServiceController.Destroy;
 begin
   if fHandle <> 0 then
+  begin
     CloseServiceHandle(fHandle);
+    fHandle := 0;
+  end;
   if fSCHandle <> 0 then
+  begin
     CloseServiceHandle(fSCHandle);
+    fSCHandle := 0;
+  end;
   inherited;
 end;
 
@@ -2988,8 +2977,7 @@ begin
     result := ssNotInstalled
   else
     result := CurrentStateToServiceState(Status.dwCurrentState);
-  if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
+  TService.DoLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -3001,35 +2989,60 @@ end;
 
 function TServiceController.Pause: boolean;
 begin
-  result := ControlService(fHandle, SERVICE_CONTROL_PAUSE, fStatus);
+  if fHandle = 0 then
+    result := false
+  else
+    result := ControlService(fHandle, SERVICE_CONTROL_PAUSE, fStatus);
 end;
 
 function TServiceController.Refresh: boolean;
 begin
-  result := ControlService(fHandle, SERVICE_CONTROL_INTERROGATE, fStatus);
+  if fHandle = 0 then
+    result := false
+  else
+    result := ControlService(fHandle, SERVICE_CONTROL_INTERROGATE, fStatus);
 end;
 
 function TServiceController.Resume: boolean;
 begin
-  result := ControlService(fHandle, SERVICE_CONTROL_CONTINUE, fStatus);
+  if fHandle = 0 then
+    result := false
+  else
+    result := ControlService(fHandle, SERVICE_CONTROL_CONTINUE, fStatus);
 end;
 
 function TServiceController.Shutdown: boolean;
 begin
-  result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
+  if fHandle = 0 then
+    result := false
+  else
+    result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
 end;
 
 function TServiceController.Start(const Args: array of PChar): boolean;
 begin
+  TService.DoLog(sllDebug, 'Start(%) Args=% Handle=%',
+    [fName, length(Args), fHandle], self);
+  if fHandle = 0 then
+  begin
+    TService.DoLog(sllError, 'Start(%): no Service', [fName], self);
+    result := false;
+    exit;
+  end;
   if length(Args) = 0 then
     result := StartService(fHandle, 0, nil)
   else
     result := StartService(fHandle, length(Args), @Args[0]);
+  if not result then
+    TService.DoLog(sllLastError, 'Start(%) failed', [fName], self);
 end;
 
 function TServiceController.Stop: boolean;
 begin
-  result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
+  if fHandle = 0 then
+    result := false
+  else
+    result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
 end;
 
 procedure TServiceController.SetDescription(const Description: string);
@@ -3051,8 +3064,7 @@ var
   procedure ShowError(Msg: string);
   begin
     Msg := ServiceName + ': "' + Msg + '" failed for ' + param;
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, '%', [Msg]);
+    TService.DoLog(sllLastError, '%', [Msg], nil);
     ConsoleWrite(RawUtf8(Msg), ccLightRed);
   end;
 
@@ -3060,9 +3072,8 @@ begin
   for i := 1 to ParamCount do
   begin
     param := SysUtils.LowerCase(paramstr(i));
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllInfo,
-        'Controling % with command [%]', [ServiceName, param]);
+    TService.DoLog(sllInfo,
+      'Controling % with command [%]', [ServiceName, param], nil);
     if param = '/install' then
       TServiceController.Install(
         ServiceName, DisplayName, Description, true, ExeFileName, Dependencies)
@@ -3114,6 +3125,8 @@ begin
     result := ctrl.State;
     if result <> ssNotInstalled then
       ctrl.SetDescription(Description);
+    TService.DoLog(sllDebug,
+      'Install(%)=%', [Name, _SERVICESTATE[result]], ctrl);
   finally
     ctrl.Free;
   end;
@@ -3134,9 +3147,15 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
+  DoLog(sllDebug, 'Create: % (%) running as [%]',
+    [ServiceName, aDisplayName, Executable.ProgramFullSpec], self);
+end;
+
+class procedure TService.DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+  const Args: array of const; Instance: TObject);
+begin
   if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllInfo, 'Create: % (%) running as [%]',
-      [ServiceName, aDisplayName, Executable.ProgramFullSpec], self);
+    WindowsServiceLog(Level, Fmt, Args, Instance);
 end;
 
 procedure TService.CtrlHandle(Code: cardinal);
@@ -3144,11 +3163,20 @@ begin
   DoCtrlHandle(Code);
 end;
 
+const
+  _CMD: array[0.. 5] of string[11] = (
+    'UNKNOWN', 'STOP', 'PAUSE', 'CONTINUE', 'INTERROGATE', 'SHUTDOWN');
+
 procedure TService.DoCtrlHandle(Code: cardinal);
+var
+  c: PShortString;
 begin
-  if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllInfo, '%: command % received from OS',
-      [ServiceName, Code], self);
+  if Code <= high(_CMD) then
+    c := @_CMD[Code]
+  else
+    c := @_CMD[0];
+  DoLog(sllTrace, '% DoCtrlHandle(SERVICE_CONTROL_%=%)',
+    [ServiceName, c^, Code], self);
   try
     case Code of
       SERVICE_CONTROL_STOP:
@@ -3201,8 +3229,8 @@ begin
       fOnControl(Self, Code);
   except
   end;
-  if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllInfo, '%: command % finished', [ServiceName, Code], self);
+  DoLog(sllTrace, '% DoCtrlHandle(SERVICE_CONTROL_%=%) finished',
+    [ServiceName, c^, Code], self);
 end;
 
 procedure TService.Execute;
@@ -3216,6 +3244,7 @@ begin
   except
     ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
   end;
+  DoLog(sllTrace, '% Execute finished', [ServiceName], self);
 end;
 
 function TService.GetArgCount: Integer;
@@ -3236,9 +3265,8 @@ function TService.GetControlHandler: TServiceControlHandler;
 begin
   result := fControlHandler;
   if not Assigned(result) then
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
-        'use TServiceSingle or assign a custom ControlHandler', [self], self);
+    DoLog(sllError, '% GetControlHandler=nil: use TServiceSingle or ' +
+      'assign a custom ControlHandler', [ServiceName], self);
 end;
 
 function TService.GetInstalled: boolean;
@@ -3297,9 +3325,8 @@ var
   status: PShortString;
 begin
   status := ToText(CurrentStateToServiceState(dwState));
-  if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
-      [ServiceName, status^, dwExitCode, dwWait], self);
+  DoLog(sllTrace, '% ReportStatus(%,%)=%',
+    [ServiceName, dwExitCode, dwWait, status^], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else
@@ -3314,9 +3341,8 @@ begin
     inc(fStatusRec.dwCheckPoint);
   result := SetServiceStatus(fStatusHandle, fStatusRec);
   if not result then
-    if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, '% ReportStatus(%,%,%)',
-        [ServiceName, status^, dwExitCode, dwWait], self);
+    DoLog(sllLastError, '% ReportStatus(%,%)=% SetServiceStatus() failed',
+      [ServiceName, dwExitCode, dwWait, status^], self);
 end;
 
 procedure TService.SetControlHandler(const Value: TServiceControlHandler);
@@ -3352,6 +3378,39 @@ begin
     Free;
   end;
 end;
+
+procedure TService.ServiceProc(ArgCount: integer; Args: PPChar);
+var
+  i: PtrInt;
+begin
+  SetCurrentThreadName('ServiceProc');
+  DoLog(sllTrace, 'ServiceProc: ArgCount=% ServiceSingle=%',
+    [ArgCount, self], self);
+  if self = nil then
+    exit;
+  dec(ArgCount); // first argument is the service name to be ignored
+  if (Args = nil) or
+     (ArgCount <= 0) then
+    fArgsList := nil // no argument
+  else
+  begin
+    SetLength(fArgsList, ArgCount);
+    for i := 0 to ArgCount - 1 do
+    begin
+      inc(Args); // first was service name
+      fArgsList[i] := Args^; // convert to string
+    end;
+  end;
+  fStatusHandle := RegisterServiceCtrlHandler(pointer(fSName), @ControlHandler);
+  if fStatusHandle = 0 then
+  begin
+    ReportStatus(SERVICE_STOPPED, GetLastError, 0);
+    exit;
+  end;
+  ReportStatus(SERVICE_START_PENDING, 0, 0);
+  Execute;
+end;
+
 
 function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 begin
@@ -3393,30 +3452,13 @@ begin
       if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
           @ssp, SizeOf(TServiceStatusProcess), size) then
         result := ssp.dwProcessId
-      else if Assigned(WindowsServiceLog) then
-        WindowsServiceLog(sllLastError, 'GetServicePid(%)', [aServiceName]);
+      else
+        TService.DoLog(sllLastError, 'GetServicePid(%)', [aServiceName], nil);
     finally
       CloseServiceHandle(svc);
     end;
   finally
     CloseServiceHandle(scm);
-  end;
-end;
-
-function KillProcess(pid: cardinal; waitseconds: integer): boolean;
-var
-  ph: THandle;
-begin
-  ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
-  result := ph <> 0;
-  if result then
-  begin
-    try
-      result := TerminateProcess(ph, 0) and
-                (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
-    finally
-      CloseHandle(ph);
-    end;
   end;
 end;
 
@@ -3427,35 +3469,10 @@ end;
     and subsequent arguments are any strings passed to the service by the process
     that called the StartService function to start the service. Args can
     be nil if there are no arguments. }
-    
+
 procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
-var
-  i: PtrInt;
 begin
-  if not Assigned(ServiceSingle) then
-    exit;
-  dec(ArgCount); // first argument is the service name to be ignored
-  if (Args = nil) or
-     (integer(ArgCount) <= 0) then
-    Finalize(ServiceSingle.fArgsList) // no argument
-  else
-  begin
-    SetLength(ServiceSingle.fArgsList, ArgCount);
-    for i := 0 to ArgCount - 1 do
-    begin
-      inc(Args); // first was service name
-      ServiceSingle.fArgsList[i] := Args^; // convert to string
-    end;
-  end;
-  ServiceSingle.fStatusHandle := RegisterServiceCtrlHandler(
-    pointer(ServiceSingle.fSName), @ServiceSingle.ControlHandler);
-  if ServiceSingle.fStatusHandle = 0 then
-  begin
-    ServiceSingle.ReportStatus(SERVICE_STOPPED, GetLastError, 0);
-    exit;
-  end;
-  ServiceSingle.ReportStatus(SERVICE_START_PENDING, 0, 0);
-  ServiceSingle.Execute;
+  ServiceSingle.ServiceProc(ArgCount, Args);
 end;
 
 function ServiceSingleRun: boolean;
@@ -3490,7 +3507,7 @@ begin
     raise EOSException.Create('Only one TServiceSingle is allowed at a time');
   inherited Create(aServiceName, aDisplayName);
   ServiceSingle := self;
-  ControlHandler := SingleServiceControlHandler;
+  SetControlHandler(SingleServiceControlHandler);
 end;
 
 destructor TServiceSingle.Destroy;
@@ -3503,6 +3520,23 @@ begin
 end;
 
 
+function KillProcess(pid: cardinal; waitseconds: integer): boolean;
+var
+  ph: THandle;
+begin
+  ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
+  result := ph <> 0;
+  if result then
+  begin
+    try
+      result := TerminateProcess(ph, 0) and
+                (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
+    finally
+      CloseHandle(ph);
+    end;
+  end;
+end;
+
 function DropPriviledges(const UserName: RawUtf8): boolean;
 begin
   result := false;
@@ -3512,7 +3546,6 @@ function ChangeRoot(const FolderName: RawUtf8): boolean;
 begin
   result := false;
 end;
-
 
 // redefined here so that we can share code with FPC and Delphi
 function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
