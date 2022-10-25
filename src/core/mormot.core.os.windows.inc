@@ -312,13 +312,16 @@ const
   ERROR_WINHTTP_TIMEOUT = 12002;
   ERROR_WINHTTP_CANNOT_CONNECT = 12029;
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
+  ERROR_MUI_FILE_NOT_FOUND = 15100;
 
 function SysErrorMessage(Code: cardinal; ModuleName: PChar): string;
 var
+  err: integer;
   flags, len: PtrUInt;
   src: pointer;
-  tmp: array[0..1023] of Char;
+  tmp: array[0..1023] of char;
 begin
+  err := GetLastError;
   if ModuleName = nil then
   begin
     flags := FORMAT_MESSAGE_FROM_SYSTEM;
@@ -329,17 +332,19 @@ begin
     flags := FORMAT_MESSAGE_FROM_HMODULE;
     src := pointer(GetModuleHandle(ModuleName));
   end;
-  len := FormatMessage(flags, src, Code, ENGLISH_LANGID, @tmp, 256, nil);
-  if (len = 0) and
-     (GetLastError = ERROR_RESOURCE_LANG_NOT_FOUND) then
+  // first try if there is an English message version of this error code
+  len := FormatMessage(flags, src, Code, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
+  if len = 0 then
+    // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
     len := FormatMessage(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
   if len > 0 then
   begin
     while (len > 0) and
           (ord(tmp[len - 1]) in [0..32, ord('.')]) do
-      dec(len);
+      dec(len); // trim right
     SetString(result, PChar(@tmp), len);
   end;
+  SetLastError(err);
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
