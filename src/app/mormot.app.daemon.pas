@@ -436,6 +436,7 @@ begin
           #13#10' Build date: ', Executable.Version.BuildDateTimeString,
           #13#10' MD5: ', Md5(exe),
           #13#10' SHA256: ', Sha256(exe));
+        writeln(' OS: ', OSVersionText);
         if Executable.Version.Version32 <> 0 then
           writeln(' Version: ', Executable.Version.Detailed);
       end;
@@ -492,7 +493,7 @@ begin
             if ServiceSingleRun then
               // blocking until service shutdown
               Show(true)
-            else if GetLastError = 1063 then
+            else if GetLastError = ERROR_FAILED_SERVICE_CONTROLLER_CONNECT then
               Syntax
             else
               Show(false);

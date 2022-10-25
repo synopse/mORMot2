@@ -818,13 +818,15 @@ function GetDelphiCompilerVersion: RawUtf8; deprecated;
 {$ifdef UNICODE}
 
 const
-  /// a global constant to be appended for Windows Ansi or wide API names
+  /// a global constant to be appended for Windows Ansi or Wide API names
+  // - match the Wide API on Delphi, since String=UnicodeString
   _AW = 'W';
 
 {$else}
 
 const
-  /// a global constant to be appended for Windows Ansi or wide API names
+  /// a global constant to be appended for Windows Ansi or Wide API names
+  // - match the Ansi API on FPC or oldest Delphi, where String=AnsiString
   _AW = 'A';
 
 type
@@ -3675,6 +3677,8 @@ const
   SERVICE_CONTINUE_PENDING      = $00000005;
   SERVICE_PAUSE_PENDING         = $00000006;
   SERVICE_PAUSED                = $00000007;
+
+  ERROR_FAILED_SERVICE_CONTROLLER_CONNECT = 1063;
 
 type
   PServiceStatus = ^TServiceStatus;
