@@ -3242,10 +3242,10 @@ procedure TService.Execute;
 begin
   try
     if Assigned(fOnStart) then
-      fOnStart(@Self);
+      fOnStart(Self);
     ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
     if Assigned(fOnExecute) then
-      fOnExecute(@Self);
+      fOnExecute(Self);
   except
     ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
   end;
