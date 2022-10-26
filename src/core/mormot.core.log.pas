@@ -5316,9 +5316,22 @@ begin
 end;
 
 procedure TSynLog.AddErrorMessage(Error: cardinal);
+{$ifdef OSWINDOWS}
+var
+  msg: PUtf8Char;
+{$endif OSWINDOWS}
 begin
   fWriter.Add(' ', '"');
-  fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
+  {$ifdef OSWINDOWS}
+  msg := WinErrorConstant(Error);
+  if msg <> nil then
+  begin
+    fWriter.AddShorter('ERROR_');
+    fWriter.Add(msg, twNone);
+  end
+  else
+  {$endif OSWINDOWS}
+    fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
   fWriter.AddShorter('" (');
   fWriter.Add(Error);
   fWriter.Add(')', ' ');
