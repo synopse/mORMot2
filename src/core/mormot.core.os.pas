@@ -3709,7 +3709,7 @@ type
   end;
 
   SC_HANDLE = THandle;
-  SERVICE_STATUS_HANDLE = cardinal;
+  SERVICE_STATUS_HANDLE = THandle;
   TServiceTableEntry = record
     lpServiceName: PChar;
     lpServiceProc: procedure(ArgCount: cardinal; Args: PPChar); stdcall;
