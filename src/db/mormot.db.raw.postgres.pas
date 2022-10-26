@@ -204,6 +204,8 @@ var
 
 /// try to load the libpq library
 // - raise a ESqlDBPostgres exception if loading failed
+// - you can setup a non-standard libpq location in SynDBPostgresLibrary
+// global variable, before calling this procedure
 procedure PostgresLibraryInitialize;
 
 
