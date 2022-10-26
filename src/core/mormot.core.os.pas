@@ -2028,20 +2028,28 @@ procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns a given error code as plain text
-// - calls FormatMessageW on Windows, or StrError() on POSIX
+// - calls WinErrorText(error, nil) on Windows, or StrError() on POSIX
 function GetErrorText(error: integer): RawUtf8;
 
-/// retrieve the text corresponding to an error message for a given Windows module
-// - use RTL SysErrorMessage() as fallback
-function SysErrorMessagePerModule(Code: cardinal; ModuleName: PChar): string;
-
 {$ifdef OSWINDOWS}
-/// override the RTL function to force the ENGLISH_LANGID flag
-function SysErrorMessage(Code: cardinal; ModuleName: PChar = nil): string;
-{$endif OSWINDOWS}
 
-/// raise an Exception from the last system error
+/// return the error message of a given Module
+// - first try WinErrorConstant() for system error constants (if ModuleName=nil),
+// then call FormatMessage() and override the RTL function to force the
+// ENGLISH_LANGID flag first
+// - if ModuleName does support this Code, will try it as system error
+// - replace SysErrorMessagePerModule() and SysErrorMessage() from mORMot 1
+function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
+
+/// return the best known ERROR_* system error message constant texts
+// - without the 'ERROR_' prefix
+// - as used by WinErrorText()
+function WinErrorConstant(Code: cardinal): PUtf8Char;
+
+/// raise an Exception from the last module error using WinErrorText()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+
+{$endif OSWINDOWS}
 
 /// compatibility function, wrapping Win32 API function
 // - returns the current main Window handle on Windows, or 0 on POSIX/Linux
@@ -4698,44 +4706,6 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 begin
   if IsInitializedCriticalSection(cs) then
     DeleteCriticalSection(cs);
-end;
-
-function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
-begin
-  result := '';
-  if Code = 0 then
-    exit;
-  {$ifdef OSWINDOWS}
-  result := SysErrorMessage(Code, ModuleName);
-  if result <> '' then
-    exit;
-  {$endif OSWINDOWS}
-  result := SysErrorMessage(Code);
-  if result = '' then
-    {$ifdef OSWINDOWS}
-    if Code = ERROR_WINHTTP_CANNOT_CONNECT then
-      result := 'cannot connect'
-    else if Code = ERROR_WINHTTP_TIMEOUT then
-      result := 'timeout'
-    else if Code = ERROR_WINHTTP_INVALID_SERVER_RESPONSE then
-      result := 'invalid server response'
-    else
-    {$endif OSWINDOWS}
-      result := IntToHex(Code, 8);
-end;
-
-procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
-var
-  LastError: integer;
-  Error: Exception;
-begin
-  LastError := GetLastError;
-  if LastError <> 0 then
-    Error := ModuleException.CreateFmt('%s error %x (%s)',
-      [ModuleName, LastError, SysErrorMessagePerModule(LastError, ModuleName)])
-  else
-    Error := ModuleException.CreateFmt('Undefined %s error', [ModuleName]);
-  raise Error;
 end;
 
 function Unicode_CodePage: integer;

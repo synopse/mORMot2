@@ -313,38 +313,136 @@ const
   ERROR_WINHTTP_CANNOT_CONNECT = 12029;
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
   ERROR_MUI_FILE_NOT_FOUND = 15100;
+  // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
+  ERROR_STANDARD1: array[0..39] of PUtf8Char = (
+    'SUCCESS', 'INVALID_FUNCTION', 'FILE_NOT_FOUND', 'PATH_NOT_FOUND',
+    'TOO_MANY_OPEN_FILES', 'ACCESS_DENIED', 'INVALID_HANDLE', 'ARENA_TRASHED',
+    'NOT_ENOUGH_MEMORY', 'INVALID_BLOCK', 'BAD_ENVIRONMENT', 'BAD_FORMAT',
+    'INVALID_ACCESS', 'INVALID_DATA', 'OUTOFMEMORY', 'INVALID_DRIVE',
+    'CURRENT_DIRECTORY', 'NOT_SAME_DEVICE', 'NO_MORE_FILES', 'WRITE_PROTECT',
+    'BAD_UNIT', 'NOT_READY', 'BAD_COMMAND', 'CRC', 'BAD_LENGTH', 'SEEK',
+    'NOT_DOS_DISK', 'SECTOR_NOT_FOUND', 'OUT_OF_PAPER', 'WRITE_FAULT',
+    'READ_FAULT', 'GEN_FAILURE', 'SHARING_VIOLATION', 'LOCK_VIOLATION',
+    'WRONG_DISK', '35', 'SHARING_BUFFER_EXCEEDED', '37', 'HANDLE_EOF',
+    'HANDLE_DISK_FULL');
+  ERROR_STANDARD2: array[50..55] of PUtf8Char = (
+    'NOT_SUPPORTED', 'REM_NOT_LIST', 'DUP_NAME', 'BAD_NETPATH',
+    'NETWORK_BUSY', 'DEV_NOT_EXIST');
+  ERROR_STANDARD3: array[80..89] of PUtf8Char = (
+    'FILE_EXISTS', '81', 'CANNOT_MAKE', 'FAIL_I24', 'OUT_OF_STRUCTURES',
+    'ALREADY_ASSIGNED', 'INVALID_PASSWORD', 'INVALID_PARAMETER',
+    'NET_WRITE_FAULT', 'NO_PROC_SLOTS');
+  ERROR_STANDARD4: array[108..124] of PUtf8Char = (
+    'DRIVE_LOCKED', 'BROKEN_PIPE', 'OPEN_FAILED', 'BUFFER_OVERFLOW',
+    'DISK_FULL', 'NO_MORE_SEARCH_HANDLES', 'INVALID_TARGET_HANDLE', '115',
+    '116', 'INVALID_CATEGORY', 'INVALID_VERIFY_SWITCH', 'BAD_DRIVER_LEVEL',
+    'CALL_NOT_IMPLEMENTED', 'SEM_TIMEOUT', 'INSUFFICIENT_BUFFER',
+    'INVALID_NAME', 'INVALID_LEVEL');
+  ERROR_STANDARD5: array[1051..1079] of PUtf8Char = (
+    'DEPENDENT_SERVICES_RUNNING', 'INVALID_SERVICE_CONTROL',
+    'SERVICE_REQUEST_TIMEOUT', 'SERVICE_NO_THREAD', 'SERVICE_DATABASE_LOCKED',
+    'SERVICE_ALREADY_RUNNING', 'INVALID_SERVICE_ACCOUNT', 'SERVICE_DISABLED',
+    'CIRCULAR_DEPENDENCY', 'SERVICE_DOES_NOT_EXIST', 'SERVICE_CANNOT_ACCEPT_CTRL',
+    'SERVICE_NOT_ACTIVE', 'FAILED_SERVICE_CONTROLLER_CONNECT',
+    'EXCEPTION_IN_SERVICE', 'DATABASE_DOES_NOT_EXIST', 'SERVICE_SPECIFIC_ERROR',
+    'PROCESS_ABORTED', 'SERVICE_DEPENDENCY_FAIL', 'SERVICE_LOGON_FAILED',
+    'SERVICE_START_HANG', 'INVALID_SERVICE_LOCK', 'SERVICE_MARKED_FOR_DELETE',
+    'SERVICE_EXISTS', 'ALREADY_RUNNING_LKG', 'SERVICE_DEPENDENCY_DELETED',
+    'BOOT_ALREADY_ACCEPTED', 'SERVICE_NEVER_STARTED', 'DUPLICATE_SERVICE_NAME',
+    'DIFFERENT_SERVICE_ACCOUNT');
 
-function SysErrorMessage(Code: cardinal; ModuleName: PChar): string;
+function WinErrorConstant(Code: cardinal): PUtf8Char;
+begin
+  if Code <= high(ERROR_STANDARD1) then
+    result := ERROR_STANDARD1[Code]
+  else if Code in [low(ERROR_STANDARD2)..high(ERROR_STANDARD2)] then
+    result := ERROR_STANDARD2[Code]
+  else if Code in [low(ERROR_STANDARD3)..high(ERROR_STANDARD3)] then
+    result := ERROR_STANDARD3[Code]
+  else if Code in [low(ERROR_STANDARD4)..high(ERROR_STANDARD4)] then
+    result := ERROR_STANDARD4[Code]
+  else if (Code >= low(ERROR_STANDARD5)) and
+          (Code <= high(ERROR_STANDARD5)) then
+    result := ERROR_STANDARD5[Code]
+  else
+    case Code of
+      ERROR_WINHTTP_CANNOT_CONNECT:
+        result := 'WINHTTP_CANNOT_CONNECT';
+      ERROR_WINHTTP_TIMEOUT:
+        result := 'WINHTTP_TIMEOUT';
+      ERROR_WINHTTP_INVALID_SERVER_RESPONSE:
+        result := 'WINHTTP_INVALID_SERVER_RESPONSE';
+      else
+        result := nil;
+    end;
+end;
+
+function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 var
   err: integer;
   flags, len: PtrUInt;
   src: pointer;
-  tmp: array[0..1023] of char;
+  cod: PUtf8Char;
+  tmp: array[0..511] of WideChar;
 begin
   err := GetLastError;
+  flags := FORMAT_MESSAGE_FROM_SYSTEM;
   if ModuleName = nil then
   begin
-    flags := FORMAT_MESSAGE_FROM_SYSTEM;
+    // system error codes
+    cod := WinErrorConstant(Code);
+    if cod <> nil then
+    begin
+      // we can return directly the standard system error code constant
+      result := _fmt('ERROR_%s', [cod]);
+      exit;
+    end;
     src := nil;
   end
   else
   begin
-    flags := FORMAT_MESSAGE_FROM_HMODULE;
+    // module specific error codes
     src := pointer(GetModuleHandle(ModuleName));
+    if src <> nil then
+      flags := FORMAT_MESSAGE_FROM_HMODULE;
   end;
   // first try if there is an English message version of this error code
-  len := FormatMessage(flags, src, Code, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
+  len := FormatMessageW(flags, src, Code, ENGLISH_LANGID, @tmp, SizeOf(tmp), nil);
   if len = 0 then
     // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
-    len := FormatMessage(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
-  if len > 0 then
+    len := FormatMessageW(flags, src, Code, 0, @tmp, SizeOf(tmp), nil);
+  if (len = 0) and
+     (src <> nil) then
   begin
-    while (len > 0) and
-          (ord(tmp[len - 1]) in [0..32, ord('.')]) do
-      dec(len); // trim right
-    SetString(result, PChar(@tmp), len);
+    // fallback to the system error message if this module as no such code
+    SetLastError(err);
+    result := WinErrorText(Code, nil);
+    exit;
   end;
+  while (len > 0) and
+        (ord(tmp[len - 1]) in [0..32, ord('.')]) do
+    dec(len); // trim right
+  Win32PWideCharToUtf8(@tmp, len, result);
   SetLastError(err);
+end;
+
+function GetErrorText(error: integer): RawUtf8;
+begin
+  result := WinErrorText(error, nil);
+end;
+
+procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+var
+  code: integer;
+  E: Exception;
+begin
+  code := GetLastError;
+  if code <> 0 then
+    E := ModuleException.CreateFmt('%s error %x (%s)',
+      [ModuleName, code, string(WinErrorText(code, ModuleName))])
+  else
+    E := ModuleException.CreateFmt('Undefined %s error', [ModuleName]);
+  raise E;
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
@@ -464,14 +562,14 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
-function OemToFileName(const OEM: RawByteString): TFileName;
+function OemToFileName(const oem: RawByteString): TFileName;
 begin
   // decode OEM/DOS file name into native encoding
   SetString(result, nil, length(OEM));
   OemToChar(pointer(OEM), pointer(result)); // OemToCharW/OemToCharA = TFileName
 end;
 
-function OemToUnicode(const OEM: RawByteString): SynUnicode;
+function OemToUnicode(const oem: RawByteString): SynUnicode;
 begin
   SetString(result, nil, length(OEM));
   OemToCharW(pointer(OEM), pointer(result));
@@ -517,7 +615,8 @@ begin
     result := 0;
 end;
 
-function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
+function FileSeek64(Handle: THandle; const Offset: Int64;
+  Origin: cardinal): Int64;
 var
   r: TQWordRec;
 begin
@@ -1300,20 +1399,6 @@ begin
     end;
     inc(n, 1024); // (very unlikely) too small buffer
   until n > 8192;
-end;
-
-function GetErrorText(error: longint): RawUtf8;
-var
-  Len: integer;
-  Buffer: array[0..511] of WideChar;
-begin
-  Len := FormatMessageW(
-    FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY, nil,
-    error, 0, Buffer{%H-}, SizeOf(Buffer), nil);
-  while (Len > 0) and
-        (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
-    dec(Len);
-  Win32PWideCharToUtf8(Buffer, Len, result);
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;

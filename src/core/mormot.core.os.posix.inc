@@ -1147,7 +1147,7 @@ end;
 
 function GetErrorText(error: integer): RawUtf8;
 begin
-  result := StrError(error);
+  result := StrError(error); // from FPC RTL: using a OS-specific array of const
 end;
 
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
