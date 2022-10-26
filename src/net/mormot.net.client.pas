@@ -3246,7 +3246,7 @@ begin
   if aTimeOutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeOutSeconds);
-  fClient := fClient.Create(aOnlyUseClientSocket);
+  fClient := TSimpleHttpClient.Create(aOnlyUseClientSocket);
   if aUri <> '' then
     if not LoadFromUri(aUri, aToken) then
       raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
