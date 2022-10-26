@@ -32,13 +32,14 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
+  mormot.core.text,
   mormot.net.sock;
 
 
 { ******************** WinINet API Additional Wrappers }
 
 /// retrieve extended error information text after a WinINet API call
-function SysErrorMessageWinInet(error: integer): string;
+function SysErrorMessageWinInet(error: integer): RawUtf8;
 
 /// low-level retrieval of a Domain User from a transmitted Token
 procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
@@ -1223,7 +1224,7 @@ const
 
 type
   /// exception raised during http.sys HTTP/1.1 process
-  EHttpApiServer = class(ExceptionWithProps)
+  EHttpApiServer = class(ESynException)
   protected
     fLastApiError: integer;
     fLastApi: THttpApis;
@@ -1636,7 +1637,7 @@ type
     /// if the Proxy settings were auto-detected by Internet Explorer
     AutoDetected: Boolean;
     /// detailed error message, if GetProxyInfo() returned a non 0 error code
-    ErrorMessage: string;
+    ErrorMessage: RawUtf8;
   end;
 
 /// use WinHttp to retrieve the proxy information needed to access a given URI
@@ -1784,7 +1785,7 @@ type
     hSend);
 
   /// exception raised during http.sys WebSockets process
-  EWebSocketApi = class(ExceptionWithProps)
+  EWebSocketApi = class(ESynException)
   protected
     fLastError: integer;
     fLastApi: TWebSocketApis;
@@ -2099,8 +2100,8 @@ constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
   fLastApiError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d=0x%x)', [HttpNames[api],
-    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error, Error])
+  inherited CreateUtf8('% failed: % (%)',
+    [HttpNames[api], WinErrorText(Error, HTTPAPI_DLL), Error])
 end;
 
 
@@ -2256,22 +2257,20 @@ end;
 
 { ******************** WinINet API Additional Wrappers }
 
-function SysErrorMessageWinInet(error: integer): string;
+function SysErrorMessageWinInet(error: integer): RawUtf8;
 var
   dwError, tmpLen: DWORD;
-  tmp: string;
+  tmp: array[0..511] of WideChar;
 begin
-  result := SysErrorMessagePerModule(error, 'wininet.dll');
-  if error = ERROR_INTERNET_EXTENDED_ERROR then
-  begin
-    InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, nil, tmpLen);
-    if tmpLen > 0 then
-    begin
-      SetLength(tmp, tmpLen);
-      InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, PChar(tmp), tmpLen);
-      result := result + ' [' + tmp + ']';
-    end;
-  end;
+  result := WinErrorText(error, 'wininet.dll');
+  if error <> ERROR_INTERNET_EXTENDED_ERROR then
+    exit;
+  InternetGetLastResponseInfoW(dwError, nil, tmpLen);
+  if (tmpLen = 0) or
+     (tmplen > SizeOf(tmp)) then
+    exit;
+  InternetGetLastResponseInfoW(dwError, @tmp, tmpLen);
+  result := FormatUtf8('% [%]', [result, PWideChar(@tmp)]);
 end;
 
 procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
@@ -2432,7 +2431,7 @@ begin
       result := GetLastError;
   end;
   if result <> 0 then
-    ProxyInfo.ErrorMessage := SysErrorMessagePerModule(result, winhttpdll);
+    ProxyInfo.ErrorMessage := WinErrorText(result, winhttpdll);
 end;
 
 
@@ -2607,8 +2606,8 @@ constructor EWebSocketApi.Create(api: TWebSocketApis; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d)', [WebSocketNames[api],
-    SysErrorMessagePerModule(Error, WEBSOCKET_DLL), Error])
+  inherited CreateUtf8('% failed: % (%)', [WebSocketNames[api],
+    WinErrorText(Error, WEBSOCKET_DLL), Error])
 end;
 
 const

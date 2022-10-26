@@ -3099,7 +3099,8 @@ var
   logdata: PHTTP_LOG_FIELDS_DATA;
   contrange: ShortString;
 
-  procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
+  procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
+    E: Exception = nil);
   var
     msg: RawUtf8;
   begin
@@ -3110,7 +3111,7 @@ var
         [StatusCode, outstat], msg);
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
-      msg := msg + HtmlEscapeString(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
+      msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
       reps^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
       Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, reps^, nil,
         bytessent, nil, 0, nil, fLogData);
@@ -3180,7 +3181,7 @@ var
         fmOpenRead or fmShareDenyNone);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, SysErrorMessage(GetLastError));
+        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError, nil));
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
@@ -3409,7 +3410,7 @@ begin
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, SysErrorMessagePerModule(err, HTTPAPI_DLL));
+                  SendError(HTTP_NOTACCEPTABLE, WinErrorText(err, HTTPAPI_DLL));
                   continue;
                 end;
                 // optionally uncompress input body
@@ -3446,7 +3447,7 @@ begin
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                     (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
-                    SendError(HTTP_SERVERERROR, E.Message, E);
+                    SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
             end;
           finally
             reqid := 0; // reset Request ID to handle the next pending request
