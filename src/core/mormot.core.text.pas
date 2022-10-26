@@ -10387,7 +10387,7 @@ var
 begin
   error := GetLastError;
   FormatUtf8('% 0x% [%] %', [Trailer, CardinalToHexShort(error),
-    StringToUtf8(SysErrorMessage(error)), Format], fmt);
+    GetErrorText(error), Format], fmt);
   CreateUtf8(fmt, Args);
 end;
 

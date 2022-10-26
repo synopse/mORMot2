@@ -733,7 +733,7 @@ var
 begin
   error := GetLastError;
   CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
-    [error, SysErrorMessage(error), aContext.ID]);
+    [error, string(GetErrorText(error)), aContext.ID]);
 end;
 
 
