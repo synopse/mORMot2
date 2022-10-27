@@ -3370,7 +3370,7 @@ begin
     // unit found -> search line number
     if u^.Addr = nil then
       exit;
-    max := DynArrayNotNilHigh(u^.Addr);
+    max := length(u^.Addr) - 1;
     L := 0;
     R := max;
     if R >= 0 then
@@ -3408,10 +3408,10 @@ begin
             HasDebugInfo and
             (((fUnit <> nil) and
               (offset >= fUnit[0].Symbol.Start) and
-              (offset <= fUnit[DynArrayNotNilHigh(fUnit)].Symbol.Stop)) or
+              (offset <= fUnit[length(fUnit) - 1].Symbol.Stop)) or
              ((fSymbol <> nil) and
               (offset >= fSymbol[0].Start) and
-              (offset <= fSymbol[DynArrayNotNilHigh(fSymbol)].Stop)));
+              (offset <= fSymbol[length(fSymbol) - 1].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
