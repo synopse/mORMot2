@@ -1161,11 +1161,11 @@ type
 
   TDtoObject = class(TSynAutoCreateFields)
   private
-    FFieldNestedObject: TNestedDtoObject;
+    FNestedObject: TNestedDtoObject;
     FSomeField: RawUtf8;
   published
     property NestedObject: TNestedDtoObject
-      read FFieldNestedObject;
+      read FNestedObject;
     property SomeField: RawUtf8
       read FSomeField write FSomeField;
   end;
@@ -1176,6 +1176,22 @@ type
   published
     property Level: TSynLogInfo
       read fLevel;
+  end;
+
+  TNestedDtoObject2 = class(TNestedDtoObject)
+  private
+    FNestedObject: TNestedDtoObject;
+  published
+    property NestedObject: TNestedDtoObject
+      read FNestedObject;
+  end;
+
+  TDtoObject3 = class(TDtoObject)
+  private
+    FNestedObject2: TNestedDtoObject2;
+  published
+    property NestedObject2: TNestedDtoObject2
+      read FNestedObject2;
   end;
 
   TObjectWithVariant = class(TSynPersistent)
@@ -1258,6 +1274,7 @@ var
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
   GDtoObject, G2, G3: TDtoObject;
+  GNest: TDtoObject3;
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
@@ -1778,6 +1795,7 @@ var
       end;
     end;
     Check(JAV.D = '4');
+
     GDtoObject := TDtoObject.Create;
     G2 := TDtoObject.Create;
     Check(IsObjectDefaultOrVoid(GDtoObject));
@@ -1807,6 +1825,7 @@ var
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
     ClearObject(G2);
+
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
       'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
@@ -1826,6 +1845,27 @@ var
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
       'FieldString=c:\abc'#$0A'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A);
+    GNest := TDtoObject3.Create;
+    U := ObjectToIni(GNest);
+    CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject2]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject2.NestedObject]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckHash(U, $9AFB5BD6);
+    GNest.SomeField := 'toto';
+    GNest.NestedObject2.FieldString := 'nested1';
+    GNest.NestedObject2.NestedObject.FieldString := 'nested2';
+    U := ObjectToIni(GNest);
+    CheckHash(U, $68286617);
+    ClearObject(GNest);
+    CheckHash(ObjectToIni(GNest), $9AFB5BD6);
+    Check(IniToObject(U, GNest));
+    CheckEqual(GNest.SomeField, 'toto');
+    CheckEqual(GNest.NestedObject2.FieldString, 'nested1');
+    CheckEqual(GNest.NestedObject2.NestedObject.FieldString, 'nested2');
+    GNest.Free;
     G3 := TDtoObject2.Create;
     U := ObjectToIni(G3);
     CheckHash(U, $CDBF8A87);
@@ -1833,6 +1873,7 @@ var
     U := ObjectToIni(G3);
     CheckHash(U, $E54B4E82);
     G3.Free;
+
     ClearObject(G2);
     ClearObject(GDtoObject);
     Check(IsObjectDefaultOrVoid(GDtoObject));
@@ -1840,6 +1881,7 @@ var
     Check(ObjectEquals(G2, GDtoObject));
     G2.Free;
     GDtoObject.Free;
+
     owv := TObjectWithVariant.Create;
     J := ObjectToJson(owv);
     CheckEqual(J, '{"Value":null}');

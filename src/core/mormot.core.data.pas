@@ -2512,14 +2512,15 @@ function UpdateIniNameValue(var Content: RawUtf8;
 // - nested objects are searched in their own section, named from their property
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8 = 'Main'): boolean;
+  const SectionName: RawUtf8 = 'Main'; Level: integer = 0): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
 // - nested objects are written in their own section, named from their property
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
   Options: TTextWriterWriteObjectOptions =
-    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment]): RawUtf8;
+    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
+    Level: integer = 0): RawUtf8;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
@@ -4171,13 +4172,13 @@ begin
 end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8): boolean;
+  const SectionName: RawUtf8; Level: integer): boolean;
 var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
   section: PUtf8Char;
-  v: RawUtf8;
+  n, v: RawUtf8;
   up: array[byte] of AnsiChar;
 begin
   result := false;
@@ -4195,7 +4196,11 @@ begin
     if p^.Prop <> nil then
       if p^.Value.Kind = rkClass then
       begin // recursive load from another per-property section
-        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), p^.Name) then
+        if Level = 0 then
+          n := p^.Name
+        else
+          n := SectionName + '.' + p^.Name;
+        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n, Level + 1) then
           result := true;
       end
       else
@@ -4211,7 +4216,7 @@ begin
 end;
 
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
+  Options: TTextWriterWriteObjectOptions; Level: integer): RawUtf8;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
@@ -4220,7 +4225,7 @@ var
   o: TTextWriterWriteObjectOptions;
   r: TRttiCustom;
   p: PRttiCustomProp;
-  s: RawUtf8;
+  n, s: RawUtf8;
 begin
   result := '';
   if Instance = nil then
@@ -4237,7 +4242,11 @@ begin
       if p^.Prop <> nil then
         if p^.Value.Kind = rkClass then
         begin
-          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), p^.Name);
+          if Level = 0 then
+            n := p^.Name
+          else
+            n := SectionName + '.' + p^.Name;
+          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), n, Options, Level + 1);
           if s <> '' then
             AddRawUtf8(nested, nestedcount, s);
         end
@@ -4251,7 +4260,7 @@ begin
               if woHumanReadableEnumSetAsComment in Options then
               begin
                 p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-                  s, '; values=', false, #10, true);
+                  s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
                 W.AddString(s);
               end;
           end;
