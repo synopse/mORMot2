@@ -1894,6 +1894,15 @@ type
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUtf8DynArray): integer;
+    /// return a dynamic array with all dvObject Names, and length() = Count
+    // - since length(Names) = Capacity, you can use this method to retrieve
+    // all the object keys
+    // - consider using FieldNames iterator or Names[0..Count-1] if you need
+    // to iterate on the key names
+    // - will internally force length(Names)=length(Values)=Capacity=Count and
+    // return the Names[] instance with no memory (re)allocation
+    // - if the document is not a dvObject, will return nil
+    function GetNames: TRawUtf8DynArray;
     /// map {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
     // - the supplied aObjectPropName should match the incoming dotted value
     // of all properties (e.g. 'obj' for "obj.prop1")
@@ -1948,7 +1957,7 @@ type
     /// direct acces to the low-level internal array of names
     // - is void (nil) if Kind is not dvObject
     // - note that length(Names)=Capacity and not Count, so copy(Names, 0, Count)
-    // or use FieldNames iterator if you want the exact count
+    // or use FieldNames iterator or GetNames if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with _Safe(aVariantObject)^ do
@@ -6750,6 +6759,19 @@ begin
         inc(result);
       end;
     end;
+end;
+
+function TDocVariantData.GetNames: TRawUtf8DynArray;
+begin
+  if IsObject and
+     (VCount > 0) then
+  begin
+    DynArrayFakeLength(VName, VCount);
+    DynArrayFakeLength(VValue, VCount);
+    result := VName; // truncate with no memory (re)allocation
+  end
+  else
+    result := nil;
 end;
 
 function TDocVariantData.FlattenAsNestedObject(
