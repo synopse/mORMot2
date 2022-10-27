@@ -118,7 +118,7 @@ type
     /// how many files will be rotated (default is 2)
     property LogRotateFileCount;
   end;
-  
+
   /// meta-class of TSynDaemon settings information
   TSynDaemonSettingsClass = class of TSynDaemonAbstractSettings;
 
@@ -171,7 +171,8 @@ type
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName;
       const aSettingsExt: TFileName = '.settings';
       const aSettingsName: TFileName = '';
-      aSettingsOptions: TSynJsonFileSettingsOptions = []); reintroduce;
+      aSettingsOptions: TSynJsonFileSettingsOptions = [];
+      const SectionName:Rawutf8='Main'); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean = true);
@@ -261,7 +262,8 @@ end;
 constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
   const aWorkFolder, aSettingsFolder, aLogFolder,
         aSettingsExt, aSettingsName: TFileName;
-        aSettingsOptions: TSynJsonFileSettingsOptions);
+        aSettingsOptions: TSynJsonFileSettingsOptions;
+        const SectionName:Rawutf8);
 var
   fn: TFileName;
 begin
@@ -282,7 +284,7 @@ begin
     fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
-  fSettings.LoadFromFile(fn + aSettingsExt); // now loads the settings file
+  fSettings.LoadFromFile(fn + aSettingsExt,SectionName); // now loads the settings file
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=

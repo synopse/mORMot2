@@ -2421,7 +2421,7 @@ type
   // - would fallback and try to read as INI file if no valid JSON is found
   TSynJsonFileSettings = class(TSynAutoCreateFields)
   protected
-    fInitialJsonContent: RawUtf8;
+    fInitialJsonContent, fSectionName: RawUtf8;
     fFileName: TFileName;
     fLoadedAsIni: boolean;
     fSettingsOptions: TSynJsonFileSettingsOptions;
@@ -2430,9 +2430,9 @@ type
   public
     /// read existing settings from a JSON content
     // - if the input is no JSON object, then a .INI structure is tried
-    function LoadFromJson(var aJson: RawUtf8): boolean;
+    function LoadFromJson(var aJson: RawUtf8; const SectionName:Rawutf8): boolean;
     /// read existing settings from a JSON or INI file file
-    function LoadFromFile(const aFileName: TFileName): boolean; virtual;
+    function LoadFromFile(const aFileName: TFileName; const SectionName:Rawutf8='Main'): boolean; virtual;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
     // - will use the INI format if it was used at loading, or fsoWriteIni is set
     procedure SaveIfNeeded; virtual;
@@ -9712,7 +9712,7 @@ begin
       begin
         // RTTI_BINARYLOAD[rkDynArray]() did not set the external count
         fSafe.Padding[DIC_KEYCOUNT].VInteger   := n;
-        fSafe.Padding[DIC_VALUECOUNT].VInteger := n;      
+        fSafe.Padding[DIC_VALUECOUNT].VInteger := n;
         SetTimeouts;  // set ComputeNextTimeOut for all items
         fKeys.ForceReHash; // optimistic: input from TSynDictionary.SaveToBinary
         result := true;
@@ -11128,27 +11128,33 @@ begin
   result := true; // success
 end;
 
-function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8): boolean;
+function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8; const SectionName:Rawutf8): boolean;
 begin
   if fsoReadIni in fSettingsOptions then
-    result := false
+  begin
+    fSectionName:=SectionName;
+    result := false;
+  end
   else
     result := JsonSettingsToObject(aJson, self);
   if not result then
   begin
-    result := IniToObject(aJson, self);
+    result := IniToObject(aJson, self, SectionName);
     if result then
+    begin
+      fSectionName:=SectionName;
       include(fSettingsOptions, fsoWriteIni); // save back as INI
+    end;
   end;
   if result then
     result := AfterLoad;
 end;
 
-function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
+function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName; const SectionName:Rawutf8): boolean;
 begin
   fFileName := aFileName;
   fInitialJsonContent := StringFromFile(aFileName);
-  result := LoadFromJson(fInitialJsonContent);
+  result := LoadFromJson(fInitialJsonContent, SectionName);
 end;
 
 procedure TSynJsonFileSettings.SaveIfNeeded;
@@ -11160,7 +11166,7 @@ begin
      (fsoDisableSaveIfNeeded in fSettingsOptions) then
     exit;
   if fsoWriteIni in fSettingsOptions then
-    saved := ObjectToIni(self)
+    saved := ObjectToIni(self,fSectionName)
   else
     saved := ObjectToJson(self, SETTINGS_WRITEOPTIONS);
   if saved = fInitialJsonContent then
@@ -11258,6 +11264,6 @@ end;
 initialization
   InitializeUnit;
   DefaultJsonWriter := TJsonWriter;
-  
+
 end.
 
