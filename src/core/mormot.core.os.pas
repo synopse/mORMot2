@@ -2028,8 +2028,9 @@ procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns a given error code as plain text
-// - calls WinErrorText(error, nil) on Windows, or StrError() on POSIX
+// - redirects to WinErrorText(error, nil) on Windows, or StrError() on POSIX
 function GetErrorText(error: integer): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifdef OSWINDOWS}
 

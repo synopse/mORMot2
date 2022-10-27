@@ -774,7 +774,7 @@ begin
   if ms <> 0 then
     Windows.Sleep(ms) // follow the HW timer: typically up to 16ms on Windows
   else
-     SwitchToThread;
+    SwitchToThread;
 end;
 
 
@@ -1356,7 +1356,7 @@ var
 begin
   result := false;
   if PtrUInt(p) <= 65535 then
-    exit;
+    exit; // first 64KB is not a valid pointer by definition
   if (LastMemInfo.State <> 0) and
      (PtrUInt(p) - PtrUInt(LastMemInfo.BaseAddress) <=
        PtrUInt(LastMemInfo.RegionSize)) then
