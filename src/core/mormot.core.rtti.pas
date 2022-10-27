@@ -1808,6 +1808,17 @@ const
      ptWideString,
      ptWinAnsi];
 
+  /// which TRttiParserType types could be serialized as multi-line JSON "text"
+  // - e.g. plain RawUtf8 which may include \n line feeds but not RawByteString,
+  // TTimeLog or THash128, which never include line breaks within their "value"
+  ptMultiLineStringTypes =
+    [ptRawUtf8,
+     ptString,
+     ptSynUnicode,
+     ptUnicodeString,
+     ptWideString,
+     ptWinAnsi];
+
 var
   /// simple lookup to the plain RTTI type of most simple managed types
   // - nil for unmanaged types (e.g. rkOrdinals) or for more complex types

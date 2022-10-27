@@ -1035,7 +1035,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a sub-part of an UTF-8 String
     // - emulates AddString(copy(Text,start,len))
-    procedure AddStringCopy(const Text: RawUtf8; start,len: PtrInt);
+    procedure AddStringCopy(const Text: RawUtf8; start, len: PtrInt);
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)
     procedure AddTrimLeftLowerCase(Text: PShortString);
     /// append a UTF-8 String excluding any space or control char

@@ -2509,14 +2509,16 @@ function UpdateIniNameValue(var Content: RawUtf8;
 
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
-// - nested objects are searched in their own section, named from their property
+// - nested objects and multi-line text values are searched in their own section,
+// named from their section level and property (e.g. [mainprop.nested1.nested2])
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
   const SectionName: RawUtf8 = 'Main'; Level: integer = 0): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
-// - nested objects are written in their own section, named from their property
+// - nested objects and multi-line text values are written in their own section,
+// named from their section level and property (e.g. [mainprop.nested1.nested2])
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
   Options: TTextWriterWriteObjectOptions =
     [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
@@ -4177,7 +4179,8 @@ var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
-  section: PUtf8Char;
+  section, nested: PUtf8Char;
+  name: PAnsiChar;
   n, v: RawUtf8;
   up: array[byte] of AnsiChar;
 begin
@@ -4207,12 +4210,54 @@ begin
       begin
         PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
         v := FindIniNameValue(section, @up, #0);
-        if (v <> #0) and
-           p^.Prop^.SetValueText(Instance, v) then
-          result := true;
+        if (v = #0) and
+           (p^.Value.Parser in ptMultiLineStringTypes) then
+        begin
+          name := @up;
+          if Level <> 0 then
+          begin
+            name := UpperCopy255(name, SectionName);
+            name^ := '.';
+            inc(name);
+          end;
+          PWord(UpperCopy255(name, p^.Name))^ := ord(']');
+          nested := pointer(Ini);
+          if FindSectionFirstLine(nested, @up) then
+            // multi-line text value has been stored in its own section
+            v := GetSectionContent(nested);
+        end;
+        if v <> #0 then
+          if p^.Prop^.SetValueText(Instance, v) then
+            result := true;
       end;
     inc(p);
   end;
+end;
+
+function TrimAndIsMultiLine(var U: RawUtf8): boolean;
+var
+  L: PtrInt;
+  P: PUtf8Char absolute U;
+begin
+  result := false;
+  L := length(U);
+  if L = 0 then
+    exit;
+  while P[L - 1] in [#13, #10] do
+  begin
+    dec(L);
+    if L = 0 then
+    begin
+      U := ''; // no meaningful text
+      exit;
+    end;
+  end;
+  if L <> length(U) then
+    SetLength(U, L); // trim right
+  if BufferLineLength(P, P + L) = L then // may use x86_64 SSE2 asm
+    exit; // no line feed
+  result := true; // there are line feeds within this text
+  U := TrimChar(U, [#13]); // normalize #13#10 into #10 as ObjectToIni()
 end;
 
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
@@ -4250,29 +4295,50 @@ begin
           if s <> '' then
             AddRawUtf8(nested, nestedcount, s);
         end
+        else if p^.Value.Kind = rkEnumeration then
+        begin
+          if woHumanReadableEnumSetAsComment in Options then
+          begin
+            p^.Value.Cache.EnumInfo^.GetEnumNameAll(
+              s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
+            W.AddString(s);
+          end;
+          // AddValueJson() would have written "quotes"
+          W.AddString(p^.Name);
+          W.Add('=');
+          W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
+            p^.Prop^.GetOrdProp(Instance)));
+          W.Add(#10);
+        end
+        else if p^.Value.Parser in ptMultiLineStringTypes then
+        begin
+          p^.Prop^.GetAsString(Instance, s);
+          if TrimAndIsMultiLine(s) then
+          begin
+            // store multi-line text values in their own section
+            if Level = 0 then
+              FormatUtf8('[%]'#10'%'#10#10, [p^.Name, s], n)
+            else
+              FormatUtf8('[%.%]'#10'%'#10#10, [SectionName, p^.Name, s], n);
+            AddRawUtf8(nested, nestedcount, n);
+          end
+          else
+          begin
+            W.AddString(p^.Name);
+            W.Add('=');
+            W.AddString(s); // single line text
+            W.Add(#10);
+          end;
+        end
         else
         begin
           o := Options - [woHumanReadableEnumSetAsComment];
-          case p^.Value.Kind of
-            rkSet: // not supported yet in IniToObject/SetValueText above
-              exclude(o, woEnumSetsAsText);
-            rkEnumeration:
-              if woHumanReadableEnumSetAsComment in Options then
-              begin
-                p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-                  s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
-                W.AddString(s);
-              end;
-          end;
+          if p^.Value.Kind = rkSet then
+            // not supported (yet) in IniToObject/SetValueText above
+            exclude(o, woEnumSetsAsText);
           W.AddString(p^.Name);
           W.Add('=');
-          case p^.Value.Kind of
-            rkEnumeration: // AddValueJson() would have written "quotes"
-              W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
-                p^.Prop^.GetOrdProp(Instance)));
-          else
-            p^.AddValueJson(W, Instance, o, twOnSameLine);
-          end;
+          p^.AddValueJson(W, Instance, o, twOnSameLine);
           W.Add(#10);
         end;
       inc(p);

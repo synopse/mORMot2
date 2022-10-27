@@ -1824,11 +1824,12 @@ var
     Check(G2.NestedObject.FieldInteger = 0);
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
-    ClearObject(G2);
 
+    ClearObject(G2);
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
       'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckHash(U, $79F2E094);
     Check(not IniToObject('[main2]'#10'somefield=toto', G2));
     CheckEqual(G2.SomeField, '');
     CheckEqual(G2.NestedObject.FieldInteger, 0);
@@ -1845,6 +1846,24 @@ var
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
       'FieldString=c:\abc'#$0A'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A);
+    G2.NestedObject.FieldString := 'line1'#13#10'line2'#10'line3'#13#10#10#10;
+    U := ObjectToIni(G2);
+    CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
+      'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject.FieldString]'#$0A'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckHash(U, $B16E54F1);
+    ClearObject(G2);
+    Check(IsObjectDefaultOrVoid(G2));
+    CheckHash(ObjectToIni(G2), $79F2E094);
+    CheckEqual(G2.SomeField, '');
+    CheckEqual(G2.NestedObject.FieldInteger, 0);
+    CheckEqual(G2.NestedObject.FieldString, '');
+    Check(IniToObject(U, G2));
+    Check(not IsObjectDefaultOrVoid(G2));
+    CheckEqual(G2.SomeField, 'titi');
+    CheckEqual(G2.NestedObject.FieldInteger, 7);
+    CheckEqual(G2.NestedObject.FieldString, 'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckHash(ObjectToIni(G2), $B16E54F1);
     GNest := TDtoObject3.Create;
     U := ObjectToIni(GNest);
     CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
@@ -1859,7 +1878,9 @@ var
     GNest.NestedObject2.NestedObject.FieldString := 'nested2';
     U := ObjectToIni(GNest);
     CheckHash(U, $68286617);
+    Check(not IsObjectDefaultOrVoid(GNest));
     ClearObject(GNest);
+    Check(IsObjectDefaultOrVoid(GNest));
     CheckHash(ObjectToIni(GNest), $9AFB5BD6);
     Check(IniToObject(U, GNest));
     CheckEqual(GNest.SomeField, 'toto');
@@ -1873,7 +1894,6 @@ var
     U := ObjectToIni(G3);
     CheckHash(U, $E54B4E82);
     G3.Free;
-
     ClearObject(G2);
     ClearObject(GDtoObject);
     Check(IsObjectDefaultOrVoid(GDtoObject));
