@@ -79,7 +79,13 @@ end;
 
 {$endif UNICODE}
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload;
 begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
@@ -440,7 +446,7 @@ begin
     if cod <> nil then
     begin
       // we can return directly the standard system error code constant
-      result := _fmt('ERROR_%s', [cod]);
+      _fmt('ERROR_%s', [cod], result);
       exit;
     end;
     src := nil;
@@ -2027,7 +2033,7 @@ begin
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          LanguageInfo := _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]]);
+          _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -4101,11 +4107,11 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      OSVersionText := _fmt('Windows %s (%d.%d.%d)',
-        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber])
+      _fmt('Windows %s (%d.%d.%d)', [WINDOWS_NAME[Vers],
+        dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText)
     else
-      OSVersionText := _fmt('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
-         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]);
+      _fmt('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers], wServicePackMajor,
+        dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
@@ -4199,8 +4205,8 @@ begin
             CpuCacheText := _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
     TrimSelf(CpuCacheText);
   end;
-  CpuInfoText := _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
-    [SystemInfo.dwNumberOfProcessors, cpu]);
+  _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
+    [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // writeln(CpuInfoText); writeln(CpuCacheText);
 end;
 

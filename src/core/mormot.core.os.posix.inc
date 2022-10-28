@@ -141,9 +141,15 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 begin
-  result := RawUtf8(format(Fmt, Args));
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
 

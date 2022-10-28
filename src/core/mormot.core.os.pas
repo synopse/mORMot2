@@ -5905,8 +5905,8 @@ begin
   else
   begin
     if fVersionInfo = '' then
-      fVersionInfo := _fmt('%s %s (%s)', [ExtractFileName(fFileName),
-        DetailedOrVoid, BuildDateTimeString]);
+      _fmt('%s %s (%s)', [ExtractFileName(fFileName),
+        DetailedOrVoid, BuildDateTimeString], fVersionInfo);
     result := fVersionInfo;
   end;
 end;
@@ -5919,9 +5919,8 @@ begin
   begin
     if fUserAgent = '' then
     begin
-      fUserAgent := _fmt('%s/%s%s', [
-        GetFileNameWithoutExtOrPath(fFileName), DetailedOrVoid,
-        OS_INITIAL[OS_KIND]]);
+      _fmt('%s/%s%s', [GetFileNameWithoutExtOrPath(fFileName), DetailedOrVoid,
+        OS_INITIAL[OS_KIND]], fUserAgent);
       {$ifdef OSWINDOWS}
       if OSVersion in WINDOWS_32 then
         fUserAgent := fUserAgent + '32';
@@ -6013,8 +6012,8 @@ begin
     end
     else
       Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
-    ProgramFullSpec := _fmt('%s %s (%s)', [ProgramFileName,
-      Version.Detailed, Version.BuildDateTimeString]);
+    _fmt('%s %s (%s)', [ProgramFileName,
+      Version.Detailed, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
@@ -6434,8 +6433,8 @@ begin
           lines[s[8]] := sbiBiosDate;
           if s[1] >= $17 then // 2.4+
           begin
-            info[sbiBiosRelease]  := _fmt('%d.%d', [s[$14], s[$15]]);
-            info[sbiBiosFirmware] := _fmt('%d.%d', [s[$16], s[$17]]);
+            _fmt('%d.%d', [s[$14], s[$15]], info[sbiBiosRelease]);
+            _fmt('%d.%d', [s[$16], s[$17]], info[sbiBiosFirmware]);
           end;
         end;
       1: // System Information (type 1)
