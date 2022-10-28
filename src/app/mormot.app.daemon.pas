@@ -541,10 +541,12 @@ begin
     {$else}
     // POSIX Run/Fork background execution of the executable
     cRun,
-    cFork:
-      RunUntilSigTerminated(self, {dofork=}(cmd = cFork), Start, Stop,
+    cFork,
+    cStart: // /start = /fork
+      RunUntilSigTerminated(self, {dofork=}(cmd in [cFork, cStart]), Start, Stop,
         fSettings.fLogClass.DoLog, fSettings.ServiceName);
     cKill,
+    cStop,  // /stop = /kill
     cSilentKill:
       if RunUntilSigTerminatedForKill then
       begin
@@ -554,6 +556,9 @@ begin
       end
       else
         raise EDaemon.Create('No forked process found to be killed');
+    cState:
+      writeln(fSettings.ServiceName,
+        ' State=', ToText(RunUntilSigTerminatedState)^);
     else
       Syntax;
     {$endif OSWINDOWS}

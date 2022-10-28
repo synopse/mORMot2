@@ -3643,6 +3643,24 @@ function RegisterGlobalShutdownRelease(Instance: TObject;
 
 { ****************** Unix Daemon and Windows Service Support }
 
+type
+  /// all possible states of a Windows service
+  // - on POSIX, will identify only if the daemon is ssRunning or ssStopped
+  TServiceState = (
+    ssNotInstalled,
+    ssStopped,
+    ssStarting,
+    ssStopping,
+    ssRunning,
+    ssResuming,
+    ssPausing,
+    ssPaused,
+    ssErrorRetrievingState);
+
+/// return the ready to be displayed text of a TServiceState value
+function ToText(st: TServiceState): PShortString; overload;
+
+
 {$ifdef OSWINDOWS}
 
 { *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
@@ -3790,18 +3808,6 @@ var
   WindowsServiceLog: TSynLogProc;
 
 type
-  /// all possible states of the service
-  TServiceState = (
-    ssNotInstalled,
-    ssStopped,
-    ssStarting,
-    ssStopping,
-    ssRunning,
-    ssResuming,
-    ssPausing,
-    ssPaused,
-    ssErrorRetrievingState);
-
   /// TServiceControler class is intended to create a new Windows Service instance
   // or to maintain (that is start, stop, pause, resume...) an existing Service
   // - to provide the service itself, use the TService class
@@ -4110,9 +4116,6 @@ function ServiceSingleRun: boolean;
 // enumeration item
 function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 
-/// return the ready to be displayed text of a TServiceState value
-function ToText(st: TServiceState): PShortString; overload;
-
 /// return the ProcessID of a given service, by name
 function GetServicePid(const aServiceName: string): cardinal;
 
@@ -4145,6 +4148,9 @@ var
 
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
+
+/// check the local .pid file to return either ssRunning or ssStopped
+function RunUntilSigTerminatedState: TServiceState;
 
 var
   /// once SynDaemonIntercept has been called, this global variable
@@ -7459,6 +7465,24 @@ end;
 
 
 { ****************** Unix Daemon and Windows Service Support }
+
+const
+  // hardcoded to avoid linking mormot.core.rtti for GetEnumName()
+  _SERVICESTATE: array[TServiceState] of string[12] = (
+    'NotInstalled',
+    'Stopped',
+    'Starting',
+    'Stopping',
+    'Running',
+    'Resuming',
+    'Pausing',
+    'Paused',
+    'Error');
+
+function ToText(st: TServiceState): PShortString; overload;
+begin
+  result := @_SERVICESTATE[st];
+end;
 
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs;
   argc: PInteger; temp: PRawUtf8; posix: boolean): TParseCommands;

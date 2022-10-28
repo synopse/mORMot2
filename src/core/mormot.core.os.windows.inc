@@ -2981,25 +2981,6 @@ end;
 
 { ****************** Unix Daemon and Windows Service Support }
 
-const
-  // hardcoded to avoid linking mormot.core.rtti for GetEnumName()
-  _SERVICESTATE: array[TServiceState] of string[12] = (
-    'NotInstalled',
-    'Stopped',
-    'Starting',
-    'Stopping',
-    'Running',
-    'Resuming',
-    'Pausing',
-    'Paused',
-    'Error');
-
-function ToText(st: TServiceState): PShortString; overload;
-begin
-  result := @_SERVICESTATE[st];
-end;
-
-
 { TServiceController }
 
 constructor TServiceController.CreateNewService(
@@ -3109,7 +3090,7 @@ begin
     result := ssNotInstalled
   else
     result := CurrentStateToServiceState(Status.dwCurrentState);
-  TService.DoLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
+  TService.DoLog(sllTrace, 'GetState(%)=%', [fName, ToText(result)^], self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -3258,7 +3239,7 @@ begin
     if result <> ssNotInstalled then
       ctrl.SetDescription(Description);
     TService.DoLog(sllDebug,
-      'Install(%)=%', [Name, _SERVICESTATE[result]], ctrl);
+      'Install(%)=%', [Name, ToText(result)^], ctrl);
   finally
     ctrl.Free;
   end;

@@ -2541,6 +2541,14 @@ begin
   result := Format('%s.%s.pid', [result, Executable.ProgramName]);
 end;
 
+function RunUntilSigTerminatedState: TServiceState;
+begin
+  if FileExists(RunUntilSigTerminatedPidFile) then
+    result := ssRunning
+  else
+    result := ssStopped;
+end;
+
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
 var
   pid: PtrInt;
@@ -2556,12 +2564,12 @@ begin
     if fpgeterrno <> ESysESRCH then
       exit
     else
-    // ESysESRCH = no such process -> try to delete the .pid file
-    if DeleteFile(pidfilename) then
-    begin
-      result := true; // process crashed or hard reboot -> nothing to kill
-      exit;
-    end;
+      // ESysESRCH = no such process -> try to delete the .pid file
+      if DeleteFile(pidfilename) then
+      begin
+        result := true; // process crashed or hard reboot -> nothing to kill
+        exit;
+      end;
   if waitseconds <= 0 then
   begin
     result := true;
@@ -2576,7 +2584,7 @@ begin
   until result or
         (GetTickCount64 > tix);
   if not result then
-    fpkill(pid, SIGKILL); // finesse
+    fpkill(pid, SIGKILL); // murder with finesse
 end;
 
 procedure CleanAfterFork;
