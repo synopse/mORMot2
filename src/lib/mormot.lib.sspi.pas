@@ -1332,7 +1332,7 @@ function NetLocalGroupSetMembers; external netapi32;
 function NetLocalGroupAddMembers; external netapi32;
 function NetLocalGroupDelMembers; external netapi32;
 
-procedure SetGroups(g: PGroupInfo0Array; n: integer; var res: TRawUtf8DynArray);
+procedure GetNames(g: PGroupInfo0Array; n: integer; var res: TRawUtf8DynArray);
 var
   i: PtrInt;
 begin
@@ -1363,7 +1363,7 @@ begin
     res := NetUserGetGroups(s, u, 0,
       v, MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal);
   if res = NERR_SUCCESS then
-    SetGroups(v, dwEntriesRead, result);
+    GetNames(v, dwEntriesRead, result);
   srv.Done;
   usr.Done;
 end;
@@ -1379,7 +1379,7 @@ begin
   if NetUserEnum(Utf8ToWin32PWideChar(server, srv), 0, byte(filter), v,
       MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
     // note: _USER_INFO_0 and _LOCALGROUP_INFO_0 are identical
-    SetGroups(v, dwEntriesRead, result);
+    GetNames(v, dwEntriesRead, result);
   srv.Done;
 end;
 
@@ -1392,7 +1392,7 @@ begin
   result := nil;
   if NetLocalGroupEnum(Utf8ToWin32PWideChar(server, srv), 0, v,
       MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
-    SetGroups(v, dwEntriesRead, result);
+    GetNames(v, dwEntriesRead, result);
   srv.Done;
 end;
 
@@ -1409,7 +1409,7 @@ begin
   if NetLocalGroupGetMembers(s, g, 3, v, MAX_PREFERRED_LENGTH,
       @dwEntriesRead, @dwEntriesTotal, nil) = NERR_Success then
     // note: _LOCALGROUP_MEMBERS_INFO_3 and _LOCALGROUP_INFO_0 are identical
-    SetGroups(v, dwEntriesRead, result);
+    GetNames(v, dwEntriesRead, result);
   srv.Done;
   grp.Done;
 end;
