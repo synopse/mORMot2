@@ -1410,6 +1410,7 @@ type
   PWinProcessInfo = ^TWinProcessInfo;
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
+function ToText(p: TWinSystemPrivilege): PShortString; overload;
 
 /// quickly retrieve a Text value from Registry
 // - could be used if TWinRegistry is not needed, e.g. for a single value

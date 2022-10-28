@@ -81,7 +81,7 @@ end;
 
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
 begin
-  result := RawUtf8(format(Fmt, Args));
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
@@ -2247,8 +2247,8 @@ end;
 
 
 const
-  MAX_SE_NAME_LENGTH = 31;
-  WINSYSTEMPRIVILEGENAME: array[TWinSystemPrivilege] of string = (
+  _WSP: array[TWinSystemPrivilege] of string[32] = (
+    // note: string[32] to ensure there is a trailing #0 for all items
     'SeCreateTokenPrivilege',          // wspCreateToken
     'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
     'SeLockMemoryPrivilege',           // wspLockMemory
@@ -2296,18 +2296,24 @@ function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
   var TokenHandle: THandle): BOOL;
     stdcall; external advapi32 name 'OpenProcessToken';
 
-function LookupPrivilegeValue(lpSystemName, lpName: PChar;
+function LookupPrivilegeValueA(lpSystemName, lpName: PAnsiChar;
   var lpLuid: TLargeInteger): BOOL;
-    stdcall; external advapi32 name 'LookupPrivilegeValue' + _AW;
+    stdcall; external advapi32 name 'LookupPrivilegeValueA';
 
-function LookupPrivilegeName(lpSystemName: LPCSTR; var lpLuid: TLargeInteger;
-  lpName: PChar; var cbName: DWORD): BOOL;
-    stdcall; external advapi32 name 'LookupPrivilegeName' + _AW;
+function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger;
+  lpName: PAnsiChar; var cbName: DWORD): BOOL;
+    stdcall; external advapi32 name 'LookupPrivilegeNameA';
 
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
   PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
     stdcall; external advapi32 name 'AdjustTokenPrivileges';
+
+
+function ToText(p: TWinSystemPrivilege): PShortString;
+begin
+  result := @_WSP[p];
+end;
 
 
 { TSynWindowsPrivileges }
@@ -2395,11 +2401,12 @@ end;
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
+  name: string[127];
   tp: PTOKEN_PRIVILEGES;
   i: PtrInt;
-  name: string;
   len: cardinal;
   p: TWinSystemPrivilege;
+  priv: PLUIDANDATTRIBUTES;
 begin
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
@@ -2408,28 +2415,22 @@ begin
     if GetRawTokenInfo(Token, TokenPrivileges, buf) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
     tp := buf.buf;
-    SetLength(name, MAX_SE_NAME_LENGTH);
-    for i := 0 to tp.PrivilegeCount - 1 do
+    priv := @tp.Privileges;
+    for i := 1 to tp.PrivilegeCount do
     begin
-      len := length(name);
-      if not LookupPrivilegeName(
-               nil, tp.Privileges[i].Luid, pointer(name), len) then
-        if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-          RaiseLastError('LoadPriviledges: LookupPrivilegeName')
-        else
-        begin
-          SetLength(name, len);
-          if not LookupPrivilegeName(
-                   nil, tp.Privileges[i].Luid, pointer(name), len) then
-            RaiseLastError('LoadPriviledges: LookupPrivilegeName')
-        end;
+      len := high(name);
+      if not LookupPrivilegeNameA(nil, priv.Luid, @name[1], len) or
+         (len = 0) then
+         RaiseLastError('LoadPriviledges: LookupPrivilegeNameA');
+      name[0] := AnsiChar(len);
       for p := low(p) to high(p) do
-        if CompareText(name, WINSYSTEMPRIVILEGENAME[p]) = 0 then
+        if PropNameEquals(PShortString(@name), PShortString(@_WSP[p])) then
         begin
           Include(fAvailable, p);
-          if tp.Privileges[i].Attributes and SE_PRIVILEGE_ENABLED <> 0 then
+          if priv.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
             Include(fDefEnabled, p);
         end;
+      inc(priv);
     end;
     fEnabled := fDefEnabled;
   finally
@@ -2446,13 +2447,12 @@ var
   cbprev: DWORD;
 begin
   result := false;
-  cbprev := SizeOf(TOKEN_PRIVILEGES);
-  if not LookupPrivilegeValue(
-           nil, Pointer(WINSYSTEMPRIVILEGENAME[aPrivilege]), id) then
+  if not LookupPrivilegeValueA(nil, @_WSP[aPrivilege][1], id) then
     exit;
   tp.PrivilegeCount := 1;
   tp.Privileges[0].Luid := PInt64(@id)^;
   tp.Privileges[0].Attributes := 0;
+  cbprev := SizeOf(TOKEN_PRIVILEGES);
   AdjustTokenPrivileges(
     Token, false, tp, SizeOf(TOKEN_PRIVILEGES), @tpprev, @cbprev);
   if GetLastError <> ERROR_SUCCESS then
@@ -2939,7 +2939,7 @@ begin
       exit;
     end;
   end;
-  // on XP, try to read directly from physical memory via ntdl.dll low-level API
+  // on XP, read directly from physical memory via ntdll.dll low-level API
   result := GetRawSmbiosFromMem(info);
 end;
 
