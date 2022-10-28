@@ -454,15 +454,21 @@ end;
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 var
   code: integer;
-  E: Exception;
 begin
   code := GetLastError;
-  if code <> 0 then
-    E := ModuleException.CreateFmt('%s error %x (%s)',
-      [ModuleName, code, string(WinErrorText(code, ModuleName))])
-  else
-    E := ModuleException.CreateFmt('Undefined %s error', [ModuleName]);
-  raise E;
+  raise ModuleException.CreateFmt('%s error %x (%s)',
+    [ModuleName, code, string(WinErrorText(code, ModuleName))]);
+end;
+
+procedure RaiseLastError(const Context: shortstring; RaisedException: ExceptClass);
+var
+  code: integer;
+begin
+  code := GetLastError;
+  if RaisedException = nil then
+    RaisedException := EOSException;
+  raise RaisedException.CreateFmt('%s error %x (%s)',
+    [Context, code, string(WinErrorText(code, nil))])
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
@@ -1267,7 +1273,7 @@ begin
   with PInt64Rec(@fFileSize)^ do
     fMap := CreateFileMapping(fFile, nil, PAGE_READONLY, Hi, Lo, nil);
   if fMap = 0 then
-    raise EOSException.Create('TMemoryMap.Map: CreateFileMapping()=0');
+    RaiseLastError('TMemoryMap.Map: CreateFileMapping');
   with PInt64Rec(@aCustomOffset)^ do
     fBuf := MapViewOfFile(fMap, FILE_MAP_READ, Hi, Lo, fBufSize);
   if fBuf = nil then
@@ -2292,20 +2298,17 @@ begin
   if aTokenPrivilege = pttProcess then
   begin
     if not OpenProcessToken(GetCurrentProcess, access, Token) then
-      raise EOSException.Create(
-        'TSynWindowsPrivileges cannot open process token');
+      RaiseLastError('TSynWindowsPrivileges: OpenProcessToken');
   end
   else if not OpenThreadToken(GetCurrentThread, access, false, Token) then
     if GetLastError = ERROR_NO_TOKEN then
     begin
       if not ImpersonateSelf(SecurityImpersonation) or
          not OpenThreadToken(GetCurrentThread, access, false, Token) then
-        raise EOSException.Create(
-          'TSynWindowsPrivileges cannot open thread token');
+        RaiseLastError('TSynWindowsPrivileges: ImpersonateSelf');
     end
     else
-      raise EOSException.Create(
-        'TSynWindowsPrivileges cannot open thread token');
+      RaiseLastError('TSynWindowsPrivileges: OpenThreadToken');
   LoadPrivileges;
 end;
 
@@ -2386,17 +2389,13 @@ begin
       if not LookupPrivilegeName(
                nil, tp.Privileges[i].Luid, pointer(name), len) then
         if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-          raise EOSException.CreateFmt(
-            'TSynWindowsPrivileges LookupPrivilegeName=%d for Luid %d',
-            [GetLastError, PInt64(@tp.Privileges[i].Luid)^])
+          RaiseLastError('LoadPriviledges: LookupPrivilegeName')
         else
         begin
           SetLength(name, len);
           if not LookupPrivilegeName(
                    nil, tp.Privileges[i].Luid, pointer(name), len) then
-            raise EOSException.CreateFmt(
-              'TSynWindowsPrivileges LookupPrivilegeName=%d for Luid=%d',
-              [GetLastError, PInt64(@tp.Privileges[i].Luid)^])
+            RaiseLastError('LoadPriviledges: LookupPrivilegeName')
         end;
       for p := low(p) to high(p) do
         if CompareText(name, WINSYSTEMPRIVILEGENAME[p]) = 0 then
