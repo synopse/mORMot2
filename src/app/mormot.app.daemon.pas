@@ -172,7 +172,7 @@ type
       const aSettingsExt: TFileName = '.settings';
       const aSettingsName: TFileName = '';
       aSettingsOptions: TSynJsonFileSettingsOptions = [];
-      const SectionName:Rawutf8='Main'); reintroduce;
+      const aSectionName: RawUtf8 = 'Main'); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean = true);
@@ -263,7 +263,7 @@ constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
   const aWorkFolder, aSettingsFolder, aLogFolder,
         aSettingsExt, aSettingsName: TFileName;
         aSettingsOptions: TSynJsonFileSettingsOptions;
-        const SectionName:Rawutf8);
+  const aSectionName: RawUtf8);
 var
   fn: TFileName;
 begin
@@ -284,7 +284,7 @@ begin
     fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
-  fSettings.LoadFromFile(fn + aSettingsExt,SectionName); // now loads the settings file
+  fSettings.LoadFromFile(fn + aSettingsExt, aSectionName); // now loads the settings file
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=
