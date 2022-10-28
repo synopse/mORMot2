@@ -80,6 +80,7 @@ Security Support Provider Interface (SSPI) Support on Windows
 - Low-Level SSPI/SChannel Functions
 - Middle-Level SSPI Wrappers
 - High-Level Client and Server Authentication using SSPI e.g. in `mormot.core.rest`
+- Lan Manager Access Functions
 
 ### mormot.lib.gssapi
 

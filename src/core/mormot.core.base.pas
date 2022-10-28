@@ -404,6 +404,7 @@ type
   PPByte = ^PByte;
   PPPByte = ^PPByte;
   PPInteger = ^PInteger;
+  PPCardinal = ^PCardinal;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
   TByteArray = array[ 0 .. MaxInt - 1 ] of byte; // redefine here with {$R-}

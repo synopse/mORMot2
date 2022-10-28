@@ -11,6 +11,7 @@ unit mormot.lib.sspi;
    - Low-Level SSPI/SChannel Functions
    - Middle-Level SSPI Wrappers
    - High-Level Client and Server Authentication using SSPI
+   - Lan Manager Access Functions
 
   *****************************************************************************
 
@@ -478,14 +479,14 @@ function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 // 'mymormotservice/myserver.mydomain.tld'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
-// and call function again width data, returned from servsr
+// and call function again with the data returned from servsr
 function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
 //  - this function must be used when application need to use different
-// user credentials (not credentials of logged in user)
+// user credentials (not credentials of logged-in user)
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
 // - aUserName is the domain and user name, in form of
@@ -493,7 +494,7 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
-// and call function again width data, returned from server
+// and call function again with the data returned from server
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
@@ -503,7 +504,7 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
 // - aInData contains data recieved from client
 // - aOutData contains data that must be sent to client
 // - if this function returns True, server must send aOutData to client
-// and call function again width data, returned from client
+// and call function again with the data returned from client
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -564,6 +565,157 @@ var
   // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
   SspiForceNtlmClient: boolean = false;
 
+
+{ ****************** Lan Manager Access Functions }
+
+// netapi32.dll API calls
+
+const
+  netapi32 = 'netapi32.dll';
+
+  MAX_PREFERRED_LENGTH = cardinal(-1);
+  LG_INCLUDE_INDIRECT = 1;
+  NERR_Success = 0;
+
+type
+  TNetApiStatus = cardinal;
+
+  // _USER_INFO_0, _LOCALGROUP_MEMBERS_INFO_3 and _LOCALGROUP_INFO_0 do match
+  TGroupInfo0 = record
+    name: PWideChar;
+  end;
+  PGroupInfo0 = ^TGroupInfo0;
+  TGroupInfo0Array = array[0..MaxInt div SizeOf(TGroupInfo0) - 1] of TGroupInfo0;
+  PGroupInfo0Array = ^TGroupInfo0Array;
+
+  TGroupInfo1 = record
+    name: PWideChar;
+    comment: PWideChar;
+  end;
+  PGroupInfo1 = ^TGroupInfo1;
+
+
+function NetApiBufferAllocate(ByteCount: cardinal;
+  var Buffer: pointer): TNetApiStatus; stdcall;
+
+function NetApiBufferFree(Buffer: pointer): TNetApiStatus; stdcall;
+
+function NetApiBufferReallocate(OldBuffer: pointer; NewByteCount: cardinal;
+  var NewBuffer: pointer): TNetApiStatus; stdcall;
+
+function NetApiBufferSize(Buffer: pointer;
+  var ByteCount: cardinal): TNetApiStatus; stdcall;
+
+
+function NetUserAdd(servername: PWideChar; level: cardinal;
+  buf: PByte; parm_err: PCardinal): TNetApiStatus; stdcall;
+
+function NetUserEnum(servername: PWideChar; level, filter: cardinal;
+  var bufptr: pointer; prefmaxlen: cardinal;
+  entriesread, totalentries: PCardinal;
+  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+
+function NetUserGetInfo(servername, username: PWideChar; level: cardinal;
+  var bufptr: pointer): TNetApiStatus; stdcall;
+
+function NetUserSetInfo(servername, username: PWideChar; level: cardinal;
+  buf: pointer; parm_err: PCardinal): TNetApiStatus; stdcall;
+
+function NetUserDel(servername: PWideChar; username: PWideChar): TNetApiStatus; stdcall;
+
+function NetUserGetGroups(servername, username: PWideChar; level: cardinal;
+  var bufptr: pointer; prefmaxlen: cardinal;
+  entriesread, totalentries: PCardinal): TNetApiStatus; stdcall;
+
+function NetUserSetGroups(servername, username: PWideChar; level: cardinal;
+  buf: pointer; num_entries: cardinal): TNetApiStatus; stdcall;
+
+function NetUserGetLocalGroups(servername, username: PWideChar;
+  level, flags: cardinal; var bufptr: pointer; prefmaxlen: cardinal;
+  entriesread, totalentries: PCardinal): TNetApiStatus; stdcall;
+
+function NetUserModalsGet(servername: PWideChar; level: cardinal;
+  var bufptr: pointer): TNetApiStatus; stdcall;
+
+function NetUserModalsSet(servername: PWideChar; level: cardinal;
+  buf: pointer; parm_err: PCardinal): TNetApiStatus; stdcall;
+
+function NetUserChangePassword(domainname, username,
+  oldpassword, newpassword: PWideChar): TNetApiStatus; stdcall;
+
+
+function NetLocalGroupAdd(servername: PWideChar; level: cardinal;
+  buf: pointer; parm_err: PCardinal): TNetApiStatus; stdcall;
+
+function NetLocalGroupAddMember(servername, groupname: PWideChar;
+  membersid: PSID): TNetApiStatus; stdcall;
+
+function NetLocalGroupEnum(servername: PWideChar; level: cardinal;
+  var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
+  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+
+function NetLocalGroupGetInfo(servername, groupname: PWideChar;
+  level: cardinal; var bufptr: pointer): TNetApiStatus; stdcall;
+
+function NetLocalGroupSetInfo(servername, groupname: PWideChar;
+  level: cardinal; buf: pointer; parm_err: PCardinal): TNetApiStatus; stdcall;
+
+function NetLocalGroupDel(servername: PWideChar;
+  groupname: PWideChar): TNetApiStatus; stdcall;
+
+function NetLocalGroupDelMember(servername: PWideChar;
+  groupname: PWideChar; membersid: PSID): TNetApiStatus; stdcall;
+
+function NetLocalGroupGetMembers(servername, localgroupname: PWideChar;
+  level: cardinal; var bufptr: pointer; prefmaxlen: cardinal;
+  entriesread, totalentries: PCardinal; resumehandle: PPCardinal): TNetApiStatus; stdcall;
+
+function NetLocalGroupSetMembers(servername, groupname: PWideChar;
+  level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
+
+function NetLocalGroupAddMembers(servername, groupname: PWideChar;
+  level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
+
+function NetLocalGroupDelMembers(servername, groupname: PWideChar;
+  level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
+
+
+/// retrieves global group names to which a specified user belongs
+// - server is the DNS or NetBIOS name of the remote server to query (typically
+// '\\MyDomainNameDns') - if server is '', the local computer is used
+// - user is typically 'user.name' or 'DOMAIN\user.name'
+// - call NetUserGetGroups() unless Local is true for NetUserGetLocalGroups()
+// - will return only the groups explicitly assigned to the user, not the
+// nested groups assigned to other local groups
+function GetGroups(const server, user: RawUtf8;
+  Local: boolean = false): TRawUtf8DynArray;
+
+type
+  TGetUsersFilterAccount = set of (
+    gufTempDuplicate,
+    gufNormal,
+    gufProxyAccount,
+    gufInterdomainTrust,
+    gufWorkstationTrust,
+    gufServerTrust);
+
+///  retrieves information about all user accounts on a server
+// - server is the DNS or NetBIOS name of the remote server to query (typically
+// '\\MyDomainNameDns') - if server is '', the local computer is used
+// - call NetUserEnum()
+function GetUsers(const server: RawUtf8 = '';
+  filter: TGetUsersFilterAccount = []): TRawUtf8DynArray;
+
+/// retrieves local group names to which the current user belongs
+// - call NetLocalGroupEnum()
+function GetLocalGroups(const server: RawUtf8 = ''): TRawUtf8DynArray;
+
+/// retrieves a list of the members of a particular local group
+// - server is the DNS or NetBIOS name of the remote server to query (typically
+// '\\MyDomainNameDns') - if server is '', the local computer is used
+// - return the account and domain names of the local group member
+// - call NetLocalGroupGetMembers()
+function GetLocalGroupMembers(const server, group: RawUtf8): TRawUtf8DynArray;
 
 
 implementation
@@ -1145,6 +1297,121 @@ begin
      (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
     SetDomainAuthMode;
   result := true;
+end;
+
+
+
+{ ****************** Lan Manager Access Functions }
+
+function NetApiBufferAllocate;    external netapi32;
+function NetApiBufferFree;        external netapi32;
+function NetApiBufferReallocate;  external netapi32;
+function NetApiBufferSize;        external netapi32;
+
+function NetUserAdd;              external netapi32;
+function NetUserEnum;             external netapi32;
+function NetUserGetInfo;          external netapi32;
+function NetUserSetInfo;          external netapi32;
+function NetUserDel;              external netapi32;
+function NetUserGetGroups;        external netapi32;
+function NetUserSetGroups;        external netapi32;
+function NetUserGetLocalGroups;   external netapi32;
+function NetUserModalsGet;        external netapi32;
+function NetUserModalsSet;        external netapi32;
+function NetUserChangePassword;   external netapi32;
+
+function NetLocalGroupAdd;        external netapi32;
+function NetLocalGroupAddMember;  external netapi32;
+function NetLocalGroupEnum;       external netapi32;
+function NetLocalGroupGetInfo;    external netapi32;
+function NetLocalGroupSetInfo;    external netapi32;
+function NetLocalGroupDel;        external netapi32;
+function NetLocalGroupDelMember;  external netapi32;
+function NetLocalGroupGetMembers; external netapi32;
+function NetLocalGroupSetMembers; external netapi32;
+function NetLocalGroupAddMembers; external netapi32;
+function NetLocalGroupDelMembers; external netapi32;
+
+procedure SetGroups(g: PGroupInfo0Array; n: integer; var res: TRawUtf8DynArray);
+var
+  i: PtrInt;
+begin
+  if n > 0 then
+  begin
+    SetLength(res, n);
+    for i := 0 to high(res) do
+      Win32PWideCharToUtf8(g[i].name, StrLenW(g[i].name), res[i]);
+  end;
+  NetAPIBufferFree(g);
+end;
+
+function GetGroups(const server, user: RawUtf8; Local: boolean): TRawUtf8DynArray;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  s, u: PWideChar;
+  res: integer;
+  srv, usr: TSynTempBuffer;
+begin
+  result := nil;
+  s := Utf8ToWin32PWideChar(server, srv);
+  u := Utf8ToWin32PWideChar(user, usr);
+  if Local then
+    res := NetUserGetLocalGroups(s, u, 0, LG_INCLUDE_INDIRECT,
+      v, MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal)
+  else
+    res := NetUserGetGroups(s, u, 0,
+      v, MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal);
+  if res = NERR_SUCCESS then
+    SetGroups(v, dwEntriesRead, result);
+  srv.Done;
+  usr.Done;
+end;
+
+function GetUsers(const server: RawUtf8;
+  filter: TGetUsersFilterAccount): TRawUtf8DynArray;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  srv: TSynTempBuffer;
+begin
+  result := nil;
+  if NetUserEnum(Utf8ToWin32PWideChar(server, srv), 0, byte(filter), v,
+      MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+    // note: _USER_INFO_0 and _LOCALGROUP_INFO_0 are identical
+    SetGroups(v, dwEntriesRead, result);
+  srv.Done;
+end;
+
+function GetLocalGroups(const server: RawUtf8): TRawUtf8DynArray;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  srv: TSynTempBuffer;
+begin
+  result := nil;
+  if NetLocalGroupEnum(Utf8ToWin32PWideChar(server, srv), 0, v,
+      MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+    SetGroups(v, dwEntriesRead, result);
+  srv.Done;
+end;
+
+function GetLocalGroupMembers(const server, group: RawUtf8): TRawUtf8DynArray;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  s, g: PWideChar;
+  srv, grp: TSynTempBuffer;
+begin
+  result := nil;
+  s := Utf8ToWin32PWideChar(server, srv);
+  g := Utf8ToWin32PWideChar(group, grp);
+  if NetLocalGroupGetMembers(s, g, 3, v, MAX_PREFERRED_LENGTH,
+      @dwEntriesRead, @dwEntriesTotal, nil) = NERR_Success then
+    // note: _LOCALGROUP_MEMBERS_INFO_3 and _LOCALGROUP_INFO_0 are identical
+    SetGroups(v, dwEntriesRead, result);
+  srv.Done;
+  grp.Done;
 end;
 
 {$endif OSPOSIX}
