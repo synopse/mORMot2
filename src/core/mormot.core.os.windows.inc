@@ -84,7 +84,7 @@ begin
   result := RawUtf8(format(Fmt, Args));
 end;
 
-// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
 var
   tmp: TSynTempBuffer;
@@ -97,6 +97,26 @@ begin
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);
   tmp.Done;
+end;
+
+function Utf8ToWin32PWideChar(const Text: RawUtf8;
+ var dest: TSynTempBuffer): PWideChar;
+var
+  TextLen: PtrInt;
+begin
+  result := nil;
+  TextLen := length(Text);
+  dest.Init(TextLen * 2);
+  if dest.len = 0 then
+    exit;
+  dest.len := Utf8ToUnicode(dest.buf, dest.Len + 16, pointer(Text), TextLen);
+  if dest.len <= 0 then
+    dest.len := 0
+  else
+  begin
+    result := dest.buf;
+    dec(dest.len); // Utf8ToUnicode() includes trailing #0
+  end;
 end;
 
 const
@@ -1868,12 +1888,12 @@ end;
 
 procedure Utf8ToConsoleDoConv(const Utf8: RawUtf8; var Console: RawByteString);
 var
-  utf16: SynUnicode;
-  tmp: TSynTempBuffer;
+  tmp16, tmp: TSynTempBuffer;
 begin
-  utf16 := Utf8Decode(Utf8);
-  tmp.Init(length(utf16) * 3);
-  CharToOemBuffW(pointer(utf16), tmp.buf, length(utf16) + 1); // +1 = ending #0
+  Utf8ToWin32PWideChar(Utf8, tmp16);
+  tmp.Init(tmp16.len * 3);
+  CharToOemBuffW(tmp16.buf, tmp.buf, tmp16.len + 1); // +1 = ending #0
+  tmp16.Done;
   FastSetStringCP(Console, tmp.buf, StrLen(tmp.buf), CP_OEMCP);
   tmp.Done;
 end;
@@ -2103,15 +2123,12 @@ function TWinRegistry.ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
   closefirst: boolean): boolean;
 var
   tmp: TSynTempBuffer;
-  L: integer;
 begin
   if closefirst then
     Close;
-  L := length(keyname);
-  tmp.Init(L * 2);
-  Utf8ToUnicode(tmp.buf, L + 8, pointer(keyname), L); // uses RTL
   key := 0;
-  result := RegOpenKeyExW(_HKEY[root], tmp.buf, 0, KEY_READ, key) = 0;
+  result := RegOpenKeyExW(
+    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = 0;
   tmp.Done;
 end;
 

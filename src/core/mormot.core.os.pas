@@ -1232,11 +1232,12 @@ procedure GetComputerUuid(out uuid: TGuid);
 {$ifdef OSWINDOWS}
 
 type
-  TThreadID = DWORD;
-  TMessage = Messages.TMessage;
-  HWND = Windows.HWND;
+  TThreadID     = DWORD;
+  TMessage      = Messages.TMessage;
+  HWND          = Windows.HWND;
+  BOOL          = Windows.BOOL;
+  PSID          = Windows.PSID;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
-  BOOL = Windows.BOOL;
 
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
@@ -2060,6 +2061,10 @@ function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 // - as used by WinErrorText()
 function WinErrorConstant(Code: cardinal): PUtf8Char;
 
+/// raise an EOSException from the last system error using WinErrorText()
+procedure RaiseLastError(const Context: shortstring;
+  RaisedException: ExceptClass = nil);
+
 /// raise an Exception from the last module error using WinErrorText()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 
@@ -2852,8 +2857,14 @@ function ConsoleReadBody: RawByteString;
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-// when using Windows API
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer;
+  out res: RawUtf8);
+
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// - returns dest.buf as PWideChar result, and dest.len as length
+// - caller should always call dest.Done to release (unlikely) temporary memory
+function Utf8ToWin32PWideChar(const Text: RawUtf8;
+  var dest: TSynTempBuffer): PWideChar;
 
 {$else}
 
