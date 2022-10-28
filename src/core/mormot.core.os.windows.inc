@@ -2350,37 +2350,37 @@ begin
   result := true;
 end;
 
+function GetRawTokenInfo(tok: THandle; tic: TTokenInformationClass;
+  var buf: TSynTempBuffer): cardinal;
+begin
+  if GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    exit; // return the number of bytes stored in buf, 0 on error
+  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+  begin
+    result := 0; // error
+    exit;
+  end;
+  buf.Done;
+  buf.Init(result); // we need a bigger buffer
+  if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    result := 0; // error
+end;
+
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
   tp: PTOKEN_PRIVILEGES;
-  len: cardinal;
   i: PtrInt;
   name: string;
+  len: cardinal;
   p: TWinSystemPrivilege;
 begin
   if Token = 0 then
-    raise EOSException.Create(
-      'TSynWindowsPrivileges: invalid privileges token');
+    raise EOSException.Create('LoadPriviledges: no token');
   buf.Init;
   try
-    len := 0;
-    if not GetTokenInformation(
-             Token, TokenPrivileges, buf.buf, buf.len, len) then
-      if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-        raise EOSException.CreateFmt(
-          'TSynWindowsPrivileges cannot get token information (error=%d)',
-          [GetLastError])
-      else
-      begin
-        buf.Done;
-        buf.Init(len); // we need a bigger buffer
-        if not GetTokenInformation(
-                 Token, TokenPrivileges, buf.buf, buf.len, len) then
-          raise EOSException.CreateFmt(
-            'TSynWindowsPrivileges cannot retrieve token information (error=%d)',
-            [GetLastError])
-      end;
+    if GetRawTokenInfo(Token, TokenPrivileges, buf) = 0 then
+      RaiseLastError('LoadPriviledges: GetTokenInformation');
     tp := buf.buf;
     SetLength(name, MAX_SE_NAME_LENGTH);
     for i := 0 to tp.PrivilegeCount - 1 do
