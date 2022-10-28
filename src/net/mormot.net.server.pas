@@ -3089,7 +3089,7 @@ var
   respsent: boolean;
   ctxt: THttpServerRequest;
   filehandle: THandle;
-  reps: PHTTP_RESPONSE;
+  resp: PHTTP_RESPONSE;
   bufread, V: PUtf8Char;
   heads: HTTP_UNKNOWN_HEADERs;
   rangestart, rangelen: ULONGLONG;
@@ -3105,15 +3105,15 @@ var
     msg: RawUtf8;
   begin
     try
-      reps^.SetStatus(StatusCode, outstat);
+      resp^.SetStatus(StatusCode, outstat);
       logdata^.ProtocolStatus := StatusCode;
       FormatUtf8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
         [StatusCode, outstat], msg);
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
       msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
-      reps^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
-      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, reps^, nil,
+      resp^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
+      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
         bytessent, nil, 0, nil, fLogData);
     except
       on Exception do
@@ -3130,7 +3130,7 @@ var
     if not result then
       exit;
     respsent := true;
-    reps^.SetStatus(outstatcode, outstat);
+    resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
     // update log information
@@ -3155,7 +3155,7 @@ var
           ReferrerLength := RawValueLength;
           Referrer := pRawValue;
         end;
-        ProtocolStatus := reps^.StatusCode;
+        ProtocolStatus := resp^.StatusCode;
         ClientIp := pointer(ctxt.fRemoteIP);
         ClientIpLength := length(ctxt.fRemoteip);
         Method := pointer(ctxt.fMethod);
@@ -3164,12 +3164,12 @@ var
         UserNameLength := Length(ctxt.fAuthenticatedUser);
       end;
     // send response
-    reps^.Version := req^.Version;
-    reps^.SetHeaders(pointer(ctxt.OutCustomHeaders),
+    resp^.Version := req^.Version;
+    resp^.SetHeaders(pointer(ctxt.OutCustomHeaders),
       heads, hsoNoXPoweredHeader in fOptions);
     if fCompressAcceptEncoding <> '' then
-      reps^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
-    with reps^.headers.KnownHeaders[respServer] do
+      resp^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
+    with resp^.headers.KnownHeaders[respServer] do
     begin
       pRawValue := pointer(fServerName);
       RawValueLength := length(fServerName);
@@ -3217,19 +3217,19 @@ var
               FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
                 outcontlen.QuadPart], contrange);
-              reps^.AddCustomHeader(@contrange[1], heads, false);
-              reps^.SetStatus(HTTP_PARTIALCONTENT, outstat);
+              resp^.AddCustomHeader(@contrange[1], heads, false);
+              resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
-          with reps^.headers.KnownHeaders[respAcceptRanges] do
+          with resp^.headers.KnownHeaders[respAcceptRanges] do
           begin
             pRawValue := 'bytes';
             RawValueLength := 5;
           end;
         end;
-        reps^.EntityChunkCount := 1;
-        reps^.pEntityChunks := @datachunkfile;
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
+        resp^.EntityChunkCount := 1;
+        resp^.pEntityChunks := @datachunkfile;
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
           bytessent, nil, 0, nil, fLogData);
       finally
         FileClose(filehandle);
@@ -3242,7 +3242,7 @@ var
         ctxt.OutContentType := ''; // true HTTP always expects a response
       if fCompress <> nil then
       begin
-        with reps^.headers.KnownHeaders[reqContentEncoding] do
+        with resp^.headers.KnownHeaders[reqContentEncoding] do
           if RawValueLength = 0 then
           begin
             // no previous encoding -> try if any compression
@@ -3252,10 +3252,10 @@ var
             RawValueLength := length(outcontenc);
           end;
       end;
-      reps^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
+      resp^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
       flags := GetSendResponseFlags(ctxt);
       EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
           bytessent, nil, 0, nil, fLogData));
     end;
   end;
@@ -3270,7 +3270,7 @@ begin
     // reserve working buffers
     SetLength(heads, 64);
     SetLength(respbuf, SizeOf(HTTP_RESPONSE));
-    reps := pointer(respbuf);
+    resp := pointer(respbuf);
     SetLength(reqbuf, 16384 + SizeOf(HTTP_REQUEST)); // req^ + 16 KB of headers
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
@@ -3425,7 +3425,7 @@ begin
             end;
             try
               // compute response
-              FillcharFast(reps^, SizeOf(reps^), 0);
+              FillcharFast(resp^, SizeOf(resp^), 0);
               respsent := false;
               outstatcode := DoBeforeRequest(ctxt);
               if outstatcode > 0 then

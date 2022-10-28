@@ -58,15 +58,21 @@ var
  
 function IORegistryEntryFromPath(
   masterPort: mach_port_t; const path: io_string_t): io_registry_entry_t; cdecl; external;
+
 function IORegistryEntryCreateCFProperty(entry: io_registry_entry_t; key: CFStringRef;
   allocator: CFAllocatorRef; options: IOOptionBits): CFTypeRef; cdecl; external;
+
 function IOObjectRelease(entry: io_registry_entry_t): kern_return_t; cdecl; external;
+
 function IOServiceMatching(name: PAnsiChar): CFMutableDictionaryRef; cdecl; external;
+
 function IOServiceGetMatchingService(masterPort: mach_port_t;
   matching: CFMutableDictionaryRef): io_service_t; cdecl; external;
+
 function IORegistryEntryCreateCFProperties(entry: io_registry_entry_t;
   var properties: CFMutableDictionaryRef; allocator: CFAllocatorRef;
   options: IOOptionBits): integer; cdecl; external;
+
 
 // see https://forum.lazarus.freepascal.org/index.php?topic=49358#msg357641
 procedure _Get(id: PChar; out result: RawUtf8);
