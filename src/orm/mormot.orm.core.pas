@@ -1364,7 +1364,7 @@ type
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitly this before having called StaticDataCreate()
+    // - you must call explicitly this before having called OrmMapInMemory()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or
@@ -1518,9 +1518,16 @@ type
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
       aRemoteRest: TRestOrmParent): TRestOrmParent; 
-    /// fast get the associated TRestStorageRemote from its index, if any
-    // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
-    function GetRemoteTable(TableIndex: integer): TRestOrmParent;
+    /// get the non-virtual TRestStorage instance for one TOrm class
+    // - set e.g. after OrmMapMongoDB(), OrmMapInMemory(),
+    // TRestStorageShardDB.Create or TRestOrmServer.RemoteDataCreate
+    function GetStaticStorage(aClass: TOrmClass): TRestOrmParent;
+    /// get the virtual TRestStorage instance for one TOrm class
+    // - i.e. in-memory or external SQL tables declared as SQLite3 virtual tables
+    function GetVirtualStorage(aClass: TOrmClass): TRestOrmParent;
+    /// get the in-memory or virtual TRestStorage instance for one TOrm class
+    // - will also follow TRestOrmServer.StaticVirtualTableDirect property
+    function GetStorage(aClass: TOrmClass): TRestOrmParent;
   end;
 
 
@@ -2626,7 +2633,7 @@ type
     // - return true on success, but be aware that the field list must match
     // the field layout, otherwise if may return true but will corrupt data
     function SimplePropertiesFill(const aSimpleFields: array of const): boolean;
-    /// set the simple fields from a JSON array of values - after the initial [
+    /// set the fields from a JSON array of values - after the initial [
     function FillFromArray(const Fields: TFieldBits; Json: PUtf8Char): boolean;
     /// initialize a TDynArray wrapper to map dynamic array property values
     // - if the field name is not existing or not a dynamic array, result.IsVoid
@@ -3628,7 +3635,7 @@ type
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
-  POrmPropertiesMapping = ^TOrmPropertiesMapping;
+  POrmMapping = ^TOrmMapping;
 
   /// allow custom field mapping of a TOrm
   // - used e.g. for external database process, including SQL generation,
@@ -3637,9 +3644,9 @@ type
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
   {$ifdef USERECORDWITHMETHODS}
-  TOrmPropertiesMapping = record
+  TOrmMapping = record
   {$else}
-  TOrmPropertiesMapping = object
+  TOrmMapping = object
   {$endif USERECORDWITHMETHODS}
   private
     /// storage of main read-only properties
@@ -3651,7 +3658,7 @@ type
     fExtFieldNamesUnQuotedSql: TRawUtf8DynArray;
     fSql: TOrmModelPropertiesSql;
     fFieldNamesMatchInternal: TFieldBits;
-    fOptions: TOrmPropertiesMappingOptions;
+    fOptions: TOrmMappingOptions;
     fAutoComputeSql: boolean;
     fMappingVersion: cardinal;
     /// fill fRowIDFieldName/fSql with the current information
@@ -3662,10 +3669,9 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.MapField('IntField', 'ExtField');
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
-    function MapField(
-      const InternalName, ExternalName: RawUtf8): POrmPropertiesMapping;
+    function MapField(const InternalName, ExternalName: RawUtf8): POrmMapping;
     /// call this method to ensure that all fields won't conflict with a SQL
     // keyword for the given database
     // - by default, no check is performed: you can use this method to ensure
@@ -3676,19 +3682,18 @@ type
     // !   MapField('IntField', 'ExtField').
     // !   MapAutoKeywordFields;
     // - will in fact include the rpmAutoMapKeywordFields flag in Options
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
-    function MapAutoKeywordFields: POrmPropertiesMapping;
+    function MapAutoKeywordFields: POrmMapping;
     /// specify some advanced options for the field mapping
-    // - see TOrmPropertiesMappingOptions for all possibilities
+    // - see TOrmMappingOptions for all possibilities
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.
     // !   MapField('IntField', 'ExtField').
     // !   SetOptions([rpmNoCreateMissingTable, rpmNoCreateMissingField]);
-    // - since it returns a POrmPropertiesMapping instance, you can
+    // - since it returns a POrmMapping instance, you can
     // chain MapField().SetOptions().MapField(); calls to map several fields
-    function SetOptions(
-      aOptions: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
+    function SetOptions(aOptions: TOrmMappingOptions): POrmMapping;
     /// add several custom field mappings
     // - can be used e.g. as
     // ! aModel.Props[TOrmMyExternal].ExternalDB.
@@ -3697,8 +3702,7 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - is slightly faster than several chained MapField() calls, since SQL
     // will be computed only once
-    function MapFields(
-      const InternalExternalPairs: array of RawUtf8): POrmPropertiesMapping;
+    function MapFields(const InternalExternalPairs: array of RawUtf8): POrmMapping;
   public
     /// initialize the field mapping for a given TOrm
     // - if AutoComputeSql is true, will pre-compute all needed SQL from the
@@ -3707,7 +3711,7 @@ type
     // custom field mapping
     procedure Init(Table: TOrmClass; const MappedTableName: RawUtf8;
       MappedConnection: TObject; AutoComputeSql: boolean;
-      MappingOptions: TOrmPropertiesMappingOptions);
+      MappingOptions: TOrmMappingOptions);
     /// map a field name from its internal name to its external name
     // - raise an EOrmException if the supplied field name is not defined in
     // the TOrm as ID or a published property
@@ -3761,7 +3765,7 @@ type
     // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
     // a TSqlDBConnectionProperties instance in mormot.orm.sql.pas, or by
-    // StaticMongoDBRegister() to a TMongoCollection instance, or by
+    // OrmMapMongoDB() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
     // ! if Server.Model.Props[TOrmArticle].ExternalDB.ConnectionProperties = nil then
@@ -3805,7 +3809,7 @@ type
     property FieldNamesMatchInternal: TFieldBits
       read fFieldNamesMatchInternal;
     /// how the mapping process will take place
-    property Options: TOrmPropertiesMappingOptions
+    property Options: TOrmMappingOptions
       read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
@@ -3844,7 +3848,7 @@ type
     // tables with mapped table or fields names
     Sql: TOrmModelPropertiesSql;
     /// allow SQL process for one external TOrm in this model
-    ExternalDB: TOrmPropertiesMapping;
+    ExternalDB: TOrmMapping;
     /// will by-pass automated table and field creation for this TOrm
     // - may be used e.g. when the TOrm is in fact mapped into a View,
     // or is attached as external table and not a real local table
@@ -3926,8 +3930,8 @@ type
   private
     fTables: TOrmClassDynArray;
     fRoot: RawUtf8;
-    fRootUpper: RawUtf8;
     fTablesMax: integer;
+    fRootLen: integer;
     fTableProps: TOrmModelPropertiesObjArray;
     fCustomCollationForAll: array[TOrmFieldType] of RawUtf8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
@@ -4039,6 +4043,7 @@ type
     // 'root/sub' matches exactly Root='root'), or with character case
     // approximation (e.g. 'Root/sub' approximates Root='root')
     function UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the URI corresponding to a given table, i.e. 'root/table'
     function GetUri(aTable: TOrmClass): RawUtf8;
     /// return the 'root/table/ID' URI
@@ -4115,9 +4120,10 @@ type
     // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
     // be used to specify e.g. connection parameters as expected by mormot.orm.sql
     // - call it before TRestServer.Create()
+    // - raise EModelException on error, or return the external DB table mapping
     function VirtualTableRegister(aClass: TOrmClass; aModule: TClass;
       const aExternalTableName: RawUtf8 = ''; aExternalDataBase: TObject = nil;
-      aMappingOptions: TOrmPropertiesMappingOptions = []): boolean;
+      aMappingOptions: TOrmMappingOptions = []): POrmMapping;
     /// retrieve a Virtual Table module associated to a class
     // - returns a TOrmVirtualTableClass type definition
     function VirtualTableModule(aClass: TOrmClass): TClass;
@@ -4181,6 +4187,9 @@ type
 
     /// returns the Root property, or '' if the instance is nil
     function SafeRoot: RawUtf8;
+    /// direct access to length(Root) when parsing
+    property RootLen: integer
+      read fRootLen;
     /// compute the URI for a class in this Model, as 'ModelRoot/SqlTableName'
     // - set also GetUri/GetUriID/GetUriCallback methods
     property Uri[aClass: TOrmClass]: RawUtf8
@@ -4263,6 +4272,12 @@ type
     // - this will flush the stored JSON content for this record (and table
     // settings will be kept)
     procedure Flush(aTable: TOrmClass; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// flush the cache for a given record
+    // - this will flush the stored JSON content for this record (and table
+    // settings will be kept)
+    procedure Flush(aTableIndex: PtrInt; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// flush the cache for a set of specified records
     // - this will flush the stored JSON content for these record (and table
     // settings will be kept)
@@ -4280,6 +4295,7 @@ type
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): integer;
     /// activate the internal caching for a whole Table
     // - any cached item of this table will be flushed
+    // - you can use FillFromQuery() to SELECT and load all items into the cache
     // - return true on success
     function SetCache(aTable: TOrmClass): boolean; overload;
     /// activate the internal caching for a given TOrm
@@ -4345,6 +4361,7 @@ type
     // - this method is dedicated for a record deletion
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// TRest instance shall call this method when records are deleted
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of TID); overload;
@@ -4908,6 +4925,8 @@ type
   TSqlRestCache = TRestCache;
   TSqlRestBatch = TRestBatch;
   TSqlRestBatchLocked = TRestBatchLocked;
+  TOrmPropertiesMapping = TOrmMapping;
+  TOrmPropertiesMappingOptions = TOrmMappingOptions;
 
 {$endif PUREMORMOT2}
 
@@ -6112,7 +6131,7 @@ begin
         i := IndexByName(aName);
         if i >= 0 then
         begin // only map if column name is a valid field
-          include(fTableMapFields, i);
+          FieldBitSet(fTableMapFields, i);
           AddMap(aRecord, List[i], aIndex);
         end;
       end;
@@ -6329,11 +6348,13 @@ begin
 end;
 
 constructor TOrm.Create;
-begin
-  with OrmProps do // don't call inherited Create but OrmProps custom setup
-    if pointer(ManyFields) <> nil then
-      // auto-instanciate any TOrmMany instance
-      ManyFieldsCreate(self, pointer(ManyFields));
+var
+  props: TOrmProperties;
+begin // don't call inherited Create but make TOrmProperties custom setup
+  props := OrmProps;
+  if props.ManyFields <> nil then
+    // auto-instanciate any TOrmMany instance
+    ManyFieldsCreate(self, pointer(props.ManyFields));
 end;
 
 destructor TOrm.Destroy;
@@ -6359,8 +6380,8 @@ begin
     for i := 0 to length(props.DynArrayFields) - 1 do
       with props.DynArrayFields[i] do
         if ObjArray <> nil then
-          ObjArrayClear(PropInfo^.GetFieldAddr(self)^);
-  inherited Destroy;
+          ObjArrayClear(pointer(PAnsiChar(self) + GetterIsFieldPropOffset)^);
+  // no need to call inherited Destroy;
 end;
 
 constructor TOrm.Create(const aSimpleFields: array of const; aID: TID);
@@ -6393,8 +6414,8 @@ begin
   result.fID := fID;
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in CustomFields) and
-         (byte(f) in CopiableFieldsBits) then
+      if FieldBitGet(CustomFields, f) and
+         FieldBitGet(CopiableFieldsBits, f) then
         Fields.List[f].CopyValue(self, result);
 end;
 
@@ -6405,9 +6426,9 @@ begin
   FillZero(result{%H-});
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in CopiableFieldsBits) and
+      if FieldBitGet(CopiableFieldsBits, f) and
          not Fields.List[f].IsValueVoid(self) then
-        include(result, f);
+        FieldBitSet(result, f);
 end;
 
 constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
@@ -6505,7 +6526,7 @@ procedure TOrm.FillFrom(aRecord: TOrm);
 begin
   if (self <> nil) and
      (aRecord <> nil) then
-    FillFrom(aRecord, aRecord.OrmProps.CopiableFieldsBits);
+    FillFrom(aRecord, aRecord.Orm.CopiableFieldsBits);
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
@@ -6527,14 +6548,14 @@ begin
     if POrmClass(aRecord)^ = POrmClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Count - 1 do
-      if byte(f) in aRecordFieldBits then
+      if FieldBitGet(aRecordFieldBits, f) then
         D.List[f].CopyValue(aRecord, self);
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-name field lookup
-  S := aRecord.OrmProps.Fields;
+  S := aRecord.Orm.Fields;
   for i := 0 to S.Count - 1 do
-    if byte(i) in aRecordFieldBits then
+    if FieldBitGet(aRecordFieldBits, i) then
     begin
       SP := S.List[i];
       if D.List[i].Name = SP.Name then
@@ -6595,7 +6616,7 @@ begin
       begin
         field.SetValue(self, Value, ValueLen, wasString);
         if FieldBits <> nil then
-          Include(FieldBits^, field.PropertyIndex);
+          FieldBitSet(FieldBits^, field.PropertyIndex);
       end;
     end;
 end;
@@ -6681,7 +6702,8 @@ begin
       info.GetJsonFieldOrObjectOrArray;
       FillValue(j, F[0], info.Value, L[0], info.ValueLen,
         info.WasString, FieldBits); // parse value
-    until info.Json = nil;
+    until (info.Json = nil) or
+          (info.Json^ = #0);
   end;
 end;
 
@@ -6863,7 +6885,7 @@ var
 begin
   with Orm.Fields do
     for f := 0 to Count - 1 do
-      if byte(f) in aFields then
+      if FieldBitGet(aFields, f) then
         List[f].GetBinary(self, W);
 end;
 
@@ -6986,7 +7008,7 @@ begin
   nfo := pointer(P.Fields.List);
   for i := 0 to P.Fields.Count - 1 do
   begin
-    if byte(i) in Fields then
+    if FieldBitGet(Fields, i) then
     begin
       W.Add('"');
       W.AddNoJsonEscape(pointer(nfo^.Name), length(nfo^.Name));
@@ -7246,7 +7268,7 @@ begin
           if SQL <> '' then
           begin
             result := result + Name + SQL;
-            if byte(i) in IsUniqueFieldsBits then
+            if FieldBitGet(IsUniqueFieldsBits, i) then
               insert(' UNIQUE', result, length(result) - 1);
           end;
         end;
@@ -7404,7 +7426,7 @@ begin
     else if not FieldBitsFromCsv(aFieldsCsv, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (byte(f) in bits) and
+      if FieldBitGet(bits, f) and
          (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, 0, false); // clear field value
   end;
@@ -8145,7 +8167,7 @@ begin
     doc.Values[i] := fID;
   end;
   for f := 0 to Fields.Count - 1 do
-    if byte(f) in withFields then
+    if FieldBitGet(withFields, f) then
     begin
       i := doc.InternalAdd(Fields.List[f].Name);
       Fields.List[f].GetVariant(self, doc.Values[i]);
@@ -9065,7 +9087,7 @@ begin
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then
     begin
-      include(IsUniqueFieldsBits, i);
+      FieldBitSet(IsUniqueFieldsBits, i);
       // must trim() text value before storage, and validate for unicity
       if F.OrmFieldType in [oftUtf8Text, oftAnsiText] then
         AddFilterOrValidate(i, TSynFilterTrim.Create);
@@ -9073,7 +9095,7 @@ begin
     end;
     // get corresponding properties content
     include(fHasTypeFields, F.OrmFieldType);
-    include(FieldBits[F.OrmFieldType], i);
+    FieldBitSet(FieldBits[F.OrmFieldType], i);
     case F.OrmFieldType of
       oftUnknown:
         ;
@@ -9134,14 +9156,14 @@ begin
         end;
       oftCreateTime:
         begin
-          include(ComputeBeforeAddFieldsBits, i);
+          FieldBitSet(ComputeBeforeAddFieldsBits, i);
           goto Small;
         end;
       oftModTime,
       oftSessionUserID:
         begin
-          include(ComputeBeforeAddFieldsBits, i);
-          include(ComputeBeforeUpdateFieldsBits, i);
+          FieldBitSet(ComputeBeforeAddFieldsBits, i);
+          FieldBitSet(ComputeBeforeUpdateFieldsBits, i);
           goto Small;
         end;
       oftRecordVersion:
@@ -9157,15 +9179,15 @@ begin
         goto Simple;
     else
       begin
-Small:  include(SmallFieldsBits, i);
+Small:  FieldBitSet(SmallFieldsBits, i);
         // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         SimpleFieldSelect[nSimple].Field := i + 1; // [0]=ID
-        include(SimpleFieldsBits[ooSelect], i);
+        FieldBitSet(SimpleFieldsBits[ooSelect], i);
         fSqlTableSimpleFieldsNoRowID := fSqlTableSimpleFieldsNoRowID + F.Name + ',';
         fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
-Copiabl:include(CopiableFieldsBits, i);
+Copiabl:FieldBitSet(CopiableFieldsBits, i);
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
@@ -9515,17 +9537,20 @@ procedure TOrmModel.SetRoot(const aRoot: RawUtf8);
 var
   i: PtrInt;
 begin
-  for i := 1 to length(aRoot) do // allow RFC URI + '/' for URI-fragment
+  fRootLen := length(aRoot);
+  for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
       raise EModelException.CreateUtf8(
         '%.Root=[%] contains URI unfriendly char #% [%]',
         [self, aRoot, ord(aRoot[i]), aRoot[i]]);
   if (aRoot <> '') and
-     (aRoot[length(aRoot)] = '/') then
-    fRoot := copy(aRoot, 1, Length(aRoot) - 1)
+     (aRoot[fRootLen] = '/') then
+  begin
+    dec(fRootLen);
+    fRoot := copy(aRoot, 1, fRootLen) // trim trailing '/'
+  end
   else
     fRoot := aRoot;
-  UpperCaseCopy(fRoot, fRootUpper);
 end;
 
 constructor TOrmModel.Create(const Tables: array of TOrmClass;
@@ -9565,7 +9590,7 @@ begin
      (cardinal(aFieldIndex) >= MAX_SQLFIELDS) then
     result := false
   else
-    result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
+    result := FieldBitGet(TableProps[i].Props.IsUniqueFieldsBits, aFieldIndex);
 end;
 
 function TOrmModel.GetTableIndexFromSqlSelect(const SQL: RawUtf8;
@@ -9778,24 +9803,25 @@ begin
 end;
 
 function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
-var
-  UriLen: PtrInt;
 begin
   result := rmNoMatch;
   if (self = nil) or
      (fRoot = '') or
-     (Uri = '') then
+     (PtrUInt(Uri) = 0) or
+     ({%H-}PStrLen(PtrUInt(Uri) - _STRLEN)^ < TStrLen(fRootLen)) then
     exit;
-  if IdemPChar(pointer(Uri), pointer(fRootUpper)) then
+  if CheckCase then
   begin
-    UriLen := length(fRoot);
-    if Uri[UriLen + 1] in [#0, '/', '?'] then
-      if CheckCase and
-         CompareMemFixed(pointer(Uri), pointer(fRoot), UriLen) then
-        result := rmMatchExact
-      else
-        result := rmMatchWithCaseChange;
-  end;
+    if not CompareMemFixed(pointer(Uri), pointer(fRoot), fRootLen) then
+      exit;
+  end
+  else if not IdemPropNameUSameLenNotNull(pointer(fRoot), pointer(Uri), fRootLen) then
+    exit;
+  if Uri[fRootLen + 1] in [#0, '/', '?'] then
+    if CheckCase then
+      result := rmMatchExact
+    else
+      result := rmMatchWithCaseChange;
 end;
 
 function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
@@ -10059,11 +10085,11 @@ end;
 
 function TOrmModel.VirtualTableRegister(aClass: TOrmClass; aModule: TClass;
   const aExternalTableName: RawUtf8; aExternalDataBase: TObject;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): POrmMapping;
 var
   i: PtrInt;
 begin
-  result := false;
+  result := nil;
   if aClass = nil then
     exit;
   if (aModule = nil) or
@@ -10081,11 +10107,11 @@ begin
         raise EModelException.CreateUtf8('Invalid %.VirtualTableRegister(%) call: ' +
           'impossible to set class as virtual', [self, aClass]);
     ExternalDB.Init(aClass, aExternalTableName, aExternalDataBase, true, aMappingOptions);
+    result := @ExternalDB;
   end;
   if high(fVirtualTableModule) <> fTablesMax then
     SetLength(fVirtualTableModule, fTablesMax + 1);
   fVirtualTableModule[i] := aModule;
-  result := true;
 end;
 
 function TOrmModel.VirtualTableModule(aClass: TOrmClass): TClass;
@@ -10134,7 +10160,7 @@ constructor TOrmModelProperties.Create(aModel: TOrmModel; aTable: TOrmClass;
   aKind: TOrmVirtualKind);
 var
   f: PtrInt;
-begin // similar to TOrmPropertiesMapping.ComputeSql
+begin // similar to TOrmMapping.ComputeSql
   fModel := aModel;
   fTableIndex := fModel.GetTableIndexExisting(aTable);
   fProps := aTable.OrmProps;
@@ -10147,10 +10173,10 @@ begin // similar to TOrmPropertiesMapping.ComputeSql
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
-          if byte(f) in SimpleFieldsBits[ooUpdate] then
+          if FieldBitGet(SimpleFieldsBits[ooUpdate], f) then
             SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
-          if byte(f) in IsUniqueFieldsBits then
+          if FieldBitGet(IsUniqueFieldsBits, f) then
           begin
             // must trim() text value before storage, and validate for unicity
             if OrmFieldType in [oftUtf8Text, oftAnsiText] then
@@ -10308,11 +10334,11 @@ end;
 
 
 
-{ TOrmPropertiesMapping }
+{ TOrmMapping }
 
-procedure TOrmPropertiesMapping.Init(Table: TOrmClass;
+procedure TOrmMapping.Init(Table: TOrmClass;
   const MappedTableName: RawUtf8; MappedConnection: TObject; AutoComputeSql: boolean;
-  MappingOptions: TOrmPropertiesMappingOptions);
+  MappingOptions: TOrmMappingOptions);
 begin
   // set associated properties
   fProps := Table.OrmProps;
@@ -10333,15 +10359,15 @@ begin
     ComputeSql;
 end;
 
-function TOrmPropertiesMapping.MapField(
-  const InternalName, ExternalName: RawUtf8): POrmPropertiesMapping;
+function TOrmMapping.MapField(
+  const InternalName, ExternalName: RawUtf8): POrmMapping;
 begin
   MapFields([InternalName, ExternalName]);
   result := @self;
 end;
 
-function TOrmPropertiesMapping.MapFields(
-  const InternalExternalPairs: array of RawUtf8): POrmPropertiesMapping;
+function TOrmMapping.MapFields(
+  const InternalExternalPairs: array of RawUtf8): POrmMapping;
 var
   i, f: PtrInt;
 begin
@@ -10352,7 +10378,7 @@ begin
     begin
       fRowIDFieldName := InternalExternalPairs[i * 2 + 1];
       if IdemPropNameU(fRowIDFieldName, 'ID') then
-        include(fFieldNamesMatchInternal, 0)
+        FieldBitSet(fFieldNamesMatchInternal, 0)
       else     // [0]=ID
         exclude(fFieldNamesMatchInternal, 0);
     end
@@ -10361,7 +10387,7 @@ begin
       fExtFieldNames[f] := InternalExternalPairs[i * 2 + 1];
       fExtFieldNamesUnQuotedSql[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
       if IdemPropNameU(fExtFieldNames[f], fProps.Fields.List[f].Name) then
-        include(fFieldNamesMatchInternal, f + 1)
+        FieldBitSet(fFieldNamesMatchInternal, f + 1)
       else // [0]=ID  [1..n]=fields[i-1]
         exclude(fFieldNamesMatchInternal, f + 1);
     end;
@@ -10372,22 +10398,22 @@ begin
   result := @self;
 end;
 
-function TOrmPropertiesMapping.MapAutoKeywordFields: POrmPropertiesMapping;
+function TOrmMapping.MapAutoKeywordFields: POrmMapping;
 begin
   if @self <> nil then
     include(fOptions, rpmAutoMapKeywordFields);
   result := @self;
 end;
 
-function TOrmPropertiesMapping.SetOptions(
-  aOptions: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
+function TOrmMapping.SetOptions(
+  aOptions: TOrmMappingOptions): POrmMapping;
 begin
   if @self <> nil then
     fOptions := aOptions;
   result := @self;
 end;
 
-procedure TOrmPropertiesMapping.ComputeSql;
+procedure TOrmMapping.ComputeSql;
 
 type
   // similar to TOrmModelProperties.Create()/SetKind()
@@ -10417,18 +10443,18 @@ type
           if OrmFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
               cTableSimpleFields:
-                if byte(f) in SimpleFieldsBits[ooSelect] then
+                if FieldBitGet(SimpleFieldsBits[ooSelect], f) then
                 begin
                   if withTableName then
                     W.AddStrings([TableName, '.']);
                   W.AddString(ExtFieldNames[f]);
-                  if not (byte(f + 1) in FieldNamesMatchInternal) then
+                  if not FieldBitGet(FieldNamesMatchInternal, f + 1) then
                     // to get expected JSON column name
                     W.AddStrings([' as ', Name]);
                   W.AddComma;
                 end;
               cUpdateSimple:
-                if byte(f) in SimpleFieldsBits[ooSelect] then
+                if FieldBitGet(SimpleFieldsBits[ooSelect], f) then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
               cUpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);
@@ -10461,7 +10487,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.InternalToExternal(
+function TOrmMapping.InternalToExternal(
   const FieldName: RawUtf8): RawUtf8;
 var
   f: PtrInt;
@@ -10473,7 +10499,7 @@ begin
     result := fExtFieldNames[f];
 end;
 
-function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUtf8;
+function TOrmMapping.InternalToExternal(BlobField: PRttiProp): RawUtf8;
 var
   f: PtrInt;
 begin
@@ -10484,7 +10510,7 @@ begin
     result := fExtFieldNames[f];
 end;
 
-function TOrmPropertiesMapping.InternalCsvToExternalCsv(
+function TOrmMapping.InternalCsvToExternalCsv(
   const CsvFieldNames, Sep, SepEnd: RawUtf8): RawUtf8;
 var
   IntFields, ExtFields: TRawUtf8DynArray;
@@ -10494,7 +10520,7 @@ begin
   result := RawUtf8ArrayToCsv(ExtFields, Sep) + SepEnd;
 end;
 
-procedure TOrmPropertiesMapping.InternalToExternalDynArray(
+procedure TOrmMapping.InternalToExternalDynArray(
   const IntFieldNames: array of RawUtf8; out result: TRawUtf8DynArray;
   IntFieldIndex: PIntegerDynArray);
 var
@@ -10516,7 +10542,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.ExternalToInternalIndex(
+function TOrmMapping.ExternalToInternalIndex(
   const ExtFieldName: RawUtf8): integer;
 begin
   if IdemPropNameU(ExtFieldName, RowIDFieldName) then
@@ -10531,7 +10557,7 @@ begin
   end;
 end;
 
-function TOrmPropertiesMapping.ExternalToInternalOrNull(
+function TOrmMapping.ExternalToInternalOrNull(
   const ExtFieldName: RawUtf8): RawUtf8;
 var
   i: PtrInt;
@@ -10545,7 +10571,7 @@ begin
     result := ''; // indicates not found
 end;
 
-function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
+function TOrmMapping.AppendFieldName(FieldIndex: integer;
   var Text: RawUtf8): boolean;
 begin
   result := false; // success
@@ -10558,7 +10584,7 @@ begin
     Text := Text + ExtFieldNames[FieldIndex];
 end;
 
-function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
+function TOrmMapping.AppendFieldName(FieldIndex: integer;
   WR: TJsonWriter): boolean;
 begin
   result := false; // success
@@ -10571,7 +10597,7 @@ begin
     WR.AddString(ExtFieldNames[FieldIndex]);
 end;
 
-function TOrmPropertiesMapping.FieldNameByIndex(FieldIndex: integer): RawUtf8;
+function TOrmMapping.FieldNameByIndex(FieldIndex: integer): RawUtf8;
 begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName
@@ -10584,14 +10610,6 @@ end;
 
 
 { ------------ TRestCache Definition }
-
-/// update/refresh the cached JSON serialization of a supplied Record
-procedure CacheSetJson(var Entry: TRestCacheEntry; aRecord: TOrm);
-  {$ifdef HASINLINE} inline; {$endif}
-begin  // ooInsert = include all fields
-  if Entry.CacheEnable then
-    Entry.SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
-end;
 
 /// unserialize a JSON cached record of a given ID
 function CacheRetrieveJson(var Entry: TRestCacheEntry; aID: TID; aValue: TOrm;
@@ -10775,8 +10793,8 @@ begin
   rec := aTable.CreateAndFillPrepare(fRest, FormatSqlWhere, BoundsSqlWhere);
   try
     while rec.FillOne do
-    begin
-      CacheSetJson(cache^, rec);
+    begin // expand=true (JSON object), withid=false (not in JSON), ooInsert=all
+      cache^.SetJson(rec.fID, rec.GetJsonValues(true, false, ooInsert));
       inc(result);
     end;
   finally
@@ -10802,7 +10820,15 @@ end;
 procedure TRestCache.Flush(aTable: TOrmClass; aID: TID);
 begin
   if self <> nil then
-    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries([aID]);
+    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntry(aID);
+end;
+
+procedure TRestCache.Flush(aTableIndex: PtrInt; aID: TID);
+begin
+  if self <> nil then
+    with fCache[aTableIndex] do
+      if CacheEnable then
+        FlushCacheEntry(aID);
 end;
 
 procedure TRestCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
@@ -10832,7 +10858,9 @@ begin
     exit;
   aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
-    CacheSetJson(fCache[aTableIndex], aRecord);
+    with fCache[aTableIndex] do
+      if CacheEnable then // expand=true, withid=false, ooInsert=all
+        SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
 end;
 
 procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
@@ -10853,7 +10881,9 @@ begin
   if (self <> nil) and
      (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    fCache[aTableIndex].FlushCacheEntries([aID]);
+    with fCache[aTableIndex] do
+      if CacheEnable then
+        FlushCacheEntry(aID);
 end;
 
 procedure TRestCache.NotifyDeletions(aTableIndex: integer;
@@ -10862,7 +10892,9 @@ begin
   if (self <> nil) and
      (high(aIDs) >= 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    fCache[aTableIndex].FlushCacheEntries(aIDs);
+     with fCache[aTableIndex] do
+       if CacheEnable then
+         FlushCacheEntries(aIDs);
 end;
 
 procedure TRestCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
@@ -11151,10 +11183,11 @@ begin
       fields := fields + props.ComputeBeforeAddFieldsBits;
   end;
   blob := pointer(props.BlobFields);
-  if blob <> nil then // no need to send any null: default blob value
+  if (blob <> nil) and // no need to send any null: default blob value
+     (fields * props.FieldBits[oftBlob] <> []) then
     for f := 1 to length(props.BlobFields) do
     begin
-      if (blob^.PropertyIndex in fields) and
+      if FieldBitGet(fields, blob^.PropertyIndex) and
          blob^.IsValueVoid(Value) then
         exclude(fields, blob^.PropertyIndex);
       inc(blob);

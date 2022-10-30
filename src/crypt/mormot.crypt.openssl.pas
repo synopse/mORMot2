@@ -218,7 +218,7 @@ type
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
-    function AesGcmFinal(var tag: TAesBlock): boolean; override;
+    function AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean; override;
   end;
 
 
@@ -343,15 +343,14 @@ type
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
-  const Engine: RawUtf8 = ''): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: SpiUtf8 = ''): cardinal;
 
 /// asymmetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
 // - if Algorithm is 'null', no Digest is done before signature - which is
 // mandatory e.g. for ed25519 which uses internally SHA-512
 // - returns false on error, or true if the Message has been authenticated
-function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
+function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer;
   const Engine: RawUtf8 = ''): boolean;
@@ -372,12 +371,21 @@ function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY; overload
 // NID_X9_62_prime256v1)
 // - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawUtf8); overload;
+  out PrivateKey, PublicKey: RawUtf8; const PrivateKeyPassWord: SpiUtf8 = ''); overload;
+
+/// generate a public/private pair of keys in raw DER binary format
+// - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
+// BitsOrCurve is the number of bits of the key
+// - if EvpType is EVP_PKEY_EC, BitsOrCurve is the Elliptic curve NID (e.g.
+// NID_X9_62_prime256v1)
+// - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
+procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString; const PrivateKeyPassWord: SpiUtf8 = '');
 
 {
 /// compute the (e.g. ECDH) shared secret from a public/private keys inverted pair
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
-  const PublicKey, PrivateKey: RawUtf8; const PrivateKeyPassword: RawUtf8 = ''): RawByteString;
+  const PublicKey, PrivateKey: RawUtf8; const PrivateKeyPassword: SpiUtf8 = ''): RawByteString;
 }
 
 /// mormot.crypt.ecc256r1 compatible function for asymmetric key generation
@@ -476,7 +484,7 @@ type
   TJwtOpenSsl = class(TJwtAbstract)
   protected
     fPrivateKey, fPublicKey: RawByteString;
-    fPrivateKeyPassword, fPublicKeyPassword: RawUtf8;
+    fPrivateKeyPassword, fPublicKeyPassword: SpiUtf8;
     fHashAlgorithm: RawUtf8;
     fGenEvpType: integer;
     fGenBitsOrCurve: integer;
@@ -490,7 +498,7 @@ type
     constructor Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
       aGenEvpType, aGenBitsOrCurve: integer;
       const aPrivateKey, aPublicKey: RawByteString;
-      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
       aClaims: TJwtClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
@@ -526,6 +534,7 @@ type
     procedure SetAlgorithm; virtual; abstract; // set fAsym
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
+    // - the supplied key(s) could be in PEM or raw DER binary format
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
@@ -533,13 +542,15 @@ type
     // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(
       const aPrivateKey, aPublicKey: RawByteString;
-      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
       aClaims: TJwtClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
       reintroduce;
     /// generate a private/public keys pair for this algorithm in PEM text format
     class procedure GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
+    /// generate a private/public keys pair for this algorithm in raw DER format
+    class procedure GenerateBinaryKeys(out PrivateKey, PublicKey: RawByteString);
   end;
 
   /// meta-class of all OpenSSL JWT algorithms
@@ -618,6 +629,18 @@ type
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
+/// guess the asymmetric algorithm of this OpenSSL X509 certificate
+// - returns nil if x is nil
+// - raise an EOpenSslCert if x has an unsupported algorithm
+// - warning: caaES256K can not be distinguished from caaES256
+// - is defined here because TCryptAsymAlgo is from mormot.crypt.secure.pas
+// which does not fit in the low-level mormot.lib.openssl.pas unit
+function X509Algo(x: PX509): TCryptAsymAlgo;
+
+function ToText(u: TX509Usage): RawUtf8; overload;
+function ToText(u: TX509Usages): ShortString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
@@ -625,6 +648,7 @@ type
 // - register OpenSSL for our Asym() high-level factory (via an hidden
 // TCryptAsymOsl class)
 procedure RegisterOpenSsl;
+
 
 
 implementation
@@ -690,10 +714,6 @@ var
 var
   c: PEVP_CIPHER_CTX;
 begin
-  if (BufOut <> nil) and
-     (Count and AesBlockMod <> 0) then
-    raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
-      [Owner, 'UpdEvp', Count]);
   outl := 0;
   c := Ctx[DoEncrypt];
   EOpenSslCrypto.Check(Owner, 'UpdEvp',
@@ -885,33 +905,36 @@ end;
 
 procedure TAesGcmOsl.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  fAes.UpdEvp({encrypt=}true, Buf, nil, Len);
+  fAes.UpdEvp(fStarted = stEnc, Buf, nil, Len);
 end;
 
-function TAesGcmOsl.AesGcmFinal(var tag: TAesBlock): boolean;
+function TAesGcmOsl.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
 var
   outl: integer;
   dummy: TAesBlock;
 begin
+  result := false;
+  if (fStarted = stNone) or
+     (cardinal(TagLen) > 16) then
+    exit;
   case fStarted of
     stEnc:
       begin
         EOpenSslCrypto.Check(self, 'AesGcmFinal enc',
           EVP_CipherFinal_ex(fAes.Ctx[true], @dummy, @outl));
+        FillZero(Tag);
         EOpenSslCrypto.Check(self, 'AesGcmFinal enctag',
-          EVP_CIPHER_CTX_ctrl(fAes.Ctx[true], EVP_CTRL_GCM_GET_TAG, 16, @tag));
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[true], EVP_CTRL_GCM_GET_TAG, TagLen, @Tag));
         result := true;
       end;
     stDec:
       begin
         EOpenSslCrypto.Check(self, 'AesGcmFinal dectag',
-          EVP_CIPHER_CTX_ctrl(fAes.Ctx[false], EVP_CTRL_GCM_SET_TAG, 16, @tag));
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[false], EVP_CTRL_GCM_SET_TAG, TagLen, @Tag));
         outl := 16;
         result := (EVP_CipherFinal_ex(fAes.Ctx[false], @dummy, @outl) > 0) and
                   (outl = 0);
       end
-  else
-    result := false;
   end;
   fStarted := stNone; // allow reuse of this fAes instance
 end;
@@ -1137,7 +1160,7 @@ end;
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword, Engine: RawUtf8): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: SpiUtf8): cardinal;
 var
   pkey: PEVP_PKEY;
 begin
@@ -1152,7 +1175,7 @@ begin
   end;
 end;
 
-function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
+function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer; const Engine: RawUtf8): boolean;
 var
@@ -1235,7 +1258,7 @@ begin
 end;
 
 procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
-  out PrivateKey, PublicKey: RawUtf8);
+  out PrivateKey, PublicKey: RawUtf8; const PrivateKeyPassWord: SpiUtf8);
 var
   keys: PEVP_PKEY;
 begin
@@ -1243,18 +1266,33 @@ begin
   if keys = nil then
     raise EOpenSslHash.CreateFmt(
       'OpenSslGenerateKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
-  keys.ToPem(PrivateKey, PublicKey);
+  keys.ToPem(PrivateKey, PublicKey, PrivateKeyPassWord);
   keys.Free;
 end;
 
+procedure OpenSslGenerateBinaryKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString; const PrivateKeyPassWord: SpiUtf8);
+var
+  keys: PEVP_PKEY;
+begin
+  keys := OpenSslGenerateKeys(EvpType, BitsOrCurve);
+  if keys = nil then
+    raise EOpenSslHash.CreateFmt(
+      'OpenSslGenerateBinaryKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
+  PrivateKey := keys.PrivateToDer(PrivateKeyPassWord);
+  PublicKey := keys.PublicToDer;
+  keys.Free;
+end;
+
+{
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
-  const PublicKey, PrivateKey, PrivateKeyPassword: RawUtf8): RawByteString;
+  const PublicKey, PrivateKey, PrivateKeyPassword: SpiUtf8): RawByteString;
 begin
   result := '';
   EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslSharedSecret');
-  { TODO: implement as https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman }
+  //TODO: see https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman
 end;
-
+}
 
 var
   prime256v1grp: PEC_GROUP;
@@ -1296,34 +1334,64 @@ begin
   end;
 end;
 
+function GetEcPub(k: PEC_KEY; out PublicKey: TEccPublicKey): boolean;
+var
+  pub: PByte;
+  publen: integer;
+begin
+  result := false;
+  if k = nil then
+    exit;
+  pub := nil;
+  publen := EC_KEY_key2buf(k, POINT_CONVERSION_COMPRESSED, @pub, nil);
+  if publen = SizeOf(PublicKey) then
+  begin
+    MoveFast(pub^, PublicKey, SizeOf(PublicKey));
+    result := true;
+  end;
+  OPENSSL_free(pub);
+end;
+
+function GetEcPriv(k: PEC_KEY; out PrivateKey: TEccPrivateKey): boolean;
+var
+  priv: PBIGNUM;
+  privlen: integer;
+begin
+  result := false;
+  FillZero(PrivateKey); // may be padded with zeros anyway
+  if k = nil then
+    exit;
+  priv := EC_KEY_get0_private_key(k);
+  privlen := priv.Size;
+  if (privlen <= 0) or
+     (privlen > SizeOf(PrivateKey)) then
+    exit;
+  priv.ToBin(@PrivateKey[SizeOf(PrivateKey) - privlen]);
+  result := true;
+end;
+
+function GetEs256Public(k: PEVP_PKEY): TEccPublicKey;
+begin
+  if not GetEcPub(EVP_PKEY_get0_EC_KEY(k), result) then
+    FillZero(result, SizeOf(result));
+end;
+
+function GetEs256Private(k: PEVP_PKEY; out PrivateKey: TEccPrivateKey): boolean;
+begin
+  result := GetEcPriv(EVP_PKEY_get0_EC_KEY(k), PrivateKey);
+end;
+
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
                           out PrivateKey: TEccPrivateKey): boolean;
 var
   key: PEC_KEY;
-  pub: PByte;
-  priv: PBIGNUM;
-  publen, privlen: integer;
 begin
   result := false;
   if not NewPrime256v1Key(key) then
     exit;
   if EC_KEY_generate_key(key) = OPENSSLSUCCESS then
-  begin
-    priv := EC_KEY_get0_private_key(key);
-    privlen := BN_num_bytes(priv);
-    pub := nil;
-    publen := EC_POINT_point2buf(prime256v1grp,
-      EC_KEY_get0_public_key(key), POINT_CONVERSION_COMPRESSED, @pub, nil);
-    if (publen = SizeOf(PublicKey)) and
-       (privlen <= SizeOf(PrivateKey)) then
-    begin
-      FillZero(PrivateKey); // may be padded with zeros
-      BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
-      MoveFast(pub^, PublicKey, publen);
-      result := true;
-    end;
-    OPENSSL_free(pub);
-  end;
+    result := GetEcPub(key, PublicKey) and
+              GetEcPriv(key, PrivateKey);
   EC_KEY_free(key);
 end;
 
@@ -1344,7 +1412,7 @@ begin
      (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
     result := DerToEcc(@der, derlen, Signature);
-  BN_free(bn);
+  bn.Free;
   EC_KEY_free(key);
 end;
 
@@ -1392,7 +1460,7 @@ begin
      (EC_KEY_set_private_key(key, priv) = OPENSSLSUCCESS) and
      (ECDH_compute_key(@Secret, SizeOf(Secret), pub, key, nil) = SizeOf(Secret)) then
     result := true;
-  BN_free(priv);
+  priv.Free;
   EC_POINT_free(pub);
   EC_KEY_free(key);
 end;
@@ -1434,7 +1502,7 @@ end;
 constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
   aGenEvpType, aGenBitsOrCurve: integer;
   const aPrivateKey, aPublicKey: RawByteString;
-  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+  const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8;
   aClaims: TJwtClaims; const aAudience: array of RawUtf8;
   aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
   aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
@@ -1473,8 +1541,7 @@ var
   sign: RawByteString;
 begin
   if fPrivKey = nil then
-    fPrivKey := LoadPrivateKey(
-      pointer(fPrivateKey), length(fPrivateKey), fPrivateKeyPassword);
+    fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
   sign := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sign = '' then
     raise EJwtException.CreateUtf8('%.ComputeSignature: OpenSslSign failed [%]',
@@ -1486,8 +1553,7 @@ procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJwtContent);
 begin
   if fPubKey = nil then
-    fPubKey := LoadPublicKey(
-      pointer(fPublicKey), length(fPublicKey), fPublicKeyPassword);
+    fPubKey := LoadPublicKey(fPublicKey, fPublicKeyPassword);
   if fPubKey^.Verify(fAlgoMd, pointer(signature), pointer(headpayload),
       length(signature), length(headpayload)) then
     JWT.result := jwtValid
@@ -1508,7 +1574,7 @@ begin
 end;
 
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
-  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8; aClaims: TJwtClaims;
+  const aPrivateKeyPassword, aPublicKeyPassword: SpiUtf8; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
@@ -1520,7 +1586,8 @@ begin
     aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
+class procedure TJwtAbstractOsl.GenerateKeys(
+  out PrivateKey, PublicKey: RawUtf8);
 begin
   with TJwtAbstractOsl(NewInstance) do // no need to call Create
     try
@@ -1530,6 +1597,19 @@ begin
       Free;
     end;
 end;
+
+class procedure TJwtAbstractOsl.GenerateBinaryKeys(
+  out PrivateKey, PublicKey: RawByteString);
+begin
+  with TJwtAbstractOsl(NewInstance) do // no need to call Create
+    try
+      SetAlgorithms;
+      OpenSslGenerateBinaryKeys(fGenEvpType, fGenBitsOrCurve, PrivateKey, PublicKey);
+    finally
+      Free;
+    end;
+end;
+
 
 
 { TJwtES256Osl }
@@ -1629,7 +1709,6 @@ type
       const privpwd: RawUtf8 = ''): boolean; override;
     function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const pub, sig: RawByteString): boolean; override;
-    function SharedSecret(const pub, priv: RawByteString): RawByteString; override;
   end;
 
 
@@ -1679,11 +1758,6 @@ begin
     '', msg, pointer(pub), pointer(sig), msglen, length(pub), length(sig));
 end;
 
-function TCryptAsymOsl.SharedSecret(const pub, priv: RawByteString): RawByteString;
-begin
-  result := OpenSslSharedSecret(fEvpType, fBitsOrCurve, pub, priv, '');
-end;
-
 
 type
   EOpenSslCert = class(EOpenSsl);
@@ -1698,6 +1772,10 @@ type
     constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
+    function FromHandle(Handle: pointer): ICryptCert; override;
+    function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+      const PrivateKeyPassword: SpiUtf8;
+      out PrivateKeyPem: RawUtf8): RawByteString; override;
   end;
 
   /// class implementing ICryptCert using OpenSSL X509
@@ -1705,35 +1783,46 @@ type
   protected
     fX509: PX509;
     fPrivKey: PEVP_PKEY;
-    procedure RaiseErrorGenerate(const api: ShortString);
     function GetMD: PEVP_MD;
   public
-    constructor CreateFrom(aX509: PX509);
     destructor Destroy; override;
     procedure Clear;
     // ICryptCert methods
-    procedure Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      Fields: PCryptCertFields); override;
-    function Load(const Saved: RawByteString;
-      const PrivatePassword: RawUtf8): boolean; override;
+      Fields: PCryptCertFields): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
-    function GetIssuerSerial: RawUtf8; override;
+    function GetSubjectKey: RawUtf8; override;
+    function GetAuthorityKey: RawUtf8; override;
+    function IsSelfSigned: boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
-    function Save(const PrivatePassword: RawUtf8;
+    function GetSignatureInfo: RawUtf8; override;
+    function Load(const Saved: RawByteString; Content: TCryptCertContent;
+      const PrivatePassword: SpiUtf8): boolean; override;
+    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; override;
     function HasPrivateSecret: boolean; override;
+    function GetPublicKey: RawByteString; override;
     function GetPrivateKey: RawByteString; override;
+    function SetPrivateKey(const saved: RawByteString): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
+    procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer;
       SignLen, DataLen: integer): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override;
+    function PrivateKeyHandle: pointer; override;
   end;
 
   /// 'x509-store' ICryptStore algorithm
@@ -1750,8 +1839,8 @@ type
     constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
-    function FromBinary(const Binary: RawByteString): boolean; override;
-    function ToBinary: RawByteString; override;
+    function Load(const Saved: RawByteString): boolean; override;
+    function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
@@ -1764,8 +1853,7 @@ type
       Data: pointer; Len: integer): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
-    // return our favorite caaES256 algorithm for signing Certificates
-    function CertAlgo: TCryptCertAlgo; override;
+    function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -1773,6 +1861,7 @@ type
 
 constructor TCryptCertAlgoOpenSsl.Create(osa: TCryptAsymAlgo);
 begin
+  fOsa := osa;
   fHash := OpenSslGetMd(CAA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
   fEvpType := CAA_EVPTYPE[osa];
   fBitsOrCurve := CAA_BITSORCURVE[osa];
@@ -1789,14 +1878,41 @@ begin
   result := TCryptCertOpenSsl.Create(self);
 end;
 
+function TCryptCertAlgoOpenSsl.FromHandle(Handle: pointer): ICryptCert;
+var
+  instance: TCryptCertOpenSsl;
+begin
+  if Handle = nil then
+    instance := nil
+  else
+  begin
+    instance := TCryptCertOpenSsl.Create(self);
+    instance.fX509 := Handle;
+  end;
+  result := instance;
+end;
+
+function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
+var
+  key: PEVP_PKEY;
+begin
+  if Subjects = nil then
+    raise EOpenSslCert.Create('CreateSelfSignedCsr: void DnsCsv');
+  key := NewPrivateKey;
+  if key = nil then
+    raise EOpenSslCert.Create('CreateSelfSignedCsr: NewPrivateKey');
+  try
+    result := key.CreateSelfSignedCsr(fHash, Subjects);
+    if result <> '' then
+      PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
+  finally
+    key.Free;
+  end;
+end;
+
 
 { TCryptCertOpenSsl }
-
-constructor TCryptCertOpenSsl.CreateFrom(aX509: PX509);
-begin
-  inherited Create(nil);
-  fX509 := aX509;
-end;
 
 destructor TCryptCertOpenSsl.Destroy;
 begin
@@ -1812,26 +1928,20 @@ begin
   fPrivKey := nil;
 end;
 
-procedure TCryptCertOpenSsl.RaiseErrorGenerate(const api: ShortString);
-begin
-  RaiseError('Generate: % error', [api]); // raise ECryptCert
-end;
-
 function TCryptCertOpenSsl.GetMD: PEVP_MD;
 begin
   result := (fCryptAlgo as TCryptCertAlgoOpenSsl).fHash;
 end;
 
-procedure TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
+function TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
-  ExpireDays, ValidDays: integer; Fields: PCryptCertFields);
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
+  cn: RawUtf8;
   dns: TRawUtf8DynArray;
   name: PX509_NAME;
   x: PX509;
-  req: PX509_REQ;
-  key, pub: PEVP_PKEY;
-  auth: TCryptCertOpenSsl;
+  key: PEVP_PKEY;
   i: PtrInt;
 begin
   if fX509 <> nil then
@@ -1843,60 +1953,59 @@ begin
   if x = nil then
     RaiseErrorGenerate('NewCertificate');
   key := nil;
-  req := nil;
   try
     key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
     CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
-    for i := 0 to length(dns) - 1 do
-      if not IdemPChar(pointer(dns[i]), 'DNS:') then
-        dns[i] := 'DNS:' + dns[i];
+    if dns <> nil then
+      cn := dns[0]
+    else if (Fields = nil) or
+            (Fields^.CommonName = '') then
+      RaiseErrorGenerate('no Subject/CommonName');
+    if (length(dns) = 1) and
+       (Usages * [cuTlsClient, cuTlsServer] = []) then
+      dns := nil // no DNS: alt sub name if not needed
+    else
+      for i := 0 to length(dns) - 1 do
+        if PosExChar(':', dns[i]) = 0 then
+          dns[i] := 'DNS:' + dns[i]; // e.g. DNS: email: IP: URI:
     if not x.SetBasic(cuCA in Usages, RawUtf8ArrayToCsv(dns)) then
       RaiseErrorGenerate('SetBasic');
     if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
       RaiseErrorGenerate('SetUsage');
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');
+    name := X509_get_subject_name(x);
+    if Fields <> nil then
+      with Fields^ do
+      begin
+        if CommonName <> '' then
+          cn := CommonName;
+        name.AddEntries(Country, State, Locality, Organization, OrgUnit,
+          cn, EmailAddress, SurName, GivenName);
+      end
+      else
+        name.AddEntry('CN', cn);
+    EOpenSslCert.Check(X509_set_pubkey(x, key));
+    if not x.SetExtension(NID_subject_key_identifier, 'hash') then
+      RaiseErrorGenerate('SKID');
     if Authority = nil then
     begin
-      // self-signed certificate
-      name := X509_get_subject_name(x);
-      if Fields <> nil then
-        with Fields^ do
-          name.AddEntries(
-            Country, State, Locality, Organization, OrgUnit, CommonName);
+      // self-signed certificate - no AKID
       EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer = subject
-      EOpenSslCert.Check(X509_set_pubkey(x, key));
       if x.Sign(key, GetMD) = 0 then
         RaiseErrorGenerate('Self Sign');
     end
     else
-    begin
-      // certificate signed by a CA
-      auth := TCryptCertOpenSsl(Authority.Instance);
-      if not auth.InheritsFrom(TCryptCertOpenSsl) or
-         (auth.fPrivKey = nil) then
-        RaiseErrorGenerate('incompatible Authority');
-      req := X509_REQ_new();
-      EOpenSslCert.Check(X509_REQ_set_pubkey(req, key));
-      name := X509_REQ_get_subject_name(req);
-      if Fields <> nil then
-        with Fields^ do
-          name.AddEntries(
-            Country, State, Locality, Organization, OrgUnit, CommonName);
-      if X509_REQ_sign(req, key, GetMD) = 0 then
-        RaiseErrorGenerate('Req Sign');
-      EOpenSslCert.Check(X509_set_issuer_name(x, X509_get_subject_name(auth.fX509)));
-      EOpenSslCert.Check(X509_set_subject_name(x, name));
-      pub := X509_REQ_get_pubkey(req);
-      if pub = nil then
-        RaiseErrorGenerate('GetPubKey');
-      X509_set_pubkey(x, pub);
-      pub.Free;
-      if X509_sign(x, auth.fPrivKey, auth.GetMD) = 0 then
-        RaiseErrorGenerate('CA Sign');
-    end;
+      try
+        // certificate signed by a provided CA
+        fX509 := x; // as expected by next line
+        Sign(Authority);
+      except
+        fX509 := nil; // on error, rollback (and call x.Free)
+      end;
+    //writeln('IsSelfSigned=',x.IsSelfSigned);
     // the certificate was generated so can be stored within this instance
     fX509 := x;
     fPrivKey := key;
@@ -1905,8 +2014,8 @@ begin
   finally
     x.Free;
     key.Free;
-    req.Free;
   end;
+  result := self;
 end;
 
 function TCryptCertOpenSsl.GetSerial: RawUtf8;
@@ -1936,9 +2045,19 @@ begin
   result := fX509.IssuerName;
 end;
 
-function TCryptCertOpenSsl.GetIssuerSerial: RawUtf8;
+function TCryptCertOpenSsl.GetSubjectKey: RawUtf8;
 begin
-  result := fX509.IssuerKeyIdentifier;
+  result := fX509.SubjectKeyIdentifier;
+end;
+
+function TCryptCertOpenSsl.GetAuthorityKey: RawUtf8;
+begin
+  result := fX509.AuthorityKeyIdentifier;
+end;
+
+function TCryptCertOpenSsl.IsSelfSigned: boolean;
+begin
+  result := fX509.IsSelfSigned;
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
@@ -1961,38 +2080,51 @@ begin
   result := fX509.PeerInfo;
 end;
 
-function TCryptCertOpenSsl.Save(const PrivatePassword: RawUtf8;
-  Format: TCryptCertFormat): RawByteString;
+function TCryptCertOpenSsl.GetSignatureInfo: RawUtf8;
+begin
+  result := fX509.GetSignatureAlgo;
+end;
+
+function TCryptCertOpenSsl.Save(Content: TCryptCertContent;
+  const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 begin
   result := '';
-  if fX509 = nil then
-    exit;
   if not (Format in [ccfBinary, ccfPem]) then
-    result := inherited Save(PrivatePassword, Format)
-  else if PrivatePassword = '' then
-  begin
-    // include the X509 certificate (but not any private key) as DER or PEM
-    result := fX509.ToBinary;
-    if Format = ccfPem then
-      result := DerToPem(result, pemCertificate);
-  end
+    // hexa or base64 encoding of the binary output is handled by TCryptCert
+    result := inherited Save(Content, PrivatePassword, Format)
   else
-  begin
-    // PrivatePassword will be used to encrypt the private key
-    if fPrivKey = nil then
-      RaiseError('Save(password) with no Private Key');
-    if Format = ccfPem then
-      // concatenate the certificate and its private key as PEM
-      result := DerToPem(fX509.ToBinary, pemCertificate) + #13#10 +
-                fPrivKey.PrivateKeyToPem(PrivatePassword)
-    else
-      // ccfBinary will use the PKCS12 binary encoding
-      result := fX509.ToPkcs12(fPrivKey, PrivatePassword)
+  case Content of
+    cccCertOnly:
+      if fX509 <> nil then
+      begin
+        // include the X509 certificate (but not any private key) as DER or PEM
+        result := fX509.ToBinary;
+        if Format = ccfPem then
+          result := DerToPem(result, pemCertificate);
+      end;
+    cccCertWithPrivateKey:
+      if fX509 <> nil then
+        if fPrivKey = nil then
+          RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
+        else if Format = ccfPem then
+          // concatenate the certificate and its private key as PEM
+          result := DerToPem(fX509.ToBinary, pemCertificate) + RawUtf8(#13#10) +
+                    fPrivKey.PrivateToPem(PrivatePassword)
+        else
+          // ccfBinary will use the PKCS12 binary encoding
+          result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
+    cccPrivateKeyOnly:
+      if fPrivKey = nil then
+        RaiseError('Save(cccPrivateKeyOnly) with no Private Key')
+      else if Format = ccfPem then
+        result := fPrivKey.PrivateToPem(PrivatePassword)
+      else
+        result := fPrivKey.PrivateToDer(PrivatePassword);
   end;
 end;
 
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
-  const PrivatePassword: RawUtf8): boolean;
+  Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 var
   P: PUtf8Char;
   k: TPemKind;
@@ -2000,52 +2132,71 @@ var
   pkcs12: PPKCS12;
 begin
   result := false;
+  if Content = cccPrivateKeyOnly then
+  begin
+    // input only include the private key as DER or PEM
+    fPrivKey.Free;
+    fPrivKey := nil;
+    fPrivKey := LoadPrivateKey(saved, PrivatePassword);
+    if fPrivKey <> nil then
+      if (fX509 = nil) or // can load just the privkey
+         fX509.MatchPrivateKey(fPrivKey) then
+        result := true
+      else
+      begin
+        fPrivKey.Free;
+        fPrivKey := nil;
+      end;
+    exit; // don't clear the main X509 certificate
+  end;
   Clear;
   if Saved = '' then
     exit;
-  if PrivatePassword = '' then
-    // input only include the X509 certificate as DER or PEM
-    if IsPem(Saved) then
-      fX509 := LoadCertificate(PemToDer(Saved))
-    else
-      fX509 := LoadCertificate(Saved)
-  else
-  begin
-    // input include the X509 certificate and its associated private key
-    if IsPem(Saved) then
-    begin
-      // PEM certificate and PEM private key were concatenated
-      P := pointer(Saved);
-      repeat
-        pem := NextPem(P, @k);
-        if pem = '' then
-          break;
-        if k = pemCertificate then
-          if cert <> '' then
-            exit // should contain a single Certificate
-          else
-            cert := PemToDer(pem)
+  case Content of
+    cccCertOnly:
+      // input only include the X509 certificate as DER or PEM
+      if IsPem(Saved) then
+        fX509 := LoadCertificate(PemToDer(Saved))
+      else
+        fX509 := LoadCertificate(Saved);
+    cccCertWithPrivateKey:
+      begin
+        // input include the X509 certificate and its associated private key
+        if IsPem(Saved) then
+        begin
+          // PEM certificate and PEM private key were concatenated
+          P := pointer(Saved);
+          repeat
+            pem := NextPem(P, @k);
+            if pem = '' then
+              break;
+            if k = pemCertificate then
+              if cert <> '' then
+                exit // should contain a single Certificate
+              else
+                cert := PemToDer(pem)
+            else
+              priv := pem; // private key may be with several TPemKind markers
+          until false;
+          if (cert = '') or
+             (priv = '') then
+            exit;
+          fX509 := LoadCertificate(cert);
+          if fX509 = nil then
+            exit;
+          fPrivKey := LoadPrivateKey(priv, PrivatePassword);
+        end
         else
-          priv := pem; // private key may be with several TPemKind markers
-      until false;
-      if (cert = '') or
-         (priv = '') then
-        exit;
-      fX509 := LoadCertificate(cert);
-      if fX509 = nil then
-        exit;
-      fPrivKey := LoadPrivateKey(pointer(priv), length(priv), PrivatePassword);
-    end
-    else
-    begin
-      // input should be some PKCS12 binary with certificate and private key
-      pkcs12 := LoadPkcs12(Saved);
-      if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
-        Clear;
-      pkcs12.Free;
-    end;
-    if not fX509.MatchPrivateKey(fPrivKey) then
-      Clear;
+        begin
+          // input should be some PKCS12 binary with certificate and private key
+          pkcs12 := LoadPkcs12(Saved);
+          if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
+            Clear;
+          pkcs12.Free;
+        end;
+        if not fX509.MatchPrivateKey(fPrivKey) then
+          Clear;
+      end;
   end;
   result := fX509 <> nil;
 end;
@@ -2055,50 +2206,202 @@ begin
   result := fPrivKey <> nil;
 end;
 
+function TCryptCertOpenSsl.GetPublicKey: RawByteString;
+begin
+  result := fX509.GetPublicKey.PublicToDer;
+end;
+
 function TCryptCertOpenSsl.GetPrivateKey: RawByteString;
 begin
   if HasPrivateSecret then
-    result := fPrivKey.PrivateToBinary
+    result := fPrivKey.PrivateToDer({pwd=}'')
   else
     result := '';
+end;
+
+function TCryptCertOpenSsl.SetPrivateKey(const saved: RawByteString): boolean;
+begin
+  result := false;
+  fPrivKey.Free;
+  fPrivKey := nil;
+  if saved = '' then
+    exit;
+  fPrivKey := LoadPrivateKey(saved);
+  if fX509.MatchPrivateKey(fPrivKey) then
+    result := true
+  else
+  begin
+    fPrivKey.Free;
+    fPrivKey := nil;
+  end;
 end;
 
 function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;
 begin
   if HasPrivateSecret and
-     fX509.HasUsage(kuDigitalSignature) then
+     ((fX509 = nil) or
+      fX509.HasUsage(kuDigitalSignature)) then
     result := fPrivKey.Sign(GetMD, Data, Len)
   else
     result := '';
 end;
 
-function TCryptCertOpenSsl.Verify(Sign, Data: pointer;
-  SignLen, DataLen: integer): TCryptCertValidity;
+procedure TCryptCertOpenSsl.Sign(const Authority: ICryptCert);
+var
+  a: PX509;
+  auth: TCryptCertOpenSsl;
+begin
+  if Assigned(Authority) and
+     Authority.HasPrivateSecret then
+  begin
+    auth := Authority.Instance as TCryptCertOpenSsl;
+    a := auth.fX509;
+    if not a.HasUsage(kuKeyCertSign) then
+      RaiseError('Sign: no kuKeyCertSign');
+    EOpenSslCert.Check(X509_set_issuer_name(fX509, X509_get_subject_name(a)));
+    if not fX509.SetExtension(NID_authority_key_identifier, 'keyid:always', a) then
+      RaiseError('Sign: AKID'); // see RFC 3280
+    if fX509.Sign(auth.fPrivKey, auth.GetMD) = {size=} 0 then
+      RaiseError('Sign: CA Sign');
+  end
+  else
+    RaiseError('Sign: not a CA');
+end;
+
+function CanVerify(auth: PX509; usage: TX509Usage;
+  selfsigned: boolean): TCryptCertValidity;
 var
   now: TDateTime;
 begin
   now := NowUtc;
-  if (fX509 = nil) or
-     (SignLen <= 0) or
+  if auth = nil then
+    result := cvUnknownAuthority
+  else if not (selfsigned or auth.HasUsage(usage)) then
+    result := cvWrongUsage
+  else if (now >= auth.NotAfter) or
+          (now < auth.NotBefore) then
+    result := cvDeprecatedAuthority
+  else
+    result := cvValidSigned;
+end;
+
+function TCryptCertOpenSsl.Verify(Sign, Data: pointer;
+  SignLen, DataLen: integer): TCryptCertValidity;
+begin
+  if (SignLen <= 0) or
      (DataLen <= 0) then
     result := cvBadParameter
-  else if not fX509.HasUsage(kuDigitalSignature) then
-    result := cvWrongUsage
-  else if (now >= fX509.NotAfter) or
-          (now < fX509.NotBefore) then
-    result := cvDeprecatedAuthority
-  else if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
-    if fX509.IsSelfSigned then
-      result := cvValidSelfSigned
-    else
-      result := cvValidSigned
   else
-    result := cvInvalidSignature;
+    result := CanVerify(fX509, kuDigitalSignature, false);
+  if result = cvValidSigned then
+    if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
+      if fX509.IsSelfSigned then
+        result := cvValidSelfSigned
+      else
+        result := cvValidSigned
+    else
+      result := cvInvalidSignature;
+end;
+
+function TCryptCertOpenSsl.Verify(const Authority: ICryptCert): TCryptCertValidity;
+var
+  auth: PX509;
+begin
+  result := cvBadParameter;
+  if fX509 = nil then
+    exit;
+  if fX509.IsSelfSigned then
+    auth := fX509
+  else if Assigned(Authority) then
+    if Authority.Instance.InheritsFrom(TCryptCertOpenSsl) then
+    begin
+      auth := Authority.Handle;
+      if auth.SubjectKeyIdentifier <> fX509.AuthorityKeyIdentifier then
+        auth := nil;
+    end
+    else
+      exit
+  else
+    auth := nil;
+  result := CanVerify(auth, kuKeyCertSign, auth = fX509);
+  if result = cvValidSigned then
+    if X509_verify(fX509, auth.GetPublicKey) <> 1 then
+      result := cvInvalidSignature
+    else if auth = fX509 then
+      result := cvValidSelfSigned
+end;
+
+function TCryptCertOpenSsl.Encrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if (fX509 <> nil) and
+     (Cipher <> '') and
+     (fX509.HasUsage(kuDataEncipherment) or
+      fX509.HasUsage(kuEncipherOnly)) then
+    if AsymAlgo in CAA_RSA then
+      result := fX509.GetPublicKey.RsaSeal(
+        EVP_get_cipherbyname(pointer(Cipher)), Message)
+    else if AsymAlgo = caaES256 then
+      result := EciesSeal(Cipher, GetEs256Public(fX509.GetPublicKey), Message)
+  else
+    result := '';
+end;
+
+function TCryptCertOpenSsl.Decrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+var
+  priv: TEccPrivateKey;
+begin
+  result := '';
+  if (fPrivKey <> nil) and
+     (Cipher <> '') and
+     ((fX509 = nil) or
+      fX509.HasUsage(kuDataEncipherment) or
+      fX509.HasUsage(kuDecipherOnly)) then
+    if AsymAlgo in CAA_RSA then
+      result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message)
+    else if (AsymAlgo = caaES256) and
+            GetEs256Private(fPrivKey, priv) then
+    try
+      result := EciesOpen(Cipher, priv, Message);
+    finally
+      FillZero(priv);
+    end;
+end;
+
+function TCryptCertOpenSsl.SharedSecret(const pub: ICryptCert): RawByteString;
+var
+  priv: TEccPrivateKey;
+  sec: TEccSecretKey;
+begin
+  result := '';
+  try
+    if (fPrivKey <> nil) and
+       Assigned(pub) and
+       pub.Instance.InheritsFrom(TCryptCertOpenSsl) and
+       (pub.Handle <> nil) and
+       PX509(pub.Handle).HasUsage(kuKeyAgreement) and
+       ((fX509 = nil) or
+        fX509.HasUsage(kuKeyAgreement)) then
+      if AsymAlgo = caaES256 then
+        if GetEs256Private(fPrivKey, priv) and
+           Ecc256r1SharedSecret(
+             GetEs256Public(PX509(pub.Handle).GetPublicKey), priv, sec) then
+          FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
+  finally
+    FillZero(priv);
+    FillZero(sec);
+  end;
 end;
 
 function TCryptCertOpenSsl.Handle: pointer;
 begin
-  result := fX509;
+  result := fX509; // a PX509 instance
+end;
+
+function TCryptCertOpenSsl.PrivateKeyHandle: pointer;
+begin
+  result := fPrivKey; // a PEVP_PKEY instance
 end;
 
 
@@ -2124,38 +2427,51 @@ begin
   fStore.Free;
 end;
 
-function TCryptStoreOpenSsl.ToBinary: RawByteString;
+function TCryptStoreOpenSsl.Save: RawByteString;
 var
   x: PX509DynArray;
   c: PX509_CRLDynArray;
   i: PtrInt;
+  tmp: TTextWriterStackBuffer;
 begin
   // since DER has no simple binary array format, use PEM serialization
-  result := '';
-  x := fStore.Certificates;
-  for i := 0 to length(x) - 1 do
-    result := x[i].ToPem + CRLF;
-  c := fStore.Crls;
-  for i := 0 to length(c) - 1 do
-    result := c[i].ToPem + CRLF;
+  with TTextWriter.CreateOwnedStream(tmp) do
+  try
+    x := fStore.Certificates;
+    for i := 0 to length(x) - 1 do
+    begin
+      AddString(x[i].ToPem);
+      AddShorter(CRLF);
+    end;
+    c := fStore.Crls;
+    for i := 0 to length(c) - 1 do
+    begin
+      AddString(c[i].ToPem);
+      AddShorter(CRLF);
+    end;
+    SetText(RawUtf8(result));
+  finally
+    Free;
+  end;
 end;
 
-function TCryptStoreOpenSsl.FromBinary(const Binary: RawByteString): boolean;
+function TCryptStoreOpenSsl.Load(const Saved: RawByteString): boolean;
 begin
   fStore.Free;
-  fStore := NewCertificateStore;          // clear (with proper ref counting)
-  result := AddFromBuffer(Binary) <> nil; // most probably ToBinary PEM format
+  fStore := NewCertificateStore;         // clear (with proper ref counting)
+  result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
 end;
 
 function TCryptStoreOpenSsl.GetBySerial(const Serial: RawUtf8): ICryptCert;
 var
   x: PX509;
 begin
-  x := fStore.BySerial(Serial); // makes x.Acquire
+  x := fStore.BySerial(Serial);     // makes x.Acquire
   if x = nil then
     result := nil
   else
-    result := TCryptCertOpenSsl.CreateFrom(x);
+    // guess the type because the PX509 item has no ICryptCert.AsymAlgo any more
+    result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
 function ToReason(r: integer): TCryptCertRevocationReason;
@@ -2260,7 +2576,7 @@ begin
   end
   else
   begin
-    // try binary DER serialization of X509 certificate or CRL
+    // try binary DER serialization of a single X509 certificate or CRL
     serial := fStore.AddFromBinary(Content);
     if serial <> '' then
       AddRawUtf8(result, serial);
@@ -2275,6 +2591,11 @@ end;
 function TCryptStoreOpenSsl.CrlCount: integer;
 begin
   result := fStore.CrlCount;
+end;
+
+function TCryptStoreOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertAlgoOpenSsl[CryptCertAlgoOpenSslDefault];
 end;
 
 function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;
@@ -2368,9 +2689,96 @@ begin
   result := cvNotSupported;
 end;
 
-function TCryptStoreOpenSsl.CertAlgo: TCryptCertAlgo;
+
+function ToText(u: TX509Usage): RawUtf8;
 begin
-  result := CryptCertAlgoOpenSsl[caaES256];
+  result := GetEnumNameTrimed(TypeInfo(TX509Usage), ord(u));
+end;
+
+function ToText(u: TX509Usages): ShortString;
+begin
+  result := ToText(TCryptCertUsages(u), {cu_text}false); // both sets do match
+end;
+
+function X509Algo(x: PX509): TCryptAsymAlgo;
+var
+  md: integer;
+begin
+  // NOTE: caaES256K can not be distinguished from caaES256 so marks default
+  result := caaES256K;
+  {
+    x509-es256 = 794 672 ecdsa-with-SHA256 SHA256 id-ecPublicKey 128
+    x509-es384 = 795 673 ecdsa-with-SHA384 SHA384 id-ecPublicKey 192
+    x509-es512 = 796 674 ecdsa-with-SHA512 SHA512 id-ecPublicKey 256
+    x509-es256k = 794 672 ecdsa-with-SHA256 SHA256 id-ecPublicKey 128
+    x509-rs256 = 668 672 RSA-SHA256 SHA256 rsaEncryption 128
+    x509-rs384 = 669 673 RSA-SHA384 SHA384 rsaEncryption 192
+    x509-rs512 = 670 674 RSA-SHA512 SHA512 rsaEncryption 256
+    x509-ps256 = 912 672 RSASSA-PSS SHA256 RSASSA-PSS 128
+    x509-ps384 = 912 673 RSASSA-PSS SHA384 RSASSA-PSS 192
+    x509-ps512 = 912 674 RSASSA-PSS SHA512 RSASSA-PSS 256
+    x509-eddsa = 1087 0 ED25519 UNDEF ED25519 128
+  }
+  case X509_get_signature_nid(x) of
+    NID_sha256WithRSAEncryption:
+      result := caaRS256;
+    NID_sha384WithRSAEncryption:
+      result := caaRS384;
+    NID_sha512WithRSAEncryption:
+      result := caaRS512;
+    NID_ecdsa_with_SHA256:
+      result := caaES256;
+    NID_ecdsa_with_SHA384:
+      result := caaES384;
+    NID_ecdsa_with_SHA512:
+      result := caaES512;
+    NID_rsassaPss:
+      begin
+        X509_get_signature_info(x, @md, nil, nil, nil);
+        case md of
+          NID_sha256:
+            result := caaPS256;
+          NID_sha384:
+            result := caaPS384;
+          NID_sha512:
+            result := caaPS512;
+        end;
+      end;
+    NID_ED25519:
+      result := caaEdDSA;
+  end;
+  if result = caaES256K then
+    raise EOpenSslCert.Create('Unexpected X509Algo()');
+end;
+
+function _CreateDummyCertificate(const Stuff: RawUtf8;
+  const CertName: RawUtf8; Marker: cardinal): RawByteString;
+const
+  EXPIRED_DATE = '20000101000000Z'; // won't be taken into account anyway
+var
+  x: PX509;
+  key: PEVP_PKEY;
+  len: integer;
+  value: RawUtf8;
+begin
+  x := NewCertificate;
+  x.SetBasic(true);
+  x.SetUsage([kuKeyCertSign]);
+  X509_get_subject_name(x)^.AddEntry('CN', CertName);
+  key := OpenSslGenerateKeys(EVP_PKEY_EC, NID_X9_62_prime256v1); // smaller
+  X509_set_pubkey(x, key);
+  X509_set_issuer_name(x, X509_get_subject_name(x));
+  ASN1_TIME_set_string_X509(X509_get0_notAfter(x),  EXPIRED_DATE);
+  ASN1_TIME_set_string_X509(X509_get0_notBefore(x), EXPIRED_DATE);
+  len := length(Stuff);
+  SetLength(value, len + 8);
+  PCardinalArray(value)[0] := Marker;
+  BinToHex(@len, @PCardinalArray(value)[1], 2);
+  MoveFast(pointer(Stuff)^, PCardinalArray(value)[2], len);
+  x.SetExtension(NID_netscape_comment, value); // free-form text comment
+  x.Sign(key, EVP_sha1); // self-signed
+  result := x.ToBinary;  // DER format is a proper SEQ $30 ASN1 block
+  x.Free;
 end;
 
 
@@ -2381,7 +2789,7 @@ begin
   if (TAesFast[mGcm] = TAesGcmOsl) or
      not OpenSslIsAvailable then
     exit;
-  // set the fastest AES implementation classes
+  // set the fastest AES implementation classes according to the actual platform
   TAesFast[mGcm] := TAesGcmOsl;
   {$ifdef HASAESNI}
     // mormot.crypt.core x86_64 asm is faster than OpenSSL - but GCM
@@ -2397,20 +2805,22 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
-  // redirects raw mormot.crypt.ecc256r1 functions to the much faster OpenSSL
+  // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
+  // register OpenSSL methods to our high-level cryptographic catalog
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for osa := low(osa) to high(osa) do
   begin
     CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
     CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
   end;
-  // not stable enough yet
-  //CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
+  CreateDummyCertificate := _CreateDummyCertificate;
 end;
 
 procedure FinalizeUnit;

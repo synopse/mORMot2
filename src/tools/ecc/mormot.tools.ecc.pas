@@ -27,13 +27,13 @@ uses
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.crypt.secure,
   mormot.core.search,
+  mormot.crypt.secure,
   mormot.crypt.ecc,
   mormot.crypt.ecc256r1,
   mormot.crypt.core,
   mormot.app.console;
-  
+
 
 { **************** Implement End-User Commands }
 

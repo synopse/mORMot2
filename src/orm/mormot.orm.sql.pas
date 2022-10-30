@@ -139,7 +139,7 @@ type
     // the real external table columns (e.g. as TEXT for variant)
     // - returns 0 on error, or the Updated/Inserted ID
     function ExecuteFromJson(const SentData: RawUtf8; Occasion: TOrmOccasion;
-      UpdatedID: TID): TID;
+      UpdatedID: TID; BatchOptions: TRestBatchOptions): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JsonDecodedPrepareToSql(var Decoder: TJsonObjectDecoder;
       out ExternalFields: TRawUtf8DynArray; out Types: TSqlDBFieldTypeArray;
@@ -188,7 +188,7 @@ type
     function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
   public
     /// initialize the remote database connection
-    // - you should not use this, but rather call VirtualTableExternalRegister()
+    // - you should not use this, but rather call OrmMapExternal()
     // - OrmProps.ExternalDatabase will map the associated TSqlDBConnectionProperties
     // - OrmProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any databas<e schema prefix
@@ -262,13 +262,13 @@ type
     function ComputeSql(var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 
     /// retrieve the REST server instance corresponding to an external TOrm
-    // - just map aServer.StaticVirtualTable[] and will return nil if not
+    // - just map aServer.GetVirtualStorage(aClass) and will return nil if not
     // a TRestStorageExternal
     // - you can use it e.g. to call MapField() method in a fluent interface
     class function Instance(aClass: TOrmClass;
       aServer: TRestOrmServer): TRestStorageExternal;
     /// retrieve the external database connection associated to a TOrm
-    // - just map aServer.StaticVirtualTable[] and will return nil if not
+    // - just map aServer.GetVirtualStorage(aClass) and will return nil if not
     // a TRestStorageExternal
     class function ConnectionProperties(aClass: TOrmClass;
       aServer: TRestOrmServer): TSqlDBConnectionProperties; overload;
@@ -356,8 +356,8 @@ type
   end;
 
   /// mormot.db.sql-based virtual table for accessing any external database
-  // - for ORM access, you should use VirtualTableExternalRegister method to
-  //   associate this virtual table module to any TOrm class
+  // - for ORM access, you should use the OrmMapExternal() function to
+  // associate this virtual table module to any TOrm class
   // - transactions are handled by this module, according to the external database
   TOrmVirtualTableExternal = class(TOrmVirtualTable)
   public { overridden methods }
@@ -422,56 +422,51 @@ type
 // - typical usage is therefore for instance:
 // !  Props := TOleDBMSSQLConnectionProperties.Create('.\SQLEXPRESS','AdventureWorks2008R2','','');
 // !  Model := TOrmModel.Create([TOrmCustomer],'root');
-// !  VirtualTableExternalRegister(Model,TOrmCustomer,Props,'Sales.Customer');
+// !  OrmMapExternal(Model,TOrmCustomer,Props,'Sales.Customer');
 // !  Server := TRestServerDB.Create(aModel,'application.db'),true)
 // - the supplied aExternalDB parameter is stored within aClass.OrmProps, so
 // the instance must stay alive until all database access to this external table
 // is finished (e.g. use a private/protected property)
 // - aMappingOptions can be specified now, or customized later
-// - server-side may omit a call to VirtualTableExternalRegister() if the need of
+// - server-side may omit a call to OrmMapExternal() if the need of
 // an internal database is expected: it will allow custom database configuration
 // at runtime, depending on the customer's expectations (or license)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+// - this method would allow to chain MapField() or MapAutoKeywordFields
+// definitions, in a fluent interface, to refine the fields mapping
+function OrmMapExternal(aModel: TOrmModel; aClass: TOrmClass;
   aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8 = '';
-  aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
+  aMappingOptions: TOrmMappingOptions = []): POrmMapping; overload;
 
 /// register several tables of the model to be external
-// - just a wrapper over the overloaded VirtualTableExternalRegister() method
-function VirtualTableExternalRegister(aModel: TOrmModel;
+// - just a wrapper over the overloaded OrmMapExternal() method
+function OrmMapExternal(aModel: TOrmModel;
   const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
-
-/// register one table of the model to be external, with optional mapping
-// - this method would allow to chain MapField() or MapAutoKeywordFields
-// definitions, in a fluent interface:
-function VirtualTableExternalMap(aModel: TOrmModel;
-  aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  const aExternalTableName: RawUtf8 = '';
-  aMapping: TOrmPropertiesMappingOptions = []): POrmPropertiesMapping;
+  aMappingOptions: TOrmMappingOptions = []): boolean; overload;
 
 type
-  /// all possible options for VirtualTableExternalRegisterAll/TRestExternalDBCreate
+  /// all possible options for OrmMapExternalAll/TRestExternalDBCreate
   // - by default, TAuthUser and TAuthGroup tables will be handled via the
   // external DB, but you can avoid it for speed when handling session and security
-  // by setting regDoNotRegisterUserGroupTables
+  // by setting regDoNotRegisterUserGroupTables - it would also allow to encrypt
+  // the SQLite3 instance and its authentication information for higher security
   // - you can set regMapAutoKeywordFields to ensure that the mapped field names
   // won't conflict with a SQL reserved keyword on the external database by
   // mapping a name with a trailing '_' character for the external column
   // - regClearPoolOnConnectionIssue will call ClearConnectionPool when a
   // connection-linked exception is discovered
-  TVirtualTableExternalRegisterOption = (
+  TOrmMapExternalOption = (
     regDoNotRegisterUserGroupTables,
     regMapAutoKeywordFields,
     regClearPoolOnConnectionIssue);
 
-  /// set of options for VirtualTableExternalRegisterAll/TRestExternalDBCreate functions
-  TVirtualTableExternalRegisterOptions = set of TVirtualTableExternalRegisterOption;
+  /// set of options for OrmMapExternalAll/TRestExternalDBCreate functions
+  TOrmMapExternalOptions = set of TOrmMapExternalOption;
 
 /// register all tables of the model to be external, with some options
 // - by default, all tables are handled by the SQLite3 engine, unless they
-// are explicitly declared as external via VirtualTableExternalRegister: this
+// are explicitly declared as external via OrmMapExternal: this
 // function can be used to register all tables to be handled by an external DBs
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)
@@ -485,18 +480,9 @@ type
 // mapping or connection loss detection
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+function OrmMapExternalAll(aModel: TOrmModel;
   aExternalDB: TSqlDBConnectionProperties;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
-
-/// register all tables of the model to be external
-// - mainly for retro-compatibility with existing code
-// - just a wrapper around the VirtualTableExternalRegisterAll() overloaded
-// function with some boolean flags instead of TVirtualTableExternalRegisterOptions
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSqlDBConnectionProperties;
-  DoNotRegisterUserGroupTables: boolean = false;
-  ClearPoolOnConnectionIssue: boolean = false): boolean; overload;
+  aExternalOptions: TOrmMapExternalOptions): boolean; overload;
 
 
 /// create a new TRest instance, and possibly an external database, from its
@@ -505,12 +491,39 @@ function VirtualTableExternalRegisterAll(aModel: TOrmModel;
 // of this kind will be created and returned
 // - if aDefinition.Kind is a registered TSqlDBConnectionProperties class name,
 // it will instantiate an in-memory TRestServerDB or a TRestServerFullMemory
-// instance, then call VirtualTableExternalRegisterAll() on this connection
+// instance, then call OrmMapExternalAll() on this connection
 // - will return nil if the supplied aDefinition does not match any registered
 // TRest or TSqlDBConnectionProperties types
 function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): TRest; overload;
+  aExternalOptions: TOrmMapExternalOptions): TRest; overload;
+
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+type
+  TVirtualTableExternalRegisterOptions = TOrmMappingOptions;
+
+function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8 = '';
+  aMappingOptions: TVirtualTableExternalRegisterOptions = []): boolean; overload;
+function VirtualTableExternalRegister(aModel: TOrmModel;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  aMappingOptions: TVirtualTableExternalRegisterOptions = []): boolean; overload;
+function VirtualTableExternalMap(aModel: TOrmModel;
+  aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  const aExternalTableName: RawUtf8 = '';
+  aMapping: TVirtualTableExternalRegisterOptions = []): POrmMapping;
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  aExternalOptions: TOrmMapExternalOptions): boolean; overload;
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  DoNotRegisterUserGroupTables: boolean = false;
+  ClearPoolOnConnectionIssue: boolean = false): boolean; overload;
+
+{$endif PUREMORMOT2}
 
 
 implementation
@@ -603,7 +616,7 @@ var
   Field: TSqlDBColumnCreate;
   TableCreated, TableModified: boolean;
   CreateColumns: TSqlDBColumnCreateDynArray;
-  options: TOrmPropertiesMappingOptions;
+  options: TOrmMappingOptions;
 begin
   // initialize external DB properties
   options := fStoredClassMapping^.options;
@@ -915,7 +928,7 @@ begin
         for f := 0 to high(stmt.OrderByField) do
         begin
           W.AddString(fStoredClassMapping^.FieldNameByIndex(stmt.OrderByField[f] - 1));
-          if byte(f) in stmt.OrderByFieldDesc then
+          if FieldBitGet(stmt.OrderByFieldDesc, f) then
             W.AddShorter(' desc');
           W.AddComma;
         end;
@@ -1009,7 +1022,7 @@ procedure TRestStorageExternal.InternalBatchStop;
 var
   i, j, n, max, BatchBegin, BatchEnd, ValuesMax: PtrInt;
   Query: ISqlDBStatement;
-  NotifySQLEvent: TOrmEvent;
+  ev: TOrmEvent;
   SQL: RawUtf8;
   P: PUtf8Char;
   Fields, ExternalFields: TRawUtf8DynArray;
@@ -1059,12 +1072,13 @@ begin
                 case Occasion of
                   ooInsert:
                     // mPost=INSERT with the supplied fields and computed ID
-                    Decode.Decode(P, nil, pQuoted, fBatchIDs[i], true);
+                    Decode.DecodeInPlace(P, nil, pQuoted, fBatchIDs[i], true);
                   ooUpdate:
                     // mPut=UPDATE with the supplied fields and ID set appart
-                    Decode.Decode(P, nil, pQuoted, 0, true);
+                    Decode.DecodeInPlace(P, nil, pQuoted, 0, true);
                 end;
-                RecordVersionFieldHandle(Occasion, Decode);
+                if fStoredClassRecordProps.RecordVersionField <> nil then
+                  RecordVersionFieldHandle(Occasion, Decode);
                 if {%H-}Fields = nil then
                 begin
                   Decode.AssignFieldNamesTo(Fields);
@@ -1166,12 +1180,13 @@ begin
       if fBatchMethod in [mPost, mPut] then
       begin
         if fBatchMethod = mPost then
-          NotifySQLEvent := oeAdd
+          ev := oeAdd
         else
-          NotifySQLEvent := oeUpdate;
-        for i := 0 to fBatchCount - 1 do
-          Owner.InternalUpdateEvent(NotifySQLEvent,
-            fStoredClassProps.TableIndex, fBatchIDs[i], fBatchValues[i], nil, nil);
+          ev := oeUpdate;
+        if Owner.InternalUpdateEventNeeded(ev, fStoredClassProps.TableIndex) then
+          for i := 0 to fBatchCount - 1 do
+            Owner.InternalUpdateEvent(ev, fStoredClassProps.TableIndex,
+              fBatchIDs[i], fBatchValues[i], nil, nil);
       end;
       Owner.FlushInternalDBCache;
     end;
@@ -1181,6 +1196,7 @@ begin
     fBatchCount := 0;
     fBatchCapacity := 0;
     fBatchMethod := mNone;
+    fBatchOptions := [];
     StorageUnLock;
   end;
 end;
@@ -1230,7 +1246,7 @@ begin
     else
     begin
       // regular insert with EngineLockedNextID (UpdatedID=0)
-      result := ExecuteFromJson(SentData, ooInsert, 0);
+      result := ExecuteFromJson(SentData, ooInsert, 0, fBatchOptions);
       if (result > 0) and
          (Owner <> nil) then
       begin
@@ -1261,7 +1277,7 @@ begin
   else
   begin
     // regular update
-    result := ExecuteFromJson(SentData, ooUpdate, ID) = ID;
+    result := ExecuteFromJson(SentData, ooUpdate, ID, fBatchOptions) = ID;
     if result and
        (Owner <> nil) then
     begin
@@ -1375,23 +1391,27 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   stmt: ISqlDBStatement;
+  w: TJsonWriter;
 begin
   // TableModelIndex is not useful here
   result := '';
   if (self = nil) or
      (ID <= 0) then
     exit;
-  stmt := PrepareDirectForRows(pointer(fSelectOneDirectSQL), [], [ID]);
-  if stmt <> nil then
   try
-    // Expanded=true -> '[{"ID":10,...}]'#10
-    stmt.ExecutePreparedAndFetchAllAsJson(true, result);
-    if IsNotAjaxJson(pointer(result)) then
-      // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
-      result := ''
-    else
-      // list '[{...}]'#10 -> object '{...}'
-      TrimChars(result, 1, 2);
+    stmt := fProperties.NewThreadSafeStatementPrepared(
+      fSelectOneDirectSQL, {results=}true, {except=}true);
+    if stmt = nil then
+      exit;
+    stmt.Bind(1, ID);
+    stmt.ExecutePrepared;
+    w := AcquireJsonWriter;
+    try
+      stmt.StepToJson(w);
+      w.SetText(result);
+    finally
+      ReleaseJsonWriter(w);
+    end;
   except
     stmt := nil;
     HandleClearPoolOnConnectionIssue;
@@ -1963,7 +1983,7 @@ begin
     result := nil
   else
   begin
-    result := TRestStorageExternal(aServer.StaticVirtualTable[aClass]);
+    result := TRestStorageExternal(aServer.GetVirtualStorage(aClass));
     if result <> nil then
       if not result.InheritsFrom(TRestStorageExternal) then
         result := nil;
@@ -2006,7 +2026,7 @@ begin
 end;
 
 function TRestStorageExternal.ExecuteFromJson(const SentData: RawUtf8;
-  Occasion: TOrmOccasion; UpdatedID: TID): TID;
+  Occasion: TOrmOccasion; UpdatedID: TID; BatchOptions: TRestBatchOptions): TID;
 var
   Decoder: TJsonObjectDecoder;
   SQL: RawUtf8;
@@ -2015,6 +2035,7 @@ var
   InsertedID: TID;
   F: PtrInt;
   stmt: ISqlDBStatement;
+  tmp: TSynTempBuffer;
 begin
   result := 0;
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ExtExecuteFromJson' {$endif});
@@ -2039,41 +2060,47 @@ begin
         [self, StoredClass, ToText(Occasion)^]);
     end;
     // decode fields
-    if (fEngineAddForcedID <> 0) and
-       (InsertedID = fEngineAddForcedID) then
-      Decoder.Decode(SentData, nil, pNonQuoted, 0, true)
-    else
-      Decoder.Decode(SentData, nil, pNonQuoted, InsertedID, true);
-    if (Decoder.FieldCount = 0) and
-       (Occasion = ooUpdate) then
-    begin
-      // SentData='' -> no column to update
-      result := UpdatedID;
-      exit;
-    end;
-    RecordVersionFieldHandle(Occasion, Decoder);
-    // compute SQL statement and associated bound parameters
-    SQL := JsonDecodedPrepareToSql(
-      Decoder, ExternalFields, Types, Occasion, [], {array=}false);
-    if Occasion = ooUpdate then
-      // Int64ToUtf8(var) fails on D2007
-      Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
-    // execute statement
+    tmp.Init(SentData);
     try
-      stmt := fProperties.NewThreadSafeStatementPrepared(
-        SQL, {results=}false, {except=}true);
-      if stmt = nil then
+      if (fEngineAddForcedID <> 0) and
+         (InsertedID = fEngineAddForcedID) then
+        Decoder.Decode(tmp, nil, pNonQuoted, 0, true)
+      else
+        Decoder.Decode(tmp, nil, pNonQuoted, InsertedID, true);
+      if (Decoder.FieldCount = 0) and
+         (Occasion = ooUpdate) then
+      begin
+        // SentData='' -> no column to update
+        result := UpdatedID;
         exit;
-      for F := 0 to Decoder.FieldCount - 1 do
-        if Decoder.FieldTypeApproximation[F] = ftaNull then
-          stmt.BindNull(F + 1)
-        else
-          stmt.Bind(F + 1, Types[F], Decoder.FieldValues[F], true);
-      stmt.ExecutePrepared;
-    except
-      stmt := nil;
-      HandleClearPoolOnConnectionIssue;
-      exit; // leave result=0
+      end;
+      if fStoredClassRecordProps.RecordVersionField <> nil then
+        RecordVersionFieldHandle(Occasion, Decoder);
+      // compute SQL statement and associated bound parameters
+      SQL := JsonDecodedPrepareToSql(
+        Decoder, ExternalFields, Types, Occasion, BatchOptions, {array=}false);
+      if Occasion = ooUpdate then
+        // Int64ToUtf8(var) fails on D2007
+        Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
+      // execute statement
+      try
+        stmt := fProperties.NewThreadSafeStatementPrepared(
+          SQL, {results=}false, {except=}true);
+        if stmt = nil then
+          exit;
+        for F := 0 to Decoder.FieldCount - 1 do
+          if Decoder.FieldTypeApproximation[F] = ftaNull then
+            stmt.BindNull(F + 1)
+          else
+            stmt.Bind(F + 1, Types[F], Decoder.FieldValues[F], true);
+        stmt.ExecutePrepared;
+      except
+        stmt := nil;
+        HandleClearPoolOnConnectionIssue;
+        exit; // leave result=0
+      end;
+    finally
+      tmp.Done;
     end;
     // mark success
     if UpdatedID = 0 then
@@ -2108,11 +2135,19 @@ begin
   SetLength(ExternalFields, Decoder.FieldCount);
   for f := 0 to Decoder.FieldCount - 1 do
   begin
-    k := fStoredClassRecordProps.Fields.IndexByNameOrExcept(
-      Decoder.FieldNames[f]);
-    ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
-    // retrieve mormot.db.sql Types[f]
-    k := fFieldsInternalToExternal[k + 1];
+    if IsRowID(Decoder.FieldNames[f], Decoder.FieldNamesL[f]) then
+      k := VIRTUAL_TABLE_ROWID_COLUMN
+    else
+    begin
+      k := fStoredClassRecordProps.Fields.IndexByName(Decoder.FieldNames[f]);
+      if k < 0 then
+        k := -2;
+    end;
+    if k >= VIRTUAL_TABLE_ROWID_COLUMN then
+    begin
+      ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
+      k := fFieldsInternalToExternal[k + 1];
+    end;
     if k < 0 then
       raise ERestStorage.CreateUtf8(
         '%.JsonDecodedPrepareToSql(%): No column for [%] field in table %',
@@ -2496,14 +2531,14 @@ end;
 
 { *********** External SQL Database Engines Registration }
 
-function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+function OrmMapExternal(aModel: TOrmModel; aClass: TOrmClass;
   aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): POrmMapping;
 var
   ExternalTableName: RawUtf8;
   Props: TOrmModelProperties;
 begin
-  result := False;
+  result := nil;
   if (aModel = nil) or
      (aClass = nil) or
      (aExternalDB = nil) then
@@ -2522,40 +2557,25 @@ begin
     aExternalDB.SqlFullTableName(ExternalTableName), aExternalDB, aMappingOptions);
 end;
 
-function VirtualTableExternalRegister(aModel: TOrmModel;
+function OrmMapExternal(aModel: TOrmModel;
   const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  aMappingOptions: TOrmPropertiesMappingOptions): boolean;
+  aMappingOptions: TOrmMappingOptions): boolean;
 var
   i: PtrInt;
 begin
   result := true;
-  for i := 0 to High(aClass) do
-    if not VirtualTableExternalRegister(
-       aModel, aClass[i], aExternalDB, '', aMappingOptions) then
+  for i := 0 to high(aClass) do
+    if OrmMapExternal(aModel, aClass[i], aExternalDB, '', aMappingOptions) = nil then
       result := false;
 end;
 
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+function OrmMapExternalAll(aModel: TOrmModel;
   aExternalDB: TSqlDBConnectionProperties;
-  DoNotRegisterUserGroupTables, ClearPoolOnConnectionIssue: boolean): boolean;
-var
-  opt: TVirtualTableExternalRegisterOptions;
-begin
-  opt := []; // to call the overloaded function below with proper options
-  if DoNotRegisterUserGroupTables then
-    include(opt, regDoNotRegisterUserGroupTables);
-  if ClearPoolOnConnectionIssue then
-    include(opt, regClearPoolOnConnectionIssue);
-  result := VirtualTableExternalRegisterAll(aModel, aExternalDB, opt);
-end;
-
-function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSqlDBConnectionProperties;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): boolean;
+  aExternalOptions: TOrmMapExternalOptions): boolean;
 var
   i: PtrInt;
   rec: TOrmClass;
-  opt: TOrmPropertiesMappingOptions;
+  opt: TOrmMappingOptions;
 begin
   result := (aModel <> nil) and
             (aExternalDB <> nil);
@@ -2571,27 +2591,16 @@ begin
        (rec.InheritsFrom (TAuthGroup) or
         rec.InheritsFrom(TAuthUser)) then
       continue
-    else if not VirtualTableExternalRegister(aModel, rec, aExternalDB, '', opt) then
+    else if OrmMapExternal(aModel, rec, aExternalDB, '', opt) = nil then
       result := false
     else if regMapAutoKeywordFields in aExternalOptions then
       aModel.TableProps[i].ExternalDB.MapAutoKeywordFields;
   end;
 end;
 
-function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
-  aMapping: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
-begin
-  if VirtualTableExternalRegister(aModel, aClass, aExternalDB,
-    aExternalTableName, aMapping) then
-    result := @aModel.Props[aClass].ExternalDB
-  else
-    result := nil;
-end;
-
 function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aExternalOptions: TVirtualTableExternalRegisterOptions): TRest;
+  aExternalOptions: TOrmMapExternalOptions): TRest;
 var
   propsClass: TSqlDBConnectionPropertiesClass;
   props: TSqlDBConnectionProperties;
@@ -2607,9 +2616,9 @@ begin
       // aDefinition.Kind was a TSqlDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,
         aDefinition.DatabaseName, aDefinition.User, aDefinition.PassWordPlain);
-      VirtualTableExternalRegisterAll(aModel, props, aExternalOptions);
+      OrmMapExternalAll(aModel, props, aExternalOptions);
       // instantiate either a SQLite3 :memory: DB or a TRestServerFullMemory
-      result := CreateInMemoryServerForAllVirtualTables(
+      result := CreateInMemoryServer(
         aModel, aHandleAuthentication);
     except
       FreeAndNilSafe(result);
@@ -2621,6 +2630,54 @@ begin
     result := TRest.CreateTryFrom(aModel, aDefinition, aHandleAuthentication);
 end;
 
+
+// backward compatibility types redirections
+{$ifndef PUREMORMOT2}
+
+function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
+  aMappingOptions: TVirtualTableExternalRegisterOptions): boolean;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aExternalTableName,
+    aMappingOptions) <> nil;
+end;
+
+function VirtualTableExternalRegister(aModel: TOrmModel;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
+  aMappingOptions: TVirtualTableExternalRegisterOptions): boolean;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aMappingOptions);
+end;
+
+function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
+  aMapping: TVirtualTableExternalRegisterOptions): POrmMapping;
+begin
+  result := OrmMapExternal(aModel, aClass, aExternalDB, aExternalTableName, aMapping);
+end;
+
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties;
+  aExternalOptions: TOrmMapExternalOptions): boolean;
+begin
+  result := OrmMapExternalAll(aModel, aExternalDB, aExternalOptions);
+end;
+
+function VirtualTableExternalRegisterAll(aModel: TOrmModel;
+  aExternalDB: TSqlDBConnectionProperties; DoNotRegisterUserGroupTables: boolean;
+  ClearPoolOnConnectionIssue: boolean): boolean;
+var
+  opt: TOrmMapExternalOptions;
+begin
+  opt := []; // to call the overloaded function below with proper options
+  if DoNotRegisterUserGroupTables then
+    include(opt, regDoNotRegisterUserGroupTables);
+  if ClearPoolOnConnectionIssue then
+    include(opt, regClearPoolOnConnectionIssue);
+  result := OrmMapExternalAll(aModel, aExternalDB, opt);
+end;
+
+{$endif PUREMORMOT2}
 
 
 end.

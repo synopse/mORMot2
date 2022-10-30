@@ -195,7 +195,7 @@ begin
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
   fMaskSentFrames := FRAME_LEN_MASK;
-  inherited Create(aSender, aProtocol, 0, nil, nil, @aSender.fSettings, aProcessName);
+  inherited Create(aSender, aProtocol, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fConnectionID := aConnectionID;
   fClientThread := TWebSocketProcessClientThread.Create(self);
@@ -350,8 +350,9 @@ begin
     else
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
-      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnectionID,
-        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags, nil);
+      Ctxt := THttpServerRequest.Create(nil, fProcess.Protocol.ConnectionID,
+        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags,
+        fProcess.Protocol.ConnectionOpaque);
       try
         body := Data;
         if InStream <> nil then
@@ -424,6 +425,7 @@ begin
       exit;
     end;
     try
+      // setup the new protocol instance
       if aProtocol = nil then
         if aWebSocketsAjax then
           aProtocol := TWebSocketProtocolJson.Create(aWebSocketsURI)
@@ -431,6 +433,7 @@ begin
           aProtocol := TWebSocketProtocolBinary.Create(aWebSocketsURI, false,
             aWebSocketsEncryptionKey, @fSettings, aWebSocketsBinaryOptions);
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
+      // send initial upgrade request
       RequestSendHeader(aWebSocketsURI, 'GET');
       TAesPrng.Main.FillRandom(key);
       bin1 := BinToBase64(@key, SizeOf(key));
@@ -442,17 +445,20 @@ begin
                 'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
          (extout <> '') then
-        SockSend(['Sec-WebSocket-Extensions: ', extout]);
+        SockSend(['Sec-WebSocket-Extensions: ', extout]); // e.g. TEcdheProtocol
       if aCustomHeaders <> '' then
         SockSend(aCustomHeaders);
       SockSendCRLF;
       SockSendFlush('');
+      // validate the response as WebSockets upgrade
       SockRecvLn(cmd);
       GetHeader(false);
+      result := cmd;
+      if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') then
+        exit; // return the unexpected command line as error message
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
-      if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') or
-         not (hfConnectionUpgrade in Http.HeaderFlags) or
+      if not (hfConnectionUpgrade in Http.HeaderFlags) or
          (Http.ContentLength > 0) or
          not IdemPropNameU(Http.Upgrade, 'websocket') or
          not aProtocol.SetSubprotocol(prot) then
@@ -466,6 +472,7 @@ begin
         exit;
       if extout <> '' then
       begin
+        // process protocol extension (e.g. TEcdheProtocol handshake)
         result := 'Invalid HTTP Upgrade ProcessHandshake';
         extin := HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
         CsvToRawUtf8DynArray(pointer(extin), extins, ';', true);

@@ -88,7 +88,7 @@ type
     fPendingGet: TRawUtf8List;
     function GetHttpPort: RawUtf8;
     // creates TPostConnection and TRtspConnection instances for a given stream
-    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
+    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
@@ -234,7 +234,7 @@ type
   end;
 
 function TRtspOverHttpServer.ConnectionCreate(aSocket: TNetSocket;
-  const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
+  const aRemoteIp: TNetAddr; out aConnection: TAsyncConnection): boolean;
 var
   log: ISynLog;
   sock, get, old: TProxySocket;
@@ -267,7 +267,7 @@ begin
     sock := TProxySocket.Create(nil);
     try
       sock.AcceptRequest(aSocket, nil);
-      sock.RemoteIP := aRemoteIp;
+      aRemoteIp.IP(sock.fRemoteIP);
       sock.CreateSockIn; // faster header process (released below once not needed)
       parse := sock.GetRequest({withBody=}false, {headertix=}0);
       if (parse = grHeaderReceived) and
@@ -282,7 +282,7 @@ begin
         fPendingGet.Safe.WriteLock;
         try
           found := -1;
-          now := mormot.core.os.GetTickCount64 shr 10;
+          now := GetTickCount64 shr 10;
           for i := fPendingGet.Count - 1 downto 0 do
           begin
             old := fPendingGet.ObjectPtr[i];
@@ -296,7 +296,7 @@ begin
             else if fPendingGet[i] = cookie then
               found := i;
           end;
-          if IdemPropNameU(sock.Method, 'GET') then
+          if IsGet(sock.Method) then
           begin
             if found >= 0 then
               PendingDelete(found, 'duplicated')
@@ -318,7 +318,7 @@ begin
               result := true;
             end;
           end
-          else if IdemPropNameU(sock.Method, 'POST') then
+          else if IsPost(sock.Method) then
           begin
             if found < 0 then
             begin
@@ -342,7 +342,7 @@ begin
       end
       else if log <> nil then
         log.Log(sllDebug, 'ConnectionCreate rejected % % % % % %',
-          [ToText(parse)^, sock.Http.Command, sock, sock.Method, sock.URL,
+          [ToText(parse)^, sock.Http.CommandResp, sock, sock.Method, sock.URL,
            sock.Http.Headers], self);
     finally
       sock.Free;

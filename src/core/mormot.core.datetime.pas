@@ -439,6 +439,9 @@ type
     // - handle UTC/GMT time zone by default, and allow a 'Date: ' prefix
     procedure ToHttpDate(out text: RawUtf8; const tz: RawUtf8 = 'GMT';
       const prefix: RawUtf8 = '');
+    /// convert the stored date and time to its text in HTTP-like format
+    procedure ToHttpDateShort(var text: shortstring; const tz: RawUtf8 = 'GMT';
+      const prefix: RawUtf8 = '');
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
     procedure ToIsoDateTime(out text: RawUtf8; const FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date into its Iso-8601 text with no time part
@@ -513,15 +516,14 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
 
-var
-  /// contains the current UTC timestamp as the full 'Date' HTTP header line
-  // - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
-  // - needs to be refreshed by an explicit SetHttpDateNowUtcCache() call
-  HttpDateNowUtcCache: RawUtf8;
+type
+  THttpDateNowUtc = string[37];
 
-/// refresh HttpDateNowUtcCache if needed
-// - won't overwrite the current value when called more than once per second
-procedure SetHttpDateNowUtcCache(tix: Int64 = 0);
+/// returns the current UTC timestamp as the full 'Date' HTTP header line
+// - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
+// - returns as a shortstring to avoid a memory allocation by caller
+// - use an internal cache for every second refresh
+function HttpDateNowUtc: THttpDateNowUtc;
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -558,6 +560,10 @@ const
   // - may be used to check for a valid just-generated Unix timestamp value
   // - or used to store a timestamp without any 32-bit "Year 2038" overflow
   UNIXTIME_MINIMAL = 1481187020;
+
+/// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
+function UnixTimeMinimalUtc: cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a second-based c-encoded time as TDateTime
 //  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
@@ -2038,10 +2044,19 @@ begin
 end;
 
 procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz, prefix: RawUtf8);
+var
+  tmp: shortstring;
+begin
+  ToHttpDateShort(tmp, tz, prefix);
+  FastSetString(text, @tmp[1], ord(tmp[0]));
+end;
+
+procedure TSynSystemTime.ToHttpDateShort(
+  var text: shortstring; const tz, prefix: RawUtf8);
 begin
   if DayOfWeek = 0 then
     PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
-  FormatUtf8('%%, % % % %:%:% %', [
+  FormatShort('%%, % % % %:%:% %', [
     prefix,
     HTML_WEEK_DAYS[DayOfWeek],
     UInt2DigitsToShortFast(Day),
@@ -2319,21 +2334,30 @@ begin
 end;
 
 var
+  _HttpDateNowUtc: THttpDateNowUtc;
+  _HttpDateNowUtcLock: TLightLock;
   _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
 
-procedure SetHttpDateNowUtcCache(tix: Int64);
+function HttpDateNowUtc: THttpDateNowUtc;
 var
-  T: TSynSystemTime;
   c: cardinal;
+  T: TSynSystemTime;
+  now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
 begin
-  if tix = 0 then
-    tix := GetTickCount64;
-  c := tix shr 10;
-  if c = _HttpDateNowUtcTix then
-    exit;
-  T.FromNowUtc;
-  T.ToHttpDate(HttpDateNowUtcCache, 'GMT'#13#10, 'Date: ');
-  _HttpDateNowUtcTix := c; // should be the last assignment
+  c := GetTickCount64 shr 10;
+  _HttpDateNowUtcLock.Lock;
+  if c <> _HttpDateNowUtcTix then
+  begin
+    _HttpDateNowUtcLock.UnLock;
+    T.FromNowUtc;
+    T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
+    c := GetTickCount64 shr 10;
+    _HttpDateNowUtcLock.Lock;
+    _HttpDateNowUtcTix := c;
+    _HttpDateNowUtc := now;
+  end;
+  MoveFast(_HttpDateNowUtc[0], result[0], ord(_HttpDateNowUtc[0]) + 1);
+  _HttpDateNowUtcLock.UnLock;
 end;
 
 function TimeToString: RawUtf8;
@@ -2375,6 +2399,11 @@ end;
 
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
+
+function UnixTimeMinimalUtc: cardinal;
+begin
+  result := UnixTimeUtc - UNIXTIME_MINIMAL;
+end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
 begin
@@ -2686,7 +2715,7 @@ begin
     lo := Value;
     {$else}
     lo := PCardinal(@Value)^;
-    {$endif}
+    {$endif CPU64}
     if lo and (1 shl (6 + 6 + 5) - 1) = 0 then
       // no Time: just convert date
       Dest := DateToIso8601PChar(Dest, Expanded,
@@ -2698,7 +2727,7 @@ begin
     if lo shr (6 + 6 + 5) = 0 then
     {$else}
     if Value shr (6 + 6 + 5) = 0 then
-    {$endif}
+    {$endif CPU64}
       // no Date: just convert time
       Dest := TimeToIso8601PChar(Dest, Expanded,
         (lo shr (6 + 6)) and 31,

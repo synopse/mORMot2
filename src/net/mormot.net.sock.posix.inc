@@ -97,6 +97,8 @@ type
   // - we extend it to PtrInt for our TNetSocketWrap cast
   TSocket = PtrInt;
 
+  PSockAddrIn6 = ^sockaddr_in6;
+
   THostEnt = record
     h_name: PAnsiChar;
     h_aliases: PPAnsiChar;
@@ -391,7 +393,7 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  ip4: sockaddr absolute Addr;
+  addr4: sockaddr absolute Addr;
 begin
   FillCharFast(Addr, SizeOf(Addr), 0);
   result := nrNotFound;
@@ -413,8 +415,8 @@ begin
     exit;
   end;
   // check supplied port
-  ip4.sin_port := htons(GetCardinal(pointer(addrport)));
-  if (ip4.sin_port = 0) and
+  addr4.sin_port := htons(GetCardinal(pointer(addrport)));
+  if (addr4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
   // handle simple cases
@@ -423,14 +425,14 @@ begin
      (address = c6Localhost) or
      PropNameEquals(address, 'localhost') then
   begin
-    ip4.sin_family := AF_INET;
-    PCardinal(@ip4.sin_addr)^ := cLocalhost32; // 127.0.0.1
+    addr4.sin_family := AF_INET;
+    PCardinal(@addr4.sin_addr)^ := cLocalhost32; // 127.0.0.1
     exit;
   end
   else if (address = cAnyHost) or
           (address = c6AnyHost) then
   begin
-    ip4.sin_family := AF_INET; // 0.0.0.0
+    addr4.sin_family := AF_INET; // 0.0.0.0
     exit;
   end;
   // resolve name or IP (getaddrinfo is more recent, but addrinfo is not fixed)
@@ -439,10 +441,10 @@ begin
     result := nrNotFound
   else
   begin
-    ip4.sin_family := h^.h_addrtype;
+    addr4.sin_family := h^.h_addrtype;
     case h^.h_addrtype of
       AF_INET:
-         ip4.sin_addr := h^.h_addr^^;
+         addr4.sin_addr := h^.h_addr^^;
       AF_INET6:
          psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else
@@ -512,7 +514,7 @@ function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: system.PInteger): TNetEvents;
 var
   res: integer;
-  p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
+  p: TPollFD; // select() limits p.fd<FD_SETSIZE=1024 on POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
   result := [neError];
@@ -613,7 +615,6 @@ var
   list, info: pifaddrs;
   n: PtrInt;
   s: RawUtf8;
-  ss: ShortString;
 begin
   result := nil;
   n := 0;
@@ -641,15 +642,13 @@ begin
                         IP4Text(@sin_addr, s);
                     tiaIPv4Private:
                       if not IsPublicIP(integer(sin_addr)) then
-                        IP4Text(@sin_addr,s);
+                        IP4Text(@sin_addr, s);
                   end;
           AF_INET6:
             if kind in [tiaAny, tiaIPv6] then
-            begin
-              IP6Short(info^.ifa_addr, ss, false);
-              if Pos('%', ss) = 0 then
-                FastSetString(s, @ss[1], ord(ss[0]));
-            end;
+              with PSockAddrIn6(info^.ifa_addr)^ do
+                if sin6_scope_id = 0 then // don't include scoped IPv6
+                  IP6Text(@sin6_addr, s);
         end;
         if s <> '' then
         begin
@@ -692,7 +691,9 @@ begin
         with psockaddr_dl(info^.ifa_addr)^ do
           if sdl_alen = 6 then
             // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
-            mac := MacToText(@sdl_data[sdl_nlen]);
+            if PCardinal(@sdl_data[sdl_nlen])^ <> 2 then
+              // iOS7+ return always 02:00:00:00:00:00 as MAC addresses :(
+              mac := MacToText(@sdl_data[sdl_nlen]);
         if mac <> '' then
       {$else}
          (info^.ifa_addr^.sa_family = AF_PACKET) then
@@ -702,7 +703,7 @@ begin
         for i := 0 to n - 1 do
           if result[i].Address = mac then
           begin
-            mac := ''; // may appear several times
+            mac := ''; // may appear several times for each IP
             break;
           end;
         if mac <> '' then
@@ -1017,7 +1018,7 @@ type
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
 begin
-  inherited Create(fOwner);
+  inherited Create(aOwner);
   fMaxSockets := 100; // initial value: no limitation in practice and can grow
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
   SetLength(fResults, fMaxSockets);

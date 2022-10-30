@@ -47,7 +47,7 @@ const
   cAnyHost = '0.0.0.0';
   cBroadcast = '255.255.255.255';
   c6Localhost = '::1';
-  c6AnyHost = '::0';
+  c6AnyHost = '::';
   c6Broadcast = 'ffff::1';
   cAnyPort = '0';
   cLocalhost32 = $0100007f;
@@ -146,7 +146,11 @@ type
   public
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     function Family: TNetFamily;
-    function IP(localasvoid: boolean = false): RawUtf8;
+    procedure IP(var res: RawUtf8; localasvoid: boolean = false); overload;
+    function IP(localasvoid: boolean = false): RawUtf8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    function IP4: cardinal;
+      {$ifdef FPC}inline;{$endif}
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
@@ -297,19 +301,38 @@ type
 function IsPublicIP(ip4: cardinal): boolean;
 
 /// convert an IPv4 raw value into a ShortString text
+// - won't use the Operating System network layer API so works on XP too
+// - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 
 /// convert an IPv4 raw value into a RawUtf8 text
+// - zero '0.0.0.0' address  (i.e. bound to any host) is returned as ''
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 
-/// convert an IPv6 full address into a ShortString text
-procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
+/// convert an IPv6 raw value into a ShortString text
+// - will shorten the address using the regular 0 removal scheme, e.g.
+// 2001:00b8:0a0b:12f0:0000:0000:0000:0001 returns '2001:b8:a0b:12f0::1'
+// - zero is returned as '::' and loopback as '::1'
+// - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+// - won't use the Operating System network layer API so is fast and consistent
+procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+
+/// convert an IPv6 raw value into a RawUtf8 text
+// - zero '::' address  (i.e. bound to any host) is returned as ''
+// - loopback address is returned as its '127.0.0.1' IPv4 representation
+// for consistency with our high-level HTTP/REST code
+// - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
 // - returns e.g. '12:50:b6:1e:c6:aa'
 // - could be used to convert some binary buffer into human-friendly hexadecimal
 // string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
 function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
+
+/// convert a MAC address value from its standard hexadecimal text representation
+// - returns e.g. '12:50:b6:1e:c6:aa' from '1250b61ec6aa' or '1250B61EC6AA'
+function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
 
 /// convert a MAC address value into a RawUtf8 hexadecimal text with no ':'
 // - returns e.g. '1250b61ec6aa'
@@ -323,6 +346,10 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 // - may be used to enumerate all adapters
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
+
+/// flush the GetIPAddresses/GetMacAddresses internal cache
+// - may be set to force detection after HW configuration change
+procedure MacIPAddressFlush;
 
 
 type
@@ -387,6 +414,16 @@ type
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 
+  /// callback raised by INetTls.AfterAccept for SNI resolution
+  // - should check the ServerName and return the proper certificate context,
+  // typically one OpenSSL PSSL_CTX instance
+  // - if the ServerName has no match, and the default certificate is good
+  // enough, should return nil
+  // - on any error, should raise an exception
+  // - TLS is an opaque structure, typically OpenSSL PSSL
+  TOnNetTlsAcceptServerName = function(Context: PNetTlsContext; TLS: pointer;
+    const ServerName: RawUtf8): pointer of object;
+
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
@@ -404,10 +441,15 @@ type
   // $ finally
   // $   Free;
   // $ end;
+  // - for passing a PNetTlsContext, use InitNetTlsContext for initialization
   TNetTlsContext = record
     /// output: set by TCrtSocket.OpenBind() method once TLS is established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
+    // - on client: will avoid checking the server certificate, so will
+    // allow to connect and encrypt e.g. with secTLSSelfSigned servers
+    // - on OpenSSL server, should be true if no mutual authentication is done,
+    // i.e. if OnPeerValidate/OnEachPeerVerify callbacks are not set
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
     // - ignored on SChannel
@@ -420,7 +462,8 @@ type
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
     // - not used on SChannel client
     // - on SChannel server, expects a .pfx / PKCS#12 file format including
-    // the certificate and the private key:
+    // the certificate and the private key, e.g. generated from
+    // ICryptCert.SaveToFile(FileName, cccCertWithPrivateKey, ', ccfBinary) or
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
     /// input: PEM file name containing a private key to be loaded
@@ -481,9 +524,13 @@ type
     /// called by INetTls.AfterConnection to retrieve a private password
     // - not used on SChannel
     OnPrivatePassword: TOnNetTlsGetPassword;
+    /// called by INetTls.AfterAccept to set a server/host-specific certificate
+    // - not used on SChannel
+    OnAcceptServerName: TOnNetTlsAcceptServerName;
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
     // bound server certificate context into each accepted connection
     // - so that certificates are decoded only once in AfterBind
+    // - is typically a PSSL_CTX on OpenSSL
     AcceptCert: pointer;
   end;
 
@@ -521,11 +568,36 @@ type
   /// signature of a factory for a new TLS encrypted layer
   TOnNewNetTls = function: INetTls;
 
+  /// event called by HTTPS server to publish HTTP-01 challenges on port 80
+  // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
+  // - the server should send back the returned content as response with
+  // application/octet-stream (i.e. BINARY_CONTENT_TYPE)
+  TOnNetTlsAcceptChallenge = function(const domain, uri: RawUtf8;
+    var content: RawUtf8): boolean;
+
+
+/// initialize a stack-allocated TNetTlsContext instance
+procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
+  const CertificateFile: TFileName = ''; const PrivateKeyFile: TFileName = '';
+  const PrivateKeyPassword: RawUtf8 = ''; const CACertificatesFile: TFileName = '');
+
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
   // - on other targets, could be set by the mormot.lib.openssl11.pas unit
   NewNetTls: TOnNewNetTls;
+
+  /// global callback set to TNetTlsContext.AfterAccept from InitNetTlsContext()
+  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
+  // - any HTTPS server should also publish a HTTP server on port 80 to serve
+  // HTTP-01 challenges via the OnNetTlsAcceptChallenge callback
+  OnNetTlsAcceptServerName: TOnNetTlsAcceptServerName;
+
+  /// global callback used for HTTP-01 Let's Encrypt challenges
+  // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
+  // - any HTTPS server should also publish a HTTP server on port 80 to serve
+  // HTTP-01 challenges associated with the OnNetTlsAcceptServerName callback
+  OnNetTlsAcceptChallenge: TOnNetTlsAcceptChallenge;
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -542,13 +614,17 @@ type
   /// set of events monitored by TPollSocketAbstract
   TPollSocketEvents = set of TPollSocketEvent;
 
-  /// some opaque value (which may be a pointer) associated with a polling event
+  /// some opaque value (typically a pointer) associated with a polling event
   TPollSocketTag = type PtrInt;
   PPollSocketTag = ^TPollSocketTag;
   TPollSocketTagDynArray = TPtrUIntDynArray;
 
   /// modifications notified by TPollSocketAbstract.WaitForModified
-  TPollSocketResult = record
+  {$ifdef CPUINTEL}
+  TPollSocketResult =  packed record
+  {$else}
+  TPollSocketResult =  record // ARM uslaly prefers aligned data
+  {$endif CPUINTEL}
     /// opaque value as defined by TPollSocketAbstract.Subscribe
     // - holds typically a TPollAsyncConnection instance
     tag: TPollSocketTag;
@@ -556,11 +632,12 @@ type
     events: TPollSocketEvents;
   end;
   PPollSocketResult = ^TPollSocketResult;
+  TPollSocketResultDynArray = array of TPollSocketResult;
 
   /// all modifications returned by TPollSocketAbstract.WaitForModified
   TPollSocketResults = record
     // hold [0..Count-1] notified events
-    Events: array of TPollSocketResult;
+    Events: TPollSocketResultDynArray;
     /// how many modifications are currently monitored in Results[]
     Count: PtrInt;
   end;
@@ -669,21 +746,23 @@ type
     fPendingSafe: TLightLock;
     fPollIndex: integer;
     fGettingOne: integer;
-    fLastUnsubscribeTagCount: integer;
     fTerminated: boolean;
     fEpollGettingOne: boolean;
     fUnsubscribeShouldShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
-    fLastUnsubscribeTag: TPollSocketTagDynArray; // protected by fPendingSafe
     // used for select/poll (FollowEpoll=false) with multiple thread-unsafe fPoll[]
     fSubscription: TPollSocketsSubscription;
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
     fPollLock: TRTLCriticalSection;
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
-    function IsValidPending(tag: TPollSocketTag): boolean; virtual;
+    function MergePendingEvents(const new: TPollSocketResults): integer;
+    // virtual methods below could be overridden for O(1) pending state check
+    function EnsurePending(tag: TPollSocketTag): boolean; virtual;
+    procedure SetPending(tag: TPollSocketTag); virtual;
+    function UnsetPending(tag: TPollSocketTag): boolean; virtual;
   public
     /// initialize the sockets polling
     // - under Linux/POSIX, will set the open files maximum number for the
@@ -731,7 +810,15 @@ type
     /// manually append one event to the pending nodifications
     // - ready to be retrieved by GetOnePending
     procedure AddOnePending(aTag: TPollSocketTag; aEvents: TPollSocketEvents;
-      aNoSearch: boolean);
+      aSearchExisting: boolean);
+    /// disable any pending notification associated with a given connection tag
+    // - can be called when a connection is removed from the main logic
+    // to ensure function UnsetPending() never raise any GPF, if the
+    // connection has been set via AddOnePending() but not via Subscribe()
+    function DeleteOnePending(aTag: TPollSocketTag): boolean;
+    /// disable any pending notification associated with several connection tags
+    // - note that aTag array will be sorted during the process
+    function DeleteSeveralPending(aTag: PPollSocketTag; aTagCount: integer): integer;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; override;
     /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
@@ -1102,7 +1189,7 @@ type
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
-    function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
+    function PeerAddress(LocalAsVoid: boolean = false): RawUtf8;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
     function PeerPort: TNetPort;
     /// set the TCP_NODELAY option for the connection
@@ -1323,40 +1410,42 @@ begin
   end;
 end;
 
-function TNetAddr.IP(localasvoid: boolean): RawUtf8;
-var
-  tmp: ShortString;
+procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
 begin
-  result := '';
-  with PSockAddr(@Addr)^ do
-    case sa_family of
-      AF_INET:
-        // check most common used values
-        if cardinal(sin_addr) = 0 then
-          // '0.0.0.0' bound to any host -> ''
-          exit
-        else if cardinal(sin_addr) = cLocalhost32 then
-        begin
-          // '127.0.0.1' loopback -> no memory allocation
-          if not localasvoid then
-            result := IP4local;
-          exit;
-        end;
-      {$ifdef OSPOSIX}
-      AF_UNIX:
-        begin
-          if not localasvoid then
-            result := IP4local; // by definition, unix sockets are local
-          exit;
-        end;
-      {$endif OSPOSIX}
-      else
+  res := '';
+  case PSockAddr(@Addr)^.sa_family of
+    AF_INET:
+      IP4Text(@PSockAddr(@Addr)^.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
+    AF_INET6:
+      IP6Text(@PSockAddrIn6(@Addr)^.sin6_addr, res); // detect :: and ::1
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      begin
+        if not localasvoid then
+          res := IP4local; // by definition, unix sockets are local
         exit;
-    end;
-  IPShort(tmp, {withport=}false);
-  if not localasvoid or
-     (tmp <> c6Localhost) then
-    FastSetString(result, @tmp[1], ord(tmp[0]));
+      end;
+    {$endif OSPOSIX}
+  else
+    exit;
+  end;
+  if localasvoid and
+     (pointer(res) = pointer(IP4local)) then
+    res := '';
+end;
+
+function TNetAddr.IP(localasvoid: boolean): RawUtf8;
+begin
+  IP(result, localasvoid);
+end;
+
+function TNetAddr.IP4: cardinal;
+begin
+  with PSockAddr(@Addr)^ do
+    if sa_family = AF_INET then
+      result := cardinal(sin_addr) // may return cLocalhost32 = 127.0.0.1
+    else
+      result := 0; // AF_INET6 or AF_UNIX returns 0
 end;
 
 function TNetAddr.IPShort(withport: boolean): ShortString;
@@ -1369,21 +1458,24 @@ begin
   result[0] := #0;
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      begin
-        IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
-        if withport then
-        begin
-          AppendShortChar(':', result);
-          AppendShortInteger(port, result);
-        end;
-      end;
+      IP4Short(@PSockAddr(@Addr)^.sin_addr, result);
     AF_INET6:
-      IP6Short(@Addr, result, withport);
+      IP6Short(@PSockAddrIn6(@Addr)^.sin6_addr, result);
     {$ifdef OSPOSIX}
     AF_UNIX:
-      SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
-        mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
+      begin
+        SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
+          mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
+        exit; // no port
+      end;
     {$endif OSPOSIX}
+  else
+    exit;
+  end;
+  if withport then
+  begin
+    AppendShortChar(':', result);
+    AppendShortCardinal(port, result);
   end;
 end;
 
@@ -1430,16 +1522,15 @@ begin
 end;
 
 function TNetAddr.IsEqualAfter64(const another: TNetAddr): boolean;
-var
-  fam: cardinal;
 begin
-  fam := PSockAddr(@Addr)^.sa_family;
-  if fam = AF_INET then
-      result := true // SizeOf(sockaddr_in) = SizeOf(Int64) = 8
-  else if fam = AF_INET6 then
-    result := CompareMemFixed(@Addr[8], @another.Addr[8], SizeOf(sockaddr_in6) - 8)
+  case PSockAddr(@Addr)^.sa_family of
+    AF_INET:
+      result := true; // SizeOf(sockaddr_in) = SizeOf(Int64) = 8
+    AF_INET6:
+      result := CompareMemFixed(@Addr[8], @another.Addr[8], SizeOf(sockaddr_in6) - 8)
   else
     result := false;
+  end;
 end;
 
 function TNetAddr.IsEqual(const another: TNetAddr): boolean;
@@ -1996,6 +2087,9 @@ end;
 
 { ******************** Mac and IP Addresses Support }
 
+const // should be local for better code generation
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+
 function IsPublicIP(ip4: cardinal): boolean;
 begin
   result := false;
@@ -2014,13 +2108,18 @@ end;
 
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 begin
-  str(ip4addr[0], s);
-  AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[1], s);
-  AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[2], s);
-  AppendShortChar('.', s);
-  AppendShortInteger(ip4addr[3], s);
+  s[0] := #0;
+  AppendShortCardinal(ip4addr[0], s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
+  AppendShortCardinal(ip4addr[1], s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
+  AppendShortCardinal(ip4addr[2], s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
+  AppendShortCardinal(ip4addr[3], s);
+  PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
 end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
@@ -2031,7 +2130,7 @@ begin
     // '0.0.0.0' bound to any host -> ''
     result := ''
   else if PCardinal(ip4addr)^ = cLocalhost32 then
-    // '127.0.0.1' loopback -> no memory allocation
+    // '127.0.0.1' loopback (no memory allocation)
     result := IP4local
   else
   begin
@@ -2040,48 +2139,145 @@ begin
   end;
 end;
 
-procedure IP6Short(psockaddr: pointer; var s: ShortString; withport: boolean);
+procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
+// this code is faster than any other inet_ntop6() I could find around
 var
-  host: array[0..NI_MAXHOST] of AnsiChar;
-  serv: array[0..NI_MAXSERV] of AnsiChar;
-  flags, hostlen, servlen: integer;
+  i: PtrInt;
+  trimlead: boolean;
+  c, n: byte;
+  p: PAnsiChar;
+  zeros, current: record pos, len: ShortInt; end;
+  tab: PAnsiChar;
 begin
-  s[0] := #0;
-  hostlen := NI_MAXHOST;
-  servlen := NI_MAXSERV;
-  if withport then
-    flags := NI_NUMERICHOST + NI_NUMERICSERV
-  else
-    flags := NI_NUMERICHOST;
-  if getnameinfo(psockaddr, SizeOf(sockaddr_in6), host{%H-}, hostlen,
-       serv{%H-}, servlen, flags) = NO_ERROR then
-  begin
-    SetString(s, PAnsiChar(@host), mormot.core.base.StrLen(@host));
-    if withport then
+  // find longest run of 0000: for :: shortening
+  zeros.pos := -1;
+  zeros.len := 0;
+  current.pos := -1;
+  current.len := 0;
+  for i := 0 to 7 do
+    if PWordArray(ip6addr)[i] = 0 then
+      if current.pos < 0 then
+      begin
+        current.pos := i;
+        current.len := 1;
+      end
+      else
+        inc(current.len)
+    else if current.pos >= 0 then
     begin
-      AppendShortChar(':', s);
-      AppendShortBuffer(PAnsiChar(@serv), -1, s);
+      if (zeros.pos < 0) or
+         (current.len > zeros.len) then
+        zeros := current;
+      current.pos := -1;
     end;
-  end;
+  if (current.pos >= 0) and
+     ((zeros.pos < 0) or
+      (current.len > zeros.len)) then
+    zeros := current;
+  if (zeros.pos >= 0) and
+     (zeros.len < 2) then
+    zeros.pos := -1;
+  // convert to hexa
+  p := @s[1];
+  tab := @HexCharsLower;
+  n := 0;
+  repeat
+    if n = byte(zeros.pos) then
+    begin
+      // shorten double zeros to ::
+      if n = 0 then
+      begin
+        p^ := ':';
+        inc(p);
+      end;
+      p^ := ':';
+      inc(p);
+      ip6addr := @PWordArray(ip6addr)[zeros.len];
+      inc(n, zeros.len);
+      if n = 8 then
+        break;
+    end
+    else
+    begin
+      // write up to 4 hexa chars, triming leading 0
+      trimlead := true;
+      c := ip6addr^[0] shr 4;
+      if c <> 0 then
+      begin
+        p^ := tab[c];
+        inc(p);
+        trimlead := false;
+      end;
+      c := ip6addr^[0]; // in two steps for FPC
+      c := c and 15;
+      if ((c <> 0) and trimlead) or
+         not trimlead then
+      begin
+        p^ := tab[c];
+        inc(p);
+        trimlead := false;
+      end;
+      c := ip6addr^[1] shr 4;
+      if ((c <> 0) and trimlead) or
+         not trimlead then
+      begin
+        p^ := tab[c];
+        inc(p);
+      end;
+      c := ip6addr^[1];
+      c := c and 15; // last hexa char is always there
+      p^ := tab[c];
+      inc(p);
+      inc(PWord(ip6addr));
+      inc(n);
+      if n = 8 then
+        break;
+      p^ := ':';
+      inc(p);
+    end;
+  until false;
+  p^ := #0; // make null-terminated (won't hurt)
+  s[0] := AnsiChar(p - @s[1]);
 end;
 
-const
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
+var
+  s: ShortString;
+begin
+  if (PInt64(ip6addr)^ = 0) and
+     (PInt64(@ip6addr[7])^ = 0) then // start with 15 zeros?
+    case ip6addr[15] of
+      0: // IPv6 :: bound to any host -> ''
+        begin
+          result := '';
+          exit;
+        end;
+      1: // IPv6 ::1 -> '127.0.0.1' loopback (with no memory allocation)
+        begin
+          result := IP4local;
+          exit;
+        end;
+    end;
+  IP6Short(ip6addr, s);
+  FastSetString(result, @s[1], ord(s[0]));
+end;
 
 function MacToText(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
-  i: PtrInt;
+  i, c: PtrInt;
   tab: PAnsichar;
 begin
-  SetLength(result, (maclen * 3) - 1);
+  FastSetString(result, nil, (maclen * 3) - 1);
   dec(maclen);
   tab := @HexCharsLower;
   P := pointer(result);
   i := 0;
   repeat
-    P[0] := tab[mac[i] shr 4];
-    P[1] := tab[mac[i] and $F];
+    c := mac[i];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
     if i = maclen then
       break;
     P[2] := ':'; // as in Linux
@@ -2090,20 +2286,54 @@ begin
   until false;
 end;
 
+function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
+var
+  L: PtrInt;
+  h, m: PAnsiChar;
+begin
+  L := length(Hex);
+  if (L = 0) or
+     (L and 1 <> 0) then
+  begin
+    result := '';
+    exit;
+  end;
+  L := L shr 1;
+  FastSetString(result, nil, (L * 3) - 1);
+  h := pointer(Hex);
+  m := pointer(result);
+  repeat
+    m[0] := h[0];
+    if h[0] in ['A'..'Z'] then
+      inc(m[0], 32);
+    m[1] := h[1];
+    if h[1] in ['A'..'Z'] then
+      inc(m[1], 32);
+    dec(L);
+    if L = 0 then
+      break;
+    m[2] := ':';
+    inc(h, 2);
+    inc(m, 3);
+  until false;
+end;
+
 function MacToHex(mac: PByteArray; maclen: PtrInt): RawUtf8;
 var
   P: PAnsiChar;
-  i: PtrInt;
+  i, c: PtrInt;
   tab: PAnsichar;
 begin
-  SetLength(result, maclen * 2);
+  FastSetString(result, nil, maclen * 2);
   dec(maclen);
   tab := @HexCharsLower;
   P := pointer(result);
   i := 0;
   repeat
-    P[0] := tab[mac[i] shr 4];
-    P[1] := tab[mac[i] and $F];
+    c := mac[i];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
     if i = maclen then
       break;
     inc(P, 2);
@@ -2114,6 +2344,7 @@ end;
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
   IPAddresses: array[TIPAddress] of record
+    Safe: TLightLock;
     Text: RawUtf8;
     Tix: integer;
   end;
@@ -2126,6 +2357,20 @@ var
     Text: array[{WithoutName=}boolean] of RawUtf8;
   end;
 
+procedure MacIPAddressFlush;
+var
+  ip: TIPAddress;
+begin
+  for ip := low(ip) to high(ip) do
+   IPAddresses[ip].Tix := 0;
+  MacAddresses[false].Text[false] := '';
+  MacAddresses[false].Text[true] := '';
+  MacAddresses[false].Searched := false;
+  MacAddresses[true].Text[false] := '';
+  MacAddresses[true].Text[true] := '';
+  MacAddresses[true].Searched := false;
+end;
+
 function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
 var
   ip: TRawUtf8DynArray;
@@ -2135,27 +2380,32 @@ begin
   result := '';
   with IPAddresses[Kind] do
   begin
-    if Sep = ' ' then
-    begin
-      now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
-      if now <> Tix then
-        Tix := now
-      else
+    Safe.Lock;
+    try
+      if Sep = ' ' then
       begin
-        result := Text;
-        if result <> '' then
-          exit; // return the value from cache
+        now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
+        if now <> Tix then
+          Tix := now
+        else
+        begin
+          result := Text;
+          if result <> '' then
+            exit; // return the value from cache
+        end;
       end;
+      // we need to ask the OS for the current IP addresses
+      ip := GetIPAddresses(Kind);
+      if ip = nil then
+        exit;
+      result := ip[0];
+      for i := 1 to high(ip) do
+        result := result + Sep + ip[i];
+      if Sep = ' ' then
+        Text := result;
+    finally
+      Safe.UnLock;
     end;
-    // we need to ask the OS for the current IP addresses
-    ip := GetIPAddresses(Kind);
-    if ip = nil then
-      exit;
-    result := ip[0];
-    for i := 1 to high(ip) do
-      result := result + Sep + ip[i];
-    if Sep = ' ' then
-      Text := result;
   end;
 end;
 
@@ -2203,10 +2453,46 @@ begin
       end;
     SetLength(w, length(w) - 1);
     SetLength(wo, length(wo) - 1);
+    Safe.Lock; // to avoid memory leak
     Text[false] := w;
     Text[true] := wo;
+    Safe.UnLock;
     result := Text[WithoutName];
   end;
+end;
+
+function _GetSystemMacAddress: TRawUtf8DynArray;
+var
+  i, n: PtrInt;
+  addr: TMacAddressDynArray;
+begin
+  addr := GetMacAddresses({UpAndDown=}true);
+  SetLength(result, length(addr));
+  n := 0;
+  for i := 0 to length(addr) - 1 do
+    if not NetStartWith(pointer(addr[i].Name), 'DOCKER') then
+    begin
+      result[n] := addr[i].Address;
+      inc(n);
+    end;
+  SetLength(result, n);
+end;
+
+
+{ ******************** TLS / HTTPS Encryption Abstract Layer }
+
+procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
+  const CertificateFile, PrivateKeyFile: TFileName;
+  const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
+begin
+  FillCharFast(TLS, SizeOf(TLS), 0);
+  TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
+  TLS.CertificateFile := RawUtf8(CertificateFile);
+  TLS.PrivateKeyFile := RawUtf8(PrivateKeyFile);
+  TLS.PrivatePassword := PrivateKeyPassword;
+  TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
+  if Server then
+    TLS.OnAcceptServerName := OnNetTlsAcceptServerName; // e.g. mormot.net.acme
 end;
 
 
@@ -2356,6 +2642,27 @@ begin
   {$endif POLLSOCKETEPOLL}
 end;
 
+procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
+begin
+  // actually unsubscribe from the sockets monitoring API
+  {$ifdef POLLSOCKETEPOLL}
+  // epoll_ctl() is thread-safe and let epoll_wait() work in the background
+  if fPoll[0].Unsubscribe(socket) then
+  begin
+    LockedDec32(@fCount);
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'Unsubscribe(%) count=%', [pointer(socket), fCount], self);
+  end;
+  {$else}
+  // fPoll[0].UnSubscribe() is not allowed when WaitForModified() is running
+  // -> append to the unsubscription asynch list
+  fSubscriptionSafe.Lock;
+  AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribe),
+    fSubscription.UnsubscribeCount, PtrUInt(socket));
+  fSubscriptionSafe.UnLock;
+  {$endif POLLSOCKETEPOLL}
+end;
+
 function FindPendingFromTag(res: PPollSocketResult; n: PtrInt;
   tag: TPollSocketTag): PPollSocketResult;
   {$ifdef HASINLINE} inline; {$endif}
@@ -2373,56 +2680,19 @@ begin
   result := nil;
 end;
 
-procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
-var
-  fnd: PPollSocketResult;
-  ndx, n: PtrInt;
-const
-  FOUND: array[boolean] of string[10] = ('', 'events:=0 ');
+function TPollSockets.EnsurePending(tag: TPollSocketTag): boolean;
 begin
-  // first check if there is any pending notification about this socket
-  fnd := nil;
-  if fPending.Count <> 0 then
-  begin
-    fPendingSafe.Lock;
-    try
-      ndx := fPendingIndex;
-      n := fPending.Count;
-      if n <> 0 then
-      begin
-        fnd := FindPendingFromTag(@fPending.Events[ndx], n - ndx, tag);
-        if fnd <> nil then
-          byte(fnd^.events) := 0; // GetOnePending() will ignore it
-      end;
-      AddPtrUInt(fLastUnsubscribeTag, fLastUnsubscribeTagCount, tag);
-    finally
-      fPendingSafe.UnLock;
-    end;
-    if Assigned(fOnLog) and
-       (n <> 0) then // log outside fPendingSafe
-      fOnLog(sllTrace, 'Unsubscribe(%) count=% %pending #%/%',
-        [pointer(tag), fCount, FOUND[fnd <> nil], ndx, n], self);
-  end;
-  // actually unsubscribe from the sockets monitoring API
-  {$ifdef POLLSOCKETEPOLL}
-  // epoll_ctl() is thread-safe and let epoll_wait() work in the background
-  if fPoll[0].Unsubscribe(socket) then
-  begin
-    LockedDec32(@fCount);
-    if Assigned(fOnLog) then // log outside fPendingSafe
-      fOnLog(sllTrace, 'Unsubscribe(%) count=%', [pointer(socket), fCount], self);
-  end;
-  {$else}
-  // fPoll[0].UnSubscribe() is not allowed when WaitForModified() is running
-  // -> append to the unsubscription asynch list
-  fSubscriptionSafe.Lock;
-  AddPtrUInt(TPtrUIntDynArray(fSubscription.Unsubscribe),
-    fSubscription.UnsubscribeCount, PtrUInt(socket));
-  fSubscriptionSafe.UnLock;
-  {$endif POLLSOCKETEPOLL}
+  // manual O(n) brute force search
+  result := FindPendingFromTag(
+    @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, tag) <> nil;
 end;
 
-function TPollSockets.IsValidPending(tag: TPollSocketTag): boolean;
+procedure TPollSockets.SetPending(tag: TPollSocketTag);
+begin
+  // overriden method may set a per-connection flag for O(1) lookup
+end;
+
+function TPollSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
   result := true; // overriden e.g. in TPollAsyncReadSockets
 end;
@@ -2449,47 +2719,39 @@ function TPollSockets.GetOnePending(out notif: TPollSocketResult;
   const call: RawUtf8): boolean;
 var
   n, ndx: PtrInt;
-label
-  ok;
 begin
   result := false;
   if fTerminated or
      (fPending.Count <= 0) then
     exit;
   fPendingSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
+  {$ifdef HASFASTTRYFINALLY} // make a performance difference
+  try                        // and UnsetPending() should be secured
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
     n := fPending.Count;
     ndx := fPendingIndex;
     if ndx < n then
-    begin
       repeat
         // retrieve next notified event
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(notif.events) <> 0) and // Unsubscribe() may have reset to 0
-           IsValidPending(notif.tag) and // e.g. TPollAsyncReadSockets
-           ((fLastUnsubscribeTagCount = 0) or
-            not PtrUIntScanExists(pointer(fLastUnsubscribeTag),
-              fLastUnsubscribeTagCount, notif.tag)) then
+        if (byte(notif.events) <> 0) and  // DeleteOnePending() may reset to 0
+           UnsetPending(notif.tag) then   // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
           result := true;
           fPendingIndex := ndx; // continue with next event
-          // quick exit with one notified event
-          if ndx = n then
-            break; // reset fPending list
-          goto ok;
+          break;
         end;
       until ndx >= n;
+    if ndx >= n then
+    begin
       fPending.Count := 0; // reuse shared fPending.Events[] memory
       fPendingIndex := 0;
-      fLastUnsubscribeTagCount := 0;
-ok: end;
+    end;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -2501,53 +2763,70 @@ ok: end;
       byte({%H-}notif.events), ndx, n], self);
 end;
 
-function MergePendingEvents(var res: TPollSocketResults; resindex: PtrInt;
-  new: PPollSocketResult; newcount: PtrInt): integer;
+function TPollSockets.MergePendingEvents(const new: TPollSocketResults): integer;
 var
-  n, cap: PtrInt;
-  exist: PPollSocketResult;
+  n, len, cap: PtrInt;
+  p: PPollSocketResult;
 begin
-  result := 0; // returns number of new events to process
-  n := res.Count;
-  // vacuum the results list (to let caller set fPendingIndex := 0)
-  if resindex <> 0 then
+  len := fPending.Count;
+  if len = 0 then
   begin
-    dec(n, resindex);
-    MoveFast(res.Events[resindex], res.Events[0], n * SizeOf(res.Events[0]));
-    res.Count := n;
+    // no previous results: just replace the list
+    result := new.Count;
+    fPending.Count := new.Count;
+    fPending.Events := new.Events;
+    fPendingIndex := 0;
+    if PClass(self)^ <> TPollSockets then // if SetPending() is overriden
+    begin
+      p := pointer(new.Events);
+      n := new.Count;
+      repeat
+        SetPending(p^.tag); // for O(1) EnsurePending() implementation
+        inc(p);
+        dec(n);
+      until n = 0;
+    end;
+    exit;
   end;
+  // vacuum the results list (to let caller set fPendingIndex := 0)
+  if fPendingIndex <> 0 then
+  begin
+    dec(len, fPendingIndex);
+    with fPending do
+      MoveFast(Events[fPendingIndex], Events[0], len * SizeOf(Events[0]));
+    fPending.Count := len;
+    fPendingIndex := 0;
+  end;
+  result := 0; // returns number of new events to process
   // remove any duplicate: PollForPendingEvents() called before GetOnePending()
-  cap := length(res.Events);
+  p := pointer(new.Events);
+  n := new.Count;
+  cap := length(fPending.Events);
   repeat
-    // O(n*m) is faster than UnSubscribe/Subscribe because n and m are small
-    exist := FindPendingFromTag(pointer(res.Events), res.Count, new^.tag);
-    if exist = nil then
+    if not EnsurePending(p^.Tag) then
     begin
       // new event to process
-      if n >= cap then
+      if len >= cap then
       begin
-        cap := n + newCount + 16;
-        SetLength(res.Events, cap); // seldom needed
+        cap := NextGrow(len + new.Count);
+        SetLength(fPending.Events, cap); // seldom needed
       end;
-      res.Events[n] := new^;
-      inc(n);
+      fPending.Events[len] := p^;
+      inc(len);
       inc(result);
-    end
-    else
-      // merge with existing notification flags
-      exist^.events := exist^.events + new^.events;
-    inc(new);
-    dec(newCount);
-  until newCount = 0;
-  res.Count := n;
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+  fPending.Count := len;
 end;
 
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
 var
-  last, lastcount, n: PtrInt;
+  last, lastcount: PtrInt;
   start, stop: Int64;
   {$ifndef POLLSOCKETEPOLL}
-  u, s, p: PtrInt;
+  n, u, s, p: PtrInt;
   poll: TPollSocketAbstract;
   sock: TNetSocket;
   sub: TPollSocketsSubscription;
@@ -2565,9 +2844,9 @@ begin
     // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    if fPending.Count = 0 then
+    if (fPending.Count = 0) and
+       fPendingSafe.TryLock then
     begin
-      fPendingSafe.Lock;
       if fPending.Count = 0 then
       begin
         // reuse the main dynamic array of results
@@ -2724,20 +3003,12 @@ begin
       exit;
     fPendingSafe.Lock;
     try
-      n := fPending.Count;
-      if (n <= 0) or
-         (fPendingIndex = n) then
-        fPending := new // atomic list assignment (most common case)
-      else
-        result := MergePendingEvents(fPending, fPendingIndex,
-          pointer(new.Events), new.Count); // avoid duplicates
-      fPendingIndex := 0;
+      result := MergePendingEvents(new);
     finally
       fPendingSafe.UnLock;
     end;
     new.Events := nil;
-    //if result = 0 then {$i-} write('!'); {$i+}
-    if {(result > 0) and}
+    if (result > 0) and
        Assigned(fOnLog) then
     begin
       QueryPerformanceMicroSeconds(stop);
@@ -2754,17 +3025,16 @@ begin
 end;
 
 procedure TPollSockets.AddOnePending(
-  aTag: TPollSocketTag; aEvents: TPollSocketEvents; aNoSearch: boolean);
+  aTag: TPollSocketTag; aEvents: TPollSocketEvents; aSearchExisting: boolean);
 var
   n: PtrInt;
 begin
   fPendingSafe.Lock;
   try
     n := fPending.Count;
-    if aNoSearch or
-       (n = 0) or
-       (FindPendingFromTag(@fPending.Events[fPendingIndex],
-          n - fPendingIndex, aTag) = nil) then
+    if (n = 0) or
+       (not aSearchExisting) or
+       (not EnsurePending(aTag)) then
     begin
       if n >= length(fPending.Events) then
         SetLength(fPending.Events, NextGrow(n));
@@ -2775,6 +3045,70 @@ begin
       end;
       fPending.Count := n + 1;
     end;
+  finally
+    fPendingSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.DeleteOnePending(aTag: TPollSocketTag): boolean;
+var
+  fnd: PPollSocketResult;
+begin
+  result := false;
+  if (fPending.Count = 0) or
+     (aTag = 0) then
+    exit;
+  fPendingSafe.Lock;
+  try
+    if fPending.Count <> 0 then
+    begin
+      fnd := FindPendingFromTag( // fast O(n) search in L1 cache
+        @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, aTag);
+      if fnd <> nil then
+      begin
+        byte(fnd^.events) := 0; // GetOnePending() will just ignore it
+        result := true;
+      end;
+    end;
+  finally
+    fPendingSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.DeleteSeveralPending(
+  aTag: PPollSocketTag; aTagCount: integer): integer;
+var
+  p: PPollSocketResult;
+  n: integer;
+begin
+  result := 0;
+  if (fPending.Count = 0) or
+     (aTagCount = 0) then
+    exit;
+  dec(aTagCount);
+  if aTagCount = 0 then
+  begin
+    result := ord(DeleteOnePending(aTag^));
+    exit;
+  end;
+  QuickSortPtrInt(pointer(aTag), 0, aTagCount);
+  fPendingSafe.Lock;
+  try
+    n := fPending.Count;
+    if n = 0 then
+      exit;
+    dec(n, fPendingIndex);
+    p := @fPending.Events[fPendingIndex];
+    if n > 0 then
+      repeat
+        if FastFindPtrIntSorted(pointer(aTag), aTagCount, p^.tag) >= 0 then
+        begin
+          byte(p^.events) := 0; // GetOnePending() will just ignore it
+          inc(result);
+        end;
+        inc(p);
+        dec(n)
+      until n = 0;
   finally
     fPendingSafe.UnLock;
   end;
@@ -3356,7 +3690,7 @@ begin
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif OSLINUX}
   if aClientAddr <> nil then
-    fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
+    aClientAddr^.IP(fRemoteIP, RemoteIPLocalHostAsVoidInServers);
   {$ifdef OSLINUX}
   if Assigned(OnLog) then
     OnLog(sllTrace, 'Accept(%:%) sock=% %',
@@ -4124,12 +4458,12 @@ begin
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
 
-function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawByteString;
+function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawUtf8;
 begin
   if fPeerAddr = nil then
     result := ''
   else
-    result := fPeerAddr^.IP(LocalAsVoid);
+    fPeerAddr^.IP(result, LocalAsVoid);
 end;
 
 function TCrtSocket.PeerPort: TNetPort;
@@ -4162,6 +4496,7 @@ initialization
   assert(SizeOf(TNetAddr) >=
     {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
+  GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
 
 finalization

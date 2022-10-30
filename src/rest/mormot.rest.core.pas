@@ -41,7 +41,6 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.jwt,
@@ -140,18 +139,18 @@ type
     fBackgroundInterningMaxRefCount: integer;
     fBackgroundInterningSafe: TLightLock;
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     // used by AsyncRedirect/AsyncBatch/AsyncInterning
     function AsyncBatchIndex(aTable: TOrmClass): PtrInt;
     function AsyncBatchLocked(aTable: TOrmClass;
       out aBatch: TRestBatchLocked): boolean;
     procedure AsyncBatchUnLock(aBatch: TRestBatchLocked);
     procedure AsyncBatchExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     procedure AsyncBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
     procedure AsyncBackgroundInterning(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUtf8);
+      const Msg: RawUtf8);
   public
     /// initialize the thread for a periodic task processing
     constructor Create(aRest: TRest; const aThreadName: RawUtf8 = '';
@@ -433,6 +432,9 @@ type
   TRestObjArray = array of TRest;
 
   /// a generic REpresentational State Transfer (REST) client/server class
+  // - see Orm: IRestOrm, Services: TServiceContainer and Run: TRestRunThreads
+  // main properties for its actual REST-oriented process
+  // - in PUREMORMOT2 mode, all direct ORM or threading methods are hidden
   // - is a TInterfaceResolver so is able to resolve IRestOrm
   TRest = class(TInterfaceResolver)
   protected
@@ -1087,12 +1089,14 @@ type
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
   // - llfInProcess is done when run from the same process, i.e. on server side
+  // - llfConnectionUpgrade is set when "connection: upgrade" is within headers
   // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
     llfWebsockets,
-    llfInProcess);
+    llfInProcess,
+    llfConnectionUpgrade);
 
   /// some flags set by the caller to notify low-level context
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
@@ -1525,16 +1529,15 @@ type
 type
   {$M+}
   /// a simple TThread for doing some process within the context of a REST instance
-  // - also define a Start method for compatibility with older versions of Delphi
   // - inherited classes should override InternalExecute abstract method
-  TRestThread = class(TThread)
+  TRestThread = class(TThreadAbstract)
   protected
     fRest: TRest;
     fOwnRest: boolean;
+    fExecuting: boolean;
     fLog: TSynLog;
     fSafe: TSynLocker;
-    fEvent: TEvent;
-    fExecuting: boolean;
+    fEvent: TSynEvent;
     /// allows customization in overriden Create (before Execute)
     fThreadName: RawUtf8;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
@@ -1546,25 +1549,10 @@ type
     // - if aOwnRest is TRUE, the supplied REST instance will be
     // owned by this thread
     constructor Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean);
-    {$ifndef HASTTHREADSTART}
-    /// method to be called to start the thread
-    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature; we define here this method
-    // for older versions of Delphi
-    procedure Start;
-    {$endif HASTTHREADSTART}
-    {$ifdef HASTTHREADTERMINATESET}
-    /// properly terminate the thread
-    // - called by TThread.Terminate since Delphi XE2
+    /// properly terminate the thread, notifying WaitForNotExecuting
     procedure TerminatedSet; override;
-    {$else}
-    /// properly terminate the thread
-    // - called by reintroduced Terminate
-    procedure TerminatedSet; virtual;
-    /// reintroduced to call TeminatedSet
-    procedure Terminate; reintroduce;
-    {$endif HASTTHREADTERMINATESET}
     /// wait for Execute to be ended (i.e. fExecuting=false)
+    // - will use the internal TEvent so that Terminate will stop it ASAP
     procedure WaitForNotExecuting(maxMS: integer = 500);
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
@@ -1575,7 +1563,7 @@ type
     function SleepOrTerminated(MS: integer): boolean;
     /// read-only access to the associated REST instance
     property Rest: TRest
-      read FRest;
+      read fRest;
     /// TRUE if the associated REST instance will be owned by this thread
     property OwnRest: boolean
       read fOwnRest;
@@ -1588,10 +1576,10 @@ type
     property Log: TSynLog
       read fLog;
     /// a event associated to this thread
-    property Event: TEvent
+    // - used mainly by Terminate/WaitForNotExecuting but could be used
+    // for other notification purpose
+    property Event: TSynEvent
       read fEvent;
-    /// publishes the thread running state
-    property Terminated;
     /// publishes the thread executing state (set when Execute leaves)
     property Executing: boolean
       read fExecuting;
@@ -3110,7 +3098,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.SystemUseBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
@@ -3156,7 +3144,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBatchExecute(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUtf8);
+  const Msg: RawUtf8);
 var
   json, tablename: RawUtf8;
   batch: TRestBatchLocked;
@@ -3263,7 +3251,7 @@ begin
      (fBackgroundBatch = nil) then
     exit;
   log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
-  start := mormot.core.os.GetTickCount64;
+  start := GetTickCount64;
   timeout := start + 5000;
   if Table = nil then
   begin
@@ -3273,7 +3261,7 @@ begin
     repeat
       SleepHiRes(1); // wait for all batchs to be released
     until (fBackgroundBatch = nil) or
-          (mormot.core.os.GetTickCount64 > timeout);
+          (GetTickCount64 > timeout);
     result := Disable(AsyncBatchExecute);
   end
   else
@@ -3393,7 +3381,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 var
   exec: TInterfaceMethodExecute;
   call: TInterfacedObjectAsyncCall;
@@ -3456,7 +3444,7 @@ begin
 end;
 
 procedure TRestBackgroundTimer.AsyncBackgroundInterning(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
+  Sender: TSynBackgroundTimer; const Msg: RawUtf8);
 var
   i: PtrInt;
   claimed, total: integer;
@@ -3675,7 +3663,8 @@ begin
   InBody := aInBody;
 end;
 
-procedure TRestUriParams.InBodyType(out ContentType: RawUtf8; GuessJsonIfNoneSet: boolean);
+procedure TRestUriParams.InBodyType(out ContentType: RawUtf8;
+  GuessJsonIfNoneSet: boolean);
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, ContentType);
   if GuessJsonIfNoneSet and
@@ -4036,8 +4025,8 @@ begin
   if HandleErrorAsRegularResult or
      StatusCodeIsSuccess(Status) then
   begin
-    fCall^.OutStatus := Status;
     fCall^.OutBody := Result;
+    fCall^.OutStatus := Status;
     if CustomHeader <> '' then
       fCall^.OutHead := CustomHeader
     else if fCall^.OutHead = '' then
@@ -4311,7 +4300,7 @@ begin
   if fThreadName = '' then
     // if thread name has not been set by the overriden constructor
     FormatUtf8('% %', [self, fRest.Model.Root], fThreadName);
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   inherited Create(aCreateSuspended);
 end;
 
@@ -4350,13 +4339,13 @@ begin
   if (self = nil) or
      Terminated then
     exit;
-  endtix := mormot.core.os.GetTickCount64 + MS;
+  endtix := GetTickCount64 + MS;
   repeat
     fEvent.WaitFor(MS); // warning: can wait up to 15 ms more on Windows
     if Terminated then
       exit;
   until (MS < 32) or
-        (mormot.core.os.GetTickCount64 >= endtix);
+        (GetTickCount64 >= endtix);
   result := false; // normal delay expiration
 end;
 
@@ -4380,21 +4369,6 @@ begin
     fExecuting := false;
   end;
 end;
-
-{$ifndef HASTTHREADSTART}
-procedure TRestThread.Start;
-begin
-  Resume;
-end;
-{$endif HASTTHREADSTART}
-
-{$ifndef HASTTHREADTERMINATESET}
-procedure TRestThread.Terminate;
-begin
-  inherited Terminate; // FTerminated := True
-  TerminatedSet;
-end;
-{$endif HASTTHREADTERMINATESET}
 
 procedure TRestThread.TerminatedSet;
 begin

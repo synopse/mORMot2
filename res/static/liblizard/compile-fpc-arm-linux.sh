@@ -17,7 +17,7 @@ rm *.o
 FLAGS="Wall -Wextra -Wcast-qual -Wcast-align -Wshadow -Wswitch-enum -Wdeclaration-after-statement -Wstrict-prototypes -Wundef -Wpointer-arith -Wstrict-aliasing=1"
 CFILES="entropy_common.c fse_compress.c fse_decompress.c huf_compress.c huf_decompress.c lizard_compress.c lizard_decompress.c"
 
-$GCC -static -fno-pic -fno-stack-protector -O3 -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables  -fno-unwind-tables -std=c99 -I. -I$CROSS -I$CROSS/include -I$CROSS/gnu -I$CROSS/bits -nostdlib -fvisibility=hidden -D_ANSI_SOURCE  -c  $CFILES -D__ARM_PCS_VFP -marm -march=armv7-a+fp+simd -mfpu=vfpv3 -mfloat-abi=hard
+$GCC -static -fno-pic -fno-stack-protector -O2 -fomit-frame-pointer -fno-exceptions -fno-asynchronous-unwind-tables  -fno-unwind-tables -std=c99 -I. -I$CROSS -I$CROSS/include -I$CROSS/gnu -I$CROSS/bits -nostdlib -fvisibility=hidden -D_ANSI_SOURCE  -c  $CFILES -D__ARM_PCS_VFP -marm -march=armv7-a+fp+simd -mfpu=vfpv3 -mfloat-abi=hard
 
 $CROSS/arm-linux-gnueabihf-strip -d -x *.o
 

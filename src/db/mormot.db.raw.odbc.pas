@@ -420,7 +420,7 @@ type
   SqlSetPosIRow = PtrUInt;
   {$else}
   SqlSetPosIRow = Word;
-  {$endif}
+  {$endif CPU64}
   PSqlLen = ^SqlLen;
 
   SqlHandle = Pointer;

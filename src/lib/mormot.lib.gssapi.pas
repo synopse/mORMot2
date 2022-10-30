@@ -357,7 +357,7 @@ function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
-/// Client-side authentication procedure with clear text password.
+/// Client-side authentication procedure with clear text password
 // - This function must be used when application need to use different
 //  user credentials (not credentials of logged in user)
 // - aSecContext holds information between function calls
@@ -371,7 +371,7 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - you must use ClientForceSpn to specify server SPN before call
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
-  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
+  const aPassword: SpiUtf8; out aOutData: RawByteString): boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -423,15 +423,16 @@ const
 
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
-// - to use same value for TAuthUser.LogonName on all platforms user name
-// changed from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
-// - when converting fully qualified domain name to NT4-style NetBIOS name
-// ServerDomainMap first checked. If domain name not found, then it's truncated on first dot,
-// e.g. 'user1@CORP.ABC.COM' changed to 'CORP\user1'
-// - you can change domain name conversion by registering names at server startup, e.g.
-// ServerDomainMap.Add('CORP.ABC.COM', 'ABCCORP') change conversion for previuos
-// example to 'ABCCORP\user1'
-// - use only if automatic conversion (truncate on first dot) do it wrong
+// - to use the same value for TAuthUser.LogonName on all platforms, user name
+// should be changed from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
+// - when converting a fully qualified domain name to NT4-style NetBIOS name,
+// ServerDomainMapRegister() list is first checked. If domain name is not found,
+// then it's truncated on first dot, e.g. 'user1@CORP.ABC.COM' into 'CORP\user1'
+// - you can change domain name conversion by registering names at server startup,
+// e.g. ServerDomainMapRegister('CORP.ABC.COM', 'ABCCORP') change conversion for
+// previous example to 'ABCCORP\user1'
+// - used only if automatic conversion (truncate on first dot) does it wrong
+// - this method is thread-safe
 procedure ServerDomainMapRegister(const aOld, aNew: RawUtf8);
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
@@ -777,7 +778,7 @@ begin
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName, aPassword: RawUtf8;
+  const aInData: RawByteString; const aUserName: RawUtf8; const aPassword: SpiUtf8;
   out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
@@ -838,12 +839,14 @@ begin
 end;
 
 var
+  ServerDomainMapSafe: TRWLightLock;
   ServerDomainMap: array of record
     Old, New: RawUtf8;
   end;
 
 function ServerDomainFind(const aOld: RawUtf8): PtrInt;
 begin
+  // caller made ServerDomainMapSafe.WriteLock
   for result := 0 to length(ServerDomainMap) - 1 do
     with ServerDomainMap[result] do
       if IdemPropNameU(Old, aOld) then
@@ -855,29 +858,44 @@ procedure ServerDomainMapRegister(const aOld, aNew: RawUtf8);
 var
   i: PtrInt;
 begin
-  i := ServerDomainFind(aOld);
-  if i < 0 then
-  begin
-    i := length(ServerDomainMap);
-    SetLength(ServerDomainMap, i + 1);
-    ServerDomainMap[i].Old := aOld;
+  ServerDomainMapSafe.WriteLock;
+  try
+    i := ServerDomainFind(aOld);
+    if i < 0 then
+    begin
+      i := length(ServerDomainMap);
+      SetLength(ServerDomainMap, i + 1);
+      ServerDomainMap[i].Old := aOld;
+    end;
+    ServerDomainMap[i].New := aNew;
+  finally
+    ServerDomainMapSafe.WriteUnLock;
   end;
-  ServerDomainMap[i].New := aNew;
 end;
 
 procedure ServerDomainMapUnRegister(const aOld, aNew: RawUtf8);
 var
   i: PtrInt;
 begin
-  i := ServerDomainFind(aOld);
-  if i >= 0 then
-    // for our purpose, it is enough
-    ServerDomainMap[i].Old := '';
+  ServerDomainMapSafe.WriteLock;
+  try
+    i := ServerDomainFind(aOld);
+    if i >= 0 then
+      // for our purpose, it is enough to void the slot
+      ServerDomainMap[i].Old := '';
+  finally
+    ServerDomainMapSafe.WriteUnLock;
+  end;
 end;
 
 procedure ServerDomainMapUnRegisterAll;
 begin
-  ServerDomainMap := nil;
+  ServerDomainMapSafe.WriteLock;
+  try
+    ServerDomainMap := nil;
+  finally
+    ServerDomainMapSafe.WriteUnLock;
+  end;
 end;
 
 procedure ConvertUserName(P: PUtf8Char; Len: PtrUInt; out aUserName: RawUtf8);
@@ -895,13 +913,18 @@ begin
     DomainStart^ := #0;
     Inc(DomainStart);
     DomainLen := StrLen(DomainStart);
-    for i := 0 to high(ServerDomainMap) do
-      with ServerDomainMap[i] do
-        if IdemPropNameU(Old, DomainStart, DomainLen) then
-        begin
-          Domain := New;
-          break;
-        end;
+    ServerDomainMapSafe.ReadLock;
+    try
+      for i := 0 to high(ServerDomainMap) do
+        with ServerDomainMap[i] do
+          if IdemPropNameU(Old, DomainStart, DomainLen) then
+          begin
+            Domain := New;
+            break;
+          end;
+    finally
+      ServerDomainMapSafe.ReadUnLock;
+    end;
     if {%H-}Domain = '' then
     begin
       DomainEnd := PosChar(DomainStart, '.');

@@ -86,7 +86,7 @@ begin
     with THttpAsyncServer(fHttpServer) do
     if Assigned(Async.Log) then
       Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
-  if Ctxt.Method = 'GET' then
+  if IsGet(Ctxt.Method) then
     Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
       [Ctxt.Url, CardinalToHexShort(Ctxt.RequestID),
        CardinalToHexShort(Ctxt.ConnectionID)])

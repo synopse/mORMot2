@@ -66,6 +66,7 @@ Client-Side Object-Relational-Mapping (ORM) Process
 
 Server-Side Object-Relational-Mapping (ORM) Process
 - `TRestOrmServer` Abstract Server
+- `TRestOrmServerBatchSend` for `TRestBach` Server-Side Process
 
 ### mormot.orm.storage
 

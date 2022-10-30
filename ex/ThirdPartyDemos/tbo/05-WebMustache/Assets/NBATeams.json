@@ -1,0 +1,282 @@
+[
+  {
+    "name": "Hawks",
+    "location": "Atlanta",
+    "score": 595.57
+  },
+  {
+    "name": "Bullets",
+    "location": "Baltimore",
+    "score": 0
+  },
+  {
+    "name": "Celtics",
+    "location": "Boston",
+    "score": 428.21
+  },
+  {
+    "name": "Braves",
+    "location": "Buffalo",
+    "score": 0
+  },
+  {
+    "name": "Stags",
+    "location": "Chicago",
+    "score": 0
+  },
+  {
+    "name": "Zephyrs",
+    "location": "Chicago",
+    "score": 0
+  },
+  {
+    "name": "Packers",
+    "location": "Chicago",
+    "score": 0
+  },
+  {
+    "name": "Hornets",
+    "location": "Charlotte",
+    "score": 513.75
+  },
+  {
+    "name": "Bulls",
+    "location": "Chicago",
+    "score": 444.05
+  },
+  {
+    "name": "Bobcats",
+    "location": "Charlotte",
+    "score": 411.21
+  },
+  {
+    "name": "Royals",
+    "location": "Cincinnati",
+    "score": 0
+  },
+  {
+    "name": "Cavaliers",
+    "location": "Cleveland",
+    "score": 465.16
+  },
+  {
+    "name": "Mavericks",
+    "location": "Dallas",
+    "score": 464.66
+  },
+  {
+    "name": "Pistons",
+    "location": "Detroit",
+    "score": 550.64
+  },
+  {
+    "name": "Nuggets",
+    "location": "Denver",
+    "score": 0
+  },
+  {
+    "name": "Warriors",
+    "location": "Golden State",
+    "score": 446.1
+  },
+  {
+    "name": "Rockets",
+    "location": "Houston",
+    "score": 503.64
+  },
+  {
+    "name": "Pacers",
+    "location": "Indiana",
+    "score": 550.86
+  },
+  {
+    "name": "Kings",
+    "location": "Kansas City",
+    "score": 410
+  },
+  {
+    "name": "Kings",
+    "location": "Kansas City-Omaha",
+    "score": 410
+  },
+  {
+    "name": "Clippers",
+    "location": "Los Angeles",
+    "score": 413.10
+  },
+  {
+    "name": "Lakers",
+    "location": "Los Angeles",
+    "score": 596.07
+  },
+  {
+    "name": "Grizzlies",
+    "location": "Memphis",
+    "score": 494.35
+  },
+  {
+    "name": "Hawks",
+    "location": "Milwaukee",
+    "score": 595.57
+  },
+  {
+    "name": "Heat",
+    "location": "Miami",
+    "score": 527.6
+  },
+  {
+    "name": "Lakers",
+    "location": "Minneapolis",
+    "score": 596.07
+  },
+  {
+    "name": "Bucks",
+    "location": "Milwaukee",
+    "score": 421.52
+  },
+  {
+    "name": "Timberwolves",
+    "location": "Minnesota",
+    "score": 503.18
+  },
+  {
+    "name": "Nets",
+    "location": "New Jersey",
+    "score": 445.58
+  },
+  {
+    "name": "Hornets",
+    "location": "New Orleans",
+    "score": 513.75
+  },
+  {
+    "name": "Jazz",
+    "location": "New Orleans",
+    "score": 569.8
+  },
+  {
+    "name": "Knicks",
+    "location": "New York",
+    "score": 418.65
+  },
+  {
+    "name": "Nets",
+    "location": "New York",
+    "score": 445.58
+  },
+  {
+    "name": "Thunder",
+    "location": "Oklahoma City",
+    "score": 462.33
+  },
+  {
+    "name": "Magic",
+    "location": "Orlando",
+    "score": 702.16
+  },
+  {
+    "name": "Warriors",
+    "location": "Philadelphia",
+    "score": 446.1
+  },
+  {
+    "name": "76ers",
+    "location": "Philadelphia",
+    "score": 500.87
+  },
+  {
+    "name": "Suns",
+    "location": "Phoenix",
+    "score": 602.6
+  },
+  {
+    "name": "Trailblazers",
+    "location": "Portland",
+    "score": 423.42
+  },
+  {
+    "name": "Royals",
+    "location": "Rochester",
+    "score": 0
+  },
+  {
+    "name": "Kings",
+    "location": "Sacramento",
+    "score": 410
+  },
+  {
+    "name": "Spurs",
+    "location": "San Antonio",
+    "score": 488.94
+  },
+  {
+    "name": "Clippers",
+    "location": "San Diego",
+    "score": 413.10
+  },
+  {
+    "name": "Rockets",
+    "location": "San Diego",
+    "score": 503.64
+  },
+  {
+    "name": "Supersonics",
+    "location": "Seattle",
+    "score": 0
+  },
+  {
+    "name": "Warriors",
+    "location": "San Francisco",
+    "score": 446.1
+  },
+  {
+    "name": "Bombers",
+    "location": "St. Louis",
+    "score": 0
+  },
+  {
+    "name": "Hawks",
+    "location": "St. Louis",
+    "score": 595.57
+  },
+  {
+    "name": "Nationals",
+    "location": "Syracuse",
+    "score": 0
+  },
+  {
+    "name": "Huskies",
+    "location": "Toronto",
+    "score": 0
+  },
+  {
+    "name": "Raptors",
+    "location": "Toronto",
+    "score": 568.93
+  },
+  {
+    "name": "Blackhawks",
+    "location": "Tri-Cities",
+    "score": 0
+  },
+  {
+    "name": "Jazz",
+    "location": "Utah",
+    "score": 569.8
+  },
+  {
+    "name": "Grizzlies",
+    "location": "Vancouver",
+    "score": 494.35
+  },
+  {
+    "name": "Bullets",
+    "location": "Washington",
+    "score": 0
+  },
+  {
+    "name": "Wizards",
+    "location": "Washington",
+    "score": 328.83
+  }
+]

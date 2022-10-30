@@ -504,7 +504,7 @@ begin
   if not (lcPersistent in Fields.LifeCycles) then
   {$else}
   if DefaultFields then
-  {$endif}
+  {$endif ISDELPHIXE6}
     CreateFields;
   BindFields(true);
   fCurrentRow := -1;

@@ -105,7 +105,7 @@ TFTP Protocol and Client with RFC 1350/2347/2348/2349/7440 Support
 
 Current limitation: no Client code is defined yet - only the raw TFTP protocol.
 
-### mormot.net.tftp.server;
+### mormot.net.tftp.server
 
 TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
 - Abstract UDP Server
@@ -113,3 +113,13 @@ TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
 - `TTftpServerThread` Server Class
 
 Current limitation: only RRQ requests are supported/tested yet.
+
+### mormot.net.acme
+
+Automatic Certificate Management Environment (ACME v2) Client
+- Low-Level Cryptographic Wrappers
+- JWS HTTP-client implementation
+- ACME client implementation
+- Let's Encrypt TLS / HTTPS Encryption Certificates Support
+- HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
+

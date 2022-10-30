@@ -375,6 +375,23 @@ type
   /// used to determine the exact class type of a TSynPersistent
   TSynPersistentClass = class of TSynPersistent;
 
+
+  {$ifdef HASITERATORS}
+  /// abstract pointer Enumerator
+  TPointerEnumerator = record
+  private
+    Curr, After: PPointer;
+    function GetCurrent: pointer; inline;
+  public
+    procedure Init(Values: PPointerArray; Count: PtrUInt); inline;
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TPointerEnumerator; inline;
+    /// returns the current pointer value
+    property Current: pointer
+      read GetCurrent;
+  end;
+  {$endif HASITERATORS}
+
   {$M+}
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
@@ -404,6 +421,10 @@ type
     function Exists(item: pointer): boolean; virtual;
     /// fast delete one item in the list
     function Remove(item: pointer): PtrInt; virtual;
+    {$ifdef HASITERATORS}
+    /// an enumerator able to compile "for .. in list do" statements
+    function GetEnumerator: TPointerEnumerator;
+    {$endif HASITERATORS}
     /// how many items are stored in this TList instance
     property Count: integer
       read fCount;
@@ -1593,20 +1614,23 @@ type
     // stored checksum which is not needed any more
     function LoadFromBinary(const Buffer: RawByteString): boolean;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJson()
-    // - this method will therefore recognize T*ObjArray types
     function SaveToJson(EnumSetsAsText: boolean = false;
       reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
+    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
+      reformat: TTextWriterJsonFormat = jsonCompact); overload;
+    /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
+    procedure SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
+      ObjectOptions: TTextWriterWriteObjectOptions = [];
       reformat: TTextWriterJsonFormat = jsonCompact); overload;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextDateWTTextWriterriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJson(W: TTextWriter); overload;
+    procedure SaveToJson(W: TTextWriter;
+      ObjectOptions: TTextWriterWriteObjectOptions = []); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJson method, i.e.
     // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -1939,6 +1963,9 @@ type
     function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
+    /// returns position in array, or -1 if not found with a custom comparer
+    function FindOrNewComp(aHashCode: cardinal; Item: pointer;
+      Comp: TDynArraySortCompare = nil): PtrInt;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
@@ -2141,7 +2168,7 @@ type
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
-    // some suffix is added to make it unique
+    // some suffix is added to make it unique, counting from _1 to _999
     // - use internally FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
@@ -2482,17 +2509,20 @@ function UpdateIniNameValue(var Content: RawUtf8;
 
 /// fill a class Instance properties from an .ini content
 // - the class property fields are searched in the supplied main SectionName
-// - nested objects are searched in their own section, named from their property
+// - nested objects and multi-line text values are searched in their own section,
+// named from their section level and property (e.g. [mainprop.nested1.nested2])
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8 = 'Main'): boolean;
+  const SectionName: RawUtf8 = 'Main'; Level: integer = 0): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
-// - nested objects are written in their own section, named from their property
+// - nested objects and multi-line text values are written in their own section,
+// named from their section level and property (e.g. [mainprop.nested1.nested2])
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8 = 'Main';
   Options: TTextWriterWriteObjectOptions =
-    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment]): RawUtf8;
+    [woEnumSetsAsText, woRawBlobAsBase64, woHumanReadableEnumSetAsComment];
+    Level: integer = 0): RawUtf8;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
@@ -2500,6 +2530,7 @@ function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// search if the WebSocketUpgrade() header is present
+// - consider checking the hsrConnectionUpgrade flag instead
 function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
 
 
@@ -2508,13 +2539,14 @@ function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
 type
   /// used to store one list of hashed RawUtf8 in TRawUtf8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
+  // - each slot has its own TRWLightLock for efficient concurrent reads
   {$ifdef USERECORDWITHMETHODS}
   TRawUtf8InterningSlot = record
   {$else}
   TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: TLightLock;
+    fSafe: TRWLightLock;
     fCount: integer;
     fValue: TRawUtf8DynArray;
     fValues: TDynArrayHashed;
@@ -2539,6 +2571,7 @@ type
     property Count: integer
       read fCount;
   end;
+  PRawUtf8InterningSlot = ^TRawUtf8InterningSlot;
 
   /// allow to store only one copy of distinct RawUtf8 values
   // - thanks to the Copy-On-Write feature of string variables, this may
@@ -2649,7 +2682,7 @@ type
     procedure SetValue(const Name, Value: RawUtf8);
     function GetTextCRLF: RawUtf8;
     procedure SetTextCRLF(const Value: RawUtf8);
-    procedure SetTextPtr(P,PEnd: PUtf8Char; const Delimiter: RawUtf8);
+    procedure SetTextPtr(P, PEnd: PUtf8Char; const Delimiter: RawUtf8);
     function GetTextPtr: PPUtf8CharArray;
       {$ifdef HASINLINE}inline;{$endif}
     function GetNoDuplicate: boolean;
@@ -3119,6 +3152,42 @@ begin
     AssignError(nil);
 end;
 
+{$ifdef HASITERATORS}
+
+{ TPointerEnumerator }
+
+procedure TPointerEnumerator.Init(Values: PPointerArray; Count: PtrUInt);
+begin
+  if Count = 0 then
+  begin
+    Curr := nil;
+    After := nil;
+  end
+  else
+  begin
+    Curr := pointer(Values);
+    After := @Values[Count];
+    dec(Curr);
+  end;
+end;
+
+function TPointerEnumerator.MoveNext: Boolean;
+begin
+  inc(Curr);
+  result := PtrUInt(Curr) < PtrUInt(After);
+end;
+
+function TPointerEnumerator.GetCurrent: pointer;
+begin
+  result := Curr^;
+end;
+
+function TPointerEnumerator.GetEnumerator: TPointerEnumerator;
+begin
+  result := self;
+end;
+
+{$endif HASITERATORS}
 
 { TSynList }
 
@@ -3138,19 +3207,8 @@ begin
 end;
 
 function TSynList.Insert(item: pointer; index: PtrInt): PtrInt;
-var
-  n: PtrInt;
 begin
-  n := fCount;
-  if length(fList) = n then
-    SetLength(fList, NextGrow(n));
-  if PtrUInt(index) < PtrUInt(n) then
-    MoveFast(fList[index], fList[index + 1], (n - index) * SizeOf(pointer))
-  else
-    index := n;
-  fList[index] := item;
-  inc(fCount);
-  result := index;
+  result := PtrArrayInsert(fList, item, index, fCount);
 end;
 
 procedure TSynList.Clear;
@@ -3191,6 +3249,15 @@ begin
   if result >= 0 then
     Delete(result);
 end;
+
+{$ifdef HASITERATORS}
+
+function TSynList.GetEnumerator: TPointerEnumerator;
+begin
+  result.Init(pointer(fList), fCount);
+end;
+
+{$endif HASITERATORS}
 
 
 { TSynObjectList }
@@ -4107,13 +4174,14 @@ begin
 end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8): boolean;
+  const SectionName: RawUtf8; Level: integer): boolean;
 var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
-  section: PUtf8Char;
-  v: RawUtf8;
+  section, nested: PUtf8Char;
+  name: PAnsiChar;
+  n, v: RawUtf8;
   up: array[byte] of AnsiChar;
 begin
   result := false;
@@ -4131,23 +4199,69 @@ begin
     if p^.Prop <> nil then
       if p^.Value.Kind = rkClass then
       begin // recursive load from another per-property section
-        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), p^.Name) then
+        if Level = 0 then
+          n := p^.Name
+        else
+          n := SectionName + '.' + p^.Name;
+        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n, Level + 1) then
           result := true;
       end
       else
       begin
         PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
         v := FindIniNameValue(section, @up, #0);
-        if (v <> #0) and
-           p^.Prop^.SetValueText(Instance, v) then
-          result := true;
+        if (v = #0) and
+           (p^.Value.Parser in ptMultiLineStringTypes) then
+        begin
+          name := @up;
+          if Level <> 0 then
+          begin
+            name := UpperCopy255(name, SectionName);
+            name^ := '.';
+            inc(name);
+          end;
+          PWord(UpperCopy255(name, p^.Name))^ := ord(']');
+          nested := pointer(Ini);
+          if FindSectionFirstLine(nested, @up) then
+            // multi-line text value has been stored in its own section
+            v := GetSectionContent(nested);
+        end;
+        if v <> #0 then
+          if p^.Prop^.SetValueText(Instance, v) then
+            result := true;
       end;
     inc(p);
   end;
 end;
 
+function TrimAndIsMultiLine(var U: RawUtf8): boolean;
+var
+  L: PtrInt;
+  P: PUtf8Char absolute U;
+begin
+  result := false;
+  L := length(U);
+  if L = 0 then
+    exit;
+  while P[L - 1] in [#13, #10] do
+  begin
+    dec(L);
+    if L = 0 then
+    begin
+      U := ''; // no meaningful text
+      exit;
+    end;
+  end;
+  if L <> length(U) then
+    SetLength(U, L); // trim right
+  if BufferLineLength(P, P + L) = L then // may use x86_64 SSE2 asm
+    exit; // no line feed
+  result := true; // there are line feeds within this text
+  U := TrimChar(U, [#13]); // normalize #13#10 into #10 as ObjectToIni()
+end;
+
 function ObjectToIni(const Instance: TObject; const SectionName: RawUtf8;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
+  Options: TTextWriterWriteObjectOptions; Level: integer): RawUtf8;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
@@ -4156,7 +4270,7 @@ var
   o: TTextWriterWriteObjectOptions;
   r: TRttiCustom;
   p: PRttiCustomProp;
-  s: RawUtf8;
+  n, s: RawUtf8;
 begin
   result := '';
   if Instance = nil then
@@ -4173,33 +4287,58 @@ begin
       if p^.Prop <> nil then
         if p^.Value.Kind = rkClass then
         begin
-          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), p^.Name);
+          if Level = 0 then
+            n := p^.Name
+          else
+            n := SectionName + '.' + p^.Name;
+          s := ObjectToIni(p^.Prop^.GetObjProp(Instance), n, Options, Level + 1);
           if s <> '' then
             AddRawUtf8(nested, nestedcount, s);
+        end
+        else if p^.Value.Kind = rkEnumeration then
+        begin
+          if woHumanReadableEnumSetAsComment in Options then
+          begin
+            p^.Value.Cache.EnumInfo^.GetEnumNameAll(
+              s, '; values=', {quoted=}false, #10, {uncamelcase=}true);
+            W.AddString(s);
+          end;
+          // AddValueJson() would have written "quotes"
+          W.AddString(p^.Name);
+          W.Add('=');
+          W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
+            p^.Prop^.GetOrdProp(Instance)));
+          W.Add(#10);
+        end
+        else if p^.Value.Parser in ptMultiLineStringTypes then
+        begin
+          p^.Prop^.GetAsString(Instance, s);
+          if TrimAndIsMultiLine(s) then
+          begin
+            // store multi-line text values in their own section
+            if Level = 0 then
+              FormatUtf8('[%]'#10'%'#10#10, [p^.Name, s], n)
+            else
+              FormatUtf8('[%.%]'#10'%'#10#10, [SectionName, p^.Name, s], n);
+            AddRawUtf8(nested, nestedcount, n);
+          end
+          else
+          begin
+            W.AddString(p^.Name);
+            W.Add('=');
+            W.AddString(s); // single line text
+            W.Add(#10);
+          end;
         end
         else
         begin
           o := Options - [woHumanReadableEnumSetAsComment];
-          case p^.Value.Kind of
-            rkSet: // not supported yet in IniToObject/SetValueText above
-              exclude(o, woEnumSetsAsText);
-            rkEnumeration:
-              if woHumanReadableEnumSetAsComment in Options then
-              begin
-                p^.Value.Cache.EnumInfo^.GetEnumNameAll(
-                  s, '; values=', false, #10, true);
-                W.AddString(s);
-              end;
-          end;
+          if p^.Value.Kind = rkSet then
+            // not supported (yet) in IniToObject/SetValueText above
+            exclude(o, woEnumSetsAsText);
           W.AddString(p^.Name);
           W.Add('=');
-          case p^.Value.Kind of
-            rkEnumeration: // AddValueJson() would have written "quotes"
-              W.AddTrimLeftLowerCase(p^.Value.Cache.EnumInfo^.GetEnumNameOrd(
-                p^.Prop^.GetOrdProp(Instance)));
-          else
-            p^.AddValueJson(W, Instance, o, twOnSameLine);
-          end;
+          p^.AddValueJson(W, Instance, o, twOnSameLine);
           W.Add(#10);
         end;
       inc(p);
@@ -4231,52 +4370,61 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  fSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
-  {$else}
+  fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  if i >= 0 then
   begin
-  {$endif HASFASTTRYFINALLY}
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    if added then
-    begin
-      fValue[i] := aText;   // copy new value to the pool
-      aResult := aText;
-    end
-    else
-      aResult := fValue[i]; // return unified string instance
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    aResult := fValue[i]; // return unified string instance
+    fSafe.ReadUnLock;
+    exit;
   end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added within the write lock
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  if added then
+  begin
+    fValue[i] := aText; // copy new value to the pool
+    aResult := aText;
+  end
+  else
+    aResult := fValue[i]; // was added in a background thread
+  fSafe.WriteUnLock;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
 var
-  i: PtrInt;
+  c: AnsiChar;
   added: boolean;
+  i: PtrInt;
   bak: TDynArraySortCompare;
 begin
-  fSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
-  try
-  {$else}
+  if not fSafe.TryReadLock then
   begin
-  {$endif HASFASTTRYFINALLY}
-    bak := fValues.Hasher.fCompare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
-    PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    PDynArrayHasher(@fValues.Hasher)^.fCompare := bak;
-    if added then
-      FastSetString(fValue[i], aText, aTextLen); // new value to the pool
-    aResult := fValue[i]; // return unified string instance
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    FastSetString(aResult, aText, aTextLen); // avoid waiting on contention
+    exit;
   end;
+  c := aText[aTextLen];
+  aText[aTextLen] := #0; // input buffer may not be #0 terminated
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
+  if i >= 0 then
+  begin
+    aResult := fValue[i]; // return unified string instance
+    fSafe.ReadUnLock;
+    aText[aTextLen] := c;
+    exit;
+  end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added
+  bak := fValues.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+  PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  PDynArrayHasher(@fValues.Hasher)^.fCompare := bak;
+  if added then
+    FastSetString(fValue[i], aText, aTextLen); // new value to the pool
+  aResult := fValue[i];
+  fSafe.WriteUnLock;
+  aText[aTextLen] := c;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
@@ -4284,26 +4432,32 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  fSafe.Lock;
-  try
-    i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    if added then
-      fValue[i] := aText    // copy new value to the pool
-    else
-      aText := fValue[i];   // return unified string instance
-  finally
-    fSafe.UnLock;
+  fSafe.ReadLock;
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  if i >= 0 then
+  begin
+    aText := fValue[i]; // return unified string instance
+    fSafe.ReadUnLock;
+    exit;
   end;
+  fSafe.ReadUnLock;
+  fSafe.WriteLock; // need to be added
+  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  if added then
+    fValue[i] := aText  // copy new value to the pool
+  else
+    aText := fValue[i]; // was added in a background thread
+  fSafe.WriteUnLock;
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
 begin
-  fSafe.Lock;
+  fSafe.WriteLock;
   try
     fValues.SetCount(0); // Values.Clear
     fValues.Hasher.ForceReHash;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -4313,7 +4467,9 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  fSafe.Lock;
+  if fCount = 0 then
+    exit;
+  fSafe.WriteLock;
   try
     if fCount = 0 then
       exit;
@@ -4347,7 +4503,7 @@ begin
       fValues.ForceReHash;
     end;
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -4955,7 +5111,7 @@ begin
         Break;
       if DelimLen > 0 then
       begin
-        MoveSmall(pointer(Delimiter), P, DelimLen);
+        MoveByOne(pointer(Delimiter), P, DelimLen);
         inc(P, DelimLen);
       end;
     until false;
@@ -5375,7 +5531,7 @@ begin
       Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
     roUQWord:
       Compared := ord(PQWord(A)^ > PQWord(B)^) - ord(PQWord(A)^ < PQWord(B)^);
-    {$endif}
+    {$endif FPC_NEWRTTI}
   end;
   result := ORDTYPE_SIZE[ro];
 end;
@@ -5535,7 +5691,7 @@ label
   raw;
 begin
   Info := Info^.DynArrayItemType(itemsize);
-  Dest.WriteVarUInt32(itemsize); // may vary on 32-bit/64-bit compatibility
+  Dest.Write1(0); // warning: store itemsize=0 (mORMot 1 ignores it anyway)
   Dest.Write1(DelphiType(Info));
   Data := PPointer(Data)^; // de-reference pointer to array data
   if Data = nil then
@@ -5588,7 +5744,7 @@ end;
 function DynArrayLoadHeader(var Source: TFastReader;
   ArrayInfo, ItemInfo: PRttiInfo): integer;
 begin
-  Source.VarNextInt; // ignore stored itemsize for 32-bit/64-bit compatibility
+  Source.VarNextInt; // ignore stored itemsize (0 stored now)
   if Source.NextByte <> DelphiType(ItemInfo) then
     Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
   result := Source.VarUInt32;
@@ -7183,6 +7339,13 @@ end;
 
 procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJsonFormat);
+begin
+  SaveToJson(result, TEXTWRITEROPTIONS_ENUMASTEXT[EnumSetsAsText],
+    TEXTWRITEROBJECTOPTIONS_ENUMASTEXT[EnumSetsAsText]);
+end;
+
+procedure TDynArray.SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
+  ObjectOptions: TTextWriterWriteObjectOptions; reformat: TTextWriterJsonFormat);
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -7193,9 +7356,8 @@ begin
   begin
     W := DefaultJsonWriter.CreateOwnedStream(temp);
     try
-      if EnumSetsAsText then
-        W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
-      SaveToJson(W);
+      W.CustomOptions := W.CustomOptions + Options;
+      SaveToJson(W, ObjectOptions);
       W.SetText(result, reformat);
     finally
       W.Free;
@@ -7203,7 +7365,8 @@ begin
   end;
 end;
 
-procedure TDynArray.SaveToJson(W: TTextWriter);
+procedure TDynArray.SaveToJson(W: TTextWriter;
+  ObjectOptions: TTextWriterWriteObjectOptions);
 var
   len, backup: PtrInt;
   hacklen: PDALen;
@@ -7217,7 +7380,7 @@ begin
     backup := hacklen^;
     try
       hacklen^ := len - _DAOFF; // may use ExternalCount
-      W.AddTypedJson(fValue, Info.Info); // serialization from mormot.core.json
+      W.AddTypedJson(fValue, Info.Info, ObjectOptions); // from mormot.core.json
     finally
       hacklen^ := backup;
     end;
@@ -9052,6 +9215,37 @@ begin
   RaiseFatalCollision('FindOrNew', aHashCode);
 end;
 
+function TDynArrayHasher.FindOrNewComp(aHashCode: cardinal; Item: pointer;
+  Comp: TDynArraySortCompare): PtrInt;
+var
+  first, last, ndx: PtrInt;
+begin // cut-down version of FindOrNew()
+  if not Assigned(Comp) then
+    Comp := fCompare;
+  ndx := HashTableIndex(aHashCode);
+  first := ndx;
+  last := fHashTableSize;
+  if hasHasher in fState then
+    repeat
+      result := HashTableIndexToIndex(ndx) - 1; // index+1 was stored
+      if (result < 0) or // void slot = not found, or return matching index
+         (Comp((PAnsiChar(fDynArray^.Value^) +
+           result * fDynArray^.fInfo.Cache.ItemSize)^, Item^) = 0) then
+        exit;
+      inc(ndx); // hash or slot collision -> search next item
+      if ndx = last then
+        if ndx= first then
+          break
+        else
+        begin
+          ndx := 0;
+          last := first;
+        end;
+    until false;
+  result := 0; // make compiler happy
+  RaiseFatalCollision('FindOrNewComp', aHashCode);
+end;
+
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
   n, ndx: PtrInt;
@@ -9610,7 +9804,9 @@ begin
     aName_ := aName + '_';
     j := 1;
     repeat
-      aName := aName_ + UInt32ToUtf8(j);
+      if j > high(SmallUInt32Utf8) then // should never happen - 999 is enough
+        raise EDynArray.Create('TDynArrayHashed.AddAndMakeUniqueName overflow');
+      aName := aName_ + SmallUInt32Utf8[j];
       ndx := FindHashedForAdding(aName, added);
       inc(j);
     until added;

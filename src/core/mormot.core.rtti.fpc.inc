@@ -616,9 +616,12 @@ end;
 procedure fpc_ansistr_decr_ref;      external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref;      external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign;        external name 'FPC_ANSISTR_ASSIGN';
-procedure fpc_ansistr_setlength;     external name 'FPC_ANSISTR_SETLENGTH';
+//procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
 procedure fpc_ansistr_compare;       external name 'FPC_ANSISTR_COMPARE';
 procedure fpc_ansistr_compare_equal; external name 'FPC_ANSISTR_COMPARE_EQUAL';
+procedure fpc_ansistr_concat;        external name 'fpc_ansistr_concat';
+procedure fpc_ansistr_concat_multi;  external name 'fpc_ansistr_concat_multi';
+procedure fpc_setstring_ansistr;     external name 'fpc_setstring_ansistr_pansichar';
 procedure fpc_unicodestr_decr_ref;   external name 'FPC_UNICODESTR_DECR_REF';
 procedure fpc_unicodestr_incr_ref;   external name 'FPC_UNICODESTR_INCR_REF';
 procedure fpc_unicodestr_assign;     external name 'FPC_UNICODESTR_ASSIGN';
@@ -626,12 +629,10 @@ procedure fpc_dynarray_incr_ref;     external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref;     external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear;        external name 'FPC_DYNARRAY_CLEAR';
 procedure fpc_variant_init;          external name 'FPC_VARIANT_INIT';
-{$ifdef FPC_X64MM}
-function  fpc_getmem(size: PtrUInt): pointer; external name 'FPC_GETMEM';
-procedure fpc_freemem;               external name 'FPC_FREEMEM';
-{$else}
-procedure _Freemem(p: pointer);      external name 'FPC_FREEMEM';
-{$endif FPC_X64MM}
+procedure fpc_getmem;                external name 'FPC_GETMEM';
+procedure fpc_freemem(p: pointer);   external name 'FPC_FREEMEM';
+procedure fpc_rtl_getmem;            external name 'SYSTEM_$$_GETMEM$QWORD$$POINTER';
+procedure fpc_rtl_freemem;           external name 'SYSTEM_$$_FREEMEM$POINTER$$QWORD';
 
 procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt = 0);
 var
@@ -639,11 +640,14 @@ var
 begin
   PatchCode(old, new, size, nil, {unprotected=}true);
   if jmp = 0 then
-    jmp := PtrUInt(@_Freemem);
-  repeat // search and fix "jmp rel _Freemem"
+    jmp := PtrUInt(@fpc_freemem);
+  repeat // search and fix "jmp rel fpc_freemem"
     dec(size);
     if size = 0 then
+    begin
+      //writeln('not found');
       exit;
+    end;
     rel := @old[size + 1];
   until (old[size] = $e9) and
         (rel^ = cardinal(jmp - PtrUInt(@new[size]) - 5));
@@ -670,7 +674,7 @@ asm
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
-        jmp     _Freemem
+        jmp     fpc_freemem
 end;
 
 procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
@@ -693,7 +697,7 @@ procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr [d]
         cmp     rax, s
-        jz      @eq
+        je      @eq
         test    s, s
         jz      @ns
         {$ifdef STRCNT32}
@@ -723,7 +727,7 @@ asm
         {$endif STRCNT32}
         ja      @n
 @free:  sub     d, _STRRECSIZE
-        jmp     _Freemem
+        jmp     fpc_freemem
 @n:
 end;
 
@@ -749,15 +753,15 @@ asm
         test    s1, s2
         jz      @maybe0
 @first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
-        sub     al, byte ptr [s2]
+        movzx   r8, byte ptr [s2]
+        sub     rax, r8
         je      @s
-        movsx   rax, al           // branchless execution on Quicksort
-        ret
+@0:     ret                       // branchless execution on Quicksort
 @maybe0:test    s2, s2
         jz      @1
         test    s1, s1
         jnz     @first
-        dec     rax
+        dec     eax
         ret
 @s:     mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
@@ -774,7 +778,7 @@ asm
         add     rax, 8
         js      @by8
 @e:     mov     rax, r8 // all equal -> return difflen
-@0:     ret
+        ret
 @d:     bsf     r10, r10 // compute s1^-s2^
         shr     r10, 3
         add     rax, r10
@@ -799,7 +803,7 @@ asm
         lea     s1, qword ptr [s1 + rax - 8]
         lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr [s1] // compare last 8 bytes
+        mov     r8, qword ptr [s1] // compare last 8 bytes (may include length)
         cmp     r8, qword ptr [s2]
         jne     @q
         align 16
@@ -838,7 +842,7 @@ begin
     if Info <> nil then
       FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
   end;
-  _Freemem(p);
+  fpc_freemem(p);
 end;
 
 procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
@@ -860,64 +864,21 @@ end;
 
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
 
-procedure _setstring_ansistr_pansichar(out s: pointer; buf: PAnsiChar;
+procedure _setstring_ansistr_pansichar(var s: pointer; buf: PAnsiChar;
   len: SizeInt; cp: cardinal);
-begin // the caller ensured s := ''
-  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
-    cp := DefaultSystemCodePage;
-  s := FastNewString(len, cp);
-  if buf <> nil then
-    MoveFast(buf^, s^, len);
-end;
-
-{$ifdef FPC_X64MM}
-
-procedure _ansistr_setlength_new(var s: pointer; len: PtrInt; cp: cardinal);
 var
-  p, new: PAnsiChar;
-  l: PtrInt;
+  new: pointer;
 begin
   if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
     cp := DefaultSystemCodePage;
   new := FastNewString(len, cp);
-  p := s;
-  if p <> nil then
-  begin
-    l := PStrLen(p - _STRLEN)^ + 1;
-    if l > len then
-      l := len;
-    MoveFast(p^, new^, l);
-  end;
-  FastAssignNew(s, new);
+  if buf <> nil then
+    MoveFast(buf^, new^, len);
+  if s = nil then
+    s := new
+  else
+    FastAssignNew(s, new); // needed since FPC 3.2.3
 end;
-
-procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
-  {$ifndef OSWINDOWS} nostackframe; {$endif} assembler;
-asm
-        mov     rax, qword ptr [s]
-        test    len, len
-        jle     _ansistr_decr_ref
-        test    rax, rax
-        jz      _ansistr_setlength_new
-        {$ifdef STRCNT32}
-        cmp     dword ptr [rax - _STRCNT], 1
-        {$else}
-        cmp     qword ptr [rax - _STRCNT], 1
-        {$endif STRCNT32}
-        jne     _ansistr_setlength_new
-        push    len
-        push    s
-        sub     qword ptr [s], _STRRECSIZE
-        add     len, _STRRECSIZE + 1
-        call    _reallocmem // rely on MM in-place detection
-        pop     s
-        pop     len
-        add     qword ptr [s], _STRRECSIZE
-        mov     qword ptr [rax].TStrRec.length, len
-        mov     byte ptr [rax + len + _STRRECSIZE], 0
-end;
-
-{$endif FPC_X64MM}
 
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
@@ -973,44 +934,47 @@ var
   new: PAnsiChar;
   l1: PtrInt;
 begin
-  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
-    cp := CP_UTF8;
-  cp1 := _lstrcp(s1, cp);
-  cp2 := _lstrcp(s2, cp1);
-  if (cp1 = cp2) and
-     ((cp >= CP_RAWBLOB) or
-      (cp = cp1)) then
-    cp := cp1
-  else if ((cp1 <> cp) and
-           (cp1 < CP_RAWBLOB)) or
-          ((cp2 <> cp) and
-           (cp2 < CP_RAWBLOB)) then
-  begin
-    // we need to ensure that codepage handling is performed as expected
-    _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
-    exit;
-  end;
-  // we can safely concatenate the input with no conversion
   if s1 = '' then
     dest := s2
   else if s2 = '' then
     dest := s1
   else
   begin
-    l1 := _lstrlen(s1);
-    if pointer(s1) = pointer(dest) then
+    if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
+      cp := CP_UTF8;
+    cp1 := _lstrcp(s1, cp);
+    cp2 := _lstrcp(s2, cp1);
+    if (cp1 = cp2) and
+       ((cp >= CP_RAWBLOB) or
+        (cp = cp1)) then
+      cp := cp1
+    else if ((cp1 <> cp) and
+             (cp1 < CP_RAWBLOB)) or
+            ((cp2 <> cp) and
+             (cp2 < CP_RAWBLOB)) then
     begin
-      // dest := dest+s2 -> self-resize dest
-      {$ifdef FPC_X64MM}
-      _ansistr_setlength(dest, l1 + _lstrlen(s2), cp);
-      {$else}
-      SetLength(dest, l1 + _lstrlen(s2));
-      {$endif FPC_X64MM}
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
-      MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
+      // we need to ensure that codepage handling is performed as expected
+      _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
+      exit;
+    end;
+    // we can safely concatenate the input with no conversion
+    l1 := _lstrlen(s1);
+    if (pointer(s1) = pointer(dest)) and
+       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
+    begin
+      // dest := dest+s2 -> resize dest inplace
+      new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
+      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.length := l1 + _lstrlen(s2);
+      pointer(dest) := new;
+      new := ReallocMem(pointer(dest),
+        PStrRec(new)^.length + (_STRRECSIZE + 4)) + _STRRECSIZE;
+      pointer(dest) := new;
+      MoveFast(pointer(s2)^, new[l1], _lstrlen(s2) + 1); // +1 = #0
     end
     else
     begin
+      // we need to allocate a new string
       new := FastNewString(l1 + _lstrlen(s2), cp);
       MoveFast(pointer(s1)^, new[0], l1);
       MoveFast(pointer(s2)^, new[l1], _lstrlen(s2));
@@ -1073,6 +1037,7 @@ begin
   len := _lstrlen(RawByteString(p));
   cpf := _lstrcp(RawByteString(p), cp);
   if (cpf <> cp) and
+     (cp < CP_RAWBLOB) and
      (cpf < CP_RAWBLOB) then
     cpf := 0
   else
@@ -1101,16 +1066,22 @@ begin
     // we can safely concatenate the input with no conversion
     p := pointer(s[first]);
     l := _lstrlen(RawByteString(p));
-    if p = pointer(dest) then
+    if (p = pointer(dest)) and
+       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
     begin
-      // dest := dest+s... -> self-resize
-      SetLength(dest, len);
-      new := pointer(dest);
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
+      // dest := dest+s... -> resize dest inplace
+      new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
+      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.length := len;
+      pointer(dest) := new;
+      new := ReallocMem(pointer(dest), len + (_STRRECSIZE + 16)) + _STRRECSIZE;
+      PCardinal(new + len)^ := 0; // as FastNewString and SetLength do
+      pointer(dest) := new;
       cp := 0; // no FastAssignNew() below
     end
     else
     begin
+      // we need to allocate a new string
       new := FastNewString(len, cp);
       MoveFast(p^, new[0], l);
     end;
@@ -1128,65 +1099,13 @@ begin
   end;
 end;
 
-procedure _fpc_ansistr_concat(var a: RawUtf8);
-begin
-  a := a + a; // to generate "call fpc_ansistr_concat" opcode
-end;
-
-procedure _fpc_ansistr_concat_multi(var a: RawUtf8);
-begin
-  a := a + a + a; // to generate "call fpc_ansistr_concat_multi" opcode
-end;
-
-procedure _fpc_setstring_ansistr(var s: RawByteString; buf: PAnsiChar;
-  len: SizeInt; cp: cardinal);
-begin // = call fpc_ansistr_decr_ref + call fpc_setstring_ansistr_pansichar
-  SetString(s, buf, len, cp);
-end;
-
-procedure RedirectRtlCall(dummy, dest: PByteArray; offset: PtrInt);
-begin
-  dummy := @dummy[offset]; // offset to ignore e.g. call fpc_ansistr_decr_ref
-  repeat
-    if dummy[0] = $e8 then
-    begin
-      // found "call fpc_setstring_ansistr_pansichar" opcode
-      RedirectCode(@dummy[PInteger(@dummy[1])^ + 5], dest);
-      exit;
-    end;
-    inc(PByte(dummy));
-  until PInt64(dummy)^ = 0;
-end;
-
-procedure RedirectRtlUtf8(dummy, dest: PByteArray);
-begin
-  // POSIX only ABI: Windows is never natively UTF-8
-  repeat
-    if (dummy[0] = $b9) and
-       (PCardinal(@dummy[1])^ = CP_UTF8) then
-      case dummy[5] of
-        $e8:
-          begin
-            // found "mov ecx,65001; call fpc_ansistr_concat" opcodes
-            RedirectCode(@dummy[PInteger(@dummy[6])^ + 10], dest);
-            exit;
-          end;
-        $ba:
-          if (PCardinal(@dummy[6])^ = 2) and
-             (dummy[10] = $e8) then
-          begin
-            // found "mov ecx,65001; mov edx,2; call fpc_ansistr_concat_multi"
-            RedirectCode(@dummy[PInteger(@dummy[11])^ + 15], dest);
-            exit;
-          end;
-      end;
-    inc(PByte(dummy));
-  until PInt64(dummy)^ = 0;
-end;
-
 {$endif FPC_HAS_CPSTRING}
 
 procedure RedirectRtl;
+{$ifndef NOPATCHRTL}
+var
+  mm: TMemoryManager;
+{$endif NOPATCHRTL}
 begin
   {$ifndef NOPATCHRTL}
   RedirectCode(@system.Move, @MoveFast);
@@ -1194,7 +1113,7 @@ begin
   PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
   PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
   PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $77); // fpclen=$12f
+  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $7f); // fpclen=$12f
   PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
   PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
   PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
@@ -1205,22 +1124,22 @@ begin
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
   PatchCode(@fpc_variant_init, @_variant_init, $0f); // fpclen=$1f
   {$ifdef FPC_HAS_CPSTRING}
-  RedirectRtlCall(@_fpc_setstring_ansistr, @_setstring_ansistr_pansichar, $2d);
-  // Delphi/Windows is never natively UTF-8, but FPC+Lazarus may be :)
+  RedirectCode(@fpc_setstring_ansistr, @_setstring_ansistr_pansichar);
+  // Delphi/Windows is never natively UTF-8, but FPC+Lazarus is very likely :)
   if DefaultSystemCodePage = CP_UTF8 then
   begin
     // dedicated UTF-8 concatenation RTL function replacements
-    RedirectRtlUtf8(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
-    RedirectRtlUtf8(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
+    RedirectCode(@fpc_ansistr_concat, @_ansistr_concat_utf8);
+    RedirectCode(@fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;
-  {$ifdef FPC_X64MM}
-  RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);
-  {$endif FPC_X64MM}
+  //RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength); buggy
   {$endif FPC_HAS_CPSTRING}
-  {$ifdef FPC_X64MM}
-  RedirectCode(@fpc_getmem, @_Getmem);
-  RedirectCode(@fpc_freemem, @_Freemem);
-  {$endif FPC_X64MM}
+  GetMemoryManager(mm); // will work with mormot.core.fpcx64mm and any other MM
+  RedirectCode(@fpc_rtl_getmem, @mm.Getmem);    // RTL calls
+  RedirectCode(@fpc_rtl_freemem, @mm.Freemem);
+  RedirectCode(@ReAllocMem, @mm.ReAllocMem);
+  RedirectCode(@fpc_getmem, @mm.Getmem);        // asm calls
+  RedirectCode(@fpc_freemem, @mm.Freemem);
   {$endif NOPATCHRTL}
 end;
 

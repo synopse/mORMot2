@@ -147,19 +147,18 @@ type
     ValueVar: TInterfaceMethodValueVar;
     /// how the variable is to be passed at asm level
     ValueKindAsm: TInterfaceMethodValueAsm;
-    /// used to specify if the argument is passed as register
+    /// specify if the argument is passed as register
     // - contains 0 if parameter is not a register
-    // - contains 1 for EAX, 2 for EDX and 3 for ECX registers for x86
-    // - contains 1 for RCX, 2 for RDX, 3 for R8, and
-    // 4 for R9, with a backing store on the stack for x64
-    // - contains 1 for R0, 2 R1 ... 4 for R3, with a backing store on the stack for arm
-    // - contains 1 for X0, 2 X1 ... 8 for X7, with a backing store on the stack for aarch64
+    // - i386: 1 for EAX, 2 for EDX and 3 for ECX registers
+    // - x86_64: 1=RCX/RDI 2=RDX/RSI 3=R8/RDX 4=R9/RCX, with stack backing store
+    // - ARM: 1=R0 2=R1 3=R2 4=R3, with a backing store on the stack
+    // - AARCH64: 1=X0 2=X1, ..., 8=X7, with a backing store on the stack
     RegisterIdent: byte;
-    /// used to specify if a floating-point argument is passed as register
-    // - contains always 0 for x86/x87
-    // - contains 1 for XMM0, 2 for XMM1, ..., 4 for XMM3 for x64
-    // - contains 1 for D0, 2 for D1, ..., 8 for D7 for armhf
-    // - contains 1 for V0, 2 for V1, ..., 8 for V7 for aarch64
+    /// specify if a floating-point argument is passed as register
+    // - i386/x87: contains always 0
+    // - x86_64: 1 for XMM0, 2 for XMM1, , ..., 8 for XMM7
+    // - ARMHF: 1 for D0, 2 for D1, ..., 8 for D7
+    // - AARCH64: 1 for V0, 2 for V1, ..., 8 for V7
     FPRegisterIdent: byte;
     /// index of the associated variable in the local array[ArgsUsedCount[]]
     IndexVar: byte;
@@ -593,7 +592,7 @@ type
     // - will return -1 if the method is not known
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
-    function FindMethodIndex(const aMethodName: RawUtf8): integer;
+    function FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
     /// find a particular method in internal Methods[] list
     // - just a wrapper around FindMethodIndex() returing a PInterfaceMethod
     // - will return nil if the method is not known
@@ -607,7 +606,7 @@ type
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
-    function CheckMethodIndex(const aMethodName: RawUtf8): integer; overload;
+    function CheckMethodIndex(const aMethodName: RawUtf8): PtrInt; overload;
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactory if the method is not known
@@ -1917,7 +1916,7 @@ const
   MAX_EXECSTACK = 60 * 4;
   {$else}
   MAX_EXECSTACK = 1024;
-  {$endif}
+  {$endif CPUARM}
 {$endif CPU64}
 
 {$ifdef CPUX86}
@@ -1928,7 +1927,7 @@ const
   PARAMREG_FIRST = REGEAX;
   PARAMREG_LAST = REGECX;
   // floating-point params are passed by reference
-  VMTSTUBSIZE = 24;
+  VMTSTUBSIZE = 24 {$ifdef OSPOSIX} + 4 {$endif};
 {$endif CPUX86}
 
 {$ifdef CPUX64}
@@ -2727,8 +2726,9 @@ begin
   case ValueType of
     imvBoolean:
       WR.AddShorter('false,');
-    imvObject:
-      WR.AddShorter('null,'); // may raise an error on the client side
+    imvObject,
+    imvRawJson:
+      WR.AddShorter('null,'); // may raise an error on client side for imvObject
     imvInterface:
       WR.AddShorter('0,');
     imvDynArray:
@@ -3238,6 +3238,7 @@ end;
 
 function TInterfacedObjectFakeRaw.FakeCall(stack: PFakeCallStack): Int64;
 var
+  me: TInterfacedObjectFakeRaw; // self may be broken by compiler optimizations
   ctxt: TFakeCallContext;
 begin
   (*
@@ -3245,18 +3246,18 @@ begin
      if your debugger reached here, you are executing a "fake" interface
      forged to call a remote SOA server or mock/stub an interface
   *)
-  self := SelfFromInterface;
+  me := SelfFromInterface;
   // setup context
   ctxt.Stack := stack;
-  if stack.MethodIndex >= PtrUInt(fFactory.MethodsCount) then
+  if stack.MethodIndex >= PtrUInt(me.fFactory.MethodsCount) then
     raise EInterfaceFactory.CreateUtf8('%.FakeCall(%) failed: out of range %',
-      [self, fFactory.fInterfaceName, stack.MethodIndex]);
-  ctxt.Method := @fFactory.fMethods[stack.MethodIndex];
+      [me, me.fFactory.fInterfaceName, stack.MethodIndex]);
+  ctxt.Method := @me.fFactory.fMethods[stack.MethodIndex];
   ctxt.ResultType := imvNone;
   ctxt.Result := @result;
   // call execution virtual method
   result := 0;
-  self.FakeCallInternalProcess(ctxt);
+  me.FakeCallInternalProcess(ctxt);
   // handle float result if needed (ordinals are already stored in result)
   {$ifdef HAS_FPREG} // result float is returned in FP first register
   if ctxt.ResultType in [imvDouble, imvDateTime] then
@@ -3291,15 +3292,17 @@ end;
 function TInterfacedObjectFakeRaw.FakeQueryInterface(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGuid;
   out Obj): TIntQry;
+var
+  me: TInterfacedObjectFakeRaw; // self may be broken by compiler optimizations
 begin
-  self := SelfFromInterface;
-  if IsEqualGuid(@IID, @fFactory.fInterfaceIID) then
+  me := SelfFromInterface;
+  if IsEqualGuid(@IID, @me.fFactory.fInterfaceIID) then
   begin
-    pointer(Obj) := @fVTable;
-    _AddRef;
+    pointer(Obj) := @me.fVTable;
+    me._AddRef;
     result := S_OK;
   end
-  else if GetInterface(IID, Obj) then
+  else if me.GetInterface(IID, Obj) then
     result := S_OK
   else
     result := TIntQry(E_NOINTERFACE);
@@ -4098,7 +4101,7 @@ begin
           // put in an integer register
           {$ifdef CPUARM}
           // on 32-bit ARM, ordinals>POINTERBYTES are also placed in registers
-          if (SizeInStack>POINTERBYTES) and
+          if (SizeInStack > POINTERBYTES) and
              ((reg and 1) = 0) then
             inc(reg); // must be aligned on even boundary
           // check if we have still enough registers, after previous increments
@@ -4162,7 +4165,7 @@ begin
     for m := 0 to MethodsCount - 1 do
       with fMethods[m] do
       begin
-        WR.Add('{"method":"%","arguments":[',[URI]);
+        WR.Add('{"method":"%","arguments":[', [URI]);
         for a := 0 to High(Args) do
           Args[a].SerializeToContract(WR);
         WR.CancelLastComma;
@@ -4180,7 +4183,7 @@ begin
   end;
 end;
 
-function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): integer;
+function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUtf8): PtrInt;
 begin
   if (self = nil) or
      (aMethodName = '') then
@@ -4226,7 +4229,7 @@ begin
     result := -1;
 end;
 
-function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUtf8): integer;
+function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUtf8): PtrInt;
 begin
   if self = nil then
     raise EInterfaceFactory.Create('TInterfaceFactory(nil).CheckMethodIndex');
@@ -4518,14 +4521,22 @@ begin
           inc(P);                 // push {MethodIndex}
           P^ := $e2895251;
           inc(P);                 // push ecx; push edx; mov edx, esp
+          {$ifdef OSPOSIX} // align stack by 16 bytes
+          P^ := $e8505050;        // push eax; push eax; push eax (align stack)
+          inc(P);                 // call FakeCall
+          {$else}
           PByte(P)^ := $e8;
           inc(PByte(P));          // call FakeCall
+          {$endif OSPOSIX}
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall) - PtrUInt(P) - 4;
           inc(P);
           P^ := $c25dec89;        // mov esp, ebp; pop ebp; ret {StackSize}
           inc(PByte(P), 3);       // overlap c2=ret to avoid GPF
           P^ := (fMethods[i].ArgsSizeInStack shl 8) or $900000c2;
           inc(P);
+          {$ifdef OSPOSIX} // align code by 4 bytes
+          inc(PByte(P));
+          {$endif OSPOSIX}
         end;
         ReserveExecutableMemoryPageAccess(
           fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
@@ -6610,10 +6621,6 @@ end;
 
 type
   PCallMethodArgs = ^TCallMethodArgs;
-  {$ifdef FPC}
-  {$push}
-  {$packrecords 16} // stack is aligned on 16 bytes
-  {$endif FPC}
   TCallMethodArgs = record
     StackSize: PtrInt;
     StackAddr, method: PtrInt;
@@ -6624,9 +6631,6 @@ type
     res64: Int64Rec;
     resKind: TInterfaceMethodValueType;
   end;
-  {$ifdef FPC}
-  {$pop}
-  {$endif FPC}
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef CPUARM}
@@ -7174,8 +7178,8 @@ begin
     try
       if (optExecInMainThread in Options) and
          (GetCurrentThreadID <> MainThreadID) then
-        BackgroundExecuteCallMethod(@call, nil) else
-      if optExecInPerInterfaceThread in Options then
+        BackgroundExecuteCallMethod(@call, nil)
+      else if optExecInPerInterfaceThread in Options then
         if Assigned(BackgroundExecutionThread) then
           BackgroundExecuteCallMethod(@call, BackgroundExecutionThread)
         else
@@ -7504,7 +7508,7 @@ begin
       begin
         c := pointer(fValues[fMethod^.ArgsResultIndex]);
         if c^.Header = '' then
-          // set to 'Content-Type: application/json; charset=UTF-8' by default
+          // set to 'Content-Type: application/json' by default
           c^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
         // implementation could override the Header content
         fServiceCustomAnswerHead := c^.Header;

@@ -393,7 +393,9 @@ size_t LizardF_compressBegin(LizardF_compressionContext_t compressionContext, vo
         cctxPtr->maxBufferSize = requiredBuffSize;
         FREEMEM(cctxPtr->tmpBuff);
         cctxPtr->tmpBuff = (BYTE*)ALLOCATOR(1, requiredBuffSize);
-        if (cctxPtr->tmpBuff == NULL) { printf("ERROR in LizardF_compressBegin: Cannot allocate %d MB\n", (int)(requiredBuffSize>>20)); return (size_t)-LizardF_ERROR_allocation_failed; }
+        if (cctxPtr->tmpBuff == NULL) {
+          //AB printf("ERROR in LizardF_compressBegin: Cannot allocate %d MB\n", (int)(requiredBuffSize>>20)); return (size_t)-LizardF_ERROR_allocation_failed; 
+          }
     }
     cctxPtr->tmpIn = cctxPtr->tmpBuff;
     cctxPtr->tmpInSize = 0;

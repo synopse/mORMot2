@@ -36,7 +36,6 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.orm.base,
@@ -140,7 +139,7 @@ type
   public
     /// initialize the direct access to the MongoDB collection
     // - in practice, you should not have to call this constructor, but rather
-    // StaticMongoDBRegister() with a TMongoDatabase instance
+    // OrmMapMongoDB() with a TMongoDatabase instance
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); override;
     /// release used memory
     destructor Destroy; override;
@@ -225,19 +224,19 @@ type
 // used for storage (since they will be embedded within the document data)
 // - it will return the corresponding TRestStorageMongoDB instance -
 // you can access later to it and its associated collection e.g. via:
-// ! (aServer.StaticDataServer[TMyOrm] as TRestStorageMongoDB)
+// ! (aServer.GetStaticStorage(TMyOrm) as TRestStorageMongoDB)
 // - you can set aMapAutoFieldsIntoSmallerLength to compute a field name
 // mapping with minimal length, so that the stored BSON would be smaller:
 // by definition, ID/RowID will be mapped as 'id', but other fields will
 // use their first letter, and another other letter if needed (after a '_',
 // or in uppercase, or the next one) e.g. FirstName -> 'f', LastName -> 'l',
 // LockedAccount: 'la'...
-function StaticMongoDBRegister(aClass: TOrmClass; aServer: TRestOrmServer;
+function OrmMapMongoDB(aClass: TOrmClass; aServer: TRestOrm;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUtf8 = '';
   aMapAutoFieldsIntoSmallerLength: boolean = false): TRestStorageMongoDB;
 
 type
-  /// all possible options for StaticMongoDBRegisterAll/TRestMongoDBCreate functions
+  /// all possible options for OrmMapMongoDBAll/TRestMongoDBCreate functions
   // - by default, TSqlAuthUser and TSqlAuthGroup tables will be handled via the
   // external DB, but you can avoid it for speed when handling session and security
   // by setting mrDoNotRegisterUserGroupTables
@@ -247,12 +246,12 @@ type
   // use their first letter, and another other letter if needed (after a '_',
   // or in uppercase, or the next one) e.g. FirstName -> 'f', LastName -> 'l',
   // LockedAccount: 'la'... - WARNING: not yet implemented
-  TStaticMongoDBRegisterOption = (
+  TOrmMapMongoDBOption = (
     mrDoNotRegisterUserGroupTables,
     mrMapAutoFieldsIntoSmallerLength);
 
-  /// set of options for StaticMongoDBRegisterAll/TRestMongoDBCreate functions
-  TStaticMongoDBRegisterOptions = set of TStaticMongoDBRegisterOption;
+  /// set of options for OrmMapMongoDBAll/TRestMongoDBCreate functions
+  TOrmMapMongoDBOptions = set of TOrmMapMongoDBOption;
 
 /// create and register ALL classes of a given model to access a MongoDB server
 // - the collection names will follow the class names
@@ -260,9 +259,8 @@ type
 // index or populate default collection content
 // - if aMongoDBIdentifier is not 0, then SetEngineAddComputeIdentifier()
 // would be called
-function StaticMongoDBRegisterAll(aServer: TRestOrmServer;
-  aMongoDatabase: TMongoDatabase;
-  aOptions: TStaticMongoDBRegisterOptions = [];
+function OrmMapMongoDBAll(aServer: TRestOrm;
+  aMongoDatabase: TMongoDatabase; aOptions: TOrmMapMongoDBOptions = [];
   aMongoDBIdentifier: word = 0): boolean;
 
 /// create a new TRest instance, possibly using MongoDB for its ORM process
@@ -270,7 +268,7 @@ function StaticMongoDBRegisterAll(aServer: TRestOrmServer;
 // of this kind will be created and returned
 // - if aDefinition.Kind is 'MongoDB' or 'MongoDBS', it will instantiate an
 // in-memory TRestServerDB or a TRestServerFullMemory instance (calling
-// CreateInMemoryServerForAllVirtualTables), then StaticMongoDBRegisterAll()
+// CreateInMemoryServer), then OrmMapMongoDBAll()
 // with a TMongoClient initialized from aDefinition.ServerName
 // ('server' or 'server:port') - optionally with TLS enabled if Kind equals
 // 'MongoDBS' - and a TMongoDatabase created from aDefinition.DatabaseName,
@@ -280,7 +278,7 @@ function StaticMongoDBRegisterAll(aServer: TRestOrmServer;
 // would be called for all created TRestStorageMongoDB
 function TRestMongoDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aOptions: TStaticMongoDBRegisterOptions;
+  aOptions: TOrmMapMongoDBOptions;
   aMongoDBIdentifier: word = 0): TRest; overload;
 
 
@@ -298,7 +296,7 @@ implementation
 constructor TRestStorageMongoDB.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 begin
   inherited Create(aClass, aServer);
-  // ConnectionProperties should have been set in StaticMongoDBRegister()
+  // ConnectionProperties should have been set in OrmMapMongoDB()
   fCollection := fStoredClassMapping^.ConnectionProperties as TMongoCollection;
   InternalLog('will store % using %', [aClass, Collection], sllInfo);
   BsonProjectionSet(fBsonProjectionSimpleFields, true,
@@ -318,7 +316,7 @@ var
   temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
   sf := length(SubFields);
-  W := TBsonWriter.Create(temp);
+  W := TBsonWriter.Create(temp{%H-});
   try
     W.BsonDocumentBegin;
     if WithID then
@@ -330,7 +328,7 @@ begin
       name := name + SubFields[0];
     W.BsonWrite(name, result);
     for i := 0 to fStoredClassRecordProps.Fields.Count - 1 do
-      if i in Fields then
+      if FieldBitGet(Fields, i) then
       begin
         name := fStoredClassMapping^.ExtFieldNames[i];
         if i + 1 < sf then
@@ -352,7 +350,7 @@ begin
         else
           n := 0;
         for i := 0 to fStoredClassRecordProps.Fields.Count - 1 do
-          if i in Fields then
+          if FieldBitGet(Fields, i) then
           begin
             BsonFieldNames^[n] := ExtFieldNames[i];
             inc(n);
@@ -476,7 +474,7 @@ begin
   if (fEngineAddCompute = eacSynUniqueIdentifier) and
      (fEngineGenerator <> nil) then
   begin
-    result := fEngineGenerator.ComputeNew;
+    result := fEngineGenerator.ComputeNew; // this is preferred if several nodes
     fEngineLastID := result;
     exit;
   end;
@@ -501,6 +499,7 @@ var
   MissingID: boolean;
   V: PVarData;
 begin
+  // parse input JSON
   Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
   if (Doc.Kind <> dvObject) and
      (Occasion <> ooInsert) then
@@ -508,12 +507,14 @@ begin
   if not (Occasion in [ooInsert, ooUpdate]) then
     raise EOrmMongoDB.CreateUtf8(
       'Unexpected %.DocFromJson(Occasion=%)', [self, ToText(Occasion)^]);
+  // handle fields names and values
   MissingID := true;
   for i := Doc.Count - 1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(Doc.Names[i])) then
     begin
+      // extract and rename ID/RowID input field
       Doc.Names[i] := fStoredClassMapping^.RowIDFieldName;
-      VariantToInt64(Doc.Values[i], Int64(result));
+      VariantToInt64(Doc.Values[i], Int64(result)); // extract
       if (Occasion = ooUpdate) or
          (result = 0) then
         // update does not expect any $set:{_id:..}
@@ -524,11 +525,14 @@ begin
     end
     else
     begin
+      // change field name to the external mapped name
       ndx := fStoredClassRecordProps.Fields.IndexByName(Doc.Names[i]);
       if ndx < 0 then
         raise EOrmMongoDB.CreateUtf8(
           '%.DocFromJson: unknown field name [%]', [self, Doc.Names[i]]);
       Doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
+      // normalize values from JSON high-level types into MongoDB native types
+      // using the ORM/pascal declared types
       info := fStoredClassRecordProps.Fields.List[ndx];
       V := @Doc.Values[i];
       case V^.VType of
@@ -671,8 +675,14 @@ begin
         result := 0
       else
       begin
-        inc(fBatchIDsCount);
+        {$ifdef MONGO_OLDPROTOCOL}
+        // OP_INSERT layout: just the documents the one after the other
         fBatchWriter.BsonWriteDoc(doc);
+        {$else}
+        // insert command layout: as a JSON array of documents
+        fBatchWriter.BsonWrite(UInt32ToUtf8(fBatchIDsCount), doc);
+        {$endif MONGO_OLDPROTOCOL}
+        inc(fBatchIDsCount);
       end
     else
     begin
@@ -1266,19 +1276,23 @@ var
       B.BsonDocumentBegin;
       if Stmt.OrderByField <> nil then
       begin
+        // we still use the old OP_QUERY layout: TMongoCollection.DoFind
+        // will translate it into the new find: command
         B.BsonDocumentBegin('$query');
         AddWhereClause(B);
         n := high(Stmt.OrderByField);
         if (n = 0) and
            (Stmt.OrderByField[0] > 0) and
            (Stmt.Limit = 0) and
-           (Stmt.Offset = 0) and
-           (fStoredClassRecordProps.Fields.List[Stmt.OrderByField[0] - 1].
-             OrmFieldType in [oftAnsiText, oftUtf8Text]) then
+           (Stmt.Offset = 0) then
+          with fStoredClassRecordProps.Fields.List[Stmt.OrderByField[0] - 1] do
+            if (OrmFieldType in [oftAnsiText, oftUtf8Text]) and
+               not (aBinaryCollation in Attributes) then
           // $orderby is case sensitive with MongoDB -> client-side sort
           TextOrderByFirstField := fStoredClassMapping^.FieldNameByIndex(
-            Stmt.OrderByField[0] - 1)
-        else if n >= 0 then
+            Stmt.OrderByField[0] - 1);
+        if (TextOrderByFirstField = '') and
+           (n >= 0) then
         begin
           // non textual or multiple fields -> server-side sort
           B.BsonDocumentBegin('$orderby');
@@ -1451,7 +1465,7 @@ var
   W: TOrmWriter;
   MS: TRawByteStringStream;
   Res: TBsonDocument;
-  limit: PtrInt;
+  limit, f: PtrInt;
   extFieldNames, subFields: TRawUtf8DynArray;
   bits: TFieldBits;
   withID: boolean;
@@ -1540,8 +1554,8 @@ begin
             T := TOrmTableJson.CreateFromTables([fStoredClass], SQL,
               pointer(result), length(result));
             try
-              T.SortFields(T.FieldIndex(TextOrderByFirstField),
-                not(0 in Stmt.OrderByFieldDesc), nil, oftUtf8Text);
+              f := T.FieldIndex(TextOrderByFirstField);
+              T.SortFields(f, not(0 in Stmt.OrderByFieldDesc), nil, oftUtf8Text);
               result := T.GetJsonValues(W.Expand);
             finally
               T.Free;
@@ -1567,6 +1581,7 @@ end;
 function TRestStorageMongoDB.InternalBatchStart(Encoding: TRestBatchEncoding;
   BatchOptions: TRestBatchOptions): boolean;
 begin
+  //TODO: https://www.mongodb.com/docs/v6.0/core/bulk-write-operations/
   result := false; // means BATCH mode not supported
   if Encoding in [encPost, encDelete] then
   begin
@@ -1581,9 +1596,15 @@ begin
       fBatchMethod := BATCH_METHOD[Encoding];
       case fBatchMethod of
         mPOST:
-          // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
-          fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
-          // 64KB buffer for fBatchWriter instead of 8KB GetTempBuffer^
+          begin
+            // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
+            fBatchWriter := TBsonWriter.Create(TRawByteStringStream);
+            // 64KB buffer for fBatchWriter instead of 8KB GetTempBuffer^
+            {$ifndef MONGO_OLDPROTOCOL}
+            // insert: command layout expects a true BSON array
+            fBatchWriter.BsonDocumentBegin;
+            {$endif MONGO_OLDPROTOCOL}
+          end;
       end;
       result := true; // means BATCH mode is supported
     finally
@@ -1597,6 +1618,7 @@ procedure TRestStorageMongoDB.InternalBatchStop;
 var
   docs: TBsonDocument;
 begin
+  //TODO: https://www.mongodb.com/docs/v6.0/core/bulk-write-operations/
   try
     case fBatchMethod of
       mPOST:
@@ -1604,12 +1626,17 @@ begin
           // Add/Insert
           if fBatchWriter.TotalWritten = 0 then
             exit; // nothing to add
+          {$ifndef MONGO_OLDPROTOCOL}
+          // insert: command layout expects a true BSON array
+          fBatchWriter.BsonDocumentEnd;
+          {$endif MONGO_OLDPROTOCOL}
           fBatchWriter.ToBsonDocument(docs);
           fCollection.Insert(docs);
         end;
       mDELETE:
+        if fBatchIDsCount <> 0 then
         begin
-          SetLength(fBatchIDs, fBatchIDsCount);
+          DynArrayFakeLength(fBatchIDs, fBatchIDsCount);
           fCollection.Remove(BsonVariant(['_id', BsonVariant(['$in',
             BsonVariantFromInt64s(TInt64DynArray(fBatchIDs))])]));
         end;
@@ -1636,10 +1663,11 @@ begin
 end;
 
 
-function StaticMongoDBRegister(aClass: TOrmClass; aServer: TRestOrmServer;
+function OrmMapMongoDB(aClass: TOrmClass; aServer: TRestOrm;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUtf8;
   aMapAutoFieldsIntoSmallerLength: boolean): TRestStorageMongoDB;
 var
+  srv: TRestOrmServer;
   props: TOrmModelProperties;
 begin
   result := nil;
@@ -1647,6 +1675,7 @@ begin
      (aClass = nil) or
      (aMongoDatabase = nil) then
     exit; // avoid GPF
+  srv := aServer as TRestOrmServer;
   if aMongoDatabase.Client.Log = nil then
     aMongoDatabase.Client.SetLog(aServer.LogClass);
   with aServer.LogClass.Enter do
@@ -1660,14 +1689,13 @@ begin
     props.ExternalDB.Init(aClass, aMongoCollectionName,
       aMongoDatabase.CollectionOrCreate[aMongoCollectionName], true, []);
     props.ExternalDB.MapField('ID', '_id');
-    result := TRestStorageMongoDB.Create(aClass, aServer);
-    aServer.StaticTableSetup(props.TableIndex, result, sStaticDataTable);
+    result := TRestStorageMongoDB.Create(aClass, srv);
+    srv.StaticTableSetup(props.TableIndex, result, sStaticDataTable);
   end;
 end;
 
-function StaticMongoDBRegisterAll(aServer: TRestOrmServer;
-  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions;
-  aMongoDBIdentifier: word): boolean;
+function OrmMapMongoDBAll(aServer: TRestOrm; aMongoDatabase: TMongoDatabase;
+  aOptions: TOrmMapMongoDBOptions; aMongoDBIdentifier: word): boolean;
 var
   i: PtrInt;
   storage: TRestStorageMongoDB;
@@ -1687,25 +1715,25 @@ begin
         continue
       else
       begin
-        storage := StaticMongoDBRegister(Tables[i], aServer, aMongoDatabase, '');
+        storage := OrmMapMongoDB(Tables[i], aServer, aMongoDatabase, '');
         if storage = nil then
           result := false
         else if aMongoDBIdentifier <> 0 then
           storage.SetEngineAddComputeIdentifier(aMongoDBIdentifier);
       end;
   if result then
-    // ensure TOrm.InitializeTable() is called
-    aServer.InitializeTables([]); // will create indexes and default data
+    // call all TOrm.InitializeTable() to create indexes and default data
+    (aServer as TRestOrmServer).InitializeTables([]);
 end;
 
 function TRestMongoDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aOptions: TStaticMongoDBRegisterOptions; aMongoDBIdentifier: word): TRest;
+  aOptions: TOrmMapMongoDBOptions; aMongoDBIdentifier: word): TRest;
 var
   client: TMongoClient;
   database: TMongoDatabase;
   server, port, pwd: RawUtf8;
-  tls: boolean;
+  o: TMongoClientOptions;
   p: integer;
 begin
   result := nil;
@@ -1713,6 +1741,8 @@ begin
     exit;
   if IdemPChar(pointer(aDefinition.Kind), 'MONGODB') then
   begin
+    // kind=mongodb/mongodbs servername=server:port databasename=$db
+    // todo: https://www.mongodb.com/docs/manual/reference/connection-string ?
     Split(aDefinition.ServerName, ':', server, port);
     if (server = '') or
        (server[1] in ['?', '*']) or
@@ -1720,8 +1750,10 @@ begin
       // check mandatory MongoDB IP and Database
       exit;
     p := Utf8ToInteger(port, 1024, 65535, MONGODB_DEFAULTPORT);
-    tls := ord(aDefinition.Kind[8]) in [ord('S'), ord('s')]; // 'MongoDBS'
-    client := TMongoClient.Create(server, p, tls);
+    o := MONGODB_DEFAULTOPTIONS; // as set by default on TMongoClient.Create()
+    if ord(aDefinition.Kind[8]) in [ord('S'), ord('s')] then // 'mongodbs'
+      include(o, mcoTls);
+    client := TMongoClient.Create(server, p, o);
     try
       with aDefinition do
         if (User <> '') and
@@ -1732,9 +1764,8 @@ begin
         end
         else
           database := client.Open(DatabaseName);
-      result := CreateInMemoryServerForAllVirtualTables(
-        aModel, aHandleAuthentication);
-      StaticMongoDBRegisterAll(
+      result := CreateInMemoryServer(aModel, aHandleAuthentication);
+      OrmMapMongoDBAll(
         (result as TRestServer).OrmInstance as TRestOrmServer,
         database, aOptions, aMongoDBIdentifier);
       result.PrivateGarbageCollector.Add(client); // connection owned by server

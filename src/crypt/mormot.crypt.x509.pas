@@ -119,6 +119,9 @@ type
     Data: PAnsiChar;
     /// how many bytes are stored in this TAG
     Len: PtrUInt;
+    /// reset all fields of this tag
+    // - if TAsnTag is allocated on stack, should be called before Parse()
+    procedure Clear;
     /// low-level unserialization from DER encoded binary
     procedure Parse(var reader: TFastReader);
     /// convert an atOid tag into an array of unsigned integers
@@ -554,13 +557,15 @@ end;
 
 { TAsnTag }
 
-procedure TAsnTag.Parse(var reader: TFastReader);
-var
-  v: cardinal;
+procedure TAsnTag.Clear;
 begin
   FillCharFast(self, SizeOf(self), 0);
-  if reader.EOF then
-    reader.ErrorOverflow;
+end;
+
+procedure TAsnTag.Parse(var reader: TFastReader);
+var
+  v, n: cardinal;
+begin
   v := reader.NextByte;
   TagClass := TAsnTagClass(v shr 6); // 2 highest bits are the class
   if v and (1 shl 5) <> 0 then
@@ -573,14 +578,18 @@ begin
   v := reader.NextByte;
   if v and $80 <> 0 then
   begin
-    v := v and $7f;
-    if v > 4 then
-      raise EAsn.CreateUtf8('Unexpected Len=%', [v]);
-    reader.Copy(@Len, v);
-  end
-  else
-    Len := v;
-  Data := reader.Next(Len);
+    n := v and $7f;
+    if (n = 0) or
+       (n > 4) then
+      raise EAsn.CreateUtf8('Unexpected Len=%', [n]);
+    v := 0;
+    repeat
+      v := (v shl 8) + reader.NextByte; // encoded as big endian
+      dec(n);
+    until n = 0;
+  end;
+  Len := v;
+  Data := reader.Next(v);
 end;
 
 function TAsnTag.ToOid: TAsnOid;
@@ -627,13 +636,13 @@ begin
   text[0] := #2;
   text[1] := AnsiChar(f + ord('0')); // first integer is 0,1,2
   text[2] := '.';
-  AppendShortInteger(v - f * 40, text);
+  AppendShortCardinal(v - f * 40, text);
   inc(text[0]);
   text[ord(text[0])] := '.';
   while p <> nil do // process the remaining integers
   begin
     p := FromVarUInt32Safe(p, pmax, v);
-    AppendShortInteger(v, text);
+    AppendShortCardinal(v, text);
     inc(text[0]);
     text[ord(text[0])] := '.';
   end;
@@ -673,7 +682,7 @@ begin
           if Len = 0 then
             exit; // was a plain and simple 0 value
         end;
-        MoveSmall(Data, @result, Len); // was stored as little-endian
+        MoveByOne(Data, @result, Len); // was stored as little-endian
       end;
     atBitString:
       begin
@@ -682,7 +691,7 @@ begin
           raise EAsn.CreateUtf8('ToUInt32 BitString unused=%', [ord(Data[0])]);
         inc(Data); // just ignore the unused number of bits = 0 (as in BER)
         dec(Len);
-        MoveSmall(Data, PAnsiChar(@result) + 4 - Len, Len);
+        MoveByOne(Data, PAnsiChar(@result) + 4 - Len, Len);
         result := bswap32(result); // was stored as big-endian
       end
   else
@@ -890,7 +899,7 @@ type
 
 var
   XRegistered: array[TXKeyKind] of TXRegistered;
-  ASN1_KIND: array[AnsiChar] of TAsnTagKind;
+  {%H-}ASN1_KIND: array[AnsiChar] of TAsnTagKind;
 
 procedure XRegister(Kind: TXKeyKind; RecordInfo: PRttiInfo; const Def: array of RawUtf8);
 var

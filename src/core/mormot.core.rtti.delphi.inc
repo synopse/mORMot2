@@ -627,8 +627,7 @@ var
   kind: TMethodKind;
   cc: TCallConv;
   flags: ^TParamFlags;
-  name, argtypename: PShortString;
-  argtypeinfo: PRttiInfo;
+  name: PShortString;
   p: PByte;
   pw: PWord absolute p;
   pi: PTypeData absolute p;
@@ -637,19 +636,27 @@ var
   procedure AddArgFromRtti;
   var
     pp: ^PPRttiInfo absolute p;
+    argtypnfo: PRttiInfo;
+    argtypnam: PShortString;
+    {$ifdef HASNOSTATICRTTI}
+    rc: TRttiCustom;
+    {$endif HASNOSTATICRTTI}
   begin
-    argtypename := ps;
+    argtypnam := ps;
     ps := @ps^[ord(ps^[0]) + 1];
+    argtypnfo := pp^^;
     if pp^ = nil then
+    begin
       {$ifdef HASNOSTATICRTTI} // detect e.g. TGuid/THash128 -> fake TypeInfo()
-      argtypeinfo := PT_INFO[TypeNameToStandardParserType(argtypename^)];
-      if argtypeinfo = nil then
+      rc := Rtti.Find(argtypnam^, []);
+      if rc <> nil then
+        argtypnfo := rc.Info
+      else
       {$endif HASNOSTATICRTTI}
-        RaiseError('"%: %" parameter has no RTTI', [name^, argtypename^])
-    else
-      argtypeinfo := pp^^;
+        RaiseError('"%: %" parameter has no RTTI', [name^, argtypnam^]);
+    end;
     inc(pp);
-    AddArgument(name, argtypename, argtypeinfo, flags^);
+    AddArgument(name, argtypnam, argtypnfo, flags^);
   end;
 
 begin

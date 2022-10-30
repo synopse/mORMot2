@@ -26,6 +26,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.data,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
@@ -186,6 +187,7 @@ type
     fSqlW: RawUnicode;
     procedure AllocStatement;
     procedure DeallocStatement;
+    function CType2SQL(CDataType: integer): integer;
     procedure BindColumns;
     procedure GetData(var Col: TSqlDBColumnProperty; ColIndex: integer);
     function GetCol(Col: integer; ExpectedType: TSqlDBFieldType): TSqlDBStatementGetCol;
@@ -250,12 +252,8 @@ type
     //  e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     //  or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -638,8 +636,7 @@ begin
         DescribeColW(fStatement, c, Name{%H-}, 256, NameLength, DataType,
           ColumnSize, DecimalDigits, Nullable),
         SQL_HANDLE_STMT, fStatement);
-      with PSqlDBColumnProperty(
-        fColumn.AddAndMakeUniqueName(RawUnicodeToUtf8(Name, NameLength)))^ do
+      with AddColumn(RawUnicodeToUtf8(Name, NameLength))^ do
       begin
         ColumnValueInlined := true;
         ColumnValueDBType := DataType;
@@ -874,56 +871,47 @@ begin
   result := GetCol(Col, ftNull) = colNull;
 end;
 
-procedure TSqlDBOdbcStatement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBOdbcStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   res: TSqlDBStatementGetCol;
-  col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
-    raise EOdbcException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
-  if WR.Expand then
-    WR.Add('{');
-  for col := 0 to fColumnCount - 1 do // fast direct conversion from OleDB buffer
-    with fColumns[col] do
-    begin
-      if WR.Expand then
-        WR.AddFieldName(ColumnName); // add '"ColumnName":'
-      res := GetCol(col, ColumnType);
-      if res = colNull then
-        WR.AddNull
+    raise EOdbcException.CreateUtf8('%.ColumnToJson() with no prior Step', [self]);
+  with fColumns[Col] do
+  begin
+    res := GetCol(Col, ColumnType);
+    if res = colNull then
+      W.AddNull
+    else
+      case ColumnType of
+        ftInt64:
+          W.AddNoJsonEscape(Pointer(fColData[Col]));  // already as SQL_C_CHAR
+        ftDouble,
+        ftCurrency:
+          W.AddFloatStr(Pointer(fColData[Col]));      // already as SQL_C_CHAR
+        ftDate:
+          W.AddNoJsonEscape(@tmp,
+            PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToIso8601(
+              tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
+        ftUtf8:
+          begin
+            W.Add('"');
+            if ColumnDataSize > 1 then
+              W.AddJsonEscapeW(Pointer(fColData[Col]), ColumnDataSize shr 1);
+            W.Add('"');
+          end;
+        ftBlob:
+          if fForceBlobAsNull then
+            W.AddNull
+          else
+            W.WrBase64(pointer(fColData[Col]), ColumnDataSize, true);
       else
-        case ColumnType of
-          ftInt64:
-            WR.AddNoJsonEscape(Pointer(fColData[col]));  // already as SQL_C_CHAR
-          ftDouble,
-          ftCurrency:
-            WR.AddFloatStr(Pointer(fColData[col]));      // already as SQL_C_CHAR
-          ftDate:
-            WR.AddNoJsonEscape(@tmp,
-              PSql_TIMESTAMP_STRUCT(Pointer(fColData[col]))^.ToIso8601(
-                tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
-          ftUtf8:
-            begin
-              WR.Add('"');
-              if ColumnDataSize > 1 then
-                WR.AddJsonEscapeW(Pointer(fColData[col]), ColumnDataSize shr 1);
-              WR.Add('"');
-            end;
-          ftBlob:
-            if fForceBlobAsNull then
-              WR.AddNull
-            else
-              WR.WrBase64(pointer(fColData[col]), ColumnDataSize, true);
-        else
-          assert(false);
-        end;
-      WR.AddComma;
-    end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
+        raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+          [self, ord(ColumnType)]);
+      end;
+  end;
 end;
 
 constructor TSqlDBOdbcStatement.Create(aConnection: TSqlDBConnection);
@@ -952,41 +940,40 @@ const
   IDList_type:  PWideChar = 'IDList';
   StrList_type: PWideChar = 'StrList';
 
-procedure TSqlDBOdbcStatement.ExecutePrepared;
-
-  function CType2SQL(CDataType: integer): integer;
-  begin
-    case CDataType of
-      SQL_C_CHAR:
-        case fDbms of
-          dInformix:
-            result := SQL_INTEGER;
-        else
+function TSqlDBOdbcStatement.CType2SQL(CDataType: integer): integer;
+begin
+  case CDataType of
+    SQL_C_CHAR:
+      case fDbms of
+        dInformix:
+          result := SQL_INTEGER;
+      else
+        result := SQL_VARCHAR;
+      end;
+    SQL_C_TYPE_DATE:
+      result := SQL_TYPE_DATE;
+    SQL_C_TYPE_TIMESTAMP:
+      result := SQL_TYPE_TIMESTAMP;
+    SQL_C_WCHAR:
+      case fDbms of
+        dInformix:
           result := SQL_VARCHAR;
-        end;
-      SQL_C_TYPE_DATE:
-        result := SQL_TYPE_DATE;
-      SQL_C_TYPE_TIMESTAMP:
-        result := SQL_TYPE_TIMESTAMP;
-      SQL_C_WCHAR:
-        case fDbms of
-          dInformix:
-            result := SQL_VARCHAR;
-        else
-          result := SQL_WVARCHAR;
-        end;
-      SQL_C_BINARY:
-        result := SQL_VARBINARY;
-      SQL_C_SBIGINT:
-        result := SQL_BIGINT;
-      SQL_C_DOUBLE:
-        result := SQL_DOUBLE;
-    else
-      raise EOdbcException.CreateUtf8('%.ExecutePrepared: Unexpected ODBC C type %',
-        [self, CDataType]);
-    end;
+      else
+        result := SQL_WVARCHAR;
+      end;
+    SQL_C_BINARY:
+      result := SQL_VARBINARY;
+    SQL_C_SBIGINT:
+      result := SQL_BIGINT;
+    SQL_C_DOUBLE:
+      result := SQL_DOUBLE;
+  else
+    raise EOdbcException.CreateUtf8('%.ExecutePrepared: Unexpected ODBC C type %',
+      [self, CDataType]);
   end;
+end;
 
+procedure TSqlDBOdbcStatement.ExecutePrepared;
 var
   p, k: integer;
   status: SqlReturn;
@@ -997,6 +984,7 @@ var
   ItemPW: PWideChar;
   timestamp: SQL_TIMESTAMP_STRUCT;
   ansitext: boolean;
+  tmp: RawUtf8;
   StrLen_or_Ind: array of PtrInt;
   ArrayData: array of record
     StrLen_or_Ind: array of PtrInt;
@@ -1086,10 +1074,6 @@ begin
                     ColumnSize := 9;
                     DecimalDigits := 6;
                   end;
-                  // in case of "Invalid character value for cast specification" error
-                  // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
-                  // be updated to >= 17.5.2
-                  ParameterValue := pointer(@VInt64);
                   // in case of "Invalid character value for cast specification" error
                   // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
                   // be updated to >= 17.5.2
@@ -1236,11 +1220,14 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
             if VInOut <> paramIn then
               PDateTime(@VInt64)^ := PSql_TIMESTAMP_STRUCT(VData)^.ToDateTime;
           ftUtf8:
-            if ansitext then
-              VData := CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(VData),
-                StrLen(pointer(VData)))
-            else
-              VData := RawUnicodeToUtf8(pointer(VData), StrLenW(pointer(VData)));
+            begin
+              if ansitext then
+                CurrentAnsiConvert.AnsiBufferToRawUtf8(
+                  pointer(VData), StrLen(pointer(VData)), tmp)
+              else // UTF-16
+                RawUnicodeToUtf8(pointer(VData), StrLenW(pointer(VData)), tmp);
+              VData := tmp;
+            end;
         end;
   end;
   SqlLogEnd;
@@ -1266,8 +1253,7 @@ begin
   begin
     if fStatement <> nil then
       ODBC.CloseCursor(fStatement); // no check needed
-    fColumn.Clear;
-    fColumn.ForceReHash;
+    ClearColumns;
   end;
   inherited ReleaseRows;
 end;

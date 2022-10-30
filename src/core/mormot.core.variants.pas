@@ -225,11 +225,6 @@ type
       CallDesc: PCallDesc; Params: Pointer); override;
     {$endif ISDELPHIXE7}
     {$endif FPC_VARIANTSETVAR}
-    /// override those abstract methods for getter/setter implementation
-    function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
-    function IntSet(const Instance, Value: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
   public
     /// virtual constructor which should set the custom type Options
     constructor Create; virtual;
@@ -237,7 +232,12 @@ type
     // - will first compare with its own VarType for efficiency
     // - returns true and set the matching CustomType if found, false otherwise
     function FindSynVariantType(aVarType: cardinal;
-      out CustomType: TSynInvokeableVariantType): boolean;
+      out CustomType: TSynInvokeableVariantType): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// search of a registered custom variant type from its low-level VarType
+    // - will first compare with its own VarType for efficiency
+    function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// customization of JSON parsing into variants
     // - is enabled only if the sioHasTryJsonToVariant option is set
     // - will be called by e.g. by VariantLoadJson() or GetVariantFromJsonField()
@@ -282,8 +282,9 @@ type
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
     // - this default implementation will return -1 (meaning this is not an array)
-    // - overridden method could implement it, e.g. for TDocVariant of kind dvArray
-    function IterateCount(const V: TVarData): integer; virtual;
+    // - overridden method could implement it, e.g. for TDocVariant of kind
+    // dvArray - or dvObject (ignoring names) if GetObjectAsValues is true
+    function IterateCount(const V: TVarData; GetObjectAsValues: boolean): integer; virtual;
     /// allow to loop over an array document
     // - Index should be in 0..IterateCount-1 range
     // - this default implementation will do nothing
@@ -292,6 +293,16 @@ type
     /// returns TRUE if the supplied variant is of the exact custom type
     function IsOfType(const V: variant): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns TRUE if the supplied custom variant is void
+    // - e.g. returns true for a TDocVariant or TBsonVariant with Count = 0
+    // - caller should have ensured that it is of the exact custom type
+    function IsVoid(const V: TVarData): boolean; virtual;
+    /// override this abstract method for actual getter by name implementation
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; virtual;
+    /// override this abstract method for actual setter by name implementation
+    function IntSet(const Instance, Value: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
     /// identify how this custom type behave
     // - as set by the class constructor, to avoid calling any virtual method
     property Options: TSynInvokeableVariantTypeOptions
@@ -574,12 +585,6 @@ type
     fInternSafe: TLightLock;
     function CreateInternNames: TRawUtf8Interning;
     function CreateInternValues: TRawUtf8Interning;
-    /// fast getter implementation
-    function IntGet(var Dest: TVarData; const Instance: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
-    /// fast setter implementation
-    function IntSet(const Instance, Value: TVarData;
-      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   public
     /// initialize a variant instance to store some document-based content
     // - by default, every internal value will be copied, so access of nested
@@ -727,12 +732,15 @@ type
     // - if the document is an array, will return the items count (0 meaning
     // void array) - used e.g. by TSynMustacheContextVariant
     // - this overridden method will implement it for dvArray instance kind
-    function IterateCount(const V: TVarData): integer; override;
+    function IterateCount(const V: TVarData;
+      GetObjectAsValues: boolean): integer; override;
     /// allow to loop over an array document
     // - Index should be in 0..IterateCount-1 range
     // - this default implementation will do handle dvArray instance kind
     procedure Iterate(var Dest: TVarData; const V: TVarData;
       Index: integer); override;
+    /// returns true if this document has Count = 0
+    function IsVoid(const V: TVarData): boolean; override;
     /// low-level callback to access internal pseudo-methods
     // - mainly the _(Index: integer): variant method to retrieve an item
     // if the document is an array
@@ -763,6 +771,12 @@ type
     // - redirect to case-sensitive FastVarDataComp() comparison
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
+    /// overriden method for actual getter by name implementation
+    function IntGet(var Dest: TVarData; const Instance: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
+    /// overriden method for actual setter by name implementation
+    function IntSet(const Instance, Value: TVarData;
+      Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   end;
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
@@ -1042,7 +1056,10 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const aItems: TVariantDynArray;
       aOptions: TDocVariantOptions = [];
-      aItemsCopiedByReference: boolean = true);
+      aItemsCopiedByReference: boolean = true; aCount: integer = -1);
+    /// initialize a variant array instance from an object Values[]
+    procedure InitArrayFromObjectValues(const aObject: variant;
+      aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
     /// initialize a variant instance to store some RawUtf8 array content
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions); overload;
@@ -1060,7 +1077,7 @@ type
       aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
     /// initialize a variant instance to store some TDynArray content
     procedure InitArrayFrom(const aItems: TDynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions = JSON_FAST_FLOAT); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
@@ -1877,6 +1894,15 @@ type
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUtf8DynArray): integer;
+    /// return a dynamic array with all dvObject Names, and length() = Count
+    // - since length(Names) = Capacity, you can use this method to retrieve
+    // all the object keys
+    // - consider using FieldNames iterator or Names[0..Count-1] if you need
+    // to iterate on the key names
+    // - will internally force length(Names)=length(Values)=Capacity=Count and
+    // return the Names[] instance with no memory (re)allocation
+    // - if the document is not a dvObject, will return nil
+    function GetNames: TRawUtf8DynArray;
     /// map {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
     // - the supplied aObjectPropName should match the incoming dotted value
     // of all properties (e.g. 'obj' for "obj.prop1")
@@ -1931,7 +1957,7 @@ type
     /// direct acces to the low-level internal array of names
     // - is void (nil) if Kind is not dvObject
     // - note that length(Names)=Capacity and not Count, so copy(Names, 0, Count)
-    // or use FieldNames iterator if you want the exact count
+    // or use FieldNames iterator or GetNames if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with _Safe(aVariantObject)^ do
@@ -2734,6 +2760,7 @@ end;
 function VarIsVoid(const V: Variant): boolean;
 var
   vt: cardinal;
+  custom: TSynInvokeableVariantType;
 begin
   vt := TVarData(V).VType;
   with TVarData(V) do
@@ -2763,7 +2790,11 @@ begin
       else if vt = DocVariantVType then
         result := TDocVariantData(V).Count = 0
       else
-        result := false;
+      begin
+        custom := FindSynVariantType(vt);
+        result := (custom <> nil) and
+                  custom.IsVoid(TVarData(V)); // e.g. TBsonVariant.IsVoid
+      end;
     end;
 end;
 
@@ -2779,7 +2810,8 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 var
   vt: cardinal;
 begin
-  VarClear(Dest);
+  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
+    VarClear(Dest);
   vt := TVarData(Source).VType;
   if ((vt and varByRef) <> 0) or
      (vt in VTYPE_SIMPLE) then
@@ -2800,7 +2832,8 @@ var
   ct: TSynInvokeableVariantType;
 begin
   s := @Source;
-  VarClear(Dest);
+  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
+    VarClear(Dest);
   vt := s^.VType;
   while vt = varVariantByRef do
   begin
@@ -3353,7 +3386,8 @@ begin
   inherited Create; // call RegisterCustomVariantType(self)
 end;
 
-function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
+function TSynInvokeableVariantType.IterateCount(const V: TVarData;
+  GetObjectAsValues: boolean): integer;
 begin
   result := -1; // this is not an array
 end;
@@ -3629,6 +3663,11 @@ var
     result := false;
 end;
 
+function TSynInvokeableVariantType.IsVoid(const V: TVarData): boolean;
+begin
+  result := false; // not void by default
+end;
+
 function TSynInvokeableVariantType.FindSynVariantType(aVarType: cardinal;
   out CustomType: TSynInvokeableVariantType): boolean;
 var
@@ -3641,6 +3680,15 @@ begin
     ct := mormot.core.variants.FindSynVariantType(aVarType);
   CustomType := ct;
   result := ct <> nil;
+end;
+
+function TSynInvokeableVariantType.FindSynVariantType(
+  aVarType: cardinal): TSynInvokeableVariantType;
+begin
+  if aVarType = VarType then
+    result := self
+  else
+    result := mormot.core.variants.FindSynVariantType(aVarType);
 end;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData;
@@ -3751,7 +3799,7 @@ begin
         not (vt in [varEmpty..varDate, varBoolean, varShortInt..varWord64])) then
       NeedJsonEscape(PVariant(V)^, result, Escape)
     else
-      VariantToUtf8(PVariant(V)^, result, dummy); // simple values are never escaped
+      VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
   end
   else
     cv.ToJson(V, result);
@@ -3882,11 +3930,14 @@ begin
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
-function TDocVariant.IterateCount(const V: TVarData): integer;
+function TDocVariant.IterateCount(const V: TVarData;
+  GetObjectAsValues: boolean): integer;
 var
   Data: TDocVariantData absolute V;
 begin
-  if Data.IsArray then
+  if Data.IsArray or
+     (GetObjectAsValues and
+      Data.IsObject) then
     result := Data.VCount
   else
     result := -1;
@@ -3896,12 +3947,16 @@ procedure TDocVariant.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
 var
   Data: TDocVariantData absolute V;
-begin
-  if Data.IsArray and
-     (cardinal(Index) < cardinal(Data.VCount)) then
+begin // note: IterateCount() may accept IsObject values[]
+  if cardinal(Index) < cardinal(Data.VCount) then
     Dest := TVarData(Data.VValue[Index])
   else
     TRttiVarData(Dest).VType := varEmpty;
+end;
+
+function TDocVariant.IsVoid(const V: TVarData): boolean;
+begin
+  result := TDocVariantData(V).Count > 0;
 end;
 
 function TDocVariant.DoProcedure(const V: TVarData; const Name: string;
@@ -4334,8 +4389,9 @@ begin
   begin
     if _SafeArray(DocVariant, result) then
       exit;
-  end else if (ExpectedKind = dvObject) and
-              _SafeObject(DocVariant, result) then
+  end
+  else if (ExpectedKind = dvObject) and
+          _SafeObject(DocVariant, result) then
     exit;
   EDocVariant.RaiseSafe(ExpectedKind);
 end;
@@ -4956,18 +5012,32 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFromVariants(const aItems: TVariantDynArray;
-  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean; aCount: integer);
 begin
   if aItems = nil then
     TRttiVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(aItems);
+    if aCount < 0 then
+      VCount := length(aItems)
+    else
+      VCount := aCount;
     VValue := aItems; // fast by-reference copy of VValue[]
     if not aItemsCopiedByReference then
       InitCopy(variant(self), aOptions);
   end;
+end;
+
+procedure TDocVariantData.InitArrayFromObjectValues(const aObject: variant;
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
+var
+  dv: PDocVariantData;
+begin
+  if _SafeObject(aObject, dv) then
+    InitArrayFromVariants(dv^.Values, aOptions, aItemsCopiedByReference, dv^.Count)
+  else
+    TRttiVarData(self).VType := varNull;
 end;
 
 procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
@@ -5098,15 +5168,14 @@ begin
   if (n = 0) or
      (item = nil) then
     exit;
-  if item.Kind in rkRecordOrDynArrayTypes then
+  if item.Kind in (rkRecordOrDynArrayTypes + [rkClass]) then
   begin
-    // use temporary JSON conversion for complex nested content
-    aItems.SaveToJson(json);
+    // use temporary non-expanded JSON conversion for complex nested content
+    aItems.SaveToJson(json, [twoNonExpandedArrays]);
     if (json <> '') and
-       (json[1] = '[') and
-       (PCardinal(@PByteArray(json)[1])^ <> JSON_BASE64_MAGIC_QUOTE_C) then
-      // should be serialized as a true array
-      InitJsonInPlace(pointer(json), aOptions);
+       (json[1] = '{') then
+      // should be a non-expanded array, not JSON_BASE64_MAGIC_QUOTE_C
+      InitArrayFromResults(pointer(json), length(json), aOptions);
   end
   else
   begin
@@ -5167,7 +5236,7 @@ begin
     dv := pointer(VValue);
     for r := 1 to rowcount do
     begin
-      val := dv^.InitFrom(proto, {values=}false); // names byref + no values
+      val := dv^.InitFrom(proto, {values=}false); // names byref + void values
       for f := 1 to fieldcount do
       begin
         JsonToAnyVariant(val^, info, @aOptions);
@@ -5622,7 +5691,7 @@ end;
 
 procedure TDocVariantData.ClearFast;
 begin
-  PInteger(@VType)^ := 0; // clear VType and VOptions
+  TRttiVarData(self).VType := 0; // clear VType and VOptions
   FastDynArrayClear(@VName, TypeInfo(RawUtf8));
   FastDynArrayClear(@VValue, TypeInfo(variant));
   VCount := 0;
@@ -6692,6 +6761,19 @@ begin
     end;
 end;
 
+function TDocVariantData.GetNames: TRawUtf8DynArray;
+begin
+  if IsObject and
+     (VCount > 0) then
+  begin
+    DynArrayFakeLength(VName, VCount);
+    DynArrayFakeLength(VValue, VCount);
+    result := VName; // truncate with no memory (re)allocation
+  end
+  else
+    result := nil;
+end;
+
 function TDocVariantData.FlattenAsNestedObject(
   const aObjectPropName: RawUtf8): boolean;
 var
@@ -6745,7 +6827,7 @@ begin
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
       MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
-      TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
+      TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
   end;

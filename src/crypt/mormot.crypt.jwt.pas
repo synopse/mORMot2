@@ -266,6 +266,9 @@ type
     // - checking there is a payload and a signature, without decoding them
     // - could be used to quickly check if a token is likely to be a JWT
     class function ExtractAlgo(const Token: RawUtf8): RawUtf8;
+    /// in-place check of the JWT header algorithm
+    // - just a wrapper around IdemPropNameU(MatchAlgo(Token), Algo);
+    class function MatchAlgo(const Token, Algo: RawUtf8): boolean;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUtf8
@@ -343,21 +346,6 @@ const
     'iat',    // jrcIssuedAt
     'jti',    // jrcJwtID
     'data');  // jrcData
-
-  /// the JWT algorithm names according to our known asymmetric algorithms
-  // - as implemented e.g. by TJwtAbstractOsl
-  CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
-    'ES256',  // caaES256
-    'ES384',  // caaES384
-    'ES512',  // caaES512
-    'ES256K', // caaES256K
-    'RS256',  // caaRS256
-    'RS384',  // caaRS384
-    'RS512',  // caaRS512
-    'PS256',  // caaPS256
-    'PS384',  // caaPS384
-    'PS512',  // caaPS512
-    'EdDSA'); // caaEdDSA
 
 
 function ToText(res: TJwtResult): PShortString; overload;
@@ -1097,6 +1085,11 @@ begin
      (JsonDecode(temp.buf, @JWT_HEAD, 1, @V, false) <> nil) then
     V.ToUtf8(result);
   temp.Done;
+end;
+
+class function TJwtAbstract.MatchAlgo(const Token, Algo: RawUtf8): boolean;
+begin
+  result := IdemPropNameU(ExtractAlgo(Token), Algo);
 end;
 
 class function TJwtAbstract.VerifyPayload(const Token,

@@ -222,7 +222,7 @@ type
 
   /// an abstract service provider, as registered in TServiceContainer
   // - each registered interface has its own TServiceFactory instance, available
-  // as one TSqlServiceContainer item from TRest.Services property
+  // as one TServiceContainer item from TRest.Services property
   // - this will be either implemented by a registered TInterfacedObject on the
   // server, or by a on-the-fly generated fake TInterfacedObject class
   // communicating via JSON on a client
@@ -762,7 +762,7 @@ type
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
     // signature, so that it will be called with the interface instance by
     // TServiceContainerServer.FakeCallbackRelease
-    // - you may use it as such - see sample Project31ChatServer.dpr:
+    // - you may use it as such - see sample restws_chatserver.dpr:
     // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
     // !   const interfaceName: RawUtf8);
     // ! begin  // unsubscribe from fConnected: array of IChatCallback
@@ -1768,12 +1768,14 @@ end;
 
 //TODO : to be implemented in mormot.soa.client
 {
-function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientUri): boolean;
-var json: RawUtf8;
+function TServicesPublishedInterfacesList.RegisterFromServer(
+  Client: TRestClientUri): boolean;
+var
+  json: RawUtf8;
 begin
-  result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
+  result := Client.CallBackGet('stat', ['findservice', '*'], json) = HTTP_SUCCESS;
   if result and
-     (json<>'') then
+     (json <> '') then
     RegisterFromServerJson(json);
 end;
 }

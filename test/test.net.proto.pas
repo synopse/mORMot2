@@ -134,11 +134,11 @@ begin
           session := TSynTestCase.RandomIdentifier(20 + r and 15);
           get := THttpSocket.Open('localhost', proxy.Server.Port, nlTcp, 1000);
           get.SndLow('GET /sw.mov HTTP/1.0'#13#10 +
-            'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
-            'x-sessioncookie: ' + session + #13#10 +
-            'Accept: ' + RTSP_MIME + #13#10 +
-            'Pragma: no-cache'#13#10 +
-            'Cache-Control: no-cache'#13#10#13#10);
+                     'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
+                     'x-sessioncookie: ' + session + #13#10 +
+                     'Accept: ' + RTSP_MIME + #13#10 +
+                     'Pragma: no-cache'#13#10 +
+                     'Cache-Control: no-cache'#13#10#13#10);
           get.SockRecvLn(text);
           test.Check(text = 'HTTP/1.0 200 OK');
           get.GetHeader(false);
@@ -233,7 +233,7 @@ begin
     '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
     // threads=1 is the safest & fastest - but you may set 16 for testing
   try
-    proxy.WaitStarted(1);
+    proxy.WaitStarted(10);
     RtspRegressionTests(proxy, self, N, 10);
   finally
     proxy.Free;

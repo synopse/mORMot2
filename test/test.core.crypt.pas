@@ -20,6 +20,7 @@ uses
   mormot.crypt.secure,
   mormot.core.perf,
   mormot.core.test,
+  mormot.core.variants,
   mormot.crypt.jwt,
   mormot.crypt.ecc;
 
@@ -433,28 +434,40 @@ var
 begin
   // validate against official NIST vectors
   // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
-  Check(instance.FullStr(SHA3_224, nil, 0) =
+  // see also https://www.di-mgt.com.au/sha_testvectors.html
+  CheckEqual(instance.FullStr(SHA3_224, nil, 0),
     '6B4E03423667DBB73B6E15454F0EB1ABD4597F9A1B078E3F5B5A6BC7');
-  Check(instance.FullStr(SHA3_256, nil, 0) =
+  CheckEqual(instance.FullStr(SHA3_256, nil, 0),
     'A7FFC6F8BF1ED76651C14756A061D662F580FF4DE43B49FA82D80A4B80F8434A');
-  Check(instance.FullStr(SHA3_384, nil, 0) =
+  CheckEqual(instance.FullStr(SHA3_384, nil, 0),
     '0C63A75B845E4F7D01107D852E4C2485C51A50AAAA94FC61995E71BBEE983A2AC3713831264ADB47FB6BD1E058D5F004');
-  Check(instance.FullStr(SHA3_512, nil, 0) =
+  CheckEqual(instance.FullStr(SHA3_512, nil, 0),
     'A69F73CCA23A9AC5C8B567DC185A756E97C982164FE25859E0D1DCC1475C80A615B2123AF1F5F94C11E3E9402C3AC558F500199D95B6D3E301758586281DCD26');
-  Check(instance.FullStr(SHAKE_128, nil, 0) =
+  CheckEqual(instance.FullStr(SHAKE_128, nil, 0),
     '7F9C2BA4E88F827D616045507605853ED73B8093F6EFBC88EB1A6EACFA66EF26');
-  Check(instance.FullStr(SHAKE_256, nil, 0) =
+  CheckEqual(instance.FullStr(SHAKE_256, nil, 0),
     '46B9DD2B0BA88D13233B3FEB743EEB243FCD52EA62B81B82B50C27646ED5762FD75DC4DDD8C0F200CB05019D67B592F6FC821C49479AB48640292EACB3B7C4BE');
   SetLength(data, 200);
   FillCharFast(pointer(data)^, 200, $A3);
-  Check(instance.FullStr(SHA3_224, pointer(data), length(data)) =
+  CheckEqual(instance.FullStr(SHA3_224, pointer(data), length(data)),
     '9376816ABA503F72F96CE7EB65AC095DEEE3BE4BF9BBC2A1CB7E11E0');
-  Check(instance.FullStr(SHA3_256, pointer(data), length(data)) =
+  CheckEqual(instance.FullStr(SHA3_256, pointer(data), length(data)),
     '79F38ADEC5C20307A98EF76E8324AFBFD46CFD81B22E3973C65FA1BD9DE31787');
-  Check(instance.FullStr(SHA3_384, pointer(data), length(data)) =
+  CheckEqual(instance.FullStr(SHA3_384, pointer(data), length(data)),
     '1881DE2CA7E41EF95DC4732B8F5F002B189CC1E42B74168ED1732649CE1DBCDD76197A31FD55EE989F2D7050DD473E8F');
-  Check(instance.FullStr(SHA3_512, pointer(data), length(data)) =
+  CheckEqual(instance.FullStr(SHA3_512, pointer(data), length(data)),
     'E76DFAD22084A8B1467FCF2FFA58361BEC7628EDF5F3FDC0E4805DC48CAEECA81B7C13C30ADF52A3659584739A2DF46BE589C51CA1A4A8416DF6545A1CE8BA00');
+  {$ifdef ASMX64AVXNOCONST}
+  if cpuAVX2 in X64CpuFeatures then
+  begin
+    exclude(X64CpuFeatures, cpuAVX2); // validate plain x86_64 asm version
+    CheckEqual(instance.FullStr(SHA3_256, nil, 0),
+      'A7FFC6F8BF1ED76651C14756A061D662F580FF4DE43B49FA82D80A4B80F8434A');
+    CheckEqual(instance.FullStr(SHA3_256, pointer(data), length(data)),
+      '79F38ADEC5C20307A98EF76E8324AFBFD46CFD81B22E3973C65FA1BD9DE31787');
+    include(X64CpuFeatures, cpuAVX2);
+  end;
+  {$endif ASMX64AVXNOCONST}
   instance.Init(SHA3_256);
   for i := 1 to length(data) do
     instance.Update(pointer(data), 1);
@@ -470,9 +483,9 @@ begin
   instance.Update(pointer(data), 5);
   instance.Update(pointer(data), 5);
   instance.Final(dig, true); // NoInit=true to check Extendable-Output Function
-  Check(Sha256DigestToString(dig) = HASH1);
+  CheckEqual(Sha256DigestToString(dig), HASH1);
   instance.Final(dig, true);
-  Check(Sha256DigestToString(dig) =
+  CheckEqual(Sha256DigestToString(dig),
     'f85500852a5b9bb4a35440e7e4b4dba9184477a4c97b97ab0b24b91a8b04d1c8');
   for i := 1 to 200 do
   begin
@@ -481,12 +494,12 @@ begin
     Check(not IsZero(dig), 'Sha3 XOF mode');
   end;
   instance.Final(dig);
-  Check(Sha256DigestToString(dig) =
+  CheckEqual(Sha256DigestToString(dig),
     '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252',
     'Sha3 XOF vector');
   encrypted := instance.Cypher('secret', 'toto');
-  Check(mormot.core.text.BinToHex(encrypted) = 'BF013A29');
-  Check(BinToHexLower(encrypted) = 'bf013a29');
+  CheckEqual(mormot.core.text.BinToHex(encrypted), 'BF013A29');
+  CheckEqual(BinToHexLower(encrypted), 'bf013a29');
   for s := 0 to 3 do
   begin
     secret := RandomString(s * 3);
@@ -723,6 +736,9 @@ procedure TTestCoreCrypto._JWT;
     jwt: TJwtContent;
     i: integer;
     exp: TUnixTime;
+    exp64: Int64;
+    bool: boolean;
+    v: variant;
   begin
     t := one.Compute(['http://example.com/is_root', true], 'joe');
     check(t <> '');
@@ -732,6 +748,20 @@ procedure TTestCoreCrypto._JWT;
     checkEqual(iss, 'joe');
     if one.Algorithm = 'none' then
       checkEqual(hp + '.', t);
+    check(TJwtAbstract.VerifyPayload(
+      t, '', '', 'joe', '', nil, nil, nil, nil, nil, @v) = jwtValid);
+    // {"http://example.com/is_root":true,"iss":"joe","exp":1658258457}
+    check(_Safe(v)^.Count >= 3);
+    with _Safe(v)^ do
+    begin
+      Check(GetAsInt64('exp', exp64));
+      CheckEqual(exp, exp64);
+      Check(GetAsRawUtf8('iss', iss));
+      checkEqual(iss, 'joe');
+      bool := false;
+      Check(GetAsBoolean('http://example.com/is_root', bool));
+      check(bool);
+    end;
     check(one.VerifyPayload(
       t, one.Algorithm, '', 'joe', '', @exp, nil, @sub, @iss, nil) = jwtValid);
     checkEqual(one.ExtractAlgo(t), one.Algorithm);
@@ -1046,7 +1076,7 @@ begin
           {$endif USE_OPENSSL}
           bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
           bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM:
-            AES[b].MacAndCrypt(data, {encrypt=}true);
+            AES[b].MacAndCrypt(data, {encrypt=}true, {ivatbeg=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
           bSHAKE256:
@@ -1514,23 +1544,37 @@ begin
       Check(k = TPemKind(i and 7));
       CheckEqual(NextPem(P, @k), '');
     end;
+    b64 := UnZeroed(tmp);
+    Check(StrLen(pointer(b64)) = length(b64), 'unz');
+    Check(Zeroed(b64) = tmp, 'UnZeroed');
     tmp := tmp + AnsiChar(Random32(255));
   end;
+  Check(Zeroed(UnZeroed(#0)) = #0, 'unz0');
+  Check(Zeroed(UnZeroed(#0#0)) = #0#0, 'unz1');
+  Check(Zeroed(UnZeroed(#0'~'#0)) = #0'~'#0, 'unz2');
+  Check(Zeroed(UnZeroed(#0#0'~~')) = #0#0'~~', 'unz3');
+  Check(Zeroed(UnZeroed('~'#0#0'~~')) = '~'#0#0'~~', 'unz4');
   enc.Init;
   dec.Init;
   tmp := RandomString(1 shl 20);
+  tmp2 := Zeroed(UnZeroed(tmp));
+  {$ifdef FPC}
+  SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug
+  {$endif FPC}
+  Check(tmp2 = tmp, 'unz1MB');
   b64 := '';
+  tmp2 := '';
   SetLength(b64, BinToBase64Length(length(tmp)));
   SetLength(tmp2, length(tmp));
   L := 0;
   n := 50;
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVXNOCONST}
   if cfAVX2 in CpuFeatures then
   begin
     n := n * 10;
     msg := ' avx2';
   end;
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
   for i := 0 to 20 do
   begin
     enc.Resume;
@@ -1626,7 +1670,7 @@ const
      {$ifdef USE_PROV_RSA_AES} ,
      // 10/17     11/18
      TAesEcbApi, TAesCbcApi
-     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant
+     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant?
 var
   A: TAes;
   st, orig, crypted, s2, s3, s4: RawByteString;
@@ -1688,13 +1732,13 @@ begin
             RandomBytes(@mac1, SizeOf(mac1));
             Check(one.MacEncryptGetTag(mac1));
             //writeln(m,' ',k,' ',Sha256DigestToString(mac1)); writeln(TEST_AES_MAC[m, k]);
-            //CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
+            CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
           end
           else if gcm then
           begin
             RandomBytes(@tag1, SizeOf(tag1));
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
-            // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
+            //writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
               FormatUtf8('TEST_AES_TAG % %', [ks, one.AlgoName]));
           end;
@@ -2163,7 +2207,7 @@ var
   a, i: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
-  n, h, nprev, aead, pub, priv, pub2, priv2: RawUtf8;
+  n, h, nprev, aead, pub, priv, pub2, priv2, jwt, iss, sub, s2, s3: RawUtf8;
   r, s: RawByteString;
   aes: TAesAbstract;
   key: THash256;
@@ -2174,13 +2218,31 @@ var
   asy: TCryptAsym;
   en, de: ICryptCipher;
   crt: TCryptCertAlgo;
-  c1, c2, c3: ICryptCert;
+  c1, c2, c3, c4: ICryptCert;
+  fields: TCryptCertFields;
   str: TCryptStoreAlgo;
   st1, st2, st3: ICryptStore;
+  cpe: TCryptCertPerUsage;
   alg: TCryptAlgos;
   fmt: TCryptCertFormat;
-  names: string;
+  cv: TCryptCertValidity;
+  u: TCryptCertUsage;
+  namelen: integer;
+  names: RawUtf8;
+
+  procedure AddAlgName;
+  begin
+    inc(namelen, length(alg[a].AlgoName) + 1);
+    if namelen > 73 then
+    begin
+      names := names + CRLF + '     ';
+      namelen := length(alg[a].AlgoName) + 1;
+    end;
+    names := names + ' ' + alg[a].AlgoName;
+  end;
+
 begin
+  namelen := 0;
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
   for k := 0 to 2 do
@@ -2207,6 +2269,7 @@ begin
   for a := 0 to high(alg) do
   begin
     rnd := alg[a] as TCryptRandom;
+    AddAlgName;
     Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
     cprev := 0;
     dprev := 0;
@@ -2229,6 +2292,7 @@ begin
   for a := 0 to high(alg) do
   begin
     hsh := alg[a] as TCryptHasher;
+    AddAlgName;
     Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
@@ -2244,6 +2308,7 @@ begin
   for a := 0 to high(alg) do
   begin
     sig := alg[a] as TCryptSigner;
+    AddAlgName;
     Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
@@ -2266,6 +2331,7 @@ begin
   for a := 0 to high(alg) do
   begin
     cip := alg[a] as TCryptCipherAlgo;
+    AddAlgName;
     Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
@@ -2275,7 +2341,7 @@ begin
     for i := 1 to 5 do
     begin
       en := cip.Encrypt('hmac-sha256', 'sec', 'salt', i);
-      de := cip.Decrypt('hmac-SHA256', 'sec', 'salt', i);
+      de := cip.Decrypt('Hmac-SHA256', 'sec', 'salt', i);
       CheckUtf8(en.Process(n, r, aead), cip.AlgoName);
       Check(nprev <> r);
       Check(de.Process(r, s, aead));
@@ -2303,111 +2369,326 @@ begin
     Check(priv2 <> '');
     Check(pub <> pub2);
     Check(priv <> priv2);
-    s := asy.SharedSecret(pub, priv2);
-    if s <> '' then
-      CheckEqual(asy.SharedSecret(pub2, priv), s, asy.AlgoName);
   end;
   // validate Cert High-Level Algorithms Factory
   alg := TCryptCertAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     crt := alg[a] as TCryptCertAlgo;
-    if (a <> 0) and
-       (a mod 5 = 0) then
-      names := names + CRLF + '     ';
-    names := names + ' ' + string(crt.AlgoName);
+    AddAlgName;
+    check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
     c1 := crt.New;
+    check(c1.AsymAlgo = crt.AsymAlgo);
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
+    Check(c1.IsVoid);
+    Check(not c1.IsValidDate);
+    CheckEqual(c1.GetSignatureInfo, '');
     if crt.AlgoName = 'syn-es256-v1' then
     begin
       // TEccCertificate V1 has limited Usage and Subjects support
-      c1.Generate([cuCA, cuDigitalSignature], ' s1, s2 ', nil);
+      c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign], ' s1, s2 ', nil);
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 's1,s2');
-      check(c1.GetUsage = CERTIFICATE_USAGE_ALL);
+      check(c1.GetUsage = CU_ALL);
       CheckEqual(c1.GetSubject, 's1');
     end
     else
     begin
       // X509 and TEccCertificate V2 have proper Usage and Subjects support
-      c1.Generate([cuCA, cuDigitalSignature],
+      c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign],
         ' synopse.info, www.synopse.info ', nil);
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects),
         'synopse.info,www.synopse.info');
-      check(c1.GetUsage = [cuCA, cuDigitalSignature]);
+      check(c1.GetUsage = [cuCA, cuDigitalSignature, cuKeyCertSign]);
       CheckEqual(c1.GetSubject, 'synopse.info');
     end;
+    Check(not c1.IsVoid);
     Check(c1.GetSerial <> '');
+    Check(c1.GetSubjectKey <> '');
+    Check(c1.IsSelfSigned);
+    if c1.GetAuthorityKey <> c1.GetSubjectKey then // equal on syn-ecc
+      CheckEqual(c1.GetAuthorityKey, '', 'X509 self-sign has no auth');
+    Check(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1');
+    Check(c1.Verify(c1) = cvValidSelfSigned, 'cvValidSelfSigned2');
+    Check(c1.GetSignatureInfo <> '');
     Check(c1.HasPrivateSecret);
+    jwt := c1.JwtCompute([], {iss=}'myself', {sub=}'me', '', 0, 10);
+    check(jwt <> '');
+    check(TJwtAbstract.VerifyPayload(jwt, crt.JwtName, 'me', 'myself',
+      '', nil, nil, nil, nil, nil) = jwtValid);
+    iss := '';
+    sub := '';
+    check(c1.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify');
+    CheckEqual(iss, 'myself');
+    CheckEqual(sub, 'me');
+    check(c1.Handle <> nil);
+    check(c1.IsValidDate);
     check(c1.GetNotBefore <= NowUtc);
     check(c1.GetNotAfter > NowUtc);
+    check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
     for fmt := ccfBinary to ccfPem do
     begin
       c2 := crt.New;
+      Check(c2.IsVoid);
+      Check(not c2.IsValidDate);
       Check(not c2.IsEqual(c1));
       Check(c2.GetDigest <> c1.GetDigest);
-      // validate persistence in PEM/DER with no password (i.e. no private key)
-      s := c1.Save('', fmt);
+      // validate c2=cccCertOnly persistence in PEM/DER
+      s := c1.Save(cccCertOnly, '', fmt);
       check(c2.Load(s));
+      Check(not c2.IsVoid);
       Check(not c2.HasPrivateSecret, 'nopwd=pubonly');
-      Check(c1.IsEqual(c2));
+      CheckEqual(c2.JwtCompute([], 'myself', 'me', '', 0, 10), '');
+      Check(c2.IsEqual(c1));
+      Check(c2.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned3');
+      Check(c2.Verify(c2) = cvValidSelfSigned, 'cvValidSelfSigned4');
       CheckEqual(c2.GetSerial, c1.GetSerial);
       CheckEqual(c2.GetSubject, c1.GetSubject);
       CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
-      CheckEqual(c2.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckEqual(c2.GetSubjectKey, c1.GetSubjectKey);
       CheckEqual(c2.GetDigest, c1.GetDigest);
       CheckSame(c2.GetNotAfter, c1.GetNotAfter);
       CheckSame(c2.GetNotBefore, c1.GetNotBefore);
+      Check(c2.IsValidDate);
       CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
       CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
-      // validate persistence in PEM/DER with password-protected private key
+      iss := '';
+      sub := '';
+      check(c2.JwtVerify(jwt, @iss, @sub, nil) = cvValidSelfSigned, 'jwtverify2');
+      CheckEqual(iss, 'myself');
+      CheckEqual(sub, 'me');
+      Check(c2.Handle <> nil);
+      // validate c3=cccCertWithPrivateKey persistence in PEM/DER
       c3 := crt.New;
       Check(not c3.IsEqual(c1));
       Check(not c3.IsEqual(c2));
-      s := c1.Save('pwd', fmt);
-      check(c3.Load(s, 'pwd'));
+      s := c1.Save(cccCertWithPrivateKey, 'pwd', fmt);
+      check(c3.Load(s, cccCertWithPrivateKey, 'pwd'));
       Check(c3.HasPrivateSecret, 'pwd=priv');
       Check(c3.IsEqual(c1));
       Check(c3.IsEqual(c2));
       CheckEqual(c3.GetSerial, c1.GetSerial);
       CheckEqual(c3.GetSubject, c1.GetSubject);
       CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
-      CheckEqual(c3.GetIssuerSerial, c1.GetIssuerSerial);
+      CheckEqual(c3.GetSubjectKey, c1.GetSubjectKey);
       CheckSame(c3.GetNotAfter, c1.GetNotAfter);
       CheckSame(c3.GetNotBefore, c1.GetNotBefore);
       CheckEqual(c3.GetDigest, c1.GetDigest);
       CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
-      if fmt = ccfPem then // PKCS12 seems to add some information to X509
+      if fmt = ccfPem then // PKCS12 seems to add some information to X509 :(
         CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+      s := c1.Save;
+      check(c2.load(s));
+      checkEqual(c2.GetPrivateKey, '');
+      check(c2.Load(c1.Save(cccPrivateKeyOnly, '', fmt), cccPrivateKeyOnly, ''));
+      check(c2.HasPrivateSecret);
+      checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
+      Check(c2.IsEqual(c1));
+      c2.SetPrivateKey('');
+      Check(c2.IsEqual(c1));
+      checkEqual(c2.GetPrivateKey, '');
+      check(c2.Load(c1.Save(cccPrivateKeyOnly, 'pass', fmt), cccPrivateKeyOnly, 'pass'));
+      check(c2.HasPrivateSecret);
+      checkEqual(c2.GetPrivateKey, c1.GetPrivateKey);
+      Check(c2.IsEqual(c1));
+      c3 := crt.New;
+      check(c3.Load(c1.Save(cccPrivateKeyOnly, 'pass2', fmt), cccPrivateKeyOnly, 'pass2'));
+      check(c3.HasPrivateSecret, 'privkey with no main cert');
+      checkEqual(c3.GetPrivateKey, c1.GetPrivateKey);
+      Check(not c3.IsEqual(c1));
+    end;
+    checkEqual(c1.SharedSecret(nil), '', 'shared(nil)');
+    // validate signed certificate with c1 as CA
+    s3 := GuidToRawUtf8(RandomGuid);
+    Check(TrimGuid(s3));
+    c3 := crt.New;
+    c3.Generate([cuDataEncipherment, cuKeyAgreement], s3, c1);
+    Check(not c3.IsEqual(c1));
+    Check(not c3.IsEqual(c2));
+    Check(not c3.IsSelfSigned);
+    if crt.AlgoName <> 'syn-es256-v1' then
+      CheckEqual(c3.GetSubject, s3);
+    Check(c3.HasPrivateSecret);
+    CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
+    Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned1');
+    Check(c3.Verify(c2) = cvValidSigned, 'cvValidSigned2');
+    Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
+    n := '0123456789012345012345678901234'; // not a 16-byte multiple length
+    r := c3.Encrypt(n);
+    if r <> '' then // not all algorithms support encryption (RSA+ES256 only)
+    begin
+      CheckEqual(c3.Decrypt(r), n, 'asym ctr');
+      r := c3.Encrypt(n, 'aes-128-cbc');
+      CheckEqual(c3.Decrypt(r, 'aes-128-cbc'), n, 'another padding');
+    end;
+    s2 := GuidToRawUtf8(RandomGuid);
+    Check(TrimGuid(s2));
+    c2 := crt.New;
+    fields.CommonName := s2;
+    c2.Generate([cuDigitalSignature, cuKeyAgreement], '', nil, 30, -1, @fields);
+    Check(c2.IsSelfSigned);
+    if crt.AlgoName <> 'syn-es256-v1' then
+      CheckEqual(c2.GetSubject, s2);
+    if c2.GetAuthorityKey <> c2.GetSubjectKey then
+      CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
+    if crt.AlgoName <> 'syn-es256-v1' then
+      Check(c2.GetUsage = [cuDigitalSignature, cuKeyAgreement]);
+    Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
+    Check(c2.Verify(nil) = cvValidSelfSigned, 'self2');
+    c2.Sign(c1); // change signature
+    CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c2.Verify(c1) = cvValidSigned, 'self3');
+    Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
+    if crt.AlgoName = 'syn-es256-v1' then
+      check(c1.SharedSecret(c3) = c3.SharedSecret(c1), 'c1.GetUsage=CU_ALL')
+    else
+    begin
+      checkEqual(c1.SharedSecret(c3), '', 'c1(c3) no cuKeyAgreement');
+      checkEqual(c3.SharedSecret(c1), '', 'c3(c1) no cuKeyAgreement');
+    end;
+    s := c2.SharedSecret(c3);
+    check(c3.SharedSecret(c2) = s, 'sharedsecret');
+    check( (s <> '') = (crt.AsymAlgo = caaES256), 'caaES256=sharedsecret');
+    // c1 has [cuCA, cuDigitalSignature, cuKeyCertSign]
+    // c2 has [cuDigitalSignature, cuKeyAgreement]
+    // c3 has [cuDataEncipherment, cuKeyAgreement]
+    cpe.Clear;
+    check(cpe.Usages = []);
+    check(not cpe.GetUsage(cuCA, c4));
+    check(c4 = nil);
+    check(cpe.Add(nil) = []);
+    check(cpe.Usages = []);
+    for u := low(u) to high(u) do
+    begin
+      check(not cpe.GetUsage(u, c4));
+      check(c4 = nil);
+    end;
+    check(cpe.Add(c1) = []);
+    check(cpe.Usages = c1.GetUsage);
+    for u := low(u) to high(u) do
+      if u in cpe.Usages then
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c1);
+      end
+      else
+      begin
+        check(not cpe.GetUsage(u, c4));
+        check(c4 = nil);
+      end;
+    if cpe.Usages = CU_ALL then // 'syn-es256-v1'
+    begin
+      check(cpe.Add(c2) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+      for u := low(u) to high(u) do
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c2);
+      end;
+      check(cpe.Add(c3) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+      for u := low(u) to high(u) do
+      begin
+        check(cpe.GetUsage(u, c4));
+        check(c4 = c3);
+      end;
+    end
+    else
+    begin
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(not cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = nil);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c1);
+      check(not cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = nil);
+      check(cpe.Add(c2) = [cuDigitalSignature]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement]);
+      for u := low(u) to high(u) do
+        check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = c2);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c2);
+      check(not cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = nil);
+      check(cpe.Add(c3) = [cuKeyAgreement]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement, cuDataEncipherment]);
+      for u := low(u) to high(u) do
+        check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
+      check(cpe.GetUsage(cuCA, c4));
+      check(c4 = c1);
+      check(cpe.GetUsage(cuKeyAgreement, c4));
+      check(c4 = c3);
+      check(cpe.GetUsage(cuDigitalSignature, c4));
+      check(c4 = c2);
+      check(cpe.GetUsage(cuDataEncipherment, c4));
+      check(c4 = c3);
+    end;
+    s := cpe.AsBinary;
+    check(s <> '');
+    cpe.Clear;
+    check(cpe.Usages = []);
+    check(cpe.AsBinary = '');
+    if crt.AlgoName = 'syn-es256-v1' then
+    begin
+      check(cpe.FromBinary(crt, s) = CU_ALL);
+      check(cpe.Usages = CU_ALL);
+    end
+    else
+    begin
+      check(cpe.FromBinary(crt, s) = [cuDigitalSignature, cuKeyAgreement]);
+      check(cpe.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuKeyAgreement, cuDataEncipherment]);
+    end;
+    for u := low(u) to high(u) do
+    begin
+      check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
+      check((c4 <> nil) = (u in cpe.Usages));
     end;
   end;
-  AddConsole(names);
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
   alg := TCryptStoreAlgo.Instances;
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
+    AddAlgName;
     //writeln(str.AlgoName);
     st1 := str.New;
     CheckEqual(st1.Count, 0);
     // set c1 as self-signed root certificate (in v1 format)
-    c1 := st1.CertAlgo.Generate([cuCA]);
+    c1 := st1.DefaultCertAlgo.Generate([cuCA, cuKeyCertSign], 'rootca');
+    Check(c1.IsSelfSigned);
+    Check(c1.GetUsage = [cuCA, cuKeyCertSign]);
+    //writeln(C1.GetPeerInfo);
+    CheckEqual(c1.GetSubject, 'rootca');
     Check(st1.IsValid(c1) = cvUnknownAuthority);
     Check(st1.Add(c1));
     CheckEqual(st1.Count, 1);
     Check(st1.IsValid(c1) = cvValidSelfSigned);
     Check(c1.HasPrivateSecret, 'priv1');
     Check(c1.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 1');
-    // set c2 as itermediate CA, signed by c1 root CA
+    Check((c1.GetAuthorityKey = '') or
+          (c1.GetAuthorityKey = c1.GetSubjectKey));
+    // set c2 as intermediate CA, signed by c1 root CA
     c2 := nil;
     Check(not st1.Add(c2), 'no priv');
     CheckEqual(st1.Count, 1);
-    c2 := st1.CertAlgo.New;
+    c2 := st1.DefaultCertAlgo.New;
     Check(c2.Instance.ClassType = c1.Instance.ClassType);
-    c2.Generate([cuCA], '', c1);
-    Check(c2.GetUsage = [cuCA]);
+    c2.Generate([cuCA, cuKeyCertSign], 'mainca', c1);
+    Check(not c2.IsSelfSigned);
+    //writeln(c2.GetPeerInfo);
+    Check(c2.GetUsage = [cuCA, cuKeyCertSign]);
     Check(cuCA in c2.GetUsage);
+    CheckEqual(c2.GetSubject, 'mainca');
     Check(not (cuDigitalSignature in c2.GetUsage));
     Check(c2.HasPrivateSecret, 'priv2');
     Check(st1.IsValid(c2) = cvValidSigned, 'c2');
@@ -2415,35 +2696,48 @@ begin
     CheckEqual(st1.Count, 2);
     Check(st1.IsValid(c2) = cvValidSigned, 'c2');
     Check(c2.Sign(pointer(r), length(r)) = '', 'no cuDigitalSignature 2');
+    CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c2.GetAuthorityKey <> c2.GetSubjectKey);
     // set c3 as signing authority
-    c3 := st1.CertAlgo.New;
-    c3.Generate([cuDigitalSignature], '', c2);
+    c3 := st1.DefaultCertAlgo.New;
+    c3.Generate([cuDigitalSignature], 'testsigning', c2);
+    Check(not c3.IsSelfSigned);
+    Check(c3.GetUsage = [cuDigitalSignature]);
+    //writeln(c3.GetPeerInfo);
+    CheckEqual(c3.GetSubject, 'testsigning');
     Check(c3.Instance.ClassType = c1.Instance.ClassType);
     CheckEqual(c3.Instance.CryptAlgo.AlgoName, c2.Instance.CryptAlgo.AlgoName);
     Check(c3.HasPrivateSecret, 'priv3');
     Check(st1.IsValid(c3) = cvValidSigned, 'c3');
     Check(st1.Add(c3));
+    CheckEqual(c3.GetAuthorityKey, c2.GetSubjectKey);
     // sign
     s := c3.Sign(pointer(r), length(r));
     Check(s <> '', 'sign');
-    Check(st1.Verify(s, pointer(r), length(r)) = cvValidSigned, 's1');
+    cv := st1.Verify(s, pointer(r), length(r));
+    if cv <> cvNotSupported then
+      // TCryptStoreOpenSsl.Verify has no way to know which cert signed it
+      CheckUtf8(cv = cvValidSigned, 's1=%', [ToText(cv)^]);
     // persist the Store
-    st2 := str.NewFrom(st1.ToBinary);
+    st2 := str.NewFrom(st1.Save);
     CheckEqual(st2.Count, 3);
     Check(st2 <> nil);
     Check(st2.IsValid(c1) = cvValidSelfSigned, '2c1');
     Check(st2.IsValid(c2) = cvValidSigned, '2c2');
     Check(st2.IsValid(c3) = cvValidSigned, '2c3');
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2a');
-    dec(r[1]);
-    Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
-    inc(r[1]);
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
-    // validate CRL
-    Check(st2.Revoke(c3, 0, crrWithdrawn));
-    Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
-    Check(st2.Revoke(c3, 0, crrNotRevoked));
-    Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
+    if cv <> cvNotSupported then
+    begin
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2a');
+      dec(r[1]);
+      Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
+      inc(r[1]);
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
+      // validate CRL
+      Check(st2.Revoke(c3, 0, crrWithdrawn));
+      Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
+      Check(st2.Revoke(c3, 0, crrNotRevoked));
+      Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
+    end;
     // ensure new certs are not recognized by previous stores
     if st3 <> nil then
     begin
@@ -2451,10 +2745,12 @@ begin
       Check(st3.IsValid(c1) = cvUnknownAuthority, '3c1');
       Check(st3.IsValid(c2) = cvUnknownAuthority, '3c2');
       Check(st3.IsValid(c3) = cvUnknownAuthority, '3c3');
-      Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
+      if cv <> cvNotSupported then
+        Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
     end;
     st3 := st2;
   end;
+  AddConsole(Utf8ToString(names));
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;

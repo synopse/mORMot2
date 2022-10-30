@@ -38,13 +38,15 @@ type
 
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
-  // - tcoLogInSubFolder will log within a '[executable]\logs\' sub-folder
+  // - tcoLogInSubFolder will log within a '[executable]\log\' sub-folder
   // - tcoLogVerboseRotate will force the log files to rotate - could be set if
   // you expect test logs to be huge, bigger than what LogView supports
+  // - tcoLogNotHighResolution will log the current time as plain ISO-8601 text
   TSynTestOption = (
     tcoLogEachCheck,
     tcoLogInSubFolder,
-    tcoLogVerboseRotate);
+    tcoLogVerboseRotate,
+    tcoLogNotHighResolution);
 
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
@@ -1363,11 +1365,12 @@ begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
   AllocConsole;
+  RunFromSynTests := true; // set mormot.core.os.pas global flag
   with TSynLogTestLog.Family do
   begin
     Level := withLogs;
     PerThreadLog := ptIdentifiedInOneFile;
-    HighResolutionTimestamp := true;
+    HighResolutionTimestamp := not (tcoLogNotHighResolution in options);
     if (tcoLogVerboseRotate in options) and
        (Level = LOG_VERBOSE) then
     begin
@@ -1375,7 +1378,7 @@ begin
       RotateFileSizeKB := 100*1024; // rotate verbose logs by 100MB files
     end;
     if tcoLogInSubFolder in options then
-      DestinationPath := EnsureDirectoryExists(Executable.ProgramFilePath + 'logs');
+      DestinationPath := EnsureDirectoryExists(Executable.ProgramFilePath + 'log');
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);

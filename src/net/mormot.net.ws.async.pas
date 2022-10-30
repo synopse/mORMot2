@@ -92,12 +92,16 @@ type
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     procedure OnClose; override;
     function DecodeHeaders: integer; override;
+    procedure EndProcess;
     procedure BeforeDestroy; override;
     // called every 10 seconds to check against HeartbeatDelay and send ping
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
+  public
+    /// reuse this instance for a new incoming connection
+    procedure Recycle(const aRemoteIP: TNetAddr); override;
   end;
 
   /// handle HTTP/WebSockets server connections using non-blocking sockets
@@ -129,7 +133,9 @@ type
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
     fProcessClass: TWebSocketAsyncProcessClass;
+    fOnWSUpgraded: TOnWebSocketProtocolUpgraded;
     fOnWSConnect, fOnWSDisconnect: TOnWebSocketAsyncServerEvent;
+    function DoUpgrade(Protocol: TWebSocketProtocol): integer; virtual;
     procedure DoConnect(Context: TWebSocketAsyncConnection); virtual;
     procedure DoDisconnect(Context: TWebSocketAsyncConnection); virtual;
   public
@@ -164,6 +170,10 @@ type
     /// allow to customize the WebSockets processing classes
     property ProcessClass: TWebSocketAsyncProcessClass
       read fProcessClass write fProcessClass;
+    /// event triggerred when a new connection upgrade has been upgrades
+    // - allow e.g. to verify a JWT bearer before returning the WS 101 response
+    property OnWebSocketUpgraded: TOnWebSocketProtocolUpgraded
+      read fOnWSUpgraded write fOnWSUpgraded;
     /// event triggerred when a new connection upgrade has been done
     // - just before the main processing WebSockets frames process starts
     property OnWebSocketConnect: TOnWebSocketAsyncServerEvent
@@ -279,11 +289,13 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     // similar to TWebSocketServer.WebSocketProcessUpgrade
     serv := fServer as TWebSocketAsyncServer;
     result := serv.fProtocols.
-      ServerUpgrade(fHttp, fRemoteIP, fHandle, {out:} proto, {out:} resp);
+      ServerUpgrade(fHttp, fRemoteIP, fHandle, @fConnectionOpaque,
+      {out:} proto, {out:} resp);
     if result <> HTTP_SUCCESS then
       exit;
     fHttp.State := hrsUpgraded;
     fLockMax := true; // WebSockets separate receiving and sending
+    // send back WS upgrade 101 response
     if fOwner.WriteString(self, resp, {timeout=}1000) then
     begin
       // if we reached here, we switched/upgraded to WebSockets bidir frames
@@ -308,6 +320,23 @@ begin
     TryUpgrade;
 end;
 
+procedure TWebSocketAsyncConnection.EndProcess;
+begin
+  if fProcess <> nil then
+  begin
+    fProcess.fConnectionCloseWasSent := true; // too late for focConnectionClose
+    if not fProcess.fProcessEnded then
+      fProcess.ProcessStop; // there is no separated thread loop to wait for
+    FreeAndNilSafe(fProcess);
+  end;
+end;
+
+procedure TWebSocketAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
+begin
+  inherited Recycle(aRemoteIP);
+  EndProcess;
+end;
+
 procedure TWebSocketAsyncConnection.OnClose;
 begin
   inherited OnClose; // set fClosed flag
@@ -321,14 +350,8 @@ end;
 
 procedure TWebSocketAsyncConnection.BeforeDestroy;
 begin
-  if fProcess <> nil then
-  begin
-    fProcess.fConnectionCloseWasSent := true; // too late for focConnectionClose
-    if not fProcess.fProcessEnded then
-      fProcess.ProcessStop; // there is no separated thread loop to wait for
-  end;
+  EndProcess;
   inherited BeforeDestroy;
-  FreeAndNilSafe(fProcess);
 end;
 
 function TWebSocketAsyncConnection.SendDirect(const tmp: TSynTempBuffer;
@@ -438,8 +461,7 @@ var
 begin
   serv := aConnection.fServer as TWebSocketAsyncServer;
   fNoLastSocketTicks := true; // aConnection.OnLastOperationIdle handles pings
-  inherited Create(aProtocol, aConnection.Handle, nil,
-    @aConnection.fConnectionOpaque, @serv.fSettings, serv.ProcessName);
+  inherited Create(aProtocol, nil, @serv.fSettings, serv.ProcessName);
   fConnection := aConnection;
   fOnRead.Init(self, @fOnReadFrame);
 end;
@@ -448,8 +470,8 @@ function TWebSocketAsyncProcess.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    fConnection.fServer, fOwnerConnectionID, nil, fProtocol.ConnectionFlags,
-    fConnectionOpaque);
+    fConnection.fServer, fProtocol.ConnectionID, nil, fProtocol.ConnectionFlags,
+    fProtocol.ConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;
 end;
 
@@ -574,6 +596,7 @@ begin
     fProcessClass := TWebSocketAsyncProcess;
   fCallbackSendDelay := @fSettings.SendDelay;
   fProtocols := TWebSocketProtocolList.Create;
+  fProtocols.OnUpgraded := DoUpgrade;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   if hsoLogVerbose in ProcessOptions then
@@ -602,6 +625,14 @@ begin
   log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
   // release internal protocols list
   fProtocols.Free;
+end;
+
+function TWebSocketAsyncServer.DoUpgrade(Protocol: TWebSocketProtocol): integer;
+begin
+  if Assigned(fOnWSUpgraded) then
+    result := fOnWSUpgraded(Protocol)
+  else
+    result := HTTP_SUCCESS; // continue
 end;
 
 procedure TWebSocketAsyncServer.DoConnect(Context: TWebSocketAsyncConnection);

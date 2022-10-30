@@ -84,9 +84,9 @@ uses
   {$endif OSWINDOWS}
   {$ifdef USE_GRAPHICS_UNIT}
     {$ifdef FPC}
-    LCLType,
-    LCLProc,
-    LCLIntf,
+    lcltype,
+    lclproc,
+    lclintf,
     rtlconsts,
     {$ifdef USE_METAFILE}
     mormot.ui.core, // for TMetaFile definition
@@ -439,7 +439,47 @@ type
     epPrintingHighResolution);
 
   /// set of restrictions on PDF document operations
+  // - to be used as parameter for TPdfEncryption.New() class method
+  // - see PDF_PERMISSION_ALL, PDF_PERMISSION_NOMODIF, PDF_PERSMISSION_NOPRINT,
+  // PDF_PERMISSION_NOCOPY and PDF_PERMISSION_NOCOPYNORPRINT constants 
   TPdfEncryptionPermissions = set of TPdfEncryptionPermission;
+
+const
+  /// allow all actions for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_ALL: TPdfEncryptionPermissions =
+    [Low(TPdfEncryptionPermission)..high(TPdfEncryptionPermission)];
+
+  /// disable modification and annotation of a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOMODIF: TPdfEncryptionPermissions = [
+    epPrinting,
+    epContentCopy,
+    epPrintingHighResolution,
+    epFillingForms,
+    epContentExtraction,
+    epDocumentAssembly];
+
+  /// disable printing for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERSMISSION_NOPRINT: TPdfEncryptionPermissions = [
+    epGeneralEditing,
+    epContentCopy,
+    epAuthoringComment,
+    epContentExtraction,
+    epDocumentAssembly];
+
+  /// disable content extraction or copy for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOCOPY: TPdfEncryptionPermissions = [
+    epPrinting,
+    epAuthoringComment,
+    epPrintingHighResolution,
+    epFillingForms];
+
+  /// disable printing and content extraction or copy for a pdf encrypted file
+  // - to be used as parameter for TPdfEncryption.New() class method
+  PDF_PERMISSION_NOCOPYNORPRINT: TPdfEncryptionPermissions = [];
 
 {$endif USE_PDFSECURITY}
 
@@ -7222,7 +7262,7 @@ begin
   if not result then
     exit;
   AddRawUtf8(fTrueTypeFonts, TtfName);
-  QuickSortRawUTF8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
+  QuickSortRawUtf8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
 end;
 
 procedure TPdfDocument.FreeDoc;

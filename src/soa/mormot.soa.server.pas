@@ -1301,7 +1301,7 @@ begin
   begin
     W.CancelAll; // not CancelAllAsNew to keep twoForceJsonExtended
     W.AddShort('"POST",{Method:"');
-    W.AddJsonEscape(pointer(exec.Method^.InterfaceDotMethodName));
+    W.AddString(exec.Method^.InterfaceDotMethodName);
     W.AddShort('%",Input:{');
   end;
   if exec.CurrentStep < smsAfter then

@@ -353,11 +353,6 @@ type
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
     {$endif DOMAINRESTAUTH}
 
-    /// by default, the client is identified as IE 5.5, which is very
-    // friendly welcome by most servers :(
-    // - you can specify a custom value here
-    property UserAgent: RawUtf8
-      read fUserAgent write fUserAgent;
     /// the optional 'Accept: ' header value
     property Accept: RawUtf8
       read fAccept write fAccept;
@@ -391,9 +386,6 @@ type
     /// contain the body data retrieved from the server - from inherited Http
     property Content: RawByteString
       read Http.Content;
-    /// contain the body data length retrieved from the server - from inherited Http
-    property ContentLength: Int64
-      read Http.ContentLength;
     /// contain the response headers retrieved from the server - from inherited Http
     property Headers: RawUtf8
       read Http.Headers;
@@ -413,6 +405,18 @@ type
     /// optional callback called after each Request()
     property OnAfterRequest: TOnHttpClientSocketRequest
       read fOnAfterRequest write fOnAfterRequest;
+  published
+    /// by default, the client is identified as IE 5.5, which is very
+    // friendly welcome by most servers :(
+    // - you can specify a custom value here
+    property UserAgent: RawUtf8
+      read fUserAgent write fUserAgent;
+    /// contain the body data length retrieved from the server
+    property ContentLength: Int64
+      read Http.ContentLength;
+    /// contain the body type retrieved from the server
+    property ContentType: RawUtf8
+      read Http.ContentType;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -861,7 +865,11 @@ type
   end;
 
   /// WinHttp exception type
-  EWinHttp = class(ESynException);
+  EWinHttp = class(ESynException)
+  public
+    /// create and raise a EWinHttp exception, with the error message as text
+    class procedure RaiseFromLastError;
+  end;
 
   /// establish a client connection to a WebSocket server using the Windows API
   // - used by TWinWebSocketClient class
@@ -983,11 +991,11 @@ type
   protected
     fHttp: THttpClientSocket;
     fHttps: THttpRequest;
-    fProxy, fHeaders, fUserAgent: RawUtf8;
+    fUri, fProxy, fHeaders, fUserAgent: RawUtf8;
     fBody: RawByteString;
     fSocketTLS: TNetTlsContext;
     fOnlyUseClientSocket: boolean;
-    fTimeOut: integer;
+    fTimeOut, fStatus: integer;
   public
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
@@ -1010,6 +1018,9 @@ type
     /// returns the HTTP body as returned by a previous call to Request()
     property Body: RawByteString
       read fBody;
+    /// returns the HTTP status code after a Request() call
+    property Status: integer
+      read fStatus;
     /// returns the HTTP headers as returned by a previous call to Request()
     property Headers: RawUtf8
       read fHeaders;
@@ -1175,6 +1186,7 @@ function SendEmailSubject(const Text: string): RawUtf8;
 
 
 implementation
+
 
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
@@ -1526,8 +1538,8 @@ begin
             [GetEnumName(TypeInfo(TCrtSocketPending), ord(pending))^, TimeOut]);
           exit;
         end;
-        SockRecvLn(Http.Command); // will raise ENetSock on any error
-        P := pointer(Http.Command);
+        SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
+        P := pointer(Http.CommandResp);
         if IdemPChar(P, 'HTTP/1.') then
         begin
           // get http numeric status code (200,404...) from 'HTTP/1.x ######'
@@ -1544,10 +1556,10 @@ begin
         else
         begin
           // error on reading answer -> 505=wrong format
-          if Http.Command = '' then
+          if Http.CommandResp = '' then
             DoRetry(HTTP_TIMEOUT, 'Broken Link - timeout=%ms', [TimeOut])
           else
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.Command]);
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
           exit;
         end;
         // retrieve all HTTP headers
@@ -2200,8 +2212,8 @@ begin
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
     begin
-      aDataEncoding := CompressContent(fCompressAcceptHeader,
-        fCompress, InDataType, aData);
+      CompressContent(fCompressAcceptHeader, fCompress, InDataType,
+        aData, aDataEncoding);
       if aDataEncoding <> '' then
         InternalAddHeader(RawUtf8('Content-Encoding: ') + aDataEncoding);
     end;
@@ -2402,26 +2414,26 @@ begin
     pointer(Utf8ToSynUnicode(fProxyName)),
     pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
      ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
   if fHTTPS then
   begin
     protocols := InternalGetProtocols;
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
-      RaiseLastModuleError(winhttpdll, EWinHttp);
+      EWinHttp.RaiseFromLastError;
     Callback := WinHttpApi.SetStatusCallback(fSession,
       WinHttpSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
-      RaiseLastModuleError(winhttpdll, EWinHttp);
+      EWinHttp.RaiseFromLastError;
   end;
   fConnection := WinHttpApi.Connect(
     fSession, pointer(Utf8ToSynUnicode(fServer)), fPort, 0);
   if fConnection = nil then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
 end;
 
 procedure TWinHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
@@ -2439,13 +2451,13 @@ begin
   fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
     pointer(Utf8ToSynUnicode(aUrl)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
     if not WinHttpApi.SetOption(
        fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, SizeOf(Flags)) then
-      RaiseLastModuleError(winhttpdll, EWinHttp);
+      EWinHttp.RaiseFromLastError;
   end;
 end;
 
@@ -2463,7 +2475,7 @@ begin
   if (hdr <> '') and
      not WinHttpApi.AddRequestHeaders(FRequest,
      Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
 end;
 
 procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
@@ -2492,7 +2504,7 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
             Bytes := Max;
           if not WinHttpApi.WriteData(fRequest, @PByteArray(aData)[Current],
              Bytes, BytesWritten) then
-            RaiseLastModuleError(winhttpdll, EWinHttp);
+            EWinHttp.RaiseFromLastError;
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
             raise EWinHttp.CreateUtf8('%: OnUpload canceled %', [self, aMethod]);
@@ -2524,13 +2536,13 @@ begin
       end;
       if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
-        RaiseLastModuleError(winhttpdll, EWinHttp);
+        EWinHttp.RaiseFromLastError;
     end;
   if fHTTPS and
      IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
-      RaiseLastModuleError(winhttpdll, EWinHttp);
+      EWinHttp.RaiseFromLastError;
   L := length(aData);
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
@@ -2546,7 +2558,7 @@ begin
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success with no certificate validation
   // if we reached here, an error occured
-  RaiseLastModuleError(winhttpdll, EWinHttp);
+  EWinHttp.RaiseFromLastError;
 end;
 
 function TWinHttp.InternalGetInfo(Info: cardinal): RawUtf8;
@@ -2587,14 +2599,14 @@ end;
 function TWinHttp.InternalQueryDataAvailable: cardinal;
 begin
   if not WinHttpApi.QueryDataAvailable(fRequest, result) then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
 end;
 
 function TWinHttp.InternalReadData(var Data: RawByteString; Read: integer;
   Size: cardinal): cardinal;
 begin
   if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
-    RaiseLastModuleError(winhttpdll, EWinHttp);
+    EWinHttp.RaiseFromLastError;
 end;
 
 destructor TWinHttp.Destroy;
@@ -2607,6 +2619,14 @@ begin
 end;
 
 
+{ EWinHttp }
+
+class procedure EWinHttp.RaiseFromLastError;
+begin
+  RaiseLastModuleError(winhttpdll, EWinHttp);
+end;
+
+
 { EWinINet }
 
 class procedure EWinINet.RaiseFromLastError;
@@ -2616,7 +2636,7 @@ var
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   err := GetLastError;
-  E := CreateFmt('%s (%x)', [SysErrorMessageWinInet(err), err]);
+  E := CreateUtf8('% (%)', [SysErrorMessageWinInet(err), err]);
   E.fLastError := err;
   raise E;
 end;
@@ -3170,10 +3190,12 @@ function TSimpleHttpClient.Request(const uri: RawUtf8; const method: RawUtf8;
 var
   u: TUri;
 begin
+  fUri := uri;
   if u.From(uri) then
     result := RawRequest(u, method, header, data, datatype, keepalive)
   else
     result := HTTP_NOTFOUND;
+  fStatus := result;
 end;
 
 function TSimpleHttpClient.SocketTLS: PNetTlsContext;
@@ -3224,7 +3246,7 @@ begin
   if aTimeOutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeOutSeconds);
-  fClient := fClient.Create(aOnlyUseClientSocket);
+  fClient := TSimpleHttpClient.Create(aOnlyUseClientSocket);
   if aUri <> '' then
     if not LoadFromUri(aUri, aToken) then
       raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
@@ -3482,7 +3504,7 @@ end;
 
 function SendEmailSubject(const Text: string): RawUtf8;
 begin
-  StringToUtf8(Text, result);
+  StringToUtf8(Text, result{%H-});
   result := MimeHeaderEncode(result);
 end;
 

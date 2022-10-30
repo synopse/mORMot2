@@ -1,8 +1,6 @@
 /*
  * bt_matchfinder.h - Lempel-Ziv matchfinding with a hash table of binary trees
  *
- * Originally public domain; changes after 2016-09-07 are copyrighted.
- *
  * Copyright 2016 Eric Biggers
  *
  * Permission is hereby granted, free of charge, to any person
@@ -101,11 +99,7 @@ struct bt_matchfinder {
 	 * 'child_tab[pos * 2]' and 'child_tab[pos * 2 + 1]', respectively.  */
 	mf_pos_t child_tab[2UL * MATCHFINDER_WINDOW_SIZE];
 
-}
-#ifdef _aligned_attribute
-_aligned_attribute(MATCHFINDER_MEM_ALIGNMENT)
-#endif
-;
+} MATCHFINDER_ALIGNED;
 
 /* Prepare the matchfinder for a new input buffer.  */
 static forceinline void
@@ -138,22 +132,21 @@ bt_right_child(struct bt_matchfinder *mf, s32 node)
 }
 
 /* The minimum permissible value of 'max_len' for bt_matchfinder_get_matches()
- * and bt_matchfinder_skip_position().  There must be sufficiently many bytes
+ * and bt_matchfinder_skip_byte().  There must be sufficiently many bytes
  * remaining to load a 32-bit integer from the *next* position.  */
 #define BT_MATCHFINDER_REQUIRED_NBYTES	5
 
 /* Advance the binary tree matchfinder by one byte, optionally recording
  * matches.  @record_matches should be a compile-time constant.  */
 static forceinline struct lz_match *
-bt_matchfinder_advance_one_byte(struct bt_matchfinder * const restrict mf,
-				const u8 * const restrict in_base,
+bt_matchfinder_advance_one_byte(struct bt_matchfinder * const mf,
+				const u8 * const in_base,
 				const ptrdiff_t cur_pos,
 				const u32 max_len,
 				const u32 nice_len,
 				const u32 max_search_depth,
-				u32 * const restrict next_hashes,
-				u32 * const restrict best_len_ret,
-				struct lz_match * restrict lz_matchptr,
+				u32 * const next_hashes,
+				struct lz_match *lz_matchptr,
 				const bool record_matches)
 {
 	const u8 *in_next = in_base + cur_pos;
@@ -218,7 +211,6 @@ bt_matchfinder_advance_one_byte(struct bt_matchfinder * const restrict mf,
 	if (cur_node <= cutoff) {
 		*pending_lt_ptr = MATCHFINDER_INITVAL;
 		*pending_gt_ptr = MATCHFINDER_INITVAL;
-		*best_len_ret = best_len;
 		return lz_matchptr;
 	}
 
@@ -241,7 +233,6 @@ bt_matchfinder_advance_one_byte(struct bt_matchfinder * const restrict mf,
 				if (len >= nice_len) {
 					*pending_lt_ptr = *bt_left_child(mf, cur_node);
 					*pending_gt_ptr = *bt_right_child(mf, cur_node);
-					*best_len_ret = best_len;
 					return lz_matchptr;
 				}
 			}
@@ -266,7 +257,6 @@ bt_matchfinder_advance_one_byte(struct bt_matchfinder * const restrict mf,
 		if (cur_node <= cutoff || !--depth_remaining) {
 			*pending_lt_ptr = MATCHFINDER_INITVAL;
 			*pending_gt_ptr = MATCHFINDER_INITVAL;
-			*best_len_ret = best_len;
 			return lz_matchptr;
 		}
 	}
@@ -295,12 +285,6 @@ bt_matchfinder_advance_one_byte(struct bt_matchfinder * const restrict mf,
  *	The precomputed hash codes for the sequence beginning at @in_next.
  *	These will be used and then updated with the precomputed hashcodes for
  *	the sequence beginning at @in_next + 1.
- * @best_len_ret
- *	If a match of length >= 4 was found, then the length of the longest such
- *	match is written here; otherwise 3 is written here.  (Note: this is
- *	redundant with the 'struct lz_match' array, but this is easier for the
- *	compiler to optimize when inlined and the caller immediately does a
- *	check against 'best_len'.)
  * @lz_matchptr
  *	An array in which this function will record the matches.  The recorded
  *	matches will be sorted by strictly increasing length and (non-strictly)
@@ -318,7 +302,6 @@ bt_matchfinder_get_matches(struct bt_matchfinder *mf,
 			   u32 nice_len,
 			   u32 max_search_depth,
 			   u32 next_hashes[2],
-			   u32 *best_len_ret,
 			   struct lz_match *lz_matchptr)
 {
 	return bt_matchfinder_advance_one_byte(mf,
@@ -328,7 +311,6 @@ bt_matchfinder_get_matches(struct bt_matchfinder *mf,
 					       nice_len,
 					       max_search_depth,
 					       next_hashes,
-					       best_len_ret,
 					       lz_matchptr,
 					       true);
 }
@@ -340,14 +322,13 @@ bt_matchfinder_get_matches(struct bt_matchfinder *mf,
  * must do hashing and tree re-rooting.
  */
 static forceinline void
-bt_matchfinder_skip_position(struct bt_matchfinder *mf,
-			     const u8 *in_base,
-			     ptrdiff_t cur_pos,
-			     u32 nice_len,
-			     u32 max_search_depth,
-			     u32 next_hashes[2])
+bt_matchfinder_skip_byte(struct bt_matchfinder *mf,
+			 const u8 *in_base,
+			 ptrdiff_t cur_pos,
+			 u32 nice_len,
+			 u32 max_search_depth,
+			 u32 next_hashes[2])
 {
-	u32 best_len;
 	bt_matchfinder_advance_one_byte(mf,
 					in_base,
 					cur_pos,
@@ -355,7 +336,6 @@ bt_matchfinder_skip_position(struct bt_matchfinder *mf,
 					nice_len,
 					max_search_depth,
 					next_hashes,
-					&best_len,
 					NULL,
 					false);
 }
