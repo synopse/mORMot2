@@ -31,7 +31,7 @@ begin
     try
       ServiceServer := TServiceServer.Create(SampleRepository);
       try
-        HttpServer := TRestHttpServer.Create(HTTP_PORT, [ServiceServer], '+', HTTP_DEFAULT_MODE);
+        HttpServer := TRestHttpServer.Create(HTTP_PORT, [ServiceServer], '+', HTTP_DEFAULT_MODE,4 );
         HttpServer.AccessControlAllowOrigin := '*';
         try
           Writeln('Server started on port ' + HTTP_PORT);
