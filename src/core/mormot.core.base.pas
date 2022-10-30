@@ -149,7 +149,7 @@ type
   QWord = UInt64;
   {$else}
   QWord = type Int64;
-  {$endif}
+  {$endif UNICODE}
   /// points to an unsigned Int64
   PQWord = ^QWord;
   
@@ -166,7 +166,7 @@ type
   TThreadID = cardinal;
   /// compatibility definition with FPC and newer Delphi
   PUInt64 = ^UInt64;
-  {$endif}
+  {$endif ISDELPHIXE2}
 
 {$endif FPC}
 
@@ -404,6 +404,7 @@ type
   PPByte = ^PByte;
   PPPByte = ^PPByte;
   PPInteger = ^PInteger;
+  PPCardinal = ^PCardinal;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
   TByteArray = array[ 0 .. MaxInt - 1 ] of byte; // redefine here with {$R-}
@@ -471,6 +472,10 @@ type
 type
   /// stack-allocated ASCII string, used by GuidToShort() function
   TGuidShortString = string[38];
+
+  /// used e.g. to serialize up to 256-bit as hexadecimal
+  TShort64 = string[64];
+  PShort64 = ^TShort64;
 
   /// used e.g. for SetThreadName/GetCurrentThreadName
   TShort31 = string[31];
@@ -629,16 +634,8 @@ const
   // - even if a dynamic array can handle PtrInt length, consider other patterns
   _DAMAXSIZE = $5fffffff;
 
-/// same as SetLength() but without any memory resize - len should be > 0
-procedure DynArrayFakeLength(var arr; len: TDALen);
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// same as Length() but if you are sure that arr <> nil
-function DynArrayNotNilLength(var arr): TDALen;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// same as High() but if you are sure that arr <> nil
-function DynArrayNotNilHigh(var arr): TDALen;
+/// like SetLength() but without any memory resize - WARNING: len should be > 0
+procedure DynArrayFakeLength(arr: pointer; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
 {$ifndef CPUARM}
@@ -734,6 +731,24 @@ procedure FastAssignNew(var d; s: pointer = nil);
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawUtf8; len: PtrInt); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+{$ifdef HASCODEPAGE}
+/// retrieve the code page of a non void string
+// - caller should have ensure that s <> ''
+function GetCodePage(const s: RawByteString): cardinal; inline;
+{$endif HASCODEPAGE}
+
 /// initialize a RawByteString, ensuring returned "aligned" pointer
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
@@ -763,8 +778,8 @@ procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
-/// simple concatenation of a 32-bit integer as text into a shorstring
-procedure AppendShortInteger(value: integer; var dest: ShortString);
+/// simple concatenation of a 32-bit unsigned integer as text into a shorstring
+procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
 /// simple concatenation of a 64-bit integer as text into a shorstring
 procedure AppendShortInt64(value: Int64; var dest: ShortString);
@@ -1304,7 +1319,7 @@ function CompareQWord(const A, B: QWord): integer;
 // - returns nil if Value was not found
 // - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
-  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef CPUINTEL} {$ifndef HASNOSSE2} {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
 
 /// fast search of an unsigned integer position in a 32-bit integer array
 // - Count is the number of integer entries in P^
@@ -1319,7 +1334,7 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
 // - returns false if Value was not found
 // - is implemented via IntegerScanIndex() SSE2 asm on i386 and x86_64
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
-  {$ifdef CPUINTEL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef CPUINTEL} {$ifndef HASNOSSE2} {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
 
 /// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
@@ -1651,13 +1666,21 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer;
   var aPtrArrayCount: integer): PtrInt; overload;
 
 /// wrapper to add once an item to a array of pointer dynamic array storage
-function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): PtrInt; overload;
+
+/// wrapper to add once an item to a array of pointer dynamic array storage
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
+  var aPtrArrayCount: integer): PtrInt; overload;
+
+/// wrapper to insert an item to a array of pointer dynamic array storage
+function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
+  var aPtrArrayCount: integer): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): integer; overload;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): PtrInt; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger = nil); overload;
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil); overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -1684,6 +1707,15 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - this overloaded function will use a separated variable to store the items
+// count, so will be slightly faster: but you should call SetLength() when done,
+// to have a stand-alone array as expected by our ORM/SOA serialziation
+// - return the index of the item in the dynamic array
+function ObjArrayAddCount(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// wrapper to add items to a T*ObjArray dynamic array storage
 // - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
 // - return the new number of the items in aDestObjArray
@@ -1695,24 +1727,18 @@ function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 // - return the new number of the items in aDestObjArray
 function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
 
-/// wrapper to add an item to a T*ObjArray dynamic array storage
-// - this overloaded function will use a separated variable to store the items
-// count, so will be slightly faster: but you should call SetLength() when done,
-// to have a stand-alone array as expected by our ORM/SOA serialziation
-// - return the index of the item in the dynamic array
-function ObjArrayAddCount(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer): PtrInt;
-
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - if the object is already in the array (searching by address/reference,
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject); overload;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage and Count
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer); overload;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 // - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
 // - will first check if aSourceObjArray[] items are not already in aDestObjArray
@@ -2195,7 +2221,7 @@ function GetBitsCountPas(value: PtrInt): PtrInt;
 /// compute how many bits are set in a given pointer-sized integer
 // - the PopCnt() intrinsic under FPC doesn't have any fallback on older CPUs,
 // and default implementation is 5 times slower than our GetBitsCountPas() on x64
-// - this redirected function will use fast SSE4.2 popcnt opcode, if available
+// - this redirected function will use fast SSE4.2 "popcnt" opcode, if available
 var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 /// compute how many bytes are needed to store a given number of bits
@@ -2289,11 +2315,11 @@ type
    cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
    cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
    cf_c05, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
-   cfAVX512BITALG, cfTMEEN, cfAVX512VPC, cf_c15, cfFLP, cf_c17, cf_c18,
-   cf_c19, cf_c20, cf_c21, cfRDPID, cfKL, cf_c24, cfCLDEMOTE, cf_c26,
+   cfAVX512BITALG, cfTMEEN, cfAVX512VPC, cf_c15, cfFLP, cfMPX0, cfMPX1,
+   cfMPX2, cfMPX3, cfMPX4, cfRDPID, cfKL, cf_c24, cfCLDEMOTE, cf_c26,
    cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cf_d1,
    cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cf_d5, cf_d6, cf_d7, cfAVX512VP2I,
-   cfSRBDS, cfMDCLR, cf_d11, cf_d12, cfTSXFA, cfSER, cfHYBRID,
+   cfSRBDS, cfMDCLR, cfTSXABRT, cf_d12, cfTSXFA, cfSER, cfHYBRID,
    cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cfAVX512FP16,
    cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD);
 
@@ -2389,12 +2415,14 @@ function RdRand32: cardinal;
 function Rdtsc: Int64;
 
 /// compatibility function, to be implemented according to the running CPU
-// - expect the same result as the homonymous Win32 API function
+// - expect the same result as the homonymous Win32 API function, i.e.
+// returns I + 1, and store I + 1 within I in an atomic/tread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedIncrement(var I: integer): integer;
 
 /// compatibility function, to be implemented according to the running CPU
-// - expect the same result as the homonymous Win32 API function
+// - expect the same result as the homonymous Win32 API function, i.e.
+// returns I - 1, and store I - 1 within I in an atomic/tread-safe way
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
@@ -2492,29 +2520,29 @@ function BSRqword(const q: Qword): cardinal;
 
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
-  // - cpuERMS is ignored (slower than our movnt code, and not cpuid in VMs)
   // - cpuHaswell identifies Intel/AMD AVX2+BMI support at Haswell level
+  // as expected e.g. by IsValidUtf8Avx2/Base64EncodeAvx2 dedicated asm
+  // - won't include ERMSB flag because it is not propagated within some VMs
   TX64CpuFeatures = set of (
-    cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif}, cpuHaswell);
+    cpuAVX, cpuAVX2, cpuHaswell);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   X64CpuFeatures: TX64CpuFeatures;
 
-{$ifdef ASMX64AVX}
+{$ifdef ASMX64AVXNOCONST}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt):  boolean;
 // avx2 asm as used by mormot.core.buffers for Base64EncodeMain/Base64DecodeMain
 procedure Base64EncodeAvx2(var b: PAnsiChar; var blen: PtrUInt; var b64: PAnsiChar);
 procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiChar);
-{$endif ASMX64AVX}
+{$endif ASMX64AVXNOCONST}
 
 {$endif ASMX64}
 
 /// our fast version of FillChar()
 // - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
-// - you could try to define WITH_ERMS conditional but it is usually slower
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
 // and on x86_64, ERMS is wrongly used even for small blocks
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
@@ -2524,7 +2552,6 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
 // - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
 // - FPC x86_64 RTL is slower than our SSE2/AVX asm
-// - you could try to define WITH_ERMS conditional but it is usually slower
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef FPC_X86}
@@ -2535,7 +2562,6 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 
 {$else}
 
-
 // fallback to RTL versions on non-INTEL or PIC platforms by default
 // and mormot.core.os.posix.inc redirects them to libc memset/memmove
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
@@ -2543,11 +2569,10 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 
 {$endif ASMINTEL}
 
-/// an alternative Move() function tuned for small unaligned counts
-// - warning: expects Count>0 and Source/Dest not nil
-// - warning: doesn't support buffers overlapping
-procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
-  {$ifdef HASINLINE}inline;{$endif}
+/// Move() with one-by-one byte copy
+// - never redirect to MoveFast() so could be used when data overlaps
+procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// perform a MoveFast then fill the Source buffer with zeros
 // - could be used e.g. to quickly move a managed record content into a newly
@@ -2654,7 +2679,7 @@ procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
 // - if SepStr is not found, returns Str
 function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt = 1): RawUtf8; overload;
 
-/// buffer-safe version of StrComp(), to be used with PUtf8Char/PAnsiChar
+/// buffer-overflow safe version of StrComp(), to be used with PUtf8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -2765,6 +2790,9 @@ type
 // - can be used as an alternative to several Random32 function calls
 function Lecuyer: PLecuyer;
 
+/// internal function used e.g. by TLecuyer.FillShort/FillShort31
+procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - this function will use well documented and proven Pierre L'Ecuyer software
 // generator - which happens to be faster (and safer) than RDRAND opcode (which
@@ -2776,7 +2804,7 @@ function Lecuyer: PLecuyer;
 function Random32: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
-// - calls internally the overloaded Random32 function
+// - calls internally the overloaded Random32 function, ensuring Random32(max)<max
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
@@ -3288,6 +3316,11 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 // data is corrupted during transmission, will instantly return ''
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
 
+/// return the Hash32() 32-bit CRC of CompressSynLZ() uncompressed data
+// - will first check the CRC of the supplied compressed Data
+// - returns 0 if the CRC of the compressed Data is not correct
+function CompressSynLZGetHash32(const Data: RawByteString): cardinal;
+
 /// simple Run-Length-Encoding compression of a memory buffer
 // - SynLZ is not good with input of a lot of redundant bytes, e.g. chunks of
 // zeros: you could pre-process RleCompress/RleUnCompress such data before SynLZ
@@ -3352,11 +3385,17 @@ const
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
 
   /// a slightly faster alternative to Variants.Null function with TVarData
-  NullVarData: TVarData = (VType: varNull{%H-});
+  NullVarData:  TVarData = (VType: varNull{%H-});
+  FalseVarData: TVarData = (VType: varBoolean{%H-});
+  TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}1);
   
 var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
+  /// a slightly faster alternative to false constant when assigned to a variant
+  VarFalse: variant absolute FalseVarData;
+  /// a slightly faster alternative to true constant when assigned to a variant
+  VarTrue: variant absolute TrueVarData;
 
 {$ifdef HASINLINE}
 /// overloaded function which can be properly inlined to clear a variant
@@ -3838,15 +3877,6 @@ uses
   Windows; // circumvent unexpected warning about inlining (WTF!)
 {$endif ISDELPHI20062007}
 
-{$ifdef FPC_X64MM} // for direct string access to our fpcx64mm Memory Manager
-{$ifdef CPUX64}
-uses
-  mormot.core.fpcx64mm;
-{$else}
-  {$undef FPC_X64MM}
-{$endif CPUX64}
-{$endif FPC_X64MM}
-
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
   {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
@@ -4155,14 +4185,14 @@ begin
   result := nil;
   if len > 0 then
   begin
-    {$ifdef FPC_X64MM}
-    P := _GetMem(len + (_STRRECSIZE + 4));
+    {$ifdef FPC}
+    P := GetMem(len + (_STRRECSIZE + 4));
     result := PAnsiChar(P) + _STRRECSIZE;
     {$else}
     GetMem(result, len + (_STRRECSIZE + 4));
     P := pointer(result);
     inc(PStrRec(result));
-    {$endif FPC_X64MM}
+    {$endif FPC}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
     {$ifdef FPC}
     P^.codePageElemSize := codepage + (1 shl 16);
@@ -4176,6 +4206,40 @@ begin
   end;
 end;
 
+{$ifdef HASCODEPAGE}
+function GetCodePage(const s: RawByteString): cardinal;
+begin
+  result := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage;
+end;
+{$endif HASCODEPAGE}
+
+procedure FakeLength(var s: RawUtf8; len: PtrInt);
+var
+  p: PAnsiChar; // faster with a temp variable
+begin
+  p := pointer(s);
+  p[len] := #0;
+  PStrLen(p - _STRLEN)^ := len; // in-place SetLength()
+end;
+
+procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char);
+var
+  p: PAnsiChar;
+begin
+  p := pointer(s);
+  endChar^ := #0;
+  PStrLen(p - _STRLEN)^ := endChar - p;
+end;
+
+procedure FakeLength(var s: RawByteString; len: PtrInt);
+var
+  p: PAnsiChar;
+begin
+  p := pointer(s);
+  p[len] := #0;
+  PStrLen(p - _STRLEN)^ := len; // in-place SetLength()
+end;
+
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var
   r: pointer;
@@ -4184,7 +4248,10 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt);
@@ -4195,7 +4262,10 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if s = '' then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
@@ -4206,11 +4276,14 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  FastAssignNew(s, r);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNew(s, r);
 end;
 
-procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
-  out aligned: pointer; alignment: PtrUInt);
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
+  len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
   FastSetRawByteString(holder, nil, len + alignment);
@@ -4221,7 +4294,7 @@ begin
     MoveFast(fillwith^, aligned^, len);
 end;
 
-// CompareMemSmall/MoveSmall defined now for proper inlining below
+// CompareMemSmall/MoveByOne defined now for proper inlining below
 
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
 var
@@ -4252,7 +4325,7 @@ zero:
   {$endif CPUX86}
 end;
 
-procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
 var
   c: AnsiChar; // better code generation on FPC
 begin
@@ -4297,7 +4370,7 @@ begin
   if (len = 0) or
      (len + ord(dest[0]) > 255) then
     exit;
-  MoveSmall(@src[1], @dest[ord(dest[0]) + 1], len);
+  MoveFast(src[1], dest[ord(dest[0]) + 1], len);
   inc(dest[0], len);
 end;
 
@@ -4309,20 +4382,32 @@ begin
   dest[ord(dest[0])] := chr;
 end;
 
-procedure AppendShortInteger(value: integer; var dest: ShortString);
+procedure AppendShortTemp24(value, temp: PAnsiChar; dest: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  temp: ShortString;
+  valuelen, destlen, newlen: PtrInt;
 begin
-  str(value, temp); // fast enough for our purpose
-  AppendShort(temp, dest);
+  valuelen := temp - value;
+  destlen := ord(dest[0]);
+  newlen := valuelen + destlen;
+  if newlen > 255 then
+    exit;
+  dest[0] := AnsiChar(newlen);
+  MoveFast(value^, dest[destlen + 1], valuelen);
+end;
+
+procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
+var
+  tmp: array[0..23] of AnsiChar;
+begin
+  AppendShortTemp24(StrUInt32(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortInt64(value: Int64; var dest: ShortString);
 var
-  temp: ShortString;
+  tmp: array[0..23] of AnsiChar;
 begin
-  str(value, temp);
-  AppendShort(temp, dest);
+  AppendShortTemp24(StrInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: ShortString);
@@ -5683,19 +5768,9 @@ end;
 
 {$endif CPU64}
 
-procedure DynArrayFakeLength(var arr; len: TDALen);
+procedure DynArrayFakeLength(arr: pointer; len: TDALen);
 begin
   PDALen(PAnsiChar(arr) - _DALEN)^ := len - _DAOFF;
-end;
-
-function DynArrayNotNilLength(var arr): TDALen;
-begin
-  result := PDALen(PAnsiChar(arr) - _DALEN)^ + _DAOFF;
-end;
-
-function DynArrayNotNilHigh(var arr): TDALen;
-begin
-  result := PDALen(PAnsiChar(arr) - _DALEN)^ + (_DAOFF - 1);
 end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
@@ -5710,7 +5785,7 @@ begin
   high := len - 1;
 end;
 
-procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlinedS
+procedure Div100(Y: cardinal; var res: TDiv100Rec); // Delphi=asm, FPC=inlined
 var
   Y100: cardinal;
 begin
@@ -6705,10 +6780,10 @@ begin
   inc(aPtrArrayCount);
 end;
 
-function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
 begin
   n := length(a);
   result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
@@ -6719,16 +6794,42 @@ begin
   result := n;
 end;
 
-procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger);
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
+  var aPtrArrayCount: integer): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aPtrArray), aPtrArrayCount, PtrUInt(aItem));
+  if result < 0 then
+    result := PtrArrayAdd(aPtrArray, aItem, aPtrArrayCount);
+end;
+
+function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
+  var aPtrArrayCount: integer): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
+begin
+  n := aPtrArrayCount;
+  if length(a) = n then
+    SetLength(a, NextGrow(n));
+  if PtrUInt(aIndex) < PtrUInt(n) then
+    MoveFast(a[aIndex], a[aIndex + 1], (n - aIndex) * SizeOf(pointer))
+  else
+    aIndex := n;
+  a[aIndex] := aItem;
+  inc(aPtrArrayCount);
+  result := aIndex;
+end;
+
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger);
+var
+  a: TPointerDynArray absolute aPtrArray;
+  n: PtrInt;
 begin
   if aCount = nil then
     n := length(a)
   else
     n := aCount^;
-  if cardinal(aIndex) >= cardinal(n) then
+  if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
   dec(n);
   if n > aIndex then
@@ -6739,10 +6840,10 @@ begin
     aCount^ := n;
 end;
 
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): integer;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
-  n: integer;
+  n: PtrInt;
 begin
   if aCount = nil then
     n := length(a)
@@ -6772,12 +6873,13 @@ end;
 { wrapper functions to T*ObjArr types }
 
 function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
-var
-  a: TObjectDynArray absolute aObjArray;
 begin
-  result := length(a);
-  SetLength(a, result + 1);
-  a[result] := aItem;
+  result := PtrArrayAdd(aObjArray, aItem);
+end;
+
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
+begin
+  result := PtrArrayAdd(aObjArray, aItem, aObjArrayCount);
 end;
 
 function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
@@ -6799,35 +6901,15 @@ begin
   TObjectDynArray(aSourceObjArray) := nil; // aSourceObjArray[] changed ownership
 end;
 
-function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
-var
-  a: TObjectDynArray absolute aObjArray;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): PtrInt;
 begin
-  result := aObjArrayCount;
-  if result = length(a) then
-    SetLength(a, NextGrow(result));
-  a[result] := aItem;
-  inc(aObjArrayCount);
+  result := PtrArrayAddOnce(aObjArray, aItem);
 end;
 
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
-var
-  a: TObjectDynArray absolute aObjArray;
-  n: PtrInt;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt;
 begin
-  n := length(a);
-  if not PtrUIntScanExists(pointer(a), n, PtrUInt(aItem)) then
-  begin
-    SetLength(a, n + 1);
-    a[n] := aItem;
-  end;
-end;
-
-procedure ObjArrayAddOnce(var aObjArray; aItem: TObject;
-  var aObjArrayCount: integer);
-begin
-  if not PtrUIntScanExists(pointer(aObjArray), aObjArrayCount, PtrUInt(aItem)) then
-    ObjArrayAddCount(aObjArray, aItem, aObjArrayCount);
+  result := PtrArrayAddOnce(aObjArray, aItem, aObjArrayCount);
 end;
 
 function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
@@ -7380,7 +7462,7 @@ procedure Rcu(var src, dst; len: integer);
 begin
   if len > 0 then
     repeat
-      MoveSmall(@src, @dst, len); // per-byte inlined copy
+      MoveByOne(@src, @dst, len); // per-byte inlined copy
       ReadBarrier;
     until CompareMemSmall(@src, @dst, len);
 end;
@@ -7532,7 +7614,7 @@ begin
     begin
       dec(PtrUInt(Str1), PtrUInt(Str2));
       if Str1 = nil then
-        exit;
+        exit; // Str1=Str2
       repeat
         c := PByteArray(Str1)[PtrUInt(Str2)];
         if c <> PByte(Str2)^ then
@@ -7558,18 +7640,18 @@ var
   ch: AnsiChar;
   pStart, pStop: PUtf8Char;
 label
-  Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4, AfterTestT, AfterTest0, Ret, Exit;
+  s2, s6, tt, t0, t1, t2, t3, t4, s0, s1, fnd, quit;
 begin
   result := 0;
   if (p = nil) or
      (pSub = nil) or
      (PtrInt(Offset) <= 0) then
-    goto Exit;
+    goto quit;
   len := PStrLen(p - _STRLEN)^;
   lenSub := PStrLen(pSub - _STRLEN)^ - 1;
   if (len < lenSub + PtrInt(Offset)) or
      (lenSub < 0) then
-    goto Exit;
+    goto quit;
   pStop := p + len;
   inc(p, lenSub);
   inc(pSub, lenSub);
@@ -7578,67 +7660,58 @@ begin
   ch := pSub[0];
   lenSub := -lenSub;
   if p < pStop then
-    goto Loop6;
+    goto s6;
   dec(p, 4);
-  goto Loop2;
-Loop6: // check 6 chars per loop iteration
+  goto s2;
+s6: // check 6 chars per loop iteration
   if ch = p[-4] then
-    goto Test4;
+    goto t4;
   if ch = p[-3] then
-    goto Test3;
+    goto t3;
   if ch = p[-2] then
-    goto Test2;
+    goto t2;
   if ch = p[-1] then
-    goto Test1;
-Loop2:
-  if ch = p[0] then
-    goto Test0;
-AfterTest0:
-  if ch = p[1] then
-    goto TestT;
-AfterTestT:
-  inc(p, 6);
+    goto t1;
+s2:if ch = p[0] then
+    goto t0;
+s1:if ch = p[1] then
+    goto tt;
+s0:inc(p, 6);
   if p < pStop then
-    goto Loop6;
+    goto s6;
   dec(p, 4);
   if p >= pStop then
-    goto Exit;
-  goto Loop2;
-Test4:
-  dec(p, 2);
-Test2:
-  dec(p, 2);
-  goto Test0;
-Test3:
-  dec(p, 2);
-Test1:
-  dec(p, 2);
-TestT:
-  len := lenSub;
+    goto quit;
+  goto s2;
+t4:dec(p, 2);
+t2:dec(p, 2);
+  goto t0;
+t3:dec(p, 2);
+t1:dec(p, 2);
+tt:len := lenSub;
   if lenSub <> 0 then
     repeat
       if (pSub[len] <> p[len + 1]) or
          (pSub[len + 1] <> p[len + 2]) then
-        goto AfterTestT;
+        goto s0;
       inc(len, 2);
     until len >= 0;
   inc(p, 2);
   if p <= pStop then
-    goto Ret;
-  goto Exit;
-Test0:
-  len := lenSub;
+    goto fnd;
+  goto quit;
+t0:len := lenSub;
   if lenSub <> 0 then
     repeat
       if (pSub[len] <> p[len]) or
          (pSub[len + 1] <> p[len + 1]) then
-        goto AfterTest0;
+        goto s1;
       inc(len, 2);
     until len >= 0;
   inc(p);
-Ret:
+fnd:
   result := p - pStart;
-Exit:
+quit:
 end;
 
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt;
@@ -7856,8 +7929,8 @@ begin
     if (L <> 0) and
        (PStrCnt(PAnsiChar(pointer(S)) - _STRCNT)^ = 1) then
     begin
-      PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^ := L; // just fake length
-      MoveFast(PByteArray(S)[i], pointer(S)^, L + 1); // move in place (with #0)
+      MoveFast(PByteArray(S)[i], pointer(S)^, L); // move in place
+      FakeLength(S, L); // after move
     end
     else
       FastSetString(S, @PByteArray(S)[i], L); // allocate
@@ -7910,6 +7983,11 @@ var
   len, i: PtrInt;
 begin
   len := length(Str);
+  if len = 0 then
+  begin
+    result := '';
+    exit;
+  end;
   if StartPos > len then
     StartPos := len
   else if StartPos <= 0 then
@@ -8170,14 +8248,19 @@ var
 begin
   // note: we don't use RTL Random() here because it is not thread-safe
   if _EntropyGlobal.L = 0 then
-    CreateGuid(_EntropyGlobal.guid); // some rich initial value
+    sysutils.CreateGuid(_EntropyGlobal.guid); // some rich initial value
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
   e.r[1].c0 := e.r[1].c0 xor lec^.rs1; // perfect forward security
   e.r[1].c1 := e.r[1].c1 xor lec^.rs2;
   e.r[1].c2 := e.r[1].c2 xor lec^.rs3;
-  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec); // any threadvar is thread-specific
+  // any threadvar is thread-specific, so PtrUInt(lec) identifies this thread
+  {$ifdef CPUINTELARM}
+  e.r[1].c3 := e.r[1].c3 xor crc32c(PtrUInt(lec), @CpuFeatures, SizeOf(CpuFeatures));
+  {$else}
+  e.r[1].c3 := e.r[1].c3 xor PtrUInt(lec);
+  {$endif CPUINTELARM}
   // Windows CoCreateGuid, Linux /proc/sys/kernel/random/uuid, FreeBSD syscall,
   // then fallback to /dev/urandom or RTL mtwist_u32rand - may be slow
   CreateGuid(guid.guid);
@@ -8312,32 +8395,43 @@ begin
   until bytes = 0;
 end;
 
-procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
+var
+  len: PtrUInt;
 begin
-  if size > 255 then
-    size := 255;
-  Fill(@dest, size + 1);
-  size := PByte(@dest)^ mod size;
-  dest[0] := AnsiChar(size);
+  dec(size);
+  len := dest[0];  // first random byte will make length
+  if size = 31 then
+    size := len and 31 // optimized for FillShort31()
+  else
+    size := len mod size;
+  dest[0] := size;
   if size <> 0 then
     repeat
-      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
+      dest[size] := (cardinal(dest[size]) and 63) + 32;
       dec(size);
     until size = 0;
 end;
 
+procedure TLecuyer.FillShort(var dest: ShortString; size: PtrUInt);
+begin
+  if size = 0 then
+  begin
+    dest[0] := #0;
+    exit;
+  end;
+  if size > 255 then
+    size := 256
+  else
+    inc(size);
+  Fill(@dest, size);
+  FillAnsiStringFromRandom(@dest, size);
+end;
+
 procedure TLecuyer.FillShort31(var dest: TShort31);
-var
-  size: PtrUInt;
 begin
   Fill(@dest, 32);
-  size := PByte(@dest)^ and 31;
-  dest[0] := AnsiChar(size);
-  if size <> 0 then
-    repeat
-      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
-      dec(size);
-    until size = 0;
+  FillAnsiStringFromRandom(@dest, 32);
 end;
 
 procedure Random32Seed(entropy: pointer; entropylen: PtrInt);
@@ -8479,6 +8573,8 @@ type
 
 // optimized asm for x86 and x86_64 is located in include files
 
+{$ifndef HASNOSSE2}
+
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 begin
   Count := IntegerScanIndex(P, Count, Value); // SSE2 asm on Intel/AMD
@@ -8492,6 +8588,8 @@ function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): b
 begin
   result := IntegerScanIndex(P, Count, Value) >= 0; // SSE2 asm on Intel/AMD
 end;
+
+{$endif HASNOSSE2}
 
 type
   TIntelRegisters = record
@@ -8556,11 +8654,7 @@ begin
       exclude(CpuFeatures, cfPOPCNT);
     end;
   {$ifdef ASMX64}
-  {$ifdef WITH_ERMS}
-  // actually slower than our movnt code, and not cpuid in VMs -> ignored
-  if cfERMS in CpuFeatures then
-    include(X64CpuFeatures, cpuERMS);
-  {$endif WITH_ERMS}
+  // note: cfERMS has no cpuid within some VMs -> ignore and assume present
   if cfAVX in CpuFeatures then
   begin
     include(X64CpuFeatures, cpuAVX);
@@ -8575,11 +8669,17 @@ begin
   {$ifndef HASNOSSE2}
   {$ifdef WITH_ERMS}
   if not (cfSSE2 in CpuFeatures) then
-    ERMSB_MIN_SIZE := 0 // FillCharFast will fallback to rep stosb
+  begin
+    ERMSB_MIN_SIZE_FWD := 0; // FillCharFast fallbacks to rep stosb on older CPU
+    {$ifndef FPC_X86}
+    ERMSB_MIN_SIZE_BWD := 0; // in both directions to bypass the SSE2 code
+    {$endif FPC_X86}
+  end
     // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
     // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
   else if cfERMS in CpuFeatures then
-    ERMSB_MIN_SIZE := 4096; // "on 32-bit strings have to be at least 4KB"
+    ERMSB_MIN_SIZE_FWD := 4096; // "on 32-bit strings have to be at least 4KB"
+    // backward rep movsd has no ERMS optimization so degrades performance
   {$endif WITH_ERMS}
   {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then
@@ -8587,11 +8687,11 @@ begin
   {$endif ASMX86}
   if cfSSE42 in CpuFeatures then // for both i386 and x86_64
   begin
-    crc32c := @crc32csse42;
-    crc32cby4 := @crc32cby4sse42;
-    crcblock := @crcblocksse42;
-    crcblocks := @crcblockssse42;
-    DefaultHasher := @crc32csse42;
+    crc32c          := @crc32csse42;
+    crc32cby4       := @crc32cby4sse42;
+    crcblock        := @crcblocksse42;
+    crcblocks       := @crcblockssse42;
+    DefaultHasher   := @crc32csse42;
     InterningHasher := @crc32csse42;
   end;
 end;
@@ -9417,14 +9517,14 @@ nextCW:
         {$ifdef CPU64}
         o := offset[h];
         if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
-          MoveSmall(o, dst, t)
+          MoveByOne(o, dst, t)
         else if t <= 8 then
           PInt64(dst)^ := PInt64(o)^ // much faster in practice
         else
           MoveFast(o^, dst^, t);     // safe since src_endmatch := src_end-(6+5)
         {$else}
         if PtrUInt(dst - offset[h]) < t then
-          MoveSmall(offset[h], dst, t)
+          MoveByOne(offset[h], dst, t)
         else if t > 8 then
           MoveFast(offset[h]^, dst^, t)
         else
@@ -9520,20 +9620,20 @@ nextCW:
         if dst + t >= dst_end then
         begin
           // avoid buffer overflow by all means
-          MoveSmall(offset[h], dst, dst_end - dst);
+          MoveByOne(offset[h], dst, dst_end - dst);
           break;
         end;
         {$ifdef CPU64}
         o := offset[h];
         if (t <= 8) or
            (PtrUInt(dst - o) < t) then
-          MoveSmall(o, dst, t)
+          MoveByOne(o, dst, t)
         else
           MoveFast(o^, dst^, t);
         {$else}
         if (t <= 8) or
            (PtrUInt(dst - offset[h]) < t) then
-          MoveSmall(offset[h], dst, t)
+          MoveByOne(offset[h], dst, t)
         else
           MoveFast(offset[h]^, dst^, t);
         {$endif CPU64}
@@ -9612,6 +9712,20 @@ begin
       {%H-}tmp.Done;
     end;
   result := 'synlz';
+end;
+
+function CompressSynLZGetHash32(const Data: RawByteString): cardinal;
+var
+  DataLen: integer;
+  P: PAnsiChar;
+begin
+  DataLen := length(Data);
+  P := pointer(Data);
+  if (DataLen <= 8) or
+     (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
+    result := 0
+  else
+    result := PCardinal(P)^;
 end;
 
 const

@@ -25,7 +25,6 @@ interface
 uses
   sysutils,
   classes,
-  syncobjs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -418,6 +417,12 @@ function ToCaption(filter: TSynLogFilter): string; overload;
 
 /// returns a method event as text, using the .map/.dbg/.mab information if available
 function ToText(const Event: TMethod): RawUtf8; overload;
+
+/// retrieve a one-line of text including detailed heap information
+// - will use the RTL status entrypoint, or detect mormot.core.fpcx64mm
+// and retrieve all its available information
+// - as used by TSynLog.AddMemoryStats
+function RetrieveMemoryManagerInfo: RawUtf8;
 
 var
   /// low-level variable used internally by this unit
@@ -1245,6 +1250,10 @@ type
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
+    /// low-level latest value returned by QueryPerformanceMicroSeconds()
+    // - is only accurate after Enter() or if HighResolutionTimestamp is set
+    function LastQueryPerformanceMicroSeconds: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
@@ -1873,18 +1882,10 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
 
 implementation
 
-{$ifdef FPC_X64MM}
-uses
-  {$ifdef FPC}
-  exeinfo, // cross-platform executable raw access for GDB DWARF support
-  {$endif FPC}
-  mormot.core.fpcx64mm; // for sllMemory detailed stats
-{$else}
 {$ifdef FPC}
 uses
-  exeinfo;
+  exeinfo; // cross-platform executable raw access for GDB DWARF support
 {$endif FPC}
-{$endif FPC_X64MM}
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -2000,6 +2001,7 @@ type
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     Lines: TInt64DynArray;              // store TDebugUnit.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
+    filesdir: TIntegerDynArray;
     isdwarf64, debugtoconsole: boolean;
     debug: TDebugFile;
     map: TMemoryMap;
@@ -2316,7 +2318,7 @@ var
   prevaddr, prevfile, prevline: cardinal;
   unitlen: QWord;
   opcodeextlen, headerlen: PtrInt;
-  dirsn, filesn, linesn: integer;
+  dirsn, filedirsn, filesn, linesn: integer;
   state: TDwarfMachineState;
   c: ansichar;
   unsorted: boolean;
@@ -2324,7 +2326,6 @@ var
   header32: TDwarfLineInfoHeader32;
   u: PDebugUnit;
   s: ShortString;
-  filesdir: array[0..15] of byte;
   numoptable: array[1..255] of byte;
 begin
   // check if DWARF 32-bit or 64-bit format
@@ -2378,14 +2379,14 @@ begin
     AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
   until false;
   filesn := 0;
+  filedirsn := 0;
   repeat
     ReadString(s);
     if s[0] = #0 then
       break;
-    if filesn <= high(filesdir) then
-      filesdir[filesn] := read.VarUInt32;
-    read.VarNextInt(2); // we ignore the attributes
     AddRawUtf8(files, filesn, ShortStringToUtf8(s));
+    AddInteger(filesdir, filedirsn, read.VarUInt32);
+    read.VarNextInt(2); // we ignore the attributes
   until false;
   // main decoding loop
   ReadInit(file_offset + headerlen, unitlen - headerlen);
@@ -2498,8 +2499,7 @@ begin
           u := debug.fUnits.NewPtr;
           u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
             Ansi7ToString(files[prevfile])));
-          if (prevfile <= high(filesdir)) and
-             ({%H-}filesdir[prevfile] > 0) then
+          if filesdir[prevfile] > 0 then
             u^.FileName := dirs[filesdir[prevfile] - 1];
           u^.FileName := u^.FileName + files[prevfile];
           u^.Symbol.Start := state.address;
@@ -3236,9 +3236,9 @@ begin
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
                            TypeInfo(TDebugUnit), _TDebugUnit]);
   W.AddShort('{"Symbols":');
-  fSymbols.SaveToJson(W);
+  fSymbols.SaveToJson(W, []);
   W.AddShort(',"Units":');
-  fUnits.SaveToJson(W);
+  fUnits.SaveToJson(W, []);
   W.Add('}');
 end;
 
@@ -3370,7 +3370,7 @@ begin
     // unit found -> search line number
     if u^.Addr = nil then
       exit;
-    max := DynArrayNotNilHigh(u^.Addr);
+    max := length(u^.Addr) - 1;
     L := 0;
     R := max;
     if R >= 0 then
@@ -3408,10 +3408,10 @@ begin
             HasDebugInfo and
             (((fUnit <> nil) and
               (offset >= fUnit[0].Symbol.Start) and
-              (offset <= fUnit[DynArrayNotNilHigh(fUnit)].Symbol.Stop)) or
+              (offset <= fUnit[length(fUnit) - 1].Symbol.Stop)) or
              ((fSymbol <> nil) and
               (offset >= fSymbol[0].Start) and
-              (offset <= fSymbol[DynArrayNotNilHigh(fSymbol)].Stop)));
+              (offset <= fSymbol[length(fSymbol) - 1].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
@@ -3515,7 +3515,7 @@ begin
   if line > 0 then
   begin
     AppendShort(' (', result);
-    AppendShortInteger(line, result);
+    AppendShortCardinal(line, result);
     AppendShortChar(')', result);
   end;
 end;
@@ -3597,6 +3597,45 @@ begin
     TObject(Event.Data), Event.Data], result);
 end;
 
+{$ifdef FPC}
+type
+  THeapInfo = function: string;
+
+function RetrieveMemoryManagerInfo: RawUtf8;
+begin
+  {$ifdef CPUX64}
+  // detect and include mormot.core.fpcx64mm raw information
+  with GetHeapStatus do
+    if PShortString(@TotalAddrSpace)^ = 'fpcx64mm' then // magic marker
+    try
+      result := StringReplaceAll(THeapInfo(PPointer(@Unused)^)(), '  ', ' ');
+      exit;
+    except
+    end;
+  {$endif CPUX64}
+  // standard FPC memory manager
+  with GetFPCHeapStatus do
+    FormatUtf8(' - Heap: Current: used=% size=% free=%   Max: size=% used=%',
+      [KBNoSpace(CurrHeapUsed), KBNoSpace(CurrHeapSize), KBNoSpace(CurrHeapFree),
+       KBNoSpace(MaxHeapSize), KBNoSpace(MaxHeapUsed)], result);
+end;
+{$else}
+function RetrieveMemoryManagerInfo: RawUtf8;
+begin
+  // standard Delphi memory manager
+  with GetHeapStatus do
+    if TotalAddrSpace <> 0 then
+      FormatUtf8(' - Heap: AddrSpace=% Uncommitted=% Committed=% Allocated=% '+
+         'Free=% FreeSmall=% FreeBig=% Unused=% Overheap=% ',
+        [KBNoSpace(TotalAddrSpace), KBNoSpace(TotalUncommitted),
+         KBNoSpace(TotalCommitted), KBNoSpace(TotalAllocated),
+         KBNoSpace(TotalFree), KBNoSpace(FreeSmall), KBNoSpace(FreeBig),
+         KBNoSpace(Unused), KBNoSpace(Overhead)], result)
+    else
+      result := '';
+end;
+{$endif FPC}
+
 
 type
   /// an array to all available per-thread TSynLog instances
@@ -3631,7 +3670,7 @@ type
   // cross-platform / cross-compiler TThread-based flush
   TAutoFlushThread = class(TThread)
   protected
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     fToCompress: TFileName;
     fStartTix: Int64;
     fSecondElapsed: cardinal;
@@ -3649,7 +3688,7 @@ var
 
 constructor TAutoFlushThread.Create;
 begin
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   fStartTix := mormot.core.os.GetTickCount64;
   inherited Create(false);
 end;
@@ -4763,6 +4802,15 @@ begin
     _Release;
 end;
 
+function TSynLog.LastQueryPerformanceMicroSeconds: Int64;
+begin
+  if (self = nil) or
+     (fCurrentTimestamp = 0) then
+    result := 0
+  else
+    result := fCurrentTimestamp + fStartTimestamp;
+end;
+
 type
   TSynLogVoid = class(TSynLog);
 
@@ -5258,22 +5306,32 @@ var
 begin
   if GetMemoryInfo(info, {withalloc=}true) then
     fWriter.Add(
-      ' memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
+      ' System: memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
       [KBNoSpace(info.memtotal), KBNoSpace(info.memfree),
        KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
-  {$ifdef FPC_X64MM}
-  // include mormot.core.fpcx64mm raw information
-  fWriter.AddNoJsonEscapeString(GetHeapStatus(
-    ' - fpcx64mm', 16, 16, {flags=}true, {sameline=}true));
-  {$endif FPC_X64MM}
+  // include mormot.core.fpcx64mm raw information if available
+  fWriter.AddNoJsonEscapeUtf8(RetrieveMemoryManagerInfo);
   fWriter.AddShorter('   ');
 end;
 
 procedure TSynLog.AddErrorMessage(Error: cardinal);
+{$ifdef OSWINDOWS}
+var
+  msg: PUtf8Char;
+{$endif OSWINDOWS}
 begin
   fWriter.Add(' ', '"');
-  fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
+  {$ifdef OSWINDOWS}
+  msg := WinErrorConstant(Error);
+  if msg <> nil then
+  begin
+    fWriter.AddShorter('ERROR_');
+    fWriter.Add(msg, twNone);
+  end
+  else
+  {$endif OSWINDOWS}
+    fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
   fWriter.AddShorter('" (');
   fWriter.Add(Error);
   fWriter.Add(')', ' ');
@@ -5480,7 +5538,7 @@ begin
         fFamily.WithInstancePointer);
     fWriter.AddOnSameLine(pointer(aName));
     fWriter.Add('=');
-    fWriter.AddTypedJson(@aValue, aTypeInfo);
+    fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
     LogTrailer(Level);
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}

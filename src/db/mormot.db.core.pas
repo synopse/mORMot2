@@ -44,6 +44,8 @@ uses
 { ************ Shared Database Fields and Values Definitions }
 
 const
+  {$undef MAX_SQLFIELDS_64}
+
   /// maximum number of fields in a database Table
   // - default is 64, but can be set to 64, 128, 192 or 256
   // adding MAX_SQLFIELDS_128, MAX_SQLFIELDS_192 or MAX_SQLFIELDS_256
@@ -62,6 +64,7 @@ const
   MAX_SQLFIELDS = 256;
   {$else}
   MAX_SQLFIELDS = 64;
+  {$define MAX_SQLFIELDS_64}
   {$endif MAX_SQLFIELDS_256}
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
@@ -216,6 +219,25 @@ function IsZero(const Fields: TFieldBits): boolean; overload;
 function IsEqual(const A, B: TFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// return TRUE if Fields equals ALL_FIELDS constant
+function IsAllFields(const Fields: TFieldBits): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// faster alternative to "byte(Index) in Fields" expression
+// - warning: no Index range check is done
+// - similar to GetBitPtr(), but optimized for default MAX_SQLFIELDS=64
+function FieldBitGet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// faster alternative to "include(Fields, Index)" expression
+// - warning: no Index range check is done
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// faster alternative to "GetBitsCount(Fields, MaxFIelds)" expression
+function FieldBitCount(const Fields: TFieldBits; MaxFields: integer = MAX_SQLFIELDS): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast initialize a TFieldBits with 0
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
@@ -304,6 +326,7 @@ type
 
 const
   /// special TFieldBits value containing all field bits set to 1
+  // - see also IsAllFields() wrapper function
   ALL_FIELDS: TFieldBits = [0 .. MAX_SQLFIELDS - 1];
 
   /// convert identified field types into high-level ORM types
@@ -758,7 +781,7 @@ function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
 // - return 'RowID' if none found
-function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
 
 /// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
@@ -1182,8 +1205,10 @@ type
   TJsonObjectDecoder = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// contains the decoded field names
-    FieldNames: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
+    /// contains the decoded field names text
+    FieldNames: array[0..MAX_SQLFIELDS - 1] of PUtf8Char;
+    /// contains the decoded field names length
+    FieldNamesL: array[0..MAX_SQLFIELDS - 1] of byte;
     /// contains the decoded field values
     FieldValues: array[0..MAX_SQLFIELDS - 1] of RawUtf8;
     /// Decode() will set each field type approximation
@@ -1195,9 +1220,9 @@ type
     /// define if and how the parameters are to be :(...): inlined
     InlinedParams: TJsonObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
-    // - either FieldNames, either Fields[] array as defined in Decode(), or
+    // - either FieldNames[], either Fields[] array as defined in Decode(), or
     // external names as set by TRestStorageExternal.JsonDecodedPrepareToSql
-    DecodedFieldNames: PRawUtf8Array;
+    DecodedFieldNames: PPUtf8CharArray;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
     /// internal pointer over field types to be used after Decode() call
@@ -1217,20 +1242,21 @@ type
     // the overloaded Decode(Json: RawUtf8; ...) method
     // - FieldValues[] strings will be quoted and/or inlined depending on Params
     // - if RowID is set, a RowID column will be added within the returned content
-    procedure Decode(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
+    procedure DecodeInPlace(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
       Params: TJsonObjectDecoderParams; const RowID: TID = 0;
-      ReplaceRowIDWithID: boolean = false); overload;
+      ReplaceRowIDWithID: boolean = false);
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
-    // - overloaded method expecting a RawUtf8 buffer, making a private copy
-    // of the JSON content to avoid unexpected in-place modification, then
-    // calling Decode(P: PUtf8Char) to perform the process
-    procedure Decode(const Json: RawUtf8; const Fields: TRawUtf8DynArray;
-      Params: TJsonObjectDecoderParams; const RowID: TID = 0;
-      ReplaceRowIDWithID: boolean = false); overload;
+    // - overloaded method expecting a UTF-8 buffer private copy
+    // - once done with the result, should call Json.Done
+    procedure Decode(var Json: TSynTempBuffer;
+      const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
+      const RowID: TID; ReplaceRowIDWithID: boolean = false);
     /// can be used after Decode() to add a new field in FieldNames/FieldValues
     // - so that EncodeAsSql() will include this field in the generated SQL
     // - caller should ensure that the FieldName is not already defined in
-    // FieldNames[] (e.g. when the TRecordVersion field is forced)
+    // FieldNames[] (e.g. when the TRecordVersion field is forced), and
+    // will be stored in FieldNames[] as pointer, so FieldName variable
+    // should remain untouched in memory during all the decoding
     // - the caller should ensure that the supplied FieldValue will match
     // the quoting/inlining expectations of Decode(TJsonObjectDecoderParams) -
     // e.g. that string values are quoted if needed
@@ -1306,8 +1332,8 @@ function IsNotAjaxJson(P: PUtf8Char): boolean;
 // KeepIDField is true
 // - this function expects this "ID" property to be the FIRST in the
 // "Name":Value pairs, as generated by TOrm.GetJsonValues(W)
-function JsonGetObject(var P: PUtf8Char; ExtractID: PID;
-  var EndOfObject: AnsiChar; KeepIDField: boolean): RawUtf8;
+procedure JsonGetObject(var P: PUtf8Char; ExtractID: PID;
+  var EndOfObject: AnsiChar; KeepIDField: boolean; out JsonObject: RawUtf8);
 
 /// retrieve the ID/RowID field of a JSON object
 // - this function expects this "ID" property to be the FIRST in the
@@ -1460,6 +1486,53 @@ begin
   {$endif CPU64}
 end;
 
+function IsAllFields(const Fields: TFieldBits): boolean;
+begin
+  {$ifdef MAX_SQLFIELDS_64}
+  result := PInt64(@Fields)^ = -1;
+  {$else}
+  result := IsEqual(Fields, ALL_FIELDS);
+  {$endif MAX_SQLFIELDS_64}
+end;
+
+function FieldBitGet(const Fields: TFieldBits; Index: PtrUInt): boolean;
+begin
+  {$if defined(MAX_SQLFIELDS_64) and defined(CPU64)}
+  result := PInt64(@Fields)^ and (Int64(1) shl Index) <> 0;
+  {$else}
+  result := PIntegerArray(@Fields)[Index shr 5] and (1 shl (Index and 31)) <> 0;
+  {$ifend MAX_SQLFIELDS_64 and CPU64}
+end;
+
+{$if defined(MAX_SQLFIELDS_64) and defined(CPU64)}
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+begin
+  PInt64(@Fields)^ := PInt64(@Fields)^ or (Int64(1) shl Index);
+end;
+{$else}
+procedure FieldBitSet(var Fields: TFieldBits; Index: PtrUInt);
+var
+  p: PInteger;
+begin
+  p := @PIntegerArray(@Fields)[Index shr 5];
+  p^ := p^ or (1 shl (Index and 31));
+end;
+{$ifend MAX_SQLFIELDS_64 and CPU64}
+
+function FieldBitCount(const Fields: TFieldBits; MaxFields: integer): PtrInt;
+begin
+  {$ifdef MAX_SQLFIELDS_64}
+  {$ifdef CPU64}
+  result := GetBitsCountPtrInt(PtrInt(Fields));
+  {$else}
+  result := GetBitsCountPtrInt(PIntegerArray(@Fields)[0]) +
+            GetBitsCountPtrInt(PIntegerArray(@Fields)[1]);
+  {$endif CPU64}
+  {$else}
+  result := GetBitsCount(Fields, MaxFields);
+  {$endif MAX_SQLFIELDS_64}
+end;
+
 procedure FillZero(var Fields: TFieldBits);
 begin
   {$ifdef MAX_SQLFIELDS_128}
@@ -1486,15 +1559,19 @@ end;
 procedure FieldBitsToIndex(const Fields: TFieldBits;
   out Index: TFieldIndexDynArray; MaxLength: PtrInt);
 var
-  i: PtrInt;
+  i, n: PtrInt;
   p: ^TFieldIndex;
 begin
   if MaxLength > MAX_SQLFIELDS then
     raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
-  SetLength(Index, GetBitsCount(Fields, MaxLength));
+  if IsAllFields(Fields) then
+    n := MaxLength
+  else
+    n := FieldBitCount(Fields, MaxLength);
+  SetLength(Index, n);
   p := pointer(Index);
   for i := 0 to MaxLength - 1 do
-    if byte(i) in Fields then
+    if FieldBitGet(Fields, i) then
     begin
       p^ := i;
       inc(p);
@@ -1525,12 +1602,12 @@ end;
 procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
   out Fields: TFieldBits);
 var
-  i: integer;
+  i: PtrInt;
 begin
   FillZero(Fields{%H-});
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
-      include(Fields, Index[i]);
+      FieldBitSet(Fields, Index[i]);
 end;
 
 function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits;
@@ -2181,7 +2258,7 @@ begin
   result := 'SELECT ' + result + ' FROM ' + TableName + SqlFromWhere(Where);
 end;
 
-function SqlGetOrder(const Sql: RawUTF8): RawUTF8;
+function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
   i: integer;
@@ -2408,8 +2485,7 @@ begin
     inc(Count);
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
-  Gen^ := #0; // as SetLength(), but with no memory realloc
-  PStrLen(PAnsiChar(pointer(GenericSQL)) - _STRLEN)^ := Gen - pointer(GenericSQL);
+  FakeLength(GenericSQL, Gen);
   inc(Count);
 end;
 
@@ -2559,16 +2635,31 @@ end;
 
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
-  i: PtrInt;
+  i, len: PtrInt;
+  c: PPointer;
+  new: PAnsiChar;
 begin
   if fExpand then
   begin
-    if twoForceJsonExtended in CustomOptions then
-      for i := 0 to length(ColNames) - 1 do
-        ColNames[i] := ColNames[i] + ':'
-    else
-      for i := 0 to length(ColNames) - 1 do
-        ColNames[i] := '"' + ColNames[i] + '":';
+    c := pointer(ColNames);
+    for i := 1 to length(ColNames) do
+    begin
+      len := PStrLen(PAnsiChar(c^) - _STRLEN)^; // ColNames[] <> ''
+      if twoForceJsonExtended in CustomOptions then
+      begin
+        SetLength(RawUtf8(c^), len + 1); // reallocate in-place
+        PAnsiChar(c^)[len] := ':';
+      end
+      else
+      begin
+        new := FastNewString(len + 3, CP_UTF8);
+        new[0] := '"';
+        MoveFast(c^^, new[1], len);
+        PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+        FastAssignNew(c^, new);
+      end;
+      inc(c);
+    end;
   end
   else
   begin
@@ -2594,15 +2685,29 @@ begin
 end;
 
 procedure TResultsWriter.AddColumn(aColName: PUtf8Char; aColIndex, aColCount: PtrInt);
-const
-  FMT: array[boolean] of RawUtf8 = ('"%":', '%:');
+var
+  len: PtrInt;
+  new: PAnsiChar;
 begin
+  len := StrLen(aColName);
   if fExpand then
   begin
     if aColIndex = 0 then // non-expanded mode doesn't use ColNames[]
       SetLength(ColNames, aColCount);
-    FormatUtf8(FMT[twoForceJsonExtended in CustomOptions], [aColName],
-      ColNames[aColIndex]);
+    if twoForceJsonExtended in CustomOptions then
+    begin
+      new := FastNewString(len + 1, CP_UTF8);
+      MoveFast(aColName^, new^, len);
+      new[len] := ':';
+    end
+    else
+    begin
+      new := FastNewString(len + 3, CP_UTF8);
+      new[0] := '"';
+      MoveFast(aColName^, new[1], len);
+      PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+    end;
+    FastAssignNew(ColNames[aColIndex], new);
   end
   else
   begin
@@ -2613,13 +2718,14 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddNoJsonEscape(aColName, StrLen(aColName));
+    AddNoJsonEscape(aColName, len);
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
       Add('"' , ',');
       fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
-    end else
+    end
+    else
       AddShorter('","');
   end;
 end;
@@ -3210,7 +3316,7 @@ begin
     if f^.Field = 0 then
       withID := true
     else
-      include(Fields, f^.Field - 1);
+      FieldBitSet(Fields, f^.Field - 1);
     if (SubFields <> nil) and
        fHasSelectSubFields then
       SubFields^[f^.Field] := f^.SubField;
@@ -3257,7 +3363,7 @@ begin
   SetInt64(P, result);
   {$else}
   SetInt64(P, PInt64(@result)^);
-  {$endif}
+  {$endif VER3_0}
 {$endif CPU64}
 end;
 
@@ -3428,7 +3534,7 @@ begin
   end;
 end;
 
-procedure TJsonObjectDecoder.Decode(var P: PUtf8Char;
+procedure TJsonObjectDecoder.DecodeInPlace(var P: PUtf8Char;
   const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
   const RowID: TID; ReplaceRowIDWithID: boolean);
 var
@@ -3439,8 +3545,6 @@ begin
   FieldCount := 0;
   DecodedRowID := 0;
   DecodedFieldTypesToUnnest := nil;
-  FillCharFast(FieldTypeApproximation, SizeOf(FieldTypeApproximation),
-    ord(ftaNumber{TID}));
   InlinedParams := Params;
   info.Json := P;
   if pointer(Fields) = nil then
@@ -3451,13 +3555,21 @@ begin
     begin
       // insert explicit RowID as first parameter
       if ReplaceRowIDWithID then
-        FieldNames[0] := ID_TXT
+      begin
+        FieldNames[0] := pointer(ID_TXT);
+        FieldNamesL[0] := 2;
+      end
       else
-        FieldNames[0] := ROWID_TXT;
+      begin
+        FieldNames[0] := pointer(ROWID_TXT);
+        FieldNamesL[0] := 5;
+      end;
       Int64ToUtf8(RowID, FieldValues[0]);
+      FieldTypeApproximation[0] := ftaNumber;
       FieldCount := 1;
       DecodedRowID := RowID;
     end;
+    // parse all JSON fields and value, converting them to SQL values
     repeat
       if info.Json = nil then
         break;
@@ -3483,7 +3595,8 @@ begin
       F := FieldCount;
       if F = MAX_SQLFIELDS then
         raise EJsonObjectDecoder.Create('Too many inlines in TJsonObjectDecoder');
-      FastSetString(FieldNames[F], info.Value, info.Valuelen);
+      FieldNames[F] := info.Value;
+      FieldNamesL[F] := info.Valuelen;
       ParseSqlValue(info, Params, FieldTypeApproximation[F], FieldValues[F]);
       if FieldIsRowID then
         SetID(FieldValues[F], DecodedRowID);
@@ -3507,23 +3620,17 @@ begin
   P := info.Json;
 end;
 
-procedure TJsonObjectDecoder.Decode(const Json: RawUtf8;
+procedure TJsonObjectDecoder.Decode(var Json: TSynTempBuffer;
   const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
   const RowID: TID; ReplaceRowIDWithID: boolean);
 var
-  tmp: TSynTempBuffer;
   P: PUtf8Char;
 begin
-  tmp.Init(Json);
-  try
-    P := tmp.buf;
-    if P <> nil then
-      while P^ in [#1..' ', '{', '['] do
-        inc(P);
-    Decode(P, Fields, Params, RowID, ReplaceRowIDWithID);
-  finally
-    tmp.Done;
-  end;
+  P := Json.buf;
+  if P <> nil then
+    while P^ in [#1..' ', '{', '['] do
+      inc(P);
+  DecodeInPlace(P, Fields, Params, RowID, ReplaceRowIDWithID);
 end;
 
 function TJsonObjectDecoder.SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
@@ -3534,7 +3641,7 @@ begin
   if length(Fields) <> FieldCount then
     exit;
   for i := 0 to FieldCount - 1 do
-    if not IdemPropNameU(Fields[i], FieldNames[i]) then
+    if not IdemPropNameU(Fields[i], FieldNames[i], FieldNamesL[i]) then
       exit;
   result := true;
 end;
@@ -3543,9 +3650,10 @@ procedure TJsonObjectDecoder.AssignFieldNamesTo(var Fields: TRawUtf8DynArray);
 var
   i: PtrInt;
 begin
+  Fields := nil;
   SetLength(Fields, FieldCount);
   for i := 0 to FieldCount - 1 do
-    Fields[i] := FieldNames[i];
+    FastSetString(Fields[i], FieldNames[i], FieldNamesL[i]);
 end;
 
 function TJsonObjectDecoder.EncodeAsSql(const Prefix1, Prefix2: RawUtf8;
@@ -3581,9 +3689,9 @@ begin
     begin
       for f := 0 to FieldCount - 1 do
         // append 'COL1=...,COL2=...'
-        if not IsRowID(pointer(DecodedFieldNames^[f])) then
+        if not IsRowID(DecodedFieldNames^[f]) then
         begin
-          W.AddString(DecodedFieldNames^[f]);
+          W.AddNoJsonEscape(DecodedFieldNames^[f]);
           W.Add('=');
           AddValue;
         end;
@@ -3596,7 +3704,7 @@ begin
       for f := 0 to FieldCount - 1 do
       begin
         // append 'COL1,COL2'
-        W.AddString(DecodedFieldNames^[f]);
+        W.AddNoJsonEscape(DecodedFieldNames^[f]);
         W.AddComma;
       end;
       W.CancelLastComma;
@@ -3625,7 +3733,7 @@ begin
     W.Add('{');
     for f := 0 to FieldCount - 1 do
     begin
-      W.AddFieldName(DecodedFieldNames^[f]);
+      W.AddProp(DecodedFieldNames^[f]);
       if FieldTypeApproximation[f] in [ftaBlob, ftaDate, ftaString] then
         if InlinedParams = pNonQuoted then
           W.AddJsonString(FieldValues[f])
@@ -3646,17 +3754,31 @@ end;
 function TJsonObjectDecoder.FindFieldName(const FieldName: RawUtf8): PtrInt;
 begin
   for result := 0 to FieldCount - 1 do
-    if IdemPropNameU(FieldNames[result], FieldName) then
+    if IdemPropNameU(FieldName, FieldNames[result], FieldNamesL[result]) then
       exit;
   result := -1;
 end;
 
 function TJsonObjectDecoder.GetFieldNames: RawUtf8;
+var
+  i: PtrInt;
+  tmp: TTextWriterStackBuffer;
 begin
   if FieldCount = 0 then
     result := ''
   else
-    result := RawUtf8ArrayToCsv(FieldNames, ',', FieldCount - 1);
+  with TTextWriter.CreateOwnedStream(tmp) do
+    try
+      for i := 0 to FieldCount - 1 do
+      begin
+        AddNoJsonEscape(FieldNames[i], FieldNamesL[i]);
+        AddComma;
+      end;
+      CancelLastComma;
+      SetText(result);
+    finally
+      Free;
+    end;
 end;
 
 procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;
@@ -3666,7 +3788,8 @@ begin
     raise EJsonObjectDecoder.CreateUtf8(
       'Too many fields for TJsonObjectDecoder.AddField(%) max=%',
       [FieldName, MAX_SQLFIELDS]);
-  FieldNames[FieldCount] := FieldName;
+  FieldNames[FieldCount] := pointer(FieldName); // so FieldName should remain available
+  FieldNamesL[FieldCount] := length(FieldName);
   FieldValues[FieldCount] := FieldValue;
   FieldTypeApproximation[FieldCount] := FieldType;
   inc(FieldCount);
@@ -3680,7 +3803,7 @@ function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
 var
   Decoder: TJsonObjectDecoder;
 begin
-  Decoder.Decode(P, Fields, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
+  Decoder.DecodeInPlace(P, Fields, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
   result := Decoder.EncodeAsSql('', '', Update, nil, dUnknown);
 end;
 
@@ -3688,9 +3811,15 @@ function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
   RowID: TID; ReplaceRowIDWithID: boolean): RawUtf8;
 var
   Decoder: TJsonObjectDecoder;
+  tmp: TSynTempBuffer;
 begin
-  Decoder.Decode(Json, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
-  result := Decoder.EncodeAsSql('', '', Update, nil, dUnknown);
+  tmp.Init(Json);
+  try
+    Decoder.Decode(tmp, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
+    result := Decoder.EncodeAsSql('', '', Update, nil, dUnknown);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
@@ -3738,6 +3867,7 @@ begin
 end;
 
 function StartWithQuotedID(P: PUtf8Char; out ID: TID): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if PCardinal(P)^ and $ffffdfdf =
        ord('I') + ord('D') shl 8 + ord('"') shl 16 + ord(':') shl 24 then
@@ -3760,6 +3890,7 @@ begin
 end;
 
 function StartWithID(P: PUtf8Char; out ID: TID): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if PCardinal(P)^ and $ffdfdf =
        ord('I') + ord('D') shl 8 + ord(':') shl 16 then
@@ -3786,7 +3917,7 @@ begin
   if (P <> nil) and
      NextNotSpaceCharIs(P, '{') then
     if NextNotSpaceCharIs(P, '"') then
-      result := StartWithQuotedID(P, ID)
+      result := StartWithQuotedID(P, ID{%H-})
     else
       result := StartWithID(P, ID)
   else
@@ -3796,41 +3927,44 @@ begin
   end;
 end;
 
-function JsonGetObject(var P: PUtf8Char; ExtractID: PID;
-  var EndOfObject: AnsiChar; KeepIDField: boolean): RawUtf8;
+procedure JsonGetObject(var P: PUtf8Char; ExtractID: PID;
+  var EndOfObject: AnsiChar; KeepIDField: boolean; out JsonObject: RawUtf8);
 var
   Beg, PC: PUtf8Char;
 begin
-  result := '';
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ <> '{' then
-    exit;
   Beg := P;
+  if Beg = nil then
+    exit;
+  while (Beg^ <= ' ') and
+        (Beg^ <> #0) do
+    inc(Beg);
+  if Beg^ <> '{' then
+    exit;
   P := GotoEndJsonItem(Beg);
-  if (P <> nil) and
+  if (P = nil) or
      not (P^ in ENDOFJSONFIELD) then
-    P := nil;
-  if P <> nil then
+    exit;
+  EndOfObject := P^;
+  inc(P); // ignore end of object, i.e. ',' or ']'
+  if ExtractID <> nil then
   begin
-    EndOfObject := P^;
-    inc(P); // ignore end of object, i.e. ',' or ']'
-    if ExtractID <> nil then
-      if JsonGetID(Beg, ExtractID^) and
-         not KeepIDField then
+    PC := Beg;
+    repeat
+      inc(PC);
+    until PC^ > ' ';
+    if ((PC^ = '"') and
+        StartWithQuotedID(PC + 1, ExtractID^)) or
+       StartWithID(PC, ExtractID^) then
+      if not KeepIDField then
       begin
-        PC := PosChar(Beg, ','); // ignore the '"ID":203,' pair
+        PC := PosChar(PC + 3, ','); // ignore the '"ID":203,' pair
         if PC = nil then
           exit;
         PC^ := '{';
-        FastSetString(result, PC, P - PC - 1);
-        exit;
+        Beg := PC;
       end;
-    FastSetString(result, Beg, P - Beg - 1);
   end;
+  FastSetString(JsonObject, Beg, P - Beg - 1);
 end;
 
 procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
@@ -3860,6 +3994,7 @@ initialization
   ShortStringToAnsi7String(JSON_SQLDATE_MAGIC_STR, JSON_SQLDATE_MAGIC_TEXT);
   ID_TXT := 'ID'; // avoid reallocation
   ROWID_TXT := 'RowID';
+
 
 end.
 

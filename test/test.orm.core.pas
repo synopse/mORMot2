@@ -31,6 +31,7 @@ uses
   {$endif ORMGENERICS}
   mormot.db.core,
   mormot.db.nosql.bson,
+  mormot.net.http,
   mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
@@ -163,6 +164,10 @@ begin
   Check(ToMethod('toto') = mNone);
   Check(ToMethod('get') = mGET);
   Check(ToMethod('CONNECT') = mCONNECT);
+  Check(not IsGet('get'));
+  Check(IsGet('GET'));
+  Check(not IsPost('Post'));
+  Check(IsPost('POST'));
   for met := low(met) to high(met) do
     Check(ToMethod(RawUtf8(MethodText(met))) = met);
 end;

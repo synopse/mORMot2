@@ -104,12 +104,13 @@ type
     /// read-only access to the associated factory for the implementation class
     property Factory: TInterfaceFactory
       read fFactory;
-    /// read-only access to the local folder containing the Mustache views
+    /// set or retrieve the local folder containing the Mustache views
+    // - if you change it, it will also change the ViewStaticFolder as '.static'
     property ViewTemplateFolder: TFileName
       read fViewTemplateFolder write SetViewTemplateFolder;
-    /// retrieve the .static local folder name
+    /// set or retrieve the .static local folder name
     property ViewStaticFolder: TFileName
-      read fViewStaticFolder;
+      read fViewStaticFolder write fViewStaticFolder;
     /// any occurence of this tag in a rendered view will be converted
     // into the rendering time in microseconds
     // - equals '[[GENERATION_TIME_TAG]]' by default

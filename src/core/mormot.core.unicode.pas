@@ -132,6 +132,10 @@ type
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   var result: RawUtf8; Flags: TCharConversionFlags = [ccfNoTrailingZero]); overload;
 
+/// convert a RawUnicode PWideChar into a UTF-8 temporary buffer
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: TSynTempBuffer; Flags: TCharConversionFlags); overload;
+
 /// convert a RawUnicode PWideChar into a UTF-8 string
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUtf8; overload;
@@ -307,8 +311,8 @@ type
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; virtual;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
-    function AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal): RawUtf8; overload; virtual;
+    procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
+      SourceChars: cardinal; out Value: RawUtf8); overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
@@ -483,8 +487,8 @@ type
     // - directly assign the input as result, since no conversion is needed
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
-    function AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal): RawUtf8; override;
+    procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
+      SourceChars: cardinal; out Value: RawUtf8); override;
   end;
 
   /// a class to handle UTF-16 to/from Unicode translation
@@ -556,6 +560,18 @@ var
 // the string, but just add a #0 at some point in the UTF-8 buffer)
 // - could allow logging of parsed input e.g. after an exception
 procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt);
+
+/// convert a binary buffer into a fake ASCII/UTF-8 content without any #0 input
+// - will use ~ char to escape any #0 as ~0 pair (and plain ~ as ~~ pair)
+// - output is just a bunch of non 0 bytes, so not trully valid UTF-8 content
+// - may be used as an alternative to Base64 encoding if 8-bit chars are allowed
+// - call ZeroedRawUtf8() as reverse function
+function UnZeroed(const bin: RawByteString): RawUtf8;
+
+/// convert a fake UTF-8 buffer without any #0 input back into its original binary
+// - may be used as an alternative to Base64 decoding if 8-bit chars are allowed
+// - call UnZeroedRawUtf8() as reverse function
+function Zeroed(const u: RawUtf8): RawByteString;
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
@@ -1806,20 +1822,27 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: TSynTempBuffer; Flags: TCharConversionFlags);
+begin
+  if (WideChar = nil) or
+     (WideCharCount = 0) then
+    result.Init(0)
+  else
+  begin
+    result.Init(WideCharCount * 3);
+    result.Len := RawUnicodeToUtf8(
+      result.buf, result.len, WideChar, WideCharCount, Flags);
+  end;
+end;
+
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   var result: RawUtf8; Flags: TCharConversionFlags);
 var
   tmp: TSynTempBuffer;
 begin
-  if (WideChar = nil) or
-     (WideCharCount = 0) then
-    result := ''
-  else
-  begin
-    tmp.Init(WideCharCount * 3);
-    FastSetString(result, tmp.buf, RawUnicodeToUtf8(tmp.buf, tmp.len + 1,
-      WideChar, WideCharCount, Flags));
-    tmp.Done;
-  end;
+  RawUnicodeToUtf8(WideChar, WideCharCount, tmp, Flags);
+  FastSetString(result, tmp.buf, tmp.len);
+  tmp.Done;
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
@@ -2583,24 +2606,21 @@ end;
 
 function TSynAnsiConvert.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
 begin
-  result := AnsiBufferToRawUtf8(pointer(AnsiText), length(AnsiText));
+  AnsiBufferToRawUtf8(pointer(AnsiText), length(AnsiText), result);
 end;
 
-function TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
-  SourceChars: cardinal): RawUtf8;
+procedure TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
+  SourceChars: cardinal; out Value: RawUtf8);
 var
   tmp: TSynTempBuffer;
-  P: pointer;
+  P: PUtf8Char;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    result := ''
-  else
-  begin
-    P := tmp.Init(SourceChars * 3);
-    P := AnsiBufferToUtf8(P, Source, SourceChars);
-    tmp.Done(P, result);
-  end;
+    exit;
+  P := AnsiBufferToUtf8(tmp.Init(SourceChars * 3), Source, SourceChars);
+  FastSetString(Value, tmp.buf, P - tmp.buf);
+  tmp.Done;
 end;
 
 constructor TSynAnsiConvert.Create(aCodePage: cardinal);
@@ -2624,7 +2644,7 @@ var
 begin
   SynAnsiConvertListLock.ReadLock; // concurrent read lock
   i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-    SynAnsiConvertListCount, aCodePage);
+    SynAnsiConvertListCount, aCodePage); // SSE2 asm on i386 and x86_64
   if i >= 0 then
     result := SynAnsiConvertList[i]
   else
@@ -2639,7 +2659,7 @@ begin
   SynAnsiConvertListLock.WriteLock;
   try
     i := WordScanIndex(pointer(SynAnsiConvertListCodePage),
-      SynAnsiConvertListCount, aCodePage);
+      SynAnsiConvertListCount, aCodePage); // search again for thread safety
     if i >= 0 then
     begin
       result := SynAnsiConvertList[i]; // avoid any (unlikely) race condition
@@ -2737,7 +2757,6 @@ procedure TSynAnsiConvert.Utf8BufferToAnsi(Source: PUtf8Char; SourceChars: cardi
 var
   tmp: array[word] of AnsiChar;
   max: PtrInt;
-  buf: PAnsiChar;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
@@ -2753,9 +2772,8 @@ begin
     begin
       // huge strings will be allocated once and truncated, not resized
       FastSetStringCP(result, nil, max, fCodePage);
-      buf := Utf8BufferToAnsi(pointer(result), Source, SourceChars);
-      buf^ := #0; // mandatory to emulate a regular string
-      PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := buf - pointer(result);
+      FakeLength(result,
+        Utf8BufferToAnsi(pointer(result), Source, SourceChars) - pointer(result));
     end;
   end;
 end;
@@ -3435,10 +3453,10 @@ begin
   {$endif HASCODEPAGE}
 end;
 
-function TSynAnsiUtf8.AnsiBufferToRawUtf8(Source: PAnsiChar;
-  SourceChars: cardinal): RawUtf8;
+procedure TSynAnsiUtf8.AnsiBufferToRawUtf8(
+  Source: PAnsiChar; SourceChars: cardinal; out Value: RawUtf8);
 begin
-  FastSetString(result, Source, SourceChars);
+  FastSetString(Value, Source, SourceChars);
 end;
 
 
@@ -3528,7 +3546,7 @@ begin
   else
   {$ifdef HASCODEPAGE}
   begin
-    cp := StringCodePage(s);
+    cp := GetCodePage(s);
     if cp = CP_UTF8 then
       result := s
     else if cp >= CP_RAWBLOB then
@@ -3537,10 +3555,10 @@ begin
       SetCodePage(RawByteString(result), CP_UTF8, false);
     end
     else
-      result := TSynAnsiConvert.Engine(cp).AnsiToUtf8(s);
+      TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), length(s), result);
   end;
   {$else}
-  result := CurrentAnsiConvert.AnsiToUtf8(s);
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(s), length(s), result);
   {$endif HASCODEPAGE}
 end;
 
@@ -3557,7 +3575,7 @@ end;
 
 function ShortStringToUtf8(const source: ShortString): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(@source[1], ord(source[0]));
+  WinAnsiConvert.AnsiBufferToRawUtf8(@source[1], ord(source[0]), result);
 end;
 
 procedure WinAnsiToUnicodeBuffer(const S: WinAnsiString; Dest: PWordArray; DestLen: PtrInt);
@@ -3583,12 +3601,12 @@ end;
 
 function WinAnsiToUtf8(const S: WinAnsiString): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(pointer(S), length(S));
+  WinAnsiConvert.AnsiBufferToRawUtf8(pointer(S), length(S), result);
 end;
 
 function WinAnsiToUtf8(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): RawUtf8;
 begin
-  result := WinAnsiConvert.AnsiBufferToRawUtf8(WinAnsi, WinAnsiLen);
+  WinAnsiConvert.AnsiBufferToRawUtf8(WinAnsi, WinAnsiLen, result);
 end;
 
 function WideCharToWinAnsiChar(wc: cardinal): AnsiChar;
@@ -3748,7 +3766,7 @@ end;
 
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8; ACP: integer);
 begin
-  result := TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L);
+  TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L, result);
 end;
 
 {$ifdef UNICODE}
@@ -3932,7 +3950,7 @@ end;
 
 procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8);
 begin
-  result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Source, StrLen(Source));
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(Source, StrLen(Source), result);
 end;
 
 function StringToUtf8(const Text: string): RawUtf8;
@@ -3942,7 +3960,7 @@ end;
 
 procedure StringToUtf8(Text: PChar; TextLen: PtrInt; var result: RawUtf8);
 begin
-  result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Text, TextLen);
+  CurrentAnsiConvert.AnsiBufferToRawUtf8(Text, TextLen, result);
 end;
 
 procedure StringToUtf8(const Text: string; var result: RawUtf8);
@@ -4103,6 +4121,98 @@ begin
   for i := 0 to MaxSize - 1 do
     if PByteArray(u)[i] = 0 then
       PByteArray(u)[i] := ord('~');
+end;
+
+const
+  ZEROED_CW = '~'; // any byte would do - followed by ~ or 0
+
+function UnZeroed(const bin: RawByteString): RawUtf8;
+var
+  len, z, c: PtrInt;
+  a: AnsiChar;
+  s, d: PAnsiChar;
+begin
+  result := '';
+  len := length(bin);
+  if len = 0 then
+    exit;
+  s := pointer(bin);
+  z := StrLen(s);
+  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW));
+  if (z = len) and
+     (c < 0) then
+  begin
+    result := bin; // nothing to convert
+    exit;
+  end;
+  if (c < 0) or
+     (z < c) then
+    c := z;
+  FastSetString(result, nil, len shl 1);
+  d := pointer(result);
+  MoveFast(s^, d^, c);
+  inc(s, c);
+  inc(d, c);
+  dec(len, c);
+  repeat
+    a := s^;
+    if a = #0 then
+    begin
+      d^ := ZEROED_CW;
+      inc(d);
+      a := '0';
+    end
+    else if a = ZEROED_CW then
+    begin
+      d^ := ZEROED_CW;
+      inc(d);
+    end;
+    d^ := a;
+    inc(d);
+    inc(s);
+    dec(len);
+  until len = 0;
+  FakeLength(result, d - pointer(result));
+end;
+
+function Zeroed(const u: RawUtf8): RawByteString;
+var
+  len, c: PtrInt;
+  a: AnsiChar;
+  s, d: PAnsiChar;
+begin
+  result := '';
+  len := length(u);
+  if len = 0 then
+    exit;
+  s := pointer(u);
+  c := ByteScanIndex(pointer(s), len, ord(ZEROED_CW));
+  if c < 0 then
+  begin
+    result := u;
+    exit;
+  end;
+  FastSetRawByteString(result, nil, len);
+  d := pointer(result);
+  MoveFast(s^, d^, c);
+  inc(s, c);
+  inc(d, c);
+  dec(len, c);
+  repeat
+    a := s^;
+    if a = ZEROED_CW then
+    begin
+      inc(s);
+      dec(len);
+      if s^ = '0' then
+        a := #0;
+    end;
+    d^ := a;
+    inc(d);
+    inc(s);
+    dec(len);
+  until len = 0;
+  FakeLength(result, d - pointer(result));
 end;
 
 procedure Utf8ToWideString(const Text: RawUtf8; var result: WideString);
@@ -5224,7 +5334,7 @@ begin
       S := P - 1;
       inc(P, extra);
       inc(extra);
-      MoveSmall(S, D + result, extra);
+      MoveByOne(S, D + result, extra);
       inc(result, extra);
     end;
   until false;
@@ -6902,16 +7012,16 @@ end;
 
 
 const
-  // reference 8-bit upper chars as in WinAnsi / code page 1252
-  WinAnsiToUp: array[138..255] of byte =
-    (83, 139, 140, 141, 90, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
-     153, 83, 155, 140, 157, 90, 89, 160, 161, 162, 163, 164, 165, 166, 167,
-     168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181,
-     182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 65, 65, 65, 65, 65,
-     65, 198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
-     79, 215, 79, 85, 85, 85, 85, 89, 222, 223, 65, 65, 65, 65, 65, 65,
-     198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
-     79, 247, 79, 85, 85, 85, 85, 89, 222, 89);
+  // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
+  WinAnsiToUp: array[138..255] of byte = (
+    83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
+    153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
+    168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
+    183, 184, 185, 186, 187, 188, 189, 190, 191, 65,  65,  65,  65,  65,  65,
+    198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,  79,  79,
+    79,  79,  215, 79,  85,  85,  85,  85,  89,  222, 223, 65,  65,  65,  65,
+    65,  65,  198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,
+    79,  79,  79,  79,  247, 79,  85,  85,  85,  85,  89,  222, 89);
 
 {$ifdef UU_COMPRESSED}
 
@@ -6996,6 +7106,10 @@ var
   i: PtrInt;
   c: AnsiChar;
 begin
+  // decompress 1KB static in the exe into 20KB UU[] array for Unicode Uppercase
+  {$ifdef UU_COMPRESSED}
+  InitializeUU;
+  {$endif UU_COMPRESSED}
   // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
     NormToNormByte[i] := i;
@@ -7048,18 +7162,15 @@ begin
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
-  {$ifdef ASMX64AVX}
+  {$ifdef ASMX64AVXNOCONST}
   if cpuHaswell in X64CpuFeatures then
     // Haswell CPUs can use simdjson AVX2 asm for IsValidUtf8()
     IsValidUtf8Buffer := @IsValidUtf8Avx2;
-  {$endif ASMX64AVX}
+  {$endif ASMX64AVXNOCONST}
 end;
 
 
 initialization
-  {$ifdef UU_COMPRESSED}
-  InitializeUU;
-  {$endif UU_COMPRESSED}
   InitializeUnit;
 
 

@@ -85,7 +85,7 @@ type
     fThreads: TSynObjectList;
     fRunningThreadCount: integer;
     fPendingThreadCount: integer;
-    fPendingThreadFinished: TEvent;
+    fPendingThreadFinished: TSynEvent;
     fHttpServer: TRestHttpServer;
     fMinThreads: integer;
     fMaxThreads: integer;
@@ -213,7 +213,7 @@ type
   protected
     fTest: TTestMultiThreadProcess;
     fID: integer;
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     fIterationCount: integer;
     fProcessFinished: boolean;
     fIDs: TIntegerDynArray;
@@ -230,7 +230,7 @@ constructor TTestMultiThreadProcessThread.Create(
   aTest: TTestMultiThreadProcess; aID: integer);
 begin
   FreeOnTerminate := false;
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   fTest := aTest;
   fID := aID;
   SetLength(fIDs, fTest.fOperationCount);
@@ -258,65 +258,64 @@ begin
   try
     Rec.LastName := 'Thread ' + CardinalToHex(PtrUInt(GetCurrentThreadId));
     while not Terminated do
-      case fEvent.WaitFor(INFINITE) of // triggered from LaunchProcess
-        wrSignaled:
-          if Terminated or
-             fProcessFinished then // from Destroy
-            break
-          else
-          try
-            try
-              SetLength(Rest, fTest.ClientPerThread);
-              for i := 0 to high(Rest) do
-                Rest[i] := fTest.CreateClient;
-              log := TSynLog.Enter('Execute %=% iterations=%',
-                [Rest[0].ClassType, length(Rest), fIterationCount], self);
-              if not fTest.CheckFailed(Rest <> nil) then
-              begin
-                n := 0;
-                r := 0;
-                for i := 0 to fIterationCount - 1 do
-                begin
-                  Rec.FirstName := FormatUTF8('%/%', [i, fIterationCount - 1]);
-                  Rec.YearOfBirth := 1000 + i;
-                  Rec.YearOfDeath := 1040 + i;
-                  fIDs[i] := Rest[r].Orm.Add(Rec, true);
-                  if r = high(Rest) then
-                    r := 0
-                  else
-                    inc(r);
-                  if fTest.CheckFailed(fIDs[i] <> 0, 'Rest.Add') then
-                    break;
-                  inc(n);
-                end;
-                for i := 0 to n - 1 do
-                  if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
-                    break
-                  else
-                  begin
-                    fTest.Check(Rec.YearOfBirth = 1000 + i, 'yob');
-                    fTest.Check(Rec.YearOfDeath = (1040 + i) and $ffff, 'yod');
-                    //if (Rec.YearOfBirth<>1000+i) or (Rec.YearOfDeath<>1040+i) then writeln(i,'  ',ObjectToJSON(Rec));
-                    if r = high(Rest) then
-                      r := 0
-                    else
-                      inc(r);
-                  end;
-              end;
-            finally
-              for i := 0 to high(Rest) do
-                if Rest[i] <> fTest.fDatabase then
-                  FreeAndNil(Rest[i]);
-              fProcessFinished := true;
-              if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
-                fTest.fPendingThreadFinished.SetEvent; // notify all finished
-              log := nil;
+    begin
+      fEvent.WaitForEver; // triggered from LaunchProcess
+      if Terminated or
+         fProcessFinished then // from Destroy
+        break;
+      try
+        try
+          SetLength(Rest, fTest.ClientPerThread);
+          for i := 0 to high(Rest) do
+            Rest[i] := fTest.CreateClient;
+          log := TSynLog.Enter('Execute %=% iterations=%',
+            [Rest[0].ClassType, length(Rest), fIterationCount], self);
+          if not fTest.CheckFailed(Rest <> nil) then
+          begin
+            n := 0;
+            r := 0;
+            for i := 0 to fIterationCount - 1 do
+            begin
+              Rec.FirstName := FormatUTF8('%/%', [i, fIterationCount - 1]);
+              Rec.YearOfBirth := 1000 + i;
+              Rec.YearOfDeath := 1040 + i;
+              fIDs[i] := Rest[r].Orm.Add(Rec, true);
+              if r = high(Rest) then
+                r := 0
+              else
+                inc(r);
+              if fTest.CheckFailed(fIDs[i] <> 0, 'Rest.Add') then
+                break;
+              inc(n);
             end;
-          except
-            on E: Exception do
-              fTest.Check(False, E.Message);
+            for i := 0 to n - 1 do
+              if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
+                break
+              else
+              begin
+                fTest.Check(Rec.YearOfBirth = 1000 + i, 'yob');
+                fTest.Check(Rec.YearOfDeath = (1040 + i) and $ffff, 'yod');
+                //if (Rec.YearOfBirth<>1000+i) or (Rec.YearOfDeath<>1040+i) then writeln(i,'  ',ObjectToJSON(Rec));
+                if r = high(Rest) then
+                  r := 0
+                else
+                  inc(r);
+              end;
           end;
+        finally
+          for i := 0 to high(Rest) do
+            if Rest[i] <> fTest.fDatabase then
+              FreeAndNil(Rest[i]);
+          fProcessFinished := true;
+          if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
+            fTest.fPendingThreadFinished.SetEvent; // notify all finished
+          log := nil;
+        end;
+      except
+        on E: Exception do
+          fTest.Check(False, E.Message);
       end;
+    end;
   finally
     Rec.Free;
     fProcessFinished := true;
@@ -359,7 +358,7 @@ begin
   fClientPerThread := MAX_CLIENTS div MAX_THREADS;
   // note: IterationCount := OperationCount div RunningThreadCount
   //       and make some round robin around fClientPerThread
-  fPendingThreadFinished := TEvent.Create(nil, false, false, '');
+  fPendingThreadFinished := TSynEvent.Create;
 end;
 
 const
@@ -525,7 +524,7 @@ begin
          (fDatabase.AcquireWriteMode = amMainThread) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
       else
-        fPendingThreadFinished.WaitFor(INFINITE);
+        fPendingThreadFinished.WaitForEver;
       allFinished := true;
       for n := 0 to fRunningThreadCount - 1 do
         if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then

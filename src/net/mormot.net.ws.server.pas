@@ -95,8 +95,9 @@ type
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
     fProcessClass: TWebSocketProcessServerClass;
-    fOnWSConnect: TOnWebSocketServerEvent;
-    fOnWSDisconnect: TOnWebSocketServerEvent;
+    fOnWSUpgraded: TOnWebSocketProtocolUpgraded;
+    fOnWSConnect, fOnWSDisconnect: TOnWebSocketServerEvent;
+    function DoUpgrade(Protocol: TWebSocketProtocol): integer; virtual;
     procedure DoConnect(Context: TWebSocketServerSocket); virtual;
     procedure DoDisconnect(Context: TWebSocketServerSocket); virtual;
     /// validate the WebSockets handshake, then call Context.fProcess.ProcessLoop()
@@ -154,6 +155,10 @@ type
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList
       read fProtocols;
+    /// event triggerred when a new connection upgrade has been upgraded
+    // - allow e.g. to verify a JWT bearer before returning the WS 101 response
+    property OnWebSocketUpgraded: TOnWebSocketProtocolUpgraded
+      read fOnWSUpgraded write fOnWSUpgraded;
     /// event triggerred when a new connection upgrade has been done
     // - just before the main processing WebSockets frames processing loop
     property OnWebSocketConnect: TOnWebSocketServerEvent
@@ -231,8 +236,8 @@ var
   server: THttpServer;
 begin
   server := (fSocket as TWebSocketServerSocket).Server;
-  result := THttpServerRequest.Create(server, fOwnerConnectionID,
-    fOwnerThread, fProtocol.ConnectionFlags, fConnectionOpaque);
+  result := THttpServerRequest.Create(server, fProtocol.ConnectionID,
+    fOwnerThread, fProtocol.ConnectionFlags, fProtocol.ConnectionOpaque);
   RequestProcess := server.Request;
 end;
 
@@ -253,6 +258,7 @@ begin
   fCallbackSendDelay := @fSettings.SendDelay;
   fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
   fProtocols := TWebSocketProtocolList.Create;
+  fProtocols.OnUpgraded := DoUpgrade;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   if hsoLogVerbose in ProcessOptions then
@@ -275,7 +281,7 @@ begin
   // validate the WebSockets upgrade handshake
   sock.KeepAliveClient := false; // close connection with WebSockets
   result := fProtocols.ServerUpgrade(sock.Http, sock.RemoteIP,
-    sock.RemoteConnectionID, protocol, resp);
+    sock.RemoteConnectionID, @sock.fConnectionOpaque, protocol, resp);
   if result = HTTP_SUCCESS then
     if not sock.TrySndLow(pointer(resp), length(resp)) then
     begin
@@ -291,9 +297,8 @@ begin
     exit;
   end;
   // if we reached here, we switched/upgraded to WebSockets bidir frames
-  sock.fProcess := fProcessClass.Create(ClientSock, protocol,
-    sock.RemoteConnectionID, {ownerthread=}nil, @sock.fConnectionOpaque,
-    @fSettings, fProcessName);
+  sock.fProcess := fProcessClass.Create(
+    ClientSock, protocol, {ownerthread=}nil, @fSettings, fProcessName);
   fWebSocketConnections.Add(sock.fProcess);
   try
     // run main blocking loop in this connection-dedicated thread
@@ -304,6 +309,14 @@ begin
     fWebSocketConnections.Remove(sock.fProcess);
     FreeAndNilSafe(sock.fProcess); // notify end of WebSockets
   end;
+end;
+
+function TWebSocketServer.DoUpgrade(Protocol: TWebSocketProtocol): integer;
+begin
+  if Assigned(fOnWSUpgraded) then
+    result := fOnWSUpgraded(Protocol)
+  else
+    result := HTTP_SUCCESS; // continue
 end;
 
 procedure TWebSocketServer.DoConnect(Context: TWebSocketServerSocket);
@@ -328,7 +341,7 @@ var
 begin
   if (hfConnectionUpgrade in ClientSock.Http.HeaderFlags) and
      ClientSock.KeepAliveClient and
-     IdemPropNameU('GET', ClientSock.Method) and
+     IsGet(ClientSock.Method) and
      IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
   begin
     // upgrade and run fProcess.ProcessLoop
@@ -365,10 +378,11 @@ function FastFindConnection(c: PWebSocketProcessServer; n: integer;
   id: THttpServerConnectionID): TWebSocketProcessServer;
 begin
   // speedup brute force check in case of high number of connections
+  // - since we have one thread per connection, number won't be so high ;)
   if n > 0 then
     repeat
       result := c^;
-      if result.OwnerConnectionID = id then
+      if result.Protocol.ConnectionID = id then
         exit;
       inc(c);
       dec(n);
@@ -432,7 +446,7 @@ begin
           // broadcast all
          ((ids < 0) or
           // branchless O(log(n)) asm on x86_64
-          (FastFindInt64Sorted(sorted.buf, ids, ws^.OwnerConnectionID) >= 0)) then
+          (FastFindInt64Sorted(sorted.buf, ids, ws^.Protocol.ConnectionID) >= 0)) then
       begin
         FastSetRawByteString(temp.payload, pointer(aFrame.payload), len);
         ws^.Outgoing.Push(temp, tix); // non blocking asynchronous sending

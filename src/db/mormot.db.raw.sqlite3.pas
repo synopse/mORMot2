@@ -2132,7 +2132,7 @@ type
     close: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.39.0', when used in conjunction with our
+    // - currently returns '3.39.4', when used in conjunction with our
     // mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
@@ -4431,6 +4431,7 @@ type
       Expand: boolean = false; aResultCount: PPtrInt = nil;
       MaxMemory: PtrUInt = 512 shl 20; Options: TTextWriterOptions = []): RawUtf8;
     /// Execute one SQL statement step into a JSON object
+    // - has less overhead than ExecuteJson() for a single row of data
     function ExecuteStepJson(aDB: TSqlite3DB; W: TJsonWriter): boolean;
     /// Execute one SQL statement which return the results as a TDocVariant array
     // - if aSql is '', the statement should have been prepared, reset and bound
@@ -4496,7 +4497,7 @@ type
     // - TDateTime parameters can be bound with this method, either directly
     // as ISO-8601 text, or encoded via DateToSql() or DateTimeToSql()
     procedure Bind(const Params: array of const); overload;
-    /// bind a UTF-8 encoded string to a parameter
+    /// bind a UTF-8 encoded string buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESqlite3Exception on any error
     // - this function will directly call sqlite3.bind_text() and let SQLite3
@@ -8165,6 +8166,7 @@ begin
     W.AddNoJsonEscape(sqlite3.column_name(fRequest, f));
     W.Add('"', ':');
     FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.Add('}');
@@ -8587,7 +8589,6 @@ begin
         WR.Add('"');
       end;
   end;
-  WR.AddComma;
 end;
 
 procedure TSqlRequest.FieldsToJson(WR: TResultsWriter; DoNotFetchBlobs: boolean);
@@ -8627,6 +8628,7 @@ begin
       WR.AddString(WR.ColNames[f]); // '"'+ColNames[]+'":'
     end;
     FieldToJson(WR, v, DoNotFetchBlobs); // append the value and a trailing ','
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

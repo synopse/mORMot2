@@ -126,7 +126,7 @@ procedure FrameInit(opcode: TWebSocketFrameOpCode;
 procedure FrameSendEncode(const Frame: TWebSocketFrame;
   MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
 
-/// compute the SHA-1 signature of the given challenge
+/// compute the SHA-1 signature of the given WebSockets upgrade challenge
 procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 
 
@@ -282,6 +282,8 @@ type
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fRemoteLocalhost: boolean;
     fConnectionFlags: THttpServerRequestFlags;
+    fConnectionID: THttpServerConnectionID;
+    fConnectionOpaque: PHttpServerConnectionOpaque;
     fRemoteIP: RawUtf8;
     fUpgradeUri: RawUtf8;
     fUpgradeBearerToken: RawUtf8;
@@ -349,6 +351,12 @@ type
     /// contains either [hsrSecured, hsrWebsockets] or [hsrWebsockets]
     property ConnectionFlags: THttpServerRequestFlags
       read fConnectionFlags;
+    /// the associated low-level WebSocket connection numerical identifier
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
+    /// associated low-level opaque pointer maintained during the connection
+    property ConnectionOpaque: PHttpServerConnectionOpaque
+      read fConnectionOpaque;
     /// if the associated 'Remote-IP' HTTP header value maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
@@ -370,7 +378,7 @@ type
       read fUpgradeUri write fUpgradeUri;
     /// the "Bearer" HTTP header value on which this protocol has been upgraded
     property UpgradeBearerToken: RawUtf8
-      read fUpgradeBearerToken write fUpgradeBearerToken;
+      read fUpgradeBearerToken;
     /// the last error message, during frame processing
     property LastError: string
       read fLastError;
@@ -543,10 +551,19 @@ type
       read GetFramesOutCompression;
   end;
 
+  /// event signature trigerred from TWebSocketProtocolList.ServerUpgrade()
+  // - allow e.g. to verify a JWT bearer before returning the WS 101 response
+  // - Protocol.UpgradeUri/UpgradeBearerToken/RemoteIP/RemoteLocalhost and
+  // ConnectionID/ConnectionOpaque fields have already been populated
+  // - should return HTTP_SUCCESS to continue, or an error code to abort
+  TOnWebSocketProtocolUpgraded =
+    function(Protocol: TWebSocketProtocol): integer of object;
+
   /// used to maintain a list of websocket protocols (for the server side)
   TWebSocketProtocolList = class(TSynPersistentRWLightLock)
   protected
     fProtocols: array of TWebSocketProtocol;
+    fOnUpgraded: TOnWebSocketProtocolUpgraded;
     // caller should make fSafe.ReadOnlyLock/WriteLock
     function LockedFindIndex(const aName, aUri: RawUtf8): PtrInt;
   public
@@ -576,7 +593,11 @@ type
     // and use the Protocol - or free it and close the connection
     function ServerUpgrade(const Http: THttpRequestContext;
       const RemoteIp: RawUtf8; ConnectionID: THttpServerConnectionID;
+      ConnectionOpaque: PHttpServerConnectionOpaque;
       out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
+    /// callback event run from ServerUpgrade
+    property OnUpgraded: TOnWebSocketProtocolUpgraded
+      read fOnUpgraded write fOnUpgraded;
   end;
 
   /// indicates which kind of process did occur in the main WebSockets loop
@@ -708,8 +729,6 @@ type
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
-    fOwnerConnectionID: THttpServerConnectionID;
-    fConnectionOpaque: PHttpServerConnectionOpaque;
     fProtocol: TWebSocketProtocol;
     fState: TWebSocketProcessState;
     fMaskSentFrames: byte;
@@ -747,9 +766,8 @@ type
     /// initialize the WebSockets process on a given connection
     // - the supplied TWebSocketProtocol will be owned by this instance
     // - other parameters should reflect the client or server expectations
-    constructor Create(aProtocol: TWebSocketProtocol;
-      aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
-      aConnectionOpaque: PHttpServerConnectionOpaque; aSettings: PWebSocketProcessSettings;
+    constructor Create(aProtocol: TWebSocketProtocol; aOwnerThread: TSynThread;
+      aSettings: PWebSocketProcessSettings;
       const aProcessName: RawUtf8); reintroduce;
     /// finalize the context
     // - if needed, will notify the other end with a focConnectionClose frame
@@ -812,12 +830,6 @@ type
     /// the associated low-level processing thread
     property OwnerThread: TSynThread
       read fOwnerThread;
-    /// the associated low-level WebSocket connection numerical identifier
-    property OwnerConnectionID: THttpServerConnectionID
-      read fOwnerConnectionID;
-    /// associated low-level opaque pointer maintained during the connection
-    property ConnectionOpaque: PHttpServerConnectionOpaque
-      read fConnectionOpaque;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer
       read fProcessCount;
@@ -849,9 +861,7 @@ type
     // - the supplied TWebSocketProtocol will be owned by this instance
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
-      aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
-      aConnectionOpaque: PHttpServerConnectionOpaque;
-      aSettings: PWebSocketProcessSettings;
+      aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
       const aProcessName: RawUtf8); reintroduce; virtual;
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
     // - in practice, just call fSocket.SockInPending to check for pending data
@@ -1113,7 +1123,7 @@ end;
 function TWebSocketFrameEncoder.Encode(
   const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
 begin
-  MoveSmall(@hdr, Dest, hdrlen);  // 2/4 bytes for small/common frames
+  MoveByOne(@hdr, Dest, hdrlen);  // 2/4 bytes for small/common frames
   inc(Dest, hdrlen);
   if hdr.mask <> 0 then
     // hdr.mask is not at the right position: append to actual end of header
@@ -1254,7 +1264,7 @@ begin
        not synhk then
       exit;
   end;
-  res := fEncryption.ProcessHandshake(msgin, msgout);
+  res := fEncryption.ProcessHandshake(msgin, msgout); // e.g. TEcdheProtocol
   case res of
     sprSuccess:
       begin
@@ -1626,7 +1636,7 @@ begin
             IdemPropNameU(ContentType, JSON_CONTENT_TYPE) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
     else if IdemPChar(pointer(ContentType), 'TEXT/') then
-      WR.AddCsvUtf8([Content])
+      WR.AddJsonString(Content)
     else
       WR.WrBase64(pointer(Content), length(Content), true);
     WR.Add(']', '}');
@@ -2328,6 +2338,7 @@ end;
 function TWebSocketProtocolList.ServerUpgrade(
   const Http: THttpRequestContext; const RemoteIp: RawUtf8;
   ConnectionID: THttpServerConnectionID;
+  ConnectionOpaque: PHttpServerConnectionOpaque;
   out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
 var
   uri, version, prot, subprot, key, extin, extout: RawUtf8;
@@ -2335,6 +2346,7 @@ var
   P: PUtf8Char;
   Digest: TSha1Digest;
 begin
+  // validate WebSockets protocol upgrade request
   result := HTTP_BADREQUEST;
   if not IdemPropNameU(Http.CommandMethod, 'GET') or
      not IdemPropNameU(Http.Upgrade, 'websocket') then
@@ -2342,10 +2354,14 @@ begin
   version := Http.HeaderGetValue('SEC-WEBSOCKET-VERSION');
   if GetInteger(pointer(version)) < 13 then
     exit; // we expect WebSockets protocol version 13 at least
+  key := Http.HeaderGetValue('SEC-WEBSOCKET-KEY');
+  if Base64ToBinLengthSafe(pointer(key), length(key)) <> 16 then
+    exit; // WS nonce must be a Base64-encoded value of 16 bytes
   uri := TrimU(Http.CommandUri);
   if (uri <> '') and
      (uri[1] = '/') then
     Delete(uri, 1, 1);
+  // identify the Websockets protocol
   prot := Http.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
   P := pointer(prot);
   if P <> nil then
@@ -2369,9 +2385,12 @@ begin
     Protocol := CloneByUri(uri);
   if Protocol = nil then
     exit;
-  Protocol.UpgradeUri := uri;
-  Protocol.UpgradeBearerToken := Http.BearerToken;
-  Protocol.RemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
+  // setup the raw connection context
+  Protocol.fUpgradeUri := uri;
+  Protocol.fUpgradeBearerToken := Http.BearerToken;
+  Protocol.fConnectionID := ConnectionID;
+  Protocol.fConnectionOpaque := ConnectionOpaque;
+  Protocol.fRemoteIP := Http.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
   if Protocol.RemoteIP = '' then
   begin
     Protocol.RemoteIP := RemoteIP;
@@ -2381,6 +2400,17 @@ begin
   end
   else
     Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
+  // call OnUpgraded callback for request custom validation (e.g. bearer)
+  if Assigned(fOnUpgraded) then
+  begin
+    result := fOnUpgraded(Protocol);
+    if result <> HTTP_SUCCESS then
+    begin
+      Protocol.Free; // upgrade was refused by the callback
+      exit;
+    end;
+  end;
+  // process any additional protocol extension (e.g. TEcdheProtocol handshake)
   extin := Http.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
   if extin <> '' then
   begin
@@ -2392,12 +2422,7 @@ begin
       exit;
     end;
   end;
-  key := Http.HeaderGetValue('SEC-WEBSOCKET-KEY');
-  if Base64ToBinLengthSafe(pointer(key), length(key)) <> 16 then
-  begin
-    Protocol.Free;
-    exit; // this nonce must be a Base64-encoded value of 16 bytes
-  end;
+  // return the 101 header and switch protocols
   ComputeChallenge(key, Digest);
   if {%H-}extout <> '' then
     extout := 'Sec-WebSocket-Extensions: ' + extout + #13#10;
@@ -2451,16 +2476,13 @@ end;
 { TWebSocketProcess }
 
 constructor TWebSocketProcess.Create(aProtocol: TWebSocketProtocol;
-  aOwnerConnectionID: THttpServerConnectionID; aOwnerThread: TSynThread;
-  aConnectionOpaque: PHttpServerConnectionOpaque;
-  aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
+  aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
+  const aProcessName: RawUtf8);
 begin
   inherited Create; // may have been overriden
   fProcessName := aProcessName;
   fProtocol := aProtocol;
-  fOwnerConnectionID := aOwnerConnectionID;
   fOwnerThread := aOwnerThread;
-  fConnectionOpaque := aConnectionOpaque;
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create(30 * 60);
   fOutgoing := TWebSocketFrameList.Create(0);
@@ -2992,12 +3014,10 @@ end;
 { TWebCrtSocketProcess }
 
 constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
-  aProtocol: TWebSocketProtocol; aOwnerConnectionID: THttpServerConnectionID;
-  aOwnerThread: TSynThread; aConnectionOpaque: PHttpServerConnectionOpaque;
+  aProtocol: TWebSocketProtocol; aOwnerThread: TSynThread;
   aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
 begin
-  inherited Create(aProtocol, aOwnerConnectionID, aOwnerThread,
-    aConnectionOpaque, aSettings, aProcessName);
+  inherited Create(aProtocol, aOwnerThread, aSettings, aProcessName);
   fSocket := aSocket;
 end;
 

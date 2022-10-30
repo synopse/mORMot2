@@ -39,8 +39,8 @@ type
     function TotalWorkCount: Integer;
   end;
 
-  // how the background work is done in a temporary thread
-  /// - as initialized and run by TLongWorkService.StartWork
+  /// how the background work is done in a temporary thread
+  // - as initialized and run by TLongWorkService.StartWork
   TLongWorkServiceThread = class(TRestThread)
   protected
     fCallback: ILongWorkCallback;
@@ -49,7 +49,8 @@ type
     procedure InternalExecute; override;
   public
     // when Execute is finished, will trigger callback WorkFinished/WorkFailed
-    constructor Create(owner: TRest; const workName: string; const callback: ILongWorkCallback);
+    constructor Create(owner: TRest; const workName: string;
+      const callback: ILongWorkCallback);
   end;
 
 
@@ -85,9 +86,9 @@ var
 begin
   TSynLog.Add.Log(sllInfo, '%.Execute(%) started', [self, fWorkName]);
   tix := GetTickCount64;
-  Sleep(5000 + Random(1000)); // some hard work
-  if Random(100) > 20 then
-    fCallback.WorkFinished(fWorkName, GetTickCount64 - tix)
+  Sleep(5000 + Random32(1000)); // some hard work
+  if Random32(100) > 20 then
+    fCallback.WorkFinished(fWorkName, mormot.core.os.GetTickCount64 - tix)
   else
     fCallback.WorkFailed(fWorkName, 'expected random failure');
   TSynLog.Add.Log(sllInfo, '%.Execute(%) notified', [self, fWorkName]);
@@ -116,7 +117,7 @@ begin
       '8888', [Server], '+', WEBSOCKETS_DEFAULT_MODE);
     try
       // allow the HTTP server to upgrade to WebSockets with binary encryption
-      HttpServer.WebSocketsEnable(Server, PROJECT31_TRANSMISSION_KEY).
+      HttpServer.WebSocketsEnable(Server, LONGWORK_TRANSMISSION_KEY).
         SetFullLog; // full verbose logs for this demo
 
       TextColor(ccLightGreen);
@@ -143,7 +144,7 @@ begin
     begin // enable logging to file and to console
       Level := LOG_VERBOSE;
       EchoToConsole := LOG_VERBOSE;
-      PerThreadLog := ptIdentifiedInOnFile;
+      PerThreadLog := ptIdentifiedInOneFile;
     end;
   WebSocketLog := TSynLog; // verbose log of all WebSockets activity
 

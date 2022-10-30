@@ -141,6 +141,17 @@ begin
   FastSetString(result, S, P - S);
 end;
 
+function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
+procedure _fmt(const Fmt: string; const Args: array of const;
+  var result: RawUtf8); overload;
+begin
+  result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
+end;
+
 
 { ****************** Unicode, Time, File process }
 var
@@ -161,6 +172,11 @@ end;
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 begin
   result := dlsym(Lib, ProcName);
+end;
+
+function LibraryError: string;
+begin
+  result := dlerror;
 end;
 
 
@@ -224,6 +240,8 @@ const
   ICU_VER: array[1..15] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
     '_56', '_58', '_60', '_63', '_66', '_68');
+  ICU_MAX = 80;
+  ICU_MIN = 69; // previous versions are known and listed within ICU_VER[]
   SYSDATA: PAnsiChar = '/system/usr/icu';
   {$else}
   ICU_MAX = 80;
@@ -670,6 +688,28 @@ begin
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
+// try to stabilize MacOS pthreads API calls
+
+function GetCurrentThreadId: TThreadID;
+begin
+  result := system.GetCurrentThreadID();
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := system.TryEnterCriticalSection(cs);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.EnterCriticalSection(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.LeaveCriticalSection(cs);
+end;
+
 {$else}
 
 
@@ -916,12 +956,17 @@ begin
   result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
 end;
 
-procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 begin
-  if Secret then
+  if ReadOnly then
     fpchmod(pointer(FileName), S_IRUSR)
   else
     fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
+end;
+
+procedure FileSetSticky(const FileName: TFileName);
+begin
+  fpchmod(FileName, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -1108,7 +1153,7 @@ end;
 
 function GetErrorText(error: integer): RawUtf8;
 begin
-  result := StrError(error);
+  result := StrError(error); // from FPC RTL: using a OS-specific array of const
 end;
 
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
@@ -1177,6 +1222,41 @@ begin
   // note: nanosleep() adds a few dozen of microsecs for context switching
   fpnanosleep(@timeout, nil);
 end;
+
+
+{ TSynEvent }
+
+constructor TSynEvent.Create;
+begin
+  fHandle := RTLEventCreate;
+end;
+
+destructor TSynEvent.Destroy;
+begin
+  RTLEventDestroy(fHandle);
+  inherited Destroy;
+end;
+
+procedure TSynEvent.ResetEvent;
+begin
+  RTLEventResetEvent(fHandle);
+end;
+
+procedure TSynEvent.SetEvent;
+begin
+  RTLEventSetEvent(fHandle);
+end;
+
+procedure TSynEvent.WaitFor(TimeoutMS: integer);
+begin
+  RTLEventWaitFor(fHandle, TimeoutMS);
+end;
+
+procedure TSynEvent.WaitForEver;
+begin
+  RTLEventWaitFor(fHandle);
+end;
+
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
@@ -1338,13 +1418,20 @@ begin
   // not implemented yet - but not needed either
 end;
 
-function UnixKeyPending: boolean;
+function WaitReadPending(fd, timeout: integer): boolean;
 var
-  fdsin: tfdSet;
+  p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
+  // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
-  fpFD_ZERO(fdsin);
-  fpFD_SET(StdInputHandle, fdsin);
-  result := fpSelect(StdInputHandle + 1, @fdsin, nil, nil, 0) > 0;
+  p.fd := fd;
+  p.events := POLLIN or POLLPRI;
+  p.revents := 0;
+  result := FpPoll(@p, 1, timeout) > 0;
+end;
+
+function UnixKeyPending: boolean;
+begin
+  result := WaitReadPending(StdInputHandle, 0);
 end;
 
 procedure ConsoleWaitForEnterKey;
@@ -1382,6 +1469,11 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
+function ConsoleToUtf8(const S: RawByteString): RawUtf8;
+begin
+  result := S; // expect a UTF-8 console under Linux/BSD
+end;
+
 {$I+}
 
 
@@ -1412,7 +1504,7 @@ begin
       // detect translation
       if VI.VarFileInfo.Count > 0 then
         with VI.VarFileInfo.Items[0] do
-          LanguageInfo := Format('%.4x%.4x', [language, codepage]);
+          LanguageInfo := _fmt('%.4x%.4x', [language, codepage]);
       if LanguageInfo = '' then
       begin
         // take first language
@@ -1565,6 +1657,69 @@ begin
   end;
 end;
 
+function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
+
+const
+  // on POSIX, we store the SMBIOS data in a local cache for non-root users
+  SMB_CACHE = '/var/tmp/.synopse.smb';
+  SMB_FLAGS = $010003ff; // assume 3.0 SMB is good enough
+  // local storage of fallback UUID
+  UUID_CACHE = '/var/tmp/.synopse.uid';
+  // note: /var/tmp is cleaned up by systemd after 30 days so we set S_ISVTX
+  //   see https://systemd.io/TEMPORARY_DIRECTORIES
+
+function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+begin
+  result := GetRawSmbiosFromMem(info);
+  if result then
+    exit;
+  PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
+  info.Data := StringFromFile(SMB_CACHE); // cache is better than PosixInject
+  if (info.Data <> '') and
+     (CompressSynLZ(info.Data, false) = '') then
+    info.Data := ''; // tampered file
+  if info.Data = '' then
+    if Assigned(PosixInject.GetSmbiosData) then
+    begin
+      info.Data := PosixInject.GetSmbiosData; // e.g. from mormot.core.os.mac
+      if info.Data <> '' then
+        PCardinal(@info)^ := SMB_FLAGS - 1; // mark retrieved from PosixInject
+    end;
+  if info.Data = '' then
+    exit;
+  info.Length := length(info.Data);
+  result := true;
+end;
+
+procedure PosInjectSmbiosInfo(var info: TSmbiosBasicInfos);
+var
+  i: TSmbiosBasicInfo;
+begin
+  if Assigned(PosixInject.GetSmbios) then // e.g. from mormot.core.os.mac
+    for i := succ(low(i)) to high(i) do
+      if info[i] = '' then
+        info[i] := PosixInject.GetSmbios(i);
+end;
+
+procedure _AfterDecodeSmbios(var info: TRawSmbiosInfo);
+var
+  s: RawByteString;
+begin
+  // complete information e.g. from mormot.core.os.mac
+  if Assigned(PosixInject.GetSmbios) then
+    PosInjectSmbiosInfo(_Smbios);
+  // check if require persistence after some HW changes
+  if (PCardinal(@info)^ = SMB_FLAGS) or
+     (CompressSynLZGetHash32(StringFromFile(SMB_CACHE)) = Hash32(info.Data)) then
+    exit;
+  // cache raw SMBIOS data for non-root users
+  s := info.Data;
+  CompressSynLZ(s, true); // SynLZ + Hash32 to avoid tampered file
+  FileFromString(s, SMB_CACHE);
+  FileSetSticky(SMB_CACHE);
+  DeleteFile(UUID_CACHE); // this file is now superfluous and maybe inconsistent
+end;
+
 function SeemsRealPointer(p: pointer): boolean;
 begin
   // let the GPF happen silently in the kernel (validated on Linux only)
@@ -1625,10 +1780,86 @@ var
   avg: TLoadAvg;
 begin
   if getloadavg(avg, 3) = 3 then
-    result := Format('%g %g %g', [avg[0], avg[1], avg[2]])
+    result := _fmt('%g %g %g', [avg[0], avg[1], avg[2]])
   else
     result := '';
 end;
+
+{$ifdef OSFREEBSD}
+
+const
+  KENV_GET = 0;
+  KENV_SET = 1;
+
+function kenv(action: integer; name, value: PAnsiChar; len: integer): integer;
+  cdecl external clib name 'kenv';
+
+function GetSmbEfiMem: RawByteString;
+var
+  tmp: array[byte] of AnsiChar;
+  xaddr: PtrUInt;
+begin
+  result := '';
+  if kenv(KENV_GET, 'hint.smbios.0.mem', @tmp, SizeOf(tmp)) < 0 then
+    exit;
+  xaddr := PosixParseHex32(@tmp); // typical value is '0xf05b0'
+  if xaddr <> 0 then
+    result := ReadSystemMemory(xaddr, 1024); // 32 bytes is enough
+end;
+
+const
+  _KNOWN: array[0..14] of record
+    id: TSmbiosBasicInfo;
+    fn: RawUtf8;
+  end = (
+    (id: sbiBiosVendor;        fn: 'bios.vendor'),
+    (id: sbiBiosVersion;       fn: 'bios.version'),
+    (id: sbiBiosDate;          fn: 'bios.reldate'),
+    (id: sbiManufacturer;      fn: 'system.maker'),
+    (id: sbiProductName;       fn: 'system.product'),
+    (id: sbiVersion;           fn: 'system.version'),
+    (id: sbiSerial;            fn: 'system.serial'),
+    (id: sbiUuid;              fn: 'system.uuid'),
+    (id: sbiSku;               fn: 'system.sku'),
+    (id: sbiFamily;            fn: 'system.family'),
+    (id: sbiBoardManufacturer; fn: 'planar.maker'),
+    (id: sbiBoardProductName;  fn: 'planar.product'),
+    (id: sbiBoardVersion;      fn: 'planar.version'),
+    (id: sbiBoardSerial;       fn: 'planar.serial'),
+    (id: sbiBoardAssetTag;     fn: 'planar.tag')
+  );
+
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+var
+  i: PtrInt;
+  tmp: array[byte] of AnsiChar;
+begin
+  for i := 0 to high(_KNOWN) do
+    with _KNOWN[i] do
+      if kenv(KENV_GET, PAnsiChar('smbios.' + fn), @tmp, SizeOf(tmp)) >= 0 then
+        info[id] := TrimU(tmp);
+end;
+
+{$else}
+
+// help is needed to implement those on buggy Mac OS
+// may fallback to PosixInject wrappers from mormot.core.os.mac
+
+function GetSmbEfiMem: RawByteString;
+begin
+  result := '';
+end;
+
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+begin
+  result := '';
+end;
+
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+end;
+
+{$endif OSFREEBSD}
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
@@ -1667,7 +1898,7 @@ begin
   e.i[7] := e.i[7] xor us;
 end;
 
-{$else}
+{$else} // Linux-specific code
 
 const
   // function DirectoryFileNames(const Folder: TFileName): TFileNameDynArray; ?
@@ -1795,14 +2026,97 @@ begin
   DoHash128File(e.h0, '/proc/self/statm');
   DoHash128File(e.h0, '/proc/self/stat');
   DoHash128File(e.h1, '/proc/stat');
-  // read-only random UUID text like '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
+  // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
   DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt); // should have changed in-between
   DefaultHasher128(@e.h3, @rt, SizeOf(rt));
 end;
 
+{$ifdef OSANDROID}
+
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+end;
+
+{$else} // pure Linux
+
+const
+  // note: reading /sys/class/dmi/id/* is likely to require root access
+  _KNOWN: array[0..14] of record
+    id: TSmbiosBasicInfo;
+    fn: string;
+  end = (
+    (id: sbiBiosVendor;        fn: 'bios_vendor'),
+    (id: sbiBiosVersion;       fn: 'bios_version'),
+    (id: sbiBiosDate;          fn: 'bios_date'),
+    (id: sbiManufacturer;      fn: 'sys_vendor'),
+    (id: sbiProductName;       fn: 'product_name'),
+    (id: sbiVersion;           fn: 'product_version'),
+    (id: sbiSerial;            fn: 'product_serial'),
+    (id: sbiUuid;              fn: 'product_uuid'),
+    (id: sbiSku;               fn: 'product_sku'),
+    (id: sbiFamily;            fn: 'product_family'),
+    (id: sbiBoardManufacturer; fn: 'board_vendor'),
+    (id: sbiBoardProductName;  fn: 'board_name'),
+    (id: sbiBoardVersion;      fn: 'board_version'),
+    (id: sbiBoardSerial;       fn: 'board_serial'),
+    (id: sbiBoardAssetTag;     fn: 'board_asset_tag')
+  );
+
+procedure ParseHex(p: PAnsiChar; b: PByte; n: integer); forward;
+
+procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(_KNOWN) do
+    with _KNOWN[i] do
+      info[id] := TrimU(StringFromFile('/sys/class/dmi/id/' + fn, {nosize=}true));
+  // note: /var/lib/dbus/machine-id and /etc/machine-id are SW generated from
+  // random at system install so do NOT match sbiUuid HW DMI value - see
+  // https://www.freedesktop.org/software/systemd/man/machine-id.html
+end;
+
+{$endif OSANDROID}
+
 {$endif OSBSDDARWIN}
+
+{$ifndef OSDARWIN} // on POSIX systems, /dev/mem may be available from root
+function ReadSystemMemory(address, size: PtrUInt): RawByteString;
+var
+  mem: cInt;
+  map: PAnsiChar;
+  off: PtrUInt;
+begin
+  result := '';
+  if size > 4 shl 20 then
+    exit; // read up to 4MB
+  mem := FpOpen('/dev/mem', O_RDONLY, 0);
+  if mem <= 0 then
+    exit;
+  // Fpmmap() is more complex but works around problems using plain read() calls
+  off := address mod SystemInfo.dwPageSize;
+  map := Fpmmap(nil, off + size, PROT_READ, MAP_SHARED, mem, address - off);
+  if map <> MAP_FAILED then
+  begin
+    FastSetRawByteString(result, map + off, size);
+    Fpmunmap(map, off + size);
+  end;
+  FpClose(mem);
+end;
+{$endif OSDARWIN}
+
+procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
+begin
+  _DirectSmbiosInfo(info);
+  // from this very same .inc file
+  if info[sbiCpuVersion] = '' then
+    info[sbiCpuVersion] := CpuInfoText;
+  // e.g. from mormot.core.os.mac
+  if Assigned(PosixInject.GetSmbios) then
+    PosInjectSmbiosInfo(info);
+end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 begin
@@ -1896,13 +2210,6 @@ begin
   aTotalBytes := QWord(fs.blocks) * QWord(fs.bsize);
 end;
 
-const
-  {$ifdef OSBSDDARWIN}
-  POSIXMOUNTPOINTS = '/etc/mtab';
-  {$else}
-  POSIXMOUNTPOINTS = '/proc/self/mounts';
-  {$endif OSBSDDARWIN}
-
 function GetDiskPartitions: TDiskPartitions;
 var
   mounts, fs, mnt, typ: RawUtf8;
@@ -1912,9 +2219,14 @@ var
   av, fr, tot: QWord;
 begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
-  mounts := StringFromFile(POSIXMOUNTPOINTS, {hasnosize=}true);
+  {$ifdef OSLINUXANDROID}
+  mounts := StringFromFile('/proc/self/mounts', {hasnosize=}true);
+  if mounts = '' then
+  {$endif OSLINUXANDROID}
+    mounts := StringFromFile('/etc/mtab', {hasnosize=}true);
   n := 0;
   p := pointer(mounts);
+  if p <> nil then // e.g. Darwin has no /etc/mtab :(
   repeat
     fs :=  GetNextItem(p);
     mnt := GetNextItem(p);
@@ -1938,6 +2250,8 @@ begin
   //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         if n = length(result) then
           SetLength(result, NextGrow(n));
+        if length(fs) > 24 then
+          fs := copy(fs, 1, 24) + '..';
         result[n].name := fs;
         result[n].mounted := fn;
         result[n].size := tot;
@@ -2087,7 +2401,7 @@ procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogInfo;
   si_code: integer;
-  text: ShortString; // code below has no memory allocation
+  text: string[4]; // code below has no memory allocation
 begin
   if Assigned(SynDaemonInterceptLog) then
   begin
@@ -2101,7 +2415,7 @@ begin
       SIGABRT:
         text := 'ABRT';
     else
-      str(Sig, text);
+      text := 'SIG';
     end;
     if Sig = SIGTERM then
       // polite quit
@@ -2233,6 +2547,14 @@ begin
   result := Format('%s.%s.pid', [result, Executable.ProgramName]);
 end;
 
+function RunUntilSigTerminatedState: TServiceState;
+begin
+  if FileExists(RunUntilSigTerminatedPidFile) then
+    result := ssRunning
+  else
+    result := ssStopped;
+end;
+
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
 var
   pid: PtrInt;
@@ -2248,12 +2570,12 @@ begin
     if fpgeterrno <> ESysESRCH then
       exit
     else
-    // ESysESRCH = no such process -> try to delete the .pid file
-    if DeleteFile(pidfilename) then
-    begin
-      result := true; // process crashed or hard reboot -> nothing to kill
-      exit;
-    end;
+      // ESysESRCH = no such process -> try to delete the .pid file
+      if DeleteFile(pidfilename) then
+      begin
+        result := true; // process crashed or hard reboot -> nothing to kill
+        exit;
+      end;
   if waitseconds <= 0 then
   begin
     result := true;
@@ -2268,7 +2590,7 @@ begin
   until result or
         (GetTickCount64 > tix);
   if not result then
-    fpkill(pid, SIGKILL); // finesse
+    fpkill(pid, SIGKILL); // murder with finesse
 end;
 
 procedure CleanAfterFork;
@@ -2472,10 +2794,85 @@ begin
   end;
 end;
 
+function RunRedirect(const cmd: TFileName; exitcode: PInteger;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
+var
+  // note: FPC popen(file) allows access to the pid whereas clib popen() won't
+  f: file;
+  fd: THandle;
+  pid, res: cint;
+  u: RawUtf8;
+  n, l: TSsize;
+  wait: cardinal;
+  endtix: Int64;
+  tmp: array[word] of byte; // 64KB stack buffer
+begin
+  result := '';
+  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd
+    exit;
+  fd := TFileRec(f).Handle;
+  pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
+  wait := 200;
+  if waitfordelayms = INFINITE then
+    endtix := 0
+  else
+  begin
+    endtix := GetTickCount64 + waitfordelayms;
+    if waitfordelayms < wait then
+      wait := waitfordelayms;
+  end;
+  l := 0;
+  repeat
+    if WaitReadPending(fd, wait) then
+    begin
+      n := fpread(fd, tmp, SizeOf(tmp));
+      if n <= 0 then
+        break; // pipe closed = execution finished
+      SetLength(result, l + n);
+      MoveFast(tmp, PByteArray(result)[l], n);
+      inc(l, n);
+      if Assigned(onoutput) then
+      begin
+        FastSetString(u, @tmp, n); // assume console output is UTF-8 on POSIX
+        if onoutput(u) then
+          endtix := 1; // force kill() on abort
+      end;
+    end
+    else if Assigned(onoutput) and // idle
+            onoutput('') then
+      endtix := 1; // returned true to abort -> kill()
+    if (endtix <> 0) and
+       (GetTickCount64 > endtix) then
+    begin
+      fpkill(pid, SIGKILL); // abort process execution after timeout
+      pid := 0;
+      break;
+    end;
+  until false;
+  res := pclose(f);
+  if exitcode <> nil then
+    if pid = 0 then
+      exitcode^ := -1
+    else
+      exitcode^ := res;
+end;
+
 
 { ****************** Gather Operating System Information }
 
-{$ifndef OSANDROID}
+{$ifdef OSANDROID}
+
+function GetSmbEfiMem: RawByteString;
+begin
+  result := '';
+end;
+
+function getpagesize: integer;
+begin
+  result := 4096;
+end;
+
+{$else}
 function getpagesize: integer; cdecl; external clib;
 {$endif OSANDROID}
 
@@ -2520,6 +2917,57 @@ function gettimeofday_c(tp: ptimeval; tzp: ptimezone): cint;
 begin
   // it is much faster to not use the Linux syscall but the libc vDSO call
   result := gettimeofday(tp, tzp);
+end;
+
+function GetSmbEfiMem: RawByteString;
+var
+  efi, addr: RawUtf8;
+  xaddr: cardinal;
+begin
+  // retrieve raw EFI information from systab
+  result := '';
+  xaddr := 0;
+  efi := StringFromFile('/sys/firmware/efi/systab', {nosize=}true);
+  if efi = '' then
+    efi := StringFromFile('/proc/efi/systab'{nosize=}); // old Linux up to 2.6.6
+  if efi = '' then
+    exit;
+  FindNameValue(efi, 'SMBIOS', addr);
+  xaddr := PosixParseHex32(pointer(addr));
+  if xaddr <> 0 then
+    result := ReadSystemMemory(xaddr, 32); // 32 bytes is enough
+end;
+
+// on Android, /sys/class/net is not readable from the standard user :(
+function _GetSystemMacAddress: TRawUtf8DynArray;
+var
+  SR: TSearchRec;
+  fn: TFileName;
+  f: RawUtf8;
+begin
+  result := nil;
+  if FindFirst('/sys/class/net/*', faDirectory, SR) <> 0 then
+    exit;
+  repeat
+    if (SR.Name <> 'lo') and
+       not IdemPChar(pointer(SR.Name), 'DOCKER') and
+       SearchRecValidFolder(SR) then
+    begin
+      fn := '/sys/class/net/' + SR.Name;
+      f := StringFromFile(fn + '/flags', {nosize=}true);
+      if (length(f) > 2) and // e.g. '0x40' or '0x1043'
+         (PosixParseHex32(pointer(f)) and {IFF_LOOPBACK:}8 = 0) then
+      begin
+        f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
+        if f <> '' then
+        begin
+          SetLength(result, length(result) + 1);
+          result[high(result)] := f;
+        end;
+      end;
+    end;
+  until FindNext(SR) <> 0;
+  FindClose(SR);
 end;
 
 {$endif OSLINUX}
@@ -2621,6 +3069,25 @@ begin
   until false;
 end;
 
+procedure ParseHex(p: PAnsiChar; b: PByte; n: integer);
+var
+  v0, v1: integer;
+begin
+  repeat // caller ensured p<>nil and b<>nil and n>0
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+      break;
+    inc(p);
+    b^ := (v0 shl 4) or v1;
+    inc(b);
+    dec(n);
+  until n = 0;
+end;
+
 procedure ParseHex32Add(p: PAnsiChar; var result: TIntegerDynArray);
 var
   v: integer;
@@ -2667,25 +3134,6 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 {$endif OSLINUXANDROID}
 {$endif CPUAARCH64}
 
-function KB(Size: cardinal): shortstring;
-begin
-  if Size >= 1 shl 30 then
-  begin
-    str(Size shr 30, result);
-    result := result + 'GB';
-  end
-  else if Size >= 1 shl 20 then
-  begin
-    str(Size shr 20, result);
-    result := result + 'MB';
-  end
-  else
-  begin
-    str(Size shr 10, result);
-    result := result + 'KB';
-  end
-end;
-
 procedure InitializeSpecificUnit;
 var
   P: PAnsiChar;
@@ -2708,7 +3156,9 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
+  {$ifndef OSDARWIN}
   tm: TThreadManager;
+  {$endif OSDARWIN}
 begin
   // retrieve Kernel and Hardware information
   StdOutIsTTY := (IsATTY(StdOutputHandle) = 1) and
@@ -2716,12 +3166,9 @@ begin
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
-  {$ifdef OSANDROID}
-  SystemInfo.dwPageSize := 4096;
-  {$else}
   SystemInfo.dwPageSize := getpagesize; // call libc API
-  {$endif OSANDROID}
   {$ifdef OSBSDDARWIN}
+  // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
   FastSetString(BiosInfoText, beg, StrLen(beg));
@@ -2729,6 +3176,7 @@ begin
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
   {$ifdef OSDARWIN}
+  // pure MACOS branch
   CpuCache[1].LineSize := fpsysctlhwint(HW_CACHELINE);
   CpuCache[1].Size := fpsysctlhwint(HW_L1DCACHESIZE);
   CpuCache[2].LineSize := fpsysctlhwint(HW_CACHELINE);
@@ -2737,15 +3185,19 @@ begin
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[1].Size;
   if CpuCacheSize <> 0 then
-    CpuCacheText := 'L1=' + KB(CpuCache[1].Size) + ' L2=' + KB(CpuCache[2].Size);
+    CpuCacheText := 'L1=' + _oskb(CpuCache[1].Size) +
+                   ' L2=' + _oskb(CpuCache[2].Size);
   {$endif OSDARWIN}
   {$else}
   {$ifdef OSANDROID}
+  // pure ANDROID branch
   release := GetSystemProperty('ro.build.version.release');
   prod := TrimU(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
                         GetSystemProperty('ro.product.name') + ' ' +
                         GetSystemProperty('ro.product.device')));
   {$else}
+  // pure LINUX branch
+  GetSystemMacAddress := _GetSystemMacAddress;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
@@ -2875,7 +3327,7 @@ begin
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   if CpuCacheSize <> 0 then
-    CpuInfoText := KB(CpuCacheSize) + ' cache';
+    CpuInfoText := _oskb(CpuCacheSize) + ' cache';
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
@@ -2884,7 +3336,7 @@ begin
                     GetNextCardinal(P) shl 8 +
                     GetNextCardinal(P);
   OSVersion32.os := OS_KIND;
-  MoveSmall(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit version
+  MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit version
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
@@ -2900,26 +3352,27 @@ begin
   if SystemInfo.dwNumberOfProcessors = 0 then
     SystemInfo.dwNumberOfProcessors := 1;
   if modname = nil then
-    CpuInfoText := Format('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
+    CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
       [SystemInfo.dwNumberOfProcessors, CpuInfoText])
   else
-    CpuInfoText := Format('%d x %s %s (' + CPU_ARCH_TEXT + ')',
+    CpuInfoText := _fmt('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  GetThreadManager(tm); // for inlined RTL calls (avoid one level of redirection)
-  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
-  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
-  @EnterCriticalSection    := @tm.EnterCriticalSection;
-  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
   {$else}
+  // for inlined RTL calls (avoid one level of redirection)
+  GetThreadManager(tm);
+  @GetCurrentThreadId      := @tm.GetCurrentThreadId;
+  @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
+  @EnterCriticalSection    := @tm.EnterCriticalSection;
+  @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;

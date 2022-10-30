@@ -35,6 +35,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
   mormot.db.core,
@@ -204,7 +205,7 @@ type
     {$A8} // un-packed records
   {$else}
     {$A-} // packed records
-  {$endif}
+  {$endif CPU64}
   TSqlDBOleDBStatementParam = record
     /// storage used for BLOB (ftBlob) values
     // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
@@ -241,7 +242,7 @@ type
   end;
   {$ifdef CPU64}
     {$A-} // packed records
-  {$endif}
+  {$endif CPU64}
   POleDBStatementParam = ^TSqlDBOleDBStatementParam;
 
   /// used to store properties about TSqlDBOleDBStatement Parameters
@@ -460,12 +461,8 @@ type
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// return a Column as a variant
     // - this implementation will retrieve the data with no temporary variable
     // (since TQuery calls this method a lot, we tried to optimize it)
@@ -1093,9 +1090,8 @@ begin
   end;
 end;
 
-procedure TSqlDBOleDBStatement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBOleDBStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
-  col: integer;
   C: PSqlDBColumnProperty;
   V: PColumnValue;
 label
@@ -1104,62 +1100,51 @@ begin
   // dedicated version to avoid as much memory allocation than possible
   if CurrentRow <= 0 then
     raise EOleDBException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
-  if WR.Expand then
-    WR.Add('{');
-  c := pointer(fColumns);
-  for col := 1 to fColumnCount do // fast direct conversion from OleDB buffers
-  begin
-    if WR.Expand then
-      WR.AddFieldName(c^.ColumnName); // add '"ColumnName":'
-    V := @fRowSetData[c^.ColumnAttr];
-    case TSqlDBOleDBStatus(V^.Status) of
-      stOK:
-Write:  case c^.ColumnType of
-          ftInt64:
-            WR.Add(V^.Int64);
-          ftDouble:
-            WR.AddDouble(V^.Double);
-          ftCurrency:
-            WR.AddCurr64(@V^.Int64);
-          ftDate:
-            begin
-              WR.Add('"');
-              WR.AddDateTime(@V^.Double, 'T', #0, fForceDateWithMS);
-              WR.Add('"');
-            end;
-          ftUtf8:
-            begin
-              WR.Add('"');
-              WR.AddJsonEscapeW(ColPtr(C, V), V^.Length shr 1);
-              WR.Add('"');
-            end;
-          ftBlob:
-            if fForceBlobAsNull then
-              WR.AddNull
-            else
-              WR.WrBase64(ColPtr(C, V), V^.Length, true); // withMagic=true
-        else
-          WR.AddNull;
-        end;
-      stIsNull:
-        WR.AddNull;
-      stTruncated:
-        begin
-          LogTruncatedColumn(self, C^);
-          goto Write;
-        end;
-    else
-      begin
-        WR.AddNull;
-        LogStatusError(V^.Status, C);
+  c := @fColumns[Col]; // fast direct conversion from OleDB buffers
+  V := @fRowSetData[c^.ColumnAttr];
+  case TSqlDBOleDBStatus(V^.Status) of
+    stOK:
+Write:case c^.ColumnType of
+        ftInt64:
+          W.Add(V^.Int64);
+        ftDouble:
+          W.AddDouble(V^.Double);
+        ftCurrency:
+          W.AddCurr64(@V^.Int64);
+        ftDate:
+          begin
+            W.Add('"');
+            W.AddDateTime(@V^.Double, 'T', #0, fForceDateWithMS);
+            W.Add('"');
+          end;
+        ftUtf8:
+          begin
+            W.Add('"');
+            if V^.Length > 1 then
+              W.AddJsonEscapeW(ColPtr(C, V), V^.Length shr 1);
+            W.Add('"');
+          end;
+        ftBlob:
+          if fForceBlobAsNull then
+            W.AddNull
+          else
+            W.WrBase64(ColPtr(C, V), V^.Length, true); // withMagic=true
+      else
+        W.AddNull;
       end;
+    stIsNull:
+      W.AddNull;
+    stTruncated:
+      begin
+        LogTruncatedColumn(self, C^);
+        goto Write;
+      end;
+  else
+    begin
+      W.AddNull;
+      LogStatusError(V^.Status, C);
     end;
-    WR.AddComma;
-    inc(c);
   end;
-  WR.CancelLastComma; // cancel last ','
-  if WR.Expand then
-    WR.Add('}');
 end;
 
 function TSqlDBOleDBStatement.ParamToVariant(Param: integer; var Value: Variant;
@@ -1486,7 +1471,7 @@ var
   sav: integer;
 begin
 {  if not Assigned(fCommand) then
-    raise EOleDBException.CreateUtf8('%.Execute should be called before Step',[self]); }
+    raise EOleDBException.CreateUtf8('%.Execute should be called before Step', [self]); }
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
@@ -1866,7 +1851,7 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
     if not Succeeded(aResult) or
            (fOleDBErrorMessage <> '') then
     begin
-      s := SysErrorMessage(aResult);
+      s := string(GetErrorText(aResult));
       if s = '' then
         s := 'OLEDB Error ' + IntToHex(aResult, 8);
       if s <> fOleDBErrorMessage then

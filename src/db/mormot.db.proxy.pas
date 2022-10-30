@@ -331,8 +331,8 @@ type
     function ColumnString(Col: integer): string; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// return all columns values into JSON content
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
     /// direct access to the data buffer of the current row
     // - points to Double/Currency value, or variable-length Int64/UTF-8/Blob
     // - points to nil if the column value is NULL
@@ -1339,7 +1339,7 @@ begin
     for F := 0 to colcount - 1 do
     begin
       FromVarString(Data, colname);
-      prop := fColumn.AddAndMakeUniqueName(colname);
+      prop := AddColumn(colname);
       prop^.ColumnType := TSqlDBFieldType(Data^);
       inc(Data);
       prop^.ColumnValueDBSize := FromVarUInt32(Data);
@@ -1407,8 +1407,9 @@ begin
           begin
             len := FromVarUInt32(Reader);
             if not IgnoreColumnDataSize then
-              if len > fColumns[F].ColumnDataSize then
-                fColumns[F].ColumnDataSize := len;
+              with fColumns[F] do
+                if len > ColumnDataSize then
+                  ColumnDataSize := len;
             inc(Reader, len); // jump string/blob content
           end;
       else
@@ -1421,55 +1422,48 @@ begin
     PtrUInt(Reader) - PtrUInt(fDataCurrentRowValuesStart);
 end;
 
-procedure TSqlDBProxyStatementAbstract.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBProxyStatementAbstract.ColumnToJson(Col: integer; W: TJsonWriter);
 var
-  col, len: PtrInt;
+  len: PtrInt;
   data: PByte;
 begin
-  if WR.Expand then
-    WR.Add('{');
-  for col := 0 to fColumnCount - 1 do
-  begin
-    if WR.Expand then
-      WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    data := fDataCurrentRowValues[col];
-    if data = nil then
-      WR.AddNull
+  data := fDataCurrentRowValues[Col];
+  if data = nil then
+    W.AddNull
+  else
+    case fDataCurrentRowColTypes[Col] of
+      ftInt64:
+        W.Add(FromVarInt64Value(data));
+      ftDouble:
+        W.AddDouble(unaligned(PDouble(data)^));
+      ftCurrency:
+        W.AddCurr64(PInt64(data));
+      ftDate:
+        begin
+          W.Add('"');
+          W.AddDateTime(PDateTime(data)^);
+          W.Add('"');
+        end;
+      ftUtf8:
+        begin
+          W.Add('"');
+          len := FromVarUInt32(data);
+          if len <> 0 then // otherwise W.AddJsonEscape() uses StrLen(data)
+            W.AddJsonEscape(data, len);
+          W.Add('"');
+        end;
+      ftBlob:
+        if fForceBlobAsNull then
+          W.AddNull
+        else
+        begin
+          len := FromVarUInt32(data);
+          W.WrBase64(PAnsiChar(data), len, {withMagic=}true);
+        end;
     else
-      case fDataCurrentRowColTypes[col] of
-        ftInt64:
-          WR.Add(FromVarInt64Value(data));
-        ftDouble:
-          WR.AddDouble(unaligned(PDouble(data)^));
-        ftCurrency:
-          WR.AddCurr64(PInt64(data));
-        ftDate:
-          begin
-            WR.Add('"');
-            WR.AddDateTime(PDateTime(data)^);
-            WR.Add('"');
-          end;
-        ftUtf8:
-          begin
-            WR.Add('"');
-            len := FromVarUInt32(data);
-            WR.AddJsonEscape(data, len);
-            WR.Add('"');
-          end;
-        ftBlob:
-          if fForceBlobAsNull then
-            WR.AddNull
-          else
-          begin
-            len := FromVarUInt32(data);
-            WR.WrBase64(PAnsiChar(data), len, {withMagic=}true);
-          end;
-      end;
-    WR.AddComma;
-  end;
-  WR.CancelLastComma;
-  if WR.Expand then
-    WR.Add('}');
+      raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+        [self, ord(fDataCurrentRowColTypes[Col])]);
+    end;
 end;
 
 procedure TSqlDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
@@ -1912,8 +1906,8 @@ function TSqlDBServerAbstract.Process(Ctxt: THttpServerRequestAbstract): cardina
 var
   o: RawUtf8;
 begin
-  if (Ctxt.Method <> 'POST') or
-     (Ctxt.InContent = '') or
+  if (Ctxt.InContent = '') or
+     not IsPost(Ctxt.Method) or
      not IdemPropNameU(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;

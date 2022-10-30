@@ -38,7 +38,8 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
-  mormot.net.client;
+  mormot.net.client,
+  mormot.crypt.secure;
 
 
 { ******************** Shared Server-Side HTTP Process }
@@ -68,6 +69,9 @@ type
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
       aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
+    /// could be called before Prepare() to reuse an existing instance
+    procedure Recycle(aConnectionID: THttpServerConnectionID;
+      aConnectionFlags: THttpServerRequestFlags);
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -94,19 +98,26 @@ type
   // - some THttpServerGeneric classes may have only partial support of them
   // - hsoHeadersUnfiltered will store all headers, not only relevant (i.e.
   // include raw Content-Length, Content-Type and Content-Encoding entries)
+  // - hsoHeadersInterning triggers TRawUtf8Interning to reduce memory usage
+  // - hsoNoStats will disable low-level statistic counters
   // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - hsoCreateSuspended won't start the server thread immediately
   // - hsoLogVerbose could be used to debug a server in production
   // - hsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
+  // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
+  // is returned (but 401/403) - only implemented by THttpAsyncServer for now
   THttpServerOption = (
     hsoHeadersUnfiltered,
+    hsoHeadersInterning,
     hsoNoXPoweredHeader,
+    hsoNoStats,
     hsoCreateSuspended,
     hsoLogVerbose,
     hsoIncludeDateHeader,
-    hsoEnableTls);
+    hsoEnableTls,
+    hsoBan40xIP);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -154,6 +165,7 @@ type
     function NextConnectionID: integer; // 31-bit internal sequence
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
+    procedure AppendHttpDate(var Dest: TRawByteStringBuffer); virtual;
   public
     /// initialize the server instance
     constructor Create(const OnStart, OnStop: TOnNotifyThread;
@@ -323,9 +335,29 @@ type
 
 const
   /// used to compute the request ConnectionFlags from the socket TLS state
-  HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+  HTTP_TLS_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [],
     [hsrHttps, hsrSecured]);
+  /// used to compute the request ConnectionFlags from connection: upgrade header
+  HTTP_UPG_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+    [],
+    [hsrConnectionUpgrade]);
+
+
+/// some pre-computed CryptCertAlgoOpenSsl[caaRS256].New key for Windows
+// - the associated password is 'pass'
+// - as used e.g. by secTLSSelfSigned with the SChannel API on server side
+function PrivKeyCertPfx: RawByteString;
+
+/// initialize a server-side TLS structure with a self-signed algorithm
+// - as used e.g. by secTLSSelfSigned with the SChannel API on server side
+// - if OpenSSL is available, will generate a temporary pair of key files via
+// Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650) with a random password
+// - on pure SChannel, will use the PrivKeyCertPfx pre-computed constant
+// - you should eventually call DeleteFile(Utf8ToString(TLS.CertificateFile))
+// and DeleteFile(Utf8ToString(TLS.PrivateKeyFile)) to delete the two temp files
+procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
+  Algo: TCryptAsymAlgo = caaRS256);
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -340,6 +372,7 @@ type
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
   // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
+  // - grBanned is triggered by the hsoBan40xIP option
   THttpServerSocketGetRequestResult = (
     grError,
     grException,
@@ -348,7 +381,8 @@ type
     grTimeout,
     grHeaderReceived,
     grBodyReceived,
-    grUpgraded);
+    grUpgraded,
+    grBanned);
 
   {$M+} // to have existing RTTI for published properties
   THttpServer = class;
@@ -496,14 +530,14 @@ type
   protected
     fServerKeepAliveTimeOut: cardinal;
     fServerKeepAliveTimeOutSec: cardinal;
+    fHeaderRetrieveAbortDelay: cardinal;
+    fCompressGz: integer;
     fSockPort: RawUtf8;
     fSock: TCrtSocket;
     fSafe: TLightLock;
     fExecuteMessage: RawUtf8;
-    fHeaderRetrieveAbortDelay: cardinal;
     fNginxSendFileFrom: array of TFileName;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
-    fCompressGz: integer;
     function DoRequest(Ctxt: THttpServerRequest): boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -561,9 +595,14 @@ type
     // the benefit of this method parameters is that the certificates are
     // loaded and checked now by calling InitializeTlsAfterBind, not at the
     // first client connection (which may be too late)
-    procedure WaitStarted(Seconds: integer = 30;
-      const CertificateFile: TFileName = '';
-      const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '');
+    procedure WaitStarted(Seconds: integer; const CertificateFile: TFileName;
+      const PrivateKeyFile: TFileName = ''; const PrivateKeyPassword: RawUtf8 = '';
+      const CACertificatesFile: TFileName = ''); overload;
+    /// ensure the HTTP server thread is actually bound to the specified port
+    // - for hsoEnableTls support, allow to specify all server-side TLS
+    // events, including callbacks, as supported by OpenSSL
+    procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
+      overload;
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
     // - use Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     procedure InitializeTlsAfterBind;
@@ -580,7 +619,7 @@ type
     // - call this method several times to register several folders
     procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
     /// milliseconds delay to reject a connection due to too long header retrieval
-    // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
+    // - default is 0, i.e. not checked (typical behind a reverse proxy)
     property HeaderRetrieveAbortDelay: cardinal
       read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// the low-level thread execution thread
@@ -633,12 +672,23 @@ type
     /// how many HTTP connections were upgraded e.g. to WebSockets
     property StatUpgraded: integer
       index grUpgraded read GetStat;
+    /// how many HTTP connections have been not accepted by hsoBan40xIP option
+    property StatBanned: integer
+      index grBanned read GetStat;
   end;
 
   /// meta-class of our THttpServerSocketGeneric classes
   // - typically implemented by THttpServer, TWebSocketServer,
   // TWebSocketServerRest or THttpAsyncServer classes
   THttpServerSocketGenericClass = class of THttpServerSocketGeneric;
+
+  /// called from THttpServerSocket.GetRequest before OnBeforeBody
+  // - this THttpServer-specific callback allow quick and dirty action on the
+  // raw socket, to bypass the whole THttpServer.Process high-level action
+  // - should return true if the action has been handled, and response has
+  // been sent directly via ClientSock.SockSend/SockSendFlush (as HTTP/1.0)
+  // - should return false to continue as usual with THttpServer.Process
+  TOnHttpServerHeaderParsed = function(ClientSock: THttpServerSocket): boolean of object;
 
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
@@ -652,23 +702,26 @@ type
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
   // and "proxy_request_buffering on" options for best performance, and
   // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
-  // - under windows, will trigger the firewall UAC popup at first run
+  // - under Windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:
   // $ fHttpServer := THttpServer.Create('443', nil, nil, '', 32, 30000, [hsoEnableTls]);
   // $ fHttpServer.WaitStarted('cert.pem', 'privkey.pem', '');  // cert.pfx for SSPI
-  // $ // now certificates will be initialized at first incoming request
+  // $ // now certificates will be initialized and used
   THttpServer = class(THttpServerSocketGeneric)
   protected
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TSynObjectListLocked;
-    fHttpQueueLength: cardinal;
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
+    fHttpQueueLength: cardinal;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerSendBufferSize: integer;
     fExecuteState: THttpServerExecuteState;
+    fMonoThread: boolean;
+    fOnHeaderParsed: TOnHttpServerHeaderParsed;
+    fOnAcceptIdle: TNotifyEvent;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -685,12 +738,23 @@ type
       ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread); virtual;
   public
     /// create a socket-based HTTP Server, ready to be bound and listening on a port
+    // - ServerThreadPoolCount < 0 would use a single thread to rule them all
+    // - ServerThreadPoolCount = 0 would create one thread per connection
+    // - ServerThreadPoolCount > 0 would leverage the thread pool, and create
+    // one thread only for kept-alive or upgraded connections
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
       ProcessOptions: THttpServerOptions = []); override;
     /// release all memory and handlers
     destructor Destroy; override;
+    /// low-level callback called before OnBeforeBody and allow quick execution
+    // directly from THttpServerSocket.GetRequest
+    property OnHeaderParsed: TOnHttpServerHeaderParsed
+      read fOnHeaderParsed write fOnHeaderParsed;
+    /// low-level callback called after 10 seconds of inactive Accept()
+    property OnAcceptIdle: TNotifyEvent
+      read fOnAcceptIdle write fOnAcceptIdle;
   published
     /// will contain the current number of connections to the server
     property ServerConnectionActive: integer
@@ -1290,6 +1354,22 @@ begin
     id^ := 0; // ensure no overflow (31-bit range)
 end;
 
+procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
+  aConnectionFlags: THttpServerRequestFlags);
+begin
+  fConnectionID := aConnectionID;
+  fConnectionFlags := aConnectionFlags;
+  fErrorMessage := '';
+end;
+
+const
+  _CMD_200: array[boolean] of string[17] = (
+    'HTTP/1.1 200 OK'#13#10,
+    'HTTP/1.0 200 OK'#13#10);
+  _CMD_ERR: array[boolean] of string[9] = (
+    'HTTP/1.1 ',
+    'HTTP/1.0 ');
+
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
 
@@ -1314,6 +1394,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   begin
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
+    StatusCodeToReason(fRespStatus, fRespReason);
     FormatUtf8('<body style="font-family:verdana">'#10 +
       '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
       [fServer.ServerName, fRespStatus, fRespStatus, fRespReason,
@@ -1323,6 +1404,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
+  h: PRawByteStringBuffer;
 begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
   // process content
@@ -1332,17 +1414,23 @@ begin
   else if (OutContent <> '') and
           (OutContentType = STATICFILE_CONTENT_TYPE) then
     ProcessStaticFile;
-  StatusCodeToReason(fRespStatus, fRespReason);
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
-  Context.Head.Reset;
-  if hfConnectionClose in Context.HeaderFlags then
-    Context.Head.Append('HTTP/1.0 ')
+  h := @Context.Head;
+  h^.Reset;
+  if fRespStatus = HTTP_SUCCESS then // optimistic approach
+    h^.AppendShort(_CMD_200[hfConnectionClose in Context.HeaderFlags])
   else
-    Context.Head.Append('HTTP/1.1 ');
-  Context.Head.Append([fRespStatus, ' ', fRespReason], {crlf=}true);
-  // custom headers from Request() method
+  begin
+    h^.AppendShort(_CMD_ERR[hfConnectionClose in Context.HeaderFlags]);
+    StatusCodeToReason(fRespStatus, fRespReason);
+    h^.Append(fRespStatus);
+    h^.Append(' ');
+    h^.Append(fRespReason);
+    h^.AppendCRLF;
+  end;
+  // append (and sanitize) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
   begin
@@ -1351,10 +1439,19 @@ begin
       len := BufferLineLength(P, PEnd);
       if len > 0 then // no void line (means headers ending)
       begin
-        if IdemPChar(P, 'CONTENT-ENCODING:') then
-          // custom encoding: don't compress
+        if (PCardinal(P)^ or $20202020 =
+             ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24) and
+           (PCardinal(P + 4)^ or $20202020 =
+             ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24) and
+           (PCardinal(P + 8)^ or $20202020 =
+             ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
+           (PCardinal(P + 12)^ or $20202020 =
+             ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+           (P[16] = ':') then
+          // custom CONTENT-ENCODING: don't compress
           integer(Context.CompressAcceptHeader) := 0;
-        Context.Head.Append(P, len, {crlf=}true); // normalize CR/LF endings
+        h^.Append(P, len); // normalize CR/LF endings
+        h^.AppendCRLF;
         inc(P, len);
       end;
       while P^ in [#10, #13] do
@@ -1362,17 +1459,16 @@ begin
     until P^ = #0;
   end;
   // generic headers
-  Context.Head.Append('Server: ');
-  Context.Head.Append(fServer.ServerName, {crlf=}true);
+  h^.AppendShort('Server: ');
+  h^.Append(fServer.ServerName);
+  h^.AppendCRLF;
   if hsoIncludeDateHeader in fServer.Options then
-  begin
-    SetHttpDateNowUtcCache;
-    Context.Head.Append(HttpDateNowUtcCache);
-  end;
+    fServer.AppendHttpDate(h^);
   if not (hsoNoXPoweredHeader in fServer.Options) then
-    Context.Head.Append(XPOWEREDNAME + ': ' + XPOWEREDVALUE, true);
+    h^.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
+  OutContent := ''; // release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
   // now TAsyncConnectionsSockets.Write(result) should be called
 end;
@@ -1467,6 +1563,11 @@ begin
     RemoteConnID := NextConnectionID;
 end;
 
+procedure THttpServerGeneric.AppendHttpDate(var Dest: TRawByteStringBuffer);
+begin
+  Dest.AppendShort(HttpDateNowUtc);
+end;
+
 function THttpServerGeneric.CanNotifyCallback: boolean;
 begin
   result := (self <> nil) and
@@ -1556,6 +1657,194 @@ begin
 end;
 
 
+const
+  // was generated from InitNetTlsContextSelfSignedServer commented lines
+  PRIVKEY_PFX: array[0..2400] of byte = (
+    $30, $82, $09, $5D, $02, $01, $03, $30, $82, $09, $27, $06, $09, $2A, $86, $48,
+    $86, $F7, $0D, $01, $07, $01, $A0, $82, $09, $18, $04, $82, $09, $14, $30, $82,
+    $09, $10, $30, $82, $03, $C7, $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07,
+    $06, $A0, $82, $03, $B8, $30, $82, $03, $B4, $02, $01, $00, $30, $82, $03, $AD,
+    $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07, $01, $30, $1C, $06, $0A, $2A,
+    $86, $48, $86, $F7, $0D, $01, $0C, $01, $06, $30, $0E, $04, $08, $D4, $F9, $E6,
+    $DE, $12, $70, $DD, $EE, $02, $02, $08, $00, $80, $82, $03, $80, $3A, $91, $73,
+    $2F, $46, $F9, $49, $00, $B6, $90, $5B, $59, $8F, $37, $6F, $19, $6F, $85, $EF,
+    $01, $97, $1D, $CD, $A6, $C5, $04, $DF, $0A, $0F, $87, $28, $59, $80, $9A, $88,
+    $5F, $7F, $8B, $B2, $97, $A5, $13, $6E, $3E, $AB, $04, $B2, $5F, $62, $12, $0B,
+    $30, $A5, $A7, $CC, $54, $9A, $8A, $6B, $6B, $8A, $7F, $0C, $CD, $AF, $BB, $EA,
+    $78, $A5, $7F, $11, $85, $13, $6F, $DB, $61, $40, $D2, $26, $7C, $EB, $99, $A2,
+    $6F, $1B, $A4, $71, $77, $44, $7A, $10, $EC, $02, $3D, $26, $48, $72, $77, $10,
+    $07, $9E, $FE, $75, $20, $7A, $3B, $F2, $D8, $74, $74, $E8, $5C, $FF, $12, $DF,
+    $6C, $ED, $54, $C1, $76, $29, $D7, $2D, $DD, $FA, $3A, $32, $26, $7D, $F0, $31,
+    $CF, $2D, $06, $37, $83, $9B, $39, $92, $2B, $78, $1D, $17, $1A, $D3, $4B, $24,
+    $70, $00, $9F, $66, $8D, $3D, $BE, $05, $E3, $63, $7C, $2E, $58, $F7, $DB, $6D,
+    $4F, $3E, $36, $CF, $0B, $C5, $5F, $B1, $AE, $6D, $E2, $61, $63, $12, $4C, $99,
+    $24, $3E, $C9, $CF, $B9, $97, $20, $4A, $55, $41, $35, $F1, $6C, $43, $9F, $67,
+    $63, $DA, $14, $31, $57, $D2, $13, $B2, $AB, $59, $6B, $30, $D7, $1D, $2C, $54,
+    $ED, $73, $0C, $2D, $AA, $F9, $11, $13, $64, $88, $56, $D8, $B6, $16, $F9, $E7,
+    $9C, $03, $DA, $87, $2F, $7B, $4B, $C2, $EE, $1B, $2C, $53, $06, $74, $D2, $11,
+    $7F, $81, $31, $E8, $EE, $84, $40, $27, $1C, $18, $FA, $66, $02, $B1, $67, $42,
+    $4A, $B9, $4D, $8B, $96, $95, $6B, $AB, $1A, $48, $47, $44, $0E, $63, $2C, $26,
+    $27, $7C, $C1, $C8, $7C, $74, $B8, $1C, $F5, $9D, $6F, $09, $0F, $27, $F0, $B0,
+    $46, $68, $0C, $99, $03, $80, $E5, $81, $2B, $74, $E6, $B4, $02, $12, $AD, $EF,
+    $A8, $E6, $BE, $36, $BF, $24, $2B, $AB, $B5, $4D, $33, $7D, $CD, $A0, $DB, $6D,
+    $19, $68, $C9, $00, $DB, $A3, $D7, $02, $A8, $8A, $FB, $2F, $71, $4A, $A7, $82,
+    $06, $CD, $BC, $E3, $88, $12, $CA, $35, $66, $66, $36, $CF, $2D, $E9, $97, $F8,
+    $C1, $03, $48, $9C, $7A, $F4, $5F, $F5, $BC, $FD, $67, $62, $90, $19, $25, $62,
+    $03, $B2, $B1, $AE, $27, $FF, $A0, $D5, $47, $0E, $A1, $21, $29, $C8, $A5, $19,
+    $D3, $D5, $F1, $0C, $51, $5B, $4A, $DB, $FB, $D8, $A6, $49, $DB, $3A, $8E, $9D,
+    $64, $BE, $24, $01, $80, $F0, $35, $4E, $DA, $83, $5A, $DB, $83, $D7, $7C, $01,
+    $1B, $5C, $8F, $B3, $D7, $B7, $49, $9F, $AF, $C7, $29, $87, $4D, $73, $EF, $D0,
+    $D7, $BE, $BF, $C2, $09, $60, $BB, $FC, $5B, $64, $24, $04, $E6, $09, $9A, $19,
+    $68, $61, $9C, $DA, $62, $5E, $A4, $8A, $38, $5D, $DE, $BD, $4F, $BF, $78, $04,
+    $6D, $CE, $9A, $E2, $E4, $E7, $93, $A1, $E9, $CA, $F1, $3D, $9B, $E5, $14, $C8,
+    $98, $FB, $29, $B0, $1F, $01, $48, $40, $80, $67, $2B, $F2, $30, $21, $1E, $A9,
+    $4A, $B4, $8C, $BE, $DD, $9B, $3E, $2D, $82, $37, $63, $51, $24, $17, $AC, $9A,
+    $49, $BD, $AF, $DF, $2C, $CE, $BC, $D5, $A9, $43, $1F, $7A, $9A, $BF, $7B, $5A,
+    $3E, $F3, $12, $55, $67, $7D, $97, $9B, $B6, $35, $4F, $D4, $97, $DF, $2C, $D9,
+    $40, $32, $1B, $92, $8E, $25, $6E, $F0, $7A, $48, $41, $2B, $9F, $55, $7E, $D2,
+    $E5, $58, $85, $BA, $73, $51, $5C, $3F, $95, $18, $F6, $9B, $6A, $8D, $85, $25,
+    $A2, $5E, $F0, $4F, $F7, $96, $51, $CA, $AC, $FF, $C9, $CC, $96, $4F, $C6, $B0,
+    $63, $60, $C1, $50, $9A, $5B, $0D, $CA, $8F, $19, $CC, $87, $89, $6A, $31, $0F,
+    $10, $DF, $C8, $26, $64, $09, $2E, $59, $94, $22, $24, $E7, $5B, $59, $EB, $86,
+    $F9, $99, $EE, $39, $28, $14, $0C, $A7, $C4, $1F, $B5, $69, $93, $C1, $CC, $DC,
+    $14, $35, $DE, $A8, $EA, $14, $6F, $C0, $D3, $13, $98, $2A, $A9, $55, $D6, $B6,
+    $D4, $84, $0C, $92, $B2, $64, $28, $B5, $0F, $89, $A4, $F2, $7F, $3B, $3C, $35,
+    $5D, $0B, $4A, $42, $6B, $CF, $B4, $70, $78, $B3, $5E, $3E, $3D, $6E, $86, $29,
+    $5F, $F0, $27, $9A, $31, $A5, $6F, $94, $AB, $22, $8D, $E7, $FB, $21, $72, $DA,
+    $5A, $CF, $7B, $6A, $23, $F7, $6C, $05, $6D, $E1, $17, $24, $36, $7C, $3F, $56,
+    $A7, $F4, $96, $8D, $B1, $9E, $D1, $90, $F0, $9D, $F8, $32, $4B, $24, $B5, $5B,
+    $30, $B6, $B1, $3E, $9D, $D0, $FC, $56, $19, $41, $0A, $90, $CB, $E2, $BF, $E4,
+    $55, $D1, $F1, $14, $AF, $90, $B2, $13, $4E, $16, $2A, $1B, $43, $D9, $34, $14,
+    $17, $C8, $8A, $FE, $1C, $A0, $66, $40, $5E, $6B, $9F, $EE, $15, $BF, $90, $D7,
+    $6D, $87, $E2, $03, $10, $2A, $FF, $18, $E5, $A1, $DA, $00, $9B, $B7, $E6, $1E,
+    $3C, $5C, $8A, $36, $1E, $33, $E9, $4D, $89, $DA, $6C, $49, $2F, $0D, $7B, $54,
+    $68, $30, $B3, $AC, $AF, $5F, $6F, $FF, $CB, $EE, $D7, $21, $28, $73, $7D, $32,
+    $32, $D5, $C2, $74, $08, $C3, $01, $7E, $80, $C1, $F4, $CB, $AC, $91, $05, $5D,
+    $B3, $D2, $B6, $95, $D4, $D0, $19, $B8, $25, $46, $D2, $EA, $17, $3A, $BF, $D3,
+    $FF, $DC, $A1, $85, $A8, $56, $01, $1C, $24, $55, $BB, $2D, $6D, $7A, $07, $AC,
+    $C3, $1A, $DC, $93, $97, $60, $9B, $6F, $AA, $4C, $2E, $61, $86, $30, $82, $05,
+    $41, $06, $09, $2A, $86, $48, $86, $F7, $0D, $01, $07, $01, $A0, $82, $05, $32,
+    $04, $82, $05, $2E, $30, $82, $05, $2A, $30, $82, $05, $26, $06, $0B, $2A, $86,
+    $48, $86, $F7, $0D, $01, $0C, $0A, $01, $02, $A0, $82, $04, $EE, $30, $82, $04,
+    $EA, $30, $1C, $06, $0A, $2A, $86, $48, $86, $F7, $0D, $01, $0C, $01, $03, $30,
+    $0E, $04, $08, $04, $E0, $0A, $B0, $D6, $79, $A5, $44, $02, $02, $08, $00, $04,
+    $82, $04, $C8, $7F, $48, $8D, $D1, $AB, $5E, $A1, $D8, $D0, $63, $62, $6A, $D2,
+    $AF, $DD, $20, $DE, $91, $4D, $9A, $2F, $78, $20, $0C, $84, $A2, $C9, $38, $69,
+    $FE, $8A, $AA, $8E, $B6, $3E, $4E, $D7, $CA, $F4, $2E, $6B, $D6, $9D, $C0, $3B,
+    $5A, $4E, $7B, $89, $B8, $86, $38, $29, $87, $08, $A4, $B0, $2A, $ED, $CA, $13,
+    $B2, $FE, $15, $3E, $87, $BD, $1D, $AD, $43, $1F, $62, $93, $C1, $B8, $9F, $93,
+    $46, $74, $B3, $F4, $34, $D3, $9C, $97, $E1, $38, $09, $4C, $F4, $19, $35, $81,
+    $34, $27, $93, $C7, $B3, $FA, $AF, $58, $46, $73, $CC, $56, $91, $9F, $C8, $DC,
+    $6B, $04, $AF, $F1, $67, $65, $3D, $2C, $8E, $D1, $CC, $AC, $B7, $94, $41, $EA,
+    $56, $C4, $45, $ED, $C9, $2C, $BB, $C1, $0F, $05, $06, $73, $03, $33, $D1, $C2,
+    $BC, $34, $B2, $D5, $EA, $78, $5A, $22, $CA, $C3, $B4, $31, $43, $47, $92, $E8,
+    $B4, $21, $F2, $70, $0E, $B5, $1B, $9A, $07, $86, $45, $66, $8F, $DD, $90, $2E,
+    $9B, $AF, $9F, $D4, $04, $42, $EC, $07, $78, $C8, $66, $0F, $19, $AE, $64, $F6,
+    $99, $11, $6C, $71, $DB, $58, $F2, $CE, $13, $29, $FF, $C2, $4A, $C7, $4A, $02,
+    $D8, $28, $F7, $54, $DC, $A8, $FB, $30, $DF, $53, $98, $85, $6D, $3C, $CF, $16,
+    $93, $B9, $8B, $F5, $39, $80, $CD, $84, $36, $0A, $0F, $2F, $A2, $9E, $CB, $9B,
+    $83, $F0, $49, $C5, $34, $B9, $4B, $1D, $5A, $46, $56, $8F, $A8, $05, $E0, $4C,
+    $51, $41, $A4, $6B, $07, $38, $AF, $F4, $43, $81, $8D, $7D, $54, $DD, $85, $DA,
+    $39, $2B, $0E, $EF, $44, $90, $E8, $99, $67, $65, $32, $5B, $F1, $CA, $1F, $CD,
+    $58, $2D, $B3, $1E, $10, $4F, $B5, $6E, $23, $A0, $26, $D3, $22, $A7, $D9, $BD,
+    $CC, $E6, $25, $52, $FE, $00, $70, $B3, $A8, $E6, $BE, $42, $AE, $09, $7A, $AD,
+    $46, $EC, $03, $A5, $12, $D4, $07, $23, $A7, $9E, $7E, $42, $00, $48, $13, $96,
+    $E5, $3B, $55, $13, $2B, $A6, $E6, $6C, $9A, $25, $E0, $53, $27, $B5, $E7, $5F,
+    $2B, $96, $B3, $7C, $77, $A9, $D7, $F7, $14, $C7, $A8, $E1, $19, $0F, $5C, $88,
+    $E4, $F2, $1C, $AD, $71, $E8, $8F, $B2, $F6, $88, $B9, $2A, $57, $63, $EF, $B5,
+    $D7, $CA, $7C, $95, $14, $5E, $9D, $21, $6C, $6F, $87, $37, $88, $B5, $5E, $F1,
+    $8E, $0C, $33, $4B, $32, $A5, $AD, $3C, $B8, $E1, $BC, $1C, $74, $C2, $36, $D4,
+    $14, $37, $96, $1F, $3D, $93, $EF, $23, $5A, $59, $B5, $13, $CD, $34, $C7, $D6,
+    $78, $F5, $DE, $1B, $38, $EC, $70, $D3, $9E, $D4, $08, $EF, $B7, $9C, $34, $14,
+    $12, $9A, $7D, $D0, $7A, $09, $74, $16, $5F, $0E, $88, $CF, $F4, $D7, $F7, $30,
+    $97, $D7, $D2, $18, $FF, $C7, $62, $8D, $37, $D0, $77, $66, $FD, $B3, $EE, $86,
+    $D9, $1B, $9E, $7C, $D0, $D5, $B8, $D7, $F1, $3C, $57, $BE, $51, $07, $A5, $25,
+    $37, $E4, $73, $5E, $60, $B7, $98, $99, $6A, $C1, $F0, $35, $FF, $F6, $D7, $12,
+    $44, $7B, $1E, $70, $BF, $32, $E2, $49, $58, $78, $41, $22, $EE, $B5, $99, $2B,
+    $08, $C6, $A3, $E2, $C6, $65, $06, $8E, $D1, $FB, $CB, $2D, $D9, $0B, $92, $D2,
+    $05, $AB, $91, $EA, $43, $62, $16, $B3, $4B, $73, $7A, $BD, $C5, $41, $A0, $2D,
+    $6D, $28, $44, $A2, $93, $62, $2E, $67, $6B, $4A, $A0, $AB, $5E, $20, $A2, $F3,
+    $00, $56, $B4, $A8, $E8, $A3, $DA, $08, $99, $83, $C2, $AD, $8A, $7F, $85, $70,
+    $3E, $CE, $2F, $39, $06, $77, $A8, $77, $3E, $BF, $E5, $C8, $38, $DC, $68, $28,
+    $35, $49, $C8, $A8, $E3, $FD, $9D, $05, $DC, $70, $4C, $A2, $0D, $2C, $44, $37,
+    $F4, $F3, $B8, $0A, $99, $3C, $97, $10, $92, $77, $58, $B2, $E3, $00, $A2, $0E,
+    $34, $AF, $5F, $C6, $1D, $22, $DD, $34, $57, $DC, $5B, $F1, $F1, $6E, $03, $12,
+    $C2, $6C, $AD, $75, $03, $BF, $CD, $7A, $CD, $52, $0A, $75, $A1, $31, $B5, $19,
+    $DF, $52, $09, $3B, $94, $76, $EE, $1A, $5A, $A8, $8D, $3B, $EE, $B7, $86, $C6,
+    $65, $C7, $E8, $0B, $3C, $B9, $EE, $7D, $80, $22, $89, $3D, $F8, $6C, $9E, $4F,
+    $6E, $C8, $F8, $3A, $54, $76, $B5, $89, $6B, $05, $A5, $C9, $68, $68, $0B, $33,
+    $E5, $55, $E8, $B2, $F9, $39, $DC, $C8, $0A, $13, $94, $01, $D2, $A1, $0A, $42,
+    $F5, $37, $A4, $18, $C9, $97, $BB, $A4, $93, $4C, $49, $BB, $FB, $B0, $F5, $4E,
+    $C5, $D3, $3B, $BD, $A0, $37, $10, $9F, $8F, $E7, $BB, $8A, $6D, $FE, $C3, $6C,
+    $36, $A6, $3D, $C6, $ED, $D0, $7D, $68, $37, $11, $22, $16, $82, $AB, $C4, $02,
+    $EC, $EB, $A0, $7D, $0E, $22, $79, $CE, $6A, $39, $45, $31, $5C, $99, $75, $C3,
+    $6A, $B9, $A1, $00, $2D, $4D, $4D, $F5, $AC, $CC, $1E, $0D, $36, $A7, $36, $40,
+    $53, $6C, $A8, $6C, $B0, $F8, $27, $30, $68, $AE, $06, $39, $A5, $89, $86, $CC,
+    $BB, $B0, $CA, $43, $62, $1D, $71, $6A, $30, $62, $B9, $BC, $DC, $8A, $D1, $23,
+    $04, $6F, $35, $4B, $6F, $81, $B8, $31, $91, $26, $83, $28, $E6, $2E, $D3, $84,
+    $FB, $53, $F9, $6F, $B0, $0E, $37, $E1, $CE, $4D, $6F, $35, $14, $37, $4B, $EE,
+    $31, $46, $EE, $85, $DF, $04, $0D, $3D, $F0, $AC, $D2, $B7, $EF, $AE, $87, $7A,
+    $A8, $C0, $9F, $98, $4E, $E9, $C0, $A6, $7C, $E9, $FF, $D7, $76, $72, $82, $CA,
+    $89, $FB, $94, $9C, $67, $7A, $47, $47, $5C, $2C, $17, $61, $96, $15, $D6, $26,
+    $BB, $0F, $EF, $F0, $C7, $23, $BA, $39, $8A, $08, $B5, $F3, $68, $DE, $54, $80,
+    $15, $A3, $43, $A5, $DA, $0B, $60, $FE, $F9, $BF, $54, $FE, $21, $34, $08, $AB,
+    $0D, $59, $A8, $DC, $8E, $7B, $54, $46, $4D, $F7, $B6, $AC, $DF, $1D, $6F, $50,
+    $9C, $3C, $17, $5D, $19, $4C, $48, $21, $D2, $5B, $F0, $6F, $A7, $2B, $D4, $B0,
+    $87, $FD, $42, $D0, $87, $D3, $BE, $7A, $01, $61, $16, $8A, $A3, $BC, $83, $1D,
+    $BB, $6A, $FB, $51, $EB, $6B, $37, $F9, $1E, $E8, $FF, $0A, $4F, $46, $14, $1C,
+    $04, $EE, $CD, $8D, $4A, $33, $CD, $8D, $4F, $0B, $24, $2C, $E1, $25, $48, $42,
+    $A2, $EB, $04, $F4, $7E, $30, $62, $AE, $CC, $20, $1A, $A6, $38, $5C, $D5, $F3,
+    $27, $07, $81, $75, $9C, $F4, $D0, $87, $79, $6F, $0A, $28, $3D, $A5, $22, $B8,
+    $EC, $C7, $B3, $C0, $F5, $DE, $77, $6C, $7F, $C3, $01, $1E, $FA, $88, $83, $BB,
+    $D0, $9C, $29, $82, $11, $DB, $D0, $99, $C7, $D8, $E0, $2F, $E0, $22, $22, $0D,
+    $2A, $E7, $29, $64, $B3, $72, $A2, $08, $5A, $FA, $08, $86, $D4, $E5, $FE, $05,
+    $08, $64, $CC, $C3, $53, $7F, $9A, $2E, $93, $21, $C2, $FA, $16, $37, $3E, $28,
+    $CF, $CA, $57, $DA, $BB, $15, $1A, $C6, $41, $39, $BE, $D7, $F9, $9E, $78, $1B,
+    $83, $A7, $6D, $1E, $22, $BE, $49, $7F, $64, $41, $5D, $A8, $11, $40, $D7, $AD,
+    $43, $F6, $C3, $9E, $7E, $3A, $95, $2D, $27, $04, $80, $95, $02, $60, $A6, $A6,
+    $55, $25, $BD, $64, $E2, $D0, $99, $B5, $D9, $4B, $42, $F5, $69, $CE, $9A, $FE,
+    $26, $D1, $C4, $9E, $29, $3D, $AF, $85, $2F, $8E, $E0, $0A, $69, $F2, $69, $EE,
+    $66, $C2, $F7, $AB, $81, $BC, $82, $01, $22, $B6, $45, $31, $25, $30, $23, $06,
+    $09, $2A, $86, $48, $86, $F7, $0D, $01, $09, $15, $31, $16, $04, $14, $11, $9C,
+    $AB, $D1, $44, $93, $91, $54, $3C, $52, $A0, $66, $4C, $A5, $99, $DB, $42, $62,
+    $D2, $43, $30, $2D, $30, $21, $30, $09, $06, $05, $2B, $0E, $03, $02, $1A, $05,
+    $00, $04, $14, $E0, $D8, $41, $1F, $76, $85, $94, $B5, $64, $2D, $FD, $59, $27,
+    $CE, $EA, $3B, $B1, $E2, $25, $11, $04, $08, $01, $3E, $2B, $1B, $94, $CF, $41,
+    $11);
+
+function PrivKeyCertPfx: RawByteString;
+begin
+  FastSetRawByteString(result, @PRIVKEY_PFX, SizeOf(PRIVKEY_PFX));
+end;
+
+procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
+  Algo: TCryptAsymAlgo);
+var
+  cert: ICryptCert;
+  certfile, keyfile: TFileName;
+  keypass: RawUtf8;
+begin
+  certfile := TemporaryFileName;
+  if CryptCertAlgoOpenSsl[Algo] = nil then
+  begin
+    FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
+    keypass := 'pass';
+  end
+  else
+  begin
+    keyfile := TemporaryFileName;
+    keypass := CardinalToHexLower(Random32);
+    cert := CryptCertAlgoOpenSsl[Algo].
+              Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
+    cert.SaveToFile(certfile, cccCertOnly, '', ccfPem);
+    cert.SaveToFile(keyfile, cccPrivateKeyOnly, keypass, ccfPem);
+    //writeln(BinToSource('PRIVKEY_PFX', '',
+    //  cert.Save(cccCertWithPrivateKey, 'pass', ccfBinary)));
+  end;
+  InitNetTlsContext(TLS, {server=}true, certfile, keyfile, keypass);
+end;
+
+
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
 { THttpServerSocketGeneric }
@@ -1593,7 +1882,7 @@ begin
     fCompressGz := -1;
 end;
 
-function THttpServerSocketGeneric.WebSocketsEnable(const aWebSocketsURI,
+function THttpServerSocketGeneric.{%H-}WebSocketsEnable(const aWebSocketsURI,
   aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
   aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): pointer;
 begin
@@ -1602,11 +1891,22 @@ begin
 end;
 
 procedure THttpServerSocketGeneric.WaitStarted(Seconds: integer;
-  const CertificateFile, PrivateKeyFile: TFileName; const PrivateKeyPassword: RawUtf8);
+  const CertificateFile, PrivateKeyFile: TFileName;
+  const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
+var
+  tls: TNetTlsContext;
+begin
+  InitNetTlsContext(tls, {server=}true,
+    CertificateFile, PrivateKeyFile, PrivateKeyPassword, CACertificatesFile);
+  WaitStarted(Seconds, @tls);
+end;
+
+procedure THttpServerSocketGeneric.WaitStarted(
+  Seconds: integer; TLS: PNetTlsContext);
 var
   tix: Int64;
 begin
-  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
+  tix := GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
     if Terminated then
       exit;
@@ -1618,22 +1918,40 @@ begin
           [self, fExecuteMessage]);
     end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
-    if mormot.core.os.GetTickCount64 > tix then
+    if GetTickCount64 > tix then
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
   // now the server socket has been bound, and is ready to accept connections
   if (hsoEnableTls in fOptions) and
-     (CertificateFile <> '') and
-     (fSock <> nil) and // may be nil at first
-     not fSock.TLS.Enabled then
+     (TLS <> nil) and
+     (TLS^.CertificateFile <> '') and
+     ((fSock = nil) or
+      not fSock.TLS.Enabled) then
   begin
-    StringToUtf8(CertificateFile, fSock.TLS.CertificateFile);
-    StringToUtf8(PrivateKeyFile, fSock.TLS.PrivateKeyFile);
-    fSock.TLS.PrivatePassword := PrivateKeyPassword;
-    InitializeTlsAfterBind; // validate TLS certificate(s) now
-    sleep(1); // let some warmup happen
+    if fSock = nil then
+      Sleep(5); // paranoid on some servers which propagate the pointer
+    if (fSock <> nil) and
+       not fSock.TLS.Enabled then // call InitializeTlsAfterBind once
+    begin
+      fSock.TLS := TLS^;
+      InitializeTlsAfterBind; // validate TLS certificate(s) now
+      Sleep(1); // let some warmup happen
+    end;
   end;
+end;
+
+function THttpServerSocketGeneric.GetStat(
+  one: THttpServerSocketGetRequestResult): integer;
+begin
+  result := fStats[one];
+end;
+
+procedure THttpServerSocketGeneric.IncStat(
+  one: THttpServerSocketGetRequestResult);
+begin
+  if not (hsoNoStats in fOptions) then
+    LockedInc32(@fStats[one]);
 end;
 
 function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;
@@ -1652,6 +1970,7 @@ begin
     begin
       // execute the main processing callback
       Ctxt.RespStatus := Request(Ctxt);
+      Ctxt.InContent := ''; // release memory ASAP
       cod := DoAfterRequest(Ctxt);
       if cod > 0 then
         Ctxt.RespStatus := cod;
@@ -1673,18 +1992,6 @@ procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
   fServerKeepAliveTimeOut := Value;
   fServerKeepAliveTimeOutSec := Value div 1000;
-end;
-
-function THttpServerSocketGeneric.GetStat(
-  one: THttpServerSocketGetRequestResult): integer;
-begin
-  result := fStats[one];
-end;
-
-procedure THttpServerSocketGeneric.IncStat(
-  one: THttpServerSocketGetRequestResult);
-begin
-  LockedInc32(@fStats[one]);
 end;
 
 function THttpServerSocketGeneric.OnNginxAllowSend(
@@ -1750,9 +2057,9 @@ constructor THttpServer.Create(const aPort: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 begin
-  fInternalHttpServerRespList := TSynObjectListLocked.Create({ownobject=}false);
   if fThreadPool <> nil then
     fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
+  fInternalHttpServerRespList := TSynObjectListLocked.Create({ownobject=}false);
   if fThreadRespClass = nil then
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
@@ -1764,7 +2071,10 @@ begin
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
-  end;
+  end
+  else if ServerThreadPoolCount < 0 then
+    fMonoThread := true; // accept() + recv() + send() in a single thread
+    // setting fHeaderRetrieveAbortDelay may be a good idea
 end;
 
 destructor THttpServer.Destroy;
@@ -1783,12 +2093,12 @@ begin
       Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
     if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
        {dobind=}false, 10, 10, 10, 0, dummy) = nrOK then
-      // Windows TCP/UDP socket may not release Accept() until connected
+      // Windows TCP/UDP socket may not release Accept() until something happen
       dummy.ShutdownAndClose({rdwr=}false);
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;
-  endtix := mormot.core.os.GetTickCount64 + 20000;
+  endtix := GetTickCount64 + 20000;
   try
     if fInternalHttpServerRespList <> nil then // HTTP/1.1 long running threads
     begin
@@ -1807,7 +2117,7 @@ begin
           fInternalHttpServerRespList.Safe.ReadOnlyUnLock;
         end;
         SleepHiRes(10);
-      until mormot.core.os.GetTickCount64 > endtix;
+      until GetTickCount64 > endtix;
       FreeAndNilSafe(fInternalHttpServerRespList);
     end;
   finally
@@ -1832,18 +2142,13 @@ begin
   fHttpQueueLength := aValue;
 end;
 
-{ $define MONOTHREAD}
-// define this not to create a thread at every connection (not recommended)
-
 procedure THttpServer.Execute;
 var
   cltsock: TNetSocket;
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  {$ifdef MONOTHREAD}
   endtix: Int64;
-  {$endif MONOTHREAD}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -1871,47 +2176,61 @@ begin
         cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down
       end;
-      OnConnect;
-      {$ifdef MONOTHREAD}
-      try
-        cltservsock := fSocketClass.Create(self);
-        try
-          cltservsock.AcceptRequest(cltsock, @cltaddr);
-          if hsoEnableTls in fOptions then
-            cltservsock.DoTlsAfter(cstaAccept);
-          endtix := fHeaderRetrieveAbortDelay;
-          if endtix > 0 then
-            inc(endtix, mormot.core.os.GetTickCount64);
-          if cltservsock.GetRequest({withbody=}true, endtix)
-              in [grBodyReceived, grHeaderReceived] then
-            Process(cltservsock, 0, self);
-          OnDisconnect;
-        finally
-          cltservsock.Free;
-        end;
-      except
-        on E: Exception do
-          // do not stop thread on TLS or socket error
-          fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
-      end;
-      {$else}
-      if Assigned(fThreadPool) then
+      if res = nrRetry then // every 10 seconds
       begin
-        // use thread pool to process the request header, and probably its body
+        if Assigned(fOnAcceptIdle) then
+          fOnAcceptIdle(self);
+        continue;
+      end;
+      OnConnect;
+      if fMonoThread then
+        // ServerThreadPoolCount < 0 would use a single thread to rule them all
+        // - may be defined when the server is expected to have very low usage,
+        // e.g. for port 80 to 443 redirection or to implement Let's Encrypt
+        // HTTP-01 challenges (also on port 80) using OnHeaderParsed callback
+        try
+          cltservsock := fSocketClass.Create(self);
+          try
+            cltservsock.AcceptRequest(cltsock, @cltaddr);
+            if hsoEnableTls in fOptions then
+              cltservsock.DoTlsAfter(cstaAccept);
+            endtix := fHeaderRetrieveAbortDelay;
+            if endtix > 0 then
+              inc(endtix, GetTickCount64);
+            case cltservsock.GetRequest({withbody=}true, endtix) of
+              grBodyReceived,
+              grHeaderReceived:
+                begin
+                  include(cltservsock.Http.HeaderFlags, hfConnectionClose);
+                  Process(cltservsock, 0, self);
+                end;
+            end;
+            OnDisconnect;
+          finally
+            cltservsock.Free;
+          end;
+        except
+          on E: Exception do
+            // do not stop thread on TLS or socket error
+            fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
+        end
+      else if Assigned(fThreadPool) then
+      begin
+        // ServerThreadPoolCount > 0 will use the thread pool to process the
+        // request header, and probably its body unless kept-alive or upgraded
+        // - this is the most efficient way of using this server
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
             {waitoncontention=}true) then
-        begin
           // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)
-        end;
       end
       else
-        // default implementation creates one thread for each incoming socket
+        // ServerThreadPoolCount = 0 is a (somewhat resource hungry) fallback
+        // implementation with one thread for each incoming socket
         fThreadRespClass.Create(cltsock, cltaddr, self);
-      {$endif MONOTHREAD}
     end;
   except
     on E: Exception do
@@ -1948,7 +2267,9 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   // compute the response
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
-    HTTPREMOTEFLAGS[ClientSock.TLS.Enabled], @ClientSock.fConnectionOpaque);
+    HTTP_TLS_FLAGS[ClientSock.TLS.Enabled] +
+    HTTP_UPG_FLAGS[hfConnectionUpgrade in ClientSock.Http.HeaderFlags],
+    @ClientSock.fConnectionOpaque);
   try
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
     DoRequest(req);
@@ -1970,7 +2291,7 @@ begin
           break; // finished
         hrsSendBody:
           begin
-            dest.Reset; // body is retrieved from Content/ContentStream
+            dest.Clear; // body is retrieved from Content/ContentStream
             ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
             if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
               continue; // send body by fServerSendBufferSize chunks
@@ -1981,6 +2302,7 @@ begin
     end
   else
     ClientSock.fKeepAliveClient := false;
+  ClientSock.Http.ProcessDone;   // ContentStream.Free
   // add transfert stats to main socket
   if Sock <> nil then
   begin
@@ -2088,7 +2410,6 @@ var
   P: PUtf8Char;
   status: cardinal;
   pending: integer;
-  reason: RawUtf8;
   noheaderfilter: boolean;
 begin
   result := grError;
@@ -2108,8 +2429,8 @@ begin
     else
       noheaderfilter := false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
-    SockRecvLn(Http.Command);
-    P := pointer(Http.Command);
+    SockRecvLn(Http.CommandResp);
+    P := pointer(Http.CommandResp);
     if P = nil then
       exit; // broken
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
@@ -2118,14 +2439,14 @@ begin
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
     Http.Content := '';
-    // get headers
+    // get and parse HTTP request header
     GetHeader(noheaderfilter);
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
       fKeepAliveClient := false;
     if (Http.ContentLength < 0) and
        (KeepAliveClient or
-       (Http.CommandMethod = 'GET')) then
+        IsGet(Http.CommandMethod)) then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
        (GetTickCount64 > headerMaxTix) then
@@ -2135,6 +2456,13 @@ begin
     end;
     if fServer <> nil then
     begin
+      // allow THttpServer.OnHeaderParsed low-level callback
+      if Assigned(fServer.fOnHeaderParsed) and
+        fServer.fOnHeaderParsed(self) then
+      begin
+        result := grRejected; // the callback made its own SockSend() response
+        exit;
+      end;
       // validate allowed PayLoad size and OnBeforeBody callback
       if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
@@ -2144,12 +2472,14 @@ begin
         result := grOversizedPayload;
         exit;
       end;
+      // allow OnBeforeBody callback for quick response
       if Assigned(fServer.OnBeforeBody) then
       begin
         HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
         status := fServer.OnBeforeBody(Http.CommandUri, Http.CommandMethod,
           Http.Headers, Http.ContentType, fRemoteIP, Http.BearerToken,
-          Http.ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
+          Http.ContentLength, HTTP_TLS_FLAGS[TLS.Enabled] +
+          HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -2157,12 +2487,12 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          StatusCodeToReason(status, reason);
+          StatusCodeToReason(status, Http.CommandResp);
           if Assigned(OnLog) then
             OnLog(sllTrace, 'GetRequest: rejected by OnBeforeBody=% %',
-              [status, reason], self);
-          SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10,
-            reason, ' ', status]);
+              [status, Http.CommandResp], self);
+          SockSend(['HTTP/1.0 ', status, ' ', Http.CommandResp, #13#10#13#10,
+            Http.CommandResp, ' ', status]);
           SockSendFlush('');
           result := grRejected;
           exit;
@@ -2174,7 +2504,7 @@ begin
       // client waits for the server to parse the headers and return 100
       // before sending the request body
       SockSendFlush('HTTP/1.1 100 Continue'#13#10#13#10);
-    // now the server could retrieve the request body
+    // now the server could retrieve the HTTP request body
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
@@ -2239,7 +2569,7 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
     try
       repeat
-        beforetix := mormot.core.os.GetTickCount64;
+        beforetix := GetTickCount64;
         keepaliveendtix := beforetix + fServer.ServerKeepAliveTimeOut;
         repeat
           // within this loop, break=wait for next command, exit=quit
@@ -2267,7 +2597,7 @@ procedure THttpServerResp.Execute;
               end;
             cspNoData:
               begin
-                tix := mormot.core.os.GetTickCount64;
+                tix := GetTickCount64;
                 if tix >= keepaliveendtix then
                 begin
                   if Assigned(fServer.Sock.OnLog) then
@@ -2759,7 +3089,7 @@ var
   respsent: boolean;
   ctxt: THttpServerRequest;
   filehandle: THandle;
-  reps: PHTTP_RESPONSE;
+  resp: PHTTP_RESPONSE;
   bufread, V: PUtf8Char;
   heads: HTTP_UNKNOWN_HEADERs;
   rangestart, rangelen: ULONGLONG;
@@ -2769,20 +3099,21 @@ var
   logdata: PHTTP_LOG_FIELDS_DATA;
   contrange: ShortString;
 
-  procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
+  procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
+    E: Exception = nil);
   var
     msg: RawUtf8;
   begin
     try
-      reps^.SetStatus(StatusCode, outstat);
+      resp^.SetStatus(StatusCode, outstat);
       logdata^.ProtocolStatus := StatusCode;
       FormatUtf8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
         [StatusCode, outstat], msg);
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
-      msg := msg + HtmlEscapeString(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
-      reps^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
-      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, reps^, nil,
+      msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
+      resp^.SetContent(datachunkmem, msg, 'text/html; charset=utf-8');
+      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, resp^, nil,
         bytessent, nil, 0, nil, fLogData);
     except
       on Exception do
@@ -2799,7 +3130,7 @@ var
     if not result then
       exit;
     respsent := true;
-    reps^.SetStatus(outstatcode, outstat);
+    resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
     // update log information
@@ -2824,7 +3155,7 @@ var
           ReferrerLength := RawValueLength;
           Referrer := pRawValue;
         end;
-        ProtocolStatus := reps^.StatusCode;
+        ProtocolStatus := resp^.StatusCode;
         ClientIp := pointer(ctxt.fRemoteIP);
         ClientIpLength := length(ctxt.fRemoteip);
         Method := pointer(ctxt.fMethod);
@@ -2833,12 +3164,12 @@ var
         UserNameLength := Length(ctxt.fAuthenticatedUser);
       end;
     // send response
-    reps^.Version := req^.Version;
-    reps^.SetHeaders(pointer(ctxt.OutCustomHeaders),
+    resp^.Version := req^.Version;
+    resp^.SetHeaders(pointer(ctxt.OutCustomHeaders),
       heads, hsoNoXPoweredHeader in fOptions);
     if fCompressAcceptEncoding <> '' then
-      reps^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
-    with reps^.headers.KnownHeaders[respServer] do
+      resp^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
+    with resp^.headers.KnownHeaders[respServer] do
     begin
       pRawValue := pointer(fServerName);
       RawValueLength := length(fServerName);
@@ -2850,7 +3181,7 @@ var
         fmOpenRead or fmShareDenyNone);
       if not ValidHandle(filehandle)  then
       begin
-        SendError(HTTP_NOTFOUND, SysErrorMessage(GetLastError));
+        SendError(HTTP_NOTFOUND, WinErrorText(GetLastError, nil));
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
@@ -2886,19 +3217,19 @@ var
               FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
                 outcontlen.QuadPart], contrange);
-              reps^.AddCustomHeader(@contrange[1], heads, false);
-              reps^.SetStatus(HTTP_PARTIALCONTENT, outstat);
+              resp^.AddCustomHeader(@contrange[1], heads, false);
+              resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
-          with reps^.headers.KnownHeaders[respAcceptRanges] do
+          with resp^.headers.KnownHeaders[respAcceptRanges] do
           begin
             pRawValue := 'bytes';
             RawValueLength := 5;
           end;
         end;
-        reps^.EntityChunkCount := 1;
-        reps^.pEntityChunks := @datachunkfile;
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
+        resp^.EntityChunkCount := 1;
+        resp^.pEntityChunks := @datachunkfile;
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
           bytessent, nil, 0, nil, fLogData);
       finally
         FileClose(filehandle);
@@ -2911,20 +3242,20 @@ var
         ctxt.OutContentType := ''; // true HTTP always expects a response
       if fCompress <> nil then
       begin
-        with reps^.headers.KnownHeaders[reqContentEncoding] do
+        with resp^.headers.KnownHeaders[reqContentEncoding] do
           if RawValueLength = 0 then
           begin
             // no previous encoding -> try if any compression
-            outcontenc := CompressContent(
-              compressset, fCompress, ctxt.OutContentType, ctxt.fOutContent);
+            CompressContent(compressset, fCompress, ctxt.OutContentType,
+              ctxt.fOutContent, outcontenc);
             pRawValue := pointer(outcontenc);
             RawValueLength := length(outcontenc);
           end;
       end;
-      reps^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
+      resp^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
       flags := GetSendResponseFlags(ctxt);
       EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
           bytessent, nil, 0, nil, fLogData));
     end;
   end;
@@ -2939,7 +3270,7 @@ begin
     // reserve working buffers
     SetLength(heads, 64);
     SetLength(respbuf, SizeOf(HTTP_RESPONSE));
-    reps := pointer(respbuf);
+    resp := pointer(respbuf);
     SetLength(reqbuf, 16384 + SizeOf(HTTP_REQUEST)); // req^ + 16 KB of headers
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
@@ -2987,7 +3318,8 @@ begin
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
-            ctxt.ConnectionFlags := HTTPREMOTEFLAGS[req^.pSslInfo <> nil];
+            ctxt.ConnectionFlags := HTTP_TLS_FLAGS[req^.pSslInfo <> nil];
+            // no HTTP_UPG_FLAGS[]: plain THttpApiServer doesn't support upgrade
             ctxt.fConnectionID := req^.ConnectionID;
             // ctxt.fConnectionOpaque is not supported by http.sys
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
@@ -3078,7 +3410,7 @@ begin
                 until incontlenread = incontlen;
                 if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, SysErrorMessagePerModule(err, HTTPAPI_DLL));
+                  SendError(HTTP_NOTACCEPTABLE, WinErrorText(err, HTTPAPI_DLL));
                   continue;
                 end;
                 // optionally uncompress input body
@@ -3093,7 +3425,7 @@ begin
             end;
             try
               // compute response
-              FillcharFast(reps^, SizeOf(reps^), 0);
+              FillcharFast(resp^, SizeOf(resp^), 0);
               respsent := false;
               outstatcode := DoBeforeRequest(ctxt);
               if outstatcode > 0 then
@@ -3115,7 +3447,7 @@ begin
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                     (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
-                    SendError(HTTP_SERVERERROR, E.Message, E);
+                    SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
             end;
           finally
             reqid := 0; // reset Request ID to handle the next pending request
@@ -4436,6 +4768,7 @@ begin
 end;
 
 {$endif USEWININET}
+
 
 end.
 

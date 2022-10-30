@@ -76,9 +76,8 @@ The mORMOt 2 repository content is split into the following sub-folders:
 
 3.2. On Delphi: 
 * create new environment variable `mormot2` with full path to the *mORMot 2* sources (Tools - Options - IDE - Evironment Variables); 
-* add the following string to your IDE library paths (for all target platforms):
-
-   `$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
+* add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):
+   `$(mormot2)\src;$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
 
 4. Open and compile `/test/mormot2tests.dpr` in the IDE, and run the regression tests on your machine.
 

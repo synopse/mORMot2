@@ -372,9 +372,9 @@ asm
         push    edi
         push    ebp
         xor     edi, edi // edi = i
-        mov     ebp, eax // ebp = HW = TSHAHash followed by W[0..63]
+        mov     ebp, eax // ebp = HW = TShaHash followed by W[0..63]
         // rolled version faster than the unrolled one (good pipelining work :)
-@s:     mov     eax, [ebp].TSHAHash.E
+@s:     mov     eax, [ebp].TShaHash.E
         mov     ecx, eax
         mov     edx, eax
         mov     ebx, eax // ebx=E
@@ -382,26 +382,26 @@ asm
         ror     edx, 11
         ror     ecx, 25
         xor     eax, edx
-        mov     edx, [ebp].TSHAHash.G
+        mov     edx, [ebp].TShaHash.G
         xor     eax, ecx
-        mov     ecx, [ebp].TSHAHash.H
+        mov     ecx, [ebp].TShaHash.H
         add     ecx, eax // T1=ecx
-        mov     eax, [ebp].TSHAHash.F
-        mov     [ebp].TSHAHash.H, edx
-        mov     [ebp].TSHAHash.G, eax
+        mov     eax, [ebp].TShaHash.F
+        mov     [ebp].TShaHash.H, edx
+        mov     [ebp].TShaHash.G, eax
         xor     eax, edx
-        mov     [ebp].TSHAHash.F, ebx
+        mov     [ebp].TShaHash.F, ebx
         and     eax, ebx
         xor     eax, edx
         add     eax, dword ptr [K256 + edi * 4]
         add     eax, ecx
-        mov     ecx, [ebp].TSHAHash.D
-        add     eax, dword ptr [ebp + edi * 4 + 32] // 32 = SizeOf(TSHAHash)
-        mov     ebx, [ebp].TSHAHash.A
+        mov     ecx, [ebp].TShaHash.D
+        add     eax, dword ptr [ebp + edi * 4 + 32] // 32 = SizeOf(TShaHash)
+        mov     ebx, [ebp].TShaHash.A
         //  eax= T1 := ebp + Sum1(E) +(((F xor G) and E) xor G)+K256[i]+W[i];
         add     ecx, eax
         mov     esi, eax  // esi = T1
-        mov     [ebp].TSHAHash.E, ecx // E := D + T1;
+        mov     [ebp].TShaHash.E, ecx // E := D + T1;
         mov     eax, ebx // Sum0(A)
         mov     edx, ebx
         ror     eax, 2
@@ -410,21 +410,21 @@ asm
         ror     ecx, 22
         xor     eax, edx
         xor     eax, ecx // eax = Sum0(A)
-        mov     ecx, [ebp].TSHAHash.B
+        mov     ecx, [ebp].TShaHash.B
         add     esi, eax
         mov     eax, ebx // ebx=A
         mov     edx, ebx // eax=edx=A
         or      eax, ecx
-        and     eax, [ebp].TSHAHash.C   // eax = (A or B)and C
+        and     eax, [ebp].TShaHash.C   // eax = (A or B)and C
         and     edx, ecx
         or      eax, edx // eax = ((A or B)and C) or (A and B)
         inc     edi
         add     esi, eax  // esi= T1+T2
-        mov     [ebp].TSHAHash.A, esi
-        mov     eax, [ebp].TSHAHash.C // eax=C ecx=B ebx=A
-        mov     [ebp].TSHAHash.B, ebx
-        mov     [ebp].TSHAHash.C, ecx
-        mov     [ebp].TSHAHash.D, eax
+        mov     [ebp].TShaHash.A, esi
+        mov     eax, [ebp].TShaHash.C // eax=C ecx=B ebx=A
+        mov     [ebp].TShaHash.B, ebx
+        mov     [ebp].TShaHash.C, ecx
+        mov     [ebp].TShaHash.D, eax
         cmp     edi, 64
         jnz     @s
         pop     ebp
@@ -1502,7 +1502,7 @@ asm
         db      $66, $0F, $38, $DE, $FA
         db      $66, $0F, $38, $DE, $FB
         db      $66, $0F, $38, $DE, $FC
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 3]
         movups  xmm1, [eax + 16 * 2]
         movups  xmm2, [eax + 16 * 1]

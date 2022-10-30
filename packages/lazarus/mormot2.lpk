@@ -10,6 +10,7 @@
         <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
         <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+        <SrcPath Value="../../src"/>
       </SearchPaths>
       <CodeGeneration>
         <Optimizations>
@@ -46,7 +47,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="101">
+    <Files Count="104">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -429,15 +430,15 @@
         <UnitName Value="mormot.soa.server"/>
       </Item95>
       <Item96>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.pas"/>
         <UnitName Value="mormot.db.rad.ui"/>
       </Item96>
       <Item97>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.orm.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.orm.pas"/>
         <UnitName Value="mormot.db.rad.ui.orm"/>
       </Item97>
       <Item98>
-        <Filename Value="../../src/ui/mormot.db.rad.ui.sql.pas"/>
+        <Filename Value="../../src/db/mormot.db.rad.ui.sql.pas"/>
         <UnitName Value="mormot.db.rad.ui.sql"/>
       </Item98>
       <Item99>
@@ -452,6 +453,18 @@
         <Filename Value="../../src/lib/mormot.lib.gdiplus.pas"/>
         <UnitName Value="mormot.lib.gdiplus"/>
       </Item101>
+      <Item102>
+        <Filename Value="../../src/net/mormot.net.acme.pas"/>
+        <UnitName Value="mormot.net.acme"/>
+      </Item102>
+      <Item103>
+        <Filename Value="../../src/db/mormot.db.rad.ui.cds.pas"/>
+        <UnitName Value="mormot.db.rad.ui.cds"/>
+      </Item103>
+      <Item104>
+        <Filename Value="../../src/core/mormot.core.os.mac.pas"/>
+        <UnitName Value="mormot.core.os.mac"/>
+      </Item104>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>

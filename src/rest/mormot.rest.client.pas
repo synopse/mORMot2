@@ -42,7 +42,6 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
@@ -320,12 +319,18 @@ type
   /// store the information about the current session
   // - as set after a sucessfull TRestClientUri.SetUser() method
   TRestClientSession = record
+  {$ifdef HASINLINE}
+  private
+  {$endif HASINLINE}
     // for internal use
     Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUtf8;
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
+  {$ifdef HASINLINE}
+  public
+  {$endif HASINLINE}
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
     // - once authenticated, a TAuthUser instance is set, with its ID,
@@ -480,8 +485,9 @@ type
   PRestClientCallbackItem = ^TRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TRestClientCallbacks = class(TSynPersistentLock)
+  TRestClientCallbacks = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
@@ -564,14 +570,13 @@ type
       Call: PRestUriParams = nil);
     function InternalRemoteLogSend(const aText: RawUtf8): boolean;
     procedure InternalNotificationMethodExecute(var Ctxt: TRestUriParams); virtual;
-    /// will call timestamp/info if the session has currently not been retrieved
+    // will call timestamp/info if the session has currently not been retrieved
     function GetSessionVersion: RawUtf8;
     // register the user session to the TRestClientUri instance
     function SessionCreate(aAuth: TRestClientAuthenticationClass;
       var aUser: TAuthUser; const aSessionKey: RawUtf8): boolean;
     // call each fSession.HeartbeatSeconds delay
-    procedure SessionRenewEvent(Sender: TSynBackgroundTimer; Event: TWaitResult;
-      const Msg: RawUtf8);
+    procedure SessionRenewEvent(Sender: TSynBackgroundTimer; const Msg: RawUtf8);
     /// abstract methods to be implemented with a local, piped or HTTP/1.1 provider
     // - you can specify some POST/PUT data in Call.OutBody (leave '' otherwise)
     // - return the execution result in Call.OutStatus
@@ -623,7 +628,7 @@ type
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TRestOrmParent); override;
-    /// save the TSqlRestClientUri properties into a persistent storage object
+    /// save the TRestClientUri properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
@@ -647,8 +652,8 @@ type
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
-    // - this version will use a GET with supplied parameters (which will be encoded
-    // with the URL)
+    // - this version will use a GET with supplied parameters (which will be
+    // encoded with the URL), and append the expected signature (if needed)
     function CallBackGet(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
       out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
@@ -657,8 +662,8 @@ type
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the UTF-8 decoded JSON result (server must reply with one
     // "result":"value" JSON object)
-    // - this version will use a GET with supplied parameters (which will be encoded
-    // with the URL)
+    // - this version will use a GET with supplied parameters (which will be
+    // encoded with the URL), and append the expected signature (if needed)
     function CallBackGetResult(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
       aTable: TOrmClass = nil; aID: TID = 0): RawUtf8;
@@ -924,7 +929,7 @@ type
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
     {$endif OSWINDOWS}
-    /// called by IsOpen when the raw connection is established
+    /// called by IsOpen when the raw connection is (re)established
     property OnConnected: TOnClientNotify
       read fOnConnected write fOnConnected;
     /// called by IsOpen when it failed to connect
@@ -1433,6 +1438,7 @@ class procedure TRestClientAuthenticationSignedUri.ClientSessionSign(
   Sender: TRestClientUri; var Call: TRestUriParams);
 var
   nonce, blankURI: RawUtf8;
+  sign: cardinal;
 begin
   if (Sender = nil) or
      (Sender.Session.ID = 0) or
@@ -1447,9 +1453,9 @@ begin
   begin
     fSession.LastTick64 := GetTickCount64;
     nonce := CardinalToHexLower(fSession.LastTick64 shr 8); // 256 ms resolution
-    Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(
-      Sender.fComputeSignature(fSession.PrivateKey, Pointer(nonce),
-        Pointer(blankURI), length(blankURI)));
+    sign := Sender.fComputeSignature(fSession.PrivateKey, Pointer(nonce),
+      Pointer(blankURI), length(blankURI));
+    Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(sign);
   end;
 end;
 
@@ -1682,7 +1688,7 @@ begin
     result := true;
     aItem := List[i];
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1700,7 +1706,7 @@ begin
       exit;
     List[i].ReleasedFromServer := True; // just flag it -> delay deletion
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
   result := true;
 end;
@@ -1731,7 +1737,7 @@ begin
   if (self = nil) or
      (Count = 0) then
     exit;
-  Safe.Lock;
+  fSafe.Lock;
   try
     for i := Count - 1 downto 0 do
       if List[i].Instance = aInstance then
@@ -1740,7 +1746,7 @@ begin
         else
           break;
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1749,7 +1755,7 @@ procedure TRestClientCallbacks.DoRegister(aID: TRestClientCallbackID;
 begin
   if aID <= 0 then
     exit;
-  Safe.Lock;
+  fSafe.Lock;
   try
     if length(List) >= Count then
       SetLength(List, Count + 32);
@@ -1761,7 +1767,7 @@ begin
     end;
     inc(Count);
   finally
-    Safe.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1826,31 +1832,31 @@ var
   aText: RawUtf8;
 begin
   while not Terminated do
-    if fEvent.WaitFor(INFINITE) = wrSignaled then
-    begin
-      if Terminated then
-        break;
-      fSafe.Lock;
-      try
-        aText := fPendingRows;
-        fPendingRows := '';
-      finally
-        fSafe.UnLock;
-      end;
-      if (aText <> '') and
-         not Terminated then
-      try
-        while not fClient.InternalRemoteLogSend(aText) do
-          if SleepOrTerminated(2000) then // retry after 2 seconds delay
-            exit;
-      except
-        on E: Exception do
-          if (fClient <> nil) and
-             not Terminated then
-            fClient.InternalLog('%.Execute fatal error: %' +
-              'some events were not transmitted', [ClassType, E], sllWarning);
-      end;
+  begin
+    fEvent.WaitForEver;
+    if Terminated then
+      break;
+    fSafe.Lock;
+    try
+      aText := fPendingRows;
+      fPendingRows := '';
+    finally
+      fSafe.UnLock;
     end;
+    if (aText <> '') and
+       not Terminated then
+    try
+      while not fClient.InternalRemoteLogSend(aText) do
+        if SleepOrTerminated(2000) then // retry after 2 seconds delay
+          exit;
+    except
+      on E: Exception do
+        if (fClient <> nil) and
+           not Terminated then
+          fClient.InternalLog('%.Execute fatal error: %' +
+            'some events were not transmitted', [ClassType, E], sllWarning);
+    end;
+  end;
 end;
 
 
@@ -2046,7 +2052,7 @@ begin
 end;
 
 procedure TRestClientUri.SessionRenewEvent(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUtf8);
+  const Msg: RawUtf8);
 var
   resp: RawUtf8;
   status: integer;
@@ -2104,7 +2110,7 @@ begin
       if elapsed >= max then
         exit;
       inc(retry);
-      if elapsed < 500 then
+      if elapsed < 500 then // retry in pace of 100-200ms, 1-2s, 5-10s
         wait := 100
       else if elapsed < 10000 then
         wait := 1000
@@ -2120,9 +2126,10 @@ begin
       fLogClass.Add.Log(sllTrace, 'IsOpen: % after % -> wait % and ' +
         'retry #% up to % seconds - %',
         [exc, MilliSecToString(elapsed), MilliSecToString(wait), retry,
-         fConnectRetrySeconds, self],
-        self);
+         fConnectRetrySeconds, self], self);
       SleepHiRes(wait);
+      if isDestroying in fInternalState then
+        exit;
     until InternalIsOpen;
   finally
     fSafe.Leave;
@@ -2219,9 +2226,8 @@ begin
   try
     fRun.TimerDisable(SessionRenewEvent);
     InternalLog('SessionClose: notify server', sllTrace);
-    CallBackGet('auth', [
-      'userName', fSession.User.LogonName,
-      'session', fSession.ID], tmp);
+    CallBackGet('auth', ['userName', fSession.User.LogonName,
+                         'session',  fSession.ID], tmp);
   finally
     // back to no session, with default values
     fSession.ID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
@@ -2284,9 +2290,9 @@ end;
 procedure TRestClientUri.InternalNotificationMethodExecute(
   var Ctxt: TRestUriParams);
 var
-  url, root, interfmethod, interf, id, method, frames: RawUtf8;
+  url, interfmethod, interf, id, method, frames: RawUtf8;
   callback: TRestClientCallbackItem;
-  methodIndex: integer;
+  methodIndex: PtrInt;
   WR: TJsonWriter;
   temp: TTextWriterStackBuffer;
   ok: boolean;
@@ -2339,8 +2345,9 @@ begin
   if url[1] = '/' then
     system.delete(url, 1, 1);
   // 'root/BidirCallback.AsyncEvent/1' into root/interfmethod/id
-  Split(Split(url, '/', root), '/', interfmethod, id);
-  if not IdemPropNameU(root, fModel.Root) then
+  if (fModel.UriMatch(url, false) = rmNoMatch) or
+     (url[fModel.RootLen + 1] <> '/') or
+     not Split(copy(url, fModel.RootLen + 2, 1024), '/', interfmethod, id) then
     exit;
   callback.ID := GetInteger(pointer(id));
   if callback.ID <= 0 then
@@ -2547,7 +2554,8 @@ function TRestClientUri.CallBackGetResult(const aMethodName: RawUtf8;
 var
   resp: RawUtf8;
 begin
-  if CallBackGet(aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
+  if CallBackGet(
+      aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
     result := JsonDecode(resp)
   else
     result := '';

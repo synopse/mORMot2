@@ -288,7 +288,7 @@ type
   PLocalFileHeader = ^TLocalFileHeader;
 
   //// last header structure, as used in .zip file format
-  // - this header ends the file and is used to find the TFileHeader entries
+  // - those 22 bytes end the file and are used to find the TFileHeader entries
   TLastHeader = record
     /// $06054b50 PK#5#6 = LASTHEADER_SIGNATURE_INC -
     signature: cardinal;
@@ -394,10 +394,13 @@ type
     procedure InfoStart(ExpectedSize: Int64; const Action, Name: TFileName);
     procedure SetZipNamePathDelim(Value: AnsiChar);
     function NormalizeZipName(const aZipName: TFileName): TFileName;
+    procedure NormalizeIntZipName(var intName: RawByteString);
   public
     /// initialize this class
     constructor Create;
     /// the number of files inside a .zip archive
+    // - never trust the Entry[] array, which length is used as growing
+    // capacity so is likely to be bigger than the actual Count
     property Count: integer
       read fCount;
     /// how sub folders names are handled in the ZIP
@@ -492,6 +495,7 @@ type
       out Header: TLocalFileHeader): boolean;
 
     /// the files inside the .zip archive
+    // - use the Count property to find out how many files are stored
     property Entry: TZipReadEntryDynArray
       read fEntry;
   end;
@@ -640,6 +644,8 @@ type
       read fDest;
     /// the resulting file entries, ready to be written as a .zip catalog
     // - those will be appended after the data blocks at the end of the .zip file
+    // - this array is likely to have a capacity bigger than the actual Count:
+    // always use Count, not length(Entry) or "for entry in ZipWrite.Entry"
     property Entry: TZipWriteEntryDynArray
       read fEntry;
     /// mainly used during debugging - default false is safe and more efficient
@@ -676,20 +682,24 @@ procedure FileAppend(const MainFile, AppendFile: TFileName); overload;
 
 /// add AppendFile after the end of MainFile into NewFile
 // - could be used e.g. to add a .zip to an executable
-// - if PreserveWinDigSign is set, the Windows PE digital signature is kept
-// https://blog.barthe.ph/2009/02/22/change-signed-executable/
+// - if PreserveWinDigSign is set, the Windows PE digital signature is kept using
+// https://blog.barthe.ph/2009/02/22/change-signed-executable legacy method -
+// but such naive "append" is now rejected by Windows, so StuffExeCertificate()
+// from mormot.crypt.secure is to be used instead
 procedure FileAppend(const MainFile, AppendFile, NewFile: TFileName;
   PreserveWinDigSign: boolean = false); overload;
 
 /// zip a folder content after the end of MainFile into NewFile
-// - if PreserveWinDigSign is set, the Windows PE digital signature is kept
+// - PreserveWinDigSign legacy method is rejected by modern Windows, so
+// StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFolder(const MainFile, NewFile, ZipFolder: TFileName;
   const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
   CompressionLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
   PreserveWinDigSign: boolean = false);
 
 /// zip a some files after the end of MainFile into NewFile
-// - if PreserveWinDigSign is set, the Windows PE digital signature is kept
+// - PreserveWinDigSign legacy method is rejected by modern Windows, so
+// StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFiles(const MainFile, NewFile: TFileName;
   const ZipFiles: array of TFileName; RemovePath: boolean = true;
   CompressionLevel: integer = 6; PreserveWinDigSign: boolean = false);
@@ -807,8 +817,8 @@ begin
   if not fInitialized then
     result := 0
   else if (Offset = 0) and
-          (Origin = soCurrent) then
-    // for TStream.Position on Delphi
+          (Origin in [soCurrent, soEnd]) then
+    // for TStream.Position/GetSize on Delphi
     result := fSizeIn
   else
   begin
@@ -1399,6 +1409,20 @@ begin
       fZipNamePathDelimString, [rfReplaceAll]);
 end;
 
+procedure TZipAbstract.NormalizeIntZipName(var intName: RawByteString);
+var
+  i, L: PtrInt;
+begin
+  // normalize TZipWriteEntry.intName
+  L := length(intName);
+  i := ByteScanIndex(pointer(intName), L, ord(fZipNamePathDelimReversed));
+  if i >= 0 then
+    repeat
+      inc(i);
+      if intName[i] = fZipNamePathDelimReversed then
+        intName[i] := fZipNamePathDelim;
+    until i = L;
+end;
 
 { TZipWrite }
 
@@ -1527,6 +1551,7 @@ begin
               dec(d^.h64.size, SizeOf(d^.h64.offset));
             end;
             SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
+            NormalizeIntZipName(d^.intName);
             inc(writepos, info.localsize + Int64(info.f64.zzipSize));
           end;
           inc(fCount);
@@ -1640,6 +1665,7 @@ begin
       h32.fileInfo.SetUtf8FileName;
     end;
     h32.fileInfo.nameLen := length(intName);
+    NormalizeIntZipName(intName);
     result := WriteRawHeader;
   end;
 end;
@@ -1659,6 +1685,8 @@ begin
     PFileInfo(P)^ := h32.fileInfo;
     inc(PFileInfo(P));
     MoveFast(pointer(intName)^, P^, h32.fileInfo.nameLen);
+    if ByteScanIndex(pointer(P), h32.fileInfo.nameLen, ord(fZipNamePathDelimReversed)) >= 0 then
+      raise ESynZip.CreateUtf8('%.WriteRawHeader(%)', [self, intName]); // paranoid
     inc(P, h32.fileInfo.nameLen);
     if h32.fileInfo.extraLen <> 0 then
       MoveFast(h64, P^, h32.fileInfo.extraLen);
@@ -2177,6 +2205,10 @@ begin
   end;
   if prev <> nil then
     prev^.nextlocaloffs := fCentralDirectoryOffset; // last file backward search
+  if fCount = 0 then
+    fEntry := nil
+  else
+    DynArrayFakeLength(fEntry, fCount); // so that length(Entry)=Count 
 end;
 
 constructor TZipRead.Create(Instance: THandle;
@@ -2805,7 +2837,7 @@ procedure InternalFileAppend(const ctxt: ShortString;
   const onadd: TOnZipWriteAdd; const zipfiles: array of TFileName;
   level: integer; keepdigitalsign: boolean);
 const
-  CERTIFICATE_ENTRY_OFFSET = 148;
+  CERTIFICATE_ENTRY_OFFSET = 152;
 var
   M, A, O: TStream;
   i, read: PtrInt;
@@ -2894,6 +2926,7 @@ begin
       begin
         // the certificate length should be 64-bit aligned -> pad the payload
         ASize := O.Position - APos;
+        buf[0] := 0;
         while ASize and 7 <> 0 do
         begin
           O.WriteBuffer(buf[0], 1);
@@ -2964,7 +2997,7 @@ begin
       inc(P, 4);
       PCardinal(P)^ := L;
       inc(P, 4);
-      PStrLen(PAnsiChar(pointer(tmp)) - _STRLEN)^ := P - pointer(tmp); // no realloc
+      FakeLength(tmp, P - pointer(tmp)); // no realloc
       Data := tmp;
     end;
   end
@@ -2988,7 +3021,7 @@ begin
     if L <= 0 then
       Data := ''
     else
-      PStrLen(PAnsiChar(pointer(Data)) - _STRLEN)^ := L; // fake len: no realloc
+      FakeLength(Data, L);
   end
   else
     Data := UnCompressZipString(pointer(src), L, nil, ZLib, 0);

@@ -1517,7 +1517,7 @@ begin
           tmp[L - 1] := #0; // trim right #10
           dec(L);
         end;
-        msg := CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L);
+        CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L, msg);
         if (Status = OCI_SUCCESS_WITH_INFO) and
            not InfoRaiseException then
         begin
@@ -1580,7 +1580,7 @@ begin
       tmp[L - 1] := #0; // trim right #10
       dec(L);
     end;
-    msg := CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L);
+    CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L, msg);
     if ErrNum = 28001 then
       if Conn <> nil then
         if Conn.PasswordChange then

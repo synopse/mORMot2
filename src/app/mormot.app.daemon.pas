@@ -56,8 +56,7 @@ type
     constructor Create; override;
     /// define the log information into the supplied TSynLog class
     // - if you don't call this method, the logging won't be initiated
-    // - is to be called typically in the overriden Create constructor of the
-    // associated TSynDaemon class, just after "inherited Create"
+    // - called by default in TSynDaemon.AfterCreate if RunFromSynTests=false
     procedure SetLog(aLogClass: TSynLogClass);
     /// returns user-friendly description of the service, including version
     // information and company copyright (if available)
@@ -119,7 +118,7 @@ type
     /// how many files will be rotated (default is 2)
     property LogRotateFileCount;
   end;
-  
+
   /// meta-class of TSynDaemon settings information
   TSynDaemonSettingsClass = class of TSynDaemonAbstractSettings;
 
@@ -157,6 +156,7 @@ type
     fConsoleMode: boolean;
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
+    procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
     function CustomCommandLineSyntax: string; virtual;
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
@@ -171,7 +171,8 @@ type
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName;
       const aSettingsExt: TFileName = '.settings';
       const aSettingsName: TFileName = '';
-      aSettingsOptions: TSynJsonFileSettingsOptions = []); reintroduce;
+      aSettingsOptions: TSynJsonFileSettingsOptions = [];
+      const aSectionName: RawUtf8 = 'Main'); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean = true);
@@ -261,7 +262,8 @@ end;
 constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
   const aWorkFolder, aSettingsFolder, aLogFolder,
         aSettingsExt, aSettingsName: TFileName;
-        aSettingsOptions: TSynJsonFileSettingsOptions);
+        aSettingsOptions: TSynJsonFileSettingsOptions;
+  const aSectionName: RawUtf8);
 var
   fn: TFileName;
 begin
@@ -282,13 +284,22 @@ begin
     fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
-  fSettings.LoadFromFile(fn + aSettingsExt); // now loads the settings file
+  fSettings.LoadFromFile(fn + aSettingsExt, aSectionName); // now loads the settings file
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=
         {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
+  AfterCreate;
+end;
+
+procedure TSynDaemon.AfterCreate;
+begin
+  if RunFromSynTests then
+    fSettings.fLogClass := TSynLog // don't overwrite
+  else
+    fSettings.SetLog(TSynLog);
 end;
 
 destructor TSynDaemon.Destroy;
@@ -393,8 +404,7 @@ var
     else
     begin
       error := GetLastError;
-      msg := FormatUtf8('Error 0x% [%] occured with',
-        [CardinalToHexShort(error), StringToUtf8(SysErrorMessage(error))]);
+      FormatUtf8('Error % [%] occured with', [error, GetErrorText(error)], msg);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
@@ -427,6 +437,7 @@ begin
           #13#10' Build date: ', Executable.Version.BuildDateTimeString,
           #13#10' MD5: ', Md5(exe),
           #13#10' SHA256: ', Sha256(exe));
+        writeln(' OS: ', OSVersionText);
         if Executable.Version.Version32 <> 0 then
           writeln(' Version: ', Executable.Version.Detailed);
       end;
@@ -483,7 +494,7 @@ begin
             if ServiceSingleRun then
               // blocking until service shutdown
               Show(true)
-            else if GetLastError = 1063 then
+            else if GetLastError = ERROR_FAILED_SERVICE_CONTROLLER_CONNECT then
               Syntax
             else
               Show(false);
@@ -530,10 +541,12 @@ begin
     {$else}
     // POSIX Run/Fork background execution of the executable
     cRun,
-    cFork:
-      RunUntilSigTerminated(self, {dofork=}(cmd = cFork), Start, Stop,
+    cFork,
+    cStart: // /start = /fork
+      RunUntilSigTerminated(self, {dofork=}(cmd in [cFork, cStart]), Start, Stop,
         fSettings.fLogClass.DoLog, fSettings.ServiceName);
     cKill,
+    cStop,  // /stop = /kill
     cSilentKill:
       if RunUntilSigTerminatedForKill then
       begin
@@ -543,6 +556,9 @@ begin
       end
       else
         raise EDaemon.Create('No forked process found to be killed');
+    cState:
+      writeln(fSettings.ServiceName,
+        ' State=', ToText(RunUntilSigTerminatedState)^);
     else
       Syntax;
     {$endif OSWINDOWS}

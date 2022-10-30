@@ -537,16 +537,50 @@ type
     desc, template, expected: RawUtf8;
     data, partials: variant;
   end;
-
   TMustacheTests = packed record
     tests: array of TMustacheTest;
   end;
 
+  TMustacheColors = packed record
+    header: RawUtf8;
+    items: array of packed record
+      name, url: RawUtf8;
+      first, link: boolean;
+    end;
+    empty: boolean;
+  end;
+  TMustacheLOR = packed record
+    users: array of packed record
+      rowid, resto: integer;
+      login, firstname, name, alias: RawUtf8;
+      connected: boolean;
+    end;
+  end;
+
 const
   __TMustacheTest = 'desc,template,expected RawUtf8 data,partials variant';
-  __TMustacheTests = 'tests array of TMustacheTest';
+  __TMustacheTests = 'tests TArray<TMustacheTest>';
+  __TMustacheColors = 'header:RawUtf8 items:[name,url:RawUtf8 first,link:boolean] empty:boolean';
+  __TMustacheLOR = 'users:[rowid,resto:integer login,firstname,name,alias:RawUtf8 connected:boolean]';
   MUSTACHE_SPECS: array[0..4] of TFileName = (
     'interpolation', 'comments', 'sections', 'inverted', 'partials');
+  JSON_COLORS: RawUtf8 =
+    '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
+    '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
+    '"link":true,"url":"#Blue"}],"empty":true}';
+  RES_COLORS = '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
+    '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
+    '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>';
+  JSON_LOR: RawUtf8 = '{"users":[' +
+    '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet",' +
+      '"Alias":"safr","Connected":true,"Resto":0},'#13#10 +
+    '{"RowID":2,"Login":"saga","Firstname":"Samsagace","Name":"Gamegie",' +
+      '"Alias":"saga","Connected":false,"Resto":0},'#13#10 +
+    '{"RowID":3,"Login":"peto","Firstname":"Peregrin","Name":"Touque",' +
+      '"Alias":"peto","Connected":false,"Resto":0},'#13#10 +
+    '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc",' +
+      '"Alias":"mebr","Connected":true,"Resto":0}]}';
+  RES_LOR = '- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A;
 
 procedure TTestCoreProcess.MustacheRenderer;
 var
@@ -557,6 +591,8 @@ var
   doc: variant;
   html: RawUtf8;
   helpers: TSynMustacheHelpers;
+  colors: TMustacheColors;
+  lor: TMustacheLOR;
   guid: TGuid;
   spec, i: integer;
 begin
@@ -633,21 +669,21 @@ begin
     'Shown.{{^person}}Also shown!{{/person}}end');
   Check(mustache.SectionMaxCount = 1);
   html := mustache.RenderJson('{person2:2}');
-  Check(html = 'Shown.Also shown!end');
+  CheckEqual(html, 'Shown.Also shown!end');
   Check({%H-}helpers = nil, 'compiler initialized');
   mustache.HelperAdd(helpers, 'jsonhelper', MustacheHelper);
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:"a",b:10}}}');
   html := mustache.RenderJson('', nil, helpers);
-  Check(html = 'a=a,b=10');
+  CheckEqual(html, 'a=a,b=10');
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:"b",b:10} }}');
   html := mustache.RenderJson('', nil, helpers);
-  Check(html = 'a=b,b=10');
+  CheckEqual(html, 'a=b,b=10');
   mustache := TSynMustache.Parse(
     '{{{jsonhelper {a:"a",b:1}}}}');
   html := mustache.RenderJson('', nil, helpers);
-  check(html = 'a=a,b=1');
+  CheckEqual(html, 'a=a,b=1');
   mustache := TSynMustache.Parse(
     '{{jsonhelper {a:1,b:2} }},titi');
   html := mustache.RenderJson('', nil, helpers);
@@ -721,34 +757,29 @@ begin
   html := mustache.RenderJson('{}', nil, TSynMustache.HelpersGetStandardList);
   check((html <> '') and
         (TextToGuid(@html[2], @Guid) <> nil));
+  Rtti.RegisterFromText([
+    TypeInfo(TMustacheColors), __TMustacheColors,
+    TypeInfo(TMustacheLOR), __TMustacheLOR]);
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A +
     '{{#link}}'#$D#$A'<li><a href="{{url}}">{{name}}</a></li>'#$D#$A'{{/link}}'#$D#$A +
     '{{/items}}'#$D#$A#$D#$A'{{#empty}}'#$D#$A'<p>The list is empty.</p>'#$D#$A'{{/empty}}');
   Check(mustache.SectionMaxCount = 2);
-  html := mustache.RenderJson(
-    '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
-    '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
-    '"link":true,"url":"#Blue"}],"empty":true}');
-  Check(TrimU(html) =
-    '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
-    '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
-    '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>');
+  html := mustache.RenderJson(JSON_COLORS);
+  CheckEqual(TrimU(html), RES_COLORS, 'RenderJson');
+  Check(LoadJson(colors, JSON_COLORS, TypeInfo(TMustacheColors)));
+  html := mustache.RenderData(colors, TypeInfo(TMustacheColors));
+  CheckEqual(TrimU(html), RES_COLORS, 'RenderData1');
   mustache := TSynMustache.Parse(
     '{{#users}}'#$D#$A'{{^Connected}}'#$D#$A +
     '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#$D#$A'{{/Connected}}'#$D#$A'{{/users}}');
   Check(mustache.SectionMaxCount = 2);
-  html := mustache.RenderJson('{"users":[' +
-    '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet","Alias":"safr","Connected":true,"Resto":0},' +
-    #13#10 +
-    '{"RowID":2,"Login":"saga","Firstname":"Samsagace","Name":"Gamegie","Alias":"saga","Connected":false,"Resto":0},' +
-    #13#10 +
-    '{"RowID":3,"Login":"peto","Firstname":"Peregrin","Name":"Touque","Alias":"peto","Connected":false,"Resto":0},' +
-    #13#10 +
-    '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc","Alias":"mebr","Connected":true,"Resto":0}]}');
-  check(html =
-    '- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A);
+  html := mustache.RenderJson(JSON_LOR);
+  checkEqual(html, RES_LOR);
+  Check(LoadJson(lor, JSON_LOR, TypeInfo(TMustacheLOR)));
+  html := mustache.RenderData(lor, TypeInfo(TMustacheLOR));
+  checkEqual(html, RES_LOR, 'RenderData2');
 
   // run official {{mustache}} regression tests suite
   TRttiJson.RegisterFromText(TypeInfo(TMustacheTest), __TMustacheTest,
@@ -1130,11 +1161,11 @@ type
 
   TDtoObject = class(TSynAutoCreateFields)
   private
-    FFieldNestedObject: TNestedDtoObject;
+    FNestedObject: TNestedDtoObject;
     FSomeField: RawUtf8;
   published
     property NestedObject: TNestedDtoObject
-      read FFieldNestedObject;
+      read FNestedObject;
     property SomeField: RawUtf8
       read FSomeField write FSomeField;
   end;
@@ -1145,6 +1176,22 @@ type
   published
     property Level: TSynLogInfo
       read fLevel;
+  end;
+
+  TNestedDtoObject2 = class(TNestedDtoObject)
+  private
+    FNestedObject: TNestedDtoObject;
+  published
+    property NestedObject: TNestedDtoObject
+      read FNestedObject;
+  end;
+
+  TDtoObject3 = class(TDtoObject)
+  private
+    FNestedObject2: TNestedDtoObject2;
+  published
+    property NestedObject2: TNestedDtoObject2
+      read FNestedObject2;
   end;
 
   TObjectWithVariant = class(TSynPersistent)
@@ -1227,6 +1274,7 @@ var
   JAS: TTestCustomJsonArraySimple;
   JAV: TTestCustomJsonArrayVariant;
   GDtoObject, G2, G3: TDtoObject;
+  GNest: TDtoObject3;
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
@@ -1747,6 +1795,7 @@ var
       end;
     end;
     Check(JAV.D = '4');
+
     GDtoObject := TDtoObject.Create;
     G2 := TDtoObject.Create;
     Check(IsObjectDefaultOrVoid(GDtoObject));
@@ -1775,10 +1824,12 @@ var
     Check(G2.NestedObject.FieldInteger = 0);
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
+
     ClearObject(G2);
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
       'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckHash(U, $79F2E094);
     Check(not IniToObject('[main2]'#10'somefield=toto', G2));
     CheckEqual(G2.SomeField, '');
     CheckEqual(G2.NestedObject.FieldInteger, 0);
@@ -1795,6 +1846,47 @@ var
     U := ObjectToIni(G2);
     CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
       'FieldString=c:\abc'#$0A'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A);
+    G2.NestedObject.FieldString := 'line1'#13#10'line2'#10'line3'#13#10#10#10;
+    U := ObjectToIni(G2);
+    CheckEqual(U, '[Main]'#$0A'SomeField=titi'#$0A#$0A'[NestedObject]'#$0A +
+      'FieldInteger=7'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject.FieldString]'#$0A'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckHash(U, $B16E54F1);
+    ClearObject(G2);
+    Check(IsObjectDefaultOrVoid(G2));
+    CheckHash(ObjectToIni(G2), $79F2E094);
+    CheckEqual(G2.SomeField, '');
+    CheckEqual(G2.NestedObject.FieldInteger, 0);
+    CheckEqual(G2.NestedObject.FieldString, '');
+    Check(IniToObject(U, G2));
+    Check(not IsObjectDefaultOrVoid(G2));
+    CheckEqual(G2.SomeField, 'titi');
+    CheckEqual(G2.NestedObject.FieldInteger, 7);
+    CheckEqual(G2.NestedObject.FieldString, 'line1'#$0A'line2'#$0A'line3'#$0A#$0A);
+    CheckHash(ObjectToIni(G2), $B16E54F1);
+    GNest := TDtoObject3.Create;
+    U := ObjectToIni(GNest);
+    CheckEqual(U, '[Main]'#$0A'SomeField='#$0A#$0A'[NestedObject]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject2]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A +
+      '[NestedObject2.NestedObject]'#$0A +
+      'FieldString='#$0A'FieldInteger=0'#$0A'FieldVariant=null'#$0A#$0A);
+    CheckHash(U, $9AFB5BD6);
+    GNest.SomeField := 'toto';
+    GNest.NestedObject2.FieldString := 'nested1';
+    GNest.NestedObject2.NestedObject.FieldString := 'nested2';
+    U := ObjectToIni(GNest);
+    CheckHash(U, $68286617);
+    Check(not IsObjectDefaultOrVoid(GNest));
+    ClearObject(GNest);
+    Check(IsObjectDefaultOrVoid(GNest));
+    CheckHash(ObjectToIni(GNest), $9AFB5BD6);
+    Check(IniToObject(U, GNest));
+    CheckEqual(GNest.SomeField, 'toto');
+    CheckEqual(GNest.NestedObject2.FieldString, 'nested1');
+    CheckEqual(GNest.NestedObject2.NestedObject.FieldString, 'nested2');
+    GNest.Free;
     G3 := TDtoObject2.Create;
     U := ObjectToIni(G3);
     CheckHash(U, $CDBF8A87);
@@ -1809,6 +1901,7 @@ var
     Check(ObjectEquals(G2, GDtoObject));
     G2.Free;
     GDtoObject.Free;
+
     owv := TObjectWithVariant.Create;
     J := ObjectToJson(owv);
     CheckEqual(J, '{"Value":null}');
@@ -5078,7 +5171,7 @@ begin
     begin
       {$ifdef VERBOSE}
       writeln(i, ' ', GetEnumName(i)^, ' ', GetEnumNameTrimed(i));
-      {$endif}
+      {$endif VERBOSE}
       tmp := GetEnumNameTrimed(i);
       Check(GetEnumNameValue(GetEnumName(i)^) = i);
       Check(GetEnumNameTrimedValue(tmp) = i);

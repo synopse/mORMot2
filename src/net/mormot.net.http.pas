@@ -27,6 +27,7 @@ uses
   mormot.core.os,
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text,
+  mormot.core.data,
   mormot.core.buffers,
   mormot.core.zip,
   mormot.core.threads,
@@ -81,9 +82,9 @@ type
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 // - will detect most used compressible content (like 'text/*' or
 // 'application/json') from OutContentType
-function CompressContent(Accepted: THttpSocketCompressSet;
+procedure CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
+  var OutContent: RawByteString; var OutContentEncoding: RawUtf8);
 
 /// enable a give compression function for a HTTP link
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
@@ -118,6 +119,18 @@ function HttpMethodWithNoBody(const method: RawUtf8): boolean;
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
+/// quick check for case-sensitive 'GET' HTTP method name
+function IsGet(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// quick check for case-sensitive 'POST' HTTP method name
+function IsPost(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
+function IsUrlFavicon(P: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 const
   /// pseudo-header containing the current Synopse mORMot framework version
   XPOWEREDNAME = 'X-Powered-By';
@@ -147,6 +160,7 @@ type
     hrsResponseDone,
     hrsUpgraded,
     hrsErrorPayloadTooLarge,
+    hrsErrorRejected,
     hrsErrorMisuse,
     hrsErrorUnsupportedFormat,
     hrsErrorAborted,
@@ -188,6 +202,9 @@ type
   end;
 
   /// low-level reusable State Machine to parse and process any HTTP content
+  // - shared e.g. by all our (web)socket-based HTTP client and server classes
+  // - reduce memory allocations as much as possible, and parse the most used
+  // headers in explicit fields
   {$ifdef USERECORDWITHMETHODS}
   THttpRequestContext = record
   {$else}
@@ -196,7 +213,15 @@ type
   private
     ContentLeft: Int64;
     ContentPos: PByte;
-    ContentEncoding: RawUtf8;
+    ContentEncoding, CommandUriInstance: RawUtf8;
+    CommandUriInstanceLen: PtrInt;
+    procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
+      nointern: boolean);
+    function ProcessParseLine(var st: TProcessParseLine): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8;
+      nointern: boolean = false);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -206,13 +231,15 @@ type
     HeaderFlags: THttpRequestHeaderFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
-    /// will contain the first header line:
-    // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
+    /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
+    Interning: PRawUtf8InterningSlot;
+    /// will contain the first header line on client side
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
-    Command: RawUtf8;
-    /// the HTTP method parsed from Command, e.g. 'GET'
+    // - THttpServerSocket will use it, but THttpAsyncServer won't
+    CommandResp: RawUtf8;
+    /// the HTTP method parsed from first header line, e.g. 'GET'
     CommandMethod: RawUtf8;
-    /// the HTTP URI parsed from Command, e.g. '/path/to/resource'
+    /// the HTTP URI parsed from first header line, e.g. '/path/to/resource'
     CommandUri: RawUtf8;
     /// will contain all header lines after all ParseHeader
     // - use HeaderGetValue() to get one HTTP header item value by name
@@ -231,8 +258,6 @@ type
     // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     BearerToken: RawUtf8;
-    /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during ParseHeader
-    XPoweredBy: RawUtf8;
     /// will contain the data retrieved from the server, after all ParseHeader
     Content: RawByteString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
@@ -266,9 +291,8 @@ type
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
     procedure ParseHeaderFinalize;
-    /// parse Command and Head into Headers and CommandMethod/CommandUri fields
-    // - calls ParseHeaderFinalize() and server-side process the Command
-    function ParseCommandAndHeader: boolean;
+    /// parse Command into CommandMethod/CommandUri fields
+    function ParseCommand: boolean;
     /// search a value from the internal parsed Headers
     // - supplied aUpperName should be already uppercased:
     // HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
@@ -321,8 +345,6 @@ const
   HTTP_REQUEST_WRITE =
     [hrsSendBody];
 
-  /// when this and following THttpRequestContext.State are fatal HTTP errors
-  HTTP_REQUEST_FIRSTERROR = hrsErrorPayloadTooLarge;
 
 function ToText(st: THttpRequestState): PShortString; overload;
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
@@ -447,12 +469,14 @@ type
   // e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithm over WebSockets
   // - hsrWebsockets communication was made using WebSockets
   // - hsrInProcess is done when run from the same process, i.e. on server side
+  // - hsrConnectionUpgrade is set when "connection: upgrade" is within headers
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,
     hsrSecured,
     hsrWebsockets,
-    hsrInProcess);
+    hsrInProcess,
+    hsrConnectionUpgrade);
 
   /// the THttpServerRequest connection attributes
   THttpServerRequestFlags = set of THttpServerRequestFlag;
@@ -507,14 +531,15 @@ type
     fConnectionThread: TSynThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
   public
-    /// prepare an incoming request from explicit values
+    /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
+    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
+    /// prepare an incoming request from explicit values
+    // - could be used for non-HTTP execution, e.g. from a WebSockets link
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// prepare an incoming request from a parsed THttpRequestContext
-    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
     /// append some values to the OutCustomHeaders output parameter
@@ -605,6 +630,65 @@ type
       read fAuthenticatedUser;
   end;
   {$M-}
+
+  /// store a list of IPv4 which should be rejected at connection
+  // - more tuned than TIPBan for checking just after accept()
+  // - used e.g. for hsoBan40xIP
+  THttpAcceptBan = class(TSynPersistent)
+  protected
+    fLock: TLightLock; // may block only in IdleEverySecond
+    fCount, fCurrent: integer;
+    fIP: array of TCardinalDynArray; // one list per second
+    fSeconds, fMax, fWhiteIP: cardinal;
+    fRejected, fTotal: Int64;
+    procedure SetMax(const Value: cardinal);
+    procedure SetSeconds(const Value: cardinal);
+    procedure SetIP;
+  public
+    /// initialize the thread-safe storage process
+    // - banseconds should be a power-of-two <= 128
+    // - maxpersecond is the maximum number of banned IPs remembered per second
+    constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
+      banwhiteip: cardinal = cLocalhost32); reintroduce;
+    /// register an IP4 to be rejected
+    function BanIP(ip4: cardinal): boolean; overload;
+    /// register an IP4 to be rejected
+    procedure BanIP(const ip4: RawUtf8); overload;
+    /// fast check if this IP4 is to be rejected
+    function IsBanned(const addr: TNetAddr): boolean;
+    /// register an IP4 if status in >= 400 (but not 401/403)
+    function ShouldBan(status, ip4: cardinal): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// to be called every second to remove deprecated bans from the list
+    // - implemented via a round-robin list of per-second banned IPs
+    procedure IdleEverySecond;
+    /// a 32-bit IP4 which should never be banned
+    // - is set to cLocalhost32, i.e. 127.0.0.1, by default
+    property WhiteIP: cardinal
+      read fWhiteIP write fWhiteIP;
+  published
+    /// total number of accept() rejected by IsBanned()
+    property Rejected: Int64
+      read fRejected;
+    /// total number of banned IP4 since the beginning
+    property Total: Int64
+      read fTotal;
+    /// current number of banned IP4
+    property Count: integer
+      read fCount;
+    /// how many seconds a banned IP4 should be rejected
+    // - should be a power of two, with a default of 4
+    // - if set, any previous banned IP will be flushed
+    property Seconds: cardinal
+      read fSeconds write SetSeconds;
+    /// how many IP can be banned per second
+    // - used to reduce memory allocation and O(n) search speed
+    // - over this limit, BanIP() will store and replace at the last position
+    // - assign 0 to disable the banning feature
+    // - if set, any previous banned IP will be flushed
+    property Max: cardinal
+      read fMax write SetMax;
+  end;
 
 
 implementation
@@ -766,6 +850,29 @@ begin
                      ord('I') shl 24)) and $dfdfdfdf) = 0);
 end;
 
+function IsGet(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ = ord('G') + ord('E') shl 8 + ord('T') shl 16;
+end;
+
+function IsPost(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ =
+    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24;
+end;
+
+function IsUrlFavicon(P: PUtf8Char): boolean;
+begin
+  result := (P <> nil) and
+        (PCardinalArray(P)[0] =
+           ord('/') + ord('f') shl 8 + ord('a') shl 16 + ord('v') shl 24) and
+        (PCardinalArray(P)[1] =
+           ord('i') + ord('c') shl 8 + ord('o') shl 16 + ord('n') shl 24) and
+        (PCardinalArray(P)[2] =
+           ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
+        (P[12] = #0);
+end;
+
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
   CompFunction: THttpSocketCompress; var AcceptEncoding: RawUtf8;
   CompMinSize: integer): RawUtf8;
@@ -820,9 +927,9 @@ const
     'JAVASCRIPT',
     nil);
 
-function CompressContent(Accepted: THttpSocketCompressSet;
+procedure CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
+  var OutContent: RawByteString; var OutContentEncoding: RawUtf8);
 var
   i, OutContentLen: integer;
   compressible: boolean;
@@ -851,11 +958,11 @@ begin
               (OutContentLen >= CompressMinSize)) then
           begin
             // compression of the OutContent + update header
-            result := Func(OutContent, true);
+            OutContentEncoding := Func(OutContent, true);
             exit; // first in fCompress[] is prefered
           end;
   end;
-  result := '';
+  OutContentEncoding := '';
 end;
 
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
@@ -891,21 +998,6 @@ begin
   result := -1;
 end;
 
-procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
-var
-  B: PUtf8Char;
-begin
-  while (P^ > #0) and
-        (P^ <= ' ') do
-    inc(P); // trim left
-  B := P;
-  P := GotoNextControlChar(P);
-  while (P > B) and
-        (P[-1] <= ' ') do
-    dec(P); // trim right
-  FastSetString(result, B, P - B);
-end;
-
 function HttpChunkToHex32(p: PAnsiChar): integer;
 var
   v0, v1: byte;
@@ -924,7 +1016,7 @@ begin
       inc(p);
       if v1 = 255 then
       begin
-        result := (result shl 4) or v0; // odd number of hexa chars supplied
+        result := (result shl 4) or v0; // odd number of hexa chars input
         break;
       end;
       result := (result shl 8) or (integer(v0) shl 4) or v1;
@@ -951,7 +1043,6 @@ begin
   Upgrade := '';
   BearerToken := '';
   UserAgent := '';
-  XPoweredBy := '';
   Content := '';
   ContentLength := -1;
   ServerInternalState := 0;
@@ -959,30 +1050,23 @@ begin
   integer(CompressAcceptHeader) := 0;
 end;
 
-const
-  PARSEDHEADERS: array[0..11] of PAnsiChar = (
-    'CONTENT-',                    // 0
-    'TRANSFER-ENCODING: CHUNKED',  // 1
-    'CONNECTION: ',                // 2
-    'ACCEPT-ENCODING:',            // 3
-    'UPGRADE:',                    // 4
-    'SERVER-INTERNALSTATE:',       // 5
-    'X-POWERED-BY:',               // 6
-    'EXPECT: 100',                 // 7
-    HEADER_BEARER_UPPER,           // 8
-    'USER-AGENT:',                 // 9
-    'HOST:',                       // 10
-    nil);
-  PARSEDHEADERS2: array[0..3] of PAnsiChar = (
-    'LENGTH:',    // 0
-    'TYPE:',      // 1
-    'ENCODING:',  // 2
-    nil);
-  PARSEDHEADERS3: array[0..3] of PAnsiChar = (
-    'CLOSE',      // 0
-    'UPGRADE',    // 1
-    'KEEP-ALIVE', // 2
-    nil);
+procedure THttpRequestContext.GetTrimmed(P: PUtf8Char; var result: RawUtf8;
+  nointern: boolean);
+var
+  L: PtrInt;
+begin
+  while (P^ > #0) and
+        (P^ <= ' ') do
+    inc(P); // trim left
+  L := StrLen(P);
+  repeat
+    if (L = 0) or
+       (P[L - 1] > ' ') then
+      break;
+    dec(L); // trim right
+  until false;
+  SetRawUtf8(result, P, L, nointern);
+end;
 
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char;
   HeadersUnFiltered: boolean);
@@ -993,137 +1077,209 @@ begin
   if P = nil then
     exit; // avoid unexpected GPF in case of wrong usage
   P2 := P;
-  case IdemPPChar(P, @PARSEDHEADERS) of
-    0:
-      // 'CONTENT-'
-      case IdemPPChar(P + 8, @PARSEDHEADERS2) of
-        0:
-          begin
-            // 'CONTENT-LENGTH:'
-            inc(P, 16);
-            ContentLength := GetInt64(P);
-          end;
-        1:
-          begin
-            // 'CONTENT-TYPE:'
-            P := GotoNextNotSpace(P + 13);
-            if IdemPChar(P, 'APPLICATION/JSON') then
-              ContentType := JSON_CONTENT_TYPE_VAR
-            else
+  // standard headers are expected to be pure A-Z chars: fast lowercase search
+  // - or $20 makes conversion to a-z lowercase, but won't affect - / : chars
+  // - the worse case may be some false positive, which won't hurt unless
+  // your network architecture suffers from HTTP request smuggling
+  // - much less readable than cascaded IdemPPChar(), but slightly faster ;)
+  case PCardinal(P)^ or $20202020 of
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+        ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
+        // 'CONTENT-'
+        case PCardinal(P + 8)^ or $20202020 of
+          ord('l') + ord('e') shl 8 + ord('n') shl 16 + ord('g') shl 24:
+            if PCardinal(P + 12)^ or $20202020 =
+              ord('t') + ord('h') shl 8 + ord(':') shl 16 + ord(' ') shl 24 then
             begin
-              GetTrimmed(P, ContentType);
-              if ContentType <> '' then
-                // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
-                HeadersUnFiltered := true;
+              // 'CONTENT-LENGTH:'
+              ContentLength := GetInt64(P + 16);
+              if not HeadersUnFiltered then
+                exit;
             end;
-          end;
-        2:
-          if Compress <> nil then
-          begin
-            // 'CONTENT-ENCODING:'
-            P := GotoNextNotSpace(P + 17);
-            P2 := P;
-            while P^ > ' ' do
-              inc(P); // no control char should appear in any header
-            len := P - P2;
-            if len <> 0 then
-              for i := 0 to length(Compress) - 1 do
-                if IdemPropNameU(Compress[i].Name, P2, len) then
-                begin
-                  CompressContentEncoding := i;
-                  break;
-                end;
-          end;
-      else
-        HeadersUnFiltered := true;
-      end;
-    1:
-      // 'TRANSFER-ENCODING: CHUNKED'
-      include(HeaderFlags, hfTransferChunked);
-    2:
+          ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+            if P[12] = ':' then
+            begin
+              // 'CONTENT-TYPE:'
+              P := GotoNextNotSpace(P + 13);
+              if (PCardinal(P)^ or $20202020 =
+                ord('a') + ord('p') shl 8 + ord('p') shl 16 + ord('l') shl 24) and
+                 (PCardinal(P + 11)^ or $20202020 =
+                ord('/') + ord('j') shl 8 + ord('s') shl 16 + ord('o') shl 24) then
+              begin
+                // 'APPLICATION/JSON'
+                ContentType := JSON_CONTENT_TYPE_VAR;
+                if not HeadersUnFiltered then
+                  exit; // '' in headers means JSON for our REST server
+              end
+              else
+              begin
+                GetTrimmed(P, ContentType);
+                if ContentType = '' then
+                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+                  exit;
+              end;
+            end;
+          ord('e') + ord('n') shl 8 + ord('c') shl 16 + ord('o') shl 24:
+            if (Compress <> nil) and
+               (PCardinal(P + 12)^ or $20202020 =
+                ord('d') + ord('i') shl 8 + ord('n') shl 16 + ord('g') shl 24) and
+               (P[16] = ':') then
+            begin
+              // 'CONTENT-ENCODING:'
+              P := GotoNextNotSpace(P + 17);
+              P2 := P;
+              while P^ > ' ' do
+                inc(P); // no control char should appear in any header
+              len := P - P2;
+              if len <> 0 then
+                for i := 0 to length(Compress) - 1 do
+                  if IdemPropNameU(Compress[i].Name, P2, len) then
+                  begin
+                    CompressContentEncoding := i; // will handle e.g. gzip
+                    if not HeadersUnFiltered then
+                      exit;
+                    break;
+                  end;
+            end;
+        end;
+    ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if P[4] = ':' then
+        // 'HOST:'
+        GetTrimmed(P + 5, Host);
+        // always add to headers - 'host:' sometimes parsed directly
+    ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+          ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
+        (PCardinal(P + 8)^ or $20202020 =
+          ord('o') + ord('n') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
       begin
         // 'CONNECTION: '
         inc(P, 12);
-        case IdemPPChar(P, @PARSEDHEADERS3) of
-          0:
+        case PCardinal(P)^ or $20202020 of
+          ord('c') + ord('l') shl 8 + ord('o') shl 16 + ord('s') shl 24:
             begin
               // 'CONNECTION: CLOSE'
               include(HeaderFlags, hfConnectionClose);
-              inc(P, 5);
+              if not HeadersUnFiltered then
+                exit;
             end;
-          1:
-            // 'CONNECTION: UPGRADE'
-            include(HeaderFlags, hfConnectionUpgrade);
-          2:
+          ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+            begin
+              // 'CONNECTION: UPGRADE'
+              include(HeaderFlags, hfConnectionUpgrade);
+              if not HeadersUnFiltered then
+                exit;
+            end;
+          ord('k') + ord('e') shl 8 + ord('e') shl 16 + ord('p') shl 24:
+            if (PCardinal(P + 4)^ or $20202020 =
+                ord('-') + ord('a') shl 8 + ord('l') shl 16 + ord('i') shl 24) and
+               (PWord(P + 8)^ or $2020 = ord('v') + ord('e') shl 8) then
             begin
               // 'CONNECTION: KEEP-ALIVE'
               include(HeaderFlags, hfConnectionKeepAlive);
               inc(P, 10);
               if P^ = ',' then
               begin
-                P := GotoNextNotSpace(P + 1);
-                if IdemPChar(P, 'UPGRADE') then
+                repeat
+                  inc(P);
+                until P^ <= ' ';
+                if PCardinal(P)^ or $20202020 =
+                  ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24 then
                   // 'CONNECTION: KEEP-ALIVE, UPGRADE'
                   include(HeaderFlags, hfConnectionUpgrade);
               end;
+              if not HeadersUnFiltered then
+                exit;
             end;
-        else
-          HeadersUnFiltered := true;
         end;
       end;
-    3:
+    ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('c') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
+        begin
+           // 'ACCEPT-ENCODING:'
+          GetTrimmed(P + 17, AcceptEncoding);
+          if not HeadersUnFiltered then
+            exit;
+        end;
+    ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
       begin
-        // 'ACCEPT-ENCODING:'
-        inc(P, 17);
-        GetTrimmed(P, AcceptEncoding);
+        // 'USER-AGENT:'
+        GetTrimmed(P + 11, UserAgent);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    4:
-      // 'UPGRADE:'
-      GetTrimmed(P + 8, Upgrade);
-    5:
+    ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('n') + ord('t') shl 8 + ord('e') shl 16 + ord('r') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('n') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+        ord('t') + ord('a') shl 8 + ord('t') shl 16 + ord('e') shl 24) and
+         (P[20] = ':') then
       begin
         // 'SERVER-INTERNALSTATE:'
         inc(P, 21);
         ServerInternalState := GetCardinal(P);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    6:
+    ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
+         (PCardinal(P + 8)^ =
+        ord('1') + ord('0') shl 8 + ord('0') shl 16 + ord('-') shl 24) then
       begin
-        // 'X-POWERED-BY:'
-        inc(P, 13);
-        GetTrimmed(P, XPoweredBy);
+        // 'Expect: 100-continue'
+        include(HeaderFlags, hfExpect100);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    7:
-      // Expect: 100-continue
-      include(HeaderFlags, hfExpect100);
-    8:
-      begin
+    ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+        ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+        ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) and
+         (PCardinal(P + 12)^ or $20202020 =
+        ord('n') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+         (PCardinal(P + 16)^ or $20202020 =
+        ord('e') + ord('a') shl 8 + ord('r') shl 16 + ord('e') shl 24) and
+         (PWord(P + 20)^ or $2020 = ord('r') + ord(' ') shl 8) then
         // 'AUTHORIZATION: BEARER '
-        inc(P, 22);
-        GetTrimmed(P, BearerToken);
-        if BearerToken <> '' then
-          // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
-          HeadersUnFiltered := true;
-      end;
-    9:
+        GetTrimmed(P + 22, BearerToken, {nointern=}true);
+        // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+    ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
+      if PCardinal(P + 4)^ or $20202020 =
+        ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
       begin
-        // 'USER-AGENT:'
-        inc(P, 11);
-        GetTrimmed(P, UserAgent);
+        // 'UPGRADE:'
+        GetTrimmed(P + 8, Upgrade);
+        if not HeadersUnFiltered then
+          exit;
       end;
-    10:
+    ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
+      if IdemPChar(P + 4, 'SFER-ENCODING: CHUNKED') then
       begin
-        // 'HOST:'
-        inc(P, 5);
-        GetTrimmed(P, Host);
-        HeadersUnFiltered := true; // may still be needed by some code
-      end
-  else
-    // unrecognized name should be stored in Headers
-    HeadersUnFiltered := true;
+        // 'TRANSFER-ENCODING: CHUNKED'
+        include(HeaderFlags, hfTransferChunked);
+        if not HeadersUnFiltered then
+          exit;
+      end;
   end;
-  if HeadersUnFiltered then
-    // store meaningful headers into WorkBuffer, if not already there
-    Head.Append(P2, GotoNextControlChar(P) - P2, {crlf=}true);
+  // store meaningful headers into WorkBuffer, if not already there
+  Head.Append(P2, StrLen(P2));
+  Head.AppendCRLF;
 end;
 
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
@@ -1136,7 +1292,7 @@ begin
   if nfHeadersParsed in HeaderFlags then
     exit;
   include(HeaderFlags, nfHeadersParsed);
-  Head.AsText(Headers, {OverheadForRemoteIP=}40);
+  Head.AsText(Headers, {ForRemoteIP=}40, {usemainbuffer=}Interning <> nil);
   Head.Reset;
   if Compress <> nil then
     if AcceptEncoding <> '' then
@@ -1144,25 +1300,47 @@ begin
         ComputeContentEncoding(Compress, pointer(AcceptEncoding));
 end;
 
-function THttpRequestContext.ParseCommandAndHeader: boolean;
+function THttpRequestContext.ParseCommand: boolean;
 var
-  P: PUtf8Char;
+  P, B: PUtf8Char;
+  L: PtrInt;
 begin
   result := false;
   if nfHeadersParsed in HeaderFlags then
     exit;
-  P := pointer(Command);
+  P := pointer(CommandUri);
   if P = nil then
     exit;
-  GetNextItem(P, ' ', CommandMethod); // GET
-  GetNextItem(P, ' ', CommandUri);    // /path/to/resource
-  if not IdemPChar(P, 'HTTP/1.') then
+  B := P;
+  while true do
+    if P^ = ' ' then
+      break
+    else if P^ = #0 then
+      exit
+    else
+      inc(P);
+  SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
+  inc(P);
+  B := P;
+  while true do
+    if P^ = ' ' then
+      break
+    else if P^ = #0 then
+      exit
+    else
+      inc(P);
+  L := P - B;
+  MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
+  FakeLength(CommandUri, L);
+  if (PCardinal(P + 1)^ <>
+       ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) or
+     (PCardinal(P + 5)^ and $ffffff <>
+       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
   if not (hfConnectionClose in HeaderFlags) then
     if not (hfConnectionKeepAlive in HeaderFlags) and
-       (P[7] <> '1') then
+       (P[8] <> '1') then
       include(HeaderFlags, hfConnectionClose);
-  ParseHeaderFinalize;
   result := true;
 end;
 
@@ -1186,65 +1364,36 @@ begin
   State := hrsGetCommand;
 end;
 
-function ProcessParseLine(var st: TProcessParseLine; line: PRawUtf8): boolean;
-var
-  P: PUtf8Char;
-  Len: PtrInt;
+procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;
+  P: pointer; PLen: PtrInt; nointern: boolean);
 begin
-  P := st.P;
-  Len := st.Len;
-  result := false;
-  if Len <= 0 then
-    exit;
-  // search for the CR or CRLF line end - assume no other control char appears
-  dec(Len, 4);
-  if Len >= 0 then
-    repeat
-      if P[0] > #13 then
-        if P[1] > #13 then
-          if P[2] > #13 then
-            if P[3] > #13 then
-            begin
-              inc(P, 4);
-              dec(Len, 4);
-              if Len <= 0 then
-                break;
-              continue;
-            end;
-      break;
-    until false;
-  inc(Len, 4);
-  // here Len=0..3
-  if Len = 0 then
-    exit;
-  repeat
-    if P[0] <= #13 then
-      break;
-    dec(Len);
-    if Len = 0 then
-      exit;
-    inc(P);
-  until false;
-  // here P^ <= #13: we found a whole text line
-  st.Line := st.P;
-  st.LineLen := P - st.P;
-  if line <> nil then
-    FastSetString(line^, st.Line, st.LineLen);
-  result := true;
-  st.P := P; // will ensure below that st.line ends with #0
-  // go to beginning of next line
-  dec(Len);
-  if (Len <> 0) and
-     (PWord(P)^ = $0a0d) then
-    begin
-      inc(P);
-      dec(Len);
-    end;
-  inc(P);
-  st.P^ := #0;
-  // prepare for parsing the next line
-  st.P := P;
-  st.Len := Len;
+  if (Interning <> nil) and
+     not nointern then
+    Interning^.UniqueFromBuffer(res, P, PLen, InterningHasher(0, P, PLen))
+  else
+    FastSetString(res, P, PLen);
+end;
+
+function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine): boolean;
+var
+  Len: PtrInt;
+  P: PUtf8Char;
+begin
+  Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
+  if PtrUInt(Len) < PtrUInt(st.Len) then // we just ignore the following #10
+  begin
+    P := st.P;
+    st.Line := P;
+    P[Len] := #0; // replace ending CRLF by #0
+    st.LineLen := Len;
+    inc(Len, 2);  // if 2nd char is not #10, parsing will fail as expected
+    inc(st.P, Len);
+    dec(st.Len, Len);
+    result := true;
+    // now we have the next full line in st.Line/st.LineLen
+  end
+  else
+    result := false; // not enough input
 end;
 
 function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
@@ -1258,33 +1407,49 @@ begin
   repeat
     case State of
       hrsGetCommand:
-        if ProcessParseLine(st, @Command) then
-          State := hrsGetHeaders
+        if ProcessParseLine(st) then
+        begin
+          if Interning = nil then
+            FastSetString(CommandUri, st.Line, st.LineLen)
+          else
+          begin
+            // no real interning, but CommandUriInstance buffer reuse
+            if st.LineLen > CommandUriInstanceLen then
+            begin
+              CommandUriInstanceLen := st.LineLen + 256;
+              FastSetString(CommandUriInstance, nil, CommandUriInstanceLen);
+            end;
+            CommandUri := CommandUriInstance; // COW memory buffer reuse
+            MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
+            FakeLength(CommandUri, st.LineLen);
+          end;
+          State := hrsGetHeaders;
+        end
         else
           exit; // not enough input
       hrsGetHeaders:
-        if ProcessParseLine(st, nil) then
+        if ProcessParseLine(st) then
           if st.LineLen <> 0 then
             // Headers end with a void line
             ParseHeader(st.Line, hroHeadersUnfiltered in Options)
           else
-          // we reached end of headers
-          if hfTransferChunked in HeaderFlags then
-            // process chunked body
-            State := hrsGetBodyChunkedHexFirst
-          else if ContentLength > 0 then
-            // regular process with explicit content-length
-            State := hrsGetBodyContentLength
-            // note: old HTTP/1.0 format with no Content-Length is unsupported
-            // because officially not defined in HTTP/1.1 RFC2616 4.3
-          else
-            // no body
-            State := hrsWaitProcessing
+            // we reached end of headers
+            if hfTransferChunked in HeaderFlags then
+              // process chunked body
+              State := hrsGetBodyChunkedHexFirst
+            else if ContentLength > 0 then
+              // regular process with explicit content-length
+              State := hrsGetBodyContentLength
+              // note: old HTTP/1.0 format with no Content-Length is unsupported
+              // because officially not defined in HTTP/1.1 RFC2616 4.3
+            else
+              // no body
+              State := hrsWaitProcessing
         else
           exit;
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
-        if ProcessParseLine(st, nil) then
+        if ProcessParseLine(st) then
         begin
           ContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
           if ContentLeft <> 0 then
@@ -1323,12 +1488,12 @@ begin
             exit;
         end;
       hrsGetBodyChunkedDataVoidLine:
-        if ProcessParseLine(st, nil) then // chunks end with a void line
+        if ProcessParseLine(st) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
         else
           exit;
       hrsGetBodyChunkedDataLastLine:
-        if ProcessParseLine(st, nil) then // last chunk
+        if ProcessParseLine(st) then // last chunk
           if st.Len <> 0 then
             State := hrsErrorUnsupportedFormat // should be no further input
           else
@@ -1387,10 +1552,15 @@ begin
   // same logic than THttpSocket.CompressDataAndWriteHeaders below
   if (integer(CompressAcceptHeader) <> 0) and
      (ContentStream = nil) then // no stream compression (yet)
-    ContentEncoding := CompressContent(
-      CompressAcceptHeader, Compress, ContentType, Content);
+    CompressContent(CompressAcceptHeader, Compress, ContentType,
+      Content, ContentEncoding);
+  result := @Head;
   if ContentEncoding <> '' then
-    Head.Append(['Content-Encoding: ', ContentEncoding], {crlf=}true);
+  begin
+    result^.AppendShort('Content-Encoding: ');
+    result^.Append(ContentEncoding);
+    result^.AppendCRLF;
+  end;
   if ContentStream = nil then
   begin
     ContentPos := pointer(Content);
@@ -1398,43 +1568,44 @@ begin
   end
   else if ContentLength = 0 then // maybe set by SetupResponse for local file
     ContentLength := ContentStream.Size - ContentStream.Position;
-  Head.Append(['Content-Length: ', ContentLength], {crlf=}true);
+  result^.AppendShort('Content-Length: ');
+  result^.Append(ContentLength);
+  result^.AppendCRLF;
   if (ContentType <> '') and
      (ContentType <> STATICFILE_CONTENT_TYPE) then
-    Head.Append(['Content-Type: ', ContentType], {crlf=}true);
+  begin
+    result^.AppendShort('Content-Type: ');
+    result^.Append(ContentType);
+    result^.AppendCRLF;
+  end;
   if hfConnectionClose in HeaderFlags then
-    Head.Append('Connection: Close', {crlf=}true)
+    result^.AppendShort('Connection: Close'#13#10#13#10) // end with a void line
   else
   begin
     if CompressAcceptEncoding <> '' then
-      Head.Append(CompressAcceptEncoding, {crlf=}true);
-    Head.Append('Connection: Keep-Alive', {crlf=}true);
+    begin
+      result^.Append(CompressAcceptEncoding);
+      result^.AppendCRLF;
+    end;
+    result^.AppendShort('Connection: Keep-Alive'#13#10#13#10);
   end;
-  Head.Append(nil, 0, {crlf=}true); // headers always end with a void line
-  result := @Head;
   Process.Reset;
   if ContentStream = nil then
-    if ContentLength = 0 then
-      // single socket send() is possible (no output body)
-      State := hrsResponseDone
-    else if Head.CanAppend(ContentLength) then
-    begin
+    if (ContentLength = 0) or
+       result^.CanAppend(pointer(Content), ContentLength) then
       // single socket send() is possible (small body appended to headers)
-      Head.Append(Content);
-      Content := '';
-      State := hrsResponseDone;
-    end
+      State := hrsResponseDone
     else
     begin
       if ContentLength + Head.Len < MaxSizeAtOnce then
       begin
         // single socket send() is possible (body fits in the sending buffer)
-        Process.Reserve(ContentLength + Head.Len);
+        Process.Reserve(Head.Len + ContentLength);
         Process.Append(Head.Buffer, Head.Len);
         Process.Append(Content);
         Content := ''; // release ASAP
-        Head.Reset; // DoRequest will use Process
-        result := @Process;
+        Head.Reset;
+        result := @Process; // DoRequest will use Process
         State := hrsResponseDone;
       end
       else
@@ -1546,8 +1717,8 @@ begin
   if (integer(Http.CompressAcceptHeader) <> 0) and
      (OutStream = nil) then // no stream compression (yet)
   begin
-    OutContentEncoding := CompressContent(
-      Http.CompressAcceptHeader, Http.Compress, OutContentType, OutContent);
+    CompressContent(Http.CompressAcceptHeader, Http.Compress, OutContentType,
+      OutContent, OutContentEncoding);
     if OutContentEncoding <> '' then
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;
@@ -1619,8 +1790,9 @@ begin
   // finalize the headers
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % flags=% len=% %', [Http.Command,
-      ToText(Http.HeaderFlags), Http.ContentLength, Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
+      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
+      Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
@@ -1641,7 +1813,7 @@ begin
   // direct read bytes, as indicated by Content-Length or Chunked
   if hfTransferChunked in Http.HeaderFlags then
   begin
-    // supplied Content-Length header should be ignored when chunked
+    // Content-Length header should be ignored when chunked by RFC 2616 #4.4.3
     Http.ContentLength := 0;
     repeat // chunks decoding loop
       if SockIn <> nil then
@@ -1839,6 +2011,165 @@ end;
 procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);
 begin
   AppendLine(fOutCustomHeaders, Values);
+end;
+
+
+{ THttpAcceptBan }
+
+constructor THttpAcceptBan.Create(banseconds, maxpersecond, banwhiteip: cardinal);
+begin
+  fMax := maxpersecond;
+  SetSeconds(banseconds);
+  fWhiteIP := banwhiteip;
+end;
+
+procedure THttpAcceptBan.SetMax(const Value: cardinal);
+begin
+  fLock.Lock;
+  fMax := Value;
+  SetIP;
+  fLock.UnLock;
+end;
+
+procedure THttpAcceptBan.SetSeconds(const Value: cardinal);
+begin
+  if not (Value in [1, 2, 4, 8, 16, 32, 64, 128]) then
+    raise EHttpSocket.CreateFmt(
+      'Invalid %.SetSeconds(%): should be a small power of two',
+      [ClassNameShort(self)^, Value]);
+  fLock.Lock;
+  fSeconds := Value;
+  SetIP;
+  fLock.UnLock;
+end;
+
+procedure THttpAcceptBan.SetIP;
+var
+  i: PtrInt;
+begin
+  fCount := 0;
+  fCurrent := 0;
+  fIP := nil;
+  if fMax = 0 then
+    exit;
+  SetLength(fIP, fSeconds);
+  for i := 0 to fSeconds - 1 do
+    SetLength(fIP[i], fMax + 1); // 1st item is the count
+end;
+
+function THttpAcceptBan.BanIP(ip4: cardinal): boolean;
+var
+  P: PCardinalArray;
+begin
+  if (self = nil) or
+     (ip4 = 0) or
+     (ip4 = fWhiteIP) then
+   result := false
+  else
+  begin
+    fLock.Lock;
+    if fMax <> 0 then
+      {$ifdef HASFASTTRYFINALLY}
+      try
+      {$else}
+      begin
+      {$endif HASFASTTRYFINALLY}
+        P := pointer(fIP[fCurrent]); // 1st item is the count
+        if P[0] < fMax then
+        begin
+          inc(P[0]);
+          inc(fCount);
+        end;
+        P[P[0]] := ip4;
+        inc(fTotal);
+      {$ifdef HASFASTTRYFINALLY}
+      finally
+      {$endif HASFASTTRYFINALLY}
+        fLock.UnLock;
+      end;
+    result := true;
+  end;
+end;
+
+procedure THttpAcceptBan.BanIP(const ip4: RawUtf8);
+var
+  c: cardinal;
+begin
+  if IPToCardinal(pointer(ip4), c) then
+    BanIP(c);
+end;
+
+function THttpAcceptBan.IsBanned(const addr: TNetAddr): boolean;
+var
+  s: ^PCardinalArray;
+  P: PCardinalArray;
+  ip4, n: cardinal;
+begin
+  result := false;
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  ip4 := addr.IP4;
+  if ip4 = 0 then
+    exit;
+  fLock.Lock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    s := pointer(fIP);
+    n := fMax;
+    if n <> 0 then
+      repeat
+        P := s^;
+        inc(s);
+        if (P[0] <> 0) and // 1st item is the count
+           IntegerScanExists(@P[1], P[0], ip4) then // O(n) SSE2 asm on Intel
+        begin
+          inc(fRejected);
+          result := true;
+          break;
+        end;
+        dec(n);
+      until n = 0;
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fLock.UnLock;
+  end;
+end;
+
+function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
+begin
+  result := (self <> nil) and
+            ((status = HTTP_BADREQUEST) or  // naive heuristic
+             (status > HTTP_FORBIDDEN)) and // allow 401/403 retry
+            BanIP(ip4)
+end;
+
+procedure THttpAcceptBan.IdleEverySecond;
+var
+  n: PtrInt;
+  p: PCardinal;
+begin
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  fLock.Lock;
+  try
+    if fCount <> 0 then
+    begin
+      n := fSeconds - 1;         // power of two bitmask
+      n := (fCurrent + 1) and n; // per-second round robin
+      fCurrent := n;
+      p := @fIP[n][0]; // 1st item is the count
+      dec(fCount, p^);
+      p^ := 0;         // the oldest slot becomes the current (no memory move)
+    end;
+  finally
+    fLock.UnLock;
+  end;
 end;
 
 

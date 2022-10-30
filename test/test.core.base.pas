@@ -179,6 +179,8 @@ type
   published
     /// test the new RecordCopy() using our fast RTTI
     procedure _RecordCopy;
+    /// test the TSynList class
+    procedure _TSynList;
     /// test the TRawUtf8List class
     procedure _TRawUtf8List;
     /// test the TDynArray object and methods
@@ -250,6 +252,8 @@ type
     procedure Iso8601DateAndTime;
     /// test the TSynTimeZone class and its cross-platform local time process
     procedure TimeZones;
+    /// test the SMBIOS decoding features
+    procedure DmiSmbios;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -453,11 +457,53 @@ var
   Bits64: Int64 absolute Bits;
   Si, i: integer;
   c: cardinal;
+  s: shortstring;
+  txt: RawUtf8;
+  ip: THash128Rec;
   {$ifdef FPC}
   u: PtrUInt;
   timer: TPrecisionTimer;
   {$endif FPC}
 begin
+  FillZero(ip.b);
+  Check(IsZero(ip.b));
+  IP4Short(@ip, s);
+  Check(s = '0.0.0.0');
+  IP4Text(@ip, txt);
+  CheckEqual(txt, '');
+  IP6Short(@ip, s);
+  Check(s = '::', '::');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '');
+  ip.b[15] := 1;
+  IP6Short(@ip, s);
+  Check(s = '::1', '::1');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '127.0.0.1', 'IPv6 loopback');
+  ip.b[0] := 1;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::1');
+  ip.b[15] := 0;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::');
+  ip.b[6] := $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100:0:0:7000::');
+  for i := 0 to 7 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607::');
+  for i := 8 to 15 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607:809:a0b:c0d:e0f');
+  for i := 0 to 15 do
+    ip.b[i] := i or $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '7071:7273:7475:7677:7879:7a7b:7c7d:7e7f');
+  Check(mormot.core.text.HexToBin('200100B80A0B12F00000000000000001', PByte(@ip), 16));
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '2001:b8:a0b:12f0::1');
   {$ifdef CPUINTEL}
   GetBitsCountPtrInt := @GetBitsCountPurePascal;
   TestPopCnt('pas');
@@ -1135,7 +1181,6 @@ var
   AR: TRecs;
   AF: TFVs;
   AF2: TFV2s;
-  h: cardinal;
   i, j, k, Len, count, AIcount: integer;
   U, U2: RawUtf8;
   P: PUtf8Char;
@@ -1212,7 +1257,7 @@ const
     Check(length(IA) = D.Capacity);
     for i := 0 to 16256 do
       Check(IA[i] = i * 5);
-    CheckHash(D.SaveTo, $57B23EC4, 'test64k');
+    CheckHash(D.SaveTo, $55A23EC0, 'test64k');
   end;
 
   procedure TestCities;
@@ -1312,7 +1357,7 @@ begin
     Check(not IntegerScanExists(Pointer(AI), AIP.Count, i + 2000));
   end;
   Test := AIP.SaveTo;
-  CheckHash(Test, $712CA318, 'hash32i');
+  CheckHash(Test, $60DCA314, 'hash32i');
   PI := IntegerDynArrayLoadFrom(pointer(Test), AIcount);
   Check(AIcount = 1001);
   Check(PI <> nil);
@@ -1371,7 +1416,7 @@ begin
   for i := 0 to AIP.Count - 1 do
     Check(AIP.Find(i) = i);
   Test := AIP.SaveTo;
-  CheckHash(Test, $67E62807, 'hash32b');
+  CheckHash(Test, $69562803, 'hash32b');
   AIP.Reverse;
   for i := 0 to 50000 do
     Check(AI[i] = 50000 - i);
@@ -1380,7 +1425,7 @@ begin
   AIP.Compare := SortDynArrayInteger;
   AIP.Sort;
   Test := AIP.SaveTo;
-  CheckHash(Test, $67E62807, 'hash32c');
+  CheckHash(Test, $69562803, 'hash32c');
   AIP.Reverse;
   AIP.Slice(AI2, 2000, 1000);
   Check(length(AI2) = 2000);
@@ -1433,11 +1478,7 @@ begin
     Check(AVP.IndexOf(V) = i);
   end;
   Test := AVP.SaveTo;
-  {$ifdef CPU64}
-  CheckHash(Test, 1847370524, 'hash64d');
-  {$else}
-  CheckHash(Test, $712CA318, 'hash32d');
-  {$endif CPU64}
+  CheckHash(Test, {$ifdef CPU64} $2CB4A314 {$else} $60DCA314 {$endif}, 'AVP.SaveTo');
   // validate TRawUtf8DynArray
   AUP.Init(TypeInfo(TRawUtf8DynArray), AU);
   for i := 0 to 1000 do
@@ -1677,20 +1718,8 @@ begin
     Check(AFP.IndexOf(F) = i);
   end;
   Test := AFP.SaveTo;
-  {$ifdef CPU64}
-    {$ifdef FPC}
-    h := 2648774601;
-    {$else}
-    h := 1157949341;
-    {$endif FPC}
-  {$else}
-    {$ifdef UNICODE}
-    h := 3723814805;
-    {$else}
-    h := $CAA117C1;
-    {$endif UNICODE}
-  {$endif CPU64}
-  CheckHash(Test, h, 'hash32h');
+  // binary follows the in-memory layout and here Main/Detailed are string
+  CheckHash(Test, {$ifdef UNICODE} $080CE771 {$else} $0001179D {$endif}, 'hash32h');
   for i := 0 to 1000 do
   begin
     Fill(F, i);
@@ -2159,14 +2188,14 @@ begin
   cpu := bak - [cpuHaswell, cpuAvx2];
   X64CpuFeatures := []; // default SSE2 128-bit process
   Validate({rtl=}false);
-  {$ifdef FPC} // Delphi doesn't support AVX asm
+  {$ifdef ASMX64AVXNOCONST} // oldest Delphi doesn't support AVX asm
   if cpuAvx in cpu then
   begin
     X64CpuFeatures := [cpuAvx]; // AVX 256-bit process
     Validate(false);
   end;
-  {$endif FPC}
-  X64CpuFeatures := bak; // there is no AVX2 move/fillchar (still 256-bit wide)
+  {$endif ASMX64AVXNOCONST}
+  X64CpuFeatures := bak; // there is no AVX move/fillchar (still 256-bit wide)
   if (cpu <> []) and
      (cpu <> [cpuAvx]) then
     Validate(false);
@@ -2280,6 +2309,45 @@ begin
   Check(C.Dyn[0] = 10);
 end;
 
+procedure TTestCoreBase._TSynList;
+const
+  MAX = 1000;
+var
+  {$ifdef FPC}
+  p: TOrm; // FPC can iterate over pointers as class instances but not Delphi :(
+  {$else}
+  p: pointer;
+  {$endif FPC}
+  i: PtrInt;
+  l: TSynList;
+begin
+  l := TSynList.Create;
+  try
+   CheckEqual(l.Count, 0);
+   Check(not l.Exists(nil));
+   Check(l.IndexOf(nil) < 0);
+   for i := 0 to MAX - 1 do
+     CheckEqual(l.Add(pointer(i)), i);
+   CheckEqual(l.Count, MAX);
+   Check(l.Exists(nil));
+   for i := 0 to MAX - 1 do
+     Check(l[i] = pointer(i));
+   CheckEqual(l.IndexOf(nil), 0);
+   p := l[MAX - 1];
+   CheckEqual(l.IndexOf(p), MAX - 1);
+   {$ifdef HASITERATORS}
+   i := 0;
+   for p in l do
+   begin
+     CheckEqual(PtrInt(p), i);
+     inc(i);
+   end;
+   {$endif HASITERATORS}
+  finally
+    l.Free;
+  end;
+end;
+
 procedure TTestCoreBase.UrlEncoding;
 var
   i, j: integer;
@@ -2377,8 +2445,8 @@ end;
 procedure TTestCoreBase._GUID;
 var
   i: integer;
-  s: RawByteString;
-  st: string;
+  s: RawUtf8;
+  st, st2: string;
   g, g2: TGuid;
   h, h2: THash512Rec;
   pt: TRttiParserType;
@@ -2391,14 +2459,48 @@ begin
   Check(IsEqualGuid(g2, Guid));
   Check(GuidToString(Guid) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
   Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  CheckEqual(MacTextFromHex(''), '');
+  CheckEqual(MacTextFromHex('1'), '');
+  CheckEqual(MacTextFromHex('12'), '12');
+  CheckEqual(MacTextFromHex('123'), '');
+  CheckEqual(MacTextFromHex('1234'), '12:34');
+  CheckEqual(MacTextFromHex('12345'), '');
+  CheckEqual(MacTextFromHex(s), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
+  CheckEqual(MacTextFromHex(UpperCase(s)), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
+  s := s + s;
+  repeat
+    delete(s, Random32(length(s)) + 1, 1);
+    Check(TrimGuid(s) = (length(s) = 32));
+  until s = '';
+  s := '   ';
+  Check(not TrimGuid(s));
+  CheckEqual(s, '');
+  Check(not TrimGuid(s));
+  CheckEqual(s, '');
+  s := 'C9A646D3-9C61-4CB7-BFCD-EE2522C8F633';
+  Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  s := 'C9A646D39C614CB7BFCDEE2522C8F633';
+  Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  Check(TrimGuid(s));
+  CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  s[3] := 'Z';
+  Check(not TrimGuid(s));
+  CheckEqual(s, 'c9Z646d39c614cb7bfcdee2522c8f633');
+  s := '   1234 678 --';
+  Check(not TrimGuid(s));
+  CheckEqual(s, '1234678');
   for i := 1 to 1000 do
   begin
-    g.D1 := Random32;
-    g.D2 := Random32(65535);
-    g.D3 := Random32(65535);
-    Int64(g.D4) := Random64;
+    RandomGuid(g);
     st := GuidToString(g);
-    Check(st = SysUtils.GuidToString(g));
+    st2 := SysUtils.GuidToString(g);
+    Check(st = st2);
     Check(IsEqualGuid(StringToGuid(st), g));
     s := GuidToRawUtf8(g);
     Check(st = mormot.core.unicode.Utf8ToString(s));
@@ -2408,6 +2510,8 @@ begin
     Check(TextToGuid(@s[2], @g2)^ = '}');
     Check(IsEqualGuid(g2, g));
     Check(IsEqualGuid(@g2, @g));
+    Check(TrimGuid(s));
+    CheckEqual(length(s), 32);
     Check(IsEqualGuid(RawUtf8ToGuid(s), g));
     inc(g.D1);
     Check(not IsEqualGuid(g2, g));
@@ -3649,6 +3753,25 @@ var
   crc, u32, n: cardinal;
   Timer: TPrecisionTimer;
 begin
+  a := '';
+  AppendShortCardinal(0, a);
+  check(a = '0');
+  for i := 1 to 10 do
+    AppendShortCardinal(i, a);
+  check(a = '012345678910');
+  for i := 11 to 150 do
+    AppendShortCardinal(i, a);
+  CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
+  Check(_oskb(0) = '0KB');
+  Check(_oskb(1 shl 10 - 1) = '0KB');
+  Check(_oskb(1 shl 10) = '1KB');
+  Check(_oskb(1 shl 10 + 1) = '1KB');
+  Check(_oskb(1 shl 20 - 1) = '1023KB');
+  Check(_oskb(1 shl 20) = '1MB');
+  Check(_oskb(1 shl 20 + 1) = '1MB');
+  Check(_oskb(1 shl 30 - 1) = '1023MB');
+  Check(_oskb(1 shl 30) = '1GB');
+  Check(_oskb(1 shl 30 + 1) = '1GB');
   n := 100000;
   Timer.Start;
   crc := 0;
@@ -4385,14 +4508,15 @@ procedure TTestCoreBase._UTF8;
     {$ifdef HASCODEPAGE}
     CP := StringCodePage(A);
     CheckEqual(CP, C.CodePage, 'cpb');
-    {$endif FPC}
+    CheckEqual(CP, GetCodePage(A), 'cpc');
+    {$endif HASCODEPAGE}
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
     {$ifdef FPC}
     CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
     {$else}
-    CheckUtF8(A = W, 'CP%-AW', [CP]);
+    CheckUtf8(A = W, 'CP%-AW', [CP]);
     CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
     {$endif FPC}
   end;
@@ -4449,15 +4573,15 @@ begin
   for i := 0 to High(IDPU) do
     Check(IdemPChar(IDPU[i], IDPA[i]) = (i < 12));
   res :=
-    '{"result":[{"000001000013":{"00100000000016":[1534510257860,103100,2000,'
-    + '103108,1004,104132],"00100000000026":[1534510257860,12412,2000,12420,1004,12420],'
-    + '"00100000000036":[1534510257860,1378116,2000,1378112,1004,1378112],"00100000000056":'
-    + '[1534510257860,479217551,2000,479217551],"00100000000076":[1534510257860,136079943,'
-    + '2000,136079943,1004,136079944],"00100000000086":[1534510257860,1648800821,2000,'
-    + '1648801020,1004,1648801119],"00100000000096":[1534510257860,87877677,2000,87877678,'
-    + '1004,87877678],"001000000000ec":[1534510257860,1.64,2000,1.64],"001000000000fc":['
-    + '1534510257860,1.72,2000,1.72],"0010000000010c":[1534510257860,1.64,2000,1.64],"'
-    + '00100000000196":[1534510257860,0,2000,0]}}]}';
+    '{"result":[{"000001000013":{"00100000000016":[1534510257860,103100,2000,' +
+    '103108,1004,104132],"00100000000026":[1534510257860,12412,2000,12420,1004,12420],' +
+    '"00100000000036":[1534510257860,1378116,2000,1378112,1004,1378112],"00100000000056":' +
+    '[1534510257860,479217551,2000,479217551],"00100000000076":[1534510257860,136079943,' +
+    '2000,136079943,1004,136079944],"00100000000086":[1534510257860,1648800821,2000,' +
+    '1648801020,1004,1648801119],"00100000000096":[1534510257860,87877677,2000,87877678,' +
+    '1004,87877678],"001000000000ec":[1534510257860,1.64,2000,1.64],"001000000000fc":[' +
+    '1534510257860,1.72,2000,1.72],"0010000000010c":[1534510257860,1.64,2000,1.64],"' +
+    '00100000000196":[1534510257860,0,2000,0]}}]}';
   i := StrLenSafe(@res[1]);
   check(mormot.core.base.StrLen(@res[1]) = i);
   res := 'one,two,three';
@@ -5302,6 +5426,132 @@ begin
   CheckSame(local, UtcToLocal(dt, 'Romance Standard Time'));
 end;
 
+const
+  _REFSMB = // real export from a Lenovo T470 laptop
+    'qjzHzUppv1D+CwAAAADeDgAAAZkAAxABIAIwA01lbW9yeSBJbml0IENvbXBsZQAAABB0ZQB' +
+    'FbmQgb2YgRFhFIFBoYXNlAEJJT1MgQm9vaUQADggAAAAAAQAB3gAASW50ZWwoUikgU2lsaW' +
+    'NvbiBWaWV3IFRlY2gAAABAbm9sb2d5AACGDQIAKAcXIAAAAAAAAAAQFwMAAwMDAQACGAAAA' +
+    'P7/AgEABgARKAQAAwD+/0AAQAAAQA0AAQIagEBVCAMEBQYJAAAAIwBVCAIAsARDaGFubmVs' +
+    'QS1ESU1NMABCQU5LIDAAU2FtcwAAAAB1bmcAMzU5N0Q4NEMATm9uZQBNNDcxQTJLNDNDQjE' +
+    'tQyDGFwBSQyAgIAECESgFAzACAAAAAgESIwAEAAkAVeVCmgsyADk4NzY1NDMyMUAEAAAwAA' +
+    'ATHwYDAP///wEwAQAAAAAAAAAAAAAAAAAAAAAAAAcTAAAAggcAAYABgACAACAAIAAABAUHT' +
+    'DEgQ2FjaGUCBwgAAYEBASCCAIIAAgMiBQUFTDJIUwkAAYIBAAwADAMiBgUJTDNGUwQwCgAB' +
+    'A80CAACAgOkGCAD/++u/A4pkAIwKKApBMwcACAAJAUUGAgIE/ADNAiCAAAgAAAQAVTNFMUj' +
+    '+Q29ycG9yYXRpb25L/mUoVE0pIGk1LTczMAAABwAwVSBDUFUgQCAyLjYwR0h6RI+DmoOaAA' +
+    'AYCwABAgDgA/+AmgAAAAAJfQAAEgADDQFGASRMRU5PVk8ATjFRRVQ5NVcgKDEuNwARAAAwI' +
+    'CkAMDUvMnHBMDIyAQEbDAABAgMEzLuxmj40shGoXKeYgAAAAPAq1n4GBQaFGjIwSEVTMjNC' +
+    'MFUAVGhpbmtQYWQgVDQ3MACEEI8AUEYwVkRFQjgAhBpfTVRfEktfQlVfI+xfRk2kLWdxI+x' +
+    'ncQACD9IBVQEAADFFCWEACkWFABJLUxRxU0RLMEo0MDY5NyBXSU4ATDJIRjc3UzAIgIAAM0' +
+    'UzQY90IEF2YWlsYWJsZU2PAAMWDgABCiE0AgICAgAAAABwgDCIAAAAAEaFg5pHVU5vIEFzc' +
+    '2V0Qfxmb3JtZC+AGhcACAkPABECEhBOgWaBqqqqaAVVU0IgMQABiRAAEAYyAggRABAGMwII' +
+    'EgAQBjQCCBMAEAY1AggUABAGNgIIFQAQBjcCCKoSoCQWABAGOAIIFwAQBjkCCBgCEAsfjIB' +
+    'FdGhlcm5ldAIIGQIQBxyNgHh0IUhhbEiFAgAgTW+B4m9yAggaAhD/jY5IZG1pAggbABACRG' +
+    'lzcGxheVBvcnQvRFYolECgSS1EAggcABAOSERNSQIIHQIQHx2MgEhlYWRwaJGDL01pY3JvY' +
+    '+ggUZmABsAgYm8gSmFjaxMDHgAQISEDCREfAAEBAQMBAAABIAEATWVkaWFBU3JkEAMiDiBT' +
+    'bG9BBwkRIAcRAQAAAFNpbUNhR2cMBSECAA0WIgERAgAJAAFlbi2AAAABVVMAABYaIwESAAA' +
+    'DAmIJHi0E/3kHrEoFCgIARnJvbnQAUwAAgAJBTllPADAxQVY0MTkAMDMuMDEATElPTgIWJA' +
+    'USxhvyKwT/CJAAAD4GiKVeUmVhcgBMR0M0MTI4OzOFBSUAAUtIT0lIR0lVQ0NIBAAQxEhJk' +
+    'QSHUyYAVFAHAkJBWSBJL08gBAERQAAXAAYCAAEA/wIAAQEUFYBAAQQFAAIEAAABA/YPBPYP' +
+    'BfUPAACCFCcAJEFNVBERAQGlrwLAARAAQIUEggCDQCgANQEACwEAAAHA+ABOnQIACcABCAA' +
+    'LAH4QXAIAAP4A1xUDAIUhSgABACYBAHZQcm8BAAEA3RopADEQAwcDBQLwATAABQEAUmVmZX' +
+    'JlbmNlIYQAwkFdZGUgLUJiAHVDbyF2VmVyc/KYVFhUIEFDTSB2JVUA3RoqCTGxAAACwAAMA' +
+    'AMECwhcfhBPM01FIDExLjAATUVCeHcHkXRGaXJtd2FyZQYAAjQgBidWhmUgU0tVAADdSysA' +
+    'CgEANHMD//////8EAAEAIQFQAwAGAIKODBACogAHAD4AAAIINAEAAZCxAAAACjTgCwBDA08' +
+    'zU0tMIFBDSABBfS1DUgBUIGhJRCBTdGF0dXMAIedhQaNkWENPcmlnaW5x5lZhbHVlWENOIV' +
+    'YEeU8QITqyUFJPTSHyUlNUIvJBSUQAdfkgSCBRpEhR+FcHePlEeCD7XUtC41RBokGtT1kgG' +
+    'CB2+UxQQFoHkSRDrU8A3TYsAAcWAwBxIJtUATAzcwQF//////8G8g8CAK4AjJEH9A+B/wEA' +
+    '/0AzAEEh8lN5c3RlbSBBZ2WRRk8zTVJDUXEh8lBDSXhQU0GQYAQvACgAdjiNTXY4gCMAVmL' +
+    'bAAAPHy0AUgAAABAABBNA8AEAAQQCCAQKABQAFgFADIEBABgFLgAiAACEBy8AAdhhAxIXMA' +
+    'EyJgCAAAAABQgVBzEABQQxAEAwoAAVBzIABwQhAIMWMwABAQALAAFUVlQtRW5ySm0ykgCIB' +
+    'jQAWloAECAyYQCMEzVFhQsEAbIATVMgAQCMEzZGhQUBYwACABc3RoUGAYoTAQAFAA4ARAAC' +
+    'CDgAAdsAACRNRZEE21E5ARMBRQIAlAaBEIkwAgBAyAABHwAAAADAAMkKQEQC///////////' +
+    '/////////////////////MQCDAAAAKRAAAAAAAAAAAAAAAAAAAAAAQZVJMUKVMkKVMwAAhx' +
+    'I6UhABAQBOCACQDwEAUgABjA87RoUHAQEC0UVIVDU0VwAwOC8xMC8yMDIxAYwrPEaFAAAAA' +
+    'AgB////////////////////////////////////////AAAAAAAAfwT//gAA';
+
+procedure TTestCoreBase.DmiSmbios;
+var
+  uid: TGUID;
+  raw: TRawSmbiosInfo;
+  os:  TSmbiosBasicInfos;
+  dec: TSmbiosInfo;
+  s: RawUtf8;
+  b: RawByteString;
+
+  procedure CheckAgainst(const full: TSmbiosInfo; const os: TSmbiosBasicInfos);
+  begin
+    CheckEqual(full.Bios.VendorName, os[sbiBiosVendor]);
+    CheckEqual(full.Bios.Version, os[sbiBiosVersion]);
+    CheckEqual(full.Bios.Release, os[sbiBiosRelease]);
+    CheckEqual(full.Bios.Firmware, os[sbiBiosFirmware]);
+    CheckEqual(full.Bios.BuildDate, os[sbiBiosDate]);
+    CheckEqual(full.System.ProductName, os[sbiProductName]);
+    CheckEqual(full.System.Version, os[sbiVersion]);
+    CheckEqual(full.System.Uuid, os[sbiUuid]);
+    if full.Processor <> nil then
+      CheckEqual(full.Processor[0].Manufacturer, os[sbiCpuManufacturer]);
+    if full.Battery <> nil then
+      CheckEqual(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer]);
+    if full.Oem <> nil then
+      CheckEqual(full.Oem[0], os[sbiOem]);
+  end;
+
+begin
+  CheckEqual(SizeOf(TSmbiosBiosFlags), 8);
+  CheckEqual(SizeOf(TSmbiosMemory) - 7 * SizeOf(RawUtf8), 11);
+  CheckEqual(SizeOf(TSmbiosMemoryArray) - 2 * SizeOf(pointer), 5);
+  // validate actual retrieval from this computer
+  GetComputerUuid(uid); // retrieve main SMBIOS and its UUID, or generate it
+  Check(_SmbiosRetrieved);
+  Check(not IsZero(THash128(uid)), 'machine UUID');
+  GetSmbiosInfo; // parse using mormot.core.perf
+  CheckAgainst(Smbios, _smbios);
+  if Smbios.System.Uuid <> '' then
+    CheckEqual(ToUtf8(uid), Smbios.System.Uuid, 'uuid');
+  // validate from reference binary export, decoding into binary or json
+  raw.Data := Base64ToBin(_REFSMB);
+  if CheckFailed(raw.Data <> '', '_REFSMB') or
+     CheckFailed(CompressSynLZ(raw.Data, false) <> '', '_REFSMB synlz') then
+    exit;
+  PCardinal(@raw)^ := $010003ff;
+  CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
+  Check(DecodeSmbiosInfo(raw, dec), 'DecodeSmbiosInfo');
+  CheckAgainst(dec, os);
+  CheckHash(BinarySave(@dec.Bios,
+    TypeInfo(TSmbiosBios), rkRecordTypes), $9362A439, 'Bios');
+  CheckHash(BinarySave(@dec.System,
+    TypeInfo(TSmbiosSystem), rkRecordTypes), $A5E69307, 'System');
+  CheckHash(BinarySave(@dec.Board[0],
+    TypeInfo(TSmbiosBoard), rkRecordTypes), $25B6CB6C, 'Board');
+  CheckHash(BinarySave(@dec.Chassis[0],
+    TypeInfo(TSmbiosChassis), rkRecordTypes), $25633E53, 'Chassis');
+  CheckHash(BinarySave(@dec.Processor[0],
+    TypeInfo(TSmbiosProcessor), rkRecordTypes), $03E34B17, 'Proc');
+  b := BinarySave(@dec.Memory[0], TypeInfo(TSmbiosMemoryArray), rkRecordTypes);
+  //FileFromString(b, Executable.ProgramFilePath + CPU_ARCH_TEXT + '.dat');
+  CheckEqual(length(b), 137, 'MemoryArray Len');
+  CheckHash(b, $87CADDDA, 'MemoryArray');
+  SaveJson(dec.Memory[0], TypeInfo(TSmbiosMemoryArray),
+    [twoIgnoreDefaultInRecord], s);
+  CheckEqual(s, '{"l":3,"u":3,"e":3,"c":"32 GB","n":2,"d":[{"w":64,"d":64,' +
+    '"s":"16 GB","f":13,"r":2,"t":26,"e":16512,"l":"ChannelA-DIMM0","b":"B' +
+    'ANK 0","m":"Samsung","n":"3597D84C","a":"None","p":"M471A2K43CB1-CRC"' +
+    ',"c":2133},{"s":"0 B","f":2,"t":2,"l":"ChannelB-DIMM0","b":"BANK 2"}]}',
+    'MemoryArray Json');
+  CheckHash(BinarySave(@dec.Memory[0].Device[0],
+    TypeInfo(TSmbiosMemory), rkRecordTypes), $895CE535, 'Memory');
+  CheckHash(BinarySave(@dec.Connector[0],
+    TypeInfo(TSmbiosConnector), rkRecordTypes), $129D5265, 'Conn');
+  CheckHash(BinarySave(@dec.Slot[0],
+    TypeInfo(TSmbiosSlot), rkRecordTypes), $0BE08E2D, 'Slot');
+  CheckHash(BinarySave(@dec.Battery[0],
+    TypeInfo(TSmbiosBattery), rkRecordTypes), $7FDA54A0, 'Battery');
+  CheckHash(BinarySave(@dec,
+    TypeInfo(TSmbiosInfo), rkRecordTypes), $807823B2, 'BinarySave');
+  SaveJson(dec, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
+  CheckHash(s, $7A3BEEB8, 'BinarySave');
+end;
+
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
 // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestCoreBase._IdemPropName;
@@ -6082,7 +6332,7 @@ begin
         i2.From(i1.Value);
         check(i1.Equal(i2));
         json := VariantSaveJson(i1.AsVariant);
-        check(VariantSaveJson(i2.AsVariant) = json);
+        checkEqual(VariantSaveJson(i2.AsVariant), json);
         CheckEqual(json, FormatUtf8(
           '{"Created":"%","Identifier":%,"Counter":%,"Value":%,"Hex":"%"}',
           [DateTimeToIso8601Text(i1.CreateDateTime), i1.ProcessID, i1.Counter,
@@ -6095,7 +6345,7 @@ begin
         else
           check(Length(obfusc) = 24);
         inc(obfusc[12]);
-        check(not gen.FromObfuscated(obfusc, i3), 'tampered text');
+        check(not gen.FromObfuscated(obfusc, i3), 'tempered text');
         dec(obfusc[12]);
       end;
       //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);

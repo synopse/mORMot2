@@ -234,7 +234,8 @@ type
     dbPropIsMemory,
     dbPropUntouched,
     dbDropTable,
-    dbSlowInsert);
+    dbSlowInsert,
+    dbRemoteDB);
 
   TTestDatabaseAbstract = class(TSynTestCase)
   protected
@@ -611,6 +612,11 @@ begin
     Stat.CreateTableTime := RunTimer.Stop;
   if (dbSlowInsert in Flags) and not UseTransactions then // full synch is slow
     Stat.NumberOfElements := 200
+  else if (dbRemoteDB in Flags) and not UseBatch then
+    if UseTransactions then
+      Stat.NumberOfElements := 1000
+    else
+      Stat.NumberOfElements := 200
   else
     Stat.NumberOfElements := 10000;
   SetLength(ValueLastName, Stat.NumberOfElements);
@@ -788,7 +794,7 @@ end;
 
 procedure TTestDatabaseExternalAbstract.RunExternal(P: TSQLDBConnectionProperties);
 begin
-  Flags := Flags + [dbPropUntouched, dbDropTable, dbPropIsMemory];
+  Flags := Flags + [dbPropUntouched, dbDropTable, dbPropIsMemory, dbRemoteDB];
   Props := P;
   try
     Props.ThreadSafeConnection.Connect;
@@ -901,7 +907,8 @@ end;
 procedure TTestPostgresql._SynDBPostgres;
 begin
   RunExternal(TSQLDBPostgresConnectionProperties.Create(
-    'localhost', 'postgres', 'postgres', 'docker'));
+//    'localhost', 'postgres', 'postgres', 'docker'));
+  'tfb-database:5432', 'hello_world', 'benchmarkdbuser', 'benchmarkdbpass'));
 end;
 
 

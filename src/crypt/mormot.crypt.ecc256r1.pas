@@ -280,6 +280,7 @@ type
     Serial: TEccCertificateID;
     /// identify the certificate issuer
     // - is either geniune random bytes, or some Baudot-encoded text
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     Issuer: TEccCertificateIssuer;
     /// genuine identifier of the authority certificate used for signing
     // - should be used to retrieve the associated PublicKey used to compute
@@ -288,7 +289,7 @@ type
     AuthoritySerial: TEccCertificateID;
     /// identify the authoritify issuer used for signing
     // - is either geniune random bytes, or some Baudot-encoded text
-    // - may equal Issuer, if was self-signed
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     AuthorityIssuer: TEccCertificateIssuer;
     /// the ECDSA secp256r1 public key of this certificate
     // - may be used later on for signing or key derivation
@@ -313,7 +314,7 @@ type
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
     // - avoiding to compute slow ECDSA verification in case of corruption,
     // due e.g. to unexpected transmission/bug/fuzzing/dosattack
-    // - include Info content, as computed by TEccCertificateContent.ComputeCrc32
+    // - include V2 Info, as computed by TEccCertificateContent.ComputeCrc32
     CRC: cardinal;
   end;
 
@@ -341,13 +342,13 @@ type
   public
     /// basic content - version 1 compatible
     Head: TEccCertificateContentV1;
-    /// new version >= 2 with additional information
+    /// new version >= 2 with additional information (up to 512 bytes)
     Info: TEccCertificateContentV2;
     /// set Certificate usage, as 16-bit TCryptCertUsage value
     // - will also force the version to be 2 if maxversion allow it
     procedure SetUsage(usage: integer; maxversion: byte);
     /// get Certificate 16-bit TCryptCertUsage usage
-    // - returns CERTIFICATE_USAGE_ALL = all Usage for version 1
+    // - returns CU_ALL = all Usage for version 1
     function GetUsage: integer;
     /// set Certificate subject
     // - the input subject text could be CSV separated
@@ -366,8 +367,7 @@ type
     // - could be validated against EccCheck()
     function CheckDate(nowdate: PEccDate = nil): boolean;
     /// fast check if the binary buffer storage of a certificate was self-signed
-    // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
-    // fields matching Serial/Issuer
+    // - a self-signed certificate has its AuthoritySerial field matching Seial
     function IsSelfSigned: boolean;
     /// compare all fields of both Certificates
     function FieldsEqual(const another: TEccCertificateContent): boolean;
@@ -408,6 +408,7 @@ type
     AuthoritySerial: TEccCertificateID;
     /// identify the authoritify issuer used for signing
     // - is either geniune random bytes, or some Baudot-encoded text
+    // - blank in V2, contains the (may be truncated) "subject" in V1 format
     AuthorityIssuer: TEccCertificateIssuer;
     /// SHA-256 + ECDSA secp256r1 digital signature of the content
     Signature: TEccSignature;
@@ -501,7 +502,7 @@ const
     [ecdDecrypted, ecdDecryptedWithSignature];
 
   /// map all TCryptCertUsages flags for ECC Version 1 default value
-  // - should match word(CERTIFICATE_USAGE_ALL) from mormot.crypt.secure.pas
+  // - should match word(CU_ALL) from mormot.crypt.secure.pas
   ECCV1_USAGE_ALL = 65535;
 
 
@@ -550,6 +551,18 @@ function IsZero(const issuer: TEccCertificateIssuer): boolean; overload;
 function IsZero(const id: TEccCertificateID): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// ensure a TEccPublicKey binary buffer is not void, i.e. filled with 0
+function IsZero(const k: TEccPublicKey): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// ensure a TEccPrivateKey binary buffer is not void, i.e. filled with 0
+function IsZero(const pk: TEccPrivateKey): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// ensure a TEccSignature binary buffer is not void, i.e. filled with 0
+function IsZero(const sig: TEccSignature): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a supplied TEccCertificateIssuer binary buffer into proper text
 // - returns Ascii-7 text if was stored using Baudot encoding
 // - or returns hexadecimal values, if it was 16 bytes of random binary
@@ -567,6 +580,7 @@ function EccText(const ID: TEccCertificateID): RawUtf8; overload;
 
 /// convert a supplied hexadecimal buffer into a TEccCertificateID binary buffer
 // - returns TRUE if the supplied Text was a valid hexadecimal buffer
+// - will also recognize GUID/UUID layout as {x-x-x-x} or x-x-x-x
 function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
 
 /// convert a supplied TEccSignature binary buffer into proper text
@@ -610,7 +624,7 @@ implementation
  - OpenSSL 300 Ecc256r1MakeKey in   5.09ms i.e. 57.5K/s, aver. 16us
  - OpenSSL 300 Ecc256r1Sign in   7.97ms i.e. 36.7K/s, aver. 26us
  - OpenSSL 300 Ecc256r1Verify in  28.66ms i.e. 10.2K/s, aver. 95us
- - OpenSSL 598 Ecc256r1SharedSecret in  44.75ms i.e. 13K/s, aver. 74us
+ - OpenSSL 598 Ecc256r1SharedSecret in 44.75ms i.e. 13K/s, aver. 74us
 
  Some Numbers on Linux AARCH64 (Oracle Cloud VM) :
  - mORMot  300 Ecc256r1MakeKey in 243.31ms i.e. 1.2K/s, aver. 811us
@@ -1394,6 +1408,186 @@ end;
 
 { ***************** Middle-Level Certificate-based Public Key Cryptography }
 
+function ToText(val: TEccValidity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TEccValidity), ord(val));
+end;
+
+function ToText(res: TEccDecrypt): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TEccDecrypt), ord(res));
+end;
+
+procedure FillZero(out Priv: TEccPrivateKey);
+begin
+  PInt64Array(@Priv)^[0] := 0;
+  PInt64Array(@Priv)^[1] := 0;
+  PInt64Array(@Priv)^[2] := 0;
+  PInt64Array(@Priv)^[3] := 0;
+end;
+
+function IsEqual(const issuer1, issuer2: TEccCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer1;
+  b: TPtrIntArray absolute issuer2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifdef CPU32} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU32};
+end;
+
+function IsEqual(const id1, id2: TEccCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id1;
+  b: TPtrIntArray absolute id2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifdef CPU32} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU32};
+end;
+
+function IsZero(const issuer: TEccCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifdef CPU32} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU32};
+end;
+
+function IsZero(const id: TEccCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifdef CPU32} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU32};
+end;
+
+function IsZero(const k: TEccPublicKey): boolean;
+begin
+  result := IsZero(PHash256(@k[1])^); // checking main 256-bit is enough
+end;
+
+function IsZero(const pk: TEccPrivateKey): boolean;
+begin
+  result := IsZero(THash256(pk));
+end;
+
+function IsZero(const sig: TEccSignature): boolean;
+begin
+  result := IsZero(THash512Rec(sig).Lo) or // any 0 coordinate is invalid
+            IsZero(THash512Rec(sig).Hi);
+end;
+
+function NowEccDate: TEccDate;
+begin
+  result := Trunc(NowUtc) - ECC_DELTA;
+end;
+
+function EccDate(const DateTime: TDateTime): TEccDate;
+var
+  now: integer;
+begin
+  if DateTime = 0 then
+    result := 0
+  else
+  begin
+    now := Trunc(DateTime) - ECC_DELTA;
+    if cardinal(now) > high(TEccDate) then
+      result := 0
+    else
+      result := now;
+  end;
+end;
+
+function EccToDateTime(EccDate: TEccDate): TDateTime;
+begin
+  if EccDate = 0 then
+    result := 0
+  else
+    result := EccDate + ECC_DELTA;
+end;
+
+function EccText(EccDate: TEccDate; Expanded: boolean): RawUtf8;
+begin
+  if EccDate = 0 then
+    result := ''
+  else
+    result := DateToIso8601(EccDate + ECC_DELTA, Expanded);
+end;
+
+function EccText(const Issuer: TEccCertificateIssuer): RawUtf8;
+var
+  tmp: array[0..1] of TEccCertificateIssuer;
+begin
+  if IsZero(Issuer) then
+    result := ''
+  else
+  begin
+    tmp[0] := Issuer;
+    tmp[1][0] := 0; // add a trailing #0 as expected for trailing bits
+    result := BaudotToAscii(@tmp, SizeOf(Issuer));
+    if result = '' then
+      result := mormot.core.text.BinToHex(@Issuer, SizeOf(Issuer));
+  end;
+end;
+
+function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer;
+  fullbaudot: PRawByteString): boolean;
+var
+  baudot: RawByteString;
+  len: integer;
+begin
+  FillZero(THash128(Issuer));
+  baudot := AsciiToBaudot(Text);
+  if fullbaudot <> nil then
+    fullbaudot^ := baudot;
+  len := length(baudot);
+  result := len > SizeOf(Issuer);
+  if result then // truncated
+    len := SizeOf(Issuer);
+  MoveFast(pointer(baudot)^, Issuer, len);
+end;
+
+function EccText(const ID: TEccCertificateID): RawUtf8;
+begin
+  if IsZero(ID) then
+    result := ''
+  else
+    result := AesBlockToString(TAesBlock(ID));
+end;
+
+function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
+var
+  tmp: RawUtf8;
+begin
+  tmp := Text;
+  result := ((length(tmp) = 32) or TrimGuid(tmp)) and
+            mormot.core.text.HexToBin(pointer(tmp), @ID, SizeOf(ID))
+end;
+
+function EccText(const sign: TEccSignature): RawUtf8;
+begin
+  if IsZero(sign) then
+    result := ''
+  else
+    result := BinToBase64(@sign, SizeOf(sign));
+end;
+
+
 { TEccCertificateContent }
 
 procedure TEccCertificateContent.SetUsage(usage: integer; maxversion: byte);
@@ -1449,14 +1643,15 @@ var
   truncated: boolean;
   v2: TInfov2;
 begin
-  // #13/#10 are Baudot-friendly
+  // EccID(128-bit hexa) can't be stored as V1 because EccText() is then wrong
+  // try to store as Baudot - #13/#10 are Baudot-friendly so replace ','/'.'
   truncated := EccIssuer(StringReplaceChars(StringReplaceChars(TrimControlChars(
     sub), ',', #13),  '.', #10), iss, @baudot);
   if Head.Version = 1 then
     if truncated and
        (maxversion >= 2) then
     begin
-      FillZero(THash128(Head.Signed.Issuer));
+      FillZero(THash128(Head.Signed.Issuer)); // Issuer set to blank in V2
       Head.Version := 2; // we need the new format and its V2 Subject field
     end
     else
@@ -1489,8 +1684,8 @@ begin
      (Head.Signed.IssueDate = 65535) or
      IsZero(Head.Signed.Serial) or
      IsZero(Head.Signed.AuthoritySerial) or
-     IsZero(@Head.Signed.PublicKey, SizeOf(Head.Signed.PublicKey)) or
-     IsZero(@Head.Signature, SizeOf(Head.Signature)) then
+     IsZero(Head.Signed.PublicKey) or
+     IsZero(Head.Signature) then
     result := false
   else
     result := (Head.Version in [1, 2]) and
@@ -1514,8 +1709,7 @@ end;
 function TEccCertificateContent.IsSelfSigned: boolean;
 begin
   result := IsEqual(Head.Signed.AuthoritySerial, Head.Signed.Serial) and
-            not IsZero(Head.Signed.Serial) and
-            IsEqual(Head.Signed.AuthorityIssuer, Head.Signed.Issuer);
+            not IsZero(Head.Signed.Serial);
 end;
 
 function TEccCertificateContent.FieldsEqual(
@@ -1588,8 +1782,7 @@ begin
   result := (Version in [1]) and
             (Date <> 0) and
             not IsZero(AuthoritySerial) and
-            not IsZero(AuthorityIssuer) and
-            not IsZero(@Signature, SizeOf(Signature));
+            not IsZero(Signature);
 end;
 
 function TEccSignatureCertifiedContent.FromBase64(const base64: RawUtf8): boolean;
@@ -1702,170 +1895,6 @@ begin
     Serial := id;
     result := Date <> 0;
   end;
-end;
-
-
-
-function ToText(val: TEccValidity): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TEccValidity), ord(val));
-end;
-
-function ToText(res: TEccDecrypt): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TEccDecrypt), ord(res));
-end;
-
-procedure FillZero(out Priv: TEccPrivateKey);
-begin
-  PInt64Array(@Priv)^[0] := 0;
-  PInt64Array(@Priv)^[1] := 0;
-  PInt64Array(@Priv)^[2] := 0;
-  PInt64Array(@Priv)^[3] := 0;
-end;
-
-function IsEqual(const issuer1, issuer2: TEccCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer1;
-  b: TPtrIntArray absolute issuer2;
-begin
-  result := (a[0] = b[0]) and
-            (a[1] = b[1])
-            {$ifdef CPU32} and
-            (a[2] = b[2]) and
-            (a[3] = b[3])
-            {$endif CPU32};
-end;
-
-function IsEqual(const id1, id2: TEccCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id1;
-  b: TPtrIntArray absolute id2;
-begin
-  result := (a[0] = b[0]) and
-            (a[1] = b[1])
-            {$ifdef CPU32} and
-            (a[2] = b[2]) and
-            (a[3] = b[3])
-            {$endif CPU32};
-end;
-
-function IsZero(const issuer: TEccCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer;
-begin
-  result := (a[0] = 0) and
-            (a[1] = 0)
-            {$ifdef CPU32} and
-            (a[2] = 0) and
-            (a [3] = 0)
-            {$endif CPU32};
-end;
-
-function IsZero(const id: TEccCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id;
-begin
-  result := (a[0] = 0) and
-            (a[1] = 0)
-            {$ifdef CPU32} and
-            (a[2] = 0) and
-            (a [3] = 0)
-            {$endif CPU32};
-end;
-
-function NowEccDate: TEccDate;
-begin
-  result := Trunc(NowUtc) - ECC_DELTA;
-end;
-
-function EccDate(const DateTime: TDateTime): TEccDate;
-var
-  now: integer;
-begin
-  if DateTime = 0 then
-    result := 0
-  else
-  begin
-    now := Trunc(DateTime) - ECC_DELTA;
-    if cardinal(now) > high(TEccDate) then
-      result := 0
-    else
-      result := now;
-  end;
-end;
-
-function EccToDateTime(EccDate: TEccDate): TDateTime;
-begin
-  if EccDate = 0 then
-    result := 0
-  else
-    result := EccDate + ECC_DELTA;
-end;
-
-function EccText(EccDate: TEccDate; Expanded: boolean): RawUtf8;
-begin
-  if EccDate = 0 then
-    result := ''
-  else
-    result := DateToIso8601(EccDate + ECC_DELTA, Expanded);
-end;
-
-function EccText(const Issuer: TEccCertificateIssuer): RawUtf8;
-var
-  tmp: array[0..1] of TEccCertificateIssuer;
-begin
-  if IsZero(Issuer) then
-    result := ''
-  else
-  begin
-    tmp[0] := Issuer;
-    tmp[1][0] := 0; // add a trailing #0 as expected for trailing bits
-    result := BaudotToAscii(@tmp, SizeOf(Issuer));
-    if result = '' then
-      result := mormot.core.text.BinToHex(@Issuer, SizeOf(Issuer));
-  end;
-end;
-
-function EccIssuer(const Text: RawUtf8; out Issuer: TEccCertificateIssuer;
-  fullbaudot: PRawByteString): boolean;
-var
-  baudot: RawByteString;
-  len: integer;
-begin
-  FillZero(THash128(Issuer));
-  baudot := AsciiToBaudot(Text);
-  if fullbaudot <> nil then
-    fullbaudot^ := baudot;
-  len := length(baudot);
-  result := len > SizeOf(Issuer);
-  if result then // truncated
-    len := SizeOf(Issuer);
-  MoveFast(pointer(baudot)^, Issuer, len);
-end;
-
-function EccText(const ID: TEccCertificateID): RawUtf8;
-begin
-  if IsZero(ID) then
-    result := ''
-  else
-    result := AesBlockToString(TAesBlock(ID));
-end;
-
-function EccID(const Text: RawUtf8; out ID: TEccCertificateID): boolean;
-begin
-  if length(Text) <> SizeOf(ID) * 2 then
-    result := false
-  else
-    result := mormot.core.text.HexToBin(pointer(Text), @ID, SizeOf(ID));
-end;
-
-function EccText(const sign: TEccSignature): RawUtf8;
-begin
-  if IsZero(@sign, SizeOf(sign)) then
-    result := ''
-  else
-    result := BinToBase64(@sign, SizeOf(sign));
 end;
 
 

@@ -15,19 +15,35 @@
 
 {$ifdef ASMX86} // i386 asm with global - disabled on PIC targets
 
-{$define WITH_ERMS} // we enable it as fallback on old CPU without SSE2
+{
+ FillCharFast/MoveFast implementation notes:
+ - use SS2 and not FPU fld/fst which may trigger unexpected exceptions (Agner)
+ - use dedicated branchless sub-functions for small buffers of 0..32 bytes
+ - use simple SSE2 loop for 33..255 bytes
+ - assume ERBMS is available (cpuid flag may not be propagated within VMs)
+ - use "rep movsb" for 256..512K input (should work on all CPUs, even older with
+ no ERBMS), or as fallback if no SSE2 CPU is used
+ - use non volatile SSE2 loop when >= 512KB (to not pollute the CPU cache)
+ - don't use backward "std rep movsb" since it is not involved by ERMBS (slow)
+ - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated
+}
+
+{$define WITH_ERMS} // we need it as fallback on old CPU without SSE2
 
 {$ifdef WITH_ERMS}
 var
   // "rep stosb/movsb" enabled for len >= 4096 on ERMSB CPUs
   // it has been reported that "on 32-bit strings have to be at least 4KB"
   // see https://stackoverflow.com/a/43837564/458259 for explanations and timing
-  ERMSB_MIN_SIZE: integer = maxInt; // maxInt = disabled by default
-  {$define WITH_ERMSASM} // include "rep movsb" asm blocks 
+  ERMSB_MIN_SIZE_FWD: integer = maxInt; // maxInt = disabled by default
+  {$ifndef FPC_X86}
+  ERMSB_MIN_SIZE_BWD: integer = maxInt; // used for no-SSE2, not for ERMSB
+  {$endif FPC_X86}
+  {$define WITH_ERMSASM} // include "rep movsb" asm blocks
 {$endif WITH_ERMS}
 
 {$ifdef HASNOSSE2}
-  {$define WITH_ERMSASM} // "rep movsd" is used on oldest CPU
+  {$define WITH_ERMSASM} // "rep movsd" is used as fallback on oldest CPU
 {$endif HASNOSSE2}
 
 const
@@ -36,9 +52,6 @@ const
   NONTEMPORALSIZE = 1 shl 20;
 
 // fast SSE2 version - force define HASNOSSE2 when run any very old CPU
-// - using FPU fld/fst may trigger unexpected exceptions, as reported by Agner
-// Fog on "Optimizing Assembly" page 118 -> default is SSE2 code
-// - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -58,7 +71,7 @@ asm
         {$ifdef WITH_ERMS}
         cmp     edx, NONTEMPORALSIZE
         jae     @noerms // movntdq was reported to be faster than ERMSB
-        cmp     edx, ERMSB_MIN_SIZE
+        cmp     edx, ERMSB_MIN_SIZE_FWD
         ja      @ermsb
 @noerms:{$endif WITH_ERMS}
         sub     edx, 16
@@ -75,12 +88,12 @@ asm
         neg     edx
         cmp     edx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @nv
-// {$ifdef FPC} align 16 {$endif} natural alignment is actually OK
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @loop:  movaps  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
         add     edx, 16
         jl      @loop
         ret
-{$ifdef FPC} align 16 {$else} nop; nop; nop {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @nv:    movntdq dqword ptr [eax + edx], xmm0 // non-temporal fill 16 bytes
         add     edx, 16
         jl      @nv
@@ -89,12 +102,7 @@ asm
 {$ifdef WITH_ERMSASM}
 @ermsb: push    edi
         cld
-{$ifndef HASNOSSE2}
-        mov     edi, eax
-        mov     eax, ecx
-        mov     ecx, edx
-        rep     stosb   // ERMSB favors stosb and will properly align writes
-{$else} 
+{$ifdef HASNOSSE2}
 @ermsa: test    al, 3   // aligned stosd is better on old CPUs
         jz      @erms3
         mov     byte ptr [eax], cl
@@ -114,6 +122,11 @@ asm
 @erms1: test    dl, 1
         jz      @erms0
         mov     byte ptr [edi], al
+{$else} // ERMSB favors stosb and will properly align writes
+        mov     edi, eax
+        mov     eax, ecx
+        mov     ecx, edx
+        rep     stosb
 {$endif HASNOSSE2}
 @erms0: pop     edi
         ret
@@ -148,8 +161,6 @@ procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=source edx=dest ecx=count
-        cmp     eax, edx
-        jz      @exit                  // exit if source=dest
         cmp     ecx, 32
         ja      @lrg                   // count > 32 or count < 0
         sub     ecx, 8
@@ -184,7 +195,7 @@ asm
         ret
 {$endif HASNOSSE2}
 @exit:  rep     ret
-        {$ifdef FPC} align 4 {$endif}
+{$ifdef FPC} align 4 {$else} {$ifdef HASALIGN} .align 4 {$endif}{$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
 {$ifdef WITH_ERMSASM}
 @ermsf: push    esi
@@ -201,27 +212,26 @@ asm
         lea     esi, [eax + ecx - 1]
         lea     edi, [edx + ecx - 1]
         std
-        rep     movsb  // ERMSB backward move
+        rep     movsb  // backward move is slow even if ERMSB is set
         pop     edi
         pop     esi
         cld            // FPC requires this
         ret
 {$endif WITH_ERMSASM}
 {$ifdef HASNOSSE2}
-@lrg:   jng     @exit                // count < 0
-        cmp     eax, edx
-        ja      @ermsf               // fallback to rep movsb on old CPUs
-        sub     edx, ecx
-        cmp     eax, edx
-        lea     edx, [edx + ecx]
-        jna     @ermsf
-        jmp     @ermsb
+@lrg:   jng    @exit   // count < 0
+        sub    edx, eax
+        jz     @exit
+        cmp    edx, ecx
+        lea    edx, [edx + eax]
+        jb     @ermsb  // move backwards if unsigned(dest-source) < count
+        jmp    @ermsf
 {$else}
 @lrgfwd:// large forward move
         {$ifdef WITH_ERMS}
         cmp     ecx, NONTEMPORALSIZE
         jae     @noermf // movntdq was reported to be faster than ERMSB
-        cmp     ecx, ERMSB_MIN_SIZE
+        cmp     ecx, ERMSB_MIN_SIZE_FWD
         ja      @ermsf
 @noermf:{$endif WITH_ERMS}
         push    edx
@@ -236,7 +246,7 @@ asm
         pop     edx
         cmp     ecx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @fwnv
-        {$ifdef FPC} align 16 {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
         movaps  dqword ptr [edx + ecx], xmm0
         add     ecx, 16
@@ -245,23 +255,22 @@ asm
         pop     edx
         movups  dqword ptr [edx], xmm2       // first 16
         ret
-        {$ifdef FPC} align 16 {$endif}
-@fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+@fwnv:  movups  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
-        jl      @fwd
+        jl      @fwnv
         sfence
         jmp     @fwde
-@lrg:   jng     @exit                // count < 0
-        cmp     eax, edx
-        ja      @lrgfwd
-        sub     edx, ecx
-        cmp     eax, edx
-        lea     edx, [edx + ecx]
-        jna     @lrgfwd
+@lrg:   jng     @exit      // count < 0
+        sub     edx, eax
+        jz      @exit      // source=dest
+        cmp     edx, ecx
+        lea     edx, [edx + eax]
+        jae     @lrgfwd   // move backwards if unsigned(dest-source) < count
         // large backward/overlapping move
-        {$ifdef WITH_ERMS}
-        cmp     ecx, ERMSB_MIN_SIZE
+@lrgbwd:{$ifdef WITH_ERMS}
+        cmp     ecx, ERMSB_MIN_SIZE_BWD // enabled for no-SSE2, not for ERMSB
         ja      @ermsb
         {$endif WITH_ERMS}
         sub     ecx, 16
@@ -271,7 +280,8 @@ asm
         add     ecx, edx
         and     ecx, -16              // 16-byte align writes
         sub     ecx, edx
-        {$ifdef FPC} align 16 {$endif}
+        // non-volatile backward is not efficient since we overlap data
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @bwd:   movups  xmm0, dqword ptr [eax + ecx]
         movaps  dqword ptr [edx + ecx], xmm0
         sub     ecx, 16
@@ -1121,7 +1131,7 @@ asm
         jnz     @fnd
         cmp     edx, ecx
         jbe     @no
-{$ifdef FPC} align 16 {$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @by16:  movaps  xmm0, [ebx + ecx]
         add     ecx, 16
         pcmpeqb xmm0, xmm1
@@ -1609,14 +1619,24 @@ asm
         je      @0
         test    eax, edx
         jz      @maynil
-@f:     movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
-        sub     cl, byte ptr [edx]
+@f:     mov     cl, byte ptr [eax] // first char comparison (quicksort speedup)
+        mov     ch, byte ptr [edx]
+        cmp     cl, ch
         je      @s
-        movsx   eax, cl              // branchless execution on Quicksort/ReHash
+        movzx   eax, cl
+        movzx   edx, ch
+        sub     eax, edx            // branchless execution on Quicksort/ReHash
         ret
 @0:     xor     eax, eax
         ret
+@maynil:test    edx, edx       // A or B may be ''
+        jz      @1
+        test    eax, eax
+        jnz     @f
+        dec     eax
+        ret
 @s:     push    ebx
+        xor     ecx, ecx
         mov     ebx, dword ptr [eax - 4]
         sub     ebx, dword ptr [edx - 4]   // ebx = length(A)-length(B)
         push    ebx
@@ -1625,7 +1645,7 @@ asm
         sub     ecx, dword ptr [eax - 4]   // ecx = -min(length(A),length(B))
         sub     eax, ecx
         sub     edx, ecx
-{$ifdef FPC} align 16 {$else} nop; nop {$endif}
+{$ifdef FPC} align 16 {$endif} // is naturally aligned anyway
 @by4:   mov     ebx, dword ptr [eax + ecx]  // compare 4 bytes per iteration
         xor     ebx, dword ptr [edx + ecx]
         jnz     @d
@@ -1643,12 +1663,6 @@ asm
         pop     ebx
         pop     ebx
         sub     eax, edx
-        ret
-@maynil:test    edx, edx       // A or B may be ''
-        jz      @1
-        test    eax, eax
-        jnz     @f
-        dec     eax
         ret
 @1:     mov     eax, 1
 end;
@@ -1853,9 +1867,7 @@ asm
           mov     ecx, dword ptr [esi + 8]
           mov     edx, dword ptr [esi + 12]
           {$ifdef HASAESNI}
-          {$ifdef FPC}
-          align 8
-          {$endif FPC}
+{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
 @s:       crc32   eax, dword ptr [edi]
           crc32   ebx, dword ptr [edi + 4]
           crc32   ecx, dword ptr [edi + 8]

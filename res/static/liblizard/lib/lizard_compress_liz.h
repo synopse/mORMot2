@@ -96,7 +96,10 @@ FORCE_INLINE int Lizard_encodeSequence_LIZv1 (
     /* Encode Offset */
     if (offset >= LIZARD_MAX_16BIT_OFFSET)  // 24-bit offset
     {
-        if (matchLength < MM_LONGOFF) printf("ERROR matchLength=%d/%d\n", (int)matchLength, MM_LONGOFF), exit(1);
+        if (matchLength < MM_LONGOFF) {
+            //AB printf("ERROR matchLength=%d/%d\n", (int)matchLength, MM_LONGOFF), exit(1);
+            return(0);
+        }
 
       //  if ((limitedOutputBuffer) && (ctx->literalsPtr > oend - 8 /*LIZARD_LENGTH_SIZE_LIZv1(length)*/)) { LIZARD_LOG_COMPRESS_LIZv1("encodeSequence overflow2\n"); return 1; }   /* Check output limit */
         if (matchLength - MM_LONGOFF >= LIZARD_LAST_LONG_OFF) 
@@ -129,8 +132,14 @@ FORCE_INLINE int Lizard_encodeSequence_LIZv1 (
         else
         {
             // it should never happen
-            if (offset < 8) { printf("ERROR offset=%d\n", (int)offset); exit(1); }
-            if (matchLength < MINMATCH) { printf("ERROR matchLength[%d] < MINMATCH  offset=%d\n", (int)matchLength, (int)ctx->last_off); exit(1); }
+            if (offset < 8) { 
+              //AB printf("ERROR offset=%d\n", (int)offset); exit(1);
+              return 0;
+            }
+            if (matchLength < MINMATCH) { 
+              //AB printf("ERROR matchLength[%d] < MINMATCH  offset=%d\n", (int)matchLength, (int)ctx->last_off); exit(1); 
+              return 0;
+            }
             
             ctx->last_off = offset;
             MEM_writeLE16(ctx->offset16Ptr, (U16)ctx->last_off); ctx->offset16Ptr += 2;

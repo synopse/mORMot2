@@ -268,12 +268,8 @@ type
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
     // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
-    // - fast overridden implementation with no temporary variable
-    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJson(WR: TResultsWriter); override;
+    /// return one column value into JSON content
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
   end;
 
 
@@ -360,13 +356,19 @@ begin
 end;
 
 
+
 { TSqlDBSQLite3Connection }
 
 procedure TSqlDBSQLite3Connection.Commit;
 begin
   inherited Commit;
   try
-    fDB.Commit;
+    fDB.Lock;
+    try
+      fDB.Commit;
+    finally
+      fDB.UnLock;
+    end;
   except
     inc(fTransactionCount); // the transaction is still active
     raise;
@@ -448,7 +450,12 @@ end;
 procedure TSqlDBSQLite3Connection.StartTransaction;
 begin
   inherited;
-  fDB.TransactionBegin;
+  fDB.Lock;
+  try
+    fDB.TransactionBegin;
+  finally
+    fDB.UnLock;
+  end;
 end;
 
 
@@ -582,9 +589,10 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSqlDBSQLite3Statement.ColumnsToJson(WR: TResultsWriter);
+procedure TSqlDBSQLite3Statement.ColumnToJson(Col: integer; W: TJsonWriter);
 begin
-  fStatement.FieldsToJson(WR, fForceBlobAsNull);
+  fStatement.FieldToJson(W,
+    sqlite3.column_value(fStatement.Request, Col), fForceBlobAsNull);
 end;
 
 function TSqlDBSQLite3Statement.ColumnType(Col: integer;
@@ -641,8 +649,10 @@ end;
 destructor TSqlDBSQLite3Statement.Destroy;
 begin
   try
+    fDB.Lock;
     fStatement.Close; // release statement
   finally
+    fDB.UnLock;
     inherited Destroy;
   end;
 end;
@@ -655,12 +665,14 @@ begin
     exit; // execution done in Step()
   if fShouldLogSQL then
     SqlLogBegin(sllSQL);
+  fDB.Lock;
   try
     // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
     until fStatement.Step <> SQLITE_ROW;
     fUpdateCount := fDB.LastChangeCount;
   finally
+    fDB.UnLock;
     if fShouldLogSQL then
       SqlLogEnd;
   end;
@@ -695,22 +707,32 @@ begin
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
   if fDB = nil then
     fDB := TSqlDBSQLite3Connection(fConnection).DB;
-  fStatement.Prepare(fDB.DB, aSql);
-  fColumnCount := fStatement.FieldCount;
-  if fShouldLogSQL then
-  begin
-    fParamCount := fStatement.ParamCount;
-    SetLength(fLogSQLValues, fParamCount);
-    SqlLogEnd(' %', [fDB.FileNameWithoutPath]);
+  fDB.Lock;
+  try
+    fStatement.Prepare(fDB.DB, aSql);
+    fColumnCount := fStatement.FieldCount;
+    if fShouldLogSQL then
+    begin
+      fParamCount := fStatement.ParamCount;
+      SetLength(fLogSQLValues, fParamCount);
+      SqlLogEnd(' f=%', [fDB.FileNameWithoutPath]);
+    end;
+  finally
+    fDB.UnLock;
   end;
 end;
 
 procedure TSqlDBSQLite3Statement.Reset;
 begin
-  fStatement.Reset; // should be done now
-  fUpdateCount := 0;
-  // fStatement.BindReset; // slow down the process, and is not mandatory
-  ReleaseRows;
+  fDB.Lock;
+  try
+    fStatement.Reset; // should be done now
+    fUpdateCount := 0;
+    // fStatement.BindReset; // slow down the process, and is not mandatory
+    ReleaseRows;
+  finally
+    fDB.UnLock;
+  end;
   if fShouldLogSQL then
     SetLength(fLogSQLValues, fParamCount);
   inherited Reset;
@@ -720,7 +742,7 @@ procedure TSqlDBSQLite3Statement.ReleaseRows;
 begin
   if fShouldLogSQL then
     VariantDynArrayClear(fLogSQLValues);
-  inherited ReleaseRows;
+  inherited ReleaseRows; // fSqlWithInlinedParams := ''
 end;
 
 function TSqlDBSQLite3Statement.Step(SeekFirst: boolean): boolean;
@@ -733,7 +755,12 @@ begin
     //fStatement.Reset;
   end;
   try
-    result := fStatement.Step = SQLITE_ROW;
+    fDB.Lock;
+    try
+      result := fStatement.Step = SQLITE_ROW;
+    finally
+      fDB.UnLock;
+    end;
   except
     on E: Exception do
     begin

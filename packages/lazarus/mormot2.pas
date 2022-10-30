@@ -37,7 +37,7 @@ uses
   mormot.script.quickjs, mormot.soa.client, mormot.soa.codegen, 
   mormot.soa.core, mormot.soa.server, mormot.db.rad.ui, mormot.db.rad.ui.orm, 
   mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server,
-  mormot.lib.gdiplus;
+  mormot.lib.gdiplus, mormot.db.rad.ui.cds, mormot.core.os.mac;
 
 implementation
 

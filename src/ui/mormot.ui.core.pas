@@ -281,6 +281,9 @@ procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
 procedure TextRectString(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   const Text: string; Align: TAlignment = taLeftJustify; NoControlChar: boolean = false);
 
+/// alternative to the VCL Canvas.TextFlas property for text output
+function TextFlags(Canvas: TCanvas): integer;
+
 {$ifdef OSWINDOWS}
 
 /// test if the ClearType is enabled for font display
@@ -754,6 +757,17 @@ begin
 end;
 
 {$endif OSWINDOWS}
+
+function TextFlags(Canvas: TCanvas): integer;
+begin
+  {$ifdef FPC}
+  result := ETO_CLIPPED;
+  if Canvas.Brush.Style <> bsClear then
+    result := result or ETO_OPAQUE;
+  {$else}
+  result := Canvas.TextFlags;
+  {$endif FPC}
+end;
 
 procedure TextRectUtf8(const Rect: TRect; Canvas: TCanvas; X, Y: integer;
   Text: RawUtf8; Align: TAlignment; NoControlChar: boolean);

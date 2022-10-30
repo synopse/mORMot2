@@ -42,7 +42,6 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.core.perf,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
@@ -505,7 +504,7 @@ type
     fStoredClass: TOrmClass;
     fStoredClassProps: TOrmModelProperties;
     fStoredClassRecordProps: TOrmProperties;
-    fStoredClassMapping: POrmPropertiesMapping;
+    fStoredClassMapping: POrmMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fModified: boolean;
     fOutInternalStateForcedRefresh: boolean;
@@ -635,9 +634,12 @@ type
       const SentData: RawUtf8): boolean; override;
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - overriden for optimized multi-insert of the supplied JSON array values
-    function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; const Fields: TFieldBits;
-      Sent: PUtf8Char): TID; override;
+    function InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer): TRestOrmBatchDirect; override;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - overriden for optimized multi-insert of the supplied JSON array values
+    function InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID; override;
     /// manual Add of a TOrm
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g., optionally setting
@@ -709,7 +711,7 @@ type
   // - store the associated TOrm values in memory
   // - handle one TOrm per TRestStorageInMemory instance
   // - must be registered individualy in a TRestOrmServer to access data from a
-  // common client, by using the TRestOrmServer.StaticDataCreate method:
+  // common client, by using the TRestOrmServer.OrmMapInMemory method:
   // it allows an unique access for both SQLite3 and Static databases
   // - handle basic REST commands, no full SQL interpreter is implemented: only
   // valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;", i.e
@@ -730,21 +732,30 @@ type
   protected
     fValue: TOrmObjArray;
     fCount: integer;
-    fFileName: TFileName;
     fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
     fExpandedJson: boolean;
     fUnSortedID: boolean;
+    fTrackChangesAndFlushRunning: boolean;
+    fFileName: TFileName;
     fSearchRec: TOrm; // temporary record to store the searched value
     fBasicUpperSqlSelect: array[boolean] of RawUtf8;
     fUnique, fUniquePerField: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
+    fTrackChangesFieldBitsOffset: PtrUInt;
+    fTrackChangesPersistence: IRestOrm;
+    fTrackChangesDeleted: TInt64DynArray; // TIDDynArray
+    fTrackChangesDeletedCount: integer;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
       aFields: PFieldBits): boolean;
+    procedure RaiseGetItemOutOfRange(Index: integer);
     function GetItem(Index: integer): TOrm;
       {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalTrackChangeUpdated(aRec: TOrm; const Fields: TFieldBits);
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetFileName(const aFileName: TFileName);
     procedure ComputeStateAfterLoad(var loaded: TPrecisionTimer; binary: boolean);
     procedure SetBinaryFile(aBinary: boolean);
@@ -1001,6 +1012,21 @@ type
     // - the loop execution will be protected via StorageLock/StorageUnlock
     procedure ForEach(WillModifyContent: boolean;
       const OnEachProcess: TOnFindWhereEqual; Dest: pointer);
+    /// allow background write into another persistence of modified TOrm
+    // - you should define a TrackedFields: TFieldBits public field and register
+    // its offset as TrackChanges(@TOrmClass(nil).TrackedFields, OrmWriter);
+    // - then AddOne/UpdateOne/DeleteOne methods will be tracked
+    // - if you manually update one record, call TrackChangeUpdated() overloads
+    procedure TrackChanges(FieldBitsOffset: pointer; const Persistence: IRestOrm);
+    /// after TrackChanges, refresh a TOrm manually updated in-place
+    procedure TrackChangeUpdated(aRec: TOrm; const Fields: TFieldBits); overload;
+    /// after TrackChanges, refresh a TOrm manually updated in-place
+    // - if Fields is [], then simple fields are marked as updated
+    procedure TrackChangeUpdated(aRec: TOrm; const Fields: array of PUtf8Char); overload;
+    /// send all TrackChanges modifications into the associated Persistence
+    // - could be called from a background thread, e.g. once a few seconds
+    // - returns false on error, true if changes have been pushed (or nothing to do)
+    function TrackChangesAndFlush: boolean;
     /// low-level TOnFindWhereEqual callback doing nothing
     class procedure DoNothingEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// low-level TOnFindWhereEqual callback making PPointer(aDest)^ := aRec
@@ -1030,7 +1056,7 @@ type
       read GetID;
   published
     /// read only access to the file name specified by constructor
-    // - you can call the TRestOrmServer.StaticDataCreate method to
+    // - you can call the TRestOrmServer.StaticData method to
     // update the file name of an already instanciated static table
     // - if you change manually the file name from this property, the storage
     // will be marked as "modified" so that UpdateFile will save the content
@@ -1121,7 +1147,7 @@ type
   // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
-  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // aServer.GetVirtualStorage(aClass).UpdateToFile for file creation or refresh
   // - file extension is set to '.json'
   TOrmVirtualTableJson = class(TOrmVirtualTable)
   protected
@@ -1179,7 +1205,7 @@ type
   // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
-  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // aServer.GetVirtualStorage(aClass).UpdateToFile for file creation or refresh
   // - binary format is more efficient in term of speed and disk usage than
   // the JSON format implemented by TOrmVirtualTableJson
   // - binary format will be set by TOrmVirtualTableJson.CreateTableInstance
@@ -1516,6 +1542,7 @@ function ToText(t: TOrmVirtualTableTransaction): PShortString; overload;
 
 /// extract the ID from first value of the encPostHexID input JSON
 // - and move Sent^ to a fake '[' with the first real simple parameter
+// - used by InternalBatchDirectOne method of TRestStorageTOrm and TRestOrmServerDB
 function BatchExtractSimpleID(var Sent: PUtf8Char): TID;
 
 
@@ -1985,8 +2012,7 @@ end;
 procedure TRestStorage.RecordVersionFieldHandle(Occasion: TOrmOccasion;
   var Decoder: TJsonObjectDecoder);
 begin
-  if fStoredClassRecordProps.RecordVersionField = nil then
-    exit;
+  // caller should ensure that fStoredClassRecordProps.RecordVersionField <> nil
   if fOwner = nil then
     raise ERestStorage.CreateUtf8('Owner=nil for %.%: TRecordVersion',
       [fStoredClass, fStoredClassRecordProps.RecordVersionField.Name]);
@@ -2069,36 +2095,34 @@ begin
   Sent^ := '['; // ignore the first field (stored in fBatch.ID)
 end;
 
-function TRestStorageTOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+function TRestStorageTOrm.InternalBatchDirectSupport(
+  Encoding: TRestBatchEncoding; RunTableIndex: integer): TRestOrmBatchDirect;
+begin
+  if Encoding in BATCH_DIRECT then
+    result := dirWriteNoLock
+  else
+    result := dirUnsupported;
+end;
+
+function TRestStorageTOrm.InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 var
   rec: TOrm;
-  id: TID;
 begin
-  result := 0; // unsupported
-  if not (Encoding in BATCH_DIRECT) then
-    exit;
-  if Sent = nil then
-  begin
-    // called first with Sent=nil
-    result := 1; // supported
-    exit;
-  end;
   // called a second time with the proper JSON array
+  result := 0;
   if Encoding in [encPutHexID, encPostHexID] then
   begin
-    id := BatchExtractSimpleID(Sent);
-    if id <= 0 then
+    result := BatchExtractSimpleID(Sent);
+    if result <= 0 then
       exit; // invalid input
-  end
-  else
-    id := 0;
+  end;
   // same logic than EngineAdd/EngineUpdate but with no memory alloc
   rec := fStoredClass.Create;
   try
     if rec.FillFromArray(Fields, Sent) then
     begin
-      rec.IDValue := id;
+      rec.IDValue := result;
       if Encoding = encPutHexID then
         if UpdateOne(rec, Fields, '') then // no SentData
           result := HTTP_SUCCESS
@@ -2106,9 +2130,10 @@ begin
           result := HTTP_NOTFOUND
       else
       begin
-        StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirect' {$endif});
+        StorageLock(true
+          {$ifdef DEBUGSTORAGELOCK}, 'InternalBatchDirectOne' {$endif});
         try
-          result := AddOne(rec, id > 0, ''); // no SentData
+          result := AddOne(rec, result > 0, ''); // no SentData
         finally
           StorageUnLock;
         end;
@@ -2240,14 +2265,14 @@ begin
     end;
   // initialize fUnique[] fUniquePerField[] lookup tables
   fields := fStoredClassRecordProps.Fields;
-  n := GetBitsCount(fStoredClassRecordProps.IsUniqueFieldsBits, fields.Count);
+  n := FieldBitCount(fStoredClassRecordProps.IsUniqueFieldsBits);
   if n > 0 then
   begin
     SetLength(fUnique, n);
     SetLength(fUniquePerField, fields.Count);
     n := 0;
     for f := 0 to fields.Count - 1 do
-      if byte(f) in fStoredClassRecordProps.IsUniqueFieldsBits then
+      if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, f) then
       begin
         fUnique[n] := TRestStorageInMemoryUnique.Create(self, fields.List[f]);
         fUniquePerField[f] := fUnique[n];
@@ -2264,6 +2289,44 @@ begin
   fValues.Clear; // to free all stored TOrm instances
   fSearchRec.Free;
   inherited Destroy;
+end;
+
+function TRestStorageInMemory.GetID(Index: integer): TID;
+begin
+  if (self = nil) or
+     (cardinal(Index) >= cardinal(fCount)) then
+    result := 0
+  else
+    result := fValue[Index].IDValue;
+end;
+
+procedure TRestStorageInMemory.RaiseGetItemOutOfRange(Index: integer);
+begin
+  raise ERestStorage.CreateUtf8('%.GetItem(%) over % is out of range (Count=%)',
+    [self, Index, fStoredClass, fCount]);
+end;
+
+function TRestStorageInMemory.GetItem(Index: integer): TOrm;
+begin
+  result := nil;
+  if self <> nil then
+    if cardinal(Index) >= cardinal(fCount) then
+      RaiseGetItemOutOfRange(Index)
+    else
+      result := fValue[Index];
+end;
+
+procedure TRestStorageInMemory.InternalTrackChangeUpdated(aRec: TOrm;
+  const Fields: TFieldBits);
+var
+  b: PFieldBits;
+begin
+  b := pointer(PAnsiChar(aRec) + fTrackChangesFieldBitsOffset);
+  {$if SizeOf(TFieldBits) = 8}
+  PInt64(b)^ := PInt64(b)^ or PInt64(@Fields)^;
+  {$else}
+  b^ := b^ + Fields;
+  {$ifend}
 end;
 
 function TRestStorageInMemory.IDToIndex(ID: TID): PtrInt;
@@ -2340,6 +2403,8 @@ begin
   if (fOwner <> nil) then
     fOwner.InternalUpdateEvent(
       oeAdd, fStoredClassProps.TableIndex, result, SentData, nil, Rec);
+  if fTrackChangesFieldBitsOffset <> 0 then
+    InternalTrackChangeUpdated(Rec, ALL_FIELDS); // ALL_FIELDS means Add()
 end;
 
 function TRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TOrm;
@@ -2351,7 +2416,7 @@ begin
   for f := 0 to length(fUnique) - 1 do
     with fUnique[f] do
       if (aFields = nil) or
-          (byte(PropInfo.PropertyIndex) in aFields^) then
+         FieldBitGet(aFields^, PropInfo.PropertyIndex) then
       begin
         ndx := Find(aRec);
         if (ndx >= 0) and
@@ -2436,6 +2501,7 @@ end;
 function TRestStorageInMemory.DeleteOne(aIndex: integer): boolean;
 var
   f: PtrInt;
+  id: TID;
   rec: TOrm;
 begin
   if cardinal(aIndex) >= cardinal(fCount) then
@@ -2443,12 +2509,13 @@ begin
   else
   begin
     rec := fValue[aIndex];
-    if rec.IDValue = fMaxID then
+    id := rec.IDValue;
+    if id = fMaxID then
       fMaxID := 0; // recompute
     if fOwner <> nil then
       // notify BEFORE deletion
       fOwner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
-        rec.IDValue, '', nil, nil);
+        id, '', nil, nil);
     for f := 0 to length(fUnique) - 1 do
       if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
         raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
@@ -2457,6 +2524,11 @@ begin
       raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed', [self, aIndex]);
     if fMaxID = 0 then
       fMaxID := FindMaxID(pointer(fValue), fCount);
+    if (fTrackChangesFieldBitsOffset <> 0) and
+       not Int64ScanExists(pointer(fTrackChangesDeleted), fTrackChangesDeletedCount, id) then
+      AddInt64(fTrackChangesDeleted, fTrackChangesDeletedCount, id);
+      // note: any previous Add/Update are deleted with rec since TrackChanges
+      // is part of it - no need to manually clean them
     fModified := true;
     result := true;
   end;
@@ -2497,26 +2569,6 @@ end;
 function TRestStorageInMemory.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   result := false; // there is no SQL engine with this class
-end;
-
-function TRestStorageInMemory.GetID(Index: integer): TID;
-begin
-  if (self = nil) or
-     (cardinal(Index) >= cardinal(fCount)) then
-    result := 0
-  else
-    result := fValue[Index].IDValue;
-end;
-
-function TRestStorageInMemory.GetItem(Index: integer): TOrm;
-begin
-  if self <> nil then
-    if cardinal(Index) >= cardinal(fCount) then
-      raise ERestStorage.CreateUtf8('%.GetItem(%) out of range', [self, Index])
-    else
-      result := fValue[Index]
-  else
-    result := nil;
 end;
 
 procedure TRestStorageInMemory.GetJsonValuesEvent(aDest: pointer;
@@ -2675,7 +2727,7 @@ begin
     // nothing to search (e.g. oftUnknown or oftMany)
     exit;
   // use fUnique[] hash array for O(1) search if available
-  if WhereField in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, WhereField) then
   begin
     if FoundOffset <= 0 then
     begin
@@ -2931,6 +2983,119 @@ begin
       OnEachProcess(Dest, fValue[i], i);
   finally
     StorageUnLock;
+  end;
+end;
+
+procedure TRestStorageInMemory.TrackChanges(FieldBitsOffset: pointer;
+  const Persistence: IRestOrm);
+begin
+  if self = nil then
+    exit;
+  fTrackChangesFieldBitsOffset := 0;
+  fTrackChangesPersistence := nil;
+  if Persistence = nil then
+    exit;
+  if (FieldBitsOffset = nil) or
+     (PtrUInt(FieldBitsOffset) > PtrUInt(fStoredClass.InstanceSize)) then
+    raise ERestStorage.CreateUtf8('%.TrackChanges(%)', [self, FieldBitsOffset]);
+  Persistence.Model.GetTableIndexExisting(fStoredClass); // ensure support table
+  fTrackChangesFieldBitsOffset := PtrUInt(FieldBitsOffset);
+  fTrackChangesPersistence := Persistence;
+end;
+
+procedure TRestStorageInMemory.TrackChangeUpdated(aRec: TOrm;
+  const Fields: TFieldBits);
+begin
+  if (aRec <> nil) and
+     (fTrackChangesFieldBitsOffset <> 0) and
+     not IsZero(Fields) then
+    InternalTrackChangeUpdated(aRec, Fields);
+end;
+
+procedure TRestStorageInMemory.TrackChangeUpdated(aRec: TOrm;
+  const Fields: array of PUtf8Char);
+var
+  upd: TFieldBits;
+begin
+  if (aRec = nil) or
+     (fTrackChangesFieldBitsOffset = 0) then
+    exit;
+  if high(Fields) < 0 then
+    upd := StoredClassRecordProps.SimpleFieldsBits[ooUpdate]
+  else if not StoredClassRecordProps.FieldBitsFrom(Fields, upd) then
+    raise ERestStorage.CreateUtf8('Invalid %.TrackChangeUpdated', [self]);
+  InternalTrackChangeUpdated(aRec, upd);
+end;
+
+function TRestStorageInMemory.TrackChangesAndFlush: boolean;
+var
+  batch: TRestBatch;
+  b: PFieldBits;
+  off, i: PtrInt;
+  log: ISynLog;
+  p, pEnd: POrm; // this is the fastest pattern to iterate over the list
+begin
+  result := true; // success (may be no write at all)
+  off := fTrackChangesFieldBitsOffset;
+  if (off = 0) or
+     fTrackChangesAndFlushRunning or
+     (fTrackChangesPersistence = nil) or
+     (fCount = 0) then
+    exit;
+  fTrackChangesAndFlushRunning := true; // paranoid check if BatchSend is slow
+  batch := TRestBatch.Create(fTrackChangesPersistence, fStoredClass);
+  try
+    // fill the batch instance with pending tracked changes
+    StorageLock({modify=}false);
+    try
+      // delete any previous value before any Add/Update
+      for i := 0 to fTrackChangesDeletedCount - 1 do
+        batch.Delete(fTrackChangesDeleted[i]);
+      if fTrackChangesDeletedCount > 10000 then
+        fTrackChangesDeleted := nil;  // release memory only if > 16KB
+      fTrackChangesDeletedCount := 0; // flush
+      // first loop is for all Add() - to generate multi-insert if possible
+      p := pointer(fValue);
+      pEnd := @fValue[Count];
+      while p <> pEnd do
+      begin
+        b := pointer(PAnsiChar(p^) + off);
+        if IsAllFields(b^) then
+        begin
+          if log = nil then // only start logging if something is to be written
+            log := logclass.Enter(self, 'TrackChangesAndFlush Add');
+          batch.Add(p^, {senddata=}true, {forceid=}true, ALL_FIELDS, true);
+          FillZero(b^); // flush
+        end;
+        inc(p);
+      end;
+      // next loop is for all Update() - not worth regrouping by fieldbits
+      p := pointer(fValue);
+      while p <> pEnd do
+      begin
+        b := pointer(PAnsiChar(p^) + off);
+        if not IsZero(b^) then
+        begin
+          if log = nil then
+            log := logclass.Enter(self, 'TrackChangesAndFlush Update');
+          batch.Update(p^, b^, {DoNotAutoComputeFields=}true);
+          FillZero(b^); // flush
+        end;
+        inc(p);
+      end;
+    finally
+      StorageUnLock;
+    end;
+    // send the pending data as batch in the background thread
+    if batch.Count > 0 then
+      if fTrackChangesPersistence.BatchSend(batch) <> HTTP_SUCCESS then
+      begin
+        log.Log(sllError, 'TrackChangesAndFlush: SendBatch error', self);
+        result := false; // notify error
+      end;
+  finally
+    fTrackChangesAndFlushRunning := false;
+    batch.Free;
   end;
 end;
 
@@ -3283,7 +3448,7 @@ begin
     fUnSortedID := false;
   end
   else
-    // JSON may have been tampered, so we actually ensure IDs are sorted
+    // JSON may have been tempered, so we actually ensure IDs are sorted
     fMaxID := FindMaxIDAndCheckSorted(pointer(fValue), fCount, fUnSortedID);
   InternalLog('LoadFrom% % count=% load=% index=%',
     [_CALLER[binary], fStoredClass, fCount, loaded.Stop, timer.Stop]);
@@ -3634,6 +3799,7 @@ var
   V: RawUtf8;
   wasString: boolean;
   int: Int64;
+  upd: TFieldBits;
 begin
   result := false;
   if (ID < 0) or
@@ -3642,7 +3808,7 @@ begin
   P := fStoredClassProps.Prop[FieldName];
   if P = nil then
     exit;
-  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
     InternalLog('EngineUpdateFieldIncrement(%) on UNIQUE %.%',
       [ID, fStoredClass, P.Name], sllDB);
@@ -3668,6 +3834,12 @@ begin
     end;
     Int64ToUtf8(int + Increment, V);
     P.SetValueVar(fValue[i], V, false);
+    if fTrackChangesFieldBitsOffset <> 0 then
+    begin
+      FillZero(upd);
+      FieldBitSet(upd, P.PropertyIndex);
+      InternalTrackChangeUpdated(fValue[i], upd);
+    end;
     fModified := true;
     result := true;
   finally
@@ -3685,6 +3857,7 @@ var
   SetValueWasString: boolean;
   match: TSynList;
   rec: TOrm;
+  upd: TFieldBits;
 begin
   result := false;
   if (TableModelIndex <> fStoredClassProps.TableIndex) or
@@ -3705,7 +3878,7 @@ begin
   P := fStoredClassRecordProps.Fields.ByRawUtf8Name(SetFieldName);
   if P = nil then
     exit; // don't allow setting ID field, which is Read Only
-  if P.PropertyIndex in fStoredClassRecordProps.IsUniqueFieldsBits then
+  if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
     InternalLog('EngineUpdateField on UNIQUE %.%', [fStoredClass, P.Name], sllDB);
     exit; { TODO : allow update UNIQUE field? }
@@ -3745,7 +3918,14 @@ begin
         fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
           rec.IDValue, SetValueJson, nil, nil);
       end;
-    end;
+      if (fTrackChangesFieldBitsOffset <> 0) and
+         (ndx <> 0) then
+      begin
+        FillZero(upd);
+        FieldBitSet(upd, ndx - 1);
+        InternalTrackChangeUpdated(rec, upd);
+      end;
+  end;
     fModified := true;
     result := true;
   finally
@@ -3797,6 +3977,8 @@ begin
     if fOwner <> nil then
       fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         ID, SentData, nil, nil);
+    if fTrackChangesFieldBitsOffset <> 0 then
+      InternalTrackChangeUpdated(fValue[i], modified);
   finally
     StorageUnLock;
   end;
@@ -3833,6 +4015,8 @@ begin
     if fOwner <> nil then
       fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         Rec.IDValue, SentData, nil, nil);
+    if fTrackChangesFieldBitsOffset <> 0 then
+      InternalTrackChangeUpdated(dest, Fields);
   finally
     StorageUnLock;
   end;
@@ -3875,6 +4059,9 @@ begin
     if fOwner <> nil then
       fOwner.InternalUpdateEvent(oeUpdate, fStoredClassProps.TableIndex,
         ID, '', nil, fValue[i]);
+    if fTrackChangesFieldBitsOffset <> 0 then
+      InternalTrackChangeUpdated(
+        fValue[i], fStoredClassRecordProps.CopiableFieldsBits);
   finally
     StorageUnLock;
   end;
@@ -3930,8 +4117,8 @@ end;
 function TRestStorageInMemory.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  i: integer;
-  AffectedField: TFieldBits;
+  i: PtrInt;
+  upd: TFieldBits;
 begin
   result := false;
   if (aID < 0) or
@@ -3946,12 +4133,14 @@ begin
       exit;
     // set blob value directly from RTTI property description
     BlobField.SetLongStrProp(fValue[i], BlobData);
+    if (fOwner <> nil) or
+       (fTrackChangesFieldBitsOffset <> 0)  then
+      fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, upd);
     if fOwner <> nil then
-    begin
-      fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, AffectedField);
       fOwner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
-        aID, '', @AffectedField, nil);
-    end;
+        aID, '', @upd, nil);
+    if fTrackChangesFieldBitsOffset <> 0 then
+      InternalTrackChangeUpdated(fValue[i], upd);
     fModified := true;
     result := true;
   finally
@@ -3961,7 +4150,7 @@ end;
 
 function TRestStorageInMemory.UpdateBlobFields(Value: TOrm): boolean;
 var
-  i, f: integer;
+  i, f: PtrInt;
 begin
   result := false;
   if (Value <> nil) and
@@ -3981,6 +4170,9 @@ begin
         if fOwner <> nil then
           fOwner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
             Value.IDValue, '', @fStoredClassRecordProps.FieldBits[oftBlob], nil);
+        if fTrackChangesFieldBitsOffset <> 0 then
+          InternalTrackChangeUpdated(
+            fValue[i], fStoredClassRecordProps.FieldBits[oftBlob]);
         fModified := true;
         result := true;
       finally

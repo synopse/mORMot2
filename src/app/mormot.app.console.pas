@@ -293,7 +293,7 @@ begin
   if i >= 0 then
   begin
     // found
-    VariantToUtf8(fValues.Values[i], result);
+    VariantToUtf8(fValues.Values[i], result{%H-});
     fValues.Delete(i);
     exit;
   end;
@@ -369,7 +369,7 @@ end;
 function TCommandLine.AsString(const Switch: RawUtf8;
   const Default, Prompt: string): string;
 begin
-  Utf8ToStringVar(AsUtf8(Switch, StringToUtf8(Default), Prompt), result);
+  Utf8ToStringVar(AsUtf8(Switch, StringToUtf8(Default), Prompt), result{%H-});
 end;
 
 

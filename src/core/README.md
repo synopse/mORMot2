@@ -49,6 +49,13 @@ Aim of this unit is to centralize most used OS-specific API calls, like a `SysUt
 
 In practice, no "Windows", nor "Linux/Unix" reference should be needed in regular units, once `mormot.core.os` is included. :)
 
+### mormot.core.os.mac
+
+MacOS API calls for FPC, as injected to `mormot.core.os.pas`
+- Gather MacOS Specific Operating System Information
+
+This unit uses MacOSAll and link several toolkits, so was not included in `mormot.core.os.pas` to reduce executable size, but inject this methods at runtime: just include "`uses mormot.core.os.mac`" in programs needing it.
+
 ### mormot.core.unicode
 
 Efficient Unicode Conversion Classes shared by all framework units
@@ -181,6 +188,7 @@ Performance Monitoring functions shared by all framework units
 - `TSynMonitor` Process Information Classes
 - `TSynMonitorUsage` Process Information Database Storage
 - Operating System Monitoring
+- `DMI`/`SMBIOS` Binary Decoder
 - `TSynFPUException` Wrapper for FPU Flags Preservation
 
 ### mormot.core.threads

@@ -287,7 +287,7 @@ begin
           fFireDACOptions.Values['CharacterSet'] := 'UTF8';
         {$ifndef UNICODE}
         ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
-        {$endif}
+        {$endif UNICODE}
       end;
   end;
 end;

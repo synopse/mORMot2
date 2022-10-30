@@ -1,10 +1,14 @@
 /// simple SOA server using callbacks for a chat room
 program restws_chatserver;
 
-{$APPTYPE CONSOLE}
+{$I mormot.defines.inc}
+
+{$ifdef OSWINDOWS}
+  {$APPTYPE CONSOLE}
+{$endif OSWINDOWS}
 
 uses
-  {$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
+  {$I mormot.uses.inc} // use FastMM4 on older versions of Delphi
   SysUtils,
   Classes,
   mormot.core.base,
@@ -68,12 +72,12 @@ begin
       ByPassAuthentication := true;
     HttpServer := TSQLHttpServer.Create('8888', [Server], '+', WEBSOCKETS_DEFAULT_MODE);
     try
-      HttpServer.WebSocketsEnable(Server, PROJECT31_TRANSMISSION_KEY)^.
+      HttpServer.WebSocketsEnable(Server, CHAT_TRANSMISSION_KEY)^.
         SetFullLog; // full verbose logs for this demo
       TextColor(ccLightGreen);
       writeln('WebSockets Chat Server running on localhost:8888'#13#10);
       TextColor(ccWhite);
-      writeln('Please compile and run Project31ChatClient.exe'#13#10);
+      writeln('Please compile and run restws_chatlient'#13#10);
       TextColor(ccLightGray);
       writeln('Press [Enter] to quit'#13#10);
       TextColor(ccCyan);

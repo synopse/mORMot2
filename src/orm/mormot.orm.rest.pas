@@ -68,6 +68,12 @@ const
 { ************ TRestOrm Parent Class for abstract REST client/server }
 
 type
+  /// low-level TRestOrm.InternalBatchDirectSupport response
+  TRestOrmBatchDirect = (
+    dirUnsupported,
+    dirWriteLock,
+    dirWriteNoLock);
+
   {$M+}
 
   /// implements TRest.ORM process for abstract REST client/server
@@ -213,13 +219,16 @@ type
     /// internal method called by TRestServer.Batch() to process SIMPLE input
     // - an optimized storage engine could override it to process the Sent
     // JSON array values directly from the memory buffer
-    // - called first with Sent=nil to return either false (unsupported - which
-    // is what this default method does) or true (supported in overriden method)
+    // - called first to return if supported in overriden methods
+    function InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer): TRestOrmBatchDirect; virtual;
+    /// internal method called by TRestServer.Batch() to process SIMPLE input
+    // - an optimized storage engine could override it to process the Sent
+    // JSON array values directly from the memory buffer
     // - called a second time with the proper Sent JSON array of values,
     // returning the inserted ID or 200 after proper update
-    function InternalBatchDirect(Encoding: TRestBatchEncoding;
-      RunTableIndex: integer; const Fields: TFieldBits;
-      Sent: PUtf8Char): TID; virtual;
+    function InternalBatchDirectOne(Encoding: TRestBatchEncoding;
+      RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID; virtual;
   public
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -685,7 +694,8 @@ begin
     fields := props.CopiableFieldsBits
   else
     fields := props.SimpleFieldsBits[ooInsert];
-  if not ForceID and IsZero(fields) then
+  if not ForceID and
+     IsZero(fields) then
     result := ''
   else
     GetJsonValue(Value, ForceID, fields, result);
@@ -1124,7 +1134,7 @@ begin
         break;
       if SepLen <> 0 then
       begin
-        MoveSmall(pointer(Separator), P, SepLen);
+        MoveByOne(pointer(Separator), P, SepLen);
         inc(P, SepLen);
       end;
       inc(i);
@@ -1151,7 +1161,7 @@ begin
     Strings.BeginUpdate;
     Strings.Clear;
     T := ExecuteList([Table], SqlFromSelect(Table.SqlTableName,
-      'ID,' + FieldName, WhereClause, ''));
+      'RowID,' + FieldName, WhereClause, ''));
     if T <> nil then
     try
       if (T.FieldCount = 2) and
@@ -1532,9 +1542,9 @@ begin
         if IsZero(bits) then
           // get all simple fields if none supplied, like MultiFieldValues()
           bits := SimpleFieldsBits[ooSelect];
-        if bits - SimpleFieldsBits[ooSelect] = [] then
+        if bits - SimpleFieldsBits[ooSelect] = [] then // only simple fields
         begin
-          Rec := Table.Create(self, ID); // use the cache
+          Rec := Table.Create(self, ID); // we can use the cache
           try
             Rec.GetAsDocVariant(true, bits, result, nil, {"id"=}true);
           finally
@@ -1879,18 +1889,23 @@ begin
     result := 0;
     exit;
   end;
-  if ForceID or
-     (Value.IDValue = 0) then
-  begin
-    result := Add(Value, true, ForceID);
-    if (result <> 0) or
+  WriteLock; // make this atomic
+  try
+    if ForceID or
        (Value.IDValue = 0) then
-      exit;
+    begin
+      result := Add(Value, true, ForceID);
+      if (result <> 0) or
+         (Value.IDValue = 0) then
+        exit;
+    end;
+    if Update(Value) then
+      result := Value.IDValue
+    else
+      result := 0;
+  finally
+    WriteUnlock;
   end;
-  if Update(Value) then
-    result := Value.IDValue
-  else
-    result := 0;
 end;
 
 function TRestOrm.UpdateField(Table: TOrmClass; ID: TID;
@@ -1908,7 +1923,6 @@ function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUtf8; const WhereFieldValue: array of const;
   const FieldName: RawUtf8; const FieldValue: array of const): boolean;
 var
-  t: integer;
   SetValue, WhereValue: RawUtf8;
 begin
   result := false;
@@ -1918,9 +1932,8 @@ begin
     exit;
   VarRecToInlineValue(WhereFieldValue[0], WhereValue);
   VarRecToInlineValue(FieldValue[0], SetValue);
-  t := fModel.GetTableIndexExisting(Table);
-  result := EngineUpdateField(t, FieldName, SetValue,
-    WhereFieldName, WhereValue);
+  result := EngineUpdateField(fModel.GetTableIndexExisting(Table),
+    FieldName, SetValue, WhereFieldName, WhereValue);
   // warning: this may not update the internal cache
 end;
 
@@ -1939,13 +1952,12 @@ function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
   const FieldName: RawUtf8; const FieldValue: variant): boolean;
 var
-  t: integer;
   value, where: RawUtf8;
 begin
   VariantToInlineValue(WhereFieldValue, where);
   VariantToInlineValue(FieldValue, value);
-  t := fModel.GetTableIndexExisting(Table);
-  result := EngineUpdateField(t, FieldName, value, WhereFieldName, where);
+  result := EngineUpdateField(fModel.GetTableIndexExisting(Table),
+    FieldName, value, WhereFieldName, where);
   // warning: this may not update the internal cache
 end;
 
@@ -2061,13 +2073,20 @@ end;
 
 procedure TRestOrm.InternalBatchStop;
 begin
-  raise EOrmException.CreateUtf8('Unexpected %.InternalBatchStop',[self]);
+  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchStop', [self]);
 end;
 
-function TRestOrm.InternalBatchDirect(Encoding: TRestBatchEncoding;
+function TRestOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
+  RunTableIndex: integer): TRestOrmBatchDirect;
+begin
+  result := dirUnsupported; // by default, will use regular Add/Update
+end;
+
+function TRestOrm.{%H-}InternalBatchDirectOne(Encoding: TRestBatchEncoding;
   RunTableIndex: integer; const Fields: TFieldBits; Sent: PUtf8Char): TID;
 begin
-  result := 0; // this engine does NOT support optimized SIMPLE multi-insert
+  raise EOrmBatchException.CreateUtf8(
+    'Unexpected %.InternalBatchDirectOne', [self]);
 end;
 
 function TRestOrm.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;
@@ -2641,10 +2660,10 @@ function TOrmTableWritable.UpdatesToBatch(
 var
   c: TOrmClass;
   rec: TOrm;
-  r: PtrInt;
+  r, f, p: PtrInt;
   def, def32, bits: TFieldBits;
   props: TIntegerDynArray;
-  upd, updlast, b, f, p: integer;
+  upd, updlast, b: integer;
 begin
   result := 0;
   c := QueryRecordType;
@@ -2679,7 +2698,7 @@ begin
       if rec.IDValue = 0 then
         raise EOrmTable.CreateUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
       upd := fUpdatedRowsFields[r];
-      if upd = 0 then // more than 32 fields -> send all mapped
+      if upd = 0 then // more than 32 fields -> include all fields to batch
         bits := def32
       else if upd <> updlast then
       begin
@@ -2694,7 +2713,7 @@ begin
             if p < 0 then
               raise EOrmTable.CreateUtf8(
                 '%.UpdatesToBatch: Unexpected %.%', [self, c, Results[f]]);
-            include(bits, p);
+            FieldBitSet(bits, p);
           end;
           b := b shl 1;
         end;

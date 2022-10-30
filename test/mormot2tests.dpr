@@ -132,10 +132,11 @@ end;
 
 
 begin
+  SetExecutableVersion(SYNOPSE_FRAMEWORK_VERSION);
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests',
-    //LOG_VERBOSE,
-    LOG_FILTER[lfExceptions],
-    [], Executable.ProgramFilePath + 'data');
+    //LOG_VERBOSE +
+    LOG_FILTER[lfExceptions] // + [sllErrors, sllWarning]
+    ,[], Executable.ProgramFilePath + 'data');
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

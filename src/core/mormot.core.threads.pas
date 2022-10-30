@@ -36,16 +36,18 @@ uses
   mormot.core.perf;
 
 const
-  /// defined here to avoid explicit link to syncobjs in uses clause
+  // defined here to avoid explicit link to syncobjs in uses clause
   wrSignaled = syncobjs.wrSignaled;
-  /// defined here to avoid explicit link to syncobjs in uses clause
-  wrTimeout = syncobjs.wrTimeout;
+  wrTimeout  = syncobjs.wrTimeout;
+  wrError    = syncobjs.wrError;
 
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
+  // - note that you may better use TSynEvent from mormot.core.os.pas
   TWaitResult = syncobjs.TWaitResult;
 
   /// defined here to avoid explicit link to syncobjs in uses clause
+  // - note that you may better use TSynEvent from mormot.core.os.pas
   TEvent = syncobjs.TEvent;
 
   /// a dynamic array of TThread
@@ -394,6 +396,33 @@ type
   {$M+}
   TSynBackgroundThreadAbstract = class;
   TSynBackgroundThreadEvent = class;
+
+  /// abstract parent of all TThread inherited classes
+  // - to leverage cross-compiler and cross-version RTL differences
+  // - to have expected Start and TerminateSet methods, and Terminated property
+  TThreadAbstract = class(TThread)
+  public
+    {$ifndef HASTTHREADSTART}
+    /// method to be called to start the thread
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
+    procedure Start;
+    {$endif HASTTHREADSTART}
+    {$ifndef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif HASTTHREADTERMINATESET}
+    {$ifdef HASINLINE}
+    /// method which redirects to mormot.core.os instead of sysutils on FPC
+    class function GetTickCount64: Int64; reintroduce; static; inline;
+    {$endif HASINLINE}
+    /// defined as public since may be used to terminate the processing methods
+    property Terminated;
+  end;
   {$M-}
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
@@ -416,9 +445,9 @@ type
   // - you should not use this class directly, but use either
   // TSynBackgroundThreadMethodAbstract / TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
-  TSynBackgroundThreadAbstract = class(TThread)
+  TSynBackgroundThreadAbstract = class(TThreadAbstract)
   protected
-    fProcessEvent: TEvent;
+    fProcessEvent: TSynEvent;
     fOnBeforeExecute: TOnNotifyThread;
     fOnAfterExecute: TOnNotifyThread;
     fThreadName: RawUtf8;
@@ -437,27 +466,12 @@ type
       const OnBeforeExecute: TOnNotifyThread = nil;
       const OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; override;
     /// release used resources
     // - calls WaitForNotExecuting(100) for proper finalization
     destructor Destroy; override;
-    {$ifndef HASTTHREADSTART}
-    /// method to be called to start the thread
-    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature; we define here this method
-    // for older versions of Delphi
-    procedure Start;
-    {$endif HASTTHREADSTART}
-    {$ifdef HASTTHREADTERMINATESET}
-    /// properly terminate the thread
-    // - called by TThread.Terminate since Delphi XE2
-    procedure TerminatedSet; override;
-    {$else}
-    /// properly terminate the thread
-    // - called by reintroduced Terminate
-    procedure TerminatedSet; virtual;
-    /// reintroduced to call TeminatedSet
-    procedure Terminate; reintroduce;
-    {$endif HASTTHREADTERMINATESET}
     /// wait for Execute/ExecuteLoop to be ended (i.e. fExecute<>exRun)
     // - call Sleep() in a loop until the timeout is reached
     // - used e.g. in Destroy to avoid any GPF and ensure clean finalization
@@ -474,10 +488,8 @@ type
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
-    property ProcessEvent: TEvent
+    property ProcessEvent: TSynEvent
       read fProcessEvent;
-    /// defined as public since may be used to terminate the processing methods
-    property Terminated;
   end;
 
   /// state machine status of the TSynBackgroundThreadAbstract process
@@ -500,7 +512,7 @@ type
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
     fPendingProcessLock: TLightLock;
-    fCallerEvent: TEvent;
+    fCallerEvent: TSynEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
@@ -635,10 +647,7 @@ type
   TSynBackgroundThreadProcess = class;
 
   /// event callback executed periodically by TSynBackgroundThreadProcess
-  // - Event is wrTimeout after the OnProcessMS waiting period
-  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
-  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
-    Event: TWaitResult) of object;
+  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess) of object;
 
   /// TThread able to run a method at a given periodic pace
   TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
@@ -683,12 +692,11 @@ type
   TSynBackgroundTimer = class;
 
   /// event callback executed periodically by TSynBackgroundThreadProcess
-  // - Event is wrTimeout after the OnProcessMS waiting period
-  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
   // - Msg is '' if there is no pending message in this task FIFO
   // - Msg is set for each pending message in this task FIFO
+  // - on mORMot 1, there was a TWaitEvent parameter which is now removed
   TOnSynBackgroundTimerProcess = procedure(Sender: TSynBackgroundTimer;
-    Event: TWaitResult; const Msg: RawUtf8) of object;
+    const Msg: RawUtf8) of object;
 
   /// used by TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTask = record
@@ -716,8 +724,7 @@ type
     fTasks: TDynArrayLocked;
     fProcessing: boolean;
     fProcessingCounter: integer;
-    procedure EverySecond(Sender: TSynBackgroundThreadProcess;
-      Event: TWaitResult);
+    procedure EverySecond(Sender: TSynBackgroundThreadProcess);
     function Find(const aProcess: TMethod): PtrInt;
     function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUtf8; aExecuteNow: boolean): boolean;
@@ -988,7 +995,7 @@ type
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
   // not have to use the protected fOnThreadTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
-  TSynThread = class(TThread)
+  TSynThread = class(TThreadAbstract)
   protected
     fStartNotified: TObject;
     // we defined an fOnThreadTerminate event which would be run in the terminated
@@ -999,13 +1006,6 @@ type
   public
     /// initialize the thread instance, in non suspended state
     constructor Create(CreateSuspended: boolean); reintroduce; virtual;
-    {$ifndef HASTTHREADSTART}
-    /// method to be called when the thread was created as suspended
-    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature
-    // - we define here this method for older versions of Delphi
-    procedure Start;
-    {$endif HASTTHREADSTART}
     /// safe version of Sleep() which won't break the thread process
     // - returns TRUE if the thread was Terminated
     // - returns FALSE if successfully waited up to MS milliseconds
@@ -1013,8 +1013,6 @@ type
     /// ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     property StartNotified: TObject
       read fStartNotified write fStartNotified;
-    /// defined as public since may be used to terminate the processing methods
-    property Terminated;
   end;
 
   /// abstract class to implement a thread with start/stop notifications
@@ -1055,6 +1053,19 @@ type
       read fLogClass;
   end;
 
+  /// a class able to run some process in a background thread
+  // - with proper logging and eventual ending notification
+  TLoggedWorkThread = class(TLoggedThread)
+  protected
+    fSender: TObject;
+    fOnExecute, fOnExecuted: TNotifyEvent;
+    procedure DoExecute; override;
+  public
+    /// this constructor will directly start the thread in background
+    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent); reintroduce;
+  end;
+
   TSynThreadPool = class;
 
   /// defines the work threads used by TSynThreadPool
@@ -1064,7 +1075,7 @@ type
     fThreadNumber: integer;
     {$ifndef USE_WINIOCP}
     fProcessingContext: pointer; // protected by fOwner.fSafe.Lock
-    fEvent: TEvent;
+    fEvent: TSynEvent;
     {$endif USE_WINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
     procedure DoTask(Context: pointer); // exception-safe call of fOwner.Task()
@@ -1209,6 +1220,7 @@ const
 
 
 implementation
+
 
 { ************ Thread-Safe TSynQueue and TPendingTaskList }
 
@@ -1936,34 +1948,55 @@ end;
 
 { ************ Background Thread Processing }
 
+
+{ TRestThreadAbstract }
+
+{$ifndef HASTTHREADSTART}
+
+procedure TThreadAbstract.Start;
+begin
+  Resume;
+end;
+
+{$endif HASTTHREADSTART}
+
+{$ifndef HASTTHREADTERMINATESET}
+
+procedure TThreadAbstract.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+
+procedure TThreadAbstract.TerminatedSet;
+begin
+end;
+
+{$endif HASTTHREADTERMINATESET}
+
+{$ifdef HASINLINE}
+
+class function TThreadAbstract.GetTickCount64: Int64;
+begin
+  result := mormot.core.os.GetTickCount64;
+end;
+
+{$endif HASINLINE}
+
+
 { TSynBackgroundThreadAbstract }
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUtf8;
   const OnBeforeExecute: TOnNotifyThread; const OnAfterExecute: TOnNotifyThread;
   CreateSuspended: boolean);
 begin
-  fProcessEvent := TEvent.Create(nil, false, false, '');
+  fProcessEvent := TSynEvent.Create;
   fThreadName := aThreadName;
   fOnBeforeExecute := OnBeforeExecute;
   fOnAfterExecute := OnAfterExecute;
   inherited Create(CreateSuspended
     {$ifdef FPC}, 512 * 1024{$endif}); // StackSize=512KB (instead of FPC 4MB)
 end;
-
-{$ifndef HASTTHREADSTART}
-procedure TSynBackgroundThreadAbstract.Start;
-begin
-  Resume;
-end;
-{$endif HASTTHREADSTART}
-
-{$ifndef HASTTHREADTERMINATESET}
-procedure TSynBackgroundThreadAbstract.Terminate;
-begin
-  inherited Terminate; // FTerminated := True
-  TerminatedSet;
-end;
-{$endif HASTTHREADTERMINATESET}
 
 procedure TSynBackgroundThreadAbstract.TerminatedSet;
 begin
@@ -1976,11 +2009,11 @@ var
 begin
   if fExecute = exRun then
   begin
-    endtix := mormot.core.os.GetTickCount64 + maxMS;
+    endtix := GetTickCount64 + maxMS;
     repeat
       SleepHiRes(1); // wait for Execute to finish
     until (fExecute <> exRun) or
-          (mormot.core.os.GetTickCount64 >= endtix);
+          (GetTickCount64 >= endtix);
   end;
 end;
 
@@ -2043,15 +2076,15 @@ constructor TSynBackgroundThreadMethodAbstract.Create(
   const OnBeforeExecute, OnAfterExecute: TOnNotifyThread);
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
-  fCallerEvent := TEvent.Create(nil, false, false, '');
+  fCallerEvent := TSynEvent.Create;
   inherited Create(aThreadName, OnBeforeExecute, OnAfterExecute);
 end;
 
 destructor TSynBackgroundThreadMethodAbstract.Destroy;
 begin
   SetPendingProcess(flagDestroying);
-  fProcessEvent.SetEvent;  // notify terminated
-  fCallerEvent.WaitFor(INFINITE); // wait for actual termination
+  fProcessEvent.SetEvent;   // notify terminated
+  fCallerEvent.WaitForEver; // wait for actual termination
   FreeAndNilSafe(fCallerEvent);
   inherited Destroy;
 end;
@@ -2076,41 +2109,39 @@ procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
 var
   E: TObject;
 begin
-  case fProcessEvent.WaitFor(INFINITE) of
-    wrSignaled:
-      case GetPendingProcess of
-        flagDestroying:
-          begin
-            fCallerEvent.SetEvent; // abort caller thread process
-            Terminate; // forces Execute loop ending
-            exit;
-          end;
-        flagStarted:
-          if not Terminated then
-            if fExecuteLoopPause then // pause -> try again later
-              fProcessEvent.SetEvent
-            else
-            try
-              fBackgroundException := nil;
-              try
-                if Assigned(fOnBeforeProcess) then
-                  fOnBeforeProcess(self);
-                try
-                  Process;
-                finally
-                  if Assigned(fOnAfterProcess) then
-                    fOnAfterProcess(self);
-                end;
-              except
-                E := AcquireExceptionObject;
-                if E.InheritsFrom(Exception) then
-                  fBackgroundException := Exception(E);
-              end;
-            finally
-              SetPendingProcess(flagFinished);
-              fCallerEvent.SetEvent;
-            end;
+  fProcessEvent.WaitForEver;
+  case GetPendingProcess of
+    flagDestroying:
+      begin
+        fCallerEvent.SetEvent; // abort caller thread process
+        Terminate; // forces Execute loop ending
+        exit;
       end;
+    flagStarted:
+      if not Terminated then
+        if fExecuteLoopPause then // pause -> try again later
+          fProcessEvent.SetEvent
+        else
+        try
+          fBackgroundException := nil;
+          try
+            if Assigned(fOnBeforeProcess) then
+              fOnBeforeProcess(self);
+            try
+              Process;
+            finally
+              if Assigned(fOnAfterProcess) then
+                fOnAfterProcess(self);
+            end;
+          except
+            E := AcquireExceptionObject;
+            if E.InheritsFrom(Exception) then
+              fBackgroundException := Exception(E);
+          end;
+        finally
+          SetPendingProcess(flagFinished);
+          fCallerEvent.SetEvent;
+        end;
   end;
 end;
 
@@ -2137,7 +2168,7 @@ end;
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(
   var start: Int64): Int64;
 begin
-  result := mormot.core.os.GetTickCount64;
+  result := GetTickCount64;
   if start = 0 then
     result := start;
   dec(result, start);
@@ -2155,16 +2186,24 @@ begin
     exit; // nothing to wait for
   try
     if Assigned(onmainthreadidle) then
-      while fCallerEvent.WaitFor(100) = wrTimeout do
+      repeat
+        fCallerEvent.WaitFor(100);
+        if fPendingProcessFlag = flagFinished then
+          break;
         onmainthreadidle(self)
+      until false
     else
     {$ifdef OSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then
-      while fCallerEvent.WaitFor(100) = wrTimeout do
-        OnIdleProcessNotify(start)
+      repeat
+        fCallerEvent.WaitFor(100);
+        if fPendingProcessFlag = flagFinished then
+          break;
+        OnIdleProcessNotify(start);
+      until false
     else
     {$endif OSWINDOWS}
-      fCallerEvent.WaitFor(INFINITE);
+      fCallerEvent.WaitForEver;
     if fPendingProcessFlag <> flagFinished then
       ESynThread.CreateUtf8('%.WaitForFinished: flagFinished?', [self]);
     if fBackgroundException <> nil then
@@ -2315,33 +2354,31 @@ begin
 end;
 
 procedure TSynBackgroundThreadProcess.ExecuteLoop;
-var
-  wait: TWaitResult;
 begin
-  wait := fProcessEvent.WaitFor(fOnProcessMS);
-  if not Terminated and
-     (wait in [wrSignaled, wrTimeout]) then
-    if fExecuteLoopPause then // pause -> try again later
-      fProcessEvent.SetEvent
-    else
+  fProcessEvent.WaitFor(fOnProcessMS);
+  if Terminated then
+    exit;
+  if fExecuteLoopPause then // pause -> try again later
+    fProcessEvent.SetEvent
+  else
+  try
+    if fStats <> nil then
+      fStats.ProcessStartTask;
     try
+      fOnProcess(self);
+    finally
       if fStats <> nil then
-        fStats.ProcessStartTask;
-      try
-        fOnProcess(self, wait);
-      finally
-        if fStats <> nil then
-          fStats.ProcessEnd;
-      end;
-    except
-      on E: Exception do
-      begin
-        if fStats <> nil then
-          fStats.ProcessErrorRaised(E);
-        if Assigned(fOnException) then
-          fOnException(E);
-      end;
+        fStats.ProcessEnd;
     end;
+  except
+    on E: Exception do
+    begin
+      if fStats <> nil then
+        fStats.ProcessErrorRaised(E);
+      if Assigned(fOnException) then
+        fOnException(E);
+    end;
+  end;
 end;
 
 
@@ -2370,8 +2407,7 @@ end;
 const
   TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
 
-procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess;
-  Event: TWaitResult);
+procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess);
 var
   tix: Int64;
   i, f, n: PtrInt;
@@ -2381,7 +2417,7 @@ begin
   if (fTask = nil) or
      Terminated then
     exit;
-  tix := mormot.core.os.GetTickCount64;
+  tix := GetTickCount64;
   n := 0;
   LockedInc32(@fProcessingCounter);
   try
@@ -2401,7 +2437,7 @@ begin
           if integer(t^.Secs) = -1 then
           begin
             // from ExecuteOnce()
-            fTasks.DynArray.Delete(i);
+            fTasks.DynArray.Delete(i); // is likely to be the last -> no move
             continue; // don't inc(i)
           end
           else
@@ -2417,15 +2453,15 @@ begin
       with todo[i] do
         if Msg <> nil then
           for f := 0 to length(Msg) - 1 do
-          try
-            OnProcess(self, Event, Msg[f]);
-          except
-          end
+            try
+              OnProcess(self, Msg[f]);
+            except // any exception is just ignored
+            end
         else
-        try
-          OnProcess(self, Event, '');
-        except
-        end;
+          try
+            OnProcess(self, '');
+          except
+          end;
   finally
     fProcessing := InterlockedDecrement(fProcessingCounter) <> 0;
   end;
@@ -2468,8 +2504,7 @@ begin
   end;
   task.OnProcess := aOnProcess;
   task.Secs := aOnProcessSecs;
-  task.NextTix :=
-    mormot.core.os.GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
+  task.NextTix := GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
   task.MsgSafe.Init; // required since task is on stack
   fTasks.Safe.WriteLock;
   try
@@ -2979,12 +3014,12 @@ begin
   end
   else
   begin
-    endtix := mormot.core.os.GetTickCount64 + MS;
+    endtix := GetTickCount64 + MS;
     repeat
       SleepHiRes(10);
       if Terminated then
         exit;
-    until mormot.core.os.GetTickCount64 > endtix;
+    until GetTickCount64 > endtix;
   end;
   result := false; // abnormal delay expiration
 end;
@@ -3003,13 +3038,6 @@ begin
     // hardened: a closing thread should not jeopardize the whole executable! 
   end;
 end;
-
-{$ifndef HASTTHREADSTART}
-procedure TSynThread.start;
-begin
-  Resume;
-end;
-{$endif HASTTHREADSTART}
 
 
 
@@ -3069,6 +3097,9 @@ begin
     DoExecute;
   except
     // ignore any exception during processing method
+    on E: Exception do
+      if iLog <> nil then
+        iLog.Log(sllDebug, 'Execute aborted by %', [E], self);
   end;
   fProcessing := false;
   if fLog <> nil then
@@ -3090,6 +3121,28 @@ begin
 end;
 
 
+{ TLoggedWorkThread }
+
+procedure TLoggedWorkThread.DoExecute;
+begin
+  if Assigned(fOnExecute) then
+    try
+      fOnExecute(fSender);
+    finally
+      if Assigned(fOnExecuted) then
+        fOnExecuted(fSender);
+    end;
+end;
+
+constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
+  const ProcessName: RawUtf8; Sender: TObject;
+  const OnExecute, OnExecuted: TNotifyEvent);
+begin
+  fSender := Sender;
+  fOnExecute := OnExecute;
+  fOnExecuted := OnExecuted;
+  inherited Create({suspended=}false, Logger, ProcessName);
+end;
 
 
 { TSynThreadPool }
@@ -3321,7 +3374,7 @@ begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnThreadTerminate := Owner.fOnThreadTerminate;
   {$ifndef USE_WINIOCP}
-  fEvent := TEvent.Create(nil, false, false, '');
+  fEvent := TSynEvent.Create;
   {$endif USE_WINIOCP}
   inherited Create({suspended=}false);
 end;
@@ -3379,7 +3432,7 @@ begin
       if ctxt <> nil then
         DoTask(ctxt);
       {$else}
-      fEvent.WaitFor(INFINITE);
+      fEvent.WaitForEver;
       if fOwner.fTerminated then
         break;
       fOwner.fSafe.Lock;

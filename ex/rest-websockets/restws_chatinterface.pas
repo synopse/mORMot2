@@ -20,7 +20,7 @@ type
   end;
 
 const
-  PROJECT31_TRANSMISSION_KEY = 'meow_privatekey';
+  CHAT_TRANSMISSION_KEY = 'meow_privatekey';
 
   
 implementation

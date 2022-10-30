@@ -1019,7 +1019,7 @@ begin
   LastError := GetLastError;
   raise ESChannel.CreateFmt('<%s>: Result %x [%s], System Error %d ''%s''',
     [fServerAddressW, res, SspiResToText(res), LastError,
-     SysErrorMessage(LastError)]);
+     string(GetErrorText(LastError))]);
 end;
 
 function TSChannelNetTls.CheckSEC_E_OK(res: integer): cardinal;

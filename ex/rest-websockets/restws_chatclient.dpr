@@ -48,7 +48,7 @@ begin
   Client := TRestHttpClientWebsockets.Create('127.0.0.1', '8888', TSQLModel.Create([]));
   try
     Client.Model.Owner := Client;
-    Client.WebSocketsUpgrade(PROJECT31_TRANSMISSION_KEY);
+    Client.WebSocketsUpgrade(CHAT_TRANSMISSION_KEY);
     if not Client.ServerTimeStampSynchronize then
       raise EServiceException.Create(
         'Error connecting to the server: please run Project31ChatServer.exe');
@@ -57,7 +57,7 @@ begin
       raise EServiceException.Create('Service IChatService unavailable');
     try
       TextColor(ccWhite);
-      writeln('Please enter you name, then press [Enter] to join the chat');
+      writeln('Please enter your name, then press [Enter] to join the chat');
       writeln('Enter a void line to quit');
       write('@');
       TextColor(ccLightGray);

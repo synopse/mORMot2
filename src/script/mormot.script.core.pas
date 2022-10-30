@@ -291,7 +291,7 @@ type
     /// stop the remote debugger server
     procedure StopDebugger;
     /// Write text as console log to current thread Engine's debugger (if exists)
-    procedure DebuggerLog(const Text: RawUTF8);
+    procedure DebuggerLog(const Text: RawUtf8);
     /// redirect to the associated debugger thread flag if the debugger
     // connected to new engine must pause on first step
     property PauseDebuggerOnFirstStep: boolean
@@ -626,7 +626,7 @@ begin
     fRemoteDebugger := nil;
 end;
 
-procedure TThreadSafeManager.DebuggerLog(const Text: RawUTF8);
+procedure TThreadSafeManager.DebuggerLog(const Text: RawUtf8);
 begin
   if Assigned(fOnLog) then
     fOnLog(sllDebug, 'Log %', [Text], self);
@@ -662,7 +662,7 @@ begin
     if Assigned(fManager.fOnGetName) then
       fNameForDebug := fManager.fOnGetName(self);
     if fNameForDebug = '' then
-      FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
+      FormatUtf8('% %', [ToHexShort(@fThreadId, SizeOf(fThreadId)),
         CurrentThreadName], fNameForDebug);
     if Assigned(fManager.fOnGetWebAppRootPath) then
       fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)

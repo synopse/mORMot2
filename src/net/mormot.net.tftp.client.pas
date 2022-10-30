@@ -314,7 +314,7 @@ begin
   result := TFTP_OPCODE[c];
   if c = toUndefined then
   begin
-    AppendShortInteger(frame.Opcode, result);
+    AppendShortCardinal(frame.Opcode, result);
     exit;
   end;
   dec(len, SizeOf(Frame.Opcode));
@@ -337,18 +337,18 @@ begin
     toAck:
       begin
         /// 'DAT 123,len' / 'ACK 123'
-        AppendShortInteger(seq, result);
+        AppendShortCardinal(seq, result);
         dec(len, SizeOf(Frame.Sequence));
         if (len >= 0) and
            (c = toDat) then
         begin
           AppendShortChar(',', result);
-          AppendShortInteger(len, result);
+          AppendShortCardinal(len, result);
         end;
       end;
     toErr:
       begin
-        AppendShortInteger(seq, result);
+        AppendShortCardinal(seq, result);
         if seq <= ord(teLast) then
         begin
           AppendShort(' (', result);

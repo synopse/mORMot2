@@ -204,6 +204,8 @@ var
 
 /// try to load the libpq library
 // - raise a ESqlDBPostgres exception if loading failed
+// - you can setup a non-standard libpq location in SynDBPostgresLibrary
+// global variable, before calling this procedure
 procedure PostgresLibraryInitialize;
 
 
@@ -258,13 +260,10 @@ constructor TSqlDBPostgresLib.Create;
 var
   P: PPointerArray;
   i: PtrInt;
-  l2: TFileName;
 begin
-  if LIBNAME2 <> '' then
-    {%H-}l2 := Executable.ProgramFilePath + LIBNAME2;
+  TryFromExecutableFolder := true;
   TryLoadLibrary([
-    SynDBPostgresLibrary, Executable.ProgramFilePath + LIBNAME,
-    {%H-}l2, LIBNAME, LIBNAME2], ESqlDBPostgres);
+    SynDBPostgresLibrary, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
     Resolve('PQ', PQ_ENTRIES[i], @P[I], {raiseonfailure=}ESqlDBPostgres);

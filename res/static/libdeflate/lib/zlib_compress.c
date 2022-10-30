@@ -1,8 +1,6 @@
 /*
  * zlib_compress.c - compress with a zlib wrapper
  *
- * Originally public domain; changes after 2016-09-07 are copyrighted.
- *
  * Copyright 2016 Eric Biggers
  *
  * Permission is hereby granted, free of charge, to any person
@@ -28,7 +26,6 @@
  */
 
 #include "deflate_compress.h"
-#include "unaligned.h"
 #include "zlib_constants.h"
 
 #include "libdeflate.h"
@@ -49,7 +46,7 @@ libdeflate_zlib_compress(struct libdeflate_compressor *c,
 
 	/* 2 byte header: CMF and FLG  */
 	hdr = (ZLIB_CM_DEFLATE << 8) | (ZLIB_CINFO_32K_WINDOW << 12);
-	compression_level = deflate_get_compression_level(c);
+	compression_level = libdeflate_get_compression_level(c);
 	if (compression_level < 2)
 		level_hint = ZLIB_FASTEST_COMPRESSION;
 	else if (compression_level < 6)

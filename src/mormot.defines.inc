@@ -47,12 +47,6 @@
 // if defined, FPC RTL won't be patched on x86_64 with optimized asm
 // - you can enable it if you find out some compatibility problem
 
-{.$define WITH_ERMS}
-// you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
-// if cfERMS flag is available in Intel's CpuFeatures
-// -> disabled by default, since in practice it is slower than non-temporal mov
-// see https://stackoverflow.com/a/43837564/458259 for explanations and timing
-
 {$ifdef CPUX86}
   {.$define HASNOSSE2} // force x87 code on very very old CPU
 {$endif CPUX86}
@@ -62,6 +56,9 @@
 
 {.$define NOSYNDBIBX}
 // make mormot.db.sql.ibx.pas a "void" unit - defined for FPC/Lazarus packages only
+
+{.$define MONGO_OLDPROTOCOL}
+// may be used with old MongoDB instances < 3.6 with no OP_MSG in Wire protocol
 
 {.$define DISABLEAPPSQL}
 // mormot.db.sql external DB won't be linked to the executable by mormot.app
@@ -126,10 +123,11 @@
   // -vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
 
   // disable some no-brainer warnings - let FPC align with Delphi in that matter
-  {$WARN 5089 off : uninitialized managed variables 1}
-  {$WARN 5091 off : uninitialized managed variables 2}
-  {$WARN 5093 off : function result variable of a managed uninitialized}
-  {$WARN 6058 off : call to subroutine marked as inline is not inlined}
+  {$WARN 5089 off} // uninitialized managed variables 1
+  {$WARN 5091 off} // uninitialized managed variables 2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+  {$WARN 5094 off} // function result variable of a managed uninitialized 2
+  {$WARN 6058 off} // call to subroutine marked as inline is not inlined
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
@@ -296,6 +294,7 @@
         {$define ASMX64}       // supports asm with globals
         {$define ASMINTEL}     // either ASMX86 or ASMX64
         {$define ASMX64AVX}    // supports AVX/AVX2/AVX512
+        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
         {$define CPUX64ASM}    // FPC has no problem (not Delphi prior XE7)
         {$define HASAESNI}     // mormot.crypt.core rejected by Darwin asm
       {$endif OSDARWIN}
@@ -325,6 +324,9 @@
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
   {$endif CPU64}
+  {$ifndef CPUX64}
+    {$undef FPC_X64MM}         // x86_64 only unit
+  {$endif CPUX64}
 
 
   // -----------
@@ -407,6 +409,7 @@
   {$define ISDELPHI}
   {$define CPUINTEL}          // Delphi only for Intel by now
   {$define ASMINTEL}          // either ASMX86 or ASMX64
+  {$undef FPC_X64MM}          // FPC only unit
   {$ifdef CPUX64}
     {$undef CPU32}
     {$define CPU64}           // Delphi compiler for 64 bit CPU
@@ -503,6 +506,7 @@
       {$define ISDELPHIXE4}
       {$define FPC_OR_DELPHIXE4}  // circumvent Internal Error: C2130 on XE3
       {$define HASAESNI}
+      {$define HASALIGN}          // .align ### inline assembler directive
     {$ifend}
     {$if CompilerVersion >= 26.0} // = Delphi XE5
       {$define ISDELPHIXE5}
@@ -554,6 +558,7 @@
       {$define ISDELPHI11}
       {$ifdef CPU64}
         {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
+        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
       {$endif CPU64}
     {$ifend}
     {$if CompilerVersion >= 36.0} // = Delphi 12

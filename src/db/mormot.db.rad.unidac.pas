@@ -632,7 +632,7 @@ procedure TSqlDBUniDACStatement.DataSetBindSqlParam(const aArrayIndex,
 var
   P: TDAParam;
   i: Integer;
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   StoreVoidStringAsNull: boolean;
 begin
   P := TDAParam(fQueryParams[aParamIndex]);

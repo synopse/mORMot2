@@ -337,7 +337,7 @@ type
     // aServerWebSocketsCompression parameters as any regular client in the
     // local network - from the server point of view, those clients will
     // appear like local clients unless ServerRemoteIPHeader is set according
-    // to the TSqlHttpServerDefinition.ServerRemoteIPHeader value (e.g. as
+    // to the TRestHttpServerDefinition.ServerRemoteIPHeader value (e.g. as
     // 'X-Real-IP') and the remote client IP will be used instead
     // - Connected/TryConnect should be called on a regular basis to connect to
     // the Public Relay using aRelayHost/aRelayPort/aRelayKey/aRelayBearer
@@ -577,11 +577,11 @@ begin
     if Frame.opcode = focContinuation then
       Frame.payload := ip + #13 + Name + #13 + UpgradeUri; // propagate to Private Relay
     if not fOwner.EncapsulateAndSend(
-        fOwner.fServerConnected, ip, Frame, Sender.OwnerConnectionID) and
+        fOwner.fServerConnected, ip, Frame, Sender.Protocol.ConnectionID) and
        (Frame.opcode <> focConnectionClose) then
       raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Error relaying % from #% % to server',
-        [ToText(Frame.opcode)^, Sender.OwnerConnectionID, ip]);
+        [ToText(Frame.opcode)^, Sender.Protocol.ConnectionID, ip]);
   finally
     fOwner.Safe.UnLock;
   end;
