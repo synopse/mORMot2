@@ -120,8 +120,9 @@ begin
     dest.len := 0
   else
   begin
+    dec(dest.len); // Utf8ToUnicode() returned length includes trailing #0
     result := dest.buf;
-    dec(dest.len); // Utf8ToUnicode() includes trailing #0
+    result[dest.len] := #0; // missing on FPC
   end;
 end;
 
