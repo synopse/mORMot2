@@ -286,6 +286,179 @@ var
   BOOL_UTF8: array[boolean] of RawUtf8;
 
 
+type
+  /// Security IDentifier (SID) Authority, encoded as 48-bit binary
+  TSidAuth = array[0..5] of byte;
+  PSidAuth = ^TSidAuth;
+
+  /// Security IDentifier (SID) binary format, as retrieved e.g. by Windows API
+  // - this definition is not detailed on oldest Delphi, and not available on
+  // POSIX, whereas it makes sense to also have it, e.g. for server process
+  TSid = packed record
+     Revision: byte;
+     SubAuthorityCount: byte;
+     IdentifierAuthority: TSidAuth;
+     SubAuthority: array[byte] of cardinal;
+  end;
+  PSid = ^TSid;
+  PSids = array of PSid;
+
+  /// define a list of well-known Security IDentifier (SID) groups
+  // - for instance, wksBuiltinAdministrators is set for local administrators
+  // - warning: does not exactly match winnt.h WELL_KNOWN_SID_TYPE enumeration
+  TWellKnownSid = (
+    wksNull,
+    wksWorld,
+    wksLocal,
+    wksConsoleLogon,
+    wksCreatorOwner,
+    wksCreatorGroup,
+    wksCreatorOwnerServer,
+    wksCreatorGroupServer,
+    wksIntegrityUntrusted,
+    wksIntegrityLow,
+    wksIntegrityMedium,
+    wksIntegrityMediumPlus,
+    wksIntegrityHigh,
+    wksIntegritySystem,
+    wksIntegrityProtectedProcess,
+    wksIntegritySecureProcess,
+    wksAuthenticationAuthorityAsserted,
+    wksAuthenticationServiceAsserted,
+    wksAuthenticationFreshKeyAuth,
+    wksAuthenticationKeyTrust,
+    wksAuthenticationKeyPropertyMfa,
+    wksAuthenticationKeyPropertyAttestation,
+    wksNtAuthority,
+    wksDialup,
+    wksNetwork,
+    wksBatch,
+    wksInteractive,
+    wksService,
+    wksAnonymous,
+    wksProxy,
+    wksEnterpriseControllers,
+    wksSelf,
+    wksAuthenticatedUser,
+    wksRestrictedCode,
+    wksTerminalServer,
+    wksRemoteLogonId,
+    wksThisOrganisation,
+    wksIisUser,
+    wksLocalSystem,
+    wksLocalService,
+    wksNetworkService,
+    wksLocalAccount,
+    wksLocalAccountAndAdministrator,
+    wksBuiltinDomain,
+    wksBuiltinAdministrators,
+    wksBuiltinUsers,
+    wksBuiltinGuests,
+    wksBuiltinPowerUsers,
+    wksBuiltinAccountOperators,
+    wksBuiltinSystemOperators,
+    wksBuiltinPrintOperators,
+    wksBuiltinBackupOperators,
+    wksBuiltinReplicator,
+    wksBuiltinRasServers,
+    wksBuiltinPreWindows2000CompatibleAccess,
+    wksBuiltinRemoteDesktopUsers,
+    wksBuiltinNetworkConfigurationOperators,
+    wksBuiltinIncomingForestTrustBuilders,
+    wksBuiltinPerfMonitoringUsers,
+    wksBuiltinPerfLoggingUsers,
+    wksBuiltinAuthorizationAccess,
+    wksBuiltinTerminalServerLicenseServers,
+    wksBuiltinDcomUsers,
+    wksBuiltinIUsers,
+    wksBuiltinCryptoOperators,
+    wksBuiltinUnknown,
+    wksBuiltinCacheablePrincipalsGroups,
+    wksBuiltinNonCacheablePrincipalsGroups,
+    wksBuiltinEventLogReadersGroup,
+    wksBuiltinCertSvcDComAccessGroup,
+    wksBuiltinRdsRemoteAccessServers,
+    wksBuiltinRdsEndpointServers,
+    wksBuiltinRdsManagementServers,
+    wksBuiltinHyperVAdmins,
+    wksBuiltinAccessControlAssistanceOperators,
+    wksBuiltinRemoteManagementUsers,
+    wksBuiltinDefaultSystemManagedGroup,
+    wksBuiltinStorageReplicaAdmins,
+    wksBuiltinDeviceOwners,
+    wksCapabilityInternetClient,
+    wksCapabilityInternetClientServer,
+    wksCapabilityPrivateNetworkClientServer,
+    wksCapabilityPicturesLibrary,
+    wksCapabilityVideosLibrary,
+    wksCapabilityMusicLibrary,
+    wksCapabilityDocumentsLibrary,
+    wksCapabilityEnterpriseAuthentication,
+    wksCapabilitySharedUserCertificates,
+    wksCapabilityRemovableStorage,
+    wksCapabilityAppointments,
+    wksCapabilityContacts,
+    wksBuiltinAnyPackage,
+    wksBuiltinAnyRestrictedPackage,
+    wksNtlmAuthentication,
+    wksSChannelAuthentication,
+    wksDigestAuthentication);
+
+  /// define a set of well-known SID
+  TWellKnownSids = set of TWellKnownSid;
+
+  /// custom binary buffer type which can be used to manage a Windows SID instance
+  RawSid = type RawByteString;
+
+
+/// a wrapper around MemCmp() on two Security IDentifier binary buffers
+function SidCompare(a, b: PSid): integer;
+
+/// compute the actual binary length of a Security IDentifier buffer, in bytes
+function SidLength(sid: PSid): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// allocate a RawSid instance from a PSid raw handler
+procedure ToRawSid(sid: PSid; out result: RawSid);
+
+/// convert a Security IDentifier as text, following the standard representation
+procedure SidToTextShort(sid: PSid; var result: shortstring);
+
+/// convert a Security IDentifier as text, following the standard representation
+function SidToText(sid: PSid): RawUtf8; overload;
+
+/// convert a Security IDentifier as text, following the standard representation
+function SidToText(const sid: RawSid): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// parse a Security IDentifier text, following the standard representation
+// - won't support hexadecimal IdentifierAuthority, i.e. S-1-0x######-....
+function TextToSid(P: PUtf8Char; out sid: TSid): boolean; overload;
+
+/// parse a Security IDentifier text, following the standard representation
+function TextToSid(const text: RawUtf8): RawSid; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// returns a Security IDentifier of a well-known SID as binary
+// - is using an internal cache for the returned RawSid instances
+function KnownSid(wks: TWellKnownSid): RawSid;
+
+/// returns a Security IDentifier of a well-known SID as standard text
+// - e.g. wksBuiltinAdministrators as 'S-1-5-32-544'
+function KnownSidToText(wks: TWellKnownSid): PShortString;
+
+/// recognize most well-known SID from a Security IDentifier binary buffer
+// - returns wksNull if the supplied buffer was not recognized
+function SidToKnown(sid: PSid): TWellKnownSid; overload;
+
+/// recognize most well-known SID from a Security IDentifier standard text
+// - returns wksNull if the supplied text was not recognized
+function SidToKnown(const text: RawUtf8): TWellKnownSid; overload;
+
+/// recognize some well-known SIDs from the supplied SID dynamic array
+function SidToKnownGroups(const sids: PSids): TWellKnownSids;
+
+
 { ****************** Gather Operating System Information }
 
 type
@@ -1238,17 +1411,6 @@ type
   BOOL          = Windows.BOOL;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
 
-  // some definitions which are not detailed on oldest Delphi
-  SID_IDENTIFIER_AUTHORITY = array[0..5] of byte;
-  PSID_IDENTIFIER_AUTHORITY = ^SID_IDENTIFIER_AUTHORITY;
-  SID = record
-     Revision: byte;
-     SubAuthorityCount: byte;
-     IdentifierAuthority: SID_IDENTIFIER_AUTHORITY;
-     SubAuthority: array[byte] of cardinal;
-  end;
-  PSID = ^SID;
-
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
     wrClasses,
@@ -1423,6 +1585,22 @@ type
   PWinProcessInfo = ^TWinProcessInfo;
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
+  /// the SID types, as recognized by LookupSid()
+  TSidType = (
+    stUndefined,
+    stTypeUser,
+    stTypeGroup,
+    stTypeDomain,
+    stTypeAlias,
+    stTypeWellKnownGroup,
+    stTypeDeletedAccount,
+    stTypeInvalid,
+    stTypeUnknown,
+    stTypeComputer,
+    stTypeLabel,
+    stTypeLogonSession);
+
+
 function ToText(p: TWinSystemPrivilege): PShortString; overload;
 
 /// calls OpenProcessToken() or OpenThreadToken() to get the current token
@@ -1436,20 +1614,49 @@ function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
 
 /// return the SID of a given token, nil if none found
-function RawTokenSid(tok: THandle): PSID;
+// - the returned PSid is located within buf temporary buffer
+// - so caller should call buf.Done once this PSid value is not needed any more
+function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
 
-/// return the SID of the current user, from process or thread
-function CurrentSid(wtt: TWinTokenType = wttProcess): RawUtf8;
+/// return the group SIDs of a given token, nil if none found
+// - the returned PSid is located within buf temporary buffer
+// - so caller should call buf.Done once this PSid value is not needed any more
+function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
 
-/// convert a Security IDentifier as text, following the standard representation
-procedure SidToTextShort(sid: PSID; var result: shortstring);
+/// return the SID of the current user, from process or thread, as text
+// - e.g. 'S-1-5-21-823746769-1624905683-418753922-1000'
+// - optionally returning the name and domain via LookupSid()
+function CurrentSid(wtt: TWinTokenType = wttProcess;
+  name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8; overload;
 
-/// convert a Security IDentifier as text, following the standard representation
-function SidToText(sid: PSID): RawUtf8; 
+/// return the SID of the current user, from process or thread, as binary
+procedure CurrentSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
+  name: PRawUtf8 = nil; domain: PRawUtf8 = nil); overload;
 
-/// quickly retrieve a Text value from Registry
-// - could be used if TWinRegistry is not needed, e.g. for a single value
-function ReadRegString(Key: THandle; const Path, Value: string): string;
+/// return the SID of the current user groups, from process or thread, as text
+function CurrentGroupsSid(wtt: TWinTokenType = wttProcess): TRawUtf8DynArray;
+
+/// recognize the well-known SIDs from the current user, from process or thread
+// - for instance, for an user with administrator rights on Windows, returns
+// $ [wksWorld, wksLocal, wksConsoleLogon, wksIntegrityHigh, wksInteractive,
+// $  wksAuthenticatedUser, wksThisOrganisation, wksBuiltinAdministrators,
+// $  wksBuiltinUsers, wksNtlmAuthentication]
+function CurrentKnownGroups(wtt: TWinTokenType = wttProcess): TWellKnownSids;
+
+/// fast check if the current user, from process or thread, has a well-known group SID
+function CurrentKnownGroup(wks: TWellKnownSid; wtt: TWinTokenType = wttProcess): boolean;
+
+/// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
+function CurrentUserIsAdmin: boolean;
+
+/// retrieve the name and domain of a given SID
+// - returns stUndefined if the SID could not be resolved by LookupAccountSid()
+function LookupSid(sid: PSid; out name, domain: RawUtf8): TSidType; overload;
+
+/// retrieve the name and domain of a given SID, encoded from text
+// - returns stUndefined if the SID could not be resolved by LookupAccountSid()
+function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8): TSidType; overload;
+
 
 /// retrieve low-level process information, from the Windows API
 procedure GetProcessInfo(aPid: cardinal;
@@ -1458,6 +1665,10 @@ procedure GetProcessInfo(aPid: cardinal;
 /// retrieve low-level process(es) information, from the Windows API
 procedure GetProcessInfo(const aPidList: TCardinalDynArray;
   out aInfo: TWinProcessInfoDynArray); overload;
+
+/// quickly retrieve a Text value from Registry
+// - could be used if TWinRegistry is not needed, e.g. for a single value
+function ReadRegString(Key: THandle; const Path, Value: string): string;
 
 
 type
@@ -4484,6 +4695,382 @@ begin
   result := format('%d%s', [v, _U[u]]);
 end;
 
+function SidLength(sid: PSid): PtrInt;
+begin
+  if sid = nil then
+    result := 0
+  else
+    result := integer(sid^.SubAuthorityCount) shl 2 + 8;
+end;
+
+function SidCompare(a, b: PSid): integer;
+var
+  l: PtrInt;
+begin
+  l := SidLength(a);
+  result := l - SidLength(b);
+  if result = 0 then
+    result := MemCmp(pointer(a), pointer(b), l);
+end;
+
+procedure ToRawSid(sid: PSid; out result: RawSid);
+begin
+  if sid <> nil then
+    FastSetRawByteString(RawByteString(result), sid, SidLength(sid));
+end;
+
+procedure SidToTextShort(sid: PSid; var result: shortstring);
+var
+  a: PSidAuth;
+  i: PtrInt;
+begin // faster than ConvertSidToStringSidA()
+  if (sid = nil ) or
+     (sid^.Revision <> 1) then
+  begin
+    result[0] := #0; // invalid SID
+    exit;
+  end;
+  a := @sid^.IdentifierAuthority;
+  if (a^[0] <> 0) or
+     (a^[1] <> 0) then
+  begin
+    result := 'S-1-0x';
+    for i := 0 to 5 do
+      AppendShortByteHex(a^[i], result)
+  end
+  else
+  begin
+    result := 'S-1-';
+    AppendShortCardinal(bswap32(PCardinal(@a^[2])^), result);
+  end;
+  for i := 0 to integer(sid^.SubAuthorityCount) - 1 do
+  begin
+    AppendShortChar('-', result);
+    AppendShortCardinal(sid^.SubAuthority[i], result);
+  end;
+end;
+
+function SidToText(sid: PSid): RawUtf8;
+var
+  tmp: shortstring;
+begin
+  SidToTextShort(sid, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function SidToText(const sid: RawSid): RawUtf8;
+begin
+  result := SidToText(pointer(sid));
+end;
+
+// GetNextCardinal() on POSIX does not ignore trailing '-'
+function GetNextUInt32(var P: PUtf8Char): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  if P = nil then
+    exit;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
+end;
+
+function TextToSid(P: PUtf8Char; out sid: TSid): boolean;
+begin
+  result := false;
+  if (P = nil) or
+     (PCardinal(P)^ <>
+        ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24) then
+    exit;
+  inc(P, 4);
+  if not (P^ in ['1'..'9']) then
+    exit;
+  PInt64(@sid)^ := 1;
+  PCardinal(@sid.IdentifierAuthority[2])^ := bswap32(GetNextUInt32(P));
+  while P^ in ['0'..'9'] do
+  begin
+    sid.SubAuthority[sid.SubAuthorityCount] := GetNextUInt32(P);
+    inc(sid.SubAuthorityCount);
+    if sid.SubAuthorityCount = 0 then
+      exit; // avoid any overflow
+  end;
+  result := P^ = #0
+end;
+
+function TextToSid(const text: RawUtf8): RawSid;
+var
+  tmp: TSid; // maximum size possible on stack (1032 bytes)
+begin
+  if TextToSid(pointer(text), tmp) then
+    ToRawSid(@tmp, result);
+end;
+
+var
+  KNOWN_SID: array[TWellKnownSid] of RawSid;
+  KNOWN_SID_TEXT: array[TWellKnownSid] of string[15];
+
+procedure ComputeKnownSid(wks: TWellKnownSid);
+var
+  sid: TSid;
+begin
+  PInt64(@sid)^ := $0101; // sid.Revision=1, sid.SubAuthorityCount=1
+  if wks <= wksLocal then
+  begin // S-1-1-0
+    sid.IdentifierAuthority[5] := ord(wks);
+    sid.SubAuthority[0] := 0;
+  end
+  else if wks = wksConsoleLogon then
+  begin // S-1-2-1
+    sid.IdentifierAuthority[5] := 2;
+    sid.SubAuthority[0] := 1;
+  end
+  else if wks <= wksCreatorGroupServer then
+  begin // S-1-3-0
+    sid.IdentifierAuthority[5] := 3;
+    sid.SubAuthority[0] := ord(wks) - ord(wksCreatorOwner);
+  end
+  else if wks <= wksIntegritySecureProcess then
+  begin
+    sid.IdentifierAuthority[5] := 16; // S-1-16-0
+    case wks of
+      wksIntegrityUntrusted:
+        sid.SubAuthority[0] := 0;
+      wksIntegrityLow:
+        sid.SubAuthority[0] := 4096;
+      wksIntegrityMedium:
+        sid.SubAuthority[0] := 8192;
+      wksIntegrityMediumPlus:
+        sid.SubAuthority[0] := 8448;
+      wksIntegrityHigh:
+        sid.SubAuthority[0] := 12288;
+      wksIntegritySystem:
+        sid.SubAuthority[0] := 16384;
+      wksIntegrityProtectedProcess:
+        sid.SubAuthority[0] := 20480;
+      wksIntegritySecureProcess:
+        sid.SubAuthority[0] := 28672;
+    end;
+  end
+  else if wks <= wksAuthenticationKeyPropertyAttestation then
+  begin // S-1-18-1
+    sid.IdentifierAuthority[5] := 18;
+    sid.SubAuthority[0] := ord(wks) - (ord(wksAuthenticationAuthorityAsserted) - 1)
+  end
+  else
+  begin // S-1-5-1
+    sid.IdentifierAuthority[5] := 5;
+    if wks = wksNtAuthority then
+      sid.SubAuthorityCount := 0
+    else if wks <= wksInteractive then
+      sid.SubAuthority[0] := ord(wks) - ord(wksNtAuthority)
+    else if wks <= wksThisOrganisation then
+      sid.SubAuthority[0] := ord(wks) - (ord(wksNtAuthority) - 1)
+    else if wks <= wksNetworkService then
+      sid.SubAuthority[0] := ord(wks) - (ord(wksNtAuthority) - 2)
+    else if wks <= wksLocalAccountAndAdministrator then //  S-1-5-113
+      sid.SubAuthority[0] := ord(wks) - (ord(wksLocalAccount) - 113)
+    else
+    begin
+      sid.SubAuthority[0] := 32;
+      if wks <> wksBuiltinDomain then
+      begin
+        sid.SubAuthorityCount := 2;
+        if wks <= wksBuiltinDcomUsers then
+          sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinAdministrators) - 544)
+        else if wks <= wksBuiltinDeviceOwners then // S-1-5-32-583
+          sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinIUsers) - 568)
+        else if wks <= wksCapabilityContacts then
+        begin // S-1-15-3-1
+          sid.IdentifierAuthority[5] := 15;
+          sid.SubAuthority[0] := 3;
+          sid.SubAuthority[1] := ord(wks) - (ord(wksCapabilityInternetClient) - 1)
+        end
+        else if wks <= wksBuiltinAnyRestrictedPackage then
+        begin // S-1-15-2-1
+          sid.IdentifierAuthority[5] := 15;
+          sid.SubAuthority[0] := 2;
+          sid.SubAuthority[1] := ord(wks) - (ord(wksBuiltinAnyPackage) - 1)
+        end
+        else if wks <= wksDigestAuthentication then
+        begin
+          sid.SubAuthority[0] := 64;
+          case wks of
+            wksNtlmAuthentication:
+              sid.SubAuthority[1] := 10; // S-1-5-64-10
+            wksSChannelAuthentication:
+              sid.SubAuthority[1] := 14;
+            wksDigestAuthentication:
+              sid.SubAuthority[1] := 21;
+          end;
+        end;
+      end;
+    end;
+  end;
+  GlobalLock;
+  if KNOWN_SID[wks] = '' then
+  begin
+    ToRawSid(@sid, KNOWN_SID[wks]);
+    SidToTextShort(@sid, KNOWN_SID_TEXT[wks]);
+  end;
+  GlobalUnLock;
+end;
+
+function KnownSid(wks: TWellKnownSid): RawSid;
+begin
+  if (wks <> wksNull) and
+     (KNOWN_SID[wks] = '') then
+    ComputeKnownSid(wks);
+  result := KNOWN_SID[wks];
+end;
+
+function KnownSidToText(wks: TWellKnownSid): PShortString;
+begin
+  if (wks <> wksNull) and
+     (KNOWN_SID[wks] = '') then
+    ComputeKnownSid(wks);
+  result := @KNOWN_SID_TEXT[wks];
+end;
+
+// https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/81d92bba-d22b-4a8c-908a-554ab29148ab
+
+function SidToKnown(sid: PSid): TWellKnownSid;
+begin
+  result := wksNull; // not recognized
+  if (sid = nil) or
+     (sid.Revision <> 1) or
+     (PCardinal(@sid.IdentifierAuthority)^ <> 0) or
+     (sid.IdentifierAuthority[4] <> 0) then
+    exit;
+  case sid.SubAuthorityCount of // very fast O(1) SID binary recognition
+    0:
+      case sid.IdentifierAuthority[5] of
+        5:
+          result := wksNtAuthority; // S-1-5
+      end;
+    1:
+      case sid.IdentifierAuthority[5] of
+        1:
+          if sid.SubAuthority[0] = 0 then
+            result := wksWorld; // S-1-1-0
+        2:
+          case sid.SubAuthority[0] of
+            0:
+              result := wksLocal; // S-1-2-0
+            1:
+              result := wksConsoleLogon; // S-1-2-1
+          end;
+        3:
+          if sid.SubAuthority[0] in [0 .. 3] then // S-1-3-x
+            result := TWellKnownSid(byte(wksCreatorOwner) + sid.SubAuthority[0]);
+        5:
+          case sid.SubAuthority[0] of
+            1 .. 4: // S-1-5-1
+              result := TWellKnownSid(byte(pred(wksDialup)) + sid.SubAuthority[0]);
+            6 .. 15:
+              result := TWellKnownSid((byte(wksService) - 6) + sid.SubAuthority[0]);
+            17 .. 20:
+              result := TWellKnownSid((byte(wksLocalSystem) - 18) + sid.SubAuthority[0]);
+            32:
+              result := wksBuiltinDomain;
+            113 .. 114:
+              result := TWellKnownSid(integer(byte(wksLocalAccount) - 113) +
+                integer(sid.SubAuthority[0]));
+          end;
+        16:
+          case sid.SubAuthority[0] of // S-1-16-x
+            0:
+              result := wksIntegrityUntrusted;
+            4096:
+              result := wksIntegrityLow;
+            8192:
+              result := wksIntegrityMedium;
+            8448:
+              result := wksIntegrityMediumPlus;
+            12288:
+              result := wksIntegrityHigh;
+            16384:
+              result := wksIntegritySystem;
+            20480:
+              result := wksIntegrityProtectedProcess;
+            28672:
+              result := wksIntegritySecureProcess;
+          end;
+        18:
+          if sid.SubAuthority[0] in [1 .. 6] then // S-1-18-x
+            result := TWellKnownSid((byte(wksAuthenticationAuthorityAsserted) - 1) +
+              sid.SubAuthority[0]);
+      end;
+    2:
+      case sid.IdentifierAuthority[5] of
+        5:
+          case sid.SubAuthority[0] of
+            32: // S-1-5-32-544
+              case sid.SubAuthority[1] of
+                544 .. 562:
+                  result := TWellKnownSid(byte(wksBuiltinAdministrators) +
+                    sid.SubAuthority[1] - 544);
+                568 .. 583:
+                  result := TWellKnownSid(byte(wksBuiltinIUsers) +
+                    sid.SubAuthority[1] - 568);
+              end;
+            64: // S-1-5-64-10
+              case sid.SubAuthority[1] of
+                10:
+                  result := wksNtlmAuthentication;
+                14:
+                  result := wksSChannelAuthentication;
+                21:
+                  result := wksDigestAuthentication;
+              end;
+          end;
+        15:
+          case sid.SubAuthority[0] of
+            2:
+              if sid.SubAuthority[1] in [1 .. 2] then // S-1-15-2-x
+                result := TWellKnownSid(byte(pred(wksBuiltinAnyPackage)) +
+                  sid.SubAuthority[1]);
+            3:
+              if sid.SubAuthority[1] in [1 .. 12] then // S-1-15-3-x
+                result := TWellKnownSid(byte(pred(wksCapabilityInternetClient)) +
+                  sid.SubAuthority[1]);
+          end;
+      end;
+  end;
+end;
+
+function SidToKnown(const text: RawUtf8): TWellKnownSid;
+var
+  sid: TSid;
+begin
+  if TextToSid(pointer(text), sid) then
+    result := SidToKnown(@sid)
+  else
+    result := wksNull;
+end;
+
+function SidToKnownGroups(const sids: PSids): TWellKnownSids;
+var
+  k: TWellKnownSid;
+  i: PtrInt;
+begin
+  result := [];
+  for i := 0 to length(sids) - 1 do
+  begin
+    k := SidToKnown(sids[i]);
+    if k <> wksNull then
+      include(result, k);
+  end;
+end;
+
 
 { ****************** Gather Operating System Information }
 
@@ -5991,7 +6578,7 @@ begin
   vlen := 0;
   o := -1;
   for i := v to length(UserAgent) do
-    if not (UserAgent[i] in ['0'..'9', '.']) then
+    if not (UserAgent[i] in ['0' .. '9', '.']) then
     begin
       vlen := i - v; // vlen may be 0 if DetailedOrVoid was ''
       if UserAgent[i + 1] in [#0, '3'] then // end with OS_INITIAL or '32' suffix
@@ -6008,13 +6595,13 @@ end;
 
 procedure SetExecutableVersion(const aVersionText: RawUtf8);
 var
-  P: PAnsiChar;
+  P: PUtf8Char;
   i: integer;
-  ver: array[0..3] of integer;
+  ver: array[0 .. 3] of integer;
 begin
   P := pointer(aVersionText);
   for i := 0 to 3 do
-    ver[i] := GetNextCardinal(P);
+    ver[i] := GetNextUInt32(P);
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
@@ -6170,7 +6757,7 @@ type
     MinVers: byte;
     MaxSize: word;
     Revision: byte;
-    PadTo16: array[1..5] of byte;
+    PadTo16: array[1 .. 5] of byte;
     IntAnch4: cardinal; // = SMB_INT4
     IntAnch5: byte;     // = SMB_INT5
     IntChecksum: byte;

@@ -1367,23 +1367,6 @@ var
   QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
     lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
 
-function GetNextCardinal(var P: PAnsiChar): cardinal;
-var
-  c: cardinal;
-begin
-  result := 0;
-  repeat
-    c := ord(P^) - 48;
-    if c > 9 then
-      break
-    else
-      result := result * 10 + c;
-    inc(P);
-  until false;
-  while P^ in ['.', '-', ' '] do
-    inc(P);
-end;
-
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
   S: PAnsiChar;
@@ -2322,13 +2305,15 @@ function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger
   lpName: PAnsiChar; var cbName: DWORD): BOOL;
     stdcall; external advapi32 name 'LookupPrivilegeNameA';
 
+function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
+  var cchName: DWORD; ReferencedDomainName: PAnsiChar;
+  var cchReferencedDomainName: DWORD; var peUse: DWORD): BOOL;
+    stdcall; external advapi32 name 'LookupAccountSidW';
+
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
   PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
     stdcall; external advapi32 name 'AdjustTokenPrivileges';
-
-{function ConvertSidToStringSidA(Sid: PSID; var StringSid: PAnsiChar): BOOL;
-    stdcall; external advapi32 name 'ConvertSidToStringSidA'; }
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
@@ -2366,86 +2351,145 @@ begin
     result := 0; // error
 end;
 
-function RawTokenSid(tok: THandle): PSID;
-var
-  buf: TSynTempBuffer;
+function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
 begin
   result := nil;
   if (tok = INVALID_HANDLE_VALUE) or
      (tok = 0) then
     exit;
   if RawTokenGetInfo(tok, TokenUser, buf) >= SizeOf(TOKEN_USER) then
-    result := PSID(PTOKEN_USER(buf.buf)^.User.Sid);
-  buf.Done;
+    result := PSid(PTOKEN_USER(buf.buf)^.User.Sid); // within buf.buf/len
 end;
 
-function CurrentSid(wtt: TWinTokenType): RawUtf8;
+function CurrentSid(wtt: TWinTokenType; name, domain: PRawUtf8): RawUtf8;
+var
+  sid: RawSid;
+begin
+  CurrentSid(sid, wtt, name, domain);
+  result := SidToText(sid);
+end;
+
+procedure CurrentSid(out sid: RawSid; wtt: TWinTokenType;
+  name, domain: PRawUtf8);
 var
   h: THandle;
+  p: PSid;
+  n, d: RawUtf8;
+  tmp: TSynTempBuffer;
 begin
   h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := SidToText(RawTokenSid(h));
+  p := RawTokenSid(h, tmp);
+  if p <> nil then
+  begin
+    ToRawSid(p, sid);
+    if (name <> nil) or
+       (domain <> nil) then
+    begin
+      LookupSid(p, n, d);
+      if name <> nil then
+        name^ := n;
+      if domain <> nil then
+        domain^ := d;
+    end;
+  end;
+  tmp.Done;
   CloseHandle(h);
 end;
 
-procedure SidToTextShort(sid: PSID; var result: shortstring);
-var
-  a: PSID_IDENTIFIER_AUTHORITY;
-  i: PtrInt;
-begin // faster than ConvertSidToStringSidA()
-  if (sid = nil ) or
-     not IsValidSid(pointer(sid)) then
-  begin
-    result[0] := #0;
-    exit;
-  end;
-  a := @sid^.IdentifierAuthority;
-  if (a^[0] <> 0) or
-     (a^[1] <> 0) then
-  begin
-    result := 'S-1-0x';
-    for i := 0 to 5 do
-      AppendShortByteHex(a^[i], result)
-  end
-  else
-  begin
-    result := 'S-1-';
-    AppendShortCardinal(bswap32(PCardinal(@a^[2])^), result);
-  end;
-  for i := 0 to integer(sid^.SubAuthorityCount) - 1 do
-  begin
-    AppendShortChar('-', result);
-    AppendShortCardinal(sid^.SubAuthority[i], result);
-  end;
-end;
-
-function SidToText(sid: PSID): RawUtf8;
-var
-  tmp: shortstring;
-begin
-  SidToTextShort(sid, tmp);
-  FastSetString(result, @tmp[1], ord(tmp[0]));
-end;
-
-{
-function SidToText(sid: PSID): RawUtf8;
-var
-  s: PAnsiChar;
-begin
-  result := '';
-  if (sid <> nil) and
-     ConvertSidToStringSidA(sid, s) then
-  begin
-    FastSetString(result, s, StrLen(s));
-    LocalFree(HLOCAL(s));
-  end;
-end;
-}
 function ToText(p: TWinSystemPrivilege): PShortString;
 begin
   result := @_WSP[p];
 end;
 
+function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
+var
+  nfo: PTokenGroups;
+  i: PtrInt;
+begin
+  result := nil;
+  if (tok = INVALID_HANDLE_VALUE) or
+     (tok = 0) then
+    exit;
+  if RawTokenGetInfo(tok, TokenGroups, buf) >= SizeOf(nfo^) then
+  begin
+    nfo := buf.buf;
+    if nfo.GroupCount <> 0 then
+    begin
+      SetLength(result, nfo.GroupCount);
+      for i := 0 to nfo.GroupCount - 1 do
+        result[i] := pointer(nfo.Groups[i].Sid); // within buf.buf/len
+    end;
+  end;
+end;
+
+function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
+var
+  h: THandle;
+  i: PtrInt;
+  sids: PSids;
+  tmp: TSynTempBuffer;
+begin
+  result := nil;
+  h := RawTokenOpen(wtt, TOKEN_QUERY);
+  sids := RawTokenGroups(h, tmp);
+  if sids <> nil then
+  begin
+    SetLength(result, length(sids));
+    for i := 0 to length(sids) - 1 do
+      result[i] := SidToText(sids[i]);
+  end;
+  tmp.Done;
+  CloseHandle(h);
+end;
+
+function CurrentKnownGroups(wtt: TWinTokenType): TWellKnownSids;
+var
+  h: THandle;
+  tmp: TSynTempBuffer;
+begin
+  h := RawTokenOpen(wtt, TOKEN_QUERY);
+  result := SidToKnownGroups(RawTokenGroups(h, tmp));
+  tmp.Done;
+  CloseHandle(h);
+end;
+
+function CurrentKnownGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
+begin
+  result := (wks <> wksNull) and
+            (wks in CurrentKnownGroups(wtt));
+end;
+
+function CurrentUserIsAdmin: boolean;
+begin
+  result := wksBuiltinAdministrators in CurrentKnownGroups;
+end;
+
+function LookupSid(sid: PSid; out name, domain: RawUtf8): TSidType;
+var
+  n, d: array[byte] of WideChar;
+  nl, dl, use: cardinal;
+begin
+  result := stUndefined;
+  nl := SizeOf(n);
+  dl := SizeOf(d);
+  if (sid = nil) or
+     not LookupAccountSidW(nil, sid, @n, nl, @d, dl, use) then
+    exit;
+  Win32PWideCharToUtf8(@n, StrLenW(@n), name);
+  Win32PWideCharToUtf8(@d, StrLenW(@d), domain);
+  if use <= byte(high(TSidType)) then
+    result := TSidType(use);
+end;
+
+function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8): TSidType;
+var
+  s: TSid;
+begin
+  if TextToSid(pointer(sid), s) then
+    result := LookupSid(@s, name, domain)
+  else
+    result := stUndefined;
+end;
 
 
 { TSynWindowsPrivileges }
