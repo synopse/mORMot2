@@ -1322,12 +1322,13 @@ type
   /// TSynWindowsPrivileges set synchronized with WinAPI
   TWinSystemPrivileges = set of TWinSystemPrivilege;
 
-  /// TSynWindowsPrivileges enumeration synchronized with WinAPI
+  /// define which WinAPI token is to be retrieved
   // - define the execution context, i.e. if the token is used for the current
   // process or the current thread
-  TPrivilegeTokenType = (
-    pttProcess,
-    pttThread);
+  // - used e.g. by TSynWindowsPrivileges or CurrentSid()
+  TWinTokenType = (
+    wttProcess,
+    wttThread);
 
   /// manage available privileges on Windows platform
   // - not all available privileges are active for all process
@@ -1338,15 +1339,14 @@ type
     fAvailable: TWinSystemPrivileges;
     fEnabled: TWinSystemPrivileges;
     fDefEnabled: TWinSystemPrivileges;
+    fToken: THandle;
     function SetPrivilege(
       aPrivilege: TWinSystemPrivilege; aEnablePrivilege: boolean): boolean;
     procedure LoadPrivileges;
   public
-    /// handle to privileges token
-    Token: THandle;
     /// initialize the object dedicated to management of available privileges
     // - aTokenPrivilege can be used for current process or current thread
-    procedure Init(aTokenPrivilege: TPrivilegeTokenType = pttProcess);
+    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess);
     /// finalize the object and relese Token handle
     // - aRestoreInitiallyEnabled parameter can be used to restore initially
     // state of enabled privileges
@@ -1365,6 +1365,9 @@ type
     /// set of enabled privileges for current process/thread
     property Enabled: TWinSystemPrivileges
       read fEnabled;
+    /// handle to the low-level privileges token
+    property Token: THandle
+      read fToken;
   end;
 
   /// which information was returned by GetProcessInfo() overloaded functions
@@ -1411,6 +1414,17 @@ type
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
 function ToText(p: TWinSystemPrivilege): PShortString; overload;
+
+
+/// calls OpenProcessToken() or OpenThreadToken() to get the current token
+// - caller should then run CloseHandle() once done with the Token handle
+function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
+
+/// low-level retrieveal of raw binary information for a given token
+// - returns the number of bytes retrieved into buf.buf
+// - caller should then run buf.Done to release the buf result memory
+function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
+  var buf: TSynTempBuffer): cardinal;
 
 /// quickly retrieve a Text value from Registry
 // - could be used if TWinRegistry is not needed, e.g. for a single value

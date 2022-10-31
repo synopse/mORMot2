@@ -2321,32 +2321,51 @@ begin
   result := @_WSP[p];
 end;
 
+function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
+begin
+  if wtt = wttProcess then
+  begin
+    if not OpenProcessToken(GetCurrentProcess, access, result) then
+      RaiseLastError('OpenToken: OpenProcessToken');
+  end
+  else if not OpenThreadToken(GetCurrentThread, access, false, result) then
+    if GetLastError = ERROR_NO_TOKEN then
+    begin
+      // try to impersonate the thread
+      if not ImpersonateSelf(SecurityImpersonation) or
+         not OpenThreadToken(GetCurrentThread, access, false, result) then
+        RaiseLastError('OpenToken: ImpersonateSelf');
+    end
+    else
+      RaiseLastError('OpenToken: OpenThreadToken');
+end;
+
+function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
+  var buf: TSynTempBuffer): cardinal;
+begin
+  buf.Init;
+  if GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    exit; // we can directly store the buffer on buf stack
+  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+  begin
+    result := 0; // error
+    exit;
+  end;
+  buf.Done;
+  buf.Init(result); // we need a bigger buffer
+  if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+    result := 0; // error
+end;
+
 
 { TSynWindowsPrivileges }
 
-procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TPrivilegeTokenType);
-var
-  access: cardinal;
+procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType);
 begin
-  Token := 0;
   fAvailable := [];
   fEnabled := [];
   fDefEnabled := [];
-  access := TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES;
-  if aTokenPrivilege = pttProcess then
-  begin
-    if not OpenProcessToken(GetCurrentProcess, access, Token) then
-      RaiseLastError('TSynWindowsPrivileges: OpenProcessToken');
-  end
-  else if not OpenThreadToken(GetCurrentThread, access, false, Token) then
-    if GetLastError = ERROR_NO_TOKEN then
-    begin
-      if not ImpersonateSelf(SecurityImpersonation) or
-         not OpenThreadToken(GetCurrentThread, access, false, Token) then
-        RaiseLastError('TSynWindowsPrivileges: ImpersonateSelf');
-    end
-    else
-      RaiseLastError('TSynWindowsPrivileges: OpenThreadToken');
+  fToken := RawTokenOpen(aTokenPrivilege, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
   LoadPrivileges;
 end;
 
@@ -2362,7 +2381,8 @@ begin
       if p in new then
         Disable(p);
   end;
-  CloseHandle(Token);
+  CloseHandle(fToken);
+  fToken := 0;
 end;
 
 function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivilege): boolean;
@@ -2388,22 +2408,6 @@ begin
   result := true;
 end;
 
-function GetRawTokenInfo(tok: THandle; tic: TTokenInformationClass;
-  var buf: TSynTempBuffer): cardinal;
-begin
-  if GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
-    exit; // return the number of bytes stored in buf, 0 on error
-  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-  begin
-    result := 0; // error
-    exit;
-  end;
-  buf.Done;
-  buf.Init(result); // we need a bigger buffer
-  if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
-    result := 0; // error
-end;
-
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
@@ -2416,9 +2420,8 @@ var
 begin
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
-  buf.Init;
   try
-    if GetRawTokenInfo(Token, TokenPrivileges, buf) = 0 then
+    if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
     tp := buf.buf;
     priv := @tp.Privileges;
@@ -2722,7 +2725,7 @@ procedure GetProcessInfo(aPid: cardinal;
 var
   privileges: TSynWindowsPrivileges;
 begin
-  privileges.Init(pttThread);
+  privileges.Init(wttThread);
   try
     privileges.Enable(wspDebug);
     InternalGetProcessInfo(aPid, aInfo);
@@ -2738,7 +2741,7 @@ var
   i: PtrInt;
 begin
   SetLength(aInfo, Length(aPidList));
-  privileges.Init(pttThread);
+  privileges.Init(wttThread);
   try
     privileges.Enable(wspDebug);
     for i := 0 to High(aPidList) do
