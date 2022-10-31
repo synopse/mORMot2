@@ -2299,6 +2299,17 @@ type
   end;
   PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
 
+  TOKEN_USER = record
+    User: SID_AND_ATTRIBUTES;
+  end;
+  PTOKEN_USER = ^TOKEN_USER;
+
+  TOKEN_GROUPS = record
+    GroupCount: DWORD;
+    Groups: array [0..0] of SID_AND_ATTRIBUTES;
+  end;
+  PTOKEN_GROUPS = ^TOKEN_GROUPS;
+
 function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
   var TokenHandle: THandle): BOOL;
     stdcall; external advapi32 name 'OpenProcessToken';
@@ -2316,11 +2327,8 @@ function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
     stdcall; external advapi32 name 'AdjustTokenPrivileges';
 
-
-function ToText(p: TWinSystemPrivilege): PShortString;
-begin
-  result := @_WSP[p];
-end;
+{function ConvertSidToStringSidA(Sid: PSID; var StringSid: PAnsiChar): BOOL;
+    stdcall; external advapi32 name 'ConvertSidToStringSidA'; }
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
@@ -2357,6 +2365,87 @@ begin
   if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
     result := 0; // error
 end;
+
+function RawTokenSid(tok: THandle): PSID;
+var
+  buf: TSynTempBuffer;
+begin
+  result := nil;
+  if (tok = INVALID_HANDLE_VALUE) or
+     (tok = 0) then
+    exit;
+  if RawTokenGetInfo(tok, TokenUser, buf) >= SizeOf(TOKEN_USER) then
+    result := PSID(PTOKEN_USER(buf.buf)^.User.Sid);
+  buf.Done;
+end;
+
+function CurrentSid(wtt: TWinTokenType): RawUtf8;
+var
+  h: THandle;
+begin
+  h := RawTokenOpen(wtt, TOKEN_QUERY);
+  result := SidToText(RawTokenSid(h));
+  CloseHandle(h);
+end;
+
+procedure SidToTextShort(sid: PSID; var result: shortstring);
+var
+  a: PSID_IDENTIFIER_AUTHORITY;
+  i: PtrInt;
+begin // faster than ConvertSidToStringSidA()
+  if (sid = nil ) or
+     not IsValidSid(pointer(sid)) then
+  begin
+    result[0] := #0;
+    exit;
+  end;
+  a := @sid^.IdentifierAuthority;
+  if (a^[0] <> 0) or
+     (a^[1] <> 0) then
+  begin
+    result := 'S-1-0x';
+    for i := 0 to 5 do
+      AppendShortByteHex(a^[i], result)
+  end
+  else
+  begin
+    result := 'S-1-';
+    AppendShortCardinal(bswap32(PCardinal(@a^[2])^), result);
+  end;
+  for i := 0 to integer(sid^.SubAuthorityCount) - 1 do
+  begin
+    AppendShortChar('-', result);
+    AppendShortCardinal(sid^.SubAuthority[i], result);
+  end;
+end;
+
+function SidToText(sid: PSID): RawUtf8;
+var
+  tmp: shortstring;
+begin
+  SidToTextShort(sid, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+{
+function SidToText(sid: PSID): RawUtf8;
+var
+  s: PAnsiChar;
+begin
+  result := '';
+  if (sid <> nil) and
+     ConvertSidToStringSidA(sid, s) then
+  begin
+    FastSetString(result, s, StrLen(s));
+    LocalFree(HLOCAL(s));
+  end;
+end;
+}
+function ToText(p: TWinSystemPrivilege): PShortString;
+begin
+  result := @_WSP[p];
+end;
+
 
 
 { TSynWindowsPrivileges }

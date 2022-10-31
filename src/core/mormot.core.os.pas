@@ -1236,8 +1236,18 @@ type
   TMessage      = Messages.TMessage;
   HWND          = Windows.HWND;
   BOOL          = Windows.BOOL;
-  PSID          = Windows.PSID;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
+
+  // some definitions which are not detailed on oldest Delphi
+  SID_IDENTIFIER_AUTHORITY = array[0..5] of byte;
+  PSID_IDENTIFIER_AUTHORITY = ^SID_IDENTIFIER_AUTHORITY;
+  SID = record
+     Revision: byte;
+     SubAuthorityCount: byte;
+     IdentifierAuthority: SID_IDENTIFIER_AUTHORITY;
+     SubAuthority: array[byte] of cardinal;
+  end;
+  PSID = ^SID;
 
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
@@ -1415,7 +1425,6 @@ type
 
 function ToText(p: TWinSystemPrivilege): PShortString; overload;
 
-
 /// calls OpenProcessToken() or OpenThreadToken() to get the current token
 // - caller should then run CloseHandle() once done with the Token handle
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
@@ -1425,6 +1434,18 @@ function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 // - caller should then run buf.Done to release the buf result memory
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
+
+/// return the SID of a given token, nil if none found
+function RawTokenSid(tok: THandle): PSID;
+
+/// return the SID of the current user, from process or thread
+function CurrentSid(wtt: TWinTokenType = wttProcess): RawUtf8;
+
+/// convert a Security IDentifier as text, following the standard representation
+procedure SidToTextShort(sid: PSID; var result: shortstring);
+
+/// convert a Security IDentifier as text, following the standard representation
+function SidToText(sid: PSID): RawUtf8; 
 
 /// quickly retrieve a Text value from Registry
 // - could be used if TWinRegistry is not needed, e.g. for a single value
