@@ -5597,8 +5597,16 @@ begin
   known := CurrentKnownGroups;
   Check(known <> []);
   for k := low(k) to high(k) do
+  begin
+    s := SidToText(KnownSid(k));
     if k in known then
-      Check(FindRawUtf8(sids, SidToText(KnownSid(k))) >= 0);
+    begin
+      Check(FindRawUtf8(sids, s) >= 0);
+      CheckUtf8(CurrentUserHasGroup(s), s);
+    end
+    else
+      CheckUtf8(not CurrentUserHasGroup(s), s);
+  end;
   {$endif OSWINDOWS}
 end;
 

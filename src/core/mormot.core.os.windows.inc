@@ -2338,7 +2338,9 @@ function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
 begin
   buf.Init;
-  if GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+  if (tok = INVALID_HANDLE_VALUE) or
+     (tok = 0) or
+     GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
     exit; // we can directly store the buffer on buf stack
   if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
   begin
@@ -2353,12 +2355,10 @@ end;
 
 function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
 begin
-  result := nil;
-  if (tok = INVALID_HANDLE_VALUE) or
-     (tok = 0) then
-    exit;
   if RawTokenGetInfo(tok, TokenUser, buf) >= SizeOf(TOKEN_USER) then
-    result := PSid(PTOKEN_USER(buf.buf)^.User.Sid); // within buf.buf/len
+    result := PSid(PTOKEN_USER(buf.buf)^.User.Sid) // within buf.buf/len
+  else
+    result := nil;
 end;
 
 function CurrentSid(wtt: TWinTokenType; name, domain: PRawUtf8): RawUtf8;
@@ -2407,9 +2407,6 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if (tok = INVALID_HANDLE_VALUE) or
-     (tok = 0) then
-    exit;
   if RawTokenGetInfo(tok, TokenGroups, buf) >= SizeOf(nfo^) then
   begin
     nfo := buf.buf;
@@ -2422,16 +2419,23 @@ begin
   end;
 end;
 
-function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
+function CurrentGroups(wtt: TWinTokenType; var tmp: TSynTempBuffer): PSids;
 var
   h: THandle;
+begin
+  h := RawTokenOpen(wtt, TOKEN_QUERY);
+  result := RawTokenGroups(h, tmp);
+  CloseHandle(h);
+end;
+
+function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
+var
   i: PtrInt;
   sids: PSids;
   tmp: TSynTempBuffer;
 begin
   result := nil;
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  sids := RawTokenGroups(h, tmp);
+  sids := CurrentGroups(wtt, tmp);
   if sids <> nil then
   begin
     SetLength(result, length(sids));
@@ -2439,18 +2443,14 @@ begin
       result[i] := SidToText(sids[i]);
   end;
   tmp.Done;
-  CloseHandle(h);
 end;
 
 function CurrentKnownGroups(wtt: TWinTokenType): TWellKnownSids;
 var
-  h: THandle;
   tmp: TSynTempBuffer;
 begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := SidToKnownGroups(RawTokenGroups(h, tmp));
+  result := SidToKnownGroups(CurrentGroups(wtt, tmp));
   tmp.Done;
-  CloseHandle(h);
 end;
 
 function CurrentKnownGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
@@ -2458,6 +2458,27 @@ begin
   result := (wks <> wksNull) and
             (wks in CurrentKnownGroups(wtt));
 end;
+
+function CurrentUserHasGroup(const sid: RawUtf8; wtt: TWinTokenType): boolean;
+var
+  i: PtrInt;
+  sids: PSids;
+  s: TSid;
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  if not TextToSid(pointer(sid), s) then
+    exit;
+  sids := CurrentGroups(wtt, tmp);
+  for i := 0 to length(sids) - 1 do
+    if SidCompare(@s, sids[i]) = 0 then
+    begin
+      result := true;
+      break;
+    end;
+  tmp.Done;
+end;
+
 
 function CurrentUserIsAdmin: boolean;
 begin

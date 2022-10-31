@@ -1644,7 +1644,12 @@ function CurrentGroupsSid(wtt: TWinTokenType = wttProcess): TRawUtf8DynArray;
 function CurrentKnownGroups(wtt: TWinTokenType = wttProcess): TWellKnownSids;
 
 /// fast check if the current user, from process or thread, has a well-known group SID
-function CurrentKnownGroup(wks: TWellKnownSid; wtt: TWinTokenType = wttProcess): boolean;
+function CurrentKnownGroup(wks: TWellKnownSid;
+  wtt: TWinTokenType = wttProcess): boolean;
+
+/// fast check if the current user, from process or thread, has a given group SID
+function CurrentUserHasGroup(const sid: RawUtf8;
+  wtt: TWinTokenType = wttProcess): boolean;
 
 /// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
 function CurrentUserIsAdmin: boolean;
@@ -4865,7 +4870,7 @@ begin
     sid.SubAuthority[0] := ord(wks) - (ord(wksAuthenticationAuthorityAsserted) - 1)
   end
   else
-  begin // S-1-5-1
+  begin // S-1-5-x
     sid.IdentifierAuthority[5] := 5;
     if wks = wksNtAuthority then
       sid.SubAuthorityCount := 0
