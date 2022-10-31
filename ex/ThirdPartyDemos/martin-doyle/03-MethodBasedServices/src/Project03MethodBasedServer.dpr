@@ -32,7 +32,7 @@ begin
       SampleServer.DB.Synchronous := smOff;
       SampleServer.DB.LockingMode := lmExclusive;
       SampleServer.Server.CreateMissingTables;
-      HttpServer := TRestHttpServer.Create(HttpPort, [SampleServer], '+', HTTP_DEFAULT_MODE);
+      HttpServer := TRestHttpServer.Create(HttpPort, [SampleServer], '+', HTTP_DEFAULT_MODE, 4);
       HttpServer.AccessControlAllowOrigin := '*';
       try
         Writeln('Server started on port ' + HttpPort);

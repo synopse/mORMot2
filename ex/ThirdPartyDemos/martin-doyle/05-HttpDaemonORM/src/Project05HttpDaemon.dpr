@@ -18,6 +18,8 @@ uses
 
 type
   TSampleDaemonSettings = class(TSynDaemonSettings)
+  public
+    constructor Create; override;
   end;
 
   TSampleDaemon = class(TSynDaemon)
@@ -40,6 +42,14 @@ var
   SampleServer: TSampleServer;
   HttpServer: TRestHttpServer;
   SampleDaemon: TSampleDaemon;
+{
+******************************** TSampleDaemonSettings *********************************
+}
+constructor TSampleDaemonSettings.Create;
+begin
+  inherited Create;
+  Log := LOG_VERBOSE;
+end;
 
 {
 ******************************** TSampleDaemon *********************************
@@ -59,7 +69,7 @@ begin
   SampleServer.DB.Synchronous := smOff;
   SampleServer.DB.LockingMode := lmExclusive;
   SampleServer.Server.CreateMissingTables;
-  HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE);
+  HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE,4 );
   HttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo, 'HttpServer started at Port: ' + HttpPort);
 end;

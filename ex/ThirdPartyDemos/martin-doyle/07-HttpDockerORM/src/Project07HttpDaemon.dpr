@@ -18,6 +18,8 @@ uses
 
 type
   TSampleDaemonSettings = class(TSynDaemonSettings)
+  public
+    constructor Create; override;
   end;
 
   TSampleDaemon = class(TSynDaemon)
@@ -43,6 +45,16 @@ var
   ApplicationPath, DataPath, LogPath: string;
 
 {
+******************************** TSampleDaemonSettings *********************************
+}
+constructor TSampleDaemonSettings.Create;
+begin
+  inherited Create;
+  Log := LOG_VERBOSE;
+end;
+
+
+{
 ******************************** TSampleDaemon *********************************
 }
 constructor TSampleDaemon.Create(aSettingsClass: TSynDaemonSettingsClass; const
@@ -60,7 +72,7 @@ begin
   SampleServer.DB.Synchronous := smOff;
   SampleServer.DB.LockingMode := lmExclusive;
   SampleServer.Server.CreateMissingTables;
-  HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE);
+  HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE, 4);
   HttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo, 'HttpServer started at Port: ' + HttpPort);
 end;
@@ -90,6 +102,7 @@ begin
   LogFamily := SQLite3Log.Family;
   LogFamily.Level := LOG_VERBOSE;
   LogFamily.PerThreadLog := ptIdentifiedInOnFile;
+  LogFamily.EchoToConsole := LOG_VERBOSE;
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := ExpandFileName(ApplicationPath + 'data\');
   LogPath := ExpandFileName(ApplicationPath + 'log\');
@@ -97,7 +110,6 @@ begin
   SQLite3Log.Add.Log(sllInfo, DataPath);
   SQLite3Log.Add.Log(sllInfo, LogPath);
   SQLite3Log.Add.Log(sllInfo, LogFamily.DestinationPath);
-  LogFamily.EchoToConsole := LOG_VERBOSE;
   SampleDaemon := TSampleDaemon.Create(TSampleDaemonSettings, ApplicationPath, '', LogPath);
   SQLite3Log.Add.Log(sllInfo, 'Daemon started, listening on port '  + HttpPort);
   try
