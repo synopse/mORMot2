@@ -6031,23 +6031,13 @@ begin
   end;
 end;
 
-const
-  // hexstr() is not available on Delphi -> use our own simple version
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
-
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 var
   i: PtrInt;
-  b: PByte;
-begin // just return the address as hexadecimal
-  result[0] := AnsiChar(SizeOf(aAddress) * 2);
-  b := @aAddress;
+begin // return the address as hexadecimal - hexstr() is not available on Delphi
+  result[0] := #0;
   for i := SizeOf(aAddress) - 1 downto 0 do
-  begin
-    result[i * 2 + 1] := HexCharsLower[b^ shr 4];
-    result[i * 2 + 2] := HexCharsLower[b^ and $F];
-    inc(b);
-  end;
+    AppendShortByteHex(PByteArray(aAddress)[i], result);
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 var

@@ -788,6 +788,9 @@ procedure AppendShortInt64(value: Int64; var dest: ShortString);
 procedure AppendShortChar(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
+/// simple concatenation of a byte as hexadecimal into a shorstring
+procedure AppendShortByteHex(value: byte; var dest: ShortString);
+
 /// simple concatenation of a ShortString text into a shorstring
 procedure AppendShort(const src: ShortString; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
@@ -4380,6 +4383,23 @@ begin
     exit;
   inc(dest[0]);
   dest[ord(dest[0])] := chr;
+end;
+
+const
+  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+
+procedure AppendShortByteHex(value: byte; var dest: ShortString);
+var
+  len: PtrInt;
+begin
+  len := ord(dest[0]);
+  if len >= 254 then
+    exit;
+  dest[len + 1] := HexChars[value shr 4];
+  inc(len, 2);
+  value := value and $0f;
+  dest[len] := HexChars[value];
+  dest[0] := AnsiChar(len);
 end;
 
 procedure AppendShortTemp24(value, temp: PAnsiChar; dest: PAnsiChar);
