@@ -254,6 +254,8 @@ type
     procedure TimeZones;
     /// test the SMBIOS decoding features
     procedure DmiSmbios;
+    /// test Security IDentifier (SID) process
+    procedure _SID;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -5550,6 +5552,54 @@ begin
     TypeInfo(TSmbiosInfo), rkRecordTypes), $807823B2, 'BinarySave');
   SaveJson(dec, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
   CheckHash(s, $7A3BEEB8, 'BinarySave');
+end;
+
+{$ifdef OSWINDOWS}
+
+function CreateWellKnownSid(WellKnownSidType: byte; DomainSid: PSID;
+  pSid: PSID; var cbSid: cardinal): BOOL; stdcall; external 'Advapi32.dll';
+function ConvertSidToStringSidA(Sid: PSID; var StringSid: PAnsiChar): BOOL; stdcall;
+  external 'Advapi32.dll';
+
+{$endif OSWINDOWS}
+
+procedure TTestCoreBase._SID;
+var
+  k: TWellKnownSid;
+  s: RawUtf8;
+  s1, s2: RawSid;
+  {$ifdef OSWINDOWS}
+  known: TWellKnownSids;
+  sids: TRawUtf8DynArray;
+  {$endif OSWINDOWS}
+begin
+  CheckEqual(SizeOf(TSid), 1032, 'TSid');
+  for k := low(k) to high(k) do
+  begin
+    s1 := KnownSid(k);
+    Check(SidToKnown(pointer(s1)) = k);
+    Check(SidCompare(pointer(s1), pointer(s1)) = 0);
+    s := SidToText(s1);
+    CheckEqual(s, RawUtf8(KnownSidToText(k)^));
+    CheckUtf8(SidToKnown(s) = k, s);
+    s2 := TextToSid(s);
+    CheckEqual(s, SidToText(s2));
+    CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
+  end;
+  {$ifdef OSWINDOWS}
+  CurrentSid(s1, wttProcess);
+  CurrentSid(s2, wttThread);
+  Check(SidCompare(pointer(s1), pointer(s2)) = 0);
+  s := SidToText(s1);
+  CheckUtf8(IdemPChar(pointer(s), 'S-1-5-21-'), s);
+  sids := CurrentGroupsSid;
+  Check(sids <> nil);
+  known := CurrentKnownGroups;
+  Check(known <> []);
+  for k := low(k) to high(k) do
+    if k in known then
+      Check(FindRawUtf8(sids, SidToText(KnownSid(k))) >= 0);
+  {$endif OSWINDOWS}
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
