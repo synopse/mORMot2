@@ -2462,17 +2462,22 @@ end;
 
 function CurrentUserHasGroup(const sid: RawUtf8; wtt: TWinTokenType): boolean;
 var
+  s: TSid;
+begin
+  result := TextToSid(pointer(sid), s) and
+            CurrentUserHasGroup(@s, wtt);
+end;
+
+function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
+var
   i: PtrInt;
   sids: PSids;
-  s: TSid;
   tmp: TSynTempBuffer;
 begin
   result := false;
-  if not TextToSid(pointer(sid), s) then
-    exit;
   sids := CurrentGroups(wtt, tmp);
   for i := 0 to length(sids) - 1 do
-    if SidCompare(@s, sids[i]) = 0 then
+    if SidCompare(sid, sids[i]) = 0 then
     begin
       result := true;
       break;
@@ -2486,29 +2491,35 @@ begin
   result := wksBuiltinAdministrators in CurrentKnownGroups;
 end;
 
-function LookupSid(sid: PSid; out name, domain: RawUtf8): TSidType;
+function LookupSid(sid: PSid; out name, domain: RawUtf8;
+  const server: RawUtf8): TSidType;
 var
   n, d: array[byte] of WideChar;
+  s: TSynTempBuffer;
   nl, dl, use: cardinal;
 begin
   result := stUndefined;
+  if sid = nil then
+    exit;
   nl := SizeOf(n);
   dl := SizeOf(d);
-  if (sid = nil) or
-     not LookupAccountSidW(nil, sid, @n, nl, @d, dl, use) then
-    exit;
-  Win32PWideCharToUtf8(@n, StrLenW(@n), name);
-  Win32PWideCharToUtf8(@d, StrLenW(@d), domain);
-  if use <= byte(high(TSidType)) then
-    result := TSidType(use);
+  if LookupAccountSidW(Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
+  begin
+    Win32PWideCharToUtf8(@n, StrLenW(@n), name);
+    Win32PWideCharToUtf8(@d, StrLenW(@d), domain);
+    if use <= byte(high(TSidType)) then
+      result := TSidType(use);
+  end;
+  s.Done;
 end;
 
-function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8): TSidType;
+function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8;
+  const server: RawUtf8): TSidType;
 var
   s: TSid;
 begin
   if TextToSid(pointer(sid), s) then
-    result := LookupSid(@s, name, domain)
+    result := LookupSid(@s, name, domain, server)
   else
     result := stUndefined;
 end;

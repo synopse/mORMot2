@@ -1649,18 +1649,24 @@ function CurrentKnownGroup(wks: TWellKnownSid;
 
 /// fast check if the current user, from process or thread, has a given group SID
 function CurrentUserHasGroup(const sid: RawUtf8;
-  wtt: TWinTokenType = wttProcess): boolean;
+  wtt: TWinTokenType = wttProcess): boolean; overload;
+
+/// fast check if the current user, from process or thread, has a given group SID
+function CurrentUserHasGroup(sid: PSid;
+  wtt: TWinTokenType = wttProcess): boolean; overload;
 
 /// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
 function CurrentUserIsAdmin: boolean;
 
 /// retrieve the name and domain of a given SID
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
-function LookupSid(sid: PSid; out name, domain: RawUtf8): TSidType; overload;
+function LookupSid(sid: PSid; out name, domain: RawUtf8;
+  const server: RawUtf8 = ''): TSidType; overload;
 
 /// retrieve the name and domain of a given SID, encoded from text
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
-function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8): TSidType; overload;
+function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8;
+  const server: RawUtf8 = ''): TSidType; overload;
 
 
 /// retrieve low-level process information, from the Windows API
