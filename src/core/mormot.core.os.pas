@@ -4954,6 +4954,8 @@ end;
 // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/81d92bba-d22b-4a8c-908a-554ab29148ab
 
 function SidToKnown(sid: PSid): TWellKnownSid;
+var
+  c: integer;
 begin
   result := wksNull; // not recognized
   if (sid = nil) or
@@ -4963,97 +4965,92 @@ begin
     exit;
   case sid.SubAuthorityCount of // very fast O(1) SID binary recognition
     0:
-      case sid.IdentifierAuthority[5] of
-        5:
-          result := wksNtAuthority; // S-1-5
-      end;
+      if sid.IdentifierAuthority[5] = 5 then
+        result := wksNtAuthority; // S-1-5
     1:
-      case sid.IdentifierAuthority[5] of
-        1:
-          if sid.SubAuthority[0] = 0 then
-            result := wksWorld; // S-1-1-0
-        2:
-          case sid.SubAuthority[0] of
-            0:
-              result := wksLocal; // S-1-2-0
-            1:
-              result := wksConsoleLogon; // S-1-2-1
-          end;
-        3:
-          if sid.SubAuthority[0] in [0 .. 3] then // S-1-3-x
-            result := TWellKnownSid(byte(wksCreatorOwner) + sid.SubAuthority[0]);
-        5:
-          case sid.SubAuthority[0] of // S-1-5-x
-            1 .. 4:
-              result := TWellKnownSid((byte(wksDialup) - 1) + sid.SubAuthority[0]);
-            6 .. 15:
-              result := TWellKnownSid((byte(wksService) - 6) + sid.SubAuthority[0]);
-            17 .. 20:
-              result := TWellKnownSid((byte(wksIisUser) - 17) + sid.SubAuthority[0]);
-            32:
-              result := wksBuiltinDomain;
-            113 .. 114:
-              result := TWellKnownSid(integer(byte(wksLocalAccount) - 113) +
-                integer(sid.SubAuthority[0]));
-          end;
-        16:
-          case sid.SubAuthority[0] of // S-1-16-x
-            0:
-              result := wksIntegrityUntrusted;
-            4096:
-              result := wksIntegrityLow;
-            8192:
-              result := wksIntegrityMedium;
-            8448:
-              result := wksIntegrityMediumPlus;
-            12288:
-              result := wksIntegrityHigh;
-            16384:
-              result := wksIntegritySystem;
-            20480:
-              result := wksIntegrityProtectedProcess;
-            28672:
-              result := wksIntegritySecureProcess;
-          end;
-        18:
-          if sid.SubAuthority[0] in [1 .. 6] then // S-1-18-x
-            result := TWellKnownSid((byte(wksAuthenticationAuthorityAsserted) - 1) +
-              sid.SubAuthority[0]);
+      begin
+        c := sid.SubAuthority[0];
+        case sid.IdentifierAuthority[5] of
+          1:
+            if c = 0 then
+              result := wksWorld; // S-1-1-0
+          2:
+            if c in [0 .. 1] then // S-1-2-x
+              result := TWellKnownSid(ord(wksLocal) + c);
+          3:
+            if c in [0 .. 3] then // S-1-3-x
+              result := TWellKnownSid(ord(wksCreatorOwner) + c);
+          5:
+            case c of // S-1-5-x
+              1 .. 4:
+                result := TWellKnownSid((ord(wksDialup) - 1) + c);
+              6 .. 15:
+                result := TWellKnownSid((ord(wksService) - 6) + c);
+              17 .. 20:
+                result := TWellKnownSid((ord(wksIisUser) - 17) + c);
+              32:
+                result := wksBuiltinDomain;
+              113 .. 114:
+                result := TWellKnownSid(integer(ord(wksLocalAccount) - 113) + c);
+            end;
+          16:
+            case c of // S-1-16-x
+              0:
+                result := wksIntegrityUntrusted;
+              4096:
+                result := wksIntegrityLow;
+              8192:
+                result := wksIntegrityMedium;
+              8448:
+                result := wksIntegrityMediumPlus;
+              12288:
+                result := wksIntegrityHigh;
+              16384:
+                result := wksIntegritySystem;
+              20480:
+                result := wksIntegrityProtectedProcess;
+              28672:
+                result := wksIntegritySecureProcess;
+            end;
+          18:
+            if c in [1 .. 6] then // S-1-18-x
+              result :=
+                TWellKnownSid((ord(wksAuthenticationAuthorityAsserted) - 1) + c);
+        end;
       end;
     2:
-      case sid.IdentifierAuthority[5] of
-        5:
-          case sid.SubAuthority[0] of
-            32: // S-1-5-32-544
-              case sid.SubAuthority[1] of
-                544 .. 562:
-                  result := TWellKnownSid(byte(wksBuiltinAdministrators) +
-                    sid.SubAuthority[1] - 544);
-                568 .. 583:
-                  result := TWellKnownSid(byte(wksBuiltinIUsers) +
-                    sid.SubAuthority[1] - 568);
-              end;
-            64: // S-1-5-64-10
-              case sid.SubAuthority[1] of
-                10:
-                  result := wksNtlmAuthentication;
-                14:
-                  result := wksSChannelAuthentication;
-                21:
-                  result := wksDigestAuthentication;
-              end;
-          end;
-        15:
-          case sid.SubAuthority[0] of
-            2:
-              if sid.SubAuthority[1] in [1 .. 2] then // S-1-15-2-x
-                result := TWellKnownSid(byte(pred(wksBuiltinAnyPackage)) +
-                  sid.SubAuthority[1]);
-            3:
-              if sid.SubAuthority[1] in [1 .. 12] then // S-1-15-3-x
-                result := TWellKnownSid(byte(pred(wksCapabilityInternetClient)) +
-                  sid.SubAuthority[1]);
-          end;
+      begin
+        c := sid.SubAuthority[1];
+        case sid.IdentifierAuthority[5] of
+          5:
+            case sid.SubAuthority[0] of
+              32: // S-1-5-32-544
+                case c of
+                  544 .. 562:
+                    result := TWellKnownSid(ord(wksBuiltinAdministrators) + c - 544);
+                  568 .. 583:
+                    result := TWellKnownSid(ord(wksBuiltinIUsers) + c - 568);
+                end;
+              64: // S-1-5-64-10
+                case c of
+                  10:
+                    result := wksNtlmAuthentication;
+                  14:
+                    result := wksSChannelAuthentication;
+                  21:
+                    result := wksDigestAuthentication;
+                end;
+            end;
+          15:
+            case sid.SubAuthority[0] of
+              2:
+                if c in [1 .. 2] then // S-1-15-2-x
+                  result := TWellKnownSid(ord(pred(wksBuiltinAnyPackage)) + c);
+              3:
+                if c in [1 .. 12] then // S-1-15-3-x
+                  result := TWellKnownSid(ord(pred(wksCapabilityInternetClient)) + c);
+            end;
+        end;
       end;
   end;
 end;

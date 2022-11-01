@@ -2485,7 +2485,6 @@ begin
   tmp.Done;
 end;
 
-
 function CurrentUserIsAdmin: boolean;
 begin
   result := wksBuiltinAdministrators in CurrentKnownGroups;
