@@ -2337,20 +2337,21 @@ end;
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
 begin
-  buf.Init;
+  buf.Init; // stack-allocated buffer (always enough)
+  result := 0; // error
   if (tok = INVALID_HANDLE_VALUE) or
      (tok = 0) or
      GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
-    exit; // we can directly store the buffer on buf stack
+    exit; // we directly store the output buffer on buf stack
   if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
   begin
-    result := 0; // error
+    result := 0;
     exit;
   end;
   buf.Done;
   buf.Init(result); // we need a bigger buffer
   if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
-    result := 0; // error
+    result := 0;
 end;
 
 function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;

@@ -1629,7 +1629,7 @@ function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
 function CurrentSid(wtt: TWinTokenType = wttProcess;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8; overload;
 
-/// return the SID of the current user, from process or thread, as binary
+/// return the SID of the current user, from process or thread, as raw binary
 procedure CurrentSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil); overload;
 
@@ -4977,13 +4977,13 @@ begin
           if sid.SubAuthority[0] in [0 .. 3] then // S-1-3-x
             result := TWellKnownSid(byte(wksCreatorOwner) + sid.SubAuthority[0]);
         5:
-          case sid.SubAuthority[0] of
-            1 .. 4: // S-1-5-1
-              result := TWellKnownSid(byte(pred(wksDialup)) + sid.SubAuthority[0]);
+          case sid.SubAuthority[0] of // S-1-5-x
+            1 .. 4:
+              result := TWellKnownSid((byte(wksDialup) - 1) + sid.SubAuthority[0]);
             6 .. 15:
               result := TWellKnownSid((byte(wksService) - 6) + sid.SubAuthority[0]);
             17 .. 20:
-              result := TWellKnownSid((byte(wksLocalSystem) - 18) + sid.SubAuthority[0]);
+              result := TWellKnownSid((byte(wksIisUser) - 17) + sid.SubAuthority[0]);
             32:
               result := wksBuiltinDomain;
             113 .. 114:
