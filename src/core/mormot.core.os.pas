@@ -4828,7 +4828,7 @@ var
   KNOWN_SID: array[TWellKnownSid] of RawSid;
   KNOWN_SID_TEXT: array[TWellKnownSid] of string[15];
 const
-  INTEGRITY_SID: array[0..7] of word = (
+  INTEGRITY_SID: array[0..7] of word = ( // S-1-16-x known values
     0, 4096, 8192, 8448, 12288, 16384, 20480, 28672);
 
 procedure ComputeKnownSid(wks: TWellKnownSid);
@@ -4914,8 +4914,8 @@ begin
   GlobalLock;
   if KNOWN_SID[wks] = '' then
   begin
-    ToRawSid(@sid, KNOWN_SID[wks]);
     SidToTextShort(@sid, KNOWN_SID_TEXT[wks]);
+    ToRawSid(@sid, KNOWN_SID[wks]); // to be set last
   end;
   GlobalUnLock;
 end;
