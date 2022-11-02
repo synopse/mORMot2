@@ -4827,6 +4827,9 @@ end;
 var
   KNOWN_SID: array[TWellKnownSid] of RawSid;
   KNOWN_SID_TEXT: array[TWellKnownSid] of string[15];
+const
+  INTEGRITY_SID: array[0..7] of word = (
+    0, 4096, 8192, 8448, 12288, 16384, 20480, 28672);
 
 procedure ComputeKnownSid(wks: TWellKnownSid);
 var
@@ -4850,25 +4853,8 @@ begin
   end
   else if wks <= wksIntegritySecureProcess then
   begin
-    sid.IdentifierAuthority[5] := 16; // S-1-16-0
-    case wks of
-      wksIntegrityUntrusted:
-        sid.SubAuthority[0] := 0;
-      wksIntegrityLow:
-        sid.SubAuthority[0] := 4096;
-      wksIntegrityMedium:
-        sid.SubAuthority[0] := 8192;
-      wksIntegrityMediumPlus:
-        sid.SubAuthority[0] := 8448;
-      wksIntegrityHigh:
-        sid.SubAuthority[0] := 12288;
-      wksIntegritySystem:
-        sid.SubAuthority[0] := 16384;
-      wksIntegrityProtectedProcess:
-        sid.SubAuthority[0] := 20480;
-      wksIntegritySecureProcess:
-        sid.SubAuthority[0] := 28672;
-    end;
+    sid.IdentifierAuthority[5] := 16; // S-1-16-x
+    sid.SubAuthority[0] := INTEGRITY_SID[ord(wks) - ord(wksIntegrityUntrusted)];
   end
   else if wks <= wksAuthenticationKeyPropertyAttestation then
   begin // S-1-18-1
@@ -4994,23 +4980,10 @@ begin
                 result := TWellKnownSid(integer(ord(wksLocalAccount) - 113) + c);
             end;
           16:
-            case c of // S-1-16-x
-              0:
-                result := wksIntegrityUntrusted;
-              4096:
-                result := wksIntegrityLow;
-              8192:
-                result := wksIntegrityMedium;
-              8448:
-                result := wksIntegrityMediumPlus;
-              12288:
-                result := wksIntegrityHigh;
-              16384:
-                result := wksIntegritySystem;
-              20480:
-                result := wksIntegrityProtectedProcess;
-              28672:
-                result := wksIntegritySecureProcess;
+            begin // S-1-16-x
+              c := WordScanIndex(@INTEGRITY_SID, length(INTEGRITY_SID), c);
+              if c >= 0 then
+                result := TWellKnownSid(ord(wksIntegrityUntrusted) + c);
             end;
           18:
             if c in [1 .. 6] then // S-1-18-x
