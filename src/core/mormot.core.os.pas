@@ -5174,7 +5174,7 @@ const
     $69,  // aciIntel
     $c0); // aciAmpere
 
-  ARMCPU_ID_TXT: array[TArmCpuType] of RawUtf8 = (
+  ARMCPU_ID_TXT: array[TArmCpuType] of string[15] = (
      '',
      'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
      'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
@@ -5188,7 +5188,7 @@ const
      'Neoverse-V1', 'Cortex-A78', 'Cortex-A78AE', 'Cortex-X1', 'Cortex-510',
      'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C');
 
-  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of RawUtf8 = (
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
       '',
       'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
       'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
@@ -5207,7 +5207,7 @@ begin
   if act = actUnknown then
     result := 'ARM 0x' + RawUtf8(IntToHex(id, 3))
   else
-    result := ARMCPU_ID_TXT[act];
+    ShortStringToAnsi7String(ARMCPU_ID_TXT[act], result);
 end;
 
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
@@ -5223,7 +5223,7 @@ begin
   if aci = aciUnknown then
     result := 'HW 0x' + RawUtf8(IntToHex(id, 2))
   else
-    result := ARMCPU_IMPL_TXT[aci];
+    ShortStringToAnsi7String(ARMCPU_IMPL_TXT[aci], result);
 end;
 
 
@@ -5291,7 +5291,7 @@ begin
     BALTIC_CHARSET:
       result := 1257;
   else
-    result := CODEPAGE_US; // default is ANSI_CHARSET = iso-8859-1 = windows-1252
+    result := CODEPAGE_US; // default ANSI_CHARSET = iso-8859-1 = windows-1252
   end;
 end;
 
