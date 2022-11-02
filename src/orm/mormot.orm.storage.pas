@@ -1972,7 +1972,7 @@ procedure TRestStorage.StorageLock(WillModifyContent: boolean
   {$ifdef DEBUGSTORAGELOCK}; const msg: shortstring {$endif});
 begin
   {$ifdef DEBUGSTORAGELOCK}
-  if fStorageLockLogTrace or
+  if true or //fStorageLockLogTrace or
      (fStorageCriticalSectionCount > 1) then
     InternalLog('StorageLock % [%] %',
       [fStoredClass, msg, fStorageCriticalSectionCount]);
@@ -1991,7 +1991,7 @@ procedure TRestStorage.StorageUnLock;
 begin
   {$ifdef DEBUGSTORAGELOCK}
   dec(fStorageCriticalSectionCount);
-  if fStorageLockLogTrace then
+  if true then // fStorageLockLogTrace then
     InternalLog('StorageUnlock % %',
       [fStoredClass, fStorageCriticalSectionCount]);
   if fStorageCriticalSectionCount < 0 then
@@ -3046,7 +3046,7 @@ begin
   batch := TRestBatch.Create(fTrackChangesPersistence, fStoredClass);
   try
     // fill the batch instance with pending tracked changes
-    StorageLock({modify=}false);
+    StorageLock({modify=}false {$ifdef DEBUGSTORAGELOCK}, 'TrackChangesAndFlush'{$endif});
     try
       // delete any previous value before any Add/Update
       for i := 0 to fTrackChangesDeletedCount - 1 do
@@ -4973,10 +4973,12 @@ function TRestStorageShard.ShardFromID(aID: TID;
   out aShardTableIndex: integer; out aShard: TRestOrm;
   aOccasion: TOrmOccasion; aShardIndex: PInteger): boolean;
 var
-  ndx: cardinal;
+  ndx: integer;
 begin
   result := false;
-  if aID <= 0 then
+  if (self = nil ) or
+     (fShards = nil) or
+     (aID <= 0) then
     exit;
   case aOccasion of
     ooUpdate:
@@ -4987,17 +4989,18 @@ begin
         exit;
   end;
   ndx := ((aID - 1) div fShardRange) - fShardOffset;
-  if (ndx <= cardinal(fShardLast)) and
+  if (ndx >= 0) and
+     (ndx <= fShardLast) and
      (fShards[ndx] <> nil) then
   begin
     case aOccasion of
       ooUpdate:
         if (ssoNoUpdateButLastShard in fOptions) and
-           (ndx <> cardinal(fShardLast)) then
+           (ndx <> fShardLast) then
           exit;
       ooDelete:
         if (ssoNoDeleteButLastShard in fOptions) and
-           (ndx <> cardinal(fShardLast)) then
+           (ndx <> fShardLast) then
           exit;
     end;
     aShard := fShards[ndx];
@@ -5055,7 +5058,7 @@ end;
 function TRestStorageShard.EngineDelete(TableModelIndex: integer;
   ID: TID): boolean;
 var
-  tableIndex, shardIndex: integer;
+  tableIndex, shardIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ShardDelete' {$endif});
@@ -5184,7 +5187,7 @@ end;
 function TRestStorageShard.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
-  tableIndex: integer;
+  tableIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ShardRetrieve' {$endif});
@@ -5201,7 +5204,7 @@ end;
 function TRestStorageShard.EngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
-  tableIndex: integer;
+  tableIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ShardRetrieveBlob' {$endif});
@@ -5218,7 +5221,7 @@ end;
 function TRestStorageShard.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUtf8): boolean;
 var
-  tableIndex, shardIndex: integer;
+  tableIndex, shardIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ShardUpdate' {$endif});
@@ -5240,7 +5243,7 @@ end;
 function TRestStorageShard.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  tableIndex: integer;
+  tableIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   result := false;
@@ -5271,7 +5274,7 @@ end;
 function TRestStorageShard.EngineUpdateFieldIncrement(TableModelIndex: integer;
   ID: TID; const FieldName: RawUtf8; Increment: Int64): boolean;
 var
-  tableIndex: integer;
+  tableIndex: integer; // should be integer - not PtrInt
   rest: TRestOrm;
 begin
   result := false;

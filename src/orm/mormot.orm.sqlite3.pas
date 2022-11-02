@@ -1090,18 +1090,23 @@ end;
 function TRestStorageShardDB.InitNewShard: TRestOrm;
 var
   db: TRestOrmServerDB;
+  root: RawUtf8;
+  fn: TFileName;
   cachesize: integer;
   model: TOrmModel;
 begin
   inc(fShardLast);
-  model := TOrmModel.Create([fStoredClass], FormatUtf8('shard%', [fShardLast]));
+  FormatUtf8('shard%', [fShardLast], root);
+  fn := DBFileName(fShardLast);
+  InternalLog('InitNewShard % on %', [root, fn]);
+  model := TOrmModel.Create([fStoredClass], root);
   if fInitShardsIsLast then
     // last/new .dbs = 2MB cache, previous 1MB only
     cachesize := fCacheSizeLast
   else
     cachesize := fCacheSizePrevious;
-  db := TRestOrmServerDB.CreateStandalone(model, fRest,
-    DBFileName(fShardLast), DBPassword(fShardLast), fSynchronous, cachesize);
+  db := TRestOrmServerDB.CreateStandalone(
+    model, fRest, fn, DBPassword(fShardLast), fSynchronous, cachesize);
   db._AddRef;
   result := db;
   SetLength(fShards, fShardLast + 1);
@@ -1128,6 +1133,7 @@ begin
   else
     mask := fShardRootFileName + '*.dbs';
   db := FindFiles(ExtractFilePath(mask), ExtractFileName(mask), '', [ffoSortByName]);
+  InternalLog('InitShards mask=% db=%', [mask, length(db)]);
   if db = nil then
     exit; // no existing data
   fShardOffset := -1;
