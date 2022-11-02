@@ -7648,7 +7648,7 @@ end;
 { CryptDataForCurrentUser }
 
 var
-  __h: THash256;
+  __h: THash256;       // decoded local private key file
   __hmac: THmacSha256; // initialized from CryptProtectDataEntropy salt
 
 // don't use BinToBase64uri() to avoid linking mormot.core.buffers.pas
@@ -7714,62 +7714,70 @@ var
   k256: THash256;
   key, key2, appsec: RawByteString;
 begin
-  // CryptProtectDataEntropy used as salt
-  __hmac.Init(@CryptProtectDataEntropy, 32);
-  // CryptProtectDataEntropy derivated for current user -> fn + k256 
-  FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
-  Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
-  FillZero(appsec);
-  appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
-  fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
-    [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
-  FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
-  Sha256Weak(appsec, k256); // just a way to reduce to 256-bit
+  GlobalLock;
   try
-    // extract private user key from local hidden file 
-    key := StringFromFile(fn);
-    if key <> '' then
-    begin
-      try
-        key2 := TAesCfb.SimpleEncrypt(key, k256, 256, false, true);
-      except
-        key2 := ''; // handle decryption error
-      end;
-      FillZero(key);
-      {$ifdef OSWINDOWS}
-      // may probably enhance privacy by using Windows API
-      key := CryptDataForCurrentUserDPAPI(key2, appsec, false);
-      {$else}
-      // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX 
-      key := key2;
-      {$endif OSWINDOWS}
-      if TAesPrng.AFUnsplit(key, __h, SizeOf(__h)) then
-        // successfully extracted secret key in __h
-        exit;
-    end;
-    // persist the new private user key into local hidden file
-    if FileExists(fn) then
-      // allow rewrite of an invalid local file
-      FileSetHidden(fn, {ReadOnly=}false);
-    TAesPrng.Main.FillRandom(__h);
-    key := TAesPrng.Main.AFSplit(__h, SizeOf(__h), 126);
-    {$ifdef OSWINDOWS}
-    // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
-    key2 := CryptDataForCurrentUserDPAPI(key, appsec, true);
-    FillZero(key);
-    {$else}
-    // 4KB local chmod 400 hidden .file in $HOME folder under Linux/POSIX
-    key2 := key;
-    {$endif OSWINDOWS}
-    key := TAesCfb.SimpleEncrypt(key2, k256, 256, true, true);
-    if not FileFromString(key, fn) then
-      ESynCrypto.CreateUtf8('Unable to write %', [fn]);
-    FileSetHidden(fn, {ReadOnly=}true); // chmod 400
-  finally
-    FillZero(key);
-    FillZero(key2);
+    // try again for true thread-safety
+    if not IsZero(__h) then
+      exit;
+    // CryptProtectDataEntropy used as salt
+    __hmac.Init(@CryptProtectDataEntropy, 32);
+    // CryptProtectDataEntropy derivated for current user -> fn + k256
+    FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
+    Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
     FillZero(appsec);
-    FillZero(k256);
+    appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
+    fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
+      [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
+    FastSetRawByteString(appsec, @k256[15], 17); // use remaining bytes as key
+    Sha256Weak(appsec, k256); // just a way to reduce to 256-bit
+    try
+      // extract private user key from local hidden file
+      key := StringFromFile(fn);
+      if key <> '' then
+      begin
+        try
+          key2 := TAesCfb.SimpleEncrypt(key, k256, 256, false, true);
+        except
+          key2 := ''; // handle decryption error
+        end;
+        FillZero(key);
+        {$ifdef OSWINDOWS}
+        // may probably enhance privacy by using Windows API
+        key := CryptDataForCurrentUserDPAPI(key2, appsec, false);
+        {$else}
+        // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX
+        key := key2;
+        {$endif OSWINDOWS}
+        if TAesPrng.AFUnsplit(key, __h, SizeOf(__h)) then
+          // successfully extracted secret key in __h
+          exit;
+      end;
+      // persist the new private user key into local hidden file
+      if FileExists(fn) then
+        // allow rewrite of an invalid local file
+        FileSetHidden(fn, {ReadOnly=}false);
+      TAesPrng.Main.FillRandom(__h);
+      key := TAesPrng.Main.AFSplit(__h, SizeOf(__h), 126);
+      {$ifdef OSWINDOWS}
+      // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
+      key2 := CryptDataForCurrentUserDPAPI(key, appsec, true);
+      FillZero(key);
+      {$else}
+      // 4KB local chmod 400 hidden .file in $HOME folder under Linux/POSIX
+      key2 := key;
+      {$endif OSWINDOWS}
+      key := TAesCfb.SimpleEncrypt(key2, k256, 256, true, true);
+      if not FileFromString(key, fn) then
+        ESynCrypto.CreateUtf8('Unable to write %', [fn]);
+      FileSetHidden(fn, {ReadOnly=}true); // chmod 400
+    finally
+      FillZero(key);
+      FillZero(key2);
+      FillZero(appsec);
+      FillZero(k256);
+    end;
+  finally
+    GlobalUnLock;
   end;
 end;
 
@@ -7785,9 +7793,9 @@ begin
   if IsZero(__h) then
     read__h__hmac;
   try
-    hmac := __hmac; // thread-safe reuse of CryptProtectDataEntropy salt
-    hmac.Update(AppSecret);
-    hmac.Update(__h);
+    hmac := __hmac;         // thread-safe reuse of CryptProtectDataEntropy salt
+    hmac.Update(AppSecret); // application specific context
+    hmac.Update(__h);       // secret local key file content
     hmac.Done(secret);
     result := TAesCfc.MacEncrypt(Data, secret, Encrypt);
   finally
