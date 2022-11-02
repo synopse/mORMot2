@@ -7648,8 +7648,11 @@ end;
 { CryptDataForCurrentUser }
 
 var
-  __h: THash256;       // decoded local private key file
-  __hmac: THmacSha256; // initialized from CryptProtectDataEntropy salt
+  _h: record
+    safe: TLightLock;
+    k: THash256;      // decoded local private key file
+    mac: THmacSha256; // initialized from CryptProtectDataEntropy salt
+  end;
 
 // don't use BinToBase64uri() to avoid linking mormot.core.buffers.pas
 
@@ -7708,19 +7711,19 @@ begin
   RawBase64Uri(pointer(result), P, bdiv, bmod);
 end;
 
-procedure read__h__hmac;
+procedure read_h;
 var
   fn: TFileName;
   k256: THash256;
   key, key2, appsec: RawByteString;
 begin
-  GlobalLock;
+  _h.safe.Lock;
   try
     // try again for true thread-safety
-    if not IsZero(__h) then
+    if not IsZero(_h.k) then
       exit;
     // CryptProtectDataEntropy used as salt
-    __hmac.Init(@CryptProtectDataEntropy, 32);
+    _h.mac.Init(@CryptProtectDataEntropy, 32);
     // CryptProtectDataEntropy derivated for current user -> fn + k256
     FastSetRawByteString(appsec, @CryptProtectDataEntropy, 32);
     Pbkdf2HmacSha256(appsec, Executable.User, 100, k256);
@@ -7748,16 +7751,16 @@ begin
         // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX
         key := key2;
         {$endif OSWINDOWS}
-        if TAesPrng.AFUnsplit(key, __h, SizeOf(__h)) then
-          // successfully extracted secret key in __h
+        if TAesPrng.AFUnsplit(key, _h.k, SizeOf(_h.k)) then
+          // successfully extracted secret key in _h
           exit;
       end;
       // persist the new private user key into local hidden file
       if FileExists(fn) then
         // allow rewrite of an invalid local file
         FileSetHidden(fn, {ReadOnly=}false);
-      TAesPrng.Main.FillRandom(__h);
-      key := TAesPrng.Main.AFSplit(__h, SizeOf(__h), 126);
+      TAesPrng.Main.FillRandom(_h.k);
+      key := TAesPrng.Main.AFSplit(_h.k, SizeOf(_h.k), 126);
       {$ifdef OSWINDOWS}
       // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
       key2 := CryptDataForCurrentUserDPAPI(key, appsec, true);
@@ -7777,7 +7780,7 @@ begin
       FillZero(k256);
     end;
   finally
-    GlobalUnLock;
+    _h.Safe.UnLock;
   end;
 end;
 
@@ -7790,12 +7793,12 @@ begin
   result := '';
   if Data = '' then
     exit;
-  if IsZero(__h) then
-    read__h__hmac;
+  if IsZero(_h.k) then
+    read_h;
   try
-    hmac := __hmac;         // thread-safe reuse of CryptProtectDataEntropy salt
+    hmac := _h.mac;         // thread-safe reuse of CryptProtectDataEntropy salt
     hmac.Update(AppSecret); // application specific context
-    hmac.Update(__h);       // secret local key file content
+    hmac.Update(_h.k);      // secret local key file content
     hmac.Done(secret);
     result := TAesCfc.MacEncrypt(Data, secret, Encrypt);
   finally
@@ -11008,7 +11011,7 @@ end;
 
 {$endif PUREMORMOT2}
 
-// required by read__h__hmac -> deprecated even if available with PUREMORMOT2
+// required by read_h -> deprecated even if available with PUREMORMOT2
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 var
   L: integer;
@@ -11159,7 +11162,7 @@ begin
      (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then
     CryptoApi.ReleaseContext(CryptoApiAesProvider, 0);
   {$endif USE_PROV_RSA_AES}
-  FillZero(__h);
+  FillZero(_h.k);
 end;
 
 
