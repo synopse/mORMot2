@@ -6509,7 +6509,7 @@ procedure TOrmPropInfoRttiVariant.CopySameClassProp(Source: TObject;
 var
   value: Variant;
 begin
-  fPropInfo.GetVariantProp(Source, value, {byref=}true);
+  fPropInfo.GetVariantProp(Source, value, {byref=}false); // copy by value
   TOrmPropInfoRttiVariant(DestInfo).fPropInfo.SetVariantProp(Dest, value);
 end;
 
