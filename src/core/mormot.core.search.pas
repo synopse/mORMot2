@@ -1460,7 +1460,7 @@ implementation
 
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
-  Name := Directory + F.Name;
+  Name := Directory + TFileName(F.Name);
   {$ifdef OSWINDOWS}
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
@@ -1493,8 +1493,11 @@ var
   var
     F: TSearchRec;
     ff: TFindFiles;
+    fold, name: TFileName; // FPC requires these implicit local variables :(
   begin
-    if FindFirst(dir + folder + Mask, faAnyfile - faDirectory, F) = 0 then
+    fold := dir + folder;
+    name := fold + Mask;
+    if FindFirst(name, faAnyfile - faDirectory, F) = 0 then
     begin
       repeat
         if SearchRecValidFile(F) and
@@ -1504,14 +1507,14 @@ var
           if ffoExcludesDir in Options then
             ff.FromSearchRec(folder, F)
           else
-            ff.FromSearchRec(dir + folder, F);
+            ff.FromSearchRec(fold, F);
           da.Add(ff);
         end;
       until FindNext(F) <> 0;
       FindClose(F);
     end;
     if (ffoSubFolder in Options) and
-       (FindFirst(dir + folder + '*', faDirectory, F) = 0) then
+       (FindFirst(fold + '*', faDirectory, F) = 0) then
     begin
       // recursive SearchFolder() call for nested directories
       repeat
