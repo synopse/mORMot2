@@ -368,6 +368,12 @@ var
     TextColor(ccLightGray);
   end;
 
+  procedure ShowState(state: TServiceState);
+  begin
+    writeln(fSettings.ServiceName, ' State=', ToText(state)^);
+    ExitCode := ord(state); // convention result to caller e.g. from a batch
+  end;
+
   procedure Syntax;
   var
     spaces, custom: string;
@@ -532,8 +538,7 @@ begin
                   Show(ctrl.Delete);
                 end;
               cState:
-                writeln(fSettings.ServiceName,
-                  ' State=', ToText(ctrl.State)^);
+                ShowState(ctrl.State);
             end;
           finally
             ctrl.Free;
@@ -561,8 +566,7 @@ begin
       else
         raise EDaemon.Create('No forked process found to be killed');
     cState:
-      writeln(fSettings.ServiceName,
-        ' State=', ToText(RunUntilSigTerminatedState)^);
+      ShowState(RunUntilSigTerminatedState);
     else
       Syntax;
     {$endif OSWINDOWS}
