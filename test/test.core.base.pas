@@ -6131,8 +6131,8 @@ begin
       {$endif HASNEWFILEAGE}
       CheckSame(fdt, mormot.core.os.FileAgeToDateTime(fn[i]), 0.01, 'fdt');
       // FPC FileAge() is wrong and truncates 1-2 seconds on Windows -> 0.01
-      Check(FileInfo(fn[i], fs, fu), 'FileInfo');
-      CheckEqual(fs, length(s), 'FileInfo Size');
+      Check(FileInfoByName(fn[i], fs, fu), 'FileInfoByName');
+      CheckEqual(fs, length(s), 'FileInfoByName Size');
       CheckEqual(FileAgeToUnixTimeUtc(fn[i]), fu div 1000, 'FileAgeToUnixTimeUtc');
       // writeln('now=',DateTimeToIso8601Text(Now));
       // writeln('utc=',DateTimeToIso8601Text(NowUtc));

@@ -649,7 +649,7 @@ begin
     result := 0;
 end;
 
-function FileInfo(const FileName: TFileName; out FileSize: Int64;
+function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;

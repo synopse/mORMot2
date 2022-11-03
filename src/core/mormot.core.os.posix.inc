@@ -990,7 +990,7 @@ begin
           {$endif OSLINUXANDROID}
 end;
 
-function FileInfo(const FileName: TFileName; out FileSize: Int64;
+function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 var
   st: TStat;
@@ -1483,7 +1483,7 @@ var
   M, D: word;
 {$ifdef FPCUSEVERSIONINFO}
   VI: TVersionInfo;
-  TI, I: integer;
+  TI: integer;
 {$endif FPCUSEVERSIONINFO}
 begin
   fFileName := aFileName;

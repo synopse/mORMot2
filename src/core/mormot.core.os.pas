@@ -2604,7 +2604,7 @@ function FileSeek64(Handle: THandle; const Offset: Int64;
 // - return true and set FileSize and FileTimestampUtc if found - note that
 // no local time conversion is done, so timestamp won't match FileAge()
 // - use a single Operating System call, so is faster than FileSize + FileAge
-function FileInfo(const FileName: TFileName; out FileSize: Int64;
+function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 
 /// get low-level file information, in a cross-platform way
