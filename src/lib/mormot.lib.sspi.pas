@@ -594,6 +594,13 @@ type
   end;
   PGroupInfo1 = ^TGroupInfo1;
 
+  TGroupInfo3 = record
+    name: PWideChar;
+    comment: PWideChar;
+    group_sid: PSid;
+    attributes: cardinal;
+  end;
+  PGroupInfo3 = ^TGroupInfo3;
 
 function NetApiBufferAllocate(ByteCount: cardinal;
   var Buffer: pointer): TNetApiStatus; stdcall;
@@ -644,6 +651,11 @@ function NetUserChangePassword(domainname, username,
   oldpassword, newpassword: PWideChar): TNetApiStatus; stdcall;
 
 
+function NetGroupEnum(servername: PWideChar; level: cardinal;
+  var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
+  resume_handle: PPCardinal = nil): TNetApiStatus; stdcall;
+
+
 function NetLocalGroupAdd(servername: PWideChar; level: cardinal;
   buf: pointer; parm_err: PCardinal): TNetApiStatus; stdcall;
 
@@ -688,7 +700,21 @@ function NetLocalGroupDelMembers(servername, groupname: PWideChar;
 // - will return only the groups explicitly assigned to the user, not the
 // nested groups assigned to other local groups
 function GetGroups(const server, user: RawUtf8;
-  Local: boolean = false): TRawUtf8DynArray;
+  Local: boolean = false): TRawUtf8DynArray; overload;
+
+/// retrieve information about each global group names on a given server
+// - server is the DNS or NetBIOS name of the remote server to query (typically
+// '\\MyDomainNameDns') - if server is '', the local computer is used
+// - call NetGroupEnum() API
+// - return the group names, and optionally the associated SID text
+function GetGroups(const server: RawUtf8;
+  sid: PRawUtf8DynArray = nil): TRawUtf8DynArray; overload;
+
+/// retrieve the textual SID of a group name on a given server
+// - server is the DNS or NetBIOS name of the remote server to query (typically
+// '\\MyDomainNameDns') - if server is '', the local computer is used
+// - call NetGroupEnum() API then filter for the first supplied GroupName
+function GetGroupSid(const Server, GroupName: RawUtf8): RawUtf8;
 
 type
   TGetUsersFilterAccount = set of (
@@ -1320,6 +1346,8 @@ function NetUserModalsGet;        external netapi32;
 function NetUserModalsSet;        external netapi32;
 function NetUserChangePassword;   external netapi32;
 
+function NetGroupEnum;            external netapi32;
+
 function NetLocalGroupAdd;        external netapi32;
 function NetLocalGroupAddMember;  external netapi32;
 function NetLocalGroupEnum;       external netapi32;
@@ -1380,6 +1408,72 @@ begin
       MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
     // note: _USER_INFO_0 and _LOCALGROUP_INFO_0 are identical
     GetNames(v, dwEntriesRead, result);
+  srv.Done;
+end;
+
+function GetGroups(const server: RawUtf8;
+  sid: PRawUtf8DynArray): TRawUtf8DynArray;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  s: PWideChar;
+  g: PGroupInfo3;
+  i: PtrInt;
+  srv: TSynTempBuffer;
+begin
+  result := nil;
+  s := Utf8ToWin32PWideChar(server, srv);
+  if sid = nil then
+  begin
+    if NetGroupEnum(s, {level=}0, v, MAX_PREFERRED_LENGTH,
+        @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+      GetNames(v, dwEntriesRead, result);
+  end
+  else if NetGroupEnum(s, {level=}3, v, MAX_PREFERRED_LENGTH,
+            @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+  begin
+    g := v;
+    SetLength(result, dwEntriesRead);
+    SetLength(sid^, dwEntriesRead);
+    for i := 0 to integer(dwEntriesRead) - 1 do
+    begin
+      Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), result[i]);
+      sid^[i] := SidToText(g^.group_sid);
+      inc(g);
+    end;
+    NetAPIBufferFree(v);
+  end;
+  srv.Done;
+end;
+
+function GetGroupSid(const Server, GroupName: RawUtf8): RawUtf8;
+var
+  dwEntriesRead, dwEntriesTotal: cardinal;
+  v: pointer;
+  g: PGroupInfo3;
+  name: RawUtf8;
+  srv: TSynTempBuffer;
+begin
+  result := '';
+  if GroupName = '' then
+    exit;
+  if NetGroupEnum(Utf8ToWin32PWideChar(Server, srv), {level=}3, v,
+      MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+  begin
+    g := v;
+    while dwEntriesRead <> 0 do
+    begin
+      Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), Name);
+      if PropNameEquals(Name, GroupName) then
+      begin
+        result := SidToText(g^.group_sid);
+        break;
+      end;
+      inc(g);
+      dec(dwEntriesRead);
+    end;
+    NetAPIBufferFree(v);
+  end;
   srv.Done;
 end;
 
