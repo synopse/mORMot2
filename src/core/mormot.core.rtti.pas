@@ -4387,14 +4387,16 @@ type
   TSetIndexed = procedure(Index: integer; const Value: variant) of object;
 var
   call: TMethod;
+  v: PVarData;
 begin
+  v := VarDataFromVariant(Value); // de-reference any varByRef
   case Setter(Instance, @call) of
     rpcField:
-      PVariant({%H-}call.Data)^ := Value;
+      PVariant({%H-}call.Data)^ := PVariant(v)^;
     rpcMethod:
-      TSetProc(call)(Value);
+      TSetProc(call)(PVariant(v)^);
     rpcIndexed:
-      TSetIndexed(call)(Index, Value);
+      TSetIndexed(call)(Index, PVariant(v)^);
   end;
 end;
 
