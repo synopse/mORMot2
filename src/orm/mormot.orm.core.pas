@@ -1604,7 +1604,7 @@ type
     // - won't work with cross-reference mapping (FillPrepareMany)
     // - use the mapping prepared with Map() method
     // - can specify a destination record to be filled instead of main Dest
-    function Fill(aRow: integer; aDest: TOrm = nil): boolean;
+    function Fill(aRow: PtrInt; aDest: TOrm = nil): boolean;
     /// compute the updated ORM field bits during a fill
     // - will return Props.SimpleFieldsBits[ooUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TOrmProperties;
@@ -2523,7 +2523,7 @@ type
     // - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
     // - this method has been made virtual e.g. so that a calculated value can
     // be used in a custom field
-    function FillRow(aRow: integer; aDest: TOrm = nil): boolean; virtual;
+    function FillRow(aRow: PtrInt; aDest: TOrm = nil): boolean; virtual;
     /// fill all published properties of this object from the next available
     // TOrmTable prepared row
     // - FillPrepare() must have been called before
@@ -2555,11 +2555,11 @@ type
 
     /// fill all published properties of this object from a TOrmTable result row
     // - call FillPrepare() then FillRow(Row)
-    procedure FillFrom(Table: TOrmTable; Row: integer); overload;
+    procedure FillFrom(Table: TOrmTable; Row: PtrInt); overload;
     /// fill all published properties of this object from a JSON result row
     // - create a TOrmTable from the JSON data
     // - call FillPrepare() then FillRow(Row)
-    procedure FillFrom(const JSONTable: RawUtf8; Row: integer); overload;
+    procedure FillFrom(const JSONTable: RawUtf8; Row: PtrInt); overload;
     /// fill all published properties of this object from a JSON object result
     // - use JSON data, as exported by GetJsonValues()
     // - JSON data may be expanded or not
@@ -5332,7 +5332,7 @@ end;
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
   cloned: TOrm;
-  r: integer;
+  r: PtrInt;
 begin
   cloned := RecordType.Create;
   try
@@ -6161,7 +6161,7 @@ begin
   end;
 end;
 
-function TOrmFill.Fill(aRow: integer; aDest: TOrm): boolean;
+function TOrmFill.Fill(aRow: PtrInt; aDest: TOrm): boolean;
 var
   D: TOrm;
   f: integer;
@@ -6171,7 +6171,7 @@ var
 begin
   if (self = nil) or
      (Table = nil) or
-     (cardinal(aRow) > cardinal(Table.fRowCount)) then
+     (PtrUInt(aRow) > PtrUInt(Table.fRowCount)) then
     result := False
   else
   begin
@@ -6571,7 +6571,7 @@ begin
     end;
 end;
 
-procedure TOrm.FillFrom(Table: TOrmTable; Row: integer);
+procedure TOrm.FillFrom(Table: TOrmTable; Row: PtrInt);
 begin
   try
     FillPrepare(Table);
@@ -6583,7 +6583,7 @@ begin
   end;
 end;
 
-procedure TOrm.FillFrom(const JSONTable: RawUtf8; Row: integer);
+procedure TOrm.FillFrom(const JSONTable: RawUtf8; Row: PtrInt);
 var
   Table: TOrmTableJson;
   tmp: TSynTempBuffer; // work on a private copy
@@ -6776,7 +6776,7 @@ begin
       aCustomFieldsCsv);
 end;
 
-function TOrm.FillRow(aRow: integer; aDest: TOrm): boolean;
+function TOrm.FillRow(aRow: PtrInt; aDest: TOrm): boolean;
 begin
   if self <> nil then
     if aDest = nil then

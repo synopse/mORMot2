@@ -7797,10 +7797,10 @@ begin
     read_h;
   try
     hmac := _h.mac;         // thread-safe reuse of CryptProtectDataEntropy salt
-    hmac.Update(AppSecret); // application specific context
-    hmac.Update(_h.k);      // secret local key file content
+    hmac.Update(AppSecret); // application-specific context as additional salt
+    hmac.Update(_h.k);      // includes secret per-user key file decoded content
     hmac.Done(secret);
-    result := TAesCfc.MacEncrypt(Data, secret, Encrypt);
+    result := TAesCfc.MacEncrypt(Data, secret, Encrypt); // fast cipher + crc
   finally
     FillZero(secret);
   end;
