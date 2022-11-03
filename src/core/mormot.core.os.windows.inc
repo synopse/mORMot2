@@ -3945,6 +3945,7 @@ begin
       SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
       startupinfo.wShowWindow := SW_HIDE;
       startupinfo.hStdOutput := wr;
+      startupinfo.hStdError := wr;
       startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
     end
     else
@@ -4023,7 +4024,7 @@ begin
     CloseHandle(processinfo.hThread);
   end
   else
-    result := -GetLastError;
+    result := -GetLastError; // returns CreateProcessW() error as negative
   if redirected <> nil then
   begin
     CloseHandle(rd);
