@@ -2485,6 +2485,29 @@ begin
   tmp.Done;
 end;
 
+function CurrentUserHasGroup(const name, domain, server: RawUtf8;
+  wtt: TWinTokenType): boolean;
+var
+  i: PtrInt;
+  sids: PSids;
+  n, d: RawUtf8;
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  sids := CurrentGroups(wtt, tmp);
+  for i := 0 to length(sids) - 1 do
+    if (SidToKnown(sids[i]) = wksNull) and
+       (LookupSid(sids[i], n, d, server) = stTypeGroup) then
+      if PropNameEquals(n, name) and
+         ((domain = '') or
+          PropNameEquals(d, domain)) then
+      begin
+        result := true;
+        break;
+      end;
+  tmp.Done;
+end;
+
 function CurrentUserIsAdmin: boolean;
 begin
   result := wksBuiltinAdministrators in CurrentKnownGroups;

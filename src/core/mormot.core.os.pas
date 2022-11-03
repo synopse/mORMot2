@@ -1655,6 +1655,11 @@ function CurrentUserHasGroup(const sid: RawUtf8;
 function CurrentUserHasGroup(sid: PSid;
   wtt: TWinTokenType = wttProcess): boolean; overload;
 
+/// fast check if the current user, from process or thread, match a group by name
+// - calls LookupSid() on each group SID of this user, and filter with name/domain
+function CurrentUserHasGroup(const name, domain, server: RawUtf8;
+  wtt: TWinTokenType = wttProcess): boolean; overload;
+
 /// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
 function CurrentUserIsAdmin: boolean;
 
