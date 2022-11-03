@@ -707,14 +707,15 @@ function GetGroups(const server, user: RawUtf8;
 // '\\MyDomainNameDns') - if server is '', the local computer is used
 // - call NetGroupEnum() API
 // - return the group names, and optionally the associated SID text
-function GetGroups(const server: RawUtf8;
-  sid: PRawUtf8DynArray = nil): TRawUtf8DynArray; overload;
+function GetGroups(const server: RawUtf8; sid: PRawUtf8DynArray = nil;
+  Local: boolean = false): TRawUtf8DynArray; overload;
 
 /// retrieve the textual SID of a group name on a given server
 // - server is the DNS or NetBIOS name of the remote server to query (typically
 // '\\MyDomainNameDns') - if server is '', the local computer is used
 // - call NetGroupEnum() API then filter for the first supplied GroupName
-function GetGroupSid(const Server, GroupName: RawUtf8): RawUtf8;
+function GetGroupSid(const Server, GroupName: RawUtf8;
+  Local: boolean = false): RawUtf8;
 
 type
   TGetUsersFilterAccount = set of (
@@ -1412,53 +1413,72 @@ begin
 end;
 
 function GetGroups(const server: RawUtf8;
-  sid: PRawUtf8DynArray): TRawUtf8DynArray;
+  sid: PRawUtf8DynArray; Local: boolean): TRawUtf8DynArray;
 var
   dwEntriesRead, dwEntriesTotal: cardinal;
   v: pointer;
   s: PWideChar;
   g: PGroupInfo3;
   i: PtrInt;
+  res: integer;
   srv: TSynTempBuffer;
 begin
   result := nil;
   s := Utf8ToWin32PWideChar(server, srv);
-  if sid = nil then
+  if (sid = nil) or
+     Local then // NetLocalGroupEnum() does not support level 3 
   begin
-    if NetGroupEnum(s, {level=}0, v, MAX_PREFERRED_LENGTH,
-        @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+    if Local then
+      res := NetLocalGroupEnum(s, {level=}0, v, MAX_PREFERRED_LENGTH,
+          @dwEntriesRead, @dwEntriesTotal)
+    else
+      res := NetGroupEnum(s, {level=}0, v, MAX_PREFERRED_LENGTH,
+        @dwEntriesRead, @dwEntriesTotal);
+    if res = NERR_Success then
       GetNames(v, dwEntriesRead, result);
   end
-  else if NetGroupEnum(s, {level=}3, v, MAX_PREFERRED_LENGTH,
-            @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+  else
   begin
-    g := v;
-    SetLength(result, dwEntriesRead);
-    SetLength(sid^, dwEntriesRead);
-    for i := 0 to integer(dwEntriesRead) - 1 do
+    res := NetGroupEnum(s, {level=}3, v, MAX_PREFERRED_LENGTH,
+              @dwEntriesRead, @dwEntriesTotal);
+    if res = NERR_Success then // returns ERROR_INVALID_LEVEL if unsupported
     begin
-      Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), result[i]);
-      sid^[i] := SidToText(g^.group_sid);
-      inc(g);
+      g := v;
+      SetLength(result, dwEntriesRead);
+      SetLength(sid^, dwEntriesRead);
+      for i := 0 to integer(dwEntriesRead) - 1 do
+      begin
+        Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), result[i]);
+        sid^[i] := SidToText(g^.group_sid);
+        inc(g);
+      end;
+      NetAPIBufferFree(v);
     end;
-    NetAPIBufferFree(v);
   end;
   srv.Done;
 end;
 
-function GetGroupSid(const Server, GroupName: RawUtf8): RawUtf8;
+function GetGroupSid(const Server, GroupName: RawUtf8; Local: boolean): RawUtf8;
 var
   dwEntriesRead, dwEntriesTotal: cardinal;
   v: pointer;
+  s: PWideChar;
   g: PGroupInfo3;
+  res: integer;
   name: RawUtf8;
   srv: TSynTempBuffer;
 begin
   result := '';
   if GroupName = '' then
     exit;
-  if NetGroupEnum(Utf8ToWin32PWideChar(Server, srv), {level=}3, v,
-      MAX_PREFERRED_LENGTH, @dwEntriesRead, @dwEntriesTotal) = NERR_Success then
+  s := Utf8ToWin32PWideChar(Server, srv);
+  if Local then
+    res := NetLocalGroupEnum(s, {level=}3, v, MAX_PREFERRED_LENGTH,
+            @dwEntriesRead, @dwEntriesTotal)
+  else
+    res := NetGroupEnum(s, {level=}3, v, MAX_PREFERRED_LENGTH,
+            @dwEntriesRead, @dwEntriesTotal);
+  if res = NERR_Success then
   begin
     g := v;
     while dwEntriesRead <> 0 do
