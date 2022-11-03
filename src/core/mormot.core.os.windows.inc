@@ -3886,9 +3886,10 @@ var
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   output: RawByteString;
+  new: RawUtf8;
   endtix, pending: Int64;
   exitcode, n: cardinal;
-  i, l, ulen: PtrInt;
+  i, l: PtrInt;
   tmp: TSynTempBuffer;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
@@ -3939,7 +3940,10 @@ begin
   // launch the process
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
-  if redirected <> nil then
+  l := 0;
+  rd := 0;
+  if Assigned(onoutput) or
+     (redirected <> nil) then
     if CreatePipe(rd, wr, @security, 0) then
     begin
       SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
@@ -3949,9 +3953,9 @@ begin
       startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
     end
     else
-      redirected := nil;
-  FillCharFast(processinfo, SizeOf(processinfo), 0);
+      rd := 0;
   // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
+  FillCharFast(processinfo, SizeOf(processinfo), 0);
   if CreateProcessW(nil, pointer(wcmd), @security, @security, true,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
       DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
@@ -3959,11 +3963,9 @@ begin
   begin
     if processid <> nil then
       processid^ := processinfo.hProcess;
-    if redirected <> nil then
+    if rd <> 0 then
     begin
       // see https://stackoverflow.com/a/25725197/458259
-      l := 0;
-      ulen := 0;
       if waitfordelayms = INFINITE then
         endtix := 0
       else
@@ -3987,22 +3989,23 @@ begin
           SetLength(output, PtrInt(n) + l);
           MoveFast(tmp, PByteArray(output)[l], n);
           inc(l, n);
+          new := ConsoleToUtf8(output);
+          if redirected <> nil then
+            redirected^ := redirected^ + new;
           if Assigned(onoutput) then
-          begin
-            redirected^ := ConsoleToUtf8(output);
-            if onoutput(copy(redirected^, ulen + 1, maxInt)) then
+            if onoutput(new) then
             begin
               exitcode := WAIT_OBJECT_0;
               break; // returned true to stop the execution
             end;
-            ulen := length(redirected^); // incremental valid UTF-8 output
-          end;
+          dec(l, length(Utf8ToConsole(new)));
+          if l <> 0 then // if OEM_CHARSET was truncated during UTF-8 conversion
+            MoveFast(PByteArray(output)[length(output) - l], pointer(output)^, l);
+          SetLength(output, l);
         until n < SizeOf(tmp);
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
              (GetTickCount64 > endtix));
-      if redirected^ = '' then
-        redirected^ := ConsoleToUtf8(output);
       if GetExitCodeProcess(processinfo.hProcess, exitcode) then
         result := exitcode       // waited for process to end -> return code
       else
@@ -4025,7 +4028,7 @@ begin
   end
   else
     result := -GetLastError; // returns CreateProcessW() error as negative
-  if redirected <> nil then
+  if rd <> 0 then
   begin
     CloseHandle(rd);
     CloseHandle(wr);
