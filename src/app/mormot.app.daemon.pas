@@ -46,7 +46,9 @@ type
     fServiceName: string;
     fServiceDisplayName: string;
     fServiceExecutable: string;
+    {$ifdef OSWINDOWS}
     fServiceDependencies: string;
+    {$endif OSWINDOWS}
     fLog: TSynLogInfos;
     fLogRotateFileCount: integer;
     fLogPath: TFileName;
@@ -64,12 +66,14 @@ type
     /// read-only access to the TSynLog class, if SetLog() has been called
     property LogClass: TSynLogClass
       read fLogClass;
-    /// optional service dependencies
+    {$ifdef OSWINDOWS}
+    /// optional service dependencies (Windows Only)
     // - not published by default: could be defined if needed, or e.g. set in
     // overriden constructor
-    // - several depending services may be set by appending #0 between names
+    // - several depending services may be set by appending ';' between names
     property ServiceDependencies: string
       read fServiceDependencies write fServiceDependencies;
+    {$endif OSWINDOWS}
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
     property ServiceName: string
@@ -506,9 +510,9 @@ begin
           Syntax;
       cInstall:
         with fSettings do
-          Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-            ServiceDescription, aAutoStart, ServiceExecutable,
-            ServiceDependencies) <> ssNotInstalled);
+          Show(TServiceController.Install(
+            ServiceName, ServiceDisplayName, ServiceDescription, aAutoStart,
+            ServiceExecutable, ServiceDependencies) <> ssNotInstalled);
       cStart,
       cStop,
       cUninstall,

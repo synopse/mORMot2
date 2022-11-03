@@ -3164,6 +3164,8 @@ constructor TServiceController.CreateNewService(
   DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
 var
   exeName: TFileName;
+  dep: string;
+  i, l: PtrInt;
   level: TSynLogInfo;
 begin
   inherited Create;
@@ -3199,10 +3201,20 @@ begin
       [TargetComputer, DatabaseName, fName], self);
     exit;
   end;
+  l := length(Dependencies);
+  if l <> 0 then
+  begin
+    dep := Dependencies;
+    SetLength(dep, l + 1);
+    for i := 1 to l do
+      if dep[i] = ';' then
+        dep[i] := #0; // as expected by CreateService() API
+    dep[l + 1] := #0; // should end with #0#0
+  end;
   fHandle := CreateService(fSCHandle,
     pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
     ErrorControl, pointer({%H-}exeName), pointer(OrderGroup), nil,
-    pointer(Dependencies), pointer(Username), pointer(Password));
+    pointer(dep), pointer(Username), pointer(Password));
   if fHandle <> 0 then
     level := sllInfo // success
   else

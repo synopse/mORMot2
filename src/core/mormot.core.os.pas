@@ -4088,9 +4088,8 @@ type
     // - Path - a path to binary (executable) of the service created.
     // - OrderGroup - an order group name (unnecessary)
     // - Dependencies - string containing a list with names of services, which must
-    // start before (every name should be separated with #0, entire
-    // list should be separated with #0#0. Or, an empty string can be
-    // passed if there is no dependancy).
+    // start before this service (every name should be separated with ';' or an
+    // empty string can be passed if there is no dependency).
     // - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
     // account name in the form of "DomainName\Username"; If the account
     // belongs to the built-in domain, ".\Username" can be specified;
