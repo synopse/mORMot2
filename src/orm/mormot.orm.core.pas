@@ -8224,7 +8224,7 @@ begin
     exit;
   with Orm do
     if Filters = nil then
-    // no filter set yet -> process OK
+      // no filter set yet -> process OK
       result := true
     else
     begin

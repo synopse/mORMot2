@@ -2390,7 +2390,7 @@ type
     /// retrieve an instance of a given class per RTTI
     // - previously registered by SetPrivateSlot
     function GetPrivateSlot(aClass: TClass): pointer;
-    /// create a fake TRttiCustom clone with an overloaded ArrayRtti
+    /// create a fake TRttiCustom clone with an overloaded ArrayRtti/ObjArrayClass
     function ComputeFakeObjArrayRtti(aItemClass: TClass): TBytes;
     /// low-level RTTI kind, taken from Rtti property
     property Kind: TRttiKind
