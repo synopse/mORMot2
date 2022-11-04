@@ -1520,7 +1520,8 @@ begin
   end;
 end;
 
-function CoCreateGuid(out guid: THash128Rec): HRESULT; stdcall; external 'ole32.dll';
+function CoCreateGuid(out guid: THash128Rec): HRESULT;
+  stdcall; external 'ole32.dll';
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
@@ -1742,7 +1743,8 @@ end;
 
 function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
   var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
-  lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+  lpTotalNumberOfFreeBytes: QWord): LongBool;
+  stdcall; external kernel32;
 
 {
 // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
@@ -1946,6 +1948,8 @@ begin
     ConsoleToUtf8DoConv(S, result);
 end;
 
+
+{ TFileVersion }
 
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
@@ -2295,25 +2299,25 @@ type
 
 function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
   var TokenHandle: THandle): BOOL;
-    stdcall; external advapi32 name 'OpenProcessToken';
+    stdcall; external advapi32;
 
 function LookupPrivilegeValueA(lpSystemName, lpName: PAnsiChar;
   var lpLuid: TLargeInteger): BOOL;
-    stdcall; external advapi32 name 'LookupPrivilegeValueA';
+    stdcall; external advapi32;
 
 function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger;
   lpName: PAnsiChar; var cbName: DWORD): BOOL;
-    stdcall; external advapi32 name 'LookupPrivilegeNameA';
+    stdcall; external advapi32;
 
 function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
   var cchName: DWORD; ReferencedDomainName: PAnsiChar;
   var cchReferencedDomainName: DWORD; var peUse: DWORD): BOOL;
-    stdcall; external advapi32 name 'LookupAccountSidW';
+    stdcall; external advapi32;
 
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
   PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
-    stdcall; external advapi32 name 'AdjustTokenPrivileges';
+    stdcall; external advapi32;
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
@@ -2817,7 +2821,7 @@ end;
 
 function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer;
   lpBuffer: Pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
-    stdcall; external kernel32 name 'ReadProcessMemory';
+    stdcall; external kernel32;
 
 function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
 var
@@ -3021,12 +3025,12 @@ const
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
   var DataOut: DATA_BLOB): BOOL;
-    stdcall; external CRYPTDLL name 'CryptProtectData';
+    stdcall; external CRYPTDLL;
 
 function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
   var DataOut: DATA_BLOB): BOOL;
-    stdcall; external CRYPTDLL name 'CryptUnprotectData';
+    stdcall; external CRYPTDLL;
 
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
@@ -3062,18 +3066,18 @@ end;
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
-    stdcall; external CRYPTDLL name 'CertOpenSystemStoreW';
+    stdcall; external CRYPTDLL;
 
 function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
-  stdcall; external CRYPTDLL name 'CertEnumCertificatesInStore';
+  stdcall; external CRYPTDLL;
 
-function CryptBinaryToString(pBinary: PByte; cbBinary, dwFlags: DWORD;
+function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWORD;
   pszString: PAnsiChar; var pchString: DWORD): BOOL;
-    stdcall; external CRYPTDLL name 'CryptBinaryToStringA';
+    stdcall; external CRYPTDLL;
 
 function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWORD): BOOL;
-    stdcall; external CRYPTDLL name 'CertCloseStore';
+    stdcall; external CRYPTDLL;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
@@ -3090,11 +3094,11 @@ begin
     while ctx <> nil do
     begin
       certlen := 0;
-      if not CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
           CRYPT_STRING_BASE64HEADER, nil, certlen) then
         break;
       tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
-      if CryptBinaryToString(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
           CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
       begin
         SetLength(result, resultlen + certlen);
@@ -3152,27 +3156,29 @@ begin
 end;
 
 threadvar
-  OleDBCoinitialized: integer;
+  CoInitCounter: integer;
 
 // avoid including ActiveX unit
-function CoInitialize(_para1: pointer): HRESULT; stdcall; external 'ole32.dll';
-procedure CoUninitialize; stdcall; external 'ole32.dll';
+function CoInitialize(_para1: pointer): HRESULT;
+  stdcall; external 'ole32.dll';
+procedure CoUninitialize;
+  stdcall; external 'ole32.dll';
 
 procedure CoInit;
 begin
-  inc(OleDBCoInitialized); // is a threadvar: no InterlockedIncrement() needed
-  if OleDBCoInitialized = 1 then
+  inc(CoInitCounter); // is a threadvar: no InterlockedIncrement() needed
+  if CoInitCounter = 1 then
     CoInitialize(nil);
 end;
 
 procedure CoUninit;
 begin
-  if OleDBCoinitialized <= 0 then
+  if CoInitCounter <= 0 then
     raise EOleSysError.Create('You should call TOleDBConnection.Free from the same ' +
       'thread which called its Create: i.e. call MyProps.EndCurrentThread from an ' +
       'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
-  dec(OleDBCoinitialized);
-  if OleDBCoinitialized = 0 then
+  dec(CoInitCounter);
+  if CoInitCounter = 0 then
     CoUninitialize;
 end;
 
@@ -4425,8 +4431,8 @@ procedure FinalizeSpecificUnit;
 begin
   if CryptoApi.Handle <> 0 then
     Windows.FreeLibrary(CryptoApi.Handle);
-  if OleDBCoinitialized <> 0 then
-    ConsoleWrite('Missing CoUninitialize TOleDBConnection.Destroy call');
+  if CoInitCounter <> 0 then
+    ConsoleWrite('Missing CoUninit (e.g. TOleDBConnection.Destroy call)');
 end;
 
 
