@@ -191,13 +191,13 @@ type
     /// guess/comparison of the content of two TFileInfo - check zcrc32 + sizes
     function SameAs(aInfo: PFileInfo): boolean;
     /// set the the UTF-Language encoding flag (EFS)
-    procedure SetUtf8FileName;
+    procedure SetUtf8FileNameFlag;
       {$ifdef HASINLINE}inline;{$endif}
     /// remove the the UTF-Language encoding flag (EFS)
-    procedure UnSetUtf8FileName;
+    procedure UnSetUtf8FileNameFlag;
       {$ifdef HASINLINE}inline;{$endif}
     /// check if flags contains the UTF-Language encoding flag (EFS)
-    function GetUtf8FileName: boolean;
+    function GetUtf8FileNameFlag: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// set our custom proprietary algorithm used
     // - 1..15  (1=SynLZ e.g.) from flags bits 7..10 and method=Z_STORED
@@ -253,12 +253,14 @@ type
     firstDiskNo: word;
     /// 0 = binary; 1 = text
     intFileAttr: word;
-    /// dos file attributes
+    /// system-depending file attributes, typically $A0 on MSDOS
     extFileAttr: cardinal;
     /// 32-bit offset to @TLocalFileHeader
     localHeadOff: cardinal;
     /// check if extFileAttr contains the folder flag (bit 4)
-    function IsFolder: boolean;
+    // - not to be used in practice, since it is system-dependent: checking
+    // for trailing / \ character seems the way to go
+    function IsDosFolder: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize the signature/madeby/fileinfo field information
     procedure SetVersion(NeedZip64: boolean);
@@ -463,8 +465,8 @@ type
     /// get the index of a file inside the .zip archive
     function NameToIndex(const aName: TFileName): integer;
     /// uncompress a file stored inside the .zip archive into memory
-    // - will refuse to uncompress more than 128 MB of content
-    function UnZip(aIndex: integer): RawByteString; overload;
+    // - will refuse to uncompress more than aMaxSize - i.e. 128 MB of content
+    function UnZip(aIndex: integer; aMaxSize: Int64 = 128 shl 20): RawByteString; overload;
     /// uncompress a file stored inside the .zip archive into a stream
     function UnZip(aIndex: integer; aDest: TStream): boolean; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
@@ -602,6 +604,9 @@ type
     // DateTimeToWindowsFileTime() and FileAgeToWindowsTime()
     procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: PtrInt;
       FileAge: integer = 0); overload;
+    /// add an empty folder to the zip file
+    // - warning: aZipName is expected to have a / or \ trailing path delimiter
+    procedure AddEmptyFolder(const aZipName: TFileName; FileAge: integer = 0);
     /// compress an existing file, and add it to the zip
     // - deflate reading 1MB chunks of input, triggerring zip64 format if needed
     // - can use faster libdeflate (if available) for files up to 64 MB, but
@@ -619,9 +624,12 @@ type
     // - if Recursive is TRUE, would include files from nested sub-folders
     // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
     // - OnAdd callback could be used to customize the process
-    procedure AddFolder(const FolderName: TFileName;
+    // - IncludeVoidFolders=TRUE would include void folders entries to the zip
+    // - returns the number of files added
+    function AddFolder(const FolderName: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
-      CompressLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil);
+      CompressLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
+      IncludeVoidFolders: boolean = false): integer;
     /// compress (using AddDeflate) the supplied files
     // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
     procedure AddFiles(const aFiles: array of TFileName;
@@ -1286,10 +1294,10 @@ end;
 
 { TFileHeader }
 
-function TFileHeader.IsFolder: boolean;
+function TFileHeader.IsDosFolder: boolean;
 begin
   result := (@self <> nil) and
-            (extFileAttr and $00000010 <> 0);
+            (extFileAttr and $10 <> 0);
 end;
 
 procedure TFileHeader.SetVersion(NeedZip64: boolean);
@@ -1297,7 +1305,7 @@ begin
   signature := ENTRY_SIGNATURE_INC;
   dec(signature); // constant was +1 to avoid finding it in the exe
   madeBy := ZIP_VERSION[NeedZip64];
-  extFileAttr := $A0; // archive, normal
+  extFileAttr := $A0; // archive, normal (ignored by most readers)
   fileInfo.neededVersion := madeBy;
 end;
 
@@ -1332,18 +1340,18 @@ begin
            (Algorithm and 15) shl 7; // proprietary flag for mormot.core.zip.pas
 end;
 
-function TFileInfo.GetUtf8FileName: boolean;
+function TFileInfo.GetUtf8FileNameFlag: boolean;
 begin
   // from PKware appnote, Bit 11: Language encoding flag (EFS)
   result := (flags and (1 shl 11)) <> 0;
 end;
 
-procedure TFileInfo.SetUtf8FileName;
+procedure TFileInfo.SetUtf8FileNameFlag;
 begin
   flags := flags or (1 shl 11);
 end;
 
-procedure TFileInfo.UnSetUtf8FileName;
+procedure TFileInfo.UnSetUtf8FileNameFlag;
 begin
   flags := flags and not (1 shl 11);
 end;
@@ -1353,18 +1361,10 @@ begin
   result := ToByte(neededVersion) >= 45; // ignore OS flag from ZIP_VERSION[]
 end;
 
-function Is7BitAnsi(P: PChar): boolean;
+function IsFolder(const zipName: TFileName): boolean;
 begin
-  result := false;
-  if P <> nil then
-    while true do
-      if ord(P^) = 0 then
-        break
-      else if ord(P^) <= 127 then
-        inc(P)
-      else
-        exit;
-  result := true;
+  result := (zipName <> '') and
+            (zipName[length(zipName)] in ['\', '/']);
 end;
 
 
@@ -1654,7 +1654,11 @@ begin
       h32.localHeadOff := h64.offset;
       h32.fileInfo.extraLen := 0; // AddFromZip() source may have something here
     end;
-    if Is7BitAnsi(pointer(zipName)) then
+    {$ifdef UNICODE}
+    if IsAnsiCompatibleW(pointer(zipName)) then
+    {$else}
+    if IsAnsiCompatible(zipName) then
+    {$endif UNICODE}
       // ZIP should handle CP437 charset, but fails sometimes (e.g. Korean)
       intName := StringToAnsi7(zipName)
     else
@@ -1662,7 +1666,7 @@ begin
       // safe UTF-8 file name encoding
       intName := StringToUtf8(zipName);
       include(flags, zweUtf8Name);
-      h32.fileInfo.SetUtf8FileName;
+      h32.fileInfo.SetUtf8FileNameFlag;
     end;
     h32.fileInfo.nameLen := length(intName);
     NormalizeIntZipName(intName);
@@ -1752,6 +1756,13 @@ procedure TZipWrite.AddStored(const aFileName: TFileName;
   RemovePath: boolean; ZipName: TFileName);
 begin
   AddDeflated(aFileName, RemovePath, {level=} -1, ZipName);
+end;
+
+procedure TZipWrite.AddEmptyFolder(const aZipName: TFileName; FileAge: integer);
+begin
+  NewEntry(Z_STORED, cardinal(-1), FileAge);
+  WriteHeader(aZipName); // no data to write nor any fInfo progress to notify
+  inc(fCount);
 end;
 
 procedure TZipWrite.AddDeflated(const aFileName: TFileName;
@@ -1863,23 +1874,26 @@ begin
     end;
 end;
 
-procedure TZipWrite.AddFolder(const FolderName: TFileName;
+function TZipWrite.AddFolder(const FolderName: TFileName;
   const Mask: TFileName; Recursive: boolean; CompressLevel: integer;
-  const OnAdd: TOnZipWriteAdd);
+  const OnAdd: TOnZipWriteAdd; IncludeVoidFolders: boolean): integer;
 
-  procedure RecursiveAdd(const fileDir, zipDir: TFileName);
+  function RecursiveAdd(const fileDir, zipDir: TFileName): integer;
   var
     f: TSearchRec;
     cl: integer;
     zf, zn: TFileName;
   begin
+    result := 0;
     if Recursive then
       if FindFirst(fileDir + FILES_ALL, faDirectory, f) = 0 then
       begin
         repeat
           if SearchRecValidFolder(f) then
-            RecursiveAdd(fileDir + f.Name + PathDelim,
-              zipDir + f.Name + fZipNamePathDelimString);
+          begin
+            zf := zipDir + f.Name + fZipNamePathDelimString;
+            inc(result, RecursiveAdd(fileDir + f.Name + PathDelim, zf));
+          end;
         until FindNext(f) <> 0;
         FindClose(f);
       end;
@@ -1893,15 +1907,26 @@ procedure TZipWrite.AddFolder(const FolderName: TFileName;
           zn := f.Name;
           if (not Assigned(OnAdd)) or
              OnAdd(fileDir, f.Name, cl, zf, zn) then
+          begin
             AddDeflated(fileDir + f.Name, {removepath=}false, cl, zf + zn);
+            inc(result);
+          end;
         end;
       until FindNext(f) <> 0;
       FindClose(f);
     end;
+    if IncludeVoidFolders and
+       (zipDir <> '') and
+       (result = 0) and
+       (Mask = FILES_ALL) then
+    begin
+      AddEmptyFolder(zipDir, SearchRecToWindowsTime(f));
+      inc(result);
+    end;
   end;
 
 begin
-  RecursiveAdd(IncludeTrailingPathDelimiter(FolderName), '');
+  result := RecursiveAdd(IncludeTrailingPathDelimiter(FolderName), '');
 end;
 
 procedure TZipWrite.AddFiles(const aFiles: array of TFileName;
@@ -1942,13 +1967,14 @@ begin
       fOnProgressStep := zwsWriteFile;
       InfoStart(h64.zzipSize, 'Add ', z^.zipName);
       WriteHeader(z^.zipName);
-      if z^.local = nil then
-      begin
-        local.LoadAndDataSeek(ZipSource.fSource, z^.localoffs);
-        fDest.CopyFrom(ZipSource.fSource, h64.zzipSize);
-      end
-      else
-        fDest.WriteBuffer(z^.local^.Data^, h64.zzipSize);
+       if h64.zzipSize <> 0 then
+        if z^.local = nil then
+        begin
+          local.LoadAndDataSeek(ZipSource.fSource, z^.localoffs);
+          fDest.CopyFrom(ZipSource.fSource, h64.zzipSize);
+        end
+        else
+          fDest.WriteBuffer(z^.local^.Data^, h64.zzipSize);
       if fInfo.ExpectedSize <> 0 then
         fInfo.DoAfter(self, h64.zzipSize);
       inc(fCount);
@@ -2059,7 +2085,7 @@ var
   h, hnext: PFileHeader;
   e, prev: PZipReadEntry;
   i: PtrInt;
-  isascii7, isfolder: boolean;
+  isascii7: boolean;
   P: PAnsiChar;
   tmp: RawByteString;
 begin
@@ -2139,19 +2165,18 @@ begin
         isascii7 := false;
       inc(P);
     until P^ = #0;
-    isfolder := P[-1] = fZipNamePathDelim;
     if isascii7 then
       e^.zipName := Ansi7ToString(tmp)
-    else if h^.fileInfo.GetUtf8FileName then
+    else if h^.fileInfo.GetUtf8FileNameFlag then
       // decode UTF-8 file name into native string/TFileName type
       Utf8ToFileName(tmp, e^.zipName)
     else
       // legacy Windows-OEM-CP437 encoding - from mormot.core.os
       e^.zipName := OemToFileName(tmp);
-    if not isfolder then
-      if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) then
-        raise ESynZip.CreateUtf8('%.Create: Unsupported zipmethod % for % %',
-          [self, h^.fileInfo.zZipMethod, e^.zipName, fFileName]);
+    if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
+       not IsFolder(e^.zipName) then
+      raise ESynZip.CreateUtf8('%.Create: Unsupported zipmethod % for % %',
+        [self, h^.fileInfo.zZipMethod, e^.zipName, fFileName]);
     if (h^.localHeadOff = ZIP32_MAXSIZE) or
        (h^.fileInfo.zfullSize = ZIP32_MAXSIZE) or
        (h^.fileInfo.zzipSize = ZIP32_MAXSIZE) then
@@ -2174,7 +2199,7 @@ begin
       e^.localoffs := h^.localHeadOff;
     if e^.localoffs >= Offset then
     begin
-      // can unzip directly from existing memory buffer
+      // we can unzip directly from the existing memory buffer: store pointer
       e^.local := @BufZip[Int64(e^.localoffs) - Offset];
       with e^.local^.fileInfo do
         if flags and FLAG_DATADESCRIPTOR <> 0 then
@@ -2189,18 +2214,9 @@ begin
     end;
     if prev <> nil then
       prev^.nextlocaloffs := e^.localoffs;
-    if isfolder then
-    begin
-      prev := nil;
-      e^.zipName := ''; // folders are not included in Entry[]
-      FillCharFast(e^, SizeOf(e^), 0); // reuse this entry for next file
-    end
-    else
-    begin
-      prev := e;
-      inc(fCount); // add file to Entry[]
-      inc(e);
-    end;
+    prev := e;
+    inc(fCount); // add file (or folder) to Entry[]
+    inc(e);
     h := hnext;
   end;
   if prev <> nil then
@@ -2468,7 +2484,7 @@ begin
       dec(PByte(desc));
 end;
 
-function TZipRead.UnZip(aIndex: integer): RawByteString;
+function TZipRead.UnZip(aIndex: integer; aMaxSize: Int64): RawByteString;
 var
   e: PZipReadEntry;
   len: PtrUInt;
@@ -2477,8 +2493,9 @@ var
   info: TFileInfoFull;
 begin
   if not RetrieveFileInfo(aIndex, info) or
-     (info.f64.zzipSize > 128 shl 20) or
-     (info.f64.zfullSize > 128 shl 20) then
+     (info.f64.zfullSize = 0) or
+     (info.f64.zzipSize > aMaxSize) or
+     (info.f64.zfullSize > aMaxSize) then
   begin
     result := '';
     exit;
@@ -2692,7 +2709,7 @@ begin
       exit;
     Dest := Dest + ExtractFileName(LocalZipName);
   end;
-  if Entry[aIndex].dir^.IsFolder then
+  if IsFolder(Entry[aIndex].zipName) then
     result := EnsureDirectoryExists(Dest) <> ''
   else
   begin
