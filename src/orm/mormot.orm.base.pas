@@ -6515,13 +6515,13 @@ begin
   if off <> 0 then // avoid any temporary variable
   begin
     v := PVariant(PtrUInt(Dest) + off);
-    mormot.core.base.VarClear(v^);
+    VarClear(v^);
     fPropInfo.GetVariantProp(Source, v^, {byref=}false); // copy by value
   end
   else
   begin
     PCardinal(@value)^ := varEmpty; // real temp variant for a setter
-    fPropInfo.GetVariantProp(Source, variant(value), false);
+    fPropInfo.GetVariantProp(Source, variant(value), {byref=}false);
     TOrmPropInfoRttiVariant(DestInfo).fPropInfo.SetVariantProp(Dest, variant(value));
     VarClearProc(value);
   end;
