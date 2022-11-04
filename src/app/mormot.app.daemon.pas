@@ -9,6 +9,7 @@ unit mormot.app.daemon;
    Daemon (e.g. Windows Service) Stand-Alone Background Executable Support
     - Parent Daemon Settings Class
     - Parent Daemon Application Class
+    - TSynAngelize App-As-Service Launcher
 
   *****************************************************************************
 }
@@ -203,6 +204,115 @@ type
   end;
 
 
+{ ************ TSynAngelize App-As-Service Launcher }
+
+type
+  /// define how TSynAngelize should stop the process
+  // - sdlsExecutableStop will run the ExecutableStop command line (if any)
+  // - on Windows, sdlsControlC will send a Ctrl+C event to the executable console
+  // - on Windows, sdlsWmQuit will send a WM_QUIT message to the executable threads
+  // - on Windows, sdlsTerminate will call the TerminateProcess() API
+  // - on POSIX, sdlsSigTerm will send a SIGTERM signal for graceful termination
+  // - on POSIX, sdlsSigKill will send a SIGKILL signal for immediate killing
+  TSynAngelizeStopper = set of (
+    sdlsExecutableStop,
+    {$ifdef OSWINDOWS}
+    sdlsControlC,
+    sdlsWmQuit,
+    sdlsTerminate
+    {$else}
+    sdlsSigTerm,
+    sdlsSigKill
+    {$endif OSWINDOWS}
+    );
+
+  /// one daemon/service definition as recognized by TSynAngelize
+  // - any %abc% place-holders will be replaced via TSynAngelize.ExpandPath
+  TSynAngelizeSettings = class(TSynDaemonAbstractSettings)
+  protected
+    fExecutable, fExecutableStop: TFileName;
+    fAutoStart: boolean;
+    fStopper: TSynAngelizeStopper;
+    fStopDelaySec: integer;
+  public
+    /// initialize and set the default settings
+    constructor Create; override;
+  published
+    /// the service name, as used internally by Windows or the TSynDaemon class
+    // - default is the Executable file name without its path and extension
+    property ServiceName;
+    /// the service name, as displayed by Windows or at the console level
+    // - default is the Executable file name without its path and extension
+    property ServiceDisplayName;
+    /// path to the executable which should be started
+    // - could include arguments
+    property Executable: TFileName
+      read fExecutable write fExecutable;
+    /// path to the executable which should be called to stop the main Executable
+    // - could include arguments
+    // - is done first before any other attempt
+    property ExecutableStop: TFileName
+      read fExecutableStop write fExecutableStop;
+    {$ifdef OSWINDOWS}
+    /// when installing the service, defines if it should start automatically
+    // - only available on Windows
+    property AutoStart: boolean
+      read fAutoStart write fAutoStart;
+    {$endif OSWINDOWS}
+    /// define the methods used, in order, to stop the process
+    // - default is all methods
+    property Stopper: TSynAngelizeStopper
+      read fStopper write fStopper;
+    /// how many seconds should we wait between each Stopper method step
+    // - default is 2 seconds
+    property StopDelaySec: integer
+      read fStopDelaySec write fStopDelaySec;
+  end;
+
+  TSynAngelizeSettingsClass = class of TSynAngelizeSettings;
+
+  /// can run a set of executables as daemon/service from a .service definition
+  // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
+  TSynAngelize = class
+  protected
+    fSettingsClass: TSynAngelizeSettingsClass;
+    fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
+    fSettings: TSynAngelizeSettings;
+    fExpandPathLevel: integer;
+    fSettingsOptions: TSynJsonFileSettingsOptions;
+    fSectionName: RawUtf8;
+    fService: array of TSynAngelizeSettings;
+    {$ifdef OSPOSIX}
+    fPidFolder: TFileName;
+    {$endif OSPOSIX}
+    procedure GetServices;
+    procedure ListServices;
+  public
+    /// initialize the daemon/server redirection instance
+    constructor Create(const aSettingsFolder: TFileName = '';
+      aSettingsClass: TSynAngelizeSettingsClass = nil;
+      const aSettingsExt: TFileName = '.service';
+      aSettingsOptions: TSynJsonFileSettingsOptions = [];
+      const aSectionName: RawUtf8 = 'Main'); reintroduce;
+    /// finalize the stored information
+    destructor Destroy; override;
+    /// main entry point of the daemon, to process the command line switches
+    // - agl = get a list of all *.service with their current state
+    // - agl servicefilename install/uninstall/start/stop/console/verbose/status
+    procedure CommandLine;
+    /// compute a path, replacing all %abc% place holders with actual values
+    // - %agl.base% is the location of the agl executable
+    // - %agl.settings% is the location of the *.service files
+    // - %agl.params% are the additional parameters supplied to the command line
+    // - %agl.toto% is the "toto": property value in the .service settings,
+    // e.g. %agl.servicename% is the service name
+    // - TSystemPath values are available as %CommonData%, %UserData%,
+    // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
+    function ExpandPath(const aPath: TFileName): TFileName;
+  published
+
+  end;
+
 
 implementation
 
@@ -223,38 +333,38 @@ end;
 function TSynDaemonAbstractSettings.ServiceDescription: string;
 var
   versionnumber: string;
+  v: TFileVersion;
 begin
-  result := ServiceDisplayName;
-  with Executable.Version do
-  begin
-    versionnumber := DetailedOrVoid;
-    if versionnumber <> '' then
-      result := result + ' ' + versionnumber;
-    if CompanyName <> '' then
-      result := FormatString('% - (c)% %', [result, BuildYear, CompanyName]);
-  end;
+  result := fServiceDisplayName;
+  v := Executable.Version;
+  versionnumber := v.DetailedOrVoid;
+  if versionnumber <> '' then
+    result := result + ' ' + versionnumber;
+  if v.CompanyName <> '' then
+    result := FormatString('% - (c)% %', [result, v.BuildYear, v.CompanyName]);
 end;
 
 procedure TSynDaemonAbstractSettings.SetLog(aLogClass: TSynLogClass);
+var
+  f: TSynLogFamily;
 begin
-  if (self <> nil) and
-     (Log <> []) and
-     (aLogClass <> nil) then
-    with aLogClass.Family do
-    begin
-      DestinationPath := LogPath;
-      PerThreadLog := ptIdentifiedInOneFile; // ease multi-threaded server debug
-      RotateFileCount := LogRotateFileCount;
-      if RotateFileCount > 0 then
-      begin
-        RotateFileSizeKB := 20 * 1024; // rotate by 20 MB logs
-        FileExistsAction := acAppend;  // as expected in rotation mode
-      end
-      else
-        HighResolutionTimestamp := true;
-      Level := Log;
-      fLogClass := aLogClass;
-    end;
+  if (self = nil) or
+     (Log = []) or
+     (aLogClass = nil) then
+    exit;
+  fLogClass := aLogClass;
+  f := aLogClass.Family;
+  f.DestinationPath := fLogPath;
+  f.PerThreadLog := ptIdentifiedInOneFile; // ease multi-threaded server debug
+  f.RotateFileCount := fLogRotateFileCount;
+  if fLogRotateFileCount > 0 then
+  begin
+    f.RotateFileSizeKB := 20 * 1024; // rotate by 20 MB logs
+    f.FileExistsAction := acAppend;  // as expected in rotation mode
+  end
+  else
+    f.HighResolutionTimestamp := true;
+  f.Level := fLog;
 end;
 
 
@@ -388,7 +498,7 @@ var
     {$else}
     writeln(' ./', Executable.ProgramName,
             ' --console -c --verbose --help -h --version');
-    writeln(spaces, '--run -r --fork -f --kill -k');
+    writeln(spaces, '--run -r --fork -f --kill -k --silentkill --state');
     {$endif OSWINDOWS}
     custom := CustomCommandLineSyntax;
     if custom <> '' then
@@ -585,6 +695,7 @@ begin
 end;
 
 const
+  // single char command switch (not V* S*)
   CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
     'H',  // cHelp
     'I',  // cInstall
@@ -594,11 +705,27 @@ const
     'C',  // cConsole
     'K'); // cKill
 
+function ParseCmd(p: PUtf8Char): TExecuteCommandLineCmd;
+var
+  ch: AnsiChar;
+begin
+  ch := NormToUpper[p^];
+  for result := low(CMD_CHR) to high(CMD_CHR) do // parse H* I* R* F* U* C* K*
+    if CMD_CHR[result] = ch then
+      exit;
+  byte(result) := ord(cVersion) + // parse V* and S* commands
+    IdemPCharArray(p, ['VERS',      // cVersion
+                       'VERB',      // cVerbose
+                       'START',     // cStart
+                       'STOP',      // cStop
+                       'STAT',      // cState
+                       'SILENTK']); // cSilentKill
+end;
+
 procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 var
-  cmd, c: TExecuteCommandLineCmd;
+  cmd: TExecuteCommandLineCmd;
   p: PUtf8Char;
-  ch: AnsiChar;
   param: RawUtf8;
 begin
   param := TrimU(StringToUtf8(paramstr(1)));
@@ -610,23 +737,184 @@ begin
     if p^ = '-' then
       // allow e.g. --fork switch (idem to /f -f /fork -fork)
       inc(p);
-    ch := NormToUpper[p^];
-    for c := low(CMD_CHR) to high(CMD_CHR) do
-      if CMD_CHR[c] = ch then
-      begin
-        cmd := c;
-        break;
-      end;
-    if cmd = cNone then
-      byte(cmd) := ord(cVersion) +
-        IdemPCharArray(p, ['VERS',      // cVersion
-                           'VERB',      // cVerbose
-                           'START',     // cStart
-                           'STOP',      // cStop
-                           'STAT',      // cState
-                           'SILENTK']); // cSilentKill
-    end;
+    cmd := ParseCmd(p);
+  end;
   Command(cmd, aAutoStart, param);
+end;
+
+
+{ ************ TSynAngelize App-As-Service Launcher }
+
+{ TSynAngelizeSettings }
+
+constructor TSynAngelizeSettings.Create;
+begin
+  inherited Create;
+  fStopper := [low(fStopper) .. high(fStopper)];
+  fStopDelaySec := 2;
+end;
+
+
+{ TSynAngelize }
+
+constructor TSynAngelize.Create(const aSettingsFolder: TFileName;
+  aSettingsClass: TSynAngelizeSettingsClass; const aSettingsExt: TFileName;
+  aSettingsOptions: TSynJsonFileSettingsOptions; const aSectionName: RawUtf8);
+begin
+  if aSettingsClass = nil then
+    aSettingsClass := TSynAngelizeSettings;
+  fSettingsClass := aSettingsClass;
+  if aSettingsFolder = '' then
+    fSettingsFolder := Executable.ProgramFilePath
+  else
+    fSettingsFolder := IncludeTrailingPathDelimiter(aSettingsFolder);
+  {$ifdef OSPOSIX}
+  fPidFolder := EnsureDirectoryExists(Executable.ProgramFilePath + 'pid');
+  {$endif OSPOSIX}
+  fSettingsExt := aSettingsExt;
+  fSettingsOptions := aSettingsOptions;
+  fSectionName := aSectionName;
+end;
+
+destructor TSynAngelize.Destroy;
+begin
+  inherited Destroy;
+  ObjArrayClear(fService);
+end;
+
+procedure TSynAngelize.GetServices;
+var
+  r: TSearchRec;
+  s: TSynAngelizeSettings;
+  fn: TFileName;
+begin
+  ObjArrayClear(fService);
+  fn := fSettingsFolder + '*' + fSettingsExt;
+  if FindFirst(fn, faAnyFile - faDirectory, r) <> 0 then
+    exit;
+  repeat
+    if SearchRecValidFile(r) then
+    begin
+      s := fSettingsClass.Create;
+      if s.LoadFromFile(fSettingsFolder + r.Name) and
+         (s.ServiceName <> '') and
+         (s.Executable <> '') then
+        ObjArrayAdd(fService, s) // seems like a valid .service file
+      else
+        s.Free;
+    end;
+  until FindNext(r) <> 0;
+  FindClose(r);
+end;
+
+const
+  _STATECOLOR: array[TServiceState] of TConsoleColor = (
+    ccBlue,       // NotInstalled
+    ccLightRed,   // Stopped
+    ccGreen,      // Starting
+    ccRed,        // Stopping
+    ccLightGreen, // Running
+    ccGreen,      // Resuming
+    ccBrown,      // Pausing
+    ccWhite,      // Paused
+    ccMagenta);   // ErrorRetrievingState
+
+procedure TSynAngelize.ListServices;
+var
+  i: PtrInt;
+  pid: cardinal;
+  st: TServiceState;
+  n: RawUtf8;
+begin
+  GetServices;
+  for i := 0 to high(fService) do
+  begin
+    StringToUtf8(fService[i].ServiceName, n);
+    {$ifdef OSWINDOWS}
+    pid := GetServicePid(fService[i].ServiceName, @st);
+    {$else}
+    pid := GetCardinal(pointer(StringFromFile(fPidFolder + n + '.pid')));
+    if pid = 0 then
+      st := ssStopped
+    else if IsValidPid(pid) then
+      st := ssRunning // see RunUntilSigTerminatedState()
+    else
+      st := ssErrorRetrievingState; // unexpected .pid file content
+    {$endif OSWINDOWS}
+    ConsoleWrite('% [%] %', [n, pid, ToText(st)^], _STATECOLOR[st]);
+  end;
+end;
+
+procedure TSynAngelize.CommandLine;
+begin
+
+end;
+
+function TSynAngelize.ExpandPath(const aPath: TFileName): TFileName;
+var
+  o, i, j: PtrInt;
+  p: PRttiCustomProp;
+  id: RawUtf8;
+  v: string;
+begin
+  result := aPath;
+  o := 1;
+  repeat
+    i := PosExString('%', result, o);
+    if i = 0 then
+      exit;
+    j := PosExString('%', result, i + 1);
+    if j = 0 then
+      exit;
+    dec(j, i + 1); // j = length abc
+    if j = 0 then
+    begin
+      delete(result, i, 1); // %% -> %
+      o := i + 1;
+      continue;
+    end;
+    id := StringToUtf8(copy(result, i + 1, j));
+    delete(result, i, j + 2);
+    o := i;
+    if IdemPChar(pointer(id), 'AGL.') then
+    begin
+      delete(id, 1, 3);
+      case FindPropName(['base',
+                         'settings',
+                         'params'], id) of
+        0: // %agl.base% is the location of the agl executable
+          v := Executable.ProgramFilePath;
+        1: // %agl.settings% is the location of the *.service files
+          v := fSettingsFolder;
+        2: // %agl.params% are the additional parameters supplied to command line
+          v := fAdditionalParams;
+      else
+        begin
+          // %agl.toto% is the "toto": property value in the .service settings
+          p := Rtti.RegisterClass(fSettings).Props.Find(id);
+          if p = nil then
+            continue;
+          inc(fExpandPathLevel); // to detect and avoid stack overflow error
+          if fExpandPathLevel = 50 then
+            raise EDaemon.CreateUtf8('ExpandPath recursive call for agl.%', [id]);
+          v := ExpandPath(Utf8ToString(p.Prop.GetAsString(fSettings)));
+          dec(fExpandPathLevel);
+        end;
+      end;
+    end
+    else
+    begin
+      i := GetEnumNameValue(TypeInfo(TSystemPath), id, true);
+      if i < 0 then
+        continue;
+      v := GetSystemPath(TSystemPath(i));
+    end;
+    if v = '' then
+      continue;
+    insert(v, result, o);
+    inc(o, length(v));
+    v := '';
+  until false;
 end;
 
 
