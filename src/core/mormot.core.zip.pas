@@ -1364,7 +1364,7 @@ end;
 function IsFolder(const zipName: TFileName): boolean;
 begin
   result := (zipName <> '') and
-            (zipName[length(zipName)] in ['\', '/']);
+            (ord(zipName[length(zipName)]) in [ord('\'), ord('/')]);
 end;
 
 
