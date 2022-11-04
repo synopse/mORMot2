@@ -2997,8 +2997,8 @@ function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 
 /// return the process name of a given PID
-// - under Windows, is a wrapper around QueryFullProcessImageNameW/GetModuleFileNameEx
-// PsAPI call
+// - under Windows, is a wrapper around
+// QueryFullProcessImageNameW/GetModuleFileNameEx PsAPI call
 // - on Linux, will query /proc/[pid]/exe or /proc/[pid]/cmdline pseudo-file
 function EnumProcessName(PID: cardinal): RawUtf8;
 
@@ -3107,6 +3107,7 @@ procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
 // notifications, and the internal Windows Message loop (on this OS)
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
+// - from a non-main Thread, will loop and respond to PostThreadMessage(WM_QUIT)
 procedure ConsoleWaitForEnterKey;
 
 /// read all available content from stdin

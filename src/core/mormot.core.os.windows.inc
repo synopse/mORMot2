@@ -1842,55 +1842,81 @@ end;
 
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 var
-  lpNumberOfEvents: DWORD;
-  lpBuffer: TInputRecord;
-  lpNumberOfEventsRead: DWORD;
-  nStdHandle: THandle;
+  events, read: DWORD;
+  rec: TInputRecord;
+  h: THandle;
 begin
   result := false;
-  nStdHandle := GetStdHandle(STD_INPUT_HANDLE);
-  lpNumberOfEvents := 0;
-  GetNumberOfConsoleInputEvents(nStdHandle, lpNumberOfEvents);
-  if lpNumberOfEvents <> 0 then
+  h := GetStdHandle(STD_INPUT_HANDLE);
+  events := 0;
+  GetNumberOfConsoleInputEvents(h, events);
+  if events <> 0 then
   begin
-    PeekConsoleInput(nStdHandle, lpBuffer, 1, lpNumberOfEventsRead);
-    if lpNumberOfEventsRead <> 0 then
-      if lpBuffer.EventType = KEY_EVENT then
-        if lpBuffer.Event.KeyEvent.bKeyDown and
+    PeekConsoleInput(h, rec, 1, read);
+    if read <> 0 then
+      if rec.EventType = KEY_EVENT then
+        if rec.Event.KeyEvent.bKeyDown and
            ((ExpectedKey = 0) or
-            (lpBuffer.Event.KeyEvent.wVirtualKeyCode = ExpectedKey)) then
+            (rec.Event.KeyEvent.wVirtualKeyCode = ExpectedKey)) then
           result := true
         else
-          FlushConsoleInputBuffer(nStdHandle)
+          FlushConsoleInputBuffer(h)
       else
-        FlushConsoleInputBuffer(nStdHandle);
+        FlushConsoleInputBuffer(h);
   end;
 end;
 
-{$I-}
+type
+  TConsoleHandleCtrlC = class
+  private
+    class procedure HandleCtrlC;
+  end;
+var
+  ConsoleHandleCtrlCPressed: boolean;
+
+class procedure TConsoleHandleCtrlC.HandleCtrlC;
+begin
+  ConsoleHandleCtrlCPressed := true;
+end;
+
 procedure ConsoleWaitForEnterKey;
 var
   msg: TMsg;
 begin
-  if GetCurrentThreadID = MainThreadID then
-    while not ConsoleKeyPressed(VK_RETURN) do
-    begin
-      if IsMultiThread then
-        CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif}
-      else
-        Sleep(100);
-      while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
-        if msg.Message = WM_QUIT then
-          exit
+  ConsoleHandleCtrlCPressed := false;
+  HandleCtrlC(TConsoleHandleCtrlC.HandleCtrlC);
+  try
+    if GetCurrentThreadID = MainThreadID then
+      // process the messages from the main thread while waiting
+      while not ConsoleKeyPressed(VK_RETURN) and
+            not ConsoleHandleCtrlCPressed do
+      begin
+        if IsMultiThread then
+          CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif}
         else
-        begin
-          TranslateMessage(msg);
-          DispatchMessage(msg);
-        end;
-    end
-  else
-    ReadLn;
-  ioresult;
+          Sleep(100);
+        while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
+          if msg.Message = WM_QUIT then
+            exit // stop waiting when the process is gracefully closing
+          else
+          begin
+            TranslateMessage(msg);
+            DispatchMessage(msg);
+          end;
+      end
+    else
+      // just intercept any WM_QUIT message on this sub-thread
+      while not ConsoleKeyPressed(VK_RETURN) and
+            not ConsoleHandleCtrlCPressed do
+      begin
+        Sleep(100);
+        if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
+          if msg.Message = WM_QUIT then
+            exit; // nothing to dispatch with PostThreadMessage()
+      end;
+  finally
+    HandleCtrlC(nil);
+  end;
 end;
 {$I+}
 
