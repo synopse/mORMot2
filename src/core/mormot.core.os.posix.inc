@@ -951,6 +951,11 @@ begin
             (FileSetDate(Dest, DateTimeToFileDate(datetime)) = 0); // with LocalToEpoch()
 end;
 
+function SearchRecToWindowsTime(const F: TSearchRec): integer;
+begin
+  result := DateTimeToWindowsFileTime(FileDateToDateTime(F.Time));
+end;
+
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 begin
   result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));

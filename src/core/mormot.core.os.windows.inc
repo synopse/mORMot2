@@ -595,6 +595,11 @@ begin
   result := FileSetDate(Dest, WinTime) = 0;
 end;
 
+function SearchRecToWindowsTime(const F: TSearchRec): integer;
+begin
+  result := F.Time;
+end;
+
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
  out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 var

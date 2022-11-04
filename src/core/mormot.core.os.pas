@@ -2665,6 +2665,11 @@ const
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get a file date and time, from a FindFirst/FindNext search, as Windows time
+// - this cross-system function is used e.g. by mormot.core.zip which expects
+// Windows TimeStamps in its headers
+function SearchRecToWindowsTime(const F: TSearchRec): integer;
+
 /// check if a FindFirst/FindNext found instance is actually a file
 function SearchRecValidFile(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
