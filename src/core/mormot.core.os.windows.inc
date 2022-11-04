@@ -3875,21 +3875,128 @@ begin
 end;
 
 
+function WaitProcess(pid: cardinal; waitseconds: integer): boolean;
+var
+  ph: THandle;
+begin
+  result := false;
+  ph := OpenProcess(SYNCHRONIZE, false, pid);
+  if ph = 0 then
+    exit;
+  result := WaitForSingleObject(ph, waitseconds * 1000) = WAIT_OBJECT_0;
+  CloseHandle(ph);
+end;
+
+// some definitions missing on Delphi and/or FPC
+type
+  TThreadEntry32 = record
+    dwSize: DWORD;
+    cntUsage: DWORD;
+    th32ThreadID: DWORD;       // this thread
+    th32OwnerProcessID: DWORD; // Process this thread is associated with
+    tpBasePri: integer;
+    tpDeltaPri: integer;
+    dwFlags: DWORD;
+  end;
+
+const
+  TH32CS_SNAPTHREAD = $00000004;
+
+function AttachConsole(pid: cardinal): BOOL;
+  stdcall; external kernel32;
+function GetConsoleWindow: HWND;
+  stdcall; external kernel32;
+function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWORD): THandle;
+  stdcall; external kernel32;
+function Thread32First(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
+  stdcall; external kernel32;
+function Thread32Next(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
+  stdcall; external kernel32;
+function PostThreadMessage(idThread: DWORD; Msg: UINT; wParam: WPARAM;
+    lParam: LPARAM): BOOL;
+  stdcall; external user32;
+
+function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
+begin
+  result := false;
+  if integer(pid) <= 0 then
+    exit;
+  if GetConsoleWindow <> 0 then              // can attach to a single console
+    FreeConsole;
+  if not AttachConsole(pid) then             // attach to the pid console
+    exit;
+  SetConsoleCtrlHandler(nil, true);          // nil=ignore the event ourself
+  GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0); // send Ctrl+C event
+  FreeConsole;                               // detach
+  SetConsoleCtrlHandler(nil, false);         // remove our nil=ignore handler
+  result := WaitProcess(pid, waitseconds);
+  TService.DoLog(sllTrace, 'CancelProcess(%)=%', [pid, ord(result)], nil);
+end;
+
+function QuitProcess(pid: cardinal; waitseconds: integer): boolean;
+var
+  snap: THandle;
+  e: TThreadEntry32;
+begin
+  result := false;
+  if integer(pid) <= 0 then
+    exit;
+  snap := CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+  if snap <= 0 then
+    exit;
+  FillCharFast(e, SizeOf(e), 0);
+  e.dwSize := SizeOf(e);
+  if Thread32First(snap, e) then // loop over all threads of the system
+    repeat
+      if e.th32OwnerProcessID = pid then
+        if PostThreadMessage(e.th32ThreadID, WM_QUIT, 0, 0) then
+          result := true; // at least one thread found
+    until not Thread32Next(snap, e);
+  CloseHandle(snap);
+  if result then
+    result := WaitProcess(pid, waitseconds);
+  TService.DoLog(sllTrace, 'QuitProcess(%)=%', [pid, ord(result)], nil);
+end;
+
 function KillProcess(pid: cardinal; waitseconds: integer): boolean;
 var
   ph: THandle;
 begin
+  result := false;
+  if integer(pid) <= 0 then
+    exit;
   ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
-  result := ph <> 0;
-  if result then
-  begin
-    try
-      result := TerminateProcess(ph, 0) and
-                (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
-    finally
-      CloseHandle(ph);
+  if ph = 0 then
+    exit;
+  result := TerminateProcess(ph, 0) and
+            (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
+  CloseHandle(ph);
+end;
+
+var
+  OnHandleCtrlC: TThreadMethod;
+
+function ConsoleCtrlHandler(typ : dword) : BOOL; stdcall;
+begin
+  result := false;
+  if Assigned(OnHandleCtrlC) then
+    case typ of
+      CTRL_C_EVENT,
+      CTRL_CLOSE_EVENT,
+      CTRL_LOGOFF_EVENT,
+      CTRL_SHUTDOWN_EVENT:
+        begin
+          OnHandleCtrlC();
+          result := true;
+        end;
     end;
-  end;
+end;
+
+function HandleCtrlC(const OnClose: TThreadMethod): boolean;
+begin
+  result := SetConsoleCtrlHandler(@ConsoleCtrlHandler, Assigned(OnClose));
+  if result then
+    OnHandleCtrlC := OnClose;
 end;
 
 function DropPriviledges(const UserName: RawUtf8): boolean;

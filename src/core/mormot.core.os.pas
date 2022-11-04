@@ -4382,8 +4382,20 @@ function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 /// return the ProcessID of a given service, by name
 function GetServicePid(const aServiceName: string): cardinal;
 
-/// kill a Windows process from its ProcessID
+/// try to gently stop a given Windows console app from its ProcessID
+// - will send a Ctrl-C event (acquiring the process console)
+function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
+
+/// try to gently quit a Windows process from its ProcessID
+// - will send a WM_QUIT message to all its threads
+function QuitProcess(pid: cardinal; waitseconds: integer): boolean;
+
+/// forcibly terminate a Windows process from its ProcessID
+// - call TerminateProcess() and wait for its ending
 function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
+
+/// install a Windows event handler for Ctrl+C pressed on the Console
+function HandleCtrlC(const OnClose: TThreadMethod): boolean;
 
 {$else}
 
