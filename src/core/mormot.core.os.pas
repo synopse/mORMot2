@@ -1989,6 +1989,9 @@ function GetFileOpenLimit(hard: boolean = false): integer;
 // ! SetFileOpenLimit(GetFileOpenLimit(true));
 function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 
+/// read /proc/pid/status to ensure pid is of a real process, not a thread
+function IsValidPid(pid: cardinal): boolean;
+
 type
   /// Low-level access to the ICU library installed on this system
   // - "International Components for Unicode" (ICU) is an open-source set of
@@ -3108,11 +3111,11 @@ procedure TextBackground(Color: TConsoleColor);
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
 
-/// will wait for the ENTER key to be pressed, processing Synchronize() pending
-// notifications, and the internal Windows Message loop (on this OS)
-// - to be used e.g. for proper work of console applications with interface-based
-// service implemented as optExecInMainThread
-// - from a non-main Thread, will loop and respond to PostThreadMessage(WM_QUIT)
+/// will wait for the ENTER key to be pressed, with all needed waiting process
+// - on the main thread, will call Synchronize() for proper work e.g. with
+// interface-based service implemented as optExecInMainThread
+// - on Windows, from a non-main Thread, respond to PostThreadMessage(WM_QUIT)
+// - on Windows, also properly respond to Ctrl-C or closing console events
 procedure ConsoleWaitForEnterKey;
 
 /// read all available content from stdin
@@ -3925,6 +3928,7 @@ type
     ssPausing,
     ssPaused,
     ssErrorRetrievingState);
+  PServiceState = ^TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
 function ToText(st: TServiceState): PShortString; overload;
@@ -4385,7 +4389,8 @@ function ServiceSingleRun: boolean;
 function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 
 /// return the ProcessID of a given service, by name
-function GetServicePid(const aServiceName: string): cardinal;
+function GetServicePid(const aServiceName: string;
+  aServiceState: PServiceState = nil): cardinal;
 
 /// try to gently stop a given Windows console app from its ProcessID
 // - will send a Ctrl-C event (acquiring the process console)

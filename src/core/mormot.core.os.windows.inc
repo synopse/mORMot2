@@ -3795,14 +3795,18 @@ begin
   end;
 end;
 
-function GetServicePid(const aServiceName: string): cardinal;
+function GetServicePid(const aServiceName: string;
+  aServiceState: PServiceState): cardinal;
 var
+  ss: TServiceState;
+  st: TServiceStatus;
   ssp: TServiceStatusProcess;
   scm: THandle;
   svc: THandle;
   size: cardinal;
 begin
   result := 0;
+  ss := ssErrorRetrievingState;
   scm := OpenSCManager(nil, nil, SC_MANAGER_CONNECT);
   if scm <> 0 then
   try
@@ -3811,15 +3815,27 @@ begin
     try
       if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
           @ssp, SizeOf(TServiceStatusProcess), size) then
-        result := ssp.dwProcessId
+      begin
+        result := ssp.dwProcessId;
+        if aServiceState <> nil then
+        begin
+          FillCharFast(st, SizeOf(st), 0);
+          QueryServiceStatus(svc, st);
+          ss := CurrentStateToServiceState(st.dwCurrentState);
+        end;
+      end
       else
         TService.DoLog(sllLastError, 'GetServicePid(%)', [aServiceName], nil);
     finally
       CloseServiceHandle(svc);
-    end;
+    end
+    else
+      ss := ssNotInstalled;
   finally
     CloseServiceHandle(scm);
   end;
+  if aServiceState <> nil then
+    aServiceState^ := ss;
 end;
 
 {  function that a service process specifies as the entry point function

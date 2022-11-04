@@ -1735,6 +1735,11 @@ end;
 
 {$ifdef OSBSDDARWIN}
 
+function IsValidPid(pid: cardinal): boolean;
+begin
+  result := pid <> 0;
+end;
+
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 begin
   result := nil; // not implemented yet on BSD/Darwin
@@ -1918,13 +1923,26 @@ const
   DT_SOCK     = 12;
   DT_WHT      = 14;
 
+function IsValidPid(pid: cardinal): boolean;
+var
+  status, tgid: RawUtf8;
+begin
+  result := false;
+  if pid = 0 then
+    exit;
+  status := StringFromFile('/proc/' + IntToStr(pid) + '/status', {nosize=}true);
+  // ensure is a real process, not a thread
+  // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+  FindNameValue(status, 'TGID:', tgid);
+  result := GetCardinal(pointer(tgid)) = pid;
+end;
+
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var
   d: pDir;
   e: pDirent;
   n: integer;
   pid: cardinal;
-  fn, status, tgid: RawUtf8;
 begin
   result := nil;
   d := FpOpendir('/proc'); // (much) faster alternative to FindFirst()
@@ -1941,19 +1959,16 @@ begin
        (e.d_name[0] in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
-      if pid = 0 then
-        continue;
-      fn := e.d_name;
-      status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
-      FindNameValue(status, 'TGID:', tgid);
-      if GetCardinal(pointer(tgid)) = pid then
-        // ensure is a real process, not a thread
-        // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+      if (pid <> 0) and
+         IsValidPid(pid) then
         AddInteger(TIntegerDynArray(result), n, pid);
     end;
   until false;
   FpClosedir(d^);
-  SetLength(result, n);
+  if n = 0 then
+    result := nil
+  else
+    DynArrayFakeLength(result, n);
 end;
 
 var
