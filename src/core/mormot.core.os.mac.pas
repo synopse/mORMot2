@@ -108,6 +108,7 @@ end;
 
 function _GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
 begin
+  // fallback method when there is no AppleSMBIOS available, e.g. on Mac M1
   case info of
     sbiUuid:
       begin

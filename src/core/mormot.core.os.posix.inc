@@ -1691,7 +1691,7 @@ begin
   result := true;
 end;
 
-procedure PosInjectSmbiosInfo(var info: TSmbiosBasicInfos);
+procedure PosixInjectSmbiosInfo(var info: TSmbiosBasicInfos);
 var
   i: TSmbiosBasicInfo;
 begin
@@ -1707,7 +1707,7 @@ var
 begin
   // complete information e.g. from mormot.core.os.mac
   if Assigned(PosixInject.GetSmbios) then
-    PosInjectSmbiosInfo(_Smbios);
+    PosixInjectSmbiosInfo(_Smbios);
   // check if require persistence after some HW changes
   if (PCardinal(@info)^ = SMB_FLAGS) or
      (CompressSynLZGetHash32(StringFromFile(SMB_CACHE)) = Hash32(info.Data)) then
@@ -2115,7 +2115,7 @@ begin
     info[sbiCpuVersion] := CpuInfoText;
   // e.g. from mormot.core.os.mac
   if Assigned(PosixInject.GetSmbios) then
-    PosInjectSmbiosInfo(info);
+    PosixInjectSmbiosInfo(info);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
@@ -2834,12 +2834,12 @@ begin
       if Assigned(onoutput) then
       begin
         FastSetString(u, @tmp, n); // assume console output is UTF-8 on POSIX
-        if onoutput(u) then
+        if onoutput(u, pid) then
           endtix := 1; // force kill() on abort
       end;
     end
     else if Assigned(onoutput) and // idle
-            onoutput('') then
+            onoutput('', pid) then
       endtix := 1; // returned true to abort -> kill()
     if (endtix <> 0) and
        (GetTickCount64 > endtix) then

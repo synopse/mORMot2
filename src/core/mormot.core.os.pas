@@ -4498,18 +4498,19 @@ type
   // - newly console output text is given as UTF-8 on all platforms
   // - should return true to stop the execution, or false to continue
   // - on idle state (each 200ms), is called with text='' to allow execution abort
-  TOnRedirect = function(const text: RawUtf8): boolean of object;
+  // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
+  TOnRedirect = function(const text: RawUtf8; pid: cardinal): boolean of object;
 
 /// like fpSystem, but cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
-// - waitfordelay/processid/onoutput are implemented on Windows only
+// - waitfordelayms/processhandle/redirected/onoutput exist on Windows only
 // - parsed is implemented on POSIX only
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
   {$ifdef OSWINDOWS}
-  waitfordelayms: cardinal = INFINITE; processid: PHandle = nil;
+  waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
   redirected: PRawUtf8 = nil; const onoutput: TOnRedirect = nil
   {$else}
   parsed: PParseCommands = nil

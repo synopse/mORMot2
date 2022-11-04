@@ -3910,7 +3910,7 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
-  envaddexisting: boolean; waitfordelayms: cardinal; processid: PHandle;
+  envaddexisting: boolean; waitfordelayms: cardinal; processhandle: PHandle;
   redirected: PRawUtf8; const onoutput: TOnRedirect): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
@@ -3996,8 +3996,8 @@ begin
       DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
-    if processid <> nil then
-      processid^ := processinfo.hProcess;
+    if processhandle <> nil then
+      processhandle^ := processinfo.hProcess;
     if rd <> 0 then
     begin
       // see https://stackoverflow.com/a/25725197/458259
@@ -4013,7 +4013,7 @@ begin
           if pending = 0 then
           begin
             if Assigned(onoutput) and
-               onoutput('') then
+               onoutput('', processinfo.dwProcessId) then
               exitcode := WAIT_OBJECT_0; // returned true to abort
             break;
           end;
@@ -4028,10 +4028,10 @@ begin
           if redirected <> nil then
             redirected^ := redirected^ + new;
           if Assigned(onoutput) then
-            if onoutput(new) then
-            begin
+            if onoutput(new, processinfo.dwProcessId) then
+            begin // onoutput() callback returned true to stop the execution
               exitcode := WAIT_OBJECT_0;
-              break; // returned true to stop the execution
+              break;
             end;
           dec(l, length(Utf8ToConsole(new)));
           if l <> 0 then // if OEM_CHARSET was truncated during UTF-8 conversion
@@ -4044,7 +4044,10 @@ begin
       if GetExitCodeProcess(processinfo.hProcess, exitcode) then
         result := exitcode       // waited for process to end -> return code
       else
+      begin // e.g. STILL_ACTIVE if aborted by onouput()=false above
         result := -GetLastError; // was not able to retrieve exit code
+        TerminateProcess(processinfo.hProcess, result); // = SIGKILL on POSIX
+      end;
     end
     else if waitfor then
       if WaitForSingleObject(processinfo.hProcess, waitfordelayms) = WAIT_FAILED then
