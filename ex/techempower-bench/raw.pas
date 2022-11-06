@@ -361,11 +361,15 @@ procedure TRawAsyncServer.getRandomWorlds(cnt: PtrInt; out res: TWorlds);
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
+  {$ifndef USE_SQLITE3}
+  pStmt: TSqlDBPostgresStatement;
+  {$endif}
   i: PtrInt;
 begin
   SetLength(res{%H-}, cnt);
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
+  {$ifdef USE_SQLITE3}
   for i := 0 to cnt - 1 do
   begin
     stmt.Bind(1, RandomWorld);
@@ -375,6 +379,25 @@ begin
     res[i].id := stmt.ColumnInt(0);
     res[i].randomNumber := stmt.ColumnInt(1);
   end;
+  {$else} // use PostgresSQL pipelining mode
+  TSqlDBPostgresConnection(conn).EnterPipelineMode;
+  pStmt := (stmt as TSqlDBPostgresStatement);
+  for i := 0 to cnt - 1 do
+  begin
+    stmt.Bind(1, RandomWorld);
+    pStmt.SendPipelinePrepared;
+  end;
+  TSqlDBPostgresConnection(conn).PipelineSync;
+  for i := 0 to cnt - 1 do
+  begin
+    pStmt.GetPipelineResult(i = 0);
+    if not stmt.Step then
+      exit;
+    res[i].id := stmt.ColumnInt(0);
+    res[i].randomNumber := stmt.ColumnInt(1);
+  end;
+  TSqlDBPostgresConnection(conn).ExitPipelineMode(true);
+  {$endif}
 end;
 
 function TRawAsyncServer.rawqueries(ctxt: THttpServerRequestAbstract): cardinal;
@@ -574,8 +597,8 @@ begin
     threads := SystemInfo.dwNumberOfProcessors * 4;
   if threads < 16 then
     threads := 16
-  else if threads > 64 then
-    threads := 64; // prevents too many PostgreSQL per connection forks
+  else if threads > 256 then
+    threads := 256; // max. threads for THttpAsyncServer
 
   rawServer := TRawAsyncServer.Create(threads);
   try
@@ -589,7 +612,7 @@ begin
     readln;
     {$else}
     writeln('Press Ctrl+C or use SIGTERM to terminate'#10);
-    readln; //FpPause;
+    FpPause;
     {$endif USE_SQLITE3}
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
     writeln(ObjectToJsonDebug(rawServer.fHttpServer, [woDontStoreVoid, woHumanReadable]));

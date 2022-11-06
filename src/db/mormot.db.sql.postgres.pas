@@ -117,6 +117,18 @@ type
     /// discard changes of a Transaction for this connection
     // - StartTransaction method must have been called before
     procedure Rollback; override;
+    /// Enter Pipelining mode
+    // *Warning* - connection is in blocking mode, see notes about possible deadlock
+    // here - https://www.postgresql.org/docs/current/libpq-pipeline-mode.html#LIBPQ-PIPELINE-USING
+    procedure EnterPipelineMode;
+    /// Exit Pipelining mode
+    // - if checkSync is false - exit pipeline without checking batch is complete
+    procedure ExitPipelineMode(checkSync: boolean=true);
+    /// Marks a synchronization point in a pipeline by sending a sync message
+    // and flushing the send buffer
+    procedure PipelineSync;
+    /// Return current pipeline status
+    function PipelineStatus: integer;
     /// direct access to the associated PPGconn connection
     property Direct: pointer
       read fPGConn;
@@ -137,9 +149,11 @@ type
     // 0 - text, 1 - binary; initialized by Prepare, filled in Executeprepared
     fPGParamFormats: TIntegerDynArray;
     // non zero for binary params
-    fPGparamLengths: TIntegerDynArray;
+    fPGParamLengths: TIntegerDynArray;
     /// define the result columns name and content
     procedure BindColumns;
+    /// set parameters as expected by PostgresSQL
+    procedure BindParams;
     /// raise an exception if Col is out of range according to fColumnCount
     // or rowset is not initialized
     procedure CheckColAndRowset(const Col: integer);
@@ -159,6 +173,13 @@ type
     // enabled in SynDBLog.Family.Level
     // - raise an ESqlDBPostgres on any error
     procedure ExecutePrepared; override;
+    /// For connection in pipelining mode - sends a request to execute a
+    // prepared statement with given parameters, without waiting for the result(s)
+    // - after all statements are sends, conn.PipelineSync should be called,
+    // when GetPipelineResult is able to read results in order they are sends
+    procedure SendPipelinePrepared;
+    /// Retrieve result for pipelined statement
+    procedure GetPipelineResult(isFirst: boolean = false);
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
     // - warning: input JSON should already be in the expected format (ftDate)
@@ -410,6 +431,48 @@ begin
   DirectExecSql('ROLLBACK');
 end;
 
+procedure TSqlDBPostgresConnection.EnterPipelineMode;
+begin
+  if PQ.enterPipelineMode(fPGConn) <> 1 then
+    raise ESqlDBPostgres.CreateUtf8('Enter pipeline mode % failed [%]',
+      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+end;
+
+procedure TSqlDBPostgresConnection.ExitPipelineMode(checkSync: boolean);
+var
+  res: pointer;
+begin
+  if checkSync then
+  begin
+    res := PQ.getResult(fPGConn);
+    if (res <> nil) then // NULL represent end of the previous result set
+      raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: expect end of the last statement',
+        [self]);
+    res := PQ.getResult(fPGConn);
+    if (res = nil) then
+      raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: returned nil when ' +
+        'result in PGRES_PIPELINE_SYNC status is expected %', [self, PQ.ErrorMessage(fPGConn)]);
+    if (PQ.ResultStatus(res) <> PGRES_PIPELINE_SYNC) then
+     raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: unexpected result code %',
+       [self, PQ.ResultStatus(res)]);
+  end;
+  if PQ.exitPipelineMode(fPGConn) <> 1 then
+    raise ESqlDBPostgres.CreateUtf8('Exit pipeline mode % failed [%]',
+      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+end;
+
+procedure TSqlDBPostgresConnection.PipelineSync;
+begin
+  if PQ.pipelineSync(fPGConn) <> 1 then
+    raise ESqlDBPostgres.CreateUtf8('Pipeline sync % failed [%]',
+      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+end;
+
+function TSqlDBPostgresConnection.PipelineStatus: integer;
+begin
+  Result := PQ.pipelineStatus(fPGConn);
+end;
+
 function TSqlDBPostgresConnection.PreparedCount: integer;
 begin
   if (self = nil) or
@@ -543,6 +606,66 @@ begin
   end;
 end;
 
+var
+  _BindArrayJson: TRawUtf8DynArray; // fake variable as VArray marker
+
+procedure TSqlDBPostgresStatement.BindParams;
+var
+  i: PtrInt;
+  p: PSqlDBParam;
+begin
+  for i := 0 to fParamCount - 1 do // set parameters as expected by PostgreSQL
+  begin
+    // mark parameter as textual by default, with no blob len
+    fPGParamFormats[i] := 0;
+    fPGParamLengths[i] := 0;
+    // convert parameter value as text stored in p^.VData
+    p := @fParams[i];
+    if p^.VArray <> nil then
+    begin
+      if not (p^.VType in [
+           ftInt64,
+           ftDouble,
+           ftCurrency,
+           ftDate,
+           ftUtf8]) then
+        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
+          'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
+      if p^.VArray[0] <> _BindArrayJson[0] then // p^.VData set by BindArrayJson
+        p^.VData := BoundArrayToJsonArray(p^.VArray); // e.g. '{1,2,3}'
+    end
+    else
+    begin
+      case p^.VType of
+        ftNull:
+          p^.VData := '';
+        ftInt64:
+          // use SwapEndian + binary ?
+          Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
+        ftCurrency:
+          Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
+        ftDouble:
+          DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
+        ftDate:
+          // Postgres expects space instead of T in ISO-8601 expanded format
+          p^.VData := DateTimeToIso8601(
+            PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
+        ftUtf8:
+          ; // text already in p^.VData
+        ftBlob:
+          begin
+            fPGParamFormats[i] := 1; // binary
+            fPGParamLengths[i] := length(p^.VData);
+          end;
+      else
+        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: cannot bind ' +
+          'parameter #% of type %', [self, i, ToText(p^.VType)^]);
+      end;
+    end;
+    fPGParams[i] := pointer(p^.VData);
+  end;
+end;
+
 procedure TSqlDBPostgresStatement.CheckColAndRowset(const Col: integer);
 begin
   CheckCol(Col);
@@ -584,16 +707,11 @@ begin
     SqlLogEnd;
   SetLength(fPGParams, fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
-  SetLength(fPGparamLengths, fPreparedParamsCount);
+  SetLength(fPGParamLengths, fPreparedParamsCount);
 end;
-
-var
-  _BindArrayJson: TRawUtf8DynArray; // fake variable as VArray marker
 
 procedure TSqlDBPostgresStatement.ExecutePrepared;
 var
-  i: PtrInt;
-  p: PSqlDBParam;
   c: TSqlDBPostgresConnection;
 begin
   SqlLogBegin(sllSQL);
@@ -609,67 +727,18 @@ begin
     raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % ' +
       'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
   inherited ExecutePrepared;
-  for i := 0 to fParamCount - 1 do // set parameters as expected by PostgreSQL
-  begin
-    // mark parameter as textual by default, with no blob len
-    fPGParamFormats[i] := 0;
-    fPGparamLengths[i] := 0;
-    // convert parameter value as text stored in p^.VData
-    p := @fParams[i];
-    if p^.VArray <> nil then
-    begin
-      if not (p^.VType in [
-           ftInt64,
-           ftDouble,
-           ftCurrency,
-           ftDate,
-           ftUtf8]) then
-        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
-          'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
-      if p^.VArray[0] <> _BindArrayJson[0] then // p^.VData set by BindArrayJson
-        p^.VData := BoundArrayToJsonArray(p^.VArray); // e.g. '{1,2,3}'
-    end
-    else
-    begin
-      case p^.VType of
-        ftNull:
-          p^.VData := '';
-        ftInt64:
-          // use SwapEndian + binary ?
-          Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
-        ftCurrency:
-          Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
-        ftDouble:
-          DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
-        ftDate:
-          // Postgres expects space instead of T in ISO-8601 expanded format
-          p^.VData := DateTimeToIso8601(
-            PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
-        ftUtf8:
-          ; // text already in p^.VData
-        ftBlob:
-          begin
-            fPGParamFormats[i] := 1; // binary
-            fPGparamLengths[i] := length(p^.VData);
-          end;
-      else
-        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: cannot bind ' +
-          'parameter #% of type %', [self, i, ToText(p^.VType)^]);
-      end;
-    end;
-    fPGParams[i] := pointer(p^.VData);
-  end;
+  BindParams;
   c := TSqlDBPostgresConnection(Connection);
   if fPreparedStmtName <> '' then
     fRes := PQ.ExecPrepared(c.fPGConn, pointer(fPreparedStmtName),
-      fPreparedParamsCount, pointer(fPGParams), pointer(fPGparamLengths),
+      fPreparedParamsCount, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT)
   else if fPreparedParamsCount = 0 then
     // PQexec handles multiple SQL commands
     fRes := PQ.Exec(c.fPGConn, pointer(fSqlPrepared))
   else
     fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared),
-      fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGparamLengths),
+      fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
   PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
   fResStatus := PQ.ResultStatus(fRes);
@@ -681,6 +750,74 @@ begin
       PQ.Clear(fRes);
       fRes := nil;
       raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: result expected ' +
+        'but statement did not return tuples', [self]);
+    end;
+    fTotalRowsRetrieved := PQ.ntuples(fRes);
+    fCurrentRow := -1;
+    if fColumn.Count = 0 then // if columns exist then statement is already cached
+      BindColumns;
+    SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
+  end
+  else
+    SqlLogEnd(' c=%', [fPreparedStmtName]);
+end;
+
+procedure TSqlDBPostgresStatement.SendPipelinePrepared;
+var
+  c: TSqlDBPostgresConnection;
+  res: integer;
+begin
+  SqlLogBegin(sllSQL);
+  if fSqlPrepared = '' then
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.ExecutePrepared: Statement not prepared', [self]);
+  if fParamCount <> fPreparedParamsCount then
+    raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % ' +
+      'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
+  inherited ExecutePrepared;
+  BindParams;
+  c := TSqlDBPostgresConnection(Connection);
+  if fPreparedStmtName <> '' then
+    res := PQ.sendQueryPrepared(c.fPGConn, pointer(fPreparedStmtName),
+      fPreparedParamsCount, pointer(fPGParams), pointer(fPGParamLengths),
+      pointer(fPGParamFormats), PGFMT_TEXT)
+  else
+    res := PQ.sendQueryParams(c.fPGConn, pointer(fSqlPrepared),
+      fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
+      pointer(fPGParamFormats), PGFMT_TEXT);
+  if res <> 1 then
+    raise ESqlDBPostgres.CreateUtf8('%.SendPrepared: %', [self, PQ.ErrorMessage(c.fPGConn)]);
+  SqlLogEnd(' c=%', [fPreparedStmtName]);
+end;
+
+procedure TSqlDBPostgresStatement.GetPipelineResult(isFirst: boolean);
+var
+  c: TSqlDBPostgresConnection;
+begin
+  SqlLogBegin(sllSQL);
+  c := TSqlDBPostgresConnection(Connection);
+  if (not isFirst) then
+  begin
+    fRes := PQ.getResult(c.fPGConn);
+    if (fRes <> nil) then // NULL represent end of the previous result set
+      raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: returned something extra',
+        [self]);
+  end;
+  if fRes <> nil then
+  begin
+    PQ.Clear(fRes); // if forgot to call ReleaseRows
+    fRes := nil;
+  end;
+  fRes := PQ.getResult(c.fPGConn);
+  PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
+  fResStatus := PQ.ResultStatus(fRes);
+  if fExpectResults then
+  begin
+    if fResStatus <> PGRES_TUPLES_OK then
+    begin
+      PQ.Clear(fRes);
+      fRes := nil;
+      raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: result expected ' +
         'but statement did not return tuples', [self]);
     end;
     fTotalRowsRetrieved := PQ.ntuples(fRes);
