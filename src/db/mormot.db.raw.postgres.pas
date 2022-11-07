@@ -118,6 +118,10 @@ const
   PGRES_BAD_RESPONSE = 5;
   PGRES_NONFATAL_ERROR = 6;
   PGRES_FATAL_ERROR = 7;
+  PGRES_COPY_BOTH = 8; // Copy In/Out data transfer in progress
+  PGRES_SINGLE_TUPLE = 9; // single tuple from larger resultset
+  PGRES_PIPELINE_SYNC = 10; // pipeline synchronization point
+  PGRES_PIPELINE_ABORTED= 11; // Command didn't run because of an abort
 
   CONNECTION_OK = 0;
   CONNECTION_BAD = 1;
@@ -171,7 +175,7 @@ type
       resultFormat: integer): PPGresult; cdecl;
     ExecParams: function(conn: PPGconn; command: PUtf8Char; nParams: integer;
       paramTypes: PCardinal; paramValues: PPchar; paramLengths, paramFormats: PInteger;
-      resultFormat: integer):PPGresult; cdecl;
+      resultFormat: integer): PPGresult; cdecl;
     nfields: function(res: PPGresult): integer; cdecl;
     ntuples: function(res: PPGresult): integer; cdecl;
     cmdTuples: function(res: PPGresult): PUtf8Char; cdecl;
@@ -180,6 +184,23 @@ type
     GetValue: function(res: PPGresult; tup_num, field_num: integer): PUtf8Char; cdecl;
     GetLength: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
     GetIsNull: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
+
+    enterPipelineMode: function(conn: PPGconn): integer; cdecl;
+    exitPipelineMode: function(conn: PPGconn): integer; cdecl;
+    pipelineSync: function(conn: PPGconn): integer; cdecl;
+    sendFlushRequest: function(conn: PPGconn): integer; cdecl;
+    pipelineStatus: function(const conn: PPGconn): integer; cdecl;
+    flush: function(conn: PPGconn): integer; cdecl;
+
+    sendQueryParams: function(conn: PPGconn; command: PUtf8Char; nParams: integer;
+      paramTypes: PCardinal; paramValues: PPchar; paramLengths, paramFormats: PInteger;
+      resultFormat: integer): integer; cdecl;
+    sendPrepare: function(conn: PPGconn; stmtName, query: PUtf8Char; nParams: integer;
+      paramTypes: PCardinal): PPGresult; cdecl;
+    sendQueryPrepared: function(conn: PPGconn; stmtName: PUtf8Char; nParams: integer;
+      paramValues: PPchar; paramLengths, paramFormats: PInteger;
+      resultFormat: integer): integer; cdecl;
+    getResult: function(conn: PPGconn): PPGresult; cdecl;
   public
     /// try to dynamically load the libpq library
     // - raise ESqlDBPostgres if the expected library is not found
@@ -214,7 +235,7 @@ implementation
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..22] of RawUtf8 = (
+  PQ_ENTRIES: array[0..32] of RawUtf8 = (
     'libVersion',
     'isthreadsafe',
     'setdbLogin',
@@ -237,7 +258,19 @@ const
     'ftype',
     'getvalue',
     'getlength',
-    'getisnull');
+    'getisnull',
+    // pipelining
+    'enterPipelineMode',
+    'exitPipelineMode',
+    'pipelineSync',
+    'sendFlushRequest',
+    'pipelineStatus',
+    'flush',
+    'sendQueryParams',
+    'sendPrepare',
+    'sendQueryPrepared',
+    'getResult'
+    );
 
 
 { TSqlDBPostgresLib }
