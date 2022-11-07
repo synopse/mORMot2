@@ -363,7 +363,7 @@ var
   stmt: ISQLDBStatement;
   {$ifndef USE_SQLITE3}
   pStmt: TSqlDBPostgresStatement;
-  {$endif}
+  {$endif USE_SQLITE3}
   i: PtrInt;
 begin
   SetLength(res{%H-}, cnt);
@@ -379,7 +379,8 @@ begin
     res[i].id := stmt.ColumnInt(0);
     res[i].randomNumber := stmt.ColumnInt(1);
   end;
-  {$else} // use PostgresSQL pipelining mode
+  {$else}
+  // specific code to use PostgresSQL pipelining mode
   TSqlDBPostgresConnection(conn).EnterPipelineMode;
   pStmt := (stmt as TSqlDBPostgresStatement);
   for i := 0 to cnt - 1 do
@@ -397,7 +398,7 @@ begin
     res[i].randomNumber := stmt.ColumnInt(1);
   end;
   TSqlDBPostgresConnection(conn).ExitPipelineMode(true);
-  {$endif}
+  {$endif USE_SQLITE3}
 end;
 
 function TRawAsyncServer.rawqueries(ctxt: THttpServerRequestAbstract): cardinal;
@@ -612,7 +613,7 @@ begin
     readln;
     {$else}
     writeln('Press Ctrl+C or use SIGTERM to terminate'#10);
-    FpPause;
+    FpPause; // mandatory for the actual benchmark tool
     {$endif USE_SQLITE3}
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
     writeln(ObjectToJsonDebug(rawServer.fHttpServer, [woDontStoreVoid, woHumanReadable]));

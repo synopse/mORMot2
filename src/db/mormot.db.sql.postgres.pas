@@ -118,12 +118,12 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// Enter Pipelining mode
-    // *Warning* - connection is in blocking mode, see notes about possible deadlock
-    // here - https://www.postgresql.org/docs/current/libpq-pipeline-mode.html#LIBPQ-PIPELINE-USING
+    // - *Warning* - connection is in blocking mode, see notes about possible deadlock
+    // https://www.postgresql.org/docs/current/libpq-pipeline-mode.html#LIBPQ-PIPELINE-USING
     procedure EnterPipelineMode;
     /// Exit Pipelining mode
     // - if checkSync is false - exit pipeline without checking batch is complete
-    procedure ExitPipelineMode(checkSync: boolean=true);
+    procedure ExitPipelineMode(checkSync: boolean = true);
     /// Marks a synchronization point in a pipeline by sending a sync message
     // and flushing the send buffer
     procedure PipelineSync;
@@ -173,12 +173,13 @@ type
     // enabled in SynDBLog.Family.Level
     // - raise an ESqlDBPostgres on any error
     procedure ExecutePrepared; override;
-    /// For connection in pipelining mode - sends a request to execute a
-    // prepared statement with given parameters, without waiting for the result(s)
-    // - after all statements are sends, conn.PipelineSync should be called,
-    // when GetPipelineResult is able to read results in order they are sends
+    /// For connection in pipelining mode
+    // - sends a request to execute a prepared statement with given parameters, 
+    // without waiting for the result(s)
+    // - after all statements are sent, conn.PipelineSync should be called,
+    // then GetPipelineResult is able to read results in order they were sent
     procedure SendPipelinePrepared;
-    /// Retrieve result for pipelined statement
+    /// Retrieve next result for pipelined statement
     procedure GetPipelineResult(isFirst: boolean = false);
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
@@ -441,23 +442,28 @@ end;
 procedure TSqlDBPostgresConnection.ExitPipelineMode(checkSync: boolean);
 var
   res: pointer;
+  err: integer;
 begin
   if checkSync then
   begin
     res := PQ.getResult(fPGConn);
-    if (res <> nil) then // NULL represent end of the previous result set
-      raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: expect end of the last statement',
-        [self]);
+    if (res <> nil) then 
+      // NULL represent end of the previous result set
+      raise ESqlDBPostgres.CreateUtf8(
+        '%.ExitPipelineMode: expect end of the last statement', [self]);
     res := PQ.getResult(fPGConn);
-    if (res = nil) then
-      raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: returned nil when ' +
-        'result in PGRES_PIPELINE_SYNC status is expected %', [self, PQ.ErrorMessage(fPGConn)]);
-    if (PQ.ResultStatus(res) <> PGRES_PIPELINE_SYNC) then
-     raise ESqlDBPostgres.CreateUtf8('%.ExitPipelineMode: unexpected result code %',
-       [self, PQ.ResultStatus(res)]);
+    if res = nil then
+      raise ESqlDBPostgres.CreateUtf8(
+        '%.ExitPipelineMode: returned nil when result in PGRES_PIPELINE_SYNC ' +
+        'status is expected %', [self, PQ.ErrorMessage(fPGConn)]);
+    err := PQ.ResultStatus(res);
+    if err <> PGRES_PIPELINE_SYNC then
+     raise ESqlDBPostgres.CreateUtf8(
+       '%.ExitPipelineMode: unexpected result code %', [self,err]);
   end;
   if PQ.exitPipelineMode(fPGConn) <> 1 then
-    raise ESqlDBPostgres.CreateUtf8('Exit pipeline mode % failed [%]',
+    raise ESqlDBPostgres.CreateUtf8(
+      'Exit pipeline mode % failed [%]',
       [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
 end;
 
@@ -490,9 +496,12 @@ begin
   // TODO - how to get field we reference to? (currently consider this is "ID")
   with Execute('SELECT ct.conname as foreign_key_name, ' +
       '  case when ct.condeferred then 1 else 0 end as is_disabled, ' +
-      '  (SELECT tc.relname from pg_class tc where tc.oid = ct.conrelid) || ''.'' || ' +
-      '     (SELECT a.attname FROM pg_attribute a WHERE a.attnum = ct.conkey[1] AND a.attrelid = ct.conrelid) as from_ref, ' +
-      '  (SELECT tc.relname from pg_class tc where tc.oid = ct.confrelid) || ''.id'' as referenced_object ' +
+        '(SELECT tc.relname from pg_class tc ' +
+          'where tc.oid = ct.conrelid) || ''.'' || ' +
+           '(SELECT a.attname FROM pg_attribute a WHERE a.attnum = ' +
+             'ct.conkey[1] AND a.attrelid = ct.conrelid) as from_ref, ' +
+        '(SELECT tc.relname from pg_class tc where tc.oid = ' +
+          'ct.confrelid) || ''.id'' as referenced_object ' +
       'FROM  pg_constraint ct WHERE contype = ''f''', []) do
     while Step do
       fForeignKeys.Add(ColumnUtf8(2), ColumnUtf8(3));
@@ -614,7 +623,8 @@ var
   i: PtrInt;
   p: PSqlDBParam;
 begin
-  for i := 0 to fParamCount - 1 do // set parameters as expected by PostgreSQL
+  // bind fParams[] as expected by PostgreSQL - potentially as array
+  for i := 0 to fParamCount - 1 do 
   begin
     // mark parameter as textual by default, with no blob len
     fPGParamFormats[i] := 0;
@@ -631,7 +641,8 @@ begin
            ftUtf8]) then
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
           'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
-      if p^.VArray[0] <> _BindArrayJson[0] then // p^.VData set by BindArrayJson
+      if p^.VArray[0] <> _BindArrayJson[0] then
+        // p^.VData was not already set by BindArrayJson() -> convert now
         p^.VData := BoundArrayToJsonArray(p^.VArray); // e.g. '{1,2,3}'
     end
     else
@@ -640,7 +651,6 @@ begin
         ftNull:
           p^.VData := '';
         ftInt64:
-          // use SwapEndian + binary ?
           Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
         ftCurrency:
           Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
@@ -651,7 +661,7 @@ begin
           p^.VData := DateTimeToIso8601(
             PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
         ftUtf8:
-          ; // text already in p^.VData
+          ; // UTF-8 text already in p^.VData buffer
         ftBlob:
           begin
             fPGParamFormats[i] := 1; // binary
@@ -786,7 +796,8 @@ begin
       fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
   if res <> 1 then
-    raise ESqlDBPostgres.CreateUtf8('%.SendPrepared: %', [self, PQ.ErrorMessage(c.fPGConn)]);
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.SendPrepared: %', [self, PQ.ErrorMessage(c.fPGConn)]);
   SqlLogEnd(' c=%', [fPreparedStmtName]);
 end;
 
@@ -796,12 +807,13 @@ var
 begin
   SqlLogBegin(sllSQL);
   c := TSqlDBPostgresConnection(Connection);
-  if (not isFirst) then
+  if not isFirst then
   begin
     fRes := PQ.getResult(c.fPGConn);
-    if (fRes <> nil) then // NULL represent end of the previous result set
-      raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: returned something extra',
-        [self]);
+    if (fRes <> nil) then
+      // NULL represent end of the previous result set
+      raise ESqlDBPostgres.CreateUtf8(
+        '%.GetPipelineResult: returned something extra', [self]);
   end;
   if fRes <> nil then
   begin

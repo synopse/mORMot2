@@ -184,14 +184,12 @@ type
     GetValue: function(res: PPGresult; tup_num, field_num: integer): PUtf8Char; cdecl;
     GetLength: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
     GetIsNull: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
-
     enterPipelineMode: function(conn: PPGconn): integer; cdecl;
     exitPipelineMode: function(conn: PPGconn): integer; cdecl;
     pipelineSync: function(conn: PPGconn): integer; cdecl;
     sendFlushRequest: function(conn: PPGconn): integer; cdecl;
     pipelineStatus: function(const conn: PPGconn): integer; cdecl;
     flush: function(conn: PPGconn): integer; cdecl;
-
     sendQueryParams: function(conn: PPGconn; command: PUtf8Char; nParams: integer;
       paramTypes: PCardinal; paramValues: PPchar; paramLengths, paramFormats: PInteger;
       resultFormat: integer): integer; cdecl;
@@ -259,7 +257,6 @@ const
     'getvalue',
     'getlength',
     'getisnull',
-    // pipelining
     'enterPipelineMode',
     'exitPipelineMode',
     'pipelineSync',
