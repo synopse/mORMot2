@@ -1888,10 +1888,11 @@ begin
   Safe.Lock;
   try
     inc(CurrentID);
+    result := CurrentID;
     i := CurrentIndex + 1;
     if i = length(Seq) then
       i := 0;
-    Seq[i] := CurrentID;
+    Seq[i] := result;
     Msg[i] := text;
   finally
     Safe.UnLock;
