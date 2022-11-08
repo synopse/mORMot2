@@ -1871,11 +1871,10 @@ procedure TLastError.Init(Capacity: integer);
 begin
   Safe.Lock;
   try
-    if length(Seq) <> Capacity then
-    begin
-      SetLength(Seq, Capacity);
-      SetLength(Msg, Capacity);
-    end;
+    Seq := nil;
+    Msg := nil;
+    SetLength(Seq, Capacity);
+    SetLength(Msg, Capacity);
   finally
     Safe.UnLock;
   end;
@@ -1887,7 +1886,9 @@ var
 begin
   Safe.Lock;
   try
-    inc(CurrentID);
+    repeat
+      inc(CurrentID);
+    until CurrentID <> 0; // paranoid check after 2^32 messages :)
     result := CurrentID;
     i := CurrentIndex + 1;
     if i = length(Seq) then
@@ -1903,21 +1904,20 @@ function TLastError.GetMsg(id: TLastErrorID): RawUtf8;
 var
   i: PtrInt;
 begin
-  if id <> 0 then
-  begin
-    Safe.Lock;
-    try
-      i := IntegerScanIndex(pointer(Seq), length(Seq), id);
-      if i >= 0 then
-      begin
-        result := Msg[i];
-        exit;
-      end;
-    finally
-      Safe.UnLock;
-    end;
-  end;
   result := '';
+  if id = 0 then
+    exit;
+  Safe.Lock;
+  try
+    i := IntegerScanIndex(pointer(Seq), length(Seq), id);
+    if i >= 0 then
+    begin
+      result := Msg[i];
+      exit;
+    end;
+  finally
+    Safe.UnLock;
+  end;
 end;
 
 var
@@ -1932,7 +1932,7 @@ var
 begin
   err := @LastDbError;
   if err^.Seq = nil then
-    err^.Init(64);
+    err^.Init(128);
   LastDbErrorID := err^.NewMsg(text);
 end;
 
