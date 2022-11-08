@@ -350,6 +350,44 @@ var
 
 function ToText(op: TSqlCompareOperator): PShortString; overload;
 
+type
+  /// thread-safe sequence used to internally store TLastError message
+  TLastErrorID = integer;
+
+  /// allow to manage an Error messages list from IDs
+  // - used e.g. with a TLastErrorID threadvar for SetDbError/GetDbError
+  // since we can't create any string/RawUtf8 threadvar
+  {$ifdef USERECORDWITHMETHODS}
+  TLastError = record
+  {$else}
+  TLastError = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// make the internal storage thread-safe
+    Safe: TLightLock;
+    /// the latest thread safe generated ID
+    CurrentID: TLastErrorID;
+    /// the current index in Seq[] and Msg[] arrays
+    CurrentIndex: integer;
+    /// store the TLastErrorID values
+    Seq: TIntegerDynArray;
+    /// store the UTF-8 Message values
+    Msg: TRawUtf8DynArray;
+    /// initialize the Error messages list
+    procedure Init(Capacity: integer);
+    /// append a new UTF-8 message to the internal list, returning its ID
+    function NewMsg(const text: RawUtf8): TLastErrorID;
+    /// get the UTF-8 message associated to a given ID
+    function GetMsg(id: TLastErrorID): RawUtf8;
+  end;
+
+/// set an error message for the current thread
+// - using an internal TLastError store and an associated threadvar
+procedure SetDbError(const text: RawUtf8);
+
+/// get the error message assigned by SetDbError() for the current thread
+function GetDbError: RawUtf8;
+
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
@@ -1824,6 +1862,87 @@ end;
 function ToText(op: TSqlCompareOperator): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSqlCompareOperator), ord(op));
+end;
+
+
+{ TLastError }
+
+procedure TLastError.Init(Capacity: integer);
+begin
+  Safe.Lock;
+  try
+    if length(Seq) <> Capacity then
+    begin
+      SetLength(Seq, Capacity);
+      SetLength(Msg, Capacity);
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TLastError.NewMsg(const text: RawUtf8): TLastErrorID;
+var
+  i: PtrInt;
+begin
+  Safe.Lock;
+  try
+    inc(CurrentID);
+    i := CurrentIndex + 1;
+    if i = length(Seq) then
+      i := 0;
+    Seq[i] := CurrentID;
+    Msg[i] := text;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TLastError.GetMsg(id: TLastErrorID): RawUtf8;
+var
+  i: PtrInt;
+begin
+  if id <> 0 then
+  begin
+    Safe.Lock;
+    try
+      i := IntegerScanIndex(pointer(Seq), length(Seq), id);
+      if i >= 0 then
+      begin
+        result := Msg[i];
+        exit;
+      end;
+    finally
+      Safe.UnLock;
+    end;
+  end;
+  result := '';
+end;
+
+var
+  LastDbError: TLastError;
+
+threadvar
+  LastDbErrorID: TLastErrorID;
+
+procedure SetDbError(const text: RawUtf8);
+var
+  err: ^TLastError;
+begin
+  err := @LastDbError;
+  if err^.Seq = nil then
+    err^.Init(64);
+  LastDbErrorID := err^.NewMsg(text);
+end;
+
+function GetDbError: RawUtf8;
+var
+  id: TLastErrorID;
+begin
+  id := LastDbErrorID;
+  result := LastDbError.GetMsg(id);
+  if result = '' then
+    FormatUtf8('DB Error %', [id], result);
 end;
 
 
