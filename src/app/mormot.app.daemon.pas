@@ -207,14 +207,14 @@ type
 { ************ TSynAngelize App-As-Service Launcher }
 
 type
-  /// define how TSynAngelize should stop the process
+  /// define how TSynAngelize should stop the process, and its order
   // - sdlsExecutableStop will run the ExecutableStop command line (if any)
   // - on Windows, sdlsControlC will send a Ctrl+C event to the executable console
   // - on Windows, sdlsWmQuit will send a WM_QUIT message to the executable threads
   // - on Windows, sdlsTerminate will call the TerminateProcess() API
   // - on POSIX, sdlsSigTerm will send a SIGTERM signal for graceful termination
   // - on POSIX, sdlsSigKill will send a SIGKILL signal for immediate killing
-  TSynAngelizeStopper = set of (
+  TSynAngelizeStopper = (
     sdlsExecutableStop,
     {$ifdef OSWINDOWS}
     sdlsControlC,
@@ -225,6 +225,8 @@ type
     sdlsSigKill
     {$endif OSWINDOWS}
     );
+  /// define methods for TSynAngelize to stop the process
+  TSynAngelizeStoppers = set of TSynAngelizeStopper;
 
   /// one daemon/service definition as recognized by TSynAngelize
   // - any %abc% place-holders will be replaced via TSynAngelize.ExpandPath
@@ -232,7 +234,7 @@ type
   protected
     fExecutable, fExecutableStop: TFileName;
     fAutoStart: boolean;
-    fStopper: TSynAngelizeStopper;
+    fStopper: TSynAngelizeStoppers;
     fStopDelaySec: integer;
   public
     /// initialize and set the default settings
@@ -261,7 +263,7 @@ type
     {$endif OSWINDOWS}
     /// define the methods used, in order, to stop the process
     // - default is all methods
-    property Stopper: TSynAngelizeStopper
+    property Stopper: TSynAngelizeStoppers
       read fStopper write fStopper;
     /// how many seconds should we wait between each Stopper method step
     // - default is 2 seconds
@@ -273,7 +275,7 @@ type
 
   /// can run a set of executables as daemon/service from a .service definition
   // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
-  TSynAngelize = class
+  TSynAngelize = class(TSynPersistent)
   protected
     fSettingsClass: TSynAngelizeSettingsClass;
     fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
@@ -750,7 +752,7 @@ end;
 constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
-  fStopper := [low(fStopper) .. high(fStopper)];
+  fStopper := [low(TSynAngelizeStopper) .. high(TSynAngelizeStopper)];
   fStopDelaySec := 2;
 end;
 
