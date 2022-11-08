@@ -2773,7 +2773,7 @@ begin
   len := length(Stuff);
   SetLength(value, len + 8);
   PCardinalArray(value)[0] := Marker;
-  BinToHex(@len, @PCardinalArray(value)[1], 2);
+  mormot.core.text.BinToHex(@len, @PCardinalArray(value)[1], 2);
   MoveFast(pointer(Stuff)^, PCardinalArray(value)[2], len);
   x.SetExtension(NID_netscape_comment, value); // free-form text comment
   x.Sign(key, EVP_sha1); // self-signed

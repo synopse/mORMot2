@@ -88,11 +88,11 @@ type
     /// convert a floating-point value into text
     function ToTextFunc(Value: double): string;
     /// swap two by-reference floating-point values
-    // - would validate pointer use instead of XMM1/XMM2 registers under Win64
+    // - would validate pointer use instead of XMM1/XMM2 registers on x86-64
     procedure Swap(var n1, n2: double);
-    // test unaligned stack access
+    /// test unaligned stack access
     function StackIntMultiply(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10: integer): Int64;
-    // test float stack access
+    /// test float stack access
     function StackFloatMultiply(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10: double): Int64;
     /// do some work with strings, sets and enumerates parameters,
     // testing also var (in/out) parameters and set as a function result

@@ -1183,6 +1183,7 @@ begin
       if res = asValid then
       begin
         // validate and pre-load this new certificate
+        ctx := nil; // make Delphi compiler happy
         c.Safe.Lock; // as expected by c.GetServerContext
         try
           ctx := c.fCtx;
