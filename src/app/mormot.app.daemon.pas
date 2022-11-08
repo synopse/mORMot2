@@ -273,7 +273,7 @@ type
 
   TSynAngelizeSettingsClass = class of TSynAngelizeSettings;
 
-  /// can run a set of executables as daemon/service from a .service definition
+  /// can run a set of executables as daemon/service from *.service definitions
   // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
   TSynAngelize = class(TSynPersistent)
   protected

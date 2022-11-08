@@ -3935,7 +3935,7 @@ function Thread32Next(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
   stdcall; external kernel32;
 function PostThreadMessage(idThread: DWORD; Msg: UINT; wParam: WPARAM;
     lParam: LPARAM): BOOL;
-  stdcall; external user32;
+  stdcall; external user32 name 'PostThreadMessageW';
 
 function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
 begin
