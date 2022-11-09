@@ -378,15 +378,22 @@ type
     /// append a new UTF-8 message to the internal list, returning its ID
     function NewMsg(const text: RawUtf8): TLastErrorID;
     /// get the UTF-8 message associated to a given ID
-    function GetMsg(id: TLastErrorID): RawUtf8;
+    function GetMsg(id: TLastErrorID; out text: RawUtf8): boolean;
   end;
 
 /// set an error message for the current thread
-// - using an internal TLastError store and an associated threadvar
+// - using an internal TLastError store and an associated TLastErrorID threadvar
+// since we can't create any string/RawUtf8 threadvar
 procedure SetDbError(const text: RawUtf8);
+
+/// unset the error message for the current thread
+procedure ClearDbError;
 
 /// get the error message assigned by SetDbError() for the current thread
 function GetDbError: RawUtf8;
+
+/// quickly check if there is an error message for the current thread
+function HasDbError: boolean;
 
 
 // backward compatibility types redirections
@@ -1884,36 +1891,38 @@ function TLastError.NewMsg(const text: RawUtf8): TLastErrorID;
 var
   i: PtrInt;
 begin
+  result := 0; // makes Delphi compiler happy
   Safe.Lock;
   try
-    repeat
-      inc(CurrentID);
-    until CurrentID <> 0; // paranoid check after 2^32 messages :)
-    result := CurrentID;
+    inc(CurrentID);
+    if CurrentID < 0 then
+      CurrentID := 1; // paranoid check after 2^31 messages :)
     i := CurrentIndex + 1;
     if i = length(Seq) then
       i := 0;
     Seq[i] := result;
     Msg[i] := text;
+    CurrentIndex := i;
+    result := CurrentID;
   finally
     Safe.UnLock;
   end;
 end;
 
-function TLastError.GetMsg(id: TLastErrorID): RawUtf8;
+function TLastError.GetMsg(id: TLastErrorID; out text: RawUtf8): boolean;
 var
   i: PtrInt;
 begin
-  result := '';
+  result := false;
   if id = 0 then
     exit;
   Safe.Lock;
   try
-    i := IntegerScanIndex(pointer(Seq), length(Seq), id);
+    i := IntegerScanIndex(pointer(Seq), length(Seq), id); // may use SSE2
     if i >= 0 then
     begin
-      result := Msg[i];
-      exit;
+      text := Msg[i];
+      result := true;
     end;
   finally
     Safe.UnLock;
@@ -1936,14 +1945,25 @@ begin
   LastDbErrorID := err^.NewMsg(text);
 end;
 
+procedure ClearDbError;
+begin
+  LastDbErrorID := 0; // reset
+end;
+
 function GetDbError: RawUtf8;
 var
   id: TLastErrorID;
 begin
   id := LastDbErrorID;
-  result := LastDbError.GetMsg(id);
-  if result = '' then
-    FormatUtf8('DB Error %', [id], result);
+  if id = 0 then
+    result := '' // no error
+  else if not LastDbError.GetMsg(id, result) then
+    FormatUtf8('Outdated DB Error %', [id], result);
+end;
+
+function HasDbError: boolean;
+begin
+  result := LastDbErrorID <> 0;
 end;
 
 
