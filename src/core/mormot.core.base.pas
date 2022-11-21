@@ -2738,6 +2738,8 @@ function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
 /// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 
+/// check if a supplied "array of const" argument is an instance of a given class
+function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
 
 type
   /// 32-bit Pierre L'Ecuyer software (random) generator
@@ -8193,6 +8195,16 @@ begin
       dec(Len);
     until Len = 0;
   result := true;
+end;
+
+function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
+begin
+  if (aArg.VType = vtObject) and
+     (aArg.VObject <> nil) and
+     aArg.VObject.InheritsFrom(aClass) then
+    result := aArg.VObject
+  else
+    result := nil;
 end;
 
 procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt);
