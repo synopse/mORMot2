@@ -76,7 +76,8 @@ const
 
 type
   /// generic parent class of all custom Exception types of this unit
-  EOrmException = class(ESynException);
+  // - will also call SetDbError() with the resulting UTF-8 message text
+  EOrmException = class(ECoreDBException);
 
   /// used to store bit set for all available Tables in a Database Model
   // - with default MAX_TABLES=256, consumes 32 bytes
@@ -7240,7 +7241,7 @@ end;
 function TOrmPropInfoList.GetItem(aIndex: PtrInt): TOrmPropInfo;
 begin
   if PtrUInt(aIndex) >= PtrUInt(fCount) then
-    raise EOrmException.Create('Invalid TOrmPropInfoList index');
+    raise EOrmException.CreateUtf8('Invalid TOrmPropInfoList index %', [aIndex]);
   result := fList[aIndex];
 end;
 

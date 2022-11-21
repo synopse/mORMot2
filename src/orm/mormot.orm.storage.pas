@@ -1464,7 +1464,8 @@ type
     fCache: TSynDictionary; // TRestStorageMultiDatabaseID/IRestOrmServer
     fSettings: TRestStorageMultiSettings;
     fModelClasses: TOrmClassDynArray;
-    function GetShutdown: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetShutdown: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetCached: RawJson;
     procedure SetShutdown(Value: boolean); virtual;
     function IDText(aID: TRestStorageMultiDatabaseID): TShort16;
@@ -1487,6 +1488,7 @@ type
     procedure OnServerInfo(Ctxt: TRestUriContext; var Info: TDocVariantData);
     /// check if the supplied database ID matches DatabaseIDBits definition
     function IsDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// raise ERestStorageMulti if the supplied database ID is out of range
     procedure EnsureDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID;
       const aCaller: shortstring);
@@ -4865,7 +4867,7 @@ var
   i, n: PtrInt;
 begin
   if aShardRange < MIN_SHARD then
-    raise ERestStorage.CreateUtf8('%.Create(%,aShardRange=%<%) does not make sense',
+    raise ERestStorage.CreateUtf8('Unexpected %.Create(%,aShardRange=%<%)',
       [self, aClass, aShardRange, MIN_SHARD]);
   inherited Create(aClass, aServer);
   fShardRange := aShardRange;
@@ -5298,7 +5300,7 @@ begin
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ShardBatchStart' {$endif});
   try
     if fShardBatch <> nil then
-      raise ERestStorage.CreateUtf8('%.InternalBatchStop should have been called', [self]);
+      raise ERestStorage.CreateUtf8('Missing %.InternalBatchStop call', [self]);
     if fShardLast < 0 then
       // new DB -> force fShardBatch<>nil
       SetLength(fShardBatch, 1)
@@ -5315,11 +5317,10 @@ end;
 function TRestStorageShard.InternalShardBatch(ShardIndex: integer): TRestBatch;
 begin
   if cardinal(ShardIndex) > cardinal(fShardLast) then
-    raise ERestStorage.CreateUtf8('%.InternalShardBatch(%)',
+    raise ERestStorage.CreateUtf8('Unexpected %.InternalShardBatch(%)',
       [self, ShardIndex]);
   if fShardBatch = nil then
-    raise ERestStorage.CreateUtf8('%.InternalBatchStart should have been called',
-      [self]);
+    raise ERestStorage.CreateUtf8('Missing %.InternalBatchStart call', [self]);
   if ShardIndex >= length(fShardBatch) then
     // InitNewShard just called
     SetLength(fShardBatch, ShardIndex + 1);

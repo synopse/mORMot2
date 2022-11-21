@@ -9037,7 +9037,7 @@ label
 begin
   inherited Create;
   if aTable = nil then
-    raise EModelException.Create('TOrmProperties.Create(nil)');
+    raise EModelException.CreateU('TOrmProperties.Create(nil)');
   // register for JsonToObject() and for TOrmPropInfoRttiTID.Create()
   // (should have been done before in TOrmModel.Create/AddTable)
   fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
@@ -9353,7 +9353,7 @@ var
 begin
   if (cardinal(aIndex) > cardinal(fTablesMax)) or
      (fTableProps[aIndex] <> nil) then
-    raise EModelException.Create('TOrmModel.SetTableProps');
+    raise EModelException.CreateU('TOrmModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TOrmFts5) then
     Kind := ovkFTS5
@@ -9727,7 +9727,7 @@ end;
 function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
 begin
   if self = nil then
-    raise EModelException.Create('nil.GetTableIndexExisting');
+    raise EModelException.CreateU('nil.GetTableIndexExisting');
   result := GetTableIndex(aTable);
   if result < 0 then
     raise EModelException.CreateUtf8('% is not part of % root=%',
@@ -9831,7 +9831,8 @@ var
   aProps: array[0..31] of TOrmModelProperties;
 begin
   if self = nil then
-    raise EOrmException.Create('Model required');
+    raise EOrmException.CreateUtf8(
+      'SqlFromSelectWhere(%): no Model', [SqlSelect]);
   if high(Tables) = 0 then
   begin
     // fastest common call with one TOrmClass
@@ -9840,8 +9841,9 @@ begin
   end;
   // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
   if cardinal(high(Tables)) > high(aProps) then
-    raise EModelException.CreateUtf8('%.SqlFromSelectWhere() up to % Tables[]',
-      [self, Length(aProps)]);
+    raise EModelException.CreateUtf8(
+      '%.SqlFromSelectWhere(%) up to % Tables[]',
+      [self, SqlSelect, Length(aProps)]);
   for i := 0 to high(Tables) do
     aProps[i] := Props[Tables[i]]; // raise EModelException if not found
   if SqlSelect = '*' then

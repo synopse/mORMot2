@@ -704,7 +704,9 @@ begin
         costPrimaryIndex:
           pInfo.estimatedRows := 1;
       else
-        raise EOrmException.Create('vt_BestIndex: unexpected EstimatedCost');
+        raise EOrmException.CreateUtf8(
+          'vt_BestIndex: unexpected EstimatedCost=%',
+          [ord(prepared^.EstimatedCost)]);
       end;
     pInfo.idxStr := pointer(prepared);
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
@@ -2368,7 +2370,8 @@ var
 begin
   info.Json := GotoNextNotSpace(P);
   if info.Json^ <> '[' then
-    raise EOrmBatchException.Create('Invalid simple batch');
+    raise EOrmBatchException.CreateUtf8(
+      'Invalid simple batch - start with % instead of [', [info.Json^]);
   inc(info.Json);
   if id <> nil then
     id^ := GetNextItemInt64(info.Json);
