@@ -5494,20 +5494,23 @@ begin
               SetLength(VValue, cap);
               Val := @VValue[n];
             end;
-            if intnames <> nil then
-              intnames.Unique(VName[n], Name, NameLen)
-            else
-              FastSetString(VName[n], Name, NameLen);
             JsonToAnyVariant(Val^, info, @VOptions);
             if info.Json = nil then
               if info.EndOfObject = '}' then // valid object end
                 info.Json := @NULCHAR
               else
                 break; // invalid input
-            if intvalues <> nil then
-              intvalues.UniqueVariant(Val^);
-            inc(n);
-            inc(Val);
+            if NameLen <> 0 then // we just ignore void field names
+            begin
+              if intnames <> nil then
+                intnames.Unique(VName[n], Name, NameLen)
+              else
+                FastSetString(VName[n], Name, NameLen);
+              if intvalues <> nil then
+                intvalues.UniqueVariant(Val^);
+              inc(n);
+              inc(Val);
+            end;
           until info.EndOfObject = '}';
           Json := info.Json;
           if (Name = nil) or
@@ -6172,6 +6175,7 @@ var
 begin
   result := false;
   if (VCount = 0) or
+     (aName = '') or
      not IsObject then
     exit;
   ndx := DocVariantFind[IsCaseSensitive](
