@@ -2379,7 +2379,7 @@ begin
   prop := pointer(Props.List);
   for f := 0 to Props.Count - 1 do
   begin
-    if GetBitPtr(@Fields, f) then
+    if FieldBitGet(Fields, f) then
     begin
       inc(result);
       // regular in-place JSON decoding

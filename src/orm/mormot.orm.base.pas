@@ -10881,7 +10881,7 @@ begin
        (sfoPutIDFirst in Format) then
       W.AddPropInt64('ID', decoded);
     for i := 0 to Fields.Count - 1 do
-      if GetBitPtr(@Bits, i) then
+      if FieldBitGet(Bits, i) then
       begin
         W.AddFieldName(Fields.List[i].Name);
         Start := info.Json;

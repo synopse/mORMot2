@@ -4010,7 +4010,7 @@ begin
     dest := fValue[i];
     nfo := fStoredClassRecordProps.Fields;
     for f := 0 to nfo.Count - 1 do
-      if GetBitPtr(@Fields, f) then
+      if FieldBitGet(Fields, f) then
         nfo.List[f].CopyValue(Rec, dest);
     fModified := true;
     result := true;

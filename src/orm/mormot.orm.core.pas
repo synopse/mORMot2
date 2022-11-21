@@ -5031,7 +5031,7 @@ begin
       begin
         W.AddShorter('RowID,'); // first is always the ID
         for f := 0 to Props.Fields.Count - 1 do
-          if GetBitPtr(FieldBits, f) then
+          if FieldBitGet(FieldBits^, f) then
           begin
             W.AddString(Props.Fields.List[f].Name);
             W.AddComma;
@@ -7490,7 +7490,7 @@ begin
   info.Json := Json + 1;
   props := Orm.Fields;
   for i := 0 to props.Count - 1 do
-    if GetBitPtr(@Fields, i) then
+    if FieldBitGet(Fields, i) then
     begin
       info.GetJsonFieldOrObjectOrArray;
       props.List[i].SetValue(self, info.Value, info.ValueLen, info.WasString);
@@ -11231,7 +11231,7 @@ begin
           nfo := pointer(props.Fields.List);
           for f := 0 to props.Fields.Count - 1 do
           begin
-            if GetBitPtr(@fields, f) then
+            if FieldBitGet(fields, f) then
             begin
               nfo^.GetJsonValues(Value, fBatch);
               fBatch.AddComma;
@@ -11344,7 +11344,7 @@ begin
     nfo := pointer(props.Fields.List);
     for f := 0 to props.Fields.Count - 1 do
     begin
-      if GetBitPtr(@fields, f) then
+      if FieldBitGet(fields, f) then
       begin
         nfo^.GetJsonValues(Value, fBatch);
         fBatch.AddComma;
