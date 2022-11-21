@@ -211,7 +211,7 @@ const
 
 type
   /// exception type used for MongoDB process
-  EMongoException = class(ESynException);
+  EMongoException = class(ECoreDBException);
 
   /// define how an opUpdate operation will behave
   // - if mufUpsert is set, the database will insert the supplied object into
@@ -1778,7 +1778,7 @@ type
     fConnection: TMongoConnection;
   public
     /// initialize the Exception for a given request
-    constructor Create(const aMsg: string; aConnection: TMongoConnection);
+    constructor Create(const aMsg: RawUtf8; aConnection: TMongoConnection);
       reintroduce; overload;
     /// initialize the Exception for a given request
     constructor CreateUtf8(const Format: RawUtf8; const Args: array of const;
@@ -1794,7 +1794,7 @@ type
     fDatabase: TMongoDatabase;
   public
     /// initialize the Exception for a given request
-    constructor Create(const aMsg: string; aDatabase: TMongoDatabase);
+    constructor Create(const aMsg: RawUtf8; aDatabase: TMongoDatabase);
       reintroduce; overload;
     /// initialize the Exception for a given request
     constructor CreateUtf8(const Format: RawUtf8; const Args: array of const;
@@ -1820,16 +1820,16 @@ type
     function GetErrorDoc: variant;
   public
     /// initialize the Exception for a given request
-    constructor Create(const aMsg: string; aConnection: TMongoConnection;
+    constructor Create(const aMsg: RawUtf8; aConnection: TMongoConnection;
       aRequest: TMongoRequest = nil); reintroduce; overload;
     /// initialize the Exception for a given request
     constructor CreateUtf8(const Format: RawUtf8; const Args: array of const;
       aConnection: TMongoConnection; aRequest: TMongoRequest); reintroduce;
     /// initialize the Exception for a given request
-    constructor Create(const aMsg: string; aConnection: TMongoConnection;
+    constructor Create(const aMsg: RawUtf8; aConnection: TMongoConnection;
       aRequest: TMongoRequest; const aError: TMongoReplyCursor); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor Create(const aMsg: string; aConnection: TMongoConnection;
+    constructor Create(const aMsg: RawUtf8; aConnection: TMongoConnection;
       aRequest: TMongoRequest; const aErrorDoc: TDocVariantData); reintroduce; overload;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
@@ -1858,7 +1858,7 @@ type
     // error message retrieved from the operating system
     // - if such an exception is raised, you can use SystemLastError property
     // to retrieve the corresponding Operating System error code
-    constructor Create(const aMsg: string; aConnection: TMongoConnection;
+    constructor Create(const aMsg: RawUtf8; aConnection: TMongoConnection;
       aRequest: TMongoRequest = nil); reintroduce;
     /// contain the associated Operating System last error code
     // - will specify e.g. the kind of communication/socket error
@@ -2354,7 +2354,7 @@ begin
       raise EMongoException.CreateUtf8('ComputeDocumentsList(Document[%])', [i]);
   end;
   if PAnsiChar(P) - pointer(fReply) <> Len then
-    raise EMongoException.Create('ComputeDocumentsList(Documents)');
+    raise EMongoException.CreateUtf8('ComputeDocumentsList(Documents) %', [Len]);
 end;
 
 {$else}
@@ -2612,7 +2612,7 @@ begin
     inc(result);
   end;
   if result <> length(Dest) then
-    raise EMongoException.Create('Invalid opReply Documents');
+    raise EMongoException.CreateU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllToBson(Dest: TBsonWriter);
@@ -2647,7 +2647,7 @@ begin
   while Next(item) do
     Dest.AddItem(item{%H-});
   if Dest.Count <> result then
-    raise EMongoException.Create('Invalid opReply Documents');
+    raise EMongoException.CreateU('Invalid opReply Documents');
 end;
 
 procedure TMongoReplyCursor.AppendAllAsDocVariant(var Dest: variant);
@@ -2771,7 +2771,7 @@ end;
 procedure TMongoConnection.Open;
 begin
   if self = nil then
-    raise EMongoException.Create('TMongoConnection(nil).Open');
+    raise EMongoException.CreateU('TMongoConnection(nil).Open');
   if fSocket <> nil then
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
@@ -2780,7 +2780,8 @@ begin
       @Client.ConnectionTlsContext, @Client.ConnectionTunnel);
   except
     on E: Exception do
-      raise EMongoException.CreateUtf8('%.Open unable to connect to MongoDB server %: % [%]',
+      raise EMongoException.CreateUtf8(
+        '%.Open unable to connect to MongoDB server %: % [%]',
         [self, Client.ConnectionString, E, E.Message]);
   end;
   fSocket.TcpNoDelay := true; // we buffer all output data before sending
@@ -3249,10 +3250,10 @@ end;
 
 { EMongoConnectionException }
 
-constructor EMongoConnectionException.Create(const aMsg: string;
+constructor EMongoConnectionException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection);
 begin
-  inherited Create(aMsg);
+  inherited CreateU(aMsg);
   fConnection := aConnection;
 end;
 
@@ -3266,7 +3267,7 @@ end;
 
 { EMongoRequestException }
 
-constructor EMongoRequestException.Create(const aMsg: string;
+constructor EMongoRequestException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   inherited Create(aMsg, aConnection);
@@ -3280,14 +3281,14 @@ begin
   fRequest := aRequest;
 end;
 
-constructor EMongoRequestException.Create(const aMsg: string;
+constructor EMongoRequestException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest; const aError: TMongoReplyCursor);
 begin
   Create(aMsg, aConnection, aRequest);
   fError := aError;
 end;
 
-constructor EMongoRequestException.Create(const aMsg: string;
+constructor EMongoRequestException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest; const aErrorDoc: TDocVariantData);
 begin
   Create(aMsg, aConnection, aRequest);
@@ -3327,7 +3328,7 @@ end;
 
 { EMongoRequestOSException }
 
-constructor EMongoRequestOSException.Create(const aMsg: string;
+constructor EMongoRequestOSException.Create(const aMsg: RawUtf8;
   aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   fSystemLastError := GetLastError;
@@ -3338,7 +3339,7 @@ end;
 
 { EMongoDatabaseException }
 
-constructor EMongoDatabaseException.Create(const aMsg: string;
+constructor EMongoDatabaseException.Create(const aMsg: RawUtf8;
   aDatabase: TMongoDatabase);
 begin
   inherited Create(aMsg, aDatabase.Client.Connections[0]);
@@ -4025,7 +4026,7 @@ var
 begin
   // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber < 2020000 then
-    raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
+    raise EMongoException.CreateU('Aggregation needs MongoDB 2.2 or later');
   if fDatabase.Client.ServerBuildInfoNumber >= 3060000 then
   begin
     // since 3.6, the cursor:{} parameter is mandatory, even if void
@@ -4132,7 +4133,8 @@ begin
   if Database.Client.Log <> nil then
     log := Database.Client.Log.Enter('EnsureIndex %', [fName], self);
   if DocVariantData(Keys)^.kind <> dvObject then
-    raise EMongoException.CreateUtf8('%[%].EnsureIndex(Keys?)', [self,
+    raise EMongoException.CreateUtf8('%[%].EnsureIndex(Keys?)',
+      [self,
       FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber >= 2060000;
   doc := _ObjFast(['key', Keys]);
