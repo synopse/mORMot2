@@ -3432,14 +3432,14 @@ var
     until (Length(Res) < 4) or
           (Res[4] <> '-');
     if not IdemPChar(pointer(Res), pointer(Answer)) then
-      raise ESendEmail.CreateUtf8('%', [Res]);
+      raise ESendEmail.CreateU(Res);
   end;
 
   procedure Exec(const Command, Answer: RawUtf8);
   begin
     writeln(TCP.SockOut^, Command);
     if ioresult <> 0 then
-      raise ESendEmail.CreateUtf8('write error for %s', [Command]);
+      raise ESendEmail.CreateUtf8('write error for %', [Command]);
     Expect(Answer)
   end;
 
