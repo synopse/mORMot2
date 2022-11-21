@@ -5500,7 +5500,7 @@ begin
                 info.Json := @NULCHAR
               else
                 break; // invalid input
-            if NameLen <> 0 then // we just ignore void field names
+            if NameLen <> 0 then // we just ignore void "":xxx field names
             begin
               if intnames <> nil then
                 intnames.Unique(VName[n], Name, NameLen)

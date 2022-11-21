@@ -262,7 +262,7 @@ var
   GssApi: TGssApi;
 
   /// library name of the system implementation of GSSAPI
-  // - only used on MacOS by default
+  // - only used on MacOS by default (GSS is available since 10.7 Lion in 2011)
   // - you can overwrite with a custom value, and call LoadGssApi again
   {$ifdef OSDARWIN}
   GssLib_OS: TFileName = '/System/Library/Frameworks/GSS.framework/GSS';

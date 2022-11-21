@@ -175,7 +175,7 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    procedure InternalBatchAppend(const aValue: RawUtf8; const aID: TID);
+    procedure InternalBatchAppend(const aValue: RawUtf8; aID: TID);
     /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -1202,7 +1202,7 @@ begin
 end;
 
 procedure TRestStorageExternal.InternalBatchAppend(const aValue: RawUtf8;
-  const aID: TID);
+  aID: TID);
 begin
   if fBatchCount >= fBatchCapacity then
   begin
