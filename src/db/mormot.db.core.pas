@@ -390,10 +390,19 @@ procedure SetDbError(const text: RawUtf8);
 procedure ClearDbError;
 
 /// get the error message assigned by SetDbError() for the current thread
+// - e.g. after any raise ESqlDBException.CreateUtf8
 function GetDbError: RawUtf8;
 
 /// quickly check if there is an error message for the current thread
 function HasDbError: boolean;
+
+type
+  /// abstract DB-oriented exception class
+  // - CreateUtf8() will also call SetDbError() with the resulting message text
+  ECoreDBException = class(ESynException)
+  protected
+    procedure CreateAfterSetMessageUtf8; override;
+  end;
 
 
 // backward compatibility types redirections
@@ -1937,11 +1946,18 @@ threadvar
 procedure SetDbError(const text: RawUtf8);
 var
   err: ^TLastError;
+  id: TLastErrorID;
 begin
-  err := @LastDbError;
-  if err^.Seq = nil then
-    err^.Init(128);
-  LastDbErrorID := err^.NewMsg(text);
+  if text <> '' then
+  begin
+    err := @LastDbError;
+    if err^.Seq = nil then
+      err^.Init(128);
+    id := err^.NewMsg(text);
+  end
+  else
+    id := 0; // reset
+  LastDbErrorID := id;
 end;
 
 procedure ClearDbError;
@@ -1963,6 +1979,15 @@ end;
 function HasDbError: boolean;
 begin
   result := LastDbErrorID <> 0;
+end;
+
+
+{ ECoreDBException }
+
+procedure ECoreDBException.CreateAfterSetMessageUtf8;
+begin
+  SetDbError(fMessageUtf8);
+  inherited CreateAfterSetMessageUtf8;
 end;
 
 
