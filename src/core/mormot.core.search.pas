@@ -282,17 +282,17 @@ function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 
 /// apply the CSV-supplied glob patterns to an array of RawUtf8
-// - any text not maching the pattern will be deleted from the array
+// - any text not matching the pattern will be deleted from the array
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TRawUtf8DynArray); overload;
 
 /// apply the CSV-supplied glob patterns to an array of string
-// - any text not maching the pattern will be deleted from the array
+// - any text not matching the pattern will be deleted from the array
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TStringDynArray); overload;
 
-/// return TRUE if the supplied content matchs a glob pattern
-// - ?  Matches any single characer
+/// return TRUE if the supplied content matches a glob pattern
+// - ?  Matches any single character
 // - *	Matches any contiguous characters
 // - [abc]  Matches a or b or c at that position
 // - [^abc]	Matches anything but a or b or c at that position
@@ -306,7 +306,7 @@ procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
 function IsMatch(const Pattern, Text: RawUtf8;
   CaseInsensitive: boolean = false): boolean;
 
-/// return TRUE if the supplied content matchs a glob pattern, using VCL strings
+/// return TRUE if the supplied content matches a glob pattern, using VCL strings
 // - is a wrapper around IsMatch() with fast UTF-8 conversion
 function IsMatchString(const Pattern, Text: string;
   CaseInsensitive: boolean = false): boolean;
@@ -383,10 +383,10 @@ function SoundExUtf8(U: PUtf8Char; next: PPUtf8Char = nil;
   Lang: TSynSoundExPronunciation = sndxEnglish): cardinal;
 
 const
-  /// number of bits to use for each interresting soundex char
+  /// number of bits to use for each interesting soundex char
   // - default is to use 8-bit, i.e. 4 soundex chars, which is the
   // standard approach
-  // - for a more detailled soundex, use 4 bits resolution, which will
+  // - for a more detailed soundex, use 4 bits resolution, which will
   // compute up to 7 soundex chars in a cardinal (that's our choice)
   SOUNDEX_BITS = 4;
 
@@ -506,7 +506,7 @@ type
   TExprParserAbstract = class(TParserAbstract)
   protected
     procedure ParseNextCurrentWord; override;
-    // may be overriden to provide custom words escaping (e.g. handle quotes)
+    // may be overridden to provide custom words escaping (e.g. handle quotes)
     procedure ParseNextWord; virtual;
     procedure Initialize; override;
   end;
@@ -544,7 +544,7 @@ type
   // - a "Bloom Filter" is a space-efficient probabilistic data structure,
   // that is used to test whether an element is a member of a set. False positive
   // matches are possible, but false negatives are not. Elements can be added to
-  // the set, but not removed. Typical use cases are to avoid unecessary
+  // the set, but not removed. Typical use cases are to avoid unnecessary
   // slow disk or network access if possible, when a lot of items are involved.
   // - memory use is very low, when compared to storage of all values: fewer
   // than 10 bits per element are required for a 1% false positive probability,
@@ -821,7 +821,7 @@ function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
 // is much faster than creating a temporary dynamic array to load the data
 // - will return nil if no or invalid data, or a pointer to the integer
 // array otherwise, with the items number stored in Count
-// - sligtly faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
+// - slightly faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
 function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntegerArray;
 
 /// search in a RawUtf8 dynamic array BLOB content as stored by TDynArray.SaveTo
@@ -840,7 +840,7 @@ type
     ArrayLoad: TRttiBinaryLoad;
   public
     /// how many items were saved in the TDynArray.SaveTo binary buffer
-    // - equals -1 if Init() failed to unserialize its header
+    // - equals -1 if Init() failed to deserialize its header
     Count: integer;
     /// the zero-based index of the current item pointed by next Step() call
     // - is in range 0..Count-1 until Step() returns false
@@ -849,7 +849,7 @@ type
     // - after Step() returned false, points just after the binary buffer,
     // like a regular TDynArray.LoadFrom
     Reader: TFastReader;
-    /// RTTI information of the unserialized dynamic array
+    /// RTTI information of the deserialized dynamic array
     ArrayRtti: TRttiCustom;
     /// initialize iteration over a TDynArray.SaveTo binary buffer
     // - returns true on success, with Count and Position being set
@@ -888,7 +888,7 @@ type
   TSynFilterOrValidateObjArrayArray = array of TSynFilterOrValidateObjArray;
 
   /// will define a filter (transformation) or a validation process to be
-  // applied to a database Record content (typicaly a TOrm)
+  // applied to a database Record content (typically a TOrm)
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynFilterOrValidate = class
   protected
@@ -916,9 +916,9 @@ type
       read fParameters write SetParameters;
   end;
 
-  /// will define a validation to be applied to a Record (typicaly a TOrm)
+  /// will define a validation to be applied to a Record (typically a TOrm)
   // field content
-  // - a typical usage is to validate an email or IP adress e.g.
+  // - a typical usage is to validate an email or IP address e.g.
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynValidate = class(TSynFilterOrValidate)
   public
@@ -941,7 +941,7 @@ type
   PSynValidate = ^TSynValidate;
 
   /// IP v4 address validation to be applied to a Record field content
-  // (typicaly a TOrm)
+  // (typically a TOrm)
   // - this versions expect no parameter
   TSynValidateIPAddress = class(TSynValidate)
   protected
@@ -952,7 +952,7 @@ type
   end;
 
   /// IP address validation to be applied to a Record field content
-  // (typicaly a TOrm)
+  // (typically a TOrm)
   // - optional JSON encoded parameters are "AllowedTLD" or "ForbiddenTLD",
   // expecting a CSV lis of Top-Level-Domain (TLD) names, e.g.
   // $ '{"AllowedTLD":"com,org,net","ForbiddenTLD":"fr"}'
@@ -1001,7 +1001,7 @@ type
 
   /// glob case-sensitive pattern validation of a Record field content
   // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
-  // - ?	   	Matches any single characer
+  // - ?	   	Matches any single character
   // - *	   	Matches any contiguous characters
   // - [abc]  Matches a or b or c at that position
   // - [^abc]	Matches anything but a or b or c at that position
@@ -1028,7 +1028,7 @@ type
   end;
 
   /// glob case-insensitive pattern validation of a text field content
-  // (typicaly a TOrm)
+  // (typically a TOrm)
   // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
@@ -1143,20 +1143,20 @@ type
     // codepoints - MaxLength may not match the UCS4 CodePoint, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
-    // be used for truncation againts the MaxLength parameter
+    // be used for truncation against the MaxLength parameter
     property Utf8Length: boolean
       read fUtf8Length write fUtf8Length;
   end;
 {$M-}
 
-  /// strong password validation for a Record field content (typicaly a TOrm)
+  /// strong password validation for a Record field content (typically a TOrm)
   // - the following parameters are set by default to
   // $ '{"MinLength":5,"MaxLength":20,"MinAlphaCount":1,"MinDigitCount":1,
   // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1,"MaxSpaceCount":0}'
   // - you can specify some JSON encoded parameters to change this default
   // values, which will validate the text field only if it contains from 5 to 10
   // characters, with at least one digit, one upper case letter, one lower case
-  // letter, and one ponctuation sign, with no space allowed inside
+  // letter, and one punctuation sign, with no space allowed inside
   TSynValidatePassWord = class(TSynValidateText)
   protected
     /// set password specific parameters
@@ -1170,7 +1170,7 @@ type
   {$NODEFINE TSynValidatePassWord }
 
   /// will define a transformation to be applied to a Record field content
-  // (typicaly a TOrm)
+  // (typically a TOrm)
   // - here "filter" means that content would be transformed according to a
   // set of defined rules
   // - a typical usage is to convert to lower or upper case, or
@@ -1185,7 +1185,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUtf8); virtual; abstract;
   end;
 
-  /// class-refrence type (metaclass) for a TSynFilter or a TSynValidate
+  /// class-reference type (metaclass) for a TSynFilter or a TSynValidate
   TSynFilterOrValidateClass = class of TSynFilterOrValidate;
 
   /// class-reference type (metaclass) of a record filter (transformation)
@@ -1233,7 +1233,7 @@ type
   // - this versions expect no parameter
   TSynFilterTrim = class(TSynFilter)
   public
-    /// perform the space triming conversion to the specified value
+    /// perform the space trimming conversion to the specified value
     procedure Process(aFieldIndex: integer; var Value: RawUtf8); override;
   end;
 
@@ -1260,7 +1260,7 @@ type
     // codepoints - MaxLength may not match the UCS4 CodePoint, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
-    // be used for truncation againts the MaxLength parameter
+    // be used for truncation against the MaxLength parameter
     property Utf8Length: boolean
       read fUtf8Length write fUtf8Length;
   end;
@@ -1336,7 +1336,7 @@ type
   // saved from a Windows system first)
   // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
   // ! {$R mormot.tz.res}
-  // - each time zone will be idendified by its TzId string, as defined by
+  // - each time zone will be identified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
   // - note that each instance is thread-safe
   TSynTimeZone = class
@@ -1404,7 +1404,7 @@ type
     function NowToLocal(const TzId: TTimeZoneID): TDateTime;
     /// compute the UTC date/time for a given local TzId value
     // - by definition, a local time may correspond to two UTC times, during the
-    // time biais period, so the returned value is informative only, and any
+    // time bias period, so the returned value is informative only, and any
     // stored value should be following UTC
     function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
     /// direct access to the low-level time zone information
@@ -1445,7 +1445,7 @@ function NowToLocal(const TzId: TTimeZoneID): TDateTime;
 
 /// compute the UTC date/time for a given local TzId value
 // - by definition, a local time may correspond to two UTC times, during the
-// time biais period, so the returned value is informative only, and any
+// time bias period, so the returned value is informative only, and any
 // stored value should be following UTC
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
