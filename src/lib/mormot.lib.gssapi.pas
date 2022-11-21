@@ -261,10 +261,21 @@ var
   /// access to the low-level libgssapi
   GssApi: TGssApi;
 
+  /// library name of the system implementation of GSSAPI
+  // - only used on MacOS by default
+  // - you can overwrite with a custom value, and call LoadGssApi again
+  {$ifdef OSDARWIN}
+  GssLib_OS: TFileName = '/System/Library/Frameworks/GSS.framework/GSS';
+  {$else}
+  GssLib_OS: TFileName = '';
+  {$endif OSDARWIN}
+
   /// library name of the MIT implementation of GSSAPI
+  // - you can overwrite with a custom value, and call LoadGssApi again
   GssLib_MIT: TFileName = 'libgssapi_krb5.so.2';
 
   /// library name of the Heimdal implementation of GSSAPI
+  // - you can overwrite with a custom value, and call LoadGssApi again
   GssLib_Heimdal: TFileName = 'libgssapi.so.3';
 
 
@@ -530,13 +541,14 @@ begin
   if GssApi <> nil then
     // already loaded
     exit;
-  tried := LibraryName + GssLib_MIT + GssLib_Heimdal;
+  tried := LibraryName + GssLib_OS + GssLib_MIT + GssLib_Heimdal;
   if GssApiTried = tried then
     // try LoadLibrary() only if any of the .so names changed
     exit;
   GssApiTried := tried;
   api := TGssApi.Create;
-  if api.TryLoadLibrary([LibraryName, GssLib_MIT, GssLib_Heimdal], nil) then
+  if api.TryLoadLibrary(
+      [LibraryName, GssLib_OS, GssLib_MIT, GssLib_Heimdal], nil) then
   begin
     P := @@api.gss_import_name;
     for i := 0 to high(GSS_NAMES) do
