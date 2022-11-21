@@ -9115,7 +9115,7 @@ begin
           fSqlTableUpdateBlobFields := fSqlTableUpdateBlobFields + F.Name + '=?,';
           fSqlTableRetrieveBlobFields := fSqlTableRetrieveBlobFields + F.Name + ',';
           fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
-          goto Copiabl;
+          goto Copiabl; // NOT_SIMPLE_FIELDS are not included by default
         end;
       oftID: // = TOrm(aID)
         if isTOrmMany and
@@ -9131,7 +9131,7 @@ begin
       oftMany:
         begin
           ManyFields[nMany] := F as TOrmPropInfoRttiMany;
-          inc(nMany);
+          inc(nMany); // NOT_SIMPLE_FIELDS are not included by default
         end;
       oftBlobDynArray:
         with F as TOrmPropInfoRttiDynArray do
@@ -9173,8 +9173,8 @@ begin
               'field is allowed per class', [Table]);
           fRecordVersionField := F as TOrmPropInfoRttiRecordVersion;
           fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
-          goto Copiabl;
-        end; // TRecordVersion is a copiable but not a simple field!
+          goto Copiabl; // NOT_SIMPLE_FIELDS are not included by default
+        end;
       oftVariant: // oftNullable are included in SmallfieldsBits
         goto Simple;
     else

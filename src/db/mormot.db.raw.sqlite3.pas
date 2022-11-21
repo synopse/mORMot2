@@ -5669,7 +5669,7 @@ end;
 constructor ESqlite3Exception.Create(aDB: TSqlite3DB; aErrorCode: integer;
   const aSql: RawUtf8);
 var
-  x: integer;
+  er: integer;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
@@ -5682,15 +5682,15 @@ begin
     fMessageUtf8 := FormatUtf8('% - %', [fMessageUtf8, sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
     begin
-      x := sqlite3.extended_errcode(aDB);
-      if x > 255 then // see https://sqlite.org/rescode.html#extrc
-        fMessageUtf8 := FormatUtf8('%, extended_errcode=%', [fMessageUtf8, x]);
+      er := sqlite3.extended_errcode(aDB);
+      if er > 255 then // see https://sqlite.org/rescode.html#extrc
+        fMessageUtf8 := FormatUtf8('%, extended_errcode=%', [fMessageUtf8, er]);
     end;
     if Assigned(sqlite3.system_errno) then
     begin
-      x := sqlite3.system_errno(aDB);
-      if x <> 0 then
-        fMessageUtf8 := FormatUtf8('%, system_errno=%', [fMessageUtf8, x]);
+      er := sqlite3.system_errno(aDB);
+      if er <> 0 then
+        fMessageUtf8 := FormatUtf8('%, system_errno=%', [fMessageUtf8, er]);
     end;
   end;
   DB := aDB;
