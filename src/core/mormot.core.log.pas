@@ -3661,7 +3661,6 @@ threadvar
 type
   // RRD of last 128 lines to be sent to console (no need of older data)
   TAutoFlushThreadToConsole = record
-    Safe: TLightLock;
     Next, Count: integer;
     Text: array[0..127] of RawUtf8; // must be a power-of-two length
     Color: array[0..127] of TConsoleColor;
@@ -3674,6 +3673,7 @@ type
     fToCompress: TFileName;
     fStartTix: Int64;
     fSecondElapsed: cardinal;
+    fToConsoleSafe: TLightLock;
     fToConsole: TAutoFlushThreadToConsole;
     procedure Execute; override;
     procedure AddToConsole(const s: RawUtf8; c: TConsoleColor);
@@ -3700,18 +3700,21 @@ begin
 end;
 
 procedure TAutoFlushThread.AddToConsole(const s: RawUtf8; c: TConsoleColor);
+var
+  i: PtrInt;
 begin
-  with fToConsole do
-  begin
-    Safe.Lock;
-    try
-      Text[Next] := s;
-      Color[Next] := c;
-      Next := (Next + 1) and high(Text); // simple round-robin data buffer
+  fToConsoleSafe.Lock;
+  try
+    with fToConsole do
+    begin
+      i := Next;
+      Text[i] := s;
+      Color[i] := c;
+      Next := (i + 1) and high(Text); // simple round-robin data buffer
       inc(Count);
-    finally
-      Safe.UnLock;
     end;
+  finally
+    fToConsoleSafe.UnLock;
   end;
 end;
 
@@ -3720,14 +3723,12 @@ var
   i: PtrInt;
   c: TAutoFlushThreadToConsole;
 begin
-  fToConsole.Safe.Lock;
+  fToConsoleSafe.Lock;
   try
-    c := fToConsole; // thread-safe local copy
-    Finalize(fToConsole.Text);
-    fToConsole.Count := 0;
-    fToConsole.Next := 0;
+    MoveFast(fToConsole, c, SizeOf(c)); // thread-safe local copy
+    FillCharFast(fToConsole, SizeOf(fToConsole), 0); // copy with no refcount
   finally
-    fToConsole.Safe.UnLock;
+    fToConsoleSafe.UnLock;
   end;
   if c.Count >= length(c.Text) then
   begin
