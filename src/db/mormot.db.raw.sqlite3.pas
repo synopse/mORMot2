@@ -2198,8 +2198,8 @@ type
     // that caused the most recent I/O error or failure to open a file.
     // - The return value is OS-dependent.
     // - For example, on unix systems, after sqlite3.open_v2() returns SQLITE_CANTOPEN,
-    // this interface could be called to get back the underlying "errno" that caused the problem,
-    // such as ENOSPC, EAUTH, EISDIR, and so forth.
+    // this interface could be called to get back the underlying "errno" that
+    // caused the problem, such as ENOSPC, EAUTH, EISDIR, and so forth.
     system_errno: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Enables or disables the extended result codes feature of SQLite.
@@ -5668,6 +5668,8 @@ end;
 
 constructor ESqlite3Exception.Create(aDB: TSqlite3DB; aErrorCode: integer;
   const aSql: RawUtf8);
+var
+  x: integer;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
@@ -5679,8 +5681,17 @@ begin
   begin
     fMessageUtf8 := FormatUtf8('% - %', [fMessageUtf8, sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
-      fMessageUtf8 := FormatUtf8('%, extended_errcode=%',
-        [fMessageUtf8, sqlite3.extended_errcode(aDB)]);
+    begin
+      x := sqlite3.extended_errcode(aDB);
+      if x > 255 then // see https://sqlite.org/rescode.html#extrc
+        fMessageUtf8 := FormatUtf8('%, extended_errcode=%', [fMessageUtf8, x]);
+    end;
+    if Assigned(sqlite3.system_errno) then
+    begin
+      x := sqlite3.system_errno(aDB);
+      if x <> 0 then
+        fMessageUtf8 := FormatUtf8('%, system_errno=%', [fMessageUtf8, x]);
+    end;
   end;
   DB := aDB;
   CreateAfterSetMessageUtf8;
