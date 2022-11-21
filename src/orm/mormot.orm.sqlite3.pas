@@ -2519,8 +2519,8 @@ begin
                 SetLength(b^.Values, b^.ValuesCount);
               props.SaveFieldsFromJsonArray(b^.Simples[ndx], b^.SimpleFields,
                 @b^.ID[ndx], nil, [sfoExtendedJson], b^.Values[ndx]);
-              encoding := encPost;
             end;
+            encoding := encPost;
           end
           else
           begin
