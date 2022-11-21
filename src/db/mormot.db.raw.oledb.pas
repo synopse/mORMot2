@@ -934,7 +934,8 @@ begin
           pCurrentRec.StrVal := Pointer(Utf8ToWideString(tmp));
         end
     else
-      raise EOleDBException.Create('Unsupported array parameter type');
+      raise EOleDBException.CreateUtf8('Unsupported array parameter type %',
+        [TSqlDBFieldTypeToString(fType)]);
     end;
   end;
 end;

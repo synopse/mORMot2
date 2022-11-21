@@ -1313,7 +1313,8 @@ begin
             ftUtf8:
               ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamStrList;
           else
-            raise EOleDBException.Create('Unsupported array parameter type');
+            raise EOleDBException.CreateUtf8('Unsupported array parameter type %',
+              [TSqlDBFieldTypeToString(P^.VType)]);
           end;
           ssParamProps[ssParamPropsCount].cPropertySets := 1;
           ssParamProps[ssParamPropsCount].iOrdinal := i;
@@ -1869,16 +1870,15 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
             GetCaptionFromEnum(TypeInfo(TSqlDBOleDBBindStatus), aStatus[i])])
         else
           s := FormatString('% Status[%]=%', [s, i, aStatus[i]]);
-
       end;
     if s <> '' then
       fOleDBErrorMessage := fOleDBErrorMessage + s;
     StringToUtf8(fOleDBErrorMessage, fErrorMessage);
     // raise exception
     if aStmt = nil then
-      E := EOleDBException.Create(fOleDBErrorMessage)
+      E := EOleDBException.CreateU(fErrorMessage)
     else
-      E := EOleDBException.CreateUtf8('%: %', [self, StringToUtf8(fOleDBErrorMessage)]);
+      E := EOleDBException.CreateUtf8('%: %', [self, fErrorMessage]);
     SynDBLog.Add.Log(sllError, E);
     raise E;
   end;
@@ -1886,7 +1886,8 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement;
 begin
   fOleDBErrorMessage := '';
   fOleDBInfoMessage := '';
-  if not Succeeded(aResult) or Assigned(OleDBProperties.OnCustomError) then
+  if not Succeeded(aResult) or
+     Assigned(OleDBProperties.OnCustomError) then
     EnhancedTest;
 end;
 

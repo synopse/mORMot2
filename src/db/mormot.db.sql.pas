@@ -669,17 +669,19 @@ type
   {$M-}
 
   /// generic Exception type, as used by mormot.db.sql and mormot.db.sql.* units
-  ESqlDBException = class(ESynException)
+  ESqlDBException = class(ECoreDBException)
   protected
     fStatement: TSqlDBStatement;
   public
     /// constructor which will use FormatUtf8() instead of Format()
     // - if the first Args[0] is a TSqlDBStatement class instance, the current
     // SQL statement will be part of the exception message
+    // - will also call SetDbError() with the resulting message text
     constructor CreateUtf8(const Format: RawUtf8; const Args: array of const);
   published
     /// associated TSqlDBStatement instance, if supplied as first parameter
-    property Statement: TSqlDBStatement read fStatement;
+    property Statement: TSqlDBStatement
+      read fStatement;
   end;
 
   /// generic interface to access a SQL query result rows
@@ -3058,7 +3060,7 @@ begin
           if c[1] = 'Z' then
           begin
             if c[2] = 'Z' then
-              raise ESqlDBException.Create(
+              raise ESqlDBException.CreateU(
                 'Only up to 656 parameters are possible in :AA to :ZZ range');
             c[1] := 'A';
             inc(c[2]);
@@ -3331,29 +3333,24 @@ end;
 
 constructor ESqlDBException.CreateUtf8(const Format: RawUtf8;
   const Args: array of const);
-var
-  msg {$ifndef SYNDB_SILENCE}, sql{$endif}: RawUtf8;
 begin
-  msg := FormatUtf8(Format, Args);
+  FormatUtf8(Format, Args, fMessageUtf8);
   {$ifndef SYNDB_SILENCE}
-  if (length(Args) > 0) and
-     (Args[0].VType = vtObject) and
-     (Args[0].VObject <> nil) then
-    if Args[0].VObject.InheritsFrom(TSqlDBStatement) then
-    begin
-      fStatement := TSqlDBStatement(Args[0].VObject);
-      if fStatement.Connection.Properties.LogSqlStatementOnException then
-      begin
-        try
-          sql := fStatement.GetSqlWithInlinedParams;
-        except
-          sql := fStatement.SQL; // if parameter access failed -> append with ?
-        end;
-        msg := msg + ' - ' + sql;
+  if high(Args) >= 0 then
+  begin
+    fStatement := VarRecAs(Args[0], TSqlDBStatement);
+    if (fStatement <> nil) and
+       fStatement.Connection.Properties.LogSqlStatementOnException then
+      try
+        fMessageUtf8 := fMessageUtf8 + ' - ' +
+          fStatement.GetSqlWithInlinedParams;
+      except
+        fMessageUtf8 := fMessageUtf8 + ' - ' +
+          fStatement.SQL; // if parameter access failed -> append with ?
       end;
-    end;
+  end;
   {$endif SYNDB_SILENCE}
-  inherited Create(Utf8ToString(msg));
+  CreateAfterSetMessageUtf8;
 end;
 
 
@@ -7032,6 +7029,7 @@ procedure TSqlDBStatement.Reset;
 begin
   fSqlWithInlinedParams := '';
   fSqlLogTimer.Init; // reset timer (for cached statement for example)
+  ClearDbError;
 end;
 
 procedure TSqlDBStatement.ReleaseRows;
@@ -7127,7 +7125,7 @@ end;
 procedure TSqlDBConnection.CheckConnection;
 begin
   if self = nil then
-    raise ESqlDBException.Create('CheckConnection: TSqlDBConnection=nil');
+    raise ESqlDBException.CreateU('TSqlDBConnection(nil).CheckConnection');
   if not Connected then
     raise ESqlDBException.CreateUtf8('% on %/% should be connected',
       [self, Properties.ServerName, Properties.DataBaseName]);
@@ -7471,7 +7469,10 @@ begin
     else if RaiseExceptionOnError and
             (fErrorException <> nil) then
       // propagate error not related to connection (e.g. SQL syntax error)
-      raise fErrorException.Create(Utf8ToString(fErrorMessage));
+      if fErrorException.InheritsFrom(ESynException) then
+        raise ECoreDBException.CreateU(fErrorMessage)
+      else
+        raise fErrorException.Create(Utf8ToString(fErrorMessage));
   end
   else
     // regular preparation, with no connection error interception
@@ -7754,7 +7755,7 @@ function TSqlDBStatementWithParams.CheckParam(Param: integer;
   NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): PSqlDBParam;
 begin
   if self = nil then
-    raise ESqlDBException.Create('self=nil for TSqlDBStatement.Bind*()');
+    raise ESqlDBException.CreateU('TSqlDBStatementWithParams(nil).Bind');
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param - 1];

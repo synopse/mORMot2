@@ -384,8 +384,8 @@ begin
           pointer(fUserID), length(fUserID), pointer(fPassWord), length(fPassWord)),
         SQL_HANDLE_DBC, fDbc)
       else if fDatabaseName = '' then
-        raise EOdbcException.Create(
-          'Need ServerName=DataSourceName or DataBaseName=FullConnectString')
+        raise EOdbcException.CreateU(
+          'Missing ServerName=DataSourceName or DataBaseName=FullConnectString')
       else
       begin
         FastSetString(fSqlDriverFullString, nil, 1024);

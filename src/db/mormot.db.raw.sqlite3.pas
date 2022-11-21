@@ -193,6 +193,8 @@ const
   /// File opened that is not a database file
   SQLITE_NOTADB = 26;
 
+  // note: SQLITE_NOTICE=27 and SQLITE_WARNING=28 are never returned by the API
+
   /// sqlite3.step() return code: another result row is ready
   SQLITE_ROW = 100;
   /// sqlite3.step() return code: has finished executing
@@ -458,7 +460,8 @@ const
   SQLITE_IOERR_SHMOPEN = 4618;
   /// The SQLITE_IOERR_SHMSIZE error code is an extended error code for SQLITE_IOERR indicating an I/O error
   // within the xShmMap method on the sqlite3_io_methods object while trying to enlarge a "shm" file as part
-  // of WAL mode transaction processing. This error may indicate that the underlying filesystem volume is out of space.
+  // of WAL mode transaction processing. This error may indicate that the underlying filesystem volume is
+  // out of space.
   SQLITE_IOERR_SHMSIZE = 4874;
   /// The SQLITE_IOERR_SHMMAP error code is an extended error code for SQLITE_IOERR indicating an I/O error
   // within the xShmMap method on the sqlite3_io_methods object while trying to map a shared memory segment
@@ -503,6 +506,11 @@ const
   /// The SQLITE_IOERR_DATA error code is an extended error code for SQLITE_IOERR used only by checksum VFS shim to
   // indicate that the checksum on a page of the database file is incorrect.
   SQLITE_IOERR_DATA = 8202;
+  ///  The SQLITE_IOERR_CORRUPTFS error code is an extended error code for
+  // SQLITE_IOERR used only by a VFS to indicate that a seek or read failure
+  // was due to the request not falling within the file's boundary rather than
+  // an ordinary device failure. This often indicates a corrupt filesystem.
+  SQLITE_IOERR_CORRUPTFS = 8458;
 
 
   /// The database is opened in read-only mode
@@ -4161,7 +4169,7 @@ type
     secDONE);
 
   /// custom SQLite3 dedicated Exception type
-  ESqlite3Exception = class(ESynException)
+  ESqlite3Exception = class(ECoreDBException)
   protected
     fErrorCode: integer;
     fSQLite3ErrorCode: TSqlite3ErrorCode;
@@ -4596,7 +4604,7 @@ type
     procedure FieldToJson(WR: TJsonWriter; Value: TSqlite3Value;
       DoNotFetchBlobs: boolean);
     /// append all columns values of the current Row to a JSON stream
-    // - will use WR.Expand to guess the expected output format
+    // - will use WR.Expand to generate the expected output format
     // - will implement twoIgnoreDefaultInRecord in WR.CustomOptions setting
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
@@ -5660,24 +5668,22 @@ end;
 
 constructor ESqlite3Exception.Create(aDB: TSqlite3DB; aErrorCode: integer;
   const aSql: RawUtf8);
-var
-  msg: RawUtf8;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   FormatUtf8('Error % (%) [%] using %', [ErrorCodeToText(SQLite3ErrorCode),
-    aErrorCode, aSql, sqlite3.VersionText], msg);
+    aErrorCode, aSql, sqlite3.VersionText], fMessageUtf8);
   if aDB = 0 then
-    msg := msg + ' with aDB=nil'
+    fMessageUtf8 := fMessageUtf8 + ' with aDB=nil'
   else
   begin
-    msg := FormatUtf8('% - %', [msg, sqlite3.errmsg(aDB)]);
+    fMessageUtf8 := FormatUtf8('% - %', [fMessageUtf8, sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
-      msg := FormatUtf8('%, extended_errcode=%',
-        [msg, sqlite3.extended_errcode(aDB)]);
+      fMessageUtf8 := FormatUtf8('%, extended_errcode=%',
+        [fMessageUtf8, sqlite3.extended_errcode(aDB)]);
   end;
   DB := aDB;
-  inherited Create(Utf8ToString(msg));
+  CreateAfterSetMessageUtf8;
 end;
 
 function sqlite3_check(DB: TSqlite3DB; aResult: integer;
@@ -8459,6 +8465,7 @@ begin
   fDB := DB;
   fRequest := 0;
   fResetDone := false;
+  ClearDbError;
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
   {$ifndef NOSQLITE3FPUSAVE}
@@ -8585,7 +8592,7 @@ begin
     SQLITE_TEXT:
       begin
         WR.Add('"');
-        WR.AddJsonEscape(sqlite3.value_text(Value), 0);
+        WR.AddJsonEscape(sqlite3.value_text(Value), {len=}0); // len=0 : fastest
         WR.Add('"');
       end;
   end;
