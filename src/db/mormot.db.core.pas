@@ -1891,7 +1891,6 @@ function TLastError.NewMsg(const text: RawUtf8): TLastErrorID;
 var
   i: PtrInt;
 begin
-  result := 0; // makes Delphi compiler happy
   Safe.Lock;
   try
     inc(CurrentID);
@@ -1900,10 +1899,10 @@ begin
     i := CurrentIndex + 1;
     if i = length(Seq) then
       i := 0;
+    result := CurrentID;
     Seq[i] := result;
     Msg[i] := text;
     CurrentIndex := i;
-    result := CurrentID;
   finally
     Safe.UnLock;
   end;
@@ -1958,7 +1957,7 @@ begin
   if id = 0 then
     result := '' // no error
   else if not LastDbError.GetMsg(id, result) then
-    FormatUtf8('Outdated DB Error %', [id], result);
+    FormatUtf8('Too many DB errors: id % is far behind', [id], result);
 end;
 
 function HasDbError: boolean;

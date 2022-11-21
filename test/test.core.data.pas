@@ -5309,9 +5309,22 @@ var
   end;
 
 begin
+  CheckEqual(GetDbError, '');
+  SetDbError('test1');
+  CheckEqual(GetDbError, 'test1');
+  SetDbError('test2');
+  CheckEqual(GetDbError, 'test2');
+  ClearDbError;
+  CheckEqual(GetDbError, '');
+  SetDbError('test3');
+  CheckEqual(GetDbError, 'test3');
+  ClearDbError;
+  CheckEqual(GetDbError, '');
   Stmt := nil;
   Props := TOrmPeople.OrmProps;
+  Check(Props <> nil);
   NewStmt('select * from atable');
+  Check(Stmt <> nil);
   Check(Stmt.TableName = 'atable');
   Check(Stmt.Where = nil);
   Stmt.SelectFieldBits(bits, withID);
