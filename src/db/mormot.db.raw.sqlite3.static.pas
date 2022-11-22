@@ -89,6 +89,23 @@ type
   end;
 
 
+const
+  /// the exact version expected by the current state of this unit
+  // - an error message is generated via DisplayFatalError() if the statically
+  // linked sqlite3.o(bj) does not match this expected value
+  EXPECTED_SQLITE3_VERSION = '3.40.0';
+
+  /// the github release tag associated with this EXPECTED_SQLITE3_VERSION
+  // - to be used if you don't want the latest version of sqlite3, but the very
+  // same binaries expected by this unit, in one of its previous version
+  // - you could download the static for this exact mORMot source revision e.g. as
+  // https://github.com/synopse/mORMot2/releases/download/2.0.4148/mormot2static.7z
+  EXPECTED_RELEASE_TAG = '2.0.4148';
+
+  /// where to download the latest available static binaries, including SQLite3
+  EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
+
+
 { ************ Encryption-Related Functions }
 
 /// use this procedure to change the password for an existing SQLite3 database file
@@ -1028,19 +1045,6 @@ function sqlite3_error_offset(DB: TSqlite3DB): integer; cdecl; external;
 
 
 { TSqlite3LibraryStatic }
-
-const
-  // error message if statically linked sqlite3.o(bj) does not match this value
-  EXPECTED_SQLITE3_VERSION = '3.39.4';
-
-  // the github release tag associated with this EXPECTED_SQLITE3_VERSION
-  // - you could download the static for this exact mORMot source revision e.g. as
-  // https://github.com/synopse/mORMot2/releases/download/2.0.4148/mormot2static.7z
-  EXPECTED_RELEASE_TAG = '2.0.4148';
-
-  // where to download the latest available static binaries, including SQLite3
-  EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
-
 
 constructor TSqlite3LibraryStatic.Create;
 begin
