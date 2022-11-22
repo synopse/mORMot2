@@ -106,7 +106,7 @@ begin
 end;
 
 function Utf8ToWin32PWideChar(const Text: RawUtf8;
- var dest: TSynTempBuffer): PWideChar;
+  var dest: TSynTempBuffer): PWideChar;
 var
   TextLen: PtrInt;
 begin
@@ -3902,18 +3902,20 @@ end;
 function ServiceSingleRun: boolean;
 var
   S: array[0..1] of TServiceTableEntry;
+  t: TSynTempBuffer;
 begin
   if ServiceSingle = nil then
   begin
     result := false;
     exit;
   end;
-  S[0].lpServiceName := pointer(ServiceSingle.ServiceName);
+  S[0].lpServiceName := Utf8ToWin32PWideChar(ServiceSingle.ServiceName, t);
   S[0].lpServiceProc := ServiceProc;
   S[1].lpServiceName := nil;
   S[1].lpServiceProc := nil;
   { TODO : disable EExternal exception logging in ServicesSingleRun? }
   result := StartServiceCtrlDispatcherW(@S);
+  t.Done;
 end;
 
 
@@ -3939,7 +3941,8 @@ begin
   try
     inherited;
   finally
-    ServiceSingle := nil;
+    if ServiceSingle = self then
+      ServiceSingle := nil;
   end;
 end;
 
