@@ -44,11 +44,11 @@ type
   // inherited classes define the values customizable from JSON serialization
   TSynDaemonAbstractSettings  = class(TSynJsonFileSettings)
   protected
-    fServiceName: string;
-    fServiceDisplayName: string;
-    fServiceExecutable: string;
+    fServiceName: RawUtf8;
+    fServiceDisplayName: RawUtf8;
+    fServiceExecutable: TFileName;
     {$ifdef OSWINDOWS}
-    fServiceDependencies: string;
+    fServiceDependencies: RawUtf8;
     {$endif OSWINDOWS}
     fLog: TSynLogInfos;
     fLogRotateFileCount: integer;
@@ -63,6 +63,7 @@ type
     procedure SetLog(aLogClass: TSynLogClass);
     /// returns user-friendly description of the service, including version
     // information and company copyright (if available)
+    // - returns a string instance, just like Executable.Version methods
     function ServiceDescription: string; virtual;
     /// read-only access to the TSynLog class, if SetLog() has been called
     property LogClass: TSynLogClass
@@ -72,21 +73,21 @@ type
     // - not published by default: could be defined if needed, or e.g. set in
     // overriden constructor
     // - several depending services may be set by appending ';' between names
-    property ServiceDependencies: string
+    property ServiceDependencies: RawUtf8
       read fServiceDependencies write fServiceDependencies;
     {$endif OSWINDOWS}
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
-    property ServiceName: string
+    property ServiceName: RawUtf8
       read fServiceName write fServiceName;
     /// the service name, as displayed by Windows or at the console level
     // - default is the executable name
-    property ServiceDisplayName: string
+    property ServiceDisplayName: RawUtf8
       read fServiceDisplayName write fServiceDisplayName;
     /// the service executable path and parameters
     // - default is void '', so the executable name (with full path) will be used
     // - by definition, is available only on Windows
-    property ServiceExecutable: string
+    property ServiceExecutable: TFileName
       read fServiceExecutable write fServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
     property Log: TSynLogInfos
@@ -328,7 +329,7 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  Utf8ToStringVar(Executable.ProgramName, fServiceName);
+  fServiceName := Executable.ProgramName;
   fServiceDisplayName := fServiceName;
 end;
 
@@ -337,7 +338,7 @@ var
   versionnumber: string;
   v: TFileVersion;
 begin
-  result := fServiceDisplayName;
+  Utf8ToStringVar(fServiceDisplayName, result);
   v := Executable.Version;
   versionnumber := v.DetailedOrVoid;
   if versionnumber <> '' then
@@ -400,7 +401,7 @@ begin
     fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
-  fSettings.LoadFromFile(fn + aSettingsExt, aSectionName); // now loads the settings file
+  fSettings.LoadFromFile(fn + aSettingsExt, aSectionName);
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=
@@ -482,7 +483,7 @@ var
 
   procedure ShowState(state: TServiceState);
   begin
-    writeln(fSettings.ServiceName, ' State=', ToText(state)^);
+    writeln(Utf8ToConsole(fSettings.ServiceName), ' State=', ToText(state)^);
     ExitCode := ord(state); // convention result to caller e.g. from a batch
   end;
 
@@ -554,7 +555,7 @@ begin
       begin
         WriteCopyright;
         exe := StringFromFile(Executable.ProgramFileName);
-        writeln(' ', fSettings.ServiceName,
+        writeln(' ', Utf8ToConsole(fSettings.ServiceName),
           #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
           #13#10' Build date: ', Executable.Version.BuildDateTimeString,
           #13#10' MD5: ', Md5(exe),
@@ -629,8 +630,8 @@ begin
       cInstall:
         with fSettings do
           Show(TServiceController.Install(
-            ServiceName, ServiceDisplayName, ServiceDescription, aAutoStart,
-            ServiceExecutable, ServiceDependencies) <> ssNotInstalled);
+            ServiceName, ServiceDisplayName, StringToUtf8(ServiceDescription),
+            aAutoStart, ServiceExecutable, ServiceDependencies) <> ssNotInstalled);
       cStart,
       cStop,
       cUninstall,
@@ -826,16 +827,15 @@ var
   i: PtrInt;
   pid: cardinal;
   st: TServiceState;
-  n: RawUtf8;
 begin
   GetServices;
   for i := 0 to high(fService) do
   begin
-    StringToUtf8(fService[i].ServiceName, n);
     {$ifdef OSWINDOWS}
     pid := GetServicePid(fService[i].ServiceName, @st);
     {$else}
-    pid := GetCardinal(pointer(StringFromFile(fPidFolder + n + '.pid')));
+    pid := GetCardinal(pointer(
+       StringFromFile(fPidFolder + fService[i].ServiceName + '.pid')));
     if pid = 0 then
       st := ssStopped
     else if IsValidPid(pid) then
@@ -843,7 +843,8 @@ begin
     else
       st := ssErrorRetrievingState; // unexpected .pid file content
     {$endif OSWINDOWS}
-    ConsoleWrite('% [%] %', [n, pid, ToText(st)^], _STATECOLOR[st]);
+    ConsoleWrite('% [%] %', [fService[i].ServiceName, pid, ToText(st)^],
+      _STATECOLOR[st]);
   end;
 end;
 
