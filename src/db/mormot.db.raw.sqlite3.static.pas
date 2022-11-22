@@ -743,50 +743,50 @@ begin
   FileClose(F);
 end;
 
-procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
-  const OldPassWord: RawUtf8);
 const
   OLDENCRYPTTABLESIZE = $4000;
 
-  procedure CreateSqlEncryptTableBytes(const PassWord: RawUtf8; Table: PByteArray);
-  // very fast table (private key) computation from a given password
-  // - execution speed and code size was the goal here: can be easily broken
-  // - the new encryption scheme is both safer and more performant
-  var
-    i, j, k, L: integer;
+procedure CreateSqlEncryptTableBytes(const PassWord: RawUtf8; Table: PByteArray);
+// very fast table (private key) computation from a given password
+// - execution speed and code size was the goal here: can be easily broken
+// - the new encryption scheme is both safer and more performant
+var
+  i, j, k, L: integer;
+begin
+  L := length(PassWord) - 1;
+  j := 0;
+  k := integer(L * ord(PassWord[1])) + 134775813; // initial value, prime based
+  for i := 0 to OLDENCRYPTTABLESIZE - 1 do
   begin
-    L := length(PassWord) - 1;
-    j := 0;
-    k := integer(L * ord(PassWord[1])) + 134775813; // initial value, prime based
-    for i := 0 to OLDENCRYPTTABLESIZE - 1 do
-    begin
-      Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
-      k := integer(k * 3 + i); // fast prime-based pseudo random generator
-      if j = L then
-        j := 0
-      else
-        inc(j);
-    end;
+    Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
+    k := integer(k * 3 + i); // fast prime-based pseudo random generator
+    if j = L then
+      j := 0
+    else
+      inc(j);
   end;
+end;
 
-  procedure XorOffset(P: PByte; Index, Count: cardinal; SqlEncryptTable: PByteArray);
-  var
-    len: cardinal;
-  begin
-    // deprecated fast and simple Cypher using Index (= offset in file)
-    if Count > 0 then
-      repeat
-        Index := Index and (OLDENCRYPTTABLESIZE - 1);
-        len := OLDENCRYPTTABLESIZE - Index;
-        if len > Count then
-          len := Count;
-        XorMemory(pointer(P), @SqlEncryptTable^[Index], len);
-        inc(P, len);
-        inc(Index, len);
-        dec(Count, len);
-      until Count = 0;
-  end;
+procedure XorOffset(P: PByte; Index, Count: cardinal; SqlEncryptTable: PByteArray);
+var
+  len: cardinal;
+begin
+  // deprecated fast and simple Cypher using Index (= offset in file)
+  if Count > 0 then
+    repeat
+      Index := Index and (OLDENCRYPTTABLESIZE - 1);
+      len := OLDENCRYPTTABLESIZE - Index;
+      if len > Count then
+        len := Count;
+      XorMemory(pointer(P), @SqlEncryptTable^[Index], len);
+      inc(P, len);
+      inc(Index, len);
+      dec(Count, len);
+    until Count = 0;
+end;
 
+procedure OldSqlEncryptTablePassWordToPlain(const FileName: TFileName;
+  const OldPassWord: RawUtf8);
 var
   F: THandle;
   R: integer;
