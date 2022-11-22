@@ -3216,17 +3216,43 @@ end;
 
 { ****************** Unix Daemon and Windows Service Support }
 
+function OpenServiceManager(const TargetComputer, DatabaseName: RawUtf8;
+  dwDesiredAccess: cardinal): SC_HANDLE;
+var
+  t1, t2: TSynTempBuffer;
+begin
+  result := OpenSCManagerW(
+    Utf8ToWin32PWideChar(TargetComputer, t1),
+    Utf8ToWin32PWideChar(DatabaseName, t2), dwDesiredAccess);
+  t1.Done;
+  t2.Done;
+end;
+
+function OpenServiceInstance(hSCManager: SC_HANDLE; const ServiceName: RawUtf8;
+  dwDesiredAccess: cardinal): SC_HANDLE;
+var
+  t: TSynTempBuffer;
+begin
+  result := OpenServiceW(
+    hSCManager, Utf8ToWin32PWideChar(ServiceName, t), dwDesiredAccess);
+  t.Done;
+end;
+
+
 { TServiceController }
 
 constructor TServiceController.CreateNewService(
-  const TargetComputer, DatabaseName, Name, DisplayName, Path,
-        OrderGroup, Dependencies, Username, Password: string;
+  const TargetComputer, DatabaseName, Name, DisplayName: RawUtf8;
+  const Path: TFileName;
+  const OrderGroup, Dependencies, Username, Password: RawUtf8;
   DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
 var
   exeName: TFileName;
-  dep: string;
-  i, l: PtrInt;
+  exeNameW: SynUnicode;
+  depW: PWideChar;
+  i: PtrInt;
   level: TSynLogInfo;
+  t0, t1, t2, t3, t4, t5: TSynTempBuffer;
 begin
   inherited Create;
   if Path = '' then
@@ -3252,29 +3278,36 @@ begin
     end
     else
       exeName := Path;
-  fName := RawUtf8(Name);
-  fSCHandle := OpenSCManager(
-    pointer(TargetComputer), pointer(DatabaseName), SC_MANAGER_ALL_ACCESS);
+  exeNameW := SynUnicode(exeName); // use RTL for TFileName to UTF-16
+  fName := Name;
+  fSCHandle := OpenServiceManager(
+    TargetComputer, DatabaseName, SC_MANAGER_ALL_ACCESS);
   if fSCHandle = 0 then
   begin
     TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
       [TargetComputer, DatabaseName, fName], self);
     exit;
   end;
-  l := length(Dependencies);
-  if l <> 0 then
+  depW := Utf8ToWin32PWideChar(Dependencies, t0);
+  if depW <> nil then
   begin
-    dep := Dependencies;
-    SetLength(dep, l + 1);
-    for i := 1 to l do
-      if dep[i] = ';' then
-        dep[i] := #0; // as expected by CreateService() API
-    dep[l + 1] := #0; // should end with #0#0
+    for i := 0 to t0.len - 1 do
+      if depW[i] = ';' then
+        depW[i] := #0; // as expected by CreateServiceW() API
+    depW[t0.len + 1] := #0; // should end with #0#0
   end;
-  fHandle := CreateService(fSCHandle,
-    pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
-    ErrorControl, pointer({%H-}exeName), pointer(OrderGroup), nil,
-    pointer(dep), pointer(Username), pointer(Password));
+  fHandle := CreateServiceW(fSCHandle,
+    Utf8ToWin32PWideChar(Name, t1), Utf8ToWin32PWideChar(DisplayName, t2),
+    DesiredAccess, ServiceType, StartType,
+    ErrorControl, pointer(exeNameW), Utf8ToWin32PWideChar(OrderGroup, t3),
+    nil, depW, Utf8ToWin32PWideChar(Username, t4),
+    Utf8ToWin32PWideChar(Password, t5));
+  t0.Done;
+  t1.Done;
+  t2.Done;
+  t3.Done;
+  t4.Done;
+  t5.Done;
   if fHandle <> 0 then
     level := sllInfo // success
   else
@@ -3284,19 +3317,18 @@ begin
 end;
 
 constructor TServiceController.CreateOpenService(
-  const TargetComputer, DataBaseName, Name: string; DesiredAccess: cardinal);
+  const TargetComputer, DataBaseName, Name: RawUtf8; DesiredAccess: cardinal);
 begin
   inherited Create;
   fName := RawUtf8(Name);
-  fSCHandle := OpenSCManager(
-    pointer(TargetComputer), pointer(DataBaseName), GENERIC_READ);
+  fSCHandle := OpenServiceManager(TargetComputer, DataBaseName, GENERIC_READ);
   if fSCHandle = 0 then
   begin
     TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
       [TargetComputer, DataBaseName, fName], self);
     exit;
   end;
-  fHandle := OpenService(fSCHandle, pointer(Name), DesiredAccess);
+  fHandle := OpenServiceInstance(fSCHandle, Name, DesiredAccess);
   if fHandle = 0 then
     TService.DoLog(sllLastError, 'OpenService(%)', [Name], self);
 end;
@@ -3379,7 +3411,7 @@ begin
     result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
 end;
 
-function TServiceController.Start(const Args: array of PChar): boolean;
+function TServiceController.Start(const Args: array of PWideChar): boolean;
 begin
   TService.DoLog(sllDebug, 'Start(%) Args=% Handle=%',
     [fName, length(Args), fHandle], self);
@@ -3390,9 +3422,9 @@ begin
     exit;
   end;
   if length(Args) = 0 then
-    result := StartService(fHandle, 0, nil)
+    result := StartServiceW(fHandle, 0, nil)
   else
-    result := StartService(fHandle, length(Args), @Args[0]);
+    result := StartServiceW(fHandle, length(Args), @Args[0]);
   if not result then
     TService.DoLog(sllLastError, 'Start(%) failed', [fName], self);
 end;
@@ -3405,27 +3437,32 @@ begin
     result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
 end;
 
-procedure TServiceController.SetDescription(const Description: string);
+function TServiceController.SetDescription(const Description: RawUtf8): boolean;
 var
-  desc: SynUnicode;
+  sd: TServiceDescription;
+  t: TSynTempBuffer;
 begin
   if Description = '' then
+  begin
+    result := false;
     exit;
-  desc := SynUnicode(Description);
-  ChangeServiceConfig2(fHandle, SERVICE_CONFIG_DESCRIPTION, @desc);
+  end;
+  sd.lpDestription := Utf8ToWin32PWideChar(Description, t);
+  result := ChangeServiceConfig2W(fHandle, SERVICE_CONFIG_DESCRIPTION, @sd);
+  t.Done;
 end;
 
 class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
-  const ServiceName, DisplayName, Description, Dependencies: string);
+  const ServiceName, DisplayName, Description, Dependencies: RawUtf8);
 var
   param: string;
   i: integer;
 
-  procedure ShowError(Msg: string);
+  procedure ShowError(Msg: RawUtf8);
   begin
-    Msg := ServiceName + ': "' + Msg + '" failed for ' + param;
+    Msg := _fmt('%: "%" failed for %', [ServiceName, Msg, param]);
     TService.DoLog(sllLastError, '%', [Msg], nil);
-    ConsoleWrite(RawUtf8(Msg), ccLightRed);
+    ConsoleWrite(Msg, ccLightRed);
   end;
 
 begin
@@ -3466,8 +3503,8 @@ begin
 end;
 
 class function TServiceController.Install(
-  const Name, DisplayName, Description: string;
-  AutoStart: boolean; ExeName: TFileName; Dependencies: string): TServiceState;
+  const Name, DisplayName, Description: RawUtf8; AutoStart: boolean;
+  ExeName: TFileName; const Dependencies: RawUtf8): TServiceState;
 var
   ctrl: TServiceController;
   start: cardinal;
@@ -3495,12 +3532,20 @@ end;
 
 { TService }
 
-constructor TService.Create(const aServiceName, aDisplayName: string);
+class procedure TService.DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+  const Args: array of const; Instance: TObject);
 begin
-  fSName := aServiceName;
-  fDName := aDisplayName;
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(Level, Fmt, Args, Instance);
+end;
+
+constructor TService.Create(const aServiceName, aDisplayName: RawUTf8);
+begin
+  fServiceName := aServiceName;
   if aDisplayName = '' then
-    fDName := aServiceName;
+    fDisplayName := aServiceName
+  else
+    fDisplayName := aDisplayName;
   fServiceType := SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
   fStartType := SERVICE_AUTO_START;
   fStatusRec.dwServiceType := fServiceType;
@@ -3509,13 +3554,6 @@ begin
   fStatusRec.dwWin32ExitCode := NO_ERROR;
   DoLog(sllDebug, 'Create: % (%) running as [%]',
     [ServiceName, aDisplayName, Executable.ProgramFullSpec], self);
-end;
-
-class procedure TService.DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
-  const Args: array of const; Instance: TObject);
-begin
-  if Assigned(WindowsServiceLog) then
-    WindowsServiceLog(Level, Fmt, Args, Instance);
 end;
 
 procedure TService.CtrlHandle(Code: cardinal);
@@ -3612,7 +3650,7 @@ begin
   result := length(fArgsList);
 end;
 
-function TService.GetArgs(Idx: Integer): string;
+function TService.GetArgs(Idx: Integer): RawUtf8;
 begin
   if cardinal(Idx) > cardinal(high(fArgsList)) then
     result := ''
@@ -3632,7 +3670,7 @@ end;
 function TService.GetInstalled: boolean;
 begin
   with TServiceController.CreateOpenService(
-    '', '', fSName, SERVICE_QUERY_STATUS) do
+    '', '', fServiceName, SERVICE_QUERY_STATUS) do
   try
     result := Handle <> 0;
   finally
@@ -3640,11 +3678,13 @@ begin
   end;
 end;
 
-function TService.Install(const Params: string): boolean;
+function TService.Install(const Params: TFileName): boolean;
 var
   schService: SC_HANDLE;
   schSCManager: SC_HANDLE;
   ServicePath: TFileName;
+  p: SynUnicode;
+  t1, t2: TSynTempBuffer;
 begin
   result := false;
   if installed then
@@ -3652,24 +3692,29 @@ begin
   ServicePath := Executable.ProgramFileName;
   if Params <> '' then
     ServicePath := ServicePath + ' ' + Params;
-  schSCManager := OpenSCManager(nil, nil, SC_MANAGER_ALL_ACCESS);
-  if schSCManager > 0 then
+  p := SynUnicode(ServicePath); // use RTL for TFileName to UTF-16 conversion
+  schSCManager := OpenSCManagerW(nil, nil, SC_MANAGER_ALL_ACCESS);
+  if schSCManager <= 0 then
+    exit;
+  schService := CreateServiceW(schSCManager,
+    Utf8ToWin32PWideChar(fServiceName, t1),
+    Utf8ToWin32PWideChar(fDisplayName, t2),
+    SERVICE_ALL_ACCESS, fServiceType, fStartType, SERVICE_ERROR_NORMAL,
+    pointer(p), nil, nil, nil, nil, nil);
+  t1.Done;
+  t2.Done;
+  if schService > 0 then
   begin
-    schService := CreateService(schSCManager, pointer(fSName), pointer(fDName),
-      SERVICE_ALL_ACCESS, fServiceType, fStartType, SERVICE_ERROR_NORMAL,
-      pointer(ServicePath), nil, nil, nil, nil, nil);
-    if schService > 0 then
-    begin
-      result := true;
-      CloseServiceHandle(schService);
-    end;
+    result := true;
+    CloseServiceHandle(schService);
   end;
+  CloseServiceHandle(schSCManager);
 end;
 
 procedure TService.Remove;
 begin
   with TServiceController.CreateOpenService(
-    '', '', fSName, SERVICE_ALL_ACCESS) do
+    '', '', fServiceName, SERVICE_ALL_ACCESS) do
   try
     if Handle = 0 then
       exit;
@@ -3720,7 +3765,7 @@ end;
 procedure TService.Start;
 begin
   with TServiceController.CreateOpenService(
-    '', '', fSName, SERVICE_ALL_ACCESS) do
+    '', '', fServiceName, SERVICE_ALL_ACCESS) do
   try
     Start([]);
   finally
@@ -3731,7 +3776,7 @@ end;
 procedure TService.Stop;
 begin
   with TServiceController.CreateOpenService(
-    '', '', fSName, SERVICE_ALL_ACCESS) do
+    '', '', fServiceName, SERVICE_ALL_ACCESS) do
   try
     Stop;
   finally
@@ -3739,9 +3784,10 @@ begin
   end;
 end;
 
-procedure TService.ServiceProc(ArgCount: integer; Args: PPChar);
+procedure TService.ServiceProc(ArgCount: integer; Args: PPWideChar);
 var
   i: PtrInt;
+  t: TSynTempBuffer;
 begin
   SetCurrentThreadName('ServiceProc');
   DoLog(sllTrace, 'ServiceProc: ArgCount=% ServiceSingle=%',
@@ -3758,10 +3804,12 @@ begin
     for i := 0 to ArgCount - 1 do
     begin
       inc(Args); // first was service name
-      fArgsList[i] := Args^; // convert to string
+      Win32PWideCharToUtf8(Args^, StrLenW(Args^), fArgsList[i]); // to string
     end;
   end;
-  fStatusHandle := RegisterServiceCtrlHandler(pointer(fSName), @ControlHandler);
+  fStatusHandle := RegisterServiceCtrlHandlerW(
+    Utf8ToWin32PWideChar(fServiceName, t), @ControlHandler);
+  t.Done;
   if fStatusHandle = 0 then
   begin
     ReportStatus(SERVICE_STOPPED, GetLastError, 0);
@@ -3795,7 +3843,7 @@ begin
   end;
 end;
 
-function GetServicePid(const aServiceName: string;
+function GetServicePid(const aServiceName: RawUtf8;
   aServiceState: PServiceState): cardinal;
 var
   ss: TServiceState;
@@ -3807,10 +3855,10 @@ var
 begin
   result := 0;
   ss := ssErrorRetrievingState;
-  scm := OpenSCManager(nil, nil, SC_MANAGER_CONNECT);
+  scm := OpenSCManagerW(nil, nil, SC_MANAGER_CONNECT);
   if scm <> 0 then
   try
-    svc := OpenService(scm, pointer(aServiceName), SERVICE_QUERY_STATUS);
+    svc := OpenServiceInstance(scm, aServiceName, SERVICE_QUERY_STATUS);
     if svc <> 0 then
     try
       if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
@@ -3846,7 +3894,7 @@ end;
     that called the StartService function to start the service. Args can
     be nil if there are no arguments. }
 
-procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
+procedure ServiceProc(ArgCount: cardinal; Args: PPWideChar); stdcall;
 begin
   ServiceSingle.ServiceProc(ArgCount, Args);
 end;
@@ -3865,7 +3913,7 @@ begin
   S[1].lpServiceName := nil;
   S[1].lpServiceProc := nil;
   { TODO : disable EExternal exception logging in ServicesSingleRun? }
-  result := StartServiceCtrlDispatcher(@S);
+  result := StartServiceCtrlDispatcherW(@S);
 end;
 
 
@@ -3877,7 +3925,7 @@ begin
     ServiceSingle.DoCtrlHandle(Opcode);
 end;
 
-constructor TServiceSingle.Create(const aServiceName, aDisplayName: string);
+constructor TServiceSingle.Create(const aServiceName, aDisplayName: RawUtf8);
 begin
   if ServiceSingle <> nil then
     raise EOSException.Create('Only one TServiceSingle is allowed at a time');

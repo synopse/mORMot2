@@ -4027,31 +4027,31 @@ type
   SC_HANDLE = THandle;
   SERVICE_STATUS_HANDLE = THandle;
   TServiceTableEntry = record
-    lpServiceName: PChar;
-    lpServiceProc: procedure(ArgCount: cardinal; Args: PPChar); stdcall;
+    lpServiceName: PWideChar;
+    lpServiceProc: procedure(ArgCount: cardinal; Args: PPWideChar); stdcall;
   end;
   PServiceTableEntry = ^TServiceTableEntry;
+  TServiceDescription = record
+    lpDestription: PWideChar;
+  end;
 
   {$Z4}
   SC_STATUS_TYPE = (SC_STATUS_PROCESS_INFO);
   {$Z1}
 
-function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
-  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
-  name 'OpenSCManager' + _AW;
-function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: cardinal;
-  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
-function StartService(hService: SC_HANDLE; dwNumServiceArgs: cardinal;
-  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
-  name 'StartService' + _AW;
-function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
+function OpenSCManagerW(lpMachineName, lpDatabaseName: PWideChar;
+  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32;
+function ChangeServiceConfig2W(hService: SC_HANDLE; dwsInfoLevel: cardinal;
+  lpInfo: Pointer): BOOL; stdcall; external advapi32;
+function StartServiceW(hService: SC_HANDLE; dwNumServiceArgs: cardinal;
+  lpServiceArgVectors: PPWideChar): BOOL; stdcall; external advapi32;
+function CreateServiceW(hSCManager: SC_HANDLE;
+  lpServiceName, lpDisplayName: PWideChar;
   dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: cardinal;
-  lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
-  lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
-  name 'CreateService' + _AW;
-function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
-  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
-  name 'OpenService' + _AW;
+  lpBinaryPathName, lpLoadOrderGroup: PWideChar; lpdwTagId: LPDWORD; lpDependencies,
+  lpServiceStartName, lpPassword: PWideChar): SC_HANDLE; stdcall; external advapi32;
+function OpenServiceW(hSCManager: SC_HANDLE; lpServiceName: PWideChar;
+  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32;
 function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
 function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
 function QueryServiceStatus(hService: SC_HANDLE;
@@ -4063,12 +4063,15 @@ function ControlService(hService: SC_HANDLE; dwControl: cardinal;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
-function RegisterServiceCtrlHandler(lpServiceName: PChar;
-  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
-  name 'RegisterServiceCtrlHandler' + _AW;
-function StartServiceCtrlDispatcher(
-  lpServiceStartTable: PServiceTableEntry): BOOL; stdcall; external advapi32
-  name 'StartServiceCtrlDispatcher' + _AW;
+function RegisterServiceCtrlHandlerW(lpServiceName: PWideChar;
+  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32;
+function StartServiceCtrlDispatcherW(
+  lpServiceStartTable: PServiceTableEntry): BOOL; stdcall; external advapi32;
+
+function OpenServiceManager(const TargetComputer, DatabaseName: RawUtf8;
+  dwDesiredAccess: cardinal): SC_HANDLE;
+function OpenServiceInstance(hSCManager: SC_HANDLE; const ServiceName: RawUtf8;
+  dwDesiredAccess: cardinal): SC_HANDLE;
 
 
 { *** high level classes to define and manage Windows Services }
@@ -4139,17 +4142,18 @@ type
     // the startup operation), SERVICE_ERROR_SEVERE,
     // SERVICE_ERROR_CRITICAL
     constructor CreateNewService(
-      const TargetComputer, DatabaseName, Name, DisplayName, Path: string;
-      const OrderGroup: string = ''; const Dependencies: string = '';
-      const Username: string = ''; const Password: string = '';
+      const TargetComputer, DatabaseName, Name, DisplayName: RawUtf8;
+      const Path: TFileName;
+      const OrderGroup: RawUtf8 = ''; const Dependencies: RawUtf8 = '';
+      const Username: RawUtf8 = ''; const Password: RawUtf8 = '';
       DesiredAccess: cardinal = SERVICE_ALL_ACCESS;
       ServiceType: cardinal = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
       StartType: cardinal = SERVICE_DEMAND_START;
       ErrorControl: cardinal = SERVICE_ERROR_NORMAL);
     /// wrapper around CreateNewService() to install the current executable as service
-    class function Install(const Name, DisplayName, Description: string;
+    class function Install(const Name, DisplayName, Description: RawUtf8;
       AutoStart: boolean; ExeName: TFileName = '';
-      Dependencies: string = ''): TServiceState;
+      const Dependencies: RawUtf8 = ''): TServiceState;
     /// open an existing service, in order to control it or its configuration
     // from your application
     // - TargetComputer - set it to empty string if local computer is the target.
@@ -4161,7 +4165,7 @@ type
     // SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
     // SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL
     constructor CreateOpenService(
-      const TargetComputer, DataBaseName, Name: string;
+      const TargetComputer, DataBaseName, Name: RawUtf8;
       DesiredAccess: cardinal = SERVICE_ALL_ACCESS);
     /// release memory and handles
     destructor Destroy; override;
@@ -4193,11 +4197,10 @@ type
     /// Removes service from the system, i.e. close the Service
     function Delete: boolean;
     /// starts the execution of a service with some specified arguments
-    // - this version expect PChar pointers, either AnsiString (for FPC and old
-    //  Delphi compiler), either UnicodeString (till Delphi 2009)
-    function Start(const Args: array of PChar): boolean;
+    // - this version expect PWideChar pointers, i.e. UTF-16 strings
+    function Start(const Args: array of PWideChar): boolean;
     /// try to define the description text of this service
-    procedure SetDescription(const Description: string);
+    function SetDescription(const Description: RawUtf8): boolean;
     /// this class method will check the command line parameters, and will let
     //  control the service according to it
     // - MyServiceSetup.exe /install will install the service
@@ -4209,8 +4212,8 @@ type
     // - if ExeFileName='', it will install the current executable
     // - optional Description and Dependencies text may be specified
     class procedure CheckParameters(const ExeFileName: TFileName;
-      const ServiceName, DisplayName, Description: string;
-      const Dependencies: string = '');
+      const ServiceName, DisplayName, Description: RawUtf8;
+      const Dependencies: RawUtf8 = '');
   end;
 
   {$M+}
@@ -4229,8 +4232,8 @@ type
   /// let an executable implement a Windows Service
   TService = class
   protected
-    fSName: string;
-    fDName: string;
+    fServiceName: RawUtf8;
+    fDisplayName: RawUtf8;
     fStartType: cardinal;
     fServiceType: cardinal;
     fData: cardinal;
@@ -4244,37 +4247,39 @@ type
     fOnResume: TServiceEvent;
     fOnStop: TServiceEvent;
     fStatusRec: TServiceStatus;
-    fArgsList: array of string;
+    fArgsList: TRawUtf8DynArray;
     fStatusHandle: THandle;
     function GetArgCount: Integer;
-    function GetArgs(Idx: Integer): string;
+    function GetArgs(Idx: Integer): RawUtf8;
     function GetInstalled: boolean;
     procedure SetStatus(const Value: TServiceStatus);
     procedure CtrlHandle(Code: cardinal);
     function GetControlHandler: TServiceControlHandler;
     procedure SetControlHandler(const Value: TServiceControlHandler);
-    procedure ServiceProc(ArgCount: integer; Args: PPChar);
+    procedure ServiceProc(ArgCount: integer; Args: PPWideChar);
   public
-    /// this method is the main service entrance, from the OS point of view
-    // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
-    // - and report the service status to the system (via ReportStatus method)
-    procedure DoCtrlHandle(Code: cardinal); virtual;
+    /// internal method redirecting to WindowsServiceLog global variable
+    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+      const Args: array of const; Instance: TObject);
     /// Creates the service
     // - the service is added to the internal registered services
     // - main application must call the global ServicesRun procedure to actually
     // start the services
     // - caller must free the TService instance when it's no longer used
-    constructor Create(const aServiceName, aDisplayName: string); reintroduce; virtual;
-    /// internal method redirecting to WindowsServiceLog global variable
-    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
-     const Args: array of const; Instance: TObject);
+    constructor Create(const aServiceName, aDisplayName: RawUtf8); reintroduce; virtual;
+    /// this method is the main service entrance, from the OS point of view
+    // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
+    // - and report the service status to the system (via ReportStatus method)
+    procedure DoCtrlHandle(Code: cardinal); virtual;
     /// Reports new status to the system
     function ReportStatus(dwState, dwExitCode, dwWait: cardinal): BOOL;
     /// Installs the service in the database
     // - return true on success
     // - create a local TServiceController with the current executable file,
     // with the supplied command line parameters
-    function Install(const Params: string = ''): boolean;
+    // - you can optionally append some parameters, which will be appended
+    // to the
+    function Install(const Params: TFileName = ''): boolean;
     /// Removes the service from database
     //  - uses a local TServiceController with the current Service Name
     procedure Remove;
@@ -4292,7 +4297,7 @@ type
       read GetArgCount;
     /// List of arguments passed to the service by the service controler
     // - Idx is in range 0..ArgCount - 1
-    property Args[Idx: Integer]: string
+    property Args[Idx: Integer]: RawUtf8
       read GetArgs;
     /// Any data You wish to associate with the service object
     property Data: cardinal
@@ -4351,11 +4356,11 @@ type
       read fOnShutdown write fOnShutdown;
   published
     /// Name of the service. Must be unique
-    property ServiceName: string
-      read fSName;
+    property ServiceName: RawUtf8
+      read fServiceName;
     /// Display name of the service
-    property DisplayName: string
-      read fDName write fDName;
+    property DisplayName: RawUtf8
+      read fDisplayName write fDisplayName;
     /// Type of service
     property ServiceType: cardinal
       read fServiceType write fServiceType;
@@ -4369,7 +4374,7 @@ type
   TServiceSingle = class(TService)
   public
     /// will set a global function as service controller
-    constructor Create(const aServiceName, aDisplayName: string); override;
+    constructor Create(const aServiceName, aDisplayName: RawUtf8); override;
     /// will release the global service controller
     destructor Destroy; override;
   end;
@@ -4389,7 +4394,7 @@ function ServiceSingleRun: boolean;
 function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 
 /// return the ProcessID of a given service, by name
-function GetServicePid(const aServiceName: string;
+function GetServicePid(const aServiceName: RawUtf8;
   aServiceState: PServiceState = nil): cardinal;
 
 /// try to gently stop a given Windows console app from its ProcessID
