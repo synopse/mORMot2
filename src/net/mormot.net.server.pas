@@ -1119,13 +1119,17 @@ type
 
   PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
 
-  /// Event handlers for WebSocket
+  /// Event handler on THttpApiWebSocketServerProtocol Accepted connection
   TOnHttpApiWebSocketServerAcceptEvent = function(Ctxt: THttpServerRequest;
     var Conn: THttpApiWebSocketConnection): boolean of object;
-  TOnHttpApiWebSocketServerMessageEvent = procedure(const Conn: THttpApiWebSocketConnection;
+  /// Event handler on THttpApiWebSocketServerProtocol Message received
+  TOnHttpApiWebSocketServerMessageEvent = procedure(var Conn: THttpApiWebSocketConnection;
     aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG) of object;
-  TOnHttpApiWebSocketServerConnectEvent = procedure(const Conn: THttpApiWebSocketConnection) of object;
-  TOnHttpApiWebSocketServerDisconnectEvent = procedure(const Conn: THttpApiWebSocketConnection;
+  /// Event handler on THttpApiWebSocketServerProtocol connection
+  TOnHttpApiWebSocketServerConnectEvent = procedure(
+    var Conn: THttpApiWebSocketConnection) of object;
+  /// Event handler on THttpApiWebSocketServerProtocol disconnection
+  TOnHttpApiWebSocketServerDisconnectEvent = procedure(var Conn: THttpApiWebSocketConnection;
     aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG) of object;
 
   /// Protocol Handler of websocket endpoints events
