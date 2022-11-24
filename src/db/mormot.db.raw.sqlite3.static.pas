@@ -416,7 +416,7 @@ begin
   // simple full pascal version of the standard C library function
   result := nil;
   if s <> nil then
-    while s^<>#0 do
+    while s^ <> #0 do
     begin
       if s^ = c then
         result := s;
@@ -1048,6 +1048,7 @@ function sqlite3_error_offset(DB: TSqlite3DB): integer; cdecl; external;
 
 constructor TSqlite3LibraryStatic.Create;
 begin
+  // resolve all SQLite3 API endpoints with external functions
   initialize             := @sqlite3_initialize;
   shutdown               := @sqlite3_shutdown;
   open                   := @sqlite3_open;

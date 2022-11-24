@@ -2785,7 +2785,7 @@ type
     // generator, but could be applied on any memory buffer for encryption
     procedure Fill(dest: pointer; bytes: integer);
     /// fill some string[0..size] with 7-bit ASCII random text
-    procedure FillShort(var dest: ShortString; size: PtrUInt);
+    procedure FillShort(var dest: ShortString; size: PtrUInt = 255);
     /// fill some string[0..31] with 7-bit ASCII random text
     procedure FillShort31(var dest: TShort31);
   end;
@@ -8435,6 +8435,8 @@ begin
   len := dest[0];  // first random byte will make length
   if size = 31 then
     size := len and 31 // optimized for FillShort31()
+  else if size = 255 then
+    size := ToByte(len)
   else
     size := len mod size;
   dest[0] := size;
