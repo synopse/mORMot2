@@ -91,38 +91,56 @@ begin
 end;
 
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
+  i: PtrInt;
   tmp: TSynTempBuffer;
 begin
-  if Len <= 0 then
-    exit;
-  tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // RTL function is good enough
   if Len > 0 then
-    dec(Len); // UnicodeToUtf8() result includes the null terminator
-  FastSetString(res, tmp.buf, Len);
-  tmp.Done;
+    if IsAnsiCompatibleW(P, Len) then
+    begin
+      FastSetString(res, nil, Len);
+      for i := 0 to Len - 1 do
+        PByteArray(res)[i] := PWordArray(P)[i];
+    end
+    else
+    begin
+      tmp.Init(Len * 3);
+      Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL if complex
+      if Len > 0 then
+        dec(Len); // UnicodeToUtf8() result includes the null terminator
+      FastSetString(res, tmp.buf, Len);
+      tmp.Done;
+    end;
 end;
 
 function Utf8ToWin32PWideChar(const Text: RawUtf8;
   var dest: TSynTempBuffer): PWideChar;
 var
-  TextLen: PtrInt;
+  TextLen, i: PtrInt;
 begin
   result := nil;
   TextLen := length(Text);
   dest.Init(TextLen * 2);
   if dest.len = 0 then
     exit;
-  dest.len := Utf8ToUnicode(dest.buf, dest.Len + 16, pointer(Text), TextLen);
-  if dest.len <= 0 then
-    dest.len := 0
+  result := dest.buf;
+  if IsAnsiCompatible(PAnsiChar(pointer(Text)), TextLen) then
+  begin
+    for i := 0 to TextLen do // include trailing #0
+      PWordArray(@result)[i] := PByteArray(Text)[i];
+    dest.len := TextLen;
+  end
   else
   begin
-    dec(dest.len); // Utf8ToUnicode() returned length includes trailing #0
-    result := dest.buf;
-    result[dest.len] := #0; // missing on FPC
+    dest.len := Utf8ToUnicode(dest.buf, dest.Len + 16, pointer(Text), TextLen);
+    if dest.len <= 0 then
+      dest.len := 0
+    else
+    begin
+      dec(dest.len); // Utf8ToUnicode() returned length includes trailing #0
+      result[dest.len] := #0; // missing on FPC
+    end;
   end;
 end;
 
