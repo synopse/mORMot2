@@ -1116,6 +1116,7 @@ type
     // - to be called when a setter is involved - not very fast, but safe
     function SetValue(Instance: TObject; const Value: variant): boolean;
     /// set a property value from a text value
+    // - handle all kind of fields, e.g. converting from text into ordinal or floats
     function SetValueText(Instance: TObject; const Value: RawUtf8): boolean;
   end;
 
@@ -1133,8 +1134,12 @@ function FromRttiOrd(o: TRttiOrd; P: pointer): Int64; overload;
 procedure FromRttiOrd(o: TRttiOrd; P: pointer; res: PInt64); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert an ordinal value into its (signed) pointer-sized integer representation
+/// convert an ordinal value into its RTTI-defined binary buffer
 procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+  /// convert a float value into its RTTI-defined binary buffer
+procedure ToRttiFloat(rf: TRttiFloat; P: pointer; Value: TSynExtended);
   {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -2107,6 +2112,10 @@ type
     // - not implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
     procedure SetValue(Data: pointer; var RVD: TRttiVarData;
       andclear: boolean = true);
+    /// set a field value from its UTF-8 text
+    // - will convert the Text into proper ordinal or float if needed
+    // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
+    function SetValueText(Data: pointer; const Text: RawUtf8): boolean;
     /// check if the Value equals the default property set in source code
     // - caller should have checked that PropDefault <> NO_DEFAULT
     function ValueIsDefault(Data: pointer): boolean;
@@ -2370,6 +2379,9 @@ type
     // - implemented in TRttiJson for proper knowledge of our variants
     function ValueByPath(var Data: pointer; Path: PUtf8Char; var Temp: TVarData;
       PathDelim: AnsiChar = '.'): TRttiCustom; virtual;
+    /// set a property value from a text value
+    // - handle all kind of fields, e.g. converting from text into ordinal or floats
+    function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -2936,6 +2948,20 @@ begin
     roUQWord:
       PInt64(P)^ := Value;
     {$endif FPC_NEWRTTI}
+  end;
+end;
+
+procedure ToRttiFloat(rf: TRttiFloat; P: pointer; Value: TSynExtended);
+begin
+  case rf of
+    rfSingle:
+      PSingle(P)^ := Value;
+    rfDouble:
+      unaligned(PDouble(P)^) := Value;
+    rfExtended:
+      PExtended(P)^ := Value;
+    rfCurr:
+      DoubleToCurrency(Value, PCurrency(P));
   end;
 end;
 
@@ -4311,16 +4337,7 @@ begin
   rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:
-      case rf of
-        rfSingle:
-          PSingle({%H-}call.Data)^ := Value;
-        rfDouble:
-          unaligned(PDouble(call.Data)^) := Value;
-        rfExtended:
-          PExtended(call.Data)^ := Value;
-        rfCurr:
-          DoubleToCurrency(Value, PCurrency(call.Data));
-      end;
+      ToRttiFloat(rf, {%H-}call.Data, Value);
     rpcMethod:
       case rf of
         rfSingle:
@@ -4589,6 +4606,7 @@ function TRttiProp.SetAsString(Instance: TObject; const Value: RawUtf8): boolean
 var
   v: PtrInt;
   P: PUtf8Char;
+  u: pointer; // to avoid a global hidden try..finally
 begin
   result := true;
   case TypeInfo^.Kind of
@@ -4609,10 +4627,26 @@ begin
     rkLString:
       SetLongStrProp(Instance, Value);
     rkWString:
-      SetWideStrProp(Instance, Utf8ToWideString(Value));
+      begin
+        u := nil;
+        try
+          Utf8ToWideString(pointer(Value), length(Value), WideString(u));
+          SetWideStrProp(Instance, WideString(u));
+        finally
+          WideString(u) := '';
+        end;
+      end;
     {$ifdef HASVARUSTRING}
     rkUString:
-      SetUnicodeStrProp(Instance, Utf8DecodeToUnicodeString(Value));
+      begin
+        u := nil;
+        try
+          Utf8DecodeToUnicodeString(pointer(Value), length(Value), UnicodeString(u));
+          SetUnicodeStrProp(Instance, UnicodeString(u));
+        finally
+          UnicodeString(u) := '';
+        end;
+      end;
     {$endif HASVARUSTRING}
   else
     result := false; // unsupported type
@@ -6591,10 +6625,10 @@ procedure TRttiCustomProp.GetValue(Data: pointer; out RVD: TRttiVarData);
 begin
   if (Prop = nil) or
      (OffsetGet >= 0 ) then
-    // direct memory access of the value
+    // direct memory access of the value (classes and records)
     GetValueDirect(Data, RVD)
   else
-    // we need to call a getter method
+    // need a class property getter
     GetValueGetter(Data, RVD);
 end;
 
@@ -6608,6 +6642,17 @@ begin
     VarClearProc(RVD.Data);
   if Prop = nil then // raise exception after NeedsClear to avoid memory leak
     raise ERttiException.Create('TRttiCustomProp.SetValue: with Prop=nil');
+end;
+
+function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boolean;
+begin
+  if (Prop = nil) or
+     (OffsetSet >= 0) then
+    // direct fill value in memory
+    result := Value.ValueSetText(PAnsiChar(Data) + OffsetSet, Text)
+  else
+    // need a class property setter
+    result := Prop.SetValueText(Data, Text);
 end;
 
 procedure TRttiCustomProp.AddValueJson(W: TTextWriter; Data: pointer;
@@ -7696,6 +7741,41 @@ function TRttiCustom.ValueByPath(var Data: pointer; Path: PUtf8Char;
   var Temp: TVarData; PathDelim: AnsiChar): TRttiCustom;
 begin
   result := nil;
+end;
+
+function TRttiCustom.ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
+var
+  v: Int64;
+  f: double;
+begin
+  result := true;
+  if rcfHasRttiOrd in Cache.Flags then
+    if ToInt64(Text, v) then
+      ToRttiOrd(Cache.RttiOrd, Data, v)
+    else
+      result := false
+  else if rcfGetInt64Prop in Cache.Flags then
+    result := ToInt64(Text, PInt64(Data)^)
+  else
+    case Cache.Kind of
+      rkFloat:
+        if ToDouble(Text, f) then
+          ToRttiFloat(Cache.RttiFloat, Data, f)
+        else
+          result := false;
+      rkVariant:
+        RawUtf8ToVariant(Text, PVariant(Data)^);
+      rkLString:
+        PRawUtf8(Data)^ := Text;
+      rkWString:
+        Utf8ToWideString(pointer(Text), length(Text), PWideString(Data)^);
+      {$ifdef HASVARUSTRING}
+      rkUString:
+        Utf8DecodeToUnicodeString(pointer(Text), length(Text), PUnicodeString(Data)^);
+      {$endif HASVARUSTRING}
+    else
+      result := false;
+    end;
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
