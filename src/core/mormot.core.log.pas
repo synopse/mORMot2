@@ -615,6 +615,7 @@ type
     fBufferSize: integer;
     fPerThreadLog: TSynLogPerThreadMode;
     fIncludeComputerNameInFileName: boolean;
+    fIncludeUserNameInFileName: boolean;
     fHighResolutionTimestamp: boolean;
     fLocalTimestamp: boolean;
     fWithUnitName: boolean;
@@ -797,12 +798,18 @@ type
     // - is '.log' by default
     property DefaultExtension: TFileName
       read fDefaultExtension write fDefaultExtension;
-    /// if TRUE, the log file name will contain the Computer name - as '(MyComputer)'
+    /// if TRUE, the log file name will contain the Computer name
+    // - as '(MyComputer)' or '(UserName@MyComputer)' patterns
     property IncludeComputerNameInFileName: boolean
       read fIncludeComputerNameInFileName write fIncludeComputerNameInFileName;
+    /// if TRUE, the log file name will contain the User name
+    // - as '(UserName)' or '(UserName@MyComputer)' patterns
+    property IncludeUserNameInFileName: boolean
+      read fIncludeUserNameInFileName write fIncludeUserNameInFileName;
     /// can be used to customized the default file name
     // - by default, the log file name is computed from the executable name
-    // (and the computer name if IncludeComputerNameInFileName is true)
+    // (and the computer/user name if IncludeComputerNameInFileName or
+    // IncludeUserNameInFileName are true)
     // - you can specify your own file name here, to be used instead
     // - this file name should not contain any folder, nor file extension (which
     // are set by DestinationPath and DefaultExtension properties)
@@ -5560,8 +5567,20 @@ begin
   if fFileName = '' then
   begin
     Utf8ToFileName(Executable.ProgramName, fFileName);
-    if fFamily.IncludeComputerNameInFileName then
-      fFileName := fFileName + ' (' + Utf8ToString(Executable.Host) + ')';
+    if fFamily.IncludeComputerNameInFileName or
+       fFamily.IncludeUserNameInFileName then
+    begin
+      fFileName := fFileName + ' (';
+      if fFamily.IncludeUserNameInFileName then
+        fFileName := fFileName + Utf8ToString(Executable.User);
+      if fFamily.IncludeComputerNameInFileName then
+      begin
+        if fFamily.IncludeUserNameInFileName then
+          fFileName := fFileName + '@';
+        fFileName := fFileName + Utf8ToString(Executable.Host);
+      end;
+      fFileName := fFileName + ')';
+    end;
   end;
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount > 0 then
