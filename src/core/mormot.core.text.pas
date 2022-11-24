@@ -3270,7 +3270,7 @@ function GotoEndOfQuotedString(P: PUtf8Char): PUtf8Char;
 var
   quote: AnsiChar;
 begin
-  // P^=" or P^=' at function call
+  // P^='"' or P^='''' at function call
   quote := P^;
   inc(P);
   repeat
@@ -3284,7 +3284,7 @@ begin
       break; // end quote
   until false;
   result := P;
-end; // P^='"' at function return
+end; // P^='"' or P^=#0 at function return
 
 function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 begin

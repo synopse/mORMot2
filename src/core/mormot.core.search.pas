@@ -9,6 +9,7 @@ unit mormot.core.search;
    Several Indexing and Search Engines, as used by other parts of the framework
     - Files Search in Folders
     - ScanUtf8, GLOB and SOUNDEX Text Search
+    - Efficient CSV Parsing using RTTI
     - Versatile Expression Search Engine
     - Bloom Filter Probabilistic Index
     - Binary Buffers Delta Compression
@@ -389,6 +390,23 @@ const
   // - for a more detailed soundex, use 4 bits resolution, which will
   // compute up to 7 soundex chars in a cardinal (that's our choice)
   SOUNDEX_BITS = 4;
+
+
+{ ******************  Efficient CSV Parsing using RTTI }
+
+/// parse a CSV buffer into a dynamic array of records using its RTTI fields
+// - TypeInfo should have proper fields description, e.g. from Delphi 2010
+// extended RTTI or mormot.core.rtti.pas' Rtti.RegisterFromText()
+// - first CSV line has headers matching the needed case-insensitive field names
+// - following CSV lines will be read and parsed into the dynamic array records
+// - any unknown header name within the RTTI fields will be ignored
+function DynArrayLoadCsv(var Value; Csv: PUtf8Char; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+
+/// parse a CSV UTF-8 string into a dynamic array of records using its RTTI fields
+// - just a wrapper around DynArrayLoadCsv(Value, pointer(Csv));
+function DynArrayLoadCsv(var Value; const Csv: RawUtf8; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
 
 
 { ****************** Versatile Expression Search Engine }
@@ -3265,6 +3283,100 @@ begin
   end;
   if next <> nil then
     next^ := FindNextUtf8WordBegin(U);
+end;
+
+
+{ ******************  Efficient CSV Parsing using RTTI }
+
+function DynArrayLoadCsv(var Value; Csv: PUtf8Char; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions): boolean;
+var
+  rt: TRttiCustom;
+  pr: PRttiCustomProp;
+  p, v: PUtf8Char;
+  s: RawUtf8;
+  mapcount, mapped, m: PtrInt;
+  rec: pointer;
+  map: PRttiCustomPropDynArray;
+  da: TDynArray;
+  count: integer;
+begin
+  result := false;
+  da.Init(TypeInfo, Value, @count);
+  rt := da.Info.ArrayRtti;
+  if (rt = nil) or
+     (rt.Parser <> ptRecord) or
+     (rt.Props.Count = 0) then
+    exit;
+  // parse the CSV headers
+  mapped := 0;
+  mapcount := 0;
+  SetLength(map, 32);
+  p := pointer(GetNextLine(Csv, Csv));
+  if Csv = nil then
+    exit; // no data
+  while p <> nil do
+  begin
+    GetNextItem(p, ',', '"', s);
+    if s = '' then
+      exit; // we don't support void headers
+    if mapcount = length(map) then
+      SetLength(map, NextGrow(mapcount));
+    pr := rt.Props.Find(s);
+    if pr <> nil then
+    begin
+      map[mapcount] := pr; // found a matching field
+      inc(mapped);
+    end;
+    inc(mapcount);
+  end;
+  if mapped = 0 then
+    exit; // no field matching any header
+  // parse the value rows
+  v := Csv;
+  while v^ in [#10, #13] do
+    inc(v);
+  while v^ <> #0 do
+  begin
+    rec := da.NewPtr;
+    m := 0;
+    repeat
+      // parse next value
+      Csv := v;
+      if v^ = '"' then
+        v := GotoEndOfQuotedString(v); // special handling of double quotes
+      while (v^ <> ',') and
+            (v^ > #13) do
+        inc(v);
+      if (m < mapcount) and
+         (map[m] <> nil) then // not matching fields are just ignored
+      begin
+        if Csv^ = '"' then
+          UnQuoteSqlStringVar(Csv, s)
+        else
+          FastSetString(s, Csv, v - Csv);
+        map[m].SetValueText(rec, s);
+      end;
+      inc(m);
+      if v^ <> ',' then
+        break;
+      inc(v);
+    until v^ in [#0, #10, #13];
+    // go to next row
+    while v^ in [#10, #13] do
+      inc(v);
+  end;
+  if count = 0 then
+    da.Capacity := 0
+  else
+    DynArrayFakeLength(da.Value^, count);
+  result := true;
+end;
+
+function DynArrayLoadCsv(var Value; const Csv: RawUtf8;
+  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions): boolean;
+begin
+  result := DynArrayLoadCsv(Value, pointer(CSV), TypeInfo, CustomVariantOptions);
 end;
 
 

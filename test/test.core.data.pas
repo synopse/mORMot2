@@ -1134,15 +1134,17 @@ type
     a: RawUtf8;
     b: integer;
   end;
+  TSubABs = array of TSubAB;
 
   TSubCD = packed record
     c: byte;
     d: RawUtf8;
   end;
+  TSubCDs = array of TSubCD;
 
   TAggregate = packed record
-    abArr: array of TSubAB;
-    cdArr: array of TSubCD;
+    abArr: TSubABs;
+    cdArr: TSubCDs;
   end;
 
   TNestedDtoObject = class(TSynAutoCreateFields)
@@ -1729,6 +1731,48 @@ var
     J := RecordSaveJson(agg2, TypeInfo(TAggregate));
     CheckHash(J, $E3AC9C44);
     check(IsValidJson(J));
+    Finalize(agg);
+    CheckEqual(length(agg.abArr), 0);
+    Check(not DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 0);
+    U := 'a'#13#10'0'#13#10'1'#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 2);
+    CheckEqual(agg.abArr[0].a, '0');
+    CheckEqual(agg.abArr[0].b, 0);
+    CheckEqual(agg.abArr[1].a, '1');
+    CheckEqual(agg.abArr[1].b, 0);
+    Finalize(agg);
+    CheckEqual(length(agg.abArr), 0);
+    U := 'a,b'#13#10'"0,1",2'#13#10'"1",3'#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 2);
+    CheckEqual(agg.abArr[0].a, '0,1');
+    CheckEqual(agg.abArr[0].b, 2);
+    CheckEqual(agg.abArr[1].a, '1');
+    CheckEqual(agg.abArr[1].b, 3);
+    U := 'c,b,a'#13#10'5,1,"2,3"'#13#10'6,7,3'#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 2);
+    CheckEqual(agg.abArr[0].a, '2,3');
+    CheckEqual(agg.abArr[0].b, 1);
+    CheckEqual(agg.abArr[1].a, '3');
+    CheckEqual(agg.abArr[1].b, 7);
+    Finalize(agg);
+    CheckEqual(length(agg.abArr), 0);
+    U := 'b'#13#10'1'#13#10'2'#13#10#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 2);
+    CheckEqual(agg.abArr[0].a, '');
+    CheckEqual(agg.abArr[0].b, 1);
+    CheckEqual(agg.abArr[1].a, '');
+    CheckEqual(agg.abArr[1].b, 2);
+    U := 'a'#13#10#13#10;
+    Check(DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 0);
+    U := 'c'#13#10'0'#13#10'1'#13#10;
+    Check(not DynArrayLoadCsv(agg.abArr, U, TypeInfo(TSubABs)));
+    CheckEqual(length(agg.abArr), 0);
 
     Finalize(JAS);
     FillCharFast(JAS, SizeOf(JAS), 0);
