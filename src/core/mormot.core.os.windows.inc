@@ -128,7 +128,7 @@ begin
   if IsAnsiCompatible(PAnsiChar(pointer(Text)), TextLen) then
   begin
     for i := 0 to TextLen do // include trailing #0
-      PWordArray(@result)[i] := PByteArray(Text)[i];
+      PWordArray(result)[i] := PByteArray(Text)[i];
     dest.len := TextLen;
   end
   else
