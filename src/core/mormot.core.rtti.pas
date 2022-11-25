@@ -7749,33 +7749,33 @@ var
   f: double;
 begin
   result := true;
-  if rcfHasRttiOrd in Cache.Flags then
-    if ToInt64(Text, v) then
-      ToRttiOrd(Cache.RttiOrd, Data, v)
-    else
-      result := false
-  else if rcfGetInt64Prop in Cache.Flags then
-    result := ToInt64(Text, PInt64(Data)^)
+  case Cache.Kind of
+    rkLString:
+      PRawUtf8(Data)^ := Text;
+    rkWString:
+      Utf8ToWideString(pointer(Text), length(Text), PWideString(Data)^);
+    {$ifdef HASVARUSTRING}
+    rkUString:
+      Utf8DecodeToUnicodeString(pointer(Text), length(Text), PUnicodeString(Data)^);
+    {$endif HASVARUSTRING}
+    rkFloat:
+      if ToDouble(Text, f) then
+        ToRttiFloat(Cache.RttiFloat, Data, f)
+      else
+        result := false;
+    rkVariant:
+      RawUtf8ToVariant(Text, PVariant(Data)^);
   else
-    case Cache.Kind of
-      rkFloat:
-        if ToDouble(Text, f) then
-          ToRttiFloat(Cache.RttiFloat, Data, f)
-        else
-          result := false;
-      rkVariant:
-        RawUtf8ToVariant(Text, PVariant(Data)^);
-      rkLString:
-        PRawUtf8(Data)^ := Text;
-      rkWString:
-        Utf8ToWideString(pointer(Text), length(Text), PWideString(Data)^);
-      {$ifdef HASVARUSTRING}
-      rkUString:
-        Utf8DecodeToUnicodeString(pointer(Text), length(Text), PUnicodeString(Data)^);
-      {$endif HASVARUSTRING}
+    if rcfHasRttiOrd in Cache.Flags then
+      if ToInt64(Text, v) then
+        ToRttiOrd(Cache.RttiOrd, Data, v)
+      else
+        result := false
+    else if rcfGetInt64Prop in Cache.Flags then
+      result := ToInt64(Text, PInt64(Data)^)
     else
       result := false;
-    end;
+  end;
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
