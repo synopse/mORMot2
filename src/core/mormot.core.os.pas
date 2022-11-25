@@ -3131,7 +3131,7 @@ function ConsoleReadBody: RawByteString;
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: integer;
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
   out res: RawUtf8);
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
