@@ -1444,6 +1444,8 @@ var
   c: AnsiChar;
 begin
   if GetCurrentThreadID = MainThreadID then
+  begin
+    SynDaemonIntercept; // intercept ^C and SIGQUIT - do nothing if already set
     repeat
       if IsMultiThread then
         CheckSynchronize(100)
@@ -1459,7 +1461,8 @@ begin
           if c in [#10, #13] then
             exit;
         until false;
-    until false
+    until false;
+  end
   else
     ReadLn;
   ioresult;
