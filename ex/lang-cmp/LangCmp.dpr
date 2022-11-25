@@ -41,7 +41,7 @@ uses
   mormot.net.async;
 
 type
-  // high-level data structures
+  // high-level data structures with RawUtf8 (interned) values
   TStopTime = record
     TripID, StopID, Arrival, Departure: RawUtf8;
   end;
@@ -52,13 +52,14 @@ type
   end;
   TTrips = array of TTrip;
 
+  // we use PUtf8Char for responses as Rust is using &'data str
   TScheduleResponse = record
-    StopID, Arrival, Departure: RawUtf8;
+    StopID, Arrival, Departure: PUtf8Char;
   end;
   TScheduleResponses = array of TScheduleResponse;
 
   TTripResponse = record
-    TripID, ServiceID, RouteID: RawUtf8;
+    TripID, ServiceID, RouteID: PUtf8Char;
     Schedules: TScheduleResponses;
   end;
   TTripResponses = array of TTripResponse;
@@ -91,7 +92,7 @@ var
 begin
   QueryPerformanceMicroSeconds(start);
   stopTimes.InitSpecific(TypeInfo(TStopTimes), stopTime, ptRawUtf8);
-  csv := StringFromFile('../MBTA_GTFS/stop_times.txt');
+  csv := StringFromFile(NormalizeFileName('../MBTA_GTFS/stop_times.txt'));
   TDynArrayLoadCsv(stopTimes, pointer(csv), intern);
   stopTimes.EnsureSorted; // sort by first ptRawUtf8 field = TripID
   QueryPerformanceMicroSeconds(stop);
@@ -106,7 +107,7 @@ var
 begin
   QueryPerformanceMicroSeconds(start);
   trips.InitSpecific(TypeInfo(TTrips), trip, ptRawUtf8);
-  csv := StringFromFile('../MBTA_GTFS/trips.txt');
+  csv := StringFromFile(NormalizeFileName('../MBTA_GTFS/trips.txt'));
   TDynArrayLoadCsv(trips, pointer(csv), intern);
   trips.EnsureSorted; // sort by first ptRawUtf8 field = RouteID
   QueryPerformanceMicroSeconds(stop);
@@ -138,18 +139,18 @@ begin
   SetLength(result, trn);
   res := pointer(result);
   repeat
-    res^.TripID := tr^.TripID;
-    res^.ServiceID := tr^.ServiceID;
-    res^.RouteID := tr^.RouteID;
-    st := stopTimes.FindAllSorted(res^.TripID, stn);
+    res^.TripID := pointer(tr^.TripID);
+    res^.ServiceID := pointer(tr^.ServiceID);
+    res^.RouteID := pointer(tr^.RouteID);
+    st := stopTimes.FindAllSorted(tr^.TripID, stn);
     if st <> nil then
     begin
       SetLength(res^.Schedules, stn);
       sch := pointer(res^.Schedules);
       repeat
-        sch^.StopID := st^.StopID;
-        sch^.Arrival := st^.Arrival;
-        sch^.Departure := st^.Departure;
+        sch^.StopID := pointer(st^.StopID);
+        sch^.Arrival := pointer(st^.Arrival);
+        sch^.Departure := pointer(st^.Departure);
         inc(sch);
         inc(st);
         dec(stn);
@@ -235,9 +236,9 @@ begin
       'route_id, trip_id, service_id: RawUtf8',
     // those two are used for JSON result generation
     TypeInfo(TScheduleResponses),
-      'stop_id, arrival_time, departure_time: RawUtf8',
+      'stop_id, arrival_time, departure_time: PUtf8Char',
     TypeInfo(TTripResponse),
-      'trip_id, service_id, route_id: RawUtf8; schedules: TScheduleResponses'
+      'trip_id, service_id, route_id: PUtf8Char; schedules: TScheduleResponses'
     ]);
   // run the HTTP server
   try
@@ -246,7 +247,9 @@ begin
       LoadCsvData;
       StartServer;
       ConsoleWrite('Server is running - try http://localhost:4000/schedules/121');
+      {$ifdef OSPOSIX}
       SynDaemonIntercept; // to intercept ^C and SIGQUIT
+      {$endif OSPOSIX}
       ConsoleWaitForEnterKey;
       ConsoleWrite('Server shutdown');
     finally
