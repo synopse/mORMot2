@@ -736,8 +736,9 @@ begin
         if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
           Col.ColumnDataState := colDataFilled
         else
-          raise EOdbcException.CreateUtf8('%.GetCol: [%] column has no size', [self,
-            Col.ColumnName]);
+          raise EOdbcException.CreateUtf8(
+            '%.GetCol: SQL_NO_TOTAL [%] % column has no size',
+            [self, Col.ColumnName, ToText(Col.ColumnType)^]);
     else
       RaiseError;
     end;
