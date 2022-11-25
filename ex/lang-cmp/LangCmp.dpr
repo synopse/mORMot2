@@ -87,7 +87,7 @@ type
 
 procedure TScheduler.GetStopTimes;
 var
-  start, stop: Int64;
+  start: Int64;
   csv: RawUtf8;
 begin
   QueryPerformanceMicroSeconds(start);
@@ -95,14 +95,12 @@ begin
   csv := StringFromFile(NormalizeFileName('../MBTA_GTFS/stop_times.txt'));
   TDynArrayLoadCsv(stopTimes, pointer(csv), intern);
   stopTimes.EnsureSorted; // sort by first ptRawUtf8 field = TripID
-  QueryPerformanceMicroSeconds(stop);
-  ConsoleWrite('parsed % stop times in %',
-    [length(stopTime), MicroSecToString(stop - start)]);
+  ConsoleWrite('parsed % stop times in %', [length(stopTime), MicroSecFrom(start)]);
 end;
 
 procedure TScheduler.GetTrips;
 var
-  start, stop: Int64;
+  start: Int64;
   csv: RawUtf8;
 begin
   QueryPerformanceMicroSeconds(start);
@@ -110,9 +108,7 @@ begin
   csv := StringFromFile(NormalizeFileName('../MBTA_GTFS/trips.txt'));
   TDynArrayLoadCsv(trips, pointer(csv), intern);
   trips.EnsureSorted; // sort by first ptRawUtf8 field = RouteID
-  QueryPerformanceMicroSeconds(stop);
-  ConsoleWrite('parsed % trips in %',
-    [length(trip), MicroSecToString(stop - start)]);
+  ConsoleWrite('parsed % trips in %', [length(trip), MicroSecFrom(start)]);
 end;
 
 procedure TScheduler.LoadCsvData;
@@ -167,21 +163,17 @@ end;
 function TScheduler.BuildTripResponseJson(const route: RawUtf8): RawUtf8;
 var
   resp: TTripResponses;
-  start, stop: Int64;
+  start: Int64;
 begin
   QueryPerformanceMicroSeconds(start);
   BuildTripResponse(route, resp);
-  QueryPerformanceMicroSeconds(stop);
-  ConsoleWrite('BuildTripResponseJson: %', [MicroSecToString(stop - start)]);
+  ConsoleWrite('BuildTripResponseJson: %', [MicroSecFrom(start)]);
   QueryPerformanceMicroSeconds(start);
   result := DynArraySaveJson(resp, TypeInfo(TTripResponses));
-  QueryPerformanceMicroSeconds(stop);
-  ConsoleWrite('JSONify: % (%)',
-    [MicroSecToString(stop - start), KBNoSpace(length(result))]);
+  ConsoleWrite('JSONify: % (%)', [MicroSecFrom(start), KBNoSpace(length(result))]);
   QueryPerformanceMicroSeconds(start);
   Finalize(resp);
-  QueryPerformanceMicroSeconds(stop);
-  ConsoleWrite('cleanup: %', [MicroSecToString(stop - start)]);
+  ConsoleWrite('cleanup: %', [MicroSecFrom(start)]);
 end;
 
 {$else}

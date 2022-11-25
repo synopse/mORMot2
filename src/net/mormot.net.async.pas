@@ -1525,7 +1525,7 @@ var
   buf: PByte;
   buflen, bufsent, sent: integer;
   res: TNetResult;
-  start, stop: Int64;
+  start: Int64;
 begin
   connection := TPollAsyncConnection(notif.tag);
   if (self = nil) or
@@ -1557,10 +1557,9 @@ begin
         res := connection.Send(buf, bufsent);
         if fDebugLog <> nil then
         begin
-          QueryPerformanceMicroSeconds(stop);
           DoLog('ProcessWrite send(%)=% %/%B in % % fProcessingWrite=%',
             [pointer(connection.fSocket), ToText(res)^, bufsent, buflen,
-             MicroSecToString(stop - start), fWrite, fProcessingWrite]);
+             MicroSecFrom(start), fWrite, fProcessingWrite]);
         end;
         if connection.fSocket = nil then
           exit; // Stop() called

@@ -2102,6 +2102,13 @@ function MilliSecToString(MS: QWord): TShort16;
 function MicroSecToString(Micro: QWord): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
+/// compute elapsed time into a human readable value, from a Start value
+// - will get current QueryPerformanceMicroSeconds() and compute against Start
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MicroSecFrom(Start: QWord): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
@@ -10308,6 +10315,14 @@ end;
 function MicroSecToString(Micro: QWord): TShort16;
 begin
   MicroSecToString(Micro, result);
+end;
+
+function MicroSecFrom(Start: QWord): TShort16;
+var
+  stop: Int64;
+begin
+  QueryPerformanceMicroSeconds(stop);
+  MicroSecToString(stop - Start, result);
 end;
 
 procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
