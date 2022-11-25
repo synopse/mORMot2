@@ -101,7 +101,7 @@ begin
     begin
       FastSetString(res, nil, Len);
       for i := 0 to Len - 1 do
-        PByteArray(res)[i] := PWordArray(P)[i];
+        PByteArray(res)[i] := PWordArray(P)[i]; // fast direct conversion
     end
     else
     begin
@@ -437,6 +437,8 @@ begin
         result := 'ALREADY_EXISTS';
       ERROR_MORE_DATA:
         result := 'MORE_DATA';
+      ERROR_NO_SYSTEM_RESOURCES:
+        result := 'NO_SYSTEM_RESOURCES';
       ERROR_WINHTTP_CANNOT_CONNECT:
         result := 'WINHTTP_CANNOT_CONNECT';
       ERROR_WINHTTP_TIMEOUT:
@@ -824,15 +826,10 @@ end;
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 var
   tmp: TW32Temp;
-  flags: integer;
 begin
-  if OSVersion >= wVista then // XP has troubles with the "sequential" flag
-    flags := FILE_FLAG_SEQUENTIAL_SCAN
-  else
-    flags := FILE_ATTRIBUTE_NORMAL;
   result := CreateFileW(W32(FileName, tmp), GENERIC_READ,
     FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-    OPEN_EXISTING, flags, 0)
+    OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0);
 end;
 
 threadvar // mandatory: GetTickCount seems per-thread on XP :(

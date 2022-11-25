@@ -2697,9 +2697,9 @@ type
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
-// - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
-// FileRead() for chunks bigger than 32MB on files opened with this flag,
-// so it would use regular FileOpen() on this deprecated OS
+// - on Windows, to avoid ERROR_NO_SYSTEM_RESOURCES problems when calling
+// FileRead() for chunks bigger than 32MB on files opened with this flag, so you
+// should better FileRead() over e.g. 16MB chunks max (as StringFromFile does)
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() or HashFile() functions
 function FileOpenSequentialRead(const FileName: TFileName): integer;
@@ -5586,6 +5586,10 @@ begin
         P := pointer(result);
         repeat
           chunk := size;
+          {$ifdef OSWINDOWS}
+          if chunk > 16 shl 20 then
+            chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
+          {$endif OSWINDOWS}
           read := FileRead(F, P^, chunk);
           if read <= 0 then
           begin
