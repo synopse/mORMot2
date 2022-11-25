@@ -3116,6 +3116,8 @@ procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
 // interface-based service implemented as optExecInMainThread
 // - on Windows, from a non-main Thread, respond to PostThreadMessage(WM_QUIT)
 // - on Windows, also properly respond to Ctrl-C or closing console events
+// - on POSIX, if you call SynDaemonIntercept first, Ctrl-C or SIG_QUIT will
+// also be intercepted and let this procedure return
 procedure ConsoleWaitForEnterKey;
 
 /// read all available content from stdin
@@ -4450,7 +4452,7 @@ var
 /// enable low-level interception of executable stop signals
 // - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global
 // SynDaemonTerminated variable, with an optional logged entry to log
-// - as called e.g. by RunUntilSigTerminated()
+// - called e.g. by RunUntilSigTerminated() or to notify ConsoleWaitForEnterKey()
 // - you can call this method several times with no issue
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);

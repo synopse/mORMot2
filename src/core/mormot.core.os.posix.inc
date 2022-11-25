@@ -1449,6 +1449,8 @@ begin
         CheckSynchronize(100)
       else
         Sleep(100);
+      if SynDaemonTerminated <> 0 then
+        break;
       if UnixKeyPending then
         repeat
           c := #0;
