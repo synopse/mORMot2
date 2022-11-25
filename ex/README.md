@@ -22,6 +22,14 @@ It may be used to benchmark and validate the stability of mORMot HTTP server on 
 
 Similar to the `/plaintext` URI of [the TFB sample](#techempower-bench) below.
 
+### lang-cmp
+
+[This sample](./lang-cmp) is a *mORMot* conversion of "An informal comparison of several programming languages" test case.
+
+The original code is at https://github.com/losvedir/transit-lang-cmp with C#, Typescript (Deno), Elixir, Go, Rust, and Scala versions.
+
+Once stabilized, we may fork and include it to the official repository.
+
 ### mondgodb
 
 [This sample](./mongodb) will benchmark the ORM + REST layer of mORMot over a local (or remote) MongoDB instance.
