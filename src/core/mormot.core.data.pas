@@ -1313,7 +1313,7 @@ type
     // - Init and InitSpecific methods will reset the aCountPointer to 0: you
     // can use this method to set the external count variable without overriding
     // the current value
-    procedure UseExternalCount(var aCountPointer: integer);
+    procedure UseExternalCount(aCountPointer: PInteger);
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize the wrapper to point to no dynamic array
     // - it won't clear the wrapped array, just reset the fValue internal pointer
@@ -1500,6 +1500,11 @@ type
     // in order to be sorted in increasing order according to Compare function
     procedure SortRange(aStart, aStop: integer;
       aCompare: TDynArraySortCompare = nil);
+    /// will check all items against aCompare
+    function IsSorted(aCompare: TDynArraySortCompare = nil): boolean;
+    /// will check all items against aCompare, calling Sort() if needed
+    // - faster than plain Sort() if the array is likely to be already sorted
+    procedure EnsureSorted(aCompare: TDynArraySortCompare = nil);
     /// sort the dynamic array items, using a Compare method (not function)
     // - it will change the dynamic array content, and exchange all items
     // in order to be sorted in increasing order according to Compare function,
@@ -1511,7 +1516,13 @@ type
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
     // - if the array is not sorted, returns FALSE
-    function FindAllSorted(const Item; out FirstIndex, LastIndex: integer): boolean;
+    function FindAllSorted(const Item;
+      out FirstIndex, LastIndex: integer): boolean; overload;
+    /// search the item pointers which match a given value in a sorted dynamic array
+    // - this method will use the Compare property function for the search
+    // - return nil and FindCount = 0 if no matching item was found
+    // - return the a pointer to the first matching item, and FindCount >=1
+    function FindAllSorted(const Item; out FindCount: integer): pointer; overload;
     /// search for an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -7594,21 +7605,66 @@ function TDynArray.FindAllSorted(const Item;
   out FirstIndex, LastIndex: integer): boolean;
 var
   found, last: integer;
-  P: PAnsiChar;
+  siz: PtrInt;
+  P, val: PAnsiChar;
 begin
   result := FastLocateSorted(Item, found);
   if not result then
     exit;
   FirstIndex := found;
   P := fValue^;
-  while (FirstIndex > 0) and
-        (fCompare(P[(FirstIndex - 1) * fInfo.Cache.ItemSize], Item) = 0) do
+  siz := fInfo.Cache.ItemSize;
+  inc(P, found * siz);
+  val := P; // faster than Item after RawUtf8 interning
+  while FirstIndex > 0 do
+  begin
+    dec(P, siz);
+    if fCompare(P^, val^) <> 0 then
+      break;
     dec(FirstIndex);
+  end;
   last := GetCount - 1;
   LastIndex := found;
-  while (LastIndex < last) and
-        (fCompare(P[(LastIndex + 1) * fInfo.Cache.ItemSize], Item) = 0) do
+  P := val;
+  while LastIndex < last do
+  begin
+    inc(P, siz);
+    if fCompare(P^, val^) <> 0 then
+      break;
     inc(LastIndex);
+  end;
+end;
+
+function TDynArray.FindAllSorted(const Item; out FindCount: integer): pointer;
+var
+  found: integer;
+  siz: PtrInt;
+  P, fnd, limit: PAnsiChar;
+begin
+  FindCount := 0;
+  result := nil;
+  if not FastLocateSorted(Item, found) then
+    exit;
+  P := fValue^;
+  limit := P;
+  siz := fInfo.Cache.ItemSize;
+  inc(P, found * siz);
+  fnd := P; // faster than Item after RawUtf8 interning
+  repeat
+    result := P;
+    inc(FindCount);
+    dec(P, siz);
+  until (P < limit) or
+        (fCompare(P^, fnd^) <> 0);
+  inc(limit, GetCount * siz);
+  P := fnd;
+  repeat
+    inc(P, siz);
+    if (P >= limit) or
+       (fCompare(P^, fnd^) <> 0) then
+      break;
+    inc(FindCount);
+  until false;
 end;
 
 function TDynArray.FastLocateSorted(const Item; out Index: integer): boolean;
@@ -8052,6 +8108,43 @@ begin
   end;
 end;
 
+function TDynArray.IsSorted(aCompare: TDynArraySortCompare): boolean;
+var
+  n: integer;
+  siz: PtrInt;
+  p, prev: PAnsiChar;
+begin
+  result := false;
+  n := GetCount;
+  if not Assigned(aCompare) then
+    aCompare := fCompare;
+  if (not Assigned(aCompare)) or
+     (n = 0) then
+    exit; // nothing to sort
+  siz := fInfo.Cache.ItemSize;
+  p := fValue^;
+  prev := p;
+  inc(p, siz);
+  dec(n);
+  if n <> 0 then
+    repeat
+      if aCompare(p^, prev^) < 0 then
+        exit;
+      prev := p;
+      inc(p, siz);
+      dec(n);
+    until n = 0;
+  result := true; // all items are sorted
+end;
+
+procedure TDynArray.EnsureSorted(aCompare: TDynArraySortCompare);
+begin
+  if IsSorted(aCompare) then
+    fSorted := true
+  else
+    Sort(aCompare);
+end;
+
 procedure TDynArray.Sort(const aCompare: TOnDynArraySortCompare; aReverse: boolean);
 var
   QuickSort: TDynArrayQuickSort;
@@ -8286,9 +8379,9 @@ bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
     result := -1;
 end;
 
-procedure TDynArray.UseExternalCount(var aCountPointer: integer);
+procedure TDynArray.UseExternalCount(aCountPointer: PInteger);
 begin
-  fCountP := @aCountPointer;
+  fCountP := aCountPointer;
 end;
 
 procedure TDynArray.Void;
