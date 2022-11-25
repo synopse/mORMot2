@@ -591,6 +591,10 @@ type
         Name8: string[8];
         RecSize8: cardinal;
         ManagedCount8: integer);
+      9: (
+        Name9: string[9];
+        RecSize9: cardinal;
+        ManagedCount9: integer);
   end;
 const
   _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
@@ -616,6 +620,12 @@ const
     Name8: 'THash512';
     RecSize8: SizeOf(THash512);
     ManagedCount8: 0);
+
+  _PUTF8CHAR: TFakeTypeInfo = ( // stored in PT_INFO[ptPUtf8Char]
+    Kind: tkRecord;  // don't mess with ordinals - just a record with a pointer
+    Name9: 'PUtf8Char';
+    RecSize9: SizeOf(pointer);
+    ManagedCount9: 0);
 
 {$endif HASNOSTATICRTTI}
 

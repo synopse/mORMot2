@@ -1753,6 +1753,7 @@ type
     ptClass,
     ptDynArray,
     ptInterface,
+    ptPUtf8Char,
     ptCustom);
 
   /// the complex kind of variables for ptTimeLog and ptOrm TRttiParserType
@@ -1811,7 +1812,8 @@ const
      ptTimeLog,
      ptUnicodeString,
      ptWideString,
-     ptWinAnsi];
+     ptWinAnsi,
+     ptPUtf8Char];
 
   /// which TRttiParserType types could be serialized as multi-line JSON "text"
   // - e.g. plain RawUtf8 which may include \n line feeds but not RawByteString,
@@ -1893,6 +1895,7 @@ const
     SizeOf(pointer),  //  ptClass
     SizeOf(pointer),  //  ptDynArray
     SizeOf(pointer),  //  ptInterface
+    SizeOf(pointer),  //  ptPUtf8Char
     0 );              //  ptCustom
 
   /// type definition name lookup to the TRttiParserType values
@@ -1936,6 +1939,7 @@ const
     '',               //  ptClass
     '',               //  ptDynArray
     '',               //  ptInterface
+    'PUtf8Char',      //  ptPUtf8Char
     '');              //  ptCustom
 
   /// type definition name lookup to the TRttiParserComplexType values
@@ -5944,6 +5948,7 @@ var
     @_NoRandom,       //  ptClass
     @_NoRandom,       //  ptDynArray
     @_NoRandom,       //  ptInterface
+    @_NoRandom,       //  ptPUtf8Char is read-only
     @_NoRandom);      //  ptCustom
 
 
@@ -9113,17 +9118,17 @@ begin
   RTTI_MANAGEDCOPY[rkInterface] := @_InterfaceCopy;
   RTTI_MANAGEDCOPY[rkDynArray]  := @_DynArrayCopy;
   {$ifdef HASVARUSTRING}
-  RTTI_FINALIZE[rkUString]   := @_StringClear; // share same PStrRec layout
-  RTTI_TO_VARTYPE[rkUString] := varUString;
-  RTTI_MANAGEDCOPY[rkUString] := @_UStringCopy;
+  RTTI_FINALIZE[rkUString]      := @_StringClear; // share same PStrRec layout
+  RTTI_TO_VARTYPE[rkUString]    := varUString;
+  RTTI_MANAGEDCOPY[rkUString]   := @_UStringCopy;
   {$endif HASVARUSTRING}
   {$ifdef FPC}
-  RTTI_FINALIZE[rkLStringOld] := @_StringClear;
-  RTTI_FINALIZE[rkObject]     := @FastRecordClear;
-  RTTI_TO_VARTYPE[rkBool]       := varBoolean;
-  RTTI_TO_VARTYPE[rkQWord]      := varWord64;
-  RTTI_TO_VARTYPE[rkLStringOld] := varString;
-  RTTI_TO_VARTYPE[rkObject]     := varAny;
+  RTTI_FINALIZE[rkLStringOld]    := @_StringClear;
+  RTTI_FINALIZE[rkObject]        := @FastRecordClear;
+  RTTI_TO_VARTYPE[rkBool]        := varBoolean;
+  RTTI_TO_VARTYPE[rkQWord]       := varWord64;
+  RTTI_TO_VARTYPE[rkLStringOld]  := varString;
+  RTTI_TO_VARTYPE[rkObject]      := varAny;
   RTTI_MANAGEDCOPY[rkLStringOld] := @_LStringCopy;
   RTTI_MANAGEDCOPY[rkObject]     := @_RecordCopy;
   {$endif FPC}
@@ -9143,7 +9148,7 @@ begin
       rkInterface,
       rkRecord,
       rkArray:
-        RTTI_TO_VARTYPE[k] := varAny;
+        RTTI_TO_VARTYPE[k] := varAny; // TVarData.VAny pointing to the value
     end;
   end;
   RTTI_FINALIZE[rkClass] := @_ObjClear;
@@ -9169,11 +9174,13 @@ begin
   PT_INFO[ptHash128]       := @_THASH128;
   PT_INFO[ptHash256]       := @_THASH256;
   PT_INFO[ptHash512]       := @_THASH512;
+  PT_INFO[ptPUtf8Char]     := @_PUTF8CHAR;
   {$else}
   PT_INFO[ptGuid]          := TypeInfo(TGuid);
   PT_INFO[ptHash128]       := TypeInfo(THash128);
   PT_INFO[ptHash256]       := TypeInfo(THash256);
   PT_INFO[ptHash512]       := TypeInfo(THash512);
+  PT_INFO[ptPUtf8Char]     := TypeInfo(PUtf8Char);
   {$endif HASNOSTATICRTTI}
   {$ifdef HASVARUSTRING}
   PT_INFO[ptUnicodeString]     := TypeInfo(UnicodeString);
@@ -9191,6 +9198,9 @@ begin
   // ptComplexTypes may have several matching TypeInfo() -> put generic
   PT_INFO[ptOrm]           := TypeInfo(TID);
   PT_INFO[ptTimeLog]       := TypeInfo(TTimeLog);
+  for t := succ(low(t)) to high(t) do
+    if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
+      raise ERttiException.CreateUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
   PTC_INFO[pctTimeLog]     := TypeInfo(TTimeLog);
   PTC_INFO[pctID]          := TypeInfo(TID);
   PTC_INFO[pctCreateTime]  := TypeInfo(TTimeLog);
@@ -9200,9 +9210,6 @@ begin
   PTC_INFO[pctRecordReference] := TypeInfo(QWord);
   PTC_INFO[pctRecordVersion]   := TypeInfo(QWord);
   PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(QWord);
-  for t := succ(low(t)) to high(t) do
-    if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
-      raise ERttiException.CreateUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
   PT_DYNARRAY[ptBoolean]       := TypeInfo(TBooleanDynArray);
   PT_DYNARRAY[ptByte]          := TypeInfo(TByteDynArray);
   PT_DYNARRAY[ptCardinal]      := TypeInfo(TCardinalDynArray);
@@ -9232,6 +9239,7 @@ begin
   PT_DYNARRAY[ptWideString]    := TypeInfo(TWideStringDynArray);
   PT_DYNARRAY[ptWinAnsi]       := TypeInfo(TWinAnsiDynArray);
   PT_DYNARRAY[ptWord]          := TypeInfo(TWordDynArray);
+  PT_DYNARRAY[ptPUtf8Char]     := TypeInfo(TPUtf8CharDynArray);
   // prepare global thread-safe TRttiCustomList
   Rtti := RegisterGlobalShutdownRelease(TRttiCustomList.Create);
   ClassUnit := _ClassUnit;

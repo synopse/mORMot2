@@ -6739,8 +6739,9 @@ const
      SortDynArrayPointer,       //  ptClass
      nil,                       //  ptDynArray
      SortDynArrayPointer,       //  ptInterface
+     SortDynArrayPUtf8Char,     //  ptPUtf8Char
      nil),                      //  ptCustom
-    // case sensitive comparison/sort functions:
+    // case insensitive comparison/sort functions:
     (nil,                        //  ptNone
      nil,                        //  ptArray
      SortDynArrayBoolean,        //  ptBoolean
@@ -6780,6 +6781,7 @@ const
      SortDynArrayPointer,        //  ptClass
      nil,                        //  ptDynArray
      SortDynArrayPointer,        //  ptInterface
+     SortDynArrayPUtf8CharI,     //  ptPUtf8Char
      nil));                      //  ptCustom
 
 
@@ -8814,6 +8816,27 @@ begin
     result := 0;
 end;
 
+function HashPUtf8Char(Item: PAnsiChar; Hasher: THasher): cardinal;
+begin
+  Item := PPointer(Item)^; // passed by reference
+  if Item <> nil then
+    result := Hasher(0, Item, StrLen(Item))
+  else
+    result := 0;
+end;
+
+function HashPUtf8CharI(Item: PUtf8Char; Hasher: THasher): cardinal;
+var
+  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+begin
+  Item := PPointer(Item)^;
+  if Item <> nil then
+    result := Hasher(0, tmp{%H-},
+      UpperCopy255Buf(tmp{%H-}, Item, StrLen(Item)) - {%H-}tmp)
+  else
+    result := 0;
+end;
+
 function HashByte(Item: pointer; Hasher: THasher): cardinal;
 begin
   result := Hasher(0, Item, SizeOf(byte));
@@ -8976,6 +8999,7 @@ const
     {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptClass
     nil,                     //  ptDynArray
     {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptInterface
+    @HashPUtf8Char,          //  ptPUtf8Char
     nil),                    //  ptCustom
    // case insensitive hash functions:
    (nil,                     //  ptNone
@@ -9016,6 +9040,7 @@ const
     {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptClass
     nil,                     //  ptDynArray
     {$ifdef CPU32} @HashInteger {$else} @HashInt64 {$endif}, // ptInterface
+    @HashPUtf8CharI,         //  ptPUtf8Char
     nil));                   //  ptCustom
 
 function DynArrayHashOne(Kind: TRttiParserType;

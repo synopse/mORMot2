@@ -5058,6 +5058,16 @@ begin
     Ctxt.W.AddNull;
 end;
 
+procedure _JS_PUtf8Char(Data: PPUtf8Char; const Ctxt: TJsonSaveContext);
+begin
+  // PUtf8Char can be saved/serialized as their own UTF-8 content,
+  // but not restored/unserialized in _JL_PUtf8Char()
+  Ctxt.W.Add('"');
+  if Data^ <> nil then
+    Ctxt.W.AddJsonEscape(Data^, {len=}0);
+  Ctxt.W.Add('"');
+end;
+
 procedure _JS_ID(Data: PInt64; const Ctxt: TJsonSaveContext);
 var
   _str: ShortString;
@@ -5337,7 +5347,8 @@ const
     @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
-    @_JS_Enumeration, @_JS_Set, nil, @_JS_DynArray, @_JS_Interface, nil);
+    @_JS_Enumeration, @_JS_Set, nil, @_JS_DynArray, @_JS_Interface,
+    @_JS_PUtf8Char, nil);
 
   /// use pointer to allow any complex kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
@@ -8039,8 +8050,17 @@ end;
 
 procedure _JL_Interface(Data: PInterface; var Ctxt: TJsonParserContext);
 begin
-  // _JS_Interface() may have serialized the object instance, but we can't
+  // _JS_Interface() may have been serialized the object instance, but we can't
   // unserialize it since we don't know which class to create
+  Ctxt.Valid := Ctxt.ParseNull;
+  Data^ := nil;
+end;
+
+procedure _JL_PUtf8Char(Data: PPUtf8Char; var Ctxt: TJsonParserContext);
+begin
+  // _JS_PUtf8Char() may have been serialized as JSON string, but we can't
+  // unserialize it since we can't allocate the memory and Ctxt.Json
+  // input is transient by definition
   Ctxt.Valid := Ctxt.ParseNull;
   Data^ := nil;
 end;
@@ -8264,7 +8284,7 @@ var
     @_JL_GUID, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
     @_JL_UnicodeString, @_JL_UnixTime, @_JL_UnixMSTime, @_JL_Variant,
     @_JL_WideString, @_JL_WinAnsi, @_JL_Word, @_JL_Enumeration, @_JL_Set,
-    nil, @_JL_DynArray, @_JL_Interface, nil);
+    nil, @_JL_DynArray, @_JL_Interface, @_JL_PUtf8Char, nil);
 
 
 { TValuePUtf8Char }
@@ -9852,6 +9872,18 @@ begin
   result := SizeOf(pointer);
 end;
 
+function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrIComp(A^, B^);
+  result := SizeOf(pointer);
+end;
+
 function _BC_Default(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   Compared := ComparePointer(A, B); // weak fallback
@@ -9891,11 +9923,17 @@ begin
         fCompare[false] := RTTI_COMPARE[false][rkWString];
       end;
     if not Assigned(fCompare[true]) then
-    begin
-      // fallback if not enough RTTI
-      fCompare[true] := @_BC_Default;
-      fCompare[false] := @_BC_Default;
-    end;
+      if aParser = ptPUtf8Char then
+      begin
+        fCompare[true] := @_BCI_PUtf8Char;
+        fCompare[false] := @_BC_PUtf8Char;
+      end
+      else
+      begin
+        // fallback to ComparePointer(A, B) if not enough RTTI
+        fCompare[true] := @_BC_Default;
+        fCompare[false] := @_BC_Default;
+      end;
   end;
   // set class serialization and initialization
   if aParser = ptClass then

@@ -3572,6 +3572,7 @@ const
     imvObject,         //  ptClass
     imvDynArray,       //  ptDynArray
     imvInterface,      //  ptInterface
+    imvNone,           //  ptPUtf8Char
     imvNone);          //  ptCustom
 
 var

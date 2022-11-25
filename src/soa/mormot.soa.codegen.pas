@@ -538,6 +538,7 @@ const
     wUnknown,  //  ptClass
     wUnknown,  //  ptDynArray
     wUnknown,  //  ptInterface
+    wRawUtf8,  //  ptPUtf8Char
     wUnknown); //  ptCustom
 
   TYPES_SOA: array[TInterfaceMethodValueType] of TWrapperType = (
