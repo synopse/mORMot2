@@ -165,6 +165,7 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 Several Indexing and Search Engines, as used by other parts of the framework
 - Files Search in Folders
 - ScanUtf8, GLOB and SOUNDEX Text Search
+- Efficient CSV Parsing using RTTI
 - Versatile Expression Search Engine
 - *Bloom Filter* Probabilistic Index
 - Binary Buffers Delta Compression

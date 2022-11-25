@@ -394,19 +394,20 @@ const
 
 { ******************  Efficient CSV Parsing using RTTI }
 
-/// parse a CSV buffer into a dynamic array of records using its RTTI fields
+/// parse a CSV buffer into a TDynArray of records using its RTTI fields
 // - TypeInfo should have proper fields description, e.g. from Delphi 2010
 // extended RTTI or mormot.core.rtti.pas' Rtti.RegisterFromText()
 // - first CSV line has headers matching the needed case-insensitive field names
 // - following CSV lines will be read and parsed into the dynamic array records
 // - any unknown header name within the RTTI fields will be ignored
-function DynArrayLoadCsv(var Value; Csv: PUtf8Char; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+// - you can optionally intern all RawUtf8 values to reduce memory consumption
+function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
+  Intern: TRawUtf8Interning = nil): boolean;
 
 /// parse a CSV UTF-8 string into a dynamic array of records using its RTTI fields
-// - just a wrapper around DynArrayLoadCsv(Value, pointer(Csv));
+// - just a wrapper around DynArrayLoadCsv() with a temporary TDynArray
 function DynArrayLoadCsv(var Value; const Csv: RawUtf8; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions = nil): boolean; overload;
+  Intern: TRawUtf8Interning = nil): boolean;
 
 
 { ****************** Versatile Expression Search Engine }
@@ -3288,8 +3289,8 @@ end;
 
 { ******************  Efficient CSV Parsing using RTTI }
 
-function DynArrayLoadCsv(var Value; Csv: PUtf8Char; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions): boolean;
+function TDynArrayLoadCsv(var Value: TDynArray; Csv: PUtf8Char;
+  Intern: TRawUtf8Interning): boolean;
 var
   rt: TRttiCustom;
   pr: PRttiCustomProp;
@@ -3298,12 +3299,11 @@ var
   mapcount, mapped, m: PtrInt;
   rec: pointer;
   map: PRttiCustomPropDynArray;
-  da: TDynArray;
-  count: integer;
+  n: integer;
+  ext: PInteger;
 begin
   result := false;
-  da.Init(TypeInfo, Value, @count);
-  rt := da.Info.ArrayRtti;
+  rt := Value.Info.ArrayRtti;
   if (rt = nil) or
      (rt.Parser <> ptRecord) or
      (rt.Props.Count = 0) then
@@ -3333,12 +3333,16 @@ begin
   if mapped = 0 then
     exit; // no field matching any header
   // parse the value rows
+  n := 0;
+  ext := Value.CountExternal;
+  if ext = nil then
+    Value.UseExternalCount(@n); // faster Value.NewPtr
   v := Csv;
   while v^ in [#10, #13] do
     inc(v);
   while v^ <> #0 do
   begin
-    rec := da.NewPtr;
+    rec := Value.NewPtr;
     m := 0;
     repeat
       // parse next value
@@ -3352,9 +3356,13 @@ begin
          (map[m] <> nil) then // not matching fields are just ignored
       begin
         if Csv^ = '"' then
-          UnQuoteSqlStringVar(Csv, s)
+        begin
+          UnQuoteSqlStringVar(Csv, s);
+          if Intern <> nil then
+            Intern.UniqueText(s);
+        end
         else
-          FastSetString(s, Csv, v - Csv);
+          Intern.Unique(s, Csv, v - Csv);
         map[m].SetValueText(rec, s);
       end;
       inc(m);
@@ -3366,17 +3374,21 @@ begin
     while v^ in [#10, #13] do
       inc(v);
   end;
-  if count = 0 then
-    da.Capacity := 0
+  if Value.Count = 0 then
+    Value.Capacity := 0
   else
-    DynArrayFakeLength(da.Value^, count);
+    DynArrayFakeLength(Value.Value^, Value.Count);
+  Value.UseExternalCount(ext); // restore fCountP if local n count was used
   result := true;
 end;
 
-function DynArrayLoadCsv(var Value; const Csv: RawUtf8;
-  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions): boolean;
+function DynArrayLoadCsv(var Value; const Csv: RawUtf8; TypeInfo: PRttiInfo;
+  Intern: TRawUtf8Interning): boolean;
+var
+  da: TDynArray;
 begin
-  result := DynArrayLoadCsv(Value, pointer(CSV), TypeInfo, CustomVariantOptions);
+  da.Init(TypeInfo, Value);
+  result := TDynArrayLoadCsv(da, pointer(CSV), Intern);
 end;
 
 
