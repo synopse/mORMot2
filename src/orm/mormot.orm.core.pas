@@ -7998,7 +7998,10 @@ begin
   cur := pointer(props.List);
   n := props.Count;
   repeat
-    W.WriteObjectPropName(pointer(cur^.Name), length(cur^.Name), Options);
+    if woHumanReadable in Options then
+      W.WriteObjectPropNameHumanReadable(pointer(cur^.Name), length(cur^.Name))
+    else
+      W.AddProp(pointer(cur^.Name), length(cur^.Name));
     cur^.GetJsonValues(Instance, W);
     inc(cur);
     dec(n);

@@ -655,8 +655,7 @@ type
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
-    procedure WriteObjectPropName(PropName: PUtf8Char; PropNameLen: PtrInt;
-      Options: TTextWriterWriteObjectOptions);
+    procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt);
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameShort(const PropName: ShortString;
@@ -5446,7 +5445,10 @@ begin
             // append ',' and proper indentation if a field was just appended
             c.W.BlockAfterItem(c.Options);
           done := true;
-          c.W.WriteObjectPropName(pointer(p^.Name), length(p^.Name), c.Options);
+          if woHumanReadable in c.Options then
+            c.W.WriteObjectPropNameHumanReadable(pointer(p^.Name), length(p^.Name))
+          else
+            c.W.AddProp(pointer(p^.Name), length(p^.Name));
           if not (rcfHookWriteProperty in Ctxt.Info.Flags) or
              not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, Data);
@@ -5636,20 +5638,21 @@ end;
 
 { TJsonWriter }
 
-procedure TJsonWriter.WriteObjectPropName(PropName: PUtf8Char;
-  PropNameLen: PtrInt; Options: TTextWriterWriteObjectOptions);
+procedure TJsonWriter.WriteObjectPropNameHumanReadable(
+  PropName: PUtf8Char; PropNameLen: PtrInt);
 begin
-  if woHumanReadable in Options then
-    AddCRAndIndent; // won't do anything if has already been done
+  AddCRAndIndent; // won't do anything if has already been done
   AddProp(PropName, PropNameLen); // handle twoForceJsonExtended
-  if woHumanReadable in Options then
-    Add(' ');
+  Add(' ');
 end;
 
 procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
   Options: TTextWriterWriteObjectOptions);
 begin
-  WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
+  if woHumanReadable in Options then
+    WriteObjectPropNameHumanReadable(@PropName[1], ord(PropName[0]))
+  else
+    AddProp(@PropName[1], ord(PropName[0]));
 end;
 
 procedure TJsonWriter.WriteObjectAsString(Value: TObject;
