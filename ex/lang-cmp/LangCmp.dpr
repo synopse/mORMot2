@@ -239,9 +239,6 @@ begin
       LoadCsvData;
       StartServer;
       ConsoleWrite('Server is running - try http://localhost:4000/schedules/121');
-      {$ifdef OSPOSIX}
-      SynDaemonIntercept; // to intercept ^C and SIGQUIT
-      {$endif OSPOSIX}
       ConsoleWaitForEnterKey;
       ConsoleWrite('Server shutdown');
     finally
