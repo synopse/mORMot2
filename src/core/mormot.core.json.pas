@@ -8050,8 +8050,8 @@ end;
 
 procedure _JL_Interface(Data: PInterface; var Ctxt: TJsonParserContext);
 begin
-  // _JS_Interface() may have been serialized the object instance, but we can't
-  // unserialize it since we don't know which class to create
+  // _JS_Interface() may have serialized the object instance properties, but we
+  // can't unserialize it since we don't know which class to create
   Ctxt.Valid := Ctxt.ParseNull;
   Data^ := nil;
 end;

@@ -2158,6 +2158,7 @@ type
     /// List[NotInheritedIndex]..List[Count-1] store the last level of properties
     NotInheritedIndex: integer;
     /// contains List[].Name as a JSON array including a trailing ,
+    // - as used by _JS_DynArray() for efficient twoNonExpandedArrays generation
     NamesAsJsonArray: RawUtf8;
     /// locate a property/field by name
     // - just redirect to FindCustomProp() low-level function

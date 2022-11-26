@@ -191,10 +191,7 @@ end;
 function TScheduler.DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   if not IdemPChar(pointer(Ctxt.Url), '/SCHEDULES/') then
-  begin
-    result := HTTP_NOTFOUND;
-    exit;
-  end;
+    exit(HTTP_NOTFOUND);
   Ctxt.OutContent := BuildTripResponseJson(copy(Ctxt.Url, 12, 100));
   Ctxt.OutContentType := JSON_CONTENT_TYPE;
   result := HTTP_SUCCESS;
