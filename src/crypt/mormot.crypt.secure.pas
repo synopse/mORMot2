@@ -993,6 +993,9 @@ type
     function Update(const buf: RawByteString): ICryptHash; overload;
     /// iterative process of a file content
     procedure UpdateFile(const filename: TFileName);
+    /// iterative process of a stream content
+    // - return the number of bytes hashed from the input TStream
+    function UpdateStream(stream: TStream): Int64;
     /// compute the digest, and return it in a memory buffer
     function Final(digest: pointer; digestlen: PtrInt): PtrInt; overload;
     /// compute the digest, and return it as UTF-8 hexadecimal text
@@ -1039,6 +1042,7 @@ type
     function Update(buf: pointer; buflen: PtrInt): ICryptHash; overload; virtual; abstract;
     function Update(const buf: RawByteString): ICryptHash; overload;
     procedure UpdateFile(const filename: TFileName);
+    function UpdateStream(stream: TStream): Int64;
     function Final(digest: pointer; digestlen: PtrInt): PtrInt; overload;
     function Final: RawUtf8; overload;
   end;
@@ -4069,6 +4073,23 @@ begin
   finally
     FileClose(F);
   end;
+end;
+
+function TCryptHash.UpdateStream(stream: TStream): Int64;
+var
+  temp: array[word] of word; // 128KB temporary buffer
+  read: integer;
+begin
+  result := 0;
+  if stream <> nil then
+    // we don't use stream.Size since some TStream classes don't support it
+    repeat
+      read := stream.Read(temp, SizeOf(temp)); // read until the end
+      if read <= 0 then
+        break;
+      Update(@temp, read);
+      inc(result, read);
+    until false;
 end;
 
 
