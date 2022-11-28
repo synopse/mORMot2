@@ -890,26 +890,45 @@ begin
   {$endif OSPTHREADS}
 end;
 
-function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
-var
-  cpu: array[0..127] of byte; // up to 1024 HW CPU sockets
+type
+  // store bitmask for up to 1024 logical CPUs
+  TCpuSet = array[0..127] of byte;
+
+function SetThreadAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
 begin
   result := false;
-  if (CpuIndex >= cardinal(CpuSockets)) or
-     (CpuIndex >= SizeOf(cpu) shl 3) then
-    exit;
-  FillCharFast(cpu, SizeOf(cpu), 0);
   {$ifdef OSPTHREADS}
   if Assigned(pthread_setaffinity_np) then
     try
-      SetBitPtr(@cpu, CpuIndex);
       result := pthread_setaffinity_np(
-        pointer(Thread.ThreadID), SizeOf(cpu), @cpu) = 0;
+        pointer(Thread.ThreadID), SizeOf(Mask), @Mask) = 0;
     except
       // ignore any exception (pthread confusion with its static version?)
       @pthread_setaffinity_np := nil; // don't continue that way
     end;
   {$endif OSPTHREADS}
+end;
+
+function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+var
+  mask: TCpuSet;
+begin
+  result := false;
+  if (CpuIndex >= SizeOf(mask) shl 3) or
+     (CpuIndex >= cardinal(SystemInfo.dwNumberOfProcessors)) then
+    exit;
+  FillCharFast(mask, SizeOf(mask), 0);
+  SetBitPtr(@mask, CpuIndex);
+  SetThreadAffinity(Thread, mask);
+end;
+
+var
+  CpuSocketsMask: array of TCpuSet;
+
+function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
+begin
+  result := (SocketIndex < cardinal(length(CpuSocketsMask))) and
+            SetThreadAffinity(Thread, CpuSocketsMask[SocketIndex]);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -3167,6 +3186,16 @@ begin
   P^ := #0; // make asciiz
 end;
 
+function ParseInt(P: PUtf8Char): integer;
+begin
+  P := ParseLine(P);
+  if (P <> nil) and
+     (P^ in ['0'..'9']) then
+    result := GetCardinal(P)
+  else
+    result := -1;
+end;
+
 {$ifdef CPUAARCH64}
 {$ifdef OSLINUXANDROID}
 // AARCH64 armv8.o is only validated on Linux
@@ -3200,10 +3229,10 @@ var
   {$else}
   hw, cache, cpuinfo: PUtf8Char;
   proccpuinfo, release, prod: RawUtf8;
+  procid, phyid: integer;
   {$ifdef OSLINUX}
   prodver, dist: RawUtf8;
   SR: TSearchRec;
-  phyid: integer;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   {$ifndef OSDARWIN}
@@ -3310,6 +3339,7 @@ begin
   cache := nil;
   SystemInfo.dwNumberOfProcessors := 0;
   proccpuinfo := StringFromFile('/proc/cpuinfo', true);
+  procid := -1;
   cpuinfo := pointer(proccpuinfo);
   while cpuinfo <> nil do
   begin
@@ -3319,8 +3349,13 @@ begin
       if beg^ = 'P' then
         modname := ParseLine(beg) // Processor : ARMv7
       else
+      begin
         // loop over all "processor : 0 .. 1 .. 2" lines to count the CPUs
-        inc(SystemInfo.dwNumberOfProcessors)
+        inc(SystemInfo.dwNumberOfProcessors);
+        procid := ParseInt(beg);
+        if procid >= integer(SystemInfo.dwNumberOfProcessors) then
+          procid := -1;
+      end
     else if IdemPChar(beg, 'MODEL NAME') then
       modname := ParseLine(beg)
     else if IdemPChar(beg, 'FEATURES') or
@@ -3338,9 +3373,19 @@ begin
     {$endif CPUARM3264}
     else if IdemPChar(beg, 'PHYSICAL ID') then
     begin
-      phyid := GetInteger(ParseLine(beg)) + 1;
-      if phyid > CpuSockets then
-        CpuSockets := phyid;
+      phyid := ParseInt(beg);
+      if phyid >= 0 then
+      begin
+        inc(phyid);
+        if phyid > CpuSockets then
+        begin
+          SetLength(CpuSocketsMask, phyid);
+          CpuSockets := phyid;
+        end;
+        if (procid >= 0) and
+           (procid < SizeOf(TCpuSet) shl 3) then
+          SetBitPtr(@CpuSocketsMask[phyid - 1], procid);
+      end;
     end;
   end;
   {$ifdef CPUARM3264}

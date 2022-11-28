@@ -3836,15 +3836,22 @@ procedure SwitchToThread;
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
 /// try to kill/cancel a thread
-// - on Windows, call the TerminateThread() API
+// - on Windows, calls the TerminateThread() API
 // - under Linux/FPC, calls pthread_cancel() API which is asynchronous
 function RawKillThread(Thread: TThread): boolean;
 
-/// try to assign a given thread to a specific CPU
-// - CpuIndex should be in 0 .. CpuSockets - 1 range
-// - on Windows, call SetThreadAffinityMask() API
-// - on under Linux/FPC, calls pthread_setaffinity_np() API
-function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+/// try to assign a given thread to a specific logical CPU core
+// - CpuIndex should be in 0 .. SystemInfo.dwNumberOfProcessors - 1 range
+// - on Windows, calls the SetThreadAffinityMask() API
+// - under Linux/FPC, calls pthread_setaffinity_np() API
+function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+
+/// try to assign a given thread to a specific hardware CPU socket
+// - SocketIndex should be in 0 .. CpuSockets - 1 range, and will use the
+// logical/hardware CPU masks retrieved during process startup
+// - on Windows, calls the SetThreadAffinityMask() API
+// - under Linux/FPC, calls pthread_setaffinity_np() API
+function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
 
 /// low-level naming of a thread
 // - on Windows, will raise a standard "fake" exception to notify the thread name

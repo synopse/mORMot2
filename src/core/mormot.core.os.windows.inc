@@ -946,14 +946,24 @@ begin
             Windows.TerminateThread(Thread.Handle, 777);
 end;
 
+function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+begin
+  result := false;
+  if (Thread = nil) or
+     (CpuIndex >= SizeOf(PtrInt) shl 3) or
+     (CpuIndex >= cardinal(SystemInfo.dwNumberOfProcessors)) then
+    exit;
+  result := SetThreadAffinityMask(Thread.Handle, 1 shl CpuIndex) <> 0;
+end;
+
 var // filled from RelationProcessorPackage items in InitializeSpecificUnit
   CpuSocketsMask: TPtrUIntDynArray;
 
-function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
 begin
   result := (Thread <> nil) and
-            (CpuIndex < cardinal(length(CpuSocketsMask))) and
-            (SetThreadAffinityMask(Thread.Handle, CpuSocketsMask[CpuIndex]) <> 0);
+    (SocketIndex < cardinal(length(CpuSocketsMask))) and
+    (SetThreadAffinityMask(Thread.Handle, CpuSocketsMask[SocketIndex]) <> 0);
 end;
 
 type
