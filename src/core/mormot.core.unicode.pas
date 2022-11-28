@@ -3608,16 +3608,19 @@ begin
   case StringFromBomFile(FileName, tmp, buf, len) of
     bomNone:
       if AssumeUtf8IfNoBom then
-        FastAssignUtf8(RawByteString(result), tmp)
+        FastAssignUtf8(result, tmp)
       else
         CurrentAnsiConvert.AnsiBufferToRawUtf8(buf, len, result);
     bomUnicode:
       RawUnicodeToUtf8(PWideChar(buf), len shr 1, result);
     bomUtf8:
+      if len = 0 then
+        result := ''
+      else
       begin
-        MoveFast(buf^, pointer(tmp)^, len); // fast delete(bom)
+        MoveFast(buf^, pointer(tmp)^, len); // fast in-place delete(bom)
         FakeLength(tmp, len);
-        FastAssignUtf8(RawByteString(result), tmp)
+        FastAssignUtf8(result, tmp)
       end;
   end;
 end;

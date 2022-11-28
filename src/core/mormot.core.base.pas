@@ -749,7 +749,8 @@ procedure FakeCodePage(var s: RawByteString; cp: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// internal function which assign src to dest, calling FakeCodePage(CP_UTF8)
-procedure FastAssignUtf8(var dest: RawByteString; const src: RawByteString);
+// - warning: src is set to '' once assigned to dest
+procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
   {$ifdef HASINLINE} inline; {$endif}
 
 {$ifdef HASCODEPAGE}
@@ -4222,9 +4223,12 @@ end;
 
 {$ifdef HASCODEPAGE}
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
+var
+  p: PAnsiChar;
 begin
-  if pointer(s) <> nil then
-    PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage := cp;
+  p := pointer(s);
+  if p <> nil then
+    PStrRec(p - _STRRECSIZE)^.CodePage := cp;
 end;
 
 function GetCodePage(const s: RawByteString): cardinal;
@@ -4237,10 +4241,11 @@ begin // do nothing on Delphi 7-2007
 end;
 {$endif HASCODEPAGE}
 
-procedure FastAssignUtf8(var dest: RawByteString; const src: RawByteString);
+procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
 begin
-  dest := src;
-  FakeCodePage(dest, CP_UTF8);
+  FakeCodePage(RawByteString(src), CP_UTF8);
+  FastAssignNew(dest, pointer(src));
+  pointer(src) := nil; // was assigned with no ref-counting involved
 end;
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
