@@ -61,6 +61,7 @@ This unit uses MacOSAll and link several toolkits, so was not included in `mormo
 Efficient Unicode Conversion Classes shared by all framework units
 - UTF-8 Efficient Encoding / Decoding
 - UTF-8 / UTF-16 / Ansi Conversion Classes
+- Text File Loading with BOM/Unicode Support
 - Low-Level String Conversion Functions
 - Text Case-(in)sensitive Conversion and Comparison
 - Operating-System Independent Unicode Process

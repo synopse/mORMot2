@@ -2804,12 +2804,6 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 type
-  /// text file layout, as recognized by TMemoryMap.TextFileKind
-  TTextFileKind = (
-    isUnicode,
-    isUtf8,
-    isAnsi);
-
   /// cross-platform memory mapping of a file content
   TMemoryMap = object
   protected
@@ -2835,10 +2829,6 @@ type
     /// set a fixed buffer for the content
     // - emulated a memory-mapping from an existing buffer
     procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
-    /// recognize the BOM of a text file
-    // - BOM is common only with Microsoft products
-    // - returns isAnsi if no BOM is available - but may be UTF-8 e.g. on POSIX
-    function TextFileKind: TTextFileKind;
     /// unmap the file
     procedure UnMap;
     /// retrieve the memory buffer mapped to the file content
@@ -5922,6 +5912,7 @@ begin
   result := DeleteFile(fn);
 end;
 
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 {$ifdef WITH_RAISEPROC} // for FPC on Win32 + Linux (Win64=WITH_VECTOREXCEPT)
@@ -6107,17 +6098,6 @@ begin
   end;
 end;
 
-function TMemoryMap.TextFileKind: TTextFileKind;
-begin
-  result := isAnsi;
-  if (fBuf <> nil) and
-     (fBufSize >= 3) then
-    if PWord(fBuf)^ = $FEFF then
-      result := isUnicode
-    else if (PWord(fBuf)^ = $BBEF) and
-            (PByteArray(fBuf)[2] = $BF) then
-      result := isUtf8;
-end;
 
 
 { TSynMemoryStreamMapped }

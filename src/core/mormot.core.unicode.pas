@@ -9,6 +9,7 @@ unit mormot.core.unicode;
    Efficient Unicode Conversion Classes shared by all framework units
    - UTF-8 Efficient Encoding / Decoding
    - UTF-8 / UTF-16 / Ansi Conversion Classes
+   - Text File Loading with BOM/Unicode Support
    - Low-Level String Conversion Functions
    - Text Case-(in)sensitive Conversion and Comparison
    - Operating-System Independent Unicode Process
@@ -119,7 +120,7 @@ function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 /// UTF-8 encode one UCS4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - this method DOES properly handle UTF-16 surrogate pairs
-function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): PtrInt;
+function Ucs4ToUtf8(ucs4: Ucs4CodePoint; Dest: PUtf8Char): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -253,7 +254,7 @@ function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 
 
 
-{ **************** UTF-8 / Unicode / Ansi Conversion Classes }
+{ **************** UTF-8 / UTF-16 / Ansi Conversion Classes }
 
 type
   /// Exception raised by this unit in case of fatal conversion issue
@@ -549,6 +550,54 @@ var
   /// global TSynAnsiConvert instance with no encoding (RawByteString/RawBlob)
   RawByteStringConvert: TSynAnsiFixedWidth;
 
+
+{ *************** Text File Loading with BOM/Unicode Support }
+
+type
+  /// text file layout, as returned by BomFile() and StringFromBomFile()
+  // - bomNone means there was no BOM recognized
+  // - bomUnicode stands for UTF-16 LE encoding (as on Windows products)
+  // - bomUtf8 stands for a UTF-8 BOM (as on Windows products)
+  TBomFile = (
+    bomNone,
+    bomUnicode,
+    bomUtf8);
+
+/// check the file BOM at the beginning of a file buffer
+// - BOM is common only with Microsoft products
+// - returns bomNone if no BOM was recognized
+// - returns bomUnicode or bomUtf8 if UTF-16LE or UTF-8 BOM were recogninzed:
+// and will adjust Buffer/BufferSize to ignore the leading 2 or 3 bytes
+function BomFile(var Buffer: pointer; var BufferSize: PtrInt): TBomFile;
+
+/// read a file into a temporary variable, check the BOM, and adjust the buffer
+function StringFromBomFile(const FileName: TFileName; out FileContent: RawByteString;
+  out Buffer: pointer; out BufferSize: PtrInt): TBomFile;
+
+/// read a File content into a RawUtf8, detecting any leading BOM
+// - will assume text file with no BOM is already UTF-8 encoded
+// - an alternative to StringFromFile() if you want to handle UTF-8 content
+// and the files are likely to be natively UTF-8 encoded, or with a BOM
+function RawUtf8FromFile(const FileName: TFileName): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// read a File content into a RawUtf8, detecting any leading BOM
+// - assume file with no BOM is encoded with the current Ansi code page, not
+// UTF-8, unless AssumeUtf8IfNoBom is true and it behaves like RawUtf8FromFile()
+function AnyTextFileToRawUtf8(const FileName: TFileName;
+  AssumeUtf8IfNoBom: boolean = false): RawUtf8;
+
+/// read a File content into a VCL/LCL string, detecting any leading BOM
+// - assume file with no BOM is encoded with the current Ansi code page, not UTF-8
+// - if ForceUtf8 is true, won't detect the BOM but assume whole file is UTF-8
+function AnyTextFileToString(const FileName: TFileName;
+  ForceUtf8: boolean = false): string;
+
+/// read a File content into SynUnicode string, detecting any leading BOM
+// - assume file with no BOM is encoded with the current Ansi code page, not UTF-8
+// - if ForceUtf8 is true, won't detect the BOM but assume whole file is UTF-8
+function AnyTextFileToSynUnicode(const FileName: TFileName;
+  ForceUtf8: boolean = false): SynUnicode;
 
 
 { *************** Low-Level String Conversion Functions }
@@ -3510,27 +3559,118 @@ begin
   result := Dest + Utf8ToWideChar(PWideChar(Dest), Source, SourceChars, true);
 end;
 
-function AnsiBufferToTempUtf8(var temp: TSynTempBuffer;
-  Buf: PAnsiChar; BufLen, CodePage: cardinal): PUtf8Char;
+
+{ *************** Text File Loading with BOM/Unicode Support }
+
+function BomFile(var Buffer: pointer; var BufferSize: PtrInt): TBomFile;
 begin
-  if (BufLen = 0) or
-     (CodePage = CP_UTF8) or
-     (CodePage >= CP_RAWBLOB) or
-     IsAnsiCompatible(Buf, BufLen) then
-  begin
-    temp.Buf := nil;
-    temp.len := BufLen;
-    result := PUtf8Char(Buf);
-  end
-  else
-  begin
-    temp.Init(BufLen * 3);
-    Buf := pointer(TSynAnsiConvert.Engine(CodePage).
-      AnsiBufferToUtf8(temp.Buf, Buf, BufLen));
-    temp.len := Buf - PAnsiChar(temp.Buf);
-    result := temp.Buf;
+  result := bomNone;
+  if (Buffer <> nil) and
+     (BufferSize >= 2) then
+    case PWord(Buffer)^ of
+      $FEFF:
+        begin
+          inc(PByte(Buffer), 2);
+          dec(BufferSize, 2);
+          result := bomUnicode
+        end;
+      $BBEF:
+        if (BufferSize >= 3) and
+           (PByteArray(Buffer)[2] = $BF) then
+        begin
+          inc(PByte(Buffer), 3);
+          dec(BufferSize, 3);
+          result := bomUtf8;
+        end;
+    end;
+end;
+
+function StringFromBomFile(const FileName: TFileName; out FileContent: RawByteString;
+  out Buffer: pointer; out BufferSize: PtrInt): TBomFile;
+begin
+  FileContent := StringFromFile(FileName);
+  Buffer := pointer(FileContent);
+  BufferSize := length(FileContent);
+  result := BomFile(Buffer, BufferSize);
+end;
+
+function RawUtf8FromFile(const FileName: TFileName): RawUtf8;
+begin
+  result := AnyTextFileToRawUtf8(FileName, {AssumeUtf8IfNoBom=}true);
+end;
+
+function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: boolean): RawUtf8;
+var
+  tmp: RawByteString;
+  buf: pointer;
+  len: PtrInt;
+begin
+  case StringFromBomFile(FileName, tmp, buf, len) of
+    bomNone:
+      if AssumeUtf8IfNoBom then
+        FastAssignUtf8(RawByteString(result), tmp)
+      else
+        CurrentAnsiConvert.AnsiBufferToRawUtf8(buf, len, result);
+    bomUnicode:
+      RawUnicodeToUtf8(PWideChar(buf), len shr 1, result);
+    bomUtf8:
+      FastSetString(result, buf, len);
   end;
 end;
+
+function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean): SynUnicode;
+var
+  tmp: RawByteString;
+  buf: pointer;
+  len: PtrInt;
+begin
+  if ForceUtf8 then
+    Utf8ToSynUnicode(StringFromFile(FileName), result)
+  else
+    case StringFromBomFile(FileName, tmp, buf, len) of
+      bomNone:
+        result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
+      bomUnicode:
+        SetString(result, PWideChar(buf), len shr 1);
+      bomUtf8:
+        Utf8ToSynUnicode(buf, len, result);
+    end;
+end;
+
+function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): string;
+var
+  tmp: RawByteString;
+  buf: pointer;
+  len: PtrInt;
+begin
+
+  {$ifdef UNICODE}
+  if ForceUtf8 then
+    Utf8ToStringVar(StringFromFile(FileName), result)
+  else
+    case StringFromBomFile(FileName, tmp, buf, len) of
+      bomNone:
+        result := CurrentAnsiConvert.AnsiToUnicodeString(buf, len);
+      bomUnicode:
+        SetString(result, PWideChar(buf), len shr 1);
+      bomUtf8:
+        Utf8DecodeToString(buf, len, result);
+    end;
+  {$else}
+  if ForceUtf8 then
+    result := CurrentAnsiConvert.Utf8ToAnsi(StringFromFile(FileName))
+  else
+    case StringFromBomFile(FileName, tmp, buf, len) of
+      bomNone:
+        SetString(result, PAnsiChar(buf), len);
+      bomUnicode:
+        result := CurrentAnsiConvert.UnicodeBufferToAnsi(buf, len shr 1);
+      bomUtf8:
+        result := CurrentAnsiConvert.Utf8BufferToAnsi(buf, len);
+    end;
+  {$endif UNICODE}
+end;
+
 
 
 { *************** Low-Level String Conversion Functions }
@@ -3764,6 +3904,28 @@ end;
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8; ACP: integer);
 begin
   TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L, result);
+end;
+
+function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer; Buf: PAnsiChar; BufLen,
+  CodePage: cardinal): PUtf8Char;
+begin
+  if (BufLen = 0) or
+     (CodePage = CP_UTF8) or
+     (CodePage >= CP_RAWBLOB) or
+     IsAnsiCompatible(Buf, BufLen) then
+  begin
+    temp.Buf := nil;
+    temp.len := BufLen;
+    result := PUtf8Char(Buf);
+  end
+  else
+  begin
+    temp.Init(BufLen * 3);
+    Buf := pointer(TSynAnsiConvert.Engine(CodePage).
+      AnsiBufferToUtf8(temp.Buf, Buf, BufLen));
+    temp.len := Buf - PAnsiChar(temp.Buf);
+    result := temp.Buf;
+  end;
 end;
 
 {$ifdef UNICODE}

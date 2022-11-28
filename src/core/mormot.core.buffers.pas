@@ -1911,31 +1911,6 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 function EscapeToShort(const source: RawByteString): ShortString; overload;
 
 
-/// get text File contents (even UTF-16 or UTF-8) and convert it into a
-// Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
-// 2009 and up) according to any BOM marker at the beginning of the file
-// - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
-function AnyTextFileToString(const FileName: TFileName;
-  ForceUtf8: boolean = false): string;
-
-/// get text file contents (even UTF-16 or UTF-8) and convert it into an
-// Unicode string according to any BOM marker at the beginning of the file
-// - any file without any BOM marker will be interpreted as plain ASCII: in this
-// case, the current string code page is used (i.e. CurrentAnsiConvert class,
-// which is likely to be UTF-8 on a recent POSIX system)
-function AnyTextFileToSynUnicode(const FileName: TFileName;
-  ForceUtf8: boolean = false): SynUnicode;
-
-/// get text file contents (even UTF-16 or UTF-8) and convert it into an
-// UTF-8 string according to any BOM marker at the beginning of the file
-// - if AssumeUtf8IfNoBom is FALSE, the current string code page is used (i.e.
-// CurrentAnsiConvert class) for conversion from ANSI into UTF-8
-// - if AssumeUtf8IfNoBom is TRUE, any file without any BOM marker will be
-// interpreted as UTF-8
-function AnyTextFileToRawUtf8(const FileName: TFileName;
-  AssumeUtf8IfNoBom: boolean = false): RawUtf8;
-
-
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
 // - generates a source code snippet of the following format:
@@ -7307,9 +7282,7 @@ begin
             part.ContentType := JSON_CONTENT_TYPE
           else
             part.ContentType := TEXT_CONTENT_TYPE;
-          {$ifdef HASCODEPAGE}
-          SetCodePage(part.Content, CP_UTF8, false); // ensure value is UTF-8
-          {$endif HASCODEPAGE}
+          FakeCodePage(part.Content, CP_UTF8); // ensure value is UTF-8
         end;
         if IdemPropNameU(part.Encoding, 'base64') then
           part.Content := Base64ToBin(part.Content);
@@ -8590,8 +8563,9 @@ begin
   GetMem(fLines, fLinesMax * SizeOf(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P + fMap.Size;
-  if Map.TextFileKind = isUtf8 then
-    inc(PByte(P), 3); // ignore UTF-8 BOM
+  if (PWord(P)^ = $BBEF) and
+     (P[2] = #$BF) then
+    inc(P, 3); // ignore UTF-8 BOM
   ParseLines(P, fMapEnd, self);
   if fLinesMax > fCount + 16384 then
     Reallocmem(fLines, fCount * SizeOf(pointer)); // size down only if worth it
@@ -8858,98 +8832,6 @@ function EscapeToShort(const source: RawByteString): ShortString;
 begin
   result[0] := AnsiChar(
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
-end;
-
-function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean): SynUnicode;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    if ForceUtf8 then
-      Utf8ToSynUnicode(PUtf8Char(Map.Buffer), Map.Size, result)
-    else
-      case Map.TextFileKind of
-        isUnicode:
-          SetString(result, PWideChar(PtrUInt(Map.Buffer) + 2),
-            (Map.Size - 2) shr 1);
-        isUtf8:
-          Utf8ToSynUnicode(PUtf8Char(pointer(PtrUInt(Map.Buffer) + 3)),
-            Map.Size - 3, result);
-        isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
-      end;
-  finally
-    Map.UnMap;
-  end;
-end;
-
-function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: boolean): RawUtf8;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    case Map.TextFileKind of
-      isUnicode:
-        RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer) + 2),
-          (Map.Size - 2) shr 1, result);
-      isUtf8:
-        FastSetString(result, pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
-      isAnsi:
-        if AssumeUtf8IfNoBom then
-          FastSetString(result, Map.Buffer, Map.Size)
-        else
-          CurrentAnsiConvert.AnsiBufferToRawUtf8(Map.Buffer, Map.Size, result);
-    end;
-  finally
-    Map.UnMap;
-  end;
-end;
-
-function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): string;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    {$ifdef UNICODE}
-    if ForceUtf8 then
-      Utf8DecodeToString(PUtf8Char(Map.Buffer), Map.Size, result)
-    else
-      case Map.TextFileKind of
-        isUnicode:
-          SetString(result,
-            PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUtf8:
-          Utf8DecodeToString(
-            pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3, result);
-        isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(
-            Map.Buffer, Map.Size);
-      end;
-    {$else}
-    if ForceUtf8 then
-      result := CurrentAnsiConvert.Utf8BufferToAnsi(
-        PUtf8Char(Map.Buffer), Map.Size)
-    else
-      case Map.TextFileKind of
-        isUnicode:
-          result := CurrentAnsiConvert.UnicodeBufferToAnsi(
-            PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUtf8:
-          result := CurrentAnsiConvert.Utf8BufferToAnsi(
-            pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
-        isAnsi:
-          SetString(result, PAnsiChar(Map.Buffer), Map.Size);
-      end;
-    {$endif UNICODE}
-  finally
-    Map.UnMap;
-  end;
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
