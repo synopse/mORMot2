@@ -108,6 +108,10 @@ type
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
   // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // is returned (but 401/403) - only implemented by THttpAsyncServer for now
+  // - either hsoThreadCpuAffinity or hsoThreadSocketAffinity could be set: the
+  // first for thread affinity to one CPU logic core, the 2nd for affinity to
+  // all logical cores of each CPU HW socket (both exclusive) - not implemented
+  // by THttpApiServer for now, but available on (async) (web)socket servers
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -117,7 +121,9 @@ type
     hsoLogVerbose,
     hsoIncludeDateHeader,
     hsoEnableTls,
-    hsoBan40xIP);
+    hsoBan40xIP,
+    hsoThreadCpuAffinity,
+    hsoThreadSocketAffinity);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -2075,6 +2081,10 @@ begin
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
+    if hsoThreadCpuAffinity in ProcessOptions then
+      SetServerThreadsAffinityPerCpu(nil, TThreadDynArray(fThreadPool.WorkThread))
+    else if hsoThreadSocketAffinity in ProcessOptions then
+      SetServerThreadsAffinityPerSocket(nil, TThreadDynArray(fThreadPool.WorkThread));
   end
   else if ServerThreadPoolCount < 0 then
     fMonoThread := true; // accept() + recv() + send() in a single thread

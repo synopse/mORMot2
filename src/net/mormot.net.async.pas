@@ -447,6 +447,9 @@ type
   // - acoNoConnectionTrack would force to by-pass the internal Connections list
   // if it is not needed - not used by now
   // - acoEnableTls flag for TLS support, via Windows SChannel or OpenSSL 1.1/3.x
+  // - either acoThreadCpuAffinity or acoThreadSocketAffinity could be set: the
+  // first for thread affinity to one CPU logic core, the 2nd for affinity to
+  // all logical cores of each CPU HW socket (both exclusive)
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -455,7 +458,9 @@ type
     acoWritePollOnly,
     acoDebugReadWriteLog,
     acoNoConnectionTrack,
-    acoEnableTls
+    acoEnableTls,
+    acoThreadCpuAffinity,
+    acoThreadSocketAffinity
   );
 
   /// to implement generational garbage collector of asynchronous connections
@@ -1842,8 +1847,6 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
-  persock, sock: integer;
-  ok: boolean;
   tix: Int64;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
@@ -1899,27 +1902,10 @@ begin
        break;
      SleepHiRes(1);
   until GetTickCount64 > tix;
-  if CpuSockets > 1 then
-  begin
-    // with multiple CPU sockets, group threads by closest HW socket
-    persock := aThreadPoolCount div CpuSockets;
-    if Assigned(log) then
-      log.Log(sllTrace, 'Create: CpuSockets=% PerSocket=%',
-        [CpuSockets, persock], self);
-    sock := 0;
-    SetThreadSocketAffinity(self, sock); // AW with R0 and lower R# threads
-    for i := 0 to aThreadPoolCount - 1 do
-    begin
-      ok := SetThreadSocketAffinity(fThreads[i], sock);
-      if Assigned(log) then
-        log.Log(sllTrace, 'Create: SetThreadSocketAffinity(%,%)=%',
-          [fThreads[i].Name, sock, BOOL_STR[ok]], self);
-   //ConsoleWrite('SetAffinity(%,%)=%', [fThreads[i].Name, sock, BOOL_STR[ok]]);
-      if (sock < CpuSockets - 1) and
-         (i mod persock = 0) then
-        inc(sock); // e.g. 0,0,0,0,1,1,1,1,1 for 9 threads and 2 sockets
-    end;
-  end;
+  if acoThreadCpuAffinity in aOptions then
+    SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
+  else if acoThreadSocketAffinity in aOptions then
+    SetServerThreadsAffinityPerSocket(log, TThreadDynArray(fThreads));
   // caller will start the main thread
   if Assigned(log) then
     log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
@@ -3363,6 +3349,10 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
+  if hsoThreadCpuAffinity in ProcessOptions then
+    include(aco, acoThreadCpuAffinity);
+  if hsoThreadSocketAffinity in ProcessOptions then
+    include(aco, acoThreadSocketAffinity);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
