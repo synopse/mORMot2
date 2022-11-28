@@ -785,6 +785,12 @@ var
   // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
   BiosInfoText: RawUtf8;
 
+  /// how many hardware CPU sockets are defined on this system
+  // - i.e. the number of physical CPU slots, not the number of logical CPU
+  // cores as returned by SystemInfo.dwNumberOfProcessors
+  // - as used e.g. by SetThreadAffinity()
+  CpuSockets: integer;
+
   /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
   // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
   // - this information is not retrieved on all Linux / POSIX systems yet
@@ -3829,15 +3835,21 @@ procedure SwitchToThread;
 /// try LockedExc() in a loop, calling SwitchToThread after some spinning
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
-/// low-level naming of a thread
-// - on Windows, will raise a standard "fake" exception to notify the thread name
-// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
-procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
-
 /// try to kill/cancel a thread
 // - on Windows, call the TerminateThread() API
-// - under Linux/FPC, calls pthread_cancel API which is asynchronous
+// - under Linux/FPC, calls pthread_cancel() API which is asynchronous
 function RawKillThread(Thread: TThread): boolean;
+
+/// try to assign a given thread to a specific CPU
+// - CpuIndex should be in 0 .. CpuSockets - 1 range
+// - on Windows, call SetThreadAffinityMask() API
+// - on under Linux/FPC, calls pthread_setaffinity_np() API
+function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+
+/// low-level naming of a thread
+// - on Windows, will raise a standard "fake" exception to notify the thread name
+// - under Linux/FPC, calls pthread_setname_np() API which truncates to 16 chars
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 
 /// name the current thread so that it would be easily identified in the IDE debugger
 // - could then be retrieved by CurrentThreadName/GetCurrentThreadName

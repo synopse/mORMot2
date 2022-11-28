@@ -2097,11 +2097,8 @@ var
 begin
   data := read.NextByte;
   if data <= 127 then
-  begin
     // optimize the most common case of -64..+63 range
-    result := (not ((data and (Int64(1) shl 6)) - 1)) or data;
-    exit;
-  end;
+    exit((not ((data and (Int64(1) shl 6)) - 1)) or data);
   result := 0;
   shift := 0;
   repeat

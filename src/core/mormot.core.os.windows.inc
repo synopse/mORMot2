@@ -946,6 +946,16 @@ begin
             Windows.TerminateThread(Thread.Handle, 777);
 end;
 
+var // filled from RelationProcessorPackage items in InitializeSpecificUnit
+  CpuSocketsMask: TPtrUIntDynArray;
+
+function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+begin
+  result := (Thread <> nil) and
+            (CpuIndex < cardinal(length(CpuSocketsMask))) and
+            (SetThreadAffinityMask(Thread.Handle, CpuSocketsMask[CpuIndex]) <> 0);
+end;
+
 type
   // avoid linking of ComObj.pas just for EOleSysError
   EOleSysError = class(Exception)
@@ -4607,11 +4617,14 @@ begin
   begin
     SetLength(proc, 512);
     siz := SizeOf(proc[0]) * 512;
-    if GetLogicalProcessorInformation(Proc[0], @siz) then
+    if GetLogicalProcessorInformation(proc[0], @siz) then
+    begin
       for i := 0 to (siz div SizeOf(proc[0])) - 1 do
-        with Proc[i] do
+        with proc[i] do
           case Relationship of
-            RelationCache:
+            RelationProcessorPackage: // physical processor
+              AddPtrUInt(CpuSocketsMask, CpuSockets, ProcessorMask);
+            RelationCache:            // raw cache information
               if Cache.CacheType in [CacheUnified, CacheData] then
                 if (Cache.Level >= low(CpuCache)) and
                    (Cache.Level <= high(CpuCache)) then
@@ -4624,24 +4637,27 @@ begin
                       LineSize := Cache.LineSize;
                     end;
           end;
-    for i := high(CpuCache) downto low(CpuCache) do
-    begin
-      CpuCacheSize := CpuCache[i].Size;
-      if CpuCacheSize <> 0 then // append the biggest level Cache size
+      for i := high(CpuCache) downto low(CpuCache) do
       begin
-        cpu := _fmt('%s %s cache', [cpu, _oskb(CpuCacheSize)]);
-        break;
+        CpuCacheSize := CpuCache[i].Size;
+        if CpuCacheSize <> 0 then // append the biggest level Cache size
+        begin
+          cpu := _fmt('%s %s cache', [cpu, _oskb(CpuCacheSize)]);
+          break;
+        end;
       end;
+      for i := low(CpuCache) to high(CpuCache) do
+        with CpuCache[i] do
+          if Count <> 0 then
+            if Count = 1 then
+              CpuCacheText := _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
+            else
+              CpuCacheText := _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
+      TrimSelf(CpuCacheText);
     end;
-    for i := low(CpuCache) to high(CpuCache) do
-      with CpuCache[i] do
-        if Count <> 0 then       
-          if Count = 1 then
-            CpuCacheText := _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
-          else
-            CpuCacheText := _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
-    TrimSelf(CpuCacheText);
   end;
+  if CpuSockets = 0 then
+    CpuSockets := 1; // e.g. on XP prior to SP3
   _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
   // writeln(CpuInfoText); writeln(CpuCacheText);

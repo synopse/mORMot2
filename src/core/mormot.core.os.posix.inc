@@ -821,6 +821,8 @@ var
   {%H-}pthread: pointer;
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
   pthread_cancel: function (thread: pointer): integer; cdecl;
+  pthread_setaffinity_np: function (thread: pointer;
+    cpusetsize: size_t; cpuset: pointer): integer; cdecl;
 
 {$endif OSPTHREADS}
 
@@ -884,6 +886,28 @@ begin
     except
       // ignore any exception (pthread confusion with its static version?)
       @pthread_cancel := nil; // don't continue that way
+    end;
+  {$endif OSPTHREADS}
+end;
+
+function SetThreadAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+var
+  cpu: array[0..127] of byte; // up to 1024 HW CPU sockets
+begin
+  result := false;
+  if (CpuIndex >= cardinal(CpuSockets)) or
+     (CpuIndex >= SizeOf(cpu) shl 3) then
+    exit;
+  FillCharFast(cpu, SizeOf(cpu), 0);
+  {$ifdef OSPTHREADS}
+  if Assigned(pthread_setaffinity_np) then
+    try
+      SetBitPtr(@cpu, CpuIndex);
+      result := pthread_setaffinity_np(
+        pointer(Thread.ThreadID), SizeOf(cpu), @cpu) = 0;
+    except
+      // ignore any exception (pthread confusion with its static version?)
+      @pthread_setaffinity_np := nil; // don't continue that way
     end;
   {$endif OSPTHREADS}
 end;
@@ -3179,6 +3203,7 @@ var
   {$ifdef OSLINUX}
   prodver, dist: RawUtf8;
   SR: TSearchRec;
+  phyid: integer;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   {$ifndef OSDARWIN}
@@ -3309,8 +3334,14 @@ begin
     else if IdemPChar(beg, 'CPU IMPLEMENTER') then
       ParseHex32Add(beg, aci)
     else if IdemPChar(beg, 'CPU PART') then
-      ParseHex32Add(beg, act);
+      ParseHex32Add(beg, act)
     {$endif CPUARM3264}
+    else if IdemPChar(beg, 'PHYSICAL ID') then
+    begin
+      phyid := GetInteger(ParseLine(beg)) + 1;
+      if phyid > CpuSockets then
+        CpuSockets := phyid;
+    end;
   end;
   {$ifdef CPUARM3264}
   if act <> nil then // CPU part/implementer are more detailed than model name
@@ -3353,6 +3384,8 @@ begin
   {$endif OSBSDDARWIN}
   if CpuCacheSize <> 0 then
     CpuInfoText := _oskb(CpuCacheSize) + ' cache';
+  if CpuSockets = 0 then
+    CpuSockets := 1;
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
@@ -3423,6 +3456,7 @@ begin
   begin
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     @pthread_cancel := dlsym(pthread, 'pthread_cancel');
+    @pthread_setaffinity_np := dlsym(pthread, 'pthread_setaffinity_np');
   end;
   {$endif OSPTHREADS}
   // some ARM/AARCH64 specific initialization
