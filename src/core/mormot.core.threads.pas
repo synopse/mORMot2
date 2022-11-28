@@ -1025,6 +1025,10 @@ type
     fOnThreadStart: TOnNotifyThread;
     procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
+    procedure SetServerThreadsAffinityPerCpu(
+      const log: ISynLog; const threads: TThreadDynArray);
+    procedure SetServerThreadsAffinityPerSocket(
+      const log: ISynLog; const threads: TThreadDynArray);
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
@@ -3067,6 +3071,50 @@ end;
 procedure TNotifiedThread.SetOnTerminate(const Event: TOnNotifyThread);
 begin
   fOnThreadTerminate := Event;
+end;
+
+procedure TNotifiedThread.SetServerThreadsAffinityPerCpu(
+  const log: ISynLog; const threads: TThreadDynArray);
+var
+  rnd, i: PtrInt;
+begin
+  rnd := SystemInfo.dwNumberOfProcessors;
+  if rnd <= 1 then
+    exit;
+  if Assigned(log) then
+    log.Log(sllTrace, 'Create: SetThreadCpuAffinity of % threads over % cores',
+      [length(threads), rnd], self);
+  SetThreadCpuAffinity(self, 0);
+  for i := 0 to high(threads) do
+    SetThreadCpuAffinity(threads[i], (i + 1) mod rnd);
+end;
+
+procedure TNotifiedThread.SetServerThreadsAffinityPerSocket(
+  const log: ISynLog; const threads: TThreadDynArray);
+var
+  sock, persock, i: integer;
+  ok: boolean;
+begin
+  if (threads = nil) or
+     (CpuSockets <= 1) then
+    exit;
+  // with multiple CPU sockets, group threads by closest HW socket
+  persock := length(threads) div CpuSockets;
+  if Assigned(log) then
+    log.Log(sllTrace, 'Create: CpuSockets=% PerSocket=%',
+      [CpuSockets, persock], self);
+  sock := 0;
+  SetThreadSocketAffinity(self, sock); // AW with R0 and lower R# threads
+  for i := 0 to high(threads) do
+  begin
+    ok := SetThreadSocketAffinity(threads[i], sock);
+    if Assigned(log) then
+      log.Log(sllTrace, 'Create: SetThreadSocketAffinity(#%,%)=%',
+        [i, sock, BOOL_STR[ok]], self);
+    if (sock < CpuSockets - 1) and
+       (i mod persock = 0) then
+      inc(sock); // e.g. 0,0,0,0,1,1,1,1,1 for 9 threads and 2 sockets
+  end;
 end;
 
 
