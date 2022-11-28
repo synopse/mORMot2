@@ -3572,7 +3572,7 @@ begin
         begin
           inc(PByte(Buffer), 2);
           dec(BufferSize, 2);
-          result := bomUnicode
+          result := bomUnicode; // UTF-16 LE
         end;
       $BBEF:
         if (BufferSize >= 3) and
@@ -3614,7 +3614,11 @@ begin
     bomUnicode:
       RawUnicodeToUtf8(PWideChar(buf), len shr 1, result);
     bomUtf8:
-      FastSetString(result, buf, len);
+      begin
+        MoveFast(buf^, pointer(tmp)^, len); // fast delete(bom)
+        FakeLength(tmp, len);
+        FastAssignUtf8(RawByteString(result), tmp)
+      end;
   end;
 end;
 
