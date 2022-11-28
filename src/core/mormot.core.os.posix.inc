@@ -3229,7 +3229,8 @@ var
   {$else}
   hw, cache, cpuinfo: PUtf8Char;
   proccpuinfo, release, prod: RawUtf8;
-  procid, phyid: integer;
+  procid, phyid, phyndx: integer;
+  phy: TIntegerDynArray;
   {$ifdef OSLINUX}
   prodver, dist: RawUtf8;
   SR: TSearchRec;
@@ -3354,7 +3355,7 @@ begin
         inc(SystemInfo.dwNumberOfProcessors);
         procid := ParseInt(beg);
         if procid >= integer(SystemInfo.dwNumberOfProcessors) then
-          procid := -1;
+          procid := -1; // paranoid
       end
     else if IdemPChar(beg, 'MODEL NAME') then
       modname := ParseLine(beg)
@@ -3373,19 +3374,19 @@ begin
     {$endif CPUARM3264}
     else if IdemPChar(beg, 'PHYSICAL ID') then
     begin
-      phyid := ParseInt(beg);
-      if phyid >= 0 then
+      phyid := ParseInt(beg); // in practice, may be 0,3,... and not 0,1,...
+      if phyid < 0 then
+        continue;
+      phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
+      if phyndx < 0 then
       begin
-        inc(phyid);
-        if phyid > CpuSockets then
-        begin
-          SetLength(CpuSocketsMask, phyid);
-          CpuSockets := phyid;
-        end;
-        if (procid >= 0) and
-           (procid < SizeOf(TCpuSet) shl 3) then
-          SetBitPtr(@CpuSocketsMask[phyid - 1], procid);
+        AddInteger(phy, CpuSockets, phyid);
+        phyndx := CpuSockets - 1;
+        SetLength(CpuSocketsMask, CpuSockets);
       end;
+      if (procid >= 0) and
+         (procid < SizeOf(TCpuSet) shl 3) then
+        SetBitPtr(@CpuSocketsMask[phyndx], procid);
     end;
   end;
   {$ifdef CPUARM3264}
