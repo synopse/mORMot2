@@ -1842,6 +1842,8 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
+  percpu, cpu: integer;
+  ok: boolean;
   tix: Int64;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
@@ -1897,8 +1899,28 @@ begin
        break;
      SleepHiRes(1);
   until GetTickCount64 > tix;
+  if CpuSockets > 1 then
+  begin
+    // with multiple CPU sockets, group threads to closed socket
+    percpu := aThreadPoolCount div CpuSockets;
+    if Assigned(log) then
+      log.Log(sllTrace, 'Create: CpuSockets=% percpu=%', [CpuSockets, percpu], self);
+    cpu := 0;
+    SetThreadAffinity(self, cpu); // AW with R0 and lower R# threads
+    for i := 0 to aThreadPoolCount - 1 do
+    begin
+      ok := SetThreadAffinity(fThreads[i], cpu);
+      if Assigned(log) then
+        log.Log(sllTrace, 'Create: SetThreadAffinity(%,%)=%',
+          [fThreads[i].Name, cpu, BOOL_STR[ok]], self);
+      if (cpu < CpuSockets - 1) and
+         (i mod percpu = 0) then
+        inc(cpu); // e.g. 0,0,0,0,1,1,1,1,1 for 9 threads and 2 sockets
+    end;
+  end;
   // caller will start the main thread
-  log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
+  if Assigned(log) then
+    log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
 end;
 
 function TAsyncConnections.AllThreadsStarted: boolean;
