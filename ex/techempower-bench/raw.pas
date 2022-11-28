@@ -172,14 +172,15 @@ begin
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
   fHttpServer := THttpAsyncServer.Create(
     '8080', nil, nil, '', threadCount,
-    5 * 60 * 1000,        // 5 minutes keep alive connections
-    [hsoNoXPoweredHeader, // not needed for a benchmark
-     hsoHeadersInterning, // reduce memory contention for /plaintext and /json
-     hsoNoStats,          // disable low-level statistic counters
+    5 * 60 * 1000,         // 5 minutes keep alive connections
+    [hsoNoXPoweredHeader,  // not needed for a benchmark
+     hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
+     hsoNoStats,           // disable low-level statistic counters
+     hsoThreadCpuAffinity, // for better scaling of /plaintext
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
      {$endif WITH_LOGS}
-     hsoIncludeDateHeader // required by TPW General Test Requirements #5
+     hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ]);
   fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.OnRequest := DoOnRequest;
@@ -609,8 +610,8 @@ begin
       rawServer.fHttpServer.SockPort, '; num thread=', threads, ' db=',
       rawServer.fDbPool.DbmsEngineName, #10);
     {$ifdef USE_SQLITE3}
-    writeln('Press [Enter] to terminate'#10);
-    readln;
+    writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
+    ConsoleWaitForEnterKey;
     {$else}
     writeln('Press Ctrl+C or use SIGTERM to terminate'#10);
     FpPause; // mandatory for the actual benchmark tool

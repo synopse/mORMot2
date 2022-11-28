@@ -201,7 +201,7 @@ procedure TScheduler.StartServer;
 begin
   server := THttpAsyncServer.Create('4000', nil, nil, '',
     SystemInfo.dwNumberOfProcessors + 1, 120000,
-    [hsoNoXPoweredHeader, hsoNoStats]);
+    [hsoNoXPoweredHeader, hsoNoStats, hsoThreadCpuAffinity]);
   server.HttpQueueLength := 100000;
   server.OnRequest := DoOnRequest;
   server.WaitStarted;

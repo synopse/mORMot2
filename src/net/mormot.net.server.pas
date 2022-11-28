@@ -109,9 +109,11 @@ type
   // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // is returned (but 401/403) - only implemented by THttpAsyncServer for now
   // - either hsoThreadCpuAffinity or hsoThreadSocketAffinity could be set: the
-  // first for thread affinity to one CPU logic core, the 2nd for affinity to
-  // all logical cores of each CPU HW socket (both exclusive) - not implemented
-  // by THttpApiServer for now, but available on (async) (web)socket servers
+  // first for thread affinity to one CPU logic core (better scalability with
+  // short-living requests), the 2nd for affinity to all logical cores of each
+  // CPU HW socket (better scalability with complex HW) - available on (async)
+  // (web)socket servers, but not implemented by THttpApiServer for now; define
+  // none for a general-purpose database-centric server
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,

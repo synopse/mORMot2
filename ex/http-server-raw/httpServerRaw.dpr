@@ -102,7 +102,8 @@ begin
   inherited Create;
   fHttpServer := THttpAsyncServer.Create(
     '8888', nil, nil, '', 4, 30000,
-    [hsoNoXPoweredHeader
+    [hsoNoXPoweredHeader,
+     hsoThreadCpuAffinity // better scalability with short-living requests
     //, hsoLogVerbose
     ]);
   //writeln('DropPriviledges=', DropPriviledges('abouchez'));
