@@ -919,7 +919,7 @@ begin
     exit;
   FillCharFast(mask, SizeOf(mask), 0);
   SetBitPtr(@mask, CpuIndex);
-  SetThreadAffinity(Thread, mask);
+  result := SetThreadAffinity(Thread, mask);
 end;
 
 var
