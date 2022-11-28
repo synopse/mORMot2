@@ -3439,17 +3439,17 @@ end;
 
 function TSynAnsiUtf8.Utf8ToAnsi(const u: RawUtf8): RawByteString;
 begin
-  result := u;
+  result := u; // u may be a read-only constant: no FastAssignUtf8()
   {$ifdef HASCODEPAGE}
-  SetCodePage(result, CP_UTF8, false);
+  SetCodePage(result, CP_UTF8, {convert=}false);
   {$endif HASCODEPAGE}
 end;
 
 function TSynAnsiUtf8.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
 begin
-  result := AnsiText;
+  result := AnsiText; // AnsiText may be read-only: no FastAssignUtf8()
   {$ifdef HASCODEPAGE}
-  SetCodePage(RawByteString(result), CP_UTF8, false);
+  SetCodePage(RawByteString(result), CP_UTF8, {convert=}false);
   {$endif HASCODEPAGE}
 end;
 
@@ -3550,10 +3550,7 @@ begin
     if cp = CP_UTF8 then
       result := s
     else if cp >= CP_RAWBLOB then
-    begin
-      result := s;
-      SetCodePage(RawByteString(result), CP_UTF8, false);
-    end
+      FastSetString(result, pointer(s), length(s)) // no convert, just copy
     else
       TSynAnsiConvert.Engine(cp).AnsiBufferToRawUtf8(pointer(s), length(s), result);
   end;
@@ -7156,10 +7153,10 @@ begin
   SortDynArrayAnsiStringByCase[true] := @SortDynArrayAnsiStringI;
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
-  CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
-  WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
-  Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
-  RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
+  CurrentAnsiConvert   := NewEngine(Unicode_CodePage);
+  WinAnsiConvert       := NewEngine(CODEPAGE_US) as TSynAnsiFixedWidth;
+  Utf8AnsiConvert      := NewEngine(CP_UTF8) as TSynAnsiUtf8;
+  RawByteStringConvert := NewEngine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
   {$ifdef ASMX64AVXNOCONST}

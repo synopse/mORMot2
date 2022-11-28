@@ -743,6 +743,15 @@ procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
 procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// internal function which could be used instead of SetCodePage() if RefCnt = 1
+// - do nothing if HASCODEPAGE is not defined, e.g. on Delphi 7-2007
+procedure FakeCodePage(var s: RawByteString; cp: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function which assign src to dest, calling FakeCodePage(CP_UTF8)
+procedure FastAssignUtf8(var dest: RawByteString; const src: RawByteString);
+  {$ifdef HASINLINE} inline; {$endif}
+
 {$ifdef HASCODEPAGE}
 /// retrieve the code page of a non void string
 // - caller should have ensure that s <> ''
@@ -4212,11 +4221,27 @@ begin
 end;
 
 {$ifdef HASCODEPAGE}
+procedure FakeCodePage(var s: RawByteString; cp: cardinal);
+begin
+  if pointer(s) <> nil then
+    PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage := cp;
+end;
+
 function GetCodePage(const s: RawByteString): cardinal;
 begin
   result := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage;
 end;
+{$else}
+procedure FakeCodePage(var s: RawByteString; cp: cardinal);
+begin // do nothing on Delphi 7-2007
+end;
 {$endif HASCODEPAGE}
+
+procedure FastAssignUtf8(var dest: RawByteString; const src: RawByteString);
+begin
+  dest := src;
+  FakeCodePage(dest, CP_UTF8);
+end;
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
 var
@@ -10983,8 +11008,8 @@ begin
   ClearVariantForString(Value);
   if Txt = '' then
     exit;
-  RawByteString(TVarData(Value).VAny) := Txt;
-  {$ifdef HASCODEPAGE} // force explicit UTF-8
+  RawUtf8(TVarData(Value).VAny) := Txt;
+  {$ifdef HASCODEPAGE} // Txt may be read-only: no FastAssignUtf8()
   SetCodePage(RawByteString(TVarData(Value).VAny), CP_UTF8, false);
   {$endif HASCODEPAGE}
 end;
@@ -11384,10 +11409,7 @@ begin
   if (StartPos = 0) and
      (Len = length(fDataString)) then
   begin
-    {$ifdef HASCODEPAGE} // FPC expects this
-    SetCodePage(fDataString, CP_UTF8, false);
-    {$endif HASCODEPAGE}
-    Text := fDataString;
+    FastAssignUtf8(RawByteString(Text), fDataString); // FPC expects this
     fDataString := ''; // caller will own the string from now on
   end
   else

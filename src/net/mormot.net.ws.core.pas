@@ -3196,11 +3196,9 @@ begin
       pfsDone:
         begin
           data := '';
-          {$ifdef HASCODEPAGE}
           if opcode = focText then
             // identify text content as UTF-8 - is likely to be JSON anyway
-            SetCodePage(outputframe.payload, CP_UTF8, false);
-          {$endif HASCODEPAGE}
+            FakeCodePage(outputframe.payload, CP_UTF8);
           if (process.fProtocol <> nil) and
              (outputframe.payload <> '') then
             process.fProtocol.AfterGetFrame(outputframe^);
