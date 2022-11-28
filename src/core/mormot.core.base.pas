@@ -11405,9 +11405,16 @@ begin
 end;
 
 procedure TRawByteStringStream.GetAsText(StartPos, Len: PtrInt; var Text: RawUtf8);
+var
+  L: PtrInt;
 begin
-  if (StartPos = 0) and
-     (Len = length(fDataString)) then
+  L := length(fDataString);
+  if Len - StartPos > L then
+    Len := L - StartPos; // avoid any buffer overflow
+  if Len <= 0 then
+    Text := ''
+  else if (StartPos = 0) and
+          (Len = L) then
   begin
     FastAssignUtf8(RawByteString(Text), fDataString); // FPC expects this
     fDataString := ''; // caller will own the string from now on
