@@ -2310,8 +2310,8 @@ class function TRest.CreateFromFile(aModel: TOrmModel;
   const aJsonFile: TFileName; aServerHandleAuthentication: boolean;
   aKey: cardinal): TRest;
 begin
-  result := CreateFromJson(aModel, AnyTextFileToRawUtf8(aJsonFile, true),
-    aServerHandleAuthentication, aKey);
+  result := CreateFromJson(
+    aModel, RawUtf8FromFile(aJsonFile), aServerHandleAuthentication, aKey);
 end;
 
 procedure TRest.ServicesRelease(Caller: TServiceContainer);

@@ -552,7 +552,7 @@ end;
 
 procedure TUIComponentsPersist.LoadFromFile;
 begin
-  fLoadedJson := StringFromFile(FileName);
+  fLoadedJson := RawUtf8FromFile(FileName); // may detect BOM
   LoadFromVariant(_JsonFast(fLoadedJson));
 end;
 

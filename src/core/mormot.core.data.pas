@@ -2856,16 +2856,14 @@ type
     /// set all lines, separated by the supplied delimiter
     // - this method is thread-safe
     procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = #13#10);
-    /// set all lines from an UTF-8 text file
-    // - expect the file is explicitly an UTF-8 file
-    // - will ignore any trailing UTF-8 BOM in the file content, but will not
-    // expect one either
+    /// set all lines from a text file
+    // - will assume text file with no BOM is already UTF-8 encoded
     // - this method is thread-safe
     procedure LoadFromFile(const FileName: TFileName);
     /// write all lines into the supplied stream
     // - this method is thread-safe
     procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = #13#10);
-    /// write all lines into a new file
+    /// write all lines into a new UTF-8 file
     // - this method is thread-safe
     procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = #13#10);
     /// return the count of stored RawUtf8
@@ -5298,32 +5296,8 @@ begin
 end;
 
 procedure TRawUtf8List.LoadFromFile(const FileName: TFileName);
-var
-  Map: TMemoryMap;
-  P: PUtf8Char;
-  tmp: RawUtf8;
 begin
-  if Map.Map(FileName) then
-  try
-    P := pointer(Map.Buffer);
-    if Map.Size <> 0 then
-      case Map.TextFileKind of
-      isUtf8:
-        // ignore UTF-8 BOM
-        SetTextPtr(P + 3, P + Map.Size, #13#10);
-      isUnicode:
-        begin
-          // conversion from UTF-16 content (mainly on Windows) into UTF-8
-          RawUnicodeToUtf8(PWideChar(P + 2), (Map.Size - 2) shr 1, tmp);
-          SetText(tmp, #13#10);
-        end;
-      else
-        // assume text file with no BOM is already UTF-8 encoded
-        SetTextPtr(P, P + Map.Size, #13#10);
-      end;
-  finally
-    Map.UnMap;
-  end;
+  SetText(RawUtf8FromFile(FileName), #13#10); // RawUtf8FromFile() detects BOM
 end;
 
 procedure TRawUtf8List.SetTextPtr(P, PEnd: PUtf8Char; const Delimiter: RawUtf8);

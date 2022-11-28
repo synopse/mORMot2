@@ -5671,7 +5671,7 @@ end;
 class function TSqlDBConnectionProperties.CreateFromFile(
   const aJsonFile: TFileName; aKey: cardinal): TSqlDBConnectionProperties;
 begin
-  result := CreateFromJson(AnyTextFileToRawUtf8(aJsonFile, true), aKey);
+  result := CreateFromJson(RawUtf8FromFile(aJsonFile), aKey);
 end;
 
 

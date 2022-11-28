@@ -1162,6 +1162,7 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - handle only currency for floating point values: set JSON_FAST_FLOAT
     // or dvoAllowDoubleValue option to support double, with potential precision loss
+    // - will assume text file with no BOM is already UTF-8 encoded
     function InitJsonFromFile(const FileName: TFileName;
       aOptions: TDocVariantOptions = []): boolean;
     /// ensure a document-based variant instance will have one unique options set
@@ -5577,7 +5578,7 @@ end;
 function TDocVariantData.InitJsonFromFile(const FileName: TFileName;
   aOptions: TDocVariantOptions): boolean;
 begin
-  result := InitJsonInPlace(pointer(StringFromFile(FileName)), aOptions) <> nil;
+  result := InitJsonInPlace(pointer(RawUtf8FromFile(FileName)), aOptions) <> nil;
 end;
 
 procedure TDocVariantData.InitCsv(aCsv: PUtf8Char; aOptions: TDocVariantOptions;

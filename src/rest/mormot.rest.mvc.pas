@@ -1368,7 +1368,7 @@ end;
 
 function TMvcViewsMustache.GetTemplate(const aFileName: TFileName): RawUtf8;
 begin
-  result := AnyTextFileToRawUtf8(ViewTemplateFolder + aFileName, true);
+  result := RawUtf8FromFile(ViewTemplateFolder + aFileName);
 end;
 
 function TMvcViewsMustache.GetTemplateAge(const aFileName: TFileName): TUnixTime;

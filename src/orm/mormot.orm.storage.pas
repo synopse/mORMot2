@@ -4278,7 +4278,7 @@ begin
     end
     else
     begin
-      json := AnyTextFileToRawUtf8(fFileName, true);
+      json := RawUtf8FromFile(fFileName);
       LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
     end;
   end;

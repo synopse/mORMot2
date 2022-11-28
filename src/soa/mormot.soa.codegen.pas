@@ -1401,8 +1401,8 @@ begin
     // download as file
     head := HEADER_CONTENT_TYPE + 'application/' + LowerCase(templateExt);
   templateName := templateName + '.' + templateExt + '.mustache';
-  template := AnyTextFileToRawUtf8(IncludeTrailingPathDelimiter(
-    Path[templateFound]) + Utf8ToString(templateName), true);
+  template := RawUtf8FromFile(
+    IncludeTrailingPathDelimiter(Path[templateFound]) + Utf8ToString(templateName));
   if template = '' then
   begin
     Ctxt.Error(templateName, HTTP_NOTFOUND);
@@ -1705,8 +1705,7 @@ begin
     DestFileName := 'mORMotServer.pas'
   else if DestFileName[1] = PathDelim then
     DestFileName := ExtractFilePath(TemplateName) + DestFileName;
-  FileFromString(WrapperFromModel(Server,
-    AnyTextFileToRawUtf8(TemplateName, true),
+  FileFromString(WrapperFromModel(Server, RawUtf8FromFile(TemplateName),
     StringToUtf8(ExtractFileName(DestFileName)), 0), DestFileName);
 end;
 
@@ -1732,7 +1731,7 @@ begin
     Free;
   end;
   ctxt.fileName := GetFileNameWithoutExtOrPath(DestFileName);
-  FileFromString(TSynMustache.Parse(AnyTextFileToRawUtf8(TemplateName, true)).
+  FileFromString(TSynMustache.Parse(RawUtf8FromFile(TemplateName)).
     Render(ctxt, nil, nil, nil, true), DestFileName);
 end;
 

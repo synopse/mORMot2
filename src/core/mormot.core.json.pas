@@ -10962,7 +10962,7 @@ function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;
 var
   tmp: RawUtf8;
 begin
-  tmp := AnyTextFileToRawUtf8(JsonFile, true);
+  tmp := RawUtf8FromFile(JsonFile);
   if tmp = '' then
     result := false
   else
@@ -11198,7 +11198,7 @@ function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName;
   const aSectionName: RawUtf8): boolean;
 begin
   fFileName := aFileName;
-  fInitialJsonContent := StringFromFile(aFileName);
+  fInitialJsonContent := RawUtf8FromFile(aFileName); // may detect BOM
   result := LoadFromJson(fInitialJsonContent, aSectionName);
 end;
 
