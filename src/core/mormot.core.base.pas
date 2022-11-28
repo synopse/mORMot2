@@ -11409,18 +11409,15 @@ var
   L: PtrInt;
 begin
   L := length(fDataString);
-  if Len - StartPos > L then
-    Len := L - StartPos; // avoid any buffer overflow
-  if Len <= 0 then
-    Text := ''
-  else if (StartPos = 0) and
-          (Len = L) then
-  begin
-    FastAssignUtf8(RawByteString(Text), fDataString); // FPC expects this
-    fDataString := ''; // caller will own the string from now on
-  end
+  if (StartPos = 0) and
+     (Len = L) then
+    FastAssignUtf8(Text, fDataString) // FPC expects this
   else
+  begin
+    if Len - StartPos > L then
+      Len := L - StartPos; // avoid any buffer overflow
     FastSetString(Text, @PByteArray(fDataString)[StartPos], Len);
+  end;
 end;
 
 
