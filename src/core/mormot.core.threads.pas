@@ -1025,15 +1025,22 @@ type
     fOnThreadStart: TOnNotifyThread;
     procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
-    procedure SetServerThreadsAffinityPerCpu(
-      const log: ISynLog; const threads: TThreadDynArray);
-    procedure SetServerThreadsAffinityPerSocket(
-      const log: ISynLog; const threads: TThreadDynArray);
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
       const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8); reintroduce; virtual;
+    /// assign each thread to a single logical CPU core
+    // - for instance, for a HTTP server, it may ensure better scalability with
+    // short-living requests and high number of threads
+    procedure SetServerThreadsAffinityPerCpu(
+      const log: ISynLog; const threads: TThreadDynArray);
+    /// assign each thread to a single hardware CPU socket
+    // - for instance, for a HTTP server, it may ensure better scalability on
+    // complex hardware with several physical CPU packages - but it is very
+    // picky, so should be enabled only with proper testing on the actual HW
+    procedure SetServerThreadsAffinityPerSocket(
+      const log: ISynLog; const threads: TThreadDynArray);
   end;
 
   /// abstract class to implement a thread with logging notifications
@@ -3079,14 +3086,15 @@ var
   rnd, i: PtrInt;
 begin
   rnd := SystemInfo.dwNumberOfProcessors;
-  if rnd <= 1 then
+  if (threads = nil) or
+     (rnd <= 1) then
     exit;
   if Assigned(log) then
     log.Log(sllTrace, 'Create: SetThreadCpuAffinity of % threads over % cores',
       [length(threads), rnd], self);
   SetThreadCpuAffinity(self, 0);
-  for i := 0 to high(threads) do
-    SetThreadCpuAffinity(threads[i], (i + 1) mod rnd);
+  for i := 1 to length(threads) do
+    SetThreadCpuAffinity(threads[i - 1], i mod rnd);
 end;
 
 procedure TNotifiedThread.SetServerThreadsAffinityPerSocket(
@@ -3101,7 +3109,7 @@ begin
   // with multiple CPU sockets, group threads by closest HW socket
   persock := length(threads) div CpuSockets;
   if Assigned(log) then
-    log.Log(sllTrace, 'Create: CpuSockets=% PerSocket=%',
+    log.Log(sllTrace, 'Create: CpuSockets=% persock=%',
       [CpuSockets, persock], self);
   sock := 0;
   SetThreadSocketAffinity(self, sock); // AW with R0 and lower R# threads
