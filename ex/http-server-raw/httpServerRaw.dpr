@@ -101,9 +101,10 @@ constructor TSimpleHttpAsyncServer.Create;
 begin
   inherited Create;
   fHttpServer := THttpAsyncServer.Create(
-    '8888', nil, nil, '', 4, 30000,
+    '8888', nil, nil, '', SystemInfo.dwNumberOfProcessors + 1, 30000,
     [hsoNoXPoweredHeader,
-     hsoThreadCpuAffinity // better scalability with short-living requests
+     hsoNoStats
+    //, hsoThreadCpuAffinity // better scalability with high number of threads
     //, hsoLogVerbose
     ]);
   //writeln('DropPriviledges=', DropPriviledges('abouchez'));

@@ -21,7 +21,7 @@ interface
 {.$define USELOCALDB2}
 {.$define USELOCALPOSTGRESQL}
 {.$define USELOCALMYSQL}
-{.$define USEMONGODB}
+{.$define USEMONGODB} // those tests are not converted from mORMot 1.18 yet
 
 {$ifdef CPU64}
   {$undef USENEXUSDB} // official NexusDB is not yet 64 bit ready :(
@@ -354,7 +354,11 @@ type
 
 
 
+
 implementation
+
+const
+  VOIDINDEX = 150; // to identify potential issues with "" values
 
 {$ifdef USEFIREBIRDEMB}
 
@@ -507,6 +511,8 @@ begin
   RunTimer.Start;
   for i := 0 to Stat.NumberOfElements - 1 do
   begin
+    // if i = VOIDINDEX then
+    //  Orm.Retrieve(Res[i], Value);
     Orm.Retrieve(Res[i], Value);
     ValueCheck(i);
   end;
@@ -626,7 +632,7 @@ begin
     begin
       UInt32ToUtf8(i + 1, ValueLastName[i]);
       {$ifndef UNIK}
-      if i <> 100 then // test https://synopse.info/fossil/info/e8c211062e
+      if i <> VOIDINDEX then // test https://synopse.info/fossil/info/e8c211062e
       {$endif UNIK}
         ValueFirstName[i] := Namee + ValueLastName[i];
     end;
@@ -634,8 +640,8 @@ begin
   if UseTransactions then
     Orm.TransactionBegin(TOrmSample, Client.SessionID);
   if UseBatch then
-    Orm.BatchStart(TOrmSample, {autotrans=}0)
-  else if length(Res) < Stat.NumberOfElements then
+    Orm.BatchStart(TOrmSample, {autotrans=}0);
+  if length(Res) < Stat.NumberOfElements then
     SetLength(Res, Stat.NumberOfElements);
   for i := 0 to Stat.NumberOfElements - 1 do
   begin
@@ -742,7 +748,7 @@ procedure TTestInMemoryEngine.ClientCreate;
 begin
   inherited ClientCreate;
   if not (dbInMemoryVirtual in Flags) then
-    StaticDataCreate(Client.Server.OrmInstance, TOrmSample, DBFileName, true);
+    OrmMapInMemory(Client.Server.OrmInstance, TOrmSample, DBFileName, true);
 end;
 
 procedure TTestInMemoryEngine.InMemoryStatic;
@@ -764,7 +770,7 @@ function TTestDatabaseExternalAbstract.ModelCreate: TOrmModel;
 begin
   result := inherited ModelCreate;
   // registration should be done BEFORE Client is initialized
-  VirtualTableExternalRegister(result, TOrmSample, Props, 'SampleRecord');
+  OrmMapExternal(result, TOrmSample, Props, 'SampleRecord');
 end;
 
 procedure TTestDatabaseExternalAbstract.ClientCreate;
@@ -868,7 +874,7 @@ procedure TTestSqliteRemote.ClientCreate;
 begin
   // initialize a fast in-memory SQLite3 remote server
   RemoteProps := TSQLDBSQLite3ConnectionProperties.Create(
-    SQLITE_MEMORY_DATABASE_NAME, '', '', '');
+    {DBFileName} SQLITE_MEMORY_DATABASE_NAME, '', '', '');
   RemoteProps.MainSQLite3DB.Synchronous := SQlite3Mode;
   RemoteProps.MainSQLite3DB.LockingMode := SQlite3Lock;
   RemoteServer := TSQLDBServerRemote.Create(
@@ -885,12 +891,6 @@ begin
   RemoteProps.Free;
 end;
 
-procedure TTestSqliteRemote.RemoteSqliteSocket;
-begin
-  RemoteClient := TSQLDBSocketConnectionProperties;
-  RunTests;
-end;
-
 {$ifdef OSWINDOWS}
 procedure TTestSqliteRemote.RemoteSqliteWinHTTP;
 begin
@@ -898,6 +898,12 @@ begin
   RunTests;
 end;
 {$endif OSWINDOWS}
+
+procedure TTestSqliteRemote.RemoteSqliteSocket;
+begin
+  RemoteClient := TSQLDBSocketConnectionProperties;
+  RunTests;
+end;
 
 
 {$ifdef USELOCALPOSTGRESQL}

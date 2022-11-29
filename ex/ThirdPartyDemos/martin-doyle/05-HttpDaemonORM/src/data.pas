@@ -23,7 +23,7 @@ type
     property Time: TModTime read FTime write FTime;
   end;
 
-  function CreateSampleModel: TOrmModel;
+function CreateSampleModel: TOrmModel;
 
 implementation
 
