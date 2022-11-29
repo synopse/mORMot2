@@ -1702,11 +1702,14 @@ type
     Prop: PRttiCustomProp;
     /// force the item class when reading a TObjectList without "ClassName":...
     ObjectListItem: TRttiCustom;
+    /// optional RawUtf8 values interning
+    Interning: TRawUtf8Interning;
     /// TDocVariant initialization options
     DVO: TDocVariantOptions;
     /// initialize this unserialization context
-    procedure Init(P: PUtf8Char; Rtti: TRttiCustom; O: TJsonParserOptions;
-      CV: PDocVariantOptions; ObjectListItemClass: TClass);
+    procedure InitParser(P: PUtf8Char; Rtti: TRttiCustom; O: TJsonParserOptions;
+      CV: PDocVariantOptions; ObjectListItemClass: TClass;
+      RawUtf8Interning: TRawUtf8Interning);
     /// call GetJsonField() to retrieve the next JSON value
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
@@ -1853,9 +1856,10 @@ type
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; override;
     /// unserialize some JSON input into Data^
+    // - as used by LoadJson() and similar high-level functions
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
-      ObjectListItemClass: TClass = nil);
+      ObjectListItemClass: TClass; Interning: TRawUtf8Interning);
     /// how many iterations could be done one a given value
     // - returns -1 if the value is not iterable, or length(DynArray) or
     // TRawUtf8List.Count or TList.Count or TSynList.Count
@@ -2106,7 +2110,7 @@ function ObjectToJsonDebug(Value: TObject;
 // a constant (refcount=-1) - see e.g. the overloaded RecordLoadJson()
 function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): PUtf8Char; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
 
 /// unserialize most kind of content as JSON, using its RTTI, as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2114,7 +2118,7 @@ function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // so is safe with a read/only or shared string - but slightly slower
 function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): boolean; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
 
 /// fill a record content from a JSON serialization as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2127,7 +2131,7 @@ function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
 // a constant (refcount=-1) - see e.g. the overloaded RecordLoadJson()
 function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): PUtf8Char; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
 
 /// fill a record content from a JSON serialization as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2135,7 +2139,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // so is safe with a read/only or shared string - but slightly slower
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): boolean; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
 // TJsonWriter.AddDynArrayJson
@@ -2151,7 +2155,7 @@ function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
 // a constant (refcount=-1) - see e.g. the overloaded DynArrayLoadJson()
 function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): PUtf8Char; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
 // TJsonWriter.AddDynArrayJson, which won't be modified
@@ -2159,7 +2163,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // so is safe with a read/only or shared string - but slightly slower
 function DynArrayLoadJson(var Value; const Json: RawUtf8;
   TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true): boolean; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
 
 /// read an object properties, as saved by ObjectToJson function
 // - ObjectInstance must be an existing TObject instance
@@ -2188,7 +2192,7 @@ function DynArrayLoadJson(var Value; const Json: RawUtf8;
 // the default values are expected to be set before JSON parsing
 function JsonToObject(var ObjectInstance; From: PUtf8Char;
   out Valid: boolean; TObjectListItemClass: TClass = nil;
-  Options: TJsonParserOptions = []): PUtf8Char;
+  Options: TJsonParserOptions = []; Interning: TRawUtf8Interning = nil): PUtf8Char;
 
 /// parse the supplied JSON with some tolerance about Settings format
 // - will make a TSynTempBuffer copy for parsing, and un-comment it
@@ -2204,8 +2208,8 @@ function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
 // during process, before calling safely JsonToObject()
 // - will return TRUE on success, or FALSE if the supplied JSON was invalid
 function ObjectLoadJson(var ObjectInstance; const Json: RawUtf8;
-  TObjectListItemClass: TClass = nil;
-  Options: TJsonParserOptions = []): boolean;
+  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = [];
+  Interning: TRawUtf8Interning = nil): boolean;
 
 /// create a new object instance, as saved by ObjectToJson(...,[...,woStoreClassName,...]);
 // - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
@@ -2216,7 +2220,7 @@ function ObjectLoadJson(var ObjectInstance; const Json: RawUtf8;
 // don't call JsonToObject(pointer(JSONRawUtf8)) but makes a temporary copy of
 // the JSON text buffer before calling this function, if want to reuse it later
 function JsonToNewObject(var From: PUtf8Char; var Valid: boolean;
-  Options: TJsonParserOptions = []): TObject;
+  Options: TJsonParserOptions = []; Interning: TRawUtf8Interning = nil): TObject;
 
 /// read an TObject published property, as saved by ObjectToJson() function
 // - will use direct in-memory reference to the object, or call the corresponding
@@ -2227,8 +2231,8 @@ function JsonToNewObject(var From: PUtf8Char; var Valid: boolean;
 // owner class: you can set the j2oSetterExpectsToFreeTempInstance option
 // to let this method release it when the setter returns
 function PropertyFromJson(Prop: PRttiCustomProp; Instance: TObject;
-  From: PUtf8Char; var Valid: boolean;
-  Options: TJsonParserOptions = []): PUtf8Char;
+  From: PUtf8Char; var Valid: boolean; Options: TJsonParserOptions = [];
+  Interning: TRawUtf8Interning = nil): PUtf8Char;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // object contents
@@ -2246,8 +2250,8 @@ function UrlDecodeObject(U: PUtf8Char; Upper: PAnsiChar;
 // - ObjectInstance must be an existing TObject instance
 // - this function will call RemoveCommentsFromJson() before process
 function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;
-  TObjectListItemClass: TClass = nil;
-  Options: TJsonParserOptions = []): boolean;
+  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = [];
+  Interning: TRawUtf8Interning = nil): boolean;
 
 
 const
@@ -7145,11 +7149,13 @@ end;
 
 { TJsonParserContext }
 
-procedure TJsonParserContext.Init(P: PUtf8Char; Rtti: TRttiCustom;
-  O: TJsonParserOptions; CV: PDocVariantOptions; ObjectListItemClass: TClass);
+procedure TJsonParserContext.InitParser(P: PUtf8Char; Rtti: TRttiCustom;
+  O: TJsonParserOptions; CV: PDocVariantOptions; ObjectListItemClass: TClass;
+  RawUtf8Interning: TRawUtf8Interning);
 begin
   Json := P;
   Valid := true;
+  Interning := RawUtf8Interning;
   if Rtti <> nil then
     O := O + TRttiJson(Rtti).fIncludeReadOptions;
   Options := O;
@@ -7196,7 +7202,7 @@ function TJsonParserContext.ParseUtf8: RawUtf8;
 begin
   GetJsonField;
   Valid := Json <> nil;
-  FastSetString(result, Value, ValueLen)
+  Interning.Unique(result, Value, ValueLen)
 end;
 
 function TJsonParserContext.ParseString: string;
@@ -7436,7 +7442,7 @@ begin
   if Ctxt.ParseNext then
     // will handle RawUtf8 but also AnsiString, WinAnsiString and RawUnicode
     if Ctxt.Info.Cache.CodePage = CP_UTF8 then
-      FastSetString(RawUtf8(Data^), Ctxt.Value, Ctxt.ValueLen)
+      Ctxt.Interning.Unique(RawUtf8(Data^), Ctxt.Value, Ctxt.ValueLen)
     else if Ctxt.Info.Cache.CodePage >= CP_RAWBLOB then
       Ctxt.Valid := false // paranoid check (RawByteString should handle it)
     else
@@ -8261,7 +8267,7 @@ begin
     repeat
       if Ctxt.ParseNext then
       begin
-        FastSetString(item, Ctxt.Value, Ctxt.ValueLen);
+        Ctxt.Interning.Unique(item, Ctxt.Value, Ctxt.ValueLen);
         Data^.AddObject(item, nil);
       end;
     until (not Ctxt.Valid) or
@@ -10145,14 +10151,15 @@ end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; ParserOptions: TJsonParserOptions;
-  CustomVariantOptions: PDocVariantOptions; ObjectListItemClass: TClass);
+  CustomVariantOptions: PDocVariantOptions; ObjectListItemClass: TClass;
+  Interning: TRawUtf8Interning);
 var
   ctxt: TJsonParserContext;
 begin
   if Assigned(self) then
   begin
-    ctxt.Init(
-      Json, self, ParserOptions, CustomVariantOptions, ObjectListItemClass);
+    ctxt.InitParser(Json, self, ParserOptions,
+      CustomVariantOptions, ObjectListItemClass, Interning);
     if Assigned(fJsonLoad) then
       // efficient direct Json parsing
       TRttiJsonLoad(fJsonLoad)(Data, ctxt)
@@ -10454,10 +10461,12 @@ end;
 
 procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Rtti: TRttiCustom;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8InterningAbstract);
 begin
   (Rtti as TRttiJson).ValueLoadJson(Data, Json, EndOfObject,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
+    CustomVariantOptions, nil, TRawUtf8Interning(Interning));
 end;
 
 
@@ -10795,23 +10804,24 @@ end;
 
 function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
-  Tolerant: boolean): PUtf8Char;
+  Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, Json, EndOfObject,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
+    @Value, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
+    CustomVariantOptions, nil, Interning);
   result := Json;
 end;
 
 function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
-  Tolerant: boolean): boolean;
+  Tolerant: boolean; Interning: TRawUtf8Interning): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Json); // make private copy before in-place decoding
   try
     result := LoadJson(Value, tmp.buf, TypeInfo, EndOfObject,
-      CustomVariantOptions, Tolerant) <> nil;
+      CustomVariantOptions, Tolerant, Interning) <> nil;
   finally
     tmp.Done;
   end;
@@ -10819,26 +10829,28 @@ end;
 
 function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
-  Tolerant: boolean): PUtf8Char;
+  Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
   if (TypeInfo = nil) or
      not (TypeInfo.Kind in rkRecordTypes) then
     raise EJsonException.CreateUtf8('RecordLoadJson: % is not a record',
       [TypeInfo.Name]);
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Rec, Json, EndOfObject,
-      JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
+    @Rec, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
+    CustomVariantOptions, nil, Interning);
   result := Json;
 end;
 
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8Interning): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Json); // make private copy before in-place decoding
   try
     result := RecordLoadJson(Rec, tmp.buf, TypeInfo, nil,
-      CustomVariantOptions, Tolerant) <> nil;
+      CustomVariantOptions, Tolerant, Interning) <> nil;
   finally
     tmp.Done;
   end;
@@ -10846,40 +10858,43 @@ end;
 
 function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
-  Tolerant: boolean): PUtf8Char;
+  Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
   if (TypeInfo = nil) or
      (TypeInfo.Kind <> rkDynArray) then
     raise EJsonException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
       [TypeInfo.Name]);
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, Json, EndOfObject,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
+    @Value, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
+    CustomVariantOptions, nil, Interning);
   result := Json;
 end;
 
 function DynArrayLoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8Interning): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Json); // make private copy before in-place decoding
   try
     result := DynArrayLoadJson(Value, tmp.buf, TypeInfo, nil,
-      CustomVariantOptions, Tolerant) <> nil;
+      CustomVariantOptions, Tolerant, Interning) <> nil;
   finally
     tmp.Done;
   end;
 end;
 
 function JsonToObject(var ObjectInstance; From: PUtf8Char; out Valid: boolean;
-  TObjectListItemClass: TClass; Options: TJsonParserOptions): PUtf8Char;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions;
+  Interning: TRawUtf8Interning): PUtf8Char;
 var
   ctxt: TJsonParserContext;
 begin
   if pointer(ObjectInstance) = nil then
     raise ERttiException.Create('JsonToObject(nil)');
-  ctxt.Init(From, Rtti.RegisterClass(TObject(ObjectInstance)), Options,
-    nil, TObjectListItemClass);
+  ctxt.InitParser(From, Rtti.RegisterClass(TObject(ObjectInstance)), Options,
+    nil, TObjectListItemClass, Interning);
   TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;
   result := ctxt.Json;
@@ -10905,14 +10920,16 @@ begin
 end;
 
 function ObjectLoadJson(var ObjectInstance; const Json: RawUtf8;
-  TObjectListItemClass: TClass; Options: TJsonParserOptions): boolean;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions;
+  Interning: TRawUtf8Interning): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Json);
   if tmp.len <> 0 then
     try
-      JsonToObject(ObjectInstance, tmp.buf, result, TObjectListItemClass, Options);
+      JsonToObject(ObjectInstance,
+        tmp.buf, result, TObjectListItemClass, Options, Interning);
     finally
       tmp.Done;
     end
@@ -10921,16 +10938,17 @@ begin
 end;
 
 function JsonToNewObject(var From: PUtf8Char; var Valid: boolean;
-  Options: TJsonParserOptions): TObject;
+  Options: TJsonParserOptions; Interning: TRawUtf8Interning): TObject;
 var
   ctxt: TJsonParserContext;
 begin
-  ctxt.Init(From, nil, Options, nil, nil);
+  ctxt.InitParser(From, nil, Options, nil, nil, Interning);
   result := ctxt.ParseNewObject;
 end;
 
 function PropertyFromJson(Prop: PRttiCustomProp; Instance: TObject;
-  From: PUtf8Char; var Valid: boolean; Options: TJsonParserOptions): PUtf8Char;
+  From: PUtf8Char; var Valid: boolean; Options: TJsonParserOptions;
+  Interning: TRawUtf8Interning): PUtf8Char;
 var
   ctxt: TJsonParserContext;
 begin
@@ -10940,7 +10958,7 @@ begin
      (Prop^.Value.Kind <> rkClass) or
      (Instance = nil) then
     exit;
-  ctxt.Init(From, Prop^.Value, Options, nil, nil);
+  ctxt.InitParser(From, Prop^.Value, Options, nil, nil, Interning);
   if not JsonLoadProp(pointer(Instance), Prop, ctxt) then
     exit;
   Valid := true;
@@ -10958,7 +10976,8 @@ begin
 end;
 
 function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;
-  TObjectListItemClass: TClass; Options: TJsonParserOptions): boolean;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions;
+  Interning: TRawUtf8Interning): boolean;
 var
   tmp: RawUtf8;
 begin
@@ -10968,7 +10987,8 @@ begin
   else
   begin
     RemoveCommentsFromJson(pointer(tmp));
-    JsonToObject(ObjectInstance, pointer(tmp), result, TObjectListItemClass, Options);
+    JsonToObject(ObjectInstance,
+      pointer(tmp), result, TObjectListItemClass, Options, Interning);
   end;
 end;
 

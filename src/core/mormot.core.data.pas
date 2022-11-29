@@ -1120,17 +1120,6 @@ function VariantHash(const value: variant; CaseInsensitive: boolean;
 
 { ************ TDynArray and TDynArrayHashed Wrappers }
 
-var
-  /// low-level JSON unserialization function
-  // - defined in this unit to avoid circular reference with mormot.core.json,
-  // and be called by TDynArray.LoadFromJson method
-  // - this unit will just set a wrapper raising an ERttiException
-  // - link mormot.core.json.pas to have a working implementation
-  // - rather call LoadJson() from mormot.core.json than this low-level function
-  GetDataFromJson: procedure(Data: pointer; var Json: PUtf8Char;
-    EndOfObject: PUtf8Char; Rtti: TRttiCustom;
-    CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
-
 type
   /// function prototype to be used for TDynArray Sort and Find method
   // - common functions exist for base types: see e.g. SortDynArrayBoolean,
@@ -1145,6 +1134,9 @@ type
 
   /// event oriented version of TDynArraySortCompare
   TOnDynArraySortCompare = function(const A, B): integer of object;
+
+  /// defined here as forward definition of the TRawUtf8Interning final class
+  TRawUtf8InterningAbstract = class(TSynPersistent);
 
 const
   /// redirect to the proper SortDynArrayAnsiString/SortDynArrayAnsiStringI
@@ -1658,17 +1650,18 @@ type
     // of an invalid input buffer
     // - this method will recognize T*ObjArray types, and will first free
     // any existing instance before unserializing, to avoid memory leak
+    // - can use an associated TRawUtf8Interning instance for RawUtf8 values
     // - warning: the content of P^ will be modified during parsing: make a
     // local copy if it will be needed later (using e.g. the overloaded method)
     function LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char = nil;
-      CustomVariantOptions: PDocVariantOptions = nil;
-      Tolerant: boolean = false): PUtf8Char; overload;
+      CustomVariantOptions: PDocVariantOptions = nil; Tolerant: boolean = false;
+      Interning: TRawUtf8InterningAbstract = nil): PUtf8Char; overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - this method will make a private copy of the JSON for in-place parsing
     // - returns false in case of invalid input buffer, true on success
     function LoadFromJson(const Json: RawUtf8;
-      CustomVariantOptions: PDocVariantOptions = nil;
-      Tolerant: boolean = false): boolean; overload;
+      CustomVariantOptions: PDocVariantOptions = nil; Tolerant: boolean = false;
+      Interning: TRawUtf8InterningAbstract = nil): boolean; overload;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; Limit: cardinal; Offset: cardinal = 0);
     /// assign the current dynamic array content into a variable
@@ -2588,7 +2581,7 @@ type
   // - thanks to the Copy-On-Write feature of string variables, this may
   // reduce a lot the memory overhead of duplicated text content
   // - this class is thread-safe and optimized for performance
-  TRawUtf8Interning = class(TSynPersistent)
+  TRawUtf8Interning = class(TRawUtf8InterningAbstract)
   protected
     fPool: array of TRawUtf8InterningSlot;
     fPoolLast: integer;
@@ -2955,6 +2948,17 @@ type
 procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
 
+var
+  /// low-level JSON unserialization function
+  // - defined in this unit to avoid circular reference with mormot.core.json,
+  // but to publish the TDynArray.LoadFromJson overloaded methods
+  // - this unit will just set a wrapper raising an ERttiException
+  // - link mormot.core.json.pas to have a working implementation
+  // - rather call LoadJson() from mormot.core.json than this low-level function
+  GetDataFromJson: procedure(Data: pointer; var Json: PUtf8Char;
+    EndOfObject: PUtf8Char; Rtti: TRttiCustom;
+    CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+    Interning: TRawUtf8InterningAbstract);
 
 
 implementation
@@ -7376,17 +7380,20 @@ end;
 
 procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Rtti: TRttiCustom;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8InterningAbstract);
 begin
   raise ERttiException.Create('GetDataFromJson() not implemented - ' +
     'please include mormot.core.json in your uses clause');
 end;
 
 function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUtf8Char;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8InterningAbstract): PUtf8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJson(fValue, P, EndOfObject, Info, CustomVariantOptions, Tolerant);
+  GetDataFromJson(fValue, P,
+    EndOfObject, Info, CustomVariantOptions, Tolerant, Interning);
   if fCountP <> nil then
     // GetDataFromJson() set the array length (capacity), not the external count
     if fValue^ = nil then
@@ -7397,13 +7404,15 @@ begin
 end;
 
 function TDynArray.LoadFromJson(const Json: RawUtf8;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
+  Interning: TRawUtf8InterningAbstract): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Json);
   try
-    result := LoadFromJson(tmp.buf, nil, CustomVariantOptions, Tolerant) <> nil;
+    result := LoadFromJson(tmp.buf, nil,
+      CustomVariantOptions, Tolerant, Interning) <> nil;
   finally
     tmp.Done;
   end;

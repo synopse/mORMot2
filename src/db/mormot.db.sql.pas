@@ -3289,7 +3289,7 @@ begin
   result := false;
   if Json = nil then
     exit;
-  p.Init(Json, nil, [], nil, nil);
+  p.InitParser(Json, nil, [], nil, nil, nil);
   if not p.ParseArray then
     exit;
   n := JsonArrayCount(p.Json); // prefetch input and compute dest length
@@ -3298,9 +3298,8 @@ begin
   SetLength(Values, n);
   for i := 0 to n - 1 do
   begin
-    p.GetJsonFieldOrObjectOrArray;
-    if not p.Valid then
-      exit;
+    if not p.ParseNextAny then
+      exit; // input parsing error
     case ParamType of
       ftUtf8: // SQL single-quoted string
         QuotedStr(p.Value, p.ValueLen, '''', Values[i]);

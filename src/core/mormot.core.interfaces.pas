@@ -3434,7 +3434,8 @@ begin
       resultAsJsonObject := true
     else if R^ <> '[' then
       FakeCallRaiseError(ctxt, 'JSON array/object result expected', []);
-    c.Init(R + 1, nil, fFactory.JsonParserOptions, @fFactory.DocVariantOptions, nil);
+    c.InitParser(R + 1, nil, fFactory.JsonParserOptions,
+      @fFactory.DocVariantOptions, nil, nil);
     arg := ctxt.Method^.ArgsOutFirst;
     if arg > 0 then
       repeat
@@ -7466,7 +7467,8 @@ begin
     end
     else
     begin
-      ctxt.Init(P, nil, fFactory.JsonParserOptions, @fDocVariantOptions, nil);
+      ctxt.InitParser(P, nil, fFactory.JsonParserOptions,
+        @fDocVariantOptions, nil, nil);
       for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       begin
         arg := @fMethod^.Args[a];

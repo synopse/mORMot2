@@ -7121,7 +7121,8 @@ begin
       Value := pointer(tmp);
     end;
   end;
-  fCustomParser.ValueLoadJson(Data, Value, nil, JSONPARSER_TOLERANTOPTIONS, nil);
+  fCustomParser.ValueLoadJson(
+    Data, Value, nil, JSONPARSER_TOLERANTOPTIONS, nil, nil, nil);
 end;
 
 
