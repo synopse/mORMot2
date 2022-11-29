@@ -4371,7 +4371,8 @@ type
           Size: DWORD;
           CacheType: TSystemLogicalProcessorCache;
         end);
-      RelationGroup: (Reserved: array [0..1] of QWord);
+      RelationGroup: (
+        Reserved: array [0..1] of QWord); // to define the actual struct size
   end;
   {$A+}
 
@@ -4616,8 +4617,8 @@ begin
     cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   if Assigned(GetLogicalProcessorInformation) then
   begin
-    SetLength(proc, 512);
-    siz := SizeOf(proc[0]) * 512;
+    SetLength(proc, 1024);
+    siz := SizeOf(proc[0]) * length(proc);
     if GetLogicalProcessorInformation(proc[0], @siz) then
     begin
       for i := 0 to (siz div SizeOf(proc[0])) - 1 do

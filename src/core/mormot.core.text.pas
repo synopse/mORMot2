@@ -10322,7 +10322,7 @@ var
   stop: Int64;
 begin
   QueryPerformanceMicroSeconds(stop);
-  MicroSecToString(stop - Start, result);
+  MicroSecToString(stop - Int64(Start), result);
 end;
 
 procedure By100ToTwoDigitString(value: cardinal; const valueunit: ShortString;
