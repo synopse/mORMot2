@@ -3840,17 +3840,34 @@ procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 // - under Linux/FPC, calls pthread_cancel() API which is asynchronous
 function RawKillThread(Thread: TThread): boolean;
 
-/// try to assign a given thread to a specific logical CPU core
-// - CpuIndex should be in 0 .. SystemInfo.dwNumberOfProcessors - 1 range
+type
+  /// store a bitmask of logical CPU cores, as used by SetThreadMaskAffinity
+  // - has 32/64-bit pointer-size on Windows, or 1024 bits on POSIX
+  TCpuSet = {$ifdef OSWINDOWS} PtrUInt {$else} array[0..127] of byte {$endif};
+var
+  /// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket
+  // - filled at process startup as CpuSocketsMask[0 .. CpuSockets - 1] range
+  CpuSocketsMask: array of TCpuSet;
+
+/// fill a bitmask of CPU cores with zeros
+procedure ResetCpuSet(out CpuSet: TCpuSet);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// set a particular bit in a mask of CPU cores
+function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
+
+/// try to assign a given thread to a specific set of logical CPU core(s)
 // - on Windows, calls the SetThreadAffinityMask() API
 // - under Linux/FPC, calls pthread_setaffinity_np() API
+function SetThreadMaskAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
+
+/// try to assign a given thread to a specific logical CPU core
+// - CpuIndex should be in 0 .. SystemInfo.dwNumberOfProcessors - 1 range
 function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
 
 /// try to assign a given thread to a specific hardware CPU socket
 // - SocketIndex should be in 0 .. CpuSockets - 1 range, and will use the
-// logical/hardware CPU masks retrieved during process startup
-// - on Windows, calls the SetThreadAffinityMask() API
-// - under Linux/FPC, calls pthread_setaffinity_np() API
+// CpuSocketsMask[] information retrieved during process startup
 function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
 
 /// low-level naming of a thread
@@ -7146,115 +7163,6 @@ end;
 
 { **************** TSynLocker Threading Features }
 
-procedure GlobalLock;
-begin
-  mormot.core.os.EnterCriticalSection(GlobalCriticalSection);
-end;
-
-procedure GlobalUnLock;
-begin
-  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection);
-end;
-
-var
-  InternalGarbageCollection: record // RegisterGlobalShutdownRelease() list
-    Instances:  TObjectDynArray;
-    Count: integer;
-    Shutdown: boolean; // paranoid check to avoid messing with Instances[]
-  end;
-
-function RegisterGlobalShutdownRelease(Instance: TObject;
-  SearchExisting: boolean): pointer;
-begin
-  if not InternalGarbageCollection.Shutdown then
-  begin
-    GlobalLock;
-    try
-      with InternalGarbageCollection do
-        if not SearchExisting or
-           not PtrUIntScanExists(pointer(Instances), Count, PtrUInt(Instance)) then
-          PtrArrayAdd(Instances, Instance, Count);
-    finally
-      GlobalUnLock;
-    end;
-  end;
-  result := Instance;
-end;
-
-function SleepDelay(elapsed: PtrInt): PtrInt;
-begin
-  if elapsed < 50 then
-    result := 0 // 10us on POSIX, SwitchToThread on Windows
-  else if elapsed < 200 then
-    result := 1
-  else if elapsed < 500 then
-    result := 5
-  else if elapsed < 2000 then
-    result := 50
-  else
-    result := 120 + Random32(130); // random 120-250 ms
-end;
-
-function SleepStepTime(var start, tix: Int64; endtix: PInt64): PtrInt;
-begin
-  tix := GetTickCount64;
-  if start = 0 then
-    start := tix;
-  result := SleepDelay(tix - start);
-  if endtix <> nil then
-    endtix^ := tix + result;
-end;
-
-function SleepStep(var start: Int64; terminated: PBoolean; event: TEvent): Int64;
-var
-  ms: integer;
-  endtix: Int64;
-begin
-  ms := SleepStepTime(start, result, @endtix);
-  if (ms < 10) or
-     (terminated = nil) then
-    if (ms = 0) or
-       (event = nil) then
-      SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
-    else
-    begin
-      if event.WaitFor(ms) = wrSignaled then
-        start := 0; // make more reactive once signaled
-    end
-  else
-    repeat
-      if event = nil then
-        SleepHiRes(10) // on Windows, HW clock resolution is around 16 ms
-      else if event.WaitFor(10) = wrSignaled then
-      begin
-        start := 0; // more reactive
-        ms := 0; // and quit
-      end;
-      result := GetTickCount64;
-    until (ms = 0) or
-          terminated^ or
-          (result >= endtix);
-end;
-
-function SleepHiRes(ms: cardinal; var terminated: boolean;
-  terminatedvalue: boolean): boolean;
-var
-  start, endtix: Int64;
-begin
-  if terminated <> terminatedvalue then
-    if ms < 20 then
-      SleepHiRes(ms) // below HW clock resolution
-    else
-    begin
-      start := GetTickCount64;
-      endtix := start + ms;
-      repeat
-      until (terminated = terminatedvalue) or
-            (SleepStep(start, @terminated) > endtix);
-    end;
-  result := terminated = terminatedvalue;
-end;
-
 // as reference, take a look at Linus insight
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
 {$ifdef CPUINTEL}
@@ -7286,44 +7194,6 @@ begin
     spin := SPIN_COUNT;
   end;
   result := spin;
-end;
-
-procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
-var
-  spin: PtrUInt;
-begin
-  spin := SPIN_COUNT;
-  while (Target <> Comperand) or
-        not LockedExc(Target, NewValue, Comperand) do
-    spin := DoSpin(spin);
-end;
-
-
-procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
-  const Args: array of const);
-begin
-  // do nothing - properly implemented in mormot.core.log
-end;
-
-procedure SetCurrentThreadName(const Format: RawUtf8; const Args: array of const);
-begin
-  SetThreadName(GetCurrentThreadId, Format, Args);
-end;
-
-procedure SetCurrentThreadName(const Name: RawUtf8);
-begin
-  SetThreadName(GetCurrentThreadId, '%', [Name]);
-end;
-
-function GetCurrentThreadName: RawUtf8;
-begin
-  ShortStringToAnsi7String(CurrentThreadName, result);
-end;
-
-function GetCurrentThreadInfo: ShortString;
-begin
-  result := ShortString(format('Thread %x [%s]',
-    [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
 end;
 
 
@@ -8093,6 +7963,177 @@ begin
   FillAnsiStringFromRandom(@dest, 32);
 end;
 
+
+procedure GlobalLock;
+begin
+  mormot.core.os.EnterCriticalSection(GlobalCriticalSection);
+end;
+
+procedure GlobalUnLock;
+begin
+  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection);
+end;
+
+var
+  InternalGarbageCollection: record // RegisterGlobalShutdownRelease() list
+    Instances:  TObjectDynArray;
+    Count: integer;
+    Shutdown: boolean; // paranoid check to avoid messing with Instances[]
+  end;
+
+function RegisterGlobalShutdownRelease(Instance: TObject;
+  SearchExisting: boolean): pointer;
+begin
+  if not InternalGarbageCollection.Shutdown then
+  begin
+    GlobalLock;
+    try
+      with InternalGarbageCollection do
+        if not SearchExisting or
+           not PtrUIntScanExists(pointer(Instances), Count, PtrUInt(Instance)) then
+          PtrArrayAdd(Instances, Instance, Count);
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := Instance;
+end;
+
+function SleepDelay(elapsed: PtrInt): PtrInt;
+begin
+  if elapsed < 50 then
+    result := 0 // 10us on POSIX, SwitchToThread on Windows
+  else if elapsed < 200 then
+    result := 1
+  else if elapsed < 500 then
+    result := 5
+  else if elapsed < 2000 then
+    result := 50
+  else
+    result := 120 + Random32(130); // random 120-250 ms
+end;
+
+function SleepStepTime(var start, tix: Int64; endtix: PInt64): PtrInt;
+begin
+  tix := GetTickCount64;
+  if start = 0 then
+    start := tix;
+  result := SleepDelay(tix - start);
+  if endtix <> nil then
+    endtix^ := tix + result;
+end;
+
+function SleepStep(var start: Int64; terminated: PBoolean; event: TEvent): Int64;
+var
+  ms: integer;
+  endtix: Int64;
+begin
+  ms := SleepStepTime(start, result, @endtix);
+  if (ms < 10) or
+     (terminated = nil) then
+    if (ms = 0) or
+       (event = nil) then
+      SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
+    else
+    begin
+      if event.WaitFor(ms) = wrSignaled then
+        start := 0; // make more reactive once signaled
+    end
+  else
+    repeat
+      if event = nil then
+        SleepHiRes(10) // on Windows, HW clock resolution is around 16 ms
+      else if event.WaitFor(10) = wrSignaled then
+      begin
+        start := 0; // more reactive
+        ms := 0; // and quit
+      end;
+      result := GetTickCount64;
+    until (ms = 0) or
+          terminated^ or
+          (result >= endtix);
+end;
+
+function SleepHiRes(ms: cardinal; var terminated: boolean;
+  terminatedvalue: boolean): boolean;
+var
+  start, endtix: Int64;
+begin
+  if terminated <> terminatedvalue then
+    if ms < 20 then
+      SleepHiRes(ms) // below HW clock resolution
+    else
+    begin
+      start := GetTickCount64;
+      endtix := start + ms;
+      repeat
+      until (terminated = terminatedvalue) or
+            (SleepStep(start, @terminated) > endtix);
+    end;
+  result := terminated = terminatedvalue;
+end;
+
+procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
+var
+  spin: PtrUInt;
+begin
+  spin := SPIN_COUNT;
+  while (Target <> Comperand) or
+        not LockedExc(Target, NewValue, Comperand) do
+    spin := DoSpin(spin);
+end;
+
+function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
+begin
+  result := false;
+  if (CpuIndex >= SizeOf(CpuSet) shl 3) or
+     (CpuIndex >= SystemInfo.dwNumberOfProcessors) then
+    exit;
+  SetBitPtr(@CpuSet, CpuIndex);
+  result := true;
+end;
+
+function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+var
+  mask: TCpuSet;
+begin
+  ResetCpuSet(mask);
+  result := SetCpuSet(mask, CpuIndex) and
+            SetThreadMaskAffinity(Thread, mask);
+end;
+
+function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
+begin
+  result := (SocketIndex < cardinal(length(CpuSocketsMask))) and
+            SetThreadMaskAffinity(Thread, CpuSocketsMask[SocketIndex]);
+end;
+
+procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
+  const Args: array of const);
+begin
+  // do nothing - properly implemented in mormot.core.log
+end;
+
+procedure SetCurrentThreadName(const Format: RawUtf8; const Args: array of const);
+begin
+  SetThreadName(GetCurrentThreadId, Format, Args);
+end;
+
+procedure SetCurrentThreadName(const Name: RawUtf8);
+begin
+  SetThreadName(GetCurrentThreadId, '%', [Name]);
+end;
+
+function GetCurrentThreadName: RawUtf8;
+begin
+  ShortStringToAnsi7String(CurrentThreadName, result);
+end;
+
+function GetCurrentThreadInfo: ShortString;
+begin
+  result := ShortString(format('Thread %x [%s]',
+    [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
+end;
 
 
 { ****************** Unix Daemon and Windows Service Support }

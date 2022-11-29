@@ -946,24 +946,15 @@ begin
             Windows.TerminateThread(Thread.Handle, 777);
 end;
 
-function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
+procedure ResetCpuSet(out CpuSet: TCpuSet);
 begin
-  result := false;
-  if (Thread = nil) or
-     (CpuIndex >= SizeOf(PtrInt) shl 3) or
-     (CpuIndex >= cardinal(SystemInfo.dwNumberOfProcessors)) then
-    exit;
-  result := SetThreadAffinityMask(Thread.Handle, 1 shl CpuIndex) <> 0;
+  CpuSet := 0;
 end;
 
-var // filled from RelationProcessorPackage items in InitializeSpecificUnit
-  CpuSocketsMask: TPtrUIntDynArray;
-
-function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
+function SetThreadMaskAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
 begin
   result := (Thread <> nil) and
-    (SocketIndex < cardinal(length(CpuSocketsMask))) and
-    (SetThreadAffinityMask(Thread.Handle, CpuSocketsMask[SocketIndex]) <> 0);
+            (Windows.SetThreadAffinityMask(Thread.Handle, Mask) <> 0);
 end;
 
 type
@@ -4632,8 +4623,8 @@ begin
       for i := 0 to (siz div SizeOf(proc[0])) - 1 do
         with proc[i] do
           case Relationship of
-            RelationProcessorPackage: // physical processor
-              AddPtrUInt(CpuSocketsMask, CpuSockets, ProcessorMask);
+            RelationProcessorPackage: // physical processor socket
+              AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, ProcessorMask);
             RelationCache:            // raw cache information
               if Cache.CacheType in [CacheUnified, CacheData] then
                 if (Cache.Level >= low(CpuCache)) and

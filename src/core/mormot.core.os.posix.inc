@@ -890,15 +890,17 @@ begin
   {$endif OSPTHREADS}
 end;
 
-type
-  // store bitmask for up to 1024 logical CPUs
-  TCpuSet = array[0..127] of byte;
+procedure ResetCpuSet(out CpuSet: TCpuSet);
+begin
+  FillCharFast(CpuSet, SizeOf(CpuSet), 0);
+end;
 
-function SetThreadAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
+function SetThreadMaskAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
 begin
   result := false;
   {$ifdef OSPTHREADS}
-  if Assigned(pthread_setaffinity_np) then
+  if (Thread <> nil) and
+     Assigned(pthread_setaffinity_np) then
     try
       result := pthread_setaffinity_np(
         pointer(Thread.ThreadID), SizeOf(Mask), @Mask) = 0;
@@ -909,27 +911,6 @@ begin
   {$endif OSPTHREADS}
 end;
 
-function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
-var
-  mask: TCpuSet;
-begin
-  result := false;
-  if (CpuIndex >= SizeOf(mask) shl 3) or
-     (CpuIndex >= cardinal(SystemInfo.dwNumberOfProcessors)) then
-    exit;
-  FillCharFast(mask, SizeOf(mask), 0);
-  SetBitPtr(@mask, CpuIndex);
-  result := SetThreadAffinity(Thread, mask);
-end;
-
-var
-  CpuSocketsMask: array of TCpuSet;
-
-function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
-begin
-  result := (SocketIndex < cardinal(length(CpuSocketsMask))) and
-            SetThreadAffinity(Thread, CpuSocketsMask[SocketIndex]);
-end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
@@ -2997,7 +2978,7 @@ begin
   xaddr := 0;
   efi := StringFromFile('/sys/firmware/efi/systab', {nosize=}true);
   if efi = '' then
-    efi := StringFromFile('/proc/efi/systab'{nosize=}); // old Linux up to 2.6.6
+    efi := StringFromFile('/proc/efi/systab', {nosize=}true); // old Linux<2.6.6
   if efi = '' then
     exit;
   FindNameValue(efi, 'SMBIOS', addr);
@@ -3381,8 +3362,8 @@ begin
       if phyndx < 0 then
       begin
         AddInteger(phy, CpuSockets, phyid);
-        phyndx := CpuSockets - 1;
         SetLength(CpuSocketsMask, CpuSockets);
+        phyndx := CpuSockets - 1;
       end;
       if (procid >= 0) and
          (procid < SizeOf(TCpuSet) shl 3) then
