@@ -658,8 +658,8 @@ begin
           DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
         ftDate:
           // Postgres expects space instead of T in ISO-8601 expanded format
-          p^.VData := DateTimeToIso8601(
-            PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
+          DateTimeToIso8601Var(PDateTime(@p^.VInt64)^,
+            {expand=}true, fForceDateWithMS, ' ', #0, RawUtf8(p^.VData));
         ftUtf8:
           ; // UTF-8 text already in p^.VData buffer
         ftBlob:
@@ -847,6 +847,7 @@ procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
 var
   p: PSqlDBParam;
 begin
+  // PostgreSQL has its own JSON-like syntax, easy to convert from true JSON
   if (ValuesCount <= 0) or
      (JsonArray = '') or
      (JsonArray[1] <> '[') or

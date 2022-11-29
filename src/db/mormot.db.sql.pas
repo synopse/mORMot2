@@ -3305,8 +3305,8 @@ begin
       ftUtf8: // SQL single-quoted string
         QuotedStr(p.Value, p.ValueLen, '''', Values[i]);
       ftDate: // normalize
-        Values[i] := DateTimeToIso8601(Iso8601ToDateTimePUtf8Char(
-          p.Value, p.ValueLen), {expanded=}true, TimeSeparator, DateMS, '''');
+        DateTimeToIso8601Var(Iso8601ToDateTimePUtf8Char(p.Value, p.ValueLen),
+          {expanded=}true, DateMS, TimeSeparator, '''', Values[i]);
     else
       if (p.Value = '') and
          not p.WasString then
@@ -4921,7 +4921,7 @@ end;
 
 function TSqlDBConnectionProperties.SqlDateToIso8601Quoted(DateTime: TDateTime): RawUtf8;
 begin
-  result := DateTimeToIso8601(DateTime, true, DateTimeFirstChar, false, '''');
+  DateTimeToIso8601Var(DateTime, true, false, DateTimeFirstChar, '''', result);
 end;
 
 function TSqlDBConnectionProperties.SqlCreate(const aTableName: RawUtf8;
@@ -7970,6 +7970,7 @@ procedure TSqlDBStatementWithParams.BindArray(Param: integer;
 var
   i: PtrInt;
   p: PSqlDBParam;
+  dt: TDateTime;
 begin
   inherited; // raise an exception in case of invalid parameter
   p := CheckParam(Param, ParamType, paramIn);
@@ -7980,9 +7981,12 @@ begin
     for i := 0 to ValuesCount - 1 do // fix e.g. for PostgreSQL
       if (p^.VArray[i] <> '') and
          (p^.VArray[i][1] = '''') then
+      begin
         // not only replace 'T'->timeseparator, but force expanded format
-        DateTimeToIso8601(Iso8601ToDateTime(p^.VArray[i]), {expanded=}true,
-          Connection.Properties.DateTimeFirstChar, {ms=}fForceDateWithMS, '''');
+        dt := Iso8601ToDateTime(p^.VArray[i]);
+        DateTimeToIso8601Var(dt, {expanded=}true, {ms=}fForceDateWithMS,
+          Connection.Properties.DateTimeFirstChar, '''', p^.VArray[i]);
+      end;
   fParamsArrayCount := ValuesCount;
 end;
 

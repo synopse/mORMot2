@@ -138,6 +138,11 @@ procedure IntervalTextToDateTimeVar(Text: PUtf8Char; var result: TDateTime);
 // - you may rather use DateTimeToIso8601Text() to handle 0 or date-only values
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar = 'T';
   WithMS: boolean = false; QuotedChar: AnsiChar = #0): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// raw basic Date/Time conversion into ISO-8601
+procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
 
 /// basic Date/Time conversion into ISO-8601
 // - use 'YYYYMMDDThhmmss' format if not Expanded
@@ -1298,6 +1303,12 @@ end;
 
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): RawUtf8;
+begin
+  DateTimeToIso8601Var(D, Expanded, WithMS, FirstChar, QuotedChar, result);
+end;
+
+procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
 var
   tmp: array[0 .. 31] of AnsiChar;
 begin
@@ -2418,9 +2429,9 @@ end;
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
   FirstTimeChar: AnsiChar): RawUtf8;
 begin
-  // inlined UnixTimeToDateTime
-  result := DateTimeToIso8601(UnixTime / SecsPerDay + UnixDateDelta,
-    Expanded, FirstTimeChar, false);
+  // inlined UnixTimeToDateTime() + DateTimeToIso8601()
+  DateTimeToIso8601Var(UnixTime / SecsPerDay + UnixDateDelta,
+    Expanded, false, FirstTimeChar, #0, result);
 end;
 
 procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
