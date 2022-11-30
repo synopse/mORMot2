@@ -78,6 +78,8 @@ type
     {$endif OSWINDOWS}
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
+    // - the service name should better be simple enough to be used as part of a
+    // short file name, if needed - use ServiceDisplayName for anything complex
     property ServiceName: RawUtf8
       read fServiceName write fServiceName;
     /// the service name, as displayed by Windows or at the console level
@@ -288,7 +290,8 @@ type
     {$ifdef OSPOSIX}
     fPidFolder: TFileName;
     {$endif OSPOSIX}
-    procedure GetServices;
+    function GetServices: integer;
+    function GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
     procedure ListServices;
   public
     /// initialize the daemon/server redirection instance
@@ -445,7 +448,7 @@ begin
   result := '';
 end;
 
-{$I-}
+{$I-} // no error raised during write/writeln
 
 procedure TSynDaemon.Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean;
   const param: RawUtf8);
@@ -785,12 +788,13 @@ begin
   ObjArrayClear(fService);
 end;
 
-procedure TSynAngelize.GetServices;
+function TSynAngelize.GetServices: integer;
 var
   r: TSearchRec;
   s: TSynAngelizeSettings;
   fn: TFileName;
 begin
+  result := 0;
   ObjArrayClear(fService);
   fn := fSettingsFolder + '*' + fSettingsExt;
   if FindFirst(fn, faAnyFile - faDirectory, r) <> 0 then
@@ -808,6 +812,37 @@ begin
     end;
   until FindNext(r) <> 0;
   FindClose(r);
+  result := length(fService);
+end;
+
+function TSynAngelize.GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
+var
+  i, n: PtrInt;
+  pid: cardinal;
+  st: TServiceState;
+begin
+  n := GetServices;
+  SetLength(result, n);
+  if pids <> nil then
+    SetLength(pids^, n);
+  for i := 0 to n - 1 do
+  begin
+    {$ifdef OSWINDOWS}
+    pid := GetServicePid(fService[i].ServiceName, @st);
+    {$else}
+    pid := GetCardinal(pointer(
+       StringFromFile(fPidFolder + fService[i].ServiceName + '.pid')));
+    if pid = 0 then
+      st := ssStopped
+    else if IsValidPid(pid) then
+      st := ssRunning // see RunUntilSigTerminatedState()
+    else
+      st := ssErrorRetrievingState; // unexpected .pid file content
+    {$endif OSWINDOWS}
+    if pids <> nil then
+      pids^[i] := pid;
+    result[i] := st;
+  end;
 end;
 
 const
@@ -825,27 +860,13 @@ const
 procedure TSynAngelize.ListServices;
 var
   i: PtrInt;
-  pid: cardinal;
-  st: TServiceState;
+  pid: PIntegerDynArray;
+  st: TServiceStateDynArray;
 begin
-  GetServices;
-  for i := 0 to high(fService) do
-  begin
-    {$ifdef OSWINDOWS}
-    pid := GetServicePid(fService[i].ServiceName, @st);
-    {$else}
-    pid := GetCardinal(pointer(
-       StringFromFile(fPidFolder + fService[i].ServiceName + '.pid')));
-    if pid = 0 then
-      st := ssStopped
-    else if IsValidPid(pid) then
-      st := ssRunning // see RunUntilSigTerminatedState()
-    else
-      st := ssErrorRetrievingState; // unexpected .pid file content
-    {$endif OSWINDOWS}
-    ConsoleWrite('% [%] %', [fService[i].ServiceName, pid, ToText(st)^],
-      _STATECOLOR[st]);
-  end;
+  st := GetServicesState(@pid);
+  for i := 0 to high(st) do
+    ConsoleWrite('% [%] %', [fService[i].ServiceName, pid[i], ToText(st[i])^],
+      _STATECOLOR[st[i]]);
 end;
 
 procedure TSynAngelize.CommandLine;
