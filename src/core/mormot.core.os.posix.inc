@@ -1424,21 +1424,21 @@ end;
 {$I-}
 
 var
-  TextAttr: integer = ord(ccDarkGray);
+  TextAttr: integer = 255; // always change the color at startup
 
 procedure TextColor(Color: TConsoleColor);
 const
   TERM_CTRL: string[8] = '04261537';
 begin
-  if not StdOutIsTTY then
-    exit;
-  if ord(Color) = TextAttr then
+  if (ord(Color) = TextAttr) or
+     not StdOutIsTTY then
     exit;
   TextAttr := ord(Color);
   if ord(Color) >= 8 then
-    write(#27'[1;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm')
+    write(#27'[1;3')
   else
-    write(#27'[0;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm');
+    write(#27'[0;3');
+  write(TERM_CTRL[(ord(Color) and 7) + 1], 'm');
   ioresult;
 end;
 

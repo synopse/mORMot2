@@ -3957,6 +3957,7 @@ type
     ssPaused,
     ssErrorRetrievingState);
   PServiceState = ^TServiceState;
+  TServiceStateDynArray = array of TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
 function ToText(st: TServiceState): PShortString; overload;
@@ -4022,6 +4023,7 @@ const
   SERVICE_CONTROL_CONTINUE      = $00000003;
   SERVICE_CONTROL_INTERROGATE   = $00000004;
   SERVICE_CONTROL_SHUTDOWN      = $00000005;
+
   SERVICE_STOPPED               = $00000001;
   SERVICE_START_PENDING         = $00000002;
   SERVICE_STOP_PENDING          = $00000003;

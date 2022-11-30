@@ -7924,7 +7924,7 @@ end;
 function PosExString(const SubStr, S: string; Offset: PtrUInt): PtrInt;
 begin
   {$ifdef CPUX86}
-  result := PosEx(SubStr, S, Offset);
+  result := PosEx(SubStr, S, Offset); // call x86 asm
   {$else}
   result := PosExPas(pointer(SubStr), pointer(S), Offset);
   {$endif CPUX86}

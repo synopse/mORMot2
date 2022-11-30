@@ -127,13 +127,13 @@ begin
   result := dest.buf;
   if IsAnsiCompatible(PAnsiChar(pointer(Text)), TextLen) then
   begin
+    dest.len := TextLen;
     for i := 0 to TextLen do // include trailing #0
       PWordArray(result)[i] := PByteArray(Text)[i];
-    dest.len := TextLen;
   end
   else
   begin
-    dest.len := Utf8ToUnicode(dest.buf, dest.Len + 16, pointer(Text), TextLen);
+    dest.len := Utf8ToUnicode(result, dest.Len + 16, pointer(Text), TextLen);
     if dest.len <= 0 then
       dest.len := 0
     else
