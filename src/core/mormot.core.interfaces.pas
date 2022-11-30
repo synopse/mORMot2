@@ -467,7 +467,8 @@ const
     '_contract_',
     '_signature_',
     '_instance_');
-
+var
+  /// default value for TInterfaceFactory.JsonParserOptions
   JSONPARSER_SERVICE: TJsonParserOptions =
     [jpoHandleCustomVariants,
      jpoIgnoreUnknownEnum,

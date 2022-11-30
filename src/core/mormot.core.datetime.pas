@@ -54,6 +54,7 @@ const
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
 // - will also recognize '.sss' milliseconds suffix, if any
 function Iso8601ToDateTime(const S: RawByteString): TDateTime; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
@@ -864,29 +865,12 @@ begin
   result := tmp;
 end;
 
-function Iso8601CheckAndDecode(P: PUtf8Char; L: integer;
-  var Value: TDateTime): boolean;
-// handle 'YYYY-MM-DDThh:mm:ss[.sss]' or 'YYYY-MM-DD' or 'Thh:mm:ss[.sss]'
+function Iso8601ToDateTime(const S: RawByteString): TDateTime;
+var
+  tmp: TDateTime; // circumvent FPC limitation
 begin
-  if P = nil then
-    result := false
-  else if (((L = 9) or (L = 13)) and
-            (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
-          ((L = 10) and
-           (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
-          (((L = 19) or (L = 23)) and
-           (P[4] = '-') and (P[10] = 'T')) then
-  begin
-    Iso8601ToDateTimePUtf8CharVar(P, L, Value);
-    result := PInt64(@Value)^ <> 0;
-  end
-  else
-    result := false;
-end;
-
-function IsIso8601(P: PUtf8Char; L: integer): boolean;
-begin
-  result := Iso8601ToTimeLogPUtf8Char(P, L) <> 0;
+  Iso8601ToDateTimePUtf8CharVar(pointer(S), length(S), tmp);
+  result := tmp;
 end;
 
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: integer;
@@ -1030,6 +1014,31 @@ begin
       MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec + MS) / MSecsPerDay;
 end;
 
+function Iso8601CheckAndDecode(P: PUtf8Char; L: integer;
+  var Value: TDateTime): boolean;
+// handle 'YYYY-MM-DDThh:mm:ss[.sss]' or 'YYYY-MM-DD' or 'Thh:mm:ss[.sss]'
+begin
+  if P = nil then
+    result := false
+  else if (((L = 9) or (L = 13)) and
+            (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
+          ((L = 10) and
+           (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
+          (((L = 19) or (L = 23)) and
+           (P[4] = '-') and (P[10] = 'T')) then
+  begin
+    Iso8601ToDateTimePUtf8CharVar(P, L, Value);
+    result := PInt64(@Value)^ <> 0;
+  end
+  else
+    result := false;
+end;
+
+function IsIso8601(P: PUtf8Char; L: integer): boolean;
+begin
+  result := Iso8601ToTimeLogPUtf8Char(P, L) <> 0;
+end;
+
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: integer): TDateTime;
 begin
   Iso8601ToTimePUtf8CharVar(P, L, result);
@@ -1150,11 +1159,6 @@ begin
     result := result - Time
   else
     result := result + Time;
-end;
-
-function Iso8601ToDateTime(const S: RawByteString): TDateTime;
-begin
-  result := Iso8601ToDateTimePUtf8Char(pointer(S), length(S));
 end;
 
 {$ifndef CPUX86NOTPIC}
