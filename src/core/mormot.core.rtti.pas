@@ -3862,6 +3862,9 @@ begin
   if k in rkOrdinalTypes then
     if VariantToInt64(Value, v) then
       SetInt64Value(Instance, v)
+    else if (k = rkEnumeration) and
+            VariantToUtf8(Value, u) then
+      result := SetValueText(Instance, u) // try GetEnumNameValue()
     else
       exit
   else if k in rkStringTypes then
@@ -3872,18 +3875,22 @@ begin
     else
       exit
   else if k = rkFloat then
-    if VariantToDouble(Value, f) then
-      SetFloatProp(Instance, f)
-    else if Assigned(_Iso8601ToDateTime) and
-            VariantToUtf8(Value, u) then
-    begin
-      f := _Iso8601ToDateTime(u);
-      if f = 0 then
+  begin
+    if not VariantToDouble(Value, f) then
+      if Assigned(_Iso8601ToDateTime) and
+         VariantToUtf8(Value, u) then
+        if u = '' then
+          f := 0
+        else
+        begin
+          f := _Iso8601ToDateTime(u);
+          if f = 0 then
+            exit; // not a date
+        end
+      else
         exit;
-      SetFloatProp(Instance, f);
-    end
-    else
-      exit
+    SetFloatProp(Instance, f);
+  end
   else if k = rkVariant then
     SetVariantProp(Instance, Value)
   else
@@ -3910,7 +3917,7 @@ begin
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then
-        exit;
+        exit; // not a text enum
       SetOrdProp(Instance, v);
     end
     else
@@ -3918,17 +3925,20 @@ begin
   else if k in rkStringTypes then
     SetAsString(Instance, Value)
   else if k = rkFloat then
-    if ToDouble(Value, f) then
-      SetFloatProp(Instance, f)
-    else if Assigned(_Iso8601ToDateTime) then
-    begin
-      f := _Iso8601ToDateTime(Value);
-      if f = 0 then
+  begin
+    if not ToDouble(Value, f) then
+      if Value = '' then
+        f := 0
+      else if Assigned(_Iso8601ToDateTime) then
+      begin
+        f := _Iso8601ToDateTime(Value);
+        if f = 0 then
+          exit; // not a date
+      end
+      else
         exit;
-      SetFloatProp(Instance, f);
-    end
-    else
-      exit
+    SetFloatProp(Instance, f);
+  end
   else if k = rkVariant then
     SetVariantProp(Instance, Value)
   else
@@ -6654,7 +6664,7 @@ function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boole
 begin
   if (Prop = nil) or
      (OffsetSet >= 0) then
-    // direct fill value in memory
+    // direct fill value in memory (classes and records)
     result := Value.ValueSetText(PAnsiChar(Data) + OffsetSet, Text)
   else
     // need a class property setter
