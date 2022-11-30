@@ -3863,8 +3863,9 @@ begin
     if VariantToInt64(Value, v) then
       SetInt64Value(Instance, v)
     else if (k = rkEnumeration) and
-            VariantToUtf8(Value, u) then
-      result := SetValueText(Instance, u) // try GetEnumNameValue()
+            VariantToUtf8(Value, u) and
+            SetValueText(Instance, u) then
+      // value found from GetEnumNameValue()
     else
       exit
   else if k in rkStringTypes then
