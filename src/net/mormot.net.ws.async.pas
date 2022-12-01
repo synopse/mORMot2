@@ -470,7 +470,8 @@ function TWebSocketAsyncProcess.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    fConnection.fServer, fProtocol.ConnectionID, nil, fProtocol.ConnectionFlags,
+    fConnection.fServer, fProtocol.ConnectionID, nil, 
+    HTTP_TLS_FLAGS[fConnection.fServer.Sock.TLS.Enabled] + fProtocol.ConnectionFlags,
     fProtocol.ConnectionOpaque);
   RequestProcess :=  fConnection.fServer.Request;
 end;
