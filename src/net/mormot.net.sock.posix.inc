@@ -1044,9 +1044,10 @@ const
   //                  in ET mode properly reflects connection close
   EPOLLMODE_LT = 0;                     // Level Triggered mode
   EPOLLMODE_ET = EPOLLET or EPOLLRDHUP; // Event Triggered mode + RDHUP
-  // "EPOLLET" edge triggered detection is not consistent with select or poll
+  // "EPOLLET" edge triggered detection is not really consistent with select
+  // or poll but works as expected by mormot.net.async logic
   // -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
-  EPOLLMODE = EPOLLMODE_LT;
+  EPOLLMODE = EPOLLMODE_ET;
   // EPOLLRDHUP is relevant only in ET mode
   EPOLLCLOSE = EPOLLHUP or (EPOLLMODE and EPOLLRDHUP);
 
@@ -1054,6 +1055,7 @@ function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvent
   tag: TPollSocketTag): boolean;
 var
   e: EPoll_Event;
+  err: integer;
 begin
   result := false;
   if (self = nil) or
@@ -1073,7 +1075,10 @@ begin
   else
     e.events := 0;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
-  result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) >= NO_ERROR;
+  repeat
+    err := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e);
+  until err <> ESysEINTR;
+  result := err >= NO_ERROR;
   if not result then
     exit;
   inc(fCount);
@@ -1084,6 +1089,7 @@ end;
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: EPoll_Event; // should be there even if not used (old kernel < 2.6.9)
+  err: integer;
 begin
   if (self = nil) or
      (socket = nil) or
@@ -1092,7 +1098,10 @@ begin
     result := false
   else
   begin
-    result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) >= NO_ERROR;
+    repeat
+      err := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e);
+    until err <> ESysEINTR;
+    result := err >= NO_ERROR;
     if result then
     begin
       dec(fCount);

@@ -1768,23 +1768,18 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            start := 0; // back to SleepHiRes(0)
+            start := 0; // back to SleepStep(0)
             while not Terminated do
             begin
               fWaitForReadPending := false;
               new := fOwner.fClients.fRead.PollForPendingEvents(ms);
               if Terminated then
                 break;
+              fWaitForReadPending := true;
               pending := fOwner.fClients.fRead.fPending.Count;
-              if new = 0 then
-                if not fOwner.fClientsEpoll then
-                begin
-                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
-                  fEvent.SleepStep(start, @Terminated);
-                  continue;
-                end
-                else if (pending = 0) and
-                        (fOwner.fClients.fRead.Count = 0) then
+              if new = 0 then // fRead has nothing new
+                if (pending = 0) and
+                   (fOwner.fClients.fRead.Count = 0) then
                 begin
                   // avoid void PollForPendingEvents/SleepStep loop
                   fOwner.DoGC;
@@ -1793,6 +1788,12 @@ begin
                   //fOwner.DoLog(sllInfo, 'Execute: % sleep', [fName], self);
                   fEvent.WaitForEver; // blocking until next accept()
                   //fOwner.DoLog(sllInfo, 'Execute: % wakeup', [fName], self);
+                  continue;
+                end
+                else
+                begin
+                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
+                  fEvent.SleepStep(start, @Terminated);
                   continue;
                 end;
               if pending > 0 then
@@ -1806,7 +1807,7 @@ begin
                 if not Terminated then
                   fEvent.WaitFor(20);
                 //fOwner.DoLog(sllCustom1, 'Execute: WaitFor out', [], self);
-                break;
+                break; // back to SleepStep(0) if new=0
               end;
             end;
           end;
@@ -1821,8 +1822,12 @@ begin
                   not Terminated do
               fOwner.fClients.ProcessRead(notif);
             // release atpReadPoll lock above
-            if fOwner.fThreadReadPoll.fWaitForReadPending then
-              fOwner.fThreadReadPoll.fEvent.SetEvent;
+            with fOwner.fThreadReadPoll do
+              if fWaitForReadPending then
+              begin
+                fWaitForReadPending := false; // set event once
+                fEvent.SetEvent;
+              end;
           end;
       else
         raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',

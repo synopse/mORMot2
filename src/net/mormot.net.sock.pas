@@ -623,7 +623,7 @@ type
   {$ifdef CPUINTEL}
   TPollSocketResult =  packed record
   {$else}
-  TPollSocketResult =  record // ARM uslaly prefers aligned data
+  TPollSocketResult =  record // ARM usualy prefers aligned data
   {$endif CPUINTEL}
     /// opaque value as defined by TPollSocketAbstract.Subscribe
     // - holds typically a TPollAsyncConnection instance
@@ -2721,10 +2721,14 @@ var
   n, ndx: PtrInt;
 begin
   result := false;
-  if fTerminated or
-     (fPending.Count <= 0) then
-    exit;
-  fPendingSafe.Lock;
+  repeat
+    if fTerminated or
+       (fPending.Count <= 0) then
+      exit;
+    if fPendingSafe.TryLock then
+      break;
+    SleepHiRes(1); // no spinning, just wait to leverage CPU/thread usage
+  until false;
   {$ifdef HASFASTTRYFINALLY} // make a performance difference
   try                        // and UnsetPending() should be secured
   {$else}
@@ -2781,7 +2785,7 @@ begin
       p := pointer(new.Events);
       n := new.Count;
       repeat
-        SetPending(p^.tag); // for O(1) EnsurePending() implementation
+        SetPending(p^.tag); // O(1) flag set in TPollConnectionSockets
         inc(p);
         dec(n);
       until n = 0;
@@ -2803,7 +2807,7 @@ begin
   n := new.Count;
   cap := length(fPending.Events);
   repeat
-    if not EnsurePending(p^.Tag) then
+    if not EnsurePending(p^.Tag) then // O(1) check in TPollConnectionSockets
     begin
       // new event to process
       if len >= cap then
