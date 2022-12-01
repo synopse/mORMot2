@@ -343,6 +343,7 @@ const
   HTTP_TLS_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [],
     [hsrHttps, hsrSecured]);
+
   /// used to compute the request ConnectionFlags from connection: upgrade header
   HTTP_UPG_FLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
     [],

@@ -3157,7 +3157,7 @@ begin
     result := fServer.OnBeforeBody(
       fHttp.CommandUri, fHttp.CommandMethod, fHttp.Headers, fHttp.ContentType,
       fRemoteIP, fHttp.BearerToken, fHttp.ContentLength,
-      HTTP_TLS_FLAGS[fServer.Sock.TLS.Enabled] +
+      HTTP_TLS_FLAGS[Assigned(fSecure)] +
       HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags]);
 end;
 
