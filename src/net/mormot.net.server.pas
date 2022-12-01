@@ -318,10 +318,6 @@ type
     //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
-    /// allow to customize this HTTP server instance
-    // - some inherited classes may have only partial support of those options
-    property Options: THttpServerOptions
-      read fOptions write fOptions;
   published
     /// returns the API version used by the inherited implementation
     property ApiVersion: RawUtf8
@@ -335,6 +331,10 @@ type
     /// the associated process name
     property ProcessName: RawUtf8
       read fProcessName write fProcessName;
+    /// allow to customize this HTTP server instance
+    // - some inherited classes may have only partial support of those options
+    property Options: THttpServerOptions
+      read fOptions write fOptions;
   end;
 
 
