@@ -860,7 +860,7 @@ const
 procedure TSynAngelize.ListServices;
 var
   i: PtrInt;
-  pid: PIntegerDynArray;
+  pid: TIntegerDynArray;
   st: TServiceStateDynArray;
 begin
   st := GetServicesState(@pid);
