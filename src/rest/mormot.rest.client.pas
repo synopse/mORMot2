@@ -465,6 +465,18 @@ type
   TOnClientFailed = procedure(Sender: TRestClientUri; E: Exception;
     Call: PRestUriParams) of object;
 
+  /// called by TRestClientUri.Uri() to notify some step
+  // - e.g. as OnError Event when an error Call.OutStatus was returned
+  // - return false to abort and fail the request
+  // - as OnError with 403, could return true to retry after changing e.g.
+  // Sender.SessionHttpHeader with a renewed JWT bearer
+  // - as OnBeforeCall or OnAfterCall, should return true to continue
+  TOnClientCall = function(Sender: TRestClientUri;
+    var Call: TRestUriParams): boolean of object;
+
+  /// signature e.g. of the TRestClientUri.OnSetUser event handler
+  TOnClientNotify = procedure(Sender: TRestClientUri) of object;
+
   /// 31-bit positive identifier of an interface callback, as sent to the server
   TRestClientCallbackID = type integer;
 
@@ -521,9 +533,6 @@ type
     function FindAndRelease(aID: TRestClientCallbackID): boolean;
   end;
 
-  /// signature e.g. of the TRestClientUri.OnSetUser event handler
-  TOnClientNotify = procedure(Sender: TRestClientUri) of object;
-
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
@@ -537,6 +546,7 @@ type
     fOnConnected: TOnClientNotify;
     fOnConnectionFailed: TOnClientFailed;
     fOnIdle: TOnIdleSynBackgroundThread;
+    fOnBeforeCall, fOnAfterCall, fOnError: TOnClientCall;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
     fOnSetUser: TOnClientNotify;
@@ -957,6 +967,18 @@ type
     // an HTTP_FORBIDDEN "403 Forbidden" error code
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
+    /// this Event is called just before the raw InternalUri() method
+    // - the callback could return true to continue, or false to abort
+    property OnBeforeCall: TOnClientCall
+      read fOnBeforeCall write fOnBeforeCall;
+    /// this Event is called just after the raw InternalUri() method
+    // - the callback could return false to close the connection
+    property OnAfterCall: TOnClientCall
+      read fOnAfterCall write fOnAfterCall;
+    /// this Event is called if Uri() was not successfull
+    // - the callback could return true to retry the call
+    property OnError: TOnClientCall
+      read fOnError write fOnError;
     /// this Event is called if Uri() was not successfull
     // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
@@ -1897,6 +1919,9 @@ var
 begin
   if Call = nil then
     exit;
+  if Assigned(fOnBeforeCall) then
+    if not fOnBeforeCall(self, Call^) then
+      exit;
   InternalUri(Call^);
   if ((Sender = nil) or OnIdleBackgroundThreadActive) and
      not (isDestroying in fInternalState) then
@@ -1913,6 +1938,9 @@ begin
     if Call^.OutStatus <> HTTP_NOTIMPLEMENTED then
       Exclude(fInternalState, isNotImplemented);
   end;
+  if Assigned(fOnAfterCall) then
+    if not fOnAfterCall(self, Call^) then
+      InternalClose;
 end;
 
 procedure TRestClientUri.SetLastException(E: Exception; ErrorCode: integer;
@@ -2413,7 +2441,7 @@ function TRestClientUri.Uri(const url, method: RawUtf8; Resp: PRawUtf8;
 var
   retry: integer;
   aUserName, aPassword: string;
-  StatusMsg: RawUtf8;
+  StatusMsg, InHead: RawUtf8;
   Call: TRestUriParams;
   aPasswordHashed: boolean;
 
@@ -2423,6 +2451,10 @@ var
     if fSession.Authentication <> nil then
       fSession.Authentication.ClientSessionSign(self, Call);
     Call.Method := method;
+    if fSession.HttpHeader <> '' then
+      Call.InHead := TrimU(InHead + #13#10 + fSession.HttpHeader)
+    else
+      Call.InHead := InHead;
     if SendData <> nil then
       Call.InBody := SendData^;
     if Assigned(fOnIdle) then
@@ -2465,9 +2497,7 @@ begin
   Call.Init;
   if (Head <> nil) and
      (Head^ <> '') then
-    Call.InHead := Head^;
-  if fSession.HttpHeader <> '' then
-    Call.InHead := TrimU(Call.InHead + #13#10 + fSession.HttpHeader);
+    InHead := Head^;
   try
     CallInternalUri;
     if (Call.OutStatus = HTTP_TIMEOUT) and
@@ -2499,6 +2529,13 @@ begin
     end;
     if not StatusCodeIsSuccess(Call.OutStatus) then
     begin
+      if Assigned(fOnError) and
+         fOnError(self, Call) then
+      begin
+        CallInternalUri; // retry once
+        if StatusCodeIsSuccess(Call.OutStatus) then
+          exit;
+      end;
       StatusCodeToReason(Call.OutStatus, StatusMsg);
       if Call.OutBody = '' then
         fLastErrorMessage := StatusMsg

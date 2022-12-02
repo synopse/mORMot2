@@ -44,7 +44,7 @@ type
   gss_cred_id_t = pointer;
   gss_ctx_id_t = pointer;
   {$ifdef OSDARWIN}
-  gss_length_t = cardinal;
+  gss_length_t = cardinal; // no OM_STRING/xom.h on MacOS - see gssapi.hin
   {$else}
   gss_length_t = PtrUInt;
   {$endif OSDARWIN}
