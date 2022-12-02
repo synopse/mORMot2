@@ -237,8 +237,8 @@ type
     // - may have been overwritten with a #0 termination in the input buffer
     EndOfObject: AnsiChar;
     /// decode a JSON field value in-place from an UTF-8 encoded text buffer
-    // - warning: will decode in the Json buffer memory itself (no memory
-    // allocation or copy), for faster process - so take care that it is not shared
+    // - warning: will decode in the Json buffer memory itself (no memory copy
+    // nor allocation), for faster process - so take care that it is not shared
     // - Value/ValueLen/WasString is set with the parsed value
     // - EndOfObject is set to the JSON ending char (',' ':' or '}' e.g.)
     // - Json points to the next field to be decoded, or nil on parsing error
