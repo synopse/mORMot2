@@ -43,9 +43,14 @@ type
   gss_name_t_ptr = ^gss_name_t;
   gss_cred_id_t = pointer;
   gss_ctx_id_t = pointer;
+  {$ifdef OSDARWIN}
+  gss_length_t = cardinal;
+  {$else}
+  gss_length_t = PtrUInt;
+  {$endif OSDARWIN}
 
   gss_OID_desc = record
-    length: PtrUInt;
+    length: gss_length_t;
     elements: pointer;
   end;
   gss_OID = ^gss_OID_desc;
@@ -100,21 +105,23 @@ const
   gss_mech_spnego: array [0..5] of byte = (
     43, 6, 1, 5, 5, 2);
   gss_mech_spnego_desc: gss_OID_desc = (
-    length: Length(gss_mech_spnego);
+    length: SizeOf(gss_mech_spnego);
     elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
 
+  // raw 1.2.840.113554.1.2.2.1 OID
   gss_nt_krb5_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
   gss_nt_krb5_name_desc: gss_OID_desc = (
-    length: Length(gss_nt_krb5_name);
+    length: SizeOf(gss_nt_krb5_name);
     elements: @gss_nt_krb5_name);
   GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
 
+  // raw 1.2.840.113554.1.2.1.1 OID
   gss_nt_user_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
   gss_nt_user_name_desc: gss_OID_desc = (
-    length: Length(gss_nt_user_name);
+    length: SizeOf(gss_nt_user_name);
     elements: @gss_nt_user_name);
   GSS_C_NT_USER_NAME: gss_OID = @gss_nt_user_name_desc;
 
