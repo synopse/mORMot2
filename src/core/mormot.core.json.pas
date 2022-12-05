@@ -5387,12 +5387,13 @@ begin
   end;
   if nfo.Kind = rkClass then
   begin
+    if Data <> nil then
+      Data := PPointer(Data)^; // class instances are accessed by reference
     if Data = nil then
     begin
       Ctxt.W.AddNull; // append 'null' for nil class instance
       exit;
     end;
-    Data := PPointer(Data)^; // class instances are accessed by reference
     flags := [];
     if (woStoreStoredFalse in c.Options) or
        (rcfDisableStored in Ctxt.Info.Flags) then
