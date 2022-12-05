@@ -45,7 +45,11 @@ type
   gss_ctx_id_t = pointer;
   {$ifdef OSDARWIN}
   gss_length_t = cardinal; // no OM_STRING/xom.h on MacOS - see gssapi.hin
-  gss_OID_desc = packed record // packed seems needed for OSDARWIN :(
+  {$ifdef CPUINTEL}
+  // #if defined(__APPLE__) && (defined(__ppc__) || defined(__ppc64__) || defined(__i386__) || defined(__x86_64__))
+  {$A2} // #pragma pack(push,2)
+  {$endif CPUINTEL}
+  gss_OID_desc = record
     length: gss_length_t;
     elements: pointer;
   end;
@@ -74,6 +78,8 @@ type
     value: pointer;
   end;
   gss_buffer_t = ^gss_buffer_desc;
+
+  {$A+} // back to usual class/record alignment
 
 
 const
