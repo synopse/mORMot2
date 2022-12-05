@@ -3911,10 +3911,13 @@ begin
     exit;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
-    if ToInt64(Value, v) then
+    if ToInt64(Value, v) or
+       (TypeInfo^.IsBoolean and
+        GetInt64Bool(pointer(Value), v)) then
       SetInt64Value(Instance, v)
-    else if (k = rkEnumeration) and
-            (Value <> '') then
+    else if Value = '' then
+      exit
+    else if k = rkEnumeration then
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then

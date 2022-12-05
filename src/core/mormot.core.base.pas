@@ -1105,6 +1105,7 @@ function GetCardinalW(P: PWideChar): PtrUInt;
 
 /// get a boolean value stored as 'true'/'false' text in P^
 // - would also recognize any non '0' integer as true, or false if P = nil
+// - see relaxed GetInt64Bool() to recognize e.g. 'TRUE' or 'yes'/'YES'
 function GetBoolean(P: PUtf8Char): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
