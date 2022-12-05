@@ -45,14 +45,18 @@ type
   gss_ctx_id_t = pointer;
   {$ifdef OSDARWIN}
   gss_length_t = cardinal; // no OM_STRING/xom.h on MacOS - see gssapi.hin
+  gss_OID_desc = packed record // packed seems needed for OSDARWIN :(
+    length: gss_length_t;
+    elements: pointer;
+  end;
   {$else}
   gss_length_t = PtrUInt;
-  {$endif OSDARWIN}
-
   gss_OID_desc = record
     length: gss_length_t;
     elements: pointer;
   end;
+  {$endif OSDARWIN}
+
   gss_OID = ^gss_OID_desc;
   gss_OID_ptr = ^gss_OID;
   gss_OID_array = array [0..0] of gss_OID_desc;
