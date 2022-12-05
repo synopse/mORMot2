@@ -2182,7 +2182,7 @@ procedure Rcu(var src, dst; len: integer);
 
 {$ifdef ISDELPHI}
 /// this function is an intrinsic in FPC
-procedure ReadBarrier;
+procedure ReadBarrier; {$ifndef CPUINTEL} inline; {$endif}
 {$endif ISDELPHI}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
@@ -7464,6 +7464,7 @@ begin
 end;
 
 {$ifdef ISDELPHI} // intrinsic in FPC
+{$ifdef CPUINTEL}
 procedure ReadBarrier;
 asm
         {$ifdef CPUX86}
@@ -7473,6 +7474,12 @@ asm
         lfence // lfence requires an SSE CPU, which is OK on x86-64
         {$endif CPUX86}
 end;
+{$else}
+procedure ReadBarrier;
+begin
+  MemoryBarrier; // modern Delphi intrinsic
+end;
+{$endif CPUINTEL}
 {$endif ISDELPHI}
 
 procedure Rcu32(var src, dst);
