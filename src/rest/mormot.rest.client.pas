@@ -2447,14 +2447,13 @@ var
 
   procedure CallInternalUri;
   begin
+    Call.Method := method;
     Call.Url := url; // reset to allow proper re-sign
+    Call.InHead := InHead; // ClientSessionSign() may add a cookie
     if fSession.Authentication <> nil then
       fSession.Authentication.ClientSessionSign(self, Call);
-    Call.Method := method;
     if fSession.HttpHeader <> '' then
-      Call.InHead := TrimU(InHead + #13#10 + fSession.HttpHeader)
-    else
-      Call.InHead := InHead;
+      Call.InHead := TrimU(Call.InHead + #13#10 + fSession.HttpHeader);
     if SendData <> nil then
       Call.InBody := SendData^;
     if Assigned(fOnIdle) then
