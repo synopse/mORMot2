@@ -1045,9 +1045,9 @@ const
   EPOLLMODE_LT = 0;                     // Level Triggered mode
   EPOLLMODE_ET = EPOLLET or EPOLLRDHUP; // Event Triggered mode + RDHUP
   // "EPOLLET" edge triggered detection is not really consistent with select
-  // or poll but works as expected by mormot.net.async logic
+  // or poll and do not work as expected e.g. with TTestMultiThreadProcess
   // -> PollForPendingEvents() will use fast O(n*m) MergePendingEvents()
-  EPOLLMODE = EPOLLMODE_ET;
+  EPOLLMODE = EPOLLMODE_LT;
   // EPOLLRDHUP is relevant only in ET mode
   EPOLLCLOSE = EPOLLHUP or (EPOLLMODE and EPOLLRDHUP);
 
