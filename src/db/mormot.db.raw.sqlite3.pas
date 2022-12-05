@@ -2309,7 +2309,7 @@ type
     /// Set A Busy Timeout
     // - This routine sets a busy handler that sleeps for a specified amount of time
     // when a table is locked. The handler will sleep multiple times until at least
-    // "ms" milliseconds of sleeping have accumulated. After at least "ms" milliseconds
+    // "Milliseconds" of sleeping have accumulated. After at least "Milliseconds"
     // of sleeping, the handler returns 0 which causes sqlite3.step() to return
     // SQLITE_BUSY or SQLITE_IOERR_BLOCKED.
     // - Calling this routine with an argument less than or equal to zero turns off
@@ -2327,6 +2327,7 @@ type
     // returned immediately upon encountering the lock. If the busy callback is not
     // nil, then the callback might be invoked with two arguments.
     // - The default busy callback is nil.
+    // - See sqlite3.busy_timeout() for setting a simple time-specific callback
     busy_handler: function(DB: TSqlite3DB;
       CallbackPtr: TSqlBusyHandler; user: Pointer): integer;  cdecl;
 
@@ -2335,7 +2336,7 @@ type
     // - UserData is passed through as the only parameter to the Callback.
     // - Only a single progress handler may be defined at one time per database connection;
     // setting a new progress handler cancels the old one.
-    // Setting Callback to nil disables the progress handler.
+    // - Setting Callback to nil disables the progress handler.
     // The progress handler is also disabled by setting N to a value less than 1.
     progress_handler: procedure(DB: TSqlite3DB; N: integer; Callback: TSqlProgressCallback;
       UserData: pointer); cdecl;
@@ -4259,8 +4260,12 @@ type
   // lmNormal using this pragma and then accessing the database file (for read
   // or write). Simply setting the locking-mode to lmNormal is not enough - locks
   // are not released until the next time the database file is accessed.
-  // - lmExclusive gives much better write performance, and could be used when
-  // needed, in case of a heavy loaded mORMot server
+  // - lmExclusive is safer and gives better performance, so is adviced for a
+  // mORMot server, e.g. a MicroService with its own stand-alone persistence -
+  // locking the DB file is a security and performance feature, and the proper
+  // and clean way to give access to the data is via a regular service endpoint:
+  // if some external process changes the DB content, the service cache and
+  // consistency expectations are likely to be broken
   TSqlLockingMode = (
     lmNormal,
     lmExclusive);
@@ -5201,6 +5206,8 @@ type
       read fTransactionActive;
     /// sets a busy handler that sleeps for a specified amount of time
     // (in milliseconds) when a table is locked, before returning an error
+    // - let SQLite3 intercept SQLITE_BUSY errors using busy_timeout() handler
+    // - only useful if the database is not in lmExclusive mode
     property BusyTimeout: integer
       read fBusyTimeout write SetBusyTimeout;
     /// query or change the suggested maximum number of database disk pages
