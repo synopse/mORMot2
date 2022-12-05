@@ -3577,9 +3577,7 @@ begin
     oftDateTimeMS:
       Iso8601ToDateTimePUtf8CharVar(Value, 0, result.VDate);
     oftBoolean:
-      result.VBoolean := not ((Value = nil) or
-                              (PWord(Value)^ = ord('0')) or
-                         (PInteger(Value)^ = FALSE_LOW));
+      GetInt64Bool(Value, result.VInt64); // false/true/yes/no
     oftEnumerate:
       result.VInteger := GetInteger(Value);
     oftInteger,
@@ -4146,11 +4144,6 @@ begin
   end;
   SetValueVar(Instance, tmp, aValue.VType in [ftDate, ftBlob, ftUtf8]);
 end;
-
-const
-  NULL_LOW  = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
-  FALSE_LOW = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
-  TRUE_LOW  = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
 procedure TOrmPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
 var
