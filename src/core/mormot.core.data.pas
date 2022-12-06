@@ -859,6 +859,16 @@ var
   // - RTTI_COMPARE[true] for case-insensitive comparison
   RTTI_COMPARE: TRttiComparers;
 
+  /// lookup table for comparison of ordinal RTTI type values
+  // - slightly faster alternative to RTTI_COMPARE[rkOrdinalTypes]
+  RTTI_ORD_COMPARE: array[TRttiOrd] of TRttiCompare;
+
+  /// lookup table for comparison of floating-point RTTI type values
+  // - slightly faster alternative to RTTI_COMPARE[rkFloat]
+  RTTI_FLOAT_COMPARE: array[TRttiFloat] of TRttiCompare;
+
+function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
 
 /// raw binary serialization of a dynamic array
 // - as called e.g. by TDynArray.SaveTo, using ExternalCount optional parameter
@@ -5497,32 +5507,59 @@ begin
   Source.Copy(Data, result);
 end;
 
-function _BC_Ord(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
-var
-  ro: TRttiOrd;
+// efficient branchless comparison of every TRttiOrd/TRttiFloat raw value
+
+function _BC_SByte(A, B: PShortInt; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  ro := Info^.RttiOrd;
-  case ro of // branchless comparison
-    roSByte:
-      Compared := ord(PShortInt(A)^ > PShortInt(B)^) - ord(PShortInt(A)^ < PShortInt(B)^);
-    roUByte:
-      Compared := ord(PByte(A)^ > PByte(B)^) - ord(PByte(A)^ < PByte(B)^);
-    roSWord:
-      Compared := ord(PSmallInt(A)^ > PSmallInt(B)^) - ord(PSmallInt(A)^ < PSmallInt(B)^);
-    roUWord:
-      Compared := ord(PWord(A)^ > PWord(B)^) - ord(PWord(A)^ < PWord(B)^);
-    roSLong:
-      Compared := ord(PInteger(A)^ > PInteger(B)^) - ord(PInteger(A)^ < PInteger(B)^);
-    roULong:
-      Compared := ord(PCardinal(A)^ > PCardinal(B)^) - ord(PCardinal(A)^ < PCardinal(B)^);
-    {$ifdef FPC_NEWRTTI}
-    roSQWord:
-      Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
-    roUQWord:
-      Compared := ord(PQWord(A)^ > PQWord(B)^) - ord(PQWord(A)^ < PQWord(B)^);
-    {$endif FPC_NEWRTTI}
-  end;
-  result := ORDTYPE_SIZE[ro];
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 1;
+end;
+
+function _BC_UByte(A, B: PByte; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 1;
+end;
+
+function _BC_SWord(A, B: PSmallInt; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 2;
+end;
+
+function _BC_UWord(A, B: PWord; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 2;
+end;
+
+function _BC_SLong(A, B: PInteger; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 4;
+end;
+
+function _BC_ULong(A, B: PCardinal; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 4;
+end;
+
+function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 8;
+end;
+
+function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := 8;
+end;
+
+function _BC_Ord(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  result := RTTI_ORD_COMPARE[Info^.RttiOrd](A, B, Info, Compared);
 end;
 
 function _BS_Float(Data: pointer; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
@@ -5537,22 +5574,27 @@ begin
   Source.Copy(Data, result);
 end;
 
-function _BC_Float(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
-var
-  rf: TRttiFloat;
+function _BC_Single(A, B: PSingle; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  rf := Info^.RttiFloat;
-  case rf of // efficient branchless comparison
-    rfSingle:
-      Compared := ord(PSingle(A)^ > PSingle(B)^) - ord(PSingle(A)^ < PSingle(B)^);
-    rfDouble:
-      Compared := ord(PDouble(A)^ > PDouble(B)^) - ord(PDouble(A)^ < PDouble(B)^);
-    rfExtended:
-      Compared := ord(PExtended(A)^ > PExtended(B)^) - ord(PExtended(A)^ < PExtended(B)^);
-    rfComp, rfCurr:
-      Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
-  end;
-  result := FLOATTYPE_SIZE[rf];
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := SizeOf(single);
+end;
+
+function _BC_Double(A, B: PDouble; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := SizeOf(double);
+end;
+
+function _BC_Extended(A, B: PExtended; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ord(A^ > B^) - ord(A^ < B^);
+  result := SizeOf(extended);
+end;
+
+function _BC_Float(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  result := RTTI_FLOAT_COMPARE[Info^.RttiFloat](A, B, Info, Compared);
 end;
 
 function _BS_64(Data: PInt64; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
@@ -10606,6 +10648,21 @@ var
   k: TRttiKind;
 begin
   // initialize RTTI binary persistence and comparison
+  RTTI_ORD_COMPARE[roSByte] := @_BC_SByte;
+  RTTI_ORD_COMPARE[roUByte] := @_BC_UByte;
+  RTTI_ORD_COMPARE[roSWord] := @_BC_SWord;
+  RTTI_ORD_COMPARE[roUWord] := @_BC_UWord;
+  RTTI_ORD_COMPARE[roSLong] := @_BC_SLong;
+  RTTI_ORD_COMPARE[roULong] := @_BC_ULong;
+  {$ifdef FPC_NEWRTTI}
+  RTTI_ORD_COMPARE[roSQWord] := @_BC_SQWord;
+  RTTI_ORD_COMPARE[roUQWord] := @_BC_UQWord;
+  {$endif FPC_NEWRTTI}
+  RTTI_FLOAT_COMPARE[rfSingle] := @_BC_Single;
+  RTTI_FLOAT_COMPARE[rfDouble] := @_BC_Double;
+  RTTI_FLOAT_COMPARE[rfExtended] := @_BC_Extended;
+  RTTI_FLOAT_COMPARE[rfComp] := @_BC_SQWord; // PInt64 comparison is the best
+  RTTI_FLOAT_COMPARE[rfCurr] := @_BC_SQWord;
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger,

@@ -9935,31 +9935,52 @@ begin
   // set comparison functions
   if rcfObjArray in fFlags then
   begin
-    fCompare[true] := _BCI_ObjArray;
+    fCompare[true]  := _BCI_ObjArray;
     fCompare[false] := _BC_ObjArray;
   end
   else
   begin
-    fCompare[true] := RTTI_COMPARE[true][Kind];
+    fCompare[true]  := RTTI_COMPARE[true][Kind];
     fCompare[false] := RTTI_COMPARE[false][Kind];
-    if Kind = rkLString then
+    if rcfHasRttiOrd in fCache.Flags then
+    begin
+      // faster direct comparison according to each ordinal type
+      fCompare[true]  := @RTTI_ORD_COMPARE[fCache.RttiOrd];
+      fCompare[false] := fCompare[true];
+    end
+    else if rcfGetInt64Prop in fCache.Flags then
+    begin
+      if rcfQWord in fCache.Flags then
+        fCompare[true] := @_BC_UQWord  // QWord comparison
+      else
+        fCompare[true] := @_BC_SQWord; // Int64 comparison
+      fCompare[false] := fCompare[true];
+    end
+    else if Kind = rkFloat then
+    begin
+      // faster direct comparison according to each floating-point type
+      fCompare[true]  := @RTTI_FLOAT_COMPARE[fCache.RttiFloat];
+      fCompare[false] := fCompare[true];
+    end
+    else if Kind = rkLString then
       // RTTI_COMPARE[rkLString] is StrComp/StrIComp which is mostly fine
       if Cache.CodePage >= CP_RAWBLOB then
       begin
         // should use RawByteString length, ignore any #0 or CaseInsensitive
-        fCompare[true] := @_BC_RawByteString;
+        fCompare[true]  := @_BC_RawByteString;
         fCompare[false] := @_BC_RawByteString;
       end
       else if Cache.CodePage = CP_UTF16 then
       begin
         // RawUnicode expects _BC_WString=StrCompW and _BCI_WString=StrICompW
-        fCompare[true] := RTTI_COMPARE[true][rkWString];
+        fCompare[true]  := RTTI_COMPARE[true][rkWString];
         fCompare[false] := RTTI_COMPARE[false][rkWString];
       end;
     if not Assigned(fCompare[true]) then
       if aParser = ptPUtf8Char then
       begin
-        fCompare[true] := @_BCI_PUtf8Char;
+        // PUtf8Char is a rkPointer with no RTTI -> manual set
+        fCompare[true]  := @_BCI_PUtf8Char;
         fCompare[false] := @_BC_PUtf8Char;
       end
       else
