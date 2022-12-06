@@ -826,8 +826,6 @@ begin
 end;
 
 destructor TSynAngelize.Destroy;
-var
-  i: PtrInt;
 begin
   inherited Destroy;
   ObjArrayClear(fService);
@@ -850,7 +848,6 @@ var
   i: PtrInt;
   fn: TFileName;
 begin
-  result := 0;
   for i := 0 to high(fService) do
     include(fService[i].fFlags, safOrphan);
   fn := fSettingsFolder + '*' + fSettingsExt;
