@@ -210,61 +210,81 @@ type
 { ************ TSynAngelize App-As-Service Launcher }
 
 type
-  /// define how TSynAngelize should stop the process, and its order
-  // - sdlsExecutableStop will run the ExecutableStop command line (if any)
-  // - on Windows, sdlsControlC will send a Ctrl+C event to the executable console
-  // - on Windows, sdlsWmQuit will send a WM_QUIT message to the executable threads
-  // - on Windows, sdlsTerminate will call the TerminateProcess() API
-  // - on POSIX, sdlsSigTerm will send a SIGTERM signal for graceful termination
-  // - on POSIX, sdlsSigKill will send a SIGKILL signal for immediate killing
+  /// define how TSynAngelize handle a sub-process execution
+  // - sasAuto will start it with the main agl daemon/service
+  TSynAngelizeStarter = (
+   sasAuto);
+  /// define TSynAngelize sub-process handling
+  TSynAngelizeStarters = set of TSynAngelizeStarter;
+
+  /// define how TSynAngelize should stop the sub-process, and its order
+  // - sasStop will run the Stop command line (if any)
+  // - on Windows, sasWinControlC will send a Ctrl+C event to the executable console
+  // - on Windows, sasWinWmQuit will send a WM_QUIT message to the executable threads
+  // - on Windows, sasWinTerminate will call the TerminateProcess() API
+  // - on POSIX, sasPosixSigTerm will send a SIGTERM signal for graceful termination
+  // - on POSIX, sasPosixSigKill will send a SIGKILL signal for immediate killing
   TSynAngelizeStopper = (
-    sdlsExecutableStop,
+    sasStop,
     {$ifdef OSWINDOWS}
-    sdlsControlC,
-    sdlsWmQuit,
-    sdlsTerminate
+    sasWinControlC,
+    sasWinWmQuit,
+    sasWinTerminate
     {$else}
-    sdlsSigTerm,
-    sdlsSigKill
+    sasPosixSigTerm,
+    sasPosixSigKill
     {$endif OSWINDOWS}
     );
   /// define methods for TSynAngelize to stop the process
   TSynAngelizeStoppers = set of TSynAngelizeStopper;
 
-  /// one daemon/service definition as recognized by TSynAngelize
+  /// define the internal state of one TSynAngelizeService
+  // - safOrphan indicates that this process has no .service associated any more
+  TSynAngelizeFlags = set of (
+    safOrphan);
+
+  /// one sub-process definition as recognized by TSynAngelize
   // - any %abc% place-holders will be replaced via TSynAngelize.ExpandPath
-  TSynAngelizeSettings = class(TSynDaemonAbstractSettings)
+  TSynAngelizeService = class(TSynJsonFileSettings)
   protected
-    fExecutable, fExecutableStop: TFileName;
-    fAutoStart: boolean;
+    fName: RawUtf8;
+    fDescription: RawUtf8;
+    fStart, fStop: TFileName;
+    fStarter: TSynAngelizeStarters;
     fStopper: TSynAngelizeStoppers;
     fStopDelaySec: integer;
+    fFlags: TSynAngelizeFlags;
   public
     /// initialize and set the default settings
     constructor Create; override;
+    /// how this instance is currently processed
+    property Flags: TSynAngelizeFlags
+      read fFlags write fFlags;
   published
-    /// the service name, as used internally by Windows or the TSynDaemon class
+    /// computer-friendly case-insensitive identifier of this sub-service
+    // - as used internally by TSynAngelize to identify this instance
+    // - should be a short, if possible ASCII and pascal-compatible, identifier
     // - default is the Executable file name without its path and extension
-    property ServiceName;
-    /// the service name, as displayed by Windows or at the console level
+    property Name: RawUtf8
+      read fName write fName;
+    /// human-friendly Unicode text which could be displayed on Web or Console UI
+    // - in addition to the Name short identifier
     // - default is the Executable file name without its path and extension
-    property ServiceDisplayName;
+    property Description: RawUtf8
+      read fDescription write fDescription;
     /// path to the executable which should be started
-    // - could include arguments
-    property Executable: TFileName
-      read fExecutable write fExecutable;
+    // - could include arguments, potentially with %abc% place holders
+    property Start: TFileName
+      read fStart write fStart;
     /// path to the executable which should be called to stop the main Executable
-    // - could include arguments
+    // - could include arguments, potentially with %abc% place holders
     // - is done first before any other attempt
-    property ExecutableStop: TFileName
-      read fExecutableStop write fExecutableStop;
-    {$ifdef OSWINDOWS}
-    /// when installing the service, defines if it should start automatically
-    // - only available on Windows
-    property AutoStart: boolean
-      read fAutoStart write fAutoStart;
-    {$endif OSWINDOWS}
-    /// define the methods used, in order, to stop the process
+    property Stop: TFileName
+      read fStop write fStop;
+    /// define how to start or restart the sub-process
+    property Starter: TSynAngelizeStarters
+      read fStarter write fStarter;
+    /// define the methods used, in order, to stop the sub-process
     // - default is all methods
     property Stopper: TSynAngelizeStoppers
       read fStopper write fStopper;
@@ -274,32 +294,45 @@ type
       read fStopDelaySec write fStopDelaySec;
   end;
 
-  TSynAngelizeSettingsClass = class of TSynAngelizeSettings;
+  TSynAngelizeServiceClass = class of TSynAngelizeService;
 
-  /// can run a set of executables as daemon/service from *.service definitions
+  /// define the main TSynAngelize daemon/service behavior
+  TSynAngelizeSettings = class(TSynDaemonSettings)
+
+  end;
+
+  /// can run a set of executables as sub-process(es) from *.service definitions
   // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
+  // - at OS level, there will be a single agl daemon or service
+  // - this main agl instance will manage one or several executables as
+  // sub-process(es), and act as both Launcher and WatchDog
   TSynAngelize = class(TSynPersistent)
   protected
-    fSettingsClass: TSynAngelizeSettingsClass;
+    fSafe: TLightLock;
+    fSettingsClass: TSynAngelizeServiceClass;
     fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
-    fSettings: TSynAngelizeSettings;
-    fExpandPathLevel: integer;
     fSettingsOptions: TSynJsonFileSettingsOptions;
+    fExpandPathLevel: byte;
     fSectionName: RawUtf8;
-    fService: array of TSynAngelizeSettings;
+    fService: array of TSynAngelizeService;
+    fSettings: TSynAngelizeSettings;
     {$ifdef OSPOSIX}
     fPidFolder: TFileName;
     {$endif OSPOSIX}
-    function GetServices: integer;
+    function FindService(const ServiceName: RawUtf8): PtrInt;
+    function UpdateServicesFromSettingsFolder: integer;
     function GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
     procedure ListServices;
+    procedure Expand(aService: TSynAngelizeService; const aPath: TFileName;
+      out aResult: TFileName);
   public
-    /// initialize the daemon/server redirection instance
+    /// initialize the main daemon/server redirection instance
+    // - main TSynAngelizeSettings is loaded
     constructor Create(const aSettingsFolder: TFileName = '';
-      aSettingsClass: TSynAngelizeSettingsClass = nil;
+      aSettingsClass: TSynAngelizeServiceClass = nil;
       const aSettingsExt: TFileName = '.service';
       aSettingsOptions: TSynJsonFileSettingsOptions = [];
-      const aSectionName: RawUtf8 = 'Main'); reintroduce;
+      const aSectionName: RawUtf8 = 'Main'; aLog: TSynLogClass = nil); reintroduce;
     /// finalize the stored information
     destructor Destroy; override;
     /// main entry point of the daemon, to process the command line switches
@@ -314,9 +347,16 @@ type
     // e.g. %agl.servicename% is the service name
     // - TSystemPath values are available as %CommonData%, %UserData%,
     // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
-    function ExpandPath(const aPath: TFileName): TFileName;
+    function ExpandPath(aService: TSynAngelizeService;
+      const aPath: TFileName): TFileName;
+    /// protect internal structures for proper thread-safety
+    // - the lock time should be kept as small as possible
+    property Safe: TLightLock
+      read fSafe;
   published
-
+    /// how this main daemon/service is defined
+    property Settings: TSynAngelizeSettings
+      read fSettings;
   end;
 
 
@@ -354,6 +394,8 @@ procedure TSynDaemonAbstractSettings.SetLog(aLogClass: TSynLogClass);
 var
   f: TSynLogFamily;
 begin
+  if RunFromSynTests then
+    aLogClass := TSynLog; // don't overwrite the tests log options
   if (self = nil) or
      (Log = []) or
      (aLogClass = nil) then
@@ -416,10 +458,7 @@ end;
 
 procedure TSynDaemon.AfterCreate;
 begin
-  if RunFromSynTests then
-    fSettings.fLogClass := TSynLog // don't overwrite
-  else
-    fSettings.SetLog(TSynLog);
+  fSettings.SetLog(TSynLog);
 end;
 
 destructor TSynDaemon.Destroy;
@@ -751,9 +790,9 @@ end;
 
 { ************ TSynAngelize App-As-Service Launcher }
 
-{ TSynAngelizeSettings }
+{ TSynAngelizeService }
 
-constructor TSynAngelizeSettings.Create;
+constructor TSynAngelizeService.Create;
 begin
   inherited Create;
   fStopper := [low(TSynAngelizeStopper) .. high(TSynAngelizeStopper)];
@@ -764,16 +803,20 @@ end;
 { TSynAngelize }
 
 constructor TSynAngelize.Create(const aSettingsFolder: TFileName;
-  aSettingsClass: TSynAngelizeSettingsClass; const aSettingsExt: TFileName;
-  aSettingsOptions: TSynJsonFileSettingsOptions; const aSectionName: RawUtf8);
+  aSettingsClass: TSynAngelizeServiceClass; const aSettingsExt: TFileName;
+  aSettingsOptions: TSynJsonFileSettingsOptions; const aSectionName: RawUtf8;
+  aLog: TSynLogClass);
 begin
   if aSettingsClass = nil then
-    aSettingsClass := TSynAngelizeSettings;
+    aSettingsClass := TSynAngelizeService;
   fSettingsClass := aSettingsClass;
   if aSettingsFolder = '' then
     fSettingsFolder := Executable.ProgramFilePath
   else
     fSettingsFolder := IncludeTrailingPathDelimiter(aSettingsFolder);
+  fSettings := TSynAngelizeSettings.Create;
+  fSettings.SettingsOptions := aSettingsOptions;
+  fSettings.LoadFromFile(fSettingsFolder + 'angelize.settings', 'agl');
   {$ifdef OSPOSIX}
   fPidFolder := EnsureDirectoryExists(Executable.ProgramFilePath + 'pid');
   {$endif OSPOSIX}
@@ -783,36 +826,76 @@ begin
 end;
 
 destructor TSynAngelize.Destroy;
+var
+  i: PtrInt;
 begin
   inherited Destroy;
   ObjArrayClear(fService);
+  fSettings.Free;
 end;
 
-function TSynAngelize.GetServices: integer;
+function TSynAngelize.FindService(const ServiceName: RawUtf8): PtrInt;
+begin
+  if ServiceName <> '' then
+    for result := 0 to high(fService) do
+      if IdemPropNameU(fService[result].Name, ServiceName) then
+        exit;
+  result := -1;
+end;
+
+function TSynAngelize.UpdateServicesFromSettingsFolder: integer;
 var
   r: TSearchRec;
-  s: TSynAngelizeSettings;
+  s: TSynAngelizeService;
+  i: PtrInt;
   fn: TFileName;
 begin
   result := 0;
-  ObjArrayClear(fService);
+  for i := 0 to high(fService) do
+    include(fService[i].fFlags, safOrphan);
   fn := fSettingsFolder + '*' + fSettingsExt;
-  if FindFirst(fn, faAnyFile - faDirectory, r) <> 0 then
-    exit;
-  repeat
-    if SearchRecValidFile(r) then
-    begin
-      s := fSettingsClass.Create;
-      if s.LoadFromFile(fSettingsFolder + r.Name) and
-         (s.ServiceName <> '') and
-         (s.Executable <> '') then
-        ObjArrayAdd(fService, s) // seems like a valid .service file
-      else
+  if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
+  begin
+    repeat
+      if SearchRecValidFile(r) then
+      begin
+        s := fSettingsClass.Create;
+        fn := fSettingsFolder + r.Name;
+        if s.LoadFromFile(fn) and
+           (s.Name <> '') and
+           (s.Start <> '') then
+        begin
+          i := FindService(s.Name);
+          if i >= 0 then
+            if fService[i].FileName <> s.FileName then
+              fSettings.LogClass.Add.Log(
+                sllWarning, 'GetServices: duplicated % name', [s.Name], self)
+            else
+            begin
+              if not ObjectEquals(s, fService[i]) then
+              begin
+                fSettings.LogClass.Add.Log(
+                  sllTrace, 'GetServices: update % from %', [s.Name, fn], self);
+                CopyObject(s, fService[i]);
+              end;
+              exclude(fService[i].fFlags, safOrphan);
+            end
+          else
+          begin
+            ObjArrayAdd(fService, s); // seems like a valid .service file
+            s := nil; // don't Free - will be owned by fService[]
+          end;
+        end
+        else
+          fSettings.LogClass.Add.Log(
+            sllWarning, 'GetServices: invalid % content', [r.Name], self);
         s.Free;
-    end;
-  until FindNext(r) <> 0;
-  FindClose(r);
+      end;
+    until FindNext(r) <> 0;
+    FindClose(r);
+  end;
   result := length(fService);
+  // note: won't remove existing items with no .service, flagged as safOrphan
 end;
 
 function TSynAngelize.GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
@@ -821,17 +904,17 @@ var
   pid: cardinal;
   st: TServiceState;
 begin
-  n := GetServices;
+  n := UpdateServicesFromSettingsFolder;
   SetLength(result, n);
   if pids <> nil then
     SetLength(pids^, n);
   for i := 0 to n - 1 do
   begin
     {$ifdef OSWINDOWS}
-    pid := GetServicePid(fService[i].ServiceName, @st);
+    pid := GetServicePid(fService[i].Name, @st);
     {$else}
     pid := GetCardinal(pointer(
-       StringFromFile(fPidFolder + fService[i].ServiceName + '.pid')));
+       StringFromFile(fPidFolder + fService[i].Name + '.pid')));
     if pid = 0 then
       st := ssStopped
     else if IsValidPid(pid) then
@@ -865,7 +948,7 @@ var
 begin
   st := GetServicesState(@pid);
   for i := 0 to high(st) do
-    ConsoleWrite('% [%] %', [fService[i].ServiceName, pid[i], ToText(st[i])^],
+    ConsoleWrite('% [%] %', [fService[i].Name, pid[i], ToText(st[i])^],
       _STATECOLOR[st[i]]);
 end;
 
@@ -874,31 +957,39 @@ begin
 
 end;
 
-function TSynAngelize.ExpandPath(const aPath: TFileName): TFileName;
+function TSynAngelize.ExpandPath(aService: TSynAngelizeService;
+  const aPath: TFileName): TFileName;
+begin
+  fExpandPathLevel := 0;
+  Expand(aService, aPath, result);
+end;
+
+procedure TSynAngelize.Expand(aService: TSynAngelizeService;
+  const aPath: TFileName; out aResult: TFileName);
 var
   o, i, j: PtrInt;
   p: PRttiCustomProp;
   id: RawUtf8;
-  v: string;
+  v: TFileName;
 begin
-  result := aPath;
+  aResult := aPath;
   o := 1;
   repeat
-    i := PosExString('%', result, o);
+    i := PosExString('%', aResult, o);
     if i = 0 then
       exit;
-    j := PosExString('%', result, i + 1);
+    j := PosExString('%', aResult, i + 1);
     if j = 0 then
       exit;
     dec(j, i + 1); // j = length abc
     if j = 0 then
     begin
-      delete(result, i, 1); // %% -> %
+      delete(aResult, i, 1); // %% -> %
       o := i + 1;
       continue;
     end;
-    id := StringToUtf8(copy(result, i + 1, j));
-    delete(result, i, j + 2);
+    id := StringToUtf8(copy(aResult, i + 1, j));
+    delete(aResult, i, j + 2);
     o := i;
     if IdemPChar(pointer(id), 'AGL.') then
     begin
@@ -915,13 +1006,16 @@ begin
       else
         begin
           // %agl.toto% is the "toto": property value in the .service settings
-          p := Rtti.RegisterClass(fSettings).Props.Find(id);
+          if aService = nil then
+            p := nil
+          else
+            p := Rtti.RegisterClass(aService).Props.Find(id);
           if p = nil then
-            continue;
-          inc(fExpandPathLevel); // to detect and avoid stack overflow error
+            raise EDaemon.CreateUtf8('ExpandPath: unknown %%agl.%%%', ['%', id, '%']);
           if fExpandPathLevel = 50 then
             raise EDaemon.CreateUtf8('ExpandPath recursive call for agl.%', [id]);
-          v := ExpandPath(Utf8ToString(p.Prop.GetAsString(fSettings)));
+          inc(fExpandPathLevel); // to detect and avoid stack overflow error
+          Expand(aService, Utf8ToString(p.Prop.GetAsString(aService)), v);
           dec(fExpandPathLevel);
         end;
       end;
@@ -935,7 +1029,7 @@ begin
     end;
     if v = '' then
       continue;
-    insert(v, result, o);
+    insert(v, aResult, o);
     inc(o, length(v));
     v := '';
   until false;
