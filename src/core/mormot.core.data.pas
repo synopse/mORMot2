@@ -10649,21 +10649,21 @@ var
   k: TRttiKind;
 begin
   // initialize RTTI binary persistence and comparison
-  RTTI_ORD_COMPARE[roSByte] := @_BC_SByte;
-  RTTI_ORD_COMPARE[roUByte] := @_BC_UByte;
-  RTTI_ORD_COMPARE[roSWord] := @_BC_SWord;
-  RTTI_ORD_COMPARE[roUWord] := @_BC_UWord;
-  RTTI_ORD_COMPARE[roSLong] := @_BC_SLong;
-  RTTI_ORD_COMPARE[roULong] := @_BC_ULong;
+  RTTI_ORD_COMPARE[roSByte]  := @_BC_SByte;
+  RTTI_ORD_COMPARE[roUByte]  := @_BC_UByte;
+  RTTI_ORD_COMPARE[roSWord]  := @_BC_SWord;
+  RTTI_ORD_COMPARE[roUWord]  := @_BC_UWord;
+  RTTI_ORD_COMPARE[roSLong]  := @_BC_SLong;
+  RTTI_ORD_COMPARE[roULong]  := @_BC_ULong;
   {$ifdef FPC_NEWRTTI}
   RTTI_ORD_COMPARE[roSQWord] := @_BC_SQWord;
   RTTI_ORD_COMPARE[roUQWord] := @_BC_UQWord;
   {$endif FPC_NEWRTTI}
-  RTTI_FLOAT_COMPARE[rfSingle] := @_BC_Single;
-  RTTI_FLOAT_COMPARE[rfDouble] := @_BC_Double;
+  RTTI_FLOAT_COMPARE[rfSingle]   := @_BC_Single;
+  RTTI_FLOAT_COMPARE[rfDouble]   := @_BC_Double;
   RTTI_FLOAT_COMPARE[rfExtended] := @_BC_Extended;
-  RTTI_FLOAT_COMPARE[rfComp] := @_BC_SQWord; // PInt64 comparison is the best
-  RTTI_FLOAT_COMPARE[rfCurr] := @_BC_SQWord;
+  RTTI_FLOAT_COMPARE[rfComp]     := @_BC_SQWord; // PInt64 is the best
+  RTTI_FLOAT_COMPARE[rfCurr]     := @_BC_SQWord;
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger,

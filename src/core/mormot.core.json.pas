@@ -9937,25 +9937,25 @@ begin
   fCompare[false] := RTTI_COMPARE[false][Kind];
   if rcfHasRttiOrd in fCache.Flags then
   begin
-    fCompare[true]  := @RTTI_ORD_COMPARE[fCache.RttiOrd];
+    fCompare[true]  := @RTTI_ORD_COMPARE[fCache.RttiOrd]; // tuned compare
     fCompare[false] := fCompare[true];
   end
   else if rcfGetInt64Prop in fCache.Flags then
   begin
     if rcfQWord in fCache.Flags then
-      fCompare[true] := @_BC_UQWord  // QWord comparison
+      fCompare[true] := @_BC_UQWord  // QWord compare
     else
-      fCompare[true] := @_BC_SQWord; // Int64 comparison
+      fCompare[true] := @_BC_SQWord; // Int64 compare
     fCompare[false] := fCompare[true];
   end
   else if Kind = rkFloat then
   begin
-    fCompare[true]  := @RTTI_FLOAT_COMPARE[fCache.RttiFloat];
+    fCompare[true]  := @RTTI_FLOAT_COMPARE[fCache.RttiFloat]; // tuned compare
     fCompare[false] := fCompare[true];
   end
   else if rcfObjArray in fFlags then
   begin
-    fCompare[true]  := _BCI_ObjArray;
+    fCompare[true]  := _BCI_ObjArray; // direct compare
     fCompare[false] := _BC_ObjArray;
   end
   else if aParser = ptPUtf8Char then
