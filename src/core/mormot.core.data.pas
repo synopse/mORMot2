@@ -867,9 +867,6 @@ var
   // - slightly faster alternative to RTTI_COMPARE[rkFloat]
   RTTI_FLOAT_COMPARE: array[TRttiFloat] of TRttiCompare;
 
-function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrInt;
-function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
-
 /// raw binary serialization of a dynamic array
 // - as called e.g. by TDynArray.SaveTo, using ExternalCount optional parameter
 // - RTTI_BINARYSAVE[rkDynArray] is a wrapper to this function, with ExternalCount=nil
@@ -936,7 +933,9 @@ function DynArrayCompare<TArray>(var Array1, Array2: TArray;
   CaseInSensitive: boolean = false): integer; overload;
 {$endif FPCGENERICS}
 
-// two low-level comparison methods used for T*ObjArray by mormot.core.json
+// some low-level comparison methods used by mormot.core.json
+function _BC_SQWord(A, B: PInt64; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_UQWord(A, B: PQWord; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 
