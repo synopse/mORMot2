@@ -343,7 +343,7 @@ type
   // if needed, AfterCreate/AfterWrite/BeforeDestroy/OnLastOperationIdle)
   TAsyncConnection = class(TPollAsyncConnection)
   protected
-    fLastOperation: TAsyncConnectionSec;
+    fLastOperation: TAsyncConnectionSec; // as monotonic seconds
     fRemoteIP4: cardinal; // may contain cLocalhost32 = 127.0.0.1
     fRemoteIP: RawUtf8;   // never contains '127.0.0.1'
     fOwner: TAsyncConnections;

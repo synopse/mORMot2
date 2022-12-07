@@ -160,7 +160,7 @@ type
   TWebSocketProcessSettings = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// time in milli seconds between each focPing commands sent to the other end
+    /// time in milliseconds between each focPing commands sent to the other end
     // - default is 0, i.e. no automatic ping sending on client side, and
     // 20000, i.e. 20 seconds, on server side
     HeartbeatDelay: cardinal;
@@ -170,14 +170,18 @@ type
     // REST commands or NotifyCallback(wscNonBlockWithoutAnswer) to be processed
     // with a lower delay
     LoopDelay: cardinal;
-    /// ms between sending - allow to gather output frames
-    // - GetTickCount resolution is around 16ms under Windows, so default 10ms
-    // seems fine for a cross-platform similar behavior
+    /// milliseconds delay between sending pending frames
+    // - allow to gather output frames in ProcessLoopStepSend
+    // - GetTickCount64 resolution is around 16ms on Windows and 4ms on Linux,
+    // so default 10 ms value seems fine for a cross-platform similar behavior
+    // (resulting in a 16ms period on Windows, and a 12ms period on Linux)
     SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent
     // - when a Hearbeat is failed to be transmitted, the class will start
     // counting how many ping/pong did fail: when this property value is
     // reached, it will release and close the connection
+    // - client could then try to reestablish the weak connection, e.g. if a
+    // mobile connection reconnects after a white zone and may change its IP
     // - default value is 5
     DisconnectAfterInvalidHeartbeatCount: cardinal;
     /// how many milliseconds the callback notification should wait acquiring
@@ -2734,7 +2738,7 @@ begin
       if elapsed > fSettings.SendDelay then
         if (fOutgoing.Count > 0) and
            (SendPendingOutgoingFrames < 0) then
-          fState := wpsClose
+          fState := wpsClose // SendFrames() failed
         else if (fSettings.HeartbeatDelay <> 0) and
                 (elapsed > fSettings.HeartbeatDelay) then
           SendPing;

@@ -10701,7 +10701,7 @@ var
   i: PtrInt;
   e: TEmoji;
 begin
-  // initialize Base64/Base64Uri/Base58 encoding/decoding tables
+  // initialize Base64/Base64Uri/Base58/Baudot encoding/decoding tables
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;

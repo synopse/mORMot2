@@ -2413,8 +2413,8 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 // on Darwin, which is not monotonic -> always use this more coherent version
 // - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if
 // available, or the low-level mach_absolute_time() monotonic Darwin API
-// - do not expect exact millisecond resolution - it may rather be within the
-// 10-16 ms range, especially under Windows
+// - do not expect exact millisecond resolution - steps may rather be e.g.
+// within the 15-16 ms range on Windows, and 4-5 ms range on Linux
 {$ifdef OSWINDOWS}
 var
   GetTickCount64: function: Int64; stdcall;
@@ -2440,7 +2440,7 @@ function UnixTimeUtc: TUnixTime;
 // - will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
 // or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
 // later being more accurate, but slightly slower than the former, so you may
-// consider using UnixMSTimeUtcFast on Windows if its 10-16ms accuracy is enough
+// consider using UnixMSTimeUtcFast on Windows if its 16ms accuracy is enough
 function UnixMSTimeUtc: TUnixMSTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time

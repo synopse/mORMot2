@@ -1580,7 +1580,7 @@ begin
   with GlobalTime[LocalTime] do
   begin
     tix := GetTickCount64 {$ifdef OSPOSIX} shr 3 {$endif}; // Linux: 8ms refresh
-    if clock <> tix then // Windows: typically in range of 10-16 ms
+    if clock <> tix then // Windows: typically 16 ms
     begin
       clock := tix;
       NewTime.Clear;
