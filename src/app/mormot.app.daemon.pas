@@ -313,6 +313,7 @@ type
     fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
     fSettingsOptions: TSynJsonFileSettingsOptions;
     fExpandPathLevel: byte;
+    fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
     fService: array of TSynAngelizeService;
     fSettings: TSynAngelizeSettings;
@@ -320,7 +321,7 @@ type
     fPidFolder: TFileName;
     {$endif OSPOSIX}
     function FindService(const ServiceName: RawUtf8): PtrInt;
-    function UpdateServicesFromSettingsFolder: integer;
+    function UpdateServicesFromSettingsFolder(Force: boolean): integer;
     function GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
     procedure ListServices;
     procedure Expand(aService: TSynAngelizeService; const aPath: TFileName;
@@ -841,55 +842,62 @@ begin
   result := -1;
 end;
 
-function TSynAngelize.UpdateServicesFromSettingsFolder: integer;
+function TSynAngelize.UpdateServicesFromSettingsFolder(Force: boolean): integer;
 var
+  c: cardinal;
   r: TSearchRec;
   s: TSynAngelizeService;
   i: PtrInt;
   fn: TFileName;
 begin
-  for i := 0 to high(fService) do
-    include(fService[i].fFlags, safOrphan);
-  fn := fSettingsFolder + '*' + fSettingsExt;
-  if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
+  c := GetTickCount64 shr 10; // disk access every second at most
+  if Force or
+     (fLastUpdateServicesFromSettingsFolder <> c) then
   begin
-    repeat
-      if SearchRecValidFile(r) then
-      begin
-        s := fSettingsClass.Create;
-        fn := fSettingsFolder + r.Name;
-        if s.LoadFromFile(fn) and
-           (s.Name <> '') and
-           (s.Start <> '') then
+    fLastUpdateServicesFromSettingsFolder := c;
+    for i := 0 to high(fService) do
+      include(fService[i].fFlags, safOrphan);
+    fn := fSettingsFolder + '*' + fSettingsExt;
+    if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
+    begin
+      repeat
+        if SearchRecValidFile(r) then
         begin
-          i := FindService(s.Name);
-          if i >= 0 then
-            if fService[i].FileName <> s.FileName then
-              fSettings.LogClass.Add.Log(
-                sllWarning, 'GetServices: duplicated % name', [s.Name], self)
+          s := fSettingsClass.Create;
+          fn := fSettingsFolder + r.Name;
+          if s.LoadFromFile(fn) and
+             (s.Name <> '') and
+             (s.Start <> '') then
+          begin
+            i := FindService(s.Name);
+            if i >= 0 then
+              if fService[i].FileName <> s.FileName then
+                fSettings.LogClass.Add.Log(
+                  sllWarning, 'GetServices: duplicated % name', [s.Name], self)
+              else
+              begin
+                if not ObjectEquals(s, fService[i]) then
+                begin
+                  fSettings.LogClass.Add.Log(
+                    sllTrace, 'GetServices: update % from %', [s.Name, fn], self);
+                  CopyObject(s, fService[i]);
+                end;
+                exclude(fService[i].fFlags, safOrphan);
+              end
             else
             begin
-              if not ObjectEquals(s, fService[i]) then
-              begin
-                fSettings.LogClass.Add.Log(
-                  sllTrace, 'GetServices: update % from %', [s.Name, fn], self);
-                CopyObject(s, fService[i]);
-              end;
-              exclude(fService[i].fFlags, safOrphan);
-            end
+              ObjArrayAdd(fService, s); // seems like a valid .service file
+              s := nil; // don't Free - will be owned by fService[]
+            end;
+          end
           else
-          begin
-            ObjArrayAdd(fService, s); // seems like a valid .service file
-            s := nil; // don't Free - will be owned by fService[]
-          end;
-        end
-        else
-          fSettings.LogClass.Add.Log(
-            sllWarning, 'GetServices: invalid % content', [r.Name], self);
-        s.Free;
-      end;
-    until FindNext(r) <> 0;
-    FindClose(r);
+            fSettings.LogClass.Add.Log(
+              sllWarning, 'GetServices: invalid % content', [r.Name], self);
+          s.Free;
+        end;
+      until FindNext(r) <> 0;
+      FindClose(r);
+    end;
   end;
   result := length(fService);
   // note: won't remove existing items with no .service, flagged as safOrphan
@@ -901,7 +909,7 @@ var
   pid: cardinal;
   st: TServiceState;
 begin
-  n := UpdateServicesFromSettingsFolder;
+  n := UpdateServicesFromSettingsFolder(false);
   SetLength(result, n);
   if pids <> nil then
     SetLength(pids^, n);
