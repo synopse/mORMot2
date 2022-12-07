@@ -6366,6 +6366,8 @@ begin
           siz := cmp(A, B, Info, result);
           inc(PAnsiChar(A), siz);
           inc(PAnsiChar(B), siz);
+          if result <> 0 then
+            exit;
           dec(Count);
         until Count = 0
       else
