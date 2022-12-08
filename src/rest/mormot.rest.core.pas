@@ -829,8 +829,8 @@ type
     function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
-    function Cache: TRestCache;
-    function CacheOrNil: TRestCache;
+    function Cache: TOrmCache;
+    function CacheOrNil: TOrmCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
   public
     // TRestRunThreads compatibility methods
@@ -2856,12 +2856,12 @@ begin
   result := fOrm.AsyncBatchDelete(Table, ID);
 end;
 
-function TRest.Cache: TRestCache;
+function TRest.Cache: TOrmCache;
 begin
   result := fOrm.Cache;
 end;
 
-function TRest.CacheOrNil: TRestCache;
+function TRest.CacheOrNil: TOrmCache;
 begin
   result := fOrm.CacheOrNil;
 end;

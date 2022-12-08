@@ -293,55 +293,55 @@ begin
   Rec := TOrmPeople.Create(Client.Orm, IDTOUPDATE);
   try
     Check(Rec.ID = IDTOUPDATE, 'retrieve record');
-    Check(Database.Orm.Cache.CachedEntries = 0);
-    Check(Client.Orm.Cache.CachedEntries = 0);
-    Check(Client.Orm.Cache.CachedMemory = 0);
+    CheckEqual(Database.Orm.Cache.CachedEntries, 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
     TestOne;
-    Check(Client.Orm.Cache.CachedEntries = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     Client.Orm.Cache.SetCache(TOrmPeople); // cache whole table
-    Check(Client.Orm.Cache.CachedEntries = 0);
-    Check(Client.Orm.Cache.CachedMemory = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
     TestOne;
-    Check(Client.Orm.Cache.CachedEntries = 1);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 1);
     Check(Client.Orm.Cache.CachedMemory > 0);
     Client.Orm.Cache.Clear; // reset cache settings
-    Check(Client.Orm.Cache.CachedEntries = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     Client.Orm.Cache.SetCache(Rec); // cache one = SetCache(TOrmPeople,Rec.ID)
-    Check(Client.Orm.Cache.CachedEntries = 0);
-    Check(Client.Orm.Cache.CachedMemory = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
     TestOne;
-    Check(Client.Orm.Cache.CachedEntries = 1);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 1);
     Check(Client.Orm.Cache.CachedMemory > 0);
     Client.Orm.Cache.SetCache(TOrmPeople);
     TestOne;
-    Check(Client.Orm.Cache.CachedEntries = 1);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 1);
     Client.Orm.Cache.Clear;
-    Check(Client.Orm.Cache.CachedEntries = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     TestOne;
-    Check(Client.Orm.Cache.CachedEntries = 0);
+    CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     if not (Client.InheritsFrom(TRestClientDB)) then
     begin // server-side
       Database.Orm.Cache.SetCache(TOrmPeople);
       TestOne;
-      Check(Client.Orm.Cache.CachedEntries = 0);
-      Check(Database.Orm.Cache.CachedEntries = 1);
+      CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 1);
       Database.Orm.Cache.Clear;
-      Check(Client.Orm.Cache.CachedEntries = 0);
-      Check(Database.Orm.Cache.CachedEntries = 0);
+      CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 0);
       Database.Orm.Cache.SetCache(TOrmPeople, Rec.ID);
       TestOne;
-      Check(Client.Orm.Cache.CachedEntries = 0);
-      Check(Database.Orm.Cache.CachedEntries = 1);
+      CheckEqual(Client.Orm.Cache.CachedEntries, 0);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 1);
       Database.Orm.Cache.SetCache(TOrmPeople);
-      Check(Database.Orm.Cache.CachedEntries = 0);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 0);
       TestOne;
-      Check(Database.Orm.Cache.CachedEntries = 1);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 1);
       if Client.InheritsFrom(TRestClientURI) then
         Client.Client.ServerCacheFlush
       else
         Database.Orm.Cache.Flush;
-      Check(Database.Orm.Cache.CachedEntries = 0);
-      Check(Database.Orm.Cache.CachedMemory = 0);
+      CheckEqual(Database.Orm.Cache.CachedEntries, 0);
+      CheckEqual(Database.Orm.Cache.CachedMemory, 0);
       Database.Orm.Cache.Clear;
     end;
   finally

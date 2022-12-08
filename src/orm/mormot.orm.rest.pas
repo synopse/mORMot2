@@ -81,7 +81,7 @@ type
   protected
     fRest: TRest;
     fModel: TOrmModel; // owned by the TRest associated instance
-    fCache: TRestCache;
+    fCache: TOrmCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TOrmClass;
     fTempJsonWriter: TJsonWriter;
@@ -448,8 +448,8 @@ type
     function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
     function Model: TOrmModel;
       {$ifdef HASINLINE}inline;{$endif}
-    function Cache: TRestCache;
-    function CacheOrNil: TRestCache;
+    function Cache: TOrmCache;
+    function CacheOrNil: TOrmCache;
       {$ifdef HASINLINE}inline;{$endif}
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
     function LogClass: TSynLogClass;
@@ -741,7 +741,7 @@ begin
   result := fModel;
 end;
 
-function TRestOrm.CacheOrNil: TRestCache;
+function TRestOrm.CacheOrNil: TOrmCache;
 begin
   result := fCache;
 end;
@@ -2428,10 +2428,10 @@ begin
     result := fRest.Run.BackgroundTimer.AsyncBatchDelete(Table, ID);
 end;
 
-function TRestOrm.Cache: TRestCache;
+function TRestOrm.Cache: TOrmCache;
 begin
   if fCache = nil then
-    fCache := TRestCache.Create(self);
+    fCache := TOrmCache.Create(self);
   result := fCache;
 end;
 

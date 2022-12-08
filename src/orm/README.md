@@ -26,7 +26,7 @@ Low-Level Basic Types and Definitions for our RESTful ORM
 - `TOrmPropInfo` ORM / RTTI Classes
 - Abstract `TOrmTableAbstract` Parent Class
 - `TOrmTableRowVariant` Custom Variant Type
-- `TOrmLocks` and `TRestCacheEntry` Basic Structures
+- `TOrmLocks` and `TOrmCacheEntry` Basic Structures
 
 ### mormot.orm.core
 
@@ -40,7 +40,7 @@ Main Shared Types and Definitions for our RESTful ORM
 - `TOrmVirtual` Definitions
 - `TOrmProperties` Definitions
 - `TOrmModel TOrmModelProperties` Definitions
-- `TRestCache` Definition
+- `TOrmCache` Definition
 - `TRestBatch TRestBatchLocked` Definitions
 - `TSynValidateRest TSynValidateUniqueField` Definitions
 - `TOrmAccessRights` Definition

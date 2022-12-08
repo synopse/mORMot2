@@ -1248,7 +1248,7 @@ const
   __TTestCustomDiscogs =
     'pagination{per_page,items,page Integer}' +
     'releases[status,title,format,label,artist RawUtf8 year,id integer]';
-  __TRestCacheEntryValue =
+  __TOrmCacheEntryValue =
     'ID: Int64; Timestamp512,Tag: cardinal; Json: RawUtf8';
   __TSubAB =
     'a : RawUtf8; b : integer;';
@@ -1280,7 +1280,7 @@ var
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
-  Cache: TRestCacheEntryValue;
+  Cache: TOrmCacheEntryValue;
   peop: TOrmPeople;
   K: RawUtf8;
   strict, Valid: boolean;
@@ -1971,26 +1971,26 @@ var
 
     Finalize(Cache);
     FillCharFast(Cache, SizeOf(Cache), 0);
-    U := RecordSaveJson(Cache, TypeInfo(TRestCacheEntryValue));
+    U := RecordSaveJson(Cache, TypeInfo(TOrmCacheEntryValue));
     CheckEqual(U, '{"ID":0,"Timestamp512":0,"Tag":0,"Json":""}');
     check(IsValidJson(U));
     Cache.ID := 10;
     Cache.Timestamp512 := 200;
     Cache.Json := 'test';
     Cache.Tag := 12;
-    U := RecordSaveJson(Cache, TypeInfo(TRestCacheEntryValue));
+    U := RecordSaveJson(Cache, TypeInfo(TOrmCacheEntryValue));
     CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"Json":"test"}');
     check(IsValidJson(U));
     U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TRestCacheEntryValue));
+    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TOrmCacheEntryValue));
     Check(Cache.ID = 210);
     Check(Cache.Timestamp512 = 2200);
     Check(Cache.Json = 'test2');
     Check(Cache.Tag = 12);
     U := '{ID:220,Json:"test3",Timestamp512:2300}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TRestCacheEntryValue));
+    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TOrmCacheEntryValue));
     Check(Cache.ID = 220);
     Check(Cache.Timestamp512 = 2300);
     Check(Cache.Json = 'test3');
@@ -2928,10 +2928,10 @@ begin
     __TTestCustomJsonArraySimple);
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayVariant),
     __TTestCustomJsonArrayVariant);
-  Rtti.RegisterFromText(TypeInfo(TRestCacheEntryValue), __TRestCacheEntryValue);
+  Rtti.RegisterFromText(TypeInfo(TOrmCacheEntryValue), __TOrmCacheEntryValue);
   TestJSONSerialization;
   TestJSONSerialization; // test twice for safety
-  Rtti.RegisterFromText(TypeInfo(TRestCacheEntryValue), '');
+  Rtti.RegisterFromText(TypeInfo(TOrmCacheEntryValue), '');
   Rtti.RegisterFromText(TypeInfo(TSubAB), '');
   Rtti.RegisterFromText(TypeInfo(TSubCD), '');
   Rtti.RegisterFromText(TypeInfo(TAggregate), '');
@@ -3292,15 +3292,15 @@ begin
   check(abs(i) < count);
   timer.Start;
   for i := 1 to ITER do
-    Check(JsonArrayCount(P) = count);
+    CheckEqual(JsonArrayCount(P), count);
   NotifyTestSpeed('JsonArrayCount(P)', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
-    Check(JsonArrayCount(P, P + length(people)) = count);
+    CheckEqual(JsonArrayCount(P, P + length(people)), count);
   NotifyTestSpeed('JsonArrayCount(P,PMax)', c, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER * 5000 do
-    Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
+    CheckEqual(JsonObjectPropCount(P + 3), 6, 'first TOrmPeople object');
   NotifyTestSpeed('JsonObjectPropCount()', 0, ITER * 5000 * 119, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
@@ -3319,7 +3319,7 @@ begin
   for i := 1 to ITER do
   begin
     dv.InitJson(people, JSON_FAST);
-    Check(dv.count = count);
+    CheckEqual(dv.count, count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', c, len, @timer, ONLYLOG);
@@ -3327,11 +3327,11 @@ begin
   for i := 1 to ITER do
   begin
     dv.InitJson(people, JSON_FAST + [dvoJsonParseDoNotGuessCount]);
-    Check(dv.count = count);
+    CheckEqual(dv.count, count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant no guess', c, len, @timer, ONLYLOG);
-  Check(DocVariantType.InternNames.Count = interned, 'no intern');
+  CheckEqual(DocVariantType.InternNames.Count, interned, 'no intern');
   DocVariantType.InternNames.Clean;
   timer.Start;
   for i := 1 to ITER do
@@ -3341,12 +3341,12 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant dvoIntern', c, len, @timer, ONLYLOG);
-  Check(DocVariantType.InternNames.Count - interned = 6, 'intern');
-  Check(DocVariantType.InternNames.Clean = 6, 'clean');
-  Check(DocVariantType.InternNames.Count = interned, 'cleaned');
+  CheckEqual(DocVariantType.InternNames.Count - interned, 6, 'intern');
+  CheckEqual(DocVariantType.InternNames.Clean, 6, 'clean');
+  CheckEqual(DocVariantType.InternNames.Count, interned, 'cleaned');
   table := TOrmTableJson.Create('', people);
   try
-    Check(table.RowCount = count);
+    CheckEqual(table.RowCount, count);
     timer.Start;
     for i := 1 to ITER do
     begin
@@ -3363,7 +3363,7 @@ begin
   begin
     table := TOrmTableJson.Create('', people);
     try
-      Check(table.RowCount = count);
+      CheckEqual(table.RowCount, count);
     finally
       table.Free;
     end;
@@ -3374,7 +3374,7 @@ begin
   begin
     table := TOrmTableJson.Create('', notexpanded);
     try
-      Check(table.RowCount = count);
+      CheckEqual(table.RowCount, count);
     finally
       table.Free;
     end;
@@ -3384,7 +3384,7 @@ begin
   for i := 1 to ITER do
   begin
     Check(dv.InitArrayFromResults(people));
-    Check(dv.count = count);
+    CheckEqual(dv.count, count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults exp', c, len, @timer, ONLYLOG);
@@ -3392,7 +3392,7 @@ begin
   for i := 1 to ITER do
   begin
     Check(dv.InitArrayFromResults(notexpanded));
-    Check(dv.count = count);
+    CheckEqual(dv.count, count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);

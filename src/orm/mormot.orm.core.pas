@@ -16,7 +16,7 @@ unit mormot.orm.core;
     - TOrmVirtual Definitions
     - TOrmProperties Definitions
     - TOrmModel TOrmModelProperties Definitions
-    - TRestCache Definition
+    - TOrmCache Definition
     - TRestBatch TRestBatchLocked Definitions
     - TSynValidateRest TSynValidateUniqueField Definitions
     - TOrmAccessRights Definition
@@ -81,7 +81,7 @@ type
   TOrmModel = class;
   TOrmModelProperties = class;
   TRestOrmParent = class;
-  TRestCache = class;
+  TOrmCache = class;
   TRestBatch = class;
   {$M-}
 
@@ -1124,7 +1124,7 @@ type
     /// access the Database Model associated with REST Client or Server instance
     function Model: TOrmModel;
     /// access the internal caching parameters for a given TOrm
-    // - will always return a TRestCache instance, creating one if needed
+    // - will always return a TOrmCache instance, creating one if needed
     // - purpose of this caching mechanism is to speed up retrieval of some
     // common values at either Client or Server level (like configuration settings)
     // - by default, this CRUD level per-ID cache is disabled
@@ -1139,10 +1139,10 @@ type
     // you shall ensure that your business logic is safe, calling Cache.Flush()
     // overloaded methods on purpose: better no cache than unproper cache -
     // "premature optimization is the root of all evil"
-    function Cache: TRestCache;
+    function Cache: TOrmCache;
     /// access the internal caching parameters for a given TOrm
-    // - will return nil if no TRestCache instance has been defined
-    function CacheOrNil: TRestCache;
+    // - will return nil if no TOrmCache instance has been defined
+    function CacheOrNil: TOrmCache;
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
     /// log the corresponding text (if logging is enabled)
@@ -4235,7 +4235,7 @@ type
   end;
 
 
-  { -------------------- TRestCache Definition }
+  { -------------------- TOrmCache Definition }
 
   /// implement a fast TOrm cache, per ID, at the TRest level
   // - purpose of this caching mechanism is to speed up retrieval of some common
@@ -4244,16 +4244,16 @@ type
   // RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
   // or via TOrmMany pattern won't be taken into account)
   // - only Simple fields are cached: e.g. the BLOB fields are not stored
-  // - this cache is thread-safe (access is locked per table)
+  // - this cache is thread-safe via a per-table TRWLightLock
   // - this caching will be located at the TRest level, that is no automated
   // synchronization is implemented between TRestClient and TRestServer:
   // you shall ensure that your code won't fail due to this restriction
-  TRestCache = class
+  TOrmCache = class
   protected
     fRest: IRestOrm;
     fModel: TOrmModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TOrm
-    fCache: TRestCacheEntryDynArray;
+    fCache: TOrmCacheEntryDynArray;
   public
     /// create a cache instance
     // - the associated TOrmModel will be used internally
@@ -4922,7 +4922,7 @@ type
   TSqlPropInfoListOptions = TOrmPropInfoListOptions;
   TSqlPropInfoAttribute = TOrmPropInfoAttribute;
   TSqlPropInfoAttributes = TOrmPropInfoAttributes;
-  TSqlRestCache = TRestCache;
+  TSqlRestCache = TOrmCache;
   TSqlRestBatch = TRestBatch;
   TSqlRestBatchLocked = TRestBatchLocked;
   TOrmPropertiesMapping = TOrmMapping;
@@ -10614,10 +10614,10 @@ begin
 end;
 
 
-{ ------------ TRestCache Definition }
+{ ------------ TOrmCache Definition }
 
 /// unserialize a JSON cached record of a given ID
-function CacheRetrieveJson(var Entry: TRestCacheEntry; aID: TID; aValue: TOrm;
+function CacheRetrieveJson(var Entry: TOrmCacheEntry; aID: TID; aValue: TOrm;
   aTag: PCardinal = nil): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 var
@@ -10635,9 +10635,9 @@ begin
 end;
 
 
-{ TRestCache }
+{ TOrmCache }
 
-constructor TRestCache.Create(const aRest: IRestOrm);
+constructor TOrmCache.Create(const aRest: IRestOrm);
 var
   i: PtrInt;
 begin
@@ -10650,13 +10650,13 @@ begin
     fCache[i].Init;
 end;
 
-destructor TRestCache.Destroy;
+destructor TOrmCache.Destroy;
 begin
   pointer(fRest) := nil; // don't change reference count
   inherited Destroy;
 end;
 
-function TRestCache.CachedEntries: cardinal;
+function TOrmCache.CachedEntries: cardinal;
 var
   i: PtrInt;
 begin
@@ -10666,7 +10666,7 @@ begin
       inc(result, fCache[i].CachedEntries);
 end;
 
-function TRestCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+function TOrmCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
 var
   i: PtrInt;
 begin
@@ -10678,7 +10678,7 @@ begin
       inc(result, fCache[i].CachedMemory(FlushedEntriesCount));
 end;
 
-function TRestCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
+function TOrmCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
 var
   i: PtrInt;
 begin
@@ -10695,7 +10695,7 @@ begin
     end;
 end;
 
-function TRestCache.IsCached(aTable: TOrmClass): boolean;
+function TOrmCache.IsCached(aTable: TOrmClass): boolean;
 var
   i: PtrUInt;
 begin
@@ -10709,7 +10709,7 @@ begin
       result := true;
 end;
 
-function TRestCache.SetCache(aTable: TOrmClass): boolean;
+function TOrmCache.SetCache(aTable: TOrmClass): boolean;
 var
   i: PtrInt;
 begin
@@ -10722,12 +10722,12 @@ begin
     if PtrUInt(i) < PtrUInt(Length(fCache)) then
     begin
       // global cache of all records of this table
-      fCache[i].SetCache;
+      fCache[i].SetCacheAll;
       result := true;
     end;
 end;
 
-function TRestCache.SetCache(aTable: TOrmClass; aID: TID): boolean;
+function TOrmCache.SetCache(aTable: TOrmClass; aID: TID): boolean;
 var
   i: PtrInt;
 begin
@@ -10744,7 +10744,7 @@ begin
   result := True;
 end;
 
-function TRestCache.SetCache(aTable: TOrmClass;
+function TOrmCache.SetCache(aTable: TOrmClass;
   const aIDs: array of TID): boolean;
 var
   i: PtrUInt;
@@ -10764,7 +10764,7 @@ begin
   result := True;
 end;
 
-function TRestCache.SetCache(aRecord: TOrm): boolean;
+function TOrmCache.SetCache(aRecord: TOrm): boolean;
 begin
   if (self = nil) or
      (aRecord = nil) or
@@ -10774,7 +10774,7 @@ begin
     result := SetCache(POrmClass(aRecord)^, aRecord.fID);
 end;
 
-procedure TRestCache.Clear;
+procedure TOrmCache.Clear;
 var
   i: PtrInt;
 begin
@@ -10783,11 +10783,11 @@ begin
       fCache[i].Clear;
 end;
 
-function TRestCache.FillFromQuery(aTable: TOrmClass;
+function TOrmCache.FillFromQuery(aTable: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): integer;
 var
   rec: TOrm;
-  cache: ^TRestCacheEntry;
+  cache: ^TOrmCacheEntry;
 begin
   result := 0;
   if self = nil then
@@ -10807,7 +10807,7 @@ begin
   end;
 end;
 
-procedure TRestCache.Flush;
+procedure TOrmCache.Flush;
 var
   i: PtrInt;
 begin
@@ -10816,19 +10816,19 @@ begin
       fCache[i].FlushCacheAllEntries; // include *CriticalSection(Mutex)
 end;
 
-procedure TRestCache.Flush(aTable: TOrmClass);
+procedure TOrmCache.Flush(aTable: TOrmClass);
 begin
   if self <> nil then // includes *CriticalSection(Mutex):
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
 end;
 
-procedure TRestCache.Flush(aTable: TOrmClass; aID: TID);
+procedure TOrmCache.Flush(aTable: TOrmClass; aID: TID);
 begin
   if self <> nil then
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntry(aID);
 end;
 
-procedure TRestCache.Flush(aTableIndex: PtrInt; aID: TID);
+procedure TOrmCache.Flush(aTableIndex: PtrInt; aID: TID);
 begin
   if self <> nil then
     with fCache[aTableIndex] do
@@ -10836,14 +10836,14 @@ begin
         FlushCacheEntry(aID);
 end;
 
-procedure TRestCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
+procedure TOrmCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
 begin
   if (self <> nil) and
      (length(aIDs) > 0) then
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries(aIDs);
 end;
 
-procedure TRestCache.Notify(aTable: TOrmClass; aID: TID;
+procedure TOrmCache.Notify(aTable: TOrmClass; aID: TID;
   const aJson: RawUtf8; aAction: TOrmOccasion);
 begin
   if (self <> nil) and
@@ -10852,7 +10852,7 @@ begin
     Notify(fModel.GetTableIndex(aTable), aID, aJson, aAction);
 end;
 
-procedure TRestCache.Notify(aRecord: TOrm; aAction: TOrmOccasion);
+procedure TOrmCache.Notify(aRecord: TOrm; aAction: TOrmOccasion);
 var
   aTableIndex: cardinal;
 begin
@@ -10868,7 +10868,7 @@ begin
         SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
 end;
 
-procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
+procedure TOrmCache.Notify(aTableIndex: integer; aID: TID;
   const aJson: RawUtf8; aAction: TOrmOccasion);
 begin
   if (self <> nil) and
@@ -10881,7 +10881,7 @@ begin
         SetJson(aID, aJson);
 end;
 
-procedure TRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
+procedure TOrmCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
   if (self <> nil) and
      (aID > 0) and
@@ -10891,7 +10891,7 @@ begin
         FlushCacheEntry(aID);
 end;
 
-procedure TRestCache.NotifyDeletions(aTableIndex: integer;
+procedure TOrmCache.NotifyDeletions(aTableIndex: integer;
   const aIDs: array of TID);
 begin
   if (self <> nil) and
@@ -10902,7 +10902,7 @@ begin
          FlushCacheEntries(aIDs);
 end;
 
-procedure TRestCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
+procedure TOrmCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
 begin
   if (self <> nil) and
      (aTable <> nil) and
@@ -10910,7 +10910,7 @@ begin
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
-function TRestCache.Retrieve(aID: TID; aValue: TOrm): boolean;
+function TOrmCache.Retrieve(aID: TID; aValue: TOrm): boolean;
 var
   TableIndex: cardinal;
 begin
@@ -10925,7 +10925,7 @@ begin
       result := true;
 end;
 
-function TRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUtf8;
+function TOrmCache.Retrieve(aTableIndex: integer; aID: TID): RawUtf8;
 begin
   result := '';
   if (self <> nil) and
