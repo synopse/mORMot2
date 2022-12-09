@@ -240,8 +240,11 @@ type
 
   /// define the internal state of one TSynAngelizeService
   // - safOrphan indicates that this process has no .service associated any more
+  // - safToStart/safToStop flags are set by ServiceStart/ServiceStop methods
   TSynAngelizeFlags = set of (
-    safOrphan);
+    safOrphan,
+    safToStart,
+    safToStop);
 
   /// one sub-process definition as recognized by TSynAngelize
   // - any %abc% place-holders will be replaced via TSynAngelize.ExpandPath
@@ -323,6 +326,8 @@ type
     function FindService(const ServiceName: RawUtf8): PtrInt;
     function UpdateServicesFromSettingsFolder(Force: boolean): integer;
     function GetServicesState(pids: PIntegerDynArray): TServiceStateDynArray;
+    procedure ServiceStart(ServiceIndex: PtrInt);
+    procedure ServiceStop(ServiceIndex: PtrInt);
     procedure ListServices;
     procedure Expand(aService: TSynAngelizeService; const aPath: TFileName;
       out aResult: TFileName);
@@ -931,6 +936,26 @@ begin
       pids^[i] := pid;
     result[i] := st;
   end;
+end;
+
+procedure TSynAngelize.ServiceStart(ServiceIndex: PtrInt);
+begin
+  if ServiceIndex >= 0 then
+    with fService[ServiceIndex] do
+    begin
+      include(fFlags, safToStart);
+      exclude(fFlags, safToStop);
+    end;
+end;
+
+procedure TSynAngelize.ServiceStop(ServiceIndex: PtrInt);
+begin
+  if ServiceIndex >= 0 then
+    with fService[ServiceIndex] do
+    begin
+      include(fFlags, safToStop);
+      exclude(fFlags, safToStart);
+    end;
 end;
 
 const
