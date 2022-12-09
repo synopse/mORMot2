@@ -1279,8 +1279,8 @@ type
     // ! ...
     // !    dv.InitArray([1, 3, 3, 4]);
     // !    for e in dv do
-    // !      // here e^.Name = nil
-    // !      writeln(e^.Value^);
+    // !      // here e.Name = nil
+    // !      writeln(e.Value^);
     // ! // output  1  2  3  4
     function GetEnumerator: TDocVariantFieldsEnumerator;
     /// an enumerator able to compile "for .. in dv.Fields do" for objects

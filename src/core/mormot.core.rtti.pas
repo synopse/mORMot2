@@ -5592,7 +5592,7 @@ begin
       repeat
         p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
         {$ifdef FPC_OLDRTTI}
-        if Info^.Kind in rkManagedTypes then
+        if p^.Kind in rkManagedTypes then
         {$endif FPC_OLDRTTI}
         begin
           offset := f^.Offset - offset;
