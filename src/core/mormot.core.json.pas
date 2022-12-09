@@ -1312,7 +1312,8 @@ type
     /// apply a specified event over all items stored in this dictionnary
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
-    // - this method is thread-safe, since it will lock the instance
+    // - this method is thread-safe - if the callback modifies the data, set
+    // MayModify=true and call fSafe.Lock/UnLock when writing
     function ForEach(const OnEach: TOnSynDictionary;
       Opaque: pointer = nil; MayModify: boolean = true): integer; overload;
     /// apply a specified event over matching items stored in this dictionnary
@@ -1320,7 +1321,8 @@ type
     // value item with the supplied comparison functions and aKey/aValue content
     // - returns the number of times OnMatch has been called, i.e. how many times
     // KeyCompare(aKey,Keys[#])=0 or ValueCompare(aValue,Values[#])=0
-    // - this method is thread-safe, since it will lock the instance
+    // - this method is thread-safe - if the callback modifies the data, set
+    // MayModify=true and call fSafe.Lock/UnLock when writing
     function ForEach(const OnMatch: TOnSynDictionary;
       KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
       Opaque: pointer = nil; MayModify: boolean = true): integer; overload;
@@ -9174,7 +9176,7 @@ begin
   now := tix64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
     exit; // no need to search more often than every second
-  fSafe.RwLock(cReadWrite); // would upgrade to cWrite only if needed
+  fSafe.ReadWriteLock; // would upgrade to cWrite only if needed
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger - 1 downto 0 do
@@ -9184,7 +9186,7 @@ begin
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
       begin
         if result = 0 then
-          fSafe.RWLock(cWrite);
+          fSafe.Lock; // = cWrite
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
@@ -9194,8 +9196,8 @@ begin
       fKeys.ForceReHash; // mandatory after manual fKeys.Delete(i)
   finally
     if result > 0 then
-      fSafe.RWUnLock(cWrite);
-    fSafe.RwUnLock(cReadWrite);
+      fSafe.UnLock; // = cWrite
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -9277,19 +9279,19 @@ end;
 
 function TSynDictionary.Clear(const aKey): PtrInt;
 begin
-  fSafe.RWLock(cReadWrite);
+  fSafe.ReadWriteLock;
   try
     result := fKeys.FindHashed(aKey);
     if result >= 0 then
     begin
-      fSafe.RWLock(cWrite);
+      fSafe.Lock;
       fValues.ItemClear(fValues.ItemPtr(result));
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOut[result] := 0;
-      fSafe.RWUnLock(cWrite);
+      fSafe.UnLock;
     end;
   finally
-    fSafe.RWUnLock(cReadWrite);
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -9330,7 +9332,10 @@ begin
      (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
     raise ESynDictionary.CreateUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
-  fSafe.RWLock(RW_FORCE[aAction <> iaFind]); // cReadOnly only for iaFind
+  if aAction = iaFind then
+    fSafe.ReadLock
+  else
+    fSafe.Lock; // other actions may need to write the internal data
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx < 0 then
@@ -9357,7 +9362,10 @@ begin
         result := nested.Add(aArrayValue) >= 0;
     end;
   finally
-    fSafe.RWUnLock(RW_FORCE[aAction <> iaFind]);
+    if aAction = iaFind then
+      fSafe.ReadUnLock
+    else
+      fSafe.UnLock;
   end;
 end;
 
@@ -9372,7 +9380,7 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
-  fSafe.RwLock(cReadOnly); // cReadOnly is good enough for SetTimeoutAtIndex()
+  fSafe.ReadLock; // cReadOnly is good enough for SetTimeoutAtIndex()
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
@@ -9380,14 +9388,10 @@ begin
     begin
       fKeys.ItemCopyAt(ndx, @aKey);
       if aUpdateTimeOut then
-      begin
-        fSafe.RwLock(cWrite);
-        SetTimeoutAtIndex(ndx);
-        fSafe.RwUnLock(cWrite);
-      end;
+        SetTimeoutAtIndex(ndx); // no cWrite lock needed
     end;
   finally
-    fSafe.RwUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -9430,7 +9434,6 @@ begin
     result := -1
   else
   begin
-    //result := fKeys.FindHashed(aKey);
     result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey, nil);
     if result < 0 then
       result := -1
@@ -9490,7 +9493,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9506,7 +9509,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -9517,21 +9520,21 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.RWLock(cReadWrite);
+  fSafe.ReadWriteLock;
   try
     ndx := fKeys.FindHashedAndDelete(aKey);
     if ndx >= 0 then
     begin
-      fSafe.RWLock(cWrite);
+      fSafe.Lock;
       fValues.ItemMoveTo(ndx, @aValue); // faster than ItemCopy()
       fValues.Delete(ndx);
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOuts.Delete(ndx);
-      fSafe.RWUnLock(cWrite);
+      fSafe.UnLock;
       result := true;
     end;
   finally
-    fSafe.RWUnLock(cReadWrite);
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
@@ -9540,7 +9543,7 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9550,7 +9553,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -9560,21 +9563,21 @@ begin
   result := false;
   if self = nil then
     exit;
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   try
     result := fValues.Find(aValue, aCompare) >= 0;
   finally
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
 procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
 begin
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   try
     fValues.CopyTo(Dest, ObjArrayByRef);
   finally
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -9585,7 +9588,10 @@ var
   i, n, ks, vs: PtrInt;
 begin
   result := 0;
-  fSafe.RWLock(RW_FORCE[MayModify]);
+  if MayModify then
+    fSafe.ReadWriteLock
+  else
+    fSafe.ReadLock;
   try
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     if (n = 0) or
@@ -9604,7 +9610,10 @@ begin
       inc(v, vs);
     end;
   finally
-    fSafe.RWUnLock(RW_FORCE[MayModify]);
+    if MayModify then
+      fSafe.ReadWriteUnLock
+    else
+      fSafe.ReadUnLock;
   end;
 end;
 
@@ -9615,7 +9624,10 @@ var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
-  fSafe.RWLock(RW_FORCE[MayModify]);
+  if MayModify then
+    fSafe.ReadWriteLock
+  else
+    fSafe.ReadLock;
   try
     result := 0;
     if (not Assigned(OnMatch)) or
@@ -9642,7 +9654,10 @@ begin
       inc(v, vs);
     end;
   finally
-    fSafe.RWUnLock(RW_FORCE[MayModify]);
+    if MayModify then
+      fSafe.ReadWriteUnLock
+    else
+      fSafe.ReadUnLock;
   end;
 end;
 
@@ -9666,7 +9681,7 @@ procedure TSynDictionary.SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean);
 var
   k, v: RawUtf8;
 begin
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   try
     if fSafe.Padding[DIC_KEYCOUNT].VInteger > 0 then
     begin
@@ -9675,7 +9690,7 @@ begin
       fValues.SaveToJson(v, EnumSetsAsText);
     end;
   finally
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
   W.AddJsonArraysAsJsonObject(pointer(k), pointer(v));
 end;
@@ -9702,11 +9717,11 @@ begin
     result := '';
     exit;
   end;
-  fSafe.RWLock(cReadOnly);
+  fSafe.ReadLock;
   try
     fValues.SaveToJson(result, EnumSetsAsText, ReFormat);
   finally
-    fSafe.RWUnLock(cReadOnly);
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -9802,7 +9817,7 @@ begin
     exit;
   W := TBufferWriter.Create(tmp{%H-});
   try
-    fSafe.RWLock(cReadOnly);
+    fSafe.ReadLock;
     try
       if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
         exit;
@@ -9811,7 +9826,7 @@ begin
       DynArraySave(pointer(fValues.Value),
         @fSafe.Padding[DIC_VALUECOUNT].VInteger, W, fValues.Info.Info);
     finally
-      fSafe.RWUnLock(cReadOnly);
+      fSafe.ReadUnLock;
     end;
     result := W.FlushAndCompress(NoCompression, Algo);
   finally

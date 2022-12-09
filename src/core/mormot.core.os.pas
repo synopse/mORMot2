@@ -3449,14 +3449,6 @@ type
   end;
   PRWLock = ^TRWLock;
 
-const
-  RW_FORCE: array[{write:}boolean] of TRWLockContext = (
-    cReadOnly,
-    cWrite);
-  RW_UPGRADE: array[{write:}boolean] of TRWLockContext = (
-    cReadOnly,
-    cReadWrite);
-
 type
   /// how TSynLocker handles its thread processing
   // - by default, uSharedLock will use the main TRTLCriticalSection
@@ -3504,6 +3496,14 @@ type
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
     function GetIsLocked: boolean;
+    // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
+    // - warning: if RWUse=uRWLock, this method will use the internal TRWLock
+    // - defined in protected section for better inlining and to fix a Delphi
+    // compiler bug about warning a missing Windows unit in the uses classes
+    procedure RWLock(context: TRWLockContext);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure RWUnLock(context: TRWLockContext);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// number of values stored in the internal Padding[] array
     // - equals 0 if no value is actually stored, or a 1..7 number otherwise
@@ -3531,14 +3531,6 @@ type
     /// finalize the mutex, and call FreeMem() on the pointer of this instance
     // - should have been initiazed with a NewSynLocker call
     procedure DoneAndFreeMem;
-    /// low-level acquisition of the lock, depending on RWUse property
-    // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
-    // - warning: if RWUse=uRWLock, this method will use the internal TRWLock
-    procedure RWLock(context: TRWLockContext);
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
-    /// low-level release of the lock, depending on RWUse property
-    procedure RWUnLock(context: TRWLockContext);
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// low-level acquisition of the lock, as RWLock(cReadOnly)
     // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
     // - warning: with RWUse=uRWLock, a nested Lock call would deadlock, but not
@@ -3546,6 +3538,12 @@ type
     procedure ReadLock;
     /// low-level release of the lock, as RWUnLock(cReadOnly)
     procedure ReadUnLock;
+    /// low-level acquisition of the lock, as RWLock(cReadWrite)
+    // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
+    // - with RWUse=uRWLock, a nested Lock call would not deadlock
+    procedure ReadWriteLock;
+    /// low-level release of the lock, as RWUnLock(cReadWrite)
+    procedure ReadWriteUnLock;
     /// lock the instance for exclusive access, as RWLock(cWrite)
     // - is re-entrant from the same thread i.e. you can nest Lock/UnLock calls
     // - warning: with RWUse=uRWLock, would deadlock after a nested ReadLock
@@ -3557,7 +3555,6 @@ type
     // !   Safe.Unlock;
     // ! end;
     procedure Lock;
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex
     // - do nothing and return false if RWUse is not the default uSharedLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
@@ -3568,7 +3565,6 @@ type
     // !     Safe.Unlock;
     // !   end;
     function TryLock: boolean;
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will try to acquire the mutex for a given time
     // - just wait and return false if RWUse is not the default uSharedLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
@@ -3583,7 +3579,6 @@ type
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
     procedure UnLock; overload;
-      {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -7609,6 +7604,16 @@ end;
 procedure TSynLocker.ReadUnLock;
 begin
   RWUnLock(cReadOnly);
+end;
+
+procedure TSynLocker.ReadWriteLock;
+begin
+  RWLock(cReadWrite);
+end;
+
+procedure TSynLocker.ReadWriteUnLock;
+begin
+  RWUnLock(cReadWrite);
 end;
 
 procedure TSynLocker.Lock;
