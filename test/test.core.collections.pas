@@ -448,10 +448,12 @@ var
   i: integer;
   vi: Int64;
   di: IKeyValue<integer, Int64>;
+  ei: TPair<integer, Int64>;
   u: RawUtf8;
   pu: PRawUtf8Array;
   vu: double;
   du: IKeyValue<RawUtf8, double>;
+  eu: TPair<RawUtf8, double>;
   setcapa: boolean;
   setcapatxt: PUtf8Char;
   timer: TPrecisionTimer;
@@ -496,8 +498,20 @@ begin
     end;
     NotifyTestSpeed('integer,Int64 % iter', [setcapatxt], MAX, 0, @timer);
     CheckEqual(di.Count, MAX + 1);
+    timer.Start;
+    i := 0;
+    for ei in di do
+    begin
+      Check(ei.Key = i);
+      Check(ei.Value = i);
+      inc(i);
+    end;
+    NotifyTestSpeed('integer,Int64 % enum', [setcapatxt], MAX, 0, @timer);
+    CheckEqual(i, MAX + 1);
     di.Clear;
     CheckEqual(di.Count, 0);
+    for ei in di do
+      Check(false);
     // manual IKeyValue<RawUtf8, double> validation
     du := Collections.NewKeyValue<RawUtf8, double>([kvoDefaultIfNotFound]);
     if setcapa then
@@ -545,6 +559,16 @@ begin
     end;
     NotifyTestSpeed('RawUtf8,double% iter', [setcapatxt], MAX, 0, @timer);
     CheckEqual(du.Count, MAX + 1);
+    timer.Start;
+    i := 0;
+    for eu in du do
+    begin
+      Check(eu.Key = pu[i]);
+      Check(eu.Value = i);
+      inc(i);
+    end;
+    NotifyTestSpeed('RawUtf8,double% enum', [setcapatxt], MAX, 0, @timer);
+    CheckEqual(i, MAX + 1);
     du.Clear;
     Check(du.Count = 0);
   end;
