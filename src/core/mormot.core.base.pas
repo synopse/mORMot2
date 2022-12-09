@@ -7619,19 +7619,6 @@ end;
 
 { ************ Faster alternative to RTL standard functions }
 
-function HasHWAes: boolean;
-begin
-  {$ifdef CPUINTEL}
-  result := cfAESNI in CpuFeatures;
-  {$else}
-  {$ifdef CPUARM}
-  result := ahcAES in CpuFeatures;
-  {$else}
-  result := false; // unknown CPU architecture
-  {$endif CPUARM}
-  {$endif CPUINTEL}
-end;
-
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
 function StrLenSafe(S: pointer): PtrInt;
@@ -8663,6 +8650,11 @@ end;
 
 {$endif HASNOSSE2}
 
+function HasHWAes: boolean;
+begin
+  result := cfAESNI in CpuFeatures;
+end;
+
 type
   TIntelRegisters = record
     eax, ebx, ecx, edx: cardinal;
@@ -8770,48 +8762,7 @@ end;
 
 {$else not CPUINTEL}
 
-// fallback to pure pascal version for ARM
-
-{$ifdef OSLINUXANDROID}
-
-const
-  AT_HWCAP  = 16;
-  AT_HWCAP2 = 26;
-
-procedure TestCpuFeatures;
-var
-  p: PPChar;
-  caps: TArmHwCaps;
-begin
-  // C library function getauxval() is not always available -> use system.envp
-  caps := [];
-  try
-    p := system.envp;
-    while p^ <> nil do
-      inc(p);
-    inc(p); // auxv is located after the last textual environment variable
-    repeat
-      if PtrUInt(p[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
-        PCardinalArray(@caps)[0] := PtrUInt(p[1])
-      else if PtrUInt(p[0]) = AT_HWCAP2 then
-        PCardinalArray(@caps)[1] := PtrUInt(p[1]);
-      p := @p[2];
-    until p[0] = nil;
-  except
-    // may happen on some untested Operating System
-    caps := []; // is likely to be invalid
-  end;
-  CpuFeatures := caps;
-end;
-
-{$else}
-
-procedure TestCpuFeatures;
-begin
-  // perhaps system.envp would work somewhat, but the HWCAP items don't match
-end;
-
-{$endif OSLINUXANDROID}
+// fallback to pure pascal version for non-Intel CPUs
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var
@@ -9238,6 +9189,67 @@ begin
     result := result shr 2;
   end;
 end;
+
+{$ifdef CPUARM3264} // ARM-specific code
+
+{$ifdef OSLINUXANDROID} // read CpuFeatures from Linux envp
+
+const
+  AT_HWCAP  = 16;
+  AT_HWCAP2 = 26;
+
+procedure TestCpuFeatures;
+var
+  p: PPChar;
+  caps: TArmHwCaps;
+begin
+  // C library function getauxval() is not always available -> use system.envp
+  caps := [];
+  try
+    p := system.envp;
+    while p^ <> nil do
+      inc(p);
+    inc(p); // auxv is located after the last textual environment variable
+    repeat
+      if PtrUInt(p[0]) = AT_HWCAP then // 32-bit or 64-bit entries = PtrUInt
+        PCardinalArray(@caps)[0] := PtrUInt(p[1])
+      else if PtrUInt(p[0]) = AT_HWCAP2 then
+        PCardinalArray(@caps)[1] := PtrUInt(p[1]);
+      p := @p[2];
+    until p[0] = nil;
+  except
+    // may happen on some untested Operating System
+    caps := []; // is likely to be invalid
+  end;
+  CpuFeatures := caps;
+end;
+
+{$else}
+
+procedure TestCpuFeatures;
+begin
+  // perhaps system.envp would work somewhat, but the HWCAP items don't match
+end;
+
+{$endif OSLINUXANDROID}
+
+function HasHWAes: boolean;
+begin
+  result := ahcAES in CpuFeatures;
+end;
+
+{$else}  // non Intel nor ARM CPUs
+
+procedure TestCpuFeatures;
+begin
+end;
+
+function HasHWAes: boolean;
+begin
+  result := false;
+end;
+
+{$endif CPUARM3264}
 
 {$endif CPUINTEL}
 

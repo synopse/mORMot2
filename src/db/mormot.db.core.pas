@@ -48,8 +48,8 @@ const
 
   /// maximum number of fields in a database Table
   // - default is 64, but can be set to 64, 128, 192 or 256
-  // adding MAX_SQLFIELDS_128, MAX_SQLFIELDS_192 or MAX_SQLFIELDS_256
-  // conditional directives for your project
+  // adding one MAX_SQLFIELDS_128, MAX_SQLFIELDS_192 or MAX_SQLFIELDS_256
+  // conditional directive for your project
   // - this constant is used internally to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
   // - note that due to compiler restriction, 256 is the maximum value
