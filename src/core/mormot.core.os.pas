@@ -3532,17 +3532,23 @@ type
     // - should have been initiazed with a NewSynLocker call
     procedure DoneAndFreeMem;
     /// low-level acquisition of the lock, depending on RWUse property
+    // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
     // - warning: if RWUse=uRWLock, this method will use the internal TRWLock
     procedure RWLock(context: TRWLockContext);
       {$ifdef HASINLINEWINAPI} inline; {$endif}
     /// low-level release of the lock, depending on RWUse property
     procedure RWUnLock(context: TRWLockContext);
       {$ifdef HASINLINEWINAPI} inline; {$endif}
-    /// lock the instance for exclusive access
-    // - redirects to RWLock(cWrite)
-    // - with default RWUse=uSharedLock, this method is re-entrant from the same
-    // thread i.e. you can nest Lock/UnLock calls in the same thread
-    // - warning: with RWUse=uRWLock, this method would deadlock on nested calls
+    /// low-level acquisition of the lock, as RWLock(cReadOnly)
+    // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
+    // - warning: with RWUse=uRWLock, a nested Lock call would deadlock, but not
+    // nested ReadLock calls
+    procedure ReadLock;
+    /// low-level release of the lock, as RWUnLock(cReadOnly)
+    procedure ReadUnLock;
+    /// lock the instance for exclusive access, as RWLock(cWrite)
+    // - is re-entrant from the same thread i.e. you can nest Lock/UnLock calls
+    // - warning: with RWUse=uRWLock, would deadlock after a nested ReadLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
     // ! try
@@ -3573,8 +3579,7 @@ type
     // !     Safe.Unlock;
     // !   end;
     function TryLockMS(retryms: integer; terminated: PBoolean = nil): boolean;
-    /// release the instance for exclusive access
-    // - redirects to RWUnLock(cWrite)
+    /// release the instance for exclusive access, as RWUnLock(cWrite)
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
     procedure UnLock; overload;
@@ -7596,30 +7601,24 @@ begin
   end; // uNoLock will just do nothing
 end;
 
+procedure TSynLocker.ReadLock;
+begin
+  RWLock(cReadOnly); // will be properly inlined
+end;
+
+procedure TSynLocker.ReadUnLock;
+begin
+  RWUnLock(cReadOnly);
+end;
+
 procedure TSynLocker.Lock;
 begin
-  case fRWUse of
-    uSharedLock:
-      begin
-        mormot.core.os.EnterCriticalSection(fSection);
-        inc(fLockCount);
-      end;
-    uRWLock:
-      fRW.WriteLock;
-  end; // uNoLock will just do nothing
+  RWLock(cWrite);
 end;
 
 procedure TSynLocker.UnLock;
 begin
-  case fRWUse of
-    uSharedLock:
-      begin
-        dec(fLockCount);
-        mormot.core.os.LeaveCriticalSection(fSection);
-      end;
-    uRWLock:
-      fRW.WriteUnLock;
-  end; // uNoLock will just do nothing
+  RWUnLock(cWrite);
 end;
 
 function TSynLocker.TryLock: boolean;
