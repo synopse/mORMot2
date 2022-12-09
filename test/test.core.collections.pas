@@ -472,7 +472,7 @@ begin
         di.Add(i, i)
       else
         Check(di.TryAdd(i, i));
-    Check(di.Count = MAX + 1);
+    CheckEqual(di.Count, MAX + 1);
     NotifyTestSpeed('integer,Int64 % add', [setcapatxt], MAX, 0, @timer);
     for i := 0 to MAX do
     begin
@@ -488,9 +488,16 @@ begin
     for i := 0 to MAX do
       Check(di[i] = i);
     NotifyTestSpeed('integer,Int64 % get', [setcapatxt], MAX, 0, @timer);
-    Check(di.Count = MAX + 1);
+    timer.Start;
+    for i := 0 to MAX do
+    begin
+      Check(di.Key[i] = i);
+      Check(di.Value[i] = i);
+    end;
+    NotifyTestSpeed('integer,Int64 % iter', [setcapatxt], MAX, 0, @timer);
+    CheckEqual(di.Count, MAX + 1);
     di.Clear;
-    Check(di.Count = 0);
+    CheckEqual(di.Count, 0);
     // manual IKeyValue<RawUtf8, double> validation
     du := Collections.NewKeyValue<RawUtf8, double>([kvoDefaultIfNotFound]);
     if setcapa then
@@ -505,7 +512,7 @@ begin
       else
         Check(du.TryAdd(u, vu));
     end;
-    Check(du.Count = MAX + 1);
+    CheckEqual(du.Count, MAX + 1);
     NotifyTestSpeed('RawUtf8,double% add', [setcapatxt], MAX, 0, @timer);
     for i := 0 to MAX do
     begin
@@ -530,7 +537,14 @@ begin
     for i := 0 to MAX do
       Check(du[pu[i]] = i);
     NotifyTestSpeed('RawUtf8,double% get', [setcapatxt], MAX, 0, @timer);
-    Check(du.Count = MAX + 1);
+    timer.Start;
+    for i := 0 to MAX do
+    begin
+      Check(du.Key[i] = pu[i]);
+      Check(du.Value[i] = i);
+    end;
+    NotifyTestSpeed('RawUtf8,double% iter', [setcapatxt], MAX, 0, @timer);
+    CheckEqual(du.Count, MAX + 1);
     du.Clear;
     Check(du.Count = 0);
   end;
