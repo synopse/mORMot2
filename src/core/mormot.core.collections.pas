@@ -214,7 +214,7 @@ type
     // - if customcompare is set, a O(n) comparison lookup will be done
     // - for a brute force RTTI-based search, see IndexOf()
     function Find(const value: T; customcompare: TDynArraySortCompare = nil): PtrInt;
-    /// allows to iterate over a generic collection of a specific type
+    /// allow to iterate over a generic collection of a specific type
     // - this enumerator is faster than for i := 0 to Count - 1 do ... list[i]
     // - we redefined our own TIListEnumerator<T> record type which is much faster
     // than using classes or interfaces, and provide very readable code:
@@ -226,12 +226,12 @@ type
     // !     list.Add(i);
     // !   for i in list do    // use an enumerator - fast, safe and clean
     // !     writeln(i);
-    /// allows to iterate over a range of the collection
+    function GetEnumerator: TIListEnumerator<T>;
+    /// allow to iterate over a range of the collection
     // - returned iterator will efficiently browse the items data in-place:
     // ! for i in list.Range do         // = for i in list do (all data)
     // ! for i in list.Range(10) do     // items 10..Count-1
     // ! for i in list.Range(0, 10) do  // first 0..9 items
-    function GetEnumerator: TIListEnumerator<T>;
     // ! for i in list.Range(10, 20) do // items 10..29 - truncated if Count<30
     // ! for i in list.Range(-10) do    // last Count-10..Count-1 items
     function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TIListEnumerator<T>;
@@ -499,15 +499,16 @@ type
     procedure ReadUnLock;
     /// allows to iterate over all key/value pairs in this collection
     // - this is not thread-safe so to be protected by ReadLock/ReadUnLock
-    // - it is twice faster than Key[]/Value[], thanks to proper inlining:
-    // ! var kv: IKeyValue<RawUtf8, double>;
-    // !     e: TPair<RawUtf8, double>;
-    // !     i: integer;
+    // - code is cleaner and safer than using Key[] Value[] and Count:
+    // ! var
+    // !   kv: IKeyValue<RawUtf8, double>;
+    // !   e: TPair<RawUtf8, double>;
+    // !   i: integer;
     // ! begin
     // !   kv := Collections.NewKeyValue<RawUtf8, double>;
     // !   for i := 1 to 20 do
     // !     kv.Add(UInt32ToUtf8(i), i);   // populate with some data
-    // !   for e in kv do          // use an enumerator - fast, safe and clean
+    // !   for e in kv do
     // !     writeln(e.Key, ' = ', e.Value);
     function GetEnumerator: TIKeyValueEnumerator<TKey, TValue>;
     /// returns the number of key/value pairs actually stored
@@ -515,19 +516,21 @@ type
     function Count: integer;
     /// high-level access to the stored values from their associated keys
     // - GetItem() raise an EIKeyValue if the key is not available, unless
-    // kvoDefaultIfNotFound option was set- use TryGetValue() if you want to
+    // kvoDefaultIfNotFound option was set - use TryGetValue() if you want to
     // detect (without any exception) any non available key
-    // - SetItem() will add the value if key is not existing, or replace it
+    // - SetItem() will add or replace the value associated with the key
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
     /// low-level access to the stored keys, in their 0..Count-1 internal order
     // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
-    // - raise an EIKeyValue if ndx is out-of-range
+    // - warning: won't raise any exception if ndx is out-of-range
+    // - consider using the safer TPair<TKey, TValue> enumerator instead
     property Key[ndx: PtrInt]: TKey
       read GetKey;
     /// low-level access to the stored values, in their 0..Count-1 internal order
     // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
-    // - raise an EIKeyValue if ndx is out-of-range
+    // - warning: won't raise any exception if ndx is out-of-range
+    // - consider using the safer TPair<TKey, TValue> enumerator instead
     property Value[ndx: PtrInt]: TValue
       read GetValue;
     /// returns the internal TSynDictionary capacity
@@ -586,8 +589,6 @@ type
     procedure SetTimeOutSeconds(value: cardinal);
     procedure ReadLock;
     procedure ReadUnLock;
-    procedure GetOneKey(ndx: PtrInt; key: pointer);
-    procedure GetOneValue(ndx: PtrInt; value: pointer);
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - main factory is Collections.NewKeyValue<TKey, TValue> class function,
@@ -1379,18 +1380,6 @@ begin
   fData.Safe^.ReadUnLock;
 end;
 
-procedure TIKeyValueParent.GetOneKey(ndx: PtrInt; key: pointer);
-begin
-  if not fData.Keys.ItemCopyAt(ndx, key) then
-    raise EIKeyValue.CreateUtf8('%.GetKey: index % out of range', [self, ndx]);
-end;
-
-procedure TIKeyValueParent.GetOneValue(ndx: PtrInt; value: pointer);
-begin
-  if not fData.Values.ItemCopyAt(ndx, value) then
-    raise EIKeyValue.CreateUtf8('%.GetValue: index % out of range', [self, ndx]);
-end;
-
 
 { TIKeyValue<TKey, TValue> }
 
@@ -1401,12 +1390,12 @@ end;
 
 function TIKeyValue<TKey, TValue>.GetKey(ndx: PtrInt): TKey;
 begin
-  GetOneKey(ndx, @result);
+  result := TArray<TKey>(fData.Keys.Value^)[ndx];
 end;
 
 function TIKeyValue<TKey, TValue>.GetValue(ndx: PtrInt): TValue;
 begin
-  GetOneValue(ndx, @result);
+  result := TArray<TValue>(fData.Values.Value^)[ndx];
 end;
 
 procedure TIKeyValue<TKey, TValue>.SetItem(const key: TKey;
@@ -1464,10 +1453,10 @@ end;
 function TIKeyValue<TKey, TValue>.GetEnumerator: TIKeyValueEnumerator<TKey, TValue>;
 begin
   result.fKey := fData.Keys.Value^;
-  dec(result.fKey);
   result.fValue := fData.Values.Value^;
-  dec(result.fValue);
   result.fCount := fData.Count;
+  dec(result.fKey); // MoveNext will make inc() first
+  dec(result.fValue);
 end;
 
 
