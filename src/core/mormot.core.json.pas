@@ -1203,7 +1203,8 @@ type
     function ComputeNextTimeOut: cardinal;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal; {$ifdef FPC} inline; {$endif}
+    function GetTimeOutSeconds: cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
     function GetThreadUse: TSynLockerUse;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1430,11 +1431,8 @@ type
       const aKey, aValue; aIndex: PtrInt): boolean;
     {$endif PUREMORMOT2}
     /// returns how many items are currently stored in this dictionary
-    // - this method is thread-safe, but returns an evolving value
-    function Count: integer;
-    /// fast returns how many items are currently stored in this dictionary
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
-    function RawCount: integer;
+    function Count: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
@@ -1473,6 +1471,15 @@ type
       read GetThreadUse write SetThreadUse;
   end;
 
+const
+  // TSynDictionary.fSafe.Padding[DIC_*] place holders - defined here for inlining
+  DIC_KEYCOUNT   = 0;   // Keys.Count integer
+  DIC_KEY        = 1;   // Key.Value pointer
+  DIC_VALUECOUNT = 2;   // Values.Count integer
+  DIC_VALUE      = 3;   // Values.Value pointer
+  DIC_TIMECOUNT  = 4;   // Timeouts.Count integer
+  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
+  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
 
 
 { ********** Low-level JSON Serialization for any kind of Values }
@@ -9067,15 +9074,6 @@ end;
 
 { TSynDictionary }
 
-const // use fSafe.Padding[DIC_*] slots for Keys/Values place holders
-  DIC_KEYCOUNT   = 0;   // Keys.Count integer
-  DIC_KEY        = 1;   // Key.Value pointer
-  DIC_VALUECOUNT = 2;   // Values.Count integer
-  DIC_VALUE      = 3;   // Values.Value pointer
-  DIC_TIMECOUNT  = 4;   // Timeouts.Count integer
-  DIC_TIMESEC    = 5;   // Timeouts Seconds integer
-  DIC_TIMETIX    = 6;   // last GetTickCount64 shr 10 integer
-
 constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress; aHasher: THasher);
@@ -9660,11 +9658,6 @@ begin
 end;
 
 function TSynDictionary.Count: integer;
-begin
-  result := fSafe.LockedInt64[DIC_KEYCOUNT];
-end;
-
-function TSynDictionary.RawCount: integer;
 begin
   result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
 end;
