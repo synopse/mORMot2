@@ -2315,13 +2315,14 @@ type
     procedure SetBinaryValuesSimpleFields(var Read: TFastReader);
     /// write the record fields into RawByteString a binary buffer
     // - same as GetBinaryValues(), but also writing the ID field first
-    function GetBinary: RawByteString;
+    function GetBinary(WithID: boolean = true;
+      SimpleFields: boolean = false): RawByteString;
     /// set the record fields from a binary buffer saved by GetBinary()
     // - same as SetBinaryValues(), but also reading the ID field first
     procedure SetBinary(var Read: TFastReader); overload;
     /// set the record fields from a binary buffer saved by GetBinary()
-    // - same as SetBinaryValues(), but also reading the ID field first
-    procedure SetBinary(const binary: RawByteString); overload;
+    procedure SetBinary(const binary: RawByteString; WithID: boolean = true;
+      SimpleFields: boolean = false); overload;
     /// set all field values from a supplied array of TSqlVar values
     // - Values[] array must match the OrmProps.Field[] order: will return
     // false if the Values[].VType does not match OrmProps.FieldType[]
@@ -6889,15 +6890,19 @@ begin
         List[f].GetBinary(self, W);
 end;
 
-function TOrm.GetBinary: RawByteString;
+function TOrm.GetBinary(WithID, SimpleFields: boolean): RawByteString;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
 begin
   W := TBufferWriter.Create(temp{%H-});
   try
-    W.WriteVarUInt64(fID);
-    GetBinaryValues(W);
+    if WithID then
+      W.WriteVarUInt64(fID);
+    if SimpleFields then
+      GetBinaryValuesSimpleFields(W)
+    else
+      GetBinaryValues(W);
     result := W.FlushTo;
   finally
     W.Free;
@@ -6910,12 +6915,17 @@ begin
   SetBinaryValues(Read);
 end;
 
-procedure TOrm.SetBinary(const binary: RawByteString);
+procedure TOrm.SetBinary(const binary: RawByteString; WithID, SimpleFields: boolean);
 var
   read: TFastReader;
 begin
   read.Init(binary);
-  SetBinary(read);
+  if WithID then
+    fID := Read.VarUInt64;
+  if SimpleFields then
+    SetBinaryValuesSimpleFields(read)
+  else
+    SetBinaryValues(read);
 end;
 
 procedure TOrm.SetBinaryValues(var Read: TFastReader);
