@@ -1161,9 +1161,12 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
 function GetExtended(P: PUtf8Char): TSynExtended; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  TPow10 = array[-31..33] of TSynExtended;
+  PPow10 = ^TPow10;
 const
   /// most common 10 ^ exponent constants, including 0 and -1 special values
-  POW10: array[-31..33] of TSynExtended = (
+  POW10: TPow10 = (
     1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
     1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
     1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
@@ -1173,7 +1176,7 @@ const
     1E29,  1E30,  1E31,  0,     -1);
 
 /// low-level computation of 10 ^ exponent, if POW10[] is not enough
-function HugePower10(exponent: integer): TSynExtended;
+function HugePower10(exponent: integer; pow10: PPow10): TSynExtended;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in a RawUtf8 string
@@ -5378,18 +5381,18 @@ begin
     result := 0;
 end;
 
-function HugePower10(exponent: integer): TSynExtended;
+function HugePower10(exponent: integer; pow10: PPow10): TSynExtended;
 var
   e: TSynExtended;
 begin
-  result := POW10[0]; // 1
+  result := pow10[0]; // 1
   if exponent < 0 then
   begin
-    e := POW10[-1];  // 0.1
+    e := pow10[-1];  // 0.1
     exponent := -exponent;
   end
   else
-    e := POW10[1];   // 10
+    e := pow10[1];   // 10
   repeat
     while exponent and 1 = 0 do
     begin
@@ -5504,13 +5507,14 @@ begin
     err := 0
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
+  exp := PtrUInt(@POW10);
   if (frac >= -31) and
      (frac <= 31) then
-    result := POW10[frac]
+    result := PPow10(exp)[frac]
   else
-    result := HugePower10(frac);
+    result := HugePower10(frac, PPow10(exp));
   if fNeg in flags then
-    result := result * POW10[33]; // * -1
+    result := result * PPow10(exp)[33]; // * -1
   result := result * v64;
 end;
 

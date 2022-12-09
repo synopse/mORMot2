@@ -8678,7 +8678,7 @@ begin
        (frac <= 31) then
       d := POW10[frac]
     else
-      d := HugePower10(frac);
+      d := HugePower10(frac, @POW10);
     Value.VDouble := d * v64;
   end
   else
