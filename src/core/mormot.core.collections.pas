@@ -71,8 +71,8 @@ uses
 type
   TIListParent = class;
 
-  /// abstract execution context for the TSynEnumerator<T> record
-  TSynEnumeratorState = record
+  /// abstract execution context for the TIListEnumerator<T> record
+  TIListEnumeratorState = record
     Current, After: PtrUInt; // 2-3 pointers on stack
     {$ifdef NOSIZEOFT}
     ItemSize: PtrUInt;
@@ -82,9 +82,9 @@ type
   /// efficient mean to iterate over a generic collection of a specific type
   // - we redefined our own record type for better performance: it properly
   // inlines, and allocates as 2-3 pointers on stack with no try..finally
-  TSynEnumerator<T> = record
+  TIListEnumerator<T> = record
   private
-    fState: TSynEnumeratorState;
+    fState: TIListEnumeratorState;
     type
       PT = ^T;
     // some property accessor
@@ -96,11 +96,11 @@ type
     /// go to the next item iterated in this collection
     function MoveNext: boolean; inline;
     /// self-reference is needed for IList<T>.Range custom enumerator
-    function GetEnumerator: TSynEnumerator<T>; inline;
+    function GetEnumerator: TIListEnumerator<T>; inline;
   end;
 
   /// exception class raised by IList<T>
-  ESynList = class(ESynException);
+  EIList = class(ESynException);
 
   /// how Collections.NewList<T> will handle its IList<T> storage
   // - by default, string values would be searched following exact case,
@@ -149,11 +149,11 @@ type
     // - a faster alternative is to set the Count then assign values with Items[]
     function Add(const value: T; wasadded: PBoolean = nil): PtrInt;
     /// insert a new value to the collection
-    // - raise ESynList if loCreateUniqueIndex is set: use Remove() then Add()
+    // - raise EIList if loCreateUniqueIndex is set: use Remove() then Add()
     procedure Insert(ndx: PtrInt; const value: T);
     /// delete one item inside the collection from its index
     // - the deleted item is finalized unless loNoFinalize was defined
-    // - raise ESynList if loCreateUniqueIndex is defined: use Remove()
+    // - raise EIList if loCreateUniqueIndex is defined: use Remove()
     function Delete(ndx: PtrInt): boolean;
     /// delete one item inside the collection from its value
     // - the deleted item is finalized unless loNoFinalize was defined
@@ -199,7 +199,7 @@ type
     // - returns the index of the existing Item if wasadded^=false
     // - returns the sorted index of the inserted Item if wasadded^=true
     // - if the collection is not sorted, returns -1 and wasadded^=false
-    // - raise ESynList if loCreateUniqueIndex is set: use plain Add()
+    // - raise EIList if loCreateUniqueIndex is set: use plain Add()
     function AddSorted(const value: T; wasadded: PBoolean = nil): integer;
     /// is true if Sort() has just been called, or AddSorted() used
     function Sorted: boolean;
@@ -222,7 +222,7 @@ type
     function Find(const value: T; customcompare: TDynArraySortCompare = nil): PtrInt;
     /// allows to iterate over a generic collection of a specific type
     // - this enumerator is faster than for i := 0 to Count - 1 do ... list[i]
-    // - we redefined our own TSynEnumerator<T> record type which is much faster
+    // - we redefined our own TIListEnumerator<T> record type which is much faster
     // than using classes or interfaces, and provide very readable code:
     // ! var i: integer;
     // !     list: IList<integer>;
@@ -232,7 +232,7 @@ type
     // !     list.Add(i);
     // !   for i in list do    // use an enumerator - fast, safe and clean
     // !     writeln(i);
-    function GetEnumerator: TSynEnumerator<T>;
+    function GetEnumerator: TIListEnumerator<T>;
     /// allows to iterate over a range of the collection
     // - returned iterator will efficiently browse the items data in-place:
     // ! for i in list.Range do         // = for i in list do (all data)
@@ -240,7 +240,7 @@ type
     // ! for i in list.Range(0, 10) do  // first 0..9 items
     // ! for i in list.Range(10, 20) do // items 10..29 - truncated if Count<30
     // ! for i in list.Range(-10) do    // last Count-10..Count-1 items
-    function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TSynEnumerator<T>;
+    function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TIListEnumerator<T>;
     /// low-level pointer over the first item of the collection
     // - can be nil if there is no item stored yet
     // - could be used to quickly lookup all items of the array, using Count:
@@ -265,13 +265,13 @@ type
     // ! a := list.AsArray(-10);    // last Count-10..Count-1 items
     function AsArray(Offset: PtrInt = 0; Limit: PtrInt = 0): TArray<T>;
     /// high-level access to the stored values from their associated indexes
-    // - raise ESynList if the supplied index is out of range
-    // - SetItem() will raise ESynList if loCreateUniqueIndex is defined
+    // - raise EIList if the supplied index is out of range
+    // - SetItem() will raise EIList if loCreateUniqueIndex is defined
     // - is the default propery so that IList<T> could be used as an array:
     // !   for i := 0 to list.Count - 1 do // regular Items[] access
     // !     writeln(list[i]);
     // - note that using an enumerator is faster than using this property within
-    // a loop, since TSynEnumerator<T> is a record which can be inlined
+    // a loop, since TIListEnumerator<T> is a record which can be inlined
     property Items[ndx: PtrInt]: T
       read GetItem write SetItem; default;
     /// returns the number of items actually stored
@@ -313,8 +313,8 @@ type
     function DoFind(const value; customcompare: TDynArraySortCompare): PtrInt;
     procedure RaiseGetItem(ndx: PtrInt);
     procedure RaiseSetItem(ndx: PtrInt);
-    procedure NewEnumerator(var state: TSynEnumeratorState); overload;
-    procedure NewEnumerator(var state: TSynEnumeratorState;
+    procedure NewEnumerator(var state: TIListEnumeratorState); overload;
+    procedure NewEnumerator(var state: TIListEnumeratorState;
       Offset, Limit: PtrInt); overload;
     // some property accessors
     function GetCount: PtrInt;
@@ -409,9 +409,9 @@ type
     /// IList<T> method to return a dynamic array of this collection items
     function AsArray(Offset: PtrInt = 0; Limit: PtrInt = 0): TArray<T>;
     /// IList<T> method to iterate over a generic collection
-    function GetEnumerator: TSynEnumerator<T>;
+    function GetEnumerator: TIListEnumerator<T>;
     /// IList<T> method to iterate over some range of the generic collection
-    function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TSynEnumerator<T>;
+    function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TIListEnumerator<T>;
   end;
 
 
@@ -421,7 +421,7 @@ type
 
 type
   /// exception class raised by TIKeyValue<TKey, TValue>
-   ESynKeyValue = class(ESynException);
+  EIKeyValue = class(ESynException);
 
   /// gives access to a generics-based dictionary holding key/value pairs
   // - as generated by Collections.NewKeyValue<TKey, TValue> main factory
@@ -438,7 +438,7 @@ type
     function GetTimeOutSeconds: cardinal;
     procedure SetTimeOutSeconds(value: cardinal);
     /// add a key/value pair to be unique
-    // - raise an ESynKeyValue if key was already set
+    // - raise an EIKeyValue if key was already set
     // - use default Items[] property to add or replace a key/value pair
     procedure Add(const key: TKey; const value: TValue);
     /// add a key/value pair if key is not existing
@@ -476,7 +476,7 @@ type
     // - this is not thread-safe so to be protected by ReadLock/ReadUnLock
     function Count: integer;
     /// high-level access to the stored values from their associated keys
-    // - GetItem() raise an ESynKeyValue if the key is not available, unless
+    // - GetItem() raise an EIKeyValue if the key is not available, unless
     // kvoDefaultIfNotFound option was set- use TryGetValue() if you want to
     // detect (without any exception) any non available key
     // - SetItem() will add the value if key is not existing, or replace it
@@ -484,12 +484,12 @@ type
       read GetItem write SetItem; default;
     /// low-level access to the stored keys, in their 0..Count-1 internal order
     // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
-    // - raise an ESynKeyValue if ndx is out-of-range
+    // - raise an EIKeyValue if ndx is out-of-range
     property Key[ndx: PtrInt]: TKey
       read GetKey;
     /// low-level access to the stored values, in their 0..Count-1 internal order
     // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
-    // - raise an ESynKeyValue if ndx is out-of-range
+    // - raise an EIKeyValue if ndx is out-of-range
     property Value[ndx: PtrInt]: TValue
       read GetValue;
     /// returns the internal TSynDictionary capacity
@@ -738,13 +738,13 @@ type
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
-    // - raise ESynKeyValue if T type is too complex (e.g. record, array or
+    // - raise EIKeyValue if T type is too complex (e.g. record, array or
     // hash): use NewPlainList<T>() instead
     class function NewList<T>(aOptions: TListOptions = [];
       aDynArrayTypeInfo: PRttiInfo = nil): IList<T>; static;
     /// generate a new IList<T> instance with exact TIList<T>
     // - to be called for complex types (e.g. record, array or hash) when
-    // NewList<T> fails with "too complex" error and triggers ESynList
+    // NewList<T> fails with "too complex" error and triggers EIList
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - will associate a TArray<T> storage, unless aDynArrayTypeInfo is set
@@ -763,7 +763,7 @@ type
     // option is forced, so that process is protected with a TSynLocker mutex
     // - by default, string keys would be searched following exact case, unless
     // the kvoKeyCaseInsensitive option is set
-    // - raise ESynKeyValue if T type is too complex (e.g. record, array or
+    // - raise EIKeyValue if T type is too complex (e.g. record, array or
     // hash): use NewPlainKeyValue<TKey, TValue>() instead
     class function NewKeyValue<TKey, TValue>(aOptions: TKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
@@ -773,7 +773,7 @@ type
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TIKeyValue<TKey, TValue>
     // - to be called for complex types (e.g. record, array or hash) when
-    // NewKeyValue<TKey, TValue> fails and triggers ESynKeyValue
+    // NewKeyValue<TKey, TValue> fails and triggers EIKeyValue
     class function NewPlainKeyValue<TKey, TValue>(aOptions: TKeyValueOptions = [];
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
@@ -787,9 +787,9 @@ implementation
 
 { ************** JSON-aware IList<> List Storage }
 
-{ TSynEnumerator }
+{ TIListEnumerator }
 
-function TSynEnumerator<T>.MoveNext: boolean;
+function TIListEnumerator<T>.MoveNext: boolean;
 var
   c: PtrUInt; // to enhance code generation
 begin
@@ -802,12 +802,12 @@ begin
   result := c < fState.After; // false if fCurrent=fItemSize=fAfter=0
 end;
 
-function TSynEnumerator<T>.GetEnumerator: TSynEnumerator<T>;
+function TIListEnumerator<T>.GetEnumerator: TIListEnumerator<T>;
 begin
   result := self; // just a copy of 3 PtrInt
 end;
 
-function TSynEnumerator<T>.DoGetCurrent: T;
+function TIListEnumerator<T>.DoGetCurrent: T;
 begin
   result := {%H-}PT(fState.Current)^;
   // faster than fDynArray^.ItemCopy() - at least for simple types
@@ -822,7 +822,7 @@ begin
   fOptions := aOptions;
   if (aDynArrayTypeInfo = nil) or
      (aDynArrayTypeInfo^.Kind <> rkDynArray) then
-     raise ESynList.CreateUtf8('%.Create: % should be a dynamic array of T',
+     raise EIList.CreateUtf8('%.Create: % should be a dynamic array of T',
        [self, aDynArrayTypeInfo^.Name^]);
   CreateRtti(Rtti.RegisterType(aDynArrayTypeInfo), aItemTypeInfo, aOptions, aSortAs);
 end;
@@ -835,7 +835,7 @@ begin
     loCaseInsensitive in fOptions);
   if (fDynArray.Info.ArrayRtti = nil) or
      (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind)  then
-    raise ESynList.CreateUtf8('%.Create<%> (%) does not match % (%)',
+    raise EIList.CreateUtf8('%.Create<%> (%) does not match % (%)',
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
        aDynArray.Info^.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
@@ -858,7 +858,7 @@ end;
 function TIListParent.Delete(ndx: PtrInt): boolean;
 begin
   if fHasher <> nil then
-    raise ESynList.CreateUtf8('%.Delete(%) is not allowed  with ' +
+    raise EIList.CreateUtf8('%.Delete(%) is not allowed  with ' +
       'loCreateUniqueIndex: use Remove()', [self, ndx]);
   result := fDynArray.Delete(ndx);
 end;
@@ -866,7 +866,7 @@ end;
 function TIListParent.DoPop(var dest; opt: TListPop): boolean;
 begin
   if fHasher <> nil then
-    raise ESynList.CreateUtf8(
+    raise EIList.CreateUtf8(
       '%.Pop() is not compatible with loCreateUniqueIndex', [self]);
   if popFromHead in opt then
     if popPeek in opt then
@@ -926,7 +926,7 @@ end;
 function TIListParent.DoAddSorted(const value; wasadded: PBoolean): integer;
 begin
   if fHasher <> nil then
-    raise ESynList.CreateUtf8('%.AddSorted() is not allowed  with ' +
+    raise EIList.CreateUtf8('%.AddSorted() is not allowed  with ' +
       'loCreateUniqueIndex: use Add()', [self]);
   result := fDynArray.FastLocateOrAddSorted(value, wasadded);
 end;
@@ -934,7 +934,7 @@ end;
 procedure TIListParent.DoInsert(ndx: PtrInt; const value);
 begin
   if fHasher <> nil then
-    raise ESynList.CreateUtf8('%.Insert(%) is not allowed with ' +
+    raise EIList.CreateUtf8('%.Insert(%) is not allowed with ' +
       'loCreateUniqueIndex: use Add()', [self, ndx]);
   fDynArray.Insert(ndx, value);
 end;
@@ -953,17 +953,17 @@ end;
 
 procedure TIListParent.RaiseGetItem(ndx: PtrInt);
 begin
-  raise ESynList.CreateUtf8('%.GetItem(%): out of range (Count=%)',
+  raise EIList.CreateUtf8('%.GetItem(%): out of range (Count=%)',
     [self, ndx, fCount]);
 end;
 
 procedure TIListParent.RaiseSetItem(ndx: PtrInt);
 begin
   if fHasher <> nil then
-    raise ESynList.CreateUtf8('%.SetItem(%) is not allowed with ' +
+    raise EIList.CreateUtf8('%.SetItem(%) is not allowed with ' +
       'loCreateUniqueIndex: use Remove() then Add()', [self, ndx]);
   if PtrUInt(ndx) >= PtrUInt(fCount) then
-    raise ESynList.CreateUtf8('%.SetItem(%): out of range (Count=%)',
+    raise EIList.CreateUtf8('%.SetItem(%): out of range (Count=%)',
       [self, ndx, fCount]);
 end;
 
@@ -1072,7 +1072,7 @@ begin
   result := @fSafe;
 end;
 
-procedure TIListParent.NewEnumerator(var state: TSynEnumeratorState);
+procedure TIListParent.NewEnumerator(var state: TIListEnumeratorState);
 var
   s: PtrUInt;
 begin
@@ -1093,7 +1093,7 @@ begin
   dec(state.Current, s);
 end;
 
-procedure TIListParent.NewEnumerator(var state: TSynEnumeratorState;
+procedure TIListParent.NewEnumerator(var state: TIListEnumeratorState;
   Offset, Limit: PtrInt);
 var
   s: PtrUInt;
@@ -1146,12 +1146,12 @@ begin
   TArray<T>(fValue)[ndx] := value;
 end;
 
-function TIList<T>.GetEnumerator: TSynEnumerator<T>;
+function TIList<T>.GetEnumerator: TIListEnumerator<T>;
 begin
   NewEnumerator(result.fState);
 end;
 
-function TIList<T>.Range(Offset, Limit: PtrInt): TSynEnumerator<T>;
+function TIList<T>.Range(Offset, Limit: PtrInt): TIListEnumerator<T>;
 begin
   NewEnumerator(result.fState, Offset, Limit);
 end;
@@ -1212,11 +1212,11 @@ begin
   // validate or recognize most simple dynamic arrays from its TKey/TValue types
   if (aContext.KeyArrayTypeInfo = nil) or
      (aContext.KeyArrayTypeInfo ^.Kind <> rkDynArray) then
-     raise ESynKeyValue.CreateUtf8('%.Create: % should be an array of TKey',
+     raise EIKeyValue.CreateUtf8('%.Create: % should be an array of TKey',
        [self, aContext.KeyArrayTypeInfo^.Name^]);
   if (aContext.ValueArrayTypeInfo = nil) or
      (aContext.ValueArrayTypeInfo^.Kind <> rkDynArray) then
-     raise ESynKeyValue.CreateUtf8('%.Create: % should be an array of TValue',
+     raise EIKeyValue.CreateUtf8('%.Create: % should be an array of TValue',
        [self, aContext.ValueArrayTypeInfo^.Name^]);
   // initialize the associated dictionary
   fData := TSynDictionary.Create(
@@ -1230,12 +1230,12 @@ begin
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
       (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
-    raise ESynKeyValue.CreateUtf8('%.Create: TKey does not match %',
+    raise EIKeyValue.CreateUtf8('%.Create: TKey does not match %',
       [self, aContext.KeyArrayTypeInfo^.RawName]);
   if (fData.Values.Info.ArrayRtti = nil) or
      ((aContext.ValueArrayTypeInfo <> nil) and
       (fData.Values.Info.ArrayRtti.Info <> aContext.ValueItemTypeInfo)) then
-    raise ESynKeyValue.CreateUtf8('%.Create: TValue does not match %',
+    raise EIKeyValue.CreateUtf8('%.Create: TValue does not match %',
       [self, aContext.ValueArrayTypeInfo^.RawName]);
 end;
 
@@ -1264,7 +1264,7 @@ end;
 procedure TIKeyValueParent.AddOne(key, value: pointer);
 begin
   if fData.Add(key^, value^) < 0 then
-    raise ESynKeyValue.CreateUtf8('%.Add: duplicated key', [self]);
+    raise EIKeyValue.CreateUtf8('%.Add: duplicated key', [self]);
 end;
 
 procedure TIKeyValueParent.GetOne(key, value: pointer);
@@ -1273,7 +1273,7 @@ begin
     if kvoDefaultIfNotFound in fOptions then
       fData.Values.ItemClear(value)
     else
-      raise ESynKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+      raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
 end;
 
 function TIKeyValueParent.GetCapacity: integer;
@@ -1329,13 +1329,13 @@ end;
 procedure TIKeyValueParent.GetOneKey(ndx: PtrInt; key: pointer);
 begin
   if not fData.Keys.ItemCopyAt(ndx, key) then
-    raise ESynKeyValue.CreateUtf8('%.GetKey: index % out of range', [self, ndx]);
+    raise EIKeyValue.CreateUtf8('%.GetKey: index % out of range', [self, ndx]);
 end;
 
 procedure TIKeyValueParent.GetOneValue(ndx: PtrInt; value: pointer);
 begin
   if not fData.Values.ItemCopyAt(ndx, value) then
-    raise ESynKeyValue.CreateUtf8('%.GetValue: index % out of range', [self, ndx]);
+    raise EIKeyValue.CreateUtf8('%.GetValue: index % out of range', [self, ndx]);
 end;
 
 
@@ -1422,7 +1422,7 @@ end;
 {$ifdef ISDELPHI} {$HINTS OFF} {$endif}
 class function Collections.{%H-}RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer;
 begin
-  raise ESynList.CreateUtf8('Collections.NewList<>: Type is too complex - ' +
+  raise EIList.CreateUtf8('Collections.NewList<>: Type is too complex - ' +
     'use Collections.NewPlainList<%> instead', [aItemTypeInfo.Name^]);
     // we tried Delphi' "at ReturnAddress" but disabled to avoid internal errors
 end;
@@ -1430,7 +1430,7 @@ end;
 class function Collections.{%H-}RaiseUseNewPlainKeyValue(
   const aContext: TNewKeyValueContext): pointer;
 begin
-  raise ESynKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
+  raise EIKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
     'complex - use Collections.NewPlainKeyValue<%, %> instead',
     [aContext.KeyItemTypeInfo.Name^, aContext.ValueItemTypeInfo.Name^]);
 end;
