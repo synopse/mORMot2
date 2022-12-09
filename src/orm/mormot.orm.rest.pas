@@ -728,9 +728,9 @@ begin
   end;
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
-  if SendData and
-     (result <> 0) then
-    fCache.Notify(POrmClass(Value)^, result, json, ooInsert);
+  if (result <> 0) and
+     SendData then
+    fCache.NotifyAllFields(t, Value);
 end;
 
 
@@ -871,7 +871,7 @@ var
   t: PtrInt;
 begin
   t := fModel.GetTableIndexExisting(Table);
-  if fCache.Retrieve(t, ID) <> '' then
+  if fCache.Exists(t, ID) then
     result := true
   else
     result := EngineRetrieve(t, ID) <> ''; // try from DB
@@ -1370,22 +1370,22 @@ begin
   if ForUpdate and
      not fModel.Lock(t, aID) then
     exit;
-  // try to retrieve existing JSON from internal cache
-  resp := fCache.Retrieve(t, aID);
+  // try to retrieve existing record from internal cache
+  result := fCache.Retrieve(aID, Value);
+  if result then
+    exit;
+  // get JSON object '{...}' in resp from corresponding EngineRetrieve() method
+  resp := EngineRetrieve(t, aID);
   if resp = '' then
   begin
-    // get JSON object '{...}' in resp from corresponding EngineRetrieve() method
-    resp := EngineRetrieve(t, aID);
-    if resp = '' then
-    begin
-      fCache.NotifyDeletion(t, aID);
-      exit;
-    end;
-    fCache.Notify(t, aID, resp, ooSelect);
+    fCache.NotifyDeletion(t, aID); // ensure there is no cache for this ID
+    exit;
   end;
-  Value.IDValue := aID; // resp may not contain the "RowID": field after Update
   // fill Value from JSON if was correctly retrieved
   Value.FillFrom(resp);
+  Value.IDValue := aID; // resp may not contain the "RowID": field
+  if not ForUpdate then
+    fCache.NotifyAllFields(t, Value);
   result := true;
 end;
 
@@ -1800,9 +1800,9 @@ end;
 function TRestOrm.Update(Value: TOrm; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): boolean;
 var
-  JsonValues: RawUtf8;
+  json: RawUtf8;
   t: integer;
-  FieldBits: TFieldBits;
+  bits: TFieldBits;
 begin
   if (self = nil) or
      (Value = nil) or
@@ -1820,31 +1820,31 @@ begin
        (Value.FillContext.Table <> nil) and
        (Value.FillContext.TableMapRecordManyInstances = nil) then
       // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
-      FieldBits := Value.FillContext.TableMapFields +
-        Value.Orm.FieldBits[oftModTime]
+      bits := Value.FillContext.TableMapFields + Value.Orm.FieldBits[oftModTime]
     else
       // update all simple/custom fields (also for FillPrepareMany)
-      FieldBits := Value.Orm.SimpleFieldsBits[ooUpdate]
+      bits := Value.Orm.SimpleFieldsBits[ooUpdate]
   else
     // CustomFields<>[] -> update specified (and TModTime fields)
     if DoNotAutoComputeFields then
-      FieldBits := CustomFields
+      bits := CustomFields
     else
-      FieldBits := CustomFields + Value.Orm.FieldBits[oftModTime];
-  if IsZero(FieldBits) then
+      bits := CustomFields + Value.Orm.FieldBits[oftModTime];
+  if IsZero(bits) then
   begin
     result := true; // a TOrm with NO simple fields (e.g. ID/blob pair)
     exit;
   end;
-  fCache.Notify(Value, ooUpdate); // will serialize Value (JsonValues may not be enough)
-  GetJsonValue(Value, {withid=}false, FieldBits, JsonValues);
+  GetJsonValue(Value, {withid=}false, bits, json);
   WriteLock;
   try
     // may be within a batch in another thread
-    result := EngineUpdate(t, Value.IDValue, JsonValues);
+    result := EngineUpdate(t, Value.IDValue, json);
   finally
     WriteUnLock;
   end;
+  if result then
+    fCache.NotifyUpdate(t, Value, bits);
 end;
 
 function TRestOrm.Update(Value: TOrm; const CustomCsvFields: RawUtf8;

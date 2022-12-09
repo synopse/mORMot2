@@ -2769,7 +2769,7 @@ type
 
   TOrmLocksDynArray = array of TOrmLocks;
 
-  /// for TOrmCache, stores a table values
+  /// for TOrmCache, stores one ORM value serialized as binary
   TOrmCacheEntryValue = packed record
     /// corresponding TOrm ID
     // - stored in increasing order for efficient O(log(n)) binary search
@@ -2782,15 +2782,16 @@ type
     /// some associated unsigned integer value
     // - not used by TOrmCache, but available at TOrmCacheEntry level
     Tag: cardinal;
-    /// JSON encoded UTF-8 serialization of the record
-    Json: RawUtf8;
+    /// binary serialization of the cached ORM instance
+    // - i.e. serialize all its simple fields, excluding the ID
+    Binary: RawByteString;
   end;
   POrmCacheEntryValue = ^TOrmCacheEntryValue;
 
   /// for TOrmCache, stores all tables values
   TOrmCacheEntryValueDynArray = array of TOrmCacheEntryValue;
 
-  /// for TOrmCache, stores a table cache settings and JSON cached values
+  /// for TOrmCache, stores a table cache settings and ORM cached values
   // - use a TOrmCacheEntryValue array sorted by ID for O(log(n)) search
   {$ifdef USERECORDWITHMETHODS}
   TOrmCacheEntry = record
@@ -2802,7 +2803,7 @@ type
     // - i.e. if was not set, or worth it for this table (e.g. in-memory table)
     CacheEnable: boolean;
     /// the whole specified Table content will be cached
-    // - if true, Values[] will contain all cached JSON values
+    // - if true, Values[] will contain all cached ORM values
     // - if false, Values[].Timestamp512 = 0 for registered but unknown ID
     CacheAll: boolean;
     /// time out value (in ms)
@@ -2812,7 +2813,7 @@ type
     Count: integer;
     /// used to R/W lock the table cache for multi-thread safety
     Safe: TRWLightLock;
-    /// all cached IDs and JSON content
+    /// all cached IDs and ORM content
     Value: TOrmCacheEntryValueDynArray;
     /// TDynArray wrapper around the Value[] array
     Values: TDynArray;
@@ -2842,17 +2843,21 @@ type
     // - will be stored into the Value[] array, with Timestamp512 = 0
     // - do nothing if CacheAll is true, i.e. SetCacheAll was called
     procedure SetCache(aID: TID);
-    /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJson(aID: TID; const aJson: RawUtf8; aTag: cardinal = 0); overload;
-    /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJson(aID: TID; var aJson: RawUtf8;
+    /// update/refresh the cached binary ORM value of a given ID
+    procedure SetBinary(aID: TID; const aOrm: RawByteString;
+      aTag: cardinal = 0); overload;
+    /// check if a record specified by its ID is in cache
+    function Exists(aID: TID): boolean;
+    /// retrieve the cached TOrm binary of a given ID
+    function RetrieveBinary(aID: TID; var aOrm: RawByteString;
       aTag: PCardinal = nil): boolean; overload;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
-    /// returns the number of JSON serialization records within this cache
+    /// returns the number of TOrm instances within this cache
     function CachedEntries: cardinal;
   end;
+  POrmCacheEntry = ^TOrmCacheEntry;
 
   /// for TOrmCache, stores per-table settings and JSON values
   // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
@@ -10457,10 +10462,10 @@ begin
       Values.FastDeleteSorted(Index)
     else
       with Value[Index] do
-      begin
+      begin // keep ID as registered by SetCache(ID), clear all other fields
         Timestamp512 := 0;
-        Json := '';
         Tag := 0;
+        Binary := '';
       end;
 end;
 
@@ -10533,13 +10538,13 @@ begin
     if CacheAll then
       Values.Clear
     else
-    begin
+    begin // keep ID as registered by SetCache(ID), clear all other fields
       v := pointer(Value);
       for i := 1 to Count do
       begin
         v^.Timestamp512 := 0;
-        v^.Json := '';
         v^.Tag := 0;
+        v^.Binary := '';
         inc(v);
       end;
     end;
@@ -10595,7 +10600,7 @@ begin
     result := graceperiod shr 9;
 end;
 
-procedure TOrmCacheEntry.SetJson(aID: TID; const aJson: RawUtf8;
+procedure TOrmCacheEntry.SetBinary(aID: TID; const aOrm: RawByteString;
   aTag: cardinal);
 var
   new: TOrmCacheEntryValue;
@@ -10604,7 +10609,7 @@ begin
   if not CacheEnable then
     exit;
   new.ID := aID;
-  new.Json := aJson;
+  new.Binary := aOrm;
   new.Timestamp512 := GetTickCount64 shr 9; // 512ms resolution
   new.Tag := aTag;
   Safe.WriteLock;
@@ -10619,7 +10624,7 @@ begin
   end;
 end;
 
-function TOrmCacheEntry.RetrieveJson(aID: TID; var aJson: RawUtf8;
+function TOrmCacheEntry.RetrieveBinary(aID: TID; var aOrm: RawByteString;
   aTag: PCardinal): boolean;
 var
   i: PtrInt;
@@ -10627,6 +10632,7 @@ var
 begin
   result := false;
   if (Count <= 0) or
+     (aID <= 0) or
      not CacheEnable then
     exit;
   deprecated := false;
@@ -10635,7 +10641,7 @@ begin
     i := Values.Find(aID); // fast O(log(n)) binary search by first ID field
     if i >= 0 then
       with Value[i] do
-        if Timestamp512 <> 0 then // 0 when there is no JSON value cached
+        if Timestamp512 <> 0 then // 0 when there is no binary value cached
           if (TimeOutMS <> 0) and
              (Timestamp512 < GetOutdatedTimestamp512) then
             deprecated := true // too old
@@ -10643,14 +10649,33 @@ begin
           begin
             if aTag <> nil then
               aTag^ := Tag;
-            aJson := JSON;
+            aOrm := Binary;
             result := true; // found a non outdated serialized value in cache
           end;
   finally
     Safe.ReadUnLock;
   end;
-  if deprecated then
+  if deprecated then // happens at most every 512 ms
     FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
+end;
+
+function TOrmCacheEntry.Exists(aID: TID): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if (Count <= 0) or
+     (aID <= 0) or
+     not CacheEnable then
+    exit;
+  Safe.ReadLock;
+  try
+    i := Values.Find(aID); // fast O(log(n)) binary search by first ID field
+    if i >= 0 then
+      result := (Value[i].Timestamp512 > GetOutdatedTimestamp512);
+  finally
+    Safe.ReadUnLock;
+  end;
 end;
 
 function TOrmCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
@@ -10675,13 +10700,13 @@ begin
            (v^.Timestamp512 < tix512) then
           inc(deprecated) // too old
         else
-          inc(result, length(v^.JSON) + (SizeOf(v^) + 16));
+          inc(result, length(v^.Binary) + (SizeOf(v^) + 16));
       inc(v);
     end;
   finally
     Safe.ReadUnLock;
   end;
-  if deprecated <> 0 then
+  if deprecated <> 0 then // happens at most every 512 ms
     deprecated := FlushCacheOutdatedEntries(tix512); // WriteLock after ReadLock
   if FlushedEntriesCount <> nil then
     inc(FlushedEntriesCount^, deprecated);

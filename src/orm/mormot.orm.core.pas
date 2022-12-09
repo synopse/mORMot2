@@ -4262,32 +4262,32 @@ type
     /// release the cache instance
     destructor Destroy; override;
     /// flush the cache
-    // - this will flush all stored JSON content, but keep the settings
+    // - this will flush all stored content, but keep the settings
     // (SetCache/SetTimeOut) as before
     procedure Flush; overload;
     /// flush the cache for a given table
-    // - this will flush all stored JSON content, but keep the settings
+    // - this will flush all stored content, but keep the settings
     // (SetCache/SetTimeOut) as before for this table
     procedure Flush(aTable: TOrmClass); overload;
     /// flush the cache for a given record
-    // - this will flush the stored JSON content for this record (and table
+    // - this will flush the stored content for this record (and table
     // settings will be kept)
     procedure Flush(aTable: TOrmClass; aID: TID); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// flush the cache for a given record
-    // - this will flush the stored JSON content for this record (and table
+    // - this will flush the stored content for this record (and table
     // settings will be kept)
     procedure Flush(aTableIndex: PtrInt; aID: TID); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// flush the cache for a set of specified records
-    // - this will flush the stored JSON content for these record (and table
+    // - this will flush the stored content for these record (and table
     // settings will be kept)
     procedure Flush(aTable: TOrmClass; const aIDs: array of TID); overload;
     /// flush the cache, and destroy all settings
-    // - this will flush all stored JSON content, AND destroy the settings
+    // - this will flush all stored content, AND reset the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
     procedure Clear;
-    // - will fill the internal JSON cache of a given Table with data coming
+    // - will fill the internal cache of a given Table with data coming
     // from a REST query
     // - returns the number of TOrm items actually cached
     // - may be handy to pre-load a set of values (e.g. a lookup table) from a
@@ -4321,9 +4321,9 @@ type
     function SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
     /// returns TRUE if the table is part of the current caching policy
     function IsCached(aTable: TOrmClass): boolean;
-    /// returns the number of JSON serialization records within this cache
+    /// returns the number of cached records with their associated data
     function CachedEntries: cardinal;
-    /// returns the memory used by JSON serialization records within this cache
+    /// returns the memory used by records content within this cache
     // - this method will also flush any outdated entries in the cache
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
     /// read-only access to the associated TRest.ORM instance
@@ -4333,33 +4333,27 @@ type
     property Model: TOrmModel
       read fModel;
   public { TRest low level methods which are not to be called usualy: }
-    /// retrieve a record specified by its ID from cache into JSON content
-    // - return '' if the item is not in cache
-    function Retrieve(aTableIndex: integer; aID: TID): RawUtf8; overload;
+    /// check if a record specified by its table and ID is in the cache
+    // - TOrmClass to be specified as its index in Rest.Model.Tables[]
+    function Exists(aTableIndex: integer; aID: TID): boolean;
     /// fill a record specified by its ID from cache into a new TOrm instance
     // - return false if the item is not in cache
-    // - this method will call RetrieveJson method, unserializing the cached
-    // JSON content into the supplied aValue instance
-    function Retrieve(aID: TID; aValue: TOrm): boolean; overload;
-    /// TRest instance shall call this method when a record is added or updated
-    // - this overloaded method expects the content to be specified as JSON object
-    procedure Notify(aTable: TOrmClass; aID: TID; const aJson: RawUtf8;
-      aAction: TOrmOccasion); overload;
-    /// TRest instance shall call this method when a record is retrieved,
-    // added or updated
-    // - this overloaded method expects the content to be specified as JSON object,
-    // and TOrmClass to be specified as its index in Rest.Model.Tables[]
-    procedure Notify(aTableIndex: integer; aID: TID; const aJson: RawUtf8;
-      aAction: TOrmOccasion); overload;
-    /// TRest instance shall call this method when a record is added or updated
-    // - this overloaded method will call the other Trace method, serializing
-    // the supplied aRecord content as JSON (not in the case of oeDelete)
-    procedure Notify(aRecord: TOrm; aAction: TOrmOccasion); overload;
+    function Retrieve(aID: TID; aValue: TOrm): boolean;
+    /// return the JSON corresponding to the TOrm instance from cache
+    function RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
+    /// TRest instance shall call this method when a record is added or read
+    // - aRecord should have all its simple fields populated
+    procedure NotifyAllFields(aTableIndex: integer; aRecord: TOrm); overload;
+    /// TRest instance shall call this method when a record is updated
+    // - existing cached instance will be completed with aFields from aRecord
+    procedure NotifyUpdate(aTableIndex: integer; aRecord: TOrm; const aFields: TFieldBits);
+    /// TRest instance shall call this method when a record is added/updated
+    // - same as NotifyAllFields and NotifyUpdate, but from a JSON object
+    procedure NotifyJson(aTable: TOrmClass; aTableIndex: integer; aID: TID;
+      const aJson: RawUtf8);
     /// TRest instance shall call this method when a record is deleted
-    // - this method is dedicated for a record deletion
     procedure NotifyDeletion(aTable: TOrmClass; aID: TID); overload;
     /// TRest instance shall call this method when a record is deleted
-    // - this method is dedicated for a record deletion
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -4388,8 +4382,6 @@ type
     fTableIndex: integer;
     fBatchCount: integer;
     fOptions: TRestBatchOptions;
-    fDeletedRecordRef: TIDDynArray;
-    fDeletedCount: integer;
     fAddCount: integer;
     fUpdateCount: integer;
     fDeleteCount: integer;
@@ -4481,15 +4473,13 @@ type
     // or TOrmProperties.FieldBitsFrom()
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
-    // - if not all fields are specified, will reset the cache entry associated
-    // with this value, unless ForceCacheUpdate is TRUE
     function Update(Value: TOrm; const CustomFields: TFieldBits = [];
-      DoNotAutoComputeFields: boolean = false; ForceCacheUpdate: boolean = false): integer; overload; virtual;
+      DoNotAutoComputeFields: boolean = false): integer; overload; virtual;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - is an overloaded method to Update(Value,FieldBitsFromCsv())
     function Update(Value: TOrm; const CustomCsvFields: RawUtf8;
-      DoNotAutoComputeFields: boolean = false; ForceCacheUpdate: boolean = false): integer; overload;
+      DoNotAutoComputeFields: boolean = false): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -10626,25 +10616,6 @@ end;
 
 { ------------ TOrmCache Definition }
 
-/// unserialize a JSON cached record of a given ID
-function CacheRetrieveJson(var Entry: TOrmCacheEntry; aID: TID; aValue: TOrm;
-  aTag: PCardinal = nil): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  json: RawUtf8;
-begin
-  if Entry.CacheEnable and
-     Entry.RetrieveJson(aID, json, aTag) then
-  begin
-    aValue.FillFrom(json);
-    aValue.fID := aID; // override RowID field (may be not present after Update)
-    result := true;
-  end
-  else
-    result := false;
-end;
-
-
 { TOrmCache }
 
 constructor TOrmCache.Create(const aRest: IRestOrm);
@@ -10808,8 +10779,8 @@ begin
   rec := aTable.CreateAndFillPrepare(fRest, FormatSqlWhere, BoundsSqlWhere);
   try
     while rec.FillOne do
-    begin // expand=true (JSON object), withid=false (not in JSON), ooInsert=all
-      cache^.SetJson(rec.fID, rec.GetJsonValues(true, false, ooInsert));
+    begin
+      cache^.SetBinary(rec.fID, rec.GetBinary({withid=}false, {simple=}true));
       inc(result);
     end;
   finally
@@ -10853,42 +10824,71 @@ begin
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries(aIDs);
 end;
 
-procedure TOrmCache.Notify(aTable: TOrmClass; aID: TID;
-  const aJson: RawUtf8; aAction: TOrmOccasion);
-begin
-  if (self <> nil) and
-     (aTable <> nil) and
-     (aID > 0) then
-    Notify(fModel.GetTableIndex(aTable), aID, aJson, aAction);
-end;
-
-procedure TOrmCache.Notify(aRecord: TOrm; aAction: TOrmOccasion);
-var
-  aTableIndex: cardinal;
+procedure TOrmCache.NotifyAllFields(aTableIndex: integer; aRecord: TOrm);
 begin
   if (self = nil) or
      (aRecord = nil) or
-     (aRecord.fID <= 0) or
-     not (aAction in [ooInsert, ooUpdate]) then
+     (aRecord.fID <= 0) then
     exit;
-  aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
-  if aTableIndex < cardinal(Length(fCache)) then
-    with fCache[aTableIndex] do
-      if CacheEnable then // expand=true, withid=false, ooInsert=all
-        SetJson(aRecord.fID, aRecord.GetJsonValues(true, false, ooInsert));
-end;
-
-procedure TOrmCache.Notify(aTableIndex: integer; aID: TID;
-  const aJson: RawUtf8; aAction: TOrmOccasion);
-begin
-  if (self <> nil) and
-     (aID > 0) and
-     (aAction in [ooSelect, ooInsert, ooUpdate]) and
-     (aJson <> '') and
-     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
+  if aTableIndex < 0 then
+    aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
+  if cardinal(aTableIndex) < cardinal(Length(fCache)) then
     with fCache[aTableIndex] do
       if CacheEnable then
-        SetJson(aID, aJson);
+        SetBinary(aRecord.fID, aRecord.GetBinary({withid=}false, {simple=}true));
+end;
+
+procedure TOrmCache.NotifyUpdate(aTableIndex: integer; aRecord: TOrm;
+  const aFields: TFieldBits);
+var
+  bin: RawByteString;
+  cached: TOrm;
+begin
+  if (self <> nil) and
+     (aRecord <> nil) and
+     (aRecord.fID > 0) and
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) and
+     not IsZero(aFields) then
+    with fCache[aTableIndex] do
+      if CacheEnable then
+        if aRecord.Orm.SimpleFieldsBits[ooSelect] - aFields = [] then
+          SetBinary(aRecord.fID, aRecord.GetBinary({withid=}false, {simple=}true))
+        else if RetrieveBinary(aRecord.fID, bin) then
+        begin
+          cached := TOrm(aRecord.NewInstance);
+          try
+            cached.SetBinary(bin, {withid=}false, {simple=}true);
+            cached.FillFrom(aRecord, aFields); // complete existing cached fields
+            SetBinary(cached.fID, cached.GetBinary({withid=}false, {simple=}true));
+          finally
+            cached.Free;
+          end;
+        end;
+end;
+
+procedure TOrmCache.NotifyJson(aTable: TOrmClass; aTableIndex: integer;
+  aID: TID; const aJson: RawUtf8);
+var
+  new: TOrm;
+  fields: TFieldBits;
+  tmp: TSynTempBuffer; // work on a private copy
+begin
+  if (self = nil) or
+     (aID <= 0) or
+     (aTable = nil) or
+     (aJson = '') or
+     (cardinal(aTableIndex) >= cardinal(Length(fCache))) or
+     not fCache[aTableIndex].CacheEnable then
+    exit;
+  tmp.Init(aJson);
+  new := aTable.Create;
+  try
+    new.FillFrom(tmp.buf, @fields);
+    NotifyUpdate(aTableIndex, new, fields);
+  finally
+    new.Free;
+    tmp.Done;
+  end;
 end;
 
 procedure TOrmCache.NotifyDeletion(aTableIndex: integer; aID: TID);
@@ -10920,30 +10920,55 @@ begin
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
+function TOrmCache.Exists(aTableIndex: integer; aID: TID): boolean;
+begin
+  result := (self <> nil) and
+            (aID > 0) and
+            (cardinal(aTableIndex) < cardinal(Length(fCache))) and
+            fCache[aTableIndex].Exists(aID);
+end;
+
 function TOrmCache.Retrieve(aID: TID; aValue: TOrm): boolean;
 var
-  TableIndex: cardinal;
+  table: cardinal;
+  bin: RawByteString;
 begin
   result := false;
   if (self = nil) or
      (aValue = nil) or
      (aID <= 0) then
     exit;
-  TableIndex := fModel.GetTableIndexExisting(POrmClass(aValue)^);
-  if TableIndex < cardinal(Length(fCache)) then
-    if CacheRetrieveJson(fCache[TableIndex], aID, aValue) then
-      result := true;
+  table := fModel.GetTableIndexExisting(POrmClass(aValue)^);
+  if table < cardinal(Length(fCache)) then
+    with fCache[table] do
+      if CacheEnable and
+         RetrieveBinary(aID, bin) then
+      begin
+        aValue.SetBinary(bin, {withid=}false, {simple=}true);
+        aValue.fID := aID; // override RowID field
+        result := true;
+      end;
 end;
 
-function TOrmCache.Retrieve(aTableIndex: integer; aID: TID): RawUtf8;
+function TOrmCache.RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
+var
+  orm: TOrm;
 begin
   result := '';
-  if (self <> nil) and
-     (aID > 0) and
-     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    with fCache[aTableIndex] do
-      if CacheEnable then
-        RetrieveJson(aID, result);
+  if (self = nil) or
+     (aTable = nil) or
+     (aID <= 0) or
+     (cardinal(aTableIndex) >= cardinal(Length(fCache))) or
+     not fCache[aTableIndex].CacheEnable then
+    exit;
+  orm := aTable.Create;
+  try
+    if Retrieve(aID, orm) then
+      result := orm.GetJsonValues({expand=}true, {withid=}false,
+        orm.Orm.SimpleFieldsBits[ooSelect]);
+  finally
+    orm.Free;
+  end;
 end;
 
 
@@ -10991,7 +11016,6 @@ begin
   fAddCount := 0;
   fUpdateCount := 0;
   fDeleteCount := 0;
-  fDeletedCount := 0;
   fPreviousTable := nil;
   fTable := aTable;
   if boExtendedJson in Options then
@@ -11256,7 +11280,7 @@ begin
         end
     end;
     if fCalledWithinRest and ForceID then
-      fRest.CacheOrNil.Notify(Value, ooInsert);
+      fRest.CacheOrNil.NotifyAllFields(-1, Value);
   end
   else
     fBatch.Add('{', '}'); // '{"Table":[...,"POST",{},...]}'
@@ -11281,7 +11305,7 @@ begin
     exit;
   end;
   if Assigned(fRest) then
-    AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
+    fRest.CacheOrNil.NotifyDeletion(Table, ID);
   Encode(Table, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
@@ -11302,7 +11326,7 @@ begin
     exit;
   end;
   if Assigned(fRest) then
-    AddID(fDeletedRecordRef, fDeletedCount, RecordReference(fTableIndex, ID));
+    fRest.CacheOrNil.NotifyDeletion(fTableIndex, ID);
   Encode(fTable, encDelete, nil, ID);
   result := fBatchCount;
   inc(fBatchCount);
@@ -11312,7 +11336,7 @@ begin
 end;
 
 function TRestBatch.Update(Value: TOrm; const CustomFields: TFieldBits;
-  DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
+  DoNotAutoComputeFields: boolean): integer;
 var
   props: TOrmProperties;
   fields: TFieldBits;
@@ -11368,18 +11392,14 @@ begin
     fBatch.Add(']');
   end;
   fBatch.AddComma;
-  if fCalledWithinRest and
-     (fields - props.SimpleFieldsBits[ooUpdate] = []) then
-    ForceCacheUpdate := true; // safe to update the cache with supplied values
-  if ForceCacheUpdate then
-    fRest.CacheOrNil.Notify(Value, ooUpdate)
-  else if Assigned(fRest) then
+  if Assigned(fRest) and
+     fCalledWithinRest and
+     (fRest.CacheOrNil <> nil) then
   begin
-    // may not contain all cached fields -> delete from cache
     tableindex := fTableIndex;
     if POrmClass(Value)^ <> fTable then
-      tableindex := fModel.GetTableIndexExisting(props.Table);
-    AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableindex, Value.IDValue));
+      tableindex := fModel.GetTableIndexExisting(POrmClass(Value)^);
+    fRest.CacheOrNil.NotifyUpdate(tableindex, Value, fields)
   end;
   result := fBatchCount;
   inc(fBatchCount);
@@ -11389,7 +11409,7 @@ begin
 end;
 
 function TRestBatch.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
-  DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
+  DoNotAutoComputeFields: boolean): integer;
 var
   bits: TFieldBits;
 begin
@@ -11398,12 +11418,10 @@ begin
      not Value.Orm.FieldBitsFromCsv(CustomCsvFields, bits) then
     result := -1
   else
-    result := Update(Value, bits, DoNotAutoComputeFields, ForceCacheUpdate);
+    result := Update(Value, bits, DoNotAutoComputeFields);
 end;
 
 function TRestBatch.PrepareForSending(out Data: RawUtf8): boolean;
-var
-  i: PtrInt;
 begin
   if (self = nil) or
      (fBatch = nil) then // no opened BATCH sequence
@@ -11412,11 +11430,6 @@ begin
   begin
     if fBatchCount > 0 then
     begin // if something to send
-      if Assigned(fRest) then
-        for i := 0 to fDeletedCount - 1 do
-          if fDeletedRecordRef[i] <> 0 then
-            fRest.CacheOrNil.NotifyDeletion(
-              fDeletedRecordRef[i] and 63, fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
       if (fTable <> nil) and

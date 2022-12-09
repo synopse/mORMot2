@@ -2267,7 +2267,7 @@ begin
         if fValueID <> 0 then
         begin
           if fOrm.fCache <> nil then
-            fOrm.fCache.Notify(fRunTableIndex, fValueID, fValue, ooInsert);
+            fOrm.fCache.NotifyJson(fRunTable, fRunTableIndex, fValueID, fValue);
           result := true;
         end;
       end;
@@ -2289,9 +2289,8 @@ begin
         fResults[fCount] := HTTP_SUCCESS; // 200 ok
         result := true;
         if fOrm.fCache <> nil then
-          // JSON fValue may be uncomplete -> delete from cache
           if not (boPutNoCacheFlush in fBatchOptions) then
-            fOrm.fCache.NotifyDeletion(fRunTableIndex, fValueID);
+            fOrm.fCache.NotifyJson(fRunTable, fRunTableIndex, fValueID, fValue);
       end;
     encDelete:
       if fOrm.EngineDelete(fRunTableIndex, fValueID) then

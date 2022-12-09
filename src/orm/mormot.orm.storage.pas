@@ -4596,7 +4596,8 @@ begin
       if insertedRowID > 0 then
       begin
         if fStaticInMemory.Owner <> nil then
-          fStaticInMemory.Owner.CacheOrNil.Notify(rec, ooInsert);
+          fStaticInMemory.Owner.CacheOrNil.NotifyAllFields(
+            fStaticInMemory.StoredClassProps.TableIndex, rec);
         result := true;
       end;
     end;
@@ -4645,8 +4646,8 @@ begin
     begin
       i := fStaticInMemory.IDToIndex(newRowID);
       if i >= 0 then
-        fStaticInMemory.Owner.CacheOrNil.Notify(
-          fStaticInMemory.fValue[i], ooUpdate);
+        fStaticInMemory.Owner.CacheOrNil.NotifyAllFields(
+          fStaticInMemory.StoredClassProps.TableIndex, fStaticInMemory.fValue[i]);
     end;
     result := true;
   end;

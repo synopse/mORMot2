@@ -531,26 +531,20 @@ begin
     if not fModel.Lock(tableindex, aID) then
       exit; // error marking as locked by the client
   end
-  else
+  else if fCache.Retrieve(aID, Value) then
   begin
-    resp := fCache.Retrieve(tableindex, aID);
-    if resp <> '' then
-    begin
-      Value.FillFrom(resp);
-      Value.IDValue := aID; // JSON object may not contain the ID
-      result := true;
-      exit; // fast retrieved from internal Client cache (BLOBs ignored)
-    end;
+    result := true;
+    exit; // fast retrieved from internal Client cache (BLOBs ignored)
   end;
   try
     state := Value.InternalState;
     if ClientRetrieve(tableindex, aID, ForUpdate, state, resp) then
     begin
       Value.InternalState := state;
-      if not ForUpdate then
-        fCache.Notify(tableindex, aID, resp, ooSelect);
       Value.FillFrom(resp);
       Value.IDValue := aID; // JSON object may not contain the ID
+      if not ForUpdate then
+        fCache.NotifyAllFields(tableindex, Value);
       if (fForceBlobTransfert <> nil) and
          fForceBlobTransfert[tableindex] then
         result := RetrieveBlobFields(Value)

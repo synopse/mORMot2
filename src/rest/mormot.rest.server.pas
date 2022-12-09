@@ -3562,7 +3562,7 @@ begin
               begin
                 // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
                 cache := TRestOrm(Server.fOrmInstance).CacheOrNil;
-                fCall^.OutBody := cache.Retrieve(TableIndex, TableID);
+                fCall^.OutBody := cache.RetrieveJson(Table, TableIndex, TableID);
                 if fCall^.OutBody = '' then
                 begin
                   // get JSON object '{...}'
@@ -3576,7 +3576,7 @@ begin
                     if fCall^.OutBody = '' then
                       cache.NotifyDeletion(TableIndex, TableID)
                     else
-                      cache.Notify(TableIndex, TableID, fCall^.OutBody, ooSelect);
+                      cache.NotifyJson(Table, TableIndex, TableID, fCall^.OutBody);
                 end;
                 if fCall^.OutBody <> '' then
                 begin
@@ -3822,12 +3822,11 @@ begin
           cache := orm.CacheOrNil;
           if rsoAddUpdateReturnsContent in Server.Options then
           begin
-            cache.NotifyDeletion(TableIndex, fTableID);
             fCall^.OutBody := TableEngine.EngineRetrieve(TableIndex, fTableID);
-            cache.Notify(TableIndex, fTableID, fCall^.OutBody, ooInsert);
+            cache.NotifyJson(Table, TableIndex, fTableID, fCall^.OutBody);
           end
           else
-            cache.Notify(TableIndex, fTableID, fCall^.InBody, ooInsert);
+            cache.NotifyJson(Table, TableIndex, fTableID, fCall^.InBody);
         end;
       end;
     mPUT:
