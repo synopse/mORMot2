@@ -431,6 +431,8 @@ type
     // some property accessors
     function GetItem(const key: TKey): TValue;
     procedure SetItem(const key: TKey; const value: TValue);
+    function GetKey(ndx: PtrInt): TKey;
+    function GetValue(ndx: PtrInt): TValue;
     function GetCapacity: integer;
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -466,7 +468,12 @@ type
     function DeleteDeprecated: integer;
     /// delete all stored key/value pairs
     procedure Clear; overload;
+    /// thread-safety protection when accessing Count/Key[]/Value[] members
+    procedure ReadLock;
+    /// thread-safety protection when accessing Count/Key[]/Value[] members
+    procedure ReadUnLock;
     /// returns the number of key/value pairs actually stored
+    // - this is not thread-safe so to be protected by ReadLock/ReadUnLock
     function Count: integer;
     /// high-level access to the stored values from their associated keys
     // - GetItem() raise an ESynKeyValue if the key is not available, unless
@@ -475,6 +482,16 @@ type
     // - SetItem() will add the value if key is not existing, or replace it
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
+    /// low-level access to the stored keys, in their 0..Count-1 internal order
+    // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
+    // - raise an ESynKeyValue if ndx is out-of-range
+    property Key[ndx: PtrInt]: TKey
+      read GetKey;
+    /// low-level access to the stored values, in their 0..Count-1 internal order
+    // - indexes are not thread-safe so to be protected by ReadLock/ReadUnLock
+    // - raise an ESynKeyValue if ndx is out-of-range
+    property Value[ndx: PtrInt]: TValue
+      read GetValue;
     /// returns the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
@@ -529,6 +546,10 @@ type
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
     procedure SetTimeOutSeconds(value: cardinal);
+    procedure ReadLock;
+    procedure ReadUnLock;
+    procedure GetOneKey(ndx: PtrInt; key: pointer);
+    procedure GetOneValue(ndx: PtrInt; value: pointer);
   public
     /// initialize the dictionary storage, specifying dynamic array keys/values
     // - main factory is Collections.NewKeyValue<TKey, TValue> class function,
@@ -577,6 +598,8 @@ type
     // some property accessors
     function GetItem(const key: TKey): TValue;
     procedure SetItem(const key: TKey; const value: TValue);
+    function GetKey(ndx: PtrInt): TKey;
+    function GetValue(ndx: PtrInt): TValue;
   public
     /// IKeyValue<> method to add an unique key/value pair
     procedure Add(const key: TKey; const value: TValue);
@@ -1285,12 +1308,34 @@ end;
 
 function TIKeyValueParent.Count: integer;
 begin
-  result := fData.Count;
+  result := fData.RawCount;
 end;
 
 function TIKeyValueParent.Data: TSynDictionary;
 begin
   result := fData;
+end;
+
+procedure TIKeyValueParent.ReadLock;
+begin
+  fData.Safe^.ReadLock;
+end;
+
+procedure TIKeyValueParent.ReadUnLock;
+begin
+  fData.Safe^.ReadUnLock;
+end;
+
+procedure TIKeyValueParent.GetOneKey(ndx: PtrInt; key: pointer);
+begin
+  if not fData.Keys.ItemCopyAt(ndx, key) then
+    raise ESynKeyValue.CreateUtf8('%.GetKey: index % out of range', [self, ndx]);
+end;
+
+procedure TIKeyValueParent.GetOneValue(ndx: PtrInt; value: pointer);
+begin
+  if not fData.Values.ItemCopyAt(ndx, value) then
+    raise ESynKeyValue.CreateUtf8('%.GetValue: index % out of range', [self, ndx]);
 end;
 
 
@@ -1299,6 +1344,16 @@ end;
 function TIKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
 begin
   GetOne(@key, @result);
+end;
+
+function TIKeyValue<TKey, TValue>.GetKey(ndx: PtrInt): TKey;
+begin
+  GetOneKey(ndx, @result);
+end;
+
+function TIKeyValue<TKey, TValue>.GetValue(ndx: PtrInt): TValue;
+begin
+  GetOneValue(ndx, @result);
 end;
 
 procedure TIKeyValue<TKey, TValue>.SetItem(const key: TKey;
