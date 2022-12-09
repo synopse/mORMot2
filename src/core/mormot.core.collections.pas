@@ -63,33 +63,27 @@ uses
 
 { ************** JSON-aware IList<> List Storage }
 
-// Delphi allows SizeOf(T) in TSynEnumerator<T>.MoveNext but FPC doesn't
-{$ifdef FPC}
-  {$define NOSIZEOFT}
-{$endif FPC}
-
 type
   TIListParent = class;
 
   /// abstract execution context for the TIListEnumerator<T> record
+  // - as filled from shared TIListParent.NewEnumerator overloaded methods
   TIListEnumeratorState = record
-    Current, After: PtrUInt; // 2-3 pointers on stack
-    {$ifdef NOSIZEOFT}
-    ItemSize: PtrUInt;
-    {$endif NOSIZEOFT}
+    Current, After: PtrUInt; // 2 pointers on stack
   end;
 
   /// efficient mean to iterate over a generic collection of a specific type
+  // - as used by IList<T>.GetEnumerator/Range methods
   // - we redefined our own record type for better performance: it properly
-  // inlines, and allocates as 2-3 pointers on stack with no try..finally
+  // inlines, and allocates as 2 pointers on stack with no try..finally
   TIListEnumerator<T> = record
   private
     fState: TIListEnumeratorState;
-    type
-      PT = ^T;
     // some property accessor
     function DoGetCurrent: T; inline;
   public
+    type
+      PT = ^T;
     /// this property is needed for any enumerator
     property Current: T
       read DoGetCurrent;
@@ -432,7 +426,8 @@ type
     Value: TValue;
   end;
 
-  /// efficient mean to iterate over a generic IKeyValue<> key/value pairs
+  /// efficient mean to iterate over a generic collection of key/value pairs
+  // - as used by IKeyValue<>.GetEnumerator
   TIKeyValueEnumerator<TKey, TValue> = record
   public
     type
@@ -838,18 +833,15 @@ function TIListEnumerator<T>.MoveNext: boolean;
 var
   c: PtrUInt; // to enhance code generation
 begin
-  {$ifdef NOSIZEOFT}
-  c := fState.ItemSize + fState.Current;
-  {$else}
-  c := fState.Current + PtrUInt(SizeOf(T));
-  {$endif NOSIZEOFT}
+  c := fState.Current;
+  inc(PT(c));
   fState.Current := c;
-  result := c < fState.After; // false if fCurrent=fItemSize=fAfter=0
+  result := c < fState.After; // false if fCurrent=fAfter=0
 end;
 
 function TIListEnumerator<T>.GetEnumerator: TIListEnumerator<T>;
 begin
-  result := self; // just a copy of 3 PtrInt
+  result := self; // just a copy of 2 PtrInt
 end;
 
 function TIListEnumerator<T>.DoGetCurrent: T;
@@ -1125,15 +1117,9 @@ begin
   if state.Current = 0 then
   begin
     state.After := 0; // ensure MoveNext=false
-    {$ifdef NOSIZEOFT}
-    state.ItemSize := 0;
-    {$endif NOSIZEOFT}
     exit;
   end;
   s := fDynArray.Info.Cache.ItemSize;
-  {$ifdef NOSIZEOFT}
-  state.ItemSize := s;
-  {$endif NOSIZEOFT}
   state.After := state.Current + s * PtrUInt(fCount);
   dec(state.Current, s);
 end;
@@ -1154,9 +1140,6 @@ begin
      (Offset >= fCount) then
   begin
     state.After := 0;  // ensure MoveNext=false
-    {$ifdef NOSIZEOFT}
-    state.ItemSize := 0;
-    {$endif NOSIZEOFT}
     exit;
   end;
   if Limit = 0 then
@@ -1165,9 +1148,6 @@ begin
   if Limit > PtrInt(s) then
     Limit := s;
   s := fDynArray.Info.Cache.ItemSize;
-  {$ifdef NOSIZEOFT}
-  state.ItemSize := s;
-  {$endif NOSIZEOFT}
   inc(state.Current, s * PtrUInt(Offset));
   state.After := state.Current + s * PtrUInt(Limit);
   dec(state.Current, s);
