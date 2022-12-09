@@ -3437,7 +3437,7 @@ var
   opt: TOrmWriterOptions;
   P: PUtf8Char;
   i, j, L: PtrInt;
-  cache: TRestCache;
+  cache: TOrmCache;
   blob: PRttiProp;
 begin
   case Method of
@@ -3774,7 +3774,7 @@ procedure TRestServerUriContext.ExecuteOrmWrite;
 var
   ok: boolean;
   blob: PRttiProp;
-  cache: TRestCache;
+  cache: TOrmCache;
   orm: TRestOrmServer;
   sqlselect, sqlwhere, sqlsort, sqldir: RawUtf8;
 begin
@@ -7150,7 +7150,7 @@ procedure TRestServer.CacheFlush(Ctxt: TRestServerUriContext);
 var
   i, count: PtrInt;
   old: TRestConnectionID;
-  cache: TRestCache;
+  cache: TOrmCache;
 begin
   case Ctxt.Method of
     mGET:
