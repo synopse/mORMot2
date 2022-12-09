@@ -1659,6 +1659,8 @@ type
     // of an invalid input buffer
     // - this method will recognize T*ObjArray types, and will first free
     // any existing instance before unserializing, to avoid memory leak
+    // - set e.g. @JSON_[mFast] as CustomVariantOptions parameter to handle
+    // complex JSON object or arrays as TDocVariant into variant fields
     // - can use an associated TRawUtf8Interning instance for RawUtf8 values
     // - warning: the content of P^ will be modified during parsing: make a
     // local copy if it will be needed later (using e.g. the overloaded method)
@@ -1746,13 +1748,13 @@ type
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
-    // - do nothing if index is out of range
-    procedure ItemCopyAt(index: PtrInt; Dest: pointer);
+    // - do nothing and return false if index is out of range or Dest is nil
+    function ItemCopyAt(index: PtrInt; Dest: pointer): boolean;
       {$ifdef FPC}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item after copy
-    // - do nothing if index is out of range
-    procedure ItemMoveTo(index: PtrInt; Dest: pointer);
+    // - do nothing and return false if index is out of range or Dest is nil
+    function ItemMoveTo(index: PtrInt; Dest: pointer): boolean;
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
     // - ClearBeforeCopy will call ItemClear() before the copy, which may be safer
@@ -2052,7 +2054,7 @@ type
     procedure Clear; inline;
     procedure ItemCopy(Source, Dest: pointer); inline;
     function ItemPtr(index: PtrInt): pointer; inline;
-    procedure ItemCopyAt(index: PtrInt; Dest: pointer); inline;
+    function ItemCopyAt(index: PtrInt; Dest: pointer): boolean; inline;
     function Add(const Item): PtrInt; inline;
     procedure Delete(aIndex: PtrInt); inline;
     function SaveTo: RawByteString; overload; inline;
@@ -7141,28 +7143,37 @@ ok:   inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
 ko:   result := nil;
 end;
 
-procedure TDynArray.ItemCopyAt(index: PtrInt; Dest: pointer);
+function TDynArray.ItemCopyAt(index: PtrInt; Dest: pointer): boolean;
 var
   p: pointer;
 begin
   p := ItemPtr(index);
   if p <> nil then
+  begin
     ItemCopy(p, Dest);
+    result := true;
+  end
+  else
+    result := false;
 end;
 
-procedure TDynArray.ItemMoveTo(index: PtrInt; Dest: pointer);
+function TDynArray.ItemMoveTo(index: PtrInt; Dest: pointer): boolean;
 var
   p: pointer;
 begin
   p := ItemPtr(index);
   if (p = nil) or
      (Dest = nil) then
+  begin
+    result := false;
     exit;
+  end;
   if (fInfo.ArrayRtti <> nil) and
      not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
+  result := true;
 end;
 
 procedure TDynArray.ItemCopyFrom(Source: pointer; index: PtrInt;
@@ -7709,7 +7720,7 @@ begin
     else if fSorted then
     begin
       P := fValue^;
-      // first compare with the last sorted item (handle some common cases)
+      // first compare with the last sorted item (common case, e.g. with IDs)
       dec(n);
       cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
       if cmp >= 0 then
@@ -9793,9 +9804,9 @@ begin
   result := InternalDynArray.ItemPtr(index);
 end;
 
-procedure TDynArrayHashed.ItemCopyAt(index: PtrInt; Dest: pointer);
+function TDynArrayHashed.ItemCopyAt(index: PtrInt; Dest: pointer): boolean;
 begin
-  InternalDynArray.ItemCopyAt(index, Dest);
+  result := InternalDynArray.ItemCopyAt(index, Dest);
 end;
 
 procedure TDynArrayHashed.Clear;
