@@ -1743,7 +1743,7 @@ type
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
-      {$ifdef HASGETTYPEKIND}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1761,7 +1761,7 @@ type
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false);
-      {$ifdef HASGETTYPEKIND}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -1774,13 +1774,13 @@ type
     /// will reset the element content
     // - i.e. release any managed type memory, and fill Item with zeros
     procedure ItemClear(Item: pointer);
-      {$ifdef HASGETTYPEKIND}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// will fill the element with some random content
     // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ItemRandom(Item: pointer);
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
-      {$ifdef HASGETTYPEKIND}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -7111,13 +7111,13 @@ begin
   result := true;
 end;
 
+{$ifdef FPC} // very efficient inlined code on FPC
 function TDynArray.ItemPtr(index: PtrInt): pointer;
 label
-  ok, ko;
+  ok, ko; // labels make the code shorter and more efficient
 var
   c: PtrUInt;
 begin
-  // very efficient code on FPC and modern Delphi
   result := pointer(fValue);
   if result = nil then
     exit;
@@ -7132,16 +7132,36 @@ ok:   inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
     else
       goto ko;
   end
-  else
-    {$ifdef FPC} // FPC stores high() in TDALen=PtrInt
+  else // FPC stores high() in TDALen=PtrInt
     if PtrUInt(index) <= PPtrUInt(PAnsiChar(result) - _DALEN)^ then
-    {$else}     // Delphi stores length() in TDALen=NativeInt
-    if PtrUInt(index) < PPtrUInt(PtrUInt(result) - _DALEN)^ then
-    {$endif FPC}
       goto ok
     else
 ko:   result := nil;
 end;
+{$else} // Delphi compilers have troubles with inlining + labels
+function TDynArray.ItemPtr(index: PtrInt): pointer;
+var
+  c: PtrUInt;
+begin
+  result := pointer(fValue);
+  if result = nil then
+    exit;
+  result := PPointer(result)^;
+  if result = nil then
+    exit;
+  c := PtrUInt(fCountP);
+  if c <> 0 then
+    if PtrUInt(index) < PCardinal(c)^ then
+      inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
+    else
+      result := nil
+  else // Delphi stores length() in TDALen=NativeInt
+    if PtrUInt(index) < PPtrUInt(PtrUInt(result) - _DALEN)^ then
+      inc(PByte(result), index * fInfo.Cache.ItemSize)
+    else
+      result := nil;
+end;
+{$endif FPC}
 
 function TDynArray.ItemCopyAt(index: PtrInt; Dest: pointer): boolean;
 var
@@ -7590,7 +7610,7 @@ begin
       result := fnd(fValue^, @Item, aCompare, n, fInfo.Cache.ItemSize);
     end
     else
-      result := IndexOf(Item, {caseinsens=}false)
+      result := IndexOf(Item, {caseinsens=}false) // no fCompare -> default
   else
     result := -1;
 end;
