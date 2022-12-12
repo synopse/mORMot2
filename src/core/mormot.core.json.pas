@@ -1201,6 +1201,7 @@ type
       aCompare: TDynArraySortCompare): boolean;
     procedure SetTimeouts;
     function ComputeNextTimeOut: cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -9093,6 +9094,7 @@ begin
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
   fValues.Init(aValueTypeInfo, fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
+  fValues.Compare := DynArraySortOne(fValues.Info.ArrayFirstField, aKeyCaseInsensitive);
   fTimeouts.Init(TypeInfo(TIntegerDynArray), fTimeOut,
     @fSafe.Padding[DIC_TIMECOUNT].VInteger);
   if aCompressAlgo = nil then
