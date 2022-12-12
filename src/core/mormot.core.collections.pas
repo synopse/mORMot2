@@ -293,15 +293,15 @@ type
   // - contains all fields and methods not explicitly related to type T
   TIListParent = class(TInterfacedObject)
   protected
-    fCount: PtrInt;  // external TDynArray count
+    fSafe: TRWLock;
+    fCount: integer;  // external fDynArray count
+    fOptions: TListOptions;
     fValue: pointer; // holds the actual dynamic array of <T>
     fDynArray: TDynArray;
-    fOptions: TListOptions;
     fHasher: PDynArrayHasher;
-    fSafe: TRWLock;
     function DoPop(var dest; opt: TListPop): boolean;
     function DoRemove(const value): boolean;
-    function DoAdd(const value; wasadded: PBoolean): PtrInt;
+    function DoAdd(const value; var added: boolean): PtrInt;
     function DoAddSorted(const value; wasadded: PBoolean): integer;
     procedure DoInsert(ndx: PtrInt; const value);
     function DoFind(const value; customcompare: TDynArraySortCompare): PtrInt;
@@ -362,7 +362,7 @@ type
     function First: pointer; inline;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
-      read fCount write SetCount;
+      read GetCount write SetCount;
     /// IList<> method to return the internal array capacity
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
@@ -931,33 +931,27 @@ begin
             fDynArray.Delete(ndx);
 end;
 
-function TIListParent.DoAdd(const value; wasadded: PBoolean): PtrInt;
+function TIListParent.DoAdd(const value; var added: boolean): PtrInt;
 var
-  added: boolean;
-  v: PAnsiChar;
   n: PtrInt;
   h: PDynArrayHasher;
+  v: PAnsiChar;
 begin
   h := fHasher;
   if h <> nil then
   begin
     result := h^.FindBeforeAdd(@value, added, h^.HashOne(@value));
-    if wasadded <> nil then
-      wasadded^ := added;
     if not added then
       exit; // already existing -> just return previous value index
   end
-  else if wasadded <> nil then
-    wasadded^ := true;
+  else
+    added := true;
   v := fValue;
   n := fCount;
   if (v = nil) or
      (n = PDALen(v -_DALEN)^ + _DAOFF) then
-    // let TDynArray handle the capacity
-    fDynArray.Count := n + 1
-  else
-    inc(fCount);
-  fDynArray.ItemCopy(@value, PAnsiChar(fValue) + n * fDynArray.Info.Cache.ItemSize);
+    fDynArray.Capacity := NextGrow(n);
+  inc(fCount);
   result := n;
 end;
 
@@ -1129,23 +1123,25 @@ procedure TIListParent.NewEnumerator(var state: TIListEnumeratorState;
   Offset, Limit: PtrInt);
 var
   s: PtrUInt;
+  n: PtrInt;
 begin
+  n := fCount;
   if Offset < 0 then
   begin
-    inc(Offset, fCount);
+    inc(Offset, n);
     if Offset < 0 then
       Offset := 0;
   end;
   state.Current := PtrUInt(fValue);
   if (state.Current = 0) or
-     (Offset >= fCount) then
+     (Offset >= n) then
   begin
     state.After := 0;  // ensure MoveNext=false
     exit;
   end;
   if Limit = 0 then
-    Limit := fCount;
-  s := fCount - Offset;
+    Limit := n;
+  s := n - Offset;
   if Limit > PtrInt(s) then
     Limit := s;
   s := fDynArray.Info.Cache.ItemSize;
@@ -1183,8 +1179,14 @@ begin
 end;
 
 function TIList<T>.Add(const value: T; wasadded: PBoolean): PtrInt;
+var
+  added: boolean;
 begin
-  result := DoAdd(value, wasadded);
+  result := DoAdd(value, added);
+  if added then
+    TArray<T>(fValue)[result] := value; // faster than fDynArray.ItemCopy()
+  if wasadded <> nil then
+    wasadded^ := added;
 end;
 
 procedure TIList<T>.Insert(ndx: PtrInt; const value: T);
@@ -1199,7 +1201,7 @@ end;
 
 function TIList<T>.IndexOf(const value: T): PtrInt;
 begin
-  result := fDynArray.IndexOf(value, loCaseInsensitive in fOptions)
+  result := fDynArray.Find(value)
 end;
 
 function TIList<T>.Find(const value: T;
@@ -2264,7 +2266,7 @@ end;
 class function Collections.NewList<T>(aOptions: TListOptions;
   aDynArrayTypeInfo: PRttiInfo): IList<T>;
 begin
-  // oldest Delphi will generate bloated code for each specific type
+  // oldest Delphi will generate (bloated) code for each specific type
   if aDynArrayTypeInfo = nil then
     aDynArrayTypeInfo := TypeInfo(TArray<T>);
   result := TIList<T>.Create(
