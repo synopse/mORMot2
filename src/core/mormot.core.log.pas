@@ -4237,7 +4237,7 @@ begin
       // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
       result := TRttiCustom(pointer(result)).PrivateSlot;
     if result = nil then
-      // register the TSynLogFamily to the TRttiCustom.Private field
+      // register the TSynLogFamily to the TRttiCustom.PrivateSlot field
       result := FamilyCreate;
   end;
 end;
@@ -4245,8 +4245,6 @@ end;
 class function TSynLog.Add: TSynLog;
 var
   P: pointer;
-label
-  sl;
 begin
   // inlined TSynLog.Family with direct fGlobalLog check
   result := pointer(Self);
@@ -4260,13 +4258,10 @@ begin
       result := TSynLogFamily(P).fGlobalLog;
       // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
       if result = nil then
-        goto sl;
+        result := TSynLogFamily(P).SynLog; // ptOneFilePerThread or at startup
     end
     else
-    begin
-      P := FamilyCreate;
-sl:   result := TSynLogFamily(P).SynLog;
-    end;
+      result := nil; // TSynLog.Family/FamilyCreate should have been called
   end;
 end;
 
