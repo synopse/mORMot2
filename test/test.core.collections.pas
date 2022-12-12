@@ -7,9 +7,18 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi XE8)
+
+// include generics.collections to the Benchmark tests
+{$define RTL_BENCH}
+
 uses
   sysutils,
   classes,
+  {$ifdef RTL_BENCH}
+  generics.collections,
+  generics.defaults,
+  {$endif RTL_BENCH}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -23,8 +32,6 @@ uses
   mormot.core.perf,
   mormot.core.test;
 
-{$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi XE8)
-
 type
   /// regression tests for mormot.core.collections features
   TTestCoreCollections = class(TSynTestCase)
@@ -33,6 +40,8 @@ type
   published
     procedure _IList;
     procedure _IKeyValue;
+published
+    procedure Benchmark;
   end;
 
 implementation
@@ -574,7 +583,304 @@ begin
   end;
 end;
 
+
+{$ifdef FPC}
+  {$WARN 4046 off} // needed with FPC generics.collections unit
+{$endif FPC}
+
+type
+  TBenchmark = function(count: integer): string;
+
+const
+  SEARCH_INT = 1000;
+  {$ifdef FPC}
+  SEARCH_UTF = 10; // FPC generics use AnsiCompareStr() which is awfully slow
+  {$else}
+  SEARCH_UTF = 100;
+  {$endif FPC}
+
+function mORMotList1(count: integer): string;
+var
+  l: IList<integer>;
+  i: integer;
+begin
+  result := 'mORMot IList<integer>';
+  l := Collections.NewList<integer>;
+  //l.Capacity := count;
+  for i := 1 to count do
+    l.Add(i);
+  for i := 0 to l.Count - 1 do
+    if l[i] = 0 then
+      result := '';
+  for i in l do
+    if i = 0 then
+      result := '';
+  for i := count downto count - SEARCH_INT do
+    if i > 0 then
+      if l.IndexOf(i) < 0 then
+        result := '';
+end;
+
+{$ifdef RTL_BENCH}
+function systemList1(count: integer): string;
+var
+  l: generics.collections.TList<integer>;
+  i: integer;
+begin
+  result := 'system TList<integer>';
+  l := generics.collections.TList<integer>.Create;
+  try
+    //l.Capacity := count;
+    for i := 1 to count do
+      l.Add(i);
+    for i := 0 to l.Count - 1 do
+      if l[i] = 0 then
+        result := '';
+    for i in l do
+      if i = 0 then
+        result := '';
+    for i := count downto count - SEARCH_INT do
+      if i > 0 then
+        if l.IndexOf(i) < 0 then
+          result := '';
+  finally
+    l.Free;
+  end;
+end;
+{$endif RTL_BENCH}
+
+function mORMotList2(count: integer): string;
+var
+  l: IList<RawUtf8>;
+  i: integer;
+  u: RawUtf8;
+begin
+  result := 'mORMot IList<RawUtf8>';
+  l := Collections.NewList<RawUtf8>;
+  //l.Capacity := count;
+  for i := 1 to count do
+    l.Add(UInt32ToUtf8(i));
+  for i := 0 to l.Count - 1 do
+    if l[i] = '' then
+      result := '';
+  for u in l do
+    if u = '' then
+      result := '';
+  for i := count downto count - SEARCH_UTF do
+    if i > 0 then
+      if l.IndexOf(UInt32ToUtf8(i)) < 0 then
+        result := '';
+end;
+
+{$ifdef RTL_BENCH}
+function systemList2(count: integer): string;
+var
+  l: generics.collections.TList<RawUtf8>;
+  i: integer;
+  u: RawUtf8;
+begin
+  result := 'system TList<RawUtf8>';
+  l := generics.collections.TList<RawUtf8>.Create;
+  try
+    //l.Capacity := count;
+    for i := 1 to count do
+      l.Add(UInt32ToUtf8(i));
+    for i := 0 to l.Count - 1 do
+      if l[i] = '' then
+        result := '';
+    for u in l do
+      if u = '' then
+        result := '';
+    for i := count downto count - SEARCH_UTF do
+      if i > 0 then
+        if l.IndexOf(UInt32ToUtf8(i)) < 0 then
+          result := '';
+  finally
+    l.Free;
+  end;
+end;
+{$endif RTL_BENCH}
+
+function mORMotKeyValue1(count: integer): string;
+var
+  d: IKeyValue<integer, integer>;
+  p: TPair<integer, integer>;
+  i: integer;
+begin
+  result := 'mORMot IKeyValue<int,int>';
+  d := Collections.NewKeyValue<integer, integer>;
+  //d.Capacity := count;
+  for i := 1 to count do
+    d.Add(i, i shl 3);
+  for i := 1 to d.Count do
+    if d[i] <> i shl 3 then
+      result := '';
+  for p in d do
+    if (p.Key = 0) or
+       (p.Value = 0) then
+      result := '';
+  for i := count downto count - SEARCH_INT do
+    if i > 0 then
+      if not d.ContainsValue(i shl 3) then
+        result := '';
+end;
+
+{$ifdef RTL_BENCH}
+function systemMap1(count: integer): string;
+var
+  d: TDictionary<integer, integer>;
+  p: generics.collections.TPair<integer, integer>;
+  i: integer;
+begin
+  result := 'system TDictionary<int,int>';
+  d := TDictionary<integer, integer>.Create;
+  try
+    //d.Capacity := count;
+    for i := 1 to count do
+      d.Add(i, i shl 3);
+    for i := 1 to d.Count do
+      if d[i] <> i shl 3 then
+        result := '';
+    for p in d do
+      if (p.Key = 0) or
+         (p.Value = 0) then
+        result := '';
+    for i := count downto count - SEARCH_INT do
+      if i > 0 then
+        if not d.ContainsValue(i shl 3) then
+          result := '';
+  finally
+    d.Free;
+  end;
+end;
+{$endif RTL_BENCH}
+
+function mORMotKeyValue2(count: integer): string;
+var
+  d: IKeyValue<RawUtf8, integer>;
+  p: TPair<RawUtf8, integer>;
+  i: integer;
+begin
+  result := 'mORMot IKeyValue<utf,int>';
+  d := Collections.NewKeyValue<RawUtf8, integer>;
+  //d.Capacity := count;
+  for i := 1 to count do
+    d.Add(UInt32ToUtf8(i), i);
+  for i := 1 to d.Count do
+    if d[UInt32ToUtf8(i)] <> i then
+      result := '';
+  for p in d do
+    if (p.Key = '') or
+       (p.Value = 0) then
+      result := '';
+  for i := count downto count - SEARCH_UTF do
+    if i > 0 then
+      if not d.ContainsValue(i) then
+        result := '';
+end;
+
+{$ifdef RTL_BENCH}
+function systemMap2(count: integer): string;
+var
+  d: TDictionary<RawUtf8, integer>;
+  p: generics.collections.TPair<RawUtf8, integer>;
+  i: integer;
+begin
+  result := 'system TDictionary<utf,int>';
+  d := TDictionary<RawUtf8, integer>.Create;
+  try
+    //d.Capacity := count;
+    for i := 1 to count do
+      d.Add(UInt32ToUtf8(i), i);
+    for i := 1 to d.Count do
+      if d[UInt32ToUtf8(i)] <> i then
+        result := '';
+    for p in d do
+      if (p.Key = '') or
+         (p.Value = 0) then
+        result := '';
+    for i := count downto count - SEARCH_UTF do
+      if i > 0 then
+        if not d.ContainsValue(i) then
+          result := '';
+  finally
+    d.Free;
+  end;
+end;
+{$endif RTL_BENCH}
+
+{
+  the list of all benchmark sub-routines
+  - our test case consists in adding, getting, enumerating, then searching
+  - to be fair, for basic features (adding + getting + enumerating), mORMot
+  generics are slightly slower than the latest Delphi generics.collection
+  unit - but faster than FPC generics anyway
+  - mORMot generics increases the .dcu size much less than Delphi's RTL
+  e.g. size of test.core.collections.dcu with Delphi 11.1 on Win32:
+    default mormot.core.generics:       24 KB
+    NOSPECIALIZE mormot.core.generics:  47 KB
+    default mormot.core.generics + Delphi generics.collection: 199 KB
+    (for only 4 generics collections definition)
+  - but our extended test with value searching let mORMot outperforms both
+  Delphi and FPC RTL, even more the FPC generics which use the very slow
+  AnsiCompareStr() call - for no benefit, and no Delphi compatibility
+}
+const
+  {$ifdef RTL_BENCH}
+  BENCHS: array[0..7] of TBenchmark = (
+    systemList1,
+    mORMotList1,
+    systemList2,
+    mORMotList2,
+    systemMap1,
+    mORMotKeyValue1,
+    systemMap2,
+    mORMotKeyValue2);
+  {$else}
+  BENCHS: array[0..3] of TBenchmark = (
+    mORMotList1,
+    mORMotList2,
+    mORMotKeyValue1,
+    mORMotKeyValue2);
+  {$endif RTL_BENCH}
+
+procedure TTestCoreCollections.Benchmark;
+const
+  REP = 4;
+var
+  timer1, timer2: TPrecisionTimer;
+  name: string;
+  b, i, j, mul, n, max, tot: PtrInt;
+begin
+  for b := low(BENCHS) to high(BENCHS) do
+  begin
+    max := 10;
+    for i := 1 to REP - 1 do
+      max := max * 20;
+    timer1.Start;
+    tot := 0;
+    n := 10;
+    for i := 1 to REP do
+    begin
+      timer2.Start;
+      mul := max div n; // to have big enough time
+      for j := 1 to mul do
+      begin
+        name := BENCHS[b](n);
+        Check(name <> '');
+      end;
+      NotifyTestSpeed('size=%', [n], n * mul, 0, @timer2, {onlylog=}true);
+      inc(tot, n * mul);
+      n := n * 20;
+    end;
+    NotifyTestSpeed(name, tot, 0, @timer1);
+  end;
+end;
+
 {$else}
+
+uses
+  mormot.core.test;
 
 type
   TTestCoreCollections = class(TSynTestCase)
