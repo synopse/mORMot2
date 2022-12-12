@@ -40,7 +40,6 @@ type
   published
     procedure _IList;
     procedure _IKeyValue;
-published
     procedure Benchmark;
   end;
 

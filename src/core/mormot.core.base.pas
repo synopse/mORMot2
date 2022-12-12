@@ -848,7 +848,7 @@ function GetClassParent(C: TClass): TClass;
 // - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
 // comparison with other kind of input variables
 function PropNameEquals(P1, P2: PShortString): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 
 /// case-insensitive comparison of two RawUtf8 only containing ASCII 7-bit
 // - use e.g. with RTTI property names values only including A..Z,0..9,_ chars
@@ -2632,7 +2632,7 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): boolean = Compar
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 
 {$ifndef CPUX86}
 /// low-level efficient pure pascal function used when inlining PosEx()

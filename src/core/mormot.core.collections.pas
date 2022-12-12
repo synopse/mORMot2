@@ -935,7 +935,6 @@ function TIListParent.DoAdd(const value; var added: boolean): PtrInt;
 var
   n: PtrInt;
   h: PDynArrayHasher;
-  v: PAnsiChar;
 begin
   h := fHasher;
   if h <> nil then
@@ -946,10 +945,8 @@ begin
   end
   else
     added := true;
-  v := fValue;
   n := fCount;
-  if (v = nil) or
-     (n = PDALen(v -_DALEN)^ + _DAOFF) then
+  if n = length(TByteDynArray(fValue)) then // all dyn array share same length()
     fDynArray.Capacity := NextGrow(n);
   inc(fCount);
   result := n;

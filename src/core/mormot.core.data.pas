@@ -7138,7 +7138,7 @@ ok:   inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
     else
 ko:   result := nil;
 end;
-{$else} // Delphi compilers have troubles with inlining + labels
+{$else} // latest Delphi compilers have troubles with inlining + labels
 function TDynArray.ItemPtr(index: PtrInt): pointer;
 var
   c: PtrUInt;

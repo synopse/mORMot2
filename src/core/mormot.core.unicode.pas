@@ -1133,7 +1133,7 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
 function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifdef FPC}inline;{$endif} { Delphi is not efficient at inlining this }
+  {$ifdef FPC}inline;{$endif} // Delphi does not like to inline labels/goto
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -1348,7 +1348,7 @@ function ContainsUtf8(p, up: PUtf8Char): boolean;
 
 /// returns TRUE if the supplied uppercased text is contained in the text buffer
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi does not like inlining goto+label
 
 /// copy source into a 256 chars dest^ buffer with 7-bit upper case conversion
 // - used internally for short keys match or case-insensitive hash

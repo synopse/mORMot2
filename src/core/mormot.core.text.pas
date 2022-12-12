@@ -1989,7 +1989,7 @@ procedure FormatString(const Format: RawUtf8; const Args: array of const;
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUtf8()
 function FormatString(const Format: RawUtf8; const Args: array of const): string; overload;
-  {$ifdef FPC}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi don't inline "array of const" parameters
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
 // - truncate result if the text size exceeds 16 bytes

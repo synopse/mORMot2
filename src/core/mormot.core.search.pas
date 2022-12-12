@@ -2172,7 +2172,7 @@ begin
 end;
 
 function SimpleContainsU(t, tend, p: PUtf8Char; pmax: PtrInt; up: PNormTable): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 // brute force case-insensitive search p[0..pmax] in t..tend-1
 var
   first: AnsiChar;
@@ -2201,7 +2201,8 @@ end;
 
 {$ifdef CPU64} // naive but very efficient code generation on FPC x86-64
 
-function SimpleContains8(t, tend, p: PUtf8Char; pmax: PtrInt): boolean; inline;
+function SimpleContains8(t, tend, p: PUtf8Char; pmax: PtrInt): boolean;
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 label
   next;
 var
@@ -2232,7 +2233,7 @@ end;
 {$ifdef CPUX86}
 
 function SimpleContains1(t, tend, p: PUtf8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 label
   next;
 var
@@ -2257,7 +2258,7 @@ next: inc(t);
 end;
 
 function SimpleContains4(t, tend, p: PUtf8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 label
   next;
 var
@@ -2284,7 +2285,7 @@ end;
 {$else}
 
 function SimpleContains1(t, tend, p: PUtf8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 label
   next;
 var
@@ -2311,7 +2312,7 @@ next: inc(t);
 end;
 
 function SimpleContains4(t, tend, p: PUtf8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 label
   next;
 var

@@ -2191,7 +2191,7 @@ function _Safe(const DocVariant: variant;
 // this function with a temporary variant (e.g. from TList<variant>.GetItem) -
 // call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _Safe(const DocVariant: variant; out DV: PDocVariantData): boolean; overload;
-  {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct access to a TDocVariantData array from a given variant instance
 // - return true and set DV with a pointer to the TDocVariantData
@@ -2226,7 +2226,7 @@ function _DV(const DocVariant: variant;
 // - slower, but maybe used instead of _Safe() e.g. on Delphi 11
 function _DV(const DocVariant: variant;
   var DV: TDocVariantData): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -4349,23 +4349,34 @@ function _Safe(const DocVariant: variant; out DV: PDocVariantData): boolean;
 var
   docv, vt: cardinal;
   v: PDocVariantData;
+{$ifdef FPC} // latest Delphi compilers have problems inlining labels
 label
   no;
+{$endif FPC}
 begin
   docv := DocVariantVType;
   v := @DocVariant;
   vt := v^.VType;
+  {$ifndef FPC}
+  result := false;
+  {$endif FPC}
   if vt <> docv then
     if vt <> varVariantByRef then
     begin
-no:   result := false;
-      exit;
+{$ifdef FPC}
+no:  result := false;
+{$endif FPC}
+     exit;
     end
     else
     begin
       v := PVarData(v)^.VPointer;
       if cardinal(v^.VType) <> docv then
+      {$ifdef FPC}
         goto no;
+      {$else}
+        exit;
+      {$endif FPC}
     end;
   DV := v;
   result := true;
