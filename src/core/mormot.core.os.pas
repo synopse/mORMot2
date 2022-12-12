@@ -3546,7 +3546,8 @@ type
     procedure ReadWriteUnLock;
     /// lock the instance for exclusive access, as RWLock(cWrite)
     // - is re-entrant from the same thread i.e. you can nest Lock/UnLock calls
-    // - warning: with RWUse=uRWLock, would deadlock after a nested ReadLock
+    // - warning: with RWUse=uRWLock, would deadlock after a nested ReadLock,
+    // but not after ReadWriteLock
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
     // ! try
