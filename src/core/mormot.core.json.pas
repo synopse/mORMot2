@@ -9247,9 +9247,8 @@ begin
   try
     result := fKeys.FindHashedForAdding(aKey^, added);
     if added then
-    begin
+    begin // fKey[result] := aKey;
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
-        // fKey[result] := aKey;
         ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
       if fValues.Add(aValue^) <> result then
         raise ESynDictionary.CreateUtf8('%.Add fValues.Add', [self]);
