@@ -1391,7 +1391,7 @@ type
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
     function Delete(aIndex: PtrInt): boolean;
-    /// search for an element value inside the dynamic array
+    /// search for an element inside the dynamic array using RTTI
     // - return the index found (0..Count-1), or -1 if Item was not found
     // - will search for all properties content of Item: TList.IndexOf()
     // searches by address, this method searches by content using the RTTI
@@ -1409,7 +1409,7 @@ type
     // - warning: Item must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write IndexOf(i+10) e.g.)
     function IndexOf(const Item; CaseInSensitive: boolean = true): PtrInt;
-    /// search for an element value inside the dynamic array
+    /// search for an element inside the dynamic array using the Compare function
     // - this method will use the Compare property function, or the supplied
     // aCompare for the search; if none of them are set, it will fallback to
     // IndexOf() to perform a default case-sensitive RTTI search
@@ -1517,12 +1517,14 @@ type
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
     // - if the array is not sorted, returns FALSE
+    // - warning: FirstIndex/LastIndex parameters should be integer, not PtrInt
     function FindAllSorted(const Item;
       out FirstIndex, LastIndex: integer): boolean; overload;
     /// search the item pointers which match a given value in a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - return nil and FindCount = 0 if no matching item was found
     // - return the a pointer to the first matching item, and FindCount >=1
+    // - warning: FindCount out parameter should be integer, not PtrInt
     function FindAllSorted(const Item; out FindCount: integer): pointer; overload;
     /// search for an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
@@ -1533,6 +1535,7 @@ type
     // - if the array is not sorted, returns FALSE and Index=-1
     // - warning: Item must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (no FastLocateSorted(i+10) e.g.)
+    // - warning: Index out parameter should be integer, not PtrInt
     function FastLocateSorted(const Item; out Index: integer): boolean;
     /// insert a sorted element value at the proper place
     // - the index should have been computed by FastLocateSorted(): false
@@ -7663,7 +7666,7 @@ end;
 function TDynArray.FindAllSorted(const Item;
   out FirstIndex, LastIndex: integer): boolean;
 var
-  found, last: integer;
+  found, last: integer; // FastLocateSorted() requires an integer
   siz: PtrInt;
   P, val: PAnsiChar;
 begin
@@ -7696,7 +7699,7 @@ end;
 
 function TDynArray.FindAllSorted(const Item; out FindCount: integer): pointer;
 var
-  found: integer;
+  found: integer; // FastLocateSorted() requires an integer
   siz: PtrInt;
   P, fnd, limit: PAnsiChar;
 begin
@@ -7774,11 +7777,9 @@ begin
       // Item not found: returns false + the index where to insert
     end
     else
-      // not Sorted
-      Index := -1
+      Index := -1 // not Sorted
   else
-    // no fCompare()
-    Index := -1;
+    Index := -1; // no fCompare()
 end;
 
 procedure TDynArray.FastAddSorted(Index: PtrInt; const Item);
@@ -9275,12 +9276,13 @@ end;
 
 function TDynArrayHasher.HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
 begin
+  result := PtrUInt(fHashTableStore);
   {$ifdef DYNARRAYHASH_16BIT}
   if hash16bit in fState then
-    result := PWordArray(fHashTableStore)[aHashTableIndex]
+    result := PWordArray(result)[aHashTableIndex]
   else
   {$endif DYNARRAYHASH_16BIT}
-    result := fHashTableStore[aHashTableIndex];
+    result := PIntegerArray(result)[aHashTableIndex];
 end;
 
 function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): PtrInt;
