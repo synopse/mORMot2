@@ -172,7 +172,7 @@ begin
     Check(li[li.Find(cop[n])] = cop[n], 'sorted find');
   {$else}
   begin
-    i := li[li.Find(cop[n])];
+    i := li[li.IndexOf(cop[n])];
     CheckEqual(da.ItemCompare(@i, @cop[n]), 0, 'sorted find');
   end;
   {$endif USEEQUALOP}
@@ -233,8 +233,6 @@ begin
     Check(i > MAX - 5);
   for i in li do
     CheckEqual(li.IndexOf(i), i);   // O(n) brute force search
-  for i in li do
-    CheckEqual(li.Find(i), i);      // O(n) brute force search
   pi := li.First;
   for i := 0 to li.Count - 1 do // fastest method
   begin
@@ -248,9 +246,7 @@ begin
   for i in li do                // use an enumerator - safe and clean
     Check(cardinal(i) <= MAX);
   for i in li do
-    CheckEqual(li.IndexOf(i), i);   // O(n) brute force search
-  for i in li do
-    CheckEqual(li.Find(i), i);      // O(1) hash table search
+    CheckEqual(li.IndexOf(i), i);   // O(1) hash table search
   // manual IList<double> validation
   ld := Collections.NewList<double>;
   for d in ld do
@@ -271,8 +267,6 @@ begin
     Check(d > MAX - 5);
   for d in ld do
     Check(ld.IndexOf(d) = trunc(d));   // O(n) brute force search
-  for d in ld do
-    Check(ld.Find(d) = trunc(d));      // O(n) brute force search
   pd := ld.First;
   for i := 0 to ld.Count - 1 do // fastest method
   begin
@@ -286,9 +280,7 @@ begin
   for d in ld do                // use an enumerator - safe and clean
     Check(d <= MAX);
   for d in ld do
-    CheckEqual(ld.IndexOf(d), trunc(d));   // O(n) brute force search
-  for d in ld do
-    CheckEqual(ld.Find(d), trunc(d));      // O(1) hash table search
+    CheckEqual(ld.IndexOf(d), trunc(d));   // O(1) hash table search
   // manual IList<TObjectWithID> validation
   lo := Collections.NewList<TObjectWithID>;
   lo.Capacity := MAX + 1;
@@ -304,7 +296,7 @@ begin
   i := 0;
   for o in lo do
   begin
-    CheckEqual(lo.Find(o), i); // O(n) lookup by address
+    CheckEqual(lo.IndexOf(o), i); // O(n) lookup by address
     inc(i);
   end;
   o := nil; // iterative Pop(o) will release the previous o<>nil instances
@@ -320,7 +312,7 @@ begin
   for i := 0 to MAX do
     CheckEqual(lo.Add(lo[i]), i); // duplicate found by loCreateUniqueIndex
   for i := 0 to MAX do
-    CheckEqual(lo.Find(lo[i]), i); // O(1) lookup via loCreateUniqueIndex
+    CheckEqual(lo.IndexOf(lo[i]), i); // O(1) lookup via loCreateUniqueIndex
   for i := 0 to lo.Count - 1 do
     CheckEqual(lo[i].IDValue, i);
   for o in lo do
@@ -367,8 +359,6 @@ begin
     Check(Utf8ToInteger(u) > MAX - 5);
   for u in lu do
     CheckEqual(lu.IndexOf(u), Utf8ToInteger(u));   // O(n) brute force search
-  for u in lu do
-    CheckEqual(lu.Find(u), Utf8ToInteger(u));      // O(n) brute force search
   pu := lu.First;
   for i := 0 to lu.Count - 1 do // fastest method
   begin
@@ -383,8 +373,7 @@ begin
   for u in lu do                    // use an enumerator - safe and clean
   begin
     CheckEqual(Utf8ToInteger(u), i);
-    CheckEqual(lu.IndexOf(u), i);   // O(n) brute force search
-    CheckEqual(lu.Find(u), i);      // O(1) hash table search
+    CheckEqual(lu.IndexOf(u), i);   // O(1) hash table search
     inc(i);
   end;
   // minimal THash128 compilation check
@@ -812,7 +801,7 @@ end;
   the list of all benchmark sub-routines
   - our test case consists in adding, getting, enumerating, then searching
   - to be fair, for basic features (adding + getting + enumerating), mORMot
-  generics are slightly slower than the latest Delphi generics.collection
+  generics are slightly slower than latest Delphi generics.collection
   unit - but faster than FPC generics anyway
   - mORMot generics increases the .dcu size much less than Delphi's RTL
   e.g. size of test.core.collections.dcu with Delphi 11.1 on Win32:
