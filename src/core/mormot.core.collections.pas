@@ -195,6 +195,10 @@ type
     // - if the collection is not sorted, returns -1 and wasadded^=false
     // - raise EIList if loCreateUniqueIndex is set: use plain Add()
     function AddSorted(const value: T; wasadded: PBoolean = nil): integer;
+    /// will check all items against customcompare, calling Sort() if needed
+    // - faster than plain Sort() if the array is likely to be already sorted
+    // - won't check for the Sorted property flag, so will always compare all
+    procedure EnsureSorted(customcompare: TDynArraySortCompare = nil);
     /// is true if Sort() has just been called, or AddSorted() used
     function Sorted: boolean;
     /// search for a value inside this collection using Comparer function
@@ -349,6 +353,8 @@ type
     /// IList<> method to sort the collection, using a comparison method
     procedure Sort(const customcompare: TOnDynArraySortCompare;
       descending: boolean = false); overload;
+    /// IList<> method to ensure collection is sorted, using a comparison method
+    procedure EnsureSorted(customcompare: TDynArraySortCompare);
     /// IList<> method returning true if Sort() or AddSorted() have been used
     function Sorted: boolean;
     /// low-level IList<> method to access the first item of the collection
@@ -1073,6 +1079,13 @@ procedure TIListParent.Sort(const customcompare: TOnDynArraySortCompare;
   descending: boolean);
 begin
   fDynArray.Sort(customcompare, descending);
+  if fHasher <> nil then
+    fHasher^.ForceReHash;
+end;
+
+procedure TIListParent.EnsureSorted(customcompare: TDynArraySortCompare);
+begin
+  fDynArray.EnsureSorted(customcompare);
   if fHasher <> nil then
     fHasher^.ForceReHash;
 end;
