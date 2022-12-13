@@ -579,10 +579,11 @@ type
   protected
     fData: TSynDictionary;
     fOptions: TKeyValueOptions;
+    fHasTimeout, fHasLock: boolean; // internal flags
     function GetKeyTypeInfo: PRttiInfo;
     function GetValueTypeInfo: PRttiInfo;
     procedure AddOne(key, value: pointer);
-    procedure GetOne(key, value: pointer);
+    procedure GetDefault(value: pointer);
     function GetCapacity: integer;
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -1272,6 +1273,7 @@ begin
      raise EIKeyValue.CreateUtf8('%.Create: % should be an array of TValue',
        [self, aContext.ValueArrayTypeInfo^.Name^]);
   // initialize the associated dictionary
+  fHasTimeout := aContext.Timeout <> 0;
   fData := TSynDictionary.Create(
     aContext.KeyArrayTypeInfo, aContext.ValueArrayTypeInfo,
     kvoKeyCaseInsensitive in fOptions, aContext.Timeout, aContext.Compress,
@@ -1280,6 +1282,7 @@ begin
     fData.ThreadUse := uNoLock // not thread-safe by default
   else if not (kvoThreadCriticalSection in fOptions) then
     fData.ThreadUse := uRWLock;
+  fHasLock := fData.ThreadUse <> uNoLock;
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
       (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
@@ -1320,13 +1323,16 @@ begin
     raise EIKeyValue.CreateUtf8('%.Add: duplicated key', [self]);
 end;
 
-procedure TIKeyValueParent.GetOne(key, value: pointer);
+procedure TIKeyValueParent.GetDefault(value: pointer);
 begin
-  if not fData.FindAndCopy(key^, value^) then
-    if kvoDefaultIfNotFound in fOptions then
-      fData.Values.ItemClear(value)
-    else
-      raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+  if kvoDefaultIfNotFound in fOptions then
+    fData.Values.ItemClear(value)
+  else
+  begin
+    if fHasLock then
+      fData.Safe^.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
+    raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+  end;
 end;
 
 function TIKeyValueParent.GetCapacity: integer;
@@ -1347,6 +1353,7 @@ end;
 procedure TIKeyValueParent.SetTimeOutSeconds(value: cardinal);
 begin
   fData.TimeOutSeconds := value;
+  fHasTimeout := value <> 0;
 end;
 
 function TIKeyValueParent.DeleteDeprecated: integer;
@@ -1371,20 +1378,32 @@ end;
 
 procedure TIKeyValueParent.ReadLock;
 begin
-  fData.Safe^.ReadLock;
+  if fHasLock then
+    fData.Safe^.ReadLock;
 end;
 
 procedure TIKeyValueParent.ReadUnLock;
 begin
-  fData.Safe^.ReadUnLock;
+  if fHasLock then
+    fData.Safe^.ReadUnLock;
 end;
 
 
 { TIKeyValue<TKey, TValue> }
 
 function TIKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
+var
+  ndx: PtrInt; // slightly more verbose but faster than FindAndCopy
 begin
-  GetOne(@key, @result);
+  if fHasLock then
+    fData.Safe^.ReadLock;
+  ndx := fData.Find(key, fHasTimeout);
+  if ndx < 0 then
+    GetDefault(@result) // may ReadUnLock and raise EIKeyValue
+  else
+    result := TArray<TValue>(fData.Values.Value^)[ndx]; // very efficient
+  if fHasLock then
+    fData.Safe^.ReadUnLock;
 end;
 
 function TIKeyValue<TKey, TValue>.GetKey(ndx: PtrInt): TKey;
@@ -1418,13 +1437,13 @@ end;
 function TIKeyValue<TKey, TValue>.TryGetValue(const key: TKey;
   var value: TValue): boolean;
 begin
-  result := fData.FindAndCopy(key, value);
+  result := fData.FindAndCopy(key, value, fHasTimeout);
 end;
 
 function TIKeyValue<TKey, TValue>.GetValueOrDefault(const key: TKey;
   const defaultValue: TValue): TValue;
 begin
-  if not fData.FindAndCopy(key, result) then
+  if not fData.FindAndCopy(key, result, fHasTimeout) then
     result := defaultValue;
 end;
 
@@ -1441,7 +1460,7 @@ end;
 
 function TIKeyValue<TKey, TValue>.ContainsKey(const key: TKey): boolean;
 begin
-  result := fData.Exists(key);
+  result := fData.Exists(key); // won't flag the timeout of this entry
 end;
 
 function TIKeyValue<TKey, TValue>.ContainsValue(const value: TValue): boolean;
