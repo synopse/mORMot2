@@ -9435,7 +9435,7 @@ begin
     RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
   if fHashTableSize - n < n shr 2 then
   begin
-    // grow hash table when 25% void
+    // grow hash table when 25% void (192/256,384/512,768/1024,1536/2048...)
     ForceReHash;
     ndx := Find(aHashCode, {foradd=}true); // recompute position
     if ndx >= 0 then

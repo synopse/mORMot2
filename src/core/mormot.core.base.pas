@@ -2632,7 +2632,7 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): boolean = Compar
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
-  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPUX86}
 /// low-level efficient pure pascal function used when inlining PosEx()
@@ -4335,15 +4335,12 @@ end;
 
 // CompareMemSmall/MoveByOne defined now for proper inlining below
 
+// warning: Delphi has troubles inlining goto/label
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
 var
   c: AnsiChar;
-label
-  zero;
 begin
-  {$ifndef CPUX86}
   result := false;
-  {$endif CPUX86}
   inc(PtrUInt(P1), PtrUInt(Length));
   inc(PtrUInt(P2), PtrUInt(Length));
   Length := -Length;
@@ -4351,17 +4348,10 @@ begin
     repeat
       c := PAnsiChar(P1)[Length];
       if c <> PAnsiChar(P2)[Length] then
-        goto zero;
+        exit;
       inc(Length);
     until Length = 0;
   result := true;
-  {$ifdef CPUX86}
-  exit;
-  {$endif CPUX86}
-zero:
-  {$ifdef CPUX86}
-  result := false;
-  {$endif CPUX86}
 end;
 
 procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
