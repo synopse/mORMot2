@@ -1680,7 +1680,7 @@ begin
       ContentEncoding := 'gzip';
       include(HeaderFlags, hfContentStreamNeedFree);
       result := true;
-      exit; // use the stream to bypass recompression
+      exit; // only use ContentStream to bypass recompression
     end;
   end;
   ContentLength := FileSize(FileName);
@@ -1692,7 +1692,7 @@ begin
   if (ContentLength < 1 shl 20) and
      (CommandMethod <> 'HEAD') then
   begin
-    // load smallest files (up to 1MB) in temp memory (and maybe compress them)
+    // smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
     ContentStream.Read(pointer(Content)^, ContentLength);
     FreeAndNilSafe(ContentStream);
