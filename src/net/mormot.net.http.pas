@@ -1566,7 +1566,8 @@ begin
     ContentPos := pointer(Content);
     ContentLength := length(Content);
   end
-  else if ContentLength = 0 then // maybe set by SetupResponse for local file
+  else if ContentLength = 0 then
+    // maybe set by SetupResponse for local file (also for HEAD responses)
     ContentLength := ContentStream.Size - ContentStream.Position;
   result^.AppendShort('Content-Length: ');
   result^.Append(ContentLength);
@@ -1614,7 +1615,10 @@ begin
     end
   else
     // ContentStream requires async body sending
-    State := hrsSendBody;
+    if CommandMethod = 'HEAD' then
+      State := hrsResponseDone // need only the headers
+    else
+      State := hrsSendBody; // send the ContentStream out by chunks
 end;
 
 procedure THttpRequestContext.ProcessBody(
@@ -1685,7 +1689,8 @@ begin
     // there is no such file available
     exit;
   ContentStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
-  if ContentLength < 1 shl 20 then
+  if (ContentLength < 1 shl 20) and
+     (CommandMethod <> 'HEAD') then
   begin
     // load smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
@@ -1693,7 +1698,7 @@ begin
     FreeAndNilSafe(ContentStream);
   end
   else
-    // stream existing big file by chunks
+    // stream existing big file by chunks (also used for HEAD responses)
     include(HeaderFlags, hfContentStreamNeedFree);
 end;
 

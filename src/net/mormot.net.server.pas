@@ -1376,7 +1376,7 @@ const
   _CMD_200: array[boolean] of string[17] = (
     'HTTP/1.1 200 OK'#13#10,
     'HTTP/1.0 200 OK'#13#10);
-  _CMD_ERR: array[boolean] of string[9] = (
+  _CMD_XXX: array[boolean] of string[9] = (
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
@@ -1432,8 +1432,8 @@ begin
   if fRespStatus = HTTP_SUCCESS then // optimistic approach
     h^.AppendShort(_CMD_200[hfConnectionClose in Context.HeaderFlags])
   else
-  begin
-    h^.AppendShort(_CMD_ERR[hfConnectionClose in Context.HeaderFlags]);
+  begin // other less common cases
+    h^.AppendShort(_CMD_XXX[hfConnectionClose in Context.HeaderFlags]);
     StatusCodeToReason(fRespStatus, fRespReason);
     h^.Append(fRespStatus);
     h^.Append(' ');

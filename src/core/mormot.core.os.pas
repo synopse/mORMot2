@@ -988,6 +988,9 @@ const
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
 
 {$ifndef PUREMORMOT2}
+const
+  HTTP_RESP_STATICFILE = STATICFILE_CONTENT_TYPE;
+
 /// deprecated function: use COMPILER_VERSION constant instead
 function GetDelphiCompilerVersion: RawUtf8; deprecated;
 {$endif PUREMORMOT2}
