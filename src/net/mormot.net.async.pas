@@ -3123,7 +3123,7 @@ begin
     result := soClose;
     exit;
   end;
-  // whole headers + body outgoing content was sent
+  // whole headers (+ body) outgoing content was sent
   if acoVerboseLog in fOwner.fOptions then
     fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
       [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
@@ -3132,7 +3132,13 @@ begin
       fServer.fOnAfterResponse(
         fHttp.CommandMethod, fHttp.CommandUri, fRemoteIP, fRespStatus);
     except
-      include(fHttp.HeaderFlags, hfConnectionClose);
+      on E: Exception do
+      begin
+        include(fHttp.HeaderFlags, hfConnectionClose);
+        if acoVerboseLog in fOwner.fOptions then
+          fOwner.DoLog(sllTrace, 'AfterWrite OnAfterResponse raised %',
+            [E], self);
+      end;
     end;
   fHttp.ProcessDone;   // ContentStream.Free
   fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
