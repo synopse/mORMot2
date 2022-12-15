@@ -743,7 +743,7 @@ type
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
-    fPendingSafe: TLightLock;
+    fPendingSafe: TOSLock; // TLightLock seems less stable on some benchmark/HW
     fPollIndex: integer;
     fGettingOne: integer;
     fTerminated: boolean;
@@ -755,7 +755,7 @@ type
     // used for select/poll (FollowEpoll=false) with multiple thread-unsafe fPoll[]
     fSubscription: TPollSocketsSubscription;
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPollLock: TRTLCriticalSection;
+    fPollLock: TOSLock;
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
     function MergePendingEvents(const new: TPollSocketResults): integer;
@@ -2557,13 +2557,14 @@ begin
     fPollClass := PollSocketClass
   else
     fPollClass := aPollClass;
+  fPendingSafe.Init; // mandatory for TOSLock
   {$ifdef POLLSOCKETEPOLL}
   // epoll has no size limit (so a single fPoll[0] can be assumed), and
   // epoll_ctl() is thread-safe and let epoll_wait() work in the background
   SetLength(fPoll, 1);
   fPoll[0] := fPollClass.Create(self);
   {$else}
-  InitializeCriticalSection(fPollLock);
+  fPollLock.Init;
   {$endif POLLSOCKETEPOLL}
   {$ifdef OSPOSIX}
   SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
@@ -2599,8 +2600,9 @@ begin
     for i := 0 to fSubscription.UnsubscribeCount - 1 do
        fSubscription.Unsubscribe[i].ShutdownAndClose({rdwr=}false);
   end;
-  DeleteCriticalSection(fPollLock);
+  fPollLock.Done;
   {$endif POLLSOCKETEPOLL}
+  fPendingSafe.Done; // mandatory for TOSLock
   inherited Destroy;
 end;
 
@@ -2725,7 +2727,7 @@ begin
     if fTerminated or
        (fPending.Count <= 0) then
       exit;
-    if fPendingSafe.TryLock then
+    if fPendingSafe.TryLock then // fPendingSafe.Lock is actually 10% slower
       break;
     SleepHiRes(1); // no spinning, just wait to leverage CPU/thread usage
   until false;
@@ -2906,7 +2908,7 @@ begin
           end;
       end;
     // use fPoll[] to retrieve any pending notifications
-    mormot.core.os.EnterCriticalSection(fPollLock);
+    fPollLock.Lock;
     try
       // first unsubscribe closed connections
       for u := 0 to sub.UnsubscribeCount - 1 do
@@ -2997,7 +2999,7 @@ begin
       fPollIndex := last; // next call will continue from fPoll[fPollIndex+1]
       lastcount := fPoll[last].Count;
     finally
-      mormot.core.os.LeaveCriticalSection(fPollLock);
+      fPollLock.UnLock;
     end;
     {$endif POLLSOCKETEPOLL}
     // append the new events to the main fPending list
