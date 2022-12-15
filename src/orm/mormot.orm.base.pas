@@ -2880,7 +2880,7 @@ type
   // - is fully implemented in mormot.orm.core by the final TOrmProperties class
   TOrmPropertiesAbstract = class
   protected
-    fLock: TRTLCriticalSection;
+    fSafe: TOSLock;
     fTableRtti: TRttiJson;
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
@@ -10739,7 +10739,7 @@ end;
 
 constructor TOrmPropertiesAbstract.Create;
 begin
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
   fSqlTableRetrieveAllFields := 'RowID'; // to work with virtual tables
   SetLength(fManyFields, MAX_SQLFIELDS);
   SetLength(fSimpleFields, MAX_SQLFIELDS);
@@ -10755,7 +10755,7 @@ end;
 destructor TOrmPropertiesAbstract.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
 end;
 
 function TOrmPropertiesAbstract.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;

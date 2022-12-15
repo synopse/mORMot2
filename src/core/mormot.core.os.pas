@@ -3267,11 +3267,11 @@ type
   /// a lightweight exclusive non-rentrant lock, stored in a PtrUInt value
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: methods are non rentrant, i.e. calling Lock twice in a raw would
-  // deadlock: use TRWLock or TSynLocker/TRTLCriticalSection for reentrant methods
+  // deadlock: use TRWLock or TSynLocker/TOSLock for reentrant methods
   // - light locks are expected to be kept a very small amount of time: use
-  // TSynLocker or TRTLCriticalSection if the lock may block too long
+  // TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
-  // be more efficient than a more global TRTLCriticalSection/TRWLock
+  // be more efficient than a more global TOSLock/TRWLock
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
   TLightLock = record
@@ -3310,9 +3310,9 @@ type
   // - consider TRWLock is you need an upgradable lock - but if you mostly read,
   // then a TRWLightLock.ReadLock/ReadUnLock/WriteLock is faster than upgrading
   // - light locks are expected to be kept a very small amount of time: use
-  // TSynLocker or TRTLCriticalSection if the lock may block too long
+  // TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
-  // be more efficient than a more global TRTLCriticalSection/TRWLock
+  // be more efficient than a more global TOSLock/TRWLock
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
   TRWLightLock = record
@@ -3367,7 +3367,7 @@ type
   /// a lightweight multiple Reads / exclusive Write reentrant lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - locks are expected to be kept a very small amount of time: use TSynLocker
-  // or TRTLCriticalSection if the lock may block too long
+  // or TOSLock if the lock may block too long
   // - warning: all methods are reentrant, but WriteLock/ReadWriteLock would
   // deadlock if called after a ReadOnlyLock
   {$ifdef USERECORDWITHMETHODS}
@@ -3457,7 +3457,7 @@ type
   PRWLock = ^TRWLock;
 
   /// the rentrant lock supplied by the Operating System
-  // - redirect to TRTLCriticalSection, using Win32 API or pthreads library
+  // - maps TRTLCriticalSection, i.e. calls Win32 API or pthreads library
   // - don't forget to call Init and Done to properly initialize the structure
   // - similar signature to TLightLock, so could be used as compile time alternative
   {$ifdef USERECORDWITHMETHODS}
@@ -6370,7 +6370,7 @@ begin
 end;
 
 var
-  GlobalCriticalSection, ConsoleCriticalSection: TRTLCriticalSection;
+  GlobalCriticalSection, ConsoleCriticalSection: TOSLock;
 
 {$I-}
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
@@ -6380,7 +6380,7 @@ begin
   if not HasConsole then
     exit;
   {$endif OSWINDOWS}
-  mormot.core.os.EnterCriticalSection(ConsoleCriticalSection);
+  ConsoleCriticalSection.Lock;
   try
     if not NoColor then
       TextColor(Color);
@@ -6391,7 +6391,7 @@ begin
       TextColor(ccLightGray);
     ioresult;
   finally
-    mormot.core.os.LeaveCriticalSection(ConsoleCriticalSection);
+    ConsoleCriticalSection.UnLock;
   end;
 end;
 {$I+}
@@ -8041,12 +8041,12 @@ end;
 
 procedure GlobalLock;
 begin
-  mormot.core.os.EnterCriticalSection(GlobalCriticalSection);
+  mormot.core.os.EnterCriticalSection(GlobalCriticalSection.CS);
 end;
 
 procedure GlobalUnLock;
 begin
-  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection);
+  mormot.core.os.LeaveCriticalSection(GlobalCriticalSection.CS);
 end;
 
 var
@@ -8458,8 +8458,8 @@ begin
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
-  InitializeCriticalSection(GlobalCriticalSection);
-  InitializeCriticalSection(ConsoleCriticalSection);
+  GlobalCriticalSection.Init;
+  ConsoleCriticalSection.Init;
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
@@ -8491,8 +8491,8 @@ begin
   ObjArrayClear(CurrentFakeStubBuffers);
   Executable.Version.Free;
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
-  DeleteCriticalSection(ConsoleCriticalSection);
-  DeleteCriticalSection(GlobalCriticalSection);
+  ConsoleCriticalSection.Done;
+  GlobalCriticalSection.Done;
   {$ifndef NOEXCEPTIONINTERCEPT}
   _RawLogException := nil;
   RawExceptionIntercepted := true;

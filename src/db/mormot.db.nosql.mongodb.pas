@@ -752,7 +752,7 @@ type
   // better performance
   TMongoConnection = class
   protected
-    fLock: TRTLCriticalSection;
+    fSafe: TOSLock;
     fLocked: cardinal;
     fClient: TMongoClient;
     fSocket: TCrtSocket;
@@ -2751,7 +2751,7 @@ begin
   if fServerAddress = '' then
     fServerAddress := '127.0.0.1';
   fServerPort := aServerPort;
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TMongoConnection.Destroy;
@@ -2763,7 +2763,7 @@ begin
       ; // continue on socket error
     end;
   finally
-    DeleteCriticalSection(fLock);
+    fSafe.Done;
     inherited Destroy;
   end;
 end;
@@ -3231,14 +3231,14 @@ end;
 
 procedure TMongoConnection.Lock;
 begin
-  EnterCriticalSection(fLock);
+  fSafe.Lock;
   inc(fLocked);
 end;
 
 procedure TMongoConnection.UnLock;
 begin
   dec(fLocked);
-  LeaveCriticalSection(fLock);
+  fSafe.UnLock;
 end;
 
 function TMongoConnection.GetLocked: boolean;

@@ -95,7 +95,7 @@ type
     /// the current (reusable) write data buffer of this connection
     fWr: TRawByteStringBuffer;
     /// TryLock/Unlock R/W thread acquisition
-    // - uses its own rentrant implementation, faster than TRTLCriticalSection
+    // - uses its own rentrant implementation, faster/lighter than TOSLock
     fRW: array[boolean] of record
       Lock: PtrUInt;
       ThreadID: TThreadID;

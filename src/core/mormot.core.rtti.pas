@@ -2476,7 +2476,7 @@ type
     // - stores e.g. the TOrmProperties ORM information of a TOrm,
     // or the TSynLogFamily of a TSynLog instance
     // - is owned, as TObject, by this TRttiCustom
-    // - assignment is usually protected by the Rtti.RegisterLock
+    // - assignment is usually protected by the Rtti.RegisterSafe
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
     /// redirect to the low-level value copy - use rather ValueCopy()
@@ -2543,7 +2543,7 @@ type
     Count: integer;
     /// a global lock shared for high-level RTTI registration process
     // - is used e.g. to protect DoRegister() or TRttiCustom.PrivateSlot
-    RegisterLock: TRTLCriticalSection;
+    RegisterSafe: TOSLock;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
     /// initialize the RTTI list
@@ -8184,7 +8184,7 @@ end;
 constructor TRttiCustomList.Create;
 begin
   PerKind := AllocMem(SizeOf(PerKind^)); // 15KB zeroed hash table allocation
-  InitializeCriticalSection(RegisterLock);
+  RegisterSafe.Init;
   fGlobalClass := TRttiCustom;
 end;
 
@@ -8195,7 +8195,7 @@ begin
   for i := Count - 1 downto 0 do
     Instances[i].Free;
   Dispose(PerKind);
-  DeleteCriticalSection(RegisterLock);
+  RegisterSafe.Done;
   inherited Destroy;
 end;
 
@@ -8425,15 +8425,15 @@ begin
     result := nil;
     exit;
   end;
-  mormot.core.os.EnterCriticalSection(RegisterLock);
+  RegisterSafe.Lock;
   try
-    result := FindType(Info);  // search again (within RegisterLock context)
+    result := FindType(Info);  // search again (within RegisterSafe context)
     if result <> nil then
       exit; // already registered in the background
     result := GlobalClass.Create(Info);
     AddToPairs(result);
   finally
-    mormot.core.os.LeaveCriticalSection(RegisterLock);
+    RegisterSafe.UnLock;
   end;
   if FindType(Info) <> result then // paranoid check
     raise ERttiException.CreateUtf8('%.DoRegister(%)?', [self, Info.RawName]);
@@ -8449,7 +8449,7 @@ begin
   else
   begin
     // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
-    mormot.core.os.EnterCriticalSection(RegisterLock);
+    RegisterSafe.Lock;
     try
       result := Find(ObjectClass); // search again (for thread safety)
       if result <> nil then
@@ -8459,7 +8459,7 @@ begin
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
     finally
-      mormot.core.os.LeaveCriticalSection(RegisterLock);
+      RegisterSafe.UnLock;
     end;
   end;
 end;
@@ -8469,7 +8469,7 @@ var
   i: integer;
   p: PRttiCustomProp;
 begin
-  mormot.core.os.EnterCriticalSection(RegisterLock);
+  RegisterSafe.Lock;
   try
     result := DoRegister(ObjectClass);
     if (rcfAutoCreateFields in ToDo) and
@@ -8498,7 +8498,7 @@ begin
       include(result.fFlags, rcfAutoCreateFields); // should be set once defined
     end;
   finally
-    mormot.core.os.LeaveCriticalSection(RegisterLock);
+    RegisterSafe.UnLock;
   end;
 end;
 
@@ -8508,7 +8508,7 @@ var
   k: PRttiCustomListPairs;
   p: ^TPointerDynArray;
 begin
-  // call is made within RegisterLock but when resizing p^.Pairs,
+  // call is made within RegisterSafe but when resizing p^.Pairs,
   // Table^.PairsSafe.WriteLock should be used
   k := @PerKind^[Instance.Kind];
   p := @k^.PerHash[(PtrUInt(Instance.Info.RawName[0]) xor
@@ -8723,8 +8723,8 @@ begin
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
     raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
   result := RegisterType(DynArrayOrRecord);
-  // usually done once at startup from main thread, so RegisterLock is safe
-  mormot.core.os.EnterCriticalSection(RegisterLock);
+  // usually done once at startup from main thread, so RegisterSafe is safe
+  RegisterSafe.Lock;
   try
     if result.Kind = rkDynArray then
       if result.ArrayRtti = nil then
@@ -8750,7 +8750,7 @@ begin
       result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
     result.SetParserType(result.Parser, result.ParserComplex);
   finally
-    mormot.core.os.LeaveCriticalSection(RegisterLock);
+    RegisterSafe.UnLock;
   end;
 end;
 
@@ -8760,7 +8760,7 @@ var
   P: PUtf8Char;
   new: boolean;
 begin
-  mormot.core.os.EnterCriticalSection(RegisterLock);
+  RegisterSafe.Lock;
   try
     result := Find(pointer(TypeName), length(TypeName));
     new := result = nil;
@@ -8775,7 +8775,7 @@ begin
     if new then
       result.NoRttiSetAndRegister(ptRecord, TypeName);
   finally
-    mormot.core.os.LeaveCriticalSection(RegisterLock);
+    RegisterSafe.UnLock;
   end;
 end;
 

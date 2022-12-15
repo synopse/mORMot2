@@ -509,13 +509,13 @@ type
     fModified: boolean;
     fOutInternalStateForcedRefresh: boolean;
     {$ifdef DEBUGSTORAGELOCK}
-    fStorageCriticalSectionCount: integer;
+    fStorageSafeCount: integer;
     {$endif DEBUGSTORAGELOCK}
     fOwner: TRestOrmServer;
     fStorageVirtual: TOrmVirtualTable;
     fBasicSqlCount: RawUtf8;
     fBasicSqlHasRows: array[boolean] of RawUtf8;
-    fStorageCriticalSection: TRTLCriticalSection;
+    fStorageSafe: TOSLock;
     fTempBuffer: PTextWriterStackBuffer;
     procedure RecordVersionFieldHandle(Occasion: TOrmOccasion;
       var Decoder: TJsonObjectDecoder);
@@ -1880,7 +1880,7 @@ begin
   inherited Create(nil);
   if aClass = nil then
     raise ERestStorage.CreateUtf8('%.Create(aClass=nil)', [self]);
-  InitializeCriticalSection(fStorageCriticalSection);
+  fStorageSafe.Init;
   fStoredClass := aClass;
   fStoredClassRecordProps := aClass.OrmProps;
   if aServer <> nil then
@@ -1909,11 +1909,11 @@ destructor TRestStorage.Destroy;
 begin
   inherited;
   {$ifdef DEBUGSTORAGELOCK}
-  if fStorageCriticalSectionCount <> 0 then
+  if fStorageSafeCount <> 0 then
     raise ERestStorage.CreateUtf8('%.Destroy with CS=%',
-      [self, fStorageCriticalSectionCount]);
+      [self, fStorageSafeCount]);
   {$endif DEBUGSTORAGELOCK}
-  DeleteCriticalSection(fStorageCriticalSection);
+  fStorageSafe.Done;
   if fStorageVirtual <> nil then
   begin
     // no GPF e.g. if DB release after server
@@ -1975,13 +1975,13 @@ procedure TRestStorage.StorageLock(WillModifyContent: boolean
 begin
   {$ifdef DEBUGSTORAGELOCK}
   if true or //fStorageLockLogTrace or
-     (fStorageCriticalSectionCount > 1) then
+     (fStorageSafeCount > 1) then
     InternalLog('StorageLock % [%] %',
-      [fStoredClass, msg, fStorageCriticalSectionCount]);
+      [fStoredClass, msg, fStorageSafeCount]);
   {$endif DEBUGSTORAGELOCK}
-  mormot.core.os.EnterCriticalSection(fStorageCriticalSection);
+  fStorageSafe.Lock;
   {$ifdef DEBUGSTORAGELOCK}
-  inc(fStorageCriticalSectionCount);
+  inc(fStorageSafeCount);
   {$endif DEBUGSTORAGELOCK}
   if WillModifyContent and
      fStorageLockShouldIncreaseOwnerInternalState and
@@ -1992,15 +1992,15 @@ end;
 procedure TRestStorage.StorageUnLock;
 begin
   {$ifdef DEBUGSTORAGELOCK}
-  dec(fStorageCriticalSectionCount);
+  dec(fStorageSafeCount);
   if true then // fStorageLockLogTrace then
     InternalLog('StorageUnlock % %',
-      [fStoredClass, fStorageCriticalSectionCount]);
-  if fStorageCriticalSectionCount < 0 then
+      [fStoredClass, fStorageSafeCount]);
+  if fStorageSafeCount < 0 then
     raise ERestStorage.CreateUtf8('%.StorageUnLock with CS=%',
-      [self, fStorageCriticalSectionCount]);
+      [self, fStorageSafeCount]);
   {$endif DEBUGSTORAGELOCK}
-  mormot.core.os.LeaveCriticalSection(fStorageCriticalSection);
+  fStorageSafe.UnLock;
 end;
 
 function TRestStorage.GetCurrentSessionUserID: TID;

@@ -158,7 +158,7 @@ type
     fTransactionRetryTimeout: Int64;
     fTransactionActiveTimeout: Int64;
     fTransactionActiveAutoReleaseTicks: Int64;
-    fLock: TRTLCriticalSection;
+    fSafe: TOSLock;
     function GetAuthenticate: TSynAuthenticationAbstract;
     /// default Handle*() will just return the incoming value
     function HandleInput(const input: RawByteString): RawByteString; virtual;
@@ -747,7 +747,7 @@ begin
   fAuthenticate := aAuthenticate;
   fTransactionRetryTimeout := 100;
   fTransactionActiveTimeout := 120000; // after 2 minutes, clear any transaction
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 function TSqlDBProxyConnectionProtocol.GetAuthenticate: TSynAuthenticationAbstract;
@@ -789,7 +789,7 @@ begin
   tix := GetTickCount64;
   tixend := tix + fTransactionRetryTimeout;
   repeat
-    EnterCriticalSection(fLock);
+    fSafe.Lock;
     try
       if (fTransactionActiveAutoReleaseTicks <> 0) and
          (tix > fTransactionActiveAutoReleaseTicks) then
@@ -807,7 +807,7 @@ begin
         connection.StartTransaction;
       end;
     finally
-      LeaveCriticalSection(fLock);
+      fSafe.UnLock;
     end;
     if result or
        (tix > tixend) then
@@ -822,7 +822,7 @@ begin
   if sessionID = 0 then
     raise ESqlDBRemote.CreateUtf8(
       '%: Remote transaction expects authentication/session', [self]);
-  EnterCriticalSection(fLock);
+  fSafe.Lock;
   try
     if sessionID <> fTransactionSessionID then
       raise ESqlDBRemote.CreateUtf8('Invalid %.TransactionEnd(%) - expected %',
@@ -830,14 +830,14 @@ begin
     fTransactionSessionID := 0;
     fTransactionActiveAutoReleaseTicks := 0;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe.UnLock;
   end;
 end;
 
 destructor TSqlDBProxyConnectionProtocol.Destroy;
 begin
   fAuthenticate.Free;
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
   inherited Destroy;
 end;
 

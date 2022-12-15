@@ -158,7 +158,7 @@ type
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
-    fExecuteLock: TRTLCriticalSection;
+    fExecuteLock: TOSLock;
     fExecuteCached: TInterfaceMethodExecuteCachedDynArray;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
@@ -312,7 +312,7 @@ type
 
 var
   /// global mutex used by optExecGlobalLocked and optFreeGlobalLocked
-  GlobalInterfaceExecuteMethod: TRTLCriticalSection;
+  GlobalInterfaceExecuteMethod: TOSLock;
 
 
 { ***************** TServiceContainerServer Services Holder }
@@ -581,7 +581,7 @@ constructor TServiceFactoryServer.Create(aRestServer: TRestServer;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
 begin
   // extract RTTI from the interface
-  InitializeCriticalSection(fExecuteLock);
+  fExecuteLock.Init;
   fInstanceGC := TSynObjectListLocked.Create({ownobjects=}false);
   fRestServer := aRestServer;
   inherited Create(aRestServer, aInterface, aInstanceCreation, aContractExpected);
@@ -759,10 +759,10 @@ begin
   end;
   // finalize service execution context
   FreeAndNil(fBackgroundThread);
-  DeleteCriticalSection(fExecuteLock);
   ObjArrayClear(fStats, true);
   ObjArrayClear(fExecuteCached);
   inherited Destroy;
+  fExecuteLock.Done;
 end;
 
 function TServiceFactoryServer.DoInstanceGC(Force: boolean): PtrInt;
@@ -817,20 +817,20 @@ begin
       BackgroundExecuteInstanceRelease(Obj, fBackgroundThread)
     else if optFreeGlobalLocked in fAnyOptions then
     begin
-      EnterCriticalSection(GlobalInterfaceExecuteMethod);
+      GlobalInterfaceExecuteMethod.Lock;
       try
         IInterface(Obj)._Release;
       finally
-        LeaveCriticalSection(GlobalInterfaceExecuteMethod);
+        GlobalInterfaceExecuteMethod.UnLock;
       end;
     end
     else if optFreeLockedPerInterface in fAnyOptions then
     begin
-      EnterCriticalSection(fExecuteLock);
+      fExecuteLock.Lock;
       try
         IInterface(Obj)._Release;
       finally
-        LeaveCriticalSection(fExecuteLock);
+        fExecuteLock.UnLock;
       end;
     end
     else
@@ -1451,9 +1451,9 @@ begin
     if mlInterfaces in fRestServer.StatLevels then
       stats := GetStats(Ctxt, m);
     if optExecLockedPerInterface in opt then
-      EnterCriticalSection(fExecuteLock)
+      fExecuteLock.Lock
     else if optExecGlobalLocked in opt then
-      EnterCriticalSection(GlobalInterfaceExecuteMethod);
+      GlobalInterfaceExecuteMethod.Lock;
     try
       exec.BackgroundExecutionThread := fBackgroundThread;
       exec.OnCallback := Ctxt.ExecuteCallback;
@@ -1488,9 +1488,9 @@ begin
       Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
     finally
       if optExecLockedPerInterface in opt then
-        LeaveCriticalSection(fExecuteLock)
+        fExecuteLock.UnLock
       else if optExecGlobalLocked in opt then
-        LeaveCriticalSection(GlobalInterfaceExecuteMethod);
+        GlobalInterfaceExecuteMethod.UnLock;
     end;
     if Ctxt.Call.OutHead = '' then
     begin
@@ -2386,10 +2386,10 @@ end;
 
 
 initialization
-  InitializeCriticalSection(GlobalInterfaceExecuteMethod);
+  GlobalInterfaceExecuteMethod.Init;
 
 finalization
-  DeleteCriticalSection(GlobalInterfaceExecuteMethod);
+  GlobalInterfaceExecuteMethod.Done;
 
 end.
 

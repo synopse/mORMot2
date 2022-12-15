@@ -2297,7 +2297,7 @@ type
   // instances (e.g. TSqlite3HttpServer or TRestServerNamedPipeResponse),
   // for better response time and CPU use (this is the technical reason why
   // service implementation methods have to handle multi-threading safety
-  // carefully, e.g. by using TRTLCriticalSection mutex on purpose) - warning:
+  // carefully, e.g. by using TOSLock mutex on purpose) - warning:
   // a Windows Service has no 'main thread' concept, so should not use it
   // - optFreeInMainThread will force the _Release/Destroy method to be run
   // in the main thread: setting this option for any method will affect the

@@ -6294,7 +6294,7 @@ var
 begin
   // private sub function for proper TOrm.OrmProps method inlining
   rtticustom := Rtti.RegisterClass(self);
-  mormot.core.os.EnterCriticalSection(Rtti.RegisterLock);
+  Rtti.RegisterSafe.Lock;
   try
     result := rtticustom.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
@@ -6314,7 +6314,7 @@ begin
        rcfClassMayBeID];  // avoid most IsPropClassInstance calls
     self.InternalDefineModel(result);
   finally
-    mormot.core.os.LeaveCriticalSection(Rtti.RegisterLock);
+    Rtti.RegisterSafe.UnLock;
   end;
 end;
 
@@ -9001,7 +9001,7 @@ var
   i: PtrInt;
 begin
   //assert(aTableIndex>=0);
-  EnterCriticalSection(fLock); // may be called from several threads at once
+  fSafe.Lock; // may be called from several threads at once
   try
     for i := 0 to fModelMax do
       if fModel[i].Model = aModel then
@@ -9016,7 +9016,7 @@ begin
       TableIndex := aTableIndex;
     end;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe.UnLock;
   end;
 end;
 
@@ -10139,7 +10139,7 @@ begin
   for i := 0 to fTablesMax do
     with TableProps[i].Props do
     begin
-      EnterCriticalSection(fLock); // may be called from several threads at once
+      fSafe.Lock; // may be called from several threads at once
       try
         for j := 0 to fModelMax do
           if fModel[j].Model = self then
@@ -10151,7 +10151,7 @@ begin
           end;
         TableProps[i].Free;
       finally
-        LeaveCriticalSection(fLock);
+        fSafe.UnLock;
       end;
     end;
   ObjArrayClear(fIDGenerator);
