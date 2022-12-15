@@ -1110,7 +1110,7 @@ type
   TSynThreadPool = class
   protected
     {$ifndef USE_WINIOCP}
-    fSafe: TLightLock;
+    fSafe: TOSLock; // TLightLock may be less stable
     {$endif USE_WINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
@@ -3213,6 +3213,7 @@ constructor TSynThreadPool.Create(NumberOfThreads: integer;
 var
   i: PtrInt;
 begin
+  fSafe.Init; // mandatory for TOSLock
   if NumberOfThreads = 0 then
     NumberOfThreads := 1
   else if cardinal(NumberOfThreads) > THREADPOOL_MAXTHREADS then
@@ -3271,6 +3272,7 @@ begin
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
+  fSafe.Done; // mandatory for TOSLock
 end;
 
 function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boolean;
