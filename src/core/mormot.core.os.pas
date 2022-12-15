@@ -3287,6 +3287,10 @@ type
     // - e.g. not needed if TLightLock is defined as a class field
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
+    /// could be called to finalize the instance as a TOSLock
+    // - does nothing - just for compatibility with TOSLock
+    procedure Done;
+      {$ifdef HASINLINE} inline; {$endif}
     /// enter an exclusive non-rentrant lock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3451,6 +3455,35 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
   PRWLock = ^TRWLock;
+
+  /// the rentrant lock supplied by the Operating System
+  // - redirect to TRTLCriticalSection, using Win32 API or pthreads library
+  // - don't forget to call Init and Done to properly initialize the structure
+  // - similar signature to TLightLock, so could be used as compile time alternative
+  {$ifdef USERECORDWITHMETHODS}
+  TOSLock = record
+  {$else}
+  TOSLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    CS: TRTLCriticalSection;
+  public
+    /// to be called to setup the instance
+    // - mandatory in all cases, even if TOSLock is part of a class
+    procedure Init;
+    /// to be called to finalize the instance
+    procedure Done;
+    /// enter an OS lock
+    procedure Lock;
+      {$ifdef FPC} inline; {$endif}
+    /// try to enter an OS lock
+    // - if returned true, caller should eventually call UnLock()
+    function TryLock: boolean;
+      {$ifdef FPC} inline; {$endif}
+    /// leave an OS lock
+    procedure UnLock;
+      {$ifdef FPC} inline; {$endif}
+  end;
 
 type
   /// how TSynLocker handles its thread processing
@@ -7210,6 +7243,10 @@ begin
   Flags := 0;
 end;
 
+procedure TLightLock.Done;
+begin // just for compatibility with TOSLock
+end;
+
 procedure TLightLock.LockSpin;
 var
   spin: PtrUInt;
@@ -7510,6 +7547,34 @@ begin
     ReadWriteUnLock
   else
     WriteUnLock;
+end;
+
+
+{ TOSLock }
+
+procedure TOSLock.Init;
+begin
+  mormot.core.os.InitializeCriticalSection(CS);
+end;
+
+procedure TOSLock.Done;
+begin
+  mormot.core.os.DeleteCriticalSection(CS);
+end;
+
+procedure TOSLock.Lock;
+begin
+  mormot.core.os.EnterCriticalSection(CS);
+end;
+
+function TOSLock.TryLock: boolean;
+begin
+  result := mormot.core.os.TryEnterCriticalSection(CS) <> 0;
+end;
+
+procedure TOSLock.UnLock;
+begin
+  mormot.core.os.LeaveCriticalSection(CS);
 end;
 
 
