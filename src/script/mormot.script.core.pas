@@ -716,7 +716,7 @@ begin
     raise EScriptException.CreateUtf8(
       'Too Many Nested %.DoBeginRequest', [self]);
   inc(fRequestFpuBackup[0]);
-  fRequestFpuBackup[fRequestFpuBackup[0]] := SetFpuFlags(ffLibrary);
+  fRequestFpuBackup[fRequestFpuBackup[0]] := SetFpuFlags;
 end;
 
 procedure TThreadSafeEngine.DoEndRequest;

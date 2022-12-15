@@ -3077,7 +3077,7 @@ var
   freev: boolean;
 begin
   freev := false;
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   try
     if (not noJson) and
        v.IsObject and
@@ -3107,7 +3107,7 @@ var
   saved: cardinal;
   len: PtrUInt;
 begin
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
   ResetFpuFlags(saved);
   temp.Init(P, len);
@@ -3127,7 +3127,7 @@ var
   len, sl, sepl: PtrUInt;
   saved: cardinal;
 begin
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
   ResetFpuFlags(saved);
   if (P = nil) or
@@ -3192,7 +3192,7 @@ begin
       f := 'main' // only global scope is allowed without file name
   else
     f := pointer(fn);
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   try
     result := JSValue(JS_Eval(@self, pointer(code), length(code), f, flags));
     if result.IsException then
@@ -3267,7 +3267,7 @@ function TJSContext.CallRaw(obj, fun: JSValue;
 var
   saved: cardinal;
 begin
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   try
     result := JS_Call(@self, fun.Raw, obj.Raw, length(args), pointer(args));
   finally
@@ -3345,7 +3345,7 @@ str:    TVarData(res).vType := varString;
         // JSONStringify() creates a temp json -> in-place parsing w/o ToUtf8()
         json.Empty;
         P := nil;
-        saved := SetFpuFlags(ffLibrary);
+        saved := SetFpuFlags;
         try
           json := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
           if json.IsException then
@@ -3368,7 +3368,7 @@ str:    TVarData(res).vType := varString;
     JS_TAG_BIG_INT:
       begin
         TVarData(res).vType := varInt64;
-        saved := SetFpuFlags(ffLibrary);
+        saved := SetFpuFlags;
         result := JS_ToInt64Ext(@self, @TVarData(res).vInt64, JSValueRaw(v)) = 0;
         ResetFpuFlags(saved);
         exit;
@@ -3381,7 +3381,7 @@ str:    TVarData(res).vType := varString;
     JS_TAG_BIG_DECIMAL,
     JS_TAG_BIG_FLOAT:
       begin
-        saved := SetFpuFlags(ffLibrary);
+        saved := SetFpuFlags;
         if JS_ToFloat64(@self, @TVarData(res).vDouble, JSValueRaw(v)) = 0 then
           TVarData(res).vType := varDouble;
         ResetFpuFlags(saved);
@@ -3451,7 +3451,7 @@ procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue;
 var
   saved: cardinal;
 begin
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   try
     result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
     if exceptonerror and

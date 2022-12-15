@@ -7909,7 +7909,7 @@ begin
   {$ifdef NOSQLITE3FPUSAVE}
   sqlite3.finalize(Request);
   {$else}
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   sqlite3.finalize(Request);
   ResetFpuFlags(saved);
   {$endif NOSQLITE3FPUSAVE}
@@ -8487,7 +8487,7 @@ begin
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
   {$ifndef NOSQLITE3FPUSAVE}
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   try
   {$endif NOSQLITE3FPUSAVE}
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
@@ -8556,7 +8556,7 @@ begin
   {$ifdef NOSQLITE3FPUSAVE}
   result := sqlite3.reset(Request);
   {$else}
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   // no check here since it is in PREVIOUS execution error state
   result := sqlite3.reset(Request);
   ResetFpuFlags(saved);
@@ -8576,7 +8576,7 @@ begin
   {$ifdef NOSQLITE3FPUSAVE}
   result := sqlite3.step(Request);
   {$else}
-  saved := SetFpuFlags(ffLibrary);
+  saved := SetFpuFlags;
   result := sqlite3.step(Request);
   ResetFpuFlags(saved);
   {$endif NOSQLITE3FPUSAVE}

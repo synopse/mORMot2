@@ -141,6 +141,11 @@ procedure SetLibcNumericLocale;
 { ********************** Cross-Platform FPU Exceptions Masking }
 
 type
+  /// define SetFpuFlags/ResetFpuFlags context
+  // - external libraries coded in C are likely to disable FPU exceptions,
+  // whereas Delphi/FPC code expects FPU exceptions to be raised ASAP
+  // - ffLibrary is used before calling an external library
+  // - ffPascal before calling pascal code from an external library callback
   TFpuFlags = (
     ffLibrary,
     ffPascal);
@@ -170,12 +175,12 @@ var
 {$endif CPUINTEL}
 
 /// mask/unmask all FPU exceptions, according to the running CPU
-// - returns the previous execption flags, for ResetFpuFlags() call
+// - returns the previous exception flags, for ResetFpuFlags() call
 // - x87 flags are $1372 for pascal, or $137F for library
 // - sse flags are $1920 for pascal, or $1FA0 for library
 // - on non Intel/AMD CPUs, will use TFPUExceptionMask from the RTL Math unit
 // - do nothing and return -1 if the supplied flags are the one already set
-function SetFpuFlags(flags: TFpuFlags): cardinal;
+function SetFpuFlags(flags: TFpuFlags = ffLibrary): cardinal;
 
 /// restore the FPU exceptions flags as overriden by SetFpuFlags()
 // - do nothing if the saved flags are the one already set, i.e. -1
@@ -1894,33 +1899,39 @@ end;
 const
   _FPUFLAGSIDEM = cardinal(-1); // fake value used for faster nested calls
 
+function _GetFlags: cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  {$ifdef CPUINTEL}
+    {$ifdef CPU64}
+    result := GetMXCSR;
+    {$else}
+    result := Get8087CW;
+    {$endif CPU64}
+  {$else}
+    result := cardinal(GetExceptionMask);
+  {$endif CPUINTEL}
+end;
+
 procedure _SetFlags(flags: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-{$ifdef CPUINTEL}
-  {$ifdef CPU64}
-  SetMXCSR(flags);
+  {$ifdef CPUINTEL}
+    {$ifdef CPU64}
+    SetMXCSR(flags);
+    {$else}
+    Set8087CW(flags);
+    {$endif CPU64}
   {$else}
-  Set8087CW(flags);
-  {$endif CPU64}
-{$else}
-  SetExceptionMask(TFPUExceptionMask(flags));
-{$endif CPUINTEL}
+    SetExceptionMask(TFPUExceptionMask(flags));
+  {$endif CPUINTEL}
 end;
 
 function SetFpuFlags(flags: TFpuFlags): cardinal;
 var
   new: cardinal;
 begin
-{$ifdef CPUINTEL}
-  {$ifdef CPU64}
-  result := GetMXCSR;
-  {$else}
-  result := Get8087CW;
-  {$endif CPU64}
-{$else}
-  result := cardinal(GetExceptionMask);
-{$endif CPUINTEL}
+  result := _GetFlags;
   new := cardinal(_FPUFLAGS[flags]);
   if new <> result then
     _SetFlags(new)
