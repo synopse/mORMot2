@@ -3213,7 +3213,6 @@ constructor TSynThreadPool.Create(NumberOfThreads: integer;
 var
   i: PtrInt;
 begin
-  fSafe.Init; // mandatory for TOSLock
   if NumberOfThreads = 0 then
     NumberOfThreads := 1
   else if cardinal(NumberOfThreads) > THREADPOOL_MAXTHREADS then
@@ -3230,6 +3229,7 @@ begin
   if fRequestQueue = 0 then
     exit;
   {$else}
+  fSafe.Init; // mandatory for TOSLock
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_WINIOCP}
   // now create the worker threads
@@ -3269,10 +3269,11 @@ begin
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
+    {$else}
+    fSafe.Done; // mandatory for TOSLock
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
-  fSafe.Done; // mandatory for TOSLock
 end;
 
 function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boolean;
