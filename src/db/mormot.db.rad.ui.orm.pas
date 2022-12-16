@@ -348,18 +348,15 @@ var
   f: PtrInt;
   val: RawUtf8;
 begin
+  result := 0;
   f := Table.FieldIndex(aLookupFieldName);
-  if f < 0 then
-    result := 0
-  else
-  begin
-    VariantToUtf8(aLookupValue, val);
+  if (f >= 0) and
+     VariantToText(aLookupValue, val) then
     if loPartialKey in aOptions then
       result := Table.SearchFieldIdemPChar(val, f)
     else
       result := Table.SearchFieldEquals(
         val, f, 1, not (loCaseInsensitive in aOptions));
-  end;
 end;
 
 {************ JSON/ORM to TDataSet Wrappers Functions }

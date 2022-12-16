@@ -4464,9 +4464,8 @@ begin
     if IsArray then
       result := ToCsv
     else if IsObject or
-            (TDocVariantData(DocVariantOrString).VType <= varNull) or
-            not VariantToUtf8(DocVariantOrString, result) then
-      result := ''; // VariantToUtf8() returns 'null' for empty/null
+            not VariantToText(DocVariantOrString, result) then
+      result := '';
 end;
 
 function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
@@ -7143,9 +7142,9 @@ var
 begin
   result := false;
   ndx := GetValueIndex(aName);
-  if ndx < 0 then
+  if (ndx < 0) or
+     not VariantToText(Values[ndx], text) then
     exit;
-  VariantToUtf8(Values[ndx], text);
   ord := GetEnumNameValue(aTypeInfo, text, true);
   if ord < 0 then
     exit;

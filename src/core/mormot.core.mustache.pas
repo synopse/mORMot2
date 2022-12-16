@@ -2127,10 +2127,8 @@ class procedure TSynMustache.JsonQuote(const Value: variant;
 var
   json: RawUtf8;
 begin
-  if not VarIsEmptyOrNull(Value) then
-    // avoid to return "null"
-    VariantToUtf8(Value, json);
-  RawUtf8ToVariant(QuotedStrJson(json), Result);
+  if VariantToText(Value, json) then
+    RawUtf8ToVariant(QuotedStrJson(json), Result);
 end;
 
 class procedure TSynMustache.JsonQuoteUri(const Value: variant;
@@ -2138,10 +2136,8 @@ class procedure TSynMustache.JsonQuoteUri(const Value: variant;
 var
   json: RawUtf8;
 begin
-  if not VarIsEmptyOrNull(Value) then
-    // avoid to return "null"
-    VariantToUtf8(Value, json);
-  RawUtf8ToVariant(UrlEncode(QuotedStrJson(json)), Result);
+  if VariantToText(Value, json) then
+    RawUtf8ToVariant(UrlEncode(QuotedStrJson(json)), Result);
 end;
 
 procedure ToHtml(const Value: variant; var Result: variant;
@@ -2153,23 +2149,18 @@ begin
   // {{{SimpleToHtml content,browserhasnoemoji,nohtmlescape}}}
   d := _Safe(Value);
   if d^.IsArray and
-     (d^.Count >= 2) then
+     (d^.Count >= 2) and
+     VariantToText(d^.Values[0], txt) then
   begin
-    if VarIsEmptyOrNull(d^.Values[0]) then
-      exit; // don't append 'null' text
-    VariantToUtf8(d^.Values[0], txt);
     if not VarIsVoid(d^.Values[1]) then
       exclude(fmt, heEmojiToUtf8);
     if (d^.Count >= 3) and
        not VarIsVoid(d^.Values[2]) then
       exclude(fmt, heHtmlEscape);
   end
-  else
+  else if not VariantToText(Value, txt) then
     // {{{MarkdownToHtml content}}}
-    if VarIsEmptyOrNull(Value) then
-      exit
-    else
-      VariantToUtf8(Value, txt);
+    exit;
   if txt <> '' then
     if wiki then
       txt := HtmlEscapeWiki(txt, fmt)
@@ -2327,14 +2318,20 @@ end;
 
 class procedure TSynMustache.Lower(const Value: variant;
   out Result: variant);
+var
+  u: RawUtf8;
 begin
-  Result := SysUtils.LowerCase(Value);
+  if VariantToText(Value, u) then
+    RawUtf8ToVariant(LowerCaseUnicode(u), Result);
 end;
 
 class procedure TSynMustache.Upper(const Value: variant;
   out Result: variant);
+var
+  u: RawUtf8;
 begin
-  Result := SysUtils.UpperCase(Value);
+  if VariantToText(Value, u) then
+    RawUtf8ToVariant(UpperCaseUnicode(u), Result);
 end;
 
 

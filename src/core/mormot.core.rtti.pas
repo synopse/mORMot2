@@ -3863,7 +3863,7 @@ begin
     if VariantToInt64(Value, v) then
       SetInt64Value(Instance, v)
     else if (k = rkEnumeration) and
-            VariantToUtf8(Value, u) and
+            VariantToText(Value, u) and
             SetValueText(Instance, u) then
       // value found from GetEnumNameValue()
     else
@@ -3879,7 +3879,7 @@ begin
   begin
     if not VariantToDouble(Value, f) then
       if Assigned(_Iso8601ToDateTime) and
-         VariantToUtf8(Value, u) then
+         VariantToText(Value, u) then
         if u = '' then
           f := 0
         else

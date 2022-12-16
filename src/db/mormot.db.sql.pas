@@ -5853,8 +5853,8 @@ begin
     case VType of
       varNull:
         BindNull(Param, IO);
-      varboolean:
-        if Vboolean then
+      varBoolean:
+        if VBoolean then
           Bind(Param, 1, IO)
         else
           Bind(Param, 0, IO);
