@@ -2133,11 +2133,10 @@ begin
     exit;
   VariantToUtf8(Value, u, wasstring);
   if wasstring then
-    if (u <> '') and
-       (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
-      r := JsonReformat(u)
-    else
-      QuotedStrJson(u, r)
+    QuotedStrJson(u, r)
+  else if (u <> '') and
+          (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
+    r := JsonReformat(u) // e.g. from TDocVariantData
   else
     r := u; // false, true, number
   RawUtf8ToVariant(r, Result);
