@@ -3407,7 +3407,7 @@ const
   NullVarData:  TVarData = (VType: varNull{%H-});
   FalseVarData: TVarData = (VType: varBoolean{%H-});
   TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}1);
-  
+
 var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
@@ -3423,6 +3423,12 @@ procedure VarClear(var v: variant); inline;
 
 /// overloaded function which can be properly inlined to clear a variant
 procedure VarClearAndSetType(var v: variant; vtype: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// internal efficient wrapper of VarClear() + set VType=varString and VAny=nil
+// - used e.g. by RawUtf8ToVariant() functions
+// - could also be used as a faster alternative to Value := ''
+procedure ClearVariantForString(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Value := Null, but slightly faster
@@ -3509,11 +3515,6 @@ procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: variant); overload;
 
 /// convert an UTF-8 encoded string into a variant RawUtf8 varString
 function RawUtf8ToVariant(const Txt: RawUtf8): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// internal efficient wrapper of VarClear() + set VType=varString and VAny=nil
-// - used e.g. by RawUtf8ToVariant() functions
-procedure ClearVariantForString(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Variant varString value into RawUtf8 encoded String

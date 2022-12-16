@@ -2202,6 +2202,11 @@ function _Safe(const DocVariant: variant; out DV: PDocVariantData): boolean; ove
 // call _DV() and a local TDocVariantData instead of a PDocVariantData
 function _SafeArray(const Value: variant; out DV: PDocVariantData): boolean; overload;
 
+/// direct access to a TDocVariantData array from a given variant instance
+// - overload to check for a given number of itemsin the array
+function _SafeArray(const Value: variant; ExpectedCount: integer;
+  out DV: PDocVariantData): boolean; overload;
+
 /// direct access to a TDocVariantData object from a given variant instance
 // - return true and set DV with a pointer to the TDocVariantData
 // corresponding to the variant instance, if it is a dvObject
@@ -2209,7 +2214,7 @@ function _SafeArray(const Value: variant; out DV: PDocVariantData): boolean; ove
 // - note: due to a local variable lifetime change in Delphi 11, don't use
 // this function with a temporary variant (e.g. from TList<variant>.GetItem) -
 // call _DV() and a local TDocVariantData instead of a PDocVariantData
-function _SafeObject(const Value: variant; out DV: PDocVariantData): boolean; overload;
+function _SafeObject(const Value: variant; out DV: PDocVariantData): boolean;
 
 /// direct copy of a TDocVariantData from a given variant instance
 // - slower, but maybe used instead of _Safe() e.g. on Delphi 11
@@ -2870,7 +2875,7 @@ begin
       begin
         dt := varString;
         d.VAny := nil;
-        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store a RawUtf8 instance
+        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store as RawUtf8
       end;
   else // note: varVariant should not happen here
     if DocVariantType.FindSynVariantType(vt, ct) then
@@ -4386,6 +4391,14 @@ function _SafeArray(const Value: variant; out DV: PDocVariantData): boolean;
 begin
   result := _Safe(Value, DV) and
             not {%H-}DV^.IsObject;
+end;
+
+function _SafeArray(const Value: variant; ExpectedCount: integer;
+  out DV: PDocVariantData): boolean; overload;
+begin
+  result := _Safe(Value, DV) and
+            {%H-}DV^.IsArray and
+            (DV^.Count = ExpectedCount);
 end;
 
 function _SafeObject(const Value: variant; out DV: PDocVariantData): boolean;
