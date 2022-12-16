@@ -309,9 +309,8 @@ type
   // - at OS level, there will be a single agl daemon or service
   // - this main agl instance will manage one or several executables as
   // sub-process(es), and act as both Launcher and WatchDog
-  TSynAngelize = class(TSynPersistent)
+  TSynAngelize = class(TSynPersistentLock)
   protected
-    fSafe: TLightLock;
     fSettingsClass: TSynAngelizeServiceClass;
     fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
     fSettingsOptions: TSynJsonFileSettingsOptions;
@@ -355,10 +354,6 @@ type
     // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
     function ExpandPath(aService: TSynAngelizeService;
       const aPath: TFileName): TFileName;
-    /// protect internal structures for proper thread-safety
-    // - the lock time should be kept as small as possible
-    property Safe: TLightLock
-      read fSafe;
   published
     /// how this main daemon/service is defined
     property Settings: TSynAngelizeSettings

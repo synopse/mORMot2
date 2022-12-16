@@ -157,7 +157,7 @@ type
   // - implements the ACME V2 client (specified in RFC8555) to download
   // free domain validated certificates, mainly from Let's Encrypt
   // - see https://letsencrypt.org/how-it-works for a high-level description
-  TAcmeClient = class
+  TAcmeClient = class(TSynPersistentLock)
   protected
     fDirectoryUrl: RawUtf8;
     fContact: RawUtf8;
@@ -166,7 +166,6 @@ type
     fChallenges: TAcmeChallengeDynArray;
     fOnChallenges: TOnAcmeChallenge;
     fChallengeWwwFolder: TFileName;
-    fSafe: TLightLock;
     fLog: TSynLogClass;
     // URI filled by ReadDirectory
     fNewNonce: RawUtf8;
@@ -188,7 +187,7 @@ type
     // - aCert is a local private certificate used to identify the client
     // account for the JWK requests - so is not involved in the TLS chain
     constructor Create(aLog: TSynLogClass; const aCert: ICryptCert;
-      const aDirectoryUrl, aContact: RawUtf8; const aSubjects: TRawUtf8DynArray);
+      const aDirectoryUrl, aContact: RawUtf8; const aSubjects: TRawUtf8DynArray); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// search for a given Challenge token, and return the associated key
@@ -220,9 +219,6 @@ type
     function RegisterAndWaitFolder(
       const ChallengeWwwFolder, OutSignedCert, OutPrivateKey: TFileName;
       const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
-    /// make this instance thread-safe
-    property Safe: TLightLock
-      read fSafe;
     /// associated contact as mailto: link, e.g. 'mailto:admin@synopse.info'
     property Contact: RawUtf8
       read fContact write fContact;
@@ -290,9 +286,8 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynPersistent)
+  TAcmeLetsEncrypt = class(TSynPersistentLock)
   protected
-    fSafe: TLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;
     fPrivateKeyPassword: SpiUtf8;
@@ -354,9 +349,6 @@ type
     // - not needed if an internal HTTP server is processed
     property OnChallenge: TOnAcmeChallenge
       read fOnChallenge write fOnChallenge;
-    /// make the internal Client list thread-safe
-    property Safe: TLightLock
-      read fSafe;
   end;
 
 
