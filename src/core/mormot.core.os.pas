@@ -2175,6 +2175,9 @@ type
 
 {$endif ISDELPHI}
 
+  /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
+  TOSLightMutex = pointer;
+
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
@@ -2198,15 +2201,32 @@ function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
 function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
   {$ifdef FPC} inline; {$endif}
 
+var
+  // Slim Reader/Writer (SRW) API exclusive mode - fallback to TLightLock on XP
+  InitializeSRWLock,
+  AcquireSRWLockExclusive,
+  ReleaseSRWLockExclusive: procedure(var P: TOSLightMutex); stdcall;
+  TryAcquireSRWLockExclusive: function (var P: TOSLightMutex): BOOL; stdcall;
+
 {$else}
 
 type
   /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
   TFileAge = TUnixTime;
 
+  /// system-specific structure holding a non-recursive mutex
+  TOSLightMutex = TRTLCriticalSection;
+
 {$ifdef OSLINUX}
   {$define OSPTHREADS} // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
+
+{$ifdef OSPTHREADS}
+var // defined here for proper inlining
+  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
+{$endif OSPTHREADS}
 
 {$endif OSWINDOWS}
 
@@ -2274,6 +2294,7 @@ var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
 {$endif OSDARWIN}
+
 {$endif OSPOSIX}
 
 /// returns TRUE if the supplied mutex has been initialized
@@ -3456,10 +3477,10 @@ type
   end;
   PRWLock = ^TRWLock;
 
-  /// the rentrant lock supplied by the Operating System
+  /// the standard rentrant lock supplied by the Operating System
   // - maps TRTLCriticalSection, i.e. calls Win32 API or pthreads library
   // - don't forget to call Init and Done to properly initialize the structure
-  // - similar signature to TLightLock, so could be used as compile time alternative
+  // - same signature as TLightLock/TOSLightLock, usable as compile time alternatives
   {$ifdef USERECORDWITHMETHODS}
   TOSLock = record
   {$else}
@@ -3474,6 +3495,7 @@ type
     /// to be called to finalize the instance
     procedure Done;
     /// enter an OS lock
+    // - notice: this method IS reentrant/recursive
     procedure Lock;
       {$ifdef FPC} inline; {$endif}
     /// try to enter an OS lock
@@ -3483,6 +3505,39 @@ type
     /// leave an OS lock
     procedure UnLock;
       {$ifdef FPC} inline; {$endif}
+  end;
+
+  /// the fastest non-rentrant lock supplied by the Operating System
+  // - calls Slim Reader/Writer (SRW) Win32 API in exclusive mode or directly
+  // the pthreads library in non-recursive/fast mode on Linux
+  // - on XP, where SRW are not available, fallback to a TLightLock
+  // - on non-Linux POSIX, fallback to regular cthreads/TRTLCriticalSection
+  // - don't forget to call Init and Done to properly initialize the structure
+  // - same signature as TOSLock/TLightLock, usable as compile time alternatives
+  {$ifdef USERECORDWITHMETHODS}
+  TOSLightLock = record
+  {$else}
+  TOSLightLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fMutex: TOSLightMutex;
+  public
+    /// to be called to setup the instance
+    // - mandatory in all cases, even if TOSLock is part of a class
+    procedure Init;
+    /// to be called to finalize the instance
+    procedure Done;
+    /// enter an OS lock
+    // - warning: this method is NOT reentrant/recursive
+    procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter an OS lock
+    // - if returned true, caller should eventually call UnLock()
+    function TryLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave an OS lock
+    procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 type
@@ -7559,7 +7614,7 @@ end;
 
 procedure TOSLock.Done;
 begin
-  mormot.core.os.DeleteCriticalSection(CS);
+  DeleteCriticalSectionIfNeeded(CS);
 end;
 
 procedure TOSLock.Lock;

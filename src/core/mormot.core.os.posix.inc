@@ -822,9 +822,73 @@ var
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
   pthread_cancel: function (thread: pointer): integer; cdecl;
   pthread_setaffinity_np: function (thread: pointer;
-    cpusetsize: size_t; cpuset: pointer): integer; cdecl;
+    cpusetsize: SizeUInt; cpuset: pointer): integer; cdecl;
+  pthread_mutex_init: function(mutex, attr: pointer): integer; cdecl;
+  pthread_mutex_destroy: function(mutex: pointer): integer; cdecl;
+
+{ TOSLightLock }
+
+procedure TOSLightLock.Init;
+begin
+  FillCharFast(fMutex, SizeOf(fMutex), 0);
+  if Assigned(pthread_mutex_init) then
+    pthread_mutex_init(@fMutex, nil) // no recursive attribute -> fast mutex
+  else
+    EOSException.Create('TOSLightLock.Init: no pthread_mutex_init');
+end;
+
+procedure TOSLightLock.Done;
+begin
+  if IsInitializedCriticalSection(fMutex) then
+    pthread_mutex_destroy(@fMutex);
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  pthread_mutex_lock(@fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := pthread_mutex_trylock(@fMutex) = 0;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  pthread_mutex_unlock(@fMutex);
+end;
+
+{$else} // fallback to plain recursive TRTLCriticalSection
+
+{ TOSLightLock }
+
+procedure TOSLightLock.Init;
+begin
+  InitCriticalSection(fMutex);
+end;
+
+procedure TOSLightLock.Done;
+begin
+  DeleteCriticalSectionIfNeeded(fMutex);
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  EnterCriticalSection(fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := TryEnterCriticalSection(@fMutex) <> 0;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  LeaveCriticalSection(fMutex);
+end;
 
 {$endif OSPTHREADS}
+
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -3484,6 +3548,11 @@ begin
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     @pthread_cancel := dlsym(pthread, 'pthread_cancel');
     @pthread_setaffinity_np := dlsym(pthread, 'pthread_setaffinity_np');
+    @pthread_mutex_init := dlsym(pthread, 'pthread_mutex_init');
+    @pthread_mutex_destroy := dlsym(pthread, 'pthread_mutex_destroy');
+    @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
+    @pthread_mutex_lock    := dlsym(pthread, 'pthread_mutex_lock');
+    @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
   end;
   {$endif OSPTHREADS}
   // some ARM/AARCH64 specific initialization

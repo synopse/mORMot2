@@ -848,12 +848,59 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
 
+procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
+begin
+  TLightLock(P).Init; // TLightLock is good enough on XP
+end;
+
+procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+begin
+  TLightLock(P).Lock;
+end;
+
+procedure ReleaseSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+begin
+  TLightLock(P).UnLock;
+end;
+
+function TryAcquireSRWLockExclusiveForXP(var P: TOSLightMutex): BOOL; stdcall;
+begin
+  result := TLightLock(P).TryLock;
+end;
+
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms <> 0 then
     Windows.Sleep(ms) // follow the HW timer: typically up to 16ms on Windows
   else
     SwitchToThread;
+end;
+
+
+{ TOSLightLock }
+
+procedure TOSLightLock.Init;
+begin
+  InitializeSRWLock(fMutex);
+end;
+
+procedure TOSLightLock.Done;
+begin // nothing needed
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  AcquireSRWLockExclusive(fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := TryAcquireSRWLockExclusive(fMutex);
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  ReleaseSRWLockExclusive(fMutex);
 end;
 
 
@@ -4127,7 +4174,7 @@ end;
 
 var
   EnvironmentCache: SynUnicode;
-  EnvironmentCacheLock: TLightLock;
+  EnvironmentCacheLock: TLightLock; // just set once
 
 procedure GetEnvironmentCache;
 var
@@ -4462,10 +4509,24 @@ begin
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
   else
     @GetNativeSystemInfo := nil;
-  @GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
-  @GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
-  @QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
-  @GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
+  GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
+  GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
+  QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
+  GetLogicalProcessorInformation := GetProcAddress(h, 'GetLogicalProcessorInformation');
+  InitializeSRWLock := GetProcAddress(h, 'InitializeSRWLock');
+  AcquireSRWLockExclusive := GetProcAddress(h, 'AcquireSRWLockExclusive');
+  ReleaseSRWLockExclusive := GetProcAddress(h, 'ReleaseSRWLockExclusive');
+  TryAcquireSRWLockExclusive := GetProcAddress(h, 'TryAcquireSRWLockExclusive');
+  if not Assigned(InitializeSRWLock) or
+     not Assigned(AcquireSRWLockExclusive) or
+     not Assigned(ReleaseSRWLockExclusive) or
+     not Assigned(TryAcquireSRWLockExclusive) then
+  begin // SRW was introduced with Vista: on XP, fallback to our TLightLock
+    InitializeSRWLock := @InitializeSRWLockForXP;
+    AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
+    ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
+    TryAcquireSRWLockExclusive := @TryAcquireSRWLockExclusiveForXP;
+  end;
   h := Windows.LoadLibrary('Psapi.dll');
   if h >= 32 then
   begin
