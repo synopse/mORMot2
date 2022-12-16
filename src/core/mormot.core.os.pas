@@ -2218,15 +2218,27 @@ type
   TOSLightMutex = TRTLCriticalSection;
 
 {$ifdef OSLINUX}
-  {$define OSPTHREADS} // direct pthread calls were tested on Linux only
+  {$define OSPTHREADSLIB} // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
+{$ifdef OSDARWIN}
+  {$define OSPTHREADSSTATIC} // direct pthread calls from the 'c' library
+{$endif OSDARWIN}
+{$ifdef OSBSD}
+  {$define OSPTHREADSSTATIC} // direct pthread calls from the c library
+{$endif OSBSD}
 
-{$ifdef OSPTHREADS}
-var // defined here for proper inlining
-  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
+// some pthread_mutex_*() API defined here for proper inlining
+{$ifdef OSPTHREADSLIB}
+var
   pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
   pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
-{$endif OSPTHREADS}
+{$endif OSPTHREADSLIB}
+{$ifdef OSPTHREADSSTATIC}
+function pthread_mutex_lock(mutex: pointer): integer; cdecl;
+function pthread_mutex_trylock(mutex: pointer): integer; cdecl;
+function pthread_mutex_unlock(mutex: pointer): integer; cdecl;
+{$endif OSPTHREADSSTATIC}
 
 {$endif OSWINDOWS}
 

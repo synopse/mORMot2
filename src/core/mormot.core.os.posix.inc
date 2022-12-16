@@ -741,10 +741,10 @@ const
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
 function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
-  cdecl; external clib name 'clock_gettime';
+  cdecl external clib name 'clock_gettime';
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl; external clib name 'gettimeofday';
+  cdecl external clib name 'gettimeofday';
 
 {$endif OSBSD}
 
@@ -815,26 +815,58 @@ begin
   result := UnixMSTimeUtc;
 end;
 
-{$ifdef OSPTHREADS}
+{$undef OSPTHREADS}
+{$undef HAS_PTHREADSETNAMENP}
+{$undef HAS_PTHREADSETAFFINITY}
 
+{$ifdef OSPTHREADSLIB}
+  {$define OSPTHREADS}
 var
   {%H-}pthread: pointer;
+  {$ifdef OSLINUX}
+  // pthread_setname_np for Linux https://stackoverflow.com/a/7989973/458259
+  {$define HAS_PTHREADSETNAMENP}
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
-  pthread_cancel: function (thread: pointer): integer; cdecl;
+  // pthread_setaffinity_np has been tested on Linux only
+  {$define HAS_PTHREADSETAFFINITY}
   pthread_setaffinity_np: function (thread: pointer;
     cpusetsize: SizeUInt; cpuset: pointer): integer; cdecl;
+  {$endif OSLINUX}
+  pthread_cancel: function (thread: pointer): integer; cdecl;
   pthread_mutex_init: function(mutex, attr: pointer): integer; cdecl;
   pthread_mutex_destroy: function(mutex: pointer): integer; cdecl;
+{$endif OSPTHREADSLIB}
+
+{$ifdef OSPTHREADSSTATIC}
+  {$define OSPTHREADS}
+// note: pthread_setname_np() has no single API across POSIX systems
+function pthread_cancel(thread: pointer): integer;
+  cdecl external clib name 'pthread_cancel';
+function pthread_mutex_init(mutex, attr: pointer): integer;
+  cdecl external clib name 'pthread_mutex_init';
+function pthread_mutex_destroy(mutex: pointer): integer;
+  cdecl external clib name 'pthread_mutex_destroy';
+function pthread_mutex_lock(mutex: pointer): integer;
+  cdecl external clib name 'pthread_mutex_lock';
+function pthread_mutex_trylock(mutex: pointer): integer;
+  cdecl external clib name 'pthread_mutex_trylock';
+function pthread_mutex_unlock(mutex: pointer): integer;
+  cdecl external clib name 'pthread_mutex_unlock';
+{$endif OSPTHREADSSTATIC}
+
+{$ifdef OSPTHREADS}
 
 { TOSLightLock }
 
 procedure TOSLightLock.Init;
 begin
   FillCharFast(fMutex, SizeOf(fMutex), 0);
-  if Assigned(pthread_mutex_init) then
-    pthread_mutex_init(@fMutex, nil) // no recursive attribute -> fast mutex
-  else
-    EOSException.Create('TOSLightLock.Init: no pthread_mutex_init');
+  {$ifdef OSPTHREADSLIB}
+  if not Assigned(pthread_mutex_init) then
+    EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
+  else // no recursive attribute -> fast mutex
+  {$endif OSPTHREADSLIB}
+    pthread_mutex_init(@fMutex, nil);
 end;
 
 procedure TOSLightLock.Done;
@@ -879,7 +911,7 @@ end;
 
 function TOSLightLock.TryLock: boolean;
 begin
-  result := TryEnterCriticalSection(@fMutex) <> 0;
+  result := TryEnterCriticalSection(fMutex) <> 0;
 end;
 
 procedure TOSLightLock.UnLock;
@@ -923,7 +955,8 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef OSPTHREADS} // see https://stackoverflow.com/a/7989973
+  {$ifdef HAS_PTHREADSETNAMENP} // see https://stackoverflow.com/a/7989973
+  {$ifdef OSPTHREADSLIB}
   if Assigned(pthread_setname_np) then
     try
       pthread_setname_np(pointer(ThreadID), @trunc[0]);
@@ -931,7 +964,8 @@ begin
       // ignore any exception (pthread confusion with its static version?)
       @pthread_setname_np := nil; // don't continue that way
     end;
-  {$endif OSPTHREADS}
+  {$endif OSPTHREADSLIB}
+  {$endif HAS_PTHREADSETNAMENP}
 end;
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
@@ -943,7 +977,7 @@ end;
 function RawKillThread(Thread: TThread): boolean;
 begin
   result := false;
-  {$ifdef OSPTHREADS}
+  {$ifdef OSPTHREADSLIB}
   if Assigned(pthread_cancel) then
     try
       result := pthread_cancel(pointer(Thread.ThreadID)) = 0;
@@ -951,7 +985,10 @@ begin
       // ignore any exception (pthread confusion with its static version?)
       @pthread_cancel := nil; // don't continue that way
     end;
-  {$endif OSPTHREADS}
+  {$endif OSPTHREADSLIB}
+  {$ifdef OSPTHREADSSTATIC}
+  result := pthread_cancel(pointer(Thread.ThreadID)) = 0;
+  {$endif OSPTHREADSSTATIC}
 end;
 
 procedure ResetCpuSet(out CpuSet: TCpuSet);
@@ -962,7 +999,8 @@ end;
 function SetThreadMaskAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
 begin
   result := false;
-  {$ifdef OSPTHREADS}
+  {$ifdef HAS_PTHREADSETAFFINITY}
+  {$ifdef OSPTHREADSLIB}
   if (Thread <> nil) and
      Assigned(pthread_setaffinity_np) then
     try
@@ -972,7 +1010,8 @@ begin
       // ignore any exception (pthread confusion with its static version?)
       @pthread_setaffinity_np := nil; // don't continue that way
     end;
-  {$endif OSPTHREADS}
+  {$endif OSPTHREADSLIB}
+  {$endif HAS_PTHREADSETAFFINITY}
 end;
 
 
@@ -2386,7 +2425,7 @@ end;
 
 {$ifdef USEMPROTECT}
 function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
-  cdecl; external clib name 'mprotect';
+  cdecl external clib name 'mprotect';
 {$endif USEMPROTECT}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
@@ -2612,20 +2651,20 @@ type
 
 // retrieve information of a given user by name
 function getpwnam(name: PAnsiChar): PPasswd;
-  cdecl; external clib;
+  cdecl external clib name 'getpwnam';
 
 // sets the supplementary group IDs for the calling process
 function setgroups(n: size_t; groups: PGid): integer;
-  cdecl; external clib;
+  cdecl external clib name 'setgroups';
 
 function setuid(uid: TUid): integer;
-  cdecl; external clib;
+  cdecl external clib name 'setuid';
 function setgid(gid: TGid): integer;
-  cdecl; external clib;
+  cdecl external clib name 'setgid';
 
 // changes the root directory of the calling process
 function chroot(rootpath: PAnsiChar): integer;
-  cdecl; external clib;
+  cdecl external clib name 'chroot';
 
 function DropPriviledges(const UserName: RawUtf8): boolean;
 var
@@ -2986,12 +3025,14 @@ begin
 end;
 
 {$else}
-function getpagesize: integer; cdecl; external clib;
+function getpagesize: integer;
+  cdecl external clib name 'getpagesize';
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
 
-function get_nprocs: integer;  cdecl; external clib;
+function get_nprocs: integer;
+  cdecl external clib name 'get_nprocs';
 
 procedure SetLinuxDistrib(const release: RawUtf8);
 var
@@ -3538,23 +3579,27 @@ begin
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
   // direct access to the pthread library if possible (Linux only)
-  {$ifdef OSPTHREADS}
+  {$ifdef OSPTHREADSLIB}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
   // static and dynamic linking, which is really confusing to our code
   // -> we don't open libpthread but we get its symbol
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
   begin
+    {$ifdef HAS_PTHREADSETNAMENP}
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-    @pthread_cancel := dlsym(pthread, 'pthread_cancel');
+    {$endif HAS_PTHREADSETNAMENP}
+    {$ifdef HAS_PTHREADSETAFFINITY}
     @pthread_setaffinity_np := dlsym(pthread, 'pthread_setaffinity_np');
+    {$endif HAS_PTHREADSETAFFINITY}
+    @pthread_cancel := dlsym(pthread, 'pthread_cancel');
     @pthread_mutex_init := dlsym(pthread, 'pthread_mutex_init');
     @pthread_mutex_destroy := dlsym(pthread, 'pthread_mutex_destroy');
     @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
     @pthread_mutex_lock    := dlsym(pthread, 'pthread_mutex_lock');
     @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
   end;
-  {$endif OSPTHREADS}
+  {$endif OSPTHREADSLIB}
   // some ARM/AARCH64 specific initialization
   {$ifdef CPUARM3264}
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
@@ -3596,10 +3641,10 @@ end;
 
 procedure FinalizeSpecificUnit;
 begin
-  {$ifdef OSPTHREADS}
+  {$ifdef OSPTHREADSLIB}
   if pthread <> nil then
     dlclose(pthread);
-  {$endif OSPTHREADS}
+  {$endif OSPTHREADSLIB}
   {$ifdef OSLINUX} // systemd API is Linux-specific
   sd.Done;
   {$endif OSLINUX}
