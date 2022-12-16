@@ -170,6 +170,7 @@ type
     // be pointed to by the PatternText private field of this object
     procedure Prepare(const aPattern: RawUtf8;
       aCaseInsensitive, aReuse: boolean); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern buffer should remain in memory, since it will
     // be pointed to by the PatternText private field of this object
@@ -208,6 +209,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// access to the pattern text as stored in Pattern
     function PatternText: PUtf8Char;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// check if the pattern search was defined as case-insensitive
+    function CaseInsensitive: boolean;
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -2766,11 +2770,17 @@ begin
   result := Pattern;
 end;
 
+function TMatch.CaseInsensitive: boolean;
+begin
+  result := Upper = @NormToUpperAnsi7;
+end;
+
+
 function IsMatch(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
 var
   match: TMatch;
 begin
-  match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
+  match.Prepare(pointer(Pattern), length(Pattern), CaseInsensitive, {reuse=}false);
   result := match.Match(Text);
 end;
 

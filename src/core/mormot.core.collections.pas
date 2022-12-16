@@ -2362,7 +2362,7 @@ begin
     else
       RaiseUseNewPlainKeyValue(ctx);
     end
-  else
+  else // ordinal key
     if IsManagedType(TValue) then
       case GetTypeKind(TValue) of
         tkLString:

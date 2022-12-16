@@ -1964,7 +1964,7 @@ begin
     else
     begin
       if c.fLastOperation > lastop then
-        // reset time flag after 42 days overflow
+        // reset time flag after 42 days / 32-bit overflow
         c.fLastOperation := lastop;
       gen.Items[result] := c; // keep if not fKeepConnectionInstanceMS old
       inc(result);
