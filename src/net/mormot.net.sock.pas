@@ -2371,20 +2371,30 @@ begin
   MacAddresses[true].Searched := false;
 end;
 
-function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
+procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
 var
   ip: TRawUtf8DynArray;
-  now: integer;
   i: PtrInt;
 begin
+  ip := GetIPAddresses(Kind); // from OS
+  if ip = nil then
+    exit;
+  Text := ip[0];
+  for i := 1 to high(ip) do
+    Text := Text + Sep + ip[i]; // as CSV
+end;
+
+function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
+var
+  now: integer;
+begin
   result := '';
-  with IPAddresses[Kind] do
-  begin
-    Safe.Lock;
-    try
-      if Sep = ' ' then
-      begin
-        now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
+  if Sep = ' ' then
+    with IPAddresses[Kind] do
+    begin
+      now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
+      Safe.Lock;
+      try
         if now <> Tix then
           Tix := now
         else
@@ -2393,20 +2403,15 @@ begin
           if result <> '' then
             exit; // return the value from cache
         end;
-      end;
-      // we need to ask the OS for the current IP addresses
-      ip := GetIPAddresses(Kind);
-      if ip = nil then
-        exit;
-      result := ip[0];
-      for i := 1 to high(ip) do
-        result := result + Sep + ip[i];
-      if Sep = ' ' then
+        GetIPCSV(Sep, Kind, result); // ask the OS for the current IP addresses
         Text := result;
-    finally
-      Safe.UnLock;
-    end;
-  end;
+      finally
+        Safe.UnLock;
+      end;
+    end
+  else
+    // Sep <> ' ' -> can't use the cache, so don't need to lock
+    GetIPCSV(Sep, Kind, result);
 end;
 
 function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
