@@ -1060,18 +1060,21 @@ type
     /// initialize a variant array instance from an object Values[]
     procedure InitArrayFromObjectValues(const aObject: variant;
       aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
+    /// initialize a variant array instance from an object Names[]
+    procedure InitArrayFromObjectNames(const aObject: variant;
+      aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
     /// initialize a variant instance to store some RawUtf8 array content
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some 32-bit integer array content
     procedure InitArrayFrom(const aItems: TIntegerDynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some 64-bit integer array content
     procedure InitArrayFrom(const aItems: TInt64DynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some double array content
     procedure InitArrayFrom(const aItems: TDoubleDynArray;
-      aOptions: TDocVariantOptions); overload;
+      aOptions: TDocVariantOptions; aCount: integer = -1); overload;
     /// initialize a variant instance to store some dynamic array content
     procedure InitArrayFrom(var aItems; ArrayInfo: PRttiInfo;
       aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
@@ -5064,6 +5067,17 @@ begin
     TRttiVarData(self).VType := varNull;
 end;
 
+procedure TDocVariantData.InitArrayFromObjectNames(const aObject: variant;
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
+var
+  dv: PDocVariantData;
+begin
+  if _SafeObject(aObject, dv) then
+    InitArrayFrom(dv^.Names, aOptions, dv^.Count)
+  else
+    TRttiVarData(self).VType := varNull;
+end;
+
 procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
   aOptions: TDocVariantOptions; aWriterOptions: TTextWriterWriteObjectOptions);
 var
@@ -5083,7 +5097,7 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFrom(const aItems: TRawUtf8DynArray;
-  aOptions: TDocVariantOptions);
+  aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
   v: PRttiVarData;
@@ -5106,7 +5120,7 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFrom(const aItems: TIntegerDynArray;
-  aOptions: TDocVariantOptions);
+  aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
   v: PRttiVarData;
@@ -5116,7 +5130,9 @@ begin
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(aItems);
+    if aCount < 0 then
+      aCount := length(aItems);
+    VCount := aCount;
     SetLength(VValue, VCount);
     v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
@@ -5129,7 +5145,7 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFrom(const aItems: TInt64DynArray;
-  aOptions: TDocVariantOptions);
+  aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
   v: PRttiVarData;
@@ -5139,7 +5155,9 @@ begin
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(aItems);
+    if aCount < 0 then
+      aCount := length(aItems);
+    VCount := aCount;
     SetLength(VValue, VCount);
     v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
@@ -5152,7 +5170,7 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFrom(const aItems: TDoubleDynArray;
-  aOptions: TDocVariantOptions);
+  aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
 begin
@@ -5161,7 +5179,9 @@ begin
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(aItems);
+    if aCount < 0 then
+      aCount := length(aItems);
+    VCount := aCount;
     SetLength(VValue, VCount);
     for ndx := 0 to VCount - 1 do
       VValue[ndx] := aItems[ndx];
