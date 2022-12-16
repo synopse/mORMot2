@@ -636,9 +636,9 @@ type
   // - used e.g. for hsoBan40xIP
   THttpAcceptBan = class(TSynPersistent)
   protected
-    fLock: TLightLock; // may block only in IdleEverySecond
+    fSafe: TOSLightLock; // almost never on contention, no R/W needed
     fCount, fCurrent: integer;
-    fIP: array of TCardinalDynArray; // one list per second
+    fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
     procedure SetMax(const Value: cardinal);
@@ -650,11 +650,14 @@ type
     // - maxpersecond is the maximum number of banned IPs remembered per second
     constructor Create(banseconds: cardinal = 4; maxpersecond: cardinal = 1024;
       banwhiteip: cardinal = cLocalhost32); reintroduce;
+    /// finalize this storage
+    destructor Destroy; override;
     /// register an IP4 to be rejected
     function BanIP(ip4: cardinal): boolean; overload;
     /// register an IP4 to be rejected
     procedure BanIP(const ip4: RawUtf8); overload;
     /// fast check if this IP4 is to be rejected
+    // - no RW lock is needed, since is done in the main socket accept() thread
     function IsBanned(const addr: TNetAddr): boolean;
     /// register an IP4 if status in >= 400 (but not 401/403)
     function ShouldBan(status, ip4: cardinal): boolean;
@@ -2026,14 +2029,24 @@ begin
   fMax := maxpersecond;
   SetSeconds(banseconds);
   fWhiteIP := banwhiteip;
+  fSafe.Init;
+end;
+
+destructor THttpAcceptBan.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
 end;
 
 procedure THttpAcceptBan.SetMax(const Value: cardinal);
 begin
-  fLock.Lock;
-  fMax := Value;
-  SetIP;
-  fLock.UnLock;
+  fSafe.Lock;
+  try
+    fMax := Value;
+    SetIP;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure THttpAcceptBan.SetSeconds(const Value: cardinal);
@@ -2042,10 +2055,13 @@ begin
     raise EHttpSocket.CreateFmt(
       'Invalid %.SetSeconds(%): should be a small power of two',
       [ClassNameShort(self)^, Value]);
-  fLock.Lock;
-  fSeconds := Value;
-  SetIP;
-  fLock.UnLock;
+  fSafe.Lock;
+  try
+    fSeconds := Value;
+    SetIP;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure THttpAcceptBan.SetIP;
@@ -2072,7 +2088,7 @@ begin
    result := false
   else
   begin
-    fLock.Lock;
+    fSafe.Lock; // very quick O(1) process in the lock
     if fMax <> 0 then
       {$ifdef HASFASTTRYFINALLY}
       try
@@ -2090,7 +2106,7 @@ begin
       {$ifdef HASFASTTRYFINALLY}
       finally
       {$endif HASFASTTRYFINALLY}
-        fLock.UnLock;
+        fSafe.UnLock;
       end;
     result := true;
   end;
@@ -2117,7 +2133,7 @@ begin
   ip4 := addr.IP4;
   if ip4 = 0 then
     exit;
-  fLock.Lock;
+  fSafe.Lock; // O(n) process, but from the main accept() thread only
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -2141,7 +2157,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fLock.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -2161,7 +2177,7 @@ begin
   if (self = nil) or
      (fCount = 0) then
     exit;
-  fLock.Lock;
+  fSafe.Lock; // very quick O(1) process
   try
     if fCount <> 0 then
     begin
@@ -2173,7 +2189,7 @@ begin
       p^ := 0;         // the oldest slot becomes the current (no memory move)
     end;
   finally
-    fLock.UnLock;
+    fSafe.UnLock;
   end;
 end;
 
