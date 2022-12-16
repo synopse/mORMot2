@@ -25,6 +25,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.search,
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,
@@ -367,6 +368,8 @@ type
     class procedure WikiToHtml(const Value: variant; out Result: variant);
     class procedure MarkdownToHtml(const Value: variant; out Result: variant);
     class procedure SimpleToHtml(const Value: variant; out Result: variant);
+    class procedure Match(const Value: variant; out Result: variant);
+    class procedure MatchI(const Value: variant; out Result: variant);
     class procedure Lower(const Value: variant; out Result: variant);
     class procedure Upper(const Value: variant; out Result: variant);
     class procedure EnumTrim(const Value: variant; out Result: variant);
@@ -376,6 +379,10 @@ type
     class procedure If_(const Value: variant; out Result: variant);
     class procedure NewGuid(const Value: variant; out Result: variant);
     class procedure ExtractFileName(const Value: variant; out Result: variant);
+    class procedure HumanBytes(const Value: variant; out Result: variant);
+    class procedure Sub(const Value: variant; out Result: variant);
+    class procedure Values(const Value: variant; out Result: variant);
+    class procedure Keys(const Value: variant; out Result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -430,9 +437,12 @@ type
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
-    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
-    // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
-    // (following TJsonWriter.AddHtmlEscapeWiki syntax)
+    // Lower / Upper (Unicode ready), PowerOfTwo, Equals (expecting two parameters),
+    // NewGuid, ExtractFileName, HumanBytes (calling KB function), Sub (as
+    // {{Sub AString,12,3}}), MarkdownToHtml, SimpleToHtml (Markdown with no
+    // HTML pass-through), WikiToHtml (callining TJsonWriter.AddHtmlEscapeWiki),
+    // Match / MatchI (as {{Match AString,startwith*}}), and Values / Keys (over
+    // a data object)
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -2012,6 +2022,12 @@ begin
       'If',
       'NewGuid',
       'ExtractFileName',
+      'HumanBytes',
+      'Sub',
+      'Values',
+      'Keys',
+      'Match',
+      'MatchI',
       'Lower',
       'Upper'],
      [DateTimeToText,
@@ -2032,6 +2048,12 @@ begin
       If_,
       NewGuid,
       ExtractFileName,
+      HumanBytes,
+      Sub,
+      Values,
+      Keys,
+      Match,
+      MatchI,
       Lower,
       Upper]);
   result := HelpersStandardList;
@@ -2080,13 +2102,12 @@ class procedure TSynMustache.DateFmt(const Value: variant;
   out Result: variant);
 var
   dt: TDateTime;
+  dv: PDocVariantData;
 begin
   // {{DateFmt DateValue,"dd/mm/yyy"}}
-  with _Safe(Value)^ do
-    if IsArray and
-       (Count = 2) and
-       VariantToDateTime(Values[0], dt) then
-      Result := FormatDateTime(Values[1], dt)
+  if _SafeArray(Value, 2, dv) and
+       VariantToDateTime(dv^.Values[0], dt) then
+      Result := FormatDateTime(dv^.Values[1], dt)
     else
       SetVariantNull(Result{%H-});
 end;
@@ -2252,13 +2273,13 @@ end;
 
 class procedure TSynMustache.Equals_(const Value: variant;
   out Result: variant);
+var
+  dv: PDocVariantData;
 begin
   // {{#Equals .,12}}
-  with _Safe(Value)^ do
-    if IsArray and
-       (Count = 2) and
-       (FastVarDataComp(@Values[0], @Values[1], false) = 0) then
-      Result := true
+  if _SafeArray(Value, 2, dv) and
+       (FastVarDataComp(@dv^.Values[0], @dv^.Values[1], false) = 0) then
+      Result := VarTrue
     else
       SetVariantNull(Result{%H-});
 end;
@@ -2267,41 +2288,38 @@ class procedure TSynMustache.If_(const Value: variant; out Result: variant);
 var
   cmp: integer;
   oper: RawUtf8;
+  dv: PDocVariantData;
   wasString: boolean;
 begin
   // {{#if .<>""}} or {{#if .,"=",123}}
   SetVariantNull(result{%H-});
-  with _Safe(Value)^ do
-    if IsArray and
-       (Count = 3) then
-    begin
-      VariantToUtf8(Values[1], oper, wasString);
-      if wasString and
-         (oper <> '') then
-      begin
-        cmp := FastVarDataComp(@Values[0], @Values[2], false);
-        case PWord(oper)^ of
-          ord('='):
-            if cmp = 0 then
-              result := True;
-          ord('>'):
-            if cmp > 0 then
-              result := True;
-          ord('<'):
-            if cmp < 0 then
-              result := True;
-          ord('>') + ord('=') shl 8:
-            if cmp >= 0 then
-              result := True;
-          ord('<') + ord('=') shl 8:
-            if cmp <= 0 then
-              result := True;
-          ord('<') + ord('>') shl 8:
-            if cmp <> 0 then
-              result := True;
-        end;
-      end;
-    end;
+  if not _SafeArray(Value, 3, dv) then
+    exit;
+  VariantToUtf8(dv^.Values[1], oper, wasString);
+  if (oper = '') or
+     not wasString then
+    exit;
+  cmp := FastVarDataComp(@dv^.Values[0], @dv^.Values[2], false);
+  case PWord(oper)^ of
+    ord('='):
+      if cmp = 0 then
+        result := VarTrue;
+    ord('>'):
+      if cmp > 0 then
+        result := VarTrue;
+    ord('<'):
+      if cmp < 0 then
+        result := VarTrue;
+    ord('>') + ord('=') shl 8:
+      if cmp >= 0 then
+        result := VarTrue;
+    ord('<') + ord('=') shl 8:
+      if cmp <= 0 then
+        result := VarTrue;
+    ord('<') + ord('>') shl 8:
+      if cmp <> 0 then
+        result := VarTrue;
+  end;
 end;
 
 class procedure TSynMustache.NewGuid(const Value: variant;
@@ -2314,6 +2332,75 @@ class procedure TSynMustache.ExtractFileName(const Value: variant;
   out Result: variant);
 begin
   Result := SysUtils.ExtractFileName(Value);
+end;
+
+class procedure TSynMustache.HumanBytes(const Value: variant;
+  out Result: variant);
+var
+  u: RawUtf8;
+  i64: Int64;
+begin
+  if not VarIsEmptyOrNull(Value) then
+    if VariantToInt64(Value, i64) or
+       (VariantToUtf8(Value, u) and
+        ToInt64(u, i64)) then
+      KBU(i64, u);
+  RawUtf8ToVariant(u, Result);
+end;
+
+class procedure TSynMustache.Sub(const Value: variant;
+  out Result: variant);
+var
+  utf: RawUtf8;
+  dv: PDocVariantData;
+  i, n: integer;
+begin
+  // {{Sub AString,12,3}}
+  SetVariantNull(Result{%H-});
+  if _SafeArray(Value, 3, dv) and
+      VariantToText(dv^.Values[0], utf) and
+      VariantToInteger(dv^.Values[1], i) and
+      VariantToInteger(dv^.Values[2], n) then
+    RawUtf8ToVariant(copy(utf, i, n), Result);
+end;
+
+class procedure TSynMustache.Values(const Value: variant;
+  out Result: variant);
+begin
+  TDocVariantData(Result).InitArrayFromObjectValues(Value, JSON_FAST);
+end;
+
+class procedure TSynMustache.Keys(const Value: variant;
+  out Result: variant);
+begin
+  TDocVariantData(Result).InitArrayFromObjectNames(Value, JSON_FAST);
+end;
+
+procedure DoMatch(dv: PDocVariantData; ci: boolean; var res: variant);
+var
+  s, p: RawUtf8;
+begin
+  // {{Match AString,APattern}}
+  if VariantToText(dv^.Values[0], s) and
+     VariantToText(dv^.Values[1], p) and
+     IsMatch(p, s, ci) then
+    res := VarTrue;
+end;
+
+class procedure TSynMustache.Match(const Value: variant; out Result: variant);
+var
+  dv: PDocVariantData;
+begin
+  if _SafeArray(Value, 2, dv) then
+     DoMatch(dv, {caseinsens=}false, Result);
+end;
+
+class procedure TSynMustache.MatchI(const Value: variant; out Result: variant);
+var
+  dv: PDocVariantData;
+begin
+  if _SafeArray(Value, 2, dv) then
+     DoMatch(dv, {caseinsens=}true, Result);
 end;
 
 class procedure TSynMustache.Lower(const Value: variant;
