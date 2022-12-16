@@ -511,7 +511,7 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
-    fPendingProcessLock: TLightLock;
+    fPendingProcessLock: TLightLock; // atomic access to fPendingProcessFlag
     fCallerEvent: TSynEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
@@ -1110,18 +1110,18 @@ type
   TSynThreadPool = class
   protected
     {$ifndef USE_WINIOCP}
-    fSafe: TOSLock; // TLightLock may be less stable
+    fSafe: TOSLightLock; // TLightLock is likely to be less stable
     {$endif USE_WINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
+    fContentionAbortDelay: integer;
     fOnThreadTerminate: TOnNotifyThread;
     fOnThreadStart: TOnNotifyThread;
     fContentionTime: Int64;
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
-    fContentionAbortDelay: integer;
     fName: RawUtf8;
     fTerminated: boolean;
     {$ifdef USE_WINIOCP}
@@ -3229,7 +3229,7 @@ begin
   if fRequestQueue = 0 then
     exit;
   {$else}
-  fSafe.Init; // mandatory for TOSLock
+  fSafe.Init; // mandatory for TOSLightLock
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_WINIOCP}
   // now create the worker threads
@@ -3270,7 +3270,7 @@ begin
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
     {$else}
-    fSafe.Done; // mandatory for TOSLock
+    fSafe.Done; // mandatory for TOSLightLock
     {$endif USE_WINIOCP}
   end;
   inherited Destroy;
@@ -3394,7 +3394,11 @@ begin
      (fPendingContextCount = 0) then
     exit;
   fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
   try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
     if fPendingContextCount > 0 then
     begin
       result := fPendingContext[0];
@@ -3404,7 +3408,9 @@ begin
       if fPendingContextCount = 128 then
         SetLength(fPendingContext, 128); // reduce when congestion is resolved
     end;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
 end;

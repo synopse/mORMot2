@@ -2110,7 +2110,7 @@ var
 begin
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
-    Events := high(ndx); // avoid ndx[] buffer overflow
+    Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
   fThreadPollingWakeupSafe.Lock;
   try

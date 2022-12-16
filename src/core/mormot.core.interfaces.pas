@@ -2217,7 +2217,7 @@ type
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fServiceFactory: TObject; // holds a TServiceFactory instance
-    fParamsSafe: TLightLock;
+    fParamsSafe: TLightLock; // thread-safe acquisition of fParams
     fParams: TJsonWriter;
     fNotifyDestroy: TOnFakeInstanceDestroy;
     // the JITed asm stubs will redirect to these JSON-oriented process
@@ -2505,7 +2505,7 @@ type
   // TMvcRendererAbstract.ExecuteCommand
   TInterfaceMethodExecuteCached = class(TInterfaceMethodExecute)
   protected
-    fCached: TLightLock;
+    fCached: TLightLock; // thread-safe acquisition of fCachedWR
     fCachedWR: TJsonWriter;
   public
     /// initialize a TInterfaceMethodExecuteCachedDynArray of per-method caches
@@ -4488,6 +4488,7 @@ end;
 {$endif CPUX64}
 
 var
+  // just called once for _FAKEVMT creation (once per interface type on i386)
   VmtSafe: TLightLock;
 
 {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"

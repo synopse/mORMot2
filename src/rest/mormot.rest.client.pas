@@ -499,7 +499,7 @@ type
   /// store the references to active interface callbacks on a REST Client
   TRestClientCallbacks = class(TSynPersistent)
   protected
-    fSafe: TLightLock;
+    fSafe: TLightLock; // very unlikely to have contention on client side
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public

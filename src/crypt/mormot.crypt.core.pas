@@ -1473,17 +1473,17 @@ type
   /// thread-safe class containing a TAes encryption/decryption engine
   TAesLocked = class
   protected
-    fSafe: TLightLock; // TAes is enough for cache line padding of this lock
+    fSafe: TOSLightLock; // TAes is enough for cache line padding of this lock
     fAes: TAes;
   public
     /// initialize the instance
     constructor Create; virtual;
     /// finalize all used memory and resources
     destructor Destroy; override;
-    /// enter the associated TTLightLock
+    /// enter the associated non-reentrant TOSLightLock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// leave the associated TTLightLock
+    /// leave the associated non-reentrant TOSLightLock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -7108,12 +7108,14 @@ end;
 
 constructor TAesLocked.Create;
 begin
+  fSafe.Init; // mandatory for TOSLightLock
 end;
 
 destructor TAesLocked.Destroy;
 begin
   inherited Destroy;
   fAes.Done; // fill AES buffer with 0 for safety
+  fSafe.Done;
 end;
 
 procedure TAesLocked.Lock;

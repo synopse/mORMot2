@@ -261,6 +261,8 @@ type
   // - can be used e.g. as white-list or black-list of clients
   // - will maintain internally a sorted list of 32-bit integers for fast lookup
   // - with optional binary persistence
+  // - as used by TRestServer.BanIP/JwtForUnauthenticatedRequestWhiteIP
+  // - see also more efficient and lower level THttpAcceptBan in mormot.net.http
   TIPBan = class(TSynPersistentStore)
   protected
     fIP4: TIntegerDynArray;

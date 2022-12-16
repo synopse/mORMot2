@@ -1938,10 +1938,10 @@ begin
 end;
 
 var
-  LastDbError: TLastError;
+  LastDbError: TLastError; // store last error texts
 
 threadvar
-  LastDbErrorID: TLastErrorID;
+  LastDbErrorID: TLastErrorID; // 32-bit error text identifier for each thread
 
 procedure SetDbError(const text: RawUtf8);
 var

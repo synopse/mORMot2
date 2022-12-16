@@ -1231,7 +1231,6 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
-    fMainConnectionLock: TLightLock;
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
     fConnectionTimeOutTicks: Int64;
@@ -1260,6 +1259,7 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
+    fMainConnectionLock: TOSLightLock;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDbms value or dDefault
@@ -3381,6 +3381,7 @@ constructor TSqlDBConnectionProperties.Create(const aServerName, aDatabaseName,
 var
   db: TSqlDBDefinition;
 begin
+  fMainConnectionLock.Init; // mandatory for TOSLightLock
   fServerName := aServerName;
   fDatabaseName := aDatabaseName;
   fUserID := aUserID;
@@ -3445,6 +3446,7 @@ begin
   fMainConnection.Free;
   FillZero(fPassword);
   inherited;
+  fMainConnectionLock.Done; // mandatory for TOSLightLock
 end;
 
 function TSqlDBConnectionProperties.Execute(const aSql: RawUtf8;
@@ -7741,7 +7743,7 @@ begin
         end;
       end;
     tmMainConnection:
-      result := inherited GetMainConnection; // has its own TLightLock
+      result := inherited GetMainConnection; // has its own TOSLightLock
   else
     result := nil;
   end;

@@ -1328,7 +1328,7 @@ type
     fEchoBuf: RawUtf8;
     fEchos: array of TOnTextWriterEcho;
     fBack: TEchoWriterBack;
-    fBackSafe: TLightLock;
+    fBackSafe: TLightLock; // protect fBack.Level/Text
     fEchoPendingExecuteBackground: boolean;
     function EchoFlush: PtrInt;
     function GetEndOfLineCRLF: boolean;

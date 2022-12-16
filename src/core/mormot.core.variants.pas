@@ -582,7 +582,7 @@ type
   protected
     /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUtf8Interning;
-    fInternSafe: TLightLock;
+    fInternSafe: TLightLock; // just protect TRawUtf8Interning initialization
     function CreateInternNames: TRawUtf8Interning;
     function CreateInternValues: TRawUtf8Interning;
   public
@@ -3330,7 +3330,7 @@ end;
 { ************** Custom Variant Types with JSON support }
 
 var
-  SynVariantTypesSafe: TLightLock;
+  SynVariantTypesSafe: TLightLock; // protects only SynRegisterCustomVariantType
 
   /// list of custom types (but not DocVariantVType) supporting TryJsonToVariant
   SynVariantTryJsonTypes: array of TSynInvokeableVariantType;

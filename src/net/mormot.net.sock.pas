@@ -743,7 +743,7 @@ type
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
-    fPendingSafe: TOSLock; // TLightLock seems less stable on some benchmark/HW
+    fPendingSafe: TOSLightLock; // TLightLock seems less stable on high-end HW
     fPollIndex: integer;
     fGettingOne: integer;
     fTerminated: boolean;
@@ -755,7 +755,7 @@ type
     // used for select/poll (FollowEpoll=false) with multiple thread-unsafe fPoll[]
     fSubscription: TPollSocketsSubscription;
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPollLock: TOSLock;
+    fPollLock: TOSLightLock;
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
     function MergePendingEvents(const new: TPollSocketResults): integer;
@@ -2557,7 +2557,7 @@ begin
     fPollClass := PollSocketClass
   else
     fPollClass := aPollClass;
-  fPendingSafe.Init; // mandatory for TOSLock
+  fPendingSafe.Init; // mandatory for TOSLightLock
   {$ifdef POLLSOCKETEPOLL}
   // epoll has no size limit (so a single fPoll[0] can be assumed), and
   // epoll_ctl() is thread-safe and let epoll_wait() work in the background
@@ -2602,7 +2602,7 @@ begin
   end;
   fPollLock.Done;
   {$endif POLLSOCKETEPOLL}
-  fPendingSafe.Done; // mandatory for TOSLock
+  fPendingSafe.Done; // mandatory for TOSLightLock
   inherited Destroy;
 end;
 

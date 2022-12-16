@@ -137,7 +137,7 @@ type
     fBackgroundBatch: TRestBatchLockedDynArray;
     fBackgroundInterning: array of TRawUtf8Interning;
     fBackgroundInterningMaxRefCount: integer;
-    fBackgroundInterningSafe: TLightLock;
+    fBackgroundInterningSafe: TLightLock; // paranoid lock
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
       const Msg: RawUtf8);
     // used by AsyncRedirect/AsyncBatch/AsyncInterning
