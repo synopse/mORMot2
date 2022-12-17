@@ -1084,7 +1084,8 @@ type
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
     procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
-      aWriterOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+      aWriterOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault];
+      aCount: integer = -1);
     /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
     // - accept the ORM/DB results dual formats as recognized by TOrmTableJson,
     // i.e. both [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...] and
@@ -5078,22 +5079,33 @@ begin
     TRttiVarData(self).VType := varNull;
 end;
 
+function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
+  aCount: integer; const aItems): PRttiVarData;
+begin
+  if aCount < 0 then
+    aCount := length(TByteDynArray(aItems));
+  if aCount = 0 then
+  begin
+    TRttiVarData(aDest).VType := varNull;
+    result := nil;
+    exit;
+  end;
+  aDest.Init(aOptions, dvArray);
+  aDest.VCount := aCount;
+  SetLength(aDest.VValue, aCount);
+  result := pointer(aDest.VValue);
+end;
+
 procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
-  aOptions: TDocVariantOptions; aWriterOptions: TTextWriterWriteObjectOptions);
+  aOptions: TDocVariantOptions; aWriterOptions: TTextWriterWriteObjectOptions;
+  aCount: integer);
 var
   ndx: PtrInt;
   aItems: TObjectDynArray absolute ObjArray;
 begin
-  if aItems = nil then
-    TRttiVarData(self).VType := varNull
-  else
-  begin
-    Init(aOptions, dvArray);
-    VCount := length(aItems);
-    SetLength(VValue, VCount);
-    for ndx := 0 to VCount - 1 do
-      ObjectToVariant(aItems[ndx], VValue[ndx], aWriterOptions);
-  end;
+  _InitArray(self, aOptions, aCount, aItems);
+  for ndx := 0 to VCount - 1 do
+    ObjectToVariant(aItems[ndx], VValue[ndx], aWriterOptions);
 end;
 
 procedure TDocVariantData.InitArrayFrom(const aItems: TRawUtf8DynArray;
@@ -5102,20 +5114,12 @@ var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if aItems = nil then
-    TRttiVarData(self).VType := varNull
-  else
+  v := _InitArray(self, aOptions, aCount, aItems);
+  for ndx := 0 to VCount - 1 do
   begin
-    Init(aOptions, dvArray);
-    VCount := length(aItems);
-    SetLength(VValue, VCount);
-    v := pointer(VValue);
-    for ndx := 0 to VCount - 1 do
-    begin
-      v^.VType := varString;
-      RawUtf8(v^.Data.VAny) := aItems[ndx];
-      inc(v);
-    end;
+    v^.VType := varString;
+    RawUtf8(v^.Data.VAny) := aItems[ndx];
+    inc(v);
   end;
 end;
 
@@ -5125,22 +5129,12 @@ var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if aItems = nil then
-    VType := varNull
-  else
+  v := _InitArray(self, aOptions, aCount, aItems);
+  for ndx := 0 to VCount - 1 do
   begin
-    Init(aOptions, dvArray);
-    if aCount < 0 then
-      aCount := length(aItems);
-    VCount := aCount;
-    SetLength(VValue, VCount);
-    v := pointer(VValue);
-    for ndx := 0 to VCount - 1 do
-    begin
-      v^.VType := varInteger;
-      v^.Data.VInteger := aItems[ndx];
-      inc(v);
-    end;
+    v^.VType := varInteger;
+    v^.Data.VInteger := aItems[ndx];
+    inc(v);
   end;
 end;
 
@@ -5150,22 +5144,12 @@ var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if aItems = nil then
-    VType := varNull
-  else
+  v := _InitArray(self, aOptions, aCount, aItems);
+  for ndx := 0 to VCount - 1 do
   begin
-    Init(aOptions, dvArray);
-    if aCount < 0 then
-      aCount := length(aItems);
-    VCount := aCount;
-    SetLength(VValue, VCount);
-    v := pointer(VValue);
-    for ndx := 0 to VCount - 1 do
-    begin
-      v^.VType := varInt64;
-      v^.Data.VInt64 := aItems[ndx];
-      inc(v);
-    end;
+    v^.VType := varInt64;
+    v^.Data.VInt64 := aItems[ndx];
+    inc(v);
   end;
 end;
 
@@ -5173,18 +5157,14 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TDoubleDynArray;
   aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
+  v: PRttiVarData;
 begin
-  if aItems = nil then
-    VType := varNull
-  else
+  v := _InitArray(self, aOptions, aCount, aItems);
+  for ndx := 0 to VCount - 1 do
   begin
-    Init(aOptions, dvArray);
-    if aCount < 0 then
-      aCount := length(aItems);
-    VCount := aCount;
-    SetLength(VValue, VCount);
-    for ndx := 0 to VCount - 1 do
-      VValue[ndx] := aItems[ndx];
+    v^.VType := varDouble;
+    v^.Data.VDouble := aItems[ndx];
+    inc(v);
   end;
 end;
 
