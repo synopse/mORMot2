@@ -704,27 +704,38 @@ type
     procedure SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
   end;
 
+  /// one class property entry, as registered by TSynMonitorUsage.Track
   TSynMonitorUsageTrackProp = record
+    /// the RTTI of this integer property
     Info: PRttiProp;
     /// property type, as recognized by MonitorPropUsageValue()
     Kind: TSynMonitorType;
+    /// internal identifier of this property
     Name: RawUtf8;
+    /// the actual values of this properties, per granularty
     Values: array[mugHour..mugYear] of TInt64DynArray;
+    /// the last value of this property, used to store differencies
     ValueLast: Int64;
   end;
 
+  /// the class properties, as registered by TSynMonitorUsage.Track
   TSynMonitorUsageTrackPropDynArray = array of TSynMonitorUsageTrackProp;
 
+  /// one class instance entry, as registered by TSynMonitorUsage.Track
   TSynMonitorUsageTrack = record
+    /// the class which properties to track
     Instance: TObject;
+    /// internal identifier of this instance
     Name: RawUtf8;
+    /// access to the tracked properties information
     Props: TSynMonitorUsageTrackPropDynArray;
   end;
 
   PSynMonitorUsageTrackProp = ^TSynMonitorUsageTrackProp;
   PSynMonitorUsageTrack = ^TSynMonitorUsageTrack;
 
-  /// define all known information about a given time
+  /// define all known information about a given time, as persisted
+  // - store a TDocVariant object with per-name fields of Values[Gran] arrays
   // - may be the current time, or a former time
   TSynMonitorUsageLoad = array[mugHour..mugYear] of variant;
 
