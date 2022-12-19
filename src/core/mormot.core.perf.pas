@@ -371,7 +371,7 @@ type
   // non-rentrant Lock/UnLock to access its individual properties
   TSynMonitor = class(TSynPersistent)
   protected
-    fSafe: TLightLock;
+    fSafe: TOSLightLock;
     fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
@@ -2596,6 +2596,7 @@ constructor TSynMonitor.Create(const aName: RawUtf8);
 begin
   Create;
   fName := aName;
+  fSafe.Init; // mandatory for TOSLightLock
 end;
 
 destructor TSynMonitor.Destroy;
@@ -2606,6 +2607,7 @@ begin
   fLastTime.Free;
   fTotalTime.Free;
   inherited Destroy;
+  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TSynMonitor.RttiBeforeWriteObject(W: TTextWriter;

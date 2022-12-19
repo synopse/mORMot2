@@ -704,7 +704,7 @@ type
     Secs: cardinal;
     NextTix: Int64;
     Msg: TRawUtf8DynArray;
-    MsgSafe: TLightLock;
+    MsgSafe: TLightLock; // protect Msg[] list
   end;
 
   /// stores TSynBackgroundTimer internal registration list
