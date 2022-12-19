@@ -135,7 +135,7 @@ const
 
 type
   /// end-user code should use this TNetSocket type to hold a socket reference
-  // - then methods allow cross-platform access to the connection
+  // - then its methods will allow cross-platform access to the connection
   TNetSocket = ^TNetSocketWrap;
 
   /// internal mapping of an address, in any supported socket layer
@@ -143,25 +143,40 @@ type
   private
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
+    function IsEqualAfter64(const another: TNetAddr): boolean;
   public
+    /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
+    // - wrap the proper getaddrinfo/gethostbyname API
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
+    /// returns the network family of this address
     function Family: TNetFamily;
+    /// convert this address into its IPv4/IPv6 textual representation
     procedure IP(var res: RawUtf8; localasvoid: boolean = false); overload;
+    /// convert this address into its IPv4/IPv6 textual representation
     function IP(localasvoid: boolean = false): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// convert this address into its 32-bit IPv4 value, 0 on IPv6/nlUnix
     function IP4: cardinal;
       {$ifdef FPC}inline;{$endif}
+    /// convert this address into its shortstring IPv4/IPv6 textual representation
     function IPShort(withport: boolean = false): ShortString; overload;
       {$ifdef HASINLINE}inline;{$endif}
+      /// convert this address into its shortstring IPv4/IPv6 textual representation
     procedure IPShort(out result: ShortString; withport: boolean = false); overload;
+    /// convert this address into its 'IPv4/IPv6:port' textual representation
     function IPWithPort: RawUtf8;
+    /// returns the network port (0..65535) of this address
     function Port: TNetPort;
+    /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
+    /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
-    function IsEqualAfter64(const another: TNetAddr): boolean;
-      {$ifdef FPC}inline;{$endif}
+    /// compare two network addresses
     function IsEqual(const another: TNetAddr): boolean;
+      {$ifdef FPC}inline;{$endif}
+    /// create a new TNetSocket instance on this network address
+    // - returns nil on API error
     function NewSocket(layer: TNetLayer): TNetSocket;
   end;
 
@@ -188,33 +203,57 @@ type
     function GetSendBufferSize: integer;
     function GetRecvBufferSize: integer;
   public
+    /// called by NewSocket to finalize a socket attributes
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
+    /// change the sending timeout of this socket, in milliseconds
     procedure SetSendTimeout(ms: integer);
+    /// change the receiving timeout of this socket, in milliseconds
     procedure SetReceiveTimeout(ms: integer);
+    /// change if this socket should enable TCP level keep-alive packets
     procedure SetKeepAlive(keepalive: boolean);
+    /// change the SO_LINGER option, i.e. let the socket remain open for a while
     procedure SetLinger(linger: integer);
+    /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
+    /// accept an incoming socket, optionally asynchronous, with accept4() support
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
       async: boolean): TNetResult;
+    /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
+    //// change the socket state to non-blocking
     function MakeAsync: TNetResult;
+    //// change the socket state to blocking
     function MakeBlocking: TNetResult;
+    /// low-level sending of some data via this socket
     function Send(Buf: pointer; var len: integer): TNetResult;
+    /// low-level receiving of some data from this socket
     function Recv(Buf: pointer; var len: integer): TNetResult;
+    /// low-level UDP sending to an address of some data
     function SendTo(Buf: pointer; len: integer; const addr: TNetAddr): TNetResult;
+    /// low-level UDP receiving from an address of some data
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
+    /// wait for the socket to a given set of receiving/sending state
+    // - using poll() on POSIX (as required), and select() on Windows
     function WaitFor(ms: integer; scope: TNetEvents; loerr: system.PInteger = nil): TNetEvents;
+    /// compute how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
+    /// wrapper around WaitFor / RecvPending / Recv methods for a given time
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
+    /// call send in loop until the whole data buffer is sent
     function SendAll(Buf: PByte; len: integer;
       terminated: PTerminated = nil): TNetResult;
+    /// finalize a socket, calling Close after shutdown() if needed
     function ShutdownAndClose(rdwr: boolean): TNetResult;
+    /// close the socket - consider ShutdownAndClose() for clean closing
     function Close: TNetResult;
+    /// access to the raw socket handle, i.e. @self
     function Socket: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    /// change the OS sending buffer size of this socket, in bytes
     property SendBufferSize: integer
       read GetSendBufferSize write SetSendBufferSize;
+    /// change the OS receiving buffer size of this socket, in bytes
     property RecvBufferSize: integer
       read GetRecvBufferSize write SetRecvBufferSize;
   end;
