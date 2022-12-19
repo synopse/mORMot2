@@ -108,9 +108,9 @@ type
   TWebSocketAsyncConnections = class(THttpAsyncConnections)
   protected
     // maintain a thread-safe list to minimize ProcessIdleTix time
-    fOutgoingSafe: TLightLock;
+    fOutgoingSafe: TLightLock; // atomic fOutgoingHandle[] access
     fOutgoingCount: integer;
-    fOutgoingHandle: TIntegerDynArray; // = TPollAsyncConnectionHandle
+    fOutgoingHandle: TPollAsyncConnectionHandleDynArray;
     procedure NotifyOutgoing(Connection: TWebSocketAsyncConnection);
     procedure ProcessIdleTixSendFrames;
     // overriden to send pending frames
@@ -389,14 +389,15 @@ procedure TWebSocketAsyncConnections.NotifyOutgoing(
   Connection: TWebSocketAsyncConnection);
 begin
   fOutgoingSafe.Lock;
-  AddInteger(fOutgoingHandle, fOutgoingCount, Connection.Handle, {nodup=}true);
+  AddInteger(TIntegerDynArray(fOutgoingHandle), fOutgoingCount,
+    Connection.Handle, {nodup=}true);
   fOutgoingSafe.UnLock;
 end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTixSendFrames;
 var
   i, conn, valid, sent, invalid, unknown: PtrInt;
-  pending: TIntegerDynArray; // keep fOutgoingSafe lock short
+  pending: TPollAsyncConnectionHandleDynArray; // keep fOutgoingSafe lock short
   c: TAsyncConnection;
   timer: TPrecisionTimer;
 begin
