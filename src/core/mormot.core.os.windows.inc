@@ -881,7 +881,7 @@ end;
 
 procedure TOSLightLock.Init;
 begin
-  InitializeSRWLock(fMutex);
+  InitializeSRWLock(fMutex); // fallback to TLightLock on XP
 end;
 
 procedure TOSLightLock.Done;

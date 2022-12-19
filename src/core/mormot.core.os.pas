@@ -3301,10 +3301,10 @@ type
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: methods are non rentrant, i.e. calling Lock twice in a raw would
   // deadlock: use TRWLock or TSynLocker/TOSLock for reentrant methods
-  // - light locks are expected to be kept a very small amount of time: use
-  // TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
+  // - our light locks are expected to be kept a very small amount of time (some
+  // CPU cycles): use TOSLightLock if the lock may block too long
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
   TLightLock = record
@@ -3340,10 +3340,10 @@ type
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: ReadLocks are reentrant and allow concurrent acccess, but calling
   // WriteLock within a ReadLock, or within another WriteLock, would deadlock
-  // - consider TRWLock is you need an upgradable lock - but if you mostly read,
-  // then a TRWLightLock.ReadLock/ReadUnLock/WriteLock is faster than upgrading
-  // - light locks are expected to be kept a very small amount of time: use
-  // TSynLocker or TOSLock if the lock may block too long
+  // - consider TRWLock if you need an upgradable lock - but for mostly reads,
+  // TRWLightLock.ReadLock/ReadUnLock/WriteLock pattern is faster than upgrading
+  // - our light locks are expected to be kept a very small amount of time (some
+  // CPU cycles): use TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
@@ -3399,8 +3399,8 @@ type
 
   /// a lightweight multiple Reads / exclusive Write reentrant lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
-  // - locks are expected to be kept a very small amount of time: use TSynLocker
-  // or TOSLock if the lock may block too long
+  // - our light locks are expected to be kept a very small amount of time (some
+  // CPU cycles): use TSynLocker or TOSLock if the lock may block too long
   // - warning: all methods are reentrant, but WriteLock/ReadWriteLock would
   // deadlock if called after a ReadOnlyLock
   {$ifdef USERECORDWITHMETHODS}
@@ -3492,6 +3492,7 @@ type
   /// the standard rentrant lock supplied by the Operating System
   // - maps TRTLCriticalSection, i.e. calls Win32 API or pthreads library
   // - don't forget to call Init and Done to properly initialize the structure
+  // - if you do require a rentrant/recursive lock, consider TOSLightLock
   // - same signature as TLightLock/TOSLightLock, usable as compile time alternatives
   {$ifdef USERECORDWITHMETHODS}
   TOSLock = record
@@ -3521,11 +3522,14 @@ type
 
   /// the fastest non-rentrant lock supplied by the Operating System
   // - calls Slim Reader/Writer (SRW) Win32 API in exclusive mode or directly
-  // the pthreads library in non-recursive/fast mode on Linux
+  // the pthread_mutex_*() library calls in non-recursive/fast mode on Linux
   // - on XP, where SRW are not available, fallback to a TLightLock
   // - on non-Linux POSIX, fallback to regular cthreads/TRTLCriticalSection
   // - don't forget to call Init and Done to properly initialize the structure
+  // - to protect a very small code section of a few CPU cycles with no Init/Done
+  // needed, and a lower footprint, you may consider our TLightLock
   // - same signature as TOSLock/TLightLock, usable as compile time alternatives
+  // - warning: non-rentrant, i.e. nested Lock calls would block, as TLightLock
   {$ifdef USERECORDWITHMETHODS}
   TOSLightLock = record
   {$else}
@@ -3540,7 +3544,8 @@ type
     /// to be called to finalize the instance
     procedure Done;
     /// enter an OS lock
-    // - warning: this method is NOT reentrant/recursive
+    // - warning: this method is NOT reentrant/recursive, so any nested call
+    // would deadlock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
     /// try to enter an OS lock
