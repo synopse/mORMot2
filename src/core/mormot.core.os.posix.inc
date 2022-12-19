@@ -854,13 +854,23 @@ function pthread_mutex_unlock(mutex: pointer): integer;
   cdecl external clib name 'pthread_mutex_unlock';
 {$endif OSPTHREADSSTATIC}
 
+
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
+begin
+  {$ifdef OSLINUX}
+  result := cs.__m_kind <> 0;
+  {$else}
+  result := not IsZero(@cs, SizeOf(cs));
+  {$endif OSLINUX}
+end;
+
 {$ifdef OSPTHREADS}
 
 { TOSLightLock }
 
 procedure TOSLightLock.Init;
 begin
-  FillCharFast(fMutex, SizeOf(fMutex), 0);
+  FillCharFast(fMutex, SizeOf(fMutex), 0); // may be bigger than pthread struct
   {$ifdef OSPTHREADSLIB}
   if not Assigned(pthread_mutex_init) then
     EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
@@ -1393,15 +1403,6 @@ end;
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
   InitCriticalSection(cs);
-end;
-
-function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
-begin
-  {$ifdef OSLINUX}
-  result := cs.__m_kind <> 0;
-  {$else}
-  result := not IsZero(@cs, SizeOf(cs));
-  {$endif OSLINUX}
 end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);

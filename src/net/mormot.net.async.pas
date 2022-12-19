@@ -2848,7 +2848,7 @@ begin
             break; // 10 seconds timeout
           if (fBanned <> nil) and
              (fBanned.Count <> 0) and
-             fBanned.IsBanned(sin) then
+             fBanned.IsBanned(sin) then // very efficient IP filterning
           begin
             if acoVerboseLog in fOptions then
               DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);

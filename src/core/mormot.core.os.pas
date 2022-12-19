@@ -36,7 +36,6 @@ uses
   {$endif OSWINDOWS}
   classes,
   contnrs,
-  syncobjs,
   types,
   sysutils,
   mormot.core.base;
@@ -3925,8 +3924,7 @@ function SleepHiRes(ms: cardinal; var terminated: boolean;
 // - should reset start := 0 when some activity occured
 // - would optionally return if terminated^ is set, or event is signaled
 // - returns the current GetTickCount64 value
-function SleepStep(var start: Int64; terminated: PBoolean = nil;
-  event: TEvent = nil): Int64;
+function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
 
 /// compute optimal sleep time as 0/1/5/50 then 120-250 ms steps
 // - is agressively designed burning some CPU in favor of responsiveness
@@ -8170,7 +8168,7 @@ begin
     endtix^ := tix + result;
 end;
 
-function SleepStep(var start: Int64; terminated: PBoolean; event: TEvent): Int64;
+function SleepStep(var start: Int64; terminated: PBoolean): Int64;
 var
   ms: integer;
   endtix: Int64;
@@ -8178,23 +8176,10 @@ begin
   ms := SleepStepTime(start, result, @endtix);
   if (ms < 10) or
      (terminated = nil) then
-    if (ms = 0) or
-       (event = nil) then
-      SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
-    else
-    begin
-      if event.WaitFor(ms) = wrSignaled then
-        start := 0; // make more reactive once signaled
-    end
+    SleepHiRes(ms) // < 16 ms is a pious wish on Windows anyway
   else
     repeat
-      if event = nil then
-        SleepHiRes(10) // on Windows, HW clock resolution is around 16 ms
-      else if event.WaitFor(10) = wrSignaled then
-      begin
-        start := 0; // more reactive
-        ms := 0; // and quit
-      end;
+      SleepHiRes(10); // on Windows, HW clock resolution is around 16 ms
       result := GetTickCount64;
     until (ms = 0) or
           terminated^ or

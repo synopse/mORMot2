@@ -23,7 +23,9 @@ interface
 uses
   sysutils,
   classes,
-  syncobjs,
+  {$ifndef PUREMORMOT2}
+  syncobjs, // please favor TSynEvent from mormot.core.os instead of TEvent
+  {$endif PUREMORMOT2}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -34,6 +36,8 @@ uses
   mormot.core.json,
   mormot.core.log,
   mormot.core.perf;
+
+{$ifndef PUREMORMOT2}
 
 const
   // defined here to avoid explicit link to syncobjs in uses clause
@@ -50,6 +54,9 @@ type
   // - note that you may better use TSynEvent from mormot.core.os.pas
   TEvent = syncobjs.TEvent;
 
+{$endif PUREMORMOT2}
+
+type
   /// a dynamic array of TThread
   TThreadDynArray = array of TThread;
 
