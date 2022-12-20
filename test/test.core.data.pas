@@ -276,6 +276,14 @@ type
       read fFileVersions write fFileVersions;
   end;
 
+  TEntry = packed record
+    ID: TID;
+    Timestamp512: cardinal;
+    Tag: cardinal;
+    Json: RawUtf8;
+  end;
+  PEntry = ^TEntry;
+
 
 
 implementation
@@ -1248,7 +1256,7 @@ const
   __TTestCustomDiscogs =
     'pagination{per_page,items,page Integer}' +
     'releases[status,title,format,label,artist RawUtf8 year,id integer]';
-  __TOrmCacheEntryValue =
+  __TEntry =
     'ID: Int64; Timestamp512,Tag: cardinal; Json: RawUtf8';
   __TSubAB =
     'a : RawUtf8; b : integer;';
@@ -1280,7 +1288,7 @@ var
   owv: TObjectWithVariant;
   Trans: TTestCustomJson2;
   Disco, Disco2: TTestCustomDiscogs;
-  Cache: TOrmCacheEntryValue;
+  Cache: TEntry;
   peop: TOrmPeople;
   K: RawUtf8;
   strict, Valid: boolean;
@@ -1971,26 +1979,26 @@ var
 
     Finalize(Cache);
     FillCharFast(Cache, SizeOf(Cache), 0);
-    U := RecordSaveJson(Cache, TypeInfo(TOrmCacheEntryValue));
+    U := RecordSaveJson(Cache, TypeInfo(TEntry));
     CheckEqual(U, '{"ID":0,"Timestamp512":0,"Tag":0,"Json":""}');
     check(IsValidJson(U));
     Cache.ID := 10;
     Cache.Timestamp512 := 200;
     Cache.Json := 'test';
     Cache.Tag := 12;
-    U := RecordSaveJson(Cache, TypeInfo(TOrmCacheEntryValue));
+    U := RecordSaveJson(Cache, TypeInfo(TEntry));
     CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"Json":"test"}');
     check(IsValidJson(U));
     U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TOrmCacheEntryValue));
+    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 210);
     Check(Cache.Timestamp512 = 2200);
     Check(Cache.Json = 'test2');
     Check(Cache.Tag = 12);
     U := '{ID:220,Json:"test3",Timestamp512:2300}';
     check(IsValidJson(U));
-    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TOrmCacheEntryValue));
+    RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TEntry));
     Check(Cache.ID = 220);
     Check(Cache.Timestamp512 = 2300);
     Check(Cache.Json = 'test3');
@@ -2928,10 +2936,10 @@ begin
     __TTestCustomJsonArraySimple);
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayVariant),
     __TTestCustomJsonArrayVariant);
-  Rtti.RegisterFromText(TypeInfo(TOrmCacheEntryValue), __TOrmCacheEntryValue);
+  Rtti.RegisterFromText(TypeInfo(TEntry), __TEntry);
   TestJSONSerialization;
   TestJSONSerialization; // test twice for safety
-  Rtti.RegisterFromText(TypeInfo(TOrmCacheEntryValue), '');
+  Rtti.RegisterFromText(TypeInfo(TEntry), '');
   Rtti.RegisterFromText(TypeInfo(TSubAB), '');
   Rtti.RegisterFromText(TypeInfo(TSubCD), '');
   Rtti.RegisterFromText(TypeInfo(TAggregate), '');
