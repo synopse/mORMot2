@@ -1253,7 +1253,7 @@ type
     /// efficient comparison of two TDocVariantData content
     // - will return the same result than JSON comparison, but more efficiently
     function Compare(const Another: TDocVariantData;
-      CaseInsensitive: boolean = false): integer;
+      CaseInsensitive: boolean = false): integer; overload;
     /// efficient comparison of two TDocVariantData objects
     // - will always ensure that both this instance and Another are Objects
     // - will compare all values following the supplied Fields order
@@ -1263,8 +1263,17 @@ type
     /// efficient equality comparison of two TDocVariantData content
     // - just a wrapper around Compare(Another)=0
     function Equals(const Another: TDocVariantData;
-      CaseInsensitive: boolean = false): boolean;
+      CaseInsensitive: boolean = false): boolean; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// compare a TTDocVariantData object property with a given value
+    // - returns -1 if this instance is not a dvObject or has no aName property
+    function Compare(const aName: RawUtf8; const aValue: variant;
+      aCaseInsensitive: boolean = false): integer; overload;
+      {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    /// efficient equality comparison a TTDocVariantData object property
+    function Equals(const aName: RawUtf8; const aValue: variant;
+      aCaseInsensitive: boolean = false): boolean; overload;
+      {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
@@ -5861,6 +5870,28 @@ function TDocVariantData.Equals(const Another: TDocVariantData;
   CaseInsensitive: boolean): boolean;
 begin
   result := Compare(Another, CaseInsensitive) = 0;
+end;
+
+function TDocVariantData.Compare(const aName: RawUtf8; const aValue: variant;
+  aCaseInsensitive: boolean): integer;
+var
+  v: PVariant;
+begin
+  if (cardinal(VType) = DocVariantVType) and
+     GetObjectProp(aName, v{%H-}) then
+    result := FastVarDataComp(pointer(v), @aValue, aCaseInsensitive)
+  else
+    result := -1;
+end;
+
+function TDocVariantData.Equals(const aName: RawUtf8; const aValue: variant;
+  aCaseInsensitive: boolean): boolean;
+var
+  v: PVariant;
+begin
+  result := (cardinal(VType) = DocVariantVType) and
+            GetObjectProp(aName, v{%H-}) and
+            (FastVarDataComp(@aValue, pointer(v), aCaseInsensitive) = 0);
 end;
 
 function TDocVariantData.InternalAdd(aName: PUtf8Char; aNameLen: integer): integer;
