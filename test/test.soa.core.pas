@@ -102,8 +102,8 @@ type
     /// test integer, strings and wide strings dynamic arrays, together with records
     function ComplexCall(const Ints: TIntegerDynArray;
       const Strs1: TRawUtf8DynArray; var Str2: TWideStringDynArray;
-      const Rec1: TVirtualTableModuleProperties; var Rec2: TOrmCacheEntryValue;
-      Float1: double; var Float2: double): TOrmCacheEntryValue;
+      const Rec1: TVirtualTableModuleProperties; var Rec2: TEntry;
+      Float1: double; var Float2: double): TEntry;
     /// validates ArgsInputIsOctetStream raw binary upload
     function DirectCall(const Data: RawBlob): integer;
     /// validates huge RawJson/RawUtf8
@@ -337,8 +337,8 @@ type
       var options: TServiceInstanceImplementations): TRttiParserComplexTypes;
     function ComplexCall(const Ints: TIntegerDynArray;
       const Strs1: TRawUtf8DynArray; var Str2: TWideStringDynArray;
-      const Rec1: TVirtualTableModuleProperties; var Rec2: TOrmCacheEntryValue;
-      Float1: double; var Float2: double): TOrmCacheEntryValue;
+      const Rec1: TVirtualTableModuleProperties; var Rec2: TEntry;
+      Float1: double; var Float2: double): TEntry;
     function DirectCall(const Data: RawBlob): integer;
     function RepeatJsonArray(const item: RawUtf8; count: integer): RawJson;
     function RepeatTextArray(const item: RawUtf8; count: integer): RawUtf8;
@@ -468,8 +468,8 @@ end;
 
 function TServiceCalculator.ComplexCall(const Ints: TIntegerDynArray;
   const Strs1: TRawUtf8DynArray; var Str2: TWideStringDynArray;
-  const Rec1: TVirtualTableModuleProperties; var Rec2: TOrmCacheEntryValue;
-  Float1: double; var Float2: double): TOrmCacheEntryValue;
+  const Rec1: TVirtualTableModuleProperties; var Rec2: TEntry;
+  Float1: double; var Float2: double): TEntry;
 var
   i: integer;
 begin
@@ -816,7 +816,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Strs1: TRawUtf8DynArray;
     Str2: TWideStringDynArray;
     Rec1: TVirtualTableModuleProperties;
-    Rec2, RecRes: TOrmCacheEntryValue;
+    Rec2, RecRes: TEntry;
     s: RawUtf8;
     r: string;
   begin
@@ -1427,7 +1427,7 @@ begin
     exit;
   //JsonReformatToFile(S.Contract, 'contract.json');
   //FileFromString(S.ContractHash, 'contract.hash');
-  CheckEqual(S.ContractHash, '"782156A43B9EB9CA"');
+  CheckEqual(S.ContractHash, '"4B6563E68276633B"');
   Check(TServiceCalculator(nil).Test(1, 2) = '3');
   Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
@@ -1842,20 +1842,20 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecordLayout;
 begin
-  TRttiJson.RegisterCustomSerializer(TypeInfo(TOrmCacheEntryValue),
+  TRttiJson.RegisterCustomSerializer(TypeInfo(TEntry),
     TTestServiceOrientedArchitecture.CustomReader,
     TTestServiceOrientedArchitecture.CustomWriter);
   try
     ClientTest(TRestServerRoutingRest, false);
   finally
-    TRttiJson.UnRegisterCustomSerializer(TypeInfo(TOrmCacheEntryValue));
+    TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEntry));
   end;
 end;
 
 class procedure TTestServiceOrientedArchitecture.CustomReader(var Context:
   TJsonParserContext; Data: pointer);
 var
-  V: POrmCacheEntryValue absolute Data;
+  V: PEntry absolute Data;
   Values: array[0..2] of TValuePUtf8Char;
 begin
   // {"ID":1786554763,"Timestamp":323618765,"Json":"D:\\TestSQL3.exe"}
@@ -1870,7 +1870,7 @@ end;
 class procedure TTestServiceOrientedArchitecture.CustomWriter(W: TJsonWriter;
   Data: pointer; Options: TTextWriterWriteObjectOptions);
 var
-  V: POrmCacheEntryValue absolute Data;
+  V: PEntry absolute Data;
 begin
   W.AddJsonEscape([
     'ID', V.ID,
