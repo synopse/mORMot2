@@ -3694,6 +3694,16 @@ begin
   {$ifdef HASCODEPAGE}
   begin
     cp := GetCodePage(s);
+    if cp = CP_ACP then
+    begin
+      cp := Unicode_CodePage;
+      if cp = CP_UTF8 then // happens on POSIX and with Lazarus
+      begin
+        result := s; // assign by ref and we can safely override 0 by CP_UTF8
+        PStrRec(PAnsiChar(pointer(result)) - _STRRECSIZE)^.CodePage := cp;
+        exit;
+      end
+    end;
     if cp = CP_UTF8 then
       result := s
     else if cp >= CP_RAWBLOB then

@@ -4427,7 +4427,12 @@ begin
             C := TOrmPropInfoRttiDouble;
         rkLString:
           case aType^.AnsiStringCodePage of
-            // recognize optimized UTF-8/UTF-16
+            // recognize dedicated UTF-8/UTF-16 classes
+            CP_ACP:
+              if Unicode_CodePage = CP_UTF8 then // happens on POSIX or LCL
+                C := TOrmPropInfoRttiRawUtf8
+              else
+                C := TOrmPropInfoRttiAnsi; // regular AnsiString
             CP_UTF8:
               C := TOrmPropInfoRttiRawUtf8;
             CP_UTF16:

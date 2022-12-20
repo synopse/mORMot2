@@ -5945,7 +5945,7 @@ begin
     {$ifdef HASCODEPAGE}
     CodePage := GetCodePage(s);
     {$else}
-    CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
+    CodePage := CP_ACP; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif HASCODEPAGE}
   AddAnyAnsiBuffer(pointer(s), L, Escape, CodePage);
 end;
@@ -5972,7 +5972,7 @@ begin
   if (P <> nil) and
      (Len > 0) then
   begin
-    if CodePage = 0 then // CP_UTF8 is very likely on POSIX or LCL
+    if CodePage = CP_ACP then // CP_UTF8 is very likely on POSIX or LCL
       CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
     case CodePage of
       CP_UTF8:          // direct write of RawUtf8 content

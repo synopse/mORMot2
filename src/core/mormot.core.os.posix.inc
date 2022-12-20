@@ -2027,7 +2027,7 @@ begin
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
   getloadavg(avg, 3);
-  DefaultHasher128(@e.h1, @avg, SizeOf(avg));
+  DefaultHasher128(@e.h1, @avg, SizeOf(avg)); // may be AesNiHash128
   GetMemoryInfo(mem, {withalloc=}false);
   DefaultHasher128(@e.h2, @mem, SizeOf(mem));
   {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
@@ -2172,7 +2172,7 @@ var
   rt: TTimeSpec; // with nanoseconds resolution
 begin
   clock_gettime(CLOCK_MONOTONIC_HIRES, @rt);
-  DefaultHasher128(@e.h0, @rt, SizeOf(rt));
+  DefaultHasher128(@e.h0, @rt, SizeOf(rt)); // maybe AesNiHash128
   SysInfo(@si); // uptime + loadavg + meminfo + numprocess
   DefaultHasher128(@e.h0, @si, SizeOf(si));
   // detailed CPU execution context and timing from Linux kernel
