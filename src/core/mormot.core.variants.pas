@@ -3209,20 +3209,11 @@ var
   // FastVarDataComp() efficient lookup for per-VType comparison function
   _VARDATACMP: array[0 .. $102 {varUString}, boolean] of byte; // _CMP2SORT[]
 
-function VariantCompAsUtf8(const A, B: variant; caseInsensitive: boolean): integer;
-// need to serialize both as UTF-8 text/JSON
-var
-  au, bu: RawUtf8;
-  wasString: boolean;
-begin
-  VariantToUtf8(A, au, wasString);
-  VariantToUtf8(B, bu, wasString);
-  result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
-end;
-
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
 var
   at, bt, sametypecomp: PtrUInt;
+  au, bu: pointer;
+  wasString: boolean;
 label
   rtl, utf;
 begin
@@ -3268,7 +3259,15 @@ rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
       result := PDocVariantData(A)^.Compare(PDocVariantData(B)^, caseInsensitive)
     else
       // compare from custom types UTF-8 text representation/serialization
-utf:  result := VariantCompAsUtf8(PVariant(A)^, PVariant(B)^, caseInsensitive)
+      begin
+utf:    au := nil; // no try..finally for local RawUtf8 variables
+        bu := nil;
+        VariantToUtf8(PVariant(A)^, RawUtf8(au), wasString);
+        VariantToUtf8(PVariant(B)^, RawUtf8(bu), wasString);
+        result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
+        FastAssignNew(au);
+        FastAssignNew(bu);
+      end
   // A and B do not share the same type
   else if (at <= varNull) or
           (bt <= varNull) then
