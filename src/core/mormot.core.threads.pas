@@ -815,12 +815,12 @@ type
   // - used e.g. by TBlockingCallback in mormot.rest.server.pas
   // - once created, process would block via a WaitFor call, which would be
   // released when NotifyFinished is called by the process background thread
-  TBlockingProcess = class(TEvent)
+  TBlockingProcess = class(TSynEvent)
   protected
     fTimeOutMs: integer;
     fEvent: TBlockingEvent;
-    fSafe: PSynLocker;
     fOwnedSafe: boolean;
+    fSafe: PSynLocker;
     procedure ResetInternal; virtual; // override to reset associated params
   public
     /// initialize the semaphore instance
@@ -2665,7 +2665,7 @@ end;
 
 constructor TBlockingProcess.Create(aTimeOutMs: integer; aSafe: PSynLocker);
 begin
-  inherited Create(nil, false, false, '');
+  inherited Create; // TSynEvent.Create
   if aTimeOutMs <= 0 then
     fTimeOutMs := 3000
   else // never wait for ever
@@ -2681,7 +2681,7 @@ end;
 
 destructor TBlockingProcess.Destroy;
 begin
-  inherited Destroy;
+  inherited Destroy; // TSynEvent
   if fOwnedSafe then
     fSafe^.DoneAndFreeMem;
 end;
@@ -2697,7 +2697,7 @@ begin
   finally
     fSafe^.UnLock;
   end;
-  inherited WaitFor(fTimeOutMs);
+  inherited WaitFor(fTimeOutMs); // TSynEvent
   fSafe^.Lock;
   try
     if fEvent <> evRaised then
@@ -2726,16 +2726,16 @@ begin
     if fEvent in [evRaised, evTimeOut] then
       exit; // ignore if already notified
     fEvent := evRaised;
-    SetEvent; // notify caller to unlock "WaitFor" method
     result := true;
   finally
     fSafe^.UnLock;
   end;
+  SetEvent; // notify caller to unlock "WaitFor" method outside of fSafe^.Lock
 end;
 
 procedure TBlockingProcess.ResetInternal;
 begin
-  ResetEvent;
+  ResetEvent; // non-blocking TSynEvent method
   fEvent := evNone;
 end;
 
