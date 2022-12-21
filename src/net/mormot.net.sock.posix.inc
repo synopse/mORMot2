@@ -389,6 +389,9 @@ end;
 
 { TNetAddr }
 
+var
+  _gethostbynamesafe: TOSLightLock; // gethostbyname() result is NOT thread-safe
+
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
@@ -436,20 +439,25 @@ begin
     exit;
   end;
   // resolve name or IP (getaddrinfo is more recent, but addrinfo is not fixed)
-  h := gethostbyname(pointer(address));
-  if h = nil then
-    result := nrNotFound
-  else
-  begin
-    addr4.sin_family := h^.h_addrtype;
-    case h^.h_addrtype of
-      AF_INET:
-         addr4.sin_addr := h^.h_addr^^;
-      AF_INET6:
-         psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
-      else
-        result := nrNotImplemented;
+  _gethostbynamesafe.Lock;
+  try
+    h := gethostbyname(pointer(address));
+    if h = nil then
+      result := nrNotFound
+    else
+    begin
+      addr4.sin_family := h^.h_addrtype;
+      case h^.h_addrtype of
+        AF_INET:
+           addr4.sin_addr := h^.h_addr^^;
+        AF_INET6:
+           psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
+        else
+          result := nrNotImplemented;
+      end;
     end;
+  finally
+    _gethostbynamesafe.UnLock;
   end;
 end;
 
@@ -1185,9 +1193,11 @@ procedure InitializeUnit;
 begin
   SocketAPIVersion := OSVersionShort +
     {$ifdef USEPOLL} ' poll' {$else} ' epoll' {$endif USEPOLL};
+  _gethostbynamesafe.Init;
 end;
 
 procedure FinalizeUnit;
 begin
+  _gethostbynamesafe.Done;
 end;
 
