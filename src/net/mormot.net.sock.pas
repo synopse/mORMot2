@@ -289,6 +289,10 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
 function GetSocketAddressFromCache(const address, port: RawUtf8;
   layer: TNetLayer; out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 
+/// check if an address is known from the current DNS
+// - calls GetSocketAddressFromCache() so would use the internal cache, if any
+function ExistSocketAddressFromCache(const host: RawUtf8): boolean;
+
 /// try to connect to several address:port servers simultaneously
 // - return up to neededcount connected TNetAddr, until timeoutms expires
 // - sockets are closed unless sockets^[] should contain the result[] sockets
@@ -1620,6 +1624,18 @@ begin
     end
   else
     result := addr.SetFrom(address, port, layer);
+end;
+
+function ExistSocketAddressFromCache(const host: RawUtf8): boolean;
+var
+  addr: TNetAddr;
+  fromcache, tobecached: boolean;
+begin
+  result := GetSocketAddressFromCache(
+    host, '7777', nlTcp, addr, fromcache, tobecached) = nrOK;
+  if result and
+     tobecached then
+    NewSocketAddressCache.Add(host, addr);
 end;
 
 function GetReachableNetAddr(const address, port: array of RawUtf8;
