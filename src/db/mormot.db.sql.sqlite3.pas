@@ -304,7 +304,7 @@ const
     ' FLOAT',                         // ftDouble
     ' FLOAT',                         // ftCurrency
     ' TEXT COLLATE ISO8601',          // ftDate
-    ' TEXT COLLATE SYSTEMNOCASE',     // ftUtf8
+    ' TEXT COLLATE SYSTEMNOCASE',     // ftUtf8 with our SYSTEMNOCASE collation
     ' BLOB'));                        // ftBlob
 begin
   fUseMormotCollations := Value;

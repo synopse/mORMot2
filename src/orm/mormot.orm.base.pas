@@ -5786,11 +5786,13 @@ begin
       fPropInfo.GetLongStrProp(Item1, RawByteString(p1));
       fPropInfo.GetLongStrProp(Item2, RawByteString(p2));
     end;
-    if CaseInsensitive then
+    if aBinaryCollation in Attributes then
+      result := SortDynArrayRawByteString(p1, p2)
+    else if CaseInsensitive then
       if aUnicodeNoCaseCollation in Attributes then
         result := Utf8ICompReference(p1, p2)
       else
-        result := Utf8IComp(p1, p2)
+        result := Utf8IComp(p1, p2) // default SYSTEMNOCASE collation
     else
       result := StrComp(p1, p2);
     if fGetterIsFieldPropOffset = 0 then

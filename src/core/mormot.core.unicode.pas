@@ -1401,6 +1401,7 @@ function UpperCopyShort(dest: PAnsiChar; const source: ShortString): PAnsiChar;
 /// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
 // - this version expects u1 and u2 to be zero-terminated
 // - decode the UTF-8 content before using NormToUpper[] lookup table
+// - match the our SYSTEMNOCASE custom (and default) SQLite 3 collation
 // - consider Utf8ICompReference() for Unicode 10.0 support
 function Utf8IComp(u1, u2: PUtf8Char): PtrInt;
 
