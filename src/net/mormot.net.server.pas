@@ -210,21 +210,26 @@ type
       aCompressMinSize: integer = 1024); virtual;
     /// you can call this method to prepare the HTTP server for shutting down
     procedure Shutdown;
-    /// event handler called by the default implementation of the
-    // virtual Request method
+    /// main event handler called by the default implementation of the
+    // virtual Request method to process a given request
+    // - OutCustomHeader will handle Content-Type/Location
+    // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
+    // then OutContent is the UTF-8 filename of a file to be sent directly
+    // to the client via http.sys or NGINX's X-Accel-Redirect; the
+    // OutCustomHeader should contain the eventual 'Content-type: ....' value
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest
       read fOnRequest write SetOnRequest;
     /// event handler called just before the body is retrieved from the client
     // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-    // error code to reject the request immediatly, and close the connection
+    // error code to reject the request immediately, and close the connection
     property OnBeforeBody: TOnHttpServerBeforeBody
       read fOnBeforeBody write SetOnBeforeBody;
-    /// event handler called after HTTP body has been retrieved, before OnProcess
+    /// event handler called after HTTP body has been retrieved, before OnRequest
     // - may be used e.g. to return a HTTP_ACCEPTED (202) status to client and
-    // continue a long-term job inside the OnProcess handler in the same thread;
-    // or to modify incoming information before passing it to main businnes logic,
+    // continue a long-term job inside the OnRequest handler in the same thread;
+    // or to modify incoming information before passing it to main business logic,
     // (header preprocessor, body encoding etc...)
     // - if the handler returns > 0 server will send a response immediately,
     // unless return code is HTTP_ACCEPTED (202), then OnRequest will be called
@@ -235,7 +240,7 @@ type
     /// event handler called after request is processed but before response
     // is sent back to client
     // - main purpose is to apply post-processor, not part of request logic
-    // - if handler returns value > 0 it will override the OnProcess response code
+    // - if handler returns value > 0 it will override the OnRequest response code
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
     property OnAfterRequest: TOnHttpServerRequest
