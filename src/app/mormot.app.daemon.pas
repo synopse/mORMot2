@@ -382,7 +382,7 @@ var
   versionnumber: string;
   v: TFileVersion;
 begin
-  Utf8ToStringVar(fServiceDisplayName, result);
+  Utf8ToStringVar(fServiceDisplayName, result{%H-});
   v := Executable.Version;
   versionnumber := v.DetailedOrVoid;
   if versionnumber <> '' then
@@ -910,7 +910,7 @@ var
   st: TServiceState;
 begin
   n := UpdateServicesFromSettingsFolder(false);
-  SetLength(result, n);
+  SetLength(result{%H-}, n);
   if pids <> nil then
     SetLength(pids^, n);
   for i := 0 to n - 1 do

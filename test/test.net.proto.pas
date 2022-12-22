@@ -34,13 +34,15 @@ type
   protected
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
+    /// validate TUriTree high-level structure
+    procedure _TUriTree;
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
     /// RTSP over HTTP, with always temporary buffering
     procedure RtspOverHttpBufferedWrite;
   end;
 
-  
+
 implementation
 
 procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
@@ -253,6 +255,56 @@ procedure TNetworkProtocols.RtspOverHttpBufferedWrite;
 begin
   DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
 end;
+
+procedure TNetworkProtocols._TUriTree;
+var
+  tree: TUriTree;
+begin
+  tree := TUriTree.Create;
+  try
+    tree.insert('romane');
+    tree.insert('romanus');
+    tree.insert('romulus');
+    tree.insert('rubens');
+    tree.insert('ruber');
+    tree.insert('rubicon');
+    tree.insert('rubicundus');
+    CheckHash(tree.ToText, $0946B9A0);
+  finally
+    tree.Free;
+  end;
+  tree := TUriTree.Create;
+  try
+    tree.insert('romanus');
+    tree.insert('romane');
+    tree.insert('rubicundus');
+    tree.insert('rubicon');
+    tree.insert('ruber');
+    tree.insert('romulus');
+    tree.insert('rubens');
+    CheckHash(tree.ToText, $305E57F1);
+  finally
+    tree.Free;
+  end;
+  tree := TUriTree.Create;
+  try
+    tree.Insert('water');
+    tree.Insert('slow');
+    tree.Insert('slower');
+    tree.Insert('waste');
+    tree.Insert('watch');
+    tree.Insert('water');
+    tree.Insert('toaster');
+    tree.Insert('team');
+    tree.Insert('tester');
+    tree.Insert('t');
+    tree.Insert('toast');
+    CheckHash(tree.ToText, $B9A61EBB);
+  finally
+    tree.Free;
+  end;
+end;
+
 
 end.
 

@@ -5018,7 +5018,7 @@ var
   tmp: TTextWriterStackBuffer; // no allocation for a few certificates
   s: TBufferWriter;
 begin
-  s := TBufferWriter.Create(tmp);
+  s := TBufferWriter.Create(tmp{%H-});
   try
     for i := 0 to length(List) - 1 do
       s.Write(List[i].Save(cccCertOnly, '', ccfBinary));
