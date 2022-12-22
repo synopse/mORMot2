@@ -2482,33 +2482,41 @@ end;
 
 function TRadixTreeNode.Find(P: PUtf8Char): TRadixTreeNode;
 var
-  i: PtrInt;
   c: PUtf8Char;
+  n: TDALen;
+  ch: ^TUriTreeNode;
 begin
   result := nil; // no match
   c := pointer(Chars);
-  if c <> nil then
-  begin
-    repeat
-      if (P^ = #0) or
-         (P^ <> c^) then
-        break;
-      inc(P);
-      inc(c);
-    until false;
-    if c^ <> #0 then
-      exit; // not enough matched chars
-  end;
+  repeat
+    if (P^ = #0) or
+       (P^ <> c^) then
+      break;
+    inc(P);
+    inc(c);
+  until false;
+  if c^ <> #0 then
+    exit; // not enough matched chars
   // if we reached here, the text do match up to now
   if P^ = #0 then
     result := self // exact match found for this entry
   else
-    for i := 0 to length(Child) - 1 do
-    begin
-      result := TUriTreeNode(Child[i]).Find(P);
-      if result <> nil then
-        exit; // match found in children
-    end;
+  begin
+    ch := pointer(Child);
+    if ch = nil then
+      exit;
+    n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+    repeat
+      if ch^.Chars[1] = P^ then
+      begin
+        result := ch^.Find(P);
+        if result <> nil then
+          exit; // match found in children
+      end;
+      inc(ch);
+      dec(n);
+    until n = 0;
+  end;
 end;
 
 procedure TRadixTreeNode.ToText(var Result: RawUtf8; Level: integer);
@@ -2608,16 +2616,27 @@ end;
 
 function TRadixTree.Find(const Text: RawUtf8): TRadixTreeNode;
 var
-  i: PtrInt;
+  n: TDALen;
+  ch: ^TUriTreeNode;
 begin
-  if self <> nil then
-    for i := 0 to length(fRoot.Child) - 1 do
+  result := nil;
+  if (self = nil) or
+     (Text = '') then
+    exit;
+  ch := pointer(fRoot.Child);
+  if ch = nil then
+    exit;
+  n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+  repeat
+    if ch^.Chars[1] = Text[1] then
     begin
-      result := fRoot.Child[i].Find(pointer(Text));
+      result := ch^.Find(pointer(Text));
       if result <> nil then
         exit;
     end;
-  result := nil;
+    inc(ch);
+    dec(n);
+  until n = 0;
 end;
 
 function TRadixTree.ToText: RawUtf8;
@@ -2664,7 +2683,8 @@ end;
 
 function TUriTreeNode.Lookup(P: PUtf8Char; Ctxt: THttpServerRequestAbstract): TUriTreeNode;
 var
-  i, n: PtrInt;
+  i: PtrInt;
+  n: TDALen;
   c: PUtf8Char;
   v: PIntegerArray;
   ch: ^TUriTreeNode;

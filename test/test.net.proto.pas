@@ -317,7 +317,8 @@ var
   ctxt: THttpServerRequestAbstract;
   i: PtrInt;
   n: TRadixTreeNode;
-  rnd: array[0..99] of RawUtf8;
+  timer: TPrecisionTimer;
+  rnd: array[0..999] of RawUtf8;
 
   procedure Call(const uri, exp1, exp2, exp3: RawUtf8; exp4: Int64 = -1;
     expstatus: integer = HTTP_SUCCESS; const met: RawUtf8 = 'GET');
@@ -406,11 +407,13 @@ begin
   tree := TUriTree.Create;
   try
     for i := 0 to high(rnd) do
-      rnd[i] := RandomIdentifier(Random32(7) + 1);
+      rnd[i] := RandomIdentifier(Random32(24) * 2 + 1);
     for i := 0 to high(rnd) do
       CheckEqual(tree.Insert(rnd[i]).FullText, rnd[i]);
+    timer.Start;
     for i := 0 to high(rnd) do
       CheckEqual(tree.Find(rnd[i]).FullText, rnd[i]);
+    NotifyTestSpeed('lookups', length(rnd));
   finally
     tree.Free;
   end;
