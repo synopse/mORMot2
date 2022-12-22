@@ -1403,6 +1403,23 @@ function FindRawUtf8(const Values: TRawUtf8DynArray; const Value: RawUtf8;
 function FindRawUtf8(const Values: array of RawUtf8; const Value: RawUtf8;
   CaseSensitive: boolean = true): integer; overload;
 
+/// raw internal method called e.g. by TDocVariantData.GetValueIndex()
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+
+/// raw internal method called e.g. by TDocVariantData.GetValueIndex()
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+
+type
+  TFindNonVoid =
+    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
+const
+  /// raw internal methods called e.g. by TDocVariantData.GetValueIndex()
+  FindNonVoid: array[{casesensitive:}boolean] of TFindNonVoid = (
+    FindNonVoidRawUtf8I,
+    FindNonVoidRawUtf8);
+
 /// true if Value was added successfully in Values[]
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
   NoDuplicates: boolean = false; CaseSensitive: boolean = true): boolean; overload;
@@ -6784,6 +6801,62 @@ begin
   result := high(Values);
   if result >= 0 then
     result := FindRawUtf8(@Values[0], Value, result + 1, CaseSensitive);
+end;
+
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
+begin
+  // FPC does proper inlining in this loop
+  result := 0;
+  repeat
+    p := n[result]; // all VName[]<>'' so p=n^<>nil
+    if (PStrLen(p - _STRLEN)^ = len) and
+       CompareMemFixed(p, name, len) then
+      exit;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p1, p2, l: PUtf8Char;
+label
+  no;
+begin
+  result := 0;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, len)
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = len then
+    begin
+      l := @p1[len - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
 end;
 
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;

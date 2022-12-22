@@ -4717,71 +4717,6 @@ end;
 
 {$endif HASITERATORS}
 
-function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p: PUtf8Char;
-begin
-  // FPC does proper inlining in this loop
-  result := 0;
-  repeat
-    p := n[result]; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
-       CompareMemFixed(p, name, len) then
-      exit;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
-function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
-  count: PtrInt): PtrInt;
-var
-  p1, p2, l: PUtf8Char;
-label
-  no;
-begin
-  result := 0;
-  p2 := name;
-  repeat
-    // inlined IdemPropNameUSameLenNotNull(p, name, len)
-    p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = len then
-    begin
-      l := @p1[len - SizeOf(cardinal)];
-      dec(p2, PtrUInt(p1));
-      while PtrUInt(l) >= PtrUInt(p1) do
-        // compare 4 Bytes per loop
-        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
-          goto no
-        else
-          inc(PCardinal(p1));
-      inc(PCardinal(l));
-      while PtrUInt(p1) < PtrUInt(l) do
-        // remaining bytes
-        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
-          goto no
-        else
-          inc(PByte(p1));
-      exit; // match found
-no:   p2 := name;
-    end;
-    inc(result);
-    dec(count);
-  until count = 0;
-  result := -1;
-end;
-
-type
-  TDocVariantFind =
-    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
-
-const
-  DocVariantFind: array[{casesensitive:}boolean] of TDocVariantFind = (
-      FindNonVoidRawUtf8I,
-      FindNonVoidRawUtf8);
-
 
 { TDocVariantData }
 
@@ -6232,7 +6167,7 @@ begin
      (aName = '') or
      not IsObject then
     exit;
-  ndx := DocVariantFind[IsCaseSensitive](
+  ndx := FindNonVoid[IsCaseSensitive](
         pointer(VName), pointer(aName), length(aName), VCount);
   if ndx < 0 then
     exit;
@@ -6693,7 +6628,7 @@ begin
   if IsObject then
     for j := 0 to high(aPropNames) do
     begin
-      ndx := DocVariantFind[aCaseSensitive](
+      ndx := FindNonVoid[aCaseSensitive](
         pointer(VName), pointer(aPropNames[j]), length(aPropNames[j]), VCount);
       if ndx >= 0 then
         if not aDoNotAddVoidProp or
@@ -6913,7 +6848,7 @@ begin
      (VCount = 0) then
     result := -1
   else
-    result := DocVariantFind[IsCaseSensitive](
+    result := FindNonVoid[IsCaseSensitive](
       pointer(VName), @aName^[1], ord(aName^[0]), VCount);
 end;
 
@@ -7051,7 +6986,7 @@ begin
     end
     else
       // O(n) lookup for name -> efficient brute force sub-functions
-      result := DocVariantFind[IsCaseSensitive](
+      result := FindNonVoid[IsCaseSensitive](
         pointer(VName), aName, aNameLen, VCount)
   else
     result := -1;
@@ -7266,7 +7201,7 @@ begin
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
     else
-      ndx := DocVariantFind[IsCaseSensitive](
+      ndx := FindNonVoid[IsCaseSensitive](
         pointer(VName), pointer(aName), length(aName), VCount);
     if aFoundIndex <> nil then
       aFoundIndex^ := ndx;
