@@ -28,6 +28,7 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 - Shared HTTP Constants and Functions
 - `THttpSocket` Implementing HTTP over plain sockets
 - Abstract Server-Side Types used e.g. for Client-Server Protocol
+- Custom URI Routing using an efficient Radix Tree
 
 ### mormot.net.client
 
