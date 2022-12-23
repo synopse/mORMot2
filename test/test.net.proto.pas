@@ -32,7 +32,8 @@ type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
-    one, two, three: RawUtf8;
+    one, two: RawUtf8;
+    three: boolean;
     request: integer;
     four: Int64;
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
@@ -269,7 +270,7 @@ function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardina
 begin
   one := Ctxt['one'];
   two := Ctxt['two'];
-  three := Ctxt['three'];
+  three := Ctxt.RouteEquals('three', '3');
   if not Ctxt.RouteInt64('four', four) then
     four := -1;
   result := HTTP_SUCCESS;
@@ -320,29 +321,32 @@ var
   timer: TPrecisionTimer;
   rnd: array[0..999] of RawUtf8;
 
-  procedure Call(const uri, exp1, exp2, exp3: RawUtf8; exp4: Int64 = -1;
-    expstatus: integer = HTTP_SUCCESS; const met: RawUtf8 = 'GET');
+  procedure Call(const uri, exp1, exp2: RawUtf8; exp3: boolean = false;
+    exp4: Int64 = -1; expstatus: integer = HTTP_SUCCESS;
+    const met: RawUtf8 = 'GET');
   begin
     request := -1;
     one := '';
     two := '';
-    three := '';
+    three := false;
     four := -1;
     ctxt.Method := met;
     ctxt.Url := uri;
     CheckEqual(router.Process(ctxt), expstatus);
     CheckEqual(one, exp1);
     CheckEqual(two, exp2);
-    CheckEqual(three, exp3);
+    Check(three = exp3);
     CheckEqual(four, exp4);
   end;
 
-  procedure Compute(const uri, expected: RawUtf8);
+  procedure Compute(const uri, expected: RawUtf8; const met: RawUtf8 = 'POST';
+    expstatus: integer = 0);
   begin
-    ctxt.Method := 'POST';
+    ctxt.Method := met;
     ctxt.Url := uri;
-    CheckEqual(router.Process(ctxt), 0);
-    CheckEqual(ctxt.Url, expected);
+    CheckEqual(router.Process(ctxt), expstatus);
+    if expected <> '' then
+      CheckEqual(ctxt.Url, expected);
   end;
 
 begin
@@ -413,48 +417,47 @@ begin
     timer.Start;
     for i := 0 to high(rnd) do
       CheckEqual(tree.Find(rnd[i]).FullText, rnd[i]);
-    NotifyTestSpeed('lookups', length(rnd));
+    NotifyTestSpeed('big tree lookups', length(rnd));
   finally
     tree.Free;
   end;
   ctxt := THttpServerRequestAbstract.Create;
   router := TUriRouter.Create;
   try
-    four := -1;
-    Call('/plaintext', '', '', '', -1, 0);
-    Call('/', '', '', '', -1, 0);
+    Call('/plaintext', '', '', false, -1, 0);
+    Call('/', '', '', false, -1, 0);
     router.Get('/plaintext', DoRequest_);
     CheckEqual(request, -1);
-    Call('/plaintext', '', '', '');
-    Call('/', '', '', '', -1, 0);
+    Call('/plaintext', '', '');
+    Call('/', '', '', false, -1, 0);
     //writeln(router.Tree[urmGet].ToText);
     router.Get('/', DoRequest0);
-    Call('/plaintext', '', '', '');
+    Call('/plaintext', '', '');
     CheckEqual(request, -1);
-    Call('/', '', '', '');
+    Call('/', '', '', false);
     CheckEqual(request, 0);
     router.Get('/do/<one>/pic/<two>', DoRequest0);
     router.Get('/do/<one>', DoRequest1);
     router.Get('/do/<one>/pic', DoRequest2);
     router.Get('/do/<one>/pic/<two>/', DoRequest3);
     router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest4);
-    Call('/do/a', 'a', '', '');
+    Call('/do/a', 'a', '');
     CheckEqual(request, 1);
-    Call('/do/123', '123', '', '');
+    Call('/do/123', '123', '');
     CheckEqual(request, 1);
-    Call('/do/toto/pic', 'toto', '', '');
+    Call('/do/toto/pic', 'toto', '');
     CheckEqual(request, 2);
-    Call('/do/toto/pic/titi/', 'toto', 'titi', '');
+    Call('/do/toto/pic/titi/', 'toto', 'titi');
     CheckEqual(request, 3);
-    Call('/do/toto/pic/titi', 'toto', 'titi', '');
+    Call('/do/toto/pic/titi', 'toto', 'titi');
     CheckEqual(request, 0);
-    Call('/do/toto/pic/titi/', 'toto', 'titi', '');
+    Call('/do/toto/pic/titi/', 'toto', 'titi');
     CheckEqual(request, 3);
-    Call('/da/1/2/3/4', '', '', '', -1, 0);
+    Call('/da/1/2/3/4', '', '', false, -1, 0);
     CheckEqual(request, -1);
-    Call('/da/1/2/3/4/', '1', '2', '3', 4);
+    Call('/da/1/2/3/4/', '1', '2', true, 4);
     CheckEqual(request, 4);
-    Call('/da/a1/b2/c3/47456/', 'a1', 'b2', 'c3', 47456);
+    Call('/da/a1/b2/3/47456/', 'a1', 'b2', true, 47456);
     CheckEqual(request, 4);
     Compute('/static', '/static');
     Compute('/static2', '/static2');
@@ -483,10 +486,36 @@ begin
     Compute('/static2', '/some2/static');
     Compute('/', '/index');
     Compute('/stat', '/stat');
+    timer.Start;
+    for i := 1 to 1000 do
+      CheckEqual(router.Tree[urmPost].Find('/static').FullText, '/static');
+    NotifyTestSpeed('URI lookups', 1000);
+    timer.Start;
+    for i := 1 to 1000 do
+      Compute('/static', '/some/static');
+    NotifyTestSpeed('URI static rewrites', 1000);
+    timer.Start;
+    for i := 1 to 1000 do
+      Compute('/user/1234', '/root/user.new?id=1234');
+    NotifyTestSpeed('URI parametrized rewrites', 1000);
+    timer.Start;
+    for i := 1 to 1000 do
+      Compute('/plaintext', '', 'GET', 200);
+    NotifyTestSpeed('URI static execute', 1000);
+    timer.Start;
+    for i := 1 to 1000 do
+      Compute('/do/toto/pic', '', 'GET', 200);
+    NotifyTestSpeed('URI parametrized execute', 1000);
     //writeln(router.Tree[urmGet].ToText);
     //writeln(router.Tree[urmPost].ToText);
     CheckHash(router.Tree[urmGet].ToText, $18A0BF58);
     CheckHash(router.Tree[urmPost].ToText, $E173FBB0);
+    router.Clear([urmPost]);
+    Call('/plaintext', '', '');
+    Compute('/static', '/static');
+    router.Clear;
+    Call('/plaintext', '', '', false, -1, 0);
+    Compute('/static', '/static');
   finally
     router.Free;
     ctxt.Free;
