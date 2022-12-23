@@ -535,7 +535,7 @@ type
     fRespStatus: integer;
     fConnectionThread: TSynThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
-    fRouteName: PRawUtf8DynArray; // points to TUriTreeNodeData.Names
+    fRouteName: pointer; // = pointer(TUriTreeNodeData.Names)
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
     function GetRouteValuePosLen(const Name: RawUtf8): PIntegerArray;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
@@ -580,6 +580,9 @@ type
     /// returns the TUriRouter <parameter> value parsed from URI as Int64
     // - Name lookup is case-sensitive
     function RouteInt64(const Name: RawUtf8; out Value: Int64): boolean;
+    /// check a TUriRouter <parameter> value parsed from URI
+    // - both Name lookup and value comparison are case-sensitive
+    function RouteEquals(const Name, ExpectedValue: RawUtf8): boolean;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -715,8 +718,6 @@ type
 { ******************** Custom URI Routing using an efficient Radix Tree }
 
 type
-  TRadixTreeNodeClass = class of TRadixTreeNode;
-
   /// implement an abstract Radix Tree node
   TRadixTreeNode = class
   public
@@ -732,7 +733,14 @@ type
     procedure ToText(var Result: RawUtf8; Level: integer);
   end;
 
+  /// our TRadixTree works on dynamic/custom types of node classes
+  TRadixTreeNodeClass = class of TRadixTreeNode;
+
   /// implement an abstract Radix Tree over UTF-8 case-insensitive text
+  // - as such, this class is not very useful if you just need to lookup for
+  // a text value: a TDynArrayHasher/TDictionary is faster and uses less RAM
+  // - but, once extended e.g. as TUriTree, it can very efficiently parse
+  // some text with variants parts (e.g. parameters)
   TRadixTree = class
   protected
     fRoot: TRadixTreeNode;
@@ -749,14 +757,15 @@ type
     function Insert(const Text: RawUtf8; Node: TRadixTreeNode = nil;
       NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode;
     /// search for the node corresponding to a given text
+    // - more than 1 million lookups per second, with 1000 items stored
     function Find(const Text: RawUtf8): TRadixTreeNode;
     /// internal debugging/testing method
     function ToText: RawUtf8;
   end;
 
   /// one HTTP method supported by TUriRouter
-  // - only support RESTful GET/POST/PUT/DELETE/OPTIONS/HEAD by default
-  // - each method would have its own internal TUriTree efficient parser
+  // - only supports RESTful GET/POST/PUT/DELETE/OPTIONS/HEAD by default
+  // - each method would have its dedicated TUriTree parser in TUriRouter
   TUriRouterMethod = (
     urmGet,
     urmPost,
@@ -774,9 +783,9 @@ type
     // - equal nil for static nodes
     // - is referenced as pointer into THttpServerRequestAbstract.fRouteName
     Names: TRawUtf8DynArray;
-    /// the Redirect() URI method
+    /// the Rewrite() URI method
     ToMethod: TUriRouterMethod;
-    /// the Redirect() URI text
+    /// the Rewrite() URI text
     ToUri: RawUtf8;
     /// [pos1,len1,valndx1,pos2,len2,valndx2,...] trios from ToUri content
     ToUriPosLen: TIntegerDynArray;
@@ -804,80 +813,94 @@ type
   end;
   TUriTreeNodes = array of TUriTreeNode;
 
-  /// exception class raised during TUriTree.Redirect/Run parsing
+  /// exception class raised during TUriTree.Rewrite/Run parsing
   EUriTree = class(ESynException);
 
   /// implement a Radix Tree to hold all registered URI for a given HTTP method
   TUriTree = class(TRadixTree)
-  protected
-    /// called from TUriRouter.Redirect/Run methods
-    procedure Setup(const aFromUri: RawUtf8; aTo: TUriRouterMethod;
-      const aToUri: RawUtf8; const aExecute: TOnHttpServerRequest);
   public
     /// initialize the Radix Tree for efficient URI parsing
     constructor Create(aNodeClass: TRadixTreeNodeClass = nil); override;
     /// to be called after Insert() to consolidate the internal tree state
+    // - nodes will be sorted by search priority, i.e. the longest depths first
+    // - as used by Setup()
     procedure AfterInsert;
+    /// called from TUriRouter.Rewrite/Run methods
+    procedure Setup(const aFromUri: RawUtf8; aTo: TUriRouterMethod;
+      const aToUri: RawUtf8; const aExecute: TOnHttpServerRequest);
   end;
 
   /// store per-method TUriTree in TUriRouter
+  // - each HTTP method would have its dedicated TUriTree parser in TUriRouter
   TUriRouterTree = array[urmGet .. high(TUriRouterMethod)] of TUriTree;
 
   /// this is the main class handling efficient server-side URI routing
-  // - process is done with no memory allocation for a static route,
+  // - Process() is done with no memory allocation for a static route,
   // using a very efficient Radix Tree for path lookup, over a thread-safe
-  // non-blocking Lookup() parsing
-  // - currently, there is no way to delete a route once registered: use Clear
+  // non-blocking URI parsing with values extractions for rewrite or execution
+  // - here are some numbers from TNetworkProtocols._TUriTree on my laptop:
+  // $ 1000 URI lookups in 950us i.e. 1M/s, aver. 950ns
+  // $ 1000 URI static rewrites in 1.02ms i.e. 0.9M/s, aver. 1.02us
+  // $ 1000 URI parametrized rewrites in 1.14ms i.e. 855.1K/s, aver. 1.14us
+  // $ 1000 URI static execute in 1.23ms i.e. 792.6K/s, aver. 1.23us
+  // $ 1000 URI parametrized execute in 1.39ms i.e. 700K/s, aver. 1.39us
   TUriRouter = class(TSynPersistentRWLightLock)
   protected
     fTree: TUriRouterTree;
+    fEntries: array[urmGet .. high(TUriRouterMethod)] of integer;
+    procedure Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
+      aTo: TUriRouterMethod; const aToUri: RawUtf8;
+      const aExecute: TOnHttpServerRequest);
   public
-    /// initialize this URI routing engine
-    constructor Create; override;
     /// finalize this URI routing engine
     destructor Destroy; override;
 
-    /// erase all previous registrations, optionally for a given HTTP method
-    procedure Clear(aMethods: TUriRouterMethods = [urmGet .. high(TUriRouterMethod)]);
-
-    /// register an URI redirection with optional <param> place holders
+    /// register an URI rewrite with optional <param> place holders
     // - <param> will be replaced in aToUri
-    // - if aToUri='' then the whole redirection is
-    // - e.g. Redirect(urmmGet, '/info', urmGet, 'root/timestamp/info');
-    // - Redirect(urmGet, '/path/from/<from>/to/<to>', urmPost,
+    // - if aToUri='' then the whole internal redirection is
+    // - e.g. Rewrite(urmmGet, '/info', urmGet, 'root/timestamp/info');
+    // - Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
     //   '/root/myservice/convert?from=<from>&to=<to>') for IMyService.Convert
-    procedure Redirect(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
+    procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8);
-    /// just a wrapper around Redirect(urmGet, aFrom, aToMethod, aTo)
-    // - e.g. Get('/info', 'root/timestamp/info');
+    /// just a wrapper around Rewrite(urmGet, aFrom, aToMethod, aTo)
+    // - e.g. router.Get('/info', 'root/timestamp/info');
+    // - e.g. router.Get('/user/<id>', '/root/userservice/new?id=<id>'); will
+    // rewrite internally '/user/1234' URI as '/root/userservice/new?id=1234'
     procedure Get(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmGet); overload;
-    /// just a wrapper around Redirect(urmPost, aFrom, aToMethod, aTo)
+    /// just a wrapper around Rewrite(urmPost, aFrom, aToMethod, aTo)
     // - e.g. Post('/doconvert', '/root/myservice/convert');
     procedure Post(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPost); overload;
-    /// just a wrapper around Redirect(urmPut, aFrom, aToMethod, aTo)
+    /// just a wrapper around Rewrite(urmPut, aFrom, aToMethod, aTo)
     // - e.g. Put('/domodify', '/root/myservice/update', urmPost);
     procedure Put(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPut); overload;
-    /// just a wrapper around Redirect(urmDelete, aFrom, aToMethod, aTo)
+    /// just a wrapper around Rewrite(urmDelete, aFrom, aToMethod, aTo)
     // - e.g. Delete('/doremove', '/root/myservice/delete', urmPost);
     procedure Delete(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmDelete); overload;
-    /// just a wrapper around Redirect(urmOptions, aFrom, aToMethod, aTo)
+    /// just a wrapper around Rewrite(urmOptions, aFrom, aToMethod, aTo)
     // - e.g. Options('/doremove', '/root/myservice/Options', urmPost);
     procedure Options(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmOptions); overload;
-    /// just a wrapper around Redirect(urmHead, aFrom, aToMethod, aTo)
+    /// just a wrapper around Rewrite(urmHead, aFrom, aToMethod, aTo)
     // - e.g. Head('/doremove', '/root/myservice/Head', urmPost);
     procedure Head(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmHead); overload;
 
-    /// assign a callback with a given URI
-    procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
+    /// assign a TOnHttpServerRequest callback with a given URI
+    // - <param> place holders will be parsed and available in callback
+    // as Ctxt['param'] default property or Ctxt.RouteInt64/RouteEquals methods
+    // - could be used e.g. for standard REST process as
+    // $ router.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
+    // $ router.Run([urmGet, urmPost, urmPut, urmDelete],
+    // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
+   procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
       const aExecute: TOnHttpServerRequest);
     /// just a wrapper around Run([urmGet], aUri, aExecute) registration method
-    // - e.g. Get('/plaintext', DoPlainText);
+    // - e.g. router.Get('/plaintext', DoPlainText);
     procedure Get(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
     /// just a wrapper around Run([urmPost], aUri, aExecute) registration method
     procedure Post(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
@@ -889,12 +912,38 @@ type
     procedure Options(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
     /// just a wrapper around Run([urmHead], aUri, aExecute) registration method
     procedure Head(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
-    /// perform the redirection within HTTP server Ctxt members
+
+    /// perform URI parsing and rewrite/execution within HTTP server Ctxt members
     // - should return 0 to continue the process, on a HTTP status code to abort
+    // if the request has been handled by a TOnHttpServerRequest callback
     function Process(Ctxt: THttpServerRequestAbstract): integer;
-    /// access to the internal per-method TUriTree
+    /// erase all previous registrations, optionally for a given HTTP method
+    // - currently, there is no way to delete a route once registered, to
+    // optimize the process thread-safety: use Clear then re-register
+    procedure Clear(aMethods: TUriRouterMethods = [urmGet .. high(TUriRouterMethod)]);
+    /// access to the internal per-method TUriTree instance
+    // - some Tree[] may be nil if the HTTP method has not been registered yet
     property Tree: TUriRouterTree
       read fTree;
+  published
+    /// how many GET rules have been registered
+    property Gets: integer
+      read fEntries[urmGet];
+    /// how many POST rules have been registered
+    property Posts: integer
+      read fEntries[urmPost];
+    /// how many PUT rules have been registered
+    property Puts: integer
+      read fEntries[urmPut];
+    /// how many DELETE rules have been registered
+    property Deletes: integer
+      read fEntries[urmDelete];
+    /// how many HEAD rules have been registered
+    property Heads: integer
+      read fEntries[urmHead];
+    /// how many OPTIONS rules have been registered
+    property Optionss: integer
+      read fEntries[urmOptions];
   end;
 
 const
@@ -2219,7 +2268,7 @@ begin
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';
-  fRouteName := nil; // no fRouteValuePosLen release (may be safely reused)
+  fRouteName := nil; // no fRouteValuePosLen release (safe to reuse)
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
@@ -2265,8 +2314,8 @@ begin
     result := nil
   else
   begin
-    i := FindNonVoidRawUtf8(pointer(fRouteName^),
-      pointer(Name), length(Name), length(fRouteName^));
+    i := FindNonVoidRawUtf8(fRouteName, pointer(Name), length(Name),
+      PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
     if i >= 0 then
       // result^ is one [pos,len] pair in fUrl
       result := @fRouteValuePosLen[i * 2]
@@ -2297,6 +2346,19 @@ begin
     SetInt64(PUtf8Char(pointer(Url)) + v[0], Value{%H-});
     result := true;
   end
+  else
+    result := false;
+end;
+
+function THttpServerRequestAbstract.RouteEquals(
+  const Name, ExpectedValue: RawUtf8): boolean;
+var
+  v: PIntegerArray;
+begin
+  v := GetRouteValuePosLen(Name);
+  if v <> nil then
+    result := (v[1] = length(ExpectedValue)) and
+      CompareMemFixed(pointer(ExpectedValue), @PByteArray(Url)[v[0]], v[1])
   else
     result := false;
 end;
@@ -2563,6 +2625,8 @@ end;
 
 procedure TRadixTree.Clear;
 begin
+  if self = nil then
+    exit;
   fRoot.Free;
   fRoot := fDefaultNodeClass.Create;
 end;
@@ -2644,7 +2708,7 @@ begin
     exit;
   n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
   repeat
-    if ch^.Chars[1] = Text[1] then
+    if ch^.Chars[1] = Text[1] then // no recursive call if obviously no match
     begin
       result := ch^.Find(pointer(Text));
       if result <> nil then
@@ -2730,10 +2794,10 @@ begin
     P := PosChar(P, '/'); // may use SSE2
     if P = nil then
       P := c + StrLen(c); // trailing ...<param> (handled as wildchar)
-    Ctxt.fRouteName := @Data.Names; // assign as pointer reference
+    Ctxt.fRouteName := pointer(Data.Names); // assign as pointer reference
     n := length(Data.Names) * 2; // length(Names[]) = current parameter index
     if length(Ctxt.fRouteValuePosLen) < n then
-      SetLength(Ctxt.fRouteValuePosLen, n + 24); // alloc by 12 params
+      SetLength(Ctxt.fRouteValuePosLen, n + 24); // alloc once by 12 params
     v := @Ctxt.fRouteValuePosLen[n - 2];
     i := c - pointer(Ctxt.Url);
     if PtrUInt(i) > 4096 then
@@ -2752,9 +2816,13 @@ begin
     exit;
   n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
   repeat
-    result := ch^.Lookup(P, Ctxt);
-    if result <> nil then
-      exit; // match found in children
+    if (ch^.Data.Names <> nil) or
+       (ch^.Chars[1] = P^) then // recursive call only if worth it
+    begin
+      result := ch^.Lookup(P, Ctxt);
+      if result <> nil then
+        exit; // match found in children
+    end;
     inc(ch);
     dec(n);
   until n = 0;
@@ -2870,7 +2938,7 @@ begin
         raise EUriTree.CreateUtf8('Unexpected <%>% in %.Setup(''%'')',
           [item, u^, self, aFromUri]);
     until false;
-  // the leaf should have the Redirect/Run information to process on match
+  // the leaf should have the Rewrite/Run information to process on match
   if Assigned(n.Data.OnRequest) or
      (n.Data.ToUri <> '') then
     raise EUriTree.CreateUtf8('%.Setup(''%''): already registered',
@@ -2881,7 +2949,7 @@ begin
   begin
     n.Data.ToMethod := aTo;
     n.Data.ToUri := aToUri;
-    n.Data.ToUriPosLen := nil; // [pos1,len1,valndx1,...] trios
+    n.Data.ToUriPosLen := nil; // store [pos1,len1,valndx1,...] trios
     n.Data.ToUriStaticLen := 0;
     u := pointer(aToUri);
     if u = nil then
@@ -2942,15 +3010,6 @@ end;
 
 { TUriRouter }
 
-constructor TUriRouter.Create;
-var
-  m: TUriRouterMethod;
-begin
-  inherited Create;
-  for m := low(fTree) to high(fTree) do
-    fTree[m] := TUriTree.Create;
-end;
-
 destructor TUriRouter.Destroy;
 var
   m: TUriRouterMethod;
@@ -2964,51 +3023,36 @@ procedure TUriRouter.Clear(aMethods: TUriRouterMethods);
 var
   m: TUriRouterMethod;
 begin
-  for m := low(fTree) to high(fTree) do
-    if m in aMethods then
-      fTree[m].Clear;
-end;
-
-procedure TUriRouter.Get(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmGet, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Post(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmPost, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Put(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmPut, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Delete(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmDelete, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Options(const aFrom, aTo: RawUtf8;
-  aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmOptions, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Head(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
-begin
-  Redirect(urmHead, aFrom, aToMethod, aTo);
-end;
-
-procedure TUriRouter.Redirect(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
-  aTo: TUriRouterMethod; const aToUri: RawUtf8);
-begin
   fSafe.WriteLock;
   try
-    fTree[aFrom].Setup(aFromUri, aTo, aToUri, nil);
+    FillCharFast(fEntries, SizeOf(fEntries), 0);
+    for m := low(fTree) to high(fTree) do
+      if m in aMethods then
+        FreeAndNil(fTree[m]);
   finally
     fSafe.WriteUnLock;
   end;
+end;
+
+procedure TUriRouter.Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
+  aTo: TUriRouterMethod; const aToUri: RawUtf8;
+  const aExecute: TOnHttpServerRequest);
+begin
+  fSafe.WriteLock;
+  try
+    if fTree[aFrom] = nil then
+      fTree[aFrom] := TUriTree.Create;
+    fTree[aFrom].Setup(aFromUri, aTo, aToUri, aExecute);
+    inc(fEntries[aFrom]);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TUriRouter.Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
+  aTo: TUriRouterMethod; const aToUri: RawUtf8);
+begin
+  Setup(aFrom, aFromUri, aTo, aToUri, nil);
 end;
 
 procedure TUriRouter.Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
@@ -3016,14 +3060,40 @@ procedure TUriRouter.Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
 var
   m: TUriRouterMethod;
 begin
-  fSafe.WriteLock;
-  try
-    for m := low(fTree) to high(fTree) do
-      if m in aFrom then
-        fTree[m].Setup(aFromUri, m, '', aExecute);
-  finally
-    fSafe.WriteUnLock;
-  end;
+  for m := low(fTree) to high(fTree) do
+    if m in aFrom then
+      Setup(m, aFromUri, m, '', aExecute);
+end;
+
+procedure TUriRouter.Get(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmGet, aFrom, aToMethod, aTo);
+end;
+
+procedure TUriRouter.Post(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmPost, aFrom, aToMethod, aTo);
+end;
+
+procedure TUriRouter.Put(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmPut, aFrom, aToMethod, aTo);
+end;
+
+procedure TUriRouter.Delete(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmDelete, aFrom, aToMethod, aTo);
+end;
+
+procedure TUriRouter.Options(const aFrom, aTo: RawUtf8;
+  aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmOptions, aFrom, aToMethod, aTo);
+end;
+
+procedure TUriRouter.Head(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
+begin
+  Rewrite(urmHead, aFrom, aToMethod, aTo);
 end;
 
 procedure TUriRouter.Get(const aUri: RawUtf8;
@@ -3065,31 +3135,18 @@ end;
 function TUriRouter.Process(Ctxt: THttpServerRequestAbstract): integer;
 var
   m: TUriRouterMethod;
+  t: TUriTree;
   found: TUriTreeNode;
 begin
   result := 0; // nothing to process
   if (self = nil) or
-     (Ctxt.Method = '') or
-     (Ctxt.Url = '') then
+     (Ctxt = nil) or
+     (Ctxt.Url = '') or
+     not UriMethod(Ctxt.Method, m) then
     exit;
-  case PCardinal(Ctxt.Method)^ of
-    ord('G') + ord('E') shl 8 + ord('T') shl 16:
-      m := urmGet;
-    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
-      m := urmPost;
-    ord('P') + ord('U') shl 8 + ord('T') shl 16:
-      m := urmPut;
-    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
-      m := urmDelete;
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
-      m := urmOptions;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
-      m := urmHead;
-  else
-    exit;
-  end;
-  found := TUriTreeNode(fTree[m].fRoot);
-  if found.Child = nil then
+  Ctxt.fRouteName := nil; // paranoid: if Process() called without Ctxt.Prepare
+  t := fTree[m];
+  if t = nil then
     exit; // this method has no registration yet
   fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
@@ -3098,7 +3155,7 @@ begin
   begin
   {$endif HASFASTTRYFINALLY}
     // fast recursive parsing - may return nil, but never raises exception
-    found := found.Lookup(pointer(Ctxt.Url), Ctxt);
+    found := TUriTreeNode(t.fRoot).Lookup(pointer(Ctxt.Url), Ctxt);
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
