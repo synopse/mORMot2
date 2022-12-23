@@ -133,6 +133,7 @@ type
   protected
     fShutdownInProgress: boolean;
     fOptions: THttpServerOptions;
+    fRoute: TUriRouter;
     /// optional event handlers for process interception
     fOnRequest: TOnHttpServerRequest;
     fOnBeforeBody: TOnHttpServerBeforeBody;
@@ -175,6 +176,22 @@ type
     /// initialize the server instance
     constructor Create(const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions); reintroduce; virtual;
+    /// release all memory and handlers used by this server
+    destructor Destroy; override;
+    /// specify URI routes for internal URI rewrites or callback execution
+    // - rules registered here will be processed before main Request/OnRequest
+    // - URI rewrites allow to extend the default routing, e.g. from TRestServer
+    // - callbacks execution allow efficient server-side processing with parameters
+    // - static routes could be defined e.g. Route.Get('/', '/root/default')
+    // - <param> place holders could be defined for proper URI rewrite
+    // e.g. Route.Post('/user/<id>', '/root/userservice/new?id=<id>') will
+    // rewrite internally '/user/1234' URI as '/root/userservice/new?id=1234'
+    // - could be used e.g. for standard REST process via event callbacks with
+    // Ctxt['user'] or Ctxt.RouteInt64('id') parameter extraction in DoUserPic:
+    // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
+    // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
+    // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
+    function Route: TUriRouter;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -340,6 +357,11 @@ type
     // - some inherited classes may have only partial support of those options
     property Options: THttpServerOptions
       read fOptions write fOptions;
+    /// read access to the URI router, as published property (e.g. for logs)
+    // - use the Route function to actually setup the routing
+    // - may be nil if Route has never been accessed, i.e. no routing was set
+    property Router: TUriRouter
+      read fRoute;
   end;
 
 
@@ -1518,6 +1540,27 @@ begin
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
+destructor THttpServerGeneric.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fRoute);
+end;
+
+function THttpServerGeneric.Route: TUriRouter;
+begin
+  if fRoute = nil then
+  begin
+    GlobalLock; // paranoid thread-safety
+    try
+      if fRoute = nil then
+        fRoute := TUriRouter.Create;
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := fRoute;
+end;
+
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer);
 begin
@@ -1975,6 +2018,15 @@ var
 begin
   result := false; // error
   try
+    if fRoute <> nil then // URI rewrite or callback execution
+    begin
+      Ctxt.RespStatus := fRoute.Process(Ctxt);
+      if Ctxt.RespStatus <> 0 then
+      begin
+        result := true; // a callback was executed
+        exit;
+      end;
+    end;
     Ctxt.RespStatus := DoBeforeRequest(Ctxt);
     if Ctxt.RespStatus > 0 then
     begin
@@ -2979,12 +3031,12 @@ begin
   fReceiveBufferSize := From.fReceiveBufferSize;
   if From.fLogData <> nil then
     fLogData := pointer(fLogDataStorage);
-  SetServerName(From.fServerName);
-  SetRemoteIPHeader(From.RemoteIPHeader);
-  SetRemoteConnIDHeader(From.RemoteConnIDHeader);
+  SetServerName(From.fServerName); // setters are sometimes needed
+  SetRemoteIPHeader(From.fRemoteIPHeader);
+  SetRemoteConnIDHeader(From.fRemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
   inherited Create(From.fOnThreadStart, From.fOnThreadTerminate,
-   From.ProcessName, From.Options - [hsoCreateSuspended]);
+    From.fProcessName, From.fOptions - [hsoCreateSuspended]);
 end;
 
 procedure THttpApiServer.DestroyMainThread;
@@ -3106,6 +3158,7 @@ var
   outcontenc, outstat: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
+  router: TUriRouter;
   ctxt: THttpServerRequest;
   filehandle: THandle;
   resp: PHTTP_RESPONSE;
@@ -3446,15 +3499,26 @@ begin
               // compute response
               FillcharFast(resp^, SizeOf(resp^), 0);
               respsent := false;
-              outstatcode := DoBeforeRequest(ctxt);
-              if outstatcode > 0 then
-                if not SendResponse or
-                   (outstatcode <> HTTP_ACCEPTED) then
-                  continue;
-              outstatcode := Request(ctxt); // call OnRequest for main process
-              afterstatcode := DoAfterRequest(ctxt);
-              if afterstatcode > 0 then
-                outstatcode := afterstatcode;
+              outstatcode := 0;
+              if fOwner = nil then
+                router := fRoute
+              else
+                router := fOwner.fRoute; // field not propagated in clones
+              if router <> nil then // URI rewrite or callback execution
+                outstatcode := router.Process(Ctxt);
+              if outstatcode = 0 then // no router callback was executed
+              begin
+                // regular server-side request evaluation
+                outstatcode := DoBeforeRequest(ctxt);
+                if outstatcode > 0 then
+                  if not SendResponse or
+                     (outstatcode <> HTTP_ACCEPTED) then
+                    continue;
+                outstatcode := Request(ctxt); // call OnRequest for main process
+                afterstatcode := DoAfterRequest(ctxt);
+                if afterstatcode > 0 then
+                  outstatcode := afterstatcode;
+              end;
               // send response
               if not respsent then
                 if not SendResponse then
