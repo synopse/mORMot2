@@ -132,6 +132,10 @@ function IsPost(const method: RawUtf8): boolean;
 function IsPut(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// quick check for case-sensitive 'DELETE' HTTP method name
+function IsDelete(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
 function IsUrlFavicon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -895,13 +899,19 @@ type
 
 const
   /// convert TUriRouterMethod into its standard HTTP text
+  // - see UriMethod() function for the reverse conversion
   URIROUTERMETHOD: array[TUriRouterMethod] of RawUtf8 = (
     'GET',     // urmGet
     'POST',    // urmPost
     'PUT',     // urmPut
     'DELETE',  // urmDelete
     'OPTIONS', // urmOptions
-    'HEAD');  // urmHead
+    'HEAD');   // urmHead
+
+/// quickly recognize most HTTP text methods into a TUriRouterMethod enumeration
+// - may replace cascaded IsGet() IsPut() IsPost() IsDelete() function calls
+// - see URIROUTERMETHOD[] constant for the reverse conversion
+function UriMethod(const Text: RawUtf8; out Method: TUriRouterMethod): boolean;
 
 
 implementation
@@ -1078,6 +1088,12 @@ function IsPut(const method: RawUtf8): boolean;
 begin
   result := PCardinal(method)^ =
     ord('P') + ord('U') shl 8 + ord('T') shl 16;
+end;
+
+function IsDelete(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ =
+    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
 end;
 
 function IsUrlFavicon(P: PUtf8Char): boolean;
@@ -2896,6 +2912,31 @@ begin
             (u^ = #0);
   end;
   AfterInsert; // compute Depth and sort by priority
+end;
+
+
+function UriMethod(const Text: RawUtf8; out Method: TUriRouterMethod): boolean;
+begin
+  result := false;
+  if Text = '' then
+    exit;
+  case PCardinal(Text)^ of
+    ord('G') + ord('E') shl 8 + ord('T') shl 16:
+      Method := urmGet;
+    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+      Method := urmPost;
+    ord('P') + ord('U') shl 8 + ord('T') shl 16:
+      Method := urmPut;
+    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
+      Method := urmDelete;
+    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
+      Method := urmOptions;
+    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+      Method := urmHead;
+  else
+    exit;
+  end;
+  result := true;
 end;
 
 
