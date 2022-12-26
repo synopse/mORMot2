@@ -6463,11 +6463,13 @@ var
 begin
   {$ifndef UNICODE}
   if not NeedsHtmlEscape(pointer(text), fmt) then // work for any AnsiString
+  {$else}
+  if fmt = hfNone then
+  {$endif UNICODE}
   begin
     StringToUtf8(text, result);
     exit;
   end;
-  {$endif UNICODE}
   W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddHtmlEscapeString(text, fmt);
