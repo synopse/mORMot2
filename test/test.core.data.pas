@@ -5301,17 +5301,39 @@ end;
 procedure TTestCoreProcess.UrlEncoding;
 var
   i: integer;
-  s, t: RawUtf8;
-  d: RawUtf8;
+  s, t, d: RawUtf8;
+  hf: TTextWriterHtmlFormat;
 begin
   for i := 1 to 100 do
   begin
     s := RandomUtf8(i);
+    Check(not NeedsHtmlEscape(pointer(s), hfNone));
     t := UrlEncode(s);
     Check(UrlDecode(t) = s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i]), '?' + d);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i], {trimlead=}true), d);
+  end;
+  for hf := low(hf) to high(hf) do
+  begin
+    for i := 1 to 10 do
+    begin
+      s := RandomIdentifier(i);
+      Check(not NeedsHtmlEscape(pointer(s), hf));
+      Check(not NeedsHtmlEscape(pointer(s), hf));
+      Check(not NeedsHtmlEscape(pointer(s), hf));
+      CheckEqual(HtmlEscape(s), s, 'HtmlEscape');
+    end;
+    s := 'some &';
+    Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    s := '&';
+    Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    s := '& some';
+    Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    t := HtmlEscape(s, hf);
+    Check((t = s) <> (hf <> hfNone));
+    if hf <> hfNone then
+      CheckEqual(t, '&amp; some');
   end;
 end;
 

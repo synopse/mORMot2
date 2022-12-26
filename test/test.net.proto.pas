@@ -441,6 +441,7 @@ begin
     router.Get('/do/<one>/pic', DoRequest2);
     router.Get('/do/<one>/pic/<two>/', DoRequest3);
     router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest4);
+    //writeln(router.Tree[urmGet].ToText);
     Call('/do/a', 'a', '');
     CheckEqual(request, 1);
     Call('/do/123', '123', '');

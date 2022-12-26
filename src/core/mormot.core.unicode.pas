@@ -3489,7 +3489,7 @@ end;
 
 function TSynAnsiUtf8.Utf8ToAnsi(const u: RawUtf8): RawByteString;
 begin
-  result := u; // u may be a read-only constant: no FastAssignUtf8()
+  result := u; // u may be a read-only constant: no FastAssignUtf8/FakeCodePage
   {$ifdef HASCODEPAGE}
   SetCodePage(result, CP_UTF8, {convert=}false);
   {$endif HASCODEPAGE}
@@ -3497,7 +3497,7 @@ end;
 
 function TSynAnsiUtf8.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
 begin
-  result := AnsiText; // AnsiText may be read-only: no FastAssignUtf8()
+  result := AnsiText; // AnsiText may be read-only: no FastAssignUtf8/FakeCodePage
   {$ifdef HASCODEPAGE}
   SetCodePage(RawByteString(result), CP_UTF8, {convert=}false);
   {$endif HASCODEPAGE}

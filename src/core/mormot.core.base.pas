@@ -11029,7 +11029,7 @@ begin
   if Txt = '' then
     exit;
   RawUtf8(TVarData(Value).VAny) := Txt;
-  {$ifdef HASCODEPAGE} // Txt may be read-only: no FastAssignUtf8()
+  {$ifdef HASCODEPAGE} // Txt may be read-only: no FastAssignUtf8/FakeCodePage
   SetCodePage(RawByteString(TVarData(Value).VAny), CP_UTF8, false);
   {$endif HASCODEPAGE}
 end;

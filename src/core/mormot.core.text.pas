@@ -1266,6 +1266,9 @@ var
 function ObjectToJson(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
+/// check if some UTF-8 text would need HTML escaping
+function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
+
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TTextWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
@@ -6439,13 +6442,18 @@ var
   temp: TTextWriterStackBuffer;
   W: TTextWriter;
 begin
-  W := TTextWriter.CreateOwnedStream(temp);
-  try
-    W.AddHtmlEscape(pointer(text), length(text), fmt);
-    W.SetText(result);
-  finally
-    W.Free;
-  end;
+  if NeedsHtmlEscape(pointer(text), fmt) then
+  begin
+    W := TTextWriter.CreateOwnedStream(temp);
+    try
+      W.AddHtmlEscape(pointer(text), length(text), fmt);
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end
+  else
+    result := text;
 end;
 
 function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
@@ -6453,6 +6461,13 @@ var
   temp: TTextWriterStackBuffer;
   W: TTextWriter;
 begin
+  {$ifndef UNICODE}
+  if not NeedsHtmlEscape(pointer(text), fmt) then // work for any AnsiString
+  begin
+    StringToUtf8(text, result);
+    exit;
+  end;
+  {$endif UNICODE}
   W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddHtmlEscapeString(text, fmt);
@@ -6460,6 +6475,27 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function NeedsHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat): boolean;
+var
+  esc: ^TAnsiCharToByte;
+begin
+  if (Text <> nil) and
+     (Fmt <> hfNone) then
+  begin
+    result := true;
+    esc := @HTML_ESC[Fmt];
+    repeat
+      if esc[Text^] <> 0 then
+        if Text^ = #0 then
+          break
+        else
+          exit;
+      inc(Text);
+    until false;
+  end;
+  result := false;
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
@@ -6484,9 +6520,8 @@ begin
           (esc[Text^] = 0) do
       inc(Text);
     AddNoJsonEscape(beg, Text - beg);
-    if PtrUInt(Text) = PtrUInt(TextLen) then
-      exit;
-    if Text^ = #0 then
+    if (PtrUInt(Text) = PtrUInt(TextLen)) or
+       (Text^ = #0) then
       exit
     else
       AddShorter(HTML_ESCAPED[esc[Text^]]);
