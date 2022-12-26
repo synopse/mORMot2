@@ -7900,8 +7900,6 @@ end;
 function UrlDecodeValue(U: PUtf8Char; const Upper: RawUtf8;
   var Value: RawUtf8; Next: PPUtf8Char): boolean;
 begin
-  // UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@U)
-  // -> U^='where=...' and V='*'
   result := false; // mark value not modified by default
   if U = nil then
   begin
@@ -7920,7 +7918,7 @@ begin
   while not (U^ in [#0, '&']) do
     inc(U);
   if U^ = #0 then
-    Next^ := nil
+    Next^ := nil // return nil when end of URI is reached
   else
     Next^ := U + 1; // jump '&'
 end;
@@ -7931,8 +7929,6 @@ var
   V: PtrInt;
   SignNeg: boolean;
 begin
-  // UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
-  // -> Next^='where=...' and O=20
   result := false; // mark value not modified by default
   if U = nil then
   begin
@@ -7946,7 +7942,7 @@ begin
     if U^ = '-' then
     begin
       SignNeg := True;
-      Inc(U);
+      inc(U);
     end
     else
       SignNeg := false;
@@ -7979,8 +7975,6 @@ function UrlDecodeCardinal(U: PUtf8Char; const Upper: RawUtf8;
 var
   V: PtrInt;
 begin
-  // UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
-  // -> Next^='where=...' and O=20
   result := false; // mark value not modified by default
   if U = nil then
   begin
@@ -8015,11 +8009,48 @@ end;
 function UrlDecodeInt64(U: PUtf8Char; const Upper: RawUtf8;
   var Value: Int64; Next: PPUtf8Char): boolean;
 var
-  tmp: RawUtf8;
+  V: Int64;
+  SignNeg: boolean;
 begin
-  result := UrlDecodeValue(U, Upper, tmp, Next);
-  if result then
-    SetInt64(pointer(tmp), Value);
+  result := false; // mark value not modified by default
+  if U = nil then
+  begin
+    if Next <> nil then
+      Next^ := U;
+    exit;
+  end;
+  if IdemPChar(U, pointer(Upper)) then
+  begin
+    inc(U, length(Upper));
+    if U^ = '-' then
+    begin
+      SignNeg := True;
+      inc(U);
+    end
+    else
+      SignNeg := false;
+    if U^ in ['0'..'9'] then
+    begin
+      V := 0;
+      repeat
+        V := (V * 10) + ord(U^) - 48;
+        inc(U);
+      until not (U^ in ['0'..'9']);
+      if SignNeg then
+        Value := -V
+      else
+        Value := V;
+      result := true;
+    end;
+  end;
+  if Next = nil then
+    exit;
+  while not (U^ in [#0, '&']) do
+    inc(U);
+  if U^ = #0 then
+    Next^ := nil
+  else
+    Next^ := U + 1; // jump '&'
 end;
 
 function UrlDecodeExtended(U: PUtf8Char; const Upper: RawUtf8;
