@@ -539,6 +539,7 @@ type
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
     function GetRouteValuePosLen(const Name: RawUtf8): PIntegerArray;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
@@ -580,9 +581,21 @@ type
     /// returns the TUriRouter <parameter> value parsed from URI as Int64
     // - Name lookup is case-sensitive
     function RouteInt64(const Name: RawUtf8; out Value: Int64): boolean;
+    /// returns the TUriRouter <parameter> value parsed from URI as RawUtf8
+    // - Name lookup is case-sensitive
+    function RouteUtf8(const Name: RawUtf8; out Value: RawUtf8): boolean;
     /// check a TUriRouter <parameter> value parsed from URI
     // - both Name lookup and value comparison are case-sensitive
     function RouteEquals(const Name, ExpectedValue: RawUtf8): boolean;
+    /// retrieve and decode an URI-encoded parameter as UTF-8 text
+    // - UpperName should follow the UrlDecodeValue() format, e.g. 'NAME='
+    function UrlParam(const UpperName: RawUtf8; out Value: RawUtf8): boolean; overload;
+    /// retrieve and decode an URI-encoded parameter as 32-bit unsigned cardinal
+    // - UpperName should follow the UrlDecodeCardinal() format, e.g. 'ID='
+    function UrlParam(const UpperName: RawUtf8; out Value: cardinal): boolean; overload;
+    /// retrieve and decode an URI-encoded parameter as 64-bit signed Int64
+    // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
+    function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -2334,14 +2347,8 @@ begin
 end;
 
 function THttpServerRequestAbstract.GetRouteValue(const Name: RawUtf8): RawUtf8;
-var
-  v: PIntegerArray;
 begin
-  v := GetRouteValuePosLen(Name);
-  if v <> nil then
-    result := copy(Url, v[0] + 1, v[1])
-  else
-    result := '';
+  RouteUtf8(Name, result);
 end;
 
 function THttpServerRequestAbstract.RouteInt64(const Name: RawUtf8;
@@ -2359,6 +2366,21 @@ begin
     result := false;
 end;
 
+function THttpServerRequestAbstract.RouteUtf8(const Name: RawUtf8;
+  out Value: RawUtf8): boolean;
+var
+  v: PIntegerArray;
+begin
+  v := GetRouteValuePosLen(Name);
+  if v <> nil then
+  begin
+    Value := copy(Url, v[0] + 1, v[1]);
+    result := true;
+  end
+  else
+    result := false;
+end;
+
 function THttpServerRequestAbstract.RouteEquals(
   const Name, ExpectedValue: RawUtf8): boolean;
 var
@@ -2370,6 +2392,60 @@ begin
       CompareMemFixed(pointer(ExpectedValue), @PByteArray(Url)[v[0]], v[1])
   else
     result := false;
+end;
+
+function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
+  out Value: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := PosChar(pointer(Url), '?');
+  if p <> nil then
+  begin
+    result := true;
+    inc(p);
+    repeat
+      if UrlDecodeValue(p, UpperName, Value, @p) then
+        exit;
+    until p = nil;
+  end;
+  result := false;
+end;
+
+function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
+  out Value: cardinal): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := PosChar(pointer(Url), '?');
+  if p <> nil then
+  begin
+    result := true;
+    inc(p);
+    repeat
+      if UrlDecodeCardinal(p, UpperName, Value, @p) then // no temp RawUtf8
+        exit;
+    until p = nil;
+  end;
+  result := false;
+end;
+
+function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
+  out Value: Int64): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := PosChar(pointer(Url), '?');
+  if p <> nil then
+  begin
+    result := true;
+    inc(p);
+    repeat
+      if UrlDecodeInt64(p, UpperName, Value, @p) then // no temp RawUtf8
+        exit;
+    until p = nil;
+  end;
+  result := false;
 end;
 
 
@@ -2913,7 +2989,7 @@ var
   pos: PtrInt;
 begin
   u := pointer(TrimU(aFromUri));
-  // validate only URI-compatible chars
+  // validate only URI-compatible chars (excluding inlined parameters after ?)
   p := u;
   if p = nil then
     exit;
@@ -2942,13 +3018,13 @@ begin
           [item, self, aFromUri]);
       AddRawUtf8(names, item);
       full := full + '<' + item + '>'; // avoid name collision with static
-      n := Insert(full) as TUriTreeNode; // some parameter (Names <> nil)
+      n := Insert(full) as TUriTreeNode; // some param (Names <> nil)
       n.Data.Names := copy(names);
       if (u = nil) or
          (u^ = #0) then
-        // TODO: detect wildchar incompatibilities with nested searches
+        // TODO: detect wildchar incompatibilities with nested searches?
         break;
-      if u^ <> '/' then
+      if not (u^ in ['/', '-']) then
         raise EUriTree.CreateUtf8('Unexpected <%>% in %.Setup(''%'')',
           [item, u^, self, aFromUri]);
     until false;
