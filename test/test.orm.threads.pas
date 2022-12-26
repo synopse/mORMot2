@@ -251,6 +251,9 @@ var
   Rest: array of TRest;
   Rec: TOrmPeople;
   i, n, r: PtrInt;
+  infoUri, peopleUri: RawUtf8;
+  http: THttpClientSocket;
+  id: TID;
   log: ISynLog;
 begin
   SetCurrentThreadName('% #%', [self, fID]);
@@ -263,6 +266,20 @@ begin
       if Terminated or
          fProcessFinished then // from Destroy
         break;
+      infoUri := '';
+      if fTest.fHttpServer <> nil then
+        if fTest.fHttpServer.HttpServer.Router = nil then
+        begin
+          infoUri := '/root/timestamp/info';
+          peopleUri := '/root/people/';
+        end
+        else
+        begin
+          // Route.Get('/info', '/root/timestamp/info');
+          // Route.Get('/people/<id>', '/root/people/<id>');
+          infoUri := '/info';
+          peopleUri := '/people/';
+        end;
       try
         try
           SetLength(Rest, fTest.ClientPerThread);
@@ -287,6 +304,27 @@ begin
               if fTest.CheckFailed(fIDs[i] <> 0, 'Rest.Add') then
                 break;
               inc(n);
+            end;
+            if (infoUri <> '') and
+               not IdemPChar(pointer(fTest.fClientOnlyPort), 'UNIX:') then
+            begin
+              http := OpenHttp('127.0.0.1', fTest.fClientOnlyPort);
+              if not fTest.CheckFailed(http <> nil, 'openhttp') then
+                try
+                  fTest.CheckEqual(
+                    http.Get(infoUri, 1000), HTTP_SUCCESS, infoUri);
+                  fTest.CheckUtf8(http.Content <> '', infoUri);
+                  for i := 0 to (n div 5) - 1 do
+                  begin
+                    fTest.CheckEqual(
+                      http.Get(peopleUri + Int64ToUtf8(fIDs[i]), 1000),
+                      HTTP_SUCCESS, peopleUri);
+                    fTest.CheckUtf8(JsonGetID(pointer(Http.Content), id), peopleUri);
+                    fTest.CheckEqual(id, fIDs[i]);
+                  end;
+                finally
+                  http.Free;
+                end;
             end;
             for i := 0 to n - 1 do
               if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
@@ -491,6 +529,11 @@ begin
         {threads=}8, secNone, '', '', HTTPSERVER_DEFAULT_OPTIONS + [rsoLogVerbose] );
       if aHttp in HTTP_BIDIR then
         fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN)^.SetFullLog;
+      if aHttp in HTTP_SOCKET_MODES then // http.sys may have not /* registered
+      begin
+        fHttpServer.Route.Get('/info', '/root/timestamp/info');
+        fHttpServer.Route.Get('/people/<id>', '/root/people/<id>');
+      end;
       //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port); readln;
     end;
   end;

@@ -507,10 +507,16 @@ begin
     for i := 1 to 1000 do
       Compute('/do/toto/pic', '', 'GET', 200);
     NotifyTestSpeed('URI parametrized execute', 1000);
+    router.Put('/index.php', '404');
+    router.Put('/admin.php', '404');
+    Compute('/index.php', '/index.php', 'PUT', 404);
+    Compute('/admin.php', '/admin.php', 'PUT', 404);
     //writeln(router.Tree[urmGet].ToText);
     //writeln(router.Tree[urmPost].ToText);
+    //writeln(router.Tree[urmPut].ToText);
     CheckHash(router.Tree[urmGet].ToText, $18A0BF58);
     CheckHash(router.Tree[urmPost].ToText, $E173FBB0);
+    CheckHash(router.Tree[urmPut].ToText, $80F7A0EF);
     router.Clear([urmPost]);
     Call('/plaintext', '', '');
     Compute('/static', '/static');
