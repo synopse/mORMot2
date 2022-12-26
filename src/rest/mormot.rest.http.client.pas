@@ -674,7 +674,7 @@ constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 var
   URI: TUri;
-  P: PUtf8Char;
+  P, next: PUtf8Char;
   V: cardinal;
   tmp: RawUtf8;
 begin
@@ -693,9 +693,10 @@ begin
       fProxyName := CurrentAnsiConvert.Utf8ToAnsi(tmp)
     else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
       fProxyByPass := CurrentAnsiConvert.Utf8ToAnsi(tmp);
-    if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @P) or
-       UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @P) then
+    if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
+       UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
       fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
+    P := next;
   end;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;
