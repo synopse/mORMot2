@@ -269,7 +269,7 @@ end;
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   one := Ctxt['one'];
-  two := Ctxt['two'];
+  Ctxt.RouteUtf8('two', two);
   three := Ctxt.RouteEquals('three', '3');
   if not Ctxt.RouteInt64('four', four) then
     four := -1;
