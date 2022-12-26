@@ -2796,9 +2796,8 @@ begin
   begin
     // <named> parameter
     c := P;
-    P := PosChar(P, '/'); // may use SSE2
-    if P = nil then
-      P := c + StrLen(c); // trailing ...<param> (handled as wildchar)
+    while not (P^ in [#0, '?', '/', '-']) do
+      inc(P);
     Ctxt.fRouteName := pointer(Data.Names); // fast assign as pointer reference
     n := length(Data.Names) * 2; // length(Names[]) = current parameter index
     if length(Ctxt.fRouteValuePosLen) < n then
@@ -2811,9 +2810,9 @@ begin
     v[1] := P - c; // value length in Ctxt.Url
   end;
   // if we reached here, the URI do match up to now
-  if P^ = #0 then
+  if P^ in [#0, '?'] then
   begin
-    result := self; // exact match found for this entry
+    result := self; // exact match found for this entry (excluding URI params)
     exit;
   end;
   ch := pointer(Child);
@@ -2911,8 +2910,10 @@ begin
   if p = nil then
     exit;
   repeat
-    if not (p^ in ['/', '_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z', '<', '>']) then
-      raise EUriTree.CreateUtf8('Invalid chars in %.Setup(''%'')', [self, aFromUri]);
+    if not (p^ in ['/', '_', '-', '.',
+                   '0'..'9', 'a'..'z', 'A'..'Z', '<', '>']) then
+      raise EUriTree.CreateUtf8('Invalid chars in %.Setup(''%'')',
+        [self, aFromUri]);
     inc(p);
   until p^ = #0;
   if PosExChar('<', aFromUri) = 0 then
@@ -2957,8 +2958,9 @@ begin
     n.Data.ToUriPosLen := nil; // store [pos1,len1,valndx1,...] trios
     n.Data.ToUriStaticLen := 0;
     n.Data.ToUriErrorStatus := Utf8ToInteger(aToUri, 200, 599, 0);
-    if n.Data.ToUriErrorStatus = 0 then
+    if n.Data.ToUriErrorStatus = 0 then // a true URI, not an HTTP error code
     begin
+      // pre-compute the rewritten URI into Data.ToUriPosLen[]
       u := pointer(aToUri);
       if u = nil then
         raise EUriTree.CreateUtf8('No ToUri in %.Setup(''%'')', [self, aFromUri]);
