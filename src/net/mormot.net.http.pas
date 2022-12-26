@@ -783,14 +783,16 @@ type
     // - equal nil for static nodes
     // - is referenced as pointer into THttpServerRequestAbstract.fRouteName
     Names: TRawUtf8DynArray;
-    /// the Rewrite() URI method
-    ToMethod: TUriRouterMethod;
     /// the Rewrite() URI text
     ToUri: RawUtf8;
     /// [pos1,len1,valndx1,pos2,len2,valndx2,...] trios from ToUri content
     ToUriPosLen: TIntegerDynArray;
     /// the size of all ToUriPosLen[] static content
     ToUriStaticLen: integer;
+    /// the URI method to be used after ToUri rewrite
+    ToUriMethod: TUriRouterMethod;
+    /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404")
+    ToUriErrorStatus: word;
     /// the callback registered by Run() for this URI
     OnRequest: TOnHttpServerRequest;
   end;
@@ -857,36 +859,39 @@ type
 
     /// register an URI rewrite with optional <param> place holders
     // - <param> will be replaced in aToUri
-    // - if aToUri='' then the whole internal redirection is
-    // - e.g. Rewrite(urmGet, '/info', urmGet, 'root/timestamp/info');
-    // - Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
-    //   '/root/myservice/convert?from=<from>&to=<to>') for IMyService.Convert
+    // - if aToUri is an '200'..'599' integer, it will return it as HTTP error
+    // - otherwise, the URI will be rewritten into aToUri, e.g.
+    // $ Rewrite(urmGet, '/info', urmGet, 'root/timestamp/info');
+    // $ Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
+    // $  '/root/myservice/convert?from=<from>&to=<to>'); // for IMyService.Convert
+    // $ Rewrite(urmGet, '/index.php', '400'); // to avoid fuzzing
     procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8);
     /// just a wrapper around Rewrite(urmGet, aFrom, aToMethod, aTo)
-    // - e.g. router.Get('/info', 'root/timestamp/info');
-    // - e.g. router.Get('/user/<id>', '/root/userservice/new?id=<id>'); will
+    // - e.g. Route.Get('/info', 'root/timestamp/info');
+    // - e.g. Route.Get('/user/<id>', '/root/userservice/new?id=<id>'); will
     // rewrite internally '/user/1234' URI as '/root/userservice/new?id=1234'
+    // - e.g. Route.Get('/admin.php', '403');
     procedure Get(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmGet); overload;
     /// just a wrapper around Rewrite(urmPost, aFrom, aToMethod, aTo)
-    // - e.g. Post('/doconvert', '/root/myservice/convert');
+    // - e.g. Route.Post('/doconvert', '/root/myservice/convert');
     procedure Post(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPost); overload;
     /// just a wrapper around Rewrite(urmPut, aFrom, aToMethod, aTo)
-    // - e.g. Put('/domodify', '/root/myservice/update', urmPost);
+    // - e.g. Route.Put('/domodify', '/root/myservice/update', urmPost);
     procedure Put(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmPut); overload;
     /// just a wrapper around Rewrite(urmDelete, aFrom, aToMethod, aTo)
-    // - e.g. Delete('/doremove', '/root/myservice/delete', urmPost);
+    // - e.g. Route.Delete('/doremove', '/root/myservice/delete', urmPost);
     procedure Delete(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmDelete); overload;
     /// just a wrapper around Rewrite(urmOptions, aFrom, aToMethod, aTo)
-    // - e.g. Options('/doremove', '/root/myservice/Options', urmPost);
+    // - e.g. Route.Options('/doremove', '/root/myservice/Options', urmPost);
     procedure Options(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmOptions); overload;
     /// just a wrapper around Rewrite(urmHead, aFrom, aToMethod, aTo)
-    // - e.g. Head('/doremove', '/root/myservice/Head', urmPost);
+    // - e.g. Route.Head('/doremove', '/root/myservice/Head', urmPost);
     procedure Head(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmHead); overload;
 
@@ -894,13 +899,13 @@ type
     // - <param> place holders will be parsed and available in callback
     // as Ctxt['param'] default property or Ctxt.RouteInt64/RouteEquals methods
     // - could be used e.g. for standard REST process as
-    // $ router.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
-    // $ router.Run([urmGet, urmPost, urmPut, urmDelete],
+    // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
+    // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
     // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
    procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
       const aExecute: TOnHttpServerRequest);
     /// just a wrapper around Run([urmGet], aUri, aExecute) registration method
-    // - e.g. router.Get('/plaintext', DoPlainText);
+    // - e.g. Route.Get('/plaintext', DoPlainText);
     procedure Get(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
     /// just a wrapper around Run([urmPost], aUri, aExecute) registration method
     procedure Post(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
@@ -2947,37 +2952,41 @@ begin
     n.Data.OnRequest := aExecute
   else
   begin
-    n.Data.ToMethod := aTo;
+    n.Data.ToUriMethod := aTo;
     n.Data.ToUri := aToUri;
     n.Data.ToUriPosLen := nil; // store [pos1,len1,valndx1,...] trios
     n.Data.ToUriStaticLen := 0;
-    u := pointer(aToUri);
-    if u = nil then
-      raise EUriTree.CreateUtf8('No ToUri in %.Setup(''%'')', [self, aFromUri]);
-    if PosExChar('<', aToUri) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
-      repeat
-        pos := u - pointer(aToUri);
-        GetNextItem(u, '<', item); // static
-        AddInteger(n.Data.ToUriPosLen, pos);          // position
-        AddInteger(n.Data.ToUriPosLen, length(item)); // length (may be 0)
-        inc(n.Data.ToUriStaticLen, length(item));
-        if (u = nil) or
-           (u^ = #0) then
-          pos := -1
-        else
-        begin
-          GetNextItem(u, '>', item); // <name>
-          if item = '' then
-            raise EUriTree.CreateUtf8('Void <> in %.Setup(''%'')',
-              [self, aToUri]);
-          pos := FindRawUtf8(names, item);
-          if pos < 0 then
-            raise EUriTree.CreateUtf8('Unknown <%> in %.Setup(''%'')',
-              [item, self, aToUri]);
-        end;
-        AddInteger(n.Data.ToUriPosLen, pos);          // value index in Names[]
-      until (u = nil) or
-            (u^ = #0);
+    n.Data.ToUriErrorStatus := Utf8ToInteger(aToUri, 200, 599, 0);
+    if n.Data.ToUriErrorStatus = 0 then
+    begin
+      u := pointer(aToUri);
+      if u = nil then
+        raise EUriTree.CreateUtf8('No ToUri in %.Setup(''%'')', [self, aFromUri]);
+      if PosExChar('<', aToUri) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
+        repeat
+          pos := u - pointer(aToUri);
+          GetNextItem(u, '<', item); // static
+          AddInteger(n.Data.ToUriPosLen, pos);          // position
+          AddInteger(n.Data.ToUriPosLen, length(item)); // length (may be 0)
+          inc(n.Data.ToUriStaticLen, length(item));
+          if (u = nil) or
+             (u^ = #0) then
+            pos := -1
+          else
+          begin
+            GetNextItem(u, '>', item); // <name>
+            if item = '' then
+              raise EUriTree.CreateUtf8('Void <> in %.Setup(''%'')',
+                [self, aToUri]);
+            pos := FindRawUtf8(names, item);
+            if pos < 0 then
+              raise EUriTree.CreateUtf8('Unknown <%> in %.Setup(''%'')',
+                [item, self, aToUri]);
+          end;
+          AddInteger(n.Data.ToUriPosLen, pos);          // value index in Names[]
+        until (u = nil) or
+              (u^ = #0);
+    end;
   end;
   AfterInsert; // compute Depth and sort by priority
 end;
@@ -3170,12 +3179,14 @@ begin
       result := found.Data.OnRequest(Ctxt)
     else if found.Data.ToUri <> '' then
     begin
-      if m <> found.Data.ToMethod then
-        Ctxt.Method := URIROUTERMETHOD[found.Data.ToMethod];
-      if found.Data.ToUriPosLen = nil then
-        Ctxt.Url := found.Data.ToUri   // only static -> just replace URI
+      if m <> found.Data.ToUriMethod then
+        Ctxt.Method := URIROUTERMETHOD[found.Data.ToUriMethod];
+      if found.Data.ToUriErrorStatus <> 0 then
+        result := found.Data.ToUriErrorStatus // redirect to an error code
+      else if found.Data.ToUriPosLen = nil then
+        Ctxt.Url := found.Data.ToUri    // only static -> just replace URI
       else
-        found.RewriteUri(Ctxt);        // compute new URI with injected values
+        found.RewriteUri(Ctxt);         // compute new URI with injected values
     end;
 end;
 
