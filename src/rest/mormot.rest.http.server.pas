@@ -175,6 +175,13 @@ const
   // use a thread-pool and has an event-driven approach so scales much better
   WEBSOCKETS_DEFAULT_MODE = useBidirAsync;
 
+  /// the kind of HTTP server which involves plain sockets, not http.sys
+  HTTP_SOCKET_MODES = [
+    useHttpSocket,
+    useBidirSocket,
+    useHttpAsync,
+    useBidirAsync];
+
   /// the TRestHttpServerUse which have bi-directional callback notifications
   // - i.e. the THttpServerGeneric classes with CanNotifyCallback=true
   HTTP_BIDIR = [useBidirSocket, useBidirAsync];
@@ -402,6 +409,14 @@ type
     // aHttpServerSecurity=secTLS so that it would redirect https://localhost:port
     procedure RootRedirectToUri(const aRedirectedUri: RawUtf8;
       aRegisterUri: boolean = true; aHttps: boolean = false);
+    /// specify URI routes for internal URI rewrites or callback execution
+    // - just redirect to the HttpServer.Route function
+    // - URI rewrites allow to extend the default routing, e.g. from TRestServer
+    // - callbacks execution allow efficient server-side processing with parameters
+    // - warning: with the THttpApiServer, URIs will be limited by the actual
+    // root URI registered at http.sys level - there is no such limitation with
+    // the socket servers, which bind to a port, so handle all URIs on it
+    function Route: TUriRouter;
     /// defines the WebSockets protocols used by useBidirSocket/useBidirAsync
     // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
@@ -711,8 +726,9 @@ begin
 end;
 
 constructor TRestHttpServer.Create(const aServers: array of TRestServer;
-  const aPort: RawUtf8; aThreadPoolCount: Integer; aSecurity: TRestHttpServerSecurity;
-  aOptions: TRestHttpServerOptions; const CertificateFile, PrivateKeyFile: TFileName;
+  const aPort: RawUtf8; aThreadPoolCount: Integer;
+  aSecurity: TRestHttpServerSecurity; aOptions: TRestHttpServerOptions;
+  const CertificateFile: TFileName; const PrivateKeyFile: TFileName;
   const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
 var
   tls: TNetTlsContext;
@@ -1023,6 +1039,15 @@ begin
   fRootRedirectToUri[aHttps] := aRedirectedUri;
   if aRedirectedUri <> '' then
     HttpApiAddUri('/', '+', HTTPS_SECURITY[aHttps], aRegisterUri, true);
+end;
+
+function TRestHttpServer.Route: TUriRouter;
+begin
+  if (self = nil) or
+     (fHttpServer = nil) then
+    result := nil
+  else
+    result := fHttpServer.Route;
 end;
 
 function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;

@@ -858,7 +858,7 @@ type
     /// register an URI rewrite with optional <param> place holders
     // - <param> will be replaced in aToUri
     // - if aToUri='' then the whole internal redirection is
-    // - e.g. Rewrite(urmmGet, '/info', urmGet, 'root/timestamp/info');
+    // - e.g. Rewrite(urmGet, '/info', urmGet, 'root/timestamp/info');
     // - Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
     //   '/root/myservice/convert?from=<from>&to=<to>') for IMyService.Convert
     procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
@@ -2794,14 +2794,14 @@ begin
     P := PosChar(P, '/'); // may use SSE2
     if P = nil then
       P := c + StrLen(c); // trailing ...<param> (handled as wildchar)
-    Ctxt.fRouteName := pointer(Data.Names); // assign as pointer reference
+    Ctxt.fRouteName := pointer(Data.Names); // fast assign as pointer reference
     n := length(Data.Names) * 2; // length(Names[]) = current parameter index
     if length(Ctxt.fRouteValuePosLen) < n then
       SetLength(Ctxt.fRouteValuePosLen, n + 24); // alloc once by 12 params
     v := @Ctxt.fRouteValuePosLen[n - 2];
     i := c - pointer(Ctxt.Url);
-    if PtrUInt(i) > 4096 then
-      exit; // paranoid check to avoid 16-bit overflow
+    if PtrUInt(i) > PtrUInt(length(Ctxt.Url)) then
+      exit; // paranoid check to avoid any overflow
     v[0] := i;     // value position (0-based) in Ctxt.Url
     v[1] := P - c; // value length in Ctxt.Url
   end;
@@ -3023,6 +3023,8 @@ procedure TUriRouter.Clear(aMethods: TUriRouterMethods);
 var
   m: TUriRouterMethod;
 begin
+  if self = nil then
+    exit; // avoid unexpected GPF
   fSafe.WriteLock;
   try
     FillCharFast(fEntries, SizeOf(fEntries), 0);
@@ -3038,6 +3040,8 @@ procedure TUriRouter.Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
   aTo: TUriRouterMethod; const aToUri: RawUtf8;
   const aExecute: TOnHttpServerRequest);
 begin
+  if self = nil then
+    exit; // avoid unexpected GPF
   fSafe.WriteLock;
   try
     if fTree[aFrom] = nil then

@@ -191,6 +191,9 @@ type
     // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
     // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
     // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
+    // - warning: with the THttpApiServer, URIs will be limited by the actual
+    // root URI registered at http.sys level - there is no such limitation with
+    // the socket servers, which bind to a port, so handle all URIs on it
     function Route: TUriRouter;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
@@ -1548,17 +1551,22 @@ end;
 
 function THttpServerGeneric.Route: TUriRouter;
 begin
-  if fRoute = nil then
+  if self = nil then
+    result := nil // avoid GPF
+  else
   begin
-    GlobalLock; // paranoid thread-safety
-    try
-      if fRoute = nil then
-        fRoute := TUriRouter.Create;
-    finally
-      GlobalUnLock;
+    if fRoute = nil then
+    begin
+      GlobalLock; // paranoid thread-safety
+      try
+        if fRoute = nil then
+          fRoute := TUriRouter.Create;
+      finally
+        GlobalUnLock;
+      end;
     end;
+    result := fRoute;
   end;
-  result := fRoute;
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;

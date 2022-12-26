@@ -5029,7 +5029,7 @@ begin
     nonce256^ := tmp;
   with ServerNonceCache[previous] do
   begin
-    ServerNonceSafe.Lock;
+    ServerNonceSafe.Lock; // keep this global lock as short as possible
     tix := ticks;
     hash := tmp;
     res := hex;
