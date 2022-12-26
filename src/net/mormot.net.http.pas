@@ -720,8 +720,17 @@ type
 type
   /// implement an abstract Radix Tree node
   TRadixTreeNode = class
+  protected
+    function ComputeDepth: integer;
+    procedure SortChildren;
   public
-    Chars, FullText: RawUtf8;
+    /// the characters to be compared at this level
+    Chars: RawUtf8;
+    /// the whole text up to this level
+    FullText: RawUtf8;
+    /// how many branches are within this node - used to sort by priority
+    Depth: integer;
+    /// the nested nodes
     Child: array of TRadixTreeNode;
     /// instantiate a new node with the same class and properties
     function Split(const Text: RawUtf8): TRadixTreeNode; virtual;
@@ -756,6 +765,10 @@ type
     // - may return an existing node instance, if Text was already inserted
     function Insert(const Text: RawUtf8; Node: TRadixTreeNode = nil;
       NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode;
+    /// to be called after Insert() to consolidate the internal tree state
+    // - nodes will be sorted by search priority, i.e. the longest depths first
+    // - as called e.g. by TUriTree.Setup()
+    procedure AfterInsert;
     /// search for the node corresponding to a given text
     // - more than 1 million lookups per second, with 1000 items stored
     function Find(const Text: RawUtf8): TRadixTreeNode;
@@ -800,20 +813,15 @@ type
   /// implement a Radix Tree node to hold one URI registration
   TUriTreeNode = class(TRadixTreeNode)
   protected
-    function ComputeDepth: integer;
-    procedure SortChildren;
     /// two recursive methods called from TUriRouter.Process
     function Lookup(P: PUtf8Char; Ctxt: THttpServerRequestAbstract): TUriTreeNode;
     procedure RewriteUri(Ctxt: THttpServerRequestAbstract);
   public
     /// all context information, as cloned by Split()
     Data: TUriTreeNodeData;
-    /// how many branches are within this node - used to sort by priority
-    Depth: integer;
     /// overriden to support the additional OnRequest fields
     function Split(const Text: RawUtf8): TRadixTreeNode; override;
   end;
-  TUriTreeNodes = array of TUriTreeNode;
 
   /// exception class raised during TUriTree.Rewrite/Run parsing
   EUriTree = class(ESynException);
@@ -823,10 +831,6 @@ type
   public
     /// initialize the Radix Tree for efficient URI parsing
     constructor Create(aNodeClass: TRadixTreeNodeClass = nil); override;
-    /// to be called after Insert() to consolidate the internal tree state
-    // - nodes will be sorted by search priority, i.e. the longest depths first
-    // - as used by Setup()
-    procedure AfterInsert;
     /// called from TUriRouter.Rewrite/Run methods
     procedure Setup(const aFromUri: RawUtf8; aTo: TUriRouterMethod;
       const aToUri: RawUtf8; const aExecute: TOnHttpServerRequest);
@@ -2545,6 +2549,34 @@ end;
 
 { TRadixTreeNode }
 
+function TRadixTreeNode.ComputeDepth: integer;
+var
+  i: PtrInt;
+begin
+  result := 1;
+  for i := 0 to high(Child) do
+    inc(result, Child[i].ComputeDepth); // recursive calculation
+  Depth := result;
+end;
+
+function RadixTreeNodeCompare(const A, B): integer;
+begin
+  // sort deeper first
+  result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
+  if result = 0 then // longest path first
+    result := CompareInteger(length(TRadixTreeNode(B).FullText),
+                             length(TRadixTreeNode(A).FullText));
+end;
+
+procedure TRadixTreeNode.SortChildren;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Child) do
+    Child[i].SortChildren; // compute nested children depth
+  DynArray(TypeInfo(TPointerDynArray), Child).Sort(RadixTreeNodeCompare);
+end;
+
 function TRadixTreeNode.Split(const Text: RawUtf8): TRadixTreeNode;
 begin
   result := TRadixTreeNodeClass(PPointer(self)^).Create;
@@ -2567,7 +2599,7 @@ function TRadixTreeNode.Find(P: PUtf8Char): TRadixTreeNode;
 var
   c: PUtf8Char;
   n: TDALen;
-  ch: ^TUriTreeNode;
+  ch: ^TRadixTreeNode;
 begin
   result := nil; // no match
   c := pointer(Chars);
@@ -2699,10 +2731,16 @@ begin
   ObjArrayAdd(Node.Child, result);
 end;
 
+procedure TRadixTree.AfterInsert;
+begin
+  fRoot.ComputeDepth;
+  fRoot.SortChildren;
+end;
+
 function TRadixTree.Find(const Text: RawUtf8): TRadixTreeNode;
 var
   n: TDALen;
-  ch: ^TUriTreeNode;
+  ch: ^TRadixTreeNode;
 begin
   result := nil;
   if (self = nil) or
@@ -2740,30 +2778,6 @@ begin
   TUriTreeNode(result).Data := Data;
   Finalize(Data);
   FillCharFast(Data, SizeOf(Data), 0);
-end;
-
-function TUriTreeNode.ComputeDepth: integer;
-var
-  i: PtrInt;
-begin
-  result := 1;
-  for i := 0 to high(Child) do
-    inc(result, TUriTreeNode(Child[i]).ComputeDepth); // recursive calculation
-  Depth := result;
-end;
-
-function UriTreeNodeCompare(const A, B): integer;
-begin // deeper first = longest path first
-  result := CompareInteger(TUriTreeNode(B).Depth, TUriTreeNode(A).Depth);
-end;
-
-procedure TUriTreeNode.SortChildren;
-var
-  i: PtrInt;
-begin
-  for i := 0 to high(Child) do
-    TUriTreeNode(Child[i]).SortChildren; // compute nested children depth
-  DynArray(TypeInfo(TUriTreeNodes), Child).Sort(UriTreeNodeCompare);
 end;
 
 function TUriTreeNode.Lookup(P: PUtf8Char; Ctxt: THttpServerRequestAbstract): TUriTreeNode;
@@ -2887,12 +2901,6 @@ begin
   if aNodeClass = nil then
     aNodeClass := TUriTreeNode;
   inherited Create(aNodeClass);
-end;
-
-procedure TUriTree.AfterInsert;
-begin
-  (fRoot as TUriTreeNode).ComputeDepth;
-  (fRoot as TUriTreeNode).SortChildren;
 end;
 
 procedure TUriTree.Setup(const aFromUri: RawUtf8; aTo: TUriRouterMethod;
