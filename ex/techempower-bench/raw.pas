@@ -89,27 +89,28 @@ type
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
   protected
-    // main HTTP routing method
-    function DoOnRequest(ctxt: THttpServerRequestAbstract): cardinal;
+    // as used by rawqueries and rawupdates
+    procedure getRandomWorlds(cnt: PtrInt; out res: TWorlds);
     // return ?queries= parameter value. If missed or < 1 return 1, if > 500 return 500
     function getQueriesParamValue(ctxt: THttpServerRequestAbstract;
-      const search: RawUtf8 = 'QUERIES='): integer;
-    procedure getRandomWorlds(cnt: PtrInt; out res: TWorlds);
+      const search: RawUtf8 = 'QUERIES='): cardinal;
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
     {$endif USE_SQLITE3}
+    // implements /queries and /cached-queries endpoints
+    function doqueries(ctxt: THttpServerRequestAbstract; orm: TOrmWorldClass;
+      const search: RawUtf8): cardinal;
   public
     constructor Create(threadCount: integer);
     destructor Destroy; override;
     // those are the implementation methods
+    function plaintext(ctxt: THttpServerRequestAbstract): cardinal;
     function json(ctxt: THttpServerRequestAbstract): cardinal;
     function db(ctxt: THttpServerRequestAbstract): cardinal;
-    // /queries and /cached-queries endpoints are implemented in doqueries
-    function doqueries(ctxt: THttpServerRequestAbstract; orm: TOrmWorldClass;
-      const search: RawUtf8): cardinal;
+    function queries(ctxt: THttpServerRequestAbstract): cardinal;
+    function cachedqueries(ctxt: THttpServerRequestAbstract): cardinal;
     function fortunes(ctxt: THttpServerRequestAbstract): cardinal;
     function updates(ctxt: THttpServerRequestAbstract): cardinal;
-    function plaintext(ctxt: THttpServerRequestAbstract): cardinal;
     function rawdb(ctxt: THttpServerRequestAbstract): cardinal;
     function rawqueries(ctxt: THttpServerRequestAbstract): cardinal;
     function rawfortunes(ctxt: THttpServerRequestAbstract): cardinal;
@@ -183,7 +184,18 @@ begin
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ]);
   fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
-  fHttpServer.OnRequest := DoOnRequest;
+  fHttpServer.Route.Get('/plaintext', plaintext);
+  fHttpServer.Route.Get('/json', json);
+  fHttpServer.Route.Get('/db', db);
+  fHttpServer.Route.Get('/fortunes', fortunes);
+  fHttpServer.Route.Get('/updates', updates);
+  fHttpServer.Route.Get('/queries', queries);
+  fHttpServer.Route.Get('/cached-queries', cachedqueries);
+  fHttpServer.Route.Get('/rawdb', rawdb);
+  fHttpServer.Route.Get('/rawqueries', rawqueries);
+  fHttpServer.Route.Get('/rawfortunes', rawfortunes);
+  fHttpServer.Route.Get('/rawupdates', rawupdates);
+  // writeln(fHttpServer.Route.Tree[urmGet].ToText);
   fHttpServer.WaitStarted; // raise exception e.g. on binding issue
 end;
 
@@ -194,43 +206,6 @@ begin
   fModel.Free;
   fDBPool.free;
   inherited Destroy;
-end;
-
-function TRawAsyncServer.DoOnRequest(ctxt: THttpServerRequestAbstract): cardinal;
-const
-  ROUTES: array[0..11] of RawUtf8 = (
-     // basic tests
-     '/PLAINTEXT', '/JSON',
-     // ORM tests
-     '/DB', '/QUERIES', '/FORTUNES', '/UPDATES', '/CACHED-QUERIES',
-     // raw tests
-     '/RAWDB' , '/RAWQUERIES', '/RAWFORTUNES', '/RAWUPDATES', '');
-var
-  route: PtrInt;
-begin
-  {$ifdef WITH_LOGS}
-  TSynLog.Add.Log(sllServiceCall, 'DoOnRequest % %', [ctxt.Method, ctxt.Url], self);
-  {$endif WITH_LOGS}
-  result := HTTP_NOTFOUND;
-  route := IdemPPChar(pointer(ctxt.Url), @ROUTES);
-  if (route >= 0) and
-     (ctxt.Url[length(ROUTES[route]) + 1] in [#0, '?', '/']) then
-    case route of
-      // basic tests
-      0: result := plaintext(ctxt);
-      1: result := json(ctxt);
-      // ORM tests
-      2: result := db(ctxt);
-      3: result := doqueries(ctxt, TOrmWorld, 'QUERIES=');
-      4: result := fortunes(ctxt);
-      5: result := updates(ctxt);
-      6: result := doqueries(ctxt, TOrmCachedWorld, 'COUNT=');
-      // raw tests
-      7: result := rawdb(ctxt);
-      8: result := rawqueries(ctxt);
-      9: result := rawfortunes(ctxt);
-      10: result := rawupdates(ctxt);
-    end;
 end;
 
 function RandomWorld: integer; inline;
@@ -290,6 +265,13 @@ end;
 
 {$endif USE_SQLITE3}
 
+function TRawAsyncServer.plaintext(ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  ctxt.OutContentType := TEXT_CONTENT_TYPE_NO_ENCODING;
+  ctxt.OutContent := HELLO_WORLD;
+  result := HTTP_SUCCESS;
+end;
+
 function TRawAsyncServer.json(ctxt: THttpServerRequestAbstract): cardinal;
 var
   msgRec: TMessageRec;
@@ -297,13 +279,6 @@ begin
   msgRec.message := HELLO_WORLD;
   ctxt.OutContentType := JSON_CONTENT_TYPE;
   ctxt.OutContent := SaveJson(msgRec, TypeInfo(TMessageRec));
-  result := HTTP_SUCCESS;
-end;
-
-function TRawAsyncServer.plaintext(ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  ctxt.OutContentType := TEXT_CONTENT_TYPE_NO_ENCODING;
-  ctxt.OutContent := HELLO_WORLD;
   result := HTTP_SUCCESS;
 end;
 
@@ -343,16 +318,20 @@ begin
   end;
 end;
 
-function TRawAsyncServer.getQueriesParamValue(ctxt: THttpServerRequestAbstract;
-  const search: RawUtf8): integer;
-var
-  p: PUtf8Char;
+function TRawAsyncServer.queries(ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  result := 0;
-  p := PosChar(pointer(ctxt.Url), '?');
-  if p <> nil then
-    UrlDecodeInteger(p + 1, search, result);
-  if result = 0 then
+  result := doqueries(ctxt, TOrmWorld, 'QUERIES=');
+end;
+
+function TRawAsyncServer.cachedqueries(ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := doqueries(ctxt, TOrmCachedWorld, 'COUNT=');
+end;
+
+function TRawAsyncServer.getQueriesParamValue(ctxt: THttpServerRequestAbstract;
+  const search: RawUtf8): cardinal;
+begin
+  if not ctxt.UrlParam(search, result) then
     result := 1
   else if result > 500 then
     result := 500;
@@ -484,7 +463,6 @@ var
   arr: TDynArray;
   n: integer;
 begin
-  result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(FORTUNES_SQL, true, true);
   stmt.ExecutePrepared;
@@ -561,7 +539,7 @@ begin
   end;
   conn := fDbPool.ThreadSafeConnection;
   //conn.StartTransaction;
-  stmt := conn.NewStatementPrepared(WORLD_UPDATE_SQLN, false);
+  stmt := conn.NewStatementPrepared(WORLD_UPDATE_SQLN, false, true);
   stmt.BindArray(1, nums);
   stmt.BindArray(2, ids);
   stmt.ExecutePrepared;
