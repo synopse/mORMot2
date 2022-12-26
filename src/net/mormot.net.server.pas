@@ -2031,6 +2031,12 @@ begin
       Ctxt.RespStatus := fRoute.Process(Ctxt);
       if Ctxt.RespStatus <> 0 then
       begin
+        if (Ctxt.OutContent = '') and
+           not StatusCodeIsSuccess(Ctxt.RespStatus) then
+        begin
+          Ctxt.fErrorMessage := 'Wrong route';
+          IncStat(grRejected);
+        end;
         result := true; // a callback was executed
         exit;
       end;
@@ -2038,7 +2044,8 @@ begin
     Ctxt.RespStatus := DoBeforeRequest(Ctxt);
     if Ctxt.RespStatus > 0 then
     begin
-      Ctxt.SetErrorMessage('Rejected % Request', [Ctxt.Url]);
+      if Ctxt.OutContent = '' then
+        Ctxt.fErrorMessage := 'Rejected request';
       IncStat(grRejected);
     end
     else
