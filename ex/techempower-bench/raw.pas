@@ -82,7 +82,7 @@ type
 
   { TRawAsyncServer }
 
-  TRawAsyncServer = class
+  TRawAsyncServer = class(TSynPersistent)
   private
     fHttpServer: THttpAsyncServer;
     fDbPool: TSqlDBConnectionProperties;
@@ -102,14 +102,15 @@ type
     function doqueries(ctxt: THttpServerRequestAbstract; orm: TOrmWorldClass;
       const search: RawUtf8): cardinal;
   public
-    constructor Create(threadCount: integer);
+    constructor Create(threadCount: integer); reintroduce;
     destructor Destroy; override;
-    // those are the implementation methods
+  published
+    // all paths are implemented by these published methods using RTTI
     function plaintext(ctxt: THttpServerRequestAbstract): cardinal;
     function json(ctxt: THttpServerRequestAbstract): cardinal;
     function db(ctxt: THttpServerRequestAbstract): cardinal;
     function queries(ctxt: THttpServerRequestAbstract): cardinal;
-    function cachedqueries(ctxt: THttpServerRequestAbstract): cardinal;
+    function cached_queries(ctxt: THttpServerRequestAbstract): cardinal;
     function fortunes(ctxt: THttpServerRequestAbstract): cardinal;
     function updates(ctxt: THttpServerRequestAbstract): cardinal;
     function rawdb(ctxt: THttpServerRequestAbstract): cardinal;
@@ -185,17 +186,7 @@ begin
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ]);
   fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
-  fHttpServer.Route.Get('/plaintext', plaintext);
-  fHttpServer.Route.Get('/json', json);
-  fHttpServer.Route.Get('/db', db);
-  fHttpServer.Route.Get('/fortunes', fortunes);
-  fHttpServer.Route.Get('/updates', updates);
-  fHttpServer.Route.Get('/queries', queries);
-  fHttpServer.Route.Get('/cached-queries', cachedqueries);
-  fHttpServer.Route.Get('/rawdb', rawdb);
-  fHttpServer.Route.Get('/rawqueries', rawqueries);
-  fHttpServer.Route.Get('/rawfortunes', rawfortunes);
-  fHttpServer.Route.Get('/rawupdates', rawupdates);
+  fHttpServer.Route.RunMethods([urmGet], self);
   // writeln(fHttpServer.Route.Tree[urmGet].ToText);
   fHttpServer.WaitStarted; // raise exception e.g. on binding issue
 end;
@@ -323,7 +314,7 @@ begin
   result := doqueries(ctxt, TOrmWorld, 'QUERIES=');
 end;
 
-function TRawAsyncServer.cachedqueries(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.cached_queries(ctxt: THttpServerRequestAbstract): cardinal;
 begin
   result := doqueries(ctxt, TOrmCachedWorld, 'COUNT=');
 end;
