@@ -3246,6 +3246,9 @@ type
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
     SimpleFieldsBits: array[TOrmOccasion] of TFieldBits;
+    /// array of fields indexes to export, i.e. "simple" fields
+    // - is a pre-allocated FieldBitsToIndex(SimpleFieldsBits[occasion])
+    SimpleFieldsIndex: array[TOrmOccasion] of TFieldIndexDynArray;
     /// number of fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.

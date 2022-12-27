@@ -3584,10 +3584,11 @@ begin
                   opt := ClientOrmOptions;
                   if opt <> [] then
                   begin
-                    // cached? -> make private
+                    // cached? -> make private copy, with proper opt layout
                     rec := Table.CreateFrom(fCall^.OutBody);
                     try
-                      fCall^.OutBody := rec.GetJsonValues(true, true, ooSelect, nil, opt);
+                      fCall^.OutBody := rec.GetJsonValues(
+                        {expand=}true, {withid=}true, ooSelect, nil, opt);
                     finally
                       rec.Free;
                     end;

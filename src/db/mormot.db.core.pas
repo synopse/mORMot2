@@ -180,7 +180,7 @@ type
   {$endif MAX_SQLFIELDS_64}
 
   /// used to store field indexes in a Table
-  // - same as TFieldBits, but allowing to store the proper order
+  // - similar to TFieldBits, but allowing to store the proper order
   TFieldIndexDynArray = array of TFieldIndex;
 
 
@@ -942,7 +942,7 @@ type
     // - this field is ignored by TOrmTable.GetJsonValues
     property WithID: boolean
       read fWithID;
-    /// Read-Only access to the field bits set for each column to be stored
+    /// Read-Only access to the field indexes set for each column to be stored
     property Fields: TFieldIndexDynArray
       read fFields;
     /// if not Expanded format, contains the Stream position of the first
@@ -1627,10 +1627,17 @@ begin
   begin
     Index := MAX_SQLFIELDS_INDEX[MaxLength]; // we can reuse a shared instance
     exit;
-  end;
+  end
+  else if IsZero(Fields) then
+    exit;
   if MaxLength > MAX_SQLFIELDS then
     raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
   n := FieldBitCount(Fields, MaxLength);
+  if n = MaxLength then
+  begin
+    Index := MAX_SQLFIELDS_INDEX[n]; // reuse a shared instance
+    exit;
+  end;
   SetLength(Index, n);
   p := pointer(Index);
   for i := 0 to MaxLength - 1 do
@@ -1638,6 +1645,9 @@ begin
     begin
       p^ := i;
       inc(p);
+      dec(n);
+      if n = 0 then
+        break;
     end;
 end;
 

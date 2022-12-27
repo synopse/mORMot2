@@ -597,7 +597,7 @@ begin
     begin
       Value.InternalState := state;
       original := Value.GetJsonValues(
-        IsNotAjaxJson(pointer(resp)), true, ooSelect);
+        {expand=}IsNotAjaxJson(pointer(resp)), {withid=}true, ooSelect);
       TrimSelf(resp);
       if (resp <> '') and
          (resp[1] = '[') then // '[{....}]' -> '{...}'

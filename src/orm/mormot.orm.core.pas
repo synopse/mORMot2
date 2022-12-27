@@ -7104,7 +7104,7 @@ begin
     exit;
   with Orm do
     serializer := CreateJsonWriter(Json, Expand, withID,
-      SimpleFieldsBits[Occasion], {knownrows=}0, 0, @tmp);
+      SimpleFieldsIndex[Occasion], {knownrows=}0, 0, @tmp);
   serializer.OrmOptions := OrmOptions; // SetOrmOptions() may refine ColNames[]
   GetJsonValuesAndFree(serializer);
 end;
@@ -9053,6 +9053,7 @@ var
   nMany, nORM, nSimple, nDynArray, nBlob, nBlobCustom, nCopiableFields: integer;
   isTOrmMany: boolean;
   F: TOrmPropInfo;
+  oo: TOrmOccasion;
   opt: TOrmPropInfoListOptions;
 label
   Simple, Small, Copiabl;
@@ -9252,6 +9253,8 @@ Copiabl:FieldBitSet(CopiableFieldsBits, i);
   if SmallFieldsBits <> SimpleFieldsBits[ooSelect] - FieldBits[oftVariant] -
     FieldBits[oftBlobDynArray] - FieldBits[oftBlobCustom] - FieldBits[oftUtf8Custom] then
     raise EModelException.CreateUtf8('TOrmProperties.Create(%) Bits?', [Table]);
+  for oo := low(oo) to high(oo) do
+    FieldBitsToIndex(SimpleFieldsBits[oo], SimpleFieldsIndex[oo], Fields.Count);
   if isTOrmMany then
   begin
     fRecordManySourceProp := Fields.ByRawUtf8Name('Source') as TOrmPropInfoRttiInstance;
