@@ -2282,7 +2282,7 @@ type
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
     procedure AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
-      WithID: boolean);
+      WithID: boolean; LowerCaseID: boolean = false);
     /// will append all the FillPrepare() records as an expanded JSON array
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
     // ! while FillOne do .. AppendJsonObject() ..
@@ -2292,7 +2292,7 @@ type
     // parameter is customized to a non void value
     // - see also IRestOrm.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TJsonWriter;
-      const Fields: TFieldBits = []);
+      const Fields: TFieldBits = []; WithID: boolean = true; LowerCaseID: boolean = false);
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_FAST_EXTENDED by JSON_FAST
     procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_FAST);
@@ -6936,6 +6936,10 @@ begin
       SimpleFields[f].SetBinary(self, Read);
 end;
 
+const
+  ID_STR: array[boolean] of string[15] = (
+    '"ID_str":"', '"idStr":"');
+
 procedure TOrm.GetJsonValues(W: TOrmWriter);
 var
   f, c: PtrInt;
@@ -6957,7 +6961,7 @@ begin
     W.AddComma;
     if (owoID_str in W.OrmOptions) and W.Expand then
     begin
-      W.AddShort('"ID_str":"');
+      W.AddShort(ID_STR[owoLowCaseID in W.OrmOptions]);
       W.Add(fID);
       W.Add('"', ',');
     end;
@@ -6982,8 +6986,12 @@ begin
     W.Add('}');
 end;
 
+const
+  _ID: array[boolean] of string[7] = (
+    '{"ID":', '{"id":');
+
 procedure TOrm.AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
-  WithID: boolean);
+  WithID, LowerCaseID: boolean);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
   P: TOrmProperties;
@@ -6996,7 +7004,7 @@ begin
   end;
   if WithID then
   begin
-    W.AddShorter('{"ID":');
+    W.AddShorter(_ID[LowerCaseID]);
     W.Add(fID);
     W.AddComma;
   end
@@ -7023,14 +7031,14 @@ begin
 end;
 
 procedure TOrm.AppendFillAsJsonArray(const FieldName: RawUtf8;
-  W: TJsonWriter; const Fields: TFieldBits);
+  W: TJsonWriter; const Fields: TFieldBits; WithID, LowerCaseID: boolean);
 begin
   if FieldName <> '' then
     W.AddFieldName(FieldName);
   W.Add('[');
   while FillOne do
   begin
-    AppendAsJsonObject(W, Fields, {withID=}true);
+    AppendAsJsonObject(W, Fields, WithID, LowerCaseID);
     W.AddComma;
   end;
   W.CancelLastComma;
@@ -7086,7 +7094,7 @@ begin
   with Orm do
     serializer := CreateJsonWriter(Json, Expand, withID,
       SimpleFieldsBits[Occasion], {knownrows=}0, 0, @tmp);
-  serializer.OrmOptions := OrmOptions;
+  serializer.OrmOptions := OrmOptions; // SetOrmOptions() may refine ColNames[]
   GetJsonValuesAndFree(serializer);
 end;
 
@@ -7101,7 +7109,7 @@ begin
   try
     serializer := Orm.CreateJsonWriter(J, Expand, withID, Fields,
       {knownrows=}0, 0, @tmp);
-    serializer.OrmOptions := OrmOptions;
+    serializer.OrmOptions := OrmOptions; // SetOrmOptions() may refine ColNames[]
     GetJsonValuesAndFree(serializer);
     result := J.DataString;
   finally

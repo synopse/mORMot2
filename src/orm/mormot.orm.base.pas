@@ -820,9 +820,13 @@ type
   // escaped as a string (which is the default, matching ORM column storage)
   // - if an additional "ID_str":"12345" field should be added to the standard
   // "ID":12345 field, which may exceed 53-bit integer precision of JavaScript
+  // - to generate JS-friendly "id" (and "idStr") instead of "ID" or "RowID"
+  // - to generate JS-friendly "propName": from a PropName pascal property
   TOrmWriterOption = (
     owoAsJsonNotAsString,
-    owoID_str);
+    owoID_str,
+    owoLowCaseID,
+    owoLowCaseFirstPropChar);
 
   /// options to customize how TOrm will be written by TOrmWriter
   TOrmWriterOptions = set of TOrmWriterOption;
@@ -3809,13 +3813,40 @@ end;
 { TOrmWriter }
 
 procedure TOrmWriter.SetOrmOptions(Value: TOrmWriterOptions);
+var
+  f: PtrInt;
+  col: PRawUtf8;
+  c: AnsiChar;
 begin
   fOrmOptions := Value;
-  if (owoAsJsonNotAsString in Value) or
-     (owoID_str in Value) then
+  if not fExpand then
+    exit;
+  if (owoLowCaseID in Value) and
+     (ColNames <> nil) and
+     ((ColNames[0] = '"RowID":') or
+      (ColNames[0] = '"ID":')) then
+     ColNames[0] := '"id":'
+  else if (owoAsJsonNotAsString in Value) or
+          (owoID_str in Value) then
     if (ColNames <> nil) and
        (ColNames[0] = '"RowID":') then
       ColNames[0] := '"ID":'; // as expected by AJAX
+  if owoLowCaseFirstPropChar in Value then
+  begin
+    col := pointer(ColNames);
+    for f := 1 to length(ColNames) do
+    begin
+      c := col^[2];
+      if (c >= 'A') and (c <= 'Z') then
+      begin
+        dec(c, 32);
+        col^[2] := c; // calls UniqueString() - slow but mandatory :(
+        if length(col^) = 5 then // 2 upper chars -> 2 lower chars
+          PByteArray(col^)[2] := NormToLowerByte[PByteArray(col^)[2]];
+      end;
+      inc(col);
+    end;
+  end;
 end;
 
 // backward compatibility methods - use Rtti/TRttiJson global instead

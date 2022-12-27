@@ -238,11 +238,13 @@ type
     /// release internal used instances
     destructor Destroy; override;
     /// internal TOrm value serialization to a JSON object
-    procedure GetJsonValue(Value: TOrm; withID: boolean;
-      const Fields: TFieldBits; out Json: RawUtf8); overload;
+    // - will use shared AcquireJsonWriter instance if available
+    procedure GetJsonValue(Value: TOrm; withID: boolean; const Fields: TFieldBits;
+      out Json: RawUtf8; LowerCaseID: boolean = false); overload;
     /// internal TOrm value serialization to a JSON object
-    procedure GetJsonValue(Value: TOrm; withID: boolean;
-      Occasion: TOrmOccasion; var Json: RawUtf8); overload;
+    // - will use shared AcquireJsonWriter instance if available
+    procedure GetJsonValue(Value: TOrm; withID: boolean; Occasion: TOrmOccasion;
+      var Json: RawUtf8; LowerCaseID: boolean = false); overload;
       {$ifdef FPC} inline; {$endif} // avoid URW1111 on Delphi 2010
     /// access to a thread-safe internal cached TJsonWriter instance
     function AcquireJsonWriter: TJsonWriter;
@@ -635,13 +637,14 @@ begin
 end;
 
 procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
-  Occasion: TOrmOccasion; var Json: RawUtf8);
+  Occasion: TOrmOccasion; var Json: RawUtf8; LowerCaseID: boolean);
 begin
-  GetJsonValue(Value, withID, Value.Orm.SimpleFieldsBits[Occasion], Json);
+  GetJsonValue(
+    Value, withID, Value.Orm.SimpleFieldsBits[Occasion], Json, LowerCaseID);
 end;
 
 procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
-  const Fields: TFieldBits; out Json: RawUtf8);
+  const Fields: TFieldBits; out Json: RawUtf8; LowerCaseID: boolean);
 var
   WR: TJsonWriter;
 begin
@@ -652,7 +655,7 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    Value.AppendAsJsonObject(WR, Fields, withID);
+    Value.AppendAsJsonObject(WR, Fields, withID, LowerCaseID);
     WR.SetText(Json);
   {$ifdef HASFASTTRYFINALLY}
   finally
