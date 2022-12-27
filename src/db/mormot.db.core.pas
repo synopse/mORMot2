@@ -169,12 +169,15 @@ type
   /// points to a bit set used for all available fields in a Table
   PFieldBits = ^TFieldBits;
 
-  /// used to store a field index in a Table
-  // - note that -1 is commonly used for the ID/RowID field so the values should
-  // be signed
-  // - MAX_SQLFIELDS may be up to 256, so ShortInt (-128..127) would not have
-  // been enough, so we use the SmallInt range (-32768..32767)
+  /// the integer type used to store a field index in a Table
+  // - the ID/RowID field  is commonly set as -1, so the values should be signed
+  {$ifdef MAX_SQLFIELDS_64}
+  // - default MAX_SQLFIELDS = 64 could use ShortInt (-128..127) range
+  TFieldIndex = ShortInt;
+  {$else}
+  // - MAX_SQLFIELDS may be up to 256, so define SmallInt range (-32768..32767)
   TFieldIndex = SmallInt;
+  {$endif MAX_SQLFIELDS_64}
 
   /// used to store field indexes in a Table
   // - same as TFieldBits, but allowing to store the proper order
@@ -244,6 +247,10 @@ function FieldBitCount(const Fields: TFieldBits; MaxFields: integer = MAX_SQLFIE
 procedure FillZero(var Fields: TFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+var
+  /// some pre-allocated arrays used by FieldBitsToIndex(ALL_FIELDS)
+  MAX_SQLFIELDS_INDEX: array[0 .. MAX_SQLFIELDS] of TFieldIndexDynArray;
+
 /// convert a TFieldBits set of bits into an array of integers
 procedure FieldBitsToIndex(const Fields: TFieldBits;
   out Index: TFieldIndexDynArray; MaxLength: PtrInt = MAX_SQLFIELDS); overload;
@@ -261,7 +268,7 @@ function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): intege
 procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
   out Fields: TFieldBits); overload;
 
-// search a field index in an array of field indexes
+/// search a field index in an array of field indexes
 // - returns the index in Indexes[] of the given Field value, -1 if not found
 function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 
@@ -891,12 +898,12 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TFieldBits; aBufSize: integer = 8192); overload;
+      const aFields: TFieldBits; aBufSize: integer = 8192); overload;
     /// the data will be written to the specified Stream
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TFieldIndexDynArray = nil; aBufSize: integer = 8192;
+      const aFields: TFieldIndexDynArray = nil; aBufSize: integer = 8192;
       aStackBuffer: PTextWriterStackBuffer = nil); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
@@ -1616,12 +1623,14 @@ var
   i, n: PtrInt;
   p: ^TFieldIndex;
 begin
+  if IsAllFields(Fields) then
+  begin
+    Index := MAX_SQLFIELDS_INDEX[MaxLength]; // we can reuse a shared instance
+    exit;
+  end;
   if MaxLength > MAX_SQLFIELDS then
     raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
-  if IsAllFields(Fields) then
-    n := MaxLength
-  else
-    n := FieldBitCount(Fields, MaxLength);
+  n := FieldBitCount(Fields, MaxLength);
   SetLength(Index, n);
   p := pointer(Index);
   for i := 0 to MaxLength - 1 do
@@ -1635,7 +1644,11 @@ end;
 function FieldBitsToIndex(
   const Fields: TFieldBits; MaxLength: PtrInt): TFieldIndexDynArray;
 begin
-  FieldBitsToIndex(Fields, result, MaxLength);
+  if IsAllFields(Fields) and
+     (MaxLength <= high(MAX_SQLFIELDS_INDEX)) then
+    result := MAX_SQLFIELDS_INDEX[MaxLength] // we can reuse a shared instance
+  else
+    FieldBitsToIndex(Fields, result, MaxLength);
 end;
 
 function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
@@ -1647,7 +1660,7 @@ end;
 
 function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 begin
-  for result := 0 to length(Indexes) - 1 do
+  for result := 0 to length(Indexes) - 1 do // never called, no need to optimize
     if Indexes[result] = Field then
       exit;
   result := -1;
@@ -2774,13 +2787,13 @@ begin
 end;
 
 constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TFieldBits; aBufSize: integer);
+  const aFields: TFieldBits; aBufSize: integer);
 begin
-  Create(aStream, Expand, withID, FieldBitsToIndex(Fields), aBufSize);
+  Create(aStream, Expand, withID, FieldBitsToIndex(aFields), aBufSize);
 end;
 
 constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TFieldIndexDynArray; aBufSize: integer;
+  const aFields: TFieldIndexDynArray; aBufSize: integer;
   aStackBuffer: PTextWriterStackBuffer);
 begin
   if aStream = nil then
@@ -2794,7 +2807,7 @@ begin
     inherited Create(aStream, aBufSize);
   fExpand := Expand;
   fWithID := withID;
-  fFields := Fields;
+  fFields := aFields;
 end;
 
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
@@ -2964,7 +2977,8 @@ const
     nil);
 
 constructor TSelectStatement.Create(const SQL: RawUtf8;
-  const GetFieldIndex: TOnGetFieldIndex; const SimpleFields: TSelectStatementSelectDynArray);
+  const GetFieldIndex: TOnGetFieldIndex;
+  const SimpleFields: TSelectStatementSelectDynArray);
 var
   prop, whereBefore: RawUtf8;
   P, B: PUtf8Char;
@@ -4152,13 +4166,23 @@ begin
     W.AddShort('insert into ');
 end;
 
-
-
-initialization
+procedure InitializeUnit;
+var
+  i, j: PtrInt;
+begin
   ShortStringToAnsi7String(JSON_SQLDATE_MAGIC_STR, JSON_SQLDATE_MAGIC_TEXT);
   ID_TXT := 'ID'; // avoid reallocation
   ROWID_TXT := 'RowID';
+  for j := 1 to high(MAX_SQLFIELDS_INDEX) do
+  begin
+    SetLength(MAX_SQLFIELDS_INDEX[j], j);
+    for i := 0 to j - 1 do
+      MAX_SQLFIELDS_INDEX[j, i] := i;
+  end;
+end;
 
+initialization
+  InitializeUnit;
 
 end.
 
