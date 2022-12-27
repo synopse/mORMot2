@@ -456,6 +456,14 @@ type
     // - is just a wrapper around Retrieve(aPublishedRecord.ID,aValue)
     // - return true on success
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
+    /// get a known TOrm instance JSON representation
+    // - a slightly faster alternative to Value.GetJsonValues
+    procedure GetJsonValue(Value: TOrm; withID: boolean; const Fields: TFieldBits;
+      out Json: RawUtf8; LowerCaseID: boolean = false); overload;
+    /// get a known TOrm instance JSON representation
+    // - a slightly faster alternative to Value.GetJsonValues
+    procedure GetJsonValue(Value: TOrm; withID: boolean; Occasion: TOrmOccasion;
+      var Json: RawUtf8; LowerCaseID: boolean = false); overload;
     /// get a list of members from a SQL statement as TObjectList
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2265,15 +2273,18 @@ type
       Occasion: TOrmOccasion; OrmOptions: TOrmWriterOptions = []); overload;
     /// same as overloaded GetJsonValues(), but returning result into a RawUtf8
     // - if UsingStream is not set, it will use a temporary TRawByteStringStream
+    // - a slightly faster alternative may be IRestOrm.GetJsonValue overload
     function GetJsonValues(Expand, withID: boolean;
       Occasion: TOrmOccasion; UsingStream: TRawByteStringStream = nil;
       OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// same as overloaded GetJsonValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUtf8
+    // - a slightly faster alternative may be IRestOrm.GetJsonValue overload
     function GetJsonValues(Expand, withID: boolean; const Fields: TFieldBits;
       OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// same as overloaded GetJsonValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUtf8
+    // - a slightly faster alternative may be IRestOrm.GetJsonValue overloads
     function GetJsonValues(Expand, withID: boolean; const FieldsCsv: RawUtf8;
       OrmOptions: TOrmWriterOptions = []): RawUtf8; overload;
     /// will append the record fields as an expanded JSON object
