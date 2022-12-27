@@ -3713,8 +3713,6 @@ type
     function GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
   public
-    /// initialize a void storage
-    constructor Create; overload;
     /// initialize the storage, optionally with some RawByteString content
     constructor Create(const aString: RawByteString); overload;
     /// read some bytes from the internal storage
@@ -3726,6 +3724,9 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
     /// retrieve the stored content from a given position, as UTF-8 text
     procedure GetAsText(StartPos, Len: PtrInt; var Text: RawUtf8);
+    /// reset the internal DataString content and the current position
+    procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct low-level access to the internal RawByteString storage
     property DataString: RawByteString
       read fDataString write fDataString;
@@ -11372,10 +11373,6 @@ end;
 
 { TRawByteStringStream }
 
-constructor TRawByteStringStream.Create;
-begin
-end;
-
 constructor TRawByteStringStream.Create(const aString: RawByteString);
 begin
   fDataString := aString;
@@ -11438,6 +11435,12 @@ begin
       Len := L - StartPos; // avoid any buffer overflow
     FastSetString(Text, @PByteArray(fDataString)[StartPos], Len);
   end;
+end;
+
+procedure TRawByteStringStream.Clear;
+begin
+  fPosition := 0;
+  fDataString := '';
 end;
 
 
