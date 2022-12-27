@@ -32,6 +32,7 @@ uses
   mormot.core.perf,
   mormot.core.mustache,
   mormot.orm.core,
+  mormot.orm.base,
   mormot.orm.sql,
   mormot.db.core,
   mormot.db.raw.sqlite3,
@@ -65,7 +66,7 @@ type
   protected
     fRandomNumber: integer;
   published
-    property RandomNumber: integer
+    property randomNumber: integer
       read fRandomNumber write fRandomNumber;
   end;
   TOrmCachedWorld = class(TOrmWorld);
@@ -277,8 +278,7 @@ var
   msgRec: TMessageRec;
 begin
   msgRec.message := HELLO_WORLD;
-  ctxt.OutContentType := JSON_CONTENT_TYPE;
-  ctxt.OutContent := SaveJson(msgRec, TypeInfo(TMessageRec));
+  ctxt.SetOutJson(SaveJson(msgRec, TypeInfo(TMessageRec)));
   result := HTTP_SUCCESS;
 end;
 
@@ -294,9 +294,8 @@ begin
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
-    ctxt.OutContent := FormatUtf8('{"id":%,"randomNumber":%}',
+    ctxt.SetOutJson('{"id":%,"randomNumber":%}',
       [stmt.ColumnInt(0), stmt.ColumnInt(1)]);
-    ctxt.OutContentType := JSON_CONTENT_TYPE;
     result := HTTP_SUCCESS;
     stmt.ReleaseRows;
   end;
@@ -309,9 +308,10 @@ var
 begin
   w := TOrmWorld.Create(fStore.Orm, RandomWorld);
   try
-    ctxt.OutContent := FormatUtf8('{"id":%,"randomNumber":%}',
-      [w.IDValue, w.randomNumber]);
-    ctxt.OutContentType := JSON_CONTENT_TYPE;
+    //fStore.Orm.GetJsonValue(w, {withid=}true, ooSelect, json, {locaseid=}true);
+    //json := w.GetJsonValues(true, true, ALL_FIELDS, [owoLowCaseID]);
+    //
+    ctxt.SetOutJson('{"id":%,"randomNumber":%}', [w.IDValue, w.randomNumber]);
     result := HTTP_SUCCESS;
   finally
     w.Free;
@@ -390,8 +390,7 @@ begin
   getRandomWorlds(cnt, res);
   if res = nil then
     exit(HTTP_SERVERERROR);
-  ctxt.OutContentType := JSON_CONTENT_TYPE;
-  ctxt.OutContent := SaveJson(res, TypeInfo(TWorlds));
+  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
   result := HTTP_SUCCESS;
 end;
 
@@ -417,8 +416,7 @@ begin
   finally
     w.Free;
   end;
-  ctxt.OutContentType := JSON_CONTENT_TYPE;
-  ctxt.OutContent := SaveJson(res, TypeInfo(TWorlds));
+  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
   result := HTTP_SUCCESS;
 end;
 
@@ -512,8 +510,7 @@ begin
   end;
   if result <> HTTP_SUCCESS then
     exit;
-  ctxt.OutContentType := JSON_CONTENT_TYPE;
-  ctxt.OutContent := SaveJson(res, TypeInfo(TWorlds));
+  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
 end;
 
 function TRawAsyncServer.rawupdates(ctxt: THttpServerRequestAbstract): cardinal;
@@ -544,8 +541,7 @@ begin
   stmt.BindArray(2, ids);
   stmt.ExecutePrepared;
   //conn.Commit; // autocommit
-  ctxt.OutContentType := JSON_CONTENT_TYPE;
-  ctxt.OutContent := SaveJson(words, TypeInfo(TWorlds));
+  ctxt.SetOutJson(SaveJson(words, TypeInfo(TWorlds)));
   result := HTTP_SUCCESS;
 end;
 
