@@ -614,6 +614,11 @@ type
     // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
     function UrlParam(const UpperName: RawUtf8; out Value: Int64): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// set the OutContent and OutContentType fields with the supplied JSON
+    procedure SetOutJson(const Json: RawUtf8); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// set the OutContent and OutContentType fields with the supplied JSON
+    procedure SetOutJson(const Fmt: RawUtf8; const Args: array of const); overload;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -2480,6 +2485,19 @@ function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: Int64): boolean;
 begin
   result := UrlDecodeParam(Url, UpperName, Value);
+end;
+
+procedure THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8);
+begin
+  fOutContent := Json;
+  fOutContentType := JSON_CONTENT_TYPE_VAR;
+end;
+
+procedure THttpServerRequestAbstract.SetOutJson(const Fmt: RawUtf8;
+  const Args: array of const);
+begin
+  FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
+  fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
 

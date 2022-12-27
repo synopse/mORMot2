@@ -1220,7 +1220,7 @@ begin
       if (content <> '') and
          (GotoNextNotSpace(pointer(content))^ in ['{', '[', '"']) and
          IsValidJson(content) then
-        result^.ContentType := JSON_CONTENT_TYPE
+        result^.ContentType := JSON_CONTENT_TYPE_VAR
       else
         result^.ContentType := TEXT_CONTENT_TYPE
     else

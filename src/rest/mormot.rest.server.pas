@@ -3413,7 +3413,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
         true, FieldsCsv, {knownrows=}0, 0, @tmp);
       try
         W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
-        W.OrmOptions := Options; // will do the magic
+        W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
         rec.AppendFillAsJsonValues(W);
         W.SetText(fCall^.OutBody);
       finally
@@ -3765,7 +3765,8 @@ procedure TRestServerUriContext.ExecuteOrmWrite;
           bits := bits + ComputeBeforeAddFieldsBits
         else
           bits := bits + ComputeBeforeUpdateFieldsBits;
-      fServer.OrmInstance.GetJsonValue(Rec, Rec.IDValue <> 0, bits, fCall^.InBody);
+      fServer.OrmInstance.GetJsonValue(
+        Rec, Rec.IDValue <> 0, bits, fCall^.InBody);
     finally
       Rec.Free;
     end;
