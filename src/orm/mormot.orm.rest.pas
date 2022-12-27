@@ -568,7 +568,7 @@ implementation
 constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
-  fTempJsonWriter := TJsonWriter.CreateOwnedStream(16384);
+  fTempJsonWriter := TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true);
   if aRest = nil then
     exit;
   fRest := aRest;

@@ -3304,6 +3304,7 @@ type
   // be more efficient than a more global TOSLock/TRWLock
   // - our light locks are expected to be kept a very small amount of time (some
   // CPU cycles): use TOSLightLock if the lock may block too long
+  // - TryLock/UnLock can be used to thread-safely acquire a shared resource
   // - only consume 4 bytes on CPU32, 8 bytes on CPU64
   {$ifdef USERECORDWITHMETHODS}
   TLightLock = record
@@ -3328,6 +3329,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// try to enter an exclusive non-rentrant lock
     // - if returned true, caller should eventually call UnLock()
+    // - could also be used to thread-safely acquire a shared resource
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an exclusive non-rentrant lock

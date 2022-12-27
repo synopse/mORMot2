@@ -3332,7 +3332,7 @@ begin
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
   fServiceFactory := aServiceFactory;
-  fParams := TJsonWriter.CreateOwnedStream(8192);
+  fParams := TJsonWriter.CreateOwnedStream(8192, {nosharedstream=}true);
 end;
 
 destructor TInterfacedObjectFake.Destroy;
@@ -7566,7 +7566,7 @@ constructor TInterfaceMethodExecuteCached.Create(aFactory: TInterfaceFactory;
   aMethod: PInterfaceMethod; const aOptions: TInterfaceMethodOptions);
 begin
   inherited Create(aFactory, aMethod, aOptions);
-  fCachedWR := TJsonWriter.CreateOwnedStream(16384);
+  fCachedWR := TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true);
 end;
 
 destructor TInterfaceMethodExecuteCached.Destroy;

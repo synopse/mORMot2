@@ -1713,10 +1713,12 @@ begin
     Free;
   end;
   fCachedContextVariant := TSynMustacheContextVariant.Create(self,
-    TJsonWriter.CreateOwnedStream(16384), SectionMaxCount + 4, Null, true);
+    TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
+    SectionMaxCount + 4, Null, true);
   fCachedContextVariant.CancelAll; // to be reused from a void context
   fCachedContextData := TSynMustacheContextData.Create(self,
-    TJsonWriter.CreateOwnedStream(16384), SectionMaxCount + 4, nil, nil, true);
+    TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
+    SectionMaxCount + 4, nil, nil, true);
   fCachedContextData.CancelAll; // to be reused from a void context
 end;
 
