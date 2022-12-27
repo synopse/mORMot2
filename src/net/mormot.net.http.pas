@@ -957,6 +957,13 @@ type
     procedure Options(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
     /// just a wrapper around Run([urmHead], aUri, aExecute) registration method
     procedure Head(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    /// assign the published methods of a class instance to their URI via RTTI
+    // - the signature of each method should match TOnHttpServerRequest
+    // - the method name is used for the URI, e.g. Instance.user for '/user',
+    // with similar case, and replacing _ in the method name by '-', e.g.
+    // Instance.cached_query for '/cached-query'
+    procedure RunMethods(RouterMethods: TUriRouterMethods; Instance: TObject;
+       const Prefix: RawUtf8 = '/');
 
     /// perform URI parsing and rewrite/execution within HTTP server Ctxt members
     // - should return 0 to continue the process, on a HTTP status code to abort
@@ -3281,6 +3288,21 @@ procedure TUriRouter.Head(const aUri: RawUtf8;
   const aExecute: TOnHttpServerRequest);
 begin
   Run([urmHead], aUri, aExecute);
+end;
+
+procedure TUriRouter.RunMethods(RouterMethods: TUriRouterMethods;
+  Instance: TObject; const Prefix: RawUtf8);
+var
+  methods: TPublishedMethodInfoDynArray;
+  m: PtrInt;
+begin
+  if (self <> nil) and
+     (Instance <> nil) and
+     (RouterMethods <> []) then
+    for m := 0 to GetPublishedMethods(Instance, methods) - 1 do
+      with methods[m] do
+        Run(RouterMethods, Prefix + StringReplaceChars(Name, '_', '-'),
+          TOnHttpServerRequest(Method));
 end;
 
 function TUriRouter.Process(Ctxt: THttpServerRequestAbstract): integer;
