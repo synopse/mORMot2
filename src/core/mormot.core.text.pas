@@ -838,17 +838,20 @@ type
     /// the data will be written to an internal TRawByteStringStream
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
-    constructor CreateOwnedStream(aBufSize: integer = 4096); overload;
+    constructor CreateOwnedStream(aBufSize: integer = 4096;
+      NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer); overload;
+    constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer;
+      NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      aBufSize: integer); overload;
+      aBufSize: integer; NoSharedStream: boolean = false); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer
-    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer); overload;
+    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
+      NoSharedStream: boolean = false); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
@@ -5034,30 +5037,42 @@ begin
   SetBuffer(aBuf, aBufSize);
 end;
 
-constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
+var
+  TextWriterSharedStreamSafe: TLightLock; // thread-safe instance acquisition
+  TextWriterSharedStream: TRawByteStringStream;
+
+constructor TTextWriter.CreateOwnedStream(
+  aBuf: pointer; aBufSize: integer; NoSharedStream: boolean);
 begin
-  fStream := TRawByteStringStream.Create; // inlined SetStream()
+  if (not NoSharedStream) and TextWriterSharedStreamSafe.TryLock then
+    fStream := TextWriterSharedStream
+  else
+    fStream := TRawByteStringStream.Create; // inlined SetStream()
   fCustomOptions := [twoStreamIsOwned];
   SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
-constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
+constructor TTextWriter.CreateOwnedStream(aBufSize: integer; NoSharedStream: boolean);
 begin
-  CreateOwnedStream(nil, aBufSize);
+  CreateOwnedStream(nil, aBufSize, NoSharedStream);
+end;
+
+constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
+  aBufSize: integer; NoSharedStream: boolean);
+begin
+  if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
+    CreateOwnedStream(nil, aBufSize, NoSharedStream)
+  else
+    CreateOwnedStream(aStackBuf, NoSharedStream);
 end;
 
 constructor TTextWriter.CreateOwnedStream(
-  var aStackBuf: TTextWriterStackBuffer; aBufSize: integer);
+  var aStackBuf: TTextWriterStackBuffer; NoSharedStream: boolean);
 begin
-  if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
-    CreateOwnedStream(nil, aBufSize)
+  if (not NoSharedStream) and TextWriterSharedStreamSafe.TryLock then
+    fStream := TextWriterSharedStream
   else
-    CreateOwnedStream(aStackBuf);
-end;
-
-constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer);
-begin
-  fStream := TRawByteStringStream.Create; // inlined SetStream()
+    fStream := TRawByteStringStream.Create; // inlined SetStream()
   fCustomOptions := [twoStreamIsOwned, twoBufferIsExternal]; // SetBuffer()
   InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
 end;
@@ -5074,7 +5089,13 @@ end;
 destructor TTextWriter.Destroy;
 begin
   if twoStreamIsOwned in fCustomOptions then
-    fStream.Free;
+    if fStream = TextWriterSharedStream then
+    begin
+      TRawByteStringStream(fStream).Clear; // for proper reuse
+      TextWriterSharedStreamSafe.UnLock;
+    end
+    else
+      fStream.Free;
   if not (twoBufferIsExternal in fCustomOptions) then
     FreeMem(fTempBuf);
   inherited;
@@ -5250,7 +5271,14 @@ begin
   if fStream <> nil then
     if twoStreamIsOwned in fCustomOptions then
     begin
-      FreeAndNilSafe(fStream);
+      if fStream = TextWriterSharedStream then
+      begin
+        TRawByteStringStream(fStream).Clear; // for proper reuse
+        TextWriterSharedStreamSafe.UnLock;
+        fStream := nil;
+      end
+      else
+        FreeAndNilSafe(fStream);
       Exclude(fCustomOptions, twoStreamIsOwned);
     end;
   if aStream <> nil then
@@ -11688,12 +11716,16 @@ begin
   end;
   _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
   _VariantSaveJson := __VariantSaveJson;
+  TextWriterSharedStream := TRawByteStringStream.Create;
 end;
 
 
 
 initialization
   InitializeUnit;
+
+finalization
+  TextWriterSharedStream.Free;
 
 end.
 
