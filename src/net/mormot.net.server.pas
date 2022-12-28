@@ -101,11 +101,11 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// store per-method TUriTree in TUriRouter
+  /// store per-method URI multiplexing Radix Tree in TUriRouter
   // - each HTTP method would have its dedicated TUriTree parser in TUriRouter
   TUriRouterTree = array[urmGet .. high(TUriRouterMethod)] of TUriTree;
 
-  /// this is the main class handling efficient server-side URI routing
+  /// efficient server-side URI routing for THttpServerGeneric
   // - Process() is done with no memory allocation for a static route,
   // using a very efficient Radix Tree for path lookup, over a thread-safe
   // non-blocking URI parsing with values extractions for rewrite or execution
@@ -171,7 +171,7 @@ type
     // $ Route.Run([urmGet], '/user/<user>/pic', DoUserPic) // retrieve a list
     // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
     // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
-   procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
+    procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
       const aExecute: TOnHttpServerRequest);
     /// just a wrapper around Run([urmGet], aUri, aExecute) registration method
     // - e.g. Route.Get('/plaintext', DoPlainText);
@@ -192,7 +192,7 @@ type
     // with exact case matching, and replacing _ in the method name by '-', e.g.
     // Instance.cached_query as '/cached-query'
     procedure RunMethods(RouterMethods: TUriRouterMethods; Instance: TObject;
-       const Prefix: RawUtf8 = '/');
+      const Prefix: RawUtf8 = '/');
 
     /// perform URI parsing and rewrite/execution within HTTP server Ctxt members
     // - should return 0 to continue the process, on a HTTP status code to abort
@@ -353,6 +353,7 @@ type
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
     fOnSendFile: TOnHttpServerSendFile;
+    fFavIcon: RawByteString;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetServerName(const aName: RawUtf8); virtual;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
@@ -374,6 +375,7 @@ type
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); virtual;
+    function GetFavIcon(Ctxt: THttpServerRequestAbstract): cardinal;
   public
     /// initialize the server instance
     constructor Create(const OnStart, OnStop: TOnNotifyThread;
@@ -397,6 +399,10 @@ type
     // root URI registered at http.sys level - there is no such limitation with
     // the socket servers, which bind to a port, so handle all URIs on it
     function Route: TUriRouter;
+    /// will route a GET to /favicon.ico to the given .ico file
+    // - if none is supplied, the default Synopse/mORMot icon is used
+    // - if '' is supplied, /favicon.ico will return a 404 error status
+    procedure SetFavIcon(const FavIconContent: RawByteString = 'default');
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -596,6 +602,9 @@ function PrivKeyCertPfx: RawByteString;
 // and DeleteFile(Utf8ToString(TLS.PrivateKeyFile)) to delete the two temp files
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo = caaRS256);
+
+/// used by THttpServerGeneric.SetFavIcon to return a nice /favicon.ico
+function FavIconBinary: RawByteString;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -1735,6 +1744,7 @@ begin
       raise EUriTree.CreateUtf8('%.Setup(''%''): already registered',
         [self, aFromUri]);
     if Assigned(aExecute) then
+      // this URI should redirect to a TOnHttpServerRequest callback
       n.Data.Execute := aExecute
     else
     begin
@@ -2130,6 +2140,26 @@ begin
   end;
 end;
 
+procedure THttpServerGeneric.SetFavIcon(const FavIconContent: RawByteString);
+begin
+  if FavIconContent = 'default' then
+    fFavIcon := FavIconBinary
+  else
+    fFavIcon := FavIconContent;
+  Route.Get('/favicon.ico', GetFavIcon);
+end;
+
+function THttpServerGeneric.GetFavIcon(Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  if fFavIcon = '' then
+    result := HTTP_NOTFOUND
+  else begin
+    Ctxt.OutContent := fFavIcon;
+    Ctxt.OutContentType := 'image/x-icon';
+    result := HTTP_SUCCESS;
+  end;
+end;
+
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer);
 begin
@@ -2469,6 +2499,30 @@ begin
     //  cert.Save(cccCertWithPrivateKey, 'pass', ccfBinary)));
   end;
   InitNetTlsContext(TLS, {server=}true, certfile, keyfile, keypass);
+end;
+
+const
+  /// decoded into FavIconBinary function result
+  // - using Base64 encoding is the easiest with Delphi and RawByteString :)
+  _FAVICON_BINARY: RawUtf8 =
+    'aQOi9AjOyJ+H/gMAAAEAAQAYGBAAAQAEAOgBAAAWAAAAKAAAABgAAAAwAAAAAQAEWhEAEFoH' +
+    'AAEC7wAFBQgAVVVVAAMDwwCMjIwA////AG1tcQCjo6sACQmbADU1NgAAACsACAhPAMvLywAA' +
+    'AHEADy34AABu/QBaEFVXYiJnWgdVUmd8zHdmWgVVVmRCERESRGRaBFUiYVoEERlmZVVVUiIR' +
+    'ERqqERESJlVVdiERq93d26ERIsVVZBEa2DMziNoRFiVUdhGtgzAAM42hFHzCQRG4MAAAADix' +
+    'EUJCYRrTWgQAM9oRYiIhG4MAAOAAA4oRIpKRG4MAD/4AA4oRIpKRG4MADv4AA4oRIiIhGoMA' +
+    'AAAOA9oRKUlhStMwAAAAONERKVJhmbgzDuADOLF5ZlxEERuDMzMzixmUZVVEkRG9Z3eNsREk' +
+    'RVVWQRGWu7u2kRlGVVVcJJGUzMzEESQlVVVVwndaBBGXcsVaBFVnd3REd3RlWgZVR3zMdEVV' +
+    'VVX///8A/4D/AP4APwD4AA8A8AAHAOAAAwDAAAEAwAABAIBaHwCAAAAAgAABAMAAAQDgAAMA' +
+    '4AAHAPAABwD8AB8A/wB/AA==';
+
+var
+  _FavIconBinary: RawByteString;
+
+function FavIconBinary: RawByteString;
+begin
+  if _FavIconBinary = '' then
+    _FavIconBinary := AlgoRle.Decompress(Base64ToBin(_FAVICON_BINARY));
+  result := _FavIconBinary;
 end;
 
 

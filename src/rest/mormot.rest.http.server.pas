@@ -245,7 +245,6 @@ type
     fRootRedirectToURI: array[boolean] of RawUtf8;
     fLog: TSynLogClass;
     fOnCustomRequest: TOnRestHttpServerRequest;
-    fFavicon: RawByteString;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract;
       ReplicateAllowHeaders: boolean);
@@ -474,10 +473,6 @@ type
     // so allow any kind of custom routing or process
     property OnCustomRequest: TOnRestHttpServerRequest
       read fOnCustomRequest write fOnCustomRequest;
-    /// you can set here some binary to be returned on GET /favicon.ico
-    // - you can use e.g. FAVICON_BINARY constant below
-    property Favicon: RawByteString
-      read fFavicon write fFavicon;
   published
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer,
@@ -514,23 +509,6 @@ type
 
 function ToText(use: TRestHttpServerUse): PShortString; overload;
 function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
-
-const
-  /// decoded into FAvIconBinary function result
-  // - using Base64 encoding is the easiest with Delphi and RawByteString :)
-  _FAVICON_BINARY: RawUtf8 =
-    'aQOi9AjOyJ+H/gMAAAEAAQAYGBAAAQAEAOgBAAAWAAAAKAAAABgAAAAwAAAAAQAEWhEAEFoH' +
-    'AAEC7wAFBQgAVVVVAAMDwwCMjIwA////AG1tcQCjo6sACQmbADU1NgAAACsACAhPAMvLywAA' +
-    'AHEADy34AABu/QBaEFVXYiJnWgdVUmd8zHdmWgVVVmRCERESRGRaBFUiYVoEERlmZVVVUiIR' +
-    'ERqqERESJlVVdiERq93d26ERIsVVZBEa2DMziNoRFiVUdhGtgzAAM42hFHzCQRG4MAAAADix' +
-    'EUJCYRrTWgQAM9oRYiIhG4MAAOAAA4oRIpKRG4MAD/4AA4oRIpKRG4MADv4AA4oRIiIhGoMA' +
-    'AAAOA9oRKUlhStMwAAAAONERKVJhmbgzDuADOLF5ZlxEERuDMzMzixmUZVVEkRG9Z3eNsREk' +
-    'RVVWQRGWu7u2kRlGVVVcJJGUzMzEESQlVVVVwndaBBGXcsVaBFVnd3REd3RlWgZVR3zMdEVV' +
-    'VVX///8A/4D/AP4APwD4AA8A8AAHAOAAAwDAAAEAwAABAIBaHwCAAAAAgAABAMAAAQDgAAMA' +
-    '4AAHAPAABwD8AB8A/wB/AA==';
-
-/// used by TRestHttpServer to return a nice /favicon.ico
-function FAvIconBinary: RawByteString;
 
 
 { ************ TRestHttpRemoteLogServer to Receive Remote Log Stream }
@@ -595,16 +573,6 @@ end;
 function ToText(sec: TRestHttpServerSecurity): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRestHttpServerSecurity), ord(sec));
-end;
-
-var
-  _FAvIconBinary: RawByteString;
-
-function FAvIconBinary: RawByteString;
-begin
-  if _FAvIconBinary = '' then
-    _FAvIconBinary := AlgoRle.Decompress(Base64ToBin(_FAVICON_BINARY));
-  result := _FAvIconBinary;
 end;
 
 
@@ -902,7 +870,7 @@ begin
     if aThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
   {$endif USEHTTPSYS}
-  fFavicon := FAvIconBinary; // nice default icon from browser :)
+  fHttpServer.SetFavIcon; // nice default icon for the browsers :)
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
@@ -1148,16 +1116,7 @@ begin
       begin
         result := HTTP_BADREQUEST; // we need an URI to identify the REST server
         exit;
-      end
-    else if (fFavicon <> '') and
-            IsUrlFavicon(pointer(Ctxt.Url)) then
-    begin
-      // GET /favicon.ico
-      Ctxt.OutContent := fFavicon;
-      Ctxt.OutContentType := 'image/x-icon';
-      result := HTTP_SUCCESS;
-      exit;
-    end;
+      end;
   if (Ctxt.Method = '') or
      ((rsoOnlyJsonRequests in fOptions) and
       not IsGet(Ctxt.Method) and
@@ -1597,8 +1556,6 @@ begin
 end;
 
 
-initialization
-  //assert(length(FAvIconBinary) = 510);
 
 end.
 

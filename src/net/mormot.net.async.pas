@@ -3187,7 +3187,7 @@ begin
   fServer.IncStat(grRejected);
   fHttp.State := hrsErrorRejected;
   if (fServer.Async.Banned <> nil) and
-     not IsUrlFavicon(pointer(fHttp.CommandUri)) and
+     not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
      fServer.Async.Banned.BanIP(fRemoteIP4) then
   begin
     fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',

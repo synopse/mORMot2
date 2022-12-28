@@ -136,7 +136,7 @@ function IsDelete(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
-function IsUrlFavicon(P: PUtf8Char): boolean;
+function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// decode a given parameter from an Url, in any position, into UTF-8 text
@@ -933,7 +933,7 @@ begin
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
 end;
 
-function IsUrlFavicon(P: PUtf8Char): boolean;
+function IsUrlFavIcon(P: PUtf8Char): boolean;
 begin
   result := (P <> nil) and
         (PCardinalArray(P)[0] =

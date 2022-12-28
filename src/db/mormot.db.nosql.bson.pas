@@ -2736,7 +2736,7 @@ end;
 procedure BsonItemsToDocVariant(Kind: TBsonElementType; BSON: PByte;
   var Doc: TDocVariantData; Option: TBsonDocArrayConversion);
 const
-  OPTIONS: array[TBsonDocArrayConversion] of TDocVariantOptions = (
+  _OPT_: array[TBsonDocArrayConversion] of TDocVariantOptions = (
     [],
     [dvoReturnNullForUnknownProperty],
     [dvoReturnNullForUnknownProperty, dvoValueCopiedByReference],
@@ -2766,7 +2766,7 @@ begin
     else
       exit; // leave Doc=varEmpty
     end;
-    Doc.Init(OPTIONS[Option], k);
+    Doc.Init(_OPT_[Option], k);
     cap := 0;
     repeat // will handle up to 64 TBsonElement per loop (via items[])
       n := 0;
