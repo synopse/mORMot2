@@ -361,6 +361,8 @@ begin
     tree.insert('rubicon');
     tree.insert('rubicundus');
     CheckHash(tree.ToText, $0946B9A0);
+    CheckEqual(tree.Root.Lookup('rubens', nil).FullText, 'rubens');
+    Check(tree.Root.Lookup('Rubens', nil) = nil);
   finally
     tree.Free;
   end;
@@ -418,7 +420,7 @@ begin
     timer.Start;
     for i := 0 to high(rnd) do
       CheckEqual(tree.Find(rnd[i]).FullText, rnd[i]);
-    NotifyTestSpeed('big tree lookups', length(rnd));
+    NotifyTestSpeed('big tree lookups', length(rnd), 0, @timer);
   finally
     tree.Free;
   end;
@@ -491,23 +493,23 @@ begin
     timer.Start;
     for i := 1 to 1000 do
       CheckEqual(router.Tree[urmPost].Find('/static').FullText, '/static');
-    NotifyTestSpeed('URI lookups', 1000);
+    NotifyTestSpeed('URI lookups', 1000, 0, @timer);
     timer.Start;
     for i := 1 to 1000 do
       Compute('/static', '/some/static');
-    NotifyTestSpeed('URI static rewrites', 1000);
+    NotifyTestSpeed('URI static rewrites', 1000, 0, @timer);
     timer.Start;
     for i := 1 to 1000 do
       Compute('/user/1234', '/root/user.new?id=1234');
-    NotifyTestSpeed('URI parametrized rewrites', 1000);
+    NotifyTestSpeed('URI parametrized rewrites', 1000, 0, @timer);
     timer.Start;
     for i := 1 to 1000 do
       Compute('/plaintext', '', 'GET', 200);
-    NotifyTestSpeed('URI static execute', 1000);
+    NotifyTestSpeed('URI static execute', 1000, 0, @timer);
     timer.Start;
     for i := 1 to 1000 do
       Compute('/do/toto/pic', '', 'GET', 200);
-    NotifyTestSpeed('URI parametrized execute', 1000);
+    NotifyTestSpeed('URI parametrized execute', 1000, 0, @timer);
     router.Put('/index.php', '404');
     router.Put('/admin.php', '404');
     Compute('/index.php', '/index.php', 'PUT', 404);

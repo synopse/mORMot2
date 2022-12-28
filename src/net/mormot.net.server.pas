@@ -107,11 +107,11 @@ type
   // using a very efficient Radix Tree for path lookup, over a thread-safe
   // non-blocking URI parsing with values extractions for rewrite or execution
   // - here are some numbers from TNetworkProtocols._TUriTree on my laptop:
-  // $ 1000 URI lookups in 950us i.e. 1M/s, aver. 950ns
-  // $ 1000 URI static rewrites in 1.02ms i.e. 0.9M/s, aver. 1.02us
-  // $ 1000 URI parametrized rewrites in 1.14ms i.e. 855.1K/s, aver. 1.14us
-  // $ 1000 URI static execute in 1.23ms i.e. 792.6K/s, aver. 1.23us
-  // $ 1000 URI parametrized execute in 1.39ms i.e. 700K/s, aver. 1.39us
+  // $ 1000 URI lookups in 37us i.e. 25.7M/s, aver. 37ns
+  // $ 1000 URI static rewrites in 80us i.e. 11.9M/s, aver. 80ns
+  // $ 1000 URI parametrized rewrites in 117us i.e. 8.1M/s, aver. 117ns
+  // $ 1000 URI static execute in 91us i.e. 10.4M/s, aver. 91ns
+  // $ 1000 URI parametrized execute in 162us i.e. 5.8M/s, aver. 162ns
   TUriRouter = class(TSynPersistentRWLightLock)
   protected
     fTree: TUriRouterTree;
