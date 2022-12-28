@@ -461,7 +461,7 @@ type
   /// event handler used by THttpServerGeneric.OnRequest, OnBeforeRequest and
   // OnAfterRequest
   // - Ctxt defines both input and output parameters
-  // - result of the function is the HTTP error code (200 if OK, e.g.)
+  // - result of the function is the HTTP status/error code (200 if OK, e.g.)
   TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
 
   /// event handler used by THttpServerGeneric.OnAfterResponse property
@@ -959,9 +959,9 @@ type
     procedure Head(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
     /// assign the published methods of a class instance to their URI via RTTI
     // - the signature of each method should match TOnHttpServerRequest
-    // - the method name is used for the URI, e.g. Instance.user for '/user',
-    // with similar case, and replacing _ in the method name by '-', e.g.
-    // Instance.cached_query for '/cached-query'
+    // - the method name is used for the URI, e.g. Instance.user as '/user',
+    // with exact case matching, and replacing _ in the method name by '-', e.g.
+    // Instance.cached_query as '/cached-query'
     procedure RunMethods(RouterMethods: TUriRouterMethods; Instance: TObject;
        const Prefix: RawUtf8 = '/');
 
