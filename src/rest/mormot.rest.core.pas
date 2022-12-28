@@ -1244,8 +1244,6 @@ type
     mUNLOCK,
     mSTATE,
     mOPTIONS,
-    mPROPFIND,
-    mPROPPATCH,
     mTRACE,
     mCOPY,
     mMKCOL,
@@ -1510,9 +1508,11 @@ type
 
 /// convert a string HTTP verb into its TUriMethod enumerate
 function ToMethod(const method: RawUtf8): TUriMethod;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
 function MethodText(m: TUriMethod): RawUtf8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 {$ifndef PUREMORMOT2}
@@ -3733,8 +3733,6 @@ const
     'UNLOCK',
     'STATE',
     'OPTIONS',
-    'PROPFIND',
-    'PROPPATCH',
     'TRACE',
     'COPY',
     'MKCOL',
@@ -3750,15 +3748,22 @@ const
     'SEARCH',
     'CONNECT',
     '');
+var
+  // quick O(n) search of the first 4 characters within L1 cache
+  METHODNAME32: array[TUriMethod] of cardinal;
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  result := TUriMethod(IdemPPChar(pointer(method), pointer(@METHODNAME)) + 1);
+  if method = '' then
+    result := mNone
+  else
+    result := TUriMethod(IntegerScanIndex( // may use SSE2
+      @METHODNAME32, length(METHODNAME32) - 1, PCardinal(method)^) + 1);
 end;
 
 function MethodText(m: TUriMethod): RawUtf8;
 begin
-  dec(m);
+  dec(m); // METHODNAME[] has no mNone entry
   if cardinal(m) < cardinal(ord(high(METHODNAME))) then
     result := METHODNAME[m]
   else
@@ -4909,10 +4914,17 @@ begin
   end;
 end;
 
-
+procedure InitializeUnit;
+var
+  m: TUriMethod;
+begin
+  DefaultTAuthGroupClass := TAuthGroup;
+  for m := low(METHODNAME32) to pred(high(METHODNAME32)) do
+    METHODNAME32[m] := PCardinal(METHODNAME[m])^;
+end;
 
 initialization
-  DefaultTAuthGroupClass := TAuthGroup;
+  InitializeUnit;
 
 end.
 

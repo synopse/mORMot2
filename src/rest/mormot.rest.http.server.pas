@@ -1126,8 +1126,7 @@ begin
     result := HTTP_BADREQUEST;
     exit;
   end;
-  if PCardinal(Ctxt.Method)^ =
-    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24 then
+  if IsOptions(Ctxt.Method) then
   begin
     // handle CORS
     if fAccessControlAllowOrigin = '' then

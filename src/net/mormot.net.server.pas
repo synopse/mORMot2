@@ -399,9 +399,10 @@ type
     // root URI registered at http.sys level - there is no such limitation with
     // the socket servers, which bind to a port, so handle all URIs on it
     function Route: TUriRouter;
-    /// will route a GET to /favicon.ico to the given .ico file
+    /// will route a GET to /favicon.ico to the given .ico file content
     // - if none is supplied, the default Synopse/mORMot icon is used
     // - if '' is supplied, /favicon.ico will return a 404 error status
+    // - warning: with THttpApiServer, may require a proper URI registration
     procedure SetFavIcon(const FavIconContent: RawByteString = 'default');
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters

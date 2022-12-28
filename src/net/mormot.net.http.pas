@@ -135,6 +135,10 @@ function IsPut(const method: RawUtf8): boolean;
 function IsDelete(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// quick check for case-sensitive 'OPTIONS' HTTP method name
+function IsOptions(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// could be used e.g. in OnBeforeBody() callback to allow a GET /favicon.ico
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -932,6 +936,13 @@ begin
   result := PCardinal(method)^ =
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24;
 end;
+
+function IsOptions(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ =
+    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
+end;
+
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
 begin
