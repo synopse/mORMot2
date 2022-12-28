@@ -32,7 +32,6 @@ uses
   mormot.core.perf,
   mormot.core.mustache,
   mormot.orm.core,
-  mormot.orm.base,
   mormot.orm.sql,
   mormot.db.core,
   mormot.db.raw.sqlite3,
@@ -48,6 +47,7 @@ uses
   mormot.db.sql.postgres;
 
 type
+  // data structures
   TMessageRec = packed record
     message: RawUtf8;
   end;
@@ -62,6 +62,7 @@ type
   end;
   TFortunes = array of TFortune;
 
+  // ORM definitions
   TOrmWorld = class(TOrm)
   protected
     fRandomNumber: integer;
@@ -80,8 +81,7 @@ type
   end;
   TOrmFortunes = array of TOrmFortune;
 
-  { TRawAsyncServer }
-
+  // main server class
   TRawAsyncServer = class(TSynPersistent)
   private
     fHttpServer: THttpAsyncServer;
@@ -90,14 +90,11 @@ type
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
   protected
-    // as used by rawqueries and rawupdates
-    procedure getRandomWorlds(cnt: PtrInt; out res: TWorlds);
-    // return ?queries= parameter value. If missed or < 1 return 1, if > 500 return 500
-    function getQueriesParamValue(ctxt: THttpServerRequestAbstract;
-      const search: RawUtf8 = 'QUERIES='): cardinal;
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
     {$endif USE_SQLITE3}
+    // as used by rawqueries and rawupdates
+    procedure getRawRandomWorlds(cnt: PtrInt; out res: TWorlds);
     // implements /queries and /cached-queries endpoints
     function doqueries(ctxt: THttpServerRequestAbstract; orm: TOrmWorldClass;
       const search: RawUtf8): cardinal;
@@ -105,7 +102,7 @@ type
     constructor Create(threadCount: integer); reintroduce;
     destructor Destroy; override;
   published
-    // all paths are implemented by these published methods using RTTI
+    // all service URI are implemented by these published methods using RTTI
     function plaintext(ctxt: THttpServerRequestAbstract): cardinal;
     function json(ctxt: THttpServerRequestAbstract): cardinal;
     function db(ctxt: THttpServerRequestAbstract): cardinal;
@@ -143,6 +140,21 @@ const
                  '</table>' +
                  '</body>' +
                  '</html>';
+
+
+function RandomWorld: integer; inline;
+begin
+  result := Random32(WORLD_COUNT) + 1;
+end;
+
+function getQueriesParamValue(ctxt: THttpServerRequestAbstract;
+  const search: RawUtf8 = 'QUERIES='): cardinal;
+begin
+  if not ctxt.UrlParam(search, result) then
+    result := 1
+  else if result > 500 then
+    result := 500;
+end;
 
 
 { TRawAsyncServer }
@@ -198,11 +210,6 @@ begin
   fModel.Free;
   fDBPool.free;
   inherited Destroy;
-end;
-
-function RandomWorld: integer; inline;
-begin
-  result := Random32(WORLD_COUNT) + 1;
 end;
 
 {$ifdef USE_SQLITE3}
@@ -299,9 +306,6 @@ var
 begin
   w := TOrmWorld.Create(fStore.Orm, RandomWorld);
   try
-    //fStore.Orm.GetJsonValue(w, {withid=}true, ooSelect, json, {locaseid=}true);
-    //json := w.GetJsonValues(true, true, ALL_FIELDS, [owoLowCaseID]);
-    //
     ctxt.SetOutJson('{"id":%,"randomNumber":%}', [w.IDValue, w.randomNumber]);
     result := HTTP_SUCCESS;
   finally
@@ -319,16 +323,7 @@ begin
   result := doqueries(ctxt, TOrmCachedWorld, 'COUNT=');
 end;
 
-function TRawAsyncServer.getQueriesParamValue(ctxt: THttpServerRequestAbstract;
-  const search: RawUtf8): cardinal;
-begin
-  if not ctxt.UrlParam(search, result) then
-    result := 1
-  else if result > 500 then
-    result := 500;
-end;
-
-procedure TRawAsyncServer.getRandomWorlds(cnt: PtrInt; out res: TWorlds);
+procedure TRawAsyncServer.getRawRandomWorlds(cnt: PtrInt; out res: TWorlds);
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
@@ -378,7 +373,7 @@ var
   res: TWorlds;
 begin
   cnt := getQueriesParamValue(ctxt);
-  getRandomWorlds(cnt, res);
+  getRawRandomWorlds(cnt, res);
   if res = nil then
     exit(HTTP_SERVERERROR);
   ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
@@ -513,7 +508,7 @@ var
   stmt: ISQLDBStatement;
 begin
   cnt := getQueriesParamValue(ctxt);
-  getRandomWorlds(cnt, words);
+  getRawRandomWorlds(cnt, words);
   if length(words) <> cnt then
     exit(HTTP_SERVERERROR);
   setLength(ids, cnt);
