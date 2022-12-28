@@ -161,12 +161,12 @@ var
 
 implementation
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 {$ifdef OSWINDOWS}
 uses
   Windows; // statically linked Delphi .obj requires the Windows API
 {$endif OSWINDOWS}
-{$endif FPC}
+{$endif ISDELPHI}
 
 
 { ************ TSqlite3LibraryStatic Implementation }

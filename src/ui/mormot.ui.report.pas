@@ -511,10 +511,10 @@ type
     procedure Resize; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     function DoMouseWheel(Shift: TShiftState; WheelDelta: integer;
       MousePos: TPoint): boolean; override; //no mousewheel support in Delphi 3
-    {$endif FPC}
+    {$endif ISDELPHI}
     procedure PopupMenuPopup(Sender: TObject);
     procedure CheckHeaderDone; virtual;
     // warning: PW buffer is overwritten at the next method call
@@ -3436,7 +3436,7 @@ begin
   inherited;
 end;
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 function TGdiPages.DoMouseWheel(Shift: TShiftState; WheelDelta: integer;
   MousePos: TPoint): boolean;
 var
@@ -3455,7 +3455,7 @@ begin
     ZoomTimerInternal(fMousePos.X, fMousePos.Y, (WheelDelta > 0));
   result := true;
 end;
-{$endif FPC}
+{$endif ISDELPHI}
 
 constructor TGdiPages.Create(AOwner: TComponent);
 {$ifdef USEPDFPRINTER}
@@ -4711,7 +4711,7 @@ begin
         begin
           if ColBold then
             Font.Style := Font.Style + [fsBold];
-          Options := ETO_CLIPPED {$ifndef FPC} or TextFlags{$endif};
+          Options := ETO_CLIPPED {$ifdef ISDELPHI} or TextFlags{$endif};
           if Brush.Style <> bsClear then
             Options := Options or ETO_OPAQUE;
           InternalUnicodeString(s, PW, PWLen, @size);

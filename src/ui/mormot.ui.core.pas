@@ -791,7 +791,7 @@ begin
   inc(Y, Rect.Top);
   {$ifdef OSWINDOWS}
   // direct Win32 API call
-  options := ETO_CLIPPED {$ifndef FPC} or Canvas.TextFlags{$endif};
+  options := ETO_CLIPPED {$ifdef ISDELPHI} or Canvas.TextFlags{$endif};
   if Canvas.Brush.Style <> bsClear then
     options := options or ETO_OPAQUE;
   if Align <> taLeftJustify then

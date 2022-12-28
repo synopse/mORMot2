@@ -2517,7 +2517,7 @@ procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef CPUINTEL} inline; {$endif}
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
@@ -2529,7 +2529,7 @@ function BSRdword(c: cardinal): cardinal;
 // - this function is an intrinsic on FPC
 function BSRqword(const q: Qword): cardinal;
 
-{$endif FPC}
+{$endif ISDELPHI}
 
 {$ifdef ASMINTEL}
 
@@ -3396,9 +3396,9 @@ const
   varNativeString = varString;
   {$endif UNICODE}
 
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   CFirstUserType = $10F;
-  {$endif FPC}
+  {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];

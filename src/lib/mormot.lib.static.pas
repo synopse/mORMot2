@@ -449,9 +449,9 @@ end;
 procedure __chkstk_ms; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '___chkstk_ms'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         push    rcx
         push    rax
         cmp     rax, 4096
@@ -1018,9 +1018,9 @@ end;
 procedure __udivti3; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         push    rdi
         push    rsi
         push    rbx
@@ -1123,9 +1123,9 @@ end;
 procedure __udivmodti4; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         push    r13
         push    r12
         push    rbp
@@ -1272,9 +1272,9 @@ end;
 procedure __divti3; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__divti3'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         push    rdi
         push    rsi
         push    rbx
@@ -1400,9 +1400,9 @@ end;
 procedure __umodti3; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         push    rdi
         push    rsi
         push    rbx
@@ -1519,9 +1519,9 @@ end;
 procedure __udivti3; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         mov     r8, rcx
         mov     r9, rdx
         mov     r10, rdx
@@ -1612,9 +1612,9 @@ end;
 procedure __udivmodti4; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         test    rcx, rcx
         push    r13
         mov     r9, rdx
@@ -1772,9 +1772,9 @@ end;
 procedure __umodti3; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         .noframe
-        {$endif FPC}
+        {$endif ISDELPHI}
         test    rcx, rcx
         push    r12
         mov     r9, rdx

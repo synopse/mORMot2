@@ -1269,11 +1269,11 @@ type
     // - returns -1 if this instance is not a dvObject or has no aName property
     function Compare(const aName: RawUtf8; const aValue: variant;
       aCaseInsensitive: boolean = false): integer; overload;
-      {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef ISDELPHI}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// efficient equality comparison a TTDocVariantData object property
     function Equals(const aName: RawUtf8; const aValue: variant;
       aCaseInsensitive: boolean = false): boolean; overload;
-      {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef ISDELPHI}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
@@ -4374,9 +4374,9 @@ begin
   docv := DocVariantVType;
   v := @DocVariant;
   vt := v^.VType;
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   result := false;
-  {$endif FPC}
+  {$endif ISDELPHI}
   if vt <> docv then
     if vt <> varVariantByRef then
     begin

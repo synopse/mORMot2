@@ -25,9 +25,9 @@ interface
 uses
   sysutils,
   classes,
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   typinfo, // for proper Delphi inlining
-  {$endif FPC}
+  {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -4442,12 +4442,12 @@ var // warning: exact local variables order should match TFakeCallStack
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
   {$endif OSPOSIX}
 asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
         // So, make space for two variables (+shadow space)
         // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
        .params 2
-        {$endif FPC}
+        {$endif ISDELPHI}
         mov     smetndx, rax
         movlpd  sxmm0, xmm0 // movlpd to ignore upper 64-bit of 128-bit xmm reg
         movlpd  sxmm1, xmm1
@@ -4466,7 +4466,7 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         mov     srdi, rdi
         lea     rsi, srdi // TFakeCallStack address as 2nd parameter
         {$else}
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         mov     [rbp + $60], rcx
         mov     [rbp + $68], rdx
         mov     [rbp + $70], r8
@@ -4476,7 +4476,7 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         mov     qword ptr [rbp + $18], rdx
         mov     qword ptr [rbp + $20], r8
         mov     qword ptr [rbp + $28], r9
-        {$endif FPC}
+        {$endif ISDELPHI}
         lea     rdx, sxmm0 // TFakeCallStack address as 2nd parameter
         {$endif OSPOSIX}
         call    TInterfacedObjectFake.FakeCall

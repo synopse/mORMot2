@@ -258,11 +258,11 @@ begin
       end;
     dMSSQL:
       begin
-        {$ifndef FPC}
+        {$ifdef ISDELPHI}
         {$ifndef UNICODE}
         fForceUseWideString := true;
         {$endif UNICODE}
-        {$endif FPC}
+        {$endif ISDELPHI}
         if aUserID = '' then
           fSpecificOptions.Values['Authentication'] := 'auWindows';
         fSpecificOptions.Values['SQL Server.Provider'] := cMSSQLProvider;

@@ -7061,7 +7061,7 @@ begin
   result := _Smbios[info];
 end;
 
-{$ifndef FPC} // missing convenient RTL function in Delphi
+{$ifdef ISDELPHI} // missing convenient RTL function in Delphi
 function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
 begin
   try
@@ -7071,7 +7071,7 @@ begin
     result := false;
   end;
 end;
-{$endif FPC}
+{$endif ISDELPHI}
 
 procedure GetComputerUuid(out uuid: TGuid);
 var

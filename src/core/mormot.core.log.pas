@@ -948,10 +948,10 @@ type
     RefCount: integer;
     /// if the method name is local, i.e. shall not be displayed at Leave()
     MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     /// the caller address, ready to display stack trace dump if needed
     Caller: PtrUInt;
-    {$endif FPC}
+    {$endif ISDELPHI}
     /// the high-resolution QueryPerformanceMicroSeconds timestamp at enter time
     EnterTimestamp: Int64;
   end;
@@ -3146,7 +3146,7 @@ begin
     begin
       // in DWARF, fSymbol[i].Start/Stop sometimes overlap -> ignore on FPC
       // GenerateFromMapOrDbg() did Sort() by Start so we can guess its enough
-      {$ifndef FPC}
+      {$ifdef ISDELPHI}
       for i := 1 to fSymbolsCount - 1 do
         if fSymbol[i].Start <= fSymbol[i - 1].Stop then
         begin
@@ -3155,7 +3155,7 @@ begin
           fSymbols.Clear;
           exit;
         end;
-      {$endif FPC}
+      {$endif ISDELPHI}
       if MabCreate then // just created from .map/.dbg -> create .mab file
         SaveToFile(MabFile);
       fHasDebugInfo := true;
@@ -3453,7 +3453,7 @@ begin
       AddHex;
       exit;
     end;
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     if (s >= 0) and
        not AllowNotCodeAddr and
        (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
@@ -3461,7 +3461,7 @@ begin
          debug.Symbols[s].Name) >= 0) then
       // no stack trace within the Delphi exception interception functions
       exit;
-    {$endif FPC}
+    {$endif ISDELPHI}
     AddHex;
     if u >= 0 then
     begin
@@ -3972,7 +3972,7 @@ begin
   if (AutoFlushThread = nil) and
      not SynLogFileFreeing and
      (fAutoFlushTimeOut <> 0)
-     {$ifndef FPC} and (DebugHook = 0) {$endif} then
+     {$ifdef ISDELPHI} and (DebugHook = 0) {$endif} then
     AutoFlushThread := TAutoFlushThread.Create;
 end;
 
@@ -4344,9 +4344,9 @@ begin
     SetLength(c^.Recursion, c^.RecursionCapacity);
   end;
   result := @c^.Recursion[c^.RecursionCount];
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   result^.Caller := 0; // no stack trace by default
-  {$endif FPC}
+  {$endif ISDELPHI}
   result^.RefCount := 0;
   inc(c^.RecursionCount);
 end;
@@ -4667,29 +4667,29 @@ begin
 end;
 
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
   {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
   {$ifdef CPU64}
     {$define USERTLCAPTURESTACKBACKTRACE}
   {$else}
     {$define USEASMX86STACKBACKTRACE}
   {$endif CPU64}
-{$endif FPC}
+{$endif ISDELPHI}
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char;
   aMethodNameLocal: boolean): ISynLog;
 var
   log: TSynLog;
   r: PSynLogThreadRecursion;
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   addr: PtrUInt;
-  {$endif FPC}
+  {$endif ISDELPHI}
 begin
   log := Add;
   if (log <> nil) and
      (sllEnter in log.fFamily.fLevel) then
   begin
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     addr := 0;
     if aMethodName = nil then
     begin
@@ -4706,7 +4706,7 @@ begin
       if addr <> 0 then
         dec(addr, 5);
     end;
-    {$endif FPC}
+    {$endif ISDELPHI}
     mormot.core.os.EnterCriticalSection(GlobalThreadLock);
     {$ifdef HASFASTTRYFINALLY}
     try
@@ -4720,9 +4720,9 @@ begin
         r^.MethodNameLocal := mnEnter
       else
         r^.MethodNameLocal := mnAlways;
-      {$ifndef FPC}
+      {$ifdef ISDELPHI}
       r^.Caller := addr;
-      {$endif FPC}
+      {$endif ISDELPHI}
     {$ifdef HASFASTTRYFINALLY}
     finally
     {$endif HASFASTTRYFINALLY}
@@ -5062,16 +5062,16 @@ begin
     LogInternalRtti(Level, aName, aTypeInfo, aValue, Instance);
 end;
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
   {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$endif FPC}
+{$endif ISDELPHI}
 
 procedure TSynLog.Log(Level: TSynLogInfo);
 var
   lasterror: integer;
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   addr: PtrUInt;
-  {$endif FPC}
+  {$endif ISDELPHI}
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
@@ -5086,7 +5086,7 @@ begin
       LogHeader(Level);
       if lasterror <> 0 then
         AddErrorMessage(lasterror);
-      {$ifndef FPC}
+      {$ifdef ISDELPHI}
       addr := 0;
       {$ifdef USERTLCAPTURESTACKBACKTRACE}
       if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
@@ -5100,7 +5100,7 @@ begin
       {$endif USEASMX86STACKBACKTRACE}
       if addr <> 0 then
         TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
-      {$endif FPC}
+      {$endif ISDELPHI}
       LogTrailer(Level);
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
@@ -5726,11 +5726,11 @@ begin
           end;
         end;
       end
-      {$ifndef FPC}
+      {$ifdef ISDELPHI}
       else if r^.Caller <> 0 then
         // no method name specified -> try from map/mab symbols
         TDebugFile.Log(fWriter, r^.Caller, {notcode=}false, {symbol=}true)
-      {$endif FPC};
+      {$endif ISDELPHI};
     end;
     if aLevel <> sllNone then
     begin

@@ -4994,7 +4994,7 @@ begin
      (ValueLen = 0) or
      (Source = nil) then
      // (Source[0] <> AnsiChar(SizeOf(PtrInt))) mORMot 2 stores elemsize=0
-     // {$ifndef FPC} or (Source[1] <> AnsiChar(rkLString)){$endif}
+     // {$ifdef ISDELPHI} or (Source[1] <> AnsiChar(rkLString)){$endif}
   begin
     result := -1;
     exit; // invalid Source or Value content

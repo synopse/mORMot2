@@ -235,9 +235,9 @@ begin
   if aDataSet.Active then
   begin
     prev.Active := true;
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     prev.LogChanges := aDataSet.LogChanges;
-    {$endif FPC}
+    {$endif ISDELPHI}
     prev.ReadOnly := aDataSet.ReadOnly;
     prev.AfterScroll := aDataSet.AfterScroll;
     aDataSet.AfterScroll := nil;
@@ -246,7 +246,7 @@ begin
   end;
   if aMode = cdsReplace then
   begin
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     if prev.LogChanges then
       aDataSet.LogChanges := false;
     aDataSet.EmptyDataSet;  
@@ -254,7 +254,7 @@ begin
     aDataSet.MergeChangeLog;
     aDataSet.Close;
     aDataSet.Open;
-    {$endif FPC}
+    {$endif ISDELPHI}
   end;
   // handle col
   SetLength(col, aTable.FieldCount);
@@ -285,9 +285,9 @@ begin
       end;
   // append data
   try
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     aDataSet.LogChanges := aLogChange;
-    {$endif FPC}
+    {$endif ISDELPHI}
     for i := 1 to aTable.RowCount do
     begin
       aDataSet.Append;
@@ -301,9 +301,9 @@ begin
   finally
     if prev.Active then
     begin
-      {$ifndef FPC}
+      {$ifdef ISDELPHI}
       aDataSet.LogChanges := prev.LogChanges;
-      {$endif FPC}
+      {$endif ISDELPHI}
       aDataSet.ReadOnly := prev.ReadOnly;
       aDataSet.AfterScroll := prev.AfterScroll;
       if Assigned(prev.AfterScroll) then

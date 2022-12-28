@@ -5391,7 +5391,7 @@ begin
       SetLength(result, length(result) + PtrInt(T^.EntryCount));
       for i := 0 to T^.EntryCount - 1 do
       begin
-        result[n] := {$ifndef FPC}@{$endif}T^.Entries[i].IID;
+        result[n] := {$ifdef ISDELPHI}@{$endif}T^.Entries[i].IID;
         inc(n);
       end;
     end;
@@ -6405,11 +6405,11 @@ begin
       {$endif FPC_NEWRTTI}
       end;
     rkInt64:
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
       if Info^.IsQWord then
         result := ptQWord
       else
-    {$endif FPC}
+    {$endif ISDELPHI}
       // PT_INFO[ptOrm/ptTimeLog/ptUnixTime] have been found above
       result := ptInt64;
   {$ifdef FPC}
@@ -6419,11 +6419,11 @@ begin
       result := ptBoolean;
   {$endif FPC}
     rkEnumeration:
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
       if Info^.IsBoolean then
         result := ptBoolean
       else
-    {$endif FPC}
+    {$endif ISDELPHI}
         result := ptEnumeration;
     rkSet:
       result := ptSet;

@@ -2848,7 +2848,7 @@ procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
    lock sub     qword ptr [Target], Decrement
 end;
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 
 // those functions are intrinsics with FPC :)
 
@@ -2887,7 +2887,7 @@ asm
         sub     dword ptr [r8].TDiv100Rec.M, eax
 end;
 
-{$endif FPC}
+{$endif ISDELPHI}
 
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}

@@ -1998,18 +1998,18 @@ begin
 end;
 {$I+}
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 var
   // Delphi doesn't define this global variable need by ConsoleReadBody
   StdInputHandle: THandle;
-{$endif FPC}
+{$endif ISDELPHI}
 
 function ConsoleStdInputLen: integer;
 begin
-  {$ifndef FPC}
+  {$ifndef ISDELPHI}
   if StdInputHandle = 0 then
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
-  {$endif FPC}
+  {$endif ISDELPHI}
   if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
     result := 0;
 end;
@@ -4467,13 +4467,14 @@ var
   i: integer;
   siz: DWORD;
 begin
-  {$ifndef FPC} // FPC_X86 already redirect to FastCode RTL Move()
   {$ifdef ASMX86}
   {$ifndef HASNOSSE2}
   if not (cfSSE2 in CpuFeatures) then
   begin
     // avoid illegal opcode in MoveFast() and SynLZ functions
+    {$ifdef ISDELPHI} // FPC_X86 already redirect to FastCode RTL Move()
     RedirectCode(@MoveFast, @System.Move);
+    {$endif ISDELPHI}
     RedirectCode(@SynLZcompress1, @SynLZcompress1Pas);
     RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas);
     ConsoleWrite('WARNING: too old CPU - recompile with HASNOSSE2', ccLightRed);
@@ -4482,7 +4483,6 @@ begin
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86}
-  {$endif FPC}
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');

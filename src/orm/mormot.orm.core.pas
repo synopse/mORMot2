@@ -37,9 +37,9 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   typinfo, // for proper Delphi inlining
-  {$endif FPC}
+  {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -2922,12 +2922,12 @@ type
     procedure ToObjectList(DestList: TObjectList;
       RecordType: TOrmClass = nil); overload;
     {$ifdef ORMGENERICS}
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     /// create a IList<TOrm*> with TOrm instances corresponding to this resultset
     // - always returns an IList<> instance, even if the TOrmTable is nil or void
     // - is disabled on FPC because it generates internal compiler errors :(
     function ToIList<T: TOrm>: IList<T>;
-    {$endif FPC}
+    {$endif ISDELPHI}
     /// create a IList<TOrm> with TOrm instances corresponding to this resultset
     // - weak typed result - rather use the ToIList<T> function on Delphi
     // - our IList<> and IKeyValue<> interfaces are faster and generates smaller
@@ -5388,12 +5388,12 @@ begin
   FillOrms(list.First, Item);
 end;
 
-{$ifndef FPC} // disabled on FPC because generates internal compiler errors :(
+{$ifdef ISDELPHI} // disabled on FPC because generates internal compiler errors :(
 function TOrmTable.ToIList<T>: IList<T>;
 begin
   ToNewIList(T, result);
 end;
-{$endif FPC}
+{$endif ISDELPHI}
 {$endif ORMGENERICS}
 
 function TOrmTable.ToObjArray(var ObjArray; RecordType: TOrmClass): boolean;
