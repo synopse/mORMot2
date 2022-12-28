@@ -25,6 +25,7 @@ uses
   mormot.core.perf,
   mormot.net.sock,
   mormot.net.http,
+  mormot.net.server,
   mormot.net.async,
   mormot.net.rtsphttp;
 

@@ -128,6 +128,7 @@ Low-Level Data Processing Functions shared by all framework units
 - `TDynArray` and `TDynArrayHashed` Wrappers
 - `Integer` Arrays Extended Process
 - `RawUtf8` String Values Interning and `TRawUtf8List`
+- Abstract Radix Tree Classes
 
 ### mormot.core.json
 

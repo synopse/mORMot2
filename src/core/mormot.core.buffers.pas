@@ -1564,6 +1564,11 @@ function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 // identifiers (0..9a..zA..Z-_.~)
 function IsUrlValid(P: PUtf8Char): boolean;
 
+/// check if the supplied text contains only URI-valid characters
+// - excluding the parameters, i.e. rejecting the ? and % characters
+// - but allowing <param> place holders as recognized by TUriMethod
+function IsValidRootUri(p: PUtf8Char): boolean;
+
 /// checks if the supplied UTF-8 text values don't need URI encoding
 // - returns TRUE if all its chars of all strings are non-void plain ASCII-7 RFC
 // compatible identifiers (0..9a..zA..Z-_.~)
@@ -7665,6 +7670,20 @@ begin
     else
       exit;
   until P^ = #0;
+  result := true;
+end;
+
+function IsValidRootUri(p: PUtf8Char): boolean;
+begin
+  result := false;
+  if p = nil then
+    exit;
+  repeat
+    if not (p^ in ['/', '_', '-', '.',
+                   '0'..'9', 'a'..'z', 'A'..'Z', '<', '>']) then
+      exit;
+    inc(p);
+  until p^ = #0;
   result := true;
 end;
 

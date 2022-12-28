@@ -15,6 +15,7 @@ unit mormot.core.data;
     - TDynArray and TDynArrayHashed Wrappers
     - Integer Arrays Extended Process
     - RawUtf8 String Values Interning and TRawUtf8List
+    - Abstract Radix Tree Classes
 
   *****************************************************************************
 }
@@ -2973,6 +2974,93 @@ var
     EndOfObject: PUtf8Char; Rtti: TRttiCustom;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
     Interning: TRawUtf8InterningAbstract);
+
+
+{ ************ Abstract Radix Tree Classes }
+
+type
+  /// implement an abstract Radix Tree node
+  TRadixTreeNode = class
+  protected
+    function ComputeDepth: integer;
+    procedure SortChildren;
+  public
+    /// the characters to be compared at this level
+    Chars: RawUtf8;
+    /// the whole text up to this level
+    FullText: RawUtf8;
+    /// how many branches are within this node - used to sort by priority
+    Depth: integer;
+    /// the nested nodes
+    Child: array of TRadixTreeNode;
+    /// instantiate a new node with the same class and properties
+    function Split(const Text: RawUtf8): TRadixTreeNode; virtual;
+    /// finalize this Radix Tree node
+    destructor Destroy; override;
+    /// search for the node corresponding to a given text
+    function Find(P: PUtf8Char): TRadixTreeNode;
+    /// internal debugging/testing method
+    procedure ToText(var Result: RawUtf8; Level: integer);
+  end;
+
+  /// our TRadixTree works on dynamic/custom types of node classes
+  TRadixTreeNodeClass = class of TRadixTreeNode;
+
+  /// implement an abstract Radix Tree over UTF-8 case-insensitive text
+  // - as such, this class is not very useful if you just need to lookup for
+  // a text value: a TDynArrayHasher/TDictionary is faster and uses less RAM
+  // - but, once extended e.g. as TUriTree, it can very efficiently parse
+  // some text with variants parts (e.g. parameters)
+  TRadixTree = class
+  protected
+    fRoot: TRadixTreeNode;
+    fDefaultNodeClass: TRadixTreeNodeClass;
+  public
+    /// initialize this Radix Tree
+    constructor Create(aNodeClass: TRadixTreeNodeClass = nil); virtual;
+    /// finalize this Radix Tree
+    destructor Destroy; override;
+    /// finalize this Radix Tree node
+    procedure Clear;
+    /// low-level insertion of a given Text entry as a given child
+    // - may return an existing node instance, if Text was already inserted
+    function Insert(const Text: RawUtf8; Node: TRadixTreeNode = nil;
+      NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode;
+    /// to be called after Insert() to consolidate the internal tree state
+    // - nodes will be sorted by search priority, i.e. the longest depths first
+    // - as called e.g. by TUriTree.Setup()
+    procedure AfterInsert;
+    /// search for the node corresponding to a given text
+    // - more than 1 million lookups per second, with 1000 items stored
+    function Find(const Text: RawUtf8): TRadixTreeNode;
+    /// internal debugging/testing method
+    function ToText: RawUtf8;
+  end;
+
+  /// implement an abstract Radix Tree static or <param> node
+  TRadixTreeNodeParams = class(TRadixTreeNode)
+  protected
+    procedure LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer); virtual; abstract;
+    function Lookup(P: PUtf8Char; Ctxt: TObject): TRadixTreeNodeParams;
+  public
+    /// all the <param1> <param2> names, in order, up to this parameter
+    // - equals nil for static nodes
+    // - is referenced as pointer into THttpServerRequestAbstract.fRouteName
+    Names: TRawUtf8DynArray;
+    /// overriden to support the additional Names fields
+    function Split(const Text: RawUtf8): TRadixTreeNode; override;
+  end;
+
+  /// implement an abstract Radix Tree with static or <param> nodes
+  TRadixTreeParams = class(TRadixTree)
+  public
+    /// register a new URI path, with <param> support
+    // - returns the node matching the given URI
+    // - called e.g. from TUriRouter.Rewrite/Run methods
+    function Setup(const aFromUri: RawUtf8; out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
+  end;
+
+  ERadixTree = class(ESynException);
 
 
 implementation
@@ -10673,6 +10761,341 @@ end;
 function AnyScanExists(P, V: pointer; Count, VSize: PtrInt): boolean;
 begin
   result := AnyScanIndex(P, V, Count, VSize) >= 0;
+end;
+
+
+{ ************ Abstract Radix Tree Classes }
+
+{ TRadixTreeNode }
+
+function TRadixTreeNode.ComputeDepth: integer;
+var
+  i: PtrInt;
+begin
+  result := 1;
+  for i := 0 to high(Child) do
+    inc(result, Child[i].ComputeDepth); // recursive calculation
+  Depth := result;
+end;
+
+function RadixTreeNodeCompare(const A, B): integer;
+begin
+  // sort deeper first
+  result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
+  if result = 0 then // longest path first
+    result := CompareInteger(length(TRadixTreeNode(B).FullText),
+                             length(TRadixTreeNode(A).FullText));
+end;
+
+procedure TRadixTreeNode.SortChildren;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Child) do
+    Child[i].SortChildren; // compute nested children depth
+  DynArray(TypeInfo(TPointerDynArray), Child).Sort(RadixTreeNodeCompare);
+end;
+
+function TRadixTreeNode.Split(const Text: RawUtf8): TRadixTreeNode;
+begin
+  result := TRadixTreeNodeClass(PPointer(self)^).Create;
+  result.Chars := Text;
+  result.FullText := FullText;
+  result.Child := Child;
+  Chars := '';
+  FullText := '';
+  Child := nil;
+  ObjArrayAdd(Child, result);
+end;
+
+destructor TRadixTreeNode.Destroy;
+begin
+  inherited Destroy;
+  ObjArrayClear(Child);
+end;
+
+function TRadixTreeNode.Find(P: PUtf8Char): TRadixTreeNode;
+var
+  c: PUtf8Char;
+  n: TDALen;
+  ch: ^TRadixTreeNode;
+begin
+  result := nil; // no match
+  c := pointer(Chars);
+  repeat
+    if (P^ = #0) or
+       (P^ <> c^) then
+      break;
+    inc(P);
+    inc(c);
+  until false;
+  if c^ <> #0 then
+    exit; // not enough matched chars
+  // if we reached here, the text do match up to now
+  if P^ = #0 then
+    result := self // exact match found for this entry
+  else
+  begin
+    ch := pointer(Child);
+    if ch = nil then
+      exit;
+    n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+    repeat
+      if ch^.Chars[1] = P^ then
+      begin
+        result := ch^.Find(P);
+        if result <> nil then
+          exit; // match found in children
+      end;
+      inc(ch);
+      dec(n);
+    until n = 0;
+  end;
+end;
+
+procedure TRadixTreeNode.ToText(var Result: RawUtf8; Level: integer);
+var
+  i: PtrInt;
+begin
+  Result := Result + RawUtf8OfChar(' ', Level) + Chars + #10;
+  for i := 0 to high(Child) do
+    Child[i].ToText(Result, Level + length(Chars));
+end;
+
+
+{ TRadixTree }
+
+constructor TRadixTree.Create(aNodeClass: TRadixTreeNodeClass);
+begin
+  fDefaultNodeClass := aNodeClass;
+  if fDefaultNodeClass = nil then
+    fDefaultNodeClass := TRadixTreeNode;
+  fRoot := fDefaultNodeClass.Create; // with no text
+end;
+
+destructor TRadixTree.Destroy;
+begin
+  inherited Destroy;
+  fRoot.Free; // will recursively free all nested children
+end;
+
+procedure TRadixTree.Clear;
+begin
+  if self = nil then
+    exit;
+  fRoot.Free;
+  fRoot := fDefaultNodeClass.Create;
+end;
+
+function TRadixTree.Insert(const Text: RawUtf8; Node: TRadixTreeNode;
+  NodeClass: TRadixTreeNodeClass): TRadixTreeNode;
+var
+  match, textlen, nodelen, i: PtrInt;
+  chars: RawUtf8;
+begin
+  result := nil;
+  if Text = '' then
+    exit;
+  if Node = nil then
+    Node := fRoot;
+  textlen := length(Text);
+  nodelen := length(Node.Chars);
+  // check how many chars of Text are within Node.Chars
+  match := 0;
+  while (match < textlen) and
+        (match < nodelen) and
+        (Text[match + 1] = Node.Chars[match + 1]) do
+    inc(match);
+  // insert the node where fits
+  chars := copy(Text, match + 1, maxInt);
+  if (match = 0) or
+     (Node = fRoot) or
+     ((match < textlen) and
+      (match >= nodelen)) then
+  begin
+    // we can just insert a new leaf node
+    if chars <> '' then
+      for i := 0 to high(Node.Child) do
+        if Node.Child[i].Chars[1] = chars[1] then
+        begin
+          result := Insert(chars, Node.Child[i]); // recursive insertion
+          result.FullText := Text;
+          exit;
+        end;
+  end
+  else if match <> nodelen then
+  begin
+    // need to split the existing node
+    Node.Split(copy(Node.Chars, match + 1, maxInt)); // split children
+    Node.Chars := copy(Text, 1, match); // new shared root
+    if chars = '' then
+    begin
+      result := Node; // don't need a sub child - use shared root
+      result.FullText := Text;
+      exit;
+    end;
+  end
+  else
+  begin
+    // match an existing node
+    result := Node;
+    exit;
+  end;
+  // create new leaf
+  if NodeClass = nil then
+    NodeClass := fDefaultNodeClass;
+  result := NodeClass.Create;
+  result.Chars := chars;
+  result.FullText := Text;
+  ObjArrayAdd(Node.Child, result);
+end;
+
+procedure TRadixTree.AfterInsert;
+begin
+  fRoot.ComputeDepth;
+  fRoot.SortChildren;
+end;
+
+function TRadixTree.Find(const Text: RawUtf8): TRadixTreeNode;
+var
+  n: TDALen;
+  ch: ^TRadixTreeNode;
+begin
+  result := nil;
+  if (self = nil) or
+     (Text = '') then
+    exit;
+  ch := pointer(fRoot.Child);
+  if ch = nil then
+    exit;
+  n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+  repeat
+    if ch^.Chars[1] = Text[1] then // no recursive call if obviously no match
+    begin
+      result := ch^.Find(pointer(Text));
+      if result <> nil then
+        exit;
+    end;
+    inc(ch);
+    dec(n);
+  until n = 0;
+end;
+
+function TRadixTree.ToText: RawUtf8;
+begin
+  result := '';
+  if self <> nil then
+    fRoot.ToText(result, 0);
+end;
+
+
+{ TRadixTreeNodeParams }
+
+function TRadixTreeNodeParams.Split(const Text: RawUtf8): TRadixTreeNode;
+begin
+  result := inherited Split(Text);
+  TRadixTreeNodeParams(result).Names := Names;
+  Names := nil;
+end;
+
+function TRadixTreeNodeParams.Lookup(P: PUtf8Char; Ctxt: TObject): TRadixTreeNodeParams;
+var
+  n: TDALen;
+  c: PUtf8Char;
+  ch: ^TRadixTreeNodeParams;
+begin
+  result := nil; // no match
+  if Names = nil then
+  begin
+    // static text
+    c := pointer(Chars);
+    if c <> nil then
+    begin
+      repeat
+        if (P^ = #0) or
+           (P^ <> c^) then
+          break;
+        inc(P);
+        inc(c);
+      until false;
+      if c^ <> #0 then
+        exit; // not enough matched chars
+    end;
+  end
+  else
+  begin
+    // <named> parameter
+    c := P;
+    while not (P^ in [#0, '?', '/']) do
+      inc(P);
+    LookupParam(Ctxt, c, P - c);
+  end;
+  // if we reached here, the URI do match up to now
+  if P^ in [#0, '?'] then
+  begin
+    result := self; // exact match found for this entry (excluding URI params)
+    exit;
+  end;
+  ch := pointer(Child);
+  if ch = nil then
+    exit;
+  n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+  repeat
+    if (ch^.Names <> nil) or
+       (ch^.Chars[1] = P^) then // recursive call only if worth it
+    begin
+      result := ch^.Lookup(P, Ctxt);
+      if result <> nil then
+        exit; // match found in children
+    end;
+    inc(ch);
+    dec(n);
+  until n = 0;
+end;
+
+
+{ TRadixTreeParams }
+
+function TRadixTreeParams.Setup(const aFromUri: RawUtf8;
+  out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
+var
+  u: PUtf8Char;
+  item, full: RawUtf8;
+begin
+  u := pointer(TrimU(aFromUri));
+  if not IsValidRootUri(u) then
+    raise ERadixTree.CreateUtf8('Invalid chars in %.Setup(''%'')',
+      [self, aFromUri]);
+  if PosExChar('<', aFromUri) = 0 then
+    // a simple static route
+    result := Insert(aFromUri) as TRadixTreeNodeParams
+  else
+    // parse static..<param1>..static..<param2>..static into static/param nodes
+    repeat
+      GetNextItem(u, '<', item);
+      full := full + item;
+      result := Insert(full) as TRadixTreeNodeParams; // static (Names = nil)
+      if u = nil then
+        break;
+      GetNextItem(u, '>', item);
+      if item = '' then
+        raise ERadixTree.CreateUtf8('Void <> in %.Setup(''%'')', [self, aFromUri]);
+      if FindRawUtf8(aNames{%H-}, item) >= 0 then
+        raise ERadixTree.CreateUtf8('Duplicated <%> in %.Setup(''%'')',
+          [item, self, aFromUri]);
+      AddRawUtf8(aNames, item);
+      full := full + '<' + item + '>'; // avoid name collision with static
+      result := Insert(full) as TRadixTreeNodeParams; // param (Names <> nil)
+      result.Names := copy(aNames);
+      if (u = nil) or
+         (u^ = #0) then
+        // TODO: detect wildchar incompatibilities with nested searches?
+        break;
+      if u^ <> '/' then
+        raise ERadixTree.CreateUtf8('Unexpected <%>% in %.Setup(''%'')',
+          [item, u^, self, aFromUri]);
+    until false;
+  AfterInsert; // compute Depth and sort by priority
 end;
 
 
