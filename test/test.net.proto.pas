@@ -366,7 +366,7 @@ begin
   finally
     tree.Free;
   end;
-  tree := TUriTree.Create;
+  tree := TUriTree.Create([rtoCaseInsensitiveUri]);
   try
     tree.insert('romanus');
     tree.insert('romane');
@@ -376,6 +376,8 @@ begin
     tree.insert('romulus');
     tree.insert('rubens');
     CheckHash(tree.ToText, $305E57F1);
+    CheckEqual(tree.Root.Lookup('rubens', nil).FullText, 'rubens');
+    CheckEqual(tree.Root.Lookup('Rubens', nil).FullText, 'rubens');
   finally
     tree.Free;
   end;

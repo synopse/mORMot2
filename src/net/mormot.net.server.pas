@@ -93,9 +93,12 @@ type
 
   /// implement a Radix Tree to hold all registered URI for a given HTTP method
   TUriTree = class(TRadixTreeParams)
+  protected
+    procedure SetNodeClass; override;
   public
-    /// initialize the Radix Tree with TUriTreeNode default class
-    constructor Create(aNodeClass: TRadixTreeNodeClass = nil); override;
+    /// access to the root node of this tree
+    function Root: TUriTreeNode;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// store per-method TUriTree in TUriRouter
@@ -1668,11 +1671,14 @@ end;
 
 { TUriTree }
 
-constructor TUriTree.Create(aNodeClass: TRadixTreeNodeClass);
+procedure TUriTree.SetNodeClass;
 begin
-  if aNodeClass = nil then
-    aNodeClass := TUriTreeNode;
-  inherited Create(aNodeClass);
+  fDefaultNodeClass := TUriTreeNode;
+end;
+
+function TUriTree.Root: TUriTreeNode;
+begin
+  result := fRoot as TUriTreeNode;
 end;
 
 
