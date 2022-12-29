@@ -745,6 +745,8 @@ procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
 
 /// internal function which could be used instead of SetCodePage() if RefCnt = 1
 // - do nothing if HASCODEPAGE is not defined, e.g. on Delphi 7-2007
+// - warning: s should NOT be read-only (i.e. assigned from a constant), but
+// a just-allocated string with RefCnt <> -1
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 

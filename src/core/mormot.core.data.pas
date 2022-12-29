@@ -3054,6 +3054,9 @@ type
     function Find(const Text: RawUtf8): TRadixTreeNode;
     /// internal debugging/testing method
     function ToText: RawUtf8;
+    /// low-level access to the root node of the Radix Tree
+    property Root: TRadixTreeNode
+      read fRoot;
   end;
 
   /// implement an abstract Radix Tree static or <param> node
