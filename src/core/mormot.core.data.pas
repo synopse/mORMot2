@@ -11105,9 +11105,6 @@ var
   item, full: RawUtf8;
 begin
   u := pointer(TrimU(aFromUri));
-  if not IsValidRootUri(u) then
-    raise ERadixTree.CreateUtf8('Invalid chars in %.Setup(''%'')',
-      [self, aFromUri]);
   if PosExChar('<', aFromUri) = 0 then
     // a simple static route
     result := Insert(aFromUri) as TRadixTreeNodeParams
