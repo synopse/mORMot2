@@ -88,9 +88,6 @@ type
     function Split(const Text: RawUtf8): TRadixTreeNode; override;
   end;
 
-  /// exception class raised during TUriTree.Rewrite/Run parsing
-  EUriTree = class(ERadixTree);
-
   /// implement a Radix Tree to hold all registered URI for a given HTTP method
   TUriTree = class(TRadixTreeParams)
   protected
@@ -100,6 +97,9 @@ type
     function Root: TUriTreeNode;
       {$ifdef HASINLINE}inline;{$endif}
   end;
+
+  /// exception class raised during TUriRouter.Rewrite/Run registration
+  EUriRouter = class(ERadixTree);
 
   /// store per-method URI multiplexing Radix Tree in TUriRouter
   // - each HTTP method would have its dedicated TUriTree parser in TUriRouter
@@ -118,11 +118,14 @@ type
   TUriRouter = class(TSynPersistentRWLightLock)
   protected
     fTree: TUriRouterTree;
+    fTreeOptions: TRadixTreeOptions;
     fEntries: array[urmGet .. high(TUriRouterMethod)] of integer;
     procedure Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8;
       const aExecute: TOnHttpServerRequest);
   public
+    /// initialize this URI routing engine
+    constructor Create(aOptions: TRadixTreeOptions = []); reintroduce;
     /// finalize this URI routing engine
     destructor Destroy; override;
 
@@ -206,6 +209,10 @@ type
     // - some Tree[] may be nil if the HTTP method has not been registered yet
     property Tree: TUriRouterTree
       read fTree;
+    /// how the TUriRouter instance should be created
+    // - should be set before calling Run/Rewrite registration methods
+    property TreeOptions: TRadixTreeOptions
+      read fTreeOptions write fTreeOptions;
   published
     /// how many GET rules have been registered
     property Gets: integer
@@ -1675,7 +1682,7 @@ begin
   until n = 0;
   Ctxt.Url := '';
   pointer(THttpServerRequest(Ctxt).fUrl) := new; // replace
-  //if p - new <> len then raise EUriTree.Create('??');
+  //if p - new <> len then raise EUriRouter.Create('??');
 end;
 
 
@@ -1732,17 +1739,20 @@ var
 begin
   if self = nil then
     exit; // avoid unexpected GPF
+  if not IsValidRootUri(pointer(aFromUri)) then
+    raise EUriRouter.CreateUtf8('Invalid char in %.Setup(''%'')',
+      [self, aFromUri]);
   fSafe.WriteLock;
   try
     if fTree[aFrom] = nil then
-      fTree[aFrom] := TUriTree.Create;
+      fTree[aFrom] := TUriTree.Create(fTreeOptions);
     n := fTree[aFrom].Setup(aFromUri, names) as TUriTreeNode;
     if n = nil then
       exit;
     // the leaf should have the Rewrite/Run information to process on match
     if Assigned(n.Data.Execute) or
        (n.Data.ToUri <> '') then
-      raise EUriTree.CreateUtf8('%.Setup(''%''): already registered',
+      raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
         [self, aFromUri]);
     if Assigned(aExecute) then
       // this URI should redirect to a TOnHttpServerRequest callback
@@ -1759,7 +1769,8 @@ begin
         // pre-compute the rewritten URI into Data.ToUriPosLen[]
         u := pointer(aToUri);
         if u = nil then
-          raise EUriTree.CreateUtf8('No ToUri in %.Setup(''%'')', [self, aFromUri]);
+          raise EUriRouter.CreateUtf8('No ToUri in %.Setup(''%'')',
+            [self, aFromUri]);
         if PosExChar('<', aToUri) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
           repeat
             pos := u - pointer(aToUri);
@@ -1774,11 +1785,11 @@ begin
             begin
               GetNextItem(u, '>', item); // <name>
               if item = '' then
-                raise EUriTree.CreateUtf8('Void <> in %.Setup(''%'')',
+                raise EUriRouter.CreateUtf8('Void <> in %.Setup(''%'')',
                   [self, aToUri]);
               pos := FindRawUtf8(names, item);
               if pos < 0 then
-                raise EUriTree.CreateUtf8('Unknown <%> in %.Setup(''%'')',
+                raise EUriRouter.CreateUtf8('Unknown <%> in %.Setup(''%'')',
                   [item, self, aToUri]);
             end;
             AddInteger(n.Data.ToUriPosLen, pos);          // value index in Names[]
@@ -1790,6 +1801,12 @@ begin
   finally
     fSafe.WriteUnLock;
   end;
+end;
+
+constructor TUriRouter.Create(aOptions: TRadixTreeOptions);
+begin
+  fTreeOptions := aOptions;
+  inherited Create;
 end;
 
 procedure TUriRouter.Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
