@@ -3300,7 +3300,7 @@ var
   spi: TInterfaceMethodValueDirections;
 begin
   // expects Service, ServiceParameters, ServiceMethod(Index) to be set
-  m := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+  m := ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
   if m >= 0 then
   begin
     if ServiceMethod = nil then
@@ -4379,7 +4379,7 @@ begin
       Service := TServiceFactoryServer(m^.InterfaceService);
       ServiceMethodIndex := m^.InterfaceMethodIndex;
       fServiceListInterfaceMethodIndex := i;
-      i := ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+      i := ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
       if i >= 0 then
         ServiceMethod := @Service.InterfaceFactory.Methods[i];
       ServiceInstanceID := GetInteger(pointer(UriBlobFieldName));
@@ -4390,7 +4390,7 @@ begin
       Service := Server.Services[Uri];
       if Service <> nil then
       begin
-        // identified as a valid JSON-RPC service
+        // identified as a valid JSON-REST service
         Split(UriBlobFieldName, '/', method, clientdrivenid);
         ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
         if ServiceMethodIndex < 0 then
@@ -4398,7 +4398,7 @@ begin
         else
         begin
           ServiceMethod := @Service.InterfaceFactory.Methods[ServiceMethodIndex];
-          inc(fServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD));
+          inc(fServiceMethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
           fServiceListInterfaceMethodIndex := -1;
           ServiceInstanceID := GetInteger(pointer(clientdrivenid));
         end;
@@ -4543,10 +4543,10 @@ begin
     ServiceInstanceID := values[2].ToCardinal; // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
     if ServiceMethodIndex >= 0 then
-      inc(fServiceMethodIndex, Length(SERVICE_PSEUDO_METHOD))
+      inc(fServiceMethodIndex, SERVICE_PSEUDO_METHOD_COUNT)
     else
     begin
-      for m := low(TServiceInternalMethod) to high(TServiceInternalMethod) do
+      for m := low(SERVICE_PSEUDO_METHOD) to high(SERVICE_PSEUDO_METHOD) do
         if IdemPropNameU(method, SERVICE_PSEUDO_METHOD[m]) then
         begin
           ServiceMethodIndex := ord(m);
@@ -7183,7 +7183,7 @@ begin
       else if (fServices <> nil) and
               (llfWebsockets in Ctxt.Call^.LowLevelConnectionFlags) then
         if Ctxt.UriBlobFieldName = '_callback_' then
-          // POST root/cacheflush/_callback_
+          // POST root/cacheflush/_callback_ with {"ICallbackName":1234} body
           // as called from TRestHttpClientWebsockets.FakeCallbackUnregister
           (fServices as TServiceContainerServer).FakeCallbackRelease(Ctxt)
         else if Ctxt.UriBlobFieldName = '_replaceconn_' then

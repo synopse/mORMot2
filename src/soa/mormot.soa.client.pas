@@ -362,7 +362,7 @@ procedure TServiceFactoryClientNotificationThread.ProcessPendingNotification;
 var
   pending: TOrmServiceNotifications;
   params, error: RawUtf8;
-  client: cardinal;
+  client: TInterfacedObjectFakeID;
   pendings, count: integer;
   timer: TPrecisionTimer;
   output: TDocVariantData;

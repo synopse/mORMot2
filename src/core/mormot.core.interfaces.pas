@@ -453,6 +453,7 @@ const
 type
   /// internal pseudo methods when an interface is used as remote service
   // - match TInterfaceFactory MethodIndex 0..3
+  // - imFree expects an associated ClientID, other methods won't
   TServiceInternalMethod = (
     imFree,
     imContract,
@@ -467,6 +468,10 @@ const
     '_contract_',
     '_signature_',
     '_instance_');
+
+  /// the number of MethodIndex which are a TServiceInternalMethod, i.e. 4
+  SERVICE_PSEUDO_METHOD_COUNT = length(SERVICE_PSEUDO_METHOD);
+
 var
   /// default value for TInterfaceFactory.JsonParserOptions
   JSONPARSER_SERVICE: TJsonParserOptions =
@@ -589,7 +594,8 @@ type
     constructor Create(aInterface: PRttiInfo);
     /// find the index of a particular method in internal Methods[] list
     // - will search for a match against Methods[].Uri property
-    // - won't find the default AddRef/Release/QueryInterface methods
+    // - won't find the default AddRef/Release/QueryInterface methods,
+    // nor the _free_/_instance_/... pseudo-methods
     // - will return -1 if the method is not known
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
@@ -633,7 +639,8 @@ type
       read fMethods;
     /// the number of internal methods
     // - does not include the default AddRef/Release/QueryInterface methods
-    // - nor the _free_/_contract_/_signature_ pseudo-methods
+    // - nor the _free_/_contract_/_signature_ pseudo-methods: so you should
+    // add SERVICE_PSEUDO_METHOD_COUNT to compute the regular MethodIndex
     property MethodsCount: integer
       read fMethodsCount;
     /// reference all known interface arguments per value type
@@ -4269,11 +4276,11 @@ begin
   if (MethodIndex < 0) or
      (self = nil) then
     result := ''
-  else if MethodIndex < Length(SERVICE_PSEUDO_METHOD) then
+  else if MethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
     result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(MethodIndex)]
   else
   begin
-    dec(MethodIndex, Length(SERVICE_PSEUDO_METHOD));
+    dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
     if cardinal(MethodIndex) < cardinal(fMethodsCount) then
       result := fMethods[MethodIndex].Uri
     else

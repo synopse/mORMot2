@@ -364,6 +364,7 @@ type
 
 const
   /// the Server-side instance implementation patterns without any ID
+  // - so imFree won't be supported
   SERVICE_IMPLEMENTATION_NOID = [sicSingle, sicShared];
 
 
@@ -1437,7 +1438,7 @@ begin
     raise EServiceException.CreateUtf8('%.SetInterfaceMethodBits: n=%', [self, n]);
   if IncludePseudoMethods then
     for i := 0 to n - 1 do
-      if fInterfaceMethod[i].InterfaceMethodIndex < Length(SERVICE_PSEUDO_METHOD) then
+      if fInterfaceMethod[i].InterfaceMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
         include(bits, i);
   while MethodNamesCsv <> nil do
   begin
@@ -1447,7 +1448,7 @@ begin
       for i := 0 to n - 1 do
         with fInterfaceMethod[i] do // O(n) search is fast enough here
         begin
-          m := InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+          m := InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
           if (m >= 0) and
              IdemPropNameU(method, InterfaceService.fInterface.Methods[m].Uri) then
             include(bits, i);

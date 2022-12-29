@@ -894,10 +894,11 @@ begin
         result := true;
       end;
     sicPerThread:
-      begin // use Length(SERVICE_PSEUDO_METHOD) to create an instance if none
+      begin
+        // use SERVICE_PSEUDO_METHOD_COUNT to create an instance if none
         Inst.Instance := nil;
         Inst.InstanceID := PtrUInt(GetCurrentThreadId);
-        if (RetrieveInstance(nil, Inst, Length(SERVICE_PSEUDO_METHOD), 0) >= 0) and
+        if (RetrieveInstance(nil, Inst, SERVICE_PSEUDO_METHOD_COUNT, 0) >= 0) and
            (Inst.Instance <> nil) then
           result := GetInterfaceFromEntry(Inst.Instance,
             fImplementationClassInterfaceEntry, Obj);
@@ -1110,7 +1111,7 @@ begin
   begin
     // initialize a new sicClientDriven instance
     if (InstanceCreation = sicClientDriven) and
-       ((cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD))
+       ((cardinal(aMethodIndex - SERVICE_PSEUDO_METHOD_COUNT)
           < cardinal(fInterface.MethodsCount)) or
         (aMethodIndex = ord(imInstance))) then
       AddNew;
@@ -1142,7 +1143,7 @@ begin
   end;
   // new TInterfacedObject corresponding to this session/user/group/thread
   if (InstanceCreation <> sicClientDriven) and
-     (cardinal(aMethodIndex - Length(SERVICE_PSEUDO_METHOD)) <
+     (cardinal(aMethodIndex - SERVICE_PSEUDO_METHOD_COUNT) <
       cardinal(fInterface.MethodsCount)) then
     AddNew;
 end;
@@ -1399,7 +1400,7 @@ begin
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
-  m := Ctxt.ServiceMethodIndex - Length(SERVICE_PSEUDO_METHOD);
+  m := Ctxt.ServiceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT;
   if (m < 0) or
      (Ctxt.ServiceExecution = nil) or
      (Ctxt.ServiceMethod = nil) then
@@ -1901,6 +1902,7 @@ begin
     (Ctxt = nil) then
     exit;
   connectionID := Ctxt.Call^.LowLevelConnectionID;
+  // decode {"ICallbackName":1234} input body
   JsonDecode(pointer(Ctxt.Call^.InBody), Values);
   if length(Values) <> 1 then
     exit;
@@ -1936,8 +1938,7 @@ begin
           @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
         Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
         Ctxt.Service := fake.fService;
-        Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex +
-          Length(SERVICE_PSEUDO_METHOD);
+        Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex + SERVICE_PSEUDO_METHOD_COUNT;
         fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
         FormatUtf8('[%,"%"]',
           [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text], params);
@@ -2189,8 +2190,8 @@ begin
       if (aExcludedMethodNamesCsv <> '') and
          not (byte(i) in {%H-}excluded) then
       begin
-        include(methods, fInterfaceMethod[i].
-          InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD));
+        include(methods,
+          fInterfaceMethod[i].InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT);
         somemethods := true;
       end;
       inc(i);
