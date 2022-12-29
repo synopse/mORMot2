@@ -624,8 +624,8 @@ function FormatUtf8(const Format: RawUtf8;
 
 type
   /// JSON-capable TTextWriter/TTextDateWriter inherited class
-  // - in addition to TTextWriter/TTextDateWriter, will handle JSON serialization
-  // of any kind of value, including classes
+  // - in addition to TTextWriter/TTextDateWriter, will handle JSON
+  // serialization of any kind of value, including records, classes or arrays
   TJsonWriter = class(TTextDateWriter)
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values

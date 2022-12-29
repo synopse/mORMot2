@@ -3072,7 +3072,7 @@ type
     // - won't affect the Find() method
     property Options: TRadixTreeOptions
       read fOptions;
-    /// register a new URI path, with <param> support
+    /// low-level registration of a new URI path, with <param> support
     // - returns the node matching the given URI
     // - called e.g. from TUriRouter.Rewrite/Run methods
     function Setup(const aFromUri: RawUtf8; out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
