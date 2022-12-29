@@ -2979,20 +2979,26 @@ var
 { ************ Abstract Radix Tree Classes }
 
 type
+  TRadixTree = class;
+
   /// implement an abstract Radix Tree node
   TRadixTreeNode = class
   protected
     function ComputeDepth: integer;
     procedure SortChildren;
   public
+    /// the main Tree holding this node
+    Owner: TRadixTree;
     /// the characters to be compared at this level
     Chars: RawUtf8;
-    /// the whole text up to this level
-    FullText: RawUtf8;
     /// how many branches are within this node - used to sort by priority
     Depth: integer;
     /// the nested nodes
     Child: array of TRadixTreeNode;
+    /// the whole text up to this level
+    FullText: RawUtf8;
+    /// initialize this node instance
+    constructor Create(aOwner: TRadixTree); reintroduce;
     /// instantiate a new node with the same class and properties
     function Split(const Text: RawUtf8): TRadixTreeNode; virtual;
     /// finalize this Radix Tree node
@@ -3006,6 +3012,12 @@ type
   /// our TRadixTree works on dynamic/custom types of node classes
   TRadixTreeNodeClass = class of TRadixTreeNode;
 
+  /// allow to customize TRadixTree process
+  // - e.g. if static text matching should be case-insensitive (but <params> are
+  // always case-sensitive, because they are internal labels)
+  TRadixTreeOptions = set of (
+    rtoCaseInsensitiveUri);
+
   /// implement an abstract Radix Tree over UTF-8 case-insensitive text
   // - as such, this class is not very useful if you just need to lookup for
   // a text value: a TDynArrayHasher/TDictionary is faster and uses less RAM
@@ -3015,18 +3027,24 @@ type
   protected
     fRoot: TRadixTreeNode;
     fDefaultNodeClass: TRadixTreeNodeClass;
+    fOptions: TRadixTreeOptions;
+    fNormTable: PNormTable; // for efficient rtoCaseInsensitiveUri
     procedure SetNodeClass; virtual; abstract;
   public
     /// initialize the Radix Tree
-    constructor Create; reintroduce;
+    constructor Create(aOptions: TRadixTreeOptions = []); reintroduce;
     /// finalize this Radix Tree
     destructor Destroy; override;
+    /// define how TRadixTreeNode.Lookup() will process this node
+    // - as set with this class constructor
+    property Options: TRadixTreeOptions
+      read fOptions;
     /// finalize this Radix Tree node
     procedure Clear;
     /// low-level insertion of a given Text entry as a given child
     // - may return an existing node instance, if Text was already inserted
-    function Insert(const Text: RawUtf8; Node: TRadixTreeNode = nil;
-      NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode; virtual;
+    function Insert(Text: RawUtf8; Node: TRadixTreeNode = nil;
+      NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode;
     /// to be called after Insert() to consolidate the internal tree state
     // - nodes will be sorted by search priority, i.e. the longest depths first
     // - as called e.g. by TUriTree.Setup()
@@ -3038,16 +3056,9 @@ type
     function ToText: RawUtf8;
   end;
 
-  /// allow to customize TRadixTree process
-  // - e.g. if static text matching should be case-insensitive (but <params> are
-  // always case-sensitive, because they are internal labels)
-  TRadixTreeOptions = set of (
-    rtoCaseInsensitiveUri);
-
   /// implement an abstract Radix Tree static or <param> node
   TRadixTreeNodeParams = class(TRadixTreeNode)
   protected
-    fOptions: TRadixTreeOptions;
     procedure LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer); virtual; abstract;
   public
     /// all the <param1> <param2> names, in order, up to this parameter
@@ -3062,23 +3073,11 @@ type
 
   /// implement an abstract Radix Tree with static or <param> nodes
   TRadixTreeParams = class(TRadixTree)
-  protected
-    fOptions: TRadixTreeOptions;
   public
-    /// initialize the Radix Tree
-    constructor Create(aOptions: TRadixTreeOptions = []); reintroduce;
-    /// define how TRadixTreeNodeParams.Lookup() will process this node
-    // - should be set before calling Setup() or Insert()
-    // - won't affect the Find() method
-    property Options: TRadixTreeOptions
-      read fOptions;
     /// low-level registration of a new URI path, with <param> support
     // - returns the node matching the given URI
     // - called e.g. from TUriRouter.Rewrite/Run methods
     function Setup(const aFromUri: RawUtf8; out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
-    /// overriden to set the corresponding options
-    function Insert(const Text: RawUtf8; Node: TRadixTreeNode = nil;
-      NodeClass: TRadixTreeNodeClass = nil): TRadixTreeNode; override;
   end;
 
   ERadixTree = class(ESynException);
@@ -10817,9 +10816,15 @@ begin
   DynArray(TypeInfo(TPointerDynArray), Child).Sort(RadixTreeNodeCompare);
 end;
 
+constructor TRadixTreeNode.Create(aOwner: TRadixTree);
+begin
+  inherited Create;
+  Owner := aOwner;
+end;
+
 function TRadixTreeNode.Split(const Text: RawUtf8): TRadixTreeNode;
 begin
-  result := TRadixTreeNodeClass(PPointer(self)^).Create;
+  result := TRadixTreeNodeClass(PPointer(self)^).Create(Owner);
   result.Chars := Text;
   result.FullText := FullText;
   result.Child := Child;
@@ -10839,13 +10844,15 @@ function TRadixTreeNode.Find(P: PUtf8Char): TRadixTreeNode;
 var
   c: PUtf8Char;
   n: TDALen;
+  t: PNormTable;
   ch: ^TRadixTreeNode;
 begin
   result := nil; // no match
+  t := Owner.fNormTable;
   c := pointer(Chars);
   repeat
-    if (P^ = #0) or
-       (P^ <> c^) then
+    if (t[P^] <> c^) or // may do LowerCaseSelf(Chars) at Insert()
+       (P^ = #0) then
       break;
     inc(P);
     inc(c);
@@ -10862,7 +10869,7 @@ begin
       exit;
     n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
     repeat
-      if ch^.Chars[1] = P^ then
+      if ch^.Chars[1] = t[P^] then
       begin
         result := ch^.Find(P);
         if result <> nil then
@@ -10886,10 +10893,15 @@ end;
 
 { TRadixTree }
 
-constructor TRadixTree.Create;
+constructor TRadixTree.Create(aOptions: TRadixTreeOptions);
 begin
   SetNodeClass;
-  fRoot := fDefaultNodeClass.Create; // with no text
+  fOptions := aOptions;
+  if rtoCaseInsensitiveUri in aOptions then
+    fNormTable := @NormToLower
+  else
+    fNormTable := @NormToNorm;
+  fRoot := fDefaultNodeClass.Create(self); // with no text
 end;
 
 destructor TRadixTree.Destroy;
@@ -10903,10 +10915,10 @@ begin
   if self = nil then
     exit;
   fRoot.Free;
-  fRoot := fDefaultNodeClass.Create;
+  fRoot := fDefaultNodeClass.Create(self);
 end;
 
-function TRadixTree.Insert(const Text: RawUtf8; Node: TRadixTreeNode;
+function TRadixTree.Insert(Text: RawUtf8; Node: TRadixTreeNode;
   NodeClass: TRadixTreeNodeClass): TRadixTreeNode;
 var
   match, textlen, nodelen, i: PtrInt;
@@ -10917,6 +10929,8 @@ begin
     exit;
   if Node = nil then
     Node := fRoot;
+  if rtoCaseInsensitiveUri in Options then
+    LowerCaseSelf(Text);
   textlen := length(Text);
   nodelen := length(Node.Chars);
   // check how many chars of Text are within Node.Chars
@@ -10963,7 +10977,7 @@ begin
   // create new leaf
   if NodeClass = nil then
     NodeClass := fDefaultNodeClass;
-  result := NodeClass.Create;
+  result := NodeClass.Create(self);
   result.Chars := chars;
   result.FullText := Text;
   ObjArrayAdd(Node.Child, result);
@@ -10978,6 +10992,7 @@ end;
 function TRadixTree.Find(const Text: RawUtf8): TRadixTreeNode;
 var
   n: TDALen;
+  c: AnsiChar;
   ch: ^TRadixTreeNode;
 begin
   result := nil;
@@ -10988,8 +11003,9 @@ begin
   if ch = nil then
     exit;
   n := PDALen(PAnsiChar(ch) - _DALEN)^ + _DAOFF;
+  c := fNormTable[Text[1]];
   repeat
-    if ch^.Chars[1] = Text[1] then // no recursive call if obviously no match
+    if ch^.Chars[1] = c then // recursive call if may match
     begin
       result := ch^.Find(pointer(Text));
       if result <> nil then
@@ -11014,7 +11030,6 @@ function TRadixTreeNodeParams.Split(const Text: RawUtf8): TRadixTreeNode;
 begin
   result := inherited Split(Text);
   TRadixTreeNodeParams(result).Names := Names;
-  TRadixTreeNodeParams(result).fOptions := fOptions;
   Names := nil;
 end;
 
@@ -11026,32 +11041,20 @@ var
   ch: ^TRadixTreeNodeParams;
 begin
   result := nil; // no match
-  if rtoCaseInsensitiveUri in fOptions then
-    t := @NormToLower
-  else
-    t := @NormToNorm;
+  t := Owner.fNormTable;
   if Names = nil then
   begin
     // static text
     c := pointer(Chars);
     if c <> nil then
     begin
-      if rtoCaseInsensitiveUri in fOptions then
-        repeat
-          if (P^ = #0) or
-             (t^[P^] <> c^) then // LowerCaseSelf(Chars) below
-            break;
-          inc(P);
-          inc(c);
-        until false
-      else
-        repeat
-          if (P^ = #0) or
-             (P^ <> c^) then
-            break;
-          inc(P);
-          inc(c);
-        until false;
+      repeat
+        if (t^[P^] <> c^) or // may do LowerCaseSelf(Chars) at Insert()
+           (P^ = #0) then
+          break;
+        inc(P);
+        inc(c);
+      until false;
       if c^ <> #0 then
         exit; // not enough matched chars
     end;
@@ -11090,14 +11093,6 @@ end;
 
 { TRadixTreeParams }
 
-constructor TRadixTreeParams.Create(aOptions: TRadixTreeOptions);
-begin
-  fOptions := aOptions;
-  SetNodeClass;
-  inherited Create;
-  (fRoot as TRadixTreeNodeParams).fOptions := aOptions;
-end;
-
 function TRadixTreeParams.Setup(const aFromUri: RawUtf8;
   out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
 var
@@ -11135,17 +11130,6 @@ begin
           [item, u^, self, aFromUri]);
     until false;
   AfterInsert; // compute Depth and sort by priority
-end;
-
-function TRadixTreeParams.Insert(const Text: RawUtf8; Node: TRadixTreeNode;
-  NodeClass: TRadixTreeNodeClass): TRadixTreeNode;
-begin
-  result := inherited Insert(Text, Node, NodeClass);
-  if result = nil then
-    exit;
-  (result as TRadixTreeNodeParams).fOptions := Options;
-  if rtoCaseInsensitiveUri in Options then
-    LowerCaseSelf(result.Chars);
 end;
 
 

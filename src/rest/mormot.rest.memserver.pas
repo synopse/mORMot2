@@ -184,6 +184,15 @@ type
       const aFileName: TFileName; aBinaryFile: boolean = false;
       aHandleUserAuthentication: boolean = false); reintroduce; overload; virtual;
   published
+    /// this method-based service will be accessible from PUT ModelRoot/Flush,
+    // and will write any modification into file
+    // - method parameters signature matches TOnRestServerCallBack type
+    // - do nothing if file name was not assigned
+    // - can be used from a remote client to ensure that any Add/Update/Delete
+    // will be stored to disk, via
+    // ! aClient.CallBackPut('Flush','',dummy)
+    procedure Flush(Ctxt: TRestServerUriContext);
+  published
     /// the file name used for data persistence
     property FileName: TFileName
       read GetFileName;
@@ -192,15 +201,6 @@ type
     // SaveToJson/SaveToBinary methods for optimized storage
     property BinaryFile: boolean
       read GetBinaryFile;
-  published
-    /// this method-base service will be accessible from ModelRoot/Flush URI,
-    // and will write any modification into file
-    // - method parameters signature matches TOnRestServerCallBack type
-    // - do nothing if file name was not assigned
-    // - can be used from a remote client to ensure that any Add/Update/Delete
-    // will be stored to disk, via
-    // ! aClient.CallBackPut('Flush','',dummy)
-    procedure Flush(Ctxt: TRestServerUriContext);
   end;
 
 
