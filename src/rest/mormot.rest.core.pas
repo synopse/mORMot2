@@ -1508,11 +1508,11 @@ type
 
 /// convert a string HTTP verb into its TUriMethod enumerate
 function ToMethod(const method: RawUtf8): TUriMethod;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
 function MethodText(m: TUriMethod): RawUtf8;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 
 {$ifndef PUREMORMOT2}
@@ -3758,7 +3758,7 @@ begin
     result := mNone
   else
     result := TUriMethod(IntegerScanIndex( // may use SSE2
-      @METHODNAME32, length(METHODNAME32) - 1, PCardinal(method)^) + 1);
+      @METHODNAME32, length(METHODNAME32) - 2, PCardinal(method)^) + 1);
 end;
 
 function MethodText(m: TUriMethod): RawUtf8;
