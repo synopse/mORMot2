@@ -1635,7 +1635,7 @@ begin
           check((length(Data) = 4) and
                 (PInteger(pointer(Data))^ = IntArray[i]));
           V2.IDValue := IntArray[i]; // debug use - do NOT set ID in your programs!
-          check(V2.DataAsHex(Client) = BinToHex(Data));
+          checkEqual(V2.DataAsHex(Client), BinToHex(Data));
           a := RandomDouble;
           b := RandomDouble;
           check(SameValue(TOrmPeople.Sum(Client, a, b, false), a + b, 1E-10));

@@ -1507,6 +1507,7 @@ type
 
 
 /// convert a string HTTP verb into its TUriMethod enumerate
+// - conversion is case-insensitive
 function ToMethod(const method: RawUtf8): TUriMethod;
   {$ifdef FPC}inline;{$endif}
 
@@ -3757,8 +3758,8 @@ begin
   if method = '' then
     result := mNone
   else
-    result := TUriMethod(IntegerScanIndex( // may use SSE2
-      @METHODNAME32, length(METHODNAME32) - 2, PCardinal(method)^) + 1);
+    result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
+      (PCardinal(method)^) and $dfdfdfdf) + 1);
 end;
 
 function MethodText(m: TUriMethod): RawUtf8;

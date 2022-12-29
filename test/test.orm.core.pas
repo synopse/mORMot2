@@ -169,7 +169,7 @@ begin
   Check(not IsPost('Post'));
   Check(IsPost('POST'));
   for met := low(met) to high(met) do
-    Check(ToMethod(RawUtf8(MethodText(met))) = met);
+    Check(ToMethod(MethodText(met)) = met);
 end;
 
 procedure TTestOrmCore._TRestServerFullMemory;
