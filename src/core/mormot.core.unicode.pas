@@ -3698,12 +3698,19 @@ begin
     if cp = CP_ACP then
     begin
       cp := Unicode_CodePage;
+      {$ifndef ISDELPHI}
       if cp = CP_UTF8 then // happens on POSIX and with Lazarus
       begin
-        result := s; // assign by ref and we can safely override 0 by CP_UTF8
-        PStrRec(PAnsiChar(pointer(result)) - _STRRECSIZE)^.CodePage := cp;
+        if PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.refCnt >= 0 then
+        begin
+          result := s; // not a read-only constant: assign by ref
+          FakeCodePage(RawByteString(result), cp); // override 0 by CP_UTF8
+        end
+        else
+          FastSetString(result, pointer(s), length(s)); // realloc constant
         exit;
-      end
+      end;
+      {$endif ISDELPHI}
     end;
     if cp = CP_UTF8 then
       result := s
