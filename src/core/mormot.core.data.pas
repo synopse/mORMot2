@@ -10802,10 +10802,12 @@ begin
 end;
 
 function RadixTreeNodeCompare(const A, B): integer;
-begin
-  // sort deeper first
-  result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
-  if result = 0 then // longest path first
+begin // sort static first, then deeper first, then by longest path
+  result := CompareInteger(ord(TRadixTreeNode(B).Chars[1] <> '<'),
+                           ord(TRadixTreeNode(A).Chars[1] <> '<'));
+  if result = 0 then
+    result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
+  if result = 0 then
     result := CompareInteger(length(TRadixTreeNode(B).FullText),
                              length(TRadixTreeNode(A).FullText));
 end;
