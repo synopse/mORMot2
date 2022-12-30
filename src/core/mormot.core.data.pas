@@ -2981,6 +2981,14 @@ var
 type
   TRadixTree = class;
 
+  /// refine the TRadixTreeNode content
+  // - rtfParam is <param> node, i.e. a TRadixTreeNodeParams with Names <> nil
+  // - rtfParamInteger is for a rtfParam which value should be only an integer,
+  // either from rtoIntegerParams global flag, or individually as <int:###>
+  TRadixTreeNodeFlags = set of (
+    rtfParam,
+    rtfParamInteger);
+
   /// implement an abstract Radix Tree node
   TRadixTreeNode = class
   protected
@@ -2993,6 +3001,8 @@ type
     Chars: RawUtf8;
     /// how many branches are within this node - used to sort by priority
     Depth: integer;
+    /// describe the content of this node
+    Flags: TRadixTreeNodeFlags;
     /// the nested nodes
     Child: array of TRadixTreeNode;
     /// the whole text up to this level
@@ -3015,8 +3025,11 @@ type
   /// allow to customize TRadixTree process
   // - e.g. if static text matching should be case-insensitive (but <params> are
   // always case-sensitive, because they are internal labels)
+  // - if <param> values should be only plain integers, never alphabetical text -
+  // you may also specify int:xxx for a single parameter, e.g. as <int:id>
   TRadixTreeOptions = set of (
-    rtoCaseInsensitiveUri);
+    rtoCaseInsensitiveUri,
+    rtoIntegerParams);
 
   /// implement an abstract Radix Tree over UTF-8 case-insensitive text
   // - as such, this class is not very useful if you just need to lookup for
@@ -3080,6 +3093,7 @@ type
     /// low-level registration of a new URI path, with <param> support
     // - returns the node matching the given URI
     // - called e.g. from TUriRouter.Rewrite/Run methods
+    // - will recognize <param> alphanumerical and <int:id> integer parameters
     function Setup(const aFromUri: RawUtf8; out aNames: TRawUtf8DynArray): TRadixTreeNodeParams;
   end;
 
@@ -10833,9 +10847,11 @@ begin
   result.Chars := Text;
   result.FullText := FullText;
   result.Child := Child;
+  result.Flags := Flags;
   Chars := '';
   FullText := '';
   Child := nil;
+  Flags := [];
   ObjArrayAdd(Child, result);
 end;
 
@@ -11068,12 +11084,23 @@ begin
   begin
     // <named> parameter
     c := P;
-    while not (P^ in [#0, '?', '/']) do
-      inc(P);
+    if rtfParamInteger in Flags then // <int:name> or rtoIntegerParams
+    begin
+      if (P^ < '0') or (P^ > '9') then
+        exit; // void <integer> is not allowed
+      repeat
+        inc(P)
+      until (P^ < '0') or (P^ > '9');
+      if (P^ <> #0) and (P^ <> '?') and (P^ <> '/') then
+        exit; // not an integer
+    end
+    else
+      while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
+        inc(P);
     LookupParam(Ctxt, c, P - c);
   end;
   // if we reached here, the URI do match up to now
-  if P^ in [#0, '?'] then
+  if (P^ = #0) or (P^ = '?') then
   begin
     result := self; // exact match found for this entry (excluding URI params)
     exit;
@@ -11103,6 +11130,7 @@ function TRadixTreeParams.Setup(const aFromUri: RawUtf8;
 var
   u: PUtf8Char;
   item, full: RawUtf8;
+  flags: TRadixTreeNodeFlags;
 begin
   u := pointer(TrimU(aFromUri));
   if PosExChar('<', aFromUri) = 0 then
@@ -11119,6 +11147,14 @@ begin
       GetNextItem(u, '>', item);
       if item = '' then
         raise ERadixTree.CreateUtf8('Void <> in %.Setup(''%'')', [self, aFromUri]);
+      flags := [rtfParam];
+      if IdemPChar(pointer(item), 'INT:') then
+      begin
+        delete(item, 1, 4);
+        include(flags, rtfParamInteger);
+      end
+      else if rtoIntegerParams in Options then
+        include(flags, rtfParamInteger);
       if FindRawUtf8(aNames{%H-}, item) >= 0 then
         raise ERadixTree.CreateUtf8('Duplicated <%> in %.Setup(''%'')',
           [item, self, aFromUri]);
@@ -11126,6 +11162,7 @@ begin
       full := full + '<' + item + '>'; // avoid name collision with static
       result := Insert(full) as TRadixTreeNodeParams; // param (Names <> nil)
       result.Names := copy(aNames);
+      result.Flags := flags;
       if (u = nil) or
          (u^ = #0) then
         // TODO: detect wildchar incompatibilities with nested searches?
