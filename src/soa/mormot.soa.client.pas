@@ -624,7 +624,9 @@ begin
   if aClient = nil then
     aClient := fClient;
   if (aFakeID <> nil) and
-     (aFakeID^ > 0) then
+     (aFakeID^ > 0) and
+     ((InstanceCreation = sicClientDriven) or
+      (aMethod = SERVICE_PSEUDO_METHOD[imFree])) then
     UInt32ToUtf8(aFakeID^, clientDrivenID);
   m := fInterface.FindMethodIndex(aMethod);
   if m < 0 then
