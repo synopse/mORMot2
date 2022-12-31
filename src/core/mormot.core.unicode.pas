@@ -3698,8 +3698,8 @@ begin
     if cp = CP_ACP then
     begin
       cp := Unicode_CodePage;
-      {$ifndef ISDELPHI}
-      if cp = CP_UTF8 then // happens on POSIX and with Lazarus
+      {$ifdef FPC}
+      if cp = CP_UTF8 then // happens on POSIX and with Lazarus - so FPC only
       begin
         if PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.refCnt >= 0 then
         begin
@@ -3710,7 +3710,7 @@ begin
           FastSetString(result, pointer(s), length(s)); // realloc constant
         exit;
       end;
-      {$endif ISDELPHI}
+      {$endif FPC}
     end;
     if cp = CP_UTF8 then
       result := s
