@@ -417,6 +417,7 @@ type
     fIndex: integer;
     fEvent: TSynEvent;
     fName: RawUtf8;
+    fLastWakeUpTix, fLastWakeUpCount: integer;
     procedure Execute; override;
   public
     /// initialize the thread
@@ -506,6 +507,7 @@ type
     end;
     fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupIndex: integer;
+    fLastWakeUpTix: integer;
     fGC: array[1..2] of TAsyncConnectionsGC;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
@@ -1729,6 +1731,7 @@ end;
 procedure TAsyncConnectionsThread.Execute;
 var
   new, pending, ms: integer;
+  didwakeupduetoslowprocess: boolean;
   start: Int64;
   notif: TPollSocketResult;
 begin
@@ -1818,13 +1821,32 @@ begin
             fEvent.WaitForEver;
             if Terminated then
               break;
+            didwakeupduetoslowprocess := false;
+            //{$I-}system.writeln(Name,' start loop ',fLastWakeUpCount);
             while fOwner.fClients.fRead.GetOnePending(notif, fName) and
                   not Terminated do
+            begin
+              if (fLastWakeUpTix <> fOwner.fLastWakeUpTix) and
+                 not didwakeupduetoslowprocess then
+              begin
+                // ProcessRead() did take some time: wake up another thread
+                // - slow down a little bit the wrk RPS
+                // - but seems to reduce the wrk max latency
+                didwakeupduetoslowprocess := true; // do it once per loop
+                //{$I-}system.writeln(Name,' didwakeupduetoslowprocess');
+                fOwner.ThreadPollingWakeup(1); // one thread is enough
+              end;
               fOwner.fClients.ProcessRead(notif);
+            end;
+            fOwner.fThreadPollingWakeupSafe.Lock;
+            fLastWakeUpTix := 0; // this thread will now need to wakeup
+            fOwner.fThreadPollingWakeupSafe.UnLock;
+            //{$I-}system.writeln(Name,' stop loop ',fLastWakeUpCount);
             // release atpReadPoll lock above
             with fOwner.fThreadReadPoll do
               if fWaitForReadPending then
               begin
+                //{$I-}system.writeln(Name,' set event ',fLastWakeUpCount);
                 fWaitForReadPending := false; // set event once
                 fEvent.SetEvent;
               end;
@@ -1865,7 +1887,7 @@ begin
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
   fLastOperationReleaseMemorySeconds := 60;
-  fLastOperationSec := Qword(GetTickCount64) div 1000; // ASAP
+  fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
   fLog := aLog;
   fConnectionClass := aConnectionClass;
@@ -1901,12 +1923,12 @@ begin
     for i := 1 to aThreadPoolCount - 1 do
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
-  tix := GetTickCount64 + 7000;
+  tix := mormot.core.os.GetTickCount64 + 7000;
   repeat
      if AllThreadsStarted then
        break;
      SleepHiRes(1);
-  until GetTickCount64 > tix;
+  until mormot.core.os.GetTickCount64 > tix;
   if acoThreadCpuAffinity in aOptions then
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
   else if acoThreadSocketAffinity in aOptions then
@@ -2026,7 +2048,7 @@ begin
     for i := 0 to high(fThreads) do
       fThreads[i].Terminate;
     p := 0;
-    endtix := GetTickCount64 + 10000;
+    endtix := mormot.core.os.GetTickCount64 + 10000;
     repeat
       n := 0;
       for i := 0 to high(fThreads) do
@@ -2043,7 +2065,7 @@ begin
         break;
       SleepHiRes(1);
       inc(p);
-    until GetTickCount64 > endtix;
+    until mormot.core.os.GetTickCount64 > endtix;
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
     ObjArrayClear(fThreads, {continueonexception=}true);
   end;
@@ -2099,21 +2121,49 @@ end;
 
 {.$define WAKEUPROUNDROBIN} // less efficient in practice
 
+const
+  // how many events a fast active thread is supposed to handle in its loop
+  // - the naive/standard/well-used algorithm of waking up the threads on need
+  // does not perform well, especially with a high number of CPU cores: the
+  // global CPU usage remains idle, because most of the time is spent between
+  // the threads, and not procesing actual data
+  // - we actually wake up the sub-threads only if it did not become idle within
+  // GetTickCount64 resolution (i.e. 16ms on Windows, 4ms on Linux)
+  // - on small load or quick response, only R1 thread is involved
+  // - on slow process (e.g. DB access), R1 is identified as blocking, and
+  // R2..Rmax threads are awaken only if WAKEUP_LOAD events have been assigned
+  // to processing threads
+  // - it seems to leverage the CPU performance especially when the number of
+  // threads is higher than the number of cores, or on high number of cores CPU
+  // - this algorithm seems efficient, and simple enough to implement and debug,
+  // in respect to what I have seen in high-performance thread pools (e.g. in
+  // MariaDB), which have much bigger complexity (like a dynamic thread pool)
+  WAKEUP_LOAD = 32;
+
 function TAsyncConnections.ThreadPollingWakeup(Events: PtrInt): PtrInt;
 var
   i: PtrInt;
   {$ifdef WAKEUPROUNDROBIN}
   last, pass: PtrInt;
+  {$else}
+  th: PAsyncConnectionsThread;
   {$endif WAKEUPROUNDROBIN}
-  t: PAsyncConnectionsThread;
+  t: TAsyncConnectionsThread;
+  tix: integer; // 32-bit is enough to check for
   ndx: array[byte] of byte; // wake up to 256 threads at once
 begin
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
+  //{$I-}system.writeln('wakeup=',Events);
+  if Events = 1 then
+    tix := 0 // after accept() or on idle server, we can always wake threads
+  else
+    tix := mormot.core.os.GetTickCount64; // resolution: 16ms Windows, 4ms Linux
   fThreadPollingWakeupSafe.Lock;
   try
+    fLastWakeUpTix := tix;
     {$ifdef WAKEUPROUNDROBIN}
     // round-robin version is less efficient in practice
     pass := 0;
@@ -2130,10 +2180,10 @@ begin
           break;
         inc(pass);
       end;
-      t := @fThreads[i];
-      if t^.fWaitForReadPending then
+      t := fThreads[i];
+      if t.fWaitForReadPending then
       begin
-        t^.fWaitForReadPending := false; // acquire this thread
+        t.fWaitForReadPending := false; // acquire this thread
         ndx[result] := i;
         inc(result);
         fThreadPollingWakeupIndex := i;
@@ -2141,18 +2191,46 @@ begin
       inc(i);
     end;
     {$else}
-    t := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here
+    th := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here
     for i := 1 to length(fThreads) - 1 do
     begin
-      if t^.fWaitForReadPending then
+      t := th^;
+      if tix = 0 then
       begin
-        t^.fWaitForReadPending := false; // acquire this thread
+        // exactly wake up one thread per needed event
+        if t.fWaitForReadPending then
+        begin
+          // this thread is currently idle and can be used
+          t.fWaitForReadPending := false; // acquire this thread
+          ndx[result] := i; // notify outside of fThreadPollingWakeupSafe lock
+          inc(result);
+          dec(Events);
+        end;
+      end
+      // fast working threads are available for up to WAKEUP_LOAD events
+      else if not t.fWaitForReadPending and
+              (t.fLastWakeUpCount > 0) and
+              (t.fLastWakeUpTix = tix) then
+      begin
+        // this thread is likely to be available very soon: consider it done
+        //{$I-}system.writeln(t.Name,' cnt=',t.fLastWakeUpCount,'-',Events);
+        dec(t.fLastWakeUpCount, Events);
+        dec(Events, t.fLastWakeUpCount);
+      end
+      else if t.fWaitForReadPending then
+      begin
+        // we need to wake up a thread, since some slow work is going on
+        t.fLastWakeUpTix := tix;
+        t.fLastWakeUpCount := WAKEUP_LOAD - Events;
+        //{$I-}system.writeln('wakeup #', t.Name,' cnt=',t.fLastWakeUpCount);
+        t.fWaitForReadPending := false; // acquire this thread
         ndx[result] := i;
         inc(result);
-        if result = Events then
-          break;
+        dec(Events, WAKEUP_LOAD);
       end;
-      inc(t);
+      if Events <= 0 then
+        break;
+      inc(th);
     end;
     {$endif WAKEUPROUNDROBIN}
   finally
@@ -2665,7 +2743,7 @@ begin
   if self = nil then
     raise EAsyncConnections.CreateUtf8(
       'TAsyncServer.WaitStarted(%) with self=nil', [seconds]);
-  tix := GetTickCount64 + seconds * 1000; // never wait forever
+  tix := mormot.core.os.GetTickCount64 + seconds * 1000; // never wait forever
   repeat
     if Terminated then
       exit;
@@ -2677,7 +2755,7 @@ begin
           [self, fExecuteMessage]);
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
-    if GetTickCount64 > tix then
+    if mormot.core.os.GetTickCount64 > tix then
       raise EAsyncConnections.CreateUtf8(
         '%.WaitStarted timeout after % seconds', [self, seconds]);
   until false;
@@ -2731,7 +2809,7 @@ destructor TAsyncServer.Destroy;
 var
   endtix: Int64;
 begin
-  endtix := GetTickCount64 + 10000;
+  endtix := mormot.core.os.GetTickCount64 + 10000;
   Shutdown;
   //DoLog(sllTrace, 'Destroy before inherited', [], self);
   inherited Destroy;
@@ -2741,7 +2819,7 @@ begin
     repeat
       SleepHiRes(1); // wait for Execute to be finalized (unlikely)
     until (fExecuteState <> esRunning) or
-          (GetTickCount64 > endtix);
+          (mormot.core.os.GetTickCount64 > endtix);
   end;
   FreeAndNilSafe(fServer);
   FreeAndNil(fBanned);
@@ -3466,7 +3544,7 @@ begin
       fSock := fAsync.fServer;
       fAsync.DoLog(sllTrace, 'Execute: main W loop', [], self);
       IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
-      tix := GetTickCount64 shr 16; // delay=500 after 1 min idle
+      tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between
       if fAsync.fClientsEpoll then
@@ -3487,7 +3565,7 @@ begin
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
           SleepHiRes(msidle);
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
-          tix64 := GetTickCount64;
+          tix64 := mormot.core.os.GetTickCount64;
           tix := tix64 shr 16;
           fAsync.ProcessIdleTix(self, tix64);
           if (fCallbackSendDelay <> nil) and
@@ -3502,7 +3580,7 @@ begin
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then
           begin
-            tix := GetTickCount64 shr 16;
+            tix := mormot.core.os.GetTickCount64 shr 16;
             lasttix := tix;
           end;
         end;
