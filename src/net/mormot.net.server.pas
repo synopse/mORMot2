@@ -321,6 +321,9 @@ type
   // - either hsoThreadCpuAffinity or hsoThreadSocketAffinity could be set: to
   // force thread affinity to one CPU logic core, or CPU HW socket; see
   // TNotifiedThread corresponding methods - not available on http.sys
+  // - hsoReusePort will set SO_REUSEPORT on POSIX, allowing to bind several
+  // THttpServerGeneric on the same port, either within the same process, or as
+  // separated processes (e.g. to set process affinity to one CPU HW socket)
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -332,7 +335,8 @@ type
     hsoEnableTls,
     hsoBan40xIP,
     hsoThreadCpuAffinity,
-    hsoThreadSocketAffinity);
+    hsoThreadSocketAffinity,
+    hsoReusePort);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -2877,10 +2881,12 @@ begin
   NotifyThreadStart(self);
   // main server process loop
   try
-    fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN (TLS is done later)
+    // BIND + LISTEN (TLS is done later)
+    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
+    // main ACCEPT loop
     while not Terminated do
     begin
       res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false);

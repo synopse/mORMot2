@@ -1726,7 +1726,7 @@ begin
       begin
         Close; // relocated to another server -> reset the TCP connection
         try
-          OpenBind(newuri.Server, newuri.Port, false, newuri.Https);
+          OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
           fRedirected := newuri.Address;
         except
           ctxt.status := HTTP_NOTFOUND;

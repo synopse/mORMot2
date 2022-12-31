@@ -451,6 +451,9 @@ type
   // - either acoThreadCpuAffinity or acoThreadSocketAffinity could be set: the
   // first for thread affinity to one CPU logic core, the 2nd for affinity to
   // all logical cores of each CPU HW socket (both exclusive)
+  // - acoReusePort will set SO_REUSEPORT on POSIX, allowing to bind several
+  // THttpServerGeneric on the same port, either within the same process, or as
+  // separated processes (e.g. to set process affinity to one CPU HW socket)
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -461,7 +464,8 @@ type
     acoNoConnectionTrack,
     acoEnableTls,
     acoThreadCpuAffinity,
-    acoThreadSocketAffinity
+    acoThreadSocketAffinity,
+    acoReusePort
   );
 
   /// to implement generational garbage collector of asynchronous connections
@@ -2874,7 +2878,8 @@ begin
   try
     // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
-    fServer := TCrtSocket.Bind(fSockPort); // BIND + LISTEN (TLS is done later)
+    // BIND + LISTEN (TLS is done later)
+    fServer := TCrtSocket.Bind(fSockPort, nlTcp, 5000, acoReusePort in Options);
     if not fServer.SockIsDefined then // paranoid check
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
@@ -3442,6 +3447,8 @@ begin
     include(aco, acoThreadCpuAffinity);
   if hsoThreadSocketAffinity in ProcessOptions then
     include(aco, acoThreadSocketAffinity);
+  if hsoReusePort in ProcessOptions then
+    include(aco, acoReusePort);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
