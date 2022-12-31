@@ -708,8 +708,8 @@ begin
 end;
 
 const
-  HTTPSERVERSOCKETCLASS: array[
-      useHttpSocket .. high(TRestHttpServerUse)] of THttpServerSocketGenericClass = (
+  HTTPSERVERSOCKETCLASS: array[useHttpSocket .. high(TRestHttpServerUse)] of
+      THttpServerSocketGenericClass = (
     THttpServer,                 // useHttpSocket
     TWebSocketServerRest,        // useBidirSocket
     THttpAsyncServer,            // useHttpAsync

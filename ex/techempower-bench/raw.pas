@@ -193,6 +193,7 @@ begin
      hsoNoStats,           // disable low-level statistic counters
      hsoThreadCpuAffinity, // for better scaling of /plaintext
      hsoReusePort,         // allow several processes binding on the same port
+     //hsoThreadSmooting,  // seems better only with a few CPU cores
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
      {$endif WITH_LOGS}

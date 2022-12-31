@@ -324,6 +324,8 @@ type
   // - hsoReusePort will set SO_REUSEPORT on POSIX, allowing to bind several
   // THttpServerGeneric on the same port, either within the same process, or as
   // separated processes (e.g. to set process affinity to one CPU HW socket)
+  // - hsoThreadSmooting will change the TAsyncConnections.ThreadPollingWakeup()
+  // algorithm for something smoother with low CPU cores (e.g. 2-8 cores)
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -336,7 +338,8 @@ type
     hsoBan40xIP,
     hsoThreadCpuAffinity,
     hsoThreadSocketAffinity,
-    hsoReusePort);
+    hsoReusePort,
+    hsoThreadSmooting);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;

@@ -452,8 +452,12 @@ type
   // first for thread affinity to one CPU logic core, the 2nd for affinity to
   // all logical cores of each CPU HW socket (both exclusive)
   // - acoReusePort will set SO_REUSEPORT on POSIX, allowing to bind several
-  // THttpServerGeneric on the same port, either within the same process, or as
+  // TAsyncConnections on the same port, either within the same process, or as
   // separated processes (e.g. to set process affinity to one CPU HW socket)
+  // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
+  // focus the process on the first threads - seems to give better results with
+  // a low number of CPU cores, but not with high number of CPU cores - see
+  // https://synopse.info/forum/viewtopic.php?pid=38780#p38780
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -465,7 +469,8 @@ type
     acoEnableTls,
     acoThreadCpuAffinity,
     acoThreadSocketAffinity,
-    acoReusePort
+    acoReusePort,
+    acoThreadSmooting
   );
 
   /// to implement generational garbage collector of asynchronous connections
@@ -1830,7 +1835,8 @@ begin
             while fOwner.fClients.fRead.GetOnePending(notif, fName) and
                   not Terminated do
             begin
-              if (fLastWakeUpTix <> fOwner.fLastWakeUpTix) and
+              if (acoThreadSmooting in fOwner.Options) and
+                 (fLastWakeUpTix <> fOwner.fLastWakeUpTix) and
                  not didwakeupduetoslowprocess then
               begin
                 // ProcessRead() did take some time: wake up another thread
@@ -1842,9 +1848,12 @@ begin
               end;
               fOwner.fClients.ProcessRead(notif);
             end;
-            fOwner.fThreadPollingWakeupSafe.Lock;
-            fLastWakeUpTix := 0; // this thread will now need to wakeup
-            fOwner.fThreadPollingWakeupSafe.UnLock;
+            if acoThreadSmooting in fOwner.Options then
+            begin
+              fOwner.fThreadPollingWakeupSafe.Lock;
+              fLastWakeUpTix := 0; // this thread will now need to wakeup
+              fOwner.fThreadPollingWakeupSafe.UnLock;
+            end;
             //{$I-}system.writeln(Name,' stop loop ',fLastWakeUpCount);
             // release atpReadPoll lock above
             with fOwner.fThreadReadPoll do
@@ -2127,6 +2136,7 @@ end;
 
 const
   // how many events a fast active thread is supposed to handle in its loop
+  // for the acoThreadSmooting option
   // - the naive/standard/well-used algorithm of waking up the threads on need
   // does not perform well, especially with a high number of CPU cores: the
   // global CPU usage remains idle, because most of the time is spent between
@@ -2161,13 +2171,14 @@ begin
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
   //{$I-}system.writeln('wakeup=',Events);
-  if Events = 1 then
-    tix := 0 // after accept() or on idle server, we can always wake threads
+  fLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms Windows, 4ms Linux
+  if (acoThreadSmooting in fOptions) and
+     (Events > 1) then
+    tix := fLastWakeUpTix
   else
-    tix := mormot.core.os.GetTickCount64; // resolution: 16ms Windows, 4ms Linux
+    tix := 0; // after accept() or on idle server, we can always wake threads
   fThreadPollingWakeupSafe.Lock;
   try
-    fLastWakeUpTix := tix;
     {$ifdef WAKEUPROUNDROBIN}
     // round-robin version is less efficient in practice
     pass := 0;
@@ -3449,6 +3460,8 @@ begin
     include(aco, acoThreadSocketAffinity);
   if hsoReusePort in ProcessOptions then
     include(aco, acoReusePort);
+  if hsoThreadSmooting in ProcessOptions then
+    include(aco, acoThreadSmooting);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
