@@ -3075,7 +3075,8 @@ type
   /// implement an abstract Radix Tree static or <param> node
   TRadixTreeNodeParams = class(TRadixTreeNode)
   protected
-    procedure LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer); virtual; abstract;
+    function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
+      virtual; abstract; // should return true on success, false to abort
   public
     /// all the <param1> <param2> names, in order, up to this parameter
     // - equals nil for static nodes
@@ -11097,7 +11098,8 @@ begin
     else
       while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
         inc(P);
-    LookupParam(Ctxt, c, P - c);
+    if not LookupParam(Ctxt, c, P - c) then
+      exit; // the parameter is not in the expected format
   end;
   // if we reached here, the URI do match up to now
   if (P^ = #0) or (P^ = '?') then

@@ -71,7 +71,7 @@ type
     /// the URI method to be used after ToUri rewrite
     ToUriMethod: TUriRouterMethod;
     /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404")
-    ToUriErrorStatus: word;
+    ToUriErrorStatus: {$ifdef CPU32} word {$else} cardinal {$endif};
     /// the callback registered by Run() for this URI
     Execute: TOnHttpServerRequest;
   end;
@@ -79,7 +79,8 @@ type
   /// implement a Radix Tree node to hold one URI registration
   TUriTreeNode = class(TRadixTreeNodeParams)
   protected
-    procedure LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer); override;
+    function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
+      override;
     procedure RewriteUri(Ctxt: THttpServerRequestAbstract);
   public
     /// all context information, as cloned by Split()
@@ -1621,12 +1622,13 @@ begin
   FillCharFast(Data, SizeOf(Data), 0);
 end;
 
-procedure TUriTreeNode.LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer);
+function TUriTreeNode.LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
 var
   req: THttpServerRequest absolute Ctxt;
   n: PtrInt;
   v: PIntegerArray;
 begin
+  result := false;
   req.fRouteName := pointer(Names); // fast assign as pointer reference
   n := length(Names) * 2; // length(Names[]) = current parameter index
   if length(req.fRouteValuePosLen) < n then
@@ -1637,6 +1639,7 @@ begin
     exit; // paranoid check to avoid any overflow
   v[0] := n;   // value position (0-based) in Ctxt.Url
   v[1] := Len; // value length in Ctxt.Url
+  result := true;
 end;
 
 procedure TUriTreeNode.RewriteUri(Ctxt: THttpServerRequestAbstract);
@@ -1648,7 +1651,7 @@ var
   new: pointer; // fast temporary RawUtf8
 begin
   // compute length of the new URI with injected values
-  t := pointer(Data.ToUriPosLen); // [pos1,len1,valndx1,...] trios
+  t := pointer(Data.ToUriPosLen); // [pos1,len1,valndx1,...] trio rules
   n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
   v := pointer(THttpServerRequest(Ctxt).fRouteValuePosLen);
   if v = nil then

@@ -1903,7 +1903,7 @@ procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var
   s: RawUtf8;
   err: integer;
-  line: array[0..4095] of AnsiChar; // avoid most memory allocation
+  line: array[0..4095] of AnsiChar; // avoid most memory allocations
 begin
   // parse the headers
   HttpStateReset;
