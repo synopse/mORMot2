@@ -192,6 +192,7 @@ begin
      hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
      hsoNoStats,           // disable low-level statistic counters
      hsoThreadCpuAffinity, // for better scaling of /plaintext
+     hsoReusePort,         // allow several processes binding on the same port
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
      {$endif WITH_LOGS}
