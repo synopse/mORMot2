@@ -215,6 +215,9 @@ type
     procedure SetLinger(linger: integer);
     /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
+    /// set the SO_REUSEPORT option, to allow several servers to bind on a port
+    // - do nothing on Windows
+    procedure ReusePort;
     /// accept an incoming socket, optionally asynchronous, with accept4() support
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
       async: boolean): TNetResult;
@@ -283,7 +286,7 @@ function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
-  out netsocket: TNetSocket; netaddr: PNetAddr = nil): TNetResult;
+  out netsocket: TNetSocket; netaddr: PNetAddr = nil; bindReusePort: boolean = false): TNetResult;
 
 /// resolve the TNetAddr of the address:port layer - maybe from cache
 function GetSocketAddressFromCache(const address, port: RawUtf8;
@@ -1074,14 +1077,14 @@ type
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
-      aTimeOut: integer = 10000);
+      aTimeOut: integer = 10000; aReusePort: boolean = true);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ENetSock exception on error
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
-      aSock: TNetSocket = TNetSocket(-1));
+      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false);
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -1715,7 +1718,7 @@ end;
 
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
-  out netsocket: TNetSocket; netaddr: PNetAddr): TNetResult;
+  out netsocket: TNetSocket; netaddr: PNetAddr; bindReusePort: boolean): TNetResult;
 var
   addr: TNetAddr;
   sock: TNetSocket;
@@ -1781,6 +1784,9 @@ begin
       // bound Socket should remain open for 5 seconds after a closesocket()
       if layer <> nlUdp then
         sock.SetLinger(5);
+      if (layer in [nlTcp, nlUdp]) and
+         bindReusePort then
+        sock.ReusePort;
       // Server-side binding/listening of the socket to the address:port
       if (bind(sock.Socket, @addr, addr.Size) <> NO_ERROR) or
          ((layer <> nlUdp) and
@@ -3564,7 +3570,7 @@ const
     'Another process may be currently listening to this port!');
 
 constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
-  aTimeOut: integer);
+  aTimeOut: integer; aReusePort: boolean);
 var
   s, p: RawUtf8;
   aSock: integer;
@@ -3604,7 +3610,8 @@ begin
     {$endif OSPOSIX}
   end;
   // next line will raise exception on error
-  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer, {%H-}TNetSocket(aSock));
+  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer,
+    {%H-}TNetSocket(aSock), aReusePort);
   {$ifdef OSLINUX}
   // in case started by systemd (port=''), listening socket is created by
   // another process and do not interrupt when it got a signal. So we need to
@@ -3646,7 +3653,7 @@ begin
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
-  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
+  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
   retry: integer;
   head: RawUtf8;
@@ -3714,7 +3721,7 @@ begin
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'Before NewSocket', [], self);
     res := NewSocket(fServer, fPort, aLayer, doBind,
-      fTimeout, fTimeout, fTimeout, retry, fSock);
+      fTimeout, fTimeout, fTimeout, retry, fSock, nil, aReusePort);
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
     if res <> nrOK then

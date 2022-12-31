@@ -43,6 +43,10 @@ const
   SOCK_NONBLOCK = O_NONBLOCK; // see net.h
   {$endif OSLINUX}
 
+  {$ifdef OSLINUXANDROID}
+  SO_REUSEPORT = 15; // available since Kernel 3.9 - not defined by FPC yet
+  {$endif OSLINUXANDROID}
+
   {$ifdef OSFREEBSD}
   NI_NUMERICHOST = 2;
   NI_NUMERICSERV = 8;
@@ -479,6 +483,15 @@ begin
     tv.tv_sec := d;
     tv.tv_usec := (ms - (d * 1000)) * 1000;
   end;
+end;
+
+procedure TNetSocketWrap.ReusePort;
+var
+  v: integer;
+begin
+  // see https://lwn.net/Articles/542629 for Linux (available since Kernel 3.9)
+  v := ord(true);
+  SetOpt(SOL_SOCKET, SO_REUSEPORT, @v, SizeOf(v));
 end;
 
 procedure TNetSocketWrap.SetSendTimeout(ms: integer);

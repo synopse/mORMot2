@@ -509,6 +509,11 @@ begin
   SetOpt(SOL_SOCKET, SO_RCVTIMEO, @ms, SizeOf(ms));
 end;
 
+procedure TNetSocketWrap.ReusePort;
+begin
+  // unsupported on Windows
+end;
+
 procedure TNetSocketWrap.SetLinger(linger: integer);
 var
   v: TLinger;
