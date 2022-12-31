@@ -2006,10 +2006,8 @@ var
 
 function ConsoleStdInputLen: integer;
 begin
-  {$ifndef ISDELPHI}
   if StdInputHandle = 0 then
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
-  {$endif ISDELPHI}
   if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
     result := 0;
 end;
