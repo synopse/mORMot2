@@ -547,7 +547,8 @@ type
       read fService write fService;
     /// the method index for an interface-based service
     // - Service member has already be retrieved from URI (so is not nil)
-    // - 0..2 are the internal _free_/_contract_/_signature_ pseudo-methods
+    // - 0..2 are the internal _free_/_contract_/_signature_ pseudo-methods, so
+    // you should add/substract SERVICE_PSEUDO_METHOD_COUNT for internal methods
     property ServiceMethodIndex: integer
       read fServiceMethodIndex write fServiceMethodIndex;
     /// access to the raw PInterfaceMethod information of an interface-based URI
@@ -565,7 +566,7 @@ type
       read fServiceInstanceID write fServiceInstanceID;
     /// the current execution context of an interface-based service
     // - maps to
-    //! Service.fExecution[InterfaceMethodIndex - Length(SERVICE_PSEUDO_METHOD)]
+    //! Service.fExecution[InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT]
     property ServiceExecution: PServiceFactoryExecution
       read fServiceExecution write fServiceExecution;
     /// the current execution options of an interface-based service
@@ -756,9 +757,40 @@ type
 
 { ************ TRestServerRoutingRest/TRestServerRoutingRest Requests Parsing Scheme }
 
-  /// calling context for a TOnRestServerCallBack using simple REST for
+  /// calling context for a TOnRestServerCallBack using JSON/RPC for
   // interface-based services
-  // - match TRestClientRoutingRest reciprocal class
+  // - see also TRestClientRoutingRest alternative (and default) class
+  // - in this routing scheme, the URI will define the interface, then the
+  // method name will be inlined with parameters, e.g.
+  // $ POST /root/Calculator
+  // $ (...)
+  // $ {"method":"Add","params":[1,2]}
+  // or, for a sicClientDriven mode service:
+  // $ POST /root/ComplexNumber
+  // $ (...)
+  // $ {"method":"Add","params":[20,30],"id":1234}
+  TRestServerRoutingJsonRpc = class(TRestServerUriContext)
+  protected
+    /// retrieve interface-based SOA with URI JSON/RPC routing
+    // - this overridden implementation expects an URI encoded with
+    // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
+    // set ServiceMethodIndex at this level (but in ExecuteSoaByInterface)
+    procedure UriDecodeSoaByInterface; override;
+    /// direct launch of an interface-based service with URI JSON/RPC routing
+    // - Uri() will ensure that Service<>nil before calling it
+    // - this overridden implementation expects parameters to be sent as part
+    // of a JSON object body:
+    // $ {"method":"Add","params":[20,30],"id":1234}
+    procedure ExecuteSoaByInterface; override;
+  public
+    /// the associated routing class on the client side
+    // - this overriden method returns TRestClientRoutingJsonRpc
+    class function ClientRouting: TRestClientRoutingClass; override;
+  end;
+
+  /// calling context for a TOnRestServerCallBack using our default simple REST
+  // routing for interface-based services
+  // - see also TRestClientRoutingJsonRpc alternative class
   // - this class will use RESTful routing for interface-based services:
   // method name will be identified within the URI, as
   // $ /Model/Interface.Method[/ClientDrivenID]
@@ -777,15 +809,17 @@ type
   // - one benefit of having .../ClientDrivenID encoded at URI is that it will
   // be more secured in our RESTful authentication scheme: each method and even
   // client driven session will be signed individualy
-  TRestServerRoutingJsonRpc = class(TRestServerUriContext)
+  TRestServerRoutingRest = class(TRestServerUriContext)
   protected
-    /// retrieve interface-based SOA with URI RESTful routing
+    /// encode fInput[] as a JSON array for regular execution
+    procedure DecodeUriParametersIntoJson;
+    /// retrieve interface-based SOA with our default URI RESTful routing
     // - should set Service member (and possibly ServiceMethodIndex)
-    // - this overridden implementation expects an URI encoded with
-    // '/Model/Interface.Method[/ClientDrivenID]' for this class, and
-    // will set ServiceMethodIndex for next ExecuteSoaByInterface method call
+    // - this overridden implementation expects an URI encoded as
+    // '/Model/Interface.Method[/ClientDrivenID]' and will set
+    // ServiceMethodIndex for next ExecuteSoaByInterface method call
     procedure UriDecodeSoaByInterface; override;
-    /// direct launch of an interface-based service with URI RESTful routing
+    /// direct run of an interface-based service with our URI RESTful routing
     // - this overridden implementation expects parameters to be sent as one JSON
     // array body (Delphi/AJAX way) or optionally with URI decoding (HTML way):
     // ! function TServiceCalculator.Add(n1, n2: integer): integer;
@@ -793,39 +827,6 @@ type
     // !  URL='root/Calculator.Add' and InBody='[ 1,2 ]'
     // !  URL='root/Calculator.Add?+%5B+1%2C2+%5D' // decoded as ' [ 1,2 ]'
     // !  URL='root/Calculator.Add?n1=1&n2=2'      // in any order, even missing
-    procedure ExecuteSoaByInterface; override;
-  public
-    /// the associated routing class on the client side
-    // - this overriden method returns TRestClientRoutingJsonRpc
-    class function ClientRouting: TRestClientRoutingClass; override;
-  end;
-
-  /// calling context for a TOnRestServerCallBack using JSON/RPC for
-  // interface-based services
-  // - match TRestClientRoutingJsonRpc reciprocal class
-  // - in this routing scheme, the URI will define the interface, then the
-  // method name will be inlined with parameters, e.g.
-  // $ POST /root/Calculator
-  // $ (...)
-  // $ {"method":"Add","params":[1,2]}
-  // or, for a sicClientDriven mode service:
-  // $ POST /root/ComplexNumber
-  // $ (...)
-  // $ {"method":"Add","params":[20,30],"id":1234}
-  TRestServerRoutingRest = class(TRestServerUriContext)
-  protected
-    /// encode fInput[] as a JSON array for regular execution
-    procedure DecodeUriParametersIntoJson;
-    /// retrieve interface-based SOA with URI JSON/RPC routing
-    // - this overridden implementation expects an URI encoded with
-    // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
-    // set ServiceMethodIndex at this level (but in ExecuteSoaByInterface)
-    procedure UriDecodeSoaByInterface; override;
-    /// direct launch of an interface-based service with URI JSON/RPC routing
-    // - Uri() will ensure that Service<>nil before calling it
-    // - this overridden implementation expects parameters to be sent as part
-    // of a JSON object body:
-    // $ {"method":"Add","params":[20,30],"id":1234}
     procedure ExecuteSoaByInterface; override;
   public
     /// the associated routing class on the client side
