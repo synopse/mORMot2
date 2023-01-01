@@ -2985,9 +2985,13 @@ type
   // - rtfParam is <param> node, i.e. a TRadixTreeNodeParams with Names <> nil
   // - rtfParamInteger is for a rtfParam which value should be only an integer,
   // either from rtoIntegerParams global flag, or individually as <int:###>
+  // - rtfParamPath is for a rtfParam which value should be the whole path,
+  // until the end of the URI or the beginning of the parameters (i.e. at '?'),
+  // set individually as <path:###> parameter
   TRadixTreeNodeFlags = set of (
     rtfParam,
-    rtfParamInteger);
+    rtfParamInteger,
+    rtfParamPath);
 
   /// implement an abstract Radix Tree node
   TRadixTreeNode = class
@@ -11060,6 +11064,7 @@ var
   n: TDALen;
   c: PUtf8Char;
   t: PNormTable;
+  f: TRadixTreeNodeFlags;
   ch: ^TRadixTreeNodeParams;
 begin
   result := nil; // no match
@@ -11085,7 +11090,8 @@ begin
   begin
     // <named> parameter
     c := P;
-    if rtfParamInteger in Flags then // <int:name> or rtoIntegerParams
+    f := Flags;
+    if rtfParamInteger in f then // <int:name> or rtoIntegerParams
     begin
       if (P^ < '0') or (P^ > '9') then
         exit; // void <integer> is not allowed
@@ -11095,7 +11101,10 @@ begin
       if (P^ <> #0) and (P^ <> '?') and (P^ <> '/') then
         exit; // not an integer
     end
-    else
+    else if rtfParamPath in f then // <path:filename>
+      while (P^ <> #0) and (P^ <> '?') do
+        inc(P)
+    else // regular <param>
       while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
         inc(P);
     if not LookupParam(Ctxt, c, P - c) then
@@ -11157,6 +11166,11 @@ begin
       end
       else if rtoIntegerParams in Options then
         include(flags, rtfParamInteger);
+      if IdemPChar(pointer(item), 'PATH:') then
+      begin
+        delete(item, 1, 5);
+        include(flags, rtfParamPath);
+      end;
       if FindRawUtf8(aNames{%H-}, item) >= 0 then
         raise ERadixTree.CreateUtf8('Duplicated <%> in %.Setup(''%'')',
           [item, self, aFromUri]);
