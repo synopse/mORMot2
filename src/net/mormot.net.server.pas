@@ -325,7 +325,8 @@ type
   // THttpServerGeneric on the same port, either within the same process, or as
   // separated processes (e.g. to set process affinity to one CPU HW socket)
   // - hsoThreadSmooting will change the TAsyncConnections.ThreadPollingWakeup()
-  // algorithm for something smoother with low CPU cores (e.g. 2-8 cores)
+  // algorithm for something smoother with low CPU cores (e.g. 2-8 cores) - this
+  // setting will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,

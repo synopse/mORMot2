@@ -192,7 +192,7 @@ begin
     [hsoNoXPoweredHeader,  // not needed for a benchmark
      hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
      hsoNoStats,           // disable low-level statistic counters
-     hsoThreadCpuAffinity, // for better scaling of /plaintext
+     //hsoThreadCpuAffinity, // better scaling of /plaintext in some cases
      hsoReusePort,         // allow several processes binding on the same port
      //hsoThreadSmooting,  // better with a few cores - slower on TFB HW
      {$ifdef WITH_LOGS}

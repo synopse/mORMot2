@@ -457,7 +457,8 @@ type
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
   // focus the process on the first threads - seems to give better results with
   // a low number of CPU cores, but not with high number of CPU cores - see
-  // https://synopse.info/forum/viewtopic.php?pid=38780#p38780
+  // https://synopse.info/forum/viewtopic.php?pid=38780#p38780 - this setting
+  // will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -3456,12 +3457,12 @@ begin
     include(aco, acoEnableTls);
   if hsoThreadCpuAffinity in ProcessOptions then
     include(aco, acoThreadCpuAffinity);
-  if hsoThreadSocketAffinity in ProcessOptions then
-    include(aco, acoThreadSocketAffinity);
-  if hsoReusePort in ProcessOptions then
-    include(aco, acoReusePort);
   if hsoThreadSmooting in ProcessOptions then
-    include(aco, acoThreadSmooting);
+    include(aco, acoThreadSmooting) // and exclude thread affinity
+  else if hsoThreadSocketAffinity in ProcessOptions then
+      include(aco, acoThreadSocketAffinity);
+    if hsoReusePort in ProcessOptions then
+      include(aco, acoReusePort);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
