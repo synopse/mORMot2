@@ -196,7 +196,7 @@ begin
      hsoNoStats,           // disable low-level statistic counters
      //hsoThreadCpuAffinity, // better scaling of /plaintext in some cases
      hsoReusePort,         // allow several processes binding on the same port
-     //hsoThreadSmooting,  // better with a few cores - slower on TFB HW
+     //hsoThreadSmooting,  // set below in flags parameter
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
      {$endif WITH_LOGS}
@@ -560,7 +560,7 @@ begin
     TypeInfo(TWorldRec),   'id,randomNumber:integer',
     TypeInfo(TFortune),    'id:integer message:RawUtf8']);
 
-  flags := [];
+  flags := [hsoThreadSmooting]; // seems always better (without thread afinity)
   if ParamCount > 1 then
   begin
     // user specified some values at command line
@@ -602,8 +602,6 @@ begin
       servers := 1;
     end;
   end;
-  if servers = 1 then
-    include(flags, hsoThreadSmooting); // 30% better /plaintext e.g. on i5 7300U
 
   // start the server instance(s), in hsoReusePort mode
   SetLength(rawServers, servers);

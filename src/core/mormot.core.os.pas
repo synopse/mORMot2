@@ -1051,11 +1051,11 @@ var
 var
   /// emulate only some used fields of Windows' TSystemInfo
   SystemInfo: record
-    // retrieved from libc's getpagesize() - is expected to not be 0
+    /// retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
-    // retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    /// retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
     dwNumberOfProcessors: cardinal;
-    // meaningful system information, as returned by fpuname()
+    /// meaningful system information, as returned by fpuname()
     uts: record
       sysname, release, version: RawUtf8;
     end;
