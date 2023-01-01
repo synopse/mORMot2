@@ -153,7 +153,9 @@ begin
   if not ctxt.UrlParam(search, result) then
     result := 1
   else if result > 500 then
-    result := 500;
+    result := 500
+  else if result < 1 then
+    result := 1;
 end;
 
 
