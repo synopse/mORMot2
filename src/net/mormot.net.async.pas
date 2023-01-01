@@ -3455,14 +3455,17 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
-  if hsoThreadCpuAffinity in ProcessOptions then
-    include(aco, acoThreadCpuAffinity);
   if hsoThreadSmooting in ProcessOptions then
-    include(aco, acoThreadSmooting) // and exclude thread affinity
-  else if hsoThreadSocketAffinity in ProcessOptions then
+    include(aco, acoThreadSmooting) // and exclude any thread affinity
+  else
+  begin
+    if hsoThreadCpuAffinity in ProcessOptions then
+      include(aco, acoThreadCpuAffinity);
+    if hsoThreadSocketAffinity in ProcessOptions then
       include(aco, acoThreadSocketAffinity);
-    if hsoReusePort in ProcessOptions then
-      include(aco, acoReusePort);
+  end;
+  if hsoReusePort in ProcessOptions then
+    include(aco, acoReusePort);
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncConnection;
   if fConnectionsClass = nil then
