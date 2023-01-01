@@ -417,7 +417,8 @@ type
     fIndex: integer;
     fEvent: TSynEvent;
     fName: RawUtf8;
-    fLastWakeUpTix, fLastWakeUpCount: integer;
+    fThreadPollingLastWakeUpTix: integer;
+    fThreadPollingLastWakeUpCount: integer;
     procedure Execute; override;
   public
     /// initialize the thread
@@ -455,10 +456,8 @@ type
   // TAsyncConnections on the same port, either within the same process, or as
   // separated processes (e.g. to set process affinity to one CPU HW socket)
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
-  // focus the process on the first threads - seems to give better results with
-  // a low number of CPU cores, but not with high number of CPU cores - see
-  // https://synopse.info/forum/viewtopic.php?pid=38780#p38780 - this setting
-  // will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
+  // focus the process on the first threads of the pool - by design, this
+  // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -516,8 +515,8 @@ type
       Address, Port: RawUtf8;
     end;
     fThreadPollingWakeupSafe: TLightLock;
-    fThreadPollingWakeupIndex: integer;
-    fLastWakeUpTix: integer;
+    fThreadPollingWakeupLoad: integer;
+    fThreadPollingLastWakeUpTix: integer;
     fGC: array[1..2] of TAsyncConnectionsGC;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
@@ -622,6 +621,12 @@ type
     /// allow to customize low-level options for processing
     property Options: TAsyncConnectionsOptions
       read fOptions write fOptions;
+    // how many events a fast active thread is supposed to handle in its loop
+    // for the acoThreadSmooting option in ThreadPollingWakeup()
+    // - will wake up the threads only if the previous seem to be somewhat idle
+    // - default value of 32 has been set from trials over wrk benchmarks
+    property ThreadPollingWakeupLoad: integer
+      read fThreadPollingWakeupLoad write fThreadPollingWakeupLoad;
     /// access to the associated log class
     property Log: TSynLogClass
       read fLog;
@@ -1832,12 +1837,12 @@ begin
             if Terminated then
               break;
             didwakeupduetoslowprocess := false;
-            //{$I-}system.writeln(Name,' start loop ',fLastWakeUpCount);
+            //{$I-}system.writeln(Name,' start loop ',fThreadPollingLastWakeUpCount);
             while fOwner.fClients.fRead.GetOnePending(notif, fName) and
                   not Terminated do
             begin
               if (acoThreadSmooting in fOwner.Options) and
-                 (fLastWakeUpTix <> fOwner.fLastWakeUpTix) and
+                 (fThreadPollingLastWakeUpTix <> fOwner.fThreadPollingLastWakeUpTix) and
                  not didwakeupduetoslowprocess then
               begin
                 // ProcessRead() did take some time: wake up another thread
@@ -1852,15 +1857,15 @@ begin
             if acoThreadSmooting in fOwner.Options then
             begin
               fOwner.fThreadPollingWakeupSafe.Lock;
-              fLastWakeUpTix := 0; // this thread will now need to wakeup
+              fThreadPollingLastWakeUpTix := 0; // this thread will now need to wakeup
               fOwner.fThreadPollingWakeupSafe.UnLock;
             end;
-            //{$I-}system.writeln(Name,' stop loop ',fLastWakeUpCount);
+            //{$I-}system.writeln(Name,' stop loop ',fThreadPollingLastWakeUpCount);
             // release atpReadPoll lock above
             with fOwner.fThreadReadPoll do
               if fWaitForReadPending then
               begin
-                //{$I-}system.writeln(Name,' set event ',fLastWakeUpCount);
+                //{$I-}system.writeln(Name,' set event ',fThreadPollingLastWakeUpCount);
                 fWaitForReadPending := false; // set event once
                 fEvent.SetEvent;
               end;
@@ -1903,6 +1908,7 @@ begin
   fLastOperationReleaseMemorySeconds := 60;
   fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
+  fThreadPollingWakeupLoad := 32; // see ThreadPollingWakeup() below
   fLog := aLog;
   fConnectionClass := aConnectionClass;
   if not (acoNoConnectionTrack in aOptions) then
@@ -2133,36 +2139,29 @@ begin
     FreeAndNil(result);
 end;
 
-{.$define WAKEUPROUNDROBIN} // less efficient in practice
-
-const
-  // how many events a fast active thread is supposed to handle in its loop
-  // for the acoThreadSmooting option
+  // NOTICE on ThreadPollingWakeupLoad / acoThreadSmooting option (i.e.
+  // how many events a fast active thread is supposed to handle in its loop)
   // - the naive/standard/well-used algorithm of waking up the threads on need
   // does not perform well, especially with a high number of CPU cores: the
   // global CPU usage remains idle, because most of the time is spent between
-  // the threads, and not procesing actual data
+  // the threads, and not processing actual data
   // - we actually wake up the sub-threads only if it did not become idle within
   // GetTickCount64 resolution (i.e. 16ms on Windows, 4ms on Linux)
   // - on small load or quick response, only R1 thread is involved
   // - on slow process (e.g. DB access), R1 is identified as blocking, and
-  // R2..Rmax threads are awaken only if WAKEUP_LOAD events have been assigned
+  // R2..Rmax threads are awaken once WAKEUP_LOAD events have been assigned
   // to processing threads
   // - it seems to leverage the CPU performance especially when the number of
   // threads is higher than the number of cores, or on high number of cores CPU
   // - this algorithm seems efficient, and simple enough to implement and debug,
   // in respect to what I have seen in high-performance thread pools (e.g. in
   // MariaDB), which have much bigger complexity (like a dynamic thread pool)
-  WAKEUP_LOAD = 32;
+  // - current default value of 32 has been set from trials of wrk benchmarks
 
 function TAsyncConnections.ThreadPollingWakeup(Events: PtrInt): PtrInt;
 var
   i: PtrInt;
-  {$ifdef WAKEUPROUNDROBIN}
-  last, pass: PtrInt;
-  {$else}
   th: PAsyncConnectionsThread;
-  {$endif WAKEUPROUNDROBIN}
   t: TAsyncConnectionsThread;
   tix: integer; // 32-bit is enough to check for
   ndx: array[byte] of byte; // wake up to 256 threads at once
@@ -2172,41 +2171,14 @@ begin
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
   //{$I-}system.writeln('wakeup=',Events);
-  fLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms Windows, 4ms Linux
+  fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms Windows, 4ms Linux
   if (acoThreadSmooting in fOptions) and
      (Events > 1) then
-    tix := fLastWakeUpTix
+    tix := fThreadPollingLastWakeUpTix
   else
     tix := 0; // after accept() or on idle server, we can always wake threads
   fThreadPollingWakeupSafe.Lock;
   try
-    {$ifdef WAKEUPROUNDROBIN}
-    // round-robin version is less efficient in practice
-    pass := 0;
-    last := length(fThreads) - 1;
-    i := fThreadPollingWakeupIndex + 1;
-    while result < Events do
-    begin
-      if i > last then
-      begin
-        i := 1; // fThread[0]=fThreadReadPoll and should not be set from here
-        last := fThreadPollingWakeupIndex;
-        if (pass = 1) or
-           (i > last) then
-          break;
-        inc(pass);
-      end;
-      t := fThreads[i];
-      if t.fWaitForReadPending then
-      begin
-        t.fWaitForReadPending := false; // acquire this thread
-        ndx[result] := i;
-        inc(result);
-        fThreadPollingWakeupIndex := i;
-      end;
-      inc(i);
-    end;
-    {$else}
     th := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here
     for i := 1 to length(fThreads) - 1 do
     begin
@@ -2225,30 +2197,29 @@ begin
       end
       // fast working threads are available for up to WAKEUP_LOAD events
       else if not t.fWaitForReadPending and
-              (t.fLastWakeUpCount > 0) and
-              (t.fLastWakeUpTix = tix) then
+              (t.fThreadPollingLastWakeUpCount > 0) and
+              (t.fThreadPollingLastWakeUpTix = tix) then
       begin
         // this thread is likely to be available very soon: consider it done
-        //{$I-}system.writeln(t.Name,' cnt=',t.fLastWakeUpCount,'-',Events);
-        dec(t.fLastWakeUpCount, Events);
-        dec(Events, t.fLastWakeUpCount);
+        //{$I-}system.writeln(t.Name,' cnt=',t.fThreadPollingLastWakeUpCount,'-',Events);
+        dec(t.fThreadPollingLastWakeUpCount, Events);
+        dec(Events, t.fThreadPollingLastWakeUpCount);
       end
       else if t.fWaitForReadPending then
       begin
         // we need to wake up a thread, since some slow work is going on
-        t.fLastWakeUpTix := tix;
-        t.fLastWakeUpCount := WAKEUP_LOAD - Events;
-        //{$I-}system.writeln('wakeup #', t.Name,' cnt=',t.fLastWakeUpCount);
+        t.fThreadPollingLastWakeUpTix := tix;
+        t.fThreadPollingLastWakeUpCount := fThreadPollingWakeupLoad - Events;
+        //{$I-}system.writeln('wakeup #', t.Name,' cnt=',t.fThreadPollingLastWakeUpCount);
         t.fWaitForReadPending := false; // acquire this thread
         ndx[result] := i;
         inc(result);
-        dec(Events, WAKEUP_LOAD);
+        dec(Events, fThreadPollingWakeupLoad);
       end;
       if Events <= 0 then
         break;
       inc(th);
     end;
-    {$endif WAKEUPROUNDROBIN}
   finally
     fThreadPollingWakeupSafe.UnLock;
   end;
