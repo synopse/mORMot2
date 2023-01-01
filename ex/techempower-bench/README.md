@@ -39,7 +39,9 @@ Working threads (per server), used CPU cores, and servers count can be specified
 ```
 $ raw threads cores servers
 ```
-default is 
+default is computed at startup depending on the available CPU cores on the running system.
+
+
 ## Some Numbers
 
 This file is currently in a pull request of the TFB repository.
