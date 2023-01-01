@@ -536,8 +536,8 @@ end;
 
 
 var
-  rawServer: TRawAsyncServer;
-  threads: integer;
+  rawServers: array of TRawAsyncServer;
+  threads, cores, servers, i: integer;
 
 begin
   {$ifdef WITH_LOGS}
@@ -556,21 +556,59 @@ begin
     TypeInfo(TWorldRec),   'id,randomNumber:integer',
     TypeInfo(TFortune),    'id:integer message:RawUtf8']);
 
-  if (ParamCount <> 1) or
-     not TryStrToInt(ParamStr(1), threads) then
-    threads := SystemInfo.dwNumberOfProcessors * 4;
-  if threads < 16 then
-    threads := 16
-  else if threads > 256 then
-    threads := 256; // max. threads for THttpAsyncServer
+  if ParamCount > 1 then
+  begin
+    if not TryStrToInt(ParamStr(1), threads) then
+      threads := SystemInfo.dwNumberOfProcessors * 4;
+    if threads < 16 then
+      threads := 16
+    else if threads > 256 then
+      threads := 256; // max. threads for THttpAsyncServer
 
-  rawServer := TRawAsyncServer.Create(threads);
+    if not TryStrToInt(ParamStr(2), cores) then
+      cores := 16;
+    if (SystemInfo.dwNumberOfProcessors > cores) then
+      SystemInfo.dwNumberOfProcessors := cores; //for hsoThreadCpuAffinity
+
+    if not TryStrToInt(ParamStr(3), servers) then
+      servers := 1;
+    if servers < 1 then
+      servers := 1
+    else if servers > 16 then
+      servers := 16;
+  end
+  else
+  begin //automatically sets best parameters depending on available CPU cores
+    cores := SystemInfo.dwNumberOfProcessors;
+    if cores > 12 then // hi-end CPU - scale using several listiners
+    begin
+      threads := cores;
+      if cores div 4 > 6 then
+        servers := 6
+      else
+        servers := cores div 4;
+    end
+    else
+    begin
+      threads := cores * 4;
+      servers := 1;
+    end;
+  end;
+
+  setLength(rawServers, servers);
+  for i := 0 to servers-1 do
+    rawServers[i] := TRawAsyncServer.Create(threads);
   try
     {$I-}
     writeln;
-    writeln(rawServer.fHttpServer.ClassName, ' running on localhost:',
-      rawServer.fHttpServer.SockPort, '; num thread=', threads, ' db=',
-      rawServer.fDbPool.DbmsEngineName, #10);
+    writeln(rawServers[0].fHttpServer.ClassName, ' running on localhost:',
+      rawServers[0].fHttpServer.SockPort,
+      '; num thread=', threads,
+      ', num CPU=', SystemInfo.dwNumberOfProcessors,
+      ', num servers=', servers,
+      ', total workers=', threads * servers,
+      ' db=',
+      rawServers[0].fDbPool.DbmsEngineName);
     {$ifdef USE_SQLITE3}
     writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
     ConsoleWaitForEnterKey;
@@ -579,12 +617,13 @@ begin
     FpPause; // mandatory for the actual benchmark tool
     {$endif USE_SQLITE3}
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
-    writeln(ObjectToJsonDebug(rawServer.fHttpServer, [woDontStoreVoid, woHumanReadable]));
+    writeln(ObjectToJsonDebug(rawServers[0].fHttpServer, [woDontStoreVoid, woHumanReadable]));
     {$ifdef FPC_X64MM}
     WriteHeapStatus(' ', 16, 8, {compileflags=}true);
     {$endif FPC_X64MM}
   finally
-    rawServer.Free;
+     for i := 0 to servers-1 do
+      rawServers[i].Free;
   end;
 
 end.
