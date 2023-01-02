@@ -2909,9 +2909,10 @@ begin
     // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    if fPending.Count = 0 then
+    {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
+    if (fPending.Count = 0) and
+       fPendingSafe.TryLock then
     begin
-      fPendingSafe.Lock;
       if fPending.Count = 0 then
       begin
         // reuse the main dynamic array of results
@@ -2920,6 +2921,7 @@ begin
       end;
       fPendingSafe.UnLock;
     end;
+    {$endif OSPOSIX}
     {$ifdef POLLSOCKETEPOLL}
     // epoll_wait() is thread-safe and let epoll_ctl() work in the background
     {if Assigned(OnLog) then
