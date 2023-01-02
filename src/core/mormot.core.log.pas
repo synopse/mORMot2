@@ -3264,14 +3264,14 @@ end;
 
 function TDebugFile.SaveToFile(const aFileName: TFileName): TFileName;
 var
-  F: TFileStream;
+  F: TStream;
 begin
   if aFileName = '' then
     result := ChangeFileExt(GetModuleName(hInstance), '.mab')
   else
     result := aFileName;
   DeleteFile(result);
-  F := TFileStream.Create(result, fmCreate);
+  F := TFileStreamEx.Create(result, fmCreate);
   try
     SaveToStream(F);
   finally
@@ -4211,7 +4211,7 @@ type
   // won't throw any exception, so application will continue to work
   // - used by TSynLog to let the application continue with no exception,
   // even in case of a disk/partition full of logs
-  TFileStreamWithoutWriteError = class(TFileStream)
+  TFileStreamWithoutWriteError = class(TFileStreamEx)
   public
     /// this overriden function returns Count, as if it was always sucessfull
     function Write(const Buffer; Count: Longint): Longint; override;
@@ -5640,7 +5640,7 @@ begin
           end
           else if (fFileRotationSize = 0) or
                   not exists then
-            TFileStream.Create(fFileName, fmCreate).Free;   // create a void file
+            TFileStreamEx.Create(fFileName, fmCreate).Free; // a void file
           fWriterStream := TFileStreamWithoutWriteError.Create(fFileName,
             fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
           break;

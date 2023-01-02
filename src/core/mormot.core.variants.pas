@@ -7638,12 +7638,12 @@ end;
 
 procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
 var
-  F: TFileStream;
+  F: TStream;
   W: TJsonWriter;
 begin
   if cardinal(VType) <> DocVariantVType then
     exit;
-  F := TFileStream.Create(FileName, fmCreate);
+  F := TFileStreamEx.Create(FileName, fmCreate);
   try
     W := TJsonWriter.Create(F, 65536);
     try

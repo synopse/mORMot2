@@ -6859,7 +6859,7 @@ function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
   keySizeBits: cardinal; aesMode: TAesMode; IV: PAesBlock): Int64;
 var
   fn: TFileName;
-  s, d: TFileStream;
+  s, d: THandleStream;
   siz: Int64;
   aes: TAesPkcs7Abstract;
 begin
@@ -6878,9 +6878,9 @@ begin
       raise ESynCrypto.CreateUtf8('AesPkcs7File: already existing %', [fn]);
   end;
   try
-    s := TFileStream.Create(src, fmOpenRead or fmShareDenyNone);
+    s := TFileStreamEx.Create(src, fmOpenReadDenyNone);
     try
-      d := TFileStream.Create(fn, fmCreate);
+      d := TFileStreamEx.Create(fn, fmCreate);
       try
         if encrypt then
         begin

@@ -1810,7 +1810,7 @@ begin
     if ContentLength > 0 then
     begin
       // there is an already-compressed .gz file to send away
-      ContentStream := TFileStream.Create(gz, fmOpenRead or fmShareDenyNone);
+      ContentStream := TFileStreamEx.Create(gz, fmOpenReadDenyNone);
       ContentEncoding := 'gzip';
       include(HeaderFlags, hfContentStreamNeedFree);
       result := true;
@@ -1822,7 +1822,7 @@ begin
   if not result then
     // there is no such file available
     exit;
-  ContentStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  ContentStream := TFileStreamEx.Create(FileName, fmOpenReadDenyNone);
   if (ContentLength < 1 shl 20) and
      (CommandMethod <> 'HEAD') then
   begin

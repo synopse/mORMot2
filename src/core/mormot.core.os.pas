@@ -2702,6 +2702,8 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = false;
   {$endif OSWINDOWS}
+  /// a convenient shortened constant to open a file for reading
+  fmOpenReadDenyNone = fmOpenRead or fmShareDenyNone;
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
@@ -2723,7 +2725,7 @@ function SearchRecValidFolder(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  // FPC TFileStream miss a Create(aHandle) constructor like Delphi
+  /// FPC TFileStream miss a Create(aHandle) constructor like Delphi
   TFileStreamFromHandle = class(THandleStream)
   protected
     fDontReleaseHandle: boolean;
@@ -2734,6 +2736,19 @@ type
     property DontReleaseHandle: boolean
       read fDontReleaseHandle write fDontReleaseHandle;
   end;
+
+  /// a TFileStream which supports FileName longer than MAX_PATH
+  TFileStreamEx = class(TFileStreamFromHandle)
+  Private
+    fFileName : TFileName;
+  public
+    /// open or create the file from its name, depending on the supplied Mode
+    // - Mode is typically fmCreate / fmOpenReadDenyNone
+    constructor Create(const aFileName: TFileName; Mode: cardinal);
+    /// the file name assigned to this class constructor
+    property FileName : TFileName read fFilename;
+  end;
+
 
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
@@ -2890,7 +2905,7 @@ type
   TSynMemoryStreamMapped = class(TSynMemoryStream)
   protected
     fMap: TMemoryMap;
-    fFileStream: TFileStream;
+    fFileStream: THandleStream;
     fFileName: TFileName;
   public
     /// create a TStream from a file content using fast memory mapping
@@ -5664,7 +5679,22 @@ end;
 destructor TFileStreamFromHandle.Destroy;
 begin
   if not fDontReleaseHandle then
-    FileClose(Handle); // otherwise file is stil opened
+    FileClose(Handle); // otherwise file remains opened (FPC RTL inconsistency)
+end;
+
+constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
+var
+  h: THandle;
+begin
+  if Mode and fmCreate = fmCreate then
+    h := FileCreate(aFileName)
+  else
+    h := FileOpen(aFileName, Mode);
+  if not ValidHandle(h) then
+    raise EOSException.CreateFmt('%s.Create(%s,%x) failed as %s',
+      [ClassNameShort(self)^, aFileName, Mode, GetErrorText(GetLastError)]);
+  inherited Create(h); // TFileStreamFromHandle constructor which will own h
+  fFileName := aFileName;
 end;
 
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
@@ -6217,7 +6247,7 @@ begin
   result := false;
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
-  F := FileOpen(aFileName, fmOpenRead or fmShareDenyNone);
+  F := FileOpen(aFileName, fmOpenReadDenyNone);
   if not ValidHandle(F) then
     exit;
   if Map(F) then
@@ -6255,7 +6285,7 @@ begin
   fFileName := aFileName;
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
-  fFileStream := TFileStream.Create(aFileName, fmOpenRead or fmShareDenyNone);
+  fFileStream := TFileStreamEx.Create(aFileName, fmOpenReadDenyNone);
   Create(fFileStream.Handle, aCustomSize, aCustomOffset);
 end;
 

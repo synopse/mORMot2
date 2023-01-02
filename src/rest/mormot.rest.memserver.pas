@@ -401,7 +401,7 @@ const
   CHARS: array[0..6] of AnsiChar = '[{":,}]';
                                  // 0123456
 var
-  S: TFileStream;
+  S: TStream;
   t: PtrInt;
   Modified: boolean;
   timer: TPrecisionTimer;
@@ -419,7 +419,7 @@ begin
   if not Modified then
     exit;
   timer.Start;
-  S := TFileStream.Create(fFileName, fmCreate);
+  S := TFileStreamEx.Create(fFileName, fmCreate);
   try
     if fBinaryFile then
     begin

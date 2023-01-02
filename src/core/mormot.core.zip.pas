@@ -1109,7 +1109,7 @@ begin
   else
   {$endif LIBDEFLATESTATIC}
   begin
-    f := TFileStream.Create(filename, fmCreate);
+    f := TFileStreamEx.Create(filename, fmCreate);
     try
       result := ToStream(f, tempBufSize);
     finally
@@ -1190,12 +1190,12 @@ end;
 function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
 var
   gz: TSynZipCompressor;
-  s, d: TFileStream;
+  s, d: TStream;
 begin
   try
-    s := TFileStream.Create(orig, fmOpenRead or fmShareDenyNone);
+    s := TFileStreamEx.Create(orig, fmOpenReadDenyNone);
     try
-      d := TFileStream.Create(destgz, fmCreate);
+      d := TFileStreamEx.Create(destgz, fmCreate);
       try
         gz := TSynZipCompressor.Create(d, CompressionLevel, szcfGZ);
         try
@@ -1443,7 +1443,7 @@ constructor TZipWrite.Create(const aDestFileName: TFileName);
 begin
   fFileName := aDestFileName;
   fDestOwned := true;
-  Create(TFileStream.Create(aDestFileName, fmCreate));
+  Create(TFileStreamEx.Create(aDestFileName, fmCreate));
 end;
 
 constructor TZipWrite.CreateAppend(aDest: TStream; const aDestFileName: TFileName);
@@ -1783,7 +1783,7 @@ begin
     else
       ZipName := NormalizeZipName(aFileName);
   // open the input file
-  f := FileOpen(aFileName, fmOpenRead or fmShareDenyNone);
+  f := FileOpen(aFileName, fmOpenReadDenyNone);
   if ValidHandle(f) then
     try
       todo := FileSeek64(f, 0, soFromEnd);
@@ -2338,7 +2338,7 @@ constructor TZipRead.Create(const aFileName: TFileName;
   ZipStartOffset, Size, WorkingMem: QWord);
 begin
   fFileName := aFileName;
-  Create(FileOpen(aFileName, fmOpenRead or fmShareDenyNone),
+  Create(FileOpen(aFileName, fmOpenReadDenyNone),
     ZipStartOffset, Size, WorkingMem);
 end;
 
@@ -2686,7 +2686,7 @@ end;
 function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
-  FS: TFileStream;
+  FS: TStream;
   LocalZipName, Dest: TFileName;
   info: TFileInfoFull;
 begin
@@ -2713,7 +2713,7 @@ begin
     result := EnsureDirectoryExists(Dest) <> ''
   else
   begin
-    FS := TFileStream.Create(Dest, fmCreate);
+    FS := TFileStreamEx.Create(Dest, fmCreate);
     try
       result := UnZipStream(aIndex, info, FS);
     finally
@@ -2834,10 +2834,10 @@ var
   M, A: TStream;
   pos: Int64;
 begin
-  M := TFileStream.Create(MainFile, fmOpenReadWrite);
+  M := TFileStreamEx.Create(MainFile, fmOpenReadWrite);
   try
     pos := M.Seek(0, soEnd);
-    A := TFileStream.Create(AppendFile, fmOpenRead);
+    A := TFileStreamEx.Create(AppendFile, fmOpenReadDenyNone);
     try
       StreamCopyUntilEnd(A, M); // faster than M.CopyFrom(A, 0);
       FileAppendSignature(M, pos);
@@ -2868,12 +2868,12 @@ begin
     raise ESynZip.CreateUtf8('%: main=new=%', [ctxt, main]);
   certoffs := 0;
   certlenoffs := 0;
-  O := TFileStream.Create(new, fmCreate);
+  O := TFileStreamEx.Create(new, fmCreate);
   try
     try
       parsePEheader := keepdigitalsign;
       // copy main source file
-      M := TFileStream.Create(main, fmOpenRead or fmShareDenyNone);
+      M := TFileStreamEx.Create(main, fmOpenReadDenyNone);
       try
         repeat
           read := M.Read(buf, SizeOf(buf));
@@ -2917,7 +2917,7 @@ begin
       APos := O.Position;
       if append <> '' then
       begin
-        A := TFileStream.Create(append, fmOpenRead or fmShareDenyNone);
+        A := TFileStreamEx.Create(append, fmOpenReadDenyNone);
         try
           StreamCopyUntilEnd(A, O);
         finally

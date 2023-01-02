@@ -3911,7 +3911,7 @@ var
     begin
       // response is file -> OutContent is UTF-8 file name to be served
       filehandle := FileOpen(Utf8ToString(ctxt.OutContent),
-        fmOpenRead or fmShareDenyNone);
+        fmOpenReadDenyNone);
       if not ValidHandle(filehandle)  then
       begin
         SendError(HTTP_NOTFOUND, WinErrorText(GetLastError, nil));

@@ -5455,7 +5455,7 @@ const
   CERTIFICATE_ENTRY_OFFSET = $98;
   WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
 
-function FindExeCertificate(const MainFile: TFileName; OutFile: TFileStream;
+function FindExeCertificate(const MainFile: TFileName; OutFile: THandleStream;
   out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
 var
   M: TStream;
@@ -5466,7 +5466,7 @@ var
 begin
   result := '';
   firstbuf := true;
-  M := TFileStream.Create(MainFile, fmOpenRead or fmShareDenyNone);
+  M := TFileStreamEx.Create(MainFile, fmOpenReadDenyNone);
   try
     repeat
       read := M.Read(buf{%H-}, SizeOf(buf));
@@ -5585,7 +5585,7 @@ const
 procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
   const Stuff: RawUtf8);
 var
-  O: TFileStream;
+  O: THandleStream;
   certoffs, certlenoffs: cardinal;
   certslen, certsend: PtrInt;
   sig, newcert: RawByteString;
@@ -5601,7 +5601,7 @@ begin
     raise EStuffExe.CreateUtf8('Stuff should be pure Text for %', [MainFile]);
   certoffs := 0;
   certlenoffs := 0;
-  O := TFileStream.Create(NewFile, fmCreate);
+  O := TFileStreamEx.Create(NewFile, fmCreate);
   try
     try
       // copy MainFile source file, parsing the PE header and cert chain

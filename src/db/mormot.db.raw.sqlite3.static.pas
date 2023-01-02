@@ -730,7 +730,7 @@ var
   hdr: array[0..2047] of byte;
 begin
   result := false;
-  F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
+  F := FileOpen(FileName, fmOpenReadDenyNone);
   if not ValidHandle(F) then
     exit;
   if (FileRead(F, hdr, SizeOf(hdr)) = SizeOf(hdr)) and

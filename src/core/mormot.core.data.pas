@@ -5313,9 +5313,9 @@ end;
 procedure TRawUtf8List.SaveToFile(
   const FileName: TFileName; const Delimiter: RawUtf8);
 var
-  FS: TFileStream;
+  FS: TStream;
 begin
-  FS := TFileStream.Create(FileName, fmCreate);
+  FS := TFileStreamEx.Create(FileName, fmCreate);
   try
     SaveToStream(FS, Delimiter);
   finally

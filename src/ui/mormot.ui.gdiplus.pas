@@ -593,14 +593,14 @@ end;
 
 procedure TSynPicture.LoadFromFile(const FileName: string);
 var
-  s: TFileStream;
+  s: TStream;
 begin
   // don't use direct GDI+ file oriented API: it's better having a local
   // copy of the untouched data in memory (e.g. for further jpeg saving)
   Clear;
   if not FileExists(FileName) then
     exit;
-  s := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  s := TFileStreamEx.Create(FileName, fmOpenReadDenyNone);
   try
     LoadFromStream(s);
   finally

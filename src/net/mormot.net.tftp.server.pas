@@ -562,7 +562,7 @@ begin
     if (fn = '') or
        FileExists(fn) then
       exit;
-    Context.FileStream := TFileStream.Create(fn, fmCreate);
+    Context.FileStream := TFileStreamEx.Create(fn, fmCreate);
     result := teNoError;
   end
   else

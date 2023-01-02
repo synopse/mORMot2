@@ -171,7 +171,7 @@ type
     // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
     // - note that by default, THttpClientSocket.OnLog will always be called
     OnProgress: TOnStreamProgress;
-    /// optional callback if TFileStream.Create(FileName, Mode) is not good enough
+    /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough
     OnStreamCreate: TOnStreamCreate;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
@@ -1288,10 +1288,10 @@ end;
 procedure THttpMultiPartStream.AddFile(const name: RawUtf8;
   const filename: TFileName; const contenttype: RawUtf8);
 var
-  fs: TFileStream;
+  fs: TStream;
   fn: RawUtf8;
 begin
-  fs := TFileStream.Create(filename, fmShareDenyNone or fmOpenRead);
+  fs := TFileStreamEx.Create(filename, fmOpenReadDenyNone);
   // an exception is raised in above line if filename is incorrect
   fn := StringToUtf8(ExtractFileName(filename));
   Add(name, '', contenttype, fn, 'binary')^.ContentFile := filename;
@@ -1824,7 +1824,7 @@ var
     if Assigned(params.OnStreamCreate) then
       redirected := params.OnStreamCreate(part, Mode)
     else
-      redirected := TFileStream.Create(part, Mode);
+      redirected := TFileStreamEx.Create(part, Mode);
     partstream := params.Hasher.Create(redirected);
   end;
 

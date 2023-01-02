@@ -1194,7 +1194,7 @@ end;
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 var
-  src, dst: TFileStream;
+  src, dst: THandleStream;
 begin
   result := false;
   if FileExists(Target) then
@@ -1203,9 +1203,9 @@ begin
     else
       DeleteFile(Target);
   try
-    src := TFileStream.Create(Source, fmOpenRead);
+    src := TFileStreamEx.Create(Source, fmOpenReadDenyNone);
     try
-      dst := TFileStream.Create(Target, fmCreate);
+      dst := TFileStreamEx.Create(Target, fmCreate);
       try
         StreamCopyUntilEnd(src, dst); // faster than dst.CopyFrom()
       finally

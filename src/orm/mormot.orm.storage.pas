@@ -4213,7 +4213,7 @@ end;
 
 procedure TRestStorageInMemory.UpdateFile;
 var
-  F: TFileStream;
+  F: TStream;
   timer: TPrecisionTimer;
 begin
   if (self = nil) or
@@ -4226,7 +4226,7 @@ begin
     DeleteFile(FileName); // always overwrite previous file
     if fCount > 0 then
     begin
-      F := TFileStream.Create(FileName, fmCreate);
+      F := TFileStreamEx.Create(FileName, fmCreate);
       try
         if BinaryFile then
           SaveToBinary(F)

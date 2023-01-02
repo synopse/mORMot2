@@ -5315,9 +5315,8 @@ var
 
 var
   PDFFileName: TFileName;
-  PDFFile:
-  TFileStream;
-  i: integer;
+  PDFFile: TStream;
+  f: THandle;
   Name: string;
   TempDir: TFileName;
 {$endif USEPDFPRINTER}
@@ -5337,34 +5336,34 @@ begin
   end; 
 {$else}
   // use the Synopse PDF engine
-  if aPdfFileName='' then
-  with TSaveDialog.Create(nil) do
-  try
-    TempDir := GetCurrentDir;
-    Filter := sPDFFile+' (*.pdf)|*.pdf';
-    Title := Caption;
-    FileName := ValidFileName(Caption);
-    DefaultExt := 'pdf';
-    Options := [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing];
-    repeat
-      if not Execute then
-        exit;
-      PDFFileName := FileName;
-      i := FileCreate(PDFFileName); // test file create (pdf not already opened)
-      if i > 0 then
-        break;
-      MessageBox(0, pointer(Format(SIniFileWriteError,[PDFFileName])),
-        nil, MB_ICONERROR);
-    until false;
-    FileClose(i);
-  finally
-    SetCurrentDir(TempDir); // allow unplug e.g. any USB
-    Free;
-  end
+  if aPdfFileName = '' then
+    with TSaveDialog.Create(nil) do
+    try
+      TempDir := GetCurrentDir;
+      Filter := sPDFFile + ' (*.pdf)|*.pdf';
+      Title := Caption;
+      FileName := ValidFileName(Caption);
+      DefaultExt := 'pdf';
+      Options := [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing];
+      repeat
+        if not Execute then
+          exit;
+        PDFFileName := FileName;
+        f := FileCreate(PDFFileName); // test file create (pdf not opened)
+        if ValidHandle(f) then
+          break;
+        MessageBox(0, pointer(Format(SIniFileWriteError, [PDFFileName])),
+          nil, MB_ICONERROR);
+      until false;
+      FileClose(f);
+    finally
+      SetCurrentDir(TempDir); // allow unplug e.g. any USB
+      Free;
+    end
   else
     PDFFileName := aPdfFileName;
   try
-    PDFFile := TFileStream.Create(PDFFileName, fmCreate);
+    PDFFile := TFileStreamEx.Create(PDFFileName, fmCreate);
     try
       ExportPdfStream(PDFFile);
     finally

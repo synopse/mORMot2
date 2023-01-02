@@ -7298,10 +7298,10 @@ end;
 
 function TPdfDocument.SaveToFile(const aFileName: TFileName): boolean;
 var
-  str: TFileStream;
+  str: TStream;
 begin
   try
-    str := TFileStream.Create(aFileName, fmCreate);
+    str := TFileStreamEx.Create(aFileName, fmCreate);
     try
       SaveToStream(str);
       result := true;

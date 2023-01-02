@@ -4156,11 +4156,11 @@ begin
   if Append and
      FileExists(aFileName) then
   begin
-    s := TFileStream.Create(aFileName, fmOpenWrite);
+    s := TFileStreamEx.Create(aFileName, fmOpenWrite);
     s.Seek(0, soEnd);
   end
   else
-    s := TFileStream.Create(aFileName, fmCreate);
+    s := TFileStreamEx.Create(aFileName, fmCreate);
   Create(s, BufLen);
   fInternalStream := true;
 end;
@@ -5402,9 +5402,9 @@ function TAlgoCompress.StreamCompress(Source: TStream;
   const DestFile: TFileName; Magic: cardinal; ForceHash32, WithTrailer: boolean;
   ChunkBytes: PtrInt): Int64;
 var
-  F: TFileStream;
+  F: TStream;
 begin
-  F := TFileStream.Create(DestFile, fmCreate);
+  F := TFileStreamEx.Create(DestFile, fmCreate);
   try
     result := StreamCompress(Source, F, Magic, ForceHash32, WithTrailer, ChunkBytes);
   finally
@@ -5599,13 +5599,13 @@ end;
 function TAlgoCompress.FileIsCompressed(const Name: TFileName;
   Magic: cardinal): boolean;
 var
-  S: TFileStream;
+  S: TStream;
   Head: TAlgoCompressHead;
 begin
   result := false;
   if FileExists(Name) then
   try
-    S := TFileStream.Create(Name, fmOpenRead or fmShareDenyNone);
+    S := TFileStreamEx.Create(Name, fmOpenReadDenyNone);
     try
       if S.Read(Head, SizeOf(Head)) = SizeOf(Head) then
         if Head.Magic = Magic then
@@ -5631,7 +5631,7 @@ begin
     S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
-      D := TFileStream.Create(Dest, fmCreate);
+      D := TFileStreamEx.Create(Dest, fmCreate);
       try
         StreamCompress(S, D, Magic, ForceHash32, WithTrailer, ChunkBytes);
       finally
@@ -5658,7 +5658,7 @@ begin
     S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
-      D := TFileStream.Create(Dest, fmCreate);
+      D := TFileStreamEx.Create(Dest, fmCreate);
       try
         if not StreamUnCompress(S, D, Magic, ForceHash32) then
           exit;
@@ -8511,9 +8511,9 @@ end;
 
 procedure TMemoryMapText.SaveToFile(FileName: TFileName; const Header: RawUtf8);
 var
-  FS: TFileStream;
+  FS: TStream;
 begin
-  FS := TFileStream.Create(FileName, fmCreate);
+  FS := TFileStreamEx.Create(FileName, fmCreate);
   try
     SaveToStream(FS, Header);
   finally
@@ -9535,7 +9535,7 @@ end;
 constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
   aBufSize: integer);
 begin
-  Create(TFileStream.Create(aSourceFileName, fmOpenRead or fmShareDenyNone));
+  Create(TFileStreamEx.Create(aSourceFileName, fmOpenReadDenyNone));
   fOwnStream := fSource;
 end;
 
