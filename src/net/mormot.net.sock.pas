@@ -2789,20 +2789,15 @@ var
   n, ndx: PtrInt;
 begin
   result := false;
-  repeat
-    if fTerminated or
-       (fPending.Count <= 0) then
-      exit;
-    if fPendingSafe.TryLock then // fPendingSafe.Lock is actually 10% slower
-      break;
-    SleepHiRes(1); // no spinning, just wait to leverage CPU/thread usage
-  until false;
-  {$ifdef HASFASTTRYFINALLY} // make a performance difference
-  try                        // and UnsetPending() should be secured
-  {$else}
-  begin
-  {$endif HASFASTTRYFINALLY}
+  if fTerminated or
+     (fPending.Count <= 0) then
+    exit;
+  fPendingSafe.Lock; // former versions used TryLock but unstable on Windows
+  try  // HASFASTTRYFINALLY is unsafe here and has little performance impact
     n := fPending.Count;
+    if fTerminated or
+       (n <= 0) then
+      exit;
     ndx := fPendingIndex;
     if ndx < n then
       repeat
@@ -2824,9 +2819,7 @@ begin
       fPending.Count := 0; // reuse shared fPending.Events[] memory
       fPendingIndex := 0;
     end;
-  {$ifdef HASFASTTRYFINALLY}
   finally
-  {$endif HASFASTTRYFINALLY}
     fPendingSafe.UnLock;
   end;
   if result and
@@ -2916,9 +2909,9 @@ begin
     // thread-safe get the pending (un)subscriptions
     last := -1;
     new.Count := 0;
-    if (fPending.Count = 0) and
-       fPendingSafe.TryLock then
+    if fPending.Count = 0 then
     begin
+      fPendingSafe.Lock;
       if fPending.Count = 0 then
       begin
         // reuse the main dynamic array of results

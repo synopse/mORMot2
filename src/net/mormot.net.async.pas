@@ -1075,7 +1075,6 @@ function TPollConnectionSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
   result := false;
   if tag <> 0 then
-  try
     // same paranoid logic than TPollAsyncConnection IsDangling() + TryLock()
     if // avoid dangling pointer
        (TPollAsyncConnection(tag).fHandle <> 0) and
@@ -1086,19 +1085,6 @@ begin
       exclude(TPollAsyncConnection(tag).fFlags, fReadPending);
       result := true;
     end;
-  except
-    {on E: Exception do
-      // a GPF has been observed some time ago on rare occasions on wrk -c 16384
-      // but has never been seen any more thanks to our dual generational GC
-      // -> has a slight performance impact, but is mandatory for proper
-      // fPendingSafe.Lock release in TPollSockets.GetOnePending
-      try
-        if Assigned(fOnlog) then
-          fOnLog(sllError, 'UnsetPending(%) raised %',
-            [pointer(tag), E.ClassType], self);
-      except
-      end;}
-  end;
 end;
 
 
