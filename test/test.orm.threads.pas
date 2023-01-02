@@ -291,6 +291,7 @@ begin
           begin
             n := 0;
             r := 0;
+            log.Log(sllTrace, 'Execute Add', self);
             for i := 0 to fIterationCount - 1 do
             begin
               Rec.FirstName := FormatUTF8('%/%', [i, fIterationCount - 1]);
@@ -305,8 +306,10 @@ begin
                 break;
               inc(n);
             end;
+            log.Log(sllTrace, 'Execute http.Get', self);
             if (infoUri <> '') and
-               not IdemPChar(pointer(fTest.fClientOnlyPort), 'UNIX:') then
+               not IdemPChar(pointer(fTest.fClientOnlyPort), 'UNIX:') and
+               (fTest.fHttpServer.Use in [useHttpSocket, useHttpAsync]) then
             begin
               http := OpenHttp('127.0.0.1', fTest.fClientOnlyPort);
               if not fTest.CheckFailed(http <> nil, 'openhttp') then
@@ -326,6 +329,7 @@ begin
                   http.Free;
                 end;
             end;
+            log.Log(sllTrace, 'Execute Retrieve', self);
             for i := 0 to n - 1 do
               if fTest.CheckFailed(Rest[r].Orm.Retrieve(fIDs[i], Rec), 'get') then
                 break
@@ -339,8 +343,10 @@ begin
                 else
                   inc(r);
               end;
+            log.Log(sllTrace, 'Execute wait', self);
           end;
         finally
+          log.Log(sllTrace, 'Execute finally', self);
           for i := 0 to high(Rest) do
             if Rest[i] <> fTest.fDatabase then
               FreeAndNil(Rest[i]);
