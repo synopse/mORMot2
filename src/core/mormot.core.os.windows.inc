@@ -993,11 +993,6 @@ begin
   TLightLock(P).UnLock;
 end;
 
-function TryAcquireSRWLockExclusiveForXP(var P: TOSLightMutex): BOOL; stdcall;
-begin
-  result := TLightLock(P).TryLock;
-end;
-
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms <> 0 then
@@ -1011,6 +1006,7 @@ end;
 
 procedure TOSLightLock.Init;
 begin
+  fMutex := nil;
   InitializeSRWLock(fMutex); // fallback to TLightLock on XP
 end;
 
@@ -1021,11 +1017,6 @@ end;
 procedure TOSLightLock.Lock;
 begin
   AcquireSRWLockExclusive(fMutex);
-end;
-
-function TOSLightLock.TryLock: boolean;
-begin
-  result := TryAcquireSRWLockExclusive(fMutex);
 end;
 
 procedure TOSLightLock.UnLock;
@@ -4644,16 +4635,13 @@ begin
   InitializeSRWLock := GetProcAddress(h, 'InitializeSRWLock');
   AcquireSRWLockExclusive := GetProcAddress(h, 'AcquireSRWLockExclusive');
   ReleaseSRWLockExclusive := GetProcAddress(h, 'ReleaseSRWLockExclusive');
-  TryAcquireSRWLockExclusive := GetProcAddress(h, 'TryAcquireSRWLockExclusive');
   if not Assigned(InitializeSRWLock) or
      not Assigned(AcquireSRWLockExclusive) or
-     not Assigned(ReleaseSRWLockExclusive) or
-     not Assigned(TryAcquireSRWLockExclusive) then
+     not Assigned(ReleaseSRWLockExclusive) then
   begin // SRW was introduced with Vista: on XP, fallback to our TLightLock
     InitializeSRWLock := @InitializeSRWLockForXP;
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
-    TryAcquireSRWLockExclusive := @TryAcquireSRWLockExclusiveForXP;
   end;
   h := Windows.LoadLibrary('Psapi.dll');
   if h >= 32 then

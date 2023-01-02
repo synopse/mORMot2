@@ -3556,6 +3556,9 @@ type
   // needed, and a lower footprint, you may consider our TLightLock
   // - same signature as TOSLock/TLightLock, usable as compile time alternatives
   // - warning: non-rentrant, i.e. nested Lock calls would block, as TLightLock
+  // - no TryLock is defined on Windows, because TryAcquireSRWLockExclusive()
+  // raised some unexpected EExternalException C000026 NT_STATUS_RESOURCE_NOT_OWNED
+  // ("Attempt to release mutex not owned by caller") during testing
   {$ifdef USERECORDWITHMETHODS}
   TOSLightLock = record
   {$else}
@@ -3574,10 +3577,12 @@ type
     // would deadlock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// try to enter an OS lock
-    // - if returned true, caller should eventually call UnLock()
+    {$ifdef OSPOSIX}
+    /// pthread-specific method
+    // - TryAcquireSRWLockExclusive() seems not stable on all Windows revisions
     function TryLock: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+     {$ifdef HASINLINE} inline; {$endif}
+    {$endif OSPOSIX}
     /// leave an OS lock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
