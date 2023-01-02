@@ -602,55 +602,89 @@ end;
 
 // some definitions missing on oldest Delphi
 const
-  INVALID_FILE_ATTRIBUTES = cardinal(-1);
   FILE_ATTRIBUTE_REPARSE_POINT = $0000400;
+
 function FindFirstFileExW(lpfilename: PWideChar; fInfoLevelId: FINDEX_INFO_LEVELS;
-  lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;
-  lpSearchFilter: pointer; dwAdditionalFlags: cardinal): THandle;
+   lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;
+   lpSearchFilter: pointer = nil; dwAdditionalFlags: cardinal = 0): THandle;
   stdcall; external kernel32;
 
-const
-  ERROR_NOT_EXIST = [
-    ERROR_FILE_NOT_FOUND,
-    ERROR_PATH_NOT_FOUND,
-    ERROR_INVALID_NAME, // protects from names in the form of masks like '*'
-    ERROR_INVALID_DRIVE,
-    ERROR_NOT_READY,
-    ERROR_INVALID_PARAMETER,
-    ERROR_BAD_PATHNAME,
-    ERROR_BAD_NETPATH,
-    ERROR_BAD_NET_NAME ];
-
-// an alternative to GetFileAttributesExW() with fallback to FindFirstFile API
-function GetFileAttributesInternal(const FileName: TFileName;
+// an alternative to GetFileAttributesExW() with fallback to FindFirstFileEx API
+function GetFileAttributesRaw(fn: PWideChar;
   out Attr: WIN32_FILE_ATTRIBUTE_DATA): boolean;
 var
-  fn: PWideChar;
   h: THandle;
   fd: TWin32FindDataW;
-  tmp: TW32Temp;
 begin
-  if FileName = '' then
-  begin
-    result := false;
-    exit;
-  end;
-  fn := W32(FileName, tmp);
+  // this API is much faster than CreateFile/GetFileTime/GetFileSize/CloseHandle
   result := GetFileAttributesExW(fn, GetFileExInfoStandard, @Attr);
   if result or
-     (GetLastError in ERROR_NOT_EXIST) then
+     (GetLastError in [ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND,
+        ERROR_INVALID_NAME, ERROR_INVALID_DRIVE, ERROR_NOT_READY,
+        ERROR_INVALID_PARAMETER, ERROR_BAD_PATHNAME, ERROR_BAD_NETPATH,
+        ERROR_BAD_NET_NAME]) then
     exit;
-  // access denied, or locked/share_exclusive: use slower but accurate API
-  h := FindFirstFileExW(
-    fn, FindExInfoStandard, @fd, FindExSearchNameMatch, nil, 0);
+  // access denied, or locked file: fallback to slower but accurate API
+  h := FindFirstFileExW(fn, FindExInfoStandard, @fd, FindExSearchNameMatch);
   if not ValidHandle(h) then
     exit;
   windows.FindClose(h);
-  Attr.dwFileAttributes := fd.dwFileAttributes; // output only needed fields
+  Attr.dwFileAttributes := fd.dwFileAttributes;
+  Attr.ftCreationTime := fd.ftCreationTime;
+  Attr.ftLastAccessTime := fd.ftLastAccessTime;
   Attr.ftLastWriteTime := fd.ftLastWriteTime;
   Attr.nFileSizeHigh := fd.nFileSizeHigh;
   Attr.nFileSizeLow := fd.nFileSizeLow;
   result := true;
+end;
+
+function GetFileAttributesInternal(const FileName: TFileName;
+  out Attr: WIN32_FILE_ATTRIBUTE_DATA; FollowLink: boolean = true): boolean;
+var
+  fn: PWideChar;
+  h: THandle;
+  f: cardinal;
+  lp: TByHandleFileInformation;
+  tmp: TW32Temp;
+begin
+  result := false;
+  if FileName = '' then
+    exit;
+  fn := W32(FileName, tmp);
+  result := GetFileAttributesRaw(fn, Attr);
+  if result and
+     FollowLink and
+     (Attr.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT <> 0) then
+  begin
+    // we need to follow a symbolic link
+    f := 0;
+    if Attr.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+      f := FILE_FLAG_BACKUP_SEMANTICS; // to access folder handle
+    FillCharFast(Attr, SizeOf(Attr), 0); // enough for FileExists()
+    // raw file access seems better than FileGetSymLinkTarget() in our case
+    // and it will be consistent on both FPC and Delphi (including pre-Unicode)
+    // - if we require file information, it is likely we would like to access it
+    // - note that FPC and Delphi RTL seems overcomplicated and non-consistent
+    // about symbolic links: mORMot will share this function everywhere
+    h := CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, f, 0);
+    if ValidHandle(h) then
+    begin
+      if GetFileInformationByHandle(h, lp) then
+      begin
+        Attr.dwFileAttributes := lp.dwFileAttributes;
+        Attr.ftCreationTime := lp.ftCreationTime;
+        Attr.ftLastAccessTime := lp.ftLastAccessTime;
+        Attr.ftLastWriteTime := lp.ftLastWriteTime;
+        Attr.nFileSizeHigh := lp.nFileSizeHigh;
+        Attr.nFileSizeLow := lp.nFileSizeLow;
+      end
+      else
+        result := false;
+      CloseHandle(h);
+    end
+    else
+      result := GetLastError in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION];
+  end;
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
@@ -658,7 +692,6 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
 begin
-  // much faster than CreateFile, GetFileTime, CloseHandle or FindFirst/Find...
   if GetFileAttributesInternal(FileName, FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
@@ -673,7 +706,7 @@ var
 begin
   if GetFileAttributesInternal(FileName, FA) and
      (AllowDir or
-      (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
+      ({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY = 0)) then
     result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
   else
     result := 0;
@@ -686,7 +719,7 @@ var
 begin
   result := 0;
   if GetFileAttributesInternal(FileName, FA) and
-     (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0) and
+     ({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY = 0) and
      FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) then
     if not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
       result := 0;
@@ -742,45 +775,11 @@ begin
 end;
 
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
-const
-  FILE_FLAG: array[boolean] of cardinal = (0, FILE_FLAG_BACKUP_SEMANTICS);
 var
-  fn: PWideChar;
-  h: THandle;
-  flags: cardinal;
-  fd: TWin32FindDataW;
-  tmp: TW32Temp;
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  result := false;
-  if FileName = '' then
-    exit;
-  fn := W32(FileName, tmp);
-  flags := GetFileAttributesW(fn);
-  if flags <> INVALID_FILE_ATTRIBUTES then
-  begin
-    result := (flags and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir;
-    if (not result) or
-       (flags and FILE_ATTRIBUTE_REPARSE_POINT = 0) or
-       (not FollowLink) then
-      exit;
-    // we most probably called FileExists() to prepare a FileOpen() on a symlink
-    h := CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ, nil,
-      OPEN_EXISTING, FILE_FLAG[CheckAsDir], 0);
-    if ValidHandle(h) then
-      CloseHandle(h)
-    else if GetLastError <> ERROR_SHARING_VIOLATION then
-      result := false;
-  end
-  else if not (GetLastError in ERROR_NOT_EXIST) then
-  begin
-    // access denied, or locked/share_exclusive: use slower but accurate API
-    h := FindFirstFileExW(
-      fn, FindExInfoStandard, @fd, FindExSearchNameMatch, nil, 0);
-    if not ValidHandle(h) then
-      exit;
-    windows.FindClose(h);
-    result := (fd.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir;
-  end;
+  result := GetFileAttributesInternal(FileName, FA, FollowLink) and
+    ((FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir);
 end;
 
 function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
@@ -799,7 +798,6 @@ function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  // much faster than CreateFile, GetFileSize, CloseHandle
   if GetFileAttributesInternal(FileName, FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
@@ -814,7 +812,6 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  // much faster than CreateFile, GetFileSize, GetFileTime, CloseHandle
   result := GetFileAttributesInternal(FileName, FA);
   if not result then
     exit;
