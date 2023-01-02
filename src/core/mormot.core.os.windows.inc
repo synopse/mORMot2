@@ -577,14 +577,66 @@ begin
   result := WindowsFileTimeToDateTime(FileDate);
 end;
 
+// some definitions missing on oldest Delphi
+const
+  INVALID_FILE_ATTRIBUTES = cardinal(-1);
+  FILE_ATTRIBUTE_REPARSE_POINT = $0000400;
+function FindFirstFileExW(lpfilename: PWideChar; fInfoLevelId: FINDEX_INFO_LEVELS;
+  lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;
+  lpSearchFilter: pointer; dwAdditionalFlags: cardinal): THandle;
+  stdcall; external kernel32;
+
+const
+  ERROR_NOT_EXIST = [
+    ERROR_FILE_NOT_FOUND,
+    ERROR_PATH_NOT_FOUND,
+    ERROR_INVALID_NAME, // protects from names in the form of masks like '*'
+    ERROR_INVALID_DRIVE,
+    ERROR_NOT_READY,
+    ERROR_INVALID_PARAMETER,
+    ERROR_BAD_PATHNAME,
+    ERROR_BAD_NETPATH,
+    ERROR_BAD_NET_NAME ];
+
+// an alternative to GetFileAttributesExW() with fallback to FindFirstFile API
+function GetFileAttributesInternal(const FileName: TFileName;
+  out Attr: WIN32_FILE_ATTRIBUTE_DATA): boolean;
+var
+  fn: PWideChar;
+  h: THandle;
+  fd: TWin32FindDataW;
+  tmp: TW32Temp;
+begin
+  if FileName = '' then
+  begin
+    result := false;
+    exit;
+  end;
+  fn := W32(FileName, tmp);
+  result := GetFileAttributesExW(fn, GetFileExInfoStandard, @Attr);
+  if result or
+     (GetLastError in ERROR_NOT_EXIST) then
+    exit;
+  // access denied, or locked/share_exclusive: use slower but accurate API
+  h := FindFirstFileExW(
+    fn, FindExInfoStandard, @fd, FindExSearchNameMatch, nil, 0);
+  if not ValidHandle(h) then
+    exit;
+  windows.FindClose(h);
+  Attr.dwFileAttributes := fd.dwFileAttributes; // output only needed fields
+  Attr.ftLastWriteTime := fd.ftLastWriteTime;
+  Attr.nFileSizeHigh := fd.nFileSizeHigh;
+  Attr.nFileSizeLow := fd.nFileSizeLow;
+  result := true;
+end;
+
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
-  tmp: TW32Temp;
 begin
   // much faster than CreateFile, GetFileTime, CloseHandle or FindFirst/Find...
-  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
+  if GetFileAttributesInternal(FileName, FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
@@ -595,9 +647,8 @@ end;
 function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
-  tmp: TW32Temp;
 begin
-  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) and
+  if GetFileAttributesInternal(FileName, FA) and
      (AllowDir or
       (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0)) then
     result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
@@ -606,8 +657,16 @@ begin
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
+var
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  ft: TFileTime;
 begin
-  result := FileAge(FileName); // only called by mormot.core.zip
+  result := 0;
+  if GetFileAttributesInternal(FileName, FA) and
+     (({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) = 0) and
+     FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) then
+    if not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
+      result := 0;
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
@@ -662,10 +721,9 @@ end;
 function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
-  tmp: TW32Temp;
 begin
   // much faster than CreateFile, GetFileSize, CloseHandle
-  if GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA) then
+  if GetFileAttributesInternal(FileName, FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
     PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
@@ -678,10 +736,9 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
-  tmp: TW32Temp;
 begin
   // much faster than CreateFile, GetFileSize, GetFileTime, CloseHandle
-  result := GetFileAttributesExW(W32(FileName, tmp), GetFileExInfoStandard, @FA);
+  result := GetFileAttributesInternal(FileName, FA);
   if not result then
     exit;
   PInt64Rec(@FileSize)^.Lo := FA.nFileSizeLow;
