@@ -8,32 +8,55 @@
 
 { ****************** Unicode, Time, File process }
 
+const
+  /// on Windows, APIs have hardcoded MAX_PATH = 260 :(
+  // - but more than 260 chars are possible with the \\?\..... prefix
+  // or by disabling the limitation in registry since Windows 10, version 1607
+  // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+  // - extended-length path allows up to 32,767 widechars
+  // - but 2047 chars seems big enough in practice e.g. due to NTFS - POSIX uses 4096
+  W32_MAX = 2047;
+
+type
+  /// 2KB stack buffer for no heap allocation during UTF-16 encoding or
+  // switch to extended-length path
+  TW32Temp = array[0..W32_MAX] of WideChar;
+
 // W32() get a PWideChar buffer from a TFileName using a temp static buffer
 {$ifdef UNICODE}
 
-type
-  TW32Temp = byte; // not used
-
-function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar; inline;
+// UnicodeString may need to be converted to extended-length path
+function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+var
+  len: PtrInt;
+  U: pointer; // hold a UnicodeString but with no try..finally
 begin
-  Temp := 0; // make compiler happy
-  result := pointer(FileName); // no conversion needed
+  len := length(FileName);
+  if (len > MAX_PATH) and
+     (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
+     (FileName[2] = ':') then
+  begin
+    // convert to extended-length path
+    U := nil;
+    TFileName(U) := '\\?\' + FileName;
+    // move to TW32Temp stack buffer
+    len := length(TFileName(U)) * 2 + 2;  // +2 to include trailing #0
+    if len > SizeOf(Temp) then
+      Temp[0] := #0 // avoid buffer overflow (rejected by Windows anyway)
+    else
+      MoveFast(U^, Temp, len);
+    // release temp memory and return the generated static buffer
+    TFileName(U) := '';
+    result := @Temp;
+  end
+  else
+    // no conversion needed
+    result := pointer(FileName);
 end;
 
 {$else}
 
-const
-  /// FPC system hardcoded MAX_PATH = 260 :(
-  // - but more than 260 chars are possible with the \\?\..... prefix
-  // or by disabling the limitation in registry since Windows 10, version 1607
-  // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
-  // - 2047 chars seems big enough in practice - POSIX uses 4096
-  W32_MAX = 2047;
-
-type
-  /// 2KB stack buffer for no heap allocation during UTF-16 encoding
-  TW32Temp = array[0..W32_MAX] of WideChar;
-
+// AnsiString is converted to UTF-16, potentially with extended-length path
 procedure W32Convert(const FileName: TFileName; var Temp: TW32Temp);
 var
   U: SynUnicode;
@@ -50,7 +73,7 @@ begin
   // move to TW32Temp stack buffer
   len := length(U) * 2 + 2;  // +2 to include trailing #0
   if len > SizeOf(Temp) then
-    Temp[0] := #0 // avoid buffer overflow (will be rejected by Windows anyway)
+    Temp[0] := #0 // avoid buffer overflow (rejected by Windows anyway)
   else
     MoveFast(pointer(U)^, Temp, len);
 end;
@@ -66,7 +89,7 @@ begin
   begin
     if (len < MAX_PATH) and
        IsAnsiCompatible(pointer(FileName), len) then
-      // most common case doesn't need any Unicode conversion
+      // most common cases do not need any Unicode conversion
       for i := 0 to len do // include trailing #0
         PWordArray(@Temp)[i] := PByteArray(FileName)[i]
     else
