@@ -1973,6 +1973,16 @@ function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
 
+/// redefined here to support FileName longer than MAX_PATH
+// - as our FileOpen/FileCreate redefinitions
+// - CheckAsDir = true is used by DirectoryExists()
+function FileExists(const FileName: TFileName; FollowLink: boolean = true;
+  CheckAsDir: boolean = false): boolean;
+
+/// redefined here to support FileName longer than MAX_PATH
+function DirectoryExists(const FileName: TFileName;
+  FollowLink: boolean = true): boolean; {$ifdef HASINLINE} inline; {$endif}
+
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function DeleteFile(const aFileName: TFileName): boolean;

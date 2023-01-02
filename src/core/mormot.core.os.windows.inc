@@ -718,6 +718,60 @@ begin
   OemToCharW(pointer(OEM), pointer(result));
 end;
 
+function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
+const
+  FILE_FLAG: array[boolean] of cardinal = (0, FILE_FLAG_BACKUP_SEMANTICS);
+var
+  fn: PWideChar;
+  h: THandle;
+  flags: cardinal;
+  fd: TWin32FindDataW;
+  tmp: TW32Temp;
+begin
+  result := false;
+  if FileName = '' then
+    exit;
+  fn := W32(FileName, tmp);
+  flags := GetFileAttributesW(fn);
+  if flags <> INVALID_FILE_ATTRIBUTES then
+  begin
+    result := (flags and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir;
+    if (not result) or
+       (flags and FILE_ATTRIBUTE_REPARSE_POINT = 0) or
+       (not FollowLink) then
+      exit;
+    // we most probably called FileExists() to prepare a FileOpen() on a symlink
+    h := CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ, nil,
+      OPEN_EXISTING, FILE_FLAG[CheckAsDir], 0);
+    if ValidHandle(h) then
+      CloseHandle(h)
+    else if GetLastError <> ERROR_SHARING_VIOLATION then
+      result := false;
+  end
+  else if not (GetLastError in ERROR_NOT_EXIST) then
+  begin
+    // access denied, or locked/share_exclusive: use slower but accurate API
+    h := FindFirstFileExW(
+      fn, FindExInfoStandard, @fd, FindExSearchNameMatch, nil, 0);
+    if not ValidHandle(h) then
+      exit;
+    windows.FindClose(h);
+    result := (fd.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir;
+  end;
+end;
+
+function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
+begin
+  if FileName = '' then
+    result := false
+  else if FileName = '.' then
+    result := true
+  else if FileName[length(FileName)] <> '\' then
+    result := FileExists(FileName, FollowLink, {checkasdir=}true)
+  else
+    result := FileExists(copy(FileName, 1, length(FileName) - 1), FollowLink, true);
+end;
+
 function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
@@ -788,7 +842,7 @@ begin
     0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
-{$ifndef UNICODE} // W32() is not worth it if aFileName is UnicodeString
+// W32() will support length > MAX_PATH even if aFileName is UnicodeString
 function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 const
   FILE_WRITE_ATTRIBUTES = $0100; // not defined on oldest Delphi
@@ -813,7 +867,6 @@ begin
   else
     result := THandle(-1);
 end;
-{$endif UNICODE}
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 var
