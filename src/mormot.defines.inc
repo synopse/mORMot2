@@ -190,6 +190,9 @@
     {$ifdef VER3_2_2}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$endif VER3_2_2}
+    {$ifdef VER3_2_3}
+      {$define HASTTHREADTERMINATESET}
+    {$endif VER3_2_3}
   {$endif VER3_2}
   {$ifdef VER3_3} // trunk before 3.2
     {$define ISFPC27}
