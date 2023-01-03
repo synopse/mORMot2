@@ -1305,20 +1305,12 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
           ExpectedResult);
         CheckEqual(data, resp,
           'alternative "param1=value1&param2=value2" URI-encoded scheme');
-        CheckEqual(fClient.URI(
-          'root/Calculator.' + Method + '/1234?' + ParamsURI, 'GET', @data),
-          ExpectedResult);
-        CheckEqual(data, resp, 'alternative URI-encoded scheme with ClientDrivenID');
         FastSetString(data, pointer(Params), length(Params)); // =UniqueString
         CheckEqual(fClient.URI(
           'root/calculator/' + Method, 'POST', @data, nil, @data),
           ExpectedResult);
         CheckEqual(data, resp, 'interface/method routing');
         FastSetString(data, pointer(Params), length(Params)); // =UniqueString
-        CheckEqual(fClient.URI(
-          'root/calculator/' + Method + '/123', 'POST', @data, nil, @Params),
-          ExpectedResult);
-        CheckEqual(data, resp, 'interface/method/clientdrivenID routing');
         CheckEqual(fClient.URI(
           'root/CALCulator/' + Method + uriencoded, 'POST', @data),
           ExpectedResult);

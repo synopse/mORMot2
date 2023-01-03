@@ -52,6 +52,7 @@ Server-Side REST Process
 - `TAuthSession` for In-Memory User Sessions
 - `TRestServerAuthentication` Implementing Authentication Schemes
 - `TRestServerMonitor` for High-Level Statistics of a REST Server
+- `TRestRouter` for efficient Radix Tree based URI Multiplexing
 - `TInterfacedCallback`/`TBlockingCallback` Classes
 - `TRestServer` Abstract REST Server
 - `TRestHttpServerDefinition` Settings for a HTTP Server

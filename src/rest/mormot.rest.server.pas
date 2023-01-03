@@ -12,6 +12,7 @@ unit mormot.rest.server;
     - TAuthSession for In-Memory User Sessions
     - TRestServerAuthentication Implementing Authentication Schemes
     - TRestServerMonitor for High-Level Statistics of a REST Server
+    - TRestRouter for efficient Radix Tree based URI Multiplexing
     - TRestServer Abstract REST Server
     - TRestHttpServerDefinition Settings for a HTTP Server
 
@@ -243,6 +244,9 @@ type
     // - should set Service member (and possibly InterfaceMethodIndex)
     // - abstract implementation which is to be overridden
     procedure UriDecodeSoaByInterface; virtual; abstract;
+    /// register the interface-based SOA URIs to Server.Router multiplexer
+    // - abstract implementation which is to be overridden
+    class procedure UriComputeRoutes(Server: TRestServer); virtual; abstract;
     /// process authentication
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
@@ -744,6 +748,8 @@ type
     /// set to TRUE disable Authentication check for this method
     // - use TRestServer.ServiceMethodByPassAuthentication() method
     ByPassAuthentication: boolean;
+    /// the allowed HTTP methods on this service
+    Methods: TUriMethods;
     /// detailed statistics associated with this method
     Stats: TSynMonitorInputOutput;
   end;
@@ -776,6 +782,9 @@ type
     // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
     // set ServiceMethodIndex at this level (but in ExecuteSoaByInterface)
     procedure UriDecodeSoaByInterface; override;
+    /// register the interface-based SOA URIs to Server.Router multiplexer
+    // - this overridden implementation register '/Model/Interface' URI
+    class procedure UriComputeRoutes(Server: TRestServer); override;
     /// direct launch of an interface-based service with URI JSON/RPC routing
     // - Uri() will ensure that Service<>nil before calling it
     // - this overridden implementation expects parameters to be sent as part
@@ -819,6 +828,10 @@ type
     // '/Model/Interface.Method[/ClientDrivenID]' and will set
     // ServiceMethodIndex for next ExecuteSoaByInterface method call
     procedure UriDecodeSoaByInterface; override;
+    /// register the interface-based SOA URIs to Server.Router multiplexer
+    // - this overridden implementation register URI encoded as
+    // '/Model/Interface.Method[/ClientDrivenID]' for this class
+    class procedure UriComputeRoutes(Server: TRestServer); override;
     /// direct run of an interface-based service with our URI RESTful routing
     // - this overridden implementation expects parameters to be sent as one JSON
     // array body (Delphi/AJAX way) or optionally with URI decoding (HTML way):
@@ -1467,6 +1480,108 @@ type
   TRestServerAddStats = set of TRestServerAddStat;
 
 
+{ ************ TRestRouter for efficient Radix Tree based URI Multiplexing }
+
+  /// define the TRestTreeNode kind of REST requests
+  // - as registered by TRestServer.ComputeRoutes, i.e.
+  // - rnTable for ModelRoot/TableName GET POST PUT DELETE BEGIN END ABORT
+  // - rnTableID for ModelRoot/TableName/<id> GET LOCK UNLOCK PUT DELETE
+  // - rnTableIDBlob for ModelRoot/TableName/<id>/Blob GET PUT
+  // - rnTableMethod for ModelRoot/TableName/MethodName GET POST PUT DELETE
+  // - rnTableIDMethod ModelRoot/TableName/<id>/MethodName GET POST PUT DELETE
+  // - rnState for ModelRoot STATE
+  // - rnMethod for ModelRoot/MethodName GET POST PUT DELETE
+  // - rnMethodPath for ModelRoot/MethodName/<path:fulluri> GET POST PUT DELETE
+  // - rnInterface for ModelRoot/InterfaceName[/.InterfaceMethodName]
+  // - rnInterfaceClientID for ModelRoot/InterfaceName/.InterfaceMethodName/<id>
+  // - rnInterfacePseudo and rnInterfacePseudoClientID for TServiceInternalMethod
+  TRestNode = (
+    rnNone,
+    rnTable,
+    rnTableID,
+    rnTableIDBlob,
+    rnTableMethod,
+    rnTableIDMethod,
+    rnState,
+    rnMethod,
+    rnMethodPath,
+    rnInterfacePseudo,
+    rnInterfacePseudoClientID,
+    rnInterface,
+    rnInterfaceClientID);
+
+  /// context information, as cloned by TRestTreeNode.Split()
+  TRestTreeNodeData = record
+    /// which kind of execution this node is about
+    Node: TRestNode;
+    /// the index of the associated method (16-bit is enough, -1 for none)
+    // - in TRestServer.PublishedMethod[] for rn*Method*
+    // - in Service.InterfaceFactory.Methods[MethodIndex-3] for rnInterface,
+    // 0..2 being internal _free_/_contract_/_signature_ pseudo-methods
+    MethodIndex: {$ifdef CPU32} SmallInt {$else} integer {$endif};
+    /// the properties of the ORM class in the server TOrmModel for rnTable*
+    Table: TOrmModelProperties;
+    /// the ORM BLOB field definition for rnTableIDBlob
+    Blob: TOrmPropInfoRttiRawBlob;
+    /// the interface-based service for rnInterface
+    Service: TServiceFactoryServerAbstract;
+    /// the actual ORM/SOA execution (never nil)
+    Execute: TOnRestServerCallBack;
+  end;
+
+  /// implement a Radix Tree node to hold one URI registration
+  TRestTreeNode = class(TRadixTreeNodeParams)
+  protected
+    fOwner: TRestServer;
+    function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean; override;
+  public
+    /// all context information, as cloned by Split()
+    Data: TRestTreeNodeData;
+    /// overriden to support the additional Data fields
+    function Split(const Text: RawUtf8): TRadixTreeNode; override;
+  end;
+
+  /// exception class raised during TRestTree URI parsing
+  ERestTree = class(ERadixTree);
+
+  /// Radix Tree to hold all registered REST URI for a given HTTP method
+  TRestTree = class(TRadixTreeParams)
+  protected
+    procedure SetNodeClass; override; // use TRestTreeNode
+  end;
+
+  /// store per-method URI multiplexing Radix Tree in TRestRouter
+  // - each HTTP method would have its dedicated TRestTree parser in TRestRouter
+  // - only the TRestServer methods are supported
+  TRestRouterTree = array[mGET .. mSTATE] of TRestTree;
+
+  /// efficient server-side URI routing for TRestServer
+  TRestRouter = class(TSynPersistent)
+  protected
+    fTree: TRestRouterTree;
+    fOwner: TRestServer;
+  public
+    /// initialize this URI routine engine
+    constructor Create(aOwner: TRestServer); reintroduce;
+    /// finalize this URI routing engine
+    destructor Destroy; override;
+    /// register a given URI to the tree, for a given HTTP method
+    // - 'modelroot/' will be prefixed to the supplied aUri
+    function Setup(aFrom: TUriMethod; const aUri: RawUtf8;
+      aNode: TRestNode): TRestTreeNode; overload;
+    /// register a given URI to the tree, for a given HTTP method
+    // - 'modelroot/' will be prefixed to the supplied aUri
+    procedure Setup(aFrom: TUriMethods; const aUri: RawUtf8; aNode: TRestNode;
+      aTable: TOrmModelProperties; aBlob: TOrmPropInfoRttiRawBlob = nil;
+      aMethodIndex: integer = -1; aService: TServiceFactory = nil); overload;
+    /// quickly search for the node corresponding to Ctxt.Method and Uri
+    function Lookup(Ctxt: TRestServerUriContext): TRestTreeNode;
+    /// access to the internal per-method TRestTree instance
+    // - some Tree[] may be nil if the HTTP method has not been registered yet
+    property Tree: TRestRouterTree
+      read fTree;
+  end;
+
 
 { ************ TRestServer Abstract REST Server }
 
@@ -1696,9 +1811,10 @@ type
     fSessionCounterMin: cardinal;
     fTimestampInfoCacheTix: cardinal;
     fOnIdleLastTix: cardinal;
-    fPublishedMethodTimestampIndex: integer;
-    fPublishedMethodAuthIndex: integer;
-    fPublishedMethodBatchIndex: integer;
+    fPublishedMethodTimestampIndex: byte;
+    fPublishedMethodAuthIndex: byte;
+    fPublishedMethodBatchIndex: byte;
+    fPublishedMethodStatIndex: byte;
     fSessionAuthentication: TRestServerAuthenticationDynArray;
     fPublishedMethod: TRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
@@ -1713,6 +1829,8 @@ type
     fServicesRouting: TRestServerUriContextClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
     fServer: IRestOrmServer;
+    fRouter: TRestRouter;
+    fRouterSafe: TRWLightLock;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1730,6 +1848,7 @@ type
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
     procedure SetRoutingClass(aServicesRouting: TRestServerUriContextClass);
+    procedure SetOptions(rso: TRestServerOptions);
     /// add a new session to the internal session list
     // - do not use this method directly: this callback is to be used by
     // TRestServerAuthentication* classes
@@ -1845,12 +1964,6 @@ type
     // TAuthGroup to the TOrmModel (if not already there)
     constructor Create(aModel: TOrmModel;
       aHandleUserAuthentication: boolean = false); reintroduce; overload; virtual;
-    /// initialize REST server instance from a TSynConnectionDefinition
-    constructor RegisteredClassCreateFrom(aModel: TOrmModel;
-      aDefinition: TSynConnectionDefinition;
-      aServerHandleAuthentication: boolean); override;
-    /// Server finalization
-    destructor Destroy; override;
     /// Server initialization with a temporary Database Model
     // - a Model will be created with supplied tables, and owned by the server
     // - if you instantiate a TRestServerFullMemory or TRestServerDB
@@ -1862,6 +1975,12 @@ type
     /// Server initialization with a void Database Model and not authentication
     // - could be used e.g. for a interface-based services API REST server
     constructor Create(const aRoot: RawUtf8); reintroduce; overload;
+    /// initialize REST server instance from a TSynConnectionDefinition
+    constructor RegisteredClassCreateFrom(aModel: TOrmModel;
+      aDefinition: TSynConnectionDefinition;
+      aServerHandleAuthentication: boolean); override;
+    /// Server finalization
+    destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TRestOrmParent); override;
 
@@ -1891,6 +2010,12 @@ type
     // - if Shutdown is called in-between, returns true
     // - if the thread waited the supplied time, returns false
     function SleepOrShutdown(MS: integer): boolean;
+    /// can be called at startup to validate the URI routes on this server
+    // - is also called from Uri() if needed (e.g. after ResetRoutes)
+    procedure ComputeRoutes;
+    /// called when the routes need to be re-computed
+    // - e.g. is called when a service has been registered, or options changes
+    procedure ResetRoutes;
     /// main access to the class implementing IRestOrm methods for this instance
     // - used internally to avoid ORM: IRestOrm reference counting and
     // enable inlining of most simple methods, if possible
@@ -1906,6 +2031,10 @@ type
     procedure RecordVersionHandle(Occasion: TOrmOccasion;
       TableIndex: integer; var Decoder: TJsonObjectDecoder;
       RecordVersionField: TOrmPropInfoRttiRecordVersion); virtual;
+    /// low-level access to the internal URI multiplexer
+    // - to be used e.g. from overriden TRestServerUriContext.UriComputeRoutes
+    property Router: TRestRouter
+      read fRouter;
   public
     /// call this method to add an authentication method to the server
     // - will return the just created TRestServerAuthentication instance,
@@ -2009,11 +2138,12 @@ type
     // list of services
     // - all those published method signature should match TOnRestServerCallBack
     procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUtf8;
-      aInstance: TObject);
+      aInstance: TObject; aMethods: TUriMethods = [mGET, mPOST, mPUT, mDELETE]);
     /// direct registration of a method for a given low-level event handler
-    procedure ServiceMethodRegister(aMethodName: RawUtf8;
-      const aEvent: TOnRestServerCallBack;
-      aByPassAuthentication: boolean = false);
+    // - returns the index in the fPublishedMethod[] internal array
+    function ServiceMethodRegister(aMethodName: RawUtf8;
+      const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean = false;
+      aMethods: TUriMethods = [mGET, mPOST, mPUT, mDELETE]): PtrInt;
     /// call this method to disable Authentication method check for a given
     // published method-based service name
     // - by default, only Auth and Timestamp methods do not require the RESTful
@@ -2235,6 +2365,7 @@ type
       read GetNoAjaxJson write SetNoAjaxJson;
     /// the URI to redirect any plain GET on root URI, without any method
     // - could be used to ease access from web browsers URI
+    // - consider using faster and more precise THttpServerGeneric.Route.Get()
     property RootRedirectGet: RawUtf8
       read fRootRedirectGet write fRootRedirectGet;
     /// a list of the services associated by all clients of this server instance
@@ -2249,7 +2380,7 @@ type
     /// allow to customize how TRestServer.Uri process the requests
     // - e.g. if HTTP_SUCCESS with no body should be translated into HTTP_NOCONTENT
     property Options: TRestServerOptions
-      read fOptions write fOptions;
+      read fOptions write SetOptions;
     /// set to true if the server will handle per-user authentication and
     // access right management
     // - i.e. if the associated TOrmModel contains TAuthUser and
@@ -2299,7 +2430,50 @@ type
       read fAuthGroupClass;
 
     { standard method-based services }
-  published
+  public
+    /// REST service accessible from the ModelRoot/Timestamp URI
+    // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
+    // - this method will not require an authenticated client
+    // - hidden ModelRoot/Timestamp/info command will return basic execution
+    // information, less verbose (and sensitive) than Stat(), calling virtual
+    // InternalInfo() protected method
+    procedure Timestamp(Ctxt: TRestServerUriContext);
+    /// REST service accessible from ModelRoot/Auth URI
+    // - called by the clients for authentication and session management
+    // - this method won't require an authenticated client, since it is used to
+    // initiate authentication
+    // - this global callback method is thread-safe
+    procedure Auth(Ctxt: TRestServerUriContext);
+    /// REST service accessible from the ModelRoot/Batch URI
+    // - will execute a set of RESTful commands, in a single step, with optional
+    // automatic SQL transaction generation
+    // - this method will require an authenticated client, for safety
+    // - expect input as JSON commands:
+    // & '{"Table":["cmd":values,...]}'
+    // or for multiple tables:
+    // & '["cmd@Table":values,...]'
+    // with cmd in POST/PUT with {object} as value or DELETE with ID
+    // - returns an array of integers: '[200,200,...]' or '["OK"]' if all
+    // returned status codes are 200 (HTTP_SUCCESS)
+    // - URI are either 'ModelRoot/TableName/Batch' or 'ModelRoot/Batch'
+    procedure Batch(Ctxt: TRestServerUriContext);
+    /// REST service accessible from the ModelRoot/CacheFlush URI
+    // - it will flush the server result cache
+    // - this method shall be called by the clients when the Server cache may be
+    // not consistent any more (e.g. after a direct write to an external database)
+    // - this method will require an authenticated client, for safety
+    // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
+    // for all tables
+    // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
+    // table cache
+    // - GET ModelRoot/CacheFlush/TableName/TableID URI will flush the content
+    // of the specified record
+    // - POST ModelRoot/CacheFlush/_callback_ URI will be called by the client
+    // to notify the server that an interface callback instance has been released
+    // - POST ModelRoot/CacheFlush/_ping_ URI will be called by the client after
+    // every half session timeout (or at least every hour) to notify the server
+    // that the connection is still alive
+    procedure CacheFlush(Ctxt: TRestServerUriContext);
     /// REST service accessible from ModelRoot/Stat URI to gather detailed information
     // - returns the current execution statistics of this server, as a JSON object
     // - this method will require an authenticated client, for safety
@@ -2318,49 +2492,6 @@ type
     // - a specific findservice=ServiceName parameter will not return any
     // statistics, but matching URIs from the server AssociatedServices list
     procedure Stat(Ctxt: TRestServerUriContext);
-    /// REST service accessible from ModelRoot/Auth URI
-    // - called by the clients for authentication and session management
-    // - this method won't require an authenticated client, since it is used to
-    // initiate authentication
-    // - this global callback method is thread-safe
-    procedure Auth(Ctxt: TRestServerUriContext);
-    /// REST service accessible from the ModelRoot/Timestamp URI
-    // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
-    // - this method will not require an authenticated client
-    // - hidden ModelRoot/Timestamp/info command will return basic execution
-    // information, less verbose (and sensitive) than Stat(), calling virtual
-    // InternalInfo() protected method
-    procedure Timestamp(Ctxt: TRestServerUriContext);
-    /// REST service accessible from the ModelRoot/CacheFlush URI
-    // - it will flush the server result cache
-    // - this method shall be called by the clients when the Server cache may be
-    // not consistent any more (e.g. after a direct write to an external database)
-    // - this method will require an authenticated client, for safety
-    // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
-    // for all tables
-    // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
-    // table cache
-    // - GET ModelRoot/CacheFlush/TableName/TableID URI will flush the content
-    // of the specified record
-    // - POST ModelRoot/CacheFlush/_callback_ URI will be called by the client
-    // to notify the server that an interface callback instance has been released
-    // - POST ModelRoot/CacheFlush/_ping_ URI will be called by the client after
-    // every half session timeout (or at least every hour) to notify the server
-    // that the connection is still alive
-    procedure CacheFlush(Ctxt: TRestServerUriContext);
-    /// REST service accessible from the ModelRoot/Batch URI
-    // - will execute a set of RESTful commands, in a single step, with optional
-    // automatic SQL transaction generation
-    // - this method will require an authenticated client, for safety
-    // - expect input as JSON commands:
-    // & '{"Table":["cmd":values,...]}'
-    // or for multiple tables:
-    // & '["cmd@Table":values,...]'
-    // with cmd in POST/PUT with {object} as value or DELETE with ID
-    // - returns an array of integers: '[200,200,...]' or '["OK"]' if all
-    // returned status codes are 200 (HTTP_SUCCESS)
-    // - URI are either 'ModelRoot/TableName/Batch' or 'ModelRoot/Batch'
-    procedure Batch(Ctxt: TRestServerUriContext);
   end;
 
   /// class-reference type (metaclass) of a REST server
@@ -2386,6 +2517,7 @@ const
 
 
 function ToText(res: TOnAuthenticationFailedReason): PShortString; overload;
+function ToText(n: TRestNode): PShortString; overload;
 
 
 /// returns the thread-specific service context execution currently running
@@ -2632,6 +2764,10 @@ begin
   result := PerThreadRunningContextAddress; // from mormot.core.interfaces.pas
 end;
 
+function ToText(n: TRestNode): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TRestNode), ord(n));
+end;
 
 
 { TRestServerUriContext }
@@ -3227,10 +3363,9 @@ begin
   case ServiceMethodIndex of
     ord(imFree):
       // {"method":"_free_", "params":[], "id":1234}
-      if not (s.InstanceCreation in [sicClientDriven..sicPerThread]) then
+      if s.InstanceCreation in SERVICE_IMPLEMENTATION_NOID then
       begin
-        Error('_free_ is not compatible with %',
-          [ToText(s.InstanceCreation)^]);
+        Error('_free_ is not compatible with %', [ToText(s.InstanceCreation)^]);
         exit;
       end;
     ord(imContract):
@@ -3254,7 +3389,7 @@ begin
       end;
     ord(imInstance):
       // "method":"_instance_" from TServiceFactoryClient.CreateFakeInstance
-      if not (s.InstanceCreation in [sicClientDriven]) then
+      if s.InstanceCreation <> sicClientDriven then
       begin
         Error('_instance_ is not compatible with %',
           [ToText(s.InstanceCreation)^]);
@@ -4408,6 +4543,78 @@ begin
   end;
 end;
 
+class procedure TRestServerRoutingRest.UriComputeRoutes(Server: TRestServer);
+var
+  services: TServiceContainerServer;
+  i: PtrInt;
+  ndx: integer;
+  noID: boolean;
+  sic: TServiceInstanceImplementation;
+  rn: TRestNode;
+  met: PServiceContainerInterfaceMethod;
+  nam: RawUtf8;
+begin
+  services := Server.Services as TServiceContainerServer;
+  // methods could be POST + JSON body but also GET + URI encoded parameters
+  for i := 0 to high(Server.Services.InterfaceMethod) do
+  begin
+    met := @services.InterfaceMethod[i];
+    nam := met^.InterfaceDotMethodName;
+    ndx := met^.InterfaceMethodIndex; // 0..3 are im* pseudo-methods
+    sic := met^.InterfaceService.InstanceCreation;
+    noID := true;
+    rn := rnInterfacePseudo;
+    case ndx of
+      // pseudo-methods have a specific URI behavior
+      ord(imContract):
+        ; // keep noID = true
+      ord(imInstance):
+        if sic <> sicClientDriven then
+          // imInstance is for a new sicClientDriven only
+          continue;
+      ord(imSignature):
+        if not services.PublishSignature then
+          // imSignature is disabled on this server
+          continue;
+      ord(imFree):
+        if sic in SERVICE_IMPLEMENTATION_NOID then
+          // imFree need an ID to release the instance
+          continue
+        else
+        begin
+          // imFree can make early release, e.g. from sicThread
+          noID := false;
+          rn := rnInterfacePseudoClientID; // with an ID
+        end
+    else
+      begin
+        // interface methods need a /ClientDrivenID only if sicClientDriven
+        noID := sic <> sicClientDriven;
+        if noID then
+          rn := rnInterface
+        else
+          rn := rnInterfaceClientID;
+      end;
+    end;
+    // URI sent as GET/POST /Model/Interface.Method[/ClientDrivenID]
+    if noID then
+      Server.Router.Setup([mGET, mPOST], nam,
+        rn, nil, nil, ndx, met^.InterfaceService)
+    else
+      Server.Router.Setup([mGET, mPOST], nam + '/<int:clientid>',
+        rn, nil, nil, ndx, met^.InterfaceService);
+    // URI sent as GET/POST /Model/Interface/Method[/ClientDrivenID]
+    nam := StringReplaceChars(nam, '.', '/');
+    if nam <> met^.InterfaceDotMethodName then
+      if noID then
+        Server.Router.Setup([mGET, mPOST], nam,
+          rn, nil, nil, ndx, met^.InterfaceService)
+      else
+        Server.Router.Setup([mGET, mPOST], nam + '/<int:clientid>',
+          rn, nil, nil, ndx, met^.InterfaceService);
+  end;
+end;
+
 procedure TRestServerRoutingRest.DecodeUriParametersIntoJson;
 var
   arg, i, ilow: PtrInt;
@@ -4513,6 +4720,21 @@ begin
      (Server.Services <> nil) then
     // URI sent as '/Model/Interface' for JSON-RPC service
     Service := Server.Services[Uri];
+  // ServiceMethodIndex will be retrieved from "method": in body
+end;
+
+class procedure TRestServerRoutingJsonRpc.UriComputeRoutes(Server: TRestServer);
+var
+  i: PtrInt;
+  s: PServiceContainerInterface;
+begin
+  // URI sent as POST '/Model/Interface' for JSON-RPC service
+  for i := 0 to Server.Services.Count - 1 do
+  begin
+    s := @Server.Services.InterfaceList[i];
+    Server.fRouter.Setup([mPOST], s^.InterfaceName, // as Server.Services[Uri]
+      rnInterface, nil, nil, -1, s^.Service);
+  end;
   // ServiceMethodIndex will be retrieved from "method": in body
 end;
 
@@ -5671,14 +5893,143 @@ begin
 end;
 
 
+{ ************ TRestRouter for efficient Radix Tree based URI Multiplexing }
+
+{ TRestTreeNode }
+
+function TRestTreeNode.LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
+var
+  ctx: TRestServerUriContext absolute Ctxt;
+  id: QWord;
+begin
+  if Data.Node = rnMethodPath then
+    // ModelRoot/MethodName/<path:fulluri>
+    // could be always set, because <path:...> will always match at ending
+    FastSetString(ctx.fUriBlobFieldName, Pos, Len)
+  else
+  begin
+    result := false;
+    SetQWord(Pos, id{%H-});
+    if id = 0 then
+      exit; // expect a positive integer
+    case Data.Node of
+      rnTableID,
+      rnTableIDBlob,
+      rnTableIDMethod:
+        // ModelRoot/TableName/TableID
+        ctx.fTableID := id;          // <int:id>
+      rnInterfaceClientID,
+      rnInterfacePseudoClientID:
+        // ModelRoot/Interface.Method/ClientDrivenID
+        ctx.fServiceInstanceID := id; // <int:clientid>
+    else
+      exit; // unexpected parameter
+    end;
+  end;
+  result := true;
+end;
+
+function TRestTreeNode.Split(const Text: RawUtf8): TRadixTreeNode;
+begin
+  result := inherited Split(Text);
+  TRestTreeNode(result).Data := Data;
+  //Finalize(Data); not needed (no managed field)
+  FillCharFast(Data, SizeOf(Data), 0);
+end;
+
+
+{ TRestTree }
+
+procedure TRestTree.SetNodeClass;
+begin
+  fDefaultNodeClass := TRestTreeNode;
+end;
+
+
+{ TRestRouter }
+
+constructor TRestRouter.Create(aOwner: TRestServer);
+begin
+  fOwner := aOwner;
+  inherited Create;
+end;
+
+destructor TRestRouter.Destroy;
+var
+  m: TUriMethod;
+begin
+  inherited Destroy;
+  for m := low(fTree) to high(fTree) do
+    fTree[m].Free;
+end;
+
+function TRestRouter.Setup(aFrom: TUriMethod; const aUri: RawUtf8;
+  aNode: TRestNode): TRestTreeNode;
+var
+  names: TRawUtf8DynArray;
+  uri: RawUtf8;
+begin
+  if aNode = rnNone then
+    raise ERestTree.CreateUtf8('%.Setup(%)?', [self, ToText(aNode)^]);
+  if fTree[aFrom] = nil then
+    fTree[aFrom] := TRestTree.Create([rtoCaseInsensitiveUri]);
+  uri := fOwner.Model.Root;
+  if aUri <> '' then
+    uri := uri + '/' + aUri;
+  result := fTree[aFrom].Setup(uri, names) as TRestTreeNode;
+  if result = nil then
+    exit;
+  if result.Data.Node <> rnNone then
+    raise ERestTree.CreateUtf8('%.Setup(m%,''%'',%) already exists as %',
+      [self, MethodText(aFrom), aUri, ToText(aNode)^, ToText(result.Data.Node)^]);
+  result.fOwner := fOwner;
+  result.Data.Node := aNode;
+end;
+
+procedure TRestRouter.Setup(aFrom: TUriMethods; const aUri: RawUtf8;
+  aNode: TRestNode; aTable: TOrmModelProperties; aBlob: TOrmPropInfoRttiRawBlob;
+  aMethodIndex: integer; aService: TServiceFactory);
+var
+  m: TUriMethod;
+  n: TRestTreeNode;
+begin
+  for m := low(fTree) to high(fTree) do
+    if m in aFrom then
+    begin
+      n := Setup(m, aUri, aNode);
+      n.Data.Table := aTable;
+      n.Data.Blob := aBlob;
+      n.Data.MethodIndex := aMethodIndex;
+      if aMethodIndex >= 0 then
+        n.Data.Execute := fOwner.fPublishedMethod[aMethodIndex].CallBack;
+      n.Data.Service := aService as TServiceFactoryServer;
+    end;
+end;
+
+function TRestRouter.Lookup(Ctxt: TRestServerUriContext): TRestTreeNode;
+var
+  p: PUtf8Char;
+begin
+  result := nil;
+  if (self = nil) or
+     (Ctxt = nil) or
+     (Ctxt.Call^.Url = '') or
+     (Ctxt.Method < low(fTree)) or
+     (Ctxt.Method > high(fTree)) then
+    exit;
+  p := pointer(Ctxt.Call^.Url);
+  if p^ = '/' then
+    inc(p);
+  result := pointer((fTree[Ctxt.Method].Root as TRestTreeNode).Lookup(p, Ctxt));
+end;
+
+
 
 { ************ TRestServer Abstract REST Server }
 
 { TRestServer }
 
 constructor TRestServer.Create(aModel: TOrmModel; aHandleUserAuthentication: boolean);
-var
-  tmp: RawUtf8;
 begin
   if aModel = nil then
     raise EOrmException.CreateUtf8('%.Create(Model=nil)', [self]);
@@ -5708,17 +6059,20 @@ begin
   fSessionCounterMin := Random32(1 shl 20) + 10; // positive 31-bit integer
   fSessionCounter := fSessionCounterMin;
   fRootRedirectForbiddenToAuth := Model.Root + '/auth';
-  // retrieve published methods
   fPublishedMethods.InitSpecific(
     TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUtf8, nil, true);
   ServiceMethodRegisterPublishedMethods('', self);
-  fPublishedMethodAuthIndex := ServiceMethodByPassAuthentication('Auth');
-  fPublishedMethodTimestampIndex := ServiceMethodByPassAuthentication('Timestamp');
-  tmp := 'Batch';
-  fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
-  if (fPublishedMethodBatchIndex < 0) or
-     (fPublishedMethodTimestampIndex < 0) then
-    raise EOrmException.CreateUtf8('%.Create: missing method!', [self]);
+  // manually add default method-based services
+  fPublishedMethodTimestampIndex := ServiceMethodRegister(
+    'timestamp', Timestamp, true, [mGET]);
+  fPublishedMethodAuthIndex := ServiceMethodRegister(
+    'auth', Auth, {bypassauth=}true, [mGET]);
+  fPublishedMethodBatchIndex := ServiceMethodRegister(
+    'batch', Batch, false, [mPUT, mPOST]);
+  ServiceMethodRegister(
+    'cacheflush', CacheFlush, false, [mGET, mPOST]);
+  fPublishedMethodStatIndex := ServiceMethodRegister(
+    'stat', Stat, false, [mGET]);
 end;
 
 var
@@ -5741,6 +6095,7 @@ begin
   fAssociatedServices.Free;
   if GlobalLibraryRequestServer = self then
     GlobalLibraryRequestServer := nil; // unregister
+  fRouter.Free;
 end;
 
 constructor TRestServer.CreateWithOwnModel(const Tables: array of TOrmClass;
@@ -6350,7 +6705,121 @@ begin
         raise EServiceException.CreateUtf8(
           'Unexpected %.SetRoutingClass(%)', [self, aServicesRouting])
       else
+      begin
         fServicesRouting := aServicesRouting;
+        ResetRoutes; // fRouter will be re-generated when needed
+      end;
+end;
+
+procedure TRestServer.SetOptions(rso: TRestServerOptions);
+begin
+  if rso = fOptions then
+    exit;
+  fOptions := rso;
+  ResetRoutes;
+end;
+
+procedure TRestServer.ResetRoutes;
+begin
+  if fRouter = nil then
+    exit;
+  fRouterSafe.WriteLock;
+  try
+    FreeAndNil(fRouter);
+  finally
+    fRouterSafe.WriteUnLock;
+  end;
+end;
+
+procedure TRestServer.ComputeRoutes;
+var
+  i, j: PtrInt;
+  t, n: RawUtf8;
+  m: TOrmModelProperties;
+  sm: PRestServerMethod;
+  b: TOrmPropInfoRttiRawBlob;
+begin
+  fRouterSafe.WriteLock;
+  try
+    if fRouter <> nil then
+      exit;
+    fRouter := TRestRouter.Create(self);
+    // ORM remote access via REST
+    if not (rsoNoTableURI in fOptions) then
+    begin
+      // ModelRoot for
+      fRouter.Setup([mGET, mPOST, mBEGIN, mEND, mABORT],
+        '', rnTable, nil);
+      if not (rsoNoInternalState in fOptions) then
+        fRouter.Setup(mSTATE, '', rnState);
+      for i := 0 to fModel.TablesMax do
+      begin
+        m := fModel.TableProps[i];
+        t := m.Props.SqlTableName;
+        // ModelRoot/TableName
+        fRouter.Setup([mGET, mPOST, mPUT, mDELETE, mBEGIN],
+          t, rnTable, m);
+        // ModelRoot/TableName/TableID
+        fRouter.Setup([mGET, mLOCK, mUNLOCK, mPUT, mDELETE],
+          t + '/<int:id>', rnTableID, m);
+        for j := 0 to high(m.Props.BlobFields) do
+        begin
+          b := m.Props.BlobFields[j];
+          // ModelRoot/TableName/TableID/BlobField
+          fRouter.Setup([mGET, mPUT],
+            t + '/<int:id>/' + b.Name, rnTableIDBlob, m, b);
+          // ModelRoot/TableName/BlobField/TableID
+          fRouter.Setup([mGET, mPUT],
+            t + '/' + b.Name + '/<int:id>', rnTableIDBlob, m, b);
+        end;
+        for j := 0 to high(fPublishedMethod) do
+          if (j <> fPublishedMethodAuthIndex) and
+             (j <> fPublishedMethodTimestampIndex) and
+             (j <> fPublishedMethodStatIndex) then
+          begin
+            sm := @fPublishedMethod[j];
+            // ModelRoot/TableName/MethodName
+            fRouter.Setup(sm^.Methods,
+              t + '/' + sm^.Name, rnTableMethod, nil, nil, j);
+            if j <> fPublishedMethodBatchIndex then
+              // ModelRoot/TableName/TableID/MethodName
+              fRouter.Setup(sm^.Methods,
+                t + '/<int:id>/' + sm^.Name, rnTableIDMethod, nil, nil, j);
+          end;
+      end;
+    end;
+    // method-based services
+    for j := 0 to high(fPublishedMethod) do
+    begin
+      sm := @fPublishedMethod[j];
+      n := sm^.Name;
+      if n[1] = '_' then
+        system.delete(n, 1, 1); // e.g. TServer._procedure -> /root/procedure
+      if n = '' then
+        continue;
+      // ModelRoot/MethodName
+      fRouter.Setup(sm^.Methods, n, rnMethod, nil, nil, j);
+      if (j <> fPublishedMethodAuthIndex) and
+         (j <> fPublishedMethodStatIndex) and
+         (j <> fPublishedMethodBatchIndex) then
+      begin
+        // ModelRoot/MethodName/<path:fulluri>
+        fRouter.Setup(sm^.Methods,
+          n + '/<path:fulluri>', rnMethodPath, nil, nil, j);
+        if (rsoMethodUnderscoreAsSlashUri in fOptions) and
+           (PosExChar('_', n) <> 0) then
+          // ModelRoot/Method/Name from Method_Name
+          fRouter.Setup(sm^.Methods,
+            StringReplaceChars(n, '_', '/'), rnMethod, nil, nil, j);
+      end;
+    end;
+    // interface-based services
+    if Services <> nil then
+      fServicesRouting.UriComputeRoutes(self); // depends on actual class
+    //writeln(fRouter.Tree[mPOST].ToText);
+  finally
+    fRouterSafe.WriteUnLock;
+  end;
 end;
 
 procedure TRestServer.SessionCreate(var User: TAuthUser;
@@ -6602,23 +7071,26 @@ begin
 end;
 
 procedure TRestServer.ServiceMethodRegisterPublishedMethods(
-  const aPrefix: RawUtf8; aInstance: TObject);
+  const aPrefix: RawUtf8; aInstance: TObject; aMethods: TUriMethods);
 var
   i: PtrInt;
   methods: TPublishedMethodInfoDynArray;
 begin
-  if aInstance = nil then
+  if (aInstance = nil) or
+     (aMethods = []) then
     exit;
   if PosExChar('/', aPrefix) > 0 then
     raise EServiceException.CreateUtf8('%.ServiceMethodRegisterPublishedMethods' +
       '("%"): prefix should not contain "/"', [self, aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance, methods) - 1 do
     with methods[i] do
-      ServiceMethodRegister(aPrefix + Name, TOnRestServerCallBack(Method));
+      ServiceMethodRegister(aPrefix + Name,
+        TOnRestServerCallBack(Method), false, aMethods);
 end;
 
-procedure TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
-  const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean);
+function TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
+  const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean;
+  aMethods: TUriMethods): PtrInt;
 begin
   TrimSelf(aMethodName);
   if aMethodName = '' then
@@ -6628,11 +7100,13 @@ begin
     raise EServiceException.CreateUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [self, aMethodName]);
   with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
-    'Duplicated published method name %.%', [self, aMethodName]))^ do
+    'Duplicated published method name %.%', [self, aMethodName], @result))^ do
   begin
     Callback := aEvent;
     ByPassAuthentication := aByPassAuthentication;
+    Methods := aMethods;
   end;
+  ResetRoutes;
 end;
 
 function TRestServer.ServiceMethodByPassAuthentication(
@@ -6915,6 +7389,8 @@ begin
   end;
   QueryPerformanceMicroSeconds(msstart);
   fStats.AddCurrentRequestCount(1);
+  if fRouter = nil then
+    ComputeRoutes; // thread-safe (re)initialize once if needed
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   ctxt := fServicesRouting.Create(self, Call);
   try
@@ -6997,6 +7473,11 @@ begin
     // 4. return expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
+      {if fRouter.Lookup(ctxt) = nil then // validate TRestRouter setup
+      begin
+        ConsoleWrite(ctxt.Call^.Url, ccLightRed);
+        if fRouter.Lookup(ctxt) = nil then
+      end;}
       outcomingfile := false;
       if Call.OutBody <> '' then
         // detect 'Content-type: !STATICFILE' as first header

@@ -373,6 +373,7 @@ type
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
     function GetFakeCallbacksCount: integer;
+    procedure SetPublishSignature(value: boolean);
     procedure RecordVersionCallbackNotify(TableIndex: integer;
       Occasion: TOrmOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUtf8);
@@ -461,7 +462,7 @@ type
     // - is set to FALSE by default, for security reasons: only "_contract_"
     // pseudo method is available - see TServiceContainer.ContractExpected
     property PublishSignature: boolean
-      read fPublishSignature write fPublishSignature;
+      read fPublishSignature write SetPublishSignature;
     /// the default TServiceFactoryServer.TimeoutSec value
     // - default is 30 minutes
     // - you can customize each service using its corresponding TimeoutSec property
@@ -1798,6 +1799,9 @@ var
   c: TInterfaceFactoryArgumentDynArray;
 begin
   result := inherited AddServiceInternal(aService);
+  // notify that routing need to be updated
+  fRestServer.ResetRoutes;
+  // register the name of any interface callback parameter
   c := aService.InterfaceFactory.ArgUsed[imvInterface];
   if c = nil then
     exit;
@@ -1869,6 +1873,14 @@ begin
     result := fFakeCallbacks.Count
   else
     result := 0;
+end;
+
+procedure TServiceContainerServer.SetPublishSignature(value: boolean);
+begin
+  if fPublishSignature = value then
+    exit;
+  fPublishSignature := value;
+  fRestServer.ResetRoutes; // (dis)active root/interface/_signature_ URI
 end;
 
 function FakeCallbackFind(list: PPointer; n: integer; id: TInterfacedObjectFakeID;

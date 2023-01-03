@@ -857,8 +857,9 @@ begin
       end;
     end;
   end;
-  // setup the newly created server instance
-  fHttpServer.OnRequest := Request;
+  // setup the newly created HTTP server instance
+  fHttpServer.OnRequest := Request; // main TRestServer(s) processing callback
+  fHttpServer.SetFavIcon; // nice default icon for the browsers :)
   {$ifndef PUREMORMOT2} // deprecated since unsafe
   if aSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
@@ -873,11 +874,13 @@ begin
     if aThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
   {$endif USEHTTPSYS}
-  fHttpServer.SetFavIcon; // nice default icon for the browsers :)
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
+  // finish the TRestServer(s) startup
+  for i := 0 to high(fDBServers) do
+    fDBServers[i].Server.ComputeRoutes; // pre-compute URI routes
   log.Log(sllHttp, '% initialized for %', [fHttpServer, fDBServerNames], self);
 end;
 
