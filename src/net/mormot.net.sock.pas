@@ -1461,23 +1461,23 @@ begin
   res := '';
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      IP4Text(@PSockAddr(@Addr)^.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
+      with PSockAddr(@Addr)^ do
+        if (not localasvoid) or
+           (cardinal(sin_addr) <> cLocalhost32) then
+          IP4Text(@sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
     AF_INET6:
-      IP6Text(@PSockAddrIn6(@Addr)^.sin6_addr, res); // detect :: and ::1
+      begin
+        IP6Text(@PSockAddrIn6(@Addr)^.sin6_addr, res); // detect :: and ::1
+        if localasvoid and
+           (pointer(res) = pointer(IP4local)) then
+          res := '';
+      end;
     {$ifdef OSPOSIX}
     AF_UNIX:
-      begin
         if not localasvoid then
           res := IP4local; // by definition, unix sockets are local
-        exit;
-      end;
     {$endif OSPOSIX}
-  else
-    exit;
   end;
-  if localasvoid and
-     (pointer(res) = pointer(IP4local)) then
-    res := '';
 end;
 
 function TNetAddr.IP(localasvoid: boolean): RawUtf8;
