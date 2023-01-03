@@ -457,6 +457,9 @@ type
     // - equals e.g. '1234' if Port = '1.2.3.4:1234'
     property PublicPort: RawUtf8
       read fPublicPort;
+    /// the kind of HTTP Server used by this instance
+    property Use: TRestHttpServerUse
+      read fUse;
     /// read-only access to all internal servers
     property DBServer[Index: integer]: TRestServer
       read GetDBServer;
