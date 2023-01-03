@@ -1308,6 +1308,7 @@ type
   /// how TRestServer should maintain its statistical information
   // - used by TRestServer.StatLevels property
   TRestServerMonitorLevels = set of (
+    mlUri,
     mlTables,
     mlMethods,
     mlInterfaces,
@@ -2513,7 +2514,7 @@ const
   /// default value of TRestServer.StatLevels property
   // - i.e. gather all statistics, but mlSessions
   SERVERDEFAULTMONITORLEVELS: TRestServerMonitorLevels =
-    [mlTables, mlMethods, mlInterfaces, mlSQLite3];
+    [mlUri, mlTables, mlMethods, mlInterfaces, mlSQLite3];
 
 
 function ToText(res: TOnAuthenticationFailedReason): PShortString; overload;
@@ -7387,15 +7388,22 @@ begin
       exit;
     end;
   end;
-  QueryPerformanceMicroSeconds(msstart);
-  fStats.AddCurrentRequestCount(1);
-  if fRouter = nil then
-    ComputeRoutes; // thread-safe (re)initialize once if needed
+  msstart := 0; // 0 indicates no stats
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   ctxt := fServicesRouting.Create(self, Call);
   try
     if log <> nil then
+    begin
       ctxt.fLog := log.Instance;
+      if StatLevels <> [] then
+        msstart := ctxt.fLog.LastQueryPerformanceMicroSeconds;
+    end;
+    if StatLevels <> [] then
+    begin
+      if msstart = 0 then
+        QueryPerformanceMicroSeconds(msstart);
+      fStats.AddCurrentRequestCount(1);
+    end;
     if fShutdownRequested then
       ctxt.Error('Server is shutting down', HTTP_UNAVAILABLE)
     else if ctxt.Method = mNone then
@@ -7473,11 +7481,6 @@ begin
     // 4. return expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
-      {if fRouter.Lookup(ctxt) = nil then // validate TRestRouter setup
-      begin
-        ConsoleWrite(ctxt.Call^.Url, ccLightRed);
-        if fRouter.Lookup(ctxt) = nil then
-      end;}
       outcomingfile := false;
       if Call.OutBody <> '' then
         // detect 'Content-type: !STATICFILE' as first header
@@ -7490,7 +7493,8 @@ begin
         if (Call.OutStatus = HTTP_SUCCESS) and
            (rsoHttp200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTTP_NOCONTENT;
-      fStats.ProcessSuccess(outcomingfile);
+      if msstart <> 0 then
+        fStats.ProcessSuccess(outcomingfile);
     end
     else
       // OutStatus is an error code
@@ -7519,22 +7523,26 @@ begin
       ctxt.Error('Unsafe HTTP header rejected [%]',
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
-    QueryPerformanceMicroSeconds(msstop);
-    dec(msstop, msstart);
-    ctxt.fMicroSecondsElapsed := msstop;
-    ctxt.StatsFromContext(fStats, msstop);
+    if msstart <> 0 then
+    begin
+      QueryPerformanceMicroSeconds(msstop);
+      dec(msstop, msstart);
+      ctxt.fMicroSecondsElapsed := msstop;
+      if mlUri in StatLevels then
+        ctxt.StatsFromContext(fStats, msstop);
+      if mlTables in StatLevels then
+        case ctxt.Command of
+          execOrmGet:
+            fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.OutBody), false, msstop);
+          execOrmWrite:
+            fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.InBody), true, msstop);
+        end;
+      fStats.AddCurrentRequestCount(-1);
+      if fStatUsage <> nil then
+        fStatUsage.Modified(fStats, []); { TODO: fixed inefficient single lock }
+    end;
     if log <> nil then
       ctxt.LogFromContext;
-    if mlTables in StatLevels then
-      case ctxt.Command of
-        execOrmGet:
-          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.OutBody), false, msstop);
-        execOrmWrite:
-          fStats.NotifyOrmTable(ctxt.TableIndex, length(Call.InBody), true, msstop);
-      end;
-    fStats.AddCurrentRequestCount(-1);
-    if fStatUsage <> nil then
-      fStatUsage.Modified(fStats, []); { TODO: fixed inefficient single lock }
     if Assigned(OnAfterUri) then
       try
         OnAfterUri(ctxt);
