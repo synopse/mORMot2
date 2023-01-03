@@ -491,7 +491,9 @@ var
 begin
   // see https://lwn.net/Articles/542629 for Linux (available since Kernel 3.9)
   v := ord(true);
-  SetOpt(SOL_SOCKET, SO_REUSEPORT, @v, SizeOf(v));
+  if @self <> nil then
+    setsockopt(TSocket(@self), SOL_SOCKET, SO_REUSEPORT, @v, SizeOf(v));
+  // don't call SetOpt() which raise ENetSock on old kernel without SO_REUSEPORT
 end;
 
 procedure TNetSocketWrap.SetSendTimeout(ms: integer);
