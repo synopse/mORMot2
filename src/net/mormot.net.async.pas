@@ -1402,20 +1402,22 @@ function TPollAsyncSockets.ProcessRead(const notif: TPollSocketResult): boolean;
 var
   connection: TPollAsyncConnection;
   recved, added, retryms: integer;
+  pse: TPollSocketEvents;
   res: TNetResult;
   start, stop: Int64;
   wf: string[3];
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := true; // if closed or properly read: don't retry
-  connection := TPollAsyncConnection(notif.tag);
+  connection := TPollAsyncConnection(ResToTag(notif));
   if (self = nil) or
      fRead.Terminated or
      connection.IsClosed then
     exit;
   LockedInc32(@fProcessingRead);
   try
-    if pseClosed in notif.events then
+    pse := ResToEvents(notif);
+    if pseClosed in pse then
     begin
       // - properly triggered from EPOLLRDHUP on Linux in ET mode
       // - never notified on Windows: select() doesn't return any "close" flag
@@ -1424,14 +1426,14 @@ begin
       CloseConnection(connection);
       exit;
     end;
-    if pseError in notif.events then
+    if pseError in pse then
       // check for pseError after pseClosed, because closing is no fatal error
-      if not OnError(connection, notif.events) then
+      if not OnError(connection, pse) then
       begin
         CloseConnection(connection);
         exit;
       end;
-    if pseRead in notif.events then
+    if pseRead in pse then
     begin
       // we were notified that there may be some pending input data
       added := 0;
@@ -1539,10 +1541,10 @@ var
   res: TNetResult;
   start: Int64;
 begin
-  connection := TPollAsyncConnection(notif.tag);
+  connection := TPollAsyncConnection(ResToTag(notif));
   if (self = nil) or
      fWrite.Terminated or
-     (notif.events <> [pseWrite]) or
+     (ResToEvents(notif) <> [pseWrite]) or
      connection.IsClosed then
     exit;
   // we are now sure that the socket is writable and safe
@@ -1579,7 +1581,7 @@ begin
           break // may block, try later
         else if res <> nrOk then
         begin
-          fWrite.Unsubscribe(connection.fSocket, notif.tag);
+          fWrite.Unsubscribe(connection.fSocket, ResToTag(notif));
           exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write failed as % -> Unsubscribe(%,%) %', [ToText(res)^,
@@ -1611,7 +1613,7 @@ begin
         if connection.fWr.Len = 0 then
         begin
           // no further ProcessWrite unless slot.fWr contains pending data
-          fWrite.Unsubscribe(connection.fSocket, notif.tag);
+          fWrite.Unsubscribe(connection.fSocket, ResToTag(notif));
           exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(sock=%,handle=%)=% %',
@@ -1644,9 +1646,9 @@ constructor TAsyncConnection.Create(aOwner: TAsyncConnections;
 begin
   fOwner := aOwner;
   inherited Create;
+  fFlags := [fWasActive]; // by definition
   fRemoteIP4 := aRemoteIP.IP4;
   aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
-  include(fFlags, fWasActive); // by definition
 end;
 
 procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
@@ -2275,8 +2277,9 @@ begin
     ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
-    DoLog(sllTrace, 'ConnectionNew % sock=% count=%',
-      [aConnection, pointer(aSocket), fConnectionCount], self);
+    DoLog(sllTrace, 'ConnectionNew % sock=% count=% gc=%',
+      [aConnection, pointer(aSocket), fConnectionCount,
+       fFromGC in aConnection.fFlags], self);
   result := true; // indicates aSocket owned by the pool
 end;
 
@@ -2687,7 +2690,7 @@ begin
     // initial accept() will be directly redirected to atpReadPending threads
     // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
     fClients.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead],
-      {aSearchExisting=} fFromGC in Sender.fFlags);
+      {aSearchExisting=} false{fFromGC in Sender.fFlags});
     ThreadPollingWakeup(1);
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
@@ -2868,12 +2871,12 @@ begin
     while not Terminated do
     begin
       if not async then
-        notif.tag := 0 // blocking initial accept()
+        PQWord(@notif)^ := 0 // blocking initial accept()
       else if not fClients.fWrite.GetOne(900, 'AW', notif) then
         continue;
       if Terminated then
         break;
-      if notif.tag = 0 then // no tag = main accept()
+      if ResToTag(notif) = 0 then // no tag = main accept()
       begin
         repeat
           // could we Accept one or several incoming connection(s)?
@@ -2904,7 +2907,7 @@ begin
             break; // 10 seconds timeout
           if (fBanned <> nil) and
              (fBanned.Count <> 0) and
-             fBanned.IsBanned(sin) then // very efficient IP filterning
+             fBanned.IsBanned(sin) then // IP filtering from blacklist
           begin
             if acoVerboseLog in fOptions then
               DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);

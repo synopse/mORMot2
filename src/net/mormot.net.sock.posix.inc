@@ -953,7 +953,7 @@ begin
        (p^.fd > 0) then
     begin
       if r = POLLIN then
-        byte(d^.events) := byte([pseRead]) // optimized for the most common case
+        byte(e) := byte([pseRead]) // optimized for the most common case
       else
       begin
         byte(e) := 0;
@@ -965,9 +965,8 @@ begin
           include(e, pseError);
         if r and POLLHUP <> 0 then
           include(e, pseClosed);
-        d^.events := e;
       end;
-      d^.tag := t^;
+      SetRes(d^, t^, e);
       inc(d);
       p^.revents := 0; // reset result flags for reuse
     end;
@@ -1173,7 +1172,6 @@ begin
   ee := pointer(fResults);
   er := pointer(results.Events);
   repeat
-    er^.tag := TPollSocketTag(ee^.data.ptr);
     ev := ee^.events;
     byte(e) := byte([pseRead]); // optimized for the most common case
     if ev <> EPOLLIN then
@@ -1187,7 +1185,13 @@ begin
       if ev and EPOLLCLOSE <> 0 then
         include(e, pseClosed);
     end;
-    er^.events := e;
+    // inlined forward SetRes(er^, TPollSocketTag(ee^.data.ptr), e)
+    {$ifdef CPU32}
+    er^.B[4] := byte(e);
+    er^.Li := TPollSocketTag(ee^.data.ptr);
+    {$else}
+    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
+    {$endif CPU32}
     inc(ee);
     inc(er);
     dec(n)

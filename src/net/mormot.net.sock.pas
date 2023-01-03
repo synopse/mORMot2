@@ -666,17 +666,14 @@ type
   TPollSocketTagDynArray = TPtrUIntDynArray;
 
   /// modifications notified by TPollSocketAbstract.WaitForModified
-  {$ifdef CPUINTEL}
-  TPollSocketResult =  packed record
+  // - this opaque 64-bit tag will contain all the data needed for a result
+  // - use ResToTag/ResToEvents and SetRes wrapper functions
+  {$ifdef CPU32}
+  TPollSocketResult = TQWordRec;
   {$else}
-  TPollSocketResult =  record // ARM usualy prefers aligned data
-  {$endif CPUINTEL}
-    /// opaque value as defined by TPollSocketAbstract.Subscribe
-    // - holds typically a TPollAsyncConnection instance
-    tag: TPollSocketTag;
-    /// the events which are notified
-    events: TPollSocketEvents;
-  end;
+  TPollSocketResult = QWord;
+  {$endif CPU32}
+
   PPollSocketResult = ^TPollSocketResult;
   TPollSocketResultDynArray = array of TPollSocketResult;
 
@@ -901,13 +898,29 @@ type
   end;
 
 
-function ToText(ev: TPollSocketEvents): TShort8; overload;
+/// extract the TPollSocketTag pointer from TPollSocketResult opaque 64-bit
+function ResToTag(const res: TPollSocketResult): TPollSocketTag;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// extract the TPollSocketEvents set from TPollSocketResult opaque 64-bit
+function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a TPollSocketResult opaque 64-bit from its corresponding information
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// set the TPollSocketEvents set as [] from TPollSocketResult opaque 64-bit
+procedure ResetResEvents(var res: TPollSocketResult);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// class function factory, returning a socket polling class matching
 // at best the current operating system
 // - return a hidden TPollSocketSelect class under Windows, TPollSocketEpoll
 // under Linux, or TPollSocketPoll on BSD
 function PollSocketClass: TPollSocketClass;
+
+function ToText(ev: TPollSocketEvents): TShort8; overload;
 
 
 { *************************** TUri parsing/generating URL wrapper }
@@ -1077,7 +1090,7 @@ type
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
-      aTimeOut: integer = 10000; aReusePort: boolean = true);
+      aTimeOut: integer = 10000; aReusePort: boolean = false);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ENetSock exception on error
     // - optionaly via TLS (using the SChannel API on Windows, or by including
@@ -2564,6 +2577,53 @@ end;
 
 { ******************** Efficient Multiple Sockets Polling }
 
+{$ifdef CPU32}
+
+function ResToTag(const res: TPollSocketResult): TPollSocketTag;
+begin
+  result := res.Li;
+end;
+
+function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
+begin
+  result := TPollSocketEvents(res.B[4]);
+end;
+
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+begin
+  res.Li := tag;
+  res.B[4] := byte(ev);
+end;
+
+procedure ResetResEvents(var res: TPollSocketResult);
+begin
+  res.B[4] := 0;
+end;
+
+{$else}
+
+function ResToTag(const res: TPollSocketResult): TPollSocketTag;
+begin
+  result := res and $00ffffffffffffff;
+end;
+
+function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
+begin
+  result := TPollSocketEvents(byte(res shr 60));
+end;
+
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+begin
+  res := tag or (PtrUInt(byte(ev)) shl 60);
+end;
+
+procedure ResetResEvents(var res: TPollSocketResult);
+begin
+  res := res and $00ffffffffffffff;
+end;
+
+{$endif CPU32}
+
 function ToText(ev: TPollSocketEvents): TShort8;
 begin
   result[0] := #0;
@@ -2739,7 +2799,7 @@ begin
   begin
     result := res;
     repeat
-      if result^.tag = tag then // fast O(n) search in L1 cache
+      if ResToTag(result^) = tag then // fast O(n) search in L1 cache
         exit;
       inc(result);
       dec(n);
@@ -2805,8 +2865,8 @@ begin
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(notif.events) <> 0) and  // DeleteOnePending() may reset to 0
-           UnsetPending(notif.tag) then   // e.g. TPollAsyncReadSockets
+        if (byte(ResToEvents(notif)) <> 0) and // DeleteOnePending() may have reset to 0
+           UnsetPending(ResToTag(notif)) then  // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
           result := true;
@@ -2824,8 +2884,8 @@ begin
   end;
   if result and
      Assigned(fOnLog) then // log outside fPendingSafe
-    fOnLog(sllTrace, 'GetOnePending(%)=% % #%/%', [call, pointer({%H-}notif.tag),
-      byte({%H-}notif.events), ndx, n], self);
+    fOnLog(sllTrace, 'GetOnePending(%)=% % #%/%', [call,
+      pointer(ResToTag({%H-}notif)), byte(ResToEvents({%H-}notif)), ndx, n], self);
 end;
 
 function TPollSockets.MergePendingEvents(const new: TPollSocketResults): integer;
@@ -2846,7 +2906,7 @@ begin
       p := pointer(new.Events);
       n := new.Count;
       repeat
-        SetPending(p^.tag); // O(1) flag set in TPollConnectionSockets
+        SetPending(ResToTag(p^)); // O(1) flag set in TPollConnectionSockets
         inc(p);
         dec(n);
       until n = 0;
@@ -2868,7 +2928,8 @@ begin
   n := new.Count;
   cap := length(fPending.Events);
   repeat
-    if not EnsurePending(p^.Tag) then // O(1) check in TPollConnectionSockets
+    if // (byte(ResToEvents(p^)) <> 0) and
+       not EnsurePending(ResToTag(p^)) then // O(1) in TPollConnectionSockets
     begin
       // new event to process
       if len >= cap then
@@ -3095,21 +3156,20 @@ procedure TPollSockets.AddOnePending(
   aTag: TPollSocketTag; aEvents: TPollSocketEvents; aSearchExisting: boolean);
 var
   n: PtrInt;
+  notif: TPollSocketResult;
 begin
+  SetRes(notif, aTag, aEvents);
   fPendingSafe.Lock;
   try
     n := fPending.Count;
     if (n = 0) or
        (not aSearchExisting) or
-       (not EnsurePending(aTag)) then
+       (not Int64ScanExists(@fPending.Events[fPendingIndex],
+         fPending.Count - fPendingIndex, PInt64(@notif)^)) then
     begin
       if n >= length(fPending.Events) then
         SetLength(fPending.Events, NextGrow(n));
-      with fPending.Events[n] do
-      begin
-        tag := aTag;
-        events := aEvents;
-      end;
+      fPending.Events[n] := notif;
       fPending.Count := n + 1;
     end;
   finally
@@ -3133,7 +3193,7 @@ begin
         @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, aTag);
       if fnd <> nil then
       begin
-        byte(fnd^.events) := 0; // GetOnePending() will just ignore it
+        ResetResEvents(fnd^);  // GetOnePending() will just ignore it
         result := true;
       end;
     end;
@@ -3168,9 +3228,9 @@ begin
     p := @fPending.Events[fPendingIndex];
     if n > 0 then
       repeat
-        if FastFindPtrIntSorted(pointer(aTag), aTagCount, p^.tag) >= 0 then
+        if FastFindPtrIntSorted(pointer(aTag), aTagCount, ResToTag(p^)) >= 0 then
         begin
-          byte(p^.events) := 0; // GetOnePending() will just ignore it
+          ResetResEvents(p^); // GetOnePending() will just ignore it
           inc(result);
         end;
         inc(p);
@@ -3203,7 +3263,7 @@ begin
     fOnGetOneIdle(self, mormot.core.os.GetTickCount64);
   {$else}
   // non-blocking call of PollForPendingEvents()
-  byte(notif.events) := 0;
+  PQWord(@notif)^ := 0;
   start := 0;
   endtix := 0;
   LockedInc32(@fGettingOne);

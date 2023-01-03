@@ -960,13 +960,11 @@ begin
        FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
-      with results.Events[results.Count] do
-      begin
-        result := true;
-        events := ev;
-        tag := fTagTag[i];
-        inc(results.Count);
-      end;
+    begin
+      SetRes(results.Events[results.Count], fTagTag[i], ev);
+      result := true;
+      inc(results.Count);
+    end;
   end;
 end;
 
