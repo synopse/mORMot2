@@ -3304,11 +3304,11 @@ var
   P: PAnsiChar;
   modname, beg: PUtf8Char;
   uts: UtsName;
+  {$ifndef OSDARWIN}
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
   i: PtrInt;
   {$endif CPUARM3264}
-  {$ifndef OSDARWIN}
   tp: timespec;
   {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
