@@ -1401,7 +1401,7 @@ end;
 function TPollAsyncSockets.ProcessRead(const notif: TPollSocketResult): boolean;
 var
   connection: TPollAsyncConnection;
-  recved, added: integer;
+  recved, added, retryms: integer;
   res: TNetResult;
   start, stop: Int64;
   wf: string[3];
@@ -1435,20 +1435,24 @@ begin
     begin
       // we were notified that there may be some pending input data
       added := 0;
+      retryms := fReadWaitMs;
       if connection.TryLock({writer=}false) then
       // GetOnePending may be from several threads -> ensure locked
       begin
-        if Assigned(fOnFirstRead) and
-           not (fFirstRead in connection.fFlags) then
+        if not (fFirstRead in connection.fFlags) then
         begin
           include(connection.fFlags, fFirstRead);
+          if Assigned(fOnFirstRead) then
           try
             fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadDoTls
           except
             // TLS error -> abort
             UnlockAndCloseConnection(false, connection, 'ProcessRead OnFirstRead');
             exit;
-          end;
+          end
+          else if (retryms = 0) and
+                  (fProcessingRead < 4) then // < 4 for "wrk -c 10000" not fail
+            retryms := 50; // just after accept() on a idle server
         end;
         repeat
           if fRead.Terminated or
@@ -1459,11 +1463,11 @@ begin
           recved := SizeOf(temp);
           res := connection.Recv(@temp, recved); // no need of RecvPending()
           if (res = nrRetry) and
-             (fReadWaitMs <> 0) then
+             (retryms <> 0) then
           begin
             // seen after accept() or from ab -> leverage this thread
             recved := SizeOf(temp);
-            if connection.fSocket.WaitFor(fReadWaitMs, [neRead]) = [neRead] then
+            if connection.fSocket.WaitFor(retryms, [neRead]) = [neRead] then
               res := connection.Recv(@temp, recved);
             wf := 'wf ';
           end
