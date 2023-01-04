@@ -100,6 +100,8 @@ const
   HTTP_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Range Not Satisfiable"
   HTTP_RANGENOTSATISFIABLE = 416;
+  /// HTTP Status Code for "I'm a teapot"
+  HTTP_TEAPOT = 418;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -191,7 +193,7 @@ const
   HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;
 
   /// MIME content type used for UTF-8 encoded XML
-  XML_CONTENT_TYPE = 'text/xml; charset=UTF-8';
+  XML_CONTENT_TYPE = 'text/xml';
 
   /// HTTP header for MIME content type used for UTF-8 encoded XML
   XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + XML_CONTENT_TYPE;
@@ -4814,6 +4816,8 @@ begin
       Reason := 'Unsupported Media Type';
     HTTP_RANGENOTSATISFIABLE:
       Reason := 'Requested Range Not Satisfiable';
+    HTTP_TEAPOT:
+      Reason := 'I''m a teapot';
     426:
       Reason := 'Upgrade Required';
     HTTP_SERVERERROR:
