@@ -785,7 +785,7 @@ type
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
     fRequest: THttpServerRequest;
-    fConnectionOpaque: THttpServerConnectionOpaque;
+    fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
@@ -3041,7 +3041,8 @@ end;
 procedure THttpAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   inherited Recycle(aRemoteIP);
-  fConnectionOpaque.Value := nil;
+  fConnectionOpaque.ValueInternal := 0;
+  fConnectionOpaque.ValueExternal := 0;
   if fServer <> nil then
   begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then

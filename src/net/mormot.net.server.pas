@@ -658,7 +658,7 @@ type
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
-    fConnectionOpaque: THttpServerConnectionOpaque;
+    fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;

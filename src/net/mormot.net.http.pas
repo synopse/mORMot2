@@ -455,11 +455,19 @@ type
   /// a dynamic array of client connection identifiers, e.g. for broadcasting
   THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
 
-  /// an opaque connection-specific pointer identifier with a strong type
+  /// an opaque connection-specific pointers identifier with a strong type
+  // - each THttpAsyncConnection or THttpServerSocket raw connection instance
+  // maintains those two abstract PtrUInt tags, as a fConnectionOpaque field
+  // - match TRestServerConnectionOpaque as defined in mormot.rest.core
   THttpServerConnectionOpaque = record
-    Value: pointer;
+    /// pointer-sized tag reserved to mORMot (e.g. to idenfity a REST session)
+    ValueInternal: PtrUInt;
+    /// pointer-sized tag free for the end-user code
+    // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
+    ValueExternal: PtrUInt;
   end;
   /// reference to an opaque connection-specific pointer identifier
+  // - may be nil if unsupported, e.g. by the http.sys servers
   PHttpServerConnectionOpaque = ^THttpServerConnectionOpaque;
 
   /// event handler used by THttpServerGeneric.OnRequest, OnBeforeRequest and

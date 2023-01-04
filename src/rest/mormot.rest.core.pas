@@ -1086,6 +1086,19 @@ type
 { ************ TRestUriParams REST URI Definitions }
 
 type
+  /// an opaque connection-specific pointer identifier with a strong type
+  // - each raw connection instance maintains two abstract PtrUInt tags
+  // - match THttpServerConnectionOpaque as defined in mormot.net.http
+  TRestServerConnectionOpaque = record
+    /// pointer-sized tag reserved to mORMot (e.g. to idenfity a REST session)
+    ValueInternal: PtrUInt;
+    /// pointer-sized tag free for the end-user code
+    ValueExternal: PtrUInt;
+  end;
+  /// reference to an opaque connection-specific pointer identifier
+  // - may be nil if unsupported, e.g. by the http.sys servers
+  PRestServerConnectionOpaque = ^TRestServerConnectionOpaque;
+
   /// flags which may be set by the caller to notify low-level context
   // - llfHttps will indicates that the communication was made over HTTPS
   // - llfSecured is set if the transmission is encrypted or in-process,
@@ -1157,9 +1170,11 @@ type
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// most HTTP servers support a per-connection pointer storage
     // - may be nil if unsupported, e.g. by the http.sys servers
-    // - see also THttpServerConnectionOpaque as defined in mormot.net.http
+    // - map to THttpAsyncConnection or THttpServerSocket fConnectionOpaque field
+    // of type THttpServerConnectionOpaque as defined in mormot.net.http
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
-    LowLevelConnectionOpaque: PPointer;
+    // - warning: only ValueExternal is usable by end-user code
+    LowLevelConnectionOpaque: PRestServerConnectionOpaque;
     /// pre-parsed Remote IP of the current connection
     LowLevelRemoteIP: RawUtf8;
     /// pre-parsed "Bearer" HTTP header value
