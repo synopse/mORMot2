@@ -3079,8 +3079,11 @@ type
   /// implement an abstract Radix Tree static or <param> node
   TRadixTreeNodeParams = class(TRadixTreeNode)
   protected
+    /// is called for each <param> as Pos/Len pair//
+    // - called eventually with Pos^='?' and Len=-1 for the inlined parameters
+    // - should return true on success, false to abort
     function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
-      virtual; abstract; // should return true on success, false to abort
+      virtual; abstract;
   public
     /// all the <param1> <param2> names, in order, up to this parameter
     // - equals nil for static nodes
@@ -11108,11 +11111,13 @@ begin
       while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
         inc(P);
     if not LookupParam(Ctxt, c, P - c) then
-      exit; // the parameter is not in the expected format
+      exit; // the parameter is not in the expected format for Ctxt
   end;
   // if we reached here, the URI do match up to now
   if (P^ = #0) or (P^ = '?') then
   begin
+    if P^ = '?' then
+      LookupParam(Ctxt, P, -1); // store the inlined parameters position in Ctxt
     result := self; // exact match found for this entry (excluding URI params)
     exit;
   end;

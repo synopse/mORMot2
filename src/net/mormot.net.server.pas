@@ -1637,6 +1637,11 @@ var
   v: PIntegerArray;
 begin
   result := false;
+  if Len < 0 then // Pos^ = '?par=val&par=val&...'
+  begin
+    req.fUrlParamPos := Pos;
+    exit;
+  end;
   req.fRouteName := pointer(Names); // fast assign as pointer reference
   n := length(Names) * 2; // length(Names[]) = current parameter index
   if length(req.fRouteValuePosLen) < n then

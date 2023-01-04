@@ -3173,7 +3173,7 @@ procedure TInterfacedObjectFakeRaw.FakeCallRaiseError(
 var
   msg: RawUtf8;
 begin
-  msg := FormatUtf8(Format, Args);
+  FormatUtf8(Format, Args, msg);
   raise EInterfaceFactory.CreateUtf8('%.FakeCall(%.%) failed: %',
     [self, fFactory.fInterfaceName, ctxt.method^.Uri, msg]);
 end;
