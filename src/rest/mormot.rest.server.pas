@@ -3997,11 +3997,10 @@ begin
   repeat
     if n >= max then
     begin
-      if n >= 256 then
-        // avoid DOS - see MAX_METHOD_ARGS for TInterfacedObjectFake
+      if n >= MAX_METHOD_ARGS * 2 then
         raise EParsingException.CreateUtf8(
-          'Security Policy: Accept up to 128 parameters for %.FillInput',
-          [self]);
+          'Security Policy: Accept up to % parameters for %.FillInput',
+          [MAX_METHOD_ARGS * 2, self]);
       inc(max, 16);
       SetLength(fInput, max);
     end;
@@ -4023,7 +4022,10 @@ begin
     end;
   until P^ = #0;
   if n = 0 then
-    fInput := nil
+  begin
+    fInput := nil;
+    fParameters := nil; // no need to try it again if only session_signature
+  end
   else
     DynArrayFakeLength(fInput, n); // SetLength() would make a realloc()
   if (Log <> nil) and
@@ -4477,7 +4479,7 @@ begin
     end;
     WR.CancelLastComma;
     WR.Add(']');
-    WR.SetText(fCall^.InBody); // input Body contains the input JSON
+    WR.SetText(fCall^.InBody); // input Body contains new generated input JSON
   finally
     WR.Free;
   end;
