@@ -220,7 +220,6 @@ type
     fRouterParam: PUtf8Char; // <int:clientid> or <int:tableid>
     fParameters: PUtf8Char;
     fSession: cardinal;
-    fSessionIndex: integer;
     fSessionOS: TOperatingSystemVersion; // 32-bit raw OS info
     fSessionGroup: TID;
     fSessionUser: TID;
@@ -263,6 +262,9 @@ type
     // - abstract implementation which is to be overridden
     class procedure UriComputeRoutes(
       Router: TRestRouter; Server: TRestServer); virtual; abstract;
+    /// copy TAuthSession values into the Session* members
+    // - this method is not thread-safe: caller should use Sessions.Safe.ReadOnlyLock
+    procedure SessionAssign(AuthSession: TAuthSession);
     /// process authentication
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
@@ -872,6 +874,7 @@ type
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
     fRemoteOsVersion: TOperatingSystemVersion;
+    fConnectionOpaque: PRestServerConnectionOpaque;
     function GetUserName: RawUtf8;
     function GetUserID: TID;
     function GetGroupID: TID;
@@ -1597,6 +1600,8 @@ type
   // - rsoValidateUtf8Input will call IsValidUtf8() on input UTF-8 JSON/text,
   // to sanitize character encodings - with AVX2 this function is very fast so
   // this could be a good option if you don't trust your clients
+  // - rsoSessionInConnectionOpaque uses LowLevelConnectionOpaque^.ValueInternal
+  // to store the current TAuthSession - may be used with a lot of sessions
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1615,7 +1620,8 @@ type
     rsoNoInternalState,
     rsoNoTableURI,
     rsoMethodUnderscoreAsSlashUri,
-    rsoValidateUtf8Input);
+    rsoValidateUtf8Input,
+    rsoSessionInConnectionOpaque);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -1820,7 +1826,7 @@ type
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(var User: TAuthUser; Ctxt: TRestServerUriContext;
       out Session: TAuthSession); virtual;
-    /// search for Ctxt.Session ID
+    /// O(log(n)) binary search for Ctxt.Session ID in the internal list
     function LockedSessionFind(aSessionID: cardinal; aIndex: PPtrInt): TAuthSession;
     /// search for Ctxt.Session ID and fill Ctxt.Session* members if found
     // - returns nil if not found, or fill aContext.User/Group values if matchs
@@ -1830,7 +1836,8 @@ type
     /// delete a session from its index in Sessions[]
     // - will perform any needed clean-up, and log the event
     // - this method is not thread-safe: caller should use Sessions.Safe.WriteLock
-    procedure LockedSessionDelete(aSessionIndex: integer; Ctxt: TRestServerUriContext);
+    procedure LockedSessionDelete(aSessionIndex: integer;
+      Ctxt: TRestServerUriContext);
     /// SessionAccess will detect and delete outdated sessions, but you can call
     // this method to force checking for deprecated session now
     // - may be used e.g. from OnSessionCreate to limit the number of active sessions
@@ -2743,7 +2750,6 @@ begin
   fThreadServer := PerThreadRunningContextAddress;
   fThreadServer^.Request := self;
   fMethodIndex := -1;
-  fSessionIndex := -1;
 end;
 
 destructor TRestServerUriContext.Destroy;
@@ -2827,6 +2833,24 @@ begin
   SetString(result, PAnsiChar(pointer(Call^.Url)), len);
 end;
 
+procedure TRestServerUriContext.SessionAssign(AuthSession: TAuthSession);
+begin
+  // touch the TAuthSession deprecation timestamp
+  AuthSession.fTimeOutTix := (TickCount64 shr 10) + AuthSession.TimeoutShr10;
+  // make local copy of TAuthSession information
+  fSession := AuthSession.ID;
+  fSessionOS := AuthSession.fRemoteOsVersion;
+  fSessionUser := AuthSession.User.IDValue;
+  fSessionGroup := AuthSession.User.GroupRights.IDValue;
+  fSessionUserName := AuthSession.User.LogonName;
+  fSessionAccessRights := AuthSession.fAccessRights;
+  if (AuthSession.RemoteIP <> '') and
+     (fCall^.LowLevelRemoteIP = '') then
+    fCall^.LowLevelRemoteIP := AuthSession.RemoteIP;
+  fCall^.RestAccessRights := @fSessionAccessRights;
+  fAuthSession := AuthSession; // for TRestServer internal use only
+end;
+
 var
   // as set by TRestServer.AdministrationExecute()
   BYPASS_ACCESS_RIGHTS: TOrmAccessRights;
@@ -2859,6 +2883,21 @@ begin
         (Method in Server.BypassOrmAuthentication)) then
       // no need to check the sessions
       exit;
+    if (rsoSessionInConnectionOpaque in Server.Options) and
+       (Call^.LowLevelConnectionOpaque <> nil) then
+    begin
+      // TAuthSession instance may have been stored at connection level
+      // to avoid signature parsing and session lookup
+      s := pointer(Call^.LowLevelConnectionOpaque^.ValueInternal);
+      if s <> nil then
+        if s.InheritsFrom(Server.fSessionClass) then
+        begin
+          SessionAssign(s);
+          exit;
+        end
+        else
+          Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
+    end;
     Server.fSessions.Safe.ReadOnlyLock; // allow concurrent authentication
     try
       a := pointer(Server.fSessionAuthentication);
@@ -2866,7 +2905,7 @@ begin
       begin
         n := PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF;
         repeat
-          s := a^.RetrieveSession(self);
+          s := a^.RetrieveSession(self); // retrieve from URI or cookie
           if s <> nil then
           begin
             if (Log <> nil) and
@@ -4793,6 +4832,7 @@ function TRestServerAuthentication.AuthSessionRelease(
 var
   uname: RawUtf8;
   sessid: cardinal;
+  ndx: PtrInt;
   s: TAuthSession;
 begin
   // fServer.Auth() method-based service made fServer.Sessions.Safe.WriteLock
@@ -4812,13 +4852,15 @@ begin
   // allow only to delete its own authenticated session
   s := RetrieveSession(Ctxt); // parse signature
   if (s <> nil) and
-     (Ctxt.fSessionIndex >= 0) and
      (sessid = s.ID) and
      (s.User.LogonName = uname) then
   begin
     Ctxt.fAuthSession := nil; // avoid GPF
-    fServer.LockedSessionDelete(Ctxt.fSessionIndex, Ctxt);
-    Ctxt.Success;
+    if fServer.LockedSessionFind(sessid, @ndx) = s then
+    begin
+      fServer.LockedSessionDelete(ndx, Ctxt);
+      Ctxt.Success;
+    end;
   end;
 end;
 
@@ -6767,8 +6809,10 @@ procedure TRestServer.SessionCreate(var User: TAuthUser;
 var
   i: PtrInt;
   a: TAuthSession;
+  o: PRestServerConnectionOpaque;
 begin
   Session := nil;
+  // handle reOneSessionPerUser option
   if (reOneSessionPerUser in
       Ctxt.Call^.RestAccessRights^.AllowRemoteExecute) and
      (fSessions <> nil) then
@@ -6783,6 +6827,7 @@ begin
         exit; // user already connected
       end;
     end;
+  // initialize the session
   Session := fSessionClass.Create(Ctxt, User);
   if Assigned(OnSessionCreate) then
     if OnSessionCreate(self, Session, Ctxt) then
@@ -6800,6 +6845,17 @@ begin
   User := nil; // will be freed by TAuthSession.Destroy
   fSessions.Add(Session);
   fStats.ClientConnect;
+  if rsoSessionInConnectionOpaque in fOptions then
+  begin
+    o := Ctxt.Call^.LowLevelConnectionOpaque;
+    if o <> nil then
+    begin
+      // we can store the TAuthSession instance at connection level
+      // to avoid signature parsing and session lookup
+      o^.ValueInternal := PtrUInt(Session);
+      Session.fConnectionOpaque := o; // for deprecated LockedSessionDelete()
+    end;
+  end;
 end;
 
 function TRestServer.LockedSessionFind(
@@ -6829,6 +6885,24 @@ procedure TRestServer.LockedSessionDelete(aSessionIndex: integer;
 var
   a: TAuthSession;
   soa: integer;
+
+  procedure ClearConnectionOpaque(o: PRestServerConnectionOpaque);
+  begin
+    if o <> nil then
+      try
+        if o^.ValueInternal <> 0 then
+          if pointer(o^.ValueInternal) = a then
+            o^.ValueInternal := 0
+          else
+            InternalLog('Delete % session: opaque=% but % expected',
+              [Ctxt, pointer(o^.ValueInternal), pointer(a)], sllWarning);
+      except
+        on E: Exception do
+          InternalLog('Delete % session: opaque connection raised %',
+            [Ctxt, ClassNameShort(E)^], sllWarning);
+      end;
+  end;
+
 begin
   soa := 0;
   if (self <> nil) and
@@ -6837,6 +6911,11 @@ begin
     a := fSessions.List[aSessionIndex];
     if fServices <> nil then
       soa := (fServices as TServiceContainerServer).OnCloseSession(a.ID);
+    if rsoSessionInConnectionOpaque in fOptions then
+      if Ctxt = nil then
+        ClearConnectionOpaque(a.fConnectionOpaque)
+      else
+        ClearConnectionOpaque(Ctxt.Call^.LowLevelConnectionOpaque);
     if Ctxt = nil then
       InternalLog('Deleted deprecated session %:%/% soaGC=%',
         [a.User.LogonName, a.ID, fSessions.Count, soa], sllUserAuth)
@@ -6887,7 +6966,7 @@ begin
      (Ctxt.Session > CONST_AUTHENTICATION_NOT_USED) then
   begin
     // retrieve session from its ID using O(log(n)) binary search
-    result := LockedSessionFind(Ctxt.Session, @Ctxt.fSessionIndex);
+    result := LockedSessionFind(Ctxt.Session, nil);
     if result <> nil then
     begin
       // security check of session connection ID consistency
@@ -6902,19 +6981,8 @@ begin
             result.RemoteIP, result.ConnectionID], sllUserAuth);
           exit;
         end;
-      // found the session
-      result.fTimeOutTix := (Ctxt.TickCount64 shr 10) + result.TimeoutShr10;
-      Ctxt.fAuthSession := result; // for TRestServer internal use
-      // make local copy of TAuthSession information
-      Ctxt.fSessionUser := result.User.IDValue;
-      Ctxt.fSessionGroup := result.User.GroupRights.IDValue;
-      Ctxt.fSessionUserName := result.User.LogonName;
-      if (result.RemoteIP <> '') and
-         (Ctxt.fCall^.LowLevelRemoteIP = '') then
-        Ctxt.fCall^.LowLevelRemoteIP := result.RemoteIP;
-      Ctxt.fSessionAccessRights := result.fAccessRights;
-      Ctxt.fSessionOS := result.fRemoteOsVersion;
-      Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
+      // found the session: assign it to the request Ctxt
+      Ctxt.SessionAssign(result);
     end;
   end
   else
