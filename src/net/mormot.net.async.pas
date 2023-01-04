@@ -84,8 +84,6 @@ type
     /// the associated 32-bit sequence number
     // - equals 0 after TPollAsyncSockets.Stop
     fHandle: TPollAsyncConnectionHandle;
-    /// atomically incremented during WaitLock()
-    fWaitCounter: integer;
     /// false for a single lock (default), true to separate read/write locks
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
@@ -143,6 +141,7 @@ type
     /// try to acquire an exclusive R/W access to this connection
     // - returns true if connection has been acquired
     // - returns false if it is used by another thread, after the timeoutMS period
+    // - only with writer=true after a locked read + process, so unlikely to sleep
     function WaitLock(writer: boolean; timeoutMS: cardinal): boolean;
     /// release exclusive R/W access to this connection
     procedure UnLock(writer: boolean);
@@ -343,7 +342,7 @@ type
   // if needed, AfterCreate/AfterWrite/BeforeDestroy/OnLastOperationIdle)
   TAsyncConnection = class(TPollAsyncConnection)
   protected
-    fLastOperation: TAsyncConnectionSec; // as monotonic seconds
+    fLastOperation: TAsyncConnectionSec; // as 32-bit monotonic seconds
     fRemoteIP4: cardinal; // may contain cLocalhost32 = 127.0.0.1
     fRemoteIP: RawUtf8;   // never contains '127.0.0.1'
     fOwner: TAsyncConnections;
@@ -1013,7 +1012,6 @@ begin
     // we acquired the Connection for this direction, or we don't want to wait
     exit;
   // loop to wait for the lock release
-  LockedInc32(@fWaitCounter);
   endtix := GetTickCount64 + timeoutMS; // never wait forever
   ms := 0;
   repeat
@@ -1031,7 +1029,6 @@ begin
       break; // acquired or socket closed
     end;
   until GetTickCount64 >= endtix;
-  InterlockedDecrement(fWaitCounter);
 end;
 
 function TPollAsyncConnection.Send(buf: pointer; var len: integer): TNetResult;
@@ -1653,7 +1650,6 @@ end;
 
 procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
-  fWaitCounter := 0;
   fLockMax := false;
   fFlags := [fFromGC, fWasActive];
   fRd.Reset;
