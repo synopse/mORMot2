@@ -109,6 +109,9 @@ const
   /// you can use this cookie value to delete a cookie on the browser side
   COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
 
+  CONTENT_TYPE_WEBFORM: PAnsiChar = 'APPLICATION/X-WWW-FORM-URLENCODED';
+  CONTENT_TYPE_MULTIPARTFORM: PAnsiChar = 'MULTIPART/FORM-DATA';
+
 
 { ************ TRestBackgroundTimer for Multi-Thread Process }
 
@@ -1171,9 +1174,6 @@ type
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
     procedure InBodyType(out ContentType: RawUtf8;
       GuessJsonIfNoneSet: boolean = True);
-    /// check if the "Content-Type" value from InHead is JSON
-    // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
-    function InBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
@@ -1225,9 +1225,9 @@ type
 
 type
   /// the available HTTP methods transmitted between client and server
-  // - some custom verbs are available in addition to standard REST commands
-  // - most of iana verbs are available
-  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
+  // - remote ORM supports non-standard mLOCK/mUNLOCK/mABORT/mSTATE verbs
+  // - not all iana verbs are available, because TRestRouter will only
+  // support mGET .. mOPTIONS verbs anyway
   // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
   // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
   TUriMethod = (
@@ -1243,21 +1243,7 @@ type
     mLOCK,
     mUNLOCK,
     mSTATE,
-    mOPTIONS,
-    mTRACE,
-    mCOPY,
-    mMKCOL,
-    mMOVE,
-    mPURGE,
-    mREPORT,
-    mMKACTIVITY,
-    mMKCALENDAR,
-    mCHECKOUT,
-    mMERGE,
-    mNOTIFY,
-    mPATCH,
-    mSEARCH,
-    mCONNECT);
+    mOPTIONS);
 
   /// set of available HTTP methods transmitted between client and server
   TUriMethods = set of TUriMethod;
@@ -1277,7 +1263,7 @@ type
     fMethod: TUriMethod;
     fInputCookiesRetrieved: boolean;
     fClientKind: TRestClientKind;
-    fInputPostContentType: RawUtf8;
+    fInputContentType: RawUtf8;
     fInHeaderLastName: RawUtf8;
     fInHeaderLastValue: RawUtf8;
     fOutSetCookie: RawUtf8;
@@ -1287,9 +1273,6 @@ type
     fJwtContent: PJwtContent;
     fTix64: Int64;
     function GetUserAgent: RawUtf8;
-    function GetRemoteIP: RawUtf8;
-    function GetRemoteIPIsLocalHost: boolean;
-    function GetRemoteIPNotLocal: RawUtf8;
     function GetInHeader(const HeaderName: RawUtf8): RawUtf8;
     procedure RetrieveCookies;
     function GetInCookie(CookieName: RawUtf8): RawUtf8;
@@ -1315,15 +1298,14 @@ type
     // authentication is not enabled
     property Method: TUriMethod
       read fMethod;
-    /// retrieve the "RemoteIP" value from the incoming HTTP headers
-    property RemoteIP: RawUtf8
-      read GetRemoteIP;
-    /// true if the "RemoteIP" value from the incoming HTTP headers is '127.0.0.1'
-    property RemoteIPIsLocalHost: boolean
-      read GetRemoteIPIsLocalHost;
-    /// "RemoteIP" value from the incoming HTTP headers but '' for '127.0.0.1'
-    property RemoteIPNotLocal: RawUtf8
-      read GetRemoteIPNotLocal;
+    /// retrieve the "RemoteIP" value from Call^.LowLevelRemoteIP or from
+    // the incoming HTTP headers
+    // - may return '127.0.0.1'
+    procedure SetRemoteIP(var IP: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// "RemoteIP" value from Call^.LowLevelRemoteIP  but nil for '127.0.0.1'
+    // - won't scan the incoming HTTP headers, but it is usually not needed
+    function RemoteIPNotLocal: PUtf8Char;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUtf8
       read GetUserAgent;
@@ -1335,6 +1317,9 @@ type
     // - will be used e.g. by ClientOrmOptions to check if the
     // current remote client expects standard JSON in all cases
     function ClientKind: TRestClientKind;
+    /// check if the content-type input is 'application/json' or ''
+    function ContentTypeIsJson: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// decode any multipart/form-data POST request input
     // - returns TRUE and set MultiPart array as expected, on success
     function InputAsMultiPart(var MultiPart: TMultiPartDynArray): boolean;
@@ -3673,14 +3658,6 @@ begin
     ContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestUriParams.InBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
-var
-  contenttype: RawUtf8;
-begin
-  InBodyType(contenttype, GuessJsonIfNoneSet);
-  result := IdemPChar(pointer(contenttype), JSON_CONTENT_TYPE_UPPER);
-end;
-
 function TRestUriParams.OutBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
@@ -3734,20 +3711,6 @@ const
     'UNLOCK',
     'STATE',
     'OPTIONS',
-    'TRACE',
-    'COPY',
-    'MKCOL',
-    'MOVE',
-    'PURGE',
-    'REPORT',
-    'MKACTIVITY',
-    'MKCALENDAR',
-    'CHECKOUT',
-    'MERGE',
-    'NOTIFY',
-    'PATCH',
-    'SEARCH',
-    'CONNECT',
     '');
 var
   // quick O(n) search of the first 4 characters within L1 cache
@@ -3778,8 +3741,8 @@ constructor TRestUriContext.Create(const aCall: TRestUriParams);
 begin
   fCall := @aCall;
   fMethod := ToMethod(aCall.Method);
-  if fMethod = mPost then
-    aCall.InBodyType(fInputPostContentType, {guessjsonifnone=}false);
+  if aCall.InBody <> '' then
+    aCall.InBodyType(fInputContentType, {guessjsonifnone=}false);
 end;
 
 destructor TRestUriContext.Destroy;
@@ -3819,27 +3782,18 @@ begin
   result := fClientKind;
 end;
 
-function TRestUriContext.GetRemoteIP: RawUtf8;
+procedure TRestUriContext.SetRemoteIP(var IP: RawUtf8);
 begin
-  result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
+  IP := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
 end;
 
-function TRestUriContext.GetRemoteIPNotLocal: RawUtf8;
+function TRestUriContext.RemoteIPNotLocal: PUtf8Char;
 begin
-  if self <> nil then
-  begin
-    result := fCall^.HeaderOnce(fCall^.LowLevelRemoteIP, HEADER_REMOTEIP_UPPER);
-    if result = '127.0.0.1' then
-      result := '';
-  end
+  if (self <> nil) and
+     (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
+    result := pointer(fCall^.LowLevelRemoteIP)
   else
-    result := '';
-end;
-
-function TRestUriContext.GetRemoteIPIsLocalHost: boolean;
-begin
-  result := (GetRemoteIP = '') or
-            (fCall^.LowLevelRemoteIP = '127.0.0.1');
+    result := nil;
 end;
 
 function TRestUriContext.AuthenticationBearerToken: RawUtf8;
@@ -3977,12 +3931,18 @@ begin
                         'Set-Cookie: ' + fOutSetCookie);
 end;
 
+function TRestUriContext.ContentTypeIsJson: boolean;
+begin
+  result := (fInputContentType = '') or
+            IdemPChar(pointer(fInputContentType), JSON_CONTENT_TYPE_UPPER);
+end;
+
 function TRestUriContext.InputAsMultiPart(
   var MultiPart: TMultiPartDynArray): boolean;
 begin
   result := (Method = mPOST) and
-     IdemPChar(pointer(fInputPostContentType), 'MULTIPART/FORM-DATA') and
-     MultiPartFormDataDecode(fInputPostContentType, fCall^.InBody, MultiPart);
+     IdemPChar(pointer(fInputContentType), CONTENT_TYPE_MULTIPARTFORM) and
+     MultiPartFormDataDecode(fInputContentType, fCall^.InBody, MultiPart);
 end;
 
 function TRestUriContext.TickCount64: Int64;

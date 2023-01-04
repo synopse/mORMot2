@@ -163,7 +163,7 @@ begin
   Check(ToMethod('') = mNone);
   Check(ToMethod('toto') = mNone);
   Check(ToMethod('get') = mGET);
-  Check(ToMethod('CONNECT') = mCONNECT);
+  Check(ToMethod('OPTIONS') = mOPTIONS);
   Check(not IsGet('get'));
   Check(IsGet('GET'));
   Check(not IsPost('Post'));

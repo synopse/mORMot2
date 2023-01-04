@@ -12,6 +12,8 @@ unit mormot.rest.mvc;
     - Web Renderer Returning Mustache Views or Json
     - Application ViewModel/Controller using Interfaces
 
+   TODO: remove TMvcRunOnRestServer in favor of THttpServer.Router
+
   *****************************************************************************
 }
 
@@ -2046,15 +2048,15 @@ end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerRoot(Ctxt: TRestServerUriContext);
 begin
-  InternalRunOnRestServer(Ctxt, Ctxt.Uri + '/' + Ctxt.UriBlobFieldName);
+  InternalRunOnRestServer(Ctxt, Ctxt.UriAfterRoot);
 end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerSub(Ctxt: TRestServerUriContext);
 begin
-  if Ctxt.UriBlobFieldName = '' then
-    Ctxt.Redirect(Ctxt.UriWithoutSignature + '/default')
+  if Ctxt.UriMethodPath = '' then
+    Ctxt.Redirect(RawUtf8(Ctxt.UriWithoutSignature) + '/default')
   else
-    InternalRunOnRestServer(Ctxt, Ctxt.UriBlobFieldName);
+    InternalRunOnRestServer(Ctxt, Ctxt.UriMethodPath);
 end;
 
 

@@ -1347,13 +1347,13 @@ begin
     if port = 0 then
       port := 80;
     _ObjAddProp('port', port, context);
-    if IdemPropNameU(Ctxt.UriBlobFieldName, 'context') then
+    if IdemPropNameU(Ctxt.UriMethodPath, 'context') then
     begin
       Ctxt.ReturnsJson(context, 200, {304=}true, twNone, {humanreadable=}true);
       exit;
     end;
     root := Ctxt.Server.Model.Root;
-    if Ctxt.UriBlobFieldName = '' then
+    if Ctxt.UriMethodPath = '' then
     begin
       result := '<html><title>mORMot Wrappers</title>' +
         '<body style="font-family:verdana;"><h1>Generated Code/Doc Wrappers</h1>' +
@@ -1387,7 +1387,7 @@ begin
   finally
     FindClose(SR);
   end;
-  Split(Ctxt.UriBlobFieldName, '/', templateName, unitName);
+  Split(Ctxt.UriMethodPath, '/', templateName, unitName);
   Split(unitName, '.', unitName, templateExt);
   if PosExChar('.', templateExt) > 0 then
   begin

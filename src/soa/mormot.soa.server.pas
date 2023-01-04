@@ -714,7 +714,7 @@ begin
       if result = nil then
       begin
         result := TSynMonitorInputOutput.Create(
-          PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
+          Ctxt.ServiceMethod^.InterfaceDotMethodName);
         fStats[MethodIndex] := result;
       end;
     finally
@@ -1297,6 +1297,7 @@ procedure FinalizeLogRest(ctxt: TRestServerUriContext;
   exec: TInterfaceMethodExecute; timeEnd: Int64);
 var
   W: TJsonWriter;
+  ip: PUtf8Char;
 begin
   W := exec.TempTextWriter;
   if exec.CurrentStep < smsBefore then
@@ -1310,12 +1311,13 @@ begin
     W.AddShort('},Output:{Failed:"Probably due to wrong input"');
   W.Add('},Session:%,User:%,Time:%,MicroSec:%',
     [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUtc, timeEnd]);
-  if Ctxt.RemoteIPIsLocalHost then
+  ip := Ctxt.RemoteIPNotLocal;
+  if ip = nil then
     W.Add('}', ',')
   else
   begin
     W.AddShorter(',IP:"');
-    W.AddString(Ctxt.RemoteIP);
+    W.AddNoJsonEscape(ip, StrLen(ip));
     W.AddShorter('"},');
   end;
   with Ctxt.ServiceExecution^ do
@@ -1331,13 +1333,10 @@ var
   execres: boolean;
   opt: TInterfaceMethodOptions;
   exec: TInterfaceMethodExecuteCached;
-  timeStart, timeEnd: Int64;
+  timeEnd: Int64;
   m: PtrInt;
-  stats: TSynMonitorInputOutput;
   err: ShortString;
 begin
-  if mlInterfaces in fRestServer.StatLevels then
-    QueryPerformanceMicroSeconds(timeStart);
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
   Inst.Instance := nil;
@@ -1410,7 +1409,6 @@ begin
     exit;
   end;
   err := '';
-  stats := nil;
   exec := nil;
   WR := nil;
   try
@@ -1450,8 +1448,6 @@ begin
       WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
     // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
     Ctxt.ServiceResultStart(WR);
-    if mlInterfaces in fRestServer.StatLevels then
-      stats := GetStats(Ctxt, m);
     if optExecLockedPerInterface in opt then
       fExecuteLock.Lock
     else if optExecGlobalLocked in opt then
@@ -1508,24 +1504,15 @@ begin
       if InstanceCreation = sicSingle then
         // always release single shot instance immediately (no GC)
         InstanceFree(Inst.Instance);
-      if stats <> nil then
-      begin
-        QueryPerformanceMicroSeconds(timeEnd);
-        dec(timeEnd, timeStart);
-        Ctxt.StatsFromContext(stats, timeEnd);
-        if Ctxt.Server.StatUsage <> nil then
-          Ctxt.Server.StatUsage.Modified(stats, []);
-        if (mlSessions in fRestServer.StatLevels) and
-           (Ctxt.AuthSession <> nil) then
-          Ctxt.AuthSession.NotifyInterfaces(Ctxt, timeEnd);
-      end
-      else
-        timeEnd := 0;
     finally
       if exec <> nil then
       begin
         if Ctxt.ServiceExecution^.LogRest <> nil then
+        begin
+          QueryPerformanceMicroSeconds(timeEnd);
+          dec(timeEnd, Ctxt.MicroSecondsStart);
           FinalizeLogRest(Ctxt, exec, timeEnd);
+        end;
         fExecuteCached[m].Release(exec);
       end;
     end;

@@ -2775,13 +2775,16 @@ end;
 procedure TRestServerTest.Sum(Ctxt: TRestServerUriContext);
 var
   a, b: double;
+  p: PUtf8Char;
 begin
-  if UrlDecodeNeedParameters(Ctxt.Parameters, 'A,B') then
+  // this is the fastest, but much more verbose
+  p := Ctxt.Parameters;
+  if UrlDecodeNeedParameters(p, 'A,B') then
   begin
-    while Ctxt.Parameters <> nil do
+    while p <> nil do
     begin
-      UrlDecodeDouble(Ctxt.Parameters, 'A=', a);
-      UrlDecodeDouble(Ctxt.Parameters, 'B=', b, @Ctxt.Parameters);
+      UrlDecodeDouble(p, 'A=', a);
+      UrlDecodeDouble(p, 'B=', b, @p);
     end;
     Ctxt.Results([a + b]);
   end
@@ -2791,8 +2794,8 @@ end;
 
 procedure TRestServerTest.Sum2(Ctxt: TRestServerUriContext);
 begin
-  with Ctxt do
-    Results([InputDouble['a'] + InputDouble['b']]);
+  // why make it complicated?
+  Ctxt.Results([Ctxt.InputDouble['a'] + Ctxt.InputDouble['b']]);
 end;
 
 

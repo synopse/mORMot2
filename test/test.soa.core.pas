@@ -1294,7 +1294,7 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
       CheckEqual(fClient.URI(
         'root/calculator.' + Method, 'POST', @resp, nil, @data),
         ExpectedResult);
-      if ExpectedResult = 200 then
+      if ExpectedResult = HTTP_SUCCESS then
       begin
         CheckEqual(fClient.URI(
           'root/CALCulator.' + Method + uriencoded, 'POST', @data),
@@ -1350,7 +1350,7 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
     if (result <> '') and
        (result[1] = '"') then
       result := UnQuoteSQLString(result); // '"777"' -> '777'
-    if (ExpectedResult = 200) and
+    if (ExpectedResult = HTTP_SUCCESS) and
        (fClient.Server.ServicesRouting = TRestServerRoutingRest) then
     begin
       resp := XMLUTF8_HEADER + '<result><Result>' + result + '</Result></result>';
@@ -1495,19 +1495,19 @@ begin
       (fClient.Server.Services['Calculator'] as TServiceFactoryServer).
         ResultAsXMLObjectIfAcceptOnlyXML := true;
     CheckEqual(Ask('None', '1,2', 'one=1&two=2',
-      '{one:1,two=2}', 400), '');
+      '{one:1,two=2}', HTTP_BADREQUEST), '');
     CheckEqual(Ask('Add', '1,2', 'n1=1&n2=2',
-      '{n1:1,n2:2}', 200), '3');
+      '{n1:1,n2:2}', HTTP_SUCCESS), '3');
     CheckEqual(Ask('Add', '1,0', 'n2=1',
-      '{n2:1}', 200), '1');
+      '{n2:1}', HTTP_SUCCESS), '1');
     CheckEqual(Ask('Multiply', '2,3', 'n1=2&n2=3',
-      '{n0:"abc",n2:3,m:null,n1:2}', 200), '6');
+      '{n0:"abc",n2:3,m:null,n1:2}', HTTP_SUCCESS), '6');
     CheckEqual(Ask('Subtract', '23,20', 'n2=20&n1=23',
-      '{n0:"abc",n2:20,n1:23}', 200), '3');
+      '{n0:"abc",n2:20,n1:23}', HTTP_SUCCESS), '3');
     CheckEqual(Ask('ToText', '777,"abc"', 'result=abc&value=777',
-      '{result:"abc",value=777}', 200), '777');
+      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
     CheckEqual(Ask('ToTextFunc', '777', 'value=777',
-      '{result:"abc",value=777}', 200), '777');
+      '{result:"abc",value=777}', HTTP_SUCCESS), '777');
     if rout = 0 then
       CheckEqual(fClient.URI(
         'root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe', 'POST',

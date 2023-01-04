@@ -2162,8 +2162,8 @@ begin
   blob := Table.OrmProps.BlobFieldPropFromRawUtf8(BlobFieldName);
   if blob = nil then
     exit;
-  result := EngineUpdateBlob(fModel.GetTableIndexExisting(Table), aID, blob,
-    BlobData);
+  result := EngineUpdateBlob(
+    fModel.GetTableIndexExisting(Table), aID, blob, BlobData);
 end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
