@@ -761,19 +761,6 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
-function OemToFileName(const oem: RawByteString): TFileName;
-begin
-  // decode OEM/DOS file name into native encoding
-  SetString(result, nil, length(OEM));
-  OemToChar(pointer(OEM), pointer(result)); // OemToCharW/OemToCharA = TFileName
-end;
-
-function OemToUnicode(const oem: RawByteString): SynUnicode;
-begin
-  SetString(result, nil, length(OEM));
-  OemToCharW(pointer(OEM), pointer(result));
-end;
-
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
@@ -2151,24 +2138,6 @@ begin
     result := S // no conversion needed
   else
     Utf8ToConsoleDoConv(S, result);
-end;
-
-procedure ConsoleToUtf8DoConv(const Console: RawByteString; var Utf8: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-begin
-  tmp.Init(length(Console) * 4);
-  OemToCharBuffW(pointer(Console), tmp.buf, length(Console) + 1); // +1 = #0
-  Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.Buf), Utf8);
-  tmp.Done;
-end;
-
-function ConsoleToUtf8(const S: RawByteString): RawUtf8;
-begin
-  if IsAnsiCompatible(S) then
-    result := S // no conversion needed
-  else
-    ConsoleToUtf8DoConv(S, result);
 end;
 
 

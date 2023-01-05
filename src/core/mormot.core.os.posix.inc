@@ -1221,39 +1221,6 @@ begin
   end;
 end;
 
-function OemToUnicode(const oem: RawByteString): SynUnicode;
-const
-  OEMTOWIDE: array[128..255] of word = (
-    // from Windows API oemtocharw()
-    199, 252, 233, 226, 228, 224, 229, 231, 234, 235, 232, 239, 238, 236, 196,
-    197, 201, 230, 198, 244, 246, 242, 251, 249, 255, 214, 220, 248, 163, 216,
-    215, 402, 225, 237, 243, 250, 241, 209, 170, 186, 191, 174, 172, 189, 188,
-    161, 171, 187, 9617, 9618, 9619, 9474, 9508, 193, 194, 192, 169, 9571, 9553,
-    9559, 9565, 162, 165, 9488, 9492, 9524, 9516, 9500, 9472, 9532, 227, 195,
-    9562, 9556, 9577, 9574, 9568, 9552, 9580, 164, 240, 208, 202, 203, 200, 305,
-    205, 206, 207, 9496, 9484, 9608, 9604, 166, 204, 9600, 211, 223, 212, 210,
-    245, 213, 181, 254, 222, 218, 219, 217, 253, 221, 175, 180, 173, 177, 8215,
-    190, 182, 167, 247, 184, 176, 168, 183, 185, 179, 178, 9632, 160);
-var
-  len, i, c: PtrInt;
-begin
-  len := length(oem);
-  SetLength(result, len);
-  for i := 0 to len - 1 do
-  begin
-    c := PByteArray(oem)[i];
-    if c > 127 then
-      c := OEMTOWIDE[c];
-    PWordArray(result)[i] := c;
-  end;
-end;
-
-function OemToFileName(const oem: RawByteString): TFileName;
-begin
-  // let's assume TFileName is UTF-8 under Linux/POSIX
-  result := Utf8Encode(OemToUnicode(oem));
-end;
-
 {$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
 var
@@ -1603,11 +1570,6 @@ begin
 end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-begin
-  result := S; // expect a UTF-8 console under Linux/BSD
-end;
-
-function ConsoleToUtf8(const S: RawByteString): RawUtf8;
 begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;

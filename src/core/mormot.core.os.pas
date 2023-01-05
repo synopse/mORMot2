@@ -2676,13 +2676,6 @@ function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 
-/// conversion of Windows OEM CP-437 charset into a UTF-16 encoded string
-function OemToUnicode(const oem: RawByteString): SynUnicode;
-
-/// conversion of Windows OEM CP-437 charset into a file name
-// - as used e.g. by mormot.core.zip for non UTF-8 file names
-function OemToFileName(const oem: RawByteString): TFileName;
-
 /// prompt the user for an error message to notify an unexpected issue
 // - in practice, text encoding is expected to be plain 7-bit ASCII
 // - on Windows, will use Writeln() on a (newly allocated if needed) console
@@ -3211,12 +3204,10 @@ function _oskb(Size: cardinal): string;
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
+// - we don't propose any ConsoleToUtf8() function because it would depend on
+// the running program itself: e.g. "dir" generates CP_OEM (850) as expected,
+// but "ipconfig" outputs WinAnsi (1252) and "wmic" UTF-16 binary with BOM (!)
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-
-/// direct conversion of a console OEM-encoded string into UTF-8 encoded string
-// - under Windows, will use the CP_OEMCP encoding
-// - under Linux, will expect the console to be defined with UTF-8 encoding
-function ConsoleToUtf8(const S: RawByteString): RawUtf8;
 
 
 type
