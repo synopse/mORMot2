@@ -7096,16 +7096,12 @@ var
   i: PtrInt;
   methods: TPublishedMethodInfoDynArray;
 begin
-  if (aInstance = nil) or
-     (aMethods = []) then
-    exit;
-  if PosExChar('/', aPrefix) > 0 then
-    raise EServiceException.CreateUtf8('%.ServiceMethodRegisterPublishedMethods' +
-      '("%"): prefix should not contain "/"', [self, aPrefix]);
-  for i := 0 to GetPublishedMethods(aInstance, methods) - 1 do
-    with methods[i] do
-      ServiceMethodRegister(aPrefix + Name,
-        TOnRestServerCallBack(Method), false, aMethods);
+  if (aInstance <> nil) and
+     (aMethods <> []) then
+    for i := 0 to GetPublishedMethods(aInstance, methods) - 1 do
+      with methods[i] do
+        ServiceMethodRegister(aPrefix + Name,
+          TOnRestServerCallBack(Method), false, aMethods);
 end;
 
 function TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
