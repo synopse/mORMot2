@@ -6737,7 +6737,8 @@ begin
       exit;
     r := TRestRouter.Create(self);
     // ORM remote access via REST
-    if not (rsoNoTableURI in fOptions) then
+    if (fModel.TablesMax >= 0) and
+       not (rsoNoTableURI in fOptions) then
     begin
       // ModelRoot for
       r.Setup([mGET, mPOST, mBEGIN, mEND, mABORT], '', rnTable, nil);
