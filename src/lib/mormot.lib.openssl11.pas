@@ -7686,7 +7686,7 @@ begin
      (Name <> '') and
      (Value <> '') then
     X509_NAME_add_entry_by_txt(@self, pointer(Name),
-      MBSTRING[IsAnsiCompatible(Value)], pointer(Value), -1, -1, 0);
+      MBSTRING[not IsAnsiCompatible(Value)], pointer(Value), -1, -1, 0);
 end;
 
 procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
