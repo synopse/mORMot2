@@ -199,7 +199,6 @@ type
     fTableIndex: integer;
     fAuthSession: TAuthSession;
     fUriMethodPath: RawUtf8;
-    fUriAfterRoot: PUtf8Char;
     fUriBlobField: TOrmPropInfoRttiRawBlob;
     fThreadServer: PServiceRunningContext;
     fTable: TOrmClass;
@@ -505,15 +504,15 @@ type
       read fServer;
     /// same as Call^.Uri, but without the &session_signature=... ending
     // - will compute it from Call^.Url and UriSessionSignaturePos
-    // - return a shortstring and not a RawUtf8 to avoid memory allocation
-    function UriWithoutSignature: shortstring;
-    /// same as Call^.Uri, but without the &... ending
-    // - will compute it from Call^.Url and
-    // - return a shortstring and not a RawUtf8 to avoid memory allocation
+    function UriWithoutSignature: RawUtf8;
+    /// same as Call^.Uri, after the 'root/' prefix, including '?' params
+    // - will compute it from Call^.Url and Server.Model.RootLen
+    function UriWithoutRoot: RawUtf8;
+    /// same as Call^.Uri, but without the ?... ending
+    // - will compute it from Call^.Url and fParameters
+    // - since used for logging, return a shortstring and not a RawUtf8 to
+    // avoid memory allocation
     function UriWithoutInlinedParams: shortstring;
-    /// points inside Call^.Uri, after the 'root/' prefix, including '?' params
-    property UriAfterRoot: PUtf8Char
-      read fUriAfterRoot;
     /// the URI after the method service name, excluding the '?' parameters
     // - as set by TRestTreeNode.LookupParam from <path:fulluri> place holder
     property UriMethodPath: RawUtf8
@@ -2806,16 +2805,25 @@ begin
     end;
 end;
 
-function TRestServerUriContext.UriWithoutSignature: shortstring;
+function TRestServerUriContext.UriWithoutSignature: RawUtf8;
 var
   len: PtrInt;
 begin
   len := fUriSessionSignaturePos;
   if len = 0 then
-    len := length(Call^.Url)
+    result := Call^.Url
   else
-    dec(len);
-  SetString(result, PAnsiChar(pointer(Call^.Url)), len);
+    FastSetString(result, pointer(Call^.Url), len - 1); // exclude ? or &
+end;
+
+function TRestServerUriContext.UriWithoutRoot: RawUtf8;
+var
+  pos: PtrInt;
+begin
+  pos := Server.Model.RootLen + 2;
+  if Call^.Url[1] = '/' then
+    inc(pos); // trim leading '/' in '/root' (may happen when called in-process)
+  result := copy(Call^.Url, pos, maxInt);
 end;
 
 function TRestServerUriContext.UriWithoutInlinedParams: shortstring;
