@@ -2074,6 +2074,38 @@ begin
     SetEndOfFile(THandleStream(fDest).Handle); // may need to be truncated
 end;
 
+const
+  CP_437: array[128..255] of word = ( // code page 437, as zip appnote requires
+    $00C7, $00FC, $00E9, $00E2, $00E4, $00E0, $00E5, $00E7, $00EA, $00EB, $00E8,
+    $00EF, $00EE, $00EC, $00C4, $00C5, $00C9, $00E6, $00C6, $00F4, $00F6, $00F2,
+    $00FB, $00F9, $00FF, $00D6, $00DC, $00A2, $00A3, $00A5, $20A7, $0192, $00E1,
+    $00ED, $00F3, $00FA, $00F1, $00D1, $00AA, $00BA, $00BF, $2310, $00AC, $00BD,
+    $00BC, $00A1, $00AB, $00BB, $2591, $2592, $2593, $2502, $2524, $2561, $2562,
+    $2556, $2555, $2563, $2551, $2557, $255D, $255C, $255B, $2510, $2514, $2534,
+    $252C, $251C, $2500, $253C, $255E, $255F, $255A, $2554, $2569, $2566, $2560,
+    $2550, $256C, $2567, $2568, $2564, $2565, $2559, $2558, $2552, $2553, $256B,
+    $256A, $2518, $250C, $2588, $2584, $258C, $2590, $2580, $03B1, $00DF, $0393,
+    $03C0, $03A3, $03C3, $03BC, $03C4, $03A6, $0398, $03A9, $03B4, $221E, $03C6,
+    $03B5, $2229, $2261, $00B1, $2265, $2264, $2320, $2321, $00F7, $2248, $00B0,
+    $2219, $00B7, $221A, $207F, $00B2, $25A0, $00A0);
+
+procedure Cp437ToFileName(const oem: RawByteString; out filename: TFileName);
+var
+  len, i, c: PtrInt;
+  utf16: SynUnicode;
+begin
+  len := length(oem);
+  SetLength(utf16, len);
+  for i := 0 to len - 1 do
+  begin
+    c := PByteArray(oem)[i];
+    if c > 127 then
+      c := CP_437[c];
+    PWordArray(utf16)[i] := c;
+  end;
+  filename := SynUnicodeToString(utf16);
+end;
+
 
 { TZipRead }
 
@@ -2171,8 +2203,8 @@ begin
       // decode UTF-8 file name into native string/TFileName type
       Utf8ToFileName(tmp, e^.zipName)
     else
-      // legacy Windows-OEM-CP437 encoding - from mormot.core.os
-      e^.zipName := OemToFileName(tmp);
+      // legacy Windows-OEM-CP437 encoding
+      Cp437ToFileName(tmp, e^.zipName);
     if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
        not IsFolder(e^.zipName) then
       raise ESynZip.CreateUtf8('%.Create: Unsupported zipmethod % for % %',
