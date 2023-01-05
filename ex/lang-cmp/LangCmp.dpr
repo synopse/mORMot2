@@ -192,8 +192,7 @@ function TScheduler.DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   if not IdemPChar(pointer(Ctxt.Url), '/SCHEDULES/') then
     exit(HTTP_NOTFOUND);
-  Ctxt.OutContent := BuildTripResponseJson(copy(Ctxt.Url, 12, 100));
-  Ctxt.OutContentType := JSON_CONTENT_TYPE;
+  Ctxt.SetOutJson(BuildTripResponseJson(copy(Ctxt.Url, 12, 100)));
   result := HTTP_SUCCESS;
 end;
 
@@ -201,7 +200,10 @@ procedure TScheduler.StartServer;
 begin
   server := THttpAsyncServer.Create('4000', nil, nil, '',
     SystemInfo.dwNumberOfProcessors + 1, 120000,
-    [hsoNoXPoweredHeader, hsoNoStats, hsoThreadCpuAffinity]);
+    [hsoNoXPoweredHeader,
+     hsoNoStats,
+     hsoHeadersInterning,
+     hsoThreadSmooting]);
   server.HttpQueueLength := 100000;
   server.OnRequest := DoOnRequest;
   server.WaitStarted;
