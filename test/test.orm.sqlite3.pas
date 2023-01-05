@@ -177,14 +177,16 @@ type
     procedure DataAsHex(Ctxt: TRestServerUriContext);
     /// method used to test the Server-Side ModelRoot/Sum or
     // ModelRoot/People/Sum Requests with JSON process
+    // - _GET_ prefix will force that only mGET is allowed
     // - implementation of this method returns the sum of two floating-points,
     // named A and B, as in the public TOrmPeople.Sum() method,
     // which implements the Client-Side of this service
     // - Table nor ID are never used here
-    procedure Sum(Ctxt: TRestServerUriContext);
+    procedure _GET_Sum(Ctxt: TRestServerUriContext);
     /// method used to test the Server-Side ModelRoot/Sum or
     // ModelRoot/People/Sum Requests with variant process
-    procedure Sum2(Ctxt: TRestServerUriContext);
+    // - _GET__POST_ prefix will force that only mGET and mPOST are allowed
+    procedure _GET__POST_Sum2(Ctxt: TRestServerUriContext);
   end;
 
 
@@ -2772,7 +2774,7 @@ begin
     Ctxt.Error('Impossible to retrieve the Data BLOB field');
 end;
 
-procedure TRestServerTest.Sum(Ctxt: TRestServerUriContext);
+procedure TRestServerTest._GET_Sum(Ctxt: TRestServerUriContext);
 var
   a, b: double;
   p: PUtf8Char;
@@ -2792,7 +2794,7 @@ begin
     Ctxt.Error('Missing Parameter');
 end;
 
-procedure TRestServerTest.Sum2(Ctxt: TRestServerUriContext);
+procedure TRestServerTest._GET__POST_Sum2(Ctxt: TRestServerUriContext);
 begin
   // why make it complicated?
   Ctxt.Results([Ctxt.InputDouble['a'] + Ctxt.InputDouble['b']]);
