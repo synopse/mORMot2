@@ -632,12 +632,12 @@ begin
 end;
 
 initialization
-  {$ifndef DELPHI2010}
+  {$ifndef HASEXTRECORDRTTI}
   // manual definition mandatory only if Delphi 2010 RTTI is not available
   Rtti.RegisterType(TypeInfo(TOrmAuthorRights));
   Rtti.RegisterFromText(TypeInfo(TCookieData),
     'AuthorName:RawUtf8 AuthorID:cardinal AuthorRights:TOrmAuthorRights');
-  {$endif DELPHI2010}
+  {$endif HASEXTRECORDRTTI}
 
 end.
 

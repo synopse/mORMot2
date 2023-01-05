@@ -63,8 +63,8 @@ begin
             aHttpServer.HttpServer.ClassName);
           writeln(#10'You can check http://localhost:8092/blog/mvc-info for information');
           writeln('or point to http://localhost:8092 to access the web app.');
-          writeln(#10'Press [Enter] to close the server.'#10);
-          readln;
+          writeln(#10'Press [Enter] or ^C to close the server.'#10);
+          ConsoleWaitForEnterKey;
           writeln('HTTP server shutdown...');
         finally
           aHTTPServer.Free;
