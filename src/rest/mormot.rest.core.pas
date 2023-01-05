@@ -3733,7 +3733,7 @@ var
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  if method = '' then
+  if length(method) < 3 then
     result := mNone
   else
     result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,

@@ -5712,7 +5712,7 @@ begin
       while wc.dwLength and 7 <> 0 do // 64-bit padding
       begin
         inc(wc.dwLength);
-        SetLength(sig, length(sig) + 1);
+        SetLength(sig, length(sig) + 1); // wc.dwLength <> length(sig)
         sig[length(sig)] := #0; // padded with #0
       end;
       O.Seek(certlenoffs, soBeginning); // in PE header
