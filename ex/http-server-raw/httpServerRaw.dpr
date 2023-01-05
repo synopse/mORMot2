@@ -103,8 +103,9 @@ begin
   fHttpServer := THttpAsyncServer.Create(
     '8888', nil, nil, '', SystemInfo.dwNumberOfProcessors + 1, 30000,
     [hsoNoXPoweredHeader,
-     hsoNoStats
-    //, hsoThreadCpuAffinity // better scalability with high number of threads
+     hsoNoStats,
+     hsoHeadersInterning,
+     hsoThreadSmooting
     //, hsoLogVerbose
     ]);
   //writeln('DropPriviledges=', DropPriviledges('abouchez'));
