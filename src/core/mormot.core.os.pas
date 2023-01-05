@@ -4685,23 +4685,28 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 
 type
   /// callback used by RunRedirect() to notify of console output at runtime
-  // - newly console output text is given as UTF-8 on all platforms
+  // - newly console output text is given as raw bytes sent by the application,
+  // with no conversion: on POSIX, it is likely to be UTF-8 but on Windows it
+  // depends on the actual command e.g. "dir" returns CP_OEM (850), "ipconfig"
+  // returns WinAnsi (1252) and "wmic" returns UTF-16 with BOM
   // - should return true to stop the execution, or false to continue
   // - on idle state (each 200ms), is called with text='' to allow execution abort
   // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
-  TOnRedirect = function(const text: RawUtf8; pid: cardinal): boolean of object;
+  TOnRedirect = function(const text: RawByteString; pid: cardinal): boolean of object;
 
 /// like fpSystem, but cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
-// - waitfordelayms/processhandle/redirected/onoutput exist on Windows only
+// - waitfordelayms/processhandle/redirected/onoutput exist on Windows only -
+// and redirected is the raw byte output, which may be OEM, WinAnsi or UTF-16
+// depending on the program itself
 // - parsed is implemented on POSIX only
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
   {$ifdef OSWINDOWS}
   waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
-  redirected: PRawUtf8 = nil; const onoutput: TOnRedirect = nil
+  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil
   {$else}
   parsed: PParseCommands = nil
   {$endif OSWINDOWS}): integer;
@@ -4709,10 +4714,14 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 /// execute a command, returning its output console as UTF-8 text
 // - calling FPC RTL popen/pclose on POSIX, or CreateProcessW on Windows
 // - return '' on cmd execution error, or the whole output console content
+// with no conversion: on POSIX, it is likely to be UTF-8 but on Windows it
+// depends on the actual command e.g. "dir" returns CP_OEM (850), "ipconfig"
+// returns WinAnsi (1252) and "wmic" returns UTF-16 with BOM
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
-  const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE): RawUtf8;
+  const onoutput: TOnRedirect = nil;
+  waitfordelayms: cardinal = INFINITE): RawByteString;
 
 
 

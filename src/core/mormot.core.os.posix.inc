@@ -2910,7 +2910,7 @@ begin
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawByteString;
 var
   // note: FPC popen(file) allows access to the pid whereas clib popen() won't
   f: file;
@@ -2943,8 +2943,13 @@ begin
       n := fpread(fd, tmp, SizeOf(tmp));
       if n <= 0 then
         break; // pipe closed = execution finished
-      SetLength(result, l + n);
-      MoveFast(tmp, PByteArray(result)[l], n);
+      if result = '' then
+        FastSetString(RawUtf8(result), @tmp, n) // assume CP_UTF8
+      else
+      begin
+        SetLength(result, l + n); // append
+        MoveFast(tmp, PByteArray(result)[l], n);
+      end;
       inc(l, n);
       if Assigned(onoutput) then
       begin

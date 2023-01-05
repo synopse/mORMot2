@@ -4283,7 +4283,7 @@ end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   envaddexisting: boolean; waitfordelayms: cardinal; processhandle: PHandle;
-  redirected: PRawUtf8; const onoutput: TOnRedirect): integer;
+  redirected: PRawByteString; const onoutput: TOnRedirect): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
@@ -4292,8 +4292,7 @@ var
   rd, wr: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
-  output: RawByteString;
-  new: RawUtf8;
+  new: RawByteString;
   endtix, pending: Int64;
   exitcode, n: cardinal;
   i, l: PtrInt;
@@ -4358,6 +4357,8 @@ begin
       startupinfo.hStdOutput := wr;
       startupinfo.hStdError := wr;
       startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+      if redirected <> nil then
+        redirected^ := '';
     end
     else
       rd := 0;
@@ -4393,22 +4394,21 @@ begin
           Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
           if n <= 0 then
             break;
-          SetLength(output, PtrInt(n) + l);
-          MoveFast(tmp, PByteArray(output)[l], n);
-          inc(l, n);
-          new := ConsoleToUtf8(output);
           if redirected <> nil then
-            redirected^ := redirected^ + new;
+          begin
+            SetLength(redirected^, l + PtrInt(n));
+            MoveFast(tmp, PByteArray(redirected^)[l], n);
+            inc(l, n);
+          end;
           if Assigned(onoutput) then
+          begin
+            SetString(new, PAnsiChar(@tmp), n);
             if onoutput(new, processinfo.dwProcessId) then
             begin // onoutput() callback returned true to stop the execution
               exitcode := WAIT_OBJECT_0;
               break;
             end;
-          dec(l, length(Utf8ToConsole(new)));
-          if l <> 0 then // if OEM_CHARSET was truncated during UTF-8 conversion
-            MoveFast(PByteArray(output)[length(output) - l], pointer(output)^, l);
-          SetLength(output, l);
+          end;
         until n < SizeOf(tmp);
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
@@ -4446,7 +4446,7 @@ begin
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawUtf8;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawByteString;
 var
   res: integer;
 begin
