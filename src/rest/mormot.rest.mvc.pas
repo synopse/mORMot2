@@ -1921,6 +1921,7 @@ end;
 procedure TMvcRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TRestServerUriContext; const MethodName: RawUtf8);
 var
+  p: PUtf8Char;
   mvcinfo, inputContext: variant;
   rawMethodName, rawFormat, cached, body, content: RawUtf8;
   staticFileName: TFileName;
@@ -1930,7 +1931,9 @@ var
   method: PInterfaceMethod;
   timer: TPrecisionTimer;
 begin
-  Split(MethodName, '/', rawMethodName, rawFormat);
+  p := pointer(MethodName);
+  if GetNextItemMultiple(p, '/?', rawMethodName) = '/' then
+    GetNextItemMultiple(p, '/?', rawFormat);
   // 1. implement mvc-info endpoint
   if (publishMvcInfo in fPublishOptions) and
      IdemPropNameU(rawMethodName, MVCINFO_URI) then
@@ -2048,13 +2051,13 @@ end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerRoot(Ctxt: TRestServerUriContext);
 begin
-  InternalRunOnRestServer(Ctxt, Ctxt.UriAfterRoot);
+  InternalRunOnRestServer(Ctxt, Ctxt.UriWithoutRoot);
 end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerSub(Ctxt: TRestServerUriContext);
 begin
   if Ctxt.UriMethodPath = '' then
-    Ctxt.Redirect(RawUtf8(Ctxt.UriWithoutSignature) + '/default')
+    Ctxt.Redirect(Ctxt.UriWithoutSignature + '/default')
   else
     InternalRunOnRestServer(Ctxt, Ctxt.UriMethodPath);
 end;
