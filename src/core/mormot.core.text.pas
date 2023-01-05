@@ -405,6 +405,12 @@ procedure GetNextItem(var P: PUtf8Char; Sep: AnsiChar;
 procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar;
   var result: RawUtf8); overload;
 
+/// return next CSV string from P from several separator characters
+// - P=nil after call when end of text is reached
+// - returns the character which ended the result string, i.e. #0 or one of Sep
+function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
+  var Next: RawUtf8): AnsiChar; overload;
+
 /// return trimmed next CSV string from P
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
@@ -4026,6 +4032,29 @@ begin
     FastSetString(result, P, S - P);
     if S^ <> #0 then
       P := S + 1
+    else
+      P := nil;
+  end;
+end;
+
+function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
+  var Next: RawUtf8): AnsiChar;
+var
+  len: PtrInt;
+begin
+  if P = nil then
+  begin
+    Next := '';
+    result := #0;
+  end
+  else
+  begin
+    len := strcspn(P, pointer(Sep)); // search size of P which are not in Sep
+    FastSetString(Next, P, len);
+    inc(P, len);
+    result := P^;
+    if result <> #0 then
+      inc(P)
     else
       P := nil;
   end;

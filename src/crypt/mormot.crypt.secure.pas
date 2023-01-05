@@ -5632,7 +5632,7 @@ begin
   fixme[6] := p + 306;
   PCardinal(p + 310)^ := Marker; // but we can overwrite the marker
   len := length(Stuff);
-  mormot.core.text.BinToHex(@len, p + 314, 2);
+  mormot.core.text.BinToHex(@len, p + 314, 2); // 16-bit hexa len
   Asn1FixMe(@fixme, 7, len - _DUMMYSTUFFLEN, 'CreateDummyCertificate');
   delete(dummy, 319, _DUMMYSTUFFLEN);
   insert(Stuff, dummy, 319);
@@ -5744,7 +5744,7 @@ begin
   for j := i to length(cert) - 16 do
     if PCardinal(P + j)^ = _MARKER_ then
     begin
-      len := 0; // length is encoded as hexadecimal
+      len := 0; // length is encoded as 16-bit hexadecimal
       if mormot.core.text.HexToBin(P + j + 4, @len, 2) and
          (len + j + 8 < length(cert)) then
       begin
