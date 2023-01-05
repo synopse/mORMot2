@@ -2106,10 +2106,14 @@ type
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TOnRestServerCallBack
+    // - will use the supplied aMethods or detect '_VERB1_[_VERB2_][..]MethodName'
+    // pattern e.g. as '_GET_Info' or '_GET__DELETE_User'
     procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUtf8;
       aInstance: TObject; aMethods: TUriMethods = [mGET, mPOST, mPUT, mDELETE]);
     /// direct registration of a method for a given low-level event handler
     // - returns the index in the fPublishedMethod[] internal array
+    // - will use the supplied aMethods or detect '_VERB1_[_VERB2_][..]MethodName'
+    // pattern e.g. as '_GET_Info' or '_GET__DELETE_User'
     function ServiceMethodRegister(aMethodName: RawUtf8;
       const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean = false;
       aMethods: TUriMethods = [mGET, mPOST, mPUT, mDELETE]): PtrInt;
@@ -7107,20 +7111,44 @@ end;
 function TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
   const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean;
   aMethods: TUriMethods): PtrInt;
+var
+  m: TUriMethods;
+  one: TUriMethod;
+  pos: PtrInt;
+  obj: TObject;
 begin
+  // handle '_VERB1_[_VERB2_][..]MethodName' pattern
   TrimSelf(aMethodName);
+  m := [];
+  while (aMethodName <> '') and
+        (aMethodName[1] = '_') do
+  begin
+    pos := PosEx('_', aMethodName, 2); // end of '_GET_'
+    if pos = 0 then
+      break;
+    one := ToMethod(copy(aMethodName, 2, pos - 2)); // 'GET'
+    if one = mNone then
+      break;
+    include(m, one);
+    // '_GET__POST_MethodName' -> '_POST_MethodName'
+    system.delete(aMethodName, 1, pos);
+  end;
+  if m = [] then
+    m := aMethods; // use (default) supplied methods
   if aMethodName = '' then
     raise EServiceException.CreateUtf8('%.ServiceMethodRegister('''')', [self]);
+  // register the method to the internal list
+  obj := TMethod(aEvent).Data;
   if not (rsoNoTableURI in fOptions) and
      (Model.GetTableIndex(aMethodName) >= 0) then
     raise EServiceException.CreateUtf8('Published method name %.% ' +
-      'conflicts with a Table in the Model!', [self, aMethodName]);
+      'conflicts with a Table in the Model!', [obj, aMethodName]);
   with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
-    'Duplicated published method name %.%', [self, aMethodName], @result))^ do
+    'Duplicated published method name %.%', [obj, aMethodName], @result))^ do
   begin
     Callback := aEvent;
     ByPassAuthentication := aByPassAuthentication;
-    Methods := aMethods;
+    Methods := m;
   end;
   ResetRoutes;
 end;
