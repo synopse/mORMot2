@@ -1878,31 +1878,35 @@ begin
   fPublishOptions := aPublishOptions;
   bypass := bypassAuthentication in fPublishOptions;
   if aSubURI <> '' then
-    fRestServer.ServiceMethodRegister(aSubURI, RunOnRestServerSub, bypass)
+    fRestServer.ServiceMethodRegister(
+      aSubURI, RunOnRestServerSub, bypass, [mGET, mPOST]) // POST for www-form
   else
   begin
     for m := 0 to fApplication.fFactory.MethodsCount - 1 do
     begin
       method := fApplication.fFactory.Methods[m].Uri;
-      if method[1] = '_' then
+      if (method[1] = '_') and
+         (method[2] <> '_') then
         // e.g. IService._Start() -> /service/start
         delete(method, 1, 1);
-      fRestServer.ServiceMethodRegister(method, RunOnRestServerRoot, bypass);
+      fRestServer.ServiceMethodRegister(
+        method, RunOnRestServerRoot, bypass, [mGET, mPOST]);
     end;
     if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        MVCINFO_URI, RunOnRestServerRoot, bypass);
+        MVCINFO_URI, RunOnRestServerRoot, bypass, [mGET]);
     if publishStatic in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        STATIC_URI, RunOnRestServerRoot, bypass);
+        STATIC_URI, RunOnRestServerRoot, bypass, [mGET]);
   end;
   if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
   fStaticCache.Init({casesensitive=}true);
   fApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
-  // no remote ORM access via REST
-  fRestServer.Options := fRestServer.Options + [rsoNoTableURI, rsoNoInternalState];
+  // no remote ORM access via REST, and route method_name as method/name too
+  fRestServer.Options := fRestServer.Options +
+    [rsoNoTableURI, rsoNoInternalState, rsoMethodUnderscoreAsSlashUri];
 end;
 
 function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
@@ -2011,7 +2015,8 @@ begin
           method := @fApplication.fFactory.Methods[methodIndex];
           inputContext := Ctxt.GetInputAsTDocVariant(JSON_MVC, method);
           if Assigned(fApplication.OnBeforeRender) then
-            if not fApplication.OnBeforeRender(Ctxt, method, inputContext, renderer) then
+            if not fApplication.OnBeforeRender(
+                     Ctxt, method, inputContext, renderer) then
               // aborted by this event handler
               exit;
           if not VarIsEmpty(inputContext) then
@@ -2030,12 +2035,13 @@ begin
           method := nil;
         renderer.ExecuteCommand(methodIndex);
         if Assigned(fApplication.OnAfterRender) then
-          if not fApplication.OnAfterRender(Ctxt, method, inputContext, renderer) then
+          if not fApplication.OnAfterRender(
+                   Ctxt, method, inputContext, renderer) then
             // processed by this event handler
             exit;
       end
       else
-        renderer.CommandError('notfound', true, HTTP_NOTFOUND);
+        renderer.CommandError('invalid method', true, HTTP_NOTFOUND);
       body := renderer.Output.Content;
       if viewHasGenerationTimeTag in renderer.fOutputFlags then
         body := StringReplaceAll(body, fViews.ViewGenerationTimeTag,
