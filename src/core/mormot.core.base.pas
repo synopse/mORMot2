@@ -110,6 +110,9 @@ const
   /// internal Code Page for System AnsiString encoding
   CP_ACP = 0;
 
+  /// internal Code Page for System Console encoding
+  CP_OEM = 1;
+
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
 type

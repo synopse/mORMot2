@@ -667,7 +667,27 @@ procedure AnyAnsiToUtf8(const s: RawByteString; var result: RawUtf8); overload;
 // UTF-8 encoded String
 // - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
 // - newer UNICODE versions of Delphi will retrieve the code page from string
+// - use AnsiToUtf8() if you want to specify the codepage
 function AnyAnsiToUtf8(const s: RawByteString): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert an AnsiString (of a given code page) into a UTF-8 string
+// - use AnyAnsiToUtf8() if you want to use the codepage of the input string
+// - wrapper around TSynAnsiConvert.Engine(CodePage).AnsiToUtf8()
+function AnsiToUtf8(const Ansi: RawByteString; CodePage: integer): RawUtf8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert an AnsiChar buffer (of a given code page) into a UTF-8 string
+// - the destination code page should be supplied
+// - wrapper around TSynAnsiConvert.Engine(CodePage).AnsiBufferToRawUtf8()
+procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
+  CodePage: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert an AnsiString (of a given code page) into a generic string
+// - the destination code page should be supplied
+// - wrapper around TSynAnsiConvert.Engine(CodePage) and string conversion
+function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
@@ -772,9 +792,6 @@ function RawUnicodeToWinAnsi(const Unicode: RawUnicode): WinAnsiString; overload
 /// convert a WideString into a WinAnsi (code page 1252) string
 function WideStringToWinAnsi(const Wide: WideString): WinAnsiString;
   {$ifdef HASINLINE}inline;{$endif}
-
-/// convert an AnsiChar buffer (of a given code page) into a UTF-8 string
-procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8; ACP: integer);
 
 /// convert any Raw Unicode encoded String into a generic SynUnicode Text
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload;
@@ -3951,9 +3968,30 @@ begin
   result := RawUnicodeToString(source, StrLenW(source));
 end;
 
-procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8; ACP: integer);
+procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
+  CodePage: integer);
 begin
-  TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUtf8(P, L, result);
+  TSynAnsiConvert.Engine(CodePage).AnsiBufferToRawUtf8(P, L, result);
+end;
+
+function AnsiToUtf8(const Ansi: RawByteString; CodePage: integer): RawUtf8;
+begin
+  if Ansi = '' then
+    result := ''
+  else
+    result := TSynAnsiConvert.Engine(CodePage).AnsiToUtf8(Ansi);
+end;
+
+function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
+begin
+  if Ansi = '' then
+    result := ''
+  else
+    {$ifdef UNICODE}
+    result := TSynAnsiConvert.Engine(CodePage).AnsiToUnicodeString(Ansi);
+    {$else}
+    result := CurrentAnsiConvert.AnsiToAnsi(TSynAnsiConvert.Engine(CodePage), Ansi);
+    {$endif UNICODE}
 end;
 
 function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer; Buf: PAnsiChar; BufLen,

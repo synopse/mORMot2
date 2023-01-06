@@ -3202,7 +3202,7 @@ function PosixParseHex32(p: PAnsiChar): integer;
 function _oskb(Size: cardinal): string;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
-// - under Windows, will use the CP_OEMCP encoding
+// - under Windows, will use the CP_OEM encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 // - we don't propose any ConsoleToUtf8() function because it would depend on
 // the running program itself: e.g. "dir" generates CP_OEM (850) as expected,
