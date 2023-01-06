@@ -747,7 +747,7 @@ type
     property Count: integer
       read fCount;
     /// how many seconds a banned IP4 should be rejected
-    // - should be a power of two, with a default of 4
+    // - should be a power of two, up to 128, with a default of 4
     // - if set, any previous banned IP will be flushed
     property Seconds: cardinal
       read fSeconds write SetSeconds;

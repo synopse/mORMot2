@@ -1611,7 +1611,6 @@ const
 
 
 /// low-level thread-safe initialization of the WinHtpp API
-// - this unit will try to load winhttp.dll in its initialization section below
 procedure WinHttpApiInitialize(RaiseOnError: boolean = true);
 
 /// a callback raising a EWinHttp on error
@@ -2338,6 +2337,7 @@ var
   AutoProxyOptions: WINHTTP_AUTOPROXY_OPTIONS;
   IEProxyConfig: WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
 begin
+  WinHttpApiInitialize;
   result := 0;
   ProxyInfo.URL := '';
   ProxyInfo.Bypass := '';
@@ -2425,7 +2425,6 @@ begin
   if result <> 0 then
     ProxyInfo.ErrorMessage := WinErrorText(result, winhttpdll);
 end;
-
 
 procedure WinHttpApiInitialize(RaiseOnError: boolean);
 var
@@ -2632,7 +2631,6 @@ initialization
     (SizeOf(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
-  WinHttpApiInitialize({RaiseOnError=}false);
 
 {$endif USEWININET}
 

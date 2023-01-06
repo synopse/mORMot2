@@ -2401,6 +2401,7 @@ var
   CallbackRes: PtrInt absolute Callback; // for FPC compatibility
   access, protocols: cardinal;
 begin
+  WinHttpApiInitialize;
   if fProxyName = '' then
     if OSVersion >= wEightOne then
       access := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY // Windows 8.1 and newer
@@ -2836,7 +2837,6 @@ var
   inH, outH: RawUtf8;
   outD: RawByteString;
 begin
-  fSocket := nil;
   _http := TWinHttpUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
     aProxyByPass, ConnectionTimeOut, SendTimeout, ReceiveTimeout);
   try

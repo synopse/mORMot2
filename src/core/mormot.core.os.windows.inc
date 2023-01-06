@@ -213,7 +213,7 @@ end;
 
 // Delphi Unicode has an ambiguous GetProcAddress() overload with PWideChar
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
-  external kernel32 name 'GetProcAddress';
+  external kernel32 name 'GetProcAddress'; // this is an Ansi-only API
 
 function LibraryError: string;
 begin
@@ -1539,19 +1539,42 @@ var
   OpenProcessAccess: DWORD;
 
   // late-binding of Windows version specific API entries
-  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetSystemTimes: function(
+    var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessTimes: function(hProcess: THandle;
-    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
-  GetProcessMemoryInfo: function(Process: THandle;
-    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
-  // EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
-  //  var lpcbNeeded: DWORD): BOOL; stdcall;
-  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
-  GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
-    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+    var lpCreationTime, lpExitTime, lpKernelTime,
+        lpUserTime: TFileTime): BOOL; stdcall;
   // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
   QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
     lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
+  // PSAPI API late-binding via DelayedProc()
+  GetProcessMemoryInfo: function(Process: THandle;
+    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
+  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD;
+    var cbNeeded: DWORD): BOOL; stdcall;
+  GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
+    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+
+function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
+var
+  h: THandle;
+  proc: pointer;
+begin
+  if pointer(api) = nil then
+  begin
+    // try to load the library once
+    proc := nil;
+    GlobalLock;
+    h := Windows.LoadLibrary(libname);
+    if h >= 32 then
+      proc := Windows.GetProcAddress(h, procname);
+    if proc = nil then
+      proc := pointer(1); // mark non available
+    pointer(api) := proc; // set it last
+    GlobalUnLock;
+  end;
+  result := pointer(api) <> pointer(1);
+end;
 
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
@@ -1608,7 +1631,7 @@ function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var n: cardinal;
 begin
   result := nil;
-  if not Assigned(EnumProcesses) then
+  if not DelayedProc(EnumProcesses, 'Psapi.dll', 'EnumProcesses') then
     exit;
   n := 2048;
   repeat
@@ -1647,7 +1670,8 @@ begin
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           Win32PWideCharToUtf8(name, len, result);
       end
-      else if Assigned(GetModuleFileNameExW) and
+      else if DelayedProc(GetModuleFileNameExW,
+                'Psapi.dll', 'GetModuleFileNameExW') and
               (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
         Win32PWideCharToUtf8(name, StrLenW(name), result);
     finally
@@ -1673,6 +1697,11 @@ begin
   result := ''; // call RetrieveSystemTimes() instead
 end;
 
+function DelayedGetProcessMemoryInfo: boolean;
+begin
+  result:= DelayedProc(GetProcessMemoryInfo, 'Psapi.dll', 'GetProcessMemoryInfo');
+end;
+
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 var
@@ -1682,7 +1711,7 @@ var
 begin
   result := false;
   if (not Assigned(GetProcessTimes)) or
-     (not Assigned(GetProcessMemoryInfo)) then
+     (not DelayedGetProcessMemoryInfo) then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h = 0 then
@@ -1722,10 +1751,12 @@ begin
   if Assigned(GetProcessTimes) then
     GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
   DefaultHasher128(@e.h0, @ft, SizeOf(ft));
-  mem.cb := SizeOf(mem);
-  if Assigned(GetProcessMemoryInfo) then
+  if Assigned(GetProcessMemoryInfo) then // may have been delayed
+  begin
+    mem.cb := SizeOf(mem);
     GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
-  DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+    DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  end;
   if Assigned(GetSystemTimes) then
     GetSystemTimes(ft.usr, ft.p, ft.e);
   DefaultHasher128(@e.h2, @ft, SizeOf(ft));
@@ -1770,7 +1801,7 @@ begin
   // no monitoring API available under oldest Windows
   result := Assigned(GetSystemTimes) and
             Assigned(GetProcessTimes) and
-            Assigned(GetProcessMemoryInfo);
+            DelayedGetProcessMemoryInfo;
 end;
 
 function TProcessInfo.Start: boolean;
@@ -1916,7 +1947,7 @@ begin
   end;
   {$else}
   if withalloc and
-     Assigned(GetProcessMemoryInfo) then
+     DelayedGetProcessMemoryInfo then
   begin
     FillcharFast(mem, SizeOf(mem), 0);
     mem.cb := SizeOf(mem);
@@ -2250,11 +2281,13 @@ begin
 end;
 
 var
+  // ComputeSystemPath() cache
+  _SystemPath: array[TSystemPath] of TFileName;
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
+  // - late binding also ensure that we load libraries only when needed
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
-  _SystemPath: array[TSystemPath] of TFileName; // cache
 
 function ComputeSystemPath(kind: TSystemPath): TFileName;
 const
@@ -2262,23 +2295,30 @@ const
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
-  csidl: array[TSystemPath] of integer = (
-    // spCommonData,       spUserData,          spCommonDocuments
-    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
-    // spUserDocuments, spTempFolder, spLog
-    CSIDL_PERSONAL,     0,      CSIDL_LOCAL_APPDATA);
+  CSIDL: array[TSystemPath] of integer = (
+    CSIDL_COMMON_APPDATA,   // spCommonData
+    CSIDL_LOCAL_APPDATA,    // spUserData
+    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
+    CSIDL_PERSONAL,         // spUserDocuments
+    0,                      // spTempFolder
+    CSIDL_LOCAL_APPDATA);   // spLog
   ENV: array[TSystemPath] of TFileName = (
-    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'LOCALAPPDATA');
+    'ALLUSERSAPPDATA',      // spCommonData
+    'LOCALAPPDATA',         // spUserData
+    '',                     // spCommonDocuments
+    '',                     // spUserDocuments
+    'TEMP',                 // spTempFolder
+    'LOCALAPPDATA');        // spLog
 var
   tmp: array[0..MAX_PATH] of char;
 begin
   if (kind = spLog) and
      IsDirectoryWritable(Executable.ProgramFilePath) then
     result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
-  else if (csidl[kind] <> 0) and
-          Assigned(SHGetFolderPath) and
-          (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
-    result := IncludeTrailingPathDelimiter(tmp)
+  else if (CSIDL[kind] <> 0) and
+     DelayedProc(SHGetFolderPath, 'SHFolder.dll', 'SHGetFolderPath' + _AW) and
+     (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
+    result := tmp
   else
   begin
     result := GetEnvironmentVariable(ENV[kind]);
@@ -2292,16 +2332,18 @@ begin
           result := Executable.ProgramFilePath;
       end;
     end;
-    result := IncludeTrailingPathDelimiter(result);
   end;
-  _SystemPath[kind] := result;
+  result := IncludeTrailingPathDelimiter(result);
 end;
 
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
   result := _SystemPath[kind];
   if result = '' then
+  begin
     result := ComputeSystemPath(kind);
+    _SystemPath[kind] := result;
+  end;
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
@@ -3184,7 +3226,7 @@ begin
     P := @@AcquireContextA;
     for i := 0 to high(NAMES) do
     begin
-      P^ := GetProcAddress(Handle, NAMES[i]);
+      P^ := LibraryResolve(Handle, NAMES[i]);
       if P^ = nil then
       begin
         PPointer(@@AcquireContextA)^ := nil;
@@ -3312,14 +3354,12 @@ const
 
 function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
 var
-  h: HMODULE;
   siz: DWORD;
   tmp: RawByteString;
   get: function(sig, id: DWORD; buf: pointer; siz: DWORD): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI
-  h := GetModuleHandle(kernel32);
-  get := GetProcAddress(h, 'GetSystemFirmwareTable');
+  get := GetProcAddress(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
   if Assigned(get) then
   begin
     siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
@@ -4581,7 +4621,8 @@ begin
   if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
   {$ifdef WITH_VECTOREXCEPT}
-  AddVectoredExceptionHandler := GetProcAddress(h, 'AddVectoredExceptionHandler');
+  AddVectoredExceptionHandler :=
+    GetProcAddress(h, 'AddVectoredExceptionHandler');
   {$endif WITH_VECTOREXCEPT}
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
@@ -4612,18 +4653,6 @@ begin
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
-  h := Windows.LoadLibrary('Psapi.dll');
-  if h >= 32 then
-  begin
-    @EnumProcesses := GetProcAddress(h, 'EnumProcesses');
-    @GetModuleFileNameExW := GetProcAddress(h, 'GetModuleFileNameExW');
-    //@EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
-    @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
-  end;
-  h := Windows.LoadLibrary('SHFolder.dll');
-  if h >= 32 then
-    // e.g. WinPE doesn't have it - https://stackoverflow.com/q/8683038/458259
-    @SHGetFolderPath := GetProcAddress(h, 'SHGetFolderPath' + _AW);
   // retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
@@ -4710,7 +4739,7 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
-  h := Windows.LoadLibrary(ntdll);
+  h := GetModuleHandle(ntdll);
   if h > 0 then
   begin
     wine_get_version := GetProcAddress(h, 'wine_get_version');
@@ -4818,6 +4847,5 @@ begin
   if CoInitCounter <> 0 then
     ConsoleWrite('Missing CoUninit (e.g. TOleDBConnection.Destroy call)');
 end;
-
 
 

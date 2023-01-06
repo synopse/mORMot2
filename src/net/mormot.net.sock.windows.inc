@@ -604,9 +604,6 @@ end;
 
 { ******************** IP Addresses Support }
 
-const
-  IPHLPAPI = 'iphlpapi.dll';
-
 type
   PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
   MIB_IPADDRTABLE = record
@@ -622,9 +619,10 @@ type
     end;
   end;
 
-function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
-  var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external IPHLPAPI;
-
+var
+  // some iphlpapi.dll late-binded API via DelayedProc()
+  GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
+    var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall;
 
 function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
 var
@@ -637,7 +635,8 @@ begin
   if Kind = tiaIPv6 then
     exit; // GetIpAddrTable() is an IPv4 only API
   Size := SizeOf(Table);
-  if GetIpAddrTable(@Table, Size, false) <> NO_ERROR then
+  if not DelayedProc(GetIpAddrTable, 'iphlpapi.dll', 'GetIpAddrTable') or
+     (GetIpAddrTable(@Table, Size, false) <> NO_ERROR) then
     exit;
   SetLength(result, Table.dwNumEntries);
   n := 0;
@@ -735,13 +734,12 @@ type
     // DHCP v6 Info following (not used by our code)
   end;
 
-function GetAdaptersAddresses(Family: ULONG; Flags: DWORD; Reserved: pointer;
-  pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
-  external IPHLPAPI;
-
-function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
-  PhyAddrLen: Pointer): DWORD; stdcall; external IPHLPAPI;
-
+var
+  // some iphlpapi.dll late-binded APIs via DelayedProc()
+  GetAdaptersAddresses: function(Family: ULONG; Flags: DWORD; Reserved: pointer;
+    pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
+  SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
+    PhyAddrLen: Pointer): DWORD; stdcall;
 
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
@@ -752,7 +750,9 @@ var
 begin
   result := nil;
   siz := 0;
-  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <> ERROR_BUFFER_OVERFLOW then
+  if not DelayedProc(GetAdaptersAddresses, 'iphlpapi.dll', 'GetAdaptersAddresses') or
+     (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <>
+       ERROR_BUFFER_OVERFLOW) then
     exit;
   SetLength(tmp, siz); // around 600 bytes per interface
   p := pointer(tmp);
@@ -785,7 +785,8 @@ var
 begin
   result := '';
   dwremoteIP := inet_addr(pointer(IP));
-  if dwremoteIP <> 0 then
+  if (dwremoteIP <> 0) and
+     DelayedProc(SendARP, 'iphlpapi.dll', 'SendARP') then
   begin
     PhyAddrLen := 8;
     if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen) = NO_ERROR then
@@ -1514,8 +1515,8 @@ var
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
-  SocketAPIVersion := RawUtf8(Format(
-    '%s.%d', [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
+  SocketAPIVersion := RawUtf8(Format('%s.%d',
+    [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
   NewNetTls := NewSChannelNetTls;
 end;
 

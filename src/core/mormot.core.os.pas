@@ -1696,6 +1696,9 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray;
 // - could be used if TWinRegistry is not needed, e.g. for a single value
 function ReadRegString(Key: THandle; const Path, Value: string): string;
 
+/// convenient late-binding of any external library
+// - just wrapper around LoadLibray + GetProcAddress
+function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
 
 type
   HCRYPTPROV = pointer;
@@ -3204,9 +3207,10 @@ function _oskb(Size: cardinal): string;
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEM encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
-// - we don't propose any ConsoleToUtf8() function because it would depend on
-// the running program itself: e.g. "dir" generates CP_OEM (850) as expected,
-// but "ipconfig" outputs WinAnsi (1252) and "wmic" UTF-16 binary with BOM (!)
+// - we don't propose any ConsoleToUtf8() function because Windows depends on
+// the running program itself: most should generates CP_OEM (e.g. 850) as expected,
+// but some could use the system code page or even UTF-16 binary with BOM (!) -
+// so you may consider using AnsiToUtf8() with the proper code page
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 
 
@@ -4687,8 +4691,9 @@ type
   /// callback used by RunRedirect() to notify of console output at runtime
   // - newly console output text is given as raw bytes sent by the application,
   // with no conversion: on POSIX, it is likely to be UTF-8 but on Windows it
-  // depends on the actual command e.g. "dir" returns CP_OEM (850), "ipconfig"
-  // returns WinAnsi (1252) and "wmic" returns UTF-16 with BOM
+  // depends on the actual program so is likely to be CP_OEM but others could
+  // use the system code page or even UTF-16 binary with BOM (!) - so you
+  // may consider using AnsiToUtf8() with the proper code page
   // - should return true to stop the execution, or false to continue
   // - on idle state (each 200ms), is called with text='' to allow execution abort
   // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
@@ -4715,8 +4720,9 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - calling FPC RTL popen/pclose on POSIX, or CreateProcessW on Windows
 // - return '' on cmd execution error, or the whole output console content
 // with no conversion: on POSIX, it is likely to be UTF-8 but on Windows it
-// depends on the actual command e.g. "dir" returns CP_OEM (850), "ipconfig"
-// returns WinAnsi (1252) and "wmic" returns UTF-16 with BOM
+// depends on the actual program so is likely to be CP_OEM but others could
+// use the system code page or even UTF-16 binary with BOM (!) - so you
+// may consider using AnsiToUtf8() with the proper code page
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
