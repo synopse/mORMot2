@@ -11164,7 +11164,7 @@ begin
      (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then
     CryptoApi.ReleaseContext(CryptoApiAesProvider, 0);
   {$endif USE_PROV_RSA_AES}
-  FillZero(_h.k);
+  FillZero(_h.k); // anti-forensic of the dead process
 end;
 
 

@@ -1576,31 +1576,30 @@ end;
 
 {$I+}
 
-
-constructor TFileVersion.Create(const aFileName: TFileName;
-  aMajor, aMinor, aRelease, aBuild: integer);
+{$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in .inc / project options
+function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
-  M, D: word;
-{$ifdef FPCUSEVERSIONINFO}
   VI: TVersionInfo;
   TI: integer;
-{$endif FPCUSEVERSIONINFO}
 begin
-  fFileName := aFileName;
-  {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in Synopse.inc / project options
-  if aFileName <> '' then
-  begin
-    VI := TVersionInfo.Create;
+  result := false;
+  if fFileName = '' then
+    exit;
+  VI := TVersionInfo.Create;
+  try
     try
-      if (aFileName <> '') and
-         (aFileName <> ParamStr(0)) then
-        VI.Load(aFileName)
+      // extract information - VI.Load() may raise EResNotFound
+      if (fFileName <> '') and
+         (fFileName <> ParamStr(0)) then
+        VI.Load(fFileName)
       else
         VI.Load(HInstance); // load info for currently running program
-      aMajor := VI.FixedInfo.FileVersion[0];
-      aMinor := VI.FixedInfo.FileVersion[1];
-      aRelease := VI.FixedInfo.FileVersion[2];
-      aBuild := VI.FixedInfo.FileVersion[3];
+      result := VI.FixedInfo.FileVersion[0] <> 0;
+      // set extracted version numbers
+      SetVersion(VI.FixedInfo.FileVersion[0],
+                 VI.FixedInfo.FileVersion[1],
+                 VI.FixedInfo.FileVersion[2],
+                 VI.FixedInfo.FileVersion[3]);
       // detect translation
       if VI.VarFileInfo.Count > 0 then
         with VI.VarFileInfo.Items[0] do
@@ -1614,7 +1613,7 @@ begin
       end
       else
       begin
-        // look for index of language
+        // look for language index
         TI := VI.StringFileInfo.Count - 1;
         while (TI >= 0) and
               (CompareText(VI.StringFileInfo.Items[TI].Name, LanguageInfo) <> 0) do
@@ -1627,27 +1626,29 @@ begin
       end;
       with VI.StringFileInfo.Items[TI] do
       begin
-        CompanyName := Values['CompanyName'];
-        FileDescription := Values['FileDescription'];
-        FileVersion := Values['FileVersion'];
-        InternalName := Values['InternalName'];
-        LegalCopyright := Values['LegalCopyright'];
+        CompanyName      := Values['CompanyName'];
+        FileDescription  := Values['FileDescription'];
+        FileVersion      := Values['FileVersion'];
+        InternalName     := Values['InternalName'];
+        LegalCopyright   := Values['LegalCopyright'];
         OriginalFilename := Values['OriginalFilename'];
-        ProductName := Values['ProductName'];
-        ProductVersion := Values['ProductVersion'];
-        Comments := Values['Comments'];
+        ProductName      := Values['ProductName'];
+        ProductVersion   := Values['ProductVersion'];
+        Comments         := Values['Comments'];
       end;
-    finally
-      VI.Free;
+    except
+      // trap EResNotFound exception from VI.Load()
     end;
+  finally
+    VI.Free;
   end;
-  {$endif FPCUSEVERSIONINFO}
-  SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if fBuildDateTime = 0 then // get build date from file age
-    fBuildDateTime := FileAgeToDateTime(aFileName);
-  if fBuildDateTime <> 0 then
-    DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
+{$else}
+function TFileVersion.RetrieveInformationFromFileName: boolean;
+begin
+  result := false; // nothing to be done
+end;
+{$endif FPCUSEVERSIONINFO}
 
 procedure GetUserHost(out User, Host: RawUtf8);
 begin

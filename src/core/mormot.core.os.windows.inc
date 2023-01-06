@@ -183,7 +183,7 @@ end;
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 var
   tmp: TW32Temp;
-  err: DWORD;
+  err: DWord;
   {$ifdef CPUX86}
   x87cw: word;
   {$endif CPUX86}
@@ -1393,7 +1393,7 @@ const
 procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
 var
   ctxt: TSynLogExceptionContext;
-  backuplasterror: DWORD;
+  backuplasterror: DWord;
   backuphandler: TOnRawLogException;
 begin
   if Exc.ExceptionCode = cSetThreadNameException then
@@ -1519,8 +1519,8 @@ const
 
 type
   TProcessMemoryCounters = record
-    cb: DWORD;
-    PageFaultCount: DWORD;
+    cb: DWord;
+    PageFaultCount: DWord;
     PeakWorkingSetSize: PtrUInt;
     WorkingSetSize: PtrUInt;
     QuotaPeakPagedPoolUsage: PtrUInt;
@@ -1536,7 +1536,7 @@ const
 
 var
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
-  OpenProcessAccess: DWORD;
+  OpenProcessAccess: DWord;
 
   // late-binding of Windows version specific API entries
   GetSystemTimes: function(
@@ -1545,15 +1545,15 @@ var
     var lpCreationTime, lpExitTime, lpKernelTime,
         lpUserTime: TFileTime): BOOL; stdcall;
   // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
-  QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
-    lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
+  QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWord;
+    lpExeName: PWideChar; lpdwSize: PDWord): BOOL; stdcall;
   // PSAPI API late-binding via DelayedProc()
   GetProcessMemoryInfo: function(Process: THandle;
-    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
-  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD;
-    var cbNeeded: DWORD): BOOL; stdcall;
+    var ppsmemCounters: TProcessMemoryCounters; cb: DWord): BOOL; stdcall;
+  EnumProcesses: function(lpidProcess: PDWord; cb: DWord;
+    var cbNeeded: DWord): BOOL; stdcall;
   GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
-    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+    lpBaseName: PWideChar; nSize: DWord): DWord; stdcall;
 
 function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
 var
@@ -1564,7 +1564,7 @@ begin
   begin
     // try to load the library once
     proc := nil;
-    GlobalLock;
+    GlobalLock; // avoid race condition
     h := Windows.LoadLibrary(libname);
     if h >= 32 then
       proc := Windows.GetProcAddress(h, procname);
@@ -1655,7 +1655,7 @@ end;
 function EnumProcessName(PID: cardinal): RawUtf8;
 var
   h: THandle;
-  len: DWORD;
+  len: DWord;
   name: array[0..4095] of WideChar;
 begin
   result := '';
@@ -1891,8 +1891,8 @@ type
   DWORDLONG = QWord;
 
   TMemoryStatusEx = record
-    dwLength: DWORD;
-    dwMemoryLoad: DWORD;
+    dwLength: DWord;
+    dwMemoryLoad: DWord;
     ullTotalPhys: DWORDLONG;
     ullAvailPhys: DWORDLONG;
     ullTotalPageFile: DWORDLONG;
@@ -1965,9 +1965,9 @@ function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
 
 {
 // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
-function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWORD;
-  lpInBuffer: Pointer; nInBufferSize: DWORD; lpOutBuffer: Pointer;
-  nOutBufferSize: DWORD; var lpBytesReturned: DWORD;
+function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWord;
+  lpInBuffer: Pointer; nInBufferSize: DWord; lpOutBuffer: Pointer;
+  nOutBufferSize: DWord; var lpBytesReturned: DWord;
   lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
 }
 
@@ -1976,7 +1976,7 @@ function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   aVolumeName: PSynUnicode): boolean;
 var
   tmp: array[0..MAX_PATH - 1] of WideChar;
-  dummy, flags: DWORD;
+  dummy, flags: DWord;
   dn: SynUnicode;
 begin
   if aDriveFolderOrFile = '' then
@@ -2059,7 +2059,7 @@ end;
 
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 var
-  events, read: DWORD;
+  events, read: DWord;
   rec: TInputRecord;
   h: THandle;
 begin
@@ -2171,13 +2171,8 @@ begin
     Utf8ToConsoleDoConv(S, result);
 end;
 
-
-{ TFileVersion }
-
-constructor TFileVersion.Create(const aFileName: TFileName;
-  aMajor, aMinor, aRelease, aBuild: integer);
+function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
-  M, D: word;
   Size, Size2: DWord;
   Pt: Pointer;
   Trans: PWordArray;
@@ -2202,69 +2197,61 @@ var
   end;
 
 begin
-  fFileName := aFileName;
-  if aFileName <> '' then
+  result := false;
+  if fFileName = '' then
+    exit;
+  // GetFileVersionInfo modifies the filename parameter data while parsing
+  // Copy the string const into a local variable to create a writeable copy
+  tmp := SynUnicode(fFileName); // use RTL for UTF-16 conversion
+  {$ifdef UNICODE}
+  UniqueString(tmp);
+  {$endif UNICODE}
+  Size := GetFileVersionInfoSizeW(pointer(tmp), Size2);
+  if Size > 0 then
   begin
-    // GetFileVersionInfo modifies the filename parameter data while parsing
-    // Copy the string const into a local variable to create a writeable copy
-    tmp := SynUnicode(aFileName); // use RTL for UTF-16 conversion
-    {$ifdef UNICODE}
-    UniqueString(tmp);
-    {$endif UNICODE}
-    Size := GetFileVersionInfoSizeW(pointer(tmp), Size2);
-    if Size > 0 then
-    begin
-      GetMem(Pt, Size);
-      try
-        tmp := SynUnicode(aFileName);
-        {$ifdef UNICODE}
-        UniqueString(tmp);
-        {$endif UNICODE}
-        GetFileVersionInfoW(pointer(tmp), 0, Size, Pt);
-        VerQueryValueW(Pt, '\', pointer(Info), Size2);
-        with Info^ do
+    result := true;
+    GetMem(Pt, Size);
+    try
+      tmp := SynUnicode(fFileName);
+      {$ifdef UNICODE}
+      UniqueString(tmp);
+      {$endif UNICODE}
+      GetFileVersionInfoW(pointer(tmp), 0, Size, Pt);
+      VerQueryValueW(Pt, '\', pointer(Info), Size2);
+      with Info^ do
+      begin
+        SetVersion({major=}  dwFileVersionMS shr 16,
+                   {minor=}  word(dwFileVersionMS),
+                   {release=}dwFileVersionLS shr 16,
+                   {build=}  word(dwFileVersionLS));
+        if (dwFileDateLS <> 0) and
+           (dwFileDateMS <> 0) then
         begin
-          if Version32 = 0 then
-          begin
-            aMajor := dwFileVersionMS shr 16;
-            aMinor := word(dwFileVersionMS);
-            aRelease := dwFileVersionLS shr 16;
-          end;
-          aBuild := word(dwFileVersionLS);
-          if (dwFileDateLS <> 0) and
-             (dwFileDateMS <> 0) then
-          begin
-            FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
-            FileTime.dwHighDateTime := dwFileDateMS;
-            FileTimeToSystemTime(FileTime, SystemTime);
-            fBuildDateTime := EncodeDate(
-              SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
-          end;
+          FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
+          FileTime.dwHighDateTime := dwFileDateMS;
+          FileTimeToSystemTime(FileTime, SystemTime);
+          fBuildDateTime := EncodeDate(
+            SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
         end;
-        VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
-        if Size2 >= 4 then
-        begin
-          _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
-          CompanyName := ReadResourceByName('CompanyName');
-          FileDescription := ReadResourceByName('FileDescription');
-          FileVersion := ReadResourceByName('FileVersion');
-          InternalName := ReadResourceByName('InternalName');
-          LegalCopyright := ReadResourceByName('LegalCopyright');
-          OriginalFilename := ReadResourceByName('OriginalFilename');
-          ProductName := ReadResourceByName('ProductName');
-          ProductVersion := ReadResourceByName('ProductVersion');
-          Comments := ReadResourceByName('Comments');
-        end
-      finally
-        Freemem(Pt);
       end;
+      VerQueryValueW(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
+      if Size2 >= 4 then
+      begin
+        _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
+        CompanyName := ReadResourceByName('CompanyName');
+        FileDescription := ReadResourceByName('FileDescription');
+        FileVersion := ReadResourceByName('FileVersion');
+        InternalName := ReadResourceByName('InternalName');
+        LegalCopyright := ReadResourceByName('LegalCopyright');
+        OriginalFilename := ReadResourceByName('OriginalFilename');
+        ProductName := ReadResourceByName('ProductName');
+        ProductVersion := ReadResourceByName('ProductVersion');
+        Comments := ReadResourceByName('Comments');
+      end
+    finally
+      Freemem(Pt);
     end;
   end;
-  SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if fBuildDateTime = 0 then  // get build date from file age
-    fBuildDateTime := FileAgeToDateTime(aFileName);
-  if fBuildDateTime <> 0 then
-    DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
@@ -2349,7 +2336,7 @@ end;
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
-  RestoreProtection, Ignore: DWORD;
+  RestoreProtection, Ignore: DWord;
   i: PtrInt;
 begin
   if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, RestoreProtection) then
@@ -2400,7 +2387,7 @@ end;
 
 function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
 var
-  rtype, rsize: DWORD;
+  rtype, rsize: DWord;
   tmp: TSynTempBuffer;
 begin
   result := '';
@@ -2423,7 +2410,7 @@ end;
 
 function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
 var
-  rtype, rsize: DWORD;
+  rtype, rsize: DWord;
 begin
   result := '';
   if RegQueryValueExW(key, pointer(entry), nil, @rtype, nil, @rsize) <> 0 then
@@ -2445,14 +2432,15 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadBuffer(const entry: SynUnicode; Data: pointer; DataLen: DWORD): boolean;
+function TWinRegistry.ReadBuffer(const entry: SynUnicode;
+  Data: pointer; DataLen: DWord): boolean;
 begin
   result := RegQueryValueExW(key, pointer(entry), nil, nil, Data, @DataLen) = 0;
 end;
 
 function TWinRegistry.ReadEnumEntries: TRawUtf8DynArray;
 var
-  count, maxlen, i, len: DWORD;
+  count, maxlen, i, len: DWord;
   tmp: TSynTempBuffer;
 begin
   result := nil;
@@ -2515,7 +2503,7 @@ const
 
 type
   TOKEN_PRIVILEGES = packed record
-    PrivilegeCount : DWORD;
+    PrivilegeCount : DWord;
     Privileges : array[0..0] of LUID_AND_ATTRIBUTES;
   end;
   PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
@@ -2526,12 +2514,12 @@ type
   PTOKEN_USER = ^TOKEN_USER;
 
   TOKEN_GROUPS = record
-    GroupCount: DWORD;
+    GroupCount: DWord;
     Groups: array [0..0] of SID_AND_ATTRIBUTES;
   end;
   PTOKEN_GROUPS = ^TOKEN_GROUPS;
 
-function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
+function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWord;
   var TokenHandle: THandle): BOOL;
     stdcall; external advapi32;
 
@@ -2540,17 +2528,17 @@ function LookupPrivilegeValueA(lpSystemName, lpName: PAnsiChar;
     stdcall; external advapi32;
 
 function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger;
-  lpName: PAnsiChar; var cbName: DWORD): BOOL;
+  lpName: PAnsiChar; var cbName: DWord): BOOL;
     stdcall; external advapi32;
 
 function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
-  var cchName: DWORD; ReferencedDomainName: PAnsiChar;
-  var cchReferencedDomainName: DWORD; var peUse: DWORD): BOOL;
+  var cchName: DWord; ReferencedDomainName: PAnsiChar;
+  var cchReferencedDomainName: DWord; var peUse: DWord): BOOL;
     stdcall; external advapi32;
 
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
-  const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
-  PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL;
+  const NewState: TOKEN_PRIVILEGES; BufferLength: DWord;
+  PreviousState: PTokenPrivileges; ReturnLength: PDWord): BOOL;
     stdcall; external advapi32;
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
@@ -2880,7 +2868,7 @@ var
   tp: TOKEN_PRIVILEGES;
   id: TLargeInteger;
   tpprev: TOKEN_PRIVILEGES;
-  cbprev: DWORD;
+  cbprev: DWord;
 begin
   result := false;
   if not LookupPrivilegeValueA(nil, @_WSP[aPrivilege][1], id) then
@@ -3014,7 +3002,7 @@ var
     ObjectAttributes: POBJECT_ATTRIBUTES): NTSTATUS; stdcall;
   NtMapViewOfSection: function (SectionHandle, ProcessHandle: THandle;
     BaseAddress: PPVOID; ZeroBits: ULONG; CommitSize: ULONG;
-    var SectionOffset: TLargeInteger; ViewSize: PULONG; InheritDisposition: DWORD;
+    var SectionOffset: TLargeInteger; ViewSize: PULONG; InheritDisposition: DWord;
     AllocationType: ULONG; Protect: ULONG): NTSTATUS; stdcall;
   NtUnmapViewOfSection: function (ProcessHandle: THandle;
     BaseAddress: PVOID): NTSTATUS; stdcall;
@@ -3057,10 +3045,10 @@ function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer;
   lpBuffer: Pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
     stdcall; external kernel32;
 
-function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
+function InternalGetProcessInfo(aPID: DWord; out aInfo: TWinProcessInfo): boolean;
 var
   bytesread: PtrUInt;
-  sizeneeded: DWORD;
+  sizeneeded: DWord;
   pbi: PMS_PROCESS_BASIC_INFORMATION;
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
@@ -3180,7 +3168,7 @@ end;
 
 function ReadRegString(Key: THandle; const Path, Value: string): string;
 var
-  siz, typ: DWORD;
+  siz, typ: DWord;
   tmp: array[byte] of char;
   k: HKey;
 begin
@@ -3243,7 +3231,7 @@ type
   {$packrecords C} // mandatory under Win64
   {$endif FPC}
   DATA_BLOB = record
-    cbData: DWORD;
+    cbData: DWord;
     pbData: PAnsiChar;
   end;
   PDATA_BLOB = ^DATA_BLOB;
@@ -3257,12 +3245,12 @@ const
   CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
 
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
     stdcall; external CRYPTDLL;
 
 function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
     stdcall; external CRYPTDLL;
 
@@ -3306,18 +3294,18 @@ function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
   stdcall; external CRYPTDLL;
 
-function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWORD;
-  pszString: PAnsiChar; var pchString: DWORD): BOOL;
+function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
+  pszString: PAnsiChar; var pchString: DWord): BOOL;
     stdcall; external CRYPTDLL;
 
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWORD): BOOL;
+function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
     stdcall; external CRYPTDLL;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
   store: HCERTSTORE;
   ctx: PCCERT_CONTEXT;
-  resultlen, certlen: DWORD;
+  resultlen, certlen: DWord;
   tmp: TSynTempBuffer;
 begin
   // call the Windows API to retrieve the System certificates
@@ -3354,9 +3342,9 @@ const
 
 function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
 var
-  siz: DWORD;
+  siz: DWord;
   tmp: RawByteString;
-  get: function(sig, id: DWORD; buf: pointer; siz: DWORD): PtrUInt; stdcall;
+  get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI
   get := GetProcAddress(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
@@ -4163,13 +4151,13 @@ end;
 // some definitions missing on Delphi and/or FPC
 type
   TThreadEntry32 = record
-    dwSize: DWORD;
-    cntUsage: DWORD;
-    th32ThreadID: DWORD;       // this thread
-    th32OwnerProcessID: DWORD; // Process this thread is associated with
+    dwSize: DWord;
+    cntUsage: DWord;
+    th32ThreadID: DWord;       // this thread
+    th32OwnerProcessID: DWord; // Process this thread is associated with
     tpBasePri: integer;
     tpDeltaPri: integer;
-    dwFlags: DWORD;
+    dwFlags: DWord;
   end;
 
 const
@@ -4179,13 +4167,13 @@ function AttachConsole(pid: cardinal): BOOL;
   stdcall; external kernel32;
 function GetConsoleWindow: HWND;
   stdcall; external kernel32;
-function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWORD): THandle;
+function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWord): THandle;
   stdcall; external kernel32;
 function Thread32First(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
   stdcall; external kernel32;
 function Thread32Next(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
   stdcall; external kernel32;
-function PostThreadMessage(idThread: DWORD; Msg: UINT; wParam: WPARAM;
+function PostThreadMessage(idThread: DWord; Msg: UINT; wParam: WPARAM;
     lParam: LPARAM): BOOL;
   stdcall; external user32 name 'PostThreadMessageW';
 
@@ -4537,13 +4525,13 @@ type
       RelationProcessorCore: (
         ProcessorCoreFlags: BYTE);
       RelationNumaNode: (
-        NumaNodeNumber: DWORD);
+        NumaNodeNumber: DWord);
       RelationCache: (
         Cache: record
           Level: BYTE;
           Associativity: BYTE;
           LineSize: WORD;
-          Size: DWORD;
+          Size: DWord;
           CacheType: TSystemLogicalProcessorCache;
         end);
       RelationGroup: (
@@ -4584,7 +4572,7 @@ var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
   GetLogicalProcessorInformation: function(
-   var Info: TSystemLogicalProcessorInformation; Len: PDWORD): BOOL; stdcall;
+   var Info: TSystemLogicalProcessorInformation; Len: PDWord): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
   Res: BOOL;
   P: pointer;
@@ -4593,7 +4581,7 @@ var
   reg: TWinRegistry;
   proc: array of TSystemLogicalProcessorInformation;
   i: integer;
-  siz: DWORD;
+  siz: DWord;
 begin
   {$ifdef ASMX86}
   {$ifndef HASNOSSE2}

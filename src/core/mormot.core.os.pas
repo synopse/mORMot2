@@ -1074,8 +1074,9 @@ type
   // - under Linux, all version numbers are set to 0 by default, unless
   // you define the FPCUSEVERSIONINFO conditional and information is
   // extracted from executable resources
-  // - you should not have to use this class directly, but via the
-  // Executable global variable
+  // - for the main executable, do not create once instance of this class, but
+  // call GetExecutableVersion / SetExecutableVersion and access the Executable
+  // global variable
   TFileVersion = class
   protected
     fDetailed: string;
@@ -1118,13 +1119,18 @@ type
     Comments: RawUtf8;
     /// associated Language Translation string version resource
     LanguageInfo: RawUtf8;
-    /// retrieve application version from exe file name
-    // - DefaultVersion32 is used if no information Version was included into
-    // the executable resources (on compilation time)
-    // - you should not have to use this constructor, but rather access the
-    // Executable global variable
+    /// initialize the version information, with optional custom values
+    // - will set the version numbers, and get BuildDateTime/BuildYear
+    // - call RetrieveInformationFromFileName to parse its internal resources
+    // - for the main executable, do not use this constructor, but call
+    // GetExecutableVersion / SetExecutableVersion and access the Executable
+    // global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0);
+    /// open and extract file information from the executable FileName
+    // - note that resource extraction is not available on POSIX, unless the
+    // FPCUSEVERSIONINFO conditional has been specified in the project options
+    function RetrieveInformationFromFileName: boolean;
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
@@ -1176,6 +1182,8 @@ type
     ProgramName: RawUtf8;
     /// the main executable details, as used e.g. by TSynLog
     // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.123 (2011-03-29 11:09:06)'
+    // - you should have called GetExecutableVersion or SetExecutableVersion  
+    // to populate this field
     ProgramFullSpec: RawUtf8;
     /// the main executable file name (including full path)
     // - same as paramstr(0)
@@ -1188,6 +1196,8 @@ type
     // - for a library, will contain the whole .dll file name
     InstanceFileName: TFileName;
     /// the current executable version
+    // - you should have called GetExecutableVersion or SetExecutableVersion
+    // to populate this field
     Version: TFileVersion;
     /// the current computer host name
     Host: RawUtf8;
@@ -1206,6 +1216,8 @@ type
 var
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
+  // but you need to call GetExecutableVersion to initialize its Version fields
+  // from the executable version resource (if any)
   // - you can call SetExecutableVersion() with a custom version, if needed
   Executable: TExecutable;
 
@@ -1214,10 +1226,18 @@ var
   ExeVersion: TExecutable absolute Executable;
   {$endif PUREMORMOT2}
 
-/// initialize Executable global variable, supplying a custom version number
-// - by default, the version numbers will be retrieved at startup from the
-// executable itself (if it was included at build time)
-// - but you can use this function to set any custom version numbers
+/// initialize Executable global variable, from the program version resources
+// - is not retrieved at startup, unless this function is especially called
+// - on POSIX, requires FPCUSEVERSIONINFO conditional to be set for the project
+// - use SetExecutableVersion() if you want to force a custom version
+// - is in fact just a wrapper around SetExecutableVersion(0, 0, 0, 0)
+procedure GetExecutableVersion;
+
+/// initialize Executable global variable with custom version numbers
+// - GetExecutableVersion will retrieve version information from the
+// executable itself (if it was included at build time and FPCUSEVERSIONINFO
+// conditional was specified for the project)
+// - but you can use this function to set any custom version number
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overload;
 
 /// initialize Executable global variable, supplying the version as text
@@ -1696,8 +1716,8 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray;
 // - could be used if TWinRegistry is not needed, e.g. for a single value
 function ReadRegString(Key: THandle; const Path, Value: string): string;
 
-/// convenient late-binding of any external library
-// - just wrapper around LoadLibray + GetProcAddress
+/// convenient late-binding of any external library function
+// - just wrapper around LoadLibray + GetProcAddress once over a pointer
 function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
 
 type
@@ -6691,9 +6711,25 @@ end;
 
 { TFileVersion }
 
+constructor TFileVersion.Create(const aFileName: TFileName;
+  aMajor, aMinor, aRelease, aBuild: integer);
+var
+  M, D: word;
+begin
+  fFileName := aFileName;
+  SetVersion(aMajor, aMinor, aRelease, aBuild);
+  if fBuildDateTime = 0 then // get build date from file age
+    fBuildDateTime := FileAgeToDateTime(aFileName);
+  if fBuildDateTime <> 0 then
+    DecodeDate(fBuildDateTime, BuildYear, M, D);
+end;
+
 function TFileVersion.Version32: integer;
 begin
-  result := Major shl 16 + Minor shl 8 + Release;
+  if self = nil then
+    result := 0
+  else
+    result := Major shl 16 + Minor shl 8 + Release;
 end;
 
 procedure TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
@@ -6703,7 +6739,12 @@ begin
   Release := aRelease;
   Build := aBuild;
   Main := Format('%d.%d', [Major, Minor]);
-  fDetailed := Format('%d.%d.%d.%d', [Major, Minor, Release, Build]);
+  if Build <> 0 then
+    fDetailed := Format('%s.%d.%d', [Main, Release, Build])
+  else if Release <> 0 then
+    fDetailed := Format('%s.%d', [Main, Release])
+  else
+    fDetailed := Main;
   fVersionInfo :=  '';
   fUserAgent := '';
 end;
@@ -6807,37 +6848,16 @@ begin
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
-procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
+procedure ComputeExecutableHash;
 begin
   with Executable do
   begin
-    if Version = nil then
-    begin
-      {$ifdef OSWINDOWS}
-      ProgramFileName := paramstr(0);
-      {$else}
-      ProgramFileName := GetModuleName(HInstance);
-      if ProgramFileName = '' then
-        ProgramFileName := ExpandFileName(paramstr(0));
-      {$endif OSWINDOWS}
-      ProgramFilePath := ExtractFilePath(ProgramFileName);
-      if IsLibrary then
-        InstanceFileName := GetModuleName(HInstance)
-      else
-        InstanceFileName := ProgramFileName;
-      ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
-      GetUserHost(User, Host);
-      if Host = '' then
-        Host := 'unknown';
-      if User = '' then
-        User := 'unknown';
-      Version := TFileVersion.Create(
-        InstanceFileName, aMajor, aMinor, aRelease, aBuild);
-    end
+    if Version.Version32 = 0 then  
+      _fmt('%s (%s)', [ProgramFileName,
+        Version.BuildDateTimeString], ProgramFullSpec)
     else
-      Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
-    _fmt('%s %s (%s)', [ProgramFileName,
-      Version.Detailed, Version.BuildDateTimeString], ProgramFullSpec);
+      _fmt('%s %s (%s)', [ProgramFileName,
+        Version.Detailed, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));
@@ -6849,10 +6869,50 @@ begin
     {$endif OSLINUXANDROID}
     {$endif CPUINTELARM}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
+    Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
     Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
     Hash.c3 := crc32c(Hash.c2, pointer(InstanceFileName), length(InstanceFileName));
   end;
+end;
+
+procedure GetExecutableVersion;
+begin
+  if Executable.Version.RetrieveInformationFromFileName then
+    ComputeExecutableHash;
+end;
+
+procedure InitializeExecutableInformation; // called once at startup
+begin
+  with Executable do
+  begin
+    {$ifdef OSWINDOWS}
+    ProgramFileName := paramstr(0);
+    {$else}
+    ProgramFileName := GetModuleName(HInstance);
+    if ProgramFileName = '' then
+      ProgramFileName := ExpandFileName(paramstr(0));
+    {$endif OSWINDOWS}
+    ProgramFilePath := ExtractFilePath(ProgramFileName);
+    if IsLibrary then
+      InstanceFileName := GetModuleName(HInstance)
+    else
+      InstanceFileName := ProgramFileName;
+    ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
+    GetUserHost(User, Host);
+    if Host = '' then
+      Host := 'unknown';
+    if User = '' then
+      User := 'unknown';
+    Version := TFileVersion.Create(ProgramFileName); // with versions=0
+  end;
+  ComputeExecutableHash;
+end;
+
+procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
+begin
+  Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
+  ComputeExecutableHash;
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
@@ -8580,7 +8640,7 @@ begin
   TrimDualSpaces(BiosInfoText);
   TrimDualSpaces(CpuInfoText);
   OSVersionShort := ToTextOS(OSVersionInt32);
-  SetExecutableVersion(0, 0, 0, 0);
+  InitializeExecutableInformation;
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
