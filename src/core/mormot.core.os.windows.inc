@@ -9,7 +9,7 @@
 { ****************** Unicode, Time, File process }
 
 const
-  /// on Windows, APIs have hardcoded MAX_PATH = 260 :(
+  /// Windows file APIs have hardcoded MAX_PATH = 260 :(
   // - but more than 260 chars are possible with the \\?\..... prefix
   // or by disabling the limitation in registry since Windows 10, version 1607
   // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
@@ -50,8 +50,20 @@ begin
     result := @Temp;
   end
   else
-    // no conversion needed
+    // no conversion nor allocation needed
     result := pointer(FileName);
+end;
+
+function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+var
+  len: PtrInt;
+begin
+  len := length(FileName) * 2 + 2;
+  if len > SizeOf(Temp) then
+    Temp[0] := #0 // avoid buffer overflow
+  else
+    MoveFast(pointer(FileName)^, Temp, len);
+  result := @Temp;
 end;
 
 {$else}
@@ -98,6 +110,11 @@ begin
       W32Convert(FileName, Temp);
     result := @Temp;
   end;
+end;
+
+function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+begin
+  result := W32(FileName, Temp); // from AnsiString: always converted
 end;
 
 {$endif UNICODE}
@@ -1538,7 +1555,7 @@ var
   // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
   OpenProcessAccess: DWord;
 
-  // late-binding of Windows version specific API entries
+  // late-binding of Windows API entries not available on XP
   GetSystemTimes: function(
     var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessTimes: function(hProcess: THandle;
@@ -1961,7 +1978,7 @@ end;
 function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
   var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
   lpTotalNumberOfFreeBytes: QWord): LongBool;
-  stdcall; external kernel32;
+   stdcall; external kernel32;
 
 {
 // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
@@ -2180,7 +2197,7 @@ var
   Info: ^TVSFixedFileInfo;
   FileTime: TFILETIME;
   SystemTime: TSYSTEMTIME;
-  tmp: SynUnicode;
+  tmp: TW32Temp;
 
   function ReadResourceByName(const From: RawUtf8): RawUtf8;
   var
@@ -2200,54 +2217,48 @@ begin
   result := false;
   if fFileName = '' then
     exit;
-  // GetFileVersionInfo modifies the filename parameter data while parsing
-  // Copy the string const into a local variable to create a writeable copy
-  tmp := SynUnicode(fFileName); // use RTL for UTF-16 conversion
-  {$ifdef UNICODE}
-  UniqueString(tmp);
-  {$endif UNICODE}
-  Size := GetFileVersionInfoSizeW(pointer(tmp), Size2);
+  // GetFileVersionInfo() modifies the filename parameter data while parsing
+  // -> copy the FileName into local tmp buffer to create a writeable copy
+  Size := GetFileVersionInfoSizeW(W32Copy(fFileName, tmp), Size2);
   if Size > 0 then
   begin
-    result := true;
     GetMem(Pt, Size);
     try
-      tmp := SynUnicode(fFileName);
-      {$ifdef UNICODE}
-      UniqueString(tmp);
-      {$endif UNICODE}
-      GetFileVersionInfoW(pointer(tmp), 0, Size, Pt);
-      VerQueryValueW(Pt, '\', pointer(Info), Size2);
-      with Info^ do
+      if GetFileVersionInfoW(W32Copy(fFileName, tmp), 0, Size, Pt) then
       begin
-        SetVersion({major=}  dwFileVersionMS shr 16,
-                   {minor=}  word(dwFileVersionMS),
-                   {release=}dwFileVersionLS shr 16,
-                   {build=}  word(dwFileVersionLS));
-        if (dwFileDateLS <> 0) and
-           (dwFileDateMS <> 0) then
+        VerQueryValueW(Pt, '\', pointer(Info), Size2);
+        with Info^ do
         begin
-          FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
-          FileTime.dwHighDateTime := dwFileDateMS;
-          FileTimeToSystemTime(FileTime, SystemTime);
-          fBuildDateTime := EncodeDate(
-            SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
+          SetVersion({major=}   dwFileVersionMS shr 16,
+                     {minor=}   word(dwFileVersionMS),
+                     {release=} dwFileVersionLS shr 16,
+                     {build=}   word(dwFileVersionLS));
+          if (dwFileDateLS <> 0) and
+             (dwFileDateMS <> 0) then
+          begin
+            FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
+            FileTime.dwHighDateTime := dwFileDateMS;
+            FileTimeToSystemTime(FileTime, SystemTime);
+            fBuildDateTime := EncodeDate(
+              SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
+          end;
         end;
+        VerQueryValueW(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
+        if Size2 >= 4 then
+        begin
+          _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
+          CompanyName      := ReadResourceByName('CompanyName');
+          FileDescription  := ReadResourceByName('FileDescription');
+          FileVersion      := ReadResourceByName('FileVersion');
+          InternalName     := ReadResourceByName('InternalName');
+          LegalCopyright   := ReadResourceByName('LegalCopyright');
+          OriginalFilename := ReadResourceByName('OriginalFilename');
+          ProductName      := ReadResourceByName('ProductName');
+          ProductVersion   := ReadResourceByName('ProductVersion');
+          Comments         := ReadResourceByName('Comments');
+        end;
+        result := true;
       end;
-      VerQueryValueW(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
-      if Size2 >= 4 then
-      begin
-        _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
-        CompanyName := ReadResourceByName('CompanyName');
-        FileDescription := ReadResourceByName('FileDescription');
-        FileVersion := ReadResourceByName('FileVersion');
-        InternalName := ReadResourceByName('InternalName');
-        LegalCopyright := ReadResourceByName('LegalCopyright');
-        OriginalFilename := ReadResourceByName('OriginalFilename');
-        ProductName := ReadResourceByName('ProductName');
-        ProductVersion := ReadResourceByName('ProductVersion');
-        Comments := ReadResourceByName('Comments');
-      end
     finally
       Freemem(Pt);
     end;

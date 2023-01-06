@@ -1690,8 +1690,9 @@ begin
         s := GetEnvironmentVariable('TMPDIR'); // POSIX
         if s = '' then
           s := GetEnvironmentVariable('TMP');
-        if s = '' then
-          if DirectoryExists('/tmp') then
+        if (s = '') or
+           not IsDirectoryWritable(s) then
+          if IsDirectoryWritable('/tmp') then
             s := '/tmp'
           else
             s := '/var/tmp';
