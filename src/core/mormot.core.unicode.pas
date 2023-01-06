@@ -316,6 +316,7 @@ type
       SourceChars: cardinal; out Value: RawUtf8); overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - will detect and ignore any trailing UTF-16LE BOM marker
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
@@ -400,6 +401,7 @@ type
       SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - will detect and ignore any trailing UTF-16LE BOM marker
     // - this overridden version will use internal lookup tables for fast process
     function UnicodeBufferToAnsi(Dest: PAnsiChar;
       Source: PWideChar; SourceChars: cardinal): PAnsiChar; override;
@@ -444,9 +446,6 @@ type
   // - match the TSynAnsiConvert signature, for code page CP_UTF8
   // - this class is mostly a non-operation for conversion to/from UTF-8
   TSynAnsiUtf8 = class(TSynAnsiConvert)
-  protected
-    function UnicodeBufferToUtf8(Dest: PAnsiChar; DestChars: cardinal;
-      Source: PWideChar; SourceChars: cardinal): PAnsiChar;
   public
     /// initialize the internal conversion engine
     constructor Create(aCodePage: cardinal); override;
@@ -467,6 +466,7 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar;
       SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
+    // - will detect and ignore any trailing UTF-16LE BOM marker
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
       SourceChars: cardinal): PAnsiChar; override;
@@ -563,10 +563,14 @@ type
     bomUnicode,
     bomUtf8);
 
+const
+  /// UTF-16LE BOM WideChar marker, as existing e.g. in some UTF-16 Windows files
+  BOM_UTF16LE = #$FEFF;
+
 /// check the file BOM at the beginning of a file buffer
 // - BOM is common only with Microsoft products
 // - returns bomNone if no BOM was recognized
-// - returns bomUnicode or bomUtf8 if UTF-16LE or UTF-8 BOM were recogninzed:
+// - returns bomUnicode or bomUtf8 if UTF-16LE or UTF-8 BOM were recognized:
 // and will adjust Buffer/BufferSize to ignore the leading 2 or 3 bytes
 function BomFile(var Buffer: pointer; var BufferSize: PtrInt): TBomFile;
 
@@ -1769,8 +1773,15 @@ begin
   result := PtrInt(Dest);
   inc(DestLen, PtrInt(Dest));
   if (Source <> nil) and
+     (SourceLen > 0) and
      (Dest <> nil) then
   begin
+    // ignore any trailing BOM (do exist on Windows files)
+    if Source^ = BOM_UTF16LE then
+    begin
+      inc(Source);
+      dec(SourceLen);
+    end;
     // first handle 7-bit ASCII WideChars, by pairs (Sha optimization)
     SourceLen := SourceLen * 2 + PtrInt(PtrUInt(Source));
     Tail := PWideChar(SourceLen) - 2;
@@ -2733,7 +2744,7 @@ end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 begin
-  if aCodePage <> 0 then
+  if aCodePage <> CP_ACP then
   begin
     result := GetEngine(aCodePage);
     if result = nil then
@@ -2751,31 +2762,41 @@ function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
 var
   c: cardinal;
 begin
-  // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
-  if SourceChars >= 2 then
-    repeat
-      c := PCardinal(Source)^;
-      if c and $ff80ff80 <> 0 then
-        break; // break on first non ASCII pair
-      dec(SourceChars, 2);
-      inc(Source, 2);
-      c := c shr 8 or c;
-      PWord(Dest)^ := c;
-      inc(Dest, 2);
-    until SourceChars < 2;
-  if (SourceChars > 0) and
-     (ord(Source^) < 128) then
-    repeat
-      Dest^ := AnsiChar(ord(Source^));
-      dec(SourceChars);
+  if (Source <> nil) and
+     (SourceChars <> 0) then
+  begin
+    // ignore any trailing BOM (do exist on Windows files)
+    if Source^ = BOM_UTF16LE then
+    begin
       inc(Source);
-      inc(Dest);
-    until (SourceChars = 0) or
-          (ord(Source^) >= 128);
-  // rely on the Operating System for all remaining ASCII characters
-  if SourceChars > 0 then
-    inc(Dest,
-      Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
+      dec(SourceChars);
+    end;
+    // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
+    if SourceChars >= 2 then
+      repeat
+        c := PCardinal(Source)^;
+        if c and $ff80ff80 <> 0 then
+          break; // break on first non ASCII pair
+        dec(SourceChars, 2);
+        inc(Source, 2);
+        c := c shr 8 or c;
+        PWord(Dest)^ := c;
+        inc(Dest, 2);
+      until SourceChars < 2;
+    if (SourceChars > 0) and
+       (ord(Source^) < 128) then
+      repeat
+        Dest^ := AnsiChar(ord(Source^));
+        dec(SourceChars);
+        inc(Source);
+        inc(Dest);
+      until (SourceChars = 0) or
+            (ord(Source^) >= 128);
+    // rely on the Operating System for all remaining ASCII characters
+    if SourceChars <> 0 then
+      inc(Dest,
+        Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
+  end;
   result := Dest;
 end;
 
@@ -3271,34 +3292,44 @@ var
   c: cardinal;
   tab: PAnsiChar;
 begin
-  // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
-  if SourceChars >= 2 then
-    repeat
-      c := PCardinal(Source)^;
-      if c and $ff80ff80 <> 0 then
-        break; // break on first non ASCII pair
-      dec(SourceChars, 2);
-      inc(Source, 2);
-      c := c shr 8 or c;
-      PWord(Dest)^ := c;
-      inc(Dest, 2);
-    until SourceChars < 2;
-  // use internal lookup tables for fast process of remaining chars
-  tab := pointer(fWideToAnsi);
-  for c := 1 to SourceChars shr 2 do
+  if (Source <> nil) and
+     (SourceChars <> 0) then
   begin
-    Dest[0] := tab[Ord(Source[0])];
-    Dest[1] := tab[Ord(Source[1])];
-    Dest[2] := tab[Ord(Source[2])];
-    Dest[3] := tab[Ord(Source[3])];
-    inc(Source, 4);
-    inc(Dest, 4);
-  end;
-  for c := 1 to SourceChars and 3 do
-  begin
-    Dest^ := tab[Ord(Source^)];
-    inc(Dest);
-    inc(Source);
+    // ignore any trailing BOM (do exist on Windows files)
+    if Source^ = BOM_UTF16LE then
+    begin
+      inc(Source);
+      dec(SourceChars);
+    end;
+    // first handle trailing 7-bit ASCII chars, by pairs (Sha optimization)
+    if SourceChars >= 2 then
+      repeat
+        c := PCardinal(Source)^;
+        if c and $ff80ff80 <> 0 then
+          break; // break on first non ASCII pair
+        dec(SourceChars, 2);
+        inc(Source, 2);
+        c := c shr 8 or c;
+        PWord(Dest)^ := c;
+        inc(Dest, 2);
+      until SourceChars < 2;
+    // use internal lookup tables for fast process of remaining chars
+    tab := pointer(fWideToAnsi);
+    for c := 1 to SourceChars shr 2 do
+    begin
+      Dest[0] := tab[Ord(Source[0])];
+      Dest[1] := tab[Ord(Source[1])];
+      Dest[2] := tab[Ord(Source[2])];
+      Dest[3] := tab[Ord(Source[3])];
+      inc(Source, 4);
+      inc(Dest, 4);
+    end;
+    for c := 1 to SourceChars and 3 do
+    begin
+      Dest^ := tab[Ord(Source^)];
+      inc(Dest);
+      inc(Source);
+    end;
   end;
   result := Dest;
 end;
@@ -3444,17 +3475,11 @@ begin
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUtf8.UnicodeBufferToUtf8(Dest: PAnsiChar;
-  DestChars: cardinal; Source: PWideChar; SourceChars: cardinal): PAnsiChar;
-begin
-  result := Dest + RawUnicodeToUtf8(PUtf8Char(Dest), DestChars,
-    Source, SourceChars, [ccfNoTrailingZero]);
-end;
-
 function TSynAnsiUtf8.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: cardinal): PAnsiChar;
 begin
-  result := UnicodeBufferToUtf8(Dest, SourceChars, Source, SourceChars);
+  result := Dest + RawUnicodeToUtf8(PUtf8Char(Dest), SourceChars * 3,
+    Source, SourceChars, [ccfNoTrailingZero]);
 end;
 
 function TSynAnsiUtf8.UnicodeBufferToAnsi(Source: PWideChar;
@@ -3468,8 +3493,8 @@ begin
   else
   begin
     tmp.Init(SourceChars * 3);
-    FastSetStringCP(result, tmp.buf, UnicodeBufferToUtf8(tmp.buf,
-      SourceChars * 3, Source, SourceChars) - PAnsiChar(tmp.buf), fCodePage);
+    FastSetStringCP(result, tmp.buf, RawUnicodeToUtf8(tmp.buf,
+      SourceChars * 3, Source, SourceChars, [ccfNoTrailingZero]), fCodePage);
     tmp.Done;
   end;
 end;
@@ -3569,7 +3594,7 @@ begin
   if (Buffer <> nil) and
      (BufferSize >= 2) then
     case PWord(Buffer)^ of
-      $FEFF:
+      ord(BOM_UTF16LE):
         begin
           inc(PByte(Buffer), 2);
           dec(BufferSize, 2);

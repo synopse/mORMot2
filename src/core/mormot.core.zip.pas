@@ -2075,7 +2075,10 @@ begin
 end;
 
 const
-  CP_437: array[128..255] of word = ( // code page 437, as zip appnote requires
+  /// direct conversion from code page 437 to UTF-16, as zip appnote requires
+  // - on POSIX, a constant table is easier and lighter than running external
+  // iconv/ICU from mormot.core.os (in UTF-8 POSIX, we don't need code pages)
+  CP_437: array[128..255] of word = (
     $00C7, $00FC, $00E9, $00E2, $00E4, $00E0, $00E5, $00E7, $00EA, $00EB, $00E8,
     $00EF, $00EE, $00EC, $00C4, $00C5, $00C9, $00E6, $00C6, $00F4, $00F6, $00F2,
     $00FB, $00F9, $00FF, $00D6, $00DC, $00A2, $00A3, $00A5, $20A7, $0192, $00E1,
