@@ -2201,9 +2201,12 @@ begin
       inc(P);
     until P^ = #0;
     if isascii7 then
+      // plain ASCII file name need no conversion
       e^.zipName := Ansi7ToString(tmp)
-    else if h^.fileInfo.GetUtf8FileNameFlag then
-      // decode UTF-8 file name into native string/TFileName type
+    else if h^.fileInfo.GetUtf8FileNameFlag or
+            IsValidUtf8(tmp) then
+      // flat let decode UTF-8 file name into native string/TFileName type
+      // also detects UTF-8 without the flag (happens from POSIX zippers)
       Utf8ToFileName(tmp, e^.zipName)
     else
       // legacy Windows-OEM-CP437 encoding
