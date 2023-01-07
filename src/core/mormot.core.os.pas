@@ -6869,7 +6869,6 @@ begin
     {$endif OSLINUXANDROID}
     {$endif CPUINTELARM}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
-    Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
     Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
     Hash.c3 := crc32c(Hash.c2, pointer(InstanceFileName), length(InstanceFileName));
