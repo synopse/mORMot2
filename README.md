@@ -1,6 +1,6 @@
 # Synopse *mORMot 2* Framework
 
-An Open Source Client-Server ORM/SOA/MVC framework in modern Object Pascal, version 2
+*An Open Source Client-Server ORM/SOA/MVC framework in modern Object Pascal*
 
 ![Happy mORMot](doc/happymormot.png)
 
@@ -19,7 +19,7 @@ You can find more about *mORMot 2* in:
 - the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
 - the [Source Code `src` sub-folder](src);
 - the [Synopse Blog](https://blog.synopse.info);
-- and even the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still works with the new version - especially all the design/conceptual part.
+- the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still mostly apply to the new version - especially the design/conceptual parts.
 
 If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/sponsors/synopse) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
 
@@ -33,17 +33,21 @@ Synopse *mORMot 2* is an Open Source Client-Server ORM SOA MVC framework for Del
 
 The main features of *mORMot* are therefore:
 
- - A very efficient cross-compiler and cross-platform JSON/UTF-8 and RTTI kernel;
- - Direct SQL and NoSQL database access (SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
+ - An optimized cross-compiler and cross-platform JSON/UTF-8 and RTTI kernel;
+ - Direct SQL and NoSQL database access (e.g. SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
  - ORM/ODM: objects persistence on almost any database (SQL or NoSQL);
  - SOA: organize your business logic into REST services defined as `interface`;
+ - Convention-over-configuration REST/JSON router, locally or over HTTP/HTTPS/WebSockets;
  - Clients: consume your data or services from any platform, via ORM/SOA APIs;
  - Web MVC: publish your ORM/SOA process as responsive Web Applications;
- - A lot of other reusable bricks (e.g. Unicode, cryptography, network, dictionaries, logging, binary serialization, variants, generics, cross-platform...).
+ - A lot of other reusable bricks (e.g. Unicode, cryptography, network, threads, dictionaries, logging, binary serialization, variants, generics, cross-platform...).
 
-With local or HTTP/HTTPS/WebSockets remote access, via a convention-over-configuration Client-Server REST design over JSON messages.
+Emphasizing speed and versatility, *mORMot* leverages the advantages of modern object pascal native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It can be used:
 
-Emphasizing speed and versatility, *mORMot* can be used to add basic ORM or Client-Server features to simple applications for hobbyists, or let experienced users develop scalable service-based projects for their customers, with the advantages of native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It could also help legacy but well working projects to embrace the next decades.
+ - to add basic ORM or Client-Server features to simple applications for hobbyists,
+ - or let experienced users develop scalable service-based (DDD) projects for their customers, 
+ - or leverage FPC cross-platform abilities with an existing Delphi codebase, to embrace the next decades,
+ - have fun and see modern object pascal challenge the latest languages or frameworks.
 
 ### Sub-Folders
 
@@ -57,9 +61,11 @@ The *mORMOt 2* repository content is organized into the following sub-folders:
 - [`doc`](doc) holds the documentation of the framework;
 - [`ex`](ex) contains various samples.
 
+Feel free to explore the source, and the inlined documentation.
+
 ### MPL/GPL/LGPL Three-License
 
-Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
+The framework is licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
 - Mozilla Public License, version 1.1 or later;
 - GNU General Public License, version 2.0 or later;
 - GNU Lesser General Public License, version 2.1 or later.
@@ -98,13 +104,16 @@ or
 3.2.1. Create a new environment variable `mormot2` with full path to the *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src`; 
 
 3.2.2. Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):
-   `$(mormot2);$(mormot2)\core;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\crypt;$(mormot2)\script;$(mormot2)\app;$(mormot2)\net;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\lib;$(mormot2)\app`
+   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui`
 
-4. Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
+4. Discover and enjoy:
 
-5. Browse the [examples folder](/ex) (work in progress).
+4.1. Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
 
-5. Discover and Enjoy!
+4.2. Browse the [examples folder](/ex) (work in progress).
+
+4.3. Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html).
+
 
 ### Contribute
 
