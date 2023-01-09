@@ -8,7 +8,7 @@ This folder hosts the main Examples of the *mORMot* Open Source framework, versi
 
 ### extdb-bench
 
-[This sample](./extdb-bench) will benchmark the ORM + REST layer of mORMot over several DB backends.
+[This sample](./extdb-bench) will benchmark the ORM + REST layer of *mORMot* over several DB backends.
 
 By default, will validate our *SQLite3* and in-memory storage layer, either directly or as virtual tables.
 
@@ -18,7 +18,7 @@ You could enable additional engines by changing the conditional definitions in t
 
 [This sample](./http-server-raw) is a stand-alone HTTP server returning some dynamic content from GET or POST requests.
 
-It may be used to benchmark and validate the stability of mORMot HTTP server on various platforms, e.g. using `ab` or `wrk` tools.
+It may be used to benchmark and validate the stability of *mORMot* HTTP server on various platforms, e.g. using `ab` or `wrk` tools.
 
 Similar to the `/plaintext` URI of [the TFB sample](#techempower-bench) below.
 
@@ -30,24 +30,26 @@ The original code is at https://github.com/losvedir/transit-lang-cmp with C#, Ty
 
 Once stabilized, we may fork and include it to the official repository.
 
+See [this blog article](https://blog.synopse.info/?post/2022/11/26/Modern-Pascal-is-Still-in-the-Race) about this sample, and how nicely it compares with C# or GoLang.
+
 ### mondgodb
 
-[This sample](./mongodb) will benchmark the ORM + REST layer of mORMot over a local (or remote) MongoDB instance.
+[This sample](./mongodb) will benchmark the ORM + REST layer of *mORMot* over a local (or remote) *MongoDB* instance.
 
 This code is a good entry point for what is possible with this unit in our framework, for both direct access or ORM/ODM access.
 And you would be able to guess the performance numbers you may achieve with your own project.
 
-Running a MongoDB database in a container is as easy as executing the following command:
+Running a *MongoDB* database in a container is as easy as executing the following command:
 
     sudo docker run --name mongodb -d -p 27017:27017 mongo:latest
 
-Then you will have a MongoDB server instance accessible on `localhost:27017`, so you could run the sample straight away.
+Then you will have a *MongoDB* server instance accessible on `localhost:27017`, so you could run the sample straight away.
 
 ### techempower-bench
 
 Contains a [TechEmpower Framework Benchmarks](https://www.techempower.com/benchmarks) compliant implementation using *mORMot*.
 
-It is a good example of what could be done to achieve the best performance with *mORMot*, and to compare with alternatives in some realistic scenarios. And we can be proud of our little rodent for sure - especially in respect to performance and pascal code expressiveness.
+It is a good example of what could be done to achieve the best performance with **mORMot**, and to compare with alternatives in some realistic scenarios. And we can be proud of our little rodent for sure - especially in respect to performance and pascal code expressiveness.
 
 ## Integrated and Advanced Samples
 
@@ -67,9 +69,11 @@ You will see the console output of the server logs, with all threads and events,
 
 ## ThirdPartyDemos
 
-[The `ThirdPartyDemos` folder](./ThirdPartyDemos) contains sub-folders with some example code committed by third party mORMot users.
+[The `ThirdPartyDemos` folder](./ThirdPartyDemos) contains sub-folders with some example code committed by third party *mORMot* users.
 
 Each demo is published as pedagogical material, and with its own license terms.
+
+Please contact each author if you find an issue in this material. Synopse is not maintaining this source code tree, but will eagerly include any pull request to enhance this folder. Feel free to propose your own sample folder!
 
 ## MPL 1.1/GPL 2.0/LGPL 2.1 three-license
 
