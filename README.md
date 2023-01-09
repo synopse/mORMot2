@@ -1,6 +1,6 @@
-# Synopse *mORMot* Framework
+# Synopse *mORMot 2* Framework
 
-An Open Source Client-Server ORM/SOA framework in modern Object Pascal, version 2
+An Open Source Client-Server ORM/SOA/MVC framework in modern Object Pascal, version 2
 
 ![Happy mORMot](doc/happymormot.png)
 
@@ -33,15 +33,17 @@ Synopse *mORMot 2* is an Open Source Client-Server ORM SOA MVC framework for Del
 
 The main features of *mORMot* are therefore:
 
+ - A very efficient cross-compiler and cross-platform JSON/UTF-8 and RTTI kernel;
+ - Direct SQL and NoSQL database access (SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
  - ORM/ODM: objects persistence on almost any database (SQL or NoSQL);
  - SOA: organize your business logic into REST services defined as `interface`;
  - Clients: consume your data or services from any platform, via ORM/SOA APIs;
  - Web MVC: publish your ORM/SOA process as responsive Web Applications;
- - A lot of other reusable bricks (e.g. Unicode, cryptography, network, cross-platform...).
+ - A lot of other reusable bricks (e.g. Unicode, cryptography, network, dictionaries, logging, binary serialization, variants, generics, cross-platform...).
 
 With local or HTTP/HTTPS/WebSockets remote access, via a convention-over-configuration Client-Server REST design over JSON messages.
 
-Emphasizing speed and versatility, *mORMot* can be used to add basic ORM or Client-Server features to simple applications for hobbyists, or let experienced users develop scaling and strong service-based projects for their customers, with the advantages of native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It could also help legacy but well working projects to embrace the next decades.
+Emphasizing speed and versatility, *mORMot* can be used to add basic ORM or Client-Server features to simple applications for hobbyists, or let experienced users develop scalable service-based projects for their customers, with the advantages of native code and easy-to-deploy solutions, reducing deployment cost and increasing ROI. It could also help legacy but well working projects to embrace the next decades.
 
 ### Sub-Folders
 
@@ -71,7 +73,7 @@ See [the full licensing terms](LICENCE.md).
 
 The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
-- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2010, XE4, XE7 and 10.4.
+- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4 and 11.1.
 
 Please submit pull requests for non-validated versions.
 
@@ -89,7 +91,7 @@ or
 
 3. Setup your favorite IDE: 
 
-3.1. On Lazarus, just install the `/packages/lazarus/mormot2.lpk` package.
+3.1. On Lazarus, just open and compile the [`/packages/lazarus/mormot2.lpk`](packages/lazarus/mormot2.lpk) package - and [`mormot2ui.lpk`](packages/lazarus/mormot2ui.lpk) if needed.
 
 3.2. On Delphi: 
 
@@ -150,3 +152,4 @@ Quick Steps when upgrading from a previous 1.18 revision:
  - Types renamed in `PUREMORMOT2` mode;
  - Delphi 5-6 and Kylix compatibility removed;
  - BigTable, LVCL, RTTI-UI deprecated.
+ 
