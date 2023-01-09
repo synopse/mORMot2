@@ -86,25 +86,25 @@ Please submit pull requests for non-validated versions.
 ### Installation
 
 1. Get the source, Luke!
-  - Clone the https://github.com/synopse/mORMot2 repository to get the source code into e.g. `c:\github\mORMot2`, and download and extract latest https://synopse.info/files/mormot2static.7z into `c:\github\mORMot2\static`;
-  - or Download a *Source code (zip)* release from https://github.com/synopse/mORMot2/releases and extract it e.g. into `d:\mormot2`, with its associated `mormot2static.7z` file content into `d:\mormot2\static`.
+  - By cloning the repository (preferred):
+    - `git clone https://github.com/synopse/mORMot2.git` into e.g. `c:\github\mORMot2`,
+    - and download and extract latest https://synopse.info/files/mormot2static.7z into `c:\github\mORMot2\static`.
+  - or as direct download of a given release (e.g. for a build script):
+    - Download a *Source code (zip)* release from https://github.com/synopse/mORMot2/releases and extract it e.g. into `d:\mormot2`,
+    - and extract its associated `mormot2static.7z` file content into `d:\mormot2\static`.
 2. Setup your favorite IDE: 
-  - On Lazarus, just open and compile the [`/packages/lazarus/mormot2.lpk`](packages/lazarus/mormot2.lpk) package - and [`mormot2ui.lpk`](packages/lazarus/mormot2ui.lpk) if needed.
+  - On Lazarus:
+    - Just open and compile the [`/packages/lazarus/mormot2.lpk`](packages/lazarus/mormot2.lpk) package;
+    - and [`mormot2ui.lpk`](packages/lazarus/mormot2ui.lpk) if needed.
   - On Delphi: 
-    - Create a new environment variable `mormot2` with full path to the *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src`; 
+    - Create a new environment variable `mormot2` with full path to your *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src` depending on step 1; 
     - Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui`
     - There is no IDE or UI package needed (yet).
 3. Discover and enjoy:
   - Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
   - Browse the [examples folder](/ex) (work in progress).
-  - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html).
-
-
-### Contribute
-
-Feel free to contribute by posting enhancements and patches to this quickly evolving project.
-  
-Enjoy!
+  - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html);
+  - Feel free to contribute by posting enhancements and patches to this quickly evolving project.
 
 ## Coming From Version 2
 
