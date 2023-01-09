@@ -2,10 +2,13 @@
 
 An Open Source Client-Server ORM/SOA framework in modern Object Pascal, version 2
 
-![mORMot2](doc/happymormot.png)
+![Happy mORMot](doc/happymormot.png)
+
 (c) 2008-2023 Synopse Informatique - Arnaud Bouchez
+
 https://synopse.info  - http://mORMot.net
-Thanks to all [Contributors](CONTRIBUTORS.md!
+
+Thanks to all [Contributors](CONTRIBUTORS.md)!
 
 **NOTICE: This version 2 replaces [*mORMot 1.18*](https://github.com/synopse/mORMot) which is now in maintainance-only mode. Consider using *mORMot 2* for any new or maintainable project.**
 
@@ -18,13 +21,15 @@ You can find more about *mORMot 2* in:
 - the [Synopse Blog](https://blog.synopse.info);
 - and even the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still works with the new version - especially all the design/conceptual part.
 
-If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/sponsors/synopse) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :)
+If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/sponsors/synopse) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
 
 ## Presentation
 
 ### mORMot What?
 
 Synopse *mORMot 2* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 11 Alexandria and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
+
+![mORMot map](doc/IamLost.png)
 
 The main features of *mORMot* are therefore:
 
@@ -88,12 +93,12 @@ or
 
 3.2. On Delphi: 
 
-3.2.1. Create a new environment variable `mormot2` with full path to the *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src'; 
+3.2.1. Create a new environment variable `mormot2` with full path to the *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src`; 
 
 3.2.2. Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):
    `$(mormot2);$(mormot2)\core;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\crypt;$(mormot2)\script;$(mormot2)\app;$(mormot2)\net;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\lib;$(mormot2)\app`
 
-4. Open and compile `[test/mormot2tests.dpr](test/mormot2tests.dpr)` in the IDE, and run the regression tests on your machine.
+4. Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
 
 5. Browse the [examples folder](/ex) (work in progress).
 
@@ -112,7 +117,7 @@ Enjoy!
 The *mORMot* framework stayed in revision 1.18 for years, and is was time for a full refactoring.
 
 The main refactoring points tried to better follow SOLID principles:
- - Switch to Semantic Versioning - see https://semver.org
+ - Switch to a more rigorous versioning policy, with regular releases;
  - Split main big units (`SynCommons.pas`, `mORMot.pas`) into smaller scope-refined units;
  - OS- or compiler- specific code separated to ease evolution;
  - Rename confusing types, e.g. `TSQLRecord` into `TOrm`, `TSQLRest` into `TRest`...;
@@ -137,7 +142,8 @@ Quick Steps when upgrading from a previous 1.18 revision:
 3) Download latest 2.# revision files as stated just above
   
 4) Change your references to *mORMot* units:
- - All unit names changed, to avoid collision between versions.
+ - All unit names changed, to avoid collision between versions;
+ - Look [at the samples](ex) to see the main useful units.
  
 5) Consult the documentation about breaking changes from 1.18, mainly:
  - Units refactoring (see point 4 above);
