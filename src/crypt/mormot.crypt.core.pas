@@ -1439,20 +1439,23 @@ type
 
 
 var
-  /// the AES-256 encoding class used by CompressShaAes() global function
+  /// the DEPRECATED AES-256 encoding class used by CompressShaAes() global function
+  // - DO NOT USE: since HTTP compression is optional, this scheme is not safe
   // - use any of the implementation classes, corresponding to the chaining
   // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - set to the secure and efficient CFB mode by default
   CompressShaAesClass: TAesAbstractClass = TAesCfb;
 
-/// set an text-based encryption key for CompressShaAes() global function
+/// set an text-based encryption key for DEPRECATED CompressShaAes() global function
+// - DO NOT USE: since HTTP compression is optional, this scheme is not safe
 // - will compute the key via Sha256Weak() and set CompressShaAesKey
 // - the key is global to the whole process
 procedure CompressShaAesSetKey(const Key: RawByteString;
   AesClass: TAesAbstractClass = nil);
 
-/// encrypt data content using the AES-256/CFB algorithm, after SynLZ compression
+/// encrypt data content using the DEPRECATED AES-256/CFB algorithm, after SynLZ
+// - DO NOT USE: since HTTP compression is optional, this scheme is not safe
 // - as expected by THttpSocket.RegisterCompress()
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
 // - will use global CompressShaAesKey / CompressShaAesClass variables to be set
