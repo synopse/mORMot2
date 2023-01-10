@@ -31,6 +31,7 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache = 512KB, assuming a low 1MB cache
+  // - today CPUs could have 144MB of cache, so we prefer a fixed value here
   NONTEMPORALSIZE = 512 * 1024;
 
   {$ifdef NO_ERMS}
@@ -60,13 +61,15 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ja      @up16                // >16 or <0
         {$ifdef WIN64ABI}    // circumvent FPC asm bug and adapt to xmm ABI
         jmp     qword ptr [r10 + r8 * 8]
-@up16:  movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
+@up16:  // >16 or <0
+        jng     @z  // <0
+        movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
         movups  xmm1, oword ptr [src]          // first 16  = xmm1
         cmp     rax, 96 - 16
         {$else}
         jmp     qword ptr [r10 + rdx * 8]
 @up16:  // >16 or <0
-        jng     @z
+        jng     @z  // <0
         mov     r8, rdx
         movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
         movups  xmm1, oword ptr [src]          // first 16  = xmm1
