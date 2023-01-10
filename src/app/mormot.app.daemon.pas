@@ -247,15 +247,16 @@ type
     safToStop);
 
   /// one sub-process definition as recognized by TSynAngelize
-  // - any %abc% place-holders will be replaced via TSynAngelize.ExpandPath
+  // - TFileName properties will expand %abc% place-holders when needed
+  // - specifies how to start, stop and watch a given sub-process
   TSynAngelizeService = class(TSynJsonFileSettings)
   protected
     fName: RawUtf8;
     fDescription: RawUtf8;
-    fStart, fStop: TFileName;
+    fStart, fStop, fWatch: TFileName;
     fStarter: TSynAngelizeStarters;
     fStopper: TSynAngelizeStoppers;
-    fStopDelaySec: integer;
+    fStopDelaySec, fWatchDelaySec: integer;
     fFlags: TSynAngelizeFlags;
   public
     /// initialize and set the default settings
@@ -277,16 +278,21 @@ type
       read fDescription write fDescription;
     /// path to the executable which should be started
     // - could include arguments, potentially with %abc% place holders
+    // - on Windows, 'service:ServiceName' would call SERVICE_CONTROL_START
+    // - several executables could be specified as CSV
     property Start: TFileName
       read fStart write fStart;
-    /// path to the executable which should be called to stop the main Executable
-    // - could include arguments, potentially with %abc% place holders
-    // - is done first before any other attempt
-    property Stop: TFileName
-      read fStop write fStop;
     /// define how to start or restart the sub-process
     property Starter: TSynAngelizeStarters
       read fStarter write fStarter;
+    /// path to the executable which should be called to stop the main Executable
+    // - could include arguments, potentially with %abc% place holders
+    // - is done first before any other attempt
+    // - on Windows, 'service:ServiceName' would call SERVICE_CONTROL_STOP
+    // - TSynAngelizeHttp could check for an URI instead, starting with 'http:'
+    // - several executables or URIs could be specified as CSV
+    property Stop: TFileName
+      read fStop write fStop;
     /// define the methods used, in order, to stop the sub-process
     // - default is all methods
     property Stopper: TSynAngelizeStoppers
@@ -295,6 +301,18 @@ type
     // - default is 2 seconds
     property StopDelaySec: integer
       read fStopDelaySec write fStopDelaySec;
+    /// path to the executable which should be called to check the process status
+    // - is done periorically by TSynAngelize
+    // - could include arguments, potentially with %abc% place holders
+    // - on Windows, 'service:ServiceName' would call SERVICE_CONTROL_INTERROGATE
+    // - TSynAngelizeHttp could check for an URI instead, starting with 'http:'
+    // - several executables or URIs could be specified as CSV
+    property Watch: TFileName
+      read fWatch write fWatch;
+    /// how many seconds should we wait between each Watch method step
+    // - default is 60 seconds
+    property WatchDelaySec: integer
+      read fWatchDelaySec write fWatchDelaySec;
   end;
 
   TSynAngelizeServiceClass = class of TSynAngelizeService;
@@ -798,6 +816,7 @@ begin
   inherited Create;
   fStopper := [low(TSynAngelizeStopper) .. high(TSynAngelizeStopper)];
   fStopDelaySec := 2;
+  fWatchDelaySec := 60;
 end;
 
 
