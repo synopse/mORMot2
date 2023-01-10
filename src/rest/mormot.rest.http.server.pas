@@ -806,8 +806,9 @@ begin
   if aUse in HTTP_API_MODES then
     if PosEx('Wine', OSVersionInfoEx) > 0 then
     begin
-      log.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
-        'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
+      if Assigned(log) then
+        log.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
+          'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
       aUse := useHttpAsync; // the closest server we have using sockets
     end
     else
@@ -824,8 +825,9 @@ begin
     except
       on E: Exception do
       begin
-        log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
-          [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
+        if Assigned(log) then
+          log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
+            [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
         FreeAndNilSafe(fHttpServer); // if http.sys initialization failed
         if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
           // propagate fatal exception with no fallback to the sockets server
@@ -883,7 +885,8 @@ begin
   // finish the TRestServer(s) startup
   for i := 0 to high(fDBServers) do
     fDBServers[i].Server.ComputeRoutes; // pre-compute URI routes
-  log.Log(sllHttp, '% initialized for %', [fHttpServer, fDBServerNames], self);
+  if Assigned(log) then
+    log.Log(sllHttp, '% initialized for %', [fHttpServer, fDBServerNames], self);
 end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
