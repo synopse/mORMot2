@@ -57,7 +57,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     rax, cnt             // rax=r8/rdx=cnt
         lea     r10, [rip + @jmptab] // 0..16 dedicated sub-functions
         sub     rax, 16
-        jg      @up16                // >16 or <0
+        ja      @up16                // >16 or <0
         {$ifdef WIN64ABI}    // circumvent FPC asm bug and adapt to xmm ABI
         jmp     qword ptr [r10 + r8 * 8]
 @up16:  movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
@@ -66,12 +66,13 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         {$else}
         jmp     qword ptr [r10 + rdx * 8]
 @up16:  // >16 or <0
+        jng     @z
         mov     r8, rdx
         movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
         movups  xmm1, oword ptr [src]          // first 16  = xmm1
         cmp     rdx, 144  // more volatile xmm registers on SystemV ABI
         {$endif WIN64ABI}
-        ja      @lrg         // >96/144 or <0
+        ja      @lrg         // >96/144
         // cnt = 17..96/144
         cmp     al, $10
         jbe     @sml10
