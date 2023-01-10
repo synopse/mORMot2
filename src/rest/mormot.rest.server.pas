@@ -304,7 +304,7 @@ type
     function CanExecuteOrmWrite(Method: TUriMethod;
       Table: TOrmClass; TableIndex: integer; const TableID: TID;
       const Rights: TOrmAccessRights): boolean;
-    /// extract the input parameters from its URI
+    /// extract the input parameters from its URI (up to 512 params)
     // - you should not have to call this method directly, but rather
     // all the InputInt/InputDouble/InputUtf8/InputExists/... properties
     // - may be useful if you want to access directly to InputPairs[] with no
@@ -4033,6 +4033,9 @@ begin
     Server.fStats.NotifyOrm(Method);
 end;
 
+const
+  MAX_INPUT = 512; // MAX_METHOD_ARGS may not be good enough
+
 procedure TRestServerUriContext.FillInput(const LogInputIdent: RawUtf8);
 var
   n, max: PtrInt;
@@ -4048,11 +4051,11 @@ begin
   repeat
     if n >= max then
     begin
-      if n >= MAX_METHOD_ARGS * 2 then
+      if n >= MAX_INPUT * 2 then
         raise EParsingException.CreateUtf8(
           'Security Policy: Accept up to % parameters for %.FillInput',
-          [MAX_METHOD_ARGS * 2, self]);
-      inc(max, 16);
+          [MAX_INPUT * 2, self]);
+      inc(max, NextGrow(max));
       SetLength(fInput, max);
     end;
     if IdemPChar(P, 'SESSION_SIGNATURE=') then
@@ -4514,7 +4517,7 @@ begin
       if a^.ValueDirection <> imdOut then
       begin
         argdone := false;
-        for i := ilow to high(fInput) shr 1 do // search argument in URI
+        for i := ilow to (length(fInput) - 1) shr 1 do // search argument in URI
           if IdemPropNameU(fInput[i * 2], @a^.ParamName^[1], ord(a^.ParamName^[0])) then
           begin
             a^.AddValueJson(WR, fInput[i * 2 + 1]); // will add "" if needed
