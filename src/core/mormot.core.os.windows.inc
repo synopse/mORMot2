@@ -3930,8 +3930,8 @@ var
   status: PShortString;
 begin
   status := ToText(CurrentStateToServiceState(dwState));
-  DoLog(sllTrace, '% ReportStatus(%,%)=%',
-    [ServiceName, dwExitCode, dwWait, status^], self);
+  DoLog(sllTrace, '% ReportStatus(%=%,%)=%', [ServiceName,
+    WinErrorConstant(dwExitCode), dwExitCode, dwWait, status^], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else

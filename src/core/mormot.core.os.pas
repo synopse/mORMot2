@@ -4534,7 +4534,8 @@ type
     /// custom event triggered when the service is resumed
     property OnResume: TServiceEvent
       read fOnResume write fOnResume;
-    /// custom event triggered when the service receive an Interrogate
+    /// custom event triggered when the service receive an Interrogate command
+    // - could call ReportStatus() e.g. to notify a problem
     property OnInterrogate: TServiceEvent
       read fOnInterrogate write fOnInterrogate;
     /// custom event triggered when the service is shut down
