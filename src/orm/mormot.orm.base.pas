@@ -3427,10 +3427,9 @@ begin
               W.AddShort(PG_FT[Decoder.DecodedFieldTypesToUnnest^[f]]);
               W.AddShorter('[]),');
             end;
-            //
             W.AddShort(' unnest(?::int8[]) order by '); // last param is ID
             W.Add(Decoder.FieldCount + 1); // order by ID to mimimize locks wait
-            W.AddShort(') as v(');
+            W.AddShorter(') as v(');
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
