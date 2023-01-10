@@ -1373,7 +1373,10 @@ function TRestHttpServer.WebSocketsEnable(const aWSURI, aWSEncryptionKey: RawUtf
   aWSAjax: boolean; aWSBinaryOptions: TWebSocketProtocolBinaryOptions;
   const aOnWSUpgraded: TOnWebSocketProtocolUpgraded): PWebSocketProcessSettings;
 begin
-  // will raise an EHttpServer exception if not supported
+  if not (fUse in HTTP_BIDIR) then
+    raise EHttpServer.CreateUtf8(
+      'Unexpected %.WebSocketsEnable over % - need e.g. WEBSOCKETS_DEFAULT_MODE',
+      [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
     aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
   if Assigned(aOnWSUpgraded) then
