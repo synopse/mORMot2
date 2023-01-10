@@ -1799,6 +1799,7 @@ type
     fServer: IRestOrmServer;
     fRouter: TRestRouter;
     fRouterSafe: TRWLightLock;
+    fOnNotifyCallback: TOnRestServerClientCallback;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1817,6 +1818,7 @@ type
     function GetServiceMethodStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
     procedure SetRoutingClass(aServicesRouting: TRestServerUriContextClass);
     procedure SetOptions(rso: TRestServerOptions);
+    procedure SetOnNotifyCallback(const event: TOnRestServerClientCallback);
     /// add a new session to the internal session list
     // - do not use this method directly: this callback is to be used by
     // TRestServerAuthentication* classes
@@ -1868,10 +1870,6 @@ type
     // - Ctxt is nil if the session is closed due to a timeout
     // - Ctxt is not nil if the session is closed explicitly by the client
     OnSessionClosed: TOnOrmSession;
-    /// this event will be executed to push notifications from the server to
-    // a remote client, using a (fake) interface parameter
-    // - is nil by default, but may point e.g. to TRestHttpServer.NotifyCallback
-    OnNotifyCallback: TOnRestServerClientCallback;
     /// this event will be executed by TServiceFactoryServer.CreateInstance
     // - you may set a callback to customize a server-side service instance,
     // i.e. inject class-level dependencies:
@@ -1925,6 +1923,12 @@ type
     // - is set by default to PAGINGPARAMETERS_YAHOO constant by
     // TRestServer.Create() constructor
     UriPagingParameters: TRestServerUriPagingParameters;
+    /// this event will be executed to push notifications from the WebSockets
+    // server to a remote client, using a (fake) interface parameter
+    // - is nil by default, but may point e.g. to TRestHttpServer.NotifyCallback
+    // - only a single WS server can be assigned to a TRestServer instance
+    property OnNotifyCallback: TOnRestServerClientCallback
+      read fOnNotifyCallback write SetOnNotifyCallback;
 
     /// Server initialization with a specified Database Model
     // - if HandleUserAuthentication is false, will set URI access rights to
@@ -6685,6 +6689,16 @@ begin
     result := fPublishedMethod[i].Stats
   else
     result := nil;
+end;
+
+procedure TRestServer.SetOnNotifyCallback(const event: TOnRestServerClientCallback);
+begin
+  if Assigned(fOnNotifyCallback) and
+     Assigned(event) then
+    raise ERestException.CreateUtf8(
+      '%.OnNotifyCallback(%) set twice: only a single WS server can be assigned',
+      [self, ClassNameShort(TObject(TMethod(event).Data))^]);
+  fOnNotifyCallback := event;
 end;
 
 procedure TRestServer.SetRoutingClass(

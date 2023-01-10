@@ -427,6 +427,8 @@ type
     // so that AJAX applications would be able to connect to this server
     // - this method raise an EHttpServer if the associated server class does not
     // support WebSockets, i.e. this instance isn't useBidirSocket/useBidirAsync
+    // - warning: only a single WebSockets server could be used in TRestServer
+    // callback at the same time to avoid confusion between the WS connections
     function WebSocketsEnable(
       const aWSURI, aWSEncryptionKey: RawUtf8; aWSAjax: boolean = false;
       aWSBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
@@ -928,7 +930,7 @@ begin
         if not noRestServerShutdown then
           fDBServers[i].Server.Shutdown;
         if TMethod(fDBServers[i].Server.OnNotifyCallback).Data = self then
-          // avoid unexpected GPF
+          // avoid unexpected GPF, and proper TRestServer reuse
           fDBServers[i].Server.OnNotifyCallback := nil;
       end;
     finally
