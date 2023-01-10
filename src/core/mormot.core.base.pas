@@ -7134,7 +7134,7 @@ begin
     end
   else
     RawObjectsClear(pointer(a), n);
-  a := nil;
+  a := nil; // finalize the dynamic array itself
 end;
 
 procedure ObjArrayObjArrayClear(var aObjArray);

@@ -5819,7 +5819,7 @@ function _ObjArrayClear(V: PPointer; Info: PRttiInfo): PtrInt;
 begin
   if V^ <> nil then
   begin
-    RawObjectsClear(pointer(V), PDALen(PAnsiChar(V^) - _DALEN)^ + _DAOFF);
+    RawObjectsClear(V^, PDALen(PAnsiChar(V^) - _DALEN)^ + _DAOFF);
     _DynArrayClear(V, Info);
   end;
   result := SizeOf(V^);
