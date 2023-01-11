@@ -98,7 +98,7 @@ Please submit pull requests for non-validated versions.
     - and [`mormot2ui.lpk`](packages/lazarus/mormot2ui.lpk) if needed.
   - On Delphi: 
     - Create a new environment variable `mormot2` with full path to your *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src` depending on step 1; 
-    - Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui`
+    - Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui;$(mormot2)\tools`
     - There is no IDE or UI package needed (yet).
 3. Discover and enjoy:
   - Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.

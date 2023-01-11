@@ -4038,7 +4038,8 @@ begin
 end;
 
 const
-  MAX_INPUT = 512; // MAX_METHOD_ARGS may not be good enough
+  // MAX_METHOD_ARGS=128 may not be enough for CONTENT_TYPE_WEBFORM POST
+  MAX_INPUT = 512;
 
 procedure TRestServerUriContext.FillInput(const LogInputIdent: RawUtf8);
 var
