@@ -18,3 +18,11 @@ The `ecc` command-line tool manages certificate-based public-key cryptography us
 - Symmetric encryption via `aeadcrypt`/`aeaddecrypt`
 - Centralized passwords management via `cheatinit`/`cheat`
 
+### mormot.tools.agl
+
+Angelize (`agl`) tool is able to run one or several executables as daemon/services
+- Implemented as a main standard OS service or daemon
+- Launches and stops sub-processes defined in JSON setting files
+- A WatchDog can check the availibility of a service on regular basis
+- Can redirect the console output, restart on problem, notify issues
+- Command line switches are available for status listing or main actions

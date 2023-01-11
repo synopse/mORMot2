@@ -518,8 +518,7 @@ procedure TSynAngelize.Expand(aService: TSynAngelizeService;
 var
   o, i, j: PtrInt;
   p: PRttiCustomProp;
-  id: RawUtf8;
-  v: TSynAngelizeAction;
+  id, v: RawUtf8;
 begin
   aOutput := aInput;
   o := 1;
@@ -566,7 +565,8 @@ begin
             raise ESynAngelize.CreateUtf8(
               'Expand infinite recursion for agl.%', [id]);
           inc(fExpandLevel); // to detect and avoid stack overflow error
-          Expand(aService, Utf8ToString(p.Prop.GetAsString(aService)), v);
+          Expand(aService,
+            Utf8ToString(p.Prop.GetAsString(aService)), TSynAngelizeAction(v));
           dec(fExpandLevel);
         end;
       end;
