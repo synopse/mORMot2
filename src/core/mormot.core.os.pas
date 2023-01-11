@@ -4626,7 +4626,7 @@ var
   RunUntilSigTerminatedPidFilePath: TFileName;
 
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
-function RunUntilSigTerminatedPidFile: TFileName;
+function RunUntilSigTerminatedPidFile(ensureWritable: boolean = false): TFileName;
 
 /// check the local .pid file to return either ssRunning or ssStopped
 function RunUntilSigTerminatedState: TServiceState;

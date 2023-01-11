@@ -2653,11 +2653,17 @@ begin
             (chroot('.') = 0);
 end;
 
-function RunUntilSigTerminatedPidFile: TFileName;
+function RunUntilSigTerminatedPidFile(ensureWritable: boolean): TFileName;
 begin
   result := RunUntilSigTerminatedPidFilePath;
   if result = '' then
     result := Executable.ProgramFilePath;
+  if not ensureWritable then
+  begin
+    result := Format('%s.%s.pid', [result, Executable.ProgramName]);
+    if FileExists(result) then
+      exit;
+  end;
   if not IsDirectoryWritable(result) then
     // if the executable folder is not writable, use the temporary folder
     result := GetSystemPath(spTempFolder);
@@ -2666,7 +2672,7 @@ end;
 
 function RunUntilSigTerminatedState: TServiceState;
 begin
-  if FileExists(RunUntilSigTerminatedPidFile) then
+  if FileExists(RunUntilSigTerminatedPidFile(false)) then
     result := ssRunning
   else
     result := ssStopped;
