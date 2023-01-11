@@ -164,11 +164,12 @@ type
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
     procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
-    function CustomCommandLineSyntax: string; virtual;
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
     {$endif OSWINDOWS}
+    function CustomParseCmd(P: PUtf8Char): boolean; virtual;
+    function CustomCommandLineSyntax: string; virtual;
   public
     /// initialize the daemon, creating the associated settings
     // - TSynDaemonSettings instance will be owned and freed by the daemon
@@ -188,6 +189,8 @@ type
     // - aAutoStart is used only under Windows
     procedure Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean = true;
       const param: RawUtf8 = '');
+    /// retrieve the current state of this daemon/service
+    function CurrentState: TServiceState;
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process
@@ -206,9 +209,7 @@ type
   end;
 
 
-
-
-
+implementation
 
 
 { ************ Parent Daemon Settings Class }
@@ -587,6 +588,18 @@ begin
   ioresult;
 end;
 
+function TSynDaemon.CurrentState: TServiceState;
+begin
+  if self = nil then
+    result := ssErrorRetrievingState
+  else
+    {$ifdef OSWINDOWS}
+    result := TServiceController.CurrentState(fSettings.ServiceName);
+    {$else}
+    result := RunUntilSigTerminatedState;
+    {$endif OSWINDOWS}
+end;
+
 const
   // single char command switch (not V* S*)
   CMD_CHR: array[cHelp .. cKill] of AnsiChar = (
@@ -615,6 +628,12 @@ begin
                        'SILENTK']); // cSilentKill
 end;
 
+function TSynDaemon.CustomParseCmd(P: PUtf8Char): boolean;
+begin
+  // should return true if the command has been identified and processed
+  result := false; // unknown command -> show syntax
+end;
+
 procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 var
   cmd: TExecuteCommandLineCmd;
@@ -631,6 +650,9 @@ begin
       // allow e.g. --fork switch (idem to /f -f /fork -fork)
       inc(p);
     cmd := ParseCmd(p);
+    if cmd = cNone then
+      if CustomParseCmd(p) then
+        exit; // command has been identified and processed
   end;
   Command(cmd, aAutoStart, param);
 end;
