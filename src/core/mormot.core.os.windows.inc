@@ -3441,11 +3441,11 @@ end;
 
 { TServiceController }
 
-constructor TServiceController.CreateNewService(
-  const TargetComputer, DatabaseName, Name, DisplayName: RawUtf8;
-  const Path: TFileName;
-  const OrderGroup, Dependencies, Username, Password: RawUtf8;
-  DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
+constructor TServiceController.CreateNewService(const TargetComputer,
+  DatabaseName, Name, DisplayName: RawUtf8; const Path: TFileName;
+  const OrderGroup: RawUtf8; const Dependencies: RawUtf8;
+  const Username: RawUtf8; const Password: RawUtf8; DesiredAccess: cardinal;
+  ServiceType: cardinal; StartType: cardinal; ErrorControl: cardinal);
 var
   exeName: TFileName;
   exeNameW: SynUnicode;
@@ -3568,7 +3568,7 @@ begin
      (fHandle = 0) then
     result := ssNotInstalled
   else
-    result := CurrentStateToServiceState(Status.dwCurrentState);
+    result := CurrentStateToServiceState(GetStatus.dwCurrentState);
   TService.DoLog(sllTrace, 'GetState(%)=%', [fName, ToText(result)^], self);
 end;
 
@@ -3652,8 +3652,9 @@ begin
   t.Done;
 end;
 
-class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
-  const ServiceName, DisplayName, Description, Dependencies: RawUtf8);
+class procedure TServiceController.CheckParameters(
+  const ExeFileName: TFileName; const ServiceName, DisplayName,
+  Description: RawUtf8; const Dependencies: RawUtf8);
 var
   param: string;
   i: integer;
@@ -3726,6 +3727,20 @@ begin
       'Install(%)=%', [Name, ToText(result)^], ctrl);
   finally
     ctrl.Free;
+  end;
+end;
+
+class function TServiceController.CurrentState(const Name: RawUtf8): TServiceState;
+begin
+  try
+    with CreateOpenService('', '', Name, SERVICE_QUERY_STATUS) do
+      try
+        result := GetState;
+      finally
+        Free;
+      end;
+  except
+    result := ssErrorRetrievingState;
   end;
 end;
 

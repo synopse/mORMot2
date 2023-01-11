@@ -31,7 +31,7 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache = 512KB, assuming a low 1MB cache
-  // - today CPUs could have 144MB of cache, so we prefer a fixed value here
+  // - today CPUs could have 144MB of cache (!) so we prefer a fixed value
   NONTEMPORALSIZE = 512 * 1024;
 
   {$ifdef NO_ERMS}
