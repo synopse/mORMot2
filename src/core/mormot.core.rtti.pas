@@ -965,10 +965,10 @@ type
     /// raw assignment of rkFloat/double
     procedure SetDoubleProp(Instance: TObject; Value: Double);
     /// raw retrieval of rkFloat - with conversion to 64-bit double
-    // - use instead GetDoubleValue
+    // - use instead GetDoubleProp if you know the property is a rkFloat/double
     function GetFloatProp(Instance: TObject): double;
     /// raw assignment of rkFloat
-    // - use instead SetDoubleValue
+    // - use instead SetDoubleProp if you know the property is a rkFloat/double
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
     /// raw retrieval of rkVariant
     // - will use varByRef from the field address if SetByRef is true
@@ -1103,11 +1103,14 @@ type
     {$endif HASVARUSTRING}
     /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
     // - this would make heap allocations and encoding conversion, so may be slow
-    procedure GetAsString(Instance: TObject; var Value: RawUtf8); overload;
+    function GetAsString(Instance: TObject; var Value: RawUtf8): boolean; overload;
     /// retrieve rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar as RawUtf8
     // - just a wrapper around the overloaded GetAsString() function
     function GetAsString(Instance: TObject): RawUtf8; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// get a property value into text
+    // - handle all kind of fields, e.g. converting ordinal or floats into text
+    function GetValueText(Instance: TObject): RawUtf8;
     /// set rkLString, rkSString, rkUString, rkWString, rkChar, rkWChar from
     // a RawUtf8 value
     // - this would make heap allocations and encoding conversion, so may be slow
@@ -3950,6 +3953,31 @@ begin
   result := true;
 end;
 
+function TRttiProp.GetValueText(Instance: TObject): RawUtf8;
+var
+  k: TRttiKind;
+  v: TRttiVarData;
+begin
+  result := '';
+  if (@self = nil) or
+     (Instance = nil) then
+    exit;
+  k := TypeInfo^.Kind;
+  if k in rkOrdinalTypes then
+    Int64ToUtf8(GetInt64Value(Instance), result)
+  else if k in rkStringTypes then
+    GetAsString(Instance, result)
+  else if k = rkFloat then
+    DoubleToStr(GetFloatProp(Instance), result)
+  else if k = rkVariant then
+  begin
+    v.VType := 0;
+    GetVariantProp(Instance, variant(v), {byref=}true);
+    VariantToUtf8(variant(v), result);
+    VarClearProc(v.Data);
+  end;
+end;
+
 function TRttiProp.GetOrdProp(Instance: TObject): Int64;
 type
   TGetProc = function: Pointer of object; // pointer result is a PtrInt register
@@ -4582,7 +4610,7 @@ begin
   GetAsString(Instance, result);
 end;
 
-procedure TRttiProp.GetAsString(Instance: TObject; var Value: RawUtf8);
+function TRttiProp.GetAsString(Instance: TObject; var Value: RawUtf8): boolean;
 var
   v: PtrInt;
   WS: WideString;
@@ -4590,6 +4618,7 @@ var
   US: UnicodeString;
   {$endif HASVARUSTRING}
 begin
+  result := true;
   case TypeInfo^.Kind of
     rkChar,
     rkWChar:
@@ -4617,7 +4646,10 @@ begin
       end;
     {$endif HASVARUSTRING}
   else
-    Value := '';
+    begin
+      Value := '';
+      result := false; // unsupported property
+    end;
   end;
 end;
 
