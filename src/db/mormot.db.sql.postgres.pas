@@ -462,8 +462,8 @@ begin
         'status is expected %', [self, PQ.ErrorMessage(fPGConn)]);
     err := PQ.ResultStatus(res);
     if err <> PGRES_PIPELINE_SYNC then
-     raise ESqlDBPostgres.CreateUtf8(
-       '%.ExitPipelineMode: unexpected result code %', [self,err]);
+      raise ESqlDBPostgres.CreateUtf8(
+        '%.ExitPipelineMode: unexpected result code %', [self, err]);
   end;
   if PQ.exitPipelineMode(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8(

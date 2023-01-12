@@ -118,9 +118,9 @@ const
   PGRES_BAD_RESPONSE = 5;
   PGRES_NONFATAL_ERROR = 6;
   PGRES_FATAL_ERROR = 7;
-  PGRES_COPY_BOTH = 8; // Copy In/Out data transfer in progress
-  PGRES_SINGLE_TUPLE = 9; // single tuple from larger resultset
-  PGRES_PIPELINE_SYNC = 10; // pipeline synchronization point
+  PGRES_COPY_BOTH = 8;        // Copy In/Out data transfer in progress
+  PGRES_SINGLE_TUPLE = 9;     // single tuple from larger resultset
+  PGRES_PIPELINE_SYNC = 10;   // pipeline synchronization point
   PGRES_PIPELINE_ABORTED= 11; // Command didn't run because of an abort
 
   CONNECTION_OK = 0;
@@ -257,6 +257,7 @@ const
     'getvalue',
     'getlength',
     'getisnull',
+    // optional API entries for pipelining mode
     'enterPipelineMode',
     'exitPipelineMode',
     'pipelineSync',
@@ -296,6 +297,7 @@ begin
   TryLoadLibrary([
     SynDBPostgresLibrary, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
+  raiseonfailure := ESqlDBPostgres;
   for i := 0 to High(PQ_ENTRIES) do
   begin
     if PQ_ENTRIES[i] = 'enterPipelineMode' then
