@@ -88,6 +88,7 @@ type
     // - allow to define dependencies between sub-services
     // - it could be a good idea to define Level by increments of 10, so that
     // intermediate services may be inserted easily in the rings
+    // - will disable the entry if set to 0 or negative value
     property Level: integer
       read fLevel write fLevel;
     /// the action(s) executed to start the sub-process
@@ -194,25 +195,26 @@ type
   // to retrieve the state of services
   TSynAngelize = class(TSynDaemon)
   protected
-    fSettingsFolder, fSettingsExt, fAdditionalParams: TFileName;
-    fSettingsOptions: TSynJsonFileSettingsOptions;
+    fAdditionalParams: TFileName;
     fSettingsClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
     fService: array of TSynAngelizeService;
-    fSettings: TSynAngelizeSettings;
+    fLevels: TIntegerDynArray;
     fLastGetServicesStateFile: RawByteString;
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
+    function LoadServicesState(out state: TSynAngelizeState): boolean;
     procedure ListServices;
+    procedure StartServices;
+    procedure StopServices;
     // sub-service support
     function FindService(const ServiceName: RawUtf8): PtrInt;
-    function LoadServicesFromSettingsFolder: integer;
-    function GetServicesState: integer;
-    procedure Expand(aService: TSynAngelizeService; const aInput: TSynAngelizeAction;
-      out aOutput: TSynAngelizeAction); overload;
+    function ComputeServicesStateFile: integer;
+    procedure DoExpand(aService: TSynAngelizeService; const aInput: TSynAngelizeAction;
+      out aOutput: TSynAngelizeAction);
   public
     /// initialize the main daemon/server redirection instance
     // - main TSynAngelizeSettings is loaded
@@ -220,6 +222,8 @@ type
       const aSectionName: RawUtf8 = 'Main'; aLog: TSynLogClass = nil); reintroduce;
     /// finalize the stored information
     destructor Destroy; override;
+    /// read and parse all *.service definitions from SettingsFolder
+    function LoadServicesFromSettingsFolder: integer;
     /// compute a path/action, replacing all %abc% place holders with their values
     // - %agl.base% is the location of the agl executable
     // - %agl.settings% is the location of the *.service files
@@ -229,17 +233,14 @@ type
     // - TSystemPath values are available as %CommonData%, %UserData%,
     // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
     function Expand(aService: TSynAngelizeService;
-      const aAction: TSynAngelizeAction): TSynAngelizeAction; overload;
+      const aAction: TSynAngelizeAction): TSynAngelizeAction;
     /// overriden for proper sub-process starting
     procedure Start; override;
     /// overriden for proper sub-process stoping
     // - should do nothing if the daemon was already stopped
     procedure Stop; override;
-  published
-    /// how this main daemon/service is defined
-    property Settings: TSynAngelizeSettings
-      read fSettings;
   end;
+
 
 
 implementation
@@ -284,7 +285,7 @@ destructor TSynAngelize.Destroy;
 begin
   inherited Destroy;
   ObjArrayClear(fService);
-  DeleteFile(fSettings.StateFile);
+  DeleteFile(TSynAngelizeSettings(fSettings).StateFile);
   fSettings.Free;
 end;
 
@@ -335,45 +336,48 @@ var
   fn: TFileName;
   r: TSearchRec;
   s: TSynAngelizeService;
+  sas: TSynAngelizeSettings;
   i: PtrInt;
 begin
-  Finalize(fService);
+  ObjArrayClear(fService);
+  Finalize(fLevels);
+  sas := fSettings as TSynAngelizeSettings;
   // remove any previous local state file
-  bin := StringFromFile(fSettings.StateFile);
+  bin := StringFromFile(sas.StateFile);
   if (bin = '') or
      (PCardinal(bin)^ <> _STATEMAGIC) then
   begin
     // this existing file is clearly invalid
-    fSettings.StateFile := '';
+    sas.StateFile := '';
     // avoid deleting of a non valid file (may be used by malicious tools)
     raise ESynAngelize.CreateUtf8(
-      'Invalid StateFile=% content', [fSettings.StateFile]);
+      'Invalid StateFile=% content', [sas.StateFile]);
   end;
-  DeleteFile(fSettings.StateFile);
+  DeleteFile(sas.StateFile);
   // browse folder for settings files and generates fService[]
-  fn := fSettingsFolder + '*' + fSettingsExt;
+  fn := sas.Folder + '*' + sas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
   begin
     repeat
       if SearchRecValidFile(r) then
       begin
         s := fSettingsClass.Create;
-        fn := fSettingsFolder + r.Name;
+        fn := sas.Folder + r.Name;
         if s.LoadFromFile(fn) and
            (s.Name <> '') and
            (s.Start <> nil) and
-           (s.Stop <> nil) then
+           (s.Stop <> nil) and
+           (s.Level > 0) then
         begin
           i := FindService(s.Name);
           if i >= 0 then
-            fSettings.LogClass.Add.Log(
-              sllWarning, 'GetServices: duplicated % name in % and %',
-                [s.Name, s.FileName, fService[i].FileName], self)
-          else
-          begin
-            ObjArrayAdd(fService, s); // seems like a valid .service file
-            s := nil; // don't Free - will be owned by fService[]
-          end;
+            raise ESynAngelize.CreateUtf8(
+              'GetServices: duplicated % name in % and %',
+              [s.Name, s.FileName, fService[i].FileName]);
+          // seems like a valid .service file
+          ObjArrayAdd(fService, s);
+          AddSortedInteger(fLevels, s.Level);
+          s := nil; // don't Free - will be owned by fService[]
         end
         else
           fSettings.LogClass.Add.Log(
@@ -386,7 +390,7 @@ begin
   result := length(fService);
 end;
 
-function TSynAngelize.GetServicesState: integer;
+function TSynAngelize.ComputeServicesStateFile: integer;
 var
   state: TSynAngelizeState;
   bin: RawByteString;
@@ -403,106 +407,8 @@ begin
   PCardinal(bin)^ := _STATEMAGIC;
   if bin <> fLastGetServicesStateFile then
   begin
-    FileFromString(bin, fSettings.StateFile);
+    FileFromString(bin, TSynAngelizeSettings(fSettings).StateFile);
     fLastGetServicesStateFile := bin;
-  end;
-end;
-
-{
-var
-  c: cardinal;
-  r: TSearchRec;
-  s: TSynAngelizeService;
-  i: PtrInt;
-  fn: TFileName;
-begin
-  c := GetTickCount64 shr 10; // disk access every second at most
-  if Force or
-     (fLastUpdateServicesFromSettingsFolder <> c) then
-  begin
-    fLastUpdateServicesFromSettingsFolder := c;
-    for i := 0 to high(fService) do
-      include(fService[i].fFlags, safOrphan);
-    fn := fSettingsFolder + '*' + fSettingsExt;
-    if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
-    begin
-      repeat
-        if SearchRecValidFile(r) then
-        begin
-          s := fSettingsClass.Create;
-          fn := fSettingsFolder + r.Name;
-          if s.LoadFromFile(fn) and
-             (s.Name <> '') and
-             (s.Start <> '') then
-          begin
-            i := FindService(s.Name);
-            if i >= 0 then
-              if fService[i].FileName <> s.FileName then
-                fSettings.LogClass.Add.Log(
-                  sllWarning, 'GetServices: duplicated % name', [s.Name], self)
-              else
-              begin
-                if not ObjectEquals(s, fService[i]) then
-                begin
-                  fSettings.LogClass.Add.Log(
-                    sllTrace, 'GetServices: update % from %', [s.Name, fn], self);
-                  CopyObject(s, fService[i]);
-                end;
-                exclude(fService[i].fFlags, safOrphan);
-              end
-            else
-            begin
-              ObjArrayAdd(fService, s); // seems like a valid .service file
-              s := nil; // don't Free - will be owned by fService[]
-            end;
-          end
-          else
-            fSettings.LogClass.Add.Log(
-              sllWarning, 'GetServices: invalid % content', [r.Name], self);
-          s.Free;
-        end;
-      until FindNext(r) <> 0;
-      FindClose(r);
-    end;
-  end;
-  result := length(fService);
-  // note: won't remove existing items with no .service, flagged as safOrphan
-}
-
-const
-  _STATECOLOR: array[TServiceState] of TConsoleColor = (
-    ccBlue,       // NotInstalled
-    ccLightRed,   // Stopped
-    ccGreen,      // Starting
-    ccRed,        // Stopping
-    ccLightGreen, // Running
-    ccGreen,      // Resuming
-    ccBrown,      // Pausing
-    ccWhite,      // Paused
-    ccMagenta);   // ErrorRetrievingState
-
-procedure TSynAngelize.ListServices;
-var
-  bin: RawByteString;
-  ss: TServiceState;
-  state: TSynAngelizeState;
-  i: PtrInt;
-begin
-  ss := CurrentState;
-  if ss <> ssRunning then
-    ConsoleWrite('Main service state is %', [ToText(ss)^], ccLightBlue)
-  else
-  begin
-    bin := StringFromFile(fSettings.StateFile);
-    if (bin <> '') and
-       (PCardinal(bin)^ = _STATEMAGIC) then
-      RecordLoad(state, PAnsiChar(pointer(bin)) + 4, TypeInfo(TSynAngelizeState));
-    if state.Service = nil then
-      ConsoleWrite('Unknown service state', ccMagenta)
-    else
-      for i := 0 to high(state.Service) do
-        with state.Service[i] do
-          ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State]);
   end;
 end;
 
@@ -510,10 +416,10 @@ function TSynAngelize.Expand(aService: TSynAngelizeService;
   const aAction: TSynAngelizeAction): TSynAngelizeAction;
 begin
   fExpandLevel := 0;
-  Expand(aService, aAction, result);
+  DoExpand(aService, aAction, result); // internal recursive method
 end;
 
-procedure TSynAngelize.Expand(aService: TSynAngelizeService;
+procedure TSynAngelize.DoExpand(aService: TSynAngelizeService;
   const aInput: TSynAngelizeAction; out aOutput: TSynAngelizeAction);
 var
   o, i, j: PtrInt;
@@ -548,7 +454,7 @@ begin
         0: // %agl.base% is the location of the agl executable
           StringToUtf8(Executable.ProgramFilePath, v);
         1: // %agl.settings% is the location of the *.service files
-          StringToUtf8(fSettingsFolder, v);
+          StringToUtf8(TSynAngelizeSettings(fSettings).Folder, v);
         2: // %agl.params% are the additional parameters supplied to command line
           StringToUtf8(fAdditionalParams, v);
       else
@@ -560,13 +466,12 @@ begin
             p := Rtti.RegisterClass(aService).Props.Find(id);
           if p = nil then
             raise ESynAngelize.CreateUtf8(
-              'Expand: unknown %%agl.%%%', ['%', id, '%']);
+              'Expand: unknown %agl.%%', ['%', id, '%']);
           if fExpandLevel = 50 then
             raise ESynAngelize.CreateUtf8(
               'Expand infinite recursion for agl.%', [id]);
           inc(fExpandLevel); // to detect and avoid stack overflow error
-          Expand(aService,
-            Utf8ToString(p.Prop.GetAsString(aService)), TSynAngelizeAction(v));
+          DoExpand(aService, p.Prop.GetAsString(aService), TSynAngelizeAction(v));
           dec(fExpandLevel);
         end;
       end;
@@ -588,10 +493,65 @@ end;
 
 procedure TSynAngelize.Start;
 begin
-
+  if fService = nil then
+    LoadServicesFromSettingsFolder;
+  StartServices;
 end;
 
 procedure TSynAngelize.Stop;
+begin
+  StopServices;
+end;
+
+function TSynAngelize.LoadServicesState(out state: TSynAngelizeState): boolean;
+var
+  bin: RawByteString;
+begin
+  result := false;
+  bin := StringFromFile(TSynAngelizeSettings(fSettings).StateFile);
+  if (bin = '') or
+     (PCardinal(bin)^ <> _STATEMAGIC) then
+    exit;
+  delete(bin, 1, 4);
+  result := RecordLoad(state, bin, TypeInfo(TSynAngelizeState));
+end;
+
+const
+  _STATECOLOR: array[TServiceState] of TConsoleColor = (
+    ccBlue,       // NotInstalled
+    ccLightRed,   // Stopped
+    ccGreen,      // Starting
+    ccRed,        // Stopping
+    ccLightGreen, // Running
+    ccGreen,      // Resuming
+    ccBrown,      // Pausing
+    ccWhite,      // Paused
+    ccMagenta);   // ErrorRetrievingState
+
+procedure TSynAngelize.ListServices;
+var
+  ss: TServiceState;
+  state: TSynAngelizeState;
+  i: PtrInt;
+begin
+  ss := CurrentState;
+  if ss <> ssRunning then
+    ConsoleWrite('Main service state is %', [ToText(ss)^], ccMagenta)
+  else if LoadServicesState(state) and
+          (state.Service <> nil) then
+    for i := 0 to high(state.Service) do
+      with state.Service[i] do
+        ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State])
+  else
+    ConsoleWrite('Unknown service state', ccMagenta)
+end;
+
+procedure TSynAngelize.StartServices;
+begin
+
+end;
+
+procedure TSynAngelize.StopServices;
 begin
 
 end;
