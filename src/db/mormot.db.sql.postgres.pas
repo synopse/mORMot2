@@ -814,7 +814,7 @@ begin
   if not isFirst then
   begin
     fRes := PQ.getResult(c.fPGConn);
-    if (fRes <> nil) then
+    if fRes <> nil then
       // NULL represent end of the previous result set
       raise ESqlDBPostgres.CreateUtf8(
         '%.GetPipelineResult: returned something extra', [self]);
@@ -860,8 +860,8 @@ begin
   p := CheckParam(Param, ParamType, paramIn, 0);
   p^.VArray := _BindArrayJson; // fake marker
   p^.VInt64 := ValuesCount;
-  JsonArray[1] := '{';
-  JsonArray[length(JsonArray)] := '}'; // PostgreSQL weird syntax
+  JsonArray[1] := '{';         // convert to PostgreSQL weird syntax
+  JsonArray[length(JsonArray)] := '}';
   p^.VData := JsonArray;       // ExecutePrepared will use directly this
   fParamsArrayCount := ValuesCount;
 end;

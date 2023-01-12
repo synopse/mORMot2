@@ -16,12 +16,13 @@ Thanks to all [Contributors](CONTRIBUTORS.md)!
 
 You can find more about *mORMot 2* in:
 - its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress);
-- the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
 - the [Source Code `src` sub-folder](src);
+- the [Thomas Tutorials](https://github.com/synopse/mORMot2/tree/master/ex/ThirdPartyDemos/tbo);
+- the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
 - the [Synopse Blog](https://blog.synopse.info);
 - the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still mostly apply to the new version - especially the design/conceptual parts.
 
-If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/sponsors/synopse) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
+If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/synopse/mORMot2/blob/master/DONATE.md) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
 
 ## Presentation
 
@@ -102,7 +103,7 @@ Please submit pull requests for non-validated versions.
     - There is no IDE or UI package needed (yet).
 3. Discover and enjoy:
   - Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
-  - Browse the [examples folder](/ex) (work in progress).
+  - Browse the [examples folder](/ex) (work in progress) - especially [Thomas Tutorials](https://github.com/synopse/mORMot2/tree/master/ex/ThirdPartyDemos/tbo) which are realistic and pedagogical.
   - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html);
   - Feel free to contribute by posting enhancements and patches to this quickly evolving project.
 
