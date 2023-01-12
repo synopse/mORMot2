@@ -5539,33 +5539,45 @@ end;
 
 function ToInteger(const text: RawUtf8; out value: integer): boolean;
 var
-  err: integer;
+  v, err: integer;
 begin
-  value := GetInteger(pointer(text), err);
+  v := GetInteger(pointer(text), err);
   result := err = 0;
+  if result then
+    value := v;
 end;
 
 function ToCardinal(const text: RawUtf8; out value: cardinal; minimal: cardinal): boolean;
+var
+  v: cardinal;
 begin
-  value := GetCardinalDef(pointer(text), cardinal(-1));
-  result := (value <> cardinal(-1)) and
-            (value >= minimal);
+  v := GetCardinalDef(pointer(text), cardinal(-1));
+  result := (v <> cardinal(-1)) and
+            (v >= minimal);
+  if result then
+    value := v;
 end;
 
 function ToInt64(const text: RawUtf8; out value: Int64): boolean;
 var
   err: integer;
+  v: Int64;
 begin
-  value := GetInt64(pointer(text), err);
+  v := GetInt64(pointer(text), err);
   result := err = 0;
+  if result then
+    value := v;
 end;
 
 function ToDouble(const text: RawUtf8; out value: double): boolean;
 var
   err: integer;
+  v: double;
 begin
-  value := GetExtended(pointer(text), err);
+  v := GetExtended(pointer(text), err);
   result := err = 0;
+  if result then
+    value := v;
 end;
 
 function Utf8ToInt64(const text: RawUtf8; const default: Int64): Int64;
