@@ -2730,7 +2730,7 @@ function VariantSave(const Value: variant): RawByteString; overload;
 // - is a wrapper around BinaryLoad(rkVariant)
 function VariantLoad(var Value: variant; Source: PAnsiChar;
   CustomVariantOptions: PDocVariantOptions;
-  SourceMax: PAnsiChar = nil): PAnsiChar; overload;
+  SourceMax: PAnsiChar {$ifndef PUREMORMOT2} = nil {$endif}): PAnsiChar; overload;
 
 /// retrieve a variant value from our optimized binary serialization format
 // - follow the data layout as used by RecordLoad() or VariantSave() function
@@ -2747,7 +2747,7 @@ function VariantLoad(const Bin: RawByteString;
 // - how custom type variants are created can be defined via CustomVariantOptions
 // - is just a wrapper around VariantLoad/BinaryLoad
 procedure FromVarVariant(var Source: PByte; var Value: variant;
-  CustomVariantOptions: PDocVariantOptions = nil);
+  CustomVariantOptions: PDocVariantOptions; SourceMax: PByte);
   {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -2998,27 +2998,26 @@ var
   vt: cardinal;
 begin
   vt := TVarData(V).VType;
-  with TVarData(V) do
-    case vt of
-      varEmpty,
-      varNull:
-        result := ''; // default VariantToUtf8(null)='null'
-      {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
-      varUString:
-        result := UnicodeString(VAny);
+  case vt of
+    varEmpty,
+    varNull:
+      result := ''; // default VariantToUtf8(null)='null'
+    {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
+    varUString:
+      result := UnicodeString(TVarData(V).VAny);
+  else
+    if vt = varUStringByRef then
+      result := PUnicodeString(TVarData(V).VAny)^
+    {$endif UNICODE}
     else
-      if vt = varUStringByRef then
-        result := PUnicodeString(VAny)^
-      {$endif UNICODE}
+    begin
+      VariantToUtf8(V, tmp, wasString);
+      if tmp = '' then
+        result := ''
       else
-      begin
-        VariantToUtf8(V, tmp, wasString);
-        if tmp = '' then
-          result := ''
-        else
-          Utf8ToStringVar(tmp, result);
-      end;
+        Utf8ToStringVar(tmp, result);
     end;
+  end;
 end;
 
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
@@ -8849,9 +8848,11 @@ end;
 function VariantLoad(var Value: variant; Source: PAnsiChar;
   CustomVariantOptions: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
 begin
+  {$ifndef PUREMORMOT2}
   if SourceMax = nil then
-    // backward compatible: assume fake 100MB Source input buffer
+    // mORMot 1 unsafe backward compatible: assume fake 100MB Source input
     SourceMax := Source + 100 shl 20;
+  {$endif PUREMORMOT2}
   result := BinaryLoad(@Value, Source, TypeInfo(Variant), nil, SourceMax,
     [rkVariant], CustomVariantOptions);
 end;
@@ -8864,9 +8865,10 @@ begin
 end;
 
 procedure FromVarVariant(var Source: PByte; var Value: variant;
-  CustomVariantOptions: PDocVariantOptions);
+  CustomVariantOptions: PDocVariantOptions; SourceMax: PByte);
 begin
-  Source := PByte(VariantLoad(Value, PAnsiChar(Source), CustomVariantOptions));
+  Source := PByte(VariantLoad(Value, pointer(Source),
+    CustomVariantOptions, pointer(SourceMax)));
 end;
 
 var

@@ -695,7 +695,8 @@ begin
     Check(T.SameValues(T2));
     bin := VariantSave(T.ValVariant);
     Check(bin <> '');
-    Check(VariantLoad(v, pointer(bin), @JSON_[mFast]) <> nil);
+    Check(VariantLoad(v, pointer(bin), @JSON_[mFast],
+      PAnsiChar(bin) + length(bin)) <> nil);
     CheckEqual(VariantSaveMongoJson(v, modMongoStrict), '{"name":"John","int":1234}');
   finally
     M.Free;
