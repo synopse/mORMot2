@@ -289,6 +289,7 @@ const
 constructor TSqlDBPostgresLib.Create;
 var
   P: PPointerArray;
+  raiseonfailure: ExceptionClass;
   i: PtrInt;
 begin
   TryFromExecutableFolder := true;
@@ -296,7 +297,11 @@ begin
     SynDBPostgresLibrary, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
-    Resolve('PQ', PQ_ENTRIES[i], @P[I], {raiseonfailure=}ESqlDBPostgres);
+  begin
+    if PQ_ENTRIES[i] = 'enterPipelineMode' then
+      raiseonfailure := nil; // old libpq with no pipelining API
+    Resolve('PQ', PQ_ENTRIES[i], @P[I], raiseonfailure);
+  end;
 end;
 
 procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;

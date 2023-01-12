@@ -434,6 +434,10 @@ end;
 
 procedure TSqlDBPostgresConnection.EnterPipelineMode;
 begin
+  if not Assigned(PQ.enterPipelineMode) then
+    raise ESqlDBPostgres.CreateUtf8(
+      'EnterPipelineMonde(%): pipelining unsupported in % v%',
+      [Properties.DatabaseNameSafe, PQ.LibraryPath, PQ.LibVersion]);
   if PQ.enterPipelineMode(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8('Enter pipeline mode % failed [%]',
       [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
