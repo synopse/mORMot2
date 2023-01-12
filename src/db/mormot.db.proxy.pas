@@ -969,7 +969,8 @@ begin
       cExecuteToJson,
       cExecuteToExpandedJson:
         begin
-          RecordLoad(exec, P, TypeInfo(TSqlDBProxyConnectionCommandExecute));
+          RecordLoad(exec, P, TypeInfo(TSqlDBProxyConnectionCommandExecute),
+            nil, PAnsiChar(pointer(msgin)) + length(msgin));
           execwithres := header.Command <> cExecute;
           stmt := Connection.NewStatementPrepared(exec.SQL,
             execwithres, true);

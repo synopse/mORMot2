@@ -6899,7 +6899,8 @@ function TOrmPropInfoRecordRtti.SetFieldSqlVar(Instance: TObject;
   const aValue: TSqlVar): boolean;
 begin
   if aValue.VType = ftBlob then
-    result := RecordLoad(GetFieldAddr(Instance)^, aValue.VBlob, fTypeInfo) <> nil
+    result := RecordLoad(GetFieldAddr(Instance)^, aValue.VBlob, fTypeInfo,
+      nil, {max=}PAnsiChar(aValue.VBlob) + aValue.VBlobLen) <> nil
   else
     result := inherited SetFieldSqlVar(Instance, aValue);
 end;

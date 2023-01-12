@@ -5390,7 +5390,7 @@ begin
     if (enclen <= SIZ) or
        (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
       exit;
-    // inlined RecordLoad() for safety
+    // inlined RecordLoad() for paranoid safety
     P := @pcd^.data;
     len := FromVarUInt32(PByte(P));
     if enclen - len <> PtrUInt(PAnsiChar(P) - pointer(Data)) then

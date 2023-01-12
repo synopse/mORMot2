@@ -1095,13 +1095,17 @@ function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo;
 // of the string length - note that if you change the type definition, any
 // previously-serialized content will fail, maybe triggering unexpected GPF: you
 // may use TypeInfoToHash() if you share this binary data accross executables
-// - you can optionally provide in SourceMax the first byte after the input
-// memory buffer, which will be used to avoid any unexpected buffer overflow -
-// would be mandatory when decoding the content from any external process
-// (e.g. a maybe-forged client) - with no performance penalty
+// - you should provide in SourceMax the first byte after the Source memory
+// buffer, which will be used to avoid any unexpected buffer overflow - clearly
+// mandatory when decoding the content from any external process (e.g. a
+// maybe-forged client) - with no performance penalty
 // - is a wrapper around BinaryLoad(rkRecordTypes)
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: PRttiInfo;
+  {$ifdef PUREMORMOT2} // SourceMax is manadatory for safety
+  Len: PInteger; SourceMax: PAnsiChar;
+  {$else} // mORMot 1 compatibility mode
   Len: PInteger = nil; SourceMax: PAnsiChar = nil;
+  {$endif PUREMORMOT2}
   TryCustomVariants: PDocVariantOptions = nil): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
