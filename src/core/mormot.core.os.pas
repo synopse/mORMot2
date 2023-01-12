@@ -4111,6 +4111,7 @@ type
     ssResuming,
     ssPausing,
     ssPaused,
+    ssFailed,
     ssErrorRetrievingState);
   PServiceState = ^TServiceState;
   TServiceStateDynArray = array of TServiceState;
@@ -8401,6 +8402,7 @@ const
     'Resuming',
     'Pausing',
     'Paused',
+    'Failed',
     'Error');
 
 function ToText(st: TServiceState): PShortString; overload;
