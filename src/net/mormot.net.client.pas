@@ -431,7 +431,8 @@ function DefaultUserAgent(Instance: TObject): RawUtf8;
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
-  aLayer: TNetLayer = nlTcp; const aUrlForProxy: RawUtf8 = ''): THttpClientSocket; overload;
+  aLayer: TNetLayer = nlTcp; const aUrlForProxy: RawUtf8 = '';
+  aTimeout: integer = 0): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
@@ -444,7 +445,8 @@ function OpenHttp(const aUri: RawUtf8;
 // and the overloaded HttpGet() functions
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTcp;
-  aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
+  aTLS: boolean = false; outStatus: PInteger = nil;
+  aTimeout: integer = 0): RawByteString; overload;
 
 /// download some potentially huge file, with proper resume
 // - is a wrapper around THttpClientSocket.WGet() method
@@ -1114,14 +1116,15 @@ type
 // or TWinHttp/TCurlHttp for any https URI, or if forceNotSocket is set to true
 // - see also OpenHttpGet() for direct THttpClientSock call
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8 = nil;
-  forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
+  forceNotSocket: boolean = false; outStatus: PInteger = nil;
+  timeout: integer = 0): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHttp/TCurlHttp for any https URI
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
-  outStatus: PInteger = nil): RawByteString; overload;
+  outStatus: PInteger = nil; timeout: integer = 0): RawByteString; overload;
 
 
 
@@ -2062,13 +2065,14 @@ end;
 {$endif DOMAINRESTAUTH}
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aLayer: TNetLayer; const aUrlForProxy: RawUtf8): THttpClientSocket;
+  aLayer: TNetLayer; const aUrlForProxy: RawUtf8;
+  aTimeout: integer): THttpClientSocket;
 var
   temp: TUri;
 begin
   try
-    result := THttpClientSocket.Open(aServer, aPort, aLayer, 0, aTLS, nil,
-      GetSystemProxyUri(aUrlForProxy, '', temp));
+    result := THttpClientSocket.Open(aServer, aPort, aLayer, aTimeout,
+      aTLS, nil, GetSystemProxyUri(aUrlForProxy, '', temp));
   except
     on ENetSock do
       result := nil;
@@ -2090,13 +2094,13 @@ end;
 
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean;
-  outStatus: PInteger): RawByteString;
+  outStatus: PInteger; aTimeout: integer): RawByteString;
 var
   Http: THttpClientSocket;
   status: integer;
 begin
   result := '';
-  Http := OpenHttp(server, port, aTLS, aLayer);
+  Http := OpenHttp(server, port, aTLS, aLayer, '', aTimeout);
   if Http <> nil then
   try
     Http.RedirectMax := 5;
@@ -3335,14 +3339,14 @@ end;
 
 
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8;
-  forceNotSocket: boolean; outStatus: PInteger): RawByteString;
+  forceNotSocket: boolean; outStatus: PInteger; timeout: integer): RawByteString;
 begin
-  result := HttpGet(aUri, '', outHeaders, forceNotSocket, outStatus);
+  result := HttpGet(aUri, '', outHeaders, forceNotSocket, outStatus, timeout);
 end;
 
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8; forceNotSocket: boolean;
-  outStatus: PInteger): RawByteString;
+  outStatus: PInteger; timeout: integer): RawByteString;
 var
   uri: TUri;
 begin
@@ -3361,11 +3365,11 @@ begin
       {$endif USELIBCURL}
         // fallback to SChannel/OpenSSL if libcurl is not installed
         result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
-          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
+          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus, timeout)
       {$endif USEWININET}
     else
       result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
-        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
+        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus, timeout)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
