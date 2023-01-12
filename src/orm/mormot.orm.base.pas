@@ -3564,7 +3564,7 @@ const
          (Value^ <> '[') and
          Base64MagicCheckAndDecode(Value, tmp, ValueLen) then
       begin
-        da := DynArrayBlobSaveJson(typeInfo, tmp.buf);
+        da := DynArrayBlobSaveJson(typeInfo, tmp.buf, tmp.len);
         info.Json := pointer(da);
       end
       else if createValueTempCopy then

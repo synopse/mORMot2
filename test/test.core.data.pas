@@ -1690,8 +1690,8 @@ var
       end;
     end;
     binary := DynArraySave(AA, TypeInfo(TRawUtf8DynArrayDynArray));
-    Check(DynArrayLoad(
-      AB, pointer(binary), TypeInfo(TRawUtf8DynArrayDynArray)) <> nil);
+    Check(DynArrayLoad(AB, pointer(binary), TypeInfo(TRawUtf8DynArrayDynArray),
+      nil, PAnsiChar(binary) + length(binary)) <> nil);
     Check(length(AA) = length(AB));
     for i := 0 to high(AA) do
     begin

@@ -606,7 +606,7 @@ begin
                     js := ''
                   else
                     // try to store dynamic array as BSON array (via Json)
-                    js := DynArrayBlobSaveJson(rtti.Info, pointer(blob));
+                    js := DynArrayBlobSaveJson(rtti.Info, pointer(blob), length(blob));
                   if (js <> '') and
                      (PInteger(js)^ and $00ffffff <> JSON_BASE64_MAGIC_C) then
                     BsonVariantType.FromJson(pointer(js), Variant(V^))

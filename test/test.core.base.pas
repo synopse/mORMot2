@@ -1318,7 +1318,7 @@ begin
   Test := dyn1.SaveTo;
   dyn1.Clear;
   Check(AB = nil);
-  Check(dyn1.LoadFrom(pointer(Test)) <> nil);
+  Check(dyn1.LoadFrom(pointer(Test), PAnsiChar(Test) + length(Test)) <> nil);
   Check(dyn1.Count = 4);
   for i := 0 to 3 do
     Check(AB[i] = (i and 1 = 1));
@@ -1384,7 +1384,7 @@ begin
   for i := 0 to 1000 do
     Check(AI[i] = 1000 - i);
   AIP.Clear;
-  Check(AIP.LoadFrom(pointer(Test)) <> nil);
+  Check(AIP.LoadFrom(pointer(Test), PAnsiChar(Test) + length(Test)) <> nil);
   for i := 0 to 1000 do
     Check(AIP.IndexOf(i) = i);
   AIP.Clear;
@@ -1449,7 +1449,7 @@ begin
   AIP.Clear;
   with DynArray(TypeInfo(TIntegerDynArray), AI) do
   begin
-    Check(LoadFrom(pointer(Test)) <> nil);
+    Check(LoadFromBinary(Test));
     for i := 0 to count - 1 do
       Check(AI[i] = i);
   end;
@@ -1536,7 +1536,8 @@ begin
   end;
   Check(P = nil);
   AUP.Clear;
-  Check(AUP.LoadFrom(pointer(Test)) - pointer(Test) = length(Test));
+  Check(AUP.LoadFrom(pointer(Test),
+    PAnsiChar(Test) + length(Test)) - pointer(Test) = length(Test));
   for i := 0 to 1000 do
     Check(GetInteger(pointer(AU[i])) = i + 1000);
   AUP.Clear;
@@ -1748,7 +1749,8 @@ begin
   CheckEqual(U, '[' + JSON_BASE64_MAGIC_UTF8 + BinToBase64(Test) + '"]');
   {$endif HASEXTRECORDRTTI}
   AFP.Clear;
-  Check(AFP.LoadFrom(pointer(Test)) - pointer(Test) = length(Test));
+  Check(AFP.LoadFrom(
+    pointer(Test), PAnsiChar(Test) + length(Test)) - pointer(Test) = length(Test));
   for i := 0 to 1000 do
   begin
     Fill(F, i);

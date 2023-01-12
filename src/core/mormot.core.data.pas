@@ -886,7 +886,11 @@ function DynArraySave(var Value; TypeInfo: PRttiInfo): RawByteString; overload;
 // - Value shall be set to the target dynamic array field
 // - is a wrapper around BinaryLoad(rkDynArray)
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: PRttiInfo;
+  {$ifdef PUREMORMOT2} // SourceMax is manadatory for safety
+  TryCustomVariants: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
+  {$else}
   TryCustomVariants: PDocVariantOptions = nil; SourceMax: PAnsiChar = nil): PAnsiChar;
+  {$endif PUREMORMOT2}
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level binary unserialization as saved by DynArraySave/TDynArray.Save
@@ -1103,7 +1107,7 @@ function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo;
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: PRttiInfo;
   {$ifdef PUREMORMOT2} // SourceMax is manadatory for safety
   Len: PInteger; SourceMax: PAnsiChar;
-  {$else} // mORMot 1 compatibility mode
+  {$else}              // mORMot 1 compatibility mode
   Len: PInteger = nil; SourceMax: PAnsiChar = nil;
   {$endif PUREMORMOT2}
   TryCustomVariants: PDocVariantOptions = nil): PAnsiChar; overload;
@@ -1621,10 +1625,15 @@ type
     function SaveTo: RawByteString; overload;
     /// unserialize dynamic array content from binary written by TDynArray.SaveTo
     // - return nil if the Source buffer is incorrect: invalid type, wrong
-    // checksum, or optional SourceMax overflow
+    // checksum, or SourceMax overflow
     // - return a non nil pointer just after the Source content on success
     // - this method will raise an ESynException for T*ObjArray types
-    function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; 
+    function LoadFrom(Source: PAnsiChar;
+      {$ifdef PUREMORMOT2} // SourceMax is manadatory for safety
+      SourceMax: PAnsiChar): PAnsiChar;
+      {$else}             // mORMot 1 compatibility mode
+      SourceMax: PAnsiChar = nil): PAnsiChar;
+      {$endif PUREMORMOT2}
     /// unserialize dynamic array content from binary written by TDynArray.SaveTo
     procedure LoadFromReader(var Read: TFastReader);
     /// unserialize the dynamic array content from a TDynArray.SaveTo binary string
@@ -2075,7 +2084,8 @@ type
     procedure SaveToJson(W: TTextWriter); overload; inline;
     function LoadFromJson(P: PUtf8Char; aEndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUtf8Char; inline;
-    function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; inline;
+    function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar
+      {$ifndef PUREMORMOT2} = nil{$endif}): PAnsiChar; inline;
     function LoadFromBinary(const Buffer: RawByteString): boolean; inline;
     procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
       aCompare: TDynArraySortCompare);
@@ -5901,9 +5911,11 @@ end;
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: PRttiInfo;
   TryCustomVariants: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
 begin
+  {$ifndef PUREMORMOT2}
   if SourceMax = nil then
-    // backward compatible: assume fake 100MB Source input buffer
+    // mORMot 1 unsafe backward compatible: assume fake 100MB Source input
     SourceMax := Source + 100 shl 20;
+  {$endif PUREMORMOT2}
   result := BinaryLoad(
     @Value, source, TypeInfo, nil, SourceMax, [rkDynArray], TryCustomVariants);
 end;
@@ -6720,7 +6732,8 @@ var
 begin
   load := RTTI_BINARYLOAD[Info^.Kind];
   if Assigned(load) and
-     (Info^.Kind in Kinds) then
+     (Info^.Kind in Kinds) and
+     (SourceMax <> nil) then
   begin
     read.Init(Source, SourceMax - Source);
     read.CustomVariants := TryCustomVariants;
@@ -6832,9 +6845,11 @@ end;
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: PRttiInfo;
   Len: PInteger; SourceMax: PAnsiChar; TryCustomVariants: PDocVariantOptions): PAnsiChar;
 begin
+  {$ifndef PUREMORMOT2}
   if SourceMax = nil then
-    // backward compatible: assume fake 100MB Source input buffer
+    // mORMot 1 unsafe backward compatible: assume fake 100MB Source input
     SourceMax := Source + 100 shl 20;
+  {$endif PUREMORMOT2}
   result := BinaryLoad(@Rec, Source, TypeInfo, Len, SourceMax,
     rkRecordTypes, TryCustomVariants);
 end;
@@ -7495,9 +7510,11 @@ function TDynArray.LoadFrom(Source, SourceMax: PAnsiChar): PAnsiChar;
 var
   read: TFastReader;
 begin
+  {$ifndef PUREMORMOT2}
   if SourceMax = nil then
-    // backward compatible: assume fake 100MB Source input buffer
+    // mORMot 1 unsafe backward compatible: assume fake 100MB Source input
     SourceMax := Source + 100 shl 20;
+  {$endif PUREMORMOT2}
   read.Init(Source, SourceMax - Source);
   LoadFromReader(read);
   if read.P <> Source then
@@ -8897,7 +8914,7 @@ begin
   if Source <> nil then // avoid GPF
     if fInfo.Cache.ItemInfo = nil then
     begin
-      if (SourceMax = nil) or
+      if {$ifndef PUREMORMOT2} (SourceMax = nil) or {$endif}
          (Source + fInfo.Cache.ItemSize <= SourceMax) then
         MoveFast(Source^, Item^, fInfo.Cache.ItemSize);
     end

@@ -1047,7 +1047,7 @@ type
     /// returns true if the Init() method has been called
     function Initialized: boolean;
     /// can be used to set all data from one BLOB memory buffer
-    procedure SetBlobDataPtr(aValue: pointer);
+    procedure SetBlobDataPtr(aValue, aValueMax: pointer);
     /// can be used to set or retrieve all stored data as one BLOB content
     property BlobData: RawByteString
       read GetBlobData write SetBlobData;
@@ -2082,7 +2082,8 @@ function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJsonCustomWriter callback or Rtti.RegisterFromText()
-function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer): RawUtf8;
+function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer;
+  BlobLen: PtrInt): RawUtf8;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -8784,9 +8785,9 @@ begin
   result := DynArray.SaveTo;
 end;
 
-procedure TSynNameValue.SetBlobDataPtr(aValue: pointer);
+procedure TSynNameValue.SetBlobDataPtr(aValue, aValueMax: pointer);
 begin
-  DynArray.LoadFrom(aValue);
+  DynArray.LoadFrom(aValue, aValueMax);
   DynArray.ForceReHash;
 end;
 
@@ -10747,7 +10748,8 @@ begin
     SaveJson(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
 end;
 
-function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer): RawUtf8;
+function DynArrayBlobSaveJson(TypeInfo: PRttiInfo;
+  BlobValue: pointer; BlobLen: PtrInt): RawUtf8;
 var
   DynArray: TDynArray;
   Value: pointer; // decode BlobValue into a temporary dynamic array
@@ -10756,7 +10758,7 @@ begin
   Value := nil;
   DynArray.Init(TypeInfo, Value);
   try
-    if DynArray.LoadFrom(BlobValue) = nil then
+    if DynArray.LoadFrom(BlobValue, PAnsiChar(BlobValue) + BlobLen) = nil then
       result := ''
     else
       with TJsonWriter.CreateOwnedStream(temp) do

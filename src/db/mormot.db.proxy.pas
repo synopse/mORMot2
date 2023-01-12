@@ -1124,7 +1124,7 @@ var
   outheader: PRemoteMessageHeader;
   intext: RawUtf8                             absolute Input;
   inexec: TSqlDBProxyConnectionCommandExecute absolute Input;
-  msg: PAnsiChar;
+  msg, msgmax: PAnsiChar;
   outdef: TSqlDBDefinition                    absolute Output;
   outint64: Int64                             absolute Output;
   outboolean: boolean                         absolute Output;
@@ -1172,6 +1172,7 @@ begin
      (outheader.Magic <> REMOTE_MAGIC) then
     raise ESqlDBRemote.CreateUtf8('Incorrect %.Process() magic/version', [self]);
   msg := pointer(msgout);
+  msgmax := msg + length(msgout);
   inc(msg, SizeOf(header));
   case outheader.Command of
     cGetToken,
@@ -1188,13 +1189,13 @@ begin
     cTryStartTransaction:
       outboolean := boolean(msg^);
     cGetFields:
-      DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray));
+      DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray), nil, msgmax);
     cGetIndexes:
-      DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray));
+      DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray), nil, msgmax);
     cGetTableNames:
-      DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray));
+      DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray), nil, msgmax);
     cGetForeignKeys:
-      outnamevalue.SetBlobDataPtr(msg);
+      outnamevalue.SetBlobDataPtr(msg, msgmax);
     cExecute,
     cExecuteToBinary,
     cExecuteToJson,
