@@ -1939,7 +1939,7 @@ begin
   Check(length(Province.Cities) = 0);
   Check(ACities.Count = 0);
   Province.Year := 0;
-  Check(RecordLoad(Province, pointer(Test), TypeInfo(TProvince))^ = #0);
+  Check(RecordLoad(Province, pointer(Test), TypeInfo(TProvince), nil, nil)^ = #0);
   Check(Province.Name = 'Test');
   Check(Province.Comment = 'comment');
   Check(Province.Year = 1000);
@@ -1954,7 +1954,7 @@ begin
   Check(Province.Comment = '');
   Check(length(Province.Cities) = 0);
   Check(ACities.Count = 0);
-  Check(RecordLoad(Province, pointer(Test), TypeInfo(TProvince))^ = #0);
+  Check(RecordLoad(Province, Test, TypeInfo(TProvince)));
   Check(Province.Name = 'Test');
   Check(Province.Comment = 'comment');
   Check(Province.Year = 1000);
@@ -2092,7 +2092,12 @@ var
         inc(len, 777 + len shr 4);
     until len >= length(buf);
     NotifyTestSpeed(msg, 1, filled, @timer);
-     // validates overlapping forward Move/MoveFast
+    // validate negative count of Move/MoveFast (should not make any GPF)
+    if rtl then
+      move(buf[1], buf[2], -100)
+    else
+      moveFast(buf[1], buf[2], -100);
+    // validates overlapping forward Move/MoveFast
     if rtl then
       msg := 'Move'
     else
