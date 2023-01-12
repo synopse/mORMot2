@@ -667,7 +667,7 @@ type
   public
     /// initialize the thread for a periodic task processing
     // - aOnProcess would be called when ProcessEvent.SetEvent is called or
-    // aOnProcessMS milliseconds period was elapse since last process
+    // aOnProcessMS milliseconds period was elapsed since last process
     // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
@@ -677,7 +677,7 @@ type
       const aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil;
       CreateSuspended: boolean = false); reintroduce; virtual;
-    /// finalize the thread
+    /// finalize and wait for the thread ending
     destructor Destroy; override;
     /// access to the implementation event of the periodic task
     property OnProcess: TOnSynBackgroundThreadProcess
@@ -2365,6 +2365,7 @@ begin
   if fExecute = exRun then
   begin
     Terminate;
+    fProcessEvent.SetEvent;     // release WaitFor() ASAP
     WaitForNotExecuting(10000); // expect the background task to be finished
   end;
   inherited Destroy;

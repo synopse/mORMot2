@@ -652,7 +652,7 @@ begin
     cmd := ParseCmd(p);
     if cmd = cNone then
       if CustomParseCmd(p) then
-        exit; // command has been identified and processed
+        exit; // command has been identified and processed in overriden method
   end;
   Command(cmd, aAutoStart, param);
 end;
