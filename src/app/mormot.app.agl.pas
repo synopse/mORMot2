@@ -333,6 +333,11 @@ end;
 const
   _STATEMAGIC = $5131e3a6;
 
+function SortByLevel(const A, B): integer; // to display by increasing Level
+begin
+  result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
+end;
+
 function TSynAngelize.LoadServicesFromSettingsFolder: integer;
 var
   bin: RawByteString;
@@ -390,6 +395,7 @@ begin
     until FindNext(r) <> 0;
     FindClose(r);
   end;
+  ObjArraySort(fService, SortByLevel);
   result := length(fService);
 end;
 

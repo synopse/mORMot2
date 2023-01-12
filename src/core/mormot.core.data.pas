@@ -2279,15 +2279,20 @@ type
 // !var
 // !  IntArray: TIntegerDynArray;
 // !begin
-// !  with DynArray(TypeInfo(TIntegerDynArray),IntArray) do
+// !  with DynArray(TypeInfo(TIntegerDynArray), IntArray) do
 // !  begin
 // !    (...)
 // !  end;
 // ! (...)
-// ! DynArray(TypeInfo(TIntegerDynArray),IntArrayA).SaveTo
+// ! bin := DynArray(TypeInfo(TIntegerDynArray), IntArray).SaveTo;
 function DynArray(aTypeInfo: PRttiInfo; var aValue;
   aCountPointer: PInteger = nil): TDynArray;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// get the hash function corresponding to a given standard array type
+// - as used e.g. internally by TDynArrayHasher.Init
+function DynArrayHashOne(Kind: TRttiParserType;
+  CaseInsensitive: boolean = false): TDynArrayHashOne;
 
 /// sort any dynamic array, via an external array of indexes
 // - this function will use the supplied TSynTempBuffer for index storage,
@@ -2300,10 +2305,8 @@ procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
 // - as used e.g. internally by TDynArray
 function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
 
-/// get the hash function corresponding to a given standard array type
-// - as used e.g. internally by TDynArrayHasher.Init
-function DynArrayHashOne(Kind: TRttiParserType;
-  CaseInsensitive: boolean = false): TDynArrayHashOne;
+/// sort any TObjArray with a given comparison function
+procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare);
 
 
 { *************** Integer Arrays Extended Process }
@@ -6962,6 +6965,17 @@ const
      SortDynArrayPUtf8CharI,     //  ptPUtf8Char
      nil));                      //  ptCustom
 
+function DynArraySortOne(Kind: TRttiParserType;
+  CaseInsensitive: boolean): TDynArraySortCompare;
+begin
+  result := PT_SORT[CaseInsensitive, Kind];
+end;
+
+procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare);
+begin
+  DynArray(TypeInfo(TObjectDynArray), aValue).Sort(Compare);
+end;
+
 
 { TDynArray }
 
@@ -9261,12 +9275,6 @@ begin
   result := PT_HASH[CaseInsensitive, Kind];
 end;
 
-function DynArraySortOne(Kind: TRttiParserType;
-  CaseInsensitive: boolean): TDynArraySortCompare;
-begin
-  result := PT_SORT[CaseInsensitive, Kind];
-end;
-
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   const aEventHash: TOnDynArrayHashOne; aHasher: THasher;
   aCompare: TDynArraySortCompare; const aEventCompare: TOnDynArraySortCompare;
@@ -10861,7 +10869,7 @@ var
 begin
   for i := 0 to high(Child) do
     Child[i].SortChildren; // compute nested children depth
-  DynArray(TypeInfo(TPointerDynArray), Child).Sort(RadixTreeNodeCompare);
+  ObjArraySort(Child, RadixTreeNodeCompare);
 end;
 
 constructor TRadixTreeNode.Create(aOwner: TRadixTree);
