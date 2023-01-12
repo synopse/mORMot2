@@ -24,9 +24,12 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.data,
+  mormot.core.threads,
   mormot.core.log,
   mormot.net.client,
   mormot.app.console,
@@ -38,13 +41,6 @@ uses
 type
   /// exception class raised by TSynAngelize
   ESynAngelize = class(ESynException);
-
-  /// define how TSynAngelize handle a sub-process execution
-  // - sasAuto will start it with the main agl daemon/service
-  TSynAngelizeStarter = (
-    sasAuto);
-  /// define TSynAngelize sub-process handling
-  TSynAngelizeStarters = set of TSynAngelizeStarter;
 
   /// define one TSynAngelizeService action
   // - depending on the context, as "method:param" pair
@@ -62,86 +58,105 @@ type
   protected
     fName: RawUtf8;
     fDescription: RawUtf8;
+    fRun, fService: RawUtf8;
     fStart, fStop, fWatch: TSynAngelizeActions;
+    fStateMessage: RawUtf8;
     fState: TServiceState;
-    fStarter: TSynAngelizeStarters;
     fLevel, fWatchDelaySec: integer;
+    fRedirectLogFile: TFileName;
+    fStarted: array of record
+      Executable: RawUtf8;
+      PID: PtrUInt;
+    end;
+    fNextWatch: Int64;
+    function GetStartedPID(const Executable: RawUtf8): PtrUInt;
   public
     /// initialize and set the default settings
     constructor Create; override;
     /// the current state of the service, as retrieved during the Watch phase
     property State: TServiceState
       read fState;
+    /// text associated to the current state, as generated during Watch phase
+    property StateMessage: RawUtf8
+      read fStateMessage;
   published
     /// computer-friendly case-insensitive identifier of this sub-service
     // - as used internally by TSynAngelize to identify this instance
     // - should be a short, if possible ASCII and pascal-compatible, identifier
-    // - default is the Executable file name without its path and extension
+    // - contains e.g. "Name": "AuthService",
     property Name: RawUtf8
       read fName write fName;
+    /// some reusable parameter available as %run% place holder
+    // - default is void '', but could be used to store an executable name
+    // or a Windows service name, e.g. "Run":"/path/to/authservice" or
+    // "Run": "MyCompanyService"
+    property Run: RawUtf8
+      read fRun write fRun;
+    /// some reusable parameter available as %run% place holder on Windows
+    // - default is void ''
+    // - contains e.g. "Service": "MyCompanyAuthService",
+    property Service: RawUtf8
+      read fService write fService;
     /// human-friendly Unicode text which could be displayed on Web or Console UI
     // - in addition to the Name short identifier
-    // - default is the Executable file name without its path and extension
+    // - contains e.g. "Name": "Authentication Service",
     property Description: RawUtf8
       read fDescription write fDescription;
     /// sub-services are started from their increasing Level
     // - allow to define dependencies between sub-services
-    // - it could be a good idea to define Level by increments of 10, so that
-    // intermediate services may be inserted easily in the rings
-    // - will disable the entry if set to 0 or negative value
+    // - it could be a good idea to define it by increments of ten (10,20,30...),
+    // so that intermediate services may be inserted easily in the rings
+    // - will disable the entry if set to 0 or any negative number
     property Level: integer
       read fLevel write fLevel;
     /// the action(s) executed to start the sub-process
     // - will be executed in-order
     // - could include %abc% place holders
-    // - could be "run:/path/to/executable" for not waiting to its ending
-    // - could be "wait:/path/to/executable" for waiting for its ending, to be
-    // terminated later on with some "Stop": [ "xxx:/path/to/executable/" ]
-    // - could be "http://127.0.0.1:8080/publish/on" for a local HTTP request
-    // - or "sleep:1000" e.g. for 1 second wait between steps
-    // - on Windows, "service:ServiceName" would call SERVICE_CONTROL_START
+    // - "start:/path/to/file" for starting and monitoring the process,
+    // terminated with "Stop": [ "stop:/path/to/file" ] command, optionally
+    // writing console output to RedirectLogFile
+    // - "exec:/path/to/file" for not waiting up to its ending
+    // - "wait:/path/to/file" for waiting for its ending with 0 exitcode
+    // - "http://127.0.0.1:8080/publish/on" for a local HTTP request
+    // - "sleep:1000" e.g. for 1 second wait between steps or after start
+    // - on Windows, "service:ServiceName" calls TServiceController.Start
+    // - if no ':' is set, ":%run%" is assumed, e.g. "start" = "start:%run%"
+    // - you can add =## to change the expected result (0 as file exitcode, 200
+    // as http status) - e.g. 'wait:%agl.base%\
     property Start: TSynAngelizeActions
       read fStart write fStart;
-    /// define how to start or restart the sub-process
-    property Starter: TSynAngelizeStarters
-      read fStarter write fStarter;
     /// the action(s) executed to stop the sub-process
     // - will be executed in-order
     // - could include %abc% place holders
-    // - could be "run:/path/to/executable" for not waiting to its ending
-    // - could be "wait:/path/to/executable" for waiting for its ending
-    // - could be "http://127.0.0.1:8080/publish/off" for a local HTTP request
-    // - on Windows, "ctrlc:/path/to/executable" send a Ctrl+C after "Start": [
-    // ... "wait:/path/to/executable" ... ]
-    // - on Windows, "wmquit:/path/to/executable" send a WM_QUIT message after
-    // "Start": [ ... "wait:/path/to/executable" ... ]
-    // - on Windows, 'terminate:/path/to/executable' call the TerminateProcess()
-    // API after "Start": [ ... "wait:/path/to/executable" ... ]
-    // - on Windows, 'service:ServiceName' would call SERVICE_CONTROL_STOP
-    // - on POSIX, "sigint:/path/to/executable" send a SIGINT message after
-    // "Start": [ ... "wait:/path/to/executable" ... ]
-    // - on POSIX, "sigterm:/path/to/executable" send a SIGTERM message after
-    // "Start": [ ... "wait:/path/to/executable" ... ]
-    // - on POSIX, "sigkill:/path/to/executable" send a SIGKILL message after
-    // "Start": [ ... "wait:/path/to/executable" ... ]
-    // - or "sleep:1000" e.g. for 1 second wait between steps
-    // - TSynAngelizeHttp could check for an URI instead, starting with 'http:'
-    // - several executables or URIs could be specified as CSV
+    // - "exec:/path/to/file" for not waiting up to its ending
+    // - "wait:/path/to/file" for waiting for its ending
+    // - "stop:/path/to/file" for stopping a process monitored from a "Start":
+    // [ "start:/path/to/file" ] previous command
+    // - "http://127.0.0.1:8080/publish/off" for a local HTTP request
+    // - "sleep:1000" e.g. for 1 second wait between steps or after stop
+    // - on Windows, "service:ServiceName" calls TServiceController.Stop
+    // - if no ':' is set, ":%run%" is assumed, e.g. "stop" = "stop:%run%"
+    // - you can add =## but the value is ignored during stopping
     property Stop: TSynAngelizeActions
       read fStop write fStop;
     // - will be executed in-order every at WatchDelaySec pace
     // - could include %abc% place holders
-    // - could be "run:/path/to/executable" for not waiting to its ending
-    // - could be "wait:/path/to/executable" for waiting for its ending, to be
-    // - could be "http://127.0.0.1:8080/publish/watchme" for a local HTTP
+    // - "wait:/path/to/file" for waiting for its ending with 0 exitcode
+    // - "http://127.0.0.1:8080/publish/watchme" for a local HTTP
     // request returning 200 on status success
-    // - on Windows, 'service:ServiceName' would call SERVICE_CONTROL_INTERROGATE
+    // - on Windows, "service:ServiceName" calls TServiceController.State
+    // - if no ':' is set, ":%run%" is assumed, e.g. "exec" = "exec:%run%"
+    // - you can add =## to change the expected result (0 as file exitcode, 200
+    // as http status)
     property Watch: TSynAngelizeActions
       read fWatch write fWatch;
     /// how many seconds should we wait between each Watch method step
     // - default is 60 seconds
     property WatchDelaySec: integer
       read fWatchDelaySec write fWatchDelaySec;
+    /// redirect "start:/path/to/executable" console output to a log file
+    property RedirectLogFile: TFileName
+      read fRedirectLogFile write fRedirectLogFile;
   end;
 
   TSynAngelizeServiceClass = class of TSynAngelizeService;
@@ -150,8 +165,8 @@ type
   TSynAngelizeSettings = class(TSynDaemonSettings)
   protected
     fFolder, fExt, fStateFile: TFileName;
-    fOptions: TSynJsonFileSettingsOptions;
-    fHttpTimeoutSec: integer;
+    fHtmlStateFileIdentifier: RawUtf8;
+    fHttpTimeoutMS: integer;
   public
     /// set the default values
     constructor Create; override;
@@ -164,18 +179,22 @@ type
     // - default is '.service'
     property Ext: TFileName
       read fExt write fExt;
-    /// how TSynAngelizeService settings files are serialized
-    property Options: TSynJsonFileSettingsOptions
-      read fOptions write fOptions;
     /// timeout in seconds for "http://....." local HTTP requests
-    // - default is 1
-    property HttpTimeoutSec: integer
-      read fHttpTimeoutSec write fHttpTimeoutSec;
+    // - default is 200
+    property HttpTimeoutMS: integer
+      read fHttpTimeoutMS write fHttpTimeoutMS;
     /// the local file used to communicate the current sub-process files
     // from running daemon to the state
     // - default is a TemporaryFileName instance
     property StateFile: TFileName
       read fStateFile write fStateFile;
+    /// if set, will generate a StateFile+'.html' content
+    // - with a HTML page with this text as description, followed by a <table>
+    // of the current services states
+    // - could be served e.g. via a local nginx server over Internet (or
+    // Intranet) to monitor the services state from anywhere in the world
+    property HtmlStateFileIdentifier: RawUtf8
+      read fHtmlStateFileIdentifier write fHtmlStateFileIdentifier;
   end;
 
   /// used to serialize the current state of the services in the executable
@@ -183,6 +202,7 @@ type
     Service: array of record
       Name: RawUtf8;
       State: TServiceState;
+      Info: RawUtf8;
     end;
   end;
 
@@ -203,6 +223,7 @@ type
     fService: array of TSynAngelizeService;
     fLevels: TIntegerDynArray;
     fLastGetServicesStateFile: RawByteString;
+    fWatchThread: TSynBackgroundThreadProcess;
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
@@ -211,12 +232,17 @@ type
     procedure StartServices;
     procedure StopServices;
     procedure StartWatching;
+    procedure WatchEverySecond(Sender: TSynBackgroundThreadProcess);
     procedure StopWatching;
     // sub-service support
     function FindService(const ServiceName: RawUtf8): PtrInt;
-    function ComputeServicesStateFile: integer;
+    function ComputeServicesStateFiles: integer;
     procedure DoExpand(aService: TSynAngelizeService; const aInput: TSynAngelizeAction;
-      out aOutput: TSynAngelizeAction);
+      out aOutput: TSynAngelizeAction); virtual;
+    function DoExpandLookup(aService: TSynAngelizeService;
+      var aID: RawUtf8): boolean; virtual;
+    procedure DoWatch(aLog: TSynLog; aService: TSynAngelizeService;
+      const aAction: TSynAngelizeAction); virtual;
   public
     /// initialize the main daemon/server redirection instance
     // - main TSynAngelizeSettings is loaded
@@ -260,13 +286,26 @@ begin
   fWatchDelaySec := 60;
 end;
 
+function TSynAngelizeService.GetStartedPID(const Executable: RawUtf8): PtrUInt;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(fStarted) do
+    if fStarted[i].Executable = Executable then
+    begin
+      result := fStarted[i].PID;
+      exit;
+    end;
+  result := 0;
+end;
+
 
 { TSynAngelizeSettings }
 
 constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
-  fHttpTimeoutSec := 1;
+  fHttpTimeoutMS := 200;
   fFolder := Executable.ProgramFilePath + 'services';
   fExt := '.service';
   fStateFile := TemporaryFileName;
@@ -283,6 +322,10 @@ begin
   fSettingsClass := aSettingsClass;
   inherited Create(TSynAngelizeSettings, Executable.ProgramFilePath,
     Executable.ProgramFilePath,  Executable.ProgramFilePath + 'log');
+  with fSettings as TSynAngelizeSettings do
+    if fHtmlStateFileIdentifier = '' then // some default text
+      FormatUtf8('% Current State',
+        [fSettings.ServiceName], fHtmlStateFileIdentifier);
 end;
 
 destructor TSynAngelize.Destroy;
@@ -295,8 +338,9 @@ end;
 // TSynDaemon command line methods
 
 const
-  AGL_CMD: array[0..1] of PAnsiChar = (
+  AGL_CMD: array[0..2] of PAnsiChar = (
     'LIST',
+    'SETTINGS',
     nil);
 
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
@@ -305,6 +349,8 @@ begin
   case IdemPPChar(P, @AGL_CMD) of
     0:
       ListServices;
+    1:
+      ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
   else
     result := false; // display syntax
   end;
@@ -313,9 +359,9 @@ end;
 function TSynAngelize.CustomCommandLineSyntax: string;
 begin
   {$ifdef OSWINDOWS}
-  result := '/list';
+  result := '/list /settings';
   {$else}
-  result := '--list';
+  result := '--list --settings';
   {$endif OSWINDOWS}
 end;
 
@@ -361,7 +407,7 @@ begin
     raise ESynAngelize.CreateUtf8(
       'Invalid StateFile=% content', [sas.StateFile]);
   end;
-  DeleteFile(sas.StateFile);
+  DeleteFile(sas.StateFile); // from now on, StateFile is meant to be valid
   // browse folder for settings files and generates fService[]
   fn := sas.Folder + '*' + sas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
@@ -370,26 +416,30 @@ begin
       if SearchRecValidFile(r) then
       begin
         s := fSettingsClass.Create;
+        s.SettingsOptions := sas.SettingsOptions; // share ini/json format
         fn := sas.Folder + r.Name;
         if s.LoadFromFile(fn) and
            (s.Name <> '') and
            (s.Start <> nil) and
-           (s.Stop <> nil) and
-           (s.Level > 0) then
-        begin
-          i := FindService(s.Name);
-          if i >= 0 then
-            raise ESynAngelize.CreateUtf8(
-              'GetServices: duplicated % name in % and %',
-              [s.Name, s.FileName, fService[i].FileName]);
-          // seems like a valid .service file
-          ObjArrayAdd(fService, s);
-          AddSortedInteger(fLevels, s.Level);
-          s := nil; // don't Free - will be owned by fService[]
-        end
+           (s.Stop <> nil) then
+          if s.Level > 0 then
+          begin
+            i := FindService(s.Name);
+            if i >= 0 then
+              raise ESynAngelize.CreateUtf8(
+                'GetServices: duplicated % name in % and %',
+                [s.Name, s.FileName, fService[i].FileName]);
+            // seems like a valid .service file
+            ObjArrayAdd(fService, s);
+            AddSortedInteger(fLevels, s.Level);
+            s := nil; // don't Free - will be owned by fService[]
+          end
+          else // s.Level <= 0
+            fSettings.LogClass.Add.Log(
+              sllDebug, 'GetServices: disabled %', [r.Name], self)
         else
-          fSettings.LogClass.Add.Log(
-            sllWarning, 'GetServices: invalid % content', [r.Name], self);
+          raise ESynAngelize.CreateUtf8(
+                  'GetServices: invalid % content', [r.Name]);
         s.Free;
       end;
     until FindNext(r) <> 0;
@@ -399,25 +449,51 @@ begin
   result := length(fService);
 end;
 
-function TSynAngelize.ComputeServicesStateFile: integer;
+function TSynAngelize.ComputeServicesStateFiles: integer;
 var
+  s: TSynAngelizeService;
   state: TSynAngelizeState;
+  sas: TSynAngelizeSettings;
   bin: RawByteString;
+  ident, html: RawUtf8;
   i: PtrInt;
 begin
   result := length(fService);
+  // compute main binary state file
   SetLength(state.Service, result);
   for i := 0 to result - 1 do
   begin
-    state.Service[i].Name := fService[i].Name;
-    state.Service[i].State := fService[i].State;
+    s := fService[i];
+    state.Service[i].Name := s.Name;
+    state.Service[i].State := s.State;
+    state.Service[i].Info := copy(s.StateMessage, 1, 80); // truncate on display
   end;
   bin := 'xxxx' + RecordSave(state, TypeInfo(TSynAngelizeState));
   PCardinal(bin)^ := _STATEMAGIC;
   if bin <> fLastGetServicesStateFile then
   begin
-    FileFromString(bin, TSynAngelizeSettings(fSettings).StateFile);
+    // current state did change: persist on disk
+    sas := fSettings as TSynAngelizeSettings;
+    FileFromString(bin, sas.StateFile);
     fLastGetServicesStateFile := bin;
+    ident := sas.HtmlStateFileIdentifier;
+    if ident <> '' then
+    begin
+      // generate human-friendly HTML state file
+      FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
+        '<body style="font-family:verdana"><h1>%</h1><hr>' +
+        '<h2>Main Service</h2><p>Change Time : %</p><p>Current State : %</p> ' +
+        '<p>Services Count : %</p><hr>' +
+        '<h2>Sub Services</h2><table><thead><tr><th>Service Name</th>' +
+        '<th>Service State</th><th>State Info</th></tr></thead><tbody>',
+        [ident, ident, NowToString, ToText(CurrentState)^, result], html);
+      for i := 0 to result - 1 do
+        with fService[i] do
+          html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
+            [html, Name, ToText(State)^, StateMessage]);
+      html := html + '</tbody></table></body></html>';
+      FileFromString(html, sas.StateFile + '.html');
+    end;
   end;
 end;
 
@@ -432,7 +508,6 @@ procedure TSynAngelize.DoExpand(aService: TSynAngelizeService;
   const aInput: TSynAngelizeAction; out aOutput: TSynAngelizeAction);
 var
   o, i, j: PtrInt;
-  p: PRttiCustomProp;
   id, v: RawUtf8;
 begin
   aOutput := aInput;
@@ -469,18 +544,14 @@ begin
       else
         begin
           // %agl.toto% is the "toto": property value in the .service settings
-          if aService = nil then
-            p := nil
-          else
-            p := Rtti.RegisterClass(aService).Props.Find(id);
-          if p = nil then
+          if not DoExpandLookup(aService, id) then
             raise ESynAngelize.CreateUtf8(
               'Expand: unknown %agl.%%', ['%', id, '%']);
           if fExpandLevel = 50 then
             raise ESynAngelize.CreateUtf8(
               'Expand infinite recursion for agl.%', [id]);
           inc(fExpandLevel); // to detect and avoid stack overflow error
-          DoExpand(aService, p.Prop.GetAsString(aService), TSynAngelizeAction(v));
+          DoExpand(aService, id, TSynAngelizeAction(v));
           dec(fExpandLevel);
         end;
       end;
@@ -500,19 +571,213 @@ begin
   until false;
 end;
 
-procedure TSynAngelize.Start;
+function TSynAngelize.DoExpandLookup(aService: TSynAngelizeService;
+  var aID: RawUtf8): boolean;
+var
+  p: PRttiCustomProp;
 begin
-  // should raise ESynAngelize on any issue, or let background work begin
-  if fService = nil then
-    LoadServicesFromSettingsFolder;
-  StartServices;
-  StartWatching;
+  result := false;
+  if aService = nil then
+    exit;
+  p := Rtti.RegisterClass(aService).Props.Find(aID);
+  if p = nil then
+    exit;
+  aID := p.Prop.GetValueText(aService);
+  result := true;
 end;
 
-procedure TSynAngelize.Stop;
+type
+  TAglContext = (
+    doStart,
+    doStop,
+    doWatch
+  );
+  TAglAction = (
+    aaExec,
+    aaWait,
+    aaStart,
+    aaStop,
+    aaHttp,
+    aaSleep
+    {$ifdef OSWINDOWS} ,
+    aaService
+    {$endif OSWINDOWS}
+    );
+  TAglActions = set of TAglAction;
+  TAglActionDynArray = array of TAglAction;
+
+function ToText(c: TAglContext): PShortString; overload;
 begin
-  StopWatching;
-  StopServices;
+  result := GetEnumName(TypeInfo(TAglContext), ord(c));
+end;
+
+function ToText(a: TAglAction): RawUtf8; overload;
+begin
+  result := GetEnumNameTrimed(TypeInfo(TAglAction), ord(a));
+end;
+
+const
+  ALLOWED_DEFAULT = [aaExec, aaWait, aaHttp, aaSleep]
+    {$ifdef OSWINDOWS} + [aaService] {$endif};
+  ALLOWED_ACTIONS: array[TAglContext] of TAglActions = (
+    ALLOWED_DEFAULT  + [aaStart], // doStart
+    ALLOWED_DEFAULT  + [aaStop],  // doStop
+    ALLOWED_DEFAULT               // doWatch
+  );
+
+function Parse(const a: TSynAngelizeAction; ctxt: TAglContext;
+  out param, text: RawUtf8): TAglActionDynArray;
+var
+  cmd, one: RawUtf8;
+  p: PUtf8Char;
+  i, n: PtrInt;
+begin
+  result := nil;
+  Split(a, ':', cmd, param); // may leave param='' e.g. for "start" -> %run%
+  n := 0;
+  p := pointer(cmd);
+  while p <> nil do
+  begin
+    GetNextItem(p, ',', one);
+    i := GetEnumNameValueTrimmed(TypeInfo(TAglAction), pointer(one), length(one));
+    if (i < 0) or
+       not (TAglAction(i) in ALLOWED_ACTIONS[ctxt]) then
+      continue; // just ignore unknown or OS-unsupported 'action:'
+    if n <> 0 then
+      text := text{%H-} + ',';
+    text := text + ToText(TAglAction(i));
+    SetLength(result, n + 1);
+    result[n] := TAglAction(i);
+    inc(n);
+  end;
+end;
+
+function Exec(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
+  Action: TAglAction; Ctxt: TAglContext; const Param: RawUtf8): boolean;
+var
+  ms: integer;
+  p, st: RawUtf8;
+  fn: TFileName;
+  status, expectedstatus: integer;
+  sas: TSynAngelizeSettings;
+  {$ifdef OSWINDOWS}
+  sc: TServiceController;
+  {$endif OSWINDOWS}
+
+  procedure CheckStatus;
+  begin
+    case Ctxt of
+      doStart:
+        if status <> expectedstatus then
+          raise ESynAngelize.CreateUtf8('DoStart % % returned % but expected %',
+            [ToText(Action), p, status, expectedstatus]);
+      doWatch:
+        if status <> expectedstatus then
+        begin
+          Service.fState := ssFailed;
+          if Service.StateMessage <> '' then
+            Service.fStateMessage := Service.StateMessage + ', ';
+          Service.fStateMessage := FormatUtf8('%% returned % but expected %',
+            [Service.StateMessage, ToText(Action), status, expectedstatus]);
+        end;
+    end;
+  end;
+
+begin
+  expectedstatus := 0; // e.g. executable file exitcode = 0 as success
+  if Split(Param, '=', p, st) then
+    ToInteger(st, expectedstatus);
+  case Action of
+    aaExec,
+    aaWait,
+    aaStart,
+    aaStop:
+      fn := NormalizeFileName(Utf8ToString(p));
+    aaHttp:
+      if expectedstatus = 0 then // not overriden by ToInteger()
+        expectedstatus := HTTP_SUCCESS;
+  end;
+  if p = '' then
+    p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
+  sas := Sender.Settings as TSynAngelizeSettings;
+  result := false;
+  Status := 0;
+  case Action of
+    aaExec,
+    aaWait:
+      begin
+        status := RunCommand(fn, Action = aaWait);
+        CheckStatus;
+      end;
+    aaStart:
+      begin
+
+      end;
+    aaStop:
+      begin
+
+      end;
+    aaHttp:
+      begin
+        p := 'http:' + p; // was trimmed by Parse()=aaHttp
+        HttpGet(p, '', nil, false, @status, sas.HttpTimeoutMS);
+        CheckStatus;
+      end;
+    aaSleep:
+      if ToInteger(Param, ms) then
+        Sleep(ms)
+      else
+        exit;
+    {$ifdef OSWINDOWS}
+    aaService:
+      begin
+        if p = '' then
+          p := Service.Service;
+        sc := TServiceController.CreateOpenService('', '', p);
+        try
+          case Ctxt of
+            doStart:
+              sc.Start([]);
+            doStop:
+              sc.Stop;
+            doWatch:
+              Service.fState := sc.State;
+          end;
+        finally
+          sc.Free;
+        end;
+      end;
+    {$endif OSWINDOWS}
+  else
+    raise ESynAngelize.CreateUtf8('Unexpected %', [ord(Action)]); // paranoid
+  end;
+  result := true;
+end;
+
+procedure DoOne(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
+  Ctxt: TAglContext; const Action: TSynAngelizeAction);
+var
+  a: PtrInt;
+  aa: TAglActionDynArray;
+  param, text: RawUtf8;
+begin
+  aa := Parse(Action, Ctxt, param, text);
+  param := Sender.Expand(Service, param);
+  Log.Log(sllDebug, '% %: % as [%] %',
+    [ToText(Ctxt)^, Service.Name, Action, text, param], Sender);
+  for a := 0 to high(aa) do
+    if Exec(Sender, Log, Service, aa[a], Ctxt, param) then
+      break;
+end;
+
+procedure TSynAngelize.DoWatch(aLog: TSynLog;
+  aService: TSynAngelizeService; const aAction: TSynAngelizeAction);
+begin
+  aService.fState := ssErrorRetrievingState;
+  aService.fStateMessage := '';
+  DoOne(self, aLog, aService, TAglContext.doWatch, aAction);
+  aLog.Log(sllTrace, 'DoWatch % % = % [%]', [aService.Name,
+    aAction, ToText(aService.State)^, aService.StateMessage], self);
 end;
 
 function TSynAngelize.LoadServicesState(out state: TSynAngelizeState): boolean;
@@ -538,7 +803,8 @@ const
     ccGreen,      // Resuming
     ccBrown,      // Pausing
     ccWhite,      // Paused
-    ccMagenta);   // ErrorRetrievingState
+    ccMagenta,    // Failed
+    ccYellow);    // ErrorRetrievingState
 
 procedure TSynAngelize.ListServices;
 var
@@ -553,30 +819,135 @@ begin
           ({%H-}state.Service <> nil) then
     for i := 0 to high(state.Service) do
       with state.Service[i] do
-        ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State])
+      begin
+        ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State]);
+        if Info <> '' then
+          ConsoleWrite('  %', [Info], ccLightGray);
+      end
   else
-    ConsoleWrite('Unknown service state', ccMagenta)
+    ConsoleWrite('Unknown service state', ccMagenta);
+  TextColor(ccLightGray);
 end;
 
 procedure TSynAngelize.StartServices;
+var
+  l, i, a: PtrInt;
+  s: TSynAngelizeService;
+  log: ISynLog;
 begin
-
+  log := TSynLog.Enter(self, 'StartServices');
+  // start sub-services following their Level order
+  for l := 0 to high(fLevels) do
+    for i := 0 to high(fService) do
+    begin
+      s := fService[i];
+      if s.Level = fLevels[l] then
+      begin
+        for a := 0 to high(s.fStart) do
+          // any exception on DoOne() should break the starting
+          DoOne(self, log.Instance, s, TAglContext.doStart, s.fStart[a]);
+        if s.Watch <> nil then
+          s.fNextWatch := GetTickCount64 + s.WatchDelaySec * 1000;
+      end;
+    end;
+  ComputeServicesStateFiles; // save initial state before any watchdog
 end;
 
 procedure TSynAngelize.StopServices;
+var
+  l, i, a: PtrInt;
+  s: TSynAngelizeService;
+  sf: TFileName;
+  log: ISynLog;
 begin
-
-  DeleteFile(TSynAngelizeSettings(fSettings).StateFile);
+  log := TSynLog.Enter(self, 'StopServices');
+  // stop sub-services following their reverse Level order
+  for l := high(fLevels) downto 0 do
+    for i := 0 to high(fService) do
+    begin
+      s := fService[i];
+      if s.Level = fLevels[l] then
+        for a := 0 to high(s.fStop) do
+        try
+          DoOne(self, log.Instance, s, TAglContext.doStop, s.fStop[a]);
+        except
+          on E: Exception do
+            // any exception should continue the stopping
+            log.Log(sllError, 'StopServices: DoStop(%,%) failed as %',
+              [s.Name, s.fStop[a], E.ClassType], self);
+        end;
+    end;
+  // delete state files
+  sf := TSynAngelizeSettings(fSettings).StateFile;
+  if sf <> '' then
+  begin
+    log.Log(sllTrace, 'StopServices: Delete % and %.html', [sf, sf], self);
+    DeleteFile(sf);
+    DeleteFile(sf + '.html');
+  end;
 end;
 
 procedure TSynAngelize.StartWatching;
 begin
+  fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
+    WatchEverySecond, 1000, nil, TSynLog.Family.OnThreadEnded);
+end;
 
+procedure TSynAngelize.WatchEverySecond(Sender: TSynBackgroundThreadProcess);
+var
+  i, a: PtrInt;
+  tix: Int64;
+  s: TSynAngelizeService;
+  log: ISynLog;
+begin
+  tix := GetTickCount64;
+  for i := 0 to high(fService) do
+  begin
+    s := fService[i];
+    if (s.fNextWatch = 0) or
+       (tix < s.fNextWatch) then
+      continue;
+    if log = nil then
+      log := TSynLog.Enter(self, 'WatchEverySecond');
+    for a := 0 to high(s.fWatch) do
+      try
+        DoWatch(log.Instance, s, s.fWatch[a]);
+      except
+        on E: Exception do // any exception should continue the watching
+          log.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
+            [s.Name, s.fWatch[a], E.ClassType], self);
+      end;
+    tix := GetTickCount64; // may have changed during DoWatch() progress
+    s.fNextWatch := tix + s.WatchDelaySec * 1000;
+  end;
+  if log <> nil then
+    ComputeServicesStateFiles;
 end;
 
 procedure TSynAngelize.StopWatching;
 begin
+  try
+    with TSynLog.Enter(self, 'StopWatching') do
+      FreeAndNil(fWatchThread);
+  except // should always continue, even or weird issue
+  end;
+end;
 
+procedure TSynAngelize.Start;
+begin
+  // should raise ESynAngelize on any issue, or let background work begin
+  if fService = nil then
+    LoadServicesFromSettingsFolder;
+  if fService = nil then
+    exit; // nothing to start
+  StartServices;
+  StartWatching;
+end;
+
+procedure TSynAngelize.Stop;
+begin
+  StopWatching;
+  StopServices;
 end;
 
 
