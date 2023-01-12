@@ -210,6 +210,8 @@ type
     procedure ListServices;
     procedure StartServices;
     procedure StopServices;
+    procedure StartWatching;
+    procedure StopWatching;
     // sub-service support
     function FindService(const ServiceName: RawUtf8): PtrInt;
     function ComputeServicesStateFile: integer;
@@ -222,7 +224,10 @@ type
       const aSectionName: RawUtf8 = 'Main'; aLog: TSynLogClass = nil); reintroduce;
     /// finalize the stored information
     destructor Destroy; override;
-    /// read and parse all *.service definitions from SettingsFolder
+    /// read and parse all *.service definitions from Settings.Folder
+    // - as called by Start overriden method
+    // - may be called before head to validate the execution settings
+    // - raise ESynAngelize on invalid settings or dubious StateFile
     function LoadServicesFromSettingsFolder: integer;
     /// compute a path/action, replacing all %abc% place holders with their values
     // - %agl.base% is the location of the agl executable
@@ -240,7 +245,6 @@ type
     // - should do nothing if the daemon was already stopped
     procedure Stop; override;
   end;
-
 
 
 implementation
@@ -285,7 +289,6 @@ destructor TSynAngelize.Destroy;
 begin
   inherited Destroy;
   ObjArrayClear(fService);
-  DeleteFile(TSynAngelizeSettings(fSettings).StateFile);
   fSettings.Free;
 end;
 
@@ -347,8 +350,8 @@ begin
   if (bin = '') or
      (PCardinal(bin)^ <> _STATEMAGIC) then
   begin
-    // this existing file is clearly invalid
-    sas.StateFile := '';
+    // this existing file is clearly invalid: store a new safe one in settings
+    sas.StateFile := TemporaryFileName;
     // avoid deleting of a non valid file (may be used by malicious tools)
     raise ESynAngelize.CreateUtf8(
       'Invalid StateFile=% content', [sas.StateFile]);
@@ -493,13 +496,16 @@ end;
 
 procedure TSynAngelize.Start;
 begin
+  // should raise ESynAngelize on any issue, or let background work begin
   if fService = nil then
     LoadServicesFromSettingsFolder;
   StartServices;
+  StartWatching;
 end;
 
 procedure TSynAngelize.Stop;
 begin
+  StopWatching;
   StopServices;
 end;
 
@@ -538,7 +544,7 @@ begin
   if ss <> ssRunning then
     ConsoleWrite('Main service state is %', [ToText(ss)^], ccMagenta)
   else if LoadServicesState(state) and
-          (state.Service <> nil) then
+          ({%H-}state.Service <> nil) then
     for i := 0 to high(state.Service) do
       with state.Service[i] do
         ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State])
@@ -552,6 +558,17 @@ begin
 end;
 
 procedure TSynAngelize.StopServices;
+begin
+
+  DeleteFile(TSynAngelizeSettings(fSettings).StateFile);
+end;
+
+procedure TSynAngelize.StartWatching;
+begin
+
+end;
+
+procedure TSynAngelize.StopWatching;
 begin
 
 end;
