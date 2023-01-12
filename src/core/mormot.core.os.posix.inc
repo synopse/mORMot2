@@ -2918,7 +2918,8 @@ begin
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawByteString;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal;
+  setresult: boolean): RawByteString;
 var
   // note: FPC popen(file) allows access to the pid whereas clib popen() won't
   f: file;
@@ -2935,6 +2936,8 @@ begin
     exit;
   fd := TFileRec(f).Handle;
   pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
+  if Assigned(onoutput) then
+    onoutput('', pid);
   wait := 200;
   if waitfordelayms = INFINITE then
     endtix := 0
@@ -2951,17 +2954,18 @@ begin
       n := fpread(fd, tmp, SizeOf(tmp));
       if n <= 0 then
         break; // pipe closed = execution finished
-      if result = '' then
-        FastSetString(RawUtf8(result), @tmp, n) // assume CP_UTF8
-      else
-      begin
-        SetLength(result, l + n); // append
-        MoveFast(tmp, PByteArray(result)[l], n);
-      end;
+      if setresult then
+        if result = '' then
+          FastSetString(RawUtf8(result), @tmp, n) // assume CP_UTF8
+        else
+        begin
+          SetLength(result, l + n); // append
+          MoveFast(tmp, PByteArray(result)[l], n);
+        end;
       inc(l, n);
       if Assigned(onoutput) then
       begin
-        FastSetString(u, @tmp, n); // assume console output is UTF-8 on POSIX
+        FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX
         if onoutput(u, pid) then
           endtix := 1; // force kill() on abort
       end;

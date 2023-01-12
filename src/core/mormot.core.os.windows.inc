@@ -4425,6 +4425,8 @@ begin
   begin
     if processhandle <> nil then
       processhandle^ := processinfo.hProcess;
+    if Assigned(onoutput) then
+      onoutput('', processinfo.dwProcessId);
     if rd <> 0 then
     begin
       // see https://stackoverflow.com/a/25725197/458259
@@ -4500,12 +4502,18 @@ begin
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal): RawByteString;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal;
+  setresult: boolean): RawByteString;
 var
   res: integer;
+  redir: PRawByteString;
 begin
   result := '';
-  res := RunCommand(cmd, true, '', false, waitfordelayms, nil, @result, onoutput);
+  if setresult then
+    redir := @result
+  else
+    redir := nil;
+  res := RunCommand(cmd, true, '', false, waitfordelayms, nil, redir, onoutput);
   if exitcode <> nil then
     exitcode^ := res;
 end;

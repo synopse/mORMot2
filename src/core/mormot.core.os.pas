@@ -4718,6 +4718,7 @@ type
   // use the system code page or even UTF-16 binary with BOM (!) - so you
   // may consider using AnsiToUtf8() with the proper code page
   // - should return true to stop the execution, or false to continue
+  // - is called once when the process is started, with text='', ignoring its return
   // - on idle state (each 200ms), is called with text='' to allow execution abort
   // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
   TOnRedirect = function(const text: RawByteString; pid: cardinal): boolean of object;
@@ -4749,8 +4750,8 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
-  const onoutput: TOnRedirect = nil;
-  waitfordelayms: cardinal = INFINITE): RawByteString;
+  const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
+  setresult: boolean = true): RawByteString;
 
 
 
