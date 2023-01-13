@@ -60,9 +60,10 @@ type
     fSender: TSynAngelize;
     fService: TSynAngelizeService;
     fCmd, fRedirectFileName: TFileName;
-    fShutdown: boolean;
+    fAbortRequested: boolean;
     fRedirect: TFileStreamEx;
     fRedirectSize: Int64;
+    fRetryEvent: TSynEvent;
     procedure Execute; override;
     procedure PerformRotation;
     function OnRedirect(const text: RawByteString; pid: cardinal): boolean;
@@ -73,6 +74,10 @@ type
       aRedirect: TFileStreamEx); reintroduce;
     /// finalize the execution
     destructor Destroy; override;
+    /// abort this process (either at shutdown, or after "stop")
+    procedure Abort;
+    /// let Execute retry to start the process now
+    procedure RetryNow;
   end;
 
   /// one sub-process definition as recognized by TSynAngelize
@@ -88,12 +93,13 @@ type
     fStart, fStop, fWatch: TSynAngelizeActions;
     fStateMessage: RawUtf8;
     fState: TServiceState;
-    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec: integer;
+    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
     fRedirectLogFile: TFileName;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
     fStarted: RawUtf8;
     fRunner: TSynAngelizeRunner;
     fRunnerExitCode: integer;
+    fAbortExitCodes: TIntegerDynArray;
     fNextWatch: Int64;
     procedure SetState(NewState: TServiceState;
       const Fmt: RawUtf8; const Args: array of const);
@@ -176,6 +182,19 @@ type
     // - you may set 0 for no gracefull stop, but direct TerminateProcess/SIGKILL
     property StopRunAbortTimeoutSec: integer
       read fStopRunAbortTimeoutSec write fStopRunAbortTimeoutSec;
+    /// how many seconds an exited process is considered "stable"
+    // - similar to NSSM, by default it will try to restart the executable if
+    // the application died without a "stop" signal, with increasing pauses
+    // - this value is the number of seconds after which a process could be 
+    // retried with no pausing - default is 60, i.e. one minute
+    // - setting 0 to this property would disable the whole restart algorithm
+    // - call "agl /retry" to restart/retry all aborted or paused service(s)
+    property RetryStableSec: integer
+      read fRetryStableSec write fRetryStableSec;
+    /// if the process stopped with one of this exit codes, won't restart
+    // - call "agl /retry" to restart/retry all aborted or paused service(s)
+    property AbortExitCodes: TIntegerDynArray
+      read fAbortExitCodes write fAbortExitCodes;
     // - will be executed in-order every at WatchDelaySec pace
     // - could include %abc% place holders
     // - "exec:/path/to/file" for not waiting up to its ending
@@ -204,7 +223,7 @@ type
     // - default 0 disable the whole rotation process
     property RedirectLogRotateFiles: integer
       read fRedirectLogRotateFiles write fRedirectLogRotateFiles;
-    /// after how many bytes in RedirectLogFile a new file should be created
+    /// after how many bytes in RedirectLogFile rotation should occur
     // - default is 100 MB
     property RedirectLogRotateBytes: integer
       read fRedirectLogRotateBytes write fRedirectLogRotateBytes;
@@ -288,6 +307,7 @@ type
     function LoadServicesState(out state: TSynAngelizeState): boolean;
     procedure ListServices;
     procedure NssmInstall;
+    procedure RetryServices;
     procedure StartServices;
     procedure StopServices;
     procedure StartWatching;
@@ -345,43 +365,139 @@ begin
   fSender := aSender;
   fLog := aLog.LogClass;
   fService := aService;
+  fService.fRunnerExitCode := -777;
+  fService.fRunner := self;
   fCmd := aCmd;
   fRedirect := aRedirect;
   fRedirectFileName := fRedirect.FileName;
-  aService.fRunnerExitCode := -777;
+  fRetryEvent := TSynEvent.Create;
   FreeOnTerminate := true;
   inherited Create({suspended=}false);
 end;
 
 destructor TSynAngelizeRunner.Destroy;
 begin
+  Abort; // release fRetryEvent.WaitFor
   inherited Destroy;
   FreeAndNil(fRedirect);
+  FreeAndNil(fRetryEvent);
+end;
+
+procedure TSynAngelizeRunner.Abort;
+begin
+  if self = nil then
+    exit;
+  fAbortRequested := true;
+  fRetryEvent.SetEvent;
+end;
+
+procedure TSynAngelizeRunner.RetryNow;
+begin
+  if self <> nil then
+    fRetryEvent.SetEvent; // unlock WaitFor(pause) below
 end;
 
 procedure TSynAngelizeRunner.Execute;
 var
   log: TSynLog;
-  sn: RawUtf8;
+  min, pause, err: integer;
+  tix, start, lastunstable: Int64;
+  // some values are copied from fService to avoid most unexpected GPF
+  timeout: integer;     // RetryStableSec
+  sn: RawUtf8;          // Name
+  se: TIntegerDynArray; // AbortExitCodes
+
+  procedure NotifyException(E: Exception);
+  begin
+    log.Log(sllWarning, 'Execute % raised %', [sn, E.ClassType], self);
+    fService.SetState(ssFailed, '% [%]', [E.ClassType, E.Message]);
+  end;
+
 begin
   log := fLog.Add;
+  timeout := fService.RetryStableSec * 1000;
   sn := fService.Name;
+  se := fService.AbortExitCodes;
   SetCurrentThreadName('run %', [sn]);
   try
-    fService.SetState(ssStarting, '%', [fCmd]);
-    // run the command in this thread, calling OnRedirect during execution
-    RunRedirect(fCmd, @fService.fRunnerExitCode, OnRedirect, INFINITE, false);
-    // if we reached here, the command was finished
-    fService.SetState(ssStopped, 'ExitCode=%', [fService.fRunnerExitCode]);
+    lastunstable := 0;
+    repeat
+      err := -7777777;
+      fService.SetState(ssStarting, '%', [fCmd]);
+      start := GetTickCount64;
+      try
+        log.Log(sllTrace, 'Execute %: %', [sn, fCmd], self);
+        // run the command in this thread, calling OnRedirect during execution
+        RunRedirect(fCmd, @err, OnRedirect, INFINITE, false);
+        // if we reached here, the command was properly finished (or stopped)
+        fService.SetState(ssStopped, 'ExitCode=%', [err]);
+      except
+        on E: Exception do
+          NotifyException(E);
+      end;
+      if Terminated or
+         (fService = nil) then
+        break;
+      fService.fRunnerExitCode := err;
+      if fAbortRequested then
+        break;
+      fService.fState := ssPaused; // notify waiting after error (keep message)
+      if (timeout = 0) or
+         IntegerScanExists(pointer(se), length(se), err) then
+      begin
+        // RetryStableSec=0 or AbortExitCodes[] match = no automatic retry
+        log.Log(sllTrace, 'Execute %: pause forever after ExitCode=%',
+          [sn, err], self);
+        fRetryEvent.WaitForEver; // will wait for abort or /retry
+      end
+      else
+      begin
+        // restart the service
+        tix := GetTickCount64;
+        if tix - start < timeout then
+        begin
+          // it did not last RetryStableSec: seems not stable - pause and retry
+          pause := 1;
+          if lastunstable = 0 then
+            lastunstable := tix
+          else
+          begin
+            min := (tix - lastunstable) div 60000;
+            if min > 60 then  // retry every sec until 1 min
+              if min < 5 then
+                pause := 15   // retry every 15 sec until 5 min
+              else if min > 10 then
+                pause := 30   // retry every 30 sec until 10 min
+              else if min > 30 then
+                pause := 60   // retry every min until 30 min
+              else if min > 60 then
+                pause := 120  // retry every 2 min until 1 hour
+              else
+                pause := 240; // retry every 4 min
+          end;
+          pause := pause * 1000 + integer(Random32(pause) * 100);
+          log.Log(sllTrace, 'Execute %: pause % after ExitCode=%',
+            [sn, MilliSecToString(pause), err], self);
+          fRetryEvent.WaitFor(pause);
+          // add a small random threshold to leverage several services restart
+        end
+        else
+        begin
+          // stable for enough time: retry now, and reset increasing pauses
+          lastunstable := 0;
+          log.Log(sllTrace, 'Execute %: retry after ExitCode=%', [sn, err], self);
+        end;
+      end;
+    until fAbortRequested or
+          Terminated;
+    log.Log(sllTrace, 'Execute %: finished', [sn], self);
   except
     on E: Exception do
-    begin
-      log.Log(sllWarning, 'Execute % raised %', [sn, E.ClassType], self);
-      fService.SetState(ssFailed, '% [%]', [E.ClassType, E.Message]);
-    end;
+      NotifyException(E);
   end;
-  fService.fRunner := nil; // notify ended
-  log.NotifyThreadEnded; // as needed by TSynLog
+  if fService <> nil then
+    fService.fRunner := nil; // notify ended
+  log.NotifyThreadEnded;   // as needed by TSynLog
 end;
 
 procedure TSynAngelizeRunner.PerformRotation;
@@ -413,9 +529,9 @@ function TSynAngelizeRunner.OnRedirect(
 var
   i, textstart, textlen: PtrInt;
 begin
-  result := fShutdown;
+  result := fAbortRequested or Terminated;
   if result then
-    // a "stop:executable" command was executed -> let RunRedirect quit
+    // from "stop:executable" -> return true to quit RunRedirect
     exit;
   if text = '' then
   begin
@@ -472,6 +588,7 @@ begin
   fWatchDelaySec := 60;
   fStopRunAbortTimeoutSec := 10;
   fRedirectLogRotateBytes := 100 shl 20; // 100MB
+  fRetryStableSec := 60;
 end;
 
 destructor TSynAngelizeService.Destroy;
@@ -480,22 +597,23 @@ begin
   if fRunner <> nil then
   begin
     fRunner.fService := nil;
-    fRunner.fShutdown := true;
     fRunner.Terminate;
+    fRunner.Abort;
   end;
 end;
 
 procedure TSynAngelizeService.SetState(NewState: TServiceState;
   const Fmt: RawUtf8; const Args: array of const);
 begin
-  try
-    fState := NewState;
-    if fStateMessage <> '' then
-      fStateMessage := fStateMessage + ', ';
-    fStateMessage := fStateMessage + FormatUtf8(Fmt, Args);
-  except
-    // this is safe to call this method in any context
-  end;
+  if self <> nil then
+    try
+      fState := NewState;
+      if fStateMessage <> '' then
+        fStateMessage := fStateMessage + ', ';
+      fStateMessage := fStateMessage + FormatUtf8(Fmt, Args);
+    except
+      // so that it is safe to call this method in any context
+    end;
 end;
 
 
@@ -539,10 +657,11 @@ end;
 // TSynDaemon command line methods
 
 const
-  AGL_CMD: array[0..3] of PAnsiChar = (
+  AGL_CMD: array[0..4] of PAnsiChar = (
     'LIST',
     'SETTINGS',
     'NSSM',
+    'RETRY',
     nil);
 
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
@@ -555,6 +674,8 @@ begin
       ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
     2:
       NssmInstall;
+    3:
+      RetryServices;
   else
     result := false; // display syntax
   end;
@@ -563,9 +684,9 @@ end;
 function TSynAngelize.CustomCommandLineSyntax: string;
 begin
   {$ifdef OSWINDOWS}
-  result := '/list /settings /nssm';
+  result := '/list /settings /nssm /retry';
   {$else}
-  result := '--list --settings --nssm';
+  result := '--list --settings --nssm --retry';
   {$endif OSWINDOWS}
 end;
 
@@ -917,7 +1038,7 @@ begin
     aaExec,
     aaWait:
       begin
-        status := RunCommand(fn, Action = aaWait);
+        status := RunCommand(fn{%H-}, Action = aaWait);
         CheckStatus;
       end;
     aaStart:
@@ -939,8 +1060,7 @@ begin
           end
           else
             ls := nil;
-          Service.fRunner := TSynAngelizeRunner.Create(
-            Sender, Log, Service, fn, ls);
+          TSynAngelizeRunner.Create(Sender, Log, Service, fn, ls);
           Service.fStarted := p;
         end
         else
@@ -955,7 +1075,7 @@ begin
         begin
           sec := Service.StopRunAbortTimeoutSec;
           RunAbortTimeoutSecs := sec;
-          Service.fRunner.fShutdown := true; // set "stop" flag for OnRedirect()
+          Service.fRunner.Abort; // set "stop" flag for OnRedirect()
           Service.SetState(ssStopping, 'TimeOut = % sec', [sec]);
           if sec <= 0 then
             sec := 1 // wait at least one second for TerminateProcess/SIGKILL
@@ -1152,6 +1272,20 @@ begin
   finally
     new.Free;
   end;
+end;
+
+procedure TSynAngelize.RetryServices;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(fService) do
+    with fService[i] do
+      if (fRunner <> nil) and
+         (State = ssPaused) then
+      begin
+        ConsoleWrite('Retry %', [Name]);
+        fRunner.RetryNow;
+      end;
 end;
 
 procedure TSynAngelize.StartServices;
