@@ -808,6 +808,10 @@ procedure UnicodeBufferToWinAnsi(source: PWideChar; out Dest: WinAnsiString);
 /// convert an Unicode buffer into a generic VCL string
 function UnicodeBufferToString(source: PWideChar): string;
 
+/// convert an Unicode buffer into a UTF-8 string
+function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
 {$ifdef HASVARUSTRING}
 
 /// convert a Delphi 2009+ or FPC Unicode string into our UTF-8 string
@@ -3966,6 +3970,11 @@ end;
 function UnicodeBufferToString(source: PWideChar): string;
 begin
   result := RawUnicodeToString(source, StrLenW(source));
+end;
+
+function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
+begin
+  RawUnicodeToUtf8(source, StrLenW(source), result);
 end;
 
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
