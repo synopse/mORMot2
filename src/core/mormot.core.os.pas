@@ -2774,7 +2774,8 @@ type
     // - Mode is typically fmCreate / fmOpenReadDenyNone
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// the file name assigned to this class constructor
-    property FileName : TFileName read fFilename;
+    property FileName : TFileName
+      read fFilename;
   end;
 
 

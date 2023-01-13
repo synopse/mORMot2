@@ -26,5 +26,7 @@ Daemon (e.g. Windows Service) Stand-Alone Background Executable Support
 
 ### mormot.app.agl
 
-Daemon (e.g. Windows Service) Stand-Alone Background Executable Support
-- `TSynAngelize` App-As-Service Launcher
+Launch, Watch and Kill Services or Executables from a main Service Instance
+- `TSynAngelizeService` Sub-Service Settings and Process
+- `TSynAngelize` Main Service Launcher and Watcher
+
