@@ -2454,7 +2454,7 @@ type
     procedure SaveIfNeeded; virtual;
     /// optional persistence file name, as set by LoadFromFile()
     property FileName: TFileName
-      read fFileName;
+      read fFileName write fFileName;
     /// allow to customize the storing process
     property SettingsOptions: TSynJsonFileSettingsOptions
       read fSettingsOptions write fSettingsOptions;

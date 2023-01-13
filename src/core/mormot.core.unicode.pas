@@ -1123,6 +1123,11 @@ function PropNameValid(P: PUtf8Char): boolean;
 // the same way than PropNameValid() which refuses digits as pascal convention
 function PropNamesValid(const Values: array of RawUtf8): boolean;
 
+/// try to generate a PropNameValid() output from an incoming text
+// - will trim all spaces, and replace most special chars by '_'
+// - if it is not PropNameValid() after those replacements, will return fallback
+function PropNameSanitize(const text, fallback: RawUtf8): RawUtf8;
+
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
@@ -4605,6 +4610,21 @@ begin
       if not (tcIdentifier in tab[Values[i][j]]) then
         exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z']
   result := true;
+end;
+
+function PropNameSanitize(const text, fallback: RawUtf8): RawUtf8;
+var
+  i: PtrInt;
+begin
+  result := text;
+  for i := length(result) downto 1 do
+    if result[i] in [#0 .. ' ', '#', '"', '''', '*'] then
+      delete(result, i, 1);
+  for i := 1 to length(result) do
+    if result[i] in ['[', ']', '/', '\', '&', '@', '+', '-', '.'] then
+      result[i] := '_';
+  if not PropNameValid(pointer(result)) then
+    result := fallback; // it was not good enough
 end;
 
 function IdemPropName(const P1, P2: ShortString): boolean;

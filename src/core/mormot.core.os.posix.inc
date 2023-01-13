@@ -2979,7 +2979,7 @@ begin
       // abort process execution after timeout or onoutput()=true
       if RunAbortTimeoutSecs > 0 then
       begin
-        // try gracefull termination
+        // try gracefull death
         if fpkill(pid, SIGTERM) = 0 then
         begin
           endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
