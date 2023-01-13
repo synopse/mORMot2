@@ -649,10 +649,9 @@ begin
     if p^ = '-' then
       // allow e.g. --fork switch (idem to /f -f /fork -fork)
       inc(p);
+    if CustomParseCmd(p) then
+      exit; // command has been identified and processed in overriden method
     cmd := ParseCmd(p);
-    if cmd = cNone then
-      if CustomParseCmd(p) then
-        exit; // command has been identified and processed in overriden method
   end;
   Command(cmd, aAutoStart, param);
 end;
