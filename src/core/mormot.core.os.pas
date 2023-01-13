@@ -4754,6 +4754,11 @@ function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
   setresult: boolean = true): RawByteString;
 
+var
+  /// how many seconds we should wait for gracefull termination of a process
+  // in RunRedirect() - or RunCommand() on Windows
+  RunAbortTimeoutSecs: integer = 5;
+
 
 
 implementation

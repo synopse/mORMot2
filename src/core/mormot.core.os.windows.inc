@@ -4470,11 +4470,24 @@ begin
             ((endtix <> 0) and
              (GetTickCount64 > endtix));
       if GetExitCodeProcess(processinfo.hProcess, exitcode) then
-        result := exitcode       // waited for process to end -> return code
+        result := exitcode // process ended from natural death -> return code
       else
-      begin // e.g. STILL_ACTIVE if aborted by onouput()=false above
-        result := -GetLastError; // was not able to retrieve exit code
-        TerminateProcess(processinfo.hProcess, result); // = SIGKILL on POSIX
+      begin
+        result := -GetLastError; // not able to retrieve exit code
+        // e.g. -ERROR_STILL_ACTIVE if aborted by onoutput()=true above
+        if (RunAbortTimeoutSecs <= 0) or
+           // try Ctrl+C
+           (not CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) or
+           // try WMQUIT
+           (not QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) then
+            // no chance: switch to criminal mode
+            TerminateProcess(processinfo.hProcess, result)
+        else
+          // gracefully ended -> try to return exit code
+          if GetExitCodeProcess(processinfo.hProcess, exitcode) then
+            result := exitcode
+          else
+            result := -GetLastError; // not able to retrieve exit code
       end;
     end
     else if waitfor then

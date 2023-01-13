@@ -2924,7 +2924,7 @@ var
   // note: FPC popen(file) allows access to the pid whereas clib popen() won't
   f: file;
   fd: THandle;
-  pid, res: cint;
+  pid, res, wr: cint;
   u: RawUtf8;
   n, l: TSsize;
   wait: cardinal;
@@ -2967,7 +2967,7 @@ begin
       begin
         FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX
         if onoutput(u, pid) then
-          endtix := 1; // force kill() on abort
+          endtix := 1; // returned true: force kill() on abort
       end;
     end
     else if Assigned(onoutput) and // idle
@@ -2976,7 +2976,26 @@ begin
     if (endtix <> 0) and
        (GetTickCount64 > endtix) then
     begin
-      fpkill(pid, SIGKILL); // abort process execution after timeout
+      // abort process execution after timeout or onoutput()=true
+      if RunAbortTimeoutSecs > 0 then
+      begin
+        // try gracefull termination
+        if fpkill(pid, SIGTERM) = 0 then
+        begin
+          endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
+          repeat
+            wr := FpWaitPid(pid, @res, WNOHANG); // 0 = no state change
+            if (wr <> 0) or
+               (GetTickCount64 > endtix) then
+              break;
+            SleepHiRes(1);
+          until false;
+          if wr = pid then // <0 for error
+            break; // gracefully ended
+        end;
+      end;
+      // force process termination
+      fpkill(pid, SIGKILL);
       pid := 0;
       break;
     end;
