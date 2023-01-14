@@ -7321,8 +7321,8 @@ var
         stmt.Prepare(aSql, ExpectResults);
         if tocache then
         begin
-          fSafe.Lock; // protect fCache access
-          try
+          //fSafe.Lock; // protect fCache access
+          //try
             if fCache = nil then
               fCache := TRawUtf8List.CreateEx(
                 [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
@@ -7337,9 +7337,9 @@ var
             else
               SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
                 'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
-          finally
-            fSafe.UnLock;
-          end;
+          //finally
+          //  fSafe.UnLock;
+          //end;
         end;
         result := stmt;
       finally
@@ -7371,8 +7371,8 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
-  fSafe.Lock; // protect fCache access
-  try
+  //fSafe.Lock; // protect fCache access
+  //try
     stmt := nil;
     if fCache <> nil then
     begin
@@ -7434,9 +7434,9 @@ begin
       else
         tocache := iscacheable;
     end;
-  finally
-    fSafe.UnLock;
-  end;
+  //finally
+  //  fSafe.UnLock;
+  //end;
   if result <> nil then
   begin
     stmt.Reset; // process outside the lock
