@@ -2672,12 +2672,11 @@ type
   TSqlDBConnectionPropertiesThreadSafe = class(TSqlDBConnectionProperties)
   protected
     fConnectionPool: TSynObjectListLightLocked;
-    fLatestConnectionRetrievedInPool: PtrInt;
     fConnectionPoolDeprecatedTix: cardinal;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     fDeleteConnectionInOwnThread: boolean;
     /// returns -1 if none was defined yet
-    function LockedPerThreadIndex: PtrInt;
+    function GetLockedPerThreadIndex: PtrInt;
     /// overridden method to properly handle multi-thread
     function GetMainConnection: TSqlDBConnection; override;
   public
@@ -7603,7 +7602,6 @@ begin
       fMainConnectionLock.UnLock;
       fConnectionPool.ClearFromLast; // to use FreeAndNilSafe
     end;
-    fLatestConnectionRetrievedInPool := -1;
     fConnectionPoolDeprecatedTix := 0; // trigger ThreadSafeConnection() release
   finally
     fConnectionPool.Safe.WriteUnLock;
@@ -7614,11 +7612,13 @@ constructor TSqlDBConnectionPropertiesThreadSafe.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fConnectionPool := TSynObjectListLightLocked.Create;
-  fLatestConnectionRetrievedInPool := -1;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-function TSqlDBConnectionPropertiesThreadSafe.LockedPerThreadIndex: PtrInt;
+threadvar
+  PerThreadConnectionIndex: integer; // for GetLockedPerThreadIndex O(1) lookup
+
+function TSqlDBConnectionPropertiesThreadSafe.GetLockedPerThreadIndex: PtrInt;
 var
   id: TThreadID;
   conn: ^TSqlDBConnectionThreadSafe;
@@ -7628,18 +7628,18 @@ begin
   begin
     // we just search for the TThreadID and won't check for IsOutdated()
     id := GetCurrentThreadId;
-    // most of the time, we are from the same thread: use simple cache
-    result := fLatestConnectionRetrievedInPool;
+    // most of the time, we have the index in the threadvar
+    result := PerThreadConnectionIndex;
     if (PtrUInt(result) < PtrUInt(fConnectionPool.Count)) and
        (TSqlDBConnectionThreadSafe(fConnectionPool.List[result]).
          fThreadID = id) then
         exit;
-    // search for connection pool for this TThreadID
+    // search for this TThreadID connection (should almost never happen)
     conn := pointer(fConnectionPool.List);
     for result := 0 to fConnectionPool.Count - 1 do
       if conn^.fThreadID = id then
       begin
-        fLatestConnectionRetrievedInPool := result;
+        PerThreadConnectionIndex := result;
         exit;
       end
       else
@@ -7661,11 +7661,11 @@ begin
   fConnectionPool.Safe.WriteLock;
   try
     // do nothing if this thread has no active connection
-    i := LockedPerThreadIndex;
+    i := GetLockedPerThreadIndex;
     if i >= 0 then
     begin
       fConnectionPool.Delete(i); // release thread's TSqlDBConnection instance
-      fLatestConnectionRetrievedInPool := -1;
+      PerThreadConnectionIndex := -1;
     end;
   finally
     fConnectionPool.Safe.WriteUnLock;
@@ -7703,10 +7703,7 @@ begin
                 while i < fConnectionPool.Count do
                   if TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).
                         IsOutdated(tix) then
-                  begin
-                    fConnectionPool.Delete(i);
-                    fLatestConnectionRetrievedInPool := -1;
-                  end
+                    fConnectionPool.Delete(i)
                   else
                     inc(i);
               finally
@@ -7718,7 +7715,7 @@ begin
         // search for an existing connection
         result := nil;
         fConnectionPool.Safe.ReadLock; // concurrent non blocking search
-        i := LockedPerThreadIndex;
+        i := GetLockedPerThreadIndex;
         if i >= 0 then
           result := fConnectionPool.List[i];
         fConnectionPool.Safe.ReadUnLock;
@@ -7737,10 +7734,11 @@ begin
         (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
         fConnectionPool.Safe.WriteLock;
         try
-          fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
+          i := fConnectionPool.Add(result)
         finally
           fConnectionPool.Safe.WriteUnLock;
         end;
+        PerThreadConnectionIndex := i; // store in a threadvar for O(1) lookup
       end;
     tmMainConnection:
       result := inherited GetMainConnection; // has its own TOSLightLock
