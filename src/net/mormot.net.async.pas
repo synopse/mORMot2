@@ -420,6 +420,7 @@ type
     fName: RawUtf8;
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingLastWakeUpCount: integer;
+    fCustomObject: TObject;
     procedure Execute; override;
   public
     /// initialize the thread
@@ -427,6 +428,12 @@ type
       aProcess: TAsyncConnectionsThreadProcess; aIndex: integer); reintroduce;
     /// finalize the thread resources
     destructor Destroy; override;
+    /// a TObject instance which will be owned by this thread once assigned
+    // - Destroy will delete it when needed
+    // - could be used to maintain some thread-speficic resource, e.g. a raw 
+    // DB connection or a (set of) COM object(s)
+    property CustomObject: TObject
+      read fCustomObject write fCustomObject;
   published
     /// which kind of ProcessRead or ProcessWrite this thread is doing
     property Process: TAsyncConnectionsThreadProcess
@@ -1735,6 +1742,7 @@ destructor TAsyncConnectionsThread.Destroy;
 begin
   inherited Destroy;
   fEvent.Free;
+  FreeAndNil(fCustomObject);
 end;
 
 procedure TAsyncConnectionsThread.Execute;
