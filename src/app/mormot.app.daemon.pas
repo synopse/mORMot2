@@ -166,6 +166,7 @@ type
     procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
+    procedure DoResume(Sender: TService);
     procedure DoStop(Sender: TService);
     {$endif OSWINDOWS}
     function CustomParseCmd(P: PUtf8Char): boolean; virtual;
@@ -196,6 +197,10 @@ type
     /// inherited class should override this abstract method with proper process
     // - should do nothing if the daemon was already stopped
     procedure Stop; virtual; abstract;
+    /// inherited class should override this abstract method with proper process
+    // - do nothing by default, but could handle SERVICE_CONTROL_CONTINUE signal
+    // - is currently called only on Windows
+    procedure Resume; virtual;
     /// call Stop, finalize the instance, and its settings
     destructor Destroy; override;
   published
@@ -319,6 +324,11 @@ begin
   FreeAndNil(fSettings);
 end;
 
+procedure TSynDaemon.Resume;
+begin
+  // nothing to be done by default - only called on Windows actually
+end;
+
 {$ifdef OSWINDOWS}
 procedure TSynDaemon.DoStart(Sender: TService);
 begin
@@ -328,6 +338,11 @@ end;
 procedure TSynDaemon.DoStop(Sender: TService);
 begin
   Stop;
+end;
+
+procedure TSynDaemon.DoResume(Sender: TService);
+begin
+  Resume;
 end;
 {$endif OSWINDOWS}
 
@@ -504,6 +519,7 @@ begin
           try
             service.OnStart := DoStart;
             service.OnStop := DoStop;
+            service.OnResume := DoResume;
             service.OnShutdown := DoStop; // sometimes, is called without Stop
             if ServiceSingleRun then
               // blocking until service shutdown
