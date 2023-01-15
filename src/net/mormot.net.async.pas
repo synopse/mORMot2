@@ -101,6 +101,8 @@ type
     end;
     /// low-level TLS context
     fSecure: INetTls;
+    /// the thread currently set by ProcessRead - maybe nil e.g. on write
+    fReadThread: TSynThread;
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
@@ -265,7 +267,7 @@ type
     /// one or several threads should execute this method
     // - thread-safe handle of any notified incoming packet
     // - return true if something has been read or closed, false to retry later
-    function ProcessRead(const notif: TPollSocketResult): boolean;
+    function ProcessRead(Sender: TSynThread; const notif: TPollSocketResult): boolean;
     /// one thread should execute this method with the proper pseWrite notif
     // - thread-safe handle of any outgoing packets
     procedure ProcessWrite(const notif: TPollSocketResult);
@@ -784,7 +786,7 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
-    fRequest: THttpServerRequest;
+    fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -1395,7 +1397,8 @@ begin
   end;
 end;
 
-function TPollAsyncSockets.ProcessRead(const notif: TPollSocketResult): boolean;
+function TPollAsyncSockets.ProcessRead(Sender: TSynThread;
+  const notif: TPollSocketResult): boolean;
 var
   connection: TPollAsyncConnection;
   recved, added, retryms: integer;
@@ -1411,6 +1414,7 @@ begin
      fRead.Terminated or
      connection.IsClosed then
     exit;
+  connection.fReadThread := Sender;
   LockedInc32(@fProcessingRead);
   try
     pse := ResToEvents(notif);
@@ -1527,6 +1531,8 @@ begin
     end;
   finally
     LockedDec32(@fProcessingRead);
+    if connection <> nil then
+      connection.fReadThread := nil;
   end;
 end;
 
@@ -1769,7 +1775,7 @@ begin
           // a single thread to rule them all: polling, reading and processing
           if fOwner.fClients.fRead.GetOne(ms, fName, notif) then
             if not Terminated then
-              fOwner.fClients.ProcessRead(notif);
+              fOwner.fClients.ProcessRead(self, notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
@@ -1840,7 +1846,7 @@ begin
                 //{$I-}system.writeln(Name,' didwakeupduetoslowprocess');
                 fOwner.ThreadPollingWakeup(1); // one thread is enough
               end;
-              fOwner.fClients.ProcessRead(notif);
+              fOwner.fClients.ProcessRead(self, notif);
             end;
             if acoThreadSmooting in fOwner.Options then
             begin
@@ -3313,11 +3319,11 @@ begin
   fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
   flags := HTTP_TLS_FLAGS[Assigned(fSecure)] +
            HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
-  if fRequest = nil then // only create if not rejected by OnBeforeBody
+  if fRequest = nil then // created once, if not rejected by OnBeforeBody
     fRequest := THttpServerRequest.Create(
-      fServer, remoteid, nil, flags, @fConnectionOpaque)
+      fServer, remoteid, fReadThread, flags, @fConnectionOpaque)
   else
-    fRequest.Recycle(remoteid, flags);
+    fRequest.Recycle(remoteid, fReadThread, flags);
   fRequest.Prepare(fHttp, fRemoteIP);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then

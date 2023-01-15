@@ -281,7 +281,7 @@ type
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
     /// could be called before Prepare() to reuse an existing instance
     procedure Recycle(aConnectionID: THttpServerConnectionID;
-      aConnectionFlags: THttpServerRequestFlags);
+      aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags);
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -2000,9 +2000,10 @@ begin
 end;
 
 procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
-  aConnectionFlags: THttpServerRequestFlags);
+  aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags);
 begin
   fConnectionID := aConnectionID;
+  fConnectionThread := aConnectionThread;
   fConnectionFlags := aConnectionFlags;
   fErrorMessage := '';
 end;
