@@ -2980,7 +2980,8 @@ begin
       if RunAbortTimeoutSecs > 0 then
       begin
         // try gracefull death
-        if fpkill(pid, SIGTERM) = 0 then
+        if (ramSIGTERM in RunAbortMethods) and
+           (fpkill(pid, SIGTERM) = 0) then
         begin
           endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
           repeat
@@ -2988,7 +2989,7 @@ begin
             if (wr <> 0) or
                (GetTickCount64 > endtix) then
               break;
-            SleepHiRes(1);
+            SleepHiRes(5);
           until false;
           if wr = pid then // <0 for error
             break; // gracefully ended

@@ -48,7 +48,7 @@ uses
 {$R *.res}
 
 var
-  angelize: TSynAngelize; 
+  angelize: TSynAngelize;
 begin
   try
     // is executed as a service/daemon or as a command line tool

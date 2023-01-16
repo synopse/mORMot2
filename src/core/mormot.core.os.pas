@@ -4780,6 +4780,23 @@ var
   // - set 0 to disable gracefull exit, and force hard SIGKILL/TerminateProcess
   RunAbortTimeoutSecs: integer = 5;
 
+{$ifdef OSWINDOWS}
+type
+  /// how in RunRedirect() or RunCommand() should try to gracefully terminate
+  // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT
+  // - ramQuit calls QuitProcess(), i.e. send WM_QUIT on all the process threads
+  TRunAbortMethods = set of (ramCtrlC, ramQuit);
+var
+  /// RunRedirect/RunCommand methods to gracefully terminate before TerminateProcess
+  RunAbortMethods: TRunAbortMethods = [ramCtrlC, ramQuit];
+{$else}
+type
+  /// how in RunRedirect() should try to gracefully terminate
+  TRunAbortMethods = set of (ramSIGTERM);
+var
+  /// RunRedirect() methods to gracefully terminate before SIGKILL
+  RunAbortMethods: TRunAbortMethods = [ramSIGTERM];
+{$endif OSWINDOWS}
 
 
 implementation

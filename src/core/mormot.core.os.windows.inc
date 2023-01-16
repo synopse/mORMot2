@@ -4342,6 +4342,8 @@ var
   new: RawByteString;
   endtix, pending: Int64;
   exitcode, n: cardinal;
+  ram: TRunAbortMethods;
+  terminated: boolean;
   i, l: PtrInt;
   tmp: TSynTempBuffer;
 begin
@@ -4393,19 +4395,22 @@ begin
   // launch the process
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
+  ram := RunAbortMethods;
   l := 0;
   rd := 0;
   if Assigned(onoutput) or
      (redirected <> nil) then
     if CreatePipe(rd, wr, @security, 0) then
     begin
-      SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+      SetHandleInformation(rd, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
       startupinfo.wShowWindow := SW_HIDE;
+      startupinfo.hStdInput := GetStdHandle(STD_INPUT_HANDLE);
       startupinfo.hStdOutput := wr;
       startupinfo.hStdError := wr;
       startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
       if redirected <> nil then
         redirected^ := '';
+      exclude(ram, ramCtrlC); // not compatible with redirection
     end
     else
       rd := 0;
@@ -4469,13 +4474,18 @@ begin
       begin
         result := -GetLastError; // not able to retrieve exit code
         // e.g. -STILL_ACTIVE if aborted by onoutput()=true above
-        if (RunAbortTimeoutSecs <= 0) or
-           // try Ctrl+C
-           not (CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs) or
-           // try WMQUIT
-               QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) then
-            // no chance: switch to criminal mode
-            TerminateProcess(processinfo.hProcess, result)
+        terminated := false;
+        if RunAbortTimeoutSecs > 0 then
+        begin
+          if ramCtrlC in ram then // try Ctrl+C
+            terminated := CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
+          if (not terminated) and
+             (ramQuit in ram) then // try WMQUIT
+            terminated := QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
+        end;
+        if not terminated then
+          // we need to KILL the process
+          TerminateProcess(processinfo.hProcess, result)
         else
           // gracefully ended -> try to return exit code
           if GetExitCodeProcess(processinfo.hProcess, exitcode) then
