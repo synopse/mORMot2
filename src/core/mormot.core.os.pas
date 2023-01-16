@@ -5698,7 +5698,7 @@ var
 begin
   result := 0;
   dir := IncludeTrailingPathDelimiter(FileName);
-  if FindFirst(dir + AllFilesMask, faAnyFile, SR) <> 0 then
+  if FindFirst(dir + FILES_ALL, faAnyFile, SR) <> 0 then
     exit;
   repeat
    if SearchRecValidFile(SR) then
