@@ -378,7 +378,7 @@ end;
 
 destructor TSynAngelizeRunner.Destroy;
 begin
-  Abort; // release fRetryEvent.WaitFor
+  Abort; // ensure fRetryEvent.WaitFor in Execute is released
   inherited Destroy;
   FreeAndNil(fRedirect);
   FreeAndNil(fRetryEvent);
@@ -386,7 +386,8 @@ end;
 
 procedure TSynAngelizeRunner.Abort;
 begin
-  if self = nil then
+  if (self = nil) or
+     fAbortRequested then
     exit;
   fAbortRequested := true;
   fRetryEvent.SetEvent;
@@ -480,7 +481,7 @@ begin
           log.Log(sllTrace, 'Execute %: pause % after ExitCode=%',
             [sn, MilliSecToString(pause), err], self);
           fRetryEvent.WaitFor(pause);
-          // add a small random threshold to leverage several services restart
+          // add a small random threshold to smooth several services restart
         end
         else
         begin
@@ -566,6 +567,8 @@ begin
           end;
         PerformRotation;
         fRedirectSize := textlen;
+        if fAbortRequested or Terminated then
+          result := true; // aborted during rotation
       end;
       // text output to log file
       fRedirect.WriteBuffer(PByteArray(text)[textstart], textlen);
@@ -597,9 +600,9 @@ begin
   inherited Destroy;
   if fRunner <> nil then
   begin
-    fRunner.fService := nil;
+    fRunner.fService := nil; // avoid GPF
     fRunner.Terminate;
-    fRunner.Abort;
+    fRunner.Abort; // release and free the thread
   end;
 end;
 
@@ -651,6 +654,7 @@ end;
 destructor TSynAngelize.Destroy;
 begin
   inherited Destroy;
+  RunAbortTimeoutSecs := 0; // force RunRedirect() hard termination now
   ObjArrayClear(fService);
   fSettings.Free;
 end;
@@ -1300,6 +1304,7 @@ var
   l, i, a: PtrInt;
   s: TSynAngelizeService;
   sf: TFileName;
+  errmsg: string;
   sas: TSynAngelizeSettings;
   log: ISynLog;
 begin
@@ -1312,6 +1317,7 @@ begin
       s := fService[i];
       if s.Level = fLevels[l] then
       begin
+        errmsg := '';
         if (s.fStop = nil) and
            (s.fRun <> '') then
           // "Stop":[] will assume 'stop:%run%'
@@ -1323,11 +1329,14 @@ begin
             DoOne(self, log.Instance, s, acDoStop, s.fStop[a]);
           except
             on E: Exception do
+            begin
               // any exception should continue the stopping
               log.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
                 [s.Name, s.fStop[a], E.ClassType], self);
+              FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
+            end;
           end;
-        s.SetState(ssStopped, 'StopServices: shutdown', []);
+        s.SetState(ssStopped, 'StopServices: shutdown%', [errmsg]);
         ComputeServicesStateFiles; // real time notification
       end;
     end;
@@ -1336,8 +1345,7 @@ begin
   if sf <> '' then
   begin
     log.Log(sllTrace, 'StopServices: Delete % and %.html', [sf, sf], self);
-    DeleteFile(sf);
-    DeleteFile(sf + '.html');
+    DeleteFile(sf); // delete binary, but not .html (marked all stopped)
   end;
 end;
 

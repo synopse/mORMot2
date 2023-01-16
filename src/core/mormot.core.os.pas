@@ -4772,6 +4772,7 @@ function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
 var
   /// how many seconds we should wait for gracefull termination of a process
   // in RunRedirect() - or RunCommand() on Windows
+  // - set 0 to disable gracefull exit, and force hard SIGKILL/TerminateProcess
   RunAbortTimeoutSecs: integer = 5;
 
 
