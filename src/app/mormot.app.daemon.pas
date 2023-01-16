@@ -491,7 +491,7 @@ begin
             Executable.Version.DetailedOrVoid], self);
           fConsoleMode := true;
           Start;
-          writeln('Press [Enter] to quit');
+          writeln('Press [Enter] or Ctrl+C to quit');
           ioresult;
           ConsoleWaitForEnterKey;
           writeln('Shutting down server');

@@ -4462,17 +4462,18 @@ begin
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
              (GetTickCount64 > endtix));
-      if GetExitCodeProcess(processinfo.hProcess, exitcode) then
+      if GetExitCodeProcess(processinfo.hProcess, exitcode) and
+         (exitcode <> STILL_ACTIVE) then
         result := exitcode // process ended from natural death -> return code
       else
       begin
         result := -GetLastError; // not able to retrieve exit code
-        // e.g. -ERROR_STILL_ACTIVE if aborted by onoutput()=true above
+        // e.g. -STILL_ACTIVE if aborted by onoutput()=true above
         if (RunAbortTimeoutSecs <= 0) or
            // try Ctrl+C
-           (not CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) or
+           not (CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs) or
            // try WMQUIT
-           (not QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) then
+               QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs)) then
             // no chance: switch to criminal mode
             TerminateProcess(processinfo.hProcess, result)
         else
