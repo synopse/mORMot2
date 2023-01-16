@@ -654,7 +654,7 @@ type
     // - caller can modify these properties, then use UpdateOne() if the changes
     // have to be stored inside the Items[] list
     // - calller must always free the returned instance
-    // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
+    // - returns NIL if any error occurred, e.g. if the supplied aID was incorrect
     // - method available since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestOrmServer
     function GetOne(aID: TID): TOrm; virtual; abstract;
@@ -872,7 +872,7 @@ type
     // - caller can modify these properties, then use UpdateOne() if the changes
     // have to be stored inside the Items[] list
     // - calller must always free the returned instance
-    // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
+    // - returns NIL if any error occurred, e.g. if the supplied aID was incorrect
     // - method available since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestOrmServer
     function GetOne(aID: TID): TOrm; override;

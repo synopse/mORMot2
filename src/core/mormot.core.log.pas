@@ -2935,7 +2935,7 @@ var
         if not GetCode(U^.Addr[n]) then
           break;
         if U^.Addr[n] <> 0 then
-          inc(n); // occured with Delphi 2010 :(
+          inc(n); // occurred with Delphi 2010 :(
       until (P >= PEnd) or
             (P^ < ' ');
       NextLine;

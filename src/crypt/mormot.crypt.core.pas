@@ -965,7 +965,7 @@ type
     // - returns true if the 128-bit CRC of the encrypted text matches the
     // supplied buffer, ignoring the 128-bit CRC of the plain data
     // - since it is easy to forge such 128-bit CRC, it will only indicate
-    // that no transmission error occured, but won't be an integrity or
+    // that no transmission error occurred, but won't be an integrity or
     // authentication proof (which will need full Decrypt + MacDecryptCheckTag)
     // - checked CRC includes any MacSetNonce() Associated value
     function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;

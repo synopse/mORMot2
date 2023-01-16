@@ -629,7 +629,7 @@ function FavIconBinary: RawByteString;
 type
   /// results of THttpServerSocket.GetRequest virtual method
   // - return grError if the socket was not connected any more, or grException
-  // if any exception occured during the process
+  // if any exception occurred during the process
   // - grOversizedPayload is returned when MaximumAllowedContentLength is reached
   // - grRejected is returned when OnBeforeBody returned not 200
   // - grTimeout is returned when HeaderRetrieveAbortDelay is reached

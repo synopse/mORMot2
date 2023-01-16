@@ -1674,7 +1674,7 @@ type
 
   ///  used to define how to trigger Events on record update
   // - see TRestServer.OnUpdateEvent property and InternalUpdateEvent() method
-  // - returns true on success, false if an error occured (but action must continue)
+  // - returns true on success, false if an error occurred (but action must continue)
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)
@@ -1684,7 +1684,7 @@ type
 
   ///  used to define how to trigger Events on record field update
   // - see TRestServer.OnBlobUpdateEvent property and InternalUpdateEvent() method
-  // - returns true on success, false if an error occured (but action must continue)
+  // - returns true on success, false if an error occurred (but action must continue)
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)

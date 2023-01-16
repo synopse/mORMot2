@@ -2546,7 +2546,7 @@ type
     ECode: DWord;
     /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
     EStackCount: integer;
-    /// the address where the exception occured
+    /// the address where the exception occurred
     EAddr: PtrUInt;
     /// the optional stack trace
     EStack: PPtrUInt;
@@ -2808,7 +2808,7 @@ function StreamCopyUntilEnd(Source, Dest: TStream): Int64;
 
 /// read a File content into a string
 // - content can be binary or text
-// - returns '' if file was not found or any read error occured
+// - returns '' if file was not found or any read error occurred
 // - wil use GetFileSize() API by default, unless HasNoSize is defined,
 // and read will be done using a buffer (required e.g. for POSIX char files)
 // - uses RawByteString for byte storage, whatever the codepage is
@@ -3976,7 +3976,7 @@ function SleepHiRes(ms: cardinal; var terminated: boolean;
 
 /// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
 // - range is agressively designed burning some CPU in favor of responsiveness
-// - should reset start := 0 when some activity occured
+// - should reset start := 0 when some activity occurred
 // - would optionally return if terminated^ is set, or event is signaled
 // - returns the current GetTickCount64 value
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
@@ -6902,12 +6902,8 @@ procedure ComputeExecutableHash;
 begin
   with Executable do
   begin
-    if Version.Version32 = 0 then  
-      _fmt('%s (%s)', [ProgramFileName,
-        Version.BuildDateTimeString], ProgramFullSpec)
-    else
-      _fmt('%s %s (%s)', [ProgramFileName,
-        Version.Detailed, Version.BuildDateTimeString], ProgramFullSpec);
+    _fmt('%s %s (%s)', [ProgramFileName,
+      Version.DetailedOrVoid, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoFeatures), length(CpuInfoFeatures));

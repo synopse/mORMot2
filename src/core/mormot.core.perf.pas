@@ -500,7 +500,7 @@ type
     /// how many errors did occur during the processing
     property Errors: TSynMonitorCount
       read fInternalErrors;
-    /// information about the last error which occured during the processing
+    /// information about the last error which occurred during the processing
     property LastError: variant
       read fLastInternalError;
   end;

@@ -2562,7 +2562,7 @@ begin
      _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success with no certificate validation
-  // if we reached here, an error occured
+  // if we reached here, an error occurred
   EWinHttp.RaiseFromLastError;
 end;
 

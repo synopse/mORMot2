@@ -212,7 +212,7 @@ type
     // - default implementation will call the OnUpdateEvent/OnBlobUpdateEvent
     // methods, if defined
     // - will also handle TOrmHistory tables, as defined by TrackChanges()
-    // - returns true on success, false if an error occured (but action must continue)
+    // - returns true on success, false if an error occurred (but action must continue)
     // - you can override this method to implement a server-wide notification,
     // but be aware it may be the first step to break the stateless architecture
     // of the framework

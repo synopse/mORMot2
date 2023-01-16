@@ -1391,7 +1391,7 @@ type
     procedure Clear;
       {$ifdef HASINLINE}inline;{$endif}
     /// delete the whole dynamic array content, ignoring exceptions
-    // - returns true if no exception occured when calling Clear, false otherwise
+    // - returns true if no exception occurred when calling Clear, false otherwise
     // - you should better not call this method, which will catch and ignore
     // all exceptions - but it may somewhat make sense in a destructor
     // - this method will recognize T*ObjArray types and free all instances
@@ -2873,7 +2873,7 @@ type
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
-    /// call the OnChange event if changes occured
+    /// call the OnChange event if changes occurred
     // - this method will also call Safe.UnLock for thread-safety
     procedure EndUpdate;
     /// set low-level text and objects from existing arrays

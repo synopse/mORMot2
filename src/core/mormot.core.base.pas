@@ -1087,7 +1087,7 @@ function GetIntegerDef(P: PUtf8Char; Default: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in P^
-// - this version return 0 in err if no error occured, and 1 if an invalid
+// - this version return 0 in err if no error occurred, and 1 if an invalid
 // character was found, not its exact index as for the val() function
 function GetInteger(P: PUtf8Char; var err: integer): PtrInt; overload;
 

@@ -3946,7 +3946,7 @@ procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
 begin
   if (Self = nil) or
      (SockIn <> nil) then
-    exit; // initialization already occured
+    exit; // initialization already occurred
   if InputBufferSize < SOCKMINBUFSIZE then
     InputBufferSize := SOCKMINBUFSIZE;
   GetMem(fSockIn, SizeOf(TTextRec) + InputBufferSize);
@@ -3968,7 +3968,7 @@ end;
 procedure TCrtSocket.CreateSockOut(OutputBufferSize: integer);
 begin
   if SockOut <> nil then
-    exit; // initialization already occured
+    exit; // initialization already occurred
   if OutputBufferSize < SOCKMINBUFSIZE then
     OutputBufferSize := SOCKMINBUFSIZE;
   GetMem(fSockOut, SizeOf(TTextRec) + OutputBufferSize);

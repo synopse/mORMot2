@@ -134,7 +134,7 @@ const
   SQLITE_UTF16_ALIGNED = 8;
 
 
-  /// Successful result. No error occured
+  /// Successful result. No error occurred
   SQLITE_OK = 0;
   /// SQL error or missing database - legacy generic code
   // - Use Extended Result Codes for more detailed information about errors
