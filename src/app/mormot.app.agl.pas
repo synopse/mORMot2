@@ -348,6 +348,8 @@ type
     /// overriden for proper sub-process stoping
     // - should do nothing if the daemon was already stopped
     procedure Stop; override;
+    /// overriden for proper sub-process retry
+    procedure Resume; override;
   end;
 
 
@@ -656,11 +658,12 @@ end;
 // TSynDaemon command line methods
 
 const
-  AGL_CMD: array[0..4] of PAnsiChar = (
+  AGL_CMD: array[0..5] of PAnsiChar = (
     'LIST',
     'SETTINGS',
     'NEW',
     'RETRY',
+    'RESUME',
     nil);
 
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
@@ -673,8 +676,9 @@ begin
       ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
     2:
       NewService;
-    3:
-      RetryServices;
+    3,
+    4:
+      Resume;
   else
     result := false; // display syntax
   end;
@@ -683,9 +687,9 @@ end;
 function TSynAngelize.CustomCommandLineSyntax: string;
 begin
   {$ifdef OSWINDOWS}
-  result := '/list /settings /nssm /retry';
+  result := '/list /settings /new /retry';
   {$else}
-  result := '--list --settings --nssm --retry';
+  result := '--list --settings --new --retry';
   {$endif OSWINDOWS}
 end;
 
@@ -1204,7 +1208,7 @@ begin
   TextColor(ccLightGray);
 end;
 
-procedure TSynAngelize.NssmInstall;
+procedure TSynAngelize.NewService;
 var
   sn, id, id2: RawUtf8;
   dir, fn, exe: TFileName;
@@ -1258,20 +1262,6 @@ begin
   finally
     new.Free;
   end;
-end;
-
-procedure TSynAngelize.RetryServices;
-var
-  i: PtrInt;
-begin
-  for i := 0 to high(fService) do
-    with fService[i] do
-      if (fRunner <> nil) and
-         (State = ssPaused) then
-      begin
-        ConsoleWrite('Retry %', [Name]);
-        fRunner.RetryNow;
-      end;
 end;
 
 procedure TSynAngelize.StartServices;
@@ -1422,6 +1412,21 @@ procedure TSynAngelize.Stop;
 begin
   StopWatching;
   StopServices;
+end;
+
+procedure TSynAngelize.Resume;
+var
+  i: PtrInt;
+begin
+  // from /retry /resume or Windows SERVICE_CONTROL_CONTINUE control
+  for i := 0 to high(fService) do
+    with fService[i] do
+      if (fRunner <> nil) and
+         (State = ssPaused) then
+      begin
+        ConsoleWrite('Retry %', [Name]);
+        fRunner.RetryNow;
+      end;
 end;
 
 
