@@ -4407,12 +4407,12 @@ begin
      (redirected <> nil) then
     if CreatePipe(rd, wr, @security, 0) then
     begin
-      SetHandleInformation(rd, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+      SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
       startupinfo.wShowWindow := SW_HIDE;
       startupinfo.hStdInput := GetStdHandle(STD_INPUT_HANDLE);
       startupinfo.hStdOutput := wr;
       startupinfo.hStdError := wr;
-      startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+      startupinfo.dwFlags := STARTF_USESTDHANDLES;
       if redirected <> nil then
         redirected^ := '';
       exclude(ram, ramCtrlC); // not compatible with redirection
@@ -4433,6 +4433,7 @@ begin
     if rd <> 0 then
     begin
       // see https://stackoverflow.com/a/25725197/458259
+      CloseHandle(wr);
       if waitfordelayms = INFINITE then
         endtix := 0
       else
@@ -4516,11 +4517,8 @@ begin
   end
   else
     result := -GetLastError; // returns CreateProcessW() error as negative
-  if rd <> 0 then
-  begin
+  if rd <> 0 then // CloseHandle(wr) has already be done
     CloseHandle(rd);
-    CloseHandle(wr);
-  end;
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
