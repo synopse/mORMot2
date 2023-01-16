@@ -169,6 +169,7 @@ type
     procedure DoResume(Sender: TService);
     procedure DoStop(Sender: TService);
     {$endif OSWINDOWS}
+    procedure WriteCopyright;
     function CustomParseCmd(P: PUtf8Char): boolean; virtual;
     function CustomCommandLineSyntax: string; virtual;
   public
@@ -353,6 +354,30 @@ end;
 
 {$I-} // no error raised during write/writeln
 
+procedure TSynDaemon.WriteCopyright;
+var
+  msg, name, copyright: string;
+  i: integer;
+begin
+  msg := fSettings.ServiceDescription;
+  i := Pos(' - ', msg);
+  if i = 0 then
+    name := msg
+  else
+  begin
+    name := copy(msg, 1, i - 1);
+    copyright := copy(msg, i + 3, 1000);
+  end;
+  TextColor(ccLightGreen);
+  writeln(' ', name);
+  writeln(StringOfChar('-', length(name) + 2));
+  TextColor(ccGreen);
+  if {%H-}copyright <> '' then
+    writeln(' ', copyright);
+  writeln;
+  TextColor(ccLightGray);
+end;
+
 procedure TSynDaemon.Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean;
   const param: RawUtf8);
 var
@@ -363,34 +388,10 @@ var
   ctrl: TServiceController;
   {$endif OSWINDOWS}
 
-  procedure WriteCopyright;
-  var
-    msg, name, copyright: string;
-    i: integer;
-  begin
-    msg := fSettings.ServiceDescription;
-    i := Pos(' - ', msg);
-    if i = 0 then
-      name := msg
-    else
-    begin
-      name := copy(msg, 1, i - 1);
-      copyright := copy(msg, i + 3, 1000);
-    end;
-    TextColor(ccLightGreen);
-    writeln(' ', name);
-    writeln(StringOfChar('-', length(name) + 2));
-    TextColor(ccGreen);
-    if {%H-}copyright <> '' then
-      writeln(' ', copyright);
-    writeln;
-    TextColor(ccLightGray);
-  end;
-
   procedure ShowState(state: TServiceState);
   begin
     writeln(Utf8ToConsole(fSettings.ServiceName), ' State=', ToText(state)^);
-    ExitCode := ord(state); // convention result to caller e.g. from a batch
+    ExitCode := ord(state); // transmit result to caller e.g. from a batch
   end;
 
   procedure Syntax;
