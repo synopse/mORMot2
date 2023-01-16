@@ -306,8 +306,7 @@ type
     function CustomCommandLineSyntax: string; override;
     function LoadServicesState(out state: TSynAngelizeState): boolean;
     procedure ListServices;
-    procedure NssmInstall;
-    procedure RetryServices;
+    procedure NewService;
     procedure StartServices;
     procedure StopServices;
     procedure StartWatching;
@@ -660,7 +659,7 @@ const
   AGL_CMD: array[0..4] of PAnsiChar = (
     'LIST',
     'SETTINGS',
-    'NSSM',
+    'NEW',
     'RETRY',
     nil);
 
@@ -673,7 +672,7 @@ begin
     1:
       ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
     2:
-      NssmInstall;
+      NewService;
     3:
       RetryServices;
   else
@@ -1215,21 +1214,21 @@ var
   log: ISynLog;
 begin
   // mimics nssm install <servicename> <application> [<options>]
-  log := TSynLog.Enter(self, 'NssmInstall');
+  log := TSynLog.Enter(self, 'NewService');
   if ParamCount < 3 then
     raise ESynAngelize.CreateUtf8(
-      'Syntax is % /nssm <servicename> <application> [<options>]',
+      'Syntax is % /new <servicename> <application> [<options>]',
       [Executable.ProgramName]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
   sn := TrimU(StringToUtf8(paramstr(2)));
   if sn = '' then
-    raise ESynAngelize.CreateUtf8('/nssm %: invalid servicename "%"', [sn]);
+    raise ESynAngelize.CreateUtf8('/new %: invalid servicename "%"', [sn]);
   exe := sysutils.Trim(paramstr(3));
   if exe <> '' then
     exe := ExpandFileName(exe);
   if not FileExists(exe) then
-    raise ESynAngelize.CreateUtf8('/nssm %: missing application "%"', [sn, exe]);
-  id := PropNameSanitize(sn, 'nssm');
+    raise ESynAngelize.CreateUtf8('/new %: missing application "%"', [sn, exe]);
+  id := PropNameSanitize(sn, 'service');
   sas := fSettings as TSynAngelizeSettings;
   dir := EnsureDirectoryExists(sas.Folder);
   fn := dir + Utf8ToString(id) + sas.Ext;
@@ -1255,7 +1254,7 @@ begin
     new.fName := id;
     new.fRun := StringToUtf8(exe);
     new.SaveIfNeeded;
-    log.Log(sllDebug, 'NssmInstall added % as %', [fn, new], self);
+    log.Log(sllDebug, 'NewService added % as %', [fn, new], self);
   finally
     new.Free;
   end;
