@@ -719,6 +719,9 @@ const
 function SortByLevel(const A, B): integer; // to display by increasing Level
 begin
   result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
+  if result = 0 then
+    result := StrIComp( // display by name within each level
+      pointer(TSynAngelizeService(A).Name), pointer(TSynAngelizeService(B).Name));
 end;
 
 function TSynAngelize.LoadServicesFromSettingsFolder: integer;
