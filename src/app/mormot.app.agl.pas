@@ -88,6 +88,7 @@ type
   TSynAngelizeService = class(TSynJsonFileSettings)
   protected
     fName: RawUtf8;
+    fOwner: TSynAngelize;
     fDescription: RawUtf8;
     fRun: RawUtf8;
     fStart, fStop, fWatch: TSynAngelizeActions;
@@ -101,8 +102,8 @@ type
     fRunnerExitCode: integer;
     fAbortExitCodes: TIntegerDynArray;
     fNextWatch: Int64;
-    procedure SetState(NewState: TServiceState;
-      const Fmt: RawUtf8; const Args: array of const);
+    procedure SetState(NewState: TServiceState; const Fmt: RawUtf8;
+      const Args: array of const; ResetMessage: boolean = false);
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -295,6 +296,7 @@ type
     fSettingsClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
     fHasWatchs: boolean;
+    fServiceState: TServiceState;
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
     fService: array of TSynAngelizeService;
@@ -370,7 +372,8 @@ begin
   fService.fRunner := self;
   fCmd := aCmd;
   fRedirect := aRedirect;
-  fRedirectFileName := fRedirect.FileName;
+  if fRedirect <> nil then
+    fRedirectFileName := fRedirect.FileName;
   fRetryEvent := TSynEvent.Create;
   FreeOnTerminate := true;
   inherited Create({suspended=}false);
@@ -425,7 +428,7 @@ begin
     lastunstable := 0;
     repeat
       err := -7777777;
-      fService.SetState(ssStarting, '%', [fCmd]);
+      fService.SetState(ssStarting, '%', [fCmd], {resetmessage=}true);
       start := GetTickCount64;
       try
         log.Log(sllTrace, 'Execute %: %', [sn, fCmd], self);
@@ -607,14 +610,24 @@ begin
 end;
 
 procedure TSynAngelizeService.SetState(NewState: TServiceState;
-  const Fmt: RawUtf8; const Args: array of const);
+  const Fmt: RawUtf8; const Args: array of const; ResetMessage: boolean);
+var
+  msg: RawUtf8;
 begin
   if self <> nil then
     try
       fState := NewState;
-      if fStateMessage <> '' then
-        fStateMessage := fStateMessage + ', ';
-      fStateMessage := fStateMessage + FormatUtf8(Fmt, Args);
+      if ResetMessage then
+        fStateMessage := '';
+      FormatUtf8(Fmt, Args, msg);
+      if msg <> '' then
+      begin
+        if fStateMessage <> '' then
+          fStateMessage := fStateMessage + ', ';
+        fStateMessage := fStateMessage + msg;
+      end;
+      if fOwner <> nil then // real time notification (fast enough)
+        fOwner.ComputeServicesStateFiles;
     except
       // so that it is safe to call this method in any context
     end;
@@ -629,7 +642,7 @@ constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
   fHttpTimeoutMS := 200;
-  fFolder := Executable.ProgramFilePath + 'services';
+  fFolder := IncludeTrailingPathDelimiter(Executable.ProgramFilePath + 'services');
   fExt := '.service';
   fStateFile := TemporaryFileName;
 end;
@@ -650,7 +663,7 @@ begin
   with fSettings as TSynAngelizeSettings do
     if fHtmlStateFileIdentifier = '' then // some default text
       FormatUtf8('% Current State',
-        [fSettings.ServiceName], fHtmlStateFileIdentifier);
+        [UpperCaseU(fSettings.ServiceName)], fHtmlStateFileIdentifier);
 end;
 
 destructor TSynAngelize.Destroy;
@@ -689,6 +702,7 @@ begin
     4:
       begin
         WriteCopyright;
+        fServiceState := CurrentState;
         Resume;
       end;
   else
@@ -757,6 +771,7 @@ begin
   end;
   DeleteFile(sas.StateFile); // from now on, StateFile is meant to be valid
   // browse folder for settings files and generates fService[]
+  sas.Folder := IncludeTrailingPathDelimiter(sas.Folder);
   fn := sas.Folder + '*' + sas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
   begin
@@ -764,12 +779,11 @@ begin
       if SearchRecValidFile(r) then
       begin
         s := fSettingsClass.Create;
+        s.fOwner := self;
         s.SettingsOptions := sas.SettingsOptions; // share ini/json format
         fn := sas.Folder + r.Name;
         if s.LoadFromFile(fn) and
-           (s.Name <> '') and
-           (s.Start <> nil) and
-           (s.Stop <> nil) then
+           (s.Name <> '') then
           if s.Level > 0 then
           begin
             exist := FindService(s.Name);
@@ -785,8 +799,8 @@ begin
             s := nil; // don't Free - will be owned by fService[]
           end
           else // s.Level <= 0
-            fSettings.LogClass.Add.Log(
-              sllDebug, 'GetServices: disabled %', [r.Name], self)
+            fSettings.LogClass.Add.Log(sllDebug,
+              'GetServices: disabled % (Level=%)', [r.Name, s.Level], self)
         else
           raise ESynAngelize.CreateUtf8(
                   'GetServices: invalid % content', [r.Name]);
@@ -832,14 +846,17 @@ begin
       // generate human-friendly HTML state file
       ident := HtmlEscape(ident); // avoid ingestion
       FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
+        '<style>table,th,td{border:1px solid;border-collapse:collapse;padding: 10px;}</style>' +
         '<body style="font-family:verdana"><h1>%</h1><hr>' +
         '<h2>Main Service</h2><p>Change Time : %</p><p>Current State : %</p> ' +
         '<p>Services Count : %</p><hr>' +
-        '<h2>Sub Services</h2><table><thead><tr><th>Service Name</th>' +
-        '<th>Service State</th><th>State Info</th></tr></thead><tbody>',
-        [ident, ident, NowToString, ToText(CurrentState)^, result], html);
+        '<h2>Sub Services</h2><table style="width:100%"><thead>' +
+        '<tr><th style="width:15%">Name</th>' +
+        '<th style="width:15%">State</th>' +
+        '<th>Info</th></tr></thead><tbody>',
+        [ident, ident, NowToString, ToText(fServiceState)^, result], html);
       for i := 0 to result - 1 do
-        with fService[i] do
+        with fService[i] do             
           html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
             [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
       html := html + '</tbody></table></body></html>';
@@ -1028,7 +1045,7 @@ var
       acDoWatch:
         if status <> expectedstatus then
           Service.SetState(ssFailed, '% returned % but expected %',
-            [ToText(Action), status, expectedstatus]);
+            [ToText(Action), status, expectedstatus], {resetmessage=}true);
     end;
   end;
 
@@ -1036,6 +1053,8 @@ begin
   expectedstatus := 0; // e.g. executable file exitcode = 0 as success
   if Split(Param, '=', p, st) then
     ToInteger(st, expectedstatus);
+  if p = '' then
+    p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
   case Action of
     aaExec,
     aaWait,
@@ -1047,8 +1066,6 @@ begin
       if expectedstatus = 0 then // not overriden by ToInteger()
         expectedstatus := HTTP_SUCCESS;
   end;
-  if p = '' then
-    p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
   sas := Sender.Settings as TSynAngelizeSettings;
   result := false;
   Status := 0;
@@ -1060,66 +1077,64 @@ begin
         CheckStatus;
       end;
     aaStart:
-      if FileExists(fn) then
-        if Service.fStarted = '' then
+      if Service.fStarted = '' then
+      begin
+        lf := Service.RedirectLogFile;
+        if lf <> '' then
         begin
-          lf := Service.RedirectLogFile;
-          if lf <> '' then
+          // create log file before thread start to track file access issue
+          if FileExists(lf) then
           begin
-            // create log file before thread start to track file access issue
-            if FileExists(lf) then
-            begin
-              ls := TFileStreamEx.Create(lf, fmOpenReadDenyNone);
-              ls.Seek(0, soEnd); // append
-            end
-            else
-              ls := TFileStreamEx.Create(lf, fmCreate);
-            Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
+            ls := TFileStreamEx.Create(lf, fmOpenReadDenyNone);
+            ls.Seek(0, soEnd); // append
           end
           else
-            ls := nil;
-          TSynAngelizeRunner.Create(Sender, Log, Service, fn, ls);
-          Service.fStarted := p;
+            ls := TFileStreamEx.Create(lf, fmCreate);
+          Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
         end
         else
-          raise ESynAngelize.CreateUtf8(
-            '%: only a single "start" is allowed per service', [Service.Name])
+          ls := nil;
+        TSynAngelizeRunner.Create(Sender, Log, Service, fn, ls);
+        Service.fStarted := p;
+      end
       else
-        raise ESynAngelize.CreateUtf8('% "start": no such executable "%"',
-          [Service.Name, fn]);
+        raise ESynAngelize.CreateUtf8(
+          '%: only a single "start" is allowed per service', [Service.Name]);
     aaStop:
-      if p = Service.fStarted then
-        if Service.fRunner <> nil then
-        begin
-          sec := Service.StopRunAbortTimeoutSec;
-          RunAbortTimeoutSecs := sec;
-          Service.fRunner.Abort; // set "stop" flag for OnRedirect()
-          Service.SetState(ssStopping, 'TimeOut = % sec', [sec]);
-          if sec <= 0 then
-            sec := 1 // wait at least one second for TerminateProcess/SIGKILL
+      if Service.fStarted <> '' then     
+        if p = Service.fStarted then
+          if Service.fRunner <> nil then
+          begin
+            sec := Service.StopRunAbortTimeoutSec;
+            RunAbortTimeoutSecs := sec;
+            Service.fRunner.Abort; // set "stop" flag for OnRedirect()
+            Service.SetState(ssStopping, '', []);
+            if sec <= 0 then
+              sec := 1 // wait at least one second for TerminateProcess/SIGKILL
+            else
+              sec := sec * 3; // wait up to 3 gracefull ending phases
+            Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [sec], Sender);
+            endtix := GetTickCount64 + sec * 1000;
+            repeat
+              SleepHiRes(10);
+              if Service.fRunner = nil then
+                break;
+               if GetTickCount64 > endtix then
+               begin
+                 Log.Log(sllWarning, 'Stop: % timeout', [p], Sender);
+                 break;
+               end;
+            until false;
+            Log.Log(sllTrace, 'Stop: % ExitCode=%',
+              [p, Service.fRunnerExitCode], Sender);
+            Service.fStarted := '';
+          end
           else
-            sec := sec * 3; // wait up to 3 gracefull ending phases
-          Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [sec], Sender);
-          endtix := GetTickCount64 + sec * 1000;
-          repeat
-            SleepHiRes(10);
-            if Service.fRunner = nil then
-              break;
-             if GetTickCount64 > endtix then
-             begin
-               Log.Log(sllWarning, 'Stop: % timeout', [p], Sender);
-               break;
-             end;
-          until false;
-          Log.Log(sllTrace, 'Stop: % ExitCode=%',
-            [p, Service.fRunnerExitCode], Sender);
-        end
+            // may happen if there is no auto-restart mode
+            Log.Log(sllDebug, 'Stop: % with nothing running', [p], Sender)
         else
-          // may happen if there is no auto-restart mode
-          Log.Log(sllDebug, 'Stop: % with nothing running', [p], Sender)
-      else
-        raise ESynAngelize.CreateUtf8('% "stop:%" does not match "start:%"',
-          [Service.Name, p, Service.fStarted]);
+          raise ESynAngelize.CreateUtf8('% "stop:%" does not match "start:%"',
+            [Service.Name, p, Service.fStarted]);
     aaHttp,
     aaHttps:
       begin
@@ -1145,9 +1160,9 @@ begin
               sc.Start([]);
             acDoStop:
               sc.Stop;
-            acDoWatch:
-              Service.SetState(sc.State, 'As Windows Service "%"', [p]);
           end;
+          Service.SetState(sc.State,
+            'As Windows Service "%"', [p], {resetmessage=}true);
         finally
           sc.Free;
           WindowsServiceLog := nil;
@@ -1201,14 +1216,13 @@ end;
 
 procedure TSynAngelize.ListServices;
 var
-  ss: TServiceState;
   state: TSynAngelizeState;
   i: PtrInt;
 begin
   WriteCopyright;
-  ss := CurrentState;
-  if ss <> ssRunning then
-    ConsoleWrite('Main service state is %', [ToText(ss)^], ccLightRed)
+  fServiceState := CurrentState;
+  if fServiceState <> ssRunning then
+    ConsoleWrite('Main service state is %', [ToText(fServiceState)^], ccLightRed)
   else if LoadServicesState(state) and
           ({%H-}state.Service <> nil) then
     for i := 0 to high(state.Service) do
@@ -1232,18 +1246,24 @@ var
   new: TSynAngelizeService;
   log: ISynLog;
 begin
-  // mimics nssm install <servicename> <application> [<options>]
+  // mimics nssm install <servicename> <executable> [<params>]
   log := fSettings.LogClass.Enter(self, 'NewService');
   WriteCopyright;
   if ParamCount < 3 then
     raise ESynAngelize.CreateUtf8(
-      'Syntax is % /new <servicename> <application> [<options>]',
+      'Syntax is % /new <servicename> <executable> [<params>]',
       [Executable.ProgramName]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
   sn := TrimU(StringToUtf8(paramstr(2)));
   if sn = '' then
-    raise ESynAngelize.CreateUtf8('/new %: invalid servicename "%"', [sn]);
+    raise ESynAngelize.CreateUtf8('/new: invalid servicename "%"', [sn]);
+  if FindService(sn) <> nil then
+    raise ESynAngelize.CreateUtf8('/new: duplicated servicename "%"', [sn]);
   exe := sysutils.Trim(paramstr(3));
+  {$ifdef OSWINDOWS}
+  if ExtractFileExt(exe) = '' then
+    exe := exe + '.exe';
+  {$endif OSWINDOWS}
   if exe <> '' then
     exe := ExpandFileName(exe);
   if not FileExists(exe) then
@@ -1252,29 +1272,31 @@ begin
   sas := fSettings as TSynAngelizeSettings;
   dir := EnsureDirectoryExists(sas.Folder);
   fn := dir + Utf8ToString(id) + sas.Ext;
-  if FileExists(fn) or
-     (FindService(id) <> nil) then
+  if FileExists(fn) then
     for i := 1 to 100 do
     begin
       id2 := FormatUtf8('%-%', [id, i]);
       fn := FormatString('%%%', [dir, id2, sas.Ext]);
-      if (FindService(id2) <> nil) and
-         not FileExists(fn) then
+      if not FileExists(fn) then
       begin
         id := id2;
         break;
       end;
     end;
   if fService = nil then
-    sas.fServiceName := sn;
+    sas.fServiceName := sn; // name the main service from the first added
   new := fSettingsClass.Create;
   try
     new.SettingsOptions := sas.SettingsOptions; // share ini/json format
     new.FileName := fn;
-    new.fName := id;
+    new.fName := sn;
+    new.fLevel := 10; // default level
+    for i := 4 to paramcount do
+      exe := exe + ' ' + paramstr(i);
     new.fRun := StringToUtf8(exe);
     new.SaveIfNeeded;
     log.Log(sllDebug, 'NewService added % as %', [fn, new], self);
+    ConsoleWrite('Created % file', [fn], ccLightGreen);
   finally
     new.Free;
   end;
@@ -1287,6 +1309,7 @@ var
   log: ISynLog;
 begin
   log := fSettings.LogClass.Enter(self, 'StartServices');
+  fServiceState := CurrentState; // retrive state once for all
   // start sub-services following their Level order
   for l := 0 to high(fLevels) do
     for i := 0 to high(fService) do
@@ -1305,7 +1328,6 @@ begin
             DoOne(self, log.Instance, s, acDoStart, s.fStart[a]);
         if s.Watch <> nil then
           s.fNextWatch := GetTickCount64 + s.WatchDelaySec * 1000;
-        ComputeServicesStateFiles; // real time notification
       end;
     end;
   ComputeServicesStateFiles; // save initial state before any watchdog
@@ -1348,8 +1370,7 @@ begin
               FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
             end;
           end;
-        s.SetState(ssStopped, 'StopServices: shutdown%', [errmsg]);
-        ComputeServicesStateFiles; // real time notification
+        s.SetState(ssStopped, 'Shutdown%', [errmsg]);
       end;
     end;
   // delete state files
@@ -1406,8 +1427,6 @@ begin
     tix := GetTickCount64; // may have changed during DoWatch() progress
     s.fNextWatch := tix + s.WatchDelaySec * 1000;
   end;
-  if log <> nil then
-    ComputeServicesStateFiles;
 end;
 
 procedure TSynAngelize.StopWatching;
