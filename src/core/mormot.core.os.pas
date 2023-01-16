@@ -2695,6 +2695,11 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
   out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 
+/// compute the size of a directory's files, optionally with nested folders
+// - basic implementation using FindFirst/FindNext so won't be the fastest
+// available, nor fully accurate when files are actually (hard) links
+function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
+
 /// copy one file to another, similar to the Windows API
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
@@ -5684,6 +5689,25 @@ const
 function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
 begin
   result := (Int64(WinTime) - DateFileTimeDelta) / 10000;
+end;
+
+function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
+var
+  SR: TSearchRec;
+  dir: TFileName;
+begin
+  result := 0;
+  dir := IncludeTrailingPathDelimiter(FileName);
+  if FindFirst(dir + AllFilesMask, faAnyFile, SR) <> 0 then
+    exit;
+  repeat
+   if SearchRecValidFile(SR) then
+     inc(result, SR.Size)
+   else if Recursive and
+           SearchRecValidFolder(SR) then
+     inc(result, DirectorySize(dir + SR.Name, true));
+  until FindNext(SR) <> 0;
+  FindClose(SR);
 end;
 
 function ValidHandle(Handle: THandle): boolean;
