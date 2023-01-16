@@ -1320,7 +1320,8 @@ begin
       exe := exe + ' ' + paramstr(i);
     new.fRun := StringToUtf8(exe);
     new.SaveIfNeeded;
-    log.Log(sllDebug, 'NewService added % as %', [fn, new], self);
+    if Assigned(log) then
+      log.Log(sllDebug, 'NewService added % as %', [fn, new], self);
     ConsoleWrite('Created % file', [fn], ccLightGreen);
   finally
     new.Free;
@@ -1366,18 +1367,21 @@ begin
     end;
     // wait for all services of this level to be running
     sec := (fSettings as TSynAngelizeSettings).StartTimeoutSec;
-    one.Log(sllTrace, 'StartServices: wait % sec for level #% start',
-      [sec, fLevels[l]], self);
-    endtix := GetTickCount64 + sec * 1000;
-    for i := 0 to high(fStarted) do
+    if sec > 0 then
     begin
-      s := fStarted[i];
-      while s.fState <> ssRunning do
-        if GetTickCount64 > endtix then
-          raise ESynAngelize.CreateUtf8(
-            'StartServices timeout waiting for %', [s.Name])
-        else
-          SleepHiRes(10);
+      one.Log(sllTrace, 'StartServices: wait % sec for level #% start',
+        [sec, fLevels[l]], self);
+      endtix := GetTickCount64 + sec * 1000;
+      for i := 0 to high(fStarted) do
+      begin
+        s := fStarted[i];
+        while s.fState <> ssRunning do
+          if GetTickCount64 > endtix then
+            raise ESynAngelize.CreateUtf8(
+              'StartServices timeout waiting for %', [s.Name])
+          else
+            SleepHiRes(10);
+      end;
     end;
   end;
   ComputeServicesStateFiles; // save initial state before any watchdog
@@ -1391,9 +1395,14 @@ var
   errmsg: string;
   sas: TSynAngelizeSettings;
   log: ISynLog;
+  one: TSynLog;
 begin
   sas := fSettings as TSynAngelizeSettings;
   log := sas.LogClass.Enter(self, 'StopServices');
+  if Assigned(log) then
+    one := log.Instance
+  else
+    one := nil;
   // stop sub-services following their reverse Level order
   for l := high(fLevels) downto 0 do
     for i := 0 to high(fService) do
@@ -1405,17 +1414,17 @@ begin
         if (s.fStop = nil) and
            (s.fRun <> '') then
           // "Stop":[] will assume 'stop:%run%'
-          DoOne(self, log.Instance, s, acDoStop, 'stop')
+          DoOne(self, one, s, acDoStop, 'stop')
         else
           // execute all "Stop":[...,...,...] actions
           for a := 0 to high(s.fStop) do
           try
-            DoOne(self, log.Instance, s, acDoStop, s.fStop[a]);
+            DoOne(self, one, s, acDoStop, s.fStop[a]);
           except
             on E: Exception do
             begin
               // any exception should continue the stopping
-              log.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
+              one.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
                 [s.Name, s.fStop[a], E.ClassType], self);
               FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
             end;
@@ -1424,28 +1433,28 @@ begin
       end;
     end;
   // finalize state files
-  ComputeServicesHtmlFile; 
+  ComputeServicesHtmlFile;
   sf := sas.StateFile;
   if sf <> '' then
   begin
-    log.Log(sllTrace, 'StopServices: Delete %', [sf], self);
+    one.Log(sllTrace, 'StopServices: Delete %', [sf], self);
     DeleteFile(sf); // delete binary, but not .html (marked all stopped)
   end;
 end;
 
 procedure TSynAngelize.StartWatching;
 var
-  log: TSynLogClass;
+  log: TSynLog;
 begin
+  log := fSettings.LogClass.Add;
   if fHasWatchs then
   begin
-    log := fSettings.LogClass;
-    log.Add.Log(sllTrace, 'StartWatching', self);
+    log.Log(sllTrace, 'StartWatching', self);
     fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
       WatchEverySecond, 1000, nil, log.Family.OnThreadEnded);
   end
   else
-    fSettings.LogClass.Add.Log(sllTrace, 'StartWatching: no need to watch', self);
+    log.Log(sllTrace, 'StartWatching: no need to watch', self);
 end;
 
 procedure TSynAngelize.WatchEverySecond(Sender: TSynBackgroundThreadProcess);
@@ -1454,9 +1463,11 @@ var
   tix: Int64;
   s: TSynAngelizeService;
   log: ISynLog;
+  one: TSynLog;
 begin
   // note that a process monitored from a "Start": [ "start:/path/to/file" ]
   // previous command is watched in its monitoring thread, not here
+  one := nil;
   tix := GetTickCount64;
   for i := 0 to high(fService) do
   begin
@@ -1465,14 +1476,18 @@ begin
        (tix < s.fNextWatch) then
       continue;
     if log = nil then
+    begin
       log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
+      if Assigned(log) then
+        one := log.Instance;
+    end;
     // execute all "Watch":[...,...,...] actions
     for a := 0 to high(s.fWatch) do
       try
-        DoWatch(log.Instance, s, s.fWatch[a]);
+        DoWatch(one, s, s.fWatch[a]);
       except
         on E: Exception do // any exception should continue the watching
-          log.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
+          one.Log(sllWarning, 'WatchEverySecond: DoWatch(%,%) raised %',
             [s.Name, s.fWatch[a], E.ClassType], self);
       end;
     tix := GetTickCount64; // may have changed during DoWatch() progress
