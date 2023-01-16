@@ -3441,6 +3441,9 @@ end;
 
 { TServiceController }
 
+type
+  EService = class(Exception);
+  
 constructor TServiceController.CreateNewService(const TargetComputer,
   DatabaseName, Name, DisplayName: RawUtf8; const Path: TFileName;
   const OrderGroup: RawUtf8; const Dependencies: RawUtf8;
@@ -3451,7 +3454,6 @@ var
   exeNameW: SynUnicode;
   depW: PWideChar;
   i: PtrInt;
-  level: TSynLogInfo;
   t0, t1, t2, t3, t4, t5: TSynTempBuffer;
 begin
   inherited Create;
@@ -3467,12 +3469,9 @@ begin
       exeName := ExpandUNCFileName(Path);
       if (copy(exeName, 1, 12) <> '\\localhost\') or
          (exeName[14] <> '$') then
-      begin
-        TService.DoLog(sllError,
-          'CreateNewService(''%'',''%'') on remote drive: Path=% is %',
-          [Name, DisplayName, Path, exeName], self);
-        exit;
-      end;
+        raise EService.CreateFmt(
+          '%s.CreateNewService(''%s'',''%s'') on remote drive: Path=%s is %s',
+          [ClassNameShort(self)^, Name, DisplayName, Path, exeName]);
       system.delete(exeName, 1, 12); // \\localhost\c$\... -> c:\...
       exeName[2] := ':';
     end
@@ -3483,11 +3482,7 @@ begin
   fSCHandle := OpenServiceManager(
     TargetComputer, DatabaseName, SC_MANAGER_ALL_ACCESS);
   if fSCHandle = 0 then
-  begin
-    TService.DoLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-      [TargetComputer, DatabaseName, fName], self);
-    exit;
-  end;
+    RaiseLastError('TServiceController.CreateService: OpenServiceManager', EService);
   depW := Utf8ToWin32PWideChar(Dependencies, t0);
   if depW <> nil then
   begin
@@ -3508,11 +3503,9 @@ begin
   t3.Done;
   t4.Done;
   t5.Done;
-  if fHandle <> 0 then
-    level := sllInfo // success
-  else
-    level := sllLastError;
-  TService.DoLog(level,
+  if fHandle = 0 then
+    RaiseLastError('TServiceController.CreateService:', EService);
+  TService.DoLog(sllInfo, 
     'CreateService(''%'',''%'',''%'')', [Name, DisplayName, exeName], self);
 end;
 
