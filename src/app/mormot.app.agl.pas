@@ -1182,19 +1182,6 @@ begin
   result := RecordLoad(state, bin, TypeInfo(TSynAngelizeState));
 end;
 
-const
-  _STATECOLOR: array[TServiceState] of TConsoleColor = (
-    ccBlue,       // NotInstalled
-    ccLightRed,   // Stopped
-    ccGreen,      // Starting
-    ccRed,        // Stopping
-    ccLightGreen, // Running
-    ccGreen,      // Resuming
-    ccBrown,      // Pausing
-    ccWhite,      // Paused
-    ccMagenta,    // Failed
-    ccYellow);    // ErrorRetrievingState
-
 procedure TSynAngelize.ListServices;
 var
   ss: TServiceState;
@@ -1209,7 +1196,7 @@ begin
     for i := 0 to high(state.Service) do
       with state.Service[i] do
       begin
-        ConsoleWrite('% %', [Name, ToText(State)^], _STATECOLOR[State]);
+        ConsoleWrite('% %', [Name, ToText(State)^], SERVICESTATE_COLOR[State]);
         if Info <> '' then
           ConsoleWrite('  %', [Info], ccLightGray);
       end

@@ -4120,6 +4120,20 @@ type
 /// return the ready to be displayed text of a TServiceState value
 function ToText(st: TServiceState): PShortString; overload;
 
+const
+  /// could be used with ConsoleWrite() to notify a Windows service state
+  SERVICESTATE_COLOR: array[TServiceState] of TConsoleColor = (
+    ccBlue,       // NotInstalled
+    ccLightRed,   // Stopped
+    ccGreen,      // Starting
+    ccRed,        // Stopping
+    ccLightGreen, // Running
+    ccGreen,      // Resuming
+    ccBrown,      // Pausing
+    ccWhite,      // Paused
+    ccMagenta,    // Failed
+    ccYellow);    // ErrorRetrievingState
+
 
 {$ifdef OSWINDOWS}
 
