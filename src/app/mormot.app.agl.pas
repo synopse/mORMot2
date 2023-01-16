@@ -242,7 +242,7 @@ type
   protected
     fFolder, fExt, fStateFile: TFileName;
     fHtmlStateFileIdentifier: RawUtf8;
-    fHttpTimeoutMS: integer;
+    fHttpTimeoutMS, fStartTimeoutSec: integer;
   public
     /// set the default values
     constructor Create; override;
@@ -271,6 +271,10 @@ type
     // Intranet) to monitor the services state from anywhere in the world
     property HtmlStateFileIdentifier: RawUtf8
       read fHtmlStateFileIdentifier write fHtmlStateFileIdentifier;
+    /// how many seconds a "Level" should wait for all processes to start
+    // - default is 30 seconds
+    property StartTimeoutSec: integer
+      read fStartTimeoutSec write fStartTimeoutSec;
   end;
 
   /// used to serialize the current state of the services
@@ -299,13 +303,14 @@ type
     fState: set of (sasStarted, sasStopped);
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
-    fService: array of TSynAngelizeService;
+    fService, fStarted: array of TSynAngelizeService;
     fLevels: TIntegerDynArray;
     fLastGetServicesStateFile: RawByteString;
     fWatchThread: TSynBackgroundThreadProcess;
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
+    procedure ClearServicesState;
     function LoadServicesState(out state: TSynAngelizeState): boolean;
     procedure ListServices;
     procedure NewService;
@@ -317,6 +322,7 @@ type
     // sub-service support
     function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
     function ComputeServicesStateFiles: integer;
+    procedure ComputeServicesHtmlFile;
     procedure DoExpand(aService: TSynAngelizeService; const aInput: TSynAngelizeAction;
       out aOutput: TSynAngelizeAction); virtual;
     function DoExpandLookup(aService: TSynAngelizeService;
@@ -755,7 +761,6 @@ end;
 
 function TSynAngelize.LoadServicesFromSettingsFolder: integer;
 var
-  bin: RawByteString;
   fn: TFileName;
   r: TSearchRec;
   s, exist: TSynAngelizeService;
@@ -765,18 +770,6 @@ begin
   Finalize(fLevels);
   fHasWatchs := false;
   sas := fSettings as TSynAngelizeSettings;
-  // remove any previous local state file
-  bin := StringFromFile(sas.StateFile);
-  if (bin <> '') and
-     (PCardinal(bin)^ <> _STATEMAGIC) then
-  begin
-    // this existing file is clearly invalid: store a new safe one in settings
-    sas.StateFile := TemporaryFileName;
-    // avoid deleting of a non valid file (may be used by malicious tools)
-    raise ESynAngelize.CreateUtf8(
-      'Invalid StateFile=% content', [sas.StateFile]);
-  end;
-  DeleteFile(sas.StateFile); // from now on, StateFile is meant to be valid
   // browse folder for settings files and generates fService[]
   sas.Folder := IncludeTrailingPathDelimiter(sas.Folder);
   fn := sas.Folder + '*' + sas.Ext;
@@ -820,13 +813,42 @@ begin
   result := length(fService);
 end;
 
+procedure TSynAngelize.ComputeServicesHtmlFile;
+var
+  i: PtrInt;
+  ident, html: RawUtf8;
+  sas: TSynAngelizeSettings;
+begin
+  sas := fSettings as TSynAngelizeSettings;
+  ident := sas.HtmlStateFileIdentifier;
+  if ident = '' then
+    exit;
+  // generate human-friendly HTML state file
+  ident := HtmlEscape(ident); // avoid ingestion
+  FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
+    '<style>table,th,td{border:1px solid;border-collapse:collapse;padding: 10px;}</style>' +
+    '<body style="font-family:verdana"><h1>%</h1><hr>' +
+    '<h2>Main Service</h2><p>Change Time : %</p>' +
+    '<p>Services Count : %</p><hr>' +
+    '<h2>Sub Services</h2><table style="width:100%"><thead>' +
+    '<tr><th style="width:15%">Name</th>' +
+    '<th style="width:15%">State</th>' +
+    '<th>Info</th></tr></thead><tbody>',
+    [ident, ident, NowToString, length(fService)], html);
+  for i := 0 to high(fService) do
+    with fService[i] do
+      html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
+        [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
+  html := html + '</tbody></table></body></html>';
+  FileFromString(html, sas.StateFile + '.html');
+end;
+
 function TSynAngelize.ComputeServicesStateFiles: integer;
 var
   s: TSynAngelizeService;
   state: TSynAngelizeState;
   sas: TSynAngelizeSettings;
   bin: RawByteString;
-  ident, html: RawUtf8;
   i: PtrInt;
 begin
   result := length(fService);
@@ -847,28 +869,7 @@ begin
     sas := fSettings as TSynAngelizeSettings;
     FileFromString(bin, sas.StateFile);
     fLastGetServicesStateFile := bin;
-    ident := sas.HtmlStateFileIdentifier;
-    if ident <> '' then
-    begin
-      // generate human-friendly HTML state file
-      ident := HtmlEscape(ident); // avoid ingestion
-      FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
-        '<style>table,th,td{border:1px solid;border-collapse:collapse;padding: 10px;}</style>' +
-        '<body style="font-family:verdana"><h1>%</h1><hr>' +
-        '<h2>Main Service</h2><p>Change Time : %</p><p>Current State : %</p> ' +
-        '<p>Services Count : %</p><hr>' +
-        '<h2>Sub Services</h2><table style="width:100%"><thead>' +
-        '<tr><th style="width:15%">Name</th>' +
-        '<th style="width:15%">State</th>' +
-        '<th>Info</th></tr></thead><tbody>',
-        [ident, ident, NowToString, ToText(fServiceState)^, result], html);
-      for i := 0 to result - 1 do
-        with fService[i] do             
-          html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
-            [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
-      html := html + '</tbody></table></body></html>';
-      FileFromString(html, sas.StateFile + '.html');
-    end;
+    ComputeServicesHtmlFile;
   end;
 end;
 
@@ -1102,7 +1103,8 @@ begin
         else
           ls := nil;
         TSynAngelizeRunner.Create(Sender, Log, Service, fn, ls);
-        Service.fStarted := p;
+        ObjArrayAdd(Sender.fStarted, Service); // for caller to wait for this level
+        Service.fStarted := p;        
       end
       else
         raise ESynAngelize.CreateUtf8(
@@ -1207,6 +1209,26 @@ begin
     aAction, ToText(aService.State)^, aService.StateMessage], self);
 end;
 
+procedure TSynAngelize.ClearServicesState;
+var
+  bin: RawByteString;
+  sas: TSynAngelizeSettings;
+begin
+  sas := fSettings as TSynAngelizeSettings;
+  // remove any previous local state file
+  bin := StringFromFile(sas.StateFile);
+  if (bin <> '') and
+     (PCardinal(bin)^ <> _STATEMAGIC) then
+  begin
+    // this existing file is clearly invalid: store a new safe one in settings
+    sas.StateFile := TemporaryFileName;
+    // avoid deleting of a non valid file (may be used by malicious tools)
+    raise ESynAngelize.CreateUtf8(
+      'Invalid StateFile=% content', [sas.StateFile]);
+  end;
+  DeleteFile(sas.StateFile); // from now on, StateFile is meant to be valid
+end;
+
 function TSynAngelize.LoadServicesState(out state: TSynAngelizeState): boolean;
 var
   bin: RawByteString;
@@ -1309,30 +1331,55 @@ procedure TSynAngelize.StartServices;
 var
   l, i, a: PtrInt;
   s: TSynAngelizeService;
+  sec: integer;
+  endtix: Int64;
   log: ISynLog;
+  one: TSynLog;
 begin
   log := fSettings.LogClass.Enter(self, 'StartServices');
-  fServiceState := CurrentState; // retrive state once for all
+  if Assigned(log) then
+    one := log.Instance
+  else
+    one := nil;
   // start sub-services following their Level order
   for l := 0 to high(fLevels) do
+  begin
+    fStarted := nil;
     for i := 0 to high(fService) do
     begin
+      // launch all services of this level
       s := fService[i];
       if s.Level = fLevels[l] then
       begin
         if (s.fStart = nil) and
            (s.fRun <> '') then
           // "Start":[] will assume 'start:%run%'
-          DoOne(self, log.Instance, s, acDoStart, 'start')
+          DoOne(self, one, s, acDoStart, 'start')
         else
           // execute all "Start":[...,...,...] actions
           for a := 0 to high(s.fStart) do
             // any exception on DoOne() should break the starting
-            DoOne(self, log.Instance, s, acDoStart, s.fStart[a]);
+            DoOne(self, one, s, acDoStart, s.fStart[a]);
         if s.Watch <> nil then
           s.fNextWatch := GetTickCount64 + s.WatchDelaySec * 1000;
       end;
     end;
+    // wait for all services of this level to be running
+    sec := (fSettings as TSynAngelizeSettings).StartTimeoutSec;
+    one.Log(sllTrace, 'StartServices: wait % sec for level #% start',
+      [sec, fLevels[l]], self);
+    endtix := GetTickCount64 + sec * 1000;
+    for i := 0 to high(fStarted) do
+    begin
+      s := fStarted[i];
+      while s.fState <> ssRunning do
+        if GetTickCount64 > endtix then
+          raise ESynAngelize.CreateUtf8(
+            'StartServices timeout waiting for %', [s.Name])
+        else
+          SleepHiRes(10);
+    end;
+  end;
   ComputeServicesStateFiles; // save initial state before any watchdog
 end;
 
@@ -1376,7 +1423,8 @@ begin
         s.SetState(ssStopped, 'Shutdown%', [errmsg]);
       end;
     end;
-  // delete state files
+  // finalize state files
+  ComputeServicesHtmlFile; 
   sf := sas.StateFile;
   if sf <> '' then
   begin
@@ -1448,6 +1496,7 @@ begin
   if sasStarted in fState then
     exit;
   include(fState, sasStarted);
+  ClearServicesState;
   if fService = nil then
     LoadServicesFromSettingsFolder;
   StartServices;
