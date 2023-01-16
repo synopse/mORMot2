@@ -296,7 +296,6 @@ type
     fSettingsClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
     fHasWatchs: boolean;
-    fServiceState: TServiceState;
     fState: set of (sasStarted, sasStopped);
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
@@ -447,13 +446,13 @@ begin
       fService.fRunnerExitCode := err;
       if fAbortRequested then
         break;
-      fService.fState := ssPaused; // notify waiting after error (keep message)
       if (timeout = 0) or
          IntegerScanExists(pointer(se), length(se), err) then
       begin
         // RetryStableSec=0 or AbortExitCodes[] match = no automatic retry
         log.Log(sllTrace, 'Execute %: pause forever after ExitCode=%',
           [sn, err], self);
+        fService.SetState(ssPaused, 'Wait for abort or /retry', []);
         fRetryEvent.WaitForEver; // will wait for abort or /retry
       end
       else
@@ -481,11 +480,12 @@ begin
               else
                 pause := 240; // retry every 4 min
           end;
+          fService.SetState(ssPaused, 'Wait % sec', [pause]);
           pause := pause * 1000 + integer(Random32(pause) * 100);
+          // add a small random threshold to smoothen several services restart
           log.Log(sllTrace, 'Execute %: pause % after ExitCode=%',
             [sn, MilliSecToString(pause), err], self);
           fRetryEvent.WaitFor(pause);
-          // add a small random threshold to smooth several services restart
         end
         else
         begin
@@ -710,7 +710,6 @@ begin
     4:
       begin
         WriteCopyright;
-        fServiceState := CurrentState;
         Resume;
       end;
   else
@@ -1227,11 +1226,8 @@ var
   i: PtrInt;
 begin
   WriteCopyright;
-  fServiceState := CurrentState;
-  if fServiceState <> ssRunning then
-    ConsoleWrite('Main service state is %', [ToText(fServiceState)^], ccLightRed)
-  else if LoadServicesState(state) and
-          ({%H-}state.Service <> nil) then
+  if LoadServicesState(state) and
+     ({%H-}state.Service <> nil) then
     for i := 0 to high(state.Service) do
       with state.Service[i] do
       begin
