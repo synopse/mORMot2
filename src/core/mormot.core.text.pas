@@ -10338,8 +10338,8 @@ procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
   ConsoleWrite(#13#10'Fatal exception ', cclightRed, true);
   ConsoleWrite('%', [E.ClassType], ccWhite, true);
-  ConsoleWrite(' raised with message ', ccLightRed, true);
-  ConsoleWrite('%', [E.Message], ccLightMagenta);
+  ConsoleWrite(' raised with message ', ccLightRed);
+  ConsoleWrite('  %', [E.Message], ccLightMagenta);
   TextColor(ccLightGray);
   if WaitForEnterKey then
   begin
