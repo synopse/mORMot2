@@ -325,7 +325,7 @@ type
     /// initialize the main daemon/server redirection instance
     // - main TSynAngelizeSettings is loaded
     constructor Create(aSettingsClass: TSynAngelizeServiceClass = nil;
-      const aSectionName: RawUtf8 = 'Main'; aLog: TSynLogClass = nil); reintroduce;
+      aLog: TSynLogClass = nil; const aSectionName: RawUtf8 = 'Main'); reintroduce;
     /// finalize the stored information
     destructor Destroy; override;
     /// read and parse all *.service definitions from Settings.Folder
@@ -638,13 +638,14 @@ end;
 { TSynAngelize }
 
 constructor TSynAngelize.Create(aSettingsClass: TSynAngelizeServiceClass;
-  const aSectionName: RawUtf8; aLog: TSynLogClass);
+  aLog: TSynLogClass; const aSectionName: RawUtf8);
 begin
   if aSettingsClass = nil then
     aSettingsClass := TSynAngelizeService;
   fSettingsClass := aSettingsClass;
   inherited Create(TSynAngelizeSettings, Executable.ProgramFilePath,
     Executable.ProgramFilePath,  Executable.ProgramFilePath + 'log');
+  WindowsServiceLog := fSettings.LogClass.DoLog;
   with fSettings as TSynAngelizeSettings do
     if fHtmlStateFileIdentifier = '' then // some default text
       FormatUtf8('% Current State',
@@ -677,12 +678,18 @@ begin
     0:
       ListServices;
     1:
-      ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
+      begin
+        WriteCopyright;
+        ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
+      end;
     2:
       NewService;
     3,
     4:
-      Resume;
+      begin
+        WriteCopyright;
+        Resume;
+      end;
   else
     result := false; // display syntax
   end;
@@ -738,7 +745,7 @@ begin
   sas := fSettings as TSynAngelizeSettings;
   // remove any previous local state file
   bin := StringFromFile(sas.StateFile);
-  if (bin = '') or
+  if (bin <> '') and
      (PCardinal(bin)^ <> _STATEMAGIC) then
   begin
     // this existing file is clearly invalid: store a new safe one in settings
@@ -1130,7 +1137,6 @@ begin
     {$ifdef OSWINDOWS}
     aaService:
       begin
-        WindowsServiceLog := Log.DoLog;
         sc := TServiceController.CreateOpenService('', '', p);
         try
           case Ctxt of
@@ -1198,9 +1204,10 @@ var
   state: TSynAngelizeState;
   i: PtrInt;
 begin
+  WriteCopyright;
   ss := CurrentState;
   if ss <> ssRunning then
-    ConsoleWrite('Main service state is %', [ToText(ss)^], ccMagenta)
+    ConsoleWrite('Main service state is %', [ToText(ss)^], ccLightRed)
   else if LoadServicesState(state) and
           ({%H-}state.Service <> nil) then
     for i := 0 to high(state.Service) do
@@ -1225,7 +1232,8 @@ var
   log: ISynLog;
 begin
   // mimics nssm install <servicename> <application> [<options>]
-  log := TSynLog.Enter(self, 'NewService');
+  log := fSettings.LogClass.Enter(self, 'NewService');
+  WriteCopyright;
   if ParamCount < 3 then
     raise ESynAngelize.CreateUtf8(
       'Syntax is % /new <servicename> <application> [<options>]',
@@ -1277,7 +1285,7 @@ var
   s: TSynAngelizeService;
   log: ISynLog;
 begin
-  log := TSynLog.Enter(self, 'StartServices');
+  log := fSettings.LogClass.Enter(self, 'StartServices');
   // start sub-services following their Level order
   for l := 0 to high(fLevels) do
     for i := 0 to high(fService) do
@@ -1311,8 +1319,8 @@ var
   sas: TSynAngelizeSettings;
   log: ISynLog;
 begin
-  log := TSynLog.Enter(self, 'StopServices');
   sas := fSettings as TSynAngelizeSettings;
+  log := sas.LogClass.Enter(self, 'StopServices');
   // stop sub-services following their reverse Level order
   for l := high(fLevels) downto 0 do
     for i := 0 to high(fService) do
@@ -1347,21 +1355,24 @@ begin
   sf := sas.StateFile;
   if sf <> '' then
   begin
-    log.Log(sllTrace, 'StopServices: Delete % and %.html', [sf, sf], self);
+    log.Log(sllTrace, 'StopServices: Delete %', [sf], self);
     DeleteFile(sf); // delete binary, but not .html (marked all stopped)
   end;
 end;
 
 procedure TSynAngelize.StartWatching;
+var
+  log: TSynLogClass;
 begin
   if fHasWatchs then
   begin
-    TSynLog.Add.Log(sllTrace, 'StartWatching', self);
+    log := fSettings.LogClass;
+    log.Add.Log(sllTrace, 'StartWatching', self);
     fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
-      WatchEverySecond, 1000, nil, TSynLog.Family.OnThreadEnded);
+      WatchEverySecond, 1000, nil, log.Family.OnThreadEnded);
   end
   else
-    TSynLog.Add.Log(sllTrace, 'StartWatching: no need to watch', self);
+    fSettings.LogClass.Add.Log(sllTrace, 'StartWatching: no need to watch', self);
 end;
 
 procedure TSynAngelize.WatchEverySecond(Sender: TSynBackgroundThreadProcess);
@@ -1381,7 +1392,7 @@ begin
        (tix < s.fNextWatch) then
       continue;
     if log = nil then
-      log := TSynLog.Enter(self, 'WatchEverySecond');
+      log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
     // execute all "Watch":[...,...,...] actions
     for a := 0 to high(s.fWatch) do
       try
@@ -1402,7 +1413,7 @@ procedure TSynAngelize.StopWatching;
 begin
   if fWatchThread <> nil then
     try
-      with TSynLog.Enter(self, 'StopWatching') do
+      with fSettings.LogClass.Enter(self, 'StopWatching') do
         FreeAndNil(fWatchThread);
     except // should always continue, even or weird issue
     end;
@@ -1413,8 +1424,6 @@ begin
   // should raise ESynAngelize on any issue, or let background work begin
   if fService = nil then
     LoadServicesFromSettingsFolder;
-  if fService = nil then
-    exit; // nothing to start
   StartServices;
   StartWatching;
 end;
