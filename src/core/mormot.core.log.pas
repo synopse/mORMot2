@@ -5628,9 +5628,9 @@ begin
           acAppend:
             Include(fInternalFlags, logHeaderWritten);
         end;
-      for retry := 1 to 2 do
+      for retry := 1 to 3 do
       begin
-        for i := 1 to 10 do
+        for i := 1 to retry * 3 do
         try
           exists := FileExists(fFileName);
           if exists and
@@ -5650,10 +5650,10 @@ begin
             break;
           end
           else // likely to be ERROR_ACCESS_DENIED
-            SleepHiRes(50); // wait a little for the file to be available 
+            SleepHiRes(50); // wait a little for the file to be available
         except
           on Exception do
-            SleepHiRes(100);
+            SleepHiRes(10);
         end;
         if fWriterStream <> nil then
           break;
