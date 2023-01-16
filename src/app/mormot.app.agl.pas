@@ -659,7 +659,9 @@ begin
   inherited Create(TSynAngelizeSettings, Executable.ProgramFilePath,
     Executable.ProgramFilePath,  Executable.ProgramFilePath + 'log');
   fShowExceptionWaitEnter := false; // allow silent mode
+  {$ifdef OSWINDOWS}
   WindowsServiceLog := fSettings.LogClass.DoLog;
+  {$endif OSWINDOWS}
   with fSettings as TSynAngelizeSettings do
     if fHtmlStateFileIdentifier = '' then // some default text
       FormatUtf8('% Current State',
@@ -1113,7 +1115,7 @@ begin
               sec := 1 // wait at least one second for TerminateProcess/SIGKILL
             else
               sec := sec * 3; // wait up to 3 gracefull ending phases
-            Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [sec], Sender);
+            Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [p, sec], Sender);
             endtix := GetTickCount64 + sec * 1000;
             repeat
               SleepHiRes(10);
@@ -1165,7 +1167,6 @@ begin
             'As Windows Service "%"', [p], {resetmessage=}true);
         finally
           sc.Free;
-          WindowsServiceLog := nil;
         end;
       end;
     {$endif OSWINDOWS}

@@ -4463,7 +4463,7 @@ begin
               break;
             end;
           end;
-        until n < SizeOf(tmp);
+        until false;
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
              (GetTickCount64 > endtix));
@@ -4477,10 +4477,10 @@ begin
         terminated := false;
         if RunAbortTimeoutSecs > 0 then
         begin
-          if ramCtrlC in ram then // try Ctrl+C
+          if ramCtrlC in ram then  // try Ctrl+C
             terminated := CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
           if (not terminated) and
-             (ramQuit in ram) then // try WMQUIT
+             (ramQuit in ram) then // try WM_QUIT
             terminated := QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
         end;
         if not terminated then

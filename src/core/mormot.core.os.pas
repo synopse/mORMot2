@@ -2778,6 +2778,8 @@ type
     /// open or create the file from its name, depending on the supplied Mode
     // - Mode is typically fmCreate / fmOpenReadDenyNone
     constructor Create(const aFileName: TFileName; Mode: cardinal);
+    /// can use this class from a low-level file OS handle
+    constructor CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
     /// the file name assigned to this class constructor
     property FileName : TFileName
       read fFilename;
@@ -5802,10 +5804,15 @@ begin
     h := FileCreate(aFileName)
   else
     h := FileOpen(aFileName, Mode);
-  if not ValidHandle(h) then
-    raise EOSException.CreateFmt('%s.Create(%s,%x) failed as %s',
-      [ClassNameShort(self)^, aFileName, Mode, GetErrorText(GetLastError)]);
-  inherited Create(h); // TFileStreamFromHandle constructor which will own h
+  CreateFromHandle(aFileName, h);
+end;
+
+constructor TFileStreamEx.CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
+begin
+  if not ValidHandle(aHandle) then
+    raise EOSException.CreateFmt('%s.Create(%s) failed as %s',
+      [ClassNameShort(self)^, aFileName, GetErrorText(GetLastError)]);
+  inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
   fFileName := aFileName;
 end;
 
