@@ -42,22 +42,25 @@ uses
   mormot.net.client        in '..\..\net\mormot.net.client.pas',
   mormot.app.console       in '..\..\app\mormot.app.console.pas',
   mormot.app.daemon        in '..\..\app\mormot.app.daemon.pas',
-  mormot.app.agl           in '..\..\app\mormot.app.agl.pas',
-  mormot.tools.agl;
+  mormot.app.agl           in '..\..\app\mormot.app.agl.pas';
 
 
 {$R *.res}
 
-type TAglCommandError = (none);
-
-function ProcessCommandLine: TAglCommandError;
+var
+  angelize: TSynAngelize; 
 begin
-
-end;
-
-begin
-  // is executed as a service/daemon or as a command line tool
-  ExitCode := ord(ProcessCommandLine);
-  
+  try
+    // is executed as a service/daemon or as a command line tool
+    angelize := TSynAngelize.Create(nil, TSynLog);
+    try
+      angelize.CommandLine;
+    finally
+      angelize.Free;
+    end;
+  except
+    on E: Exception do
+      ConsoleShowFatalException(E, {waitforenterkey=}false);
+  end;
 end.
 

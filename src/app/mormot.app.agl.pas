@@ -645,6 +645,7 @@ begin
   fSettingsClass := aSettingsClass;
   inherited Create(TSynAngelizeSettings, Executable.ProgramFilePath,
     Executable.ProgramFilePath,  Executable.ProgramFilePath + 'log');
+  fShowExceptionWaitEnter := false; // allow silent mode
   WindowsServiceLog := fSettings.LogClass.DoLog;
   with fSettings as TSynAngelizeSettings do
     if fHtmlStateFileIdentifier = '' then // some default text
