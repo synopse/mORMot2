@@ -5611,6 +5611,7 @@ end;
 procedure TSynLog.CreateLogWriter;
 var
   i, retry: integer;
+  h: THandle;
   exists: boolean;
 begin
   if fWriterStream = nil then
@@ -5627,7 +5628,7 @@ begin
           acAppend:
             Include(fInternalFlags, logHeaderWritten);
         end;
-      for retry := 0 to 2 do
+      for retry := 1 to 2 do
       begin
         for i := 1 to 10 do
         try
@@ -5641,16 +5642,23 @@ begin
           else if (fFileRotationSize = 0) or
                   not exists then
             TFileStreamEx.Create(fFileName, fmCreate).Free; // a void file
-          fWriterStream := TFileStreamWithoutWriteError.Create(fFileName,
-            fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
-          break;
+          h := FileOpen(fFileName, fmOpenReadWrite or fmShareDenyWrite);
+          if ValidHandle(h) then 
+          begin
+            fWriterStream :=
+              TFileStreamWithoutWriteError.CreateFromHandle(fFileName, h);
+            break;
+          end
+          else // likely to be ERROR_ACCESS_DENIED
+            SleepHiRes(50); // wait a little for the file to be available 
         except
           on Exception do
             SleepHiRes(100);
         end;
         if fWriterStream <> nil then
           break;
-        fFileName := ChangeFileExt(fFileName, '-' + fFamily.fDefaultExtension);
+        fFileName := ChangeFileExt(fFileName,
+          '-' + IntToStr(retry) + fFamily.fDefaultExtension);
       end;
     end;
     if fWriterStream = nil then
