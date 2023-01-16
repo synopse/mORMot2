@@ -2173,6 +2173,11 @@ var
   tmp16, tmp: TSynTempBuffer;
 begin
   Utf8ToWin32PWideChar(Utf8, tmp16);
+  if tmp16.len = 0 then
+  begin
+    Console := Utf8; // input is not valid UTF-8 -> return without conversion
+    exit;
+  end;
   tmp.Init(tmp16.len * 3);
   CharToOemBuffW(tmp16.buf, tmp.buf, tmp16.len + 1); // +1 = ending #0
   tmp16.Done;
