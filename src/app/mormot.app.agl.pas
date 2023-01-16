@@ -297,6 +297,7 @@ type
     fExpandLevel: byte;
     fHasWatchs: boolean;
     fServiceState: TServiceState;
+    fState: set of (sasStarted, sasStopped);
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
     fService: array of TSynAngelizeService;
@@ -462,13 +463,13 @@ begin
         if tix - start < timeout then
         begin
           // it did not last RetryStableSec: seems not stable - pause and retry
-          pause := 1;
+          pause := 2;
           if lastunstable = 0 then
             lastunstable := tix
           else
           begin
             min := (tix - lastunstable) div 60000;
-            if min > 60 then  // retry every sec until 1 min
+            if min > 60 then  // retry every 2 sec until 1 min
               if min < 5 then
                 pause := 15   // retry every 15 sec until 5 min
               else if min > 10 then
@@ -545,6 +546,7 @@ begin
       fService.SetState(ssRunning, 'PID=%', [pid]);
     exit;
   end;
+  fLog.Add.Log(sllDebug, 'OnRedirect: [%]', [text], self);
   // handle optional console output redirection to a file
   if (fRedirect <> nil) and
      (text <> '') then
@@ -626,8 +628,12 @@ begin
           fStateMessage := fStateMessage + ', ';
         fStateMessage := fStateMessage + msg;
       end;
-      if fOwner <> nil then // real time notification (fast enough)
-        fOwner.ComputeServicesStateFiles;
+      if fOwner <> nil then
+      begin
+        fOwner.fSettings.LogClass.Add.Log(
+          sllTrace, 'SetState(%) [%]', [ToText(NewState)^, msg], self);
+        fOwner.ComputeServicesStateFiles; // real time notification
+      end;
     except
       // so that it is safe to call this method in any context
     end;
@@ -1443,6 +1449,9 @@ end;
 procedure TSynAngelize.Start;
 begin
   // should raise ESynAngelize on any issue, or let background work begin
+  if sasStarted in fState then
+    exit;
+  include(fState, sasStarted);
   if fService = nil then
     LoadServicesFromSettingsFolder;
   StartServices;
@@ -1451,6 +1460,10 @@ end;
 
 procedure TSynAngelize.Stop;
 begin
+  if (sasStopped in fState) or
+     not (sasStarted in fState) then
+    exit;
+  include(fState, sasStopped);
   StopWatching;
   StopServices;
 end;

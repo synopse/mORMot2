@@ -191,7 +191,7 @@ type
     // - param is used when called from CommandLine()
     // - aAutoStart is used only under Windows
     procedure Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean = true;
-      const param: RawUtf8 = '');
+      const param: RawUtf8 = ''); virtual;
     /// retrieve the current state of this daemon/service
     function CurrentState: TServiceState;
     /// inherited class should override this abstract method with proper process
