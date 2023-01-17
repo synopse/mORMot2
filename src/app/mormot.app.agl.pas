@@ -729,7 +729,14 @@ begin
     4:
       begin
         WriteCopyright;
-        Resume;
+        {$ifdef OSWINDOWS}
+        with TServiceController.CreateOpenService('', '', fSettings.ServiceName) do
+          try
+            ConsoleWrite('Sending SERVICE_CONTROL_CONTINUE = ', [BOOL_STR[Resume]]);
+          finally
+            Free;
+          end;
+        {$endif OSWINDOWS}
       end;
   else
     result := false; // display syntax
@@ -741,7 +748,7 @@ begin
   {$ifdef OSWINDOWS}
   result := '/list /settings /new /retry';
   {$else}
-  result := '--list --settings --new --retry';
+  result := '--list --settings --new';
   {$endif OSWINDOWS}
 end;
 
