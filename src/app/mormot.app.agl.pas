@@ -559,6 +559,7 @@ begin
   begin
     // at startup, or idle
     if not result and
+       (fService <> nil) and
        (fService.State = ssStarting) then
       fService.SetState(ssRunning, 'PID=%', [pid]);
     exit;

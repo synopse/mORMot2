@@ -4203,27 +4203,6 @@ begin
 end;
 
 
-{ TFileStreamWithoutWriteError }
-
-type
-  /// file stream which ignores I/O write errors
-  // - in case disk space is exhausted, TFileStreamWithoutWriteError.WriteBuffer
-  // won't throw any exception, so application will continue to work
-  // - used by TSynLog to let the application continue with no exception,
-  // even in case of a disk/partition full of logs
-  TFileStreamWithoutWriteError = class(TFileStreamEx)
-  public
-    /// this overriden function returns Count, as if it was always sucessfull
-    function Write(const Buffer; Count: Longint): Longint; override;
-  end;
-
-function TFileStreamWithoutWriteError.Write(const Buffer; Count: Longint): Longint;
-begin
-  inherited Write(Buffer, Count);
-  result := Count; // ignore I/O errors
-end;
-
-
 { TSynLog }
 
 class function TSynLog.Family: TSynLogFamily;

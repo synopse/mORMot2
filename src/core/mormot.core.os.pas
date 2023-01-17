@@ -2790,6 +2790,17 @@ type
       read fFilename;
   end;
 
+  /// file stream which ignores I/O write errors
+  // - in case disk space is exhausted, TFileStreamWithoutWriteError.WriteBuffer
+  // won't throw any exception, so application will continue to work
+  // - used e.g. by TSynLog to let the application continue with no exception,
+  // even in case of a disk/partition full of logs
+  TFileStreamWithoutWriteError = class(TFileStreamEx)
+  public
+    /// this overriden function returns Count, as if it was always sucessfull
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
 
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
@@ -5815,11 +5826,15 @@ begin
             (F.Name <> '..');
 end;
 
+{ TFileStreamFromHandle }
+
 destructor TFileStreamFromHandle.Destroy;
 begin
   if not fDontReleaseHandle then
     FileClose(Handle); // otherwise file remains opened (FPC RTL inconsistency)
 end;
+
+{ TFileStreamEx }
 
 constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
 var
@@ -5840,6 +5855,15 @@ begin
   inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
   fFileName := aFileName;
 end;
+
+{ TFileStreamWithoutWriteError }
+
+function TFileStreamWithoutWriteError.Write(const Buffer; Count: Longint): Longint;
+begin
+  inherited Write(Buffer, Count);
+  result := Count; // to ignore I/O errors
+end;
+
 
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 begin
