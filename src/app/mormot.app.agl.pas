@@ -271,8 +271,9 @@ type
     // Intranet) to monitor the services state from anywhere in the world
     property HtmlStateFileIdentifier: RawUtf8
       read fHtmlStateFileIdentifier write fHtmlStateFileIdentifier;
-    /// how many seconds a "Level" should wait for all processes to start
+    /// how many seconds a "Level" should wait for all its processes to start
     // - default is 30 seconds
+    // - you can set to 0 to not wait for starting
     property StartTimeoutSec: integer
       read fStartTimeoutSec write fStartTimeoutSec;
   end;
