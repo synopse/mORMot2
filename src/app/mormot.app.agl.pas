@@ -95,6 +95,7 @@ type
     fStateMessage: RawUtf8;
     fState: TServiceState;
     fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
+    fOS: TOperatingSystem;
     fRedirectLogFile: TFileName;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
     fStarted: RawUtf8;
@@ -145,6 +146,12 @@ type
     // - will disable the entry if set to 0 or any negative number
     property Level: integer
       read fLevel write fLevel;
+    /// this sub-service could be activated only for a given Operating System
+    // - default osUnknown will run it on all systems
+    // - you can specify osWindows, osOSX, osBSD, osLinux or osPOSIX
+    // - or even a specific Linux distribution (instead of wider osLinux/osPOSIX) 
+    property OS: TOperatingSystem
+      read fOS write fOS;
     /// the action(s) executed to start the sub-process
     // - will be executed in-order
     // - could include %abc% place holders
@@ -1351,7 +1358,8 @@ begin
     begin
       // launch all services of this level
       s := fService[i];
-      if s.Level = fLevels[l] then
+      if (s.Level = fLevels[l]) and
+         MatchOS(s.OS) then
       begin
         if (s.fStart = nil) and
            (s.fRun <> '') then

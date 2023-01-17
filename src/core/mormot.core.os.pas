@@ -824,6 +824,11 @@ function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 // - returns e.g. 'Windows Vista', 'Windows 11 64-bit 22000' or 'Ubuntu Linux 5.4.0'
 function ToTextOS(osint32: integer): RawUtf8;
 
+/// check if the current OS (i.e. OS_KIND value) match a description
+// - will handle osPosix and osLinux as generic detection of those systems
+// - osUnknown will always return true
+function MatchOS(os: TOperatingSystem): boolean;
+
 type
   /// the recognized ARM/AARCH64 CPU types
   // - https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
@@ -5372,6 +5377,26 @@ begin
     // include kernel number to the distribution name, e.g. 'Ubuntu Linux 5.4.0'
     result := _fmt('%s Linux %d.%d.%d', [result, osv.utsrelease[2],
       osv.utsrelease[1], osv.utsrelease[0]]);
+end;
+
+function MatchOS(os: TOperatingSystem): boolean;
+var
+  current: TOperatingSystem;
+begin
+  current := OS_KIND;
+  if (os = osUnknown) or
+     (current = osUnknown) or
+     (os = current) then
+    result := true // exact match
+  else
+    case os of // search by family
+      osPosix:
+        result := current <> osWindows;
+      osLinux:
+        result := current in OS_LINUX;
+    else
+      result := false;
+    end;
 end;
 
 const
