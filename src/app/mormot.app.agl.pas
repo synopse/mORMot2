@@ -126,12 +126,13 @@ type
     /// some reusable parameter available as %run% place holder
     // - default is void '', but could be used to store an executable name
     // or a Windows service name, e.g. "Run":"/path/to/authservice" or
-    // "Run": "MyCompanyService"
+    // "Run": "MyCompanyService" or "Run":"\"c:\path to\program.exe\" param1 param2"
     // - is used as default if a "Start" "Stop" or "Watch" command has no second
     // value (e.g. ["start"] means ["start:%run%"]), or is void (e.g. "Start":[]
     // means also ["start:%run"])
-    // - the easiest case is to put the path to executable here, and keep
-    // "Start" "Stop" and "Watch" entries as [], for a NSSM-like behavior
+    // - the easiest case is to put the path to executable here (with double
+    // quotes for space within the file name), and keep "Start" "Stop" and
+    // "Watch" entries as [], for a NSSM-like behavior
     property Run: RawUtf8
       read fRun write fRun;
     /// human-friendly Unicode text which could be displayed on Web or Console UI
@@ -1305,7 +1306,7 @@ begin
   WriteCopyright;
   if ParamCount < 3 then
     raise ESynAngelize.CreateUtf8(
-      'Syntax is % /new <servicename> <executable> [<params>]',
+      'Syntax is % /new "<servicename>" "<executable>" [<params>]',
       [Executable.ProgramName]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
   sn := TrimU(StringToUtf8(paramstr(2)));
@@ -1345,6 +1346,7 @@ begin
     new.FileName := fn;
     new.fName := sn;
     new.fLevel := 10; // default level
+    exe := '"' + exe + '"'; // always quote the executable for any space within
     for i := 4 to paramcount do
       exe := exe + ' ' + paramstr(i);
     new.fRun := StringToUtf8(exe);
