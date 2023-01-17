@@ -96,7 +96,7 @@ type
     fState: TServiceState;
     fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
     fOS: TOperatingSystem;
-    fRedirectLogFile: TFileName;
+    fRedirectLogFile: RawUtf8;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
     fStarted: RawUtf8;
     fRunner: TSynAngelizeRunner;
@@ -225,7 +225,9 @@ type
     property WatchDelaySec: integer
       read fWatchDelaySec write fWatchDelaySec;
     /// redirect "start:/path/to/executable" console output to a log file
-    property RedirectLogFile: TFileName
+    // - could include %abc% place holders, e.g. '%agl.base%' or %agl.now%
+    // - a typical value is therefore "%agl.logpath%%name%-%agl.now%.log"
+    property RedirectLogFile: RawUtf8
       read fRedirectLogFile write fRedirectLogFile;
     /// how many rotate files RedirectLogFile could generate at once
     // - default 0 disable the whole rotation process
@@ -552,18 +554,16 @@ function TSynAngelizeRunner.OnRedirect(
 var
   i, textstart, textlen: PtrInt;
 begin
-  result := fAbortRequested or Terminated;
-  if result then
-    // from "stop:executable" -> return true to quit RunRedirect
-    exit;
+  result := fAbortRequested or Terminated; // return true to quit RunRedirect
   if text = '' then
   begin
     // at startup, or idle
-    if fService.State = ssStarting then
+    if not result and
+       (fService.State = ssStarting) then
       fService.SetState(ssRunning, 'PID=%', [pid]);
     exit;
   end;
-  fLog.Add.Log(sllDebug, 'OnRedirect: [%]', [text], self);
+  //fLog.Add.Log(sllTrace, '[%]', text, self);
   // handle optional console output redirection to a file
   if (fRedirect <> nil) and
      (text <> '') then
@@ -578,11 +578,12 @@ begin
          (fRedirectSize > fService.RedirectLogRotateBytes) then
       begin
         // need to rotate the file(s)
-        fLog.Add.Log(sllDebug, 'OnRedirect: log file rotation', self);
-        for i := textlen - 1 downto 0 do
-          if PByteArray(text)[i] in [10, 13] then
+        fLog.Add.Log(sllDebug, 'OnRedirect: % file rotation after %',
+          [fRedirectFileName, KB(fRedirectSize)], self);
+        for i := textlen downto 1 do
+          if PByteArray(text)[i - 1] in [10, 13] then
           begin
-            fRedirect.WriteBuffer(pointer(text), i); // write up to last LF
+            fRedirect.WriteBuffer(pointer(text)^, i); // write up to last LF
             textstart := i;
             dec(textlen, i);
             break;
@@ -1100,13 +1101,14 @@ begin
     aaStart:
       if Service.fStarted = '' then
       begin
-        lf := Service.RedirectLogFile;
-        if lf <> '' then
+        if Service.RedirectLogFile <> '' then
         begin
           // create log file before thread start to track file access issue
+          lf := NormalizeFileName(Utf8ToString(
+            Sender.Expand(Service, Service.RedirectLogFile)));
           if FileExists(lf) then
           begin
-            ls := TFileStreamEx.Create(lf, fmOpenReadDenyNone);
+            ls := TFileStreamEx.Create(lf, fmOpenReadWrite or fmShareDenyWrite);
             ls.Seek(0, soEnd); // append
           end
           else
