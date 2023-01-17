@@ -1465,30 +1465,30 @@ begin
   P := pointer(CommandUri);
   if P = nil then
     exit;
-  if PCardinal(P)^ =
-       ord('G') + ord('E') shl 8 + ord('T') shl 16 + ord(' ') shl 24 then
-  begin
-    CommandMethod := _GETVAR; // optimistic
-    inc(P, 4);
-  end else if (PCardinal(P)^ =
-       ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24) and
-       (P[5] = ' ') then
-  begin
-    CommandMethod := _POSTVAR;
-    inc(P, 5);
-  end
+  case PCardinal(P)^ of
+    ord('G') + ord('E') shl 8 + ord('T') shl 16 + ord(' ') shl 24:
+      begin
+        CommandMethod := _GETVAR; // optimistic
+        inc(P, 4);
+      end;
+    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+      begin
+        CommandMethod := _POSTVAR;
+        inc(P, 5);
+      end;
   else
-  begin
-    B := P;
-    while true do
-      if P^ = ' ' then
-        break
-      else if P^ = #0 then
-        exit
-      else
-        inc(P);
-    SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
-    inc(P);
+    begin
+      B := P;
+      while true do
+        if P^ = ' ' then
+          break
+        else if P^ = #0 then
+          exit
+        else
+          inc(P);
+      SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
+      inc(P);
+    end;
   end;
   B := P;
   while true do
