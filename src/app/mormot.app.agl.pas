@@ -1346,9 +1346,9 @@ begin
     new.FileName := fn;
     new.fName := sn;
     new.fLevel := 10; // default level
-    exe := '"' + exe + '"'; // always quote the executable for any space within
+    exe := QuoteFileName(exe); // re-quote the executable and parameters
     for i := 4 to paramcount do
-      exe := exe + ' ' + paramstr(i);
+      exe := exe + ' ' + QuoteFileName(paramstr(i));
     new.fRun := StringToUtf8(exe);
     new.SaveIfNeeded;
     if Assigned(log) then

@@ -2598,6 +2598,10 @@ function SafeFileNameU(const FileName: RawUtf8): boolean;
 // - see MakePath() from mormot.core.text.pas to concatenate path items
 function NormalizeFileName(const FileName: TFileName): TFileName;
 
+/// add some " before and after if FileName has some space within
+// - could be used when generating command line parameters
+function QuoteFileName(const FileName: TFileName): TFileName;
+
 /// faster cross-platform alternative to sysutils homonymous function
 // - on Windows, just redirect to WindowsFileTimeToDateTime() since FileDate
 // is already expected to be in local time from FileAge()
@@ -5793,6 +5797,16 @@ end;
 function NormalizeFileName(const FileName: TFileName): TFileName;
 begin
   result := StringReplace(FileName, InvertedPathDelim, PathDelim, [rfReplaceAll]);
+end;
+
+function QuoteFileName(const FileName: TFileName): TFileName;
+begin
+  if (FileName <> '') and
+     (PosExString(' ', FileName) <> 0) and
+     (FileName[1] <> '"') then
+    result := '"' + FileName + '"'
+  else
+    result := FileName;
 end;
 
 procedure DisplayError(const fmt: string; const args: array of const);
