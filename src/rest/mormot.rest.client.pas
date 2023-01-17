@@ -2347,10 +2347,9 @@ var
       execmsg.fPar := par;
       with fServiceNotificationMethodViaMessages do
         ok := PostMessage(Wnd, Msg, Wnd, PtrInt(execmsg));
-        // TRestClientUri.ServiceNotificationMethodExecute will Free it
       if ok then
+        // TRestClientUri.ServiceNotificationMethodExecute will Free it
         exit;
-      execmsg.Free; // avoid memory leak
     end
     else
     // if PostMessage() failed, or expecting result -> blocking execution
