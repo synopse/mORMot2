@@ -4269,7 +4269,8 @@ begin
           result := true; // at least one thread found
     until not Thread32Next(snap, e);
   CloseHandle(snap);
-  if result then
+  if result and
+     (waitseconds <> 0) then
     result := WaitProcess(pid, waitseconds);
   TService.DoLog(sllTrace, 'QuitProcess(%)=%', [pid, ord(result)], nil);
 end;
@@ -4371,17 +4372,57 @@ var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
   security: TSecurityAttributes;
+  h: array[0..1] of THandle;
   exe, path: TFileName;
   rd, wr: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
-  new: RawByteString;
-  endtix, pending: Int64;
-  exitcode, n: cardinal;
+  endtix: Int64;
+  exitcode, res: cardinal;
   ram: TRunAbortMethods;
   terminated: boolean;
   i, l: PtrInt;
-  tmp: TSynTempBuffer;
+
+  procedure RedirectOutput(flush: boolean);
+  var
+    new: RawByteString;
+    pending: Int64;
+    n: cardinal;
+    tmp: TSynTempBuffer;
+  begin
+    repeat
+      Win32Check(GetFileSizeEx(rd, pending));
+      if pending = 0 then
+      begin
+        if (not flush) and
+           Assigned(onoutput) and
+           onoutput('', processinfo.dwProcessId) then
+            exitcode := WAIT_OBJECT_0; // returned true to abort
+        break;
+      end;
+      n := 0;
+      Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
+      if n <= 0 then
+        break;
+      if redirected <> nil then
+      begin
+        SetLength(redirected^, l + PtrInt(n));
+        MoveFast(tmp, PByteArray(redirected^)[l], n);
+        inc(l, n);
+      end;
+      if Assigned(onoutput) then
+      begin
+        SetString(new, PAnsiChar(@tmp), n);
+        if onoutput(new, processinfo.dwProcessId) then
+          if not flush then
+          begin // onoutput() callback returned true to stop the execution
+            exitcode := WAIT_OBJECT_0;
+            break;
+          end;
+      end;
+    until false;
+  end;
+
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   result := -1;
@@ -4469,38 +4510,12 @@ begin
         endtix := 0
       else
         endtix := GetTickCount64 + waitfordelayms;
+      h[0] := processinfo.hProcess;
+      h[1] := rd;
       repeat
-        exitcode := WaitForSingleObject(processinfo.hProcess, 200);
+        exitcode := WaitForMultipleObjects(2, @h, false, 200);
         Win32Check(exitcode <> WAIT_FAILED);
-        repeat
-          Win32Check(GetFileSizeEx(rd, pending));
-          if pending = 0 then
-          begin
-            if Assigned(onoutput) and
-               onoutput('', processinfo.dwProcessId) then
-              exitcode := WAIT_OBJECT_0; // returned true to abort
-            break;
-          end;
-          n := 0;
-          Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
-          if n <= 0 then
-            break;
-          if redirected <> nil then
-          begin
-            SetLength(redirected^, l + PtrInt(n));
-            MoveFast(tmp, PByteArray(redirected^)[l], n);
-            inc(l, n);
-          end;
-          if Assigned(onoutput) then
-          begin
-            SetString(new, PAnsiChar(@tmp), n);
-            if onoutput(new, processinfo.dwProcessId) then
-            begin // onoutput() callback returned true to stop the execution
-              exitcode := WAIT_OBJECT_0;
-              break;
-            end;
-          end;
-        until false;
+        RedirectOutput({flush=}false);
       until (exitcode = WAIT_OBJECT_0) or
             ((endtix <> 0) and
              (GetTickCount64 > endtix));
@@ -4514,21 +4529,28 @@ begin
         terminated := false;
         if RunAbortTimeoutSecs > 0 then
         begin
-          if ramCtrlC in ram then  // try Ctrl+C
+          if ramCtrlC in ram then  // try Ctrl+C (disabled above)
             terminated := CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
           if (not terminated) and
              (ramQuit in ram) then // try WM_QUIT
-            terminated := QuitProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
+            if QuitProcess(processinfo.dwProcessId, 0) then
+            begin
+              endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
+              repeat
+                res := WaitForSingleObject(processinfo.hProcess, 10);
+                RedirectOutput({flush=}true); // mandatory to unlock pipe
+              until (res <> WAIT_TIMEOUT) or
+                    (GetTickCount64 > endtix);
+              terminated := res = WAIT_OBJECT_0;
+            end;
         end;
-        if not terminated then
-          // we need to KILL the process
-          TerminateProcess(processinfo.hProcess, result)
+        RedirectOutput({flush=}true); // ensure there is no pending data
+        if terminated and
+           // gracefully ended -> try to retrieve the exit code
+           GetExitCodeProcess(processinfo.hProcess, exitcode) then
+          result := exitcode
         else
-          // gracefully ended -> try to return exit code
-          if GetExitCodeProcess(processinfo.hProcess, exitcode) then
-            result := exitcode
-          else
-            result := -GetLastError; // not able to retrieve exit code
+          TerminateProcess(processinfo.hProcess, result); // forced kill
       end;
     end
     else if waitfor then
