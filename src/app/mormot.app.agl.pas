@@ -1107,14 +1107,21 @@ begin
           // create log file before thread start to track file access issue
           lf := NormalizeFileName(Utf8ToString(
             Sender.Expand(Service, Service.RedirectLogFile)));
-          if FileExists(lf) then
-          begin
-            ls := TFileStreamEx.Create(lf, fmOpenReadWrite or fmShareDenyWrite);
+          try
+            if not FileExists(lf) then
+              TFileStreamEx.Create(lf, fmCreate).Free; // a new void file
+            ls := TFileStreamWithoutWriteError.Create(
+              lf, fmOpenReadWrite or fmShareDenyWrite);
             ls.Seek(0, soEnd); // append
-          end
-          else
-            ls := TFileStreamEx.Create(lf, fmCreate);
-          Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
+            Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
+          except
+            on E: Exception do
+            begin
+              Log.Log(sllWarning, 'Start: % when redirecting output to %',
+                [E.ClassType, lf], Sender);
+              ls := nil;
+            end;
+          end;
         end
         else
           ls := nil;
