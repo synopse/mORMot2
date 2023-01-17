@@ -331,10 +331,10 @@ type
     function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
     function ComputeServicesStateFiles: integer;
     procedure ComputeServicesHtmlFile;
-    procedure DoExpand(aService: TSynAngelizeService; const aInput: TSynAngelizeAction;
-      out aOutput: TSynAngelizeAction); virtual;
-    function DoExpandLookup(aService: TSynAngelizeService;
-      var aID: RawUtf8): boolean; virtual;
+    function DoExpand(aService: TSynAngelizeService;
+      const aInput: TSynAngelizeAction): TSynAngelizeAction; virtual;
+    procedure DoExpandLookup(aInstance: TObject;
+      var aProp: RawUtf8; const aID: RawUtf8); virtual;
     procedure DoWatch(aLog: TSynLog; aService: TSynAngelizeService;
       const aAction: TSynAngelizeAction); virtual;
   public
@@ -353,10 +353,13 @@ type
     // - TSystemPath values are available as %CommonData%, %UserData%,
     // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
     // - %agl.base% is the location of the agl executable
-    // - %agl.settings% is the location of the *.service files
+    // - %agl.now% is the current date and time, in a filename compatible format
     // - %agl.params% are the additional parameters supplied to the command line
-    // - %toto% is the "toto": property value in the .service settings, e.g.
-    // %run% is the main executable or service name as defined in "Run": "...."
+    // - %agl.propname% is the "propname": property value in the main
+    // TSynAngelizeSettings, e.g. %agl.folder% for location of the *.service files,
+    // or %agl.logpath% for the/log sub-folder
+    // - %propname% is the "propname": property value in the .service settings,
+    // e.g. %run% is the main executable or service name as defined in "Run": "...."
     function Expand(aService: TSynAngelizeService;
       const aAction: TSynAngelizeAction): TSynAngelizeAction;
     /// overriden for proper sub-process starting
@@ -885,88 +888,90 @@ function TSynAngelize.Expand(aService: TSynAngelizeService;
   const aAction: TSynAngelizeAction): TSynAngelizeAction;
 begin
   fExpandLevel := 0;
-  DoExpand(aService, aAction, result); // internal recursive method
+  result := DoExpand(aService, aAction); // internal recursive method
 end;
 
-procedure TSynAngelize.DoExpand(aService: TSynAngelizeService;
-  const aInput: TSynAngelizeAction; out aOutput: TSynAngelizeAction);
+function TSynAngelize.DoExpand(aService: TSynAngelizeService;
+  const aInput: TSynAngelizeAction): TSynAngelizeAction;
 var
   o, i, j: PtrInt;
   id, v: RawUtf8;
 begin
-  aOutput := aInput;
+  result := aInput;
   o := 1;
   repeat
-    i := PosEx('%', aOutput, o);
+    i := PosEx('%', result, o);
     if i = 0 then
       exit;
-    j := PosEx('%', aOutput, i + 1);
+    j := PosEx('%', result, i + 1);
     if j = 0 then
       exit;
     dec(j, i + 1); // j = length abc
     if j = 0 then
     begin
-      delete(aOutput, i, 1); // %% -> %
+      delete(result, i, 1); // %% -> %
       o := i + 1;
       continue;
     end;
-    id := copy(aOutput, i + 1, j);
-    delete(aOutput, i, j + 2);
+    id := copy(result, i + 1, j);
+    delete(result, i, j + 2);
     o := i;
-    if IdemPChar(pointer(id), 'AGL.') then
-    begin
-      delete(id, 1, 3);
-      case FindPropName(['base',
-                         'settings',
-                         'params'], id) of
-        0: // %agl.base% is the location of the agl executable
-          StringToUtf8(Executable.ProgramFilePath, v);
-        1: // %agl.settings% is the location of the *.service files
-          StringToUtf8(TSynAngelizeSettings(fSettings).Folder, v);
-        2: // %agl.params% are the additional parameters supplied to command line
-          StringToUtf8(fAdditionalParams, v);
-      end;
-    end
+    i := GetEnumNameValue(TypeInfo(TSystemPath), id, true);
+    if i >= 0 then
+      StringToUtf8(GetSystemPath(TSystemPath(i)), v)
     else
     begin
-      i := GetEnumNameValue(TypeInfo(TSystemPath), id, true);
-      if i >= 0 then
-        StringToUtf8(GetSystemPath(TSystemPath(i)), v)
-      else
+      v := id;
+      if IdemPChar(pointer(id), 'AGL.') then
       begin
+        delete(v, 1, 4);
+        case FindPropName(['base',
+                           'now',
+                           'params'], v) of
+          0: // %agl.base% is the location of the agl executable
+            StringToUtf8(Executable.ProgramFilePath, v);
+          1: // %agl.now% is the current date/time
+            v := DateTimeToFileShort(Now);
+          2: // %agl.params% are the additional parameters supplied to command line
+            StringToUtf8(fAdditionalParams, v);
+        else
+          // e.g %agl.folder% or %agl.logpath%
+          DoExpandLookup(fSettings, v, id);
+        end;
+      end
+      else
         // %toto% for the "toto": property value in the .service settings
-        if not DoExpandLookup(aService, id) then
-          raise ESynAngelize.CreateUtf8(
-            'Expand: unknown %%%', ['%', id, '%']);
-        if fExpandLevel = 50 then
-          raise ESynAngelize.CreateUtf8(
-            'Expand: infinite recursion within %%%', ['%', id, '%']);
-        inc(fExpandLevel); // to detect and avoid stack overflow error
-        DoExpand(aService, id, TSynAngelizeAction(v));
-        dec(fExpandLevel);
-      end;
+        DoExpandLookup(aService, v, id);
+      if fExpandLevel = 50 then
+        raise ESynAngelize.CreateUtf8(
+          'Expand: infinite recursion within %%%', ['%', id, '%']);
+      inc(fExpandLevel); // to detect and avoid stack overflow error
+      v := DoExpand(aService, v);
+      dec(fExpandLevel);
     end;
     if v = '' then
       continue;
-    insert(v, aOutput, o);
+    insert(v, result, o);
     inc(o, length(v));
     v := '';
   until false;
 end;
 
-function TSynAngelize.DoExpandLookup(aService: TSynAngelizeService;
-  var aID: RawUtf8): boolean;
+procedure TSynAngelize.DoExpandLookup(aInstance: TObject;
+  var aProp: RawUtf8; const aID: RawUtf8);
 var
   p: PRttiCustomProp;
 begin
-  result := false;
-  if aService = nil then
-    exit;
-  p := Rtti.RegisterClass(aService).Props.Find(aID);
-  if p = nil then
-    exit;
-  aID := p.Prop.GetValueText(aService);
-  result := true;
+  if aInstance <> nil then
+  begin
+    p := Rtti.RegisterClass(aInstance).Props.Find(aProp);
+    if p <> nil then
+    begin
+      aProp := p.Prop.GetValueText(aInstance);
+      exit;
+    end;
+  end;
+  raise ESynAngelize.CreateUtf8('Expand: unknown %%%', ['%', aID, '%']);
 end;
 
 type
