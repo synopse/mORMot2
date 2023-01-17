@@ -2350,6 +2350,7 @@ var
       if ok then
         // TRestClientUri.ServiceNotificationMethodExecute will Free it
         exit;
+      // below code will run exec = this execmsg instance in blocking mode
     end
     else
     // if PostMessage() failed, or expecting result -> blocking execution

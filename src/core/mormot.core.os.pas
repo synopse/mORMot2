@@ -6616,32 +6616,7 @@ begin
 end;
 
 var
-  GlobalCriticalSection, ConsoleCriticalSection: TOSLock;
-
-{$I-}
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
-  NoLineFeed, NoColor: boolean);
-begin
-  {$ifdef OSWINDOWS}
-  if not HasConsole then
-    exit;
-  {$endif OSWINDOWS}
-  ConsoleCriticalSection.Lock;
-  try
-    if not NoColor then
-      TextColor(Color);
-    write(Utf8ToConsole(Text));
-    if not NoLineFeed then
-      writeln;
-    if not NoColor then
-      TextColor(ccLightGray);
-    ioresult;
-  finally
-    ConsoleCriticalSection.UnLock;
-  end;
-end;
-{$I+}
-
+  GlobalCriticalSection: TOSLock;
 
 { TSynLibrary }
 

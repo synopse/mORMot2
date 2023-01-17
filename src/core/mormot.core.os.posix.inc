@@ -1492,30 +1492,53 @@ begin
   StdOut := StdOutputHandle;
 end;
 
-{$I-}
-
 var
   TextAttr: integer = 255; // always change the color at startup
 
 procedure TextColor(Color: TConsoleColor);
 const
   TERM_CTRL: string[8] = '04261537';
+var
+  s: shortstring;
 begin
   if (ord(Color) = TextAttr) or
      not StdOutIsTTY then
     exit;
   TextAttr := ord(Color);
   if ord(Color) >= 8 then
-    write(#27'[1;3')
+    s := #27'[1;3'
   else
-    write(#27'[0;3');
-  write(TERM_CTRL[(ord(Color) and 7) + 1], 'm');
-  ioresult;
+    s := #27'[0;3';
+  AppendShortChar(TERM_CTRL[(ord(Color) and 7) + 1], s);
+  AppendShortChar('m', s);
+  fpwrite(StdOutputHandle, @s[1], ord(s[0])); // single syscall
 end;
 
 procedure TextBackground(Color: TConsoleColor);
 begin
   // not implemented yet - but not needed either
+end;
+
+var
+  ConsoleCriticalSection: TOSLock;
+const
+  PosixLineFeed: AnsiChar = #10;
+
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+begin
+  ConsoleCriticalSection.Lock;
+  try
+    if not NoColor then
+      TextColor(Color);
+    fpwrite(StdOutputHandle, pointer(Text), length(Text)); // UTF-8 console
+    if not NoLineFeed then
+      fpwrite(StdOutputHandle, @PosixLineFeed, 1);
+    if not NoColor then
+      TextColor(ccLightGray);
+  finally
+    ConsoleCriticalSection.UnLock;
+  end;
 end;
 
 function WaitReadPending(fd, timeout: integer): boolean;
@@ -1534,6 +1557,7 @@ begin
   result := WaitReadPending(StdInputHandle, 0);
 end;
 
+{$I-}
 procedure ConsoleWaitForEnterKey;
 var
   c: AnsiChar;
@@ -1562,6 +1586,7 @@ begin
     ReadLn;
   ioresult;
 end;
+{$I+}
 
 function ConsoleStdInputLen: integer;
 begin
@@ -1574,7 +1599,6 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
-{$I+}
 
 {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in .inc / project options
 function TFileVersion.RetrieveInformationFromFileName: boolean;

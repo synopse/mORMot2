@@ -2074,6 +2074,37 @@ begin
     SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
+var
+  ConsoleCriticalSection: TOSLock;
+
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+var
+  txt: RawByteString;
+  l: PtrInt;
+  written: cardinal;
+begin
+  if not HasConsole then
+    exit;
+  txt := Utf8ToConsole(Text);
+  l := length(txt);
+  if not NoLineFeed then
+  begin
+    SetLength(txt, l + 2); // faster to reallocate than WriteFile() twice
+    PWord(@PByteArray(txt)[l])^ := $0a0d; // CRLF
+    inc(l, 2);
+  end;
+  ConsoleCriticalSection.Lock;
+  try
+    if not NoColor then
+      TextColor(Color);
+    WriteFile(StdOut, pointer(txt)^, l, written, nil);
+    // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
+  finally
+    ConsoleCriticalSection.UnLock;
+  end;
+end;
+
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 var
   events, read: DWord;
