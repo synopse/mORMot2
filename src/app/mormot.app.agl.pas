@@ -546,7 +546,7 @@ begin
   for i := n - 2 downto 1 do
     RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
   RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
-  fRedirect := TFileStreamEx.Create(fRedirectFileName, fmCreate); // 'xxx'
+  fRedirect := TFileStreamEx.Create(fRedirectFileName, fmCreate); // 'xxx' 
 end;
 
 function TSynAngelizeRunner.OnRedirect(
@@ -584,7 +584,7 @@ begin
         for i := textlen downto 1 do
           if PByteArray(text)[i - 1] in [10, 13] then
           begin
-            fRedirect.WriteBuffer(pointer(text)^, i); // write up to last LF
+            fRedirect.Write(pointer(text)^, i); // write up to last LF
             textstart := i;
             dec(textlen, i);
             break;
@@ -595,7 +595,7 @@ begin
           result := true; // aborted during rotation
       end;
       // text output to log file
-      fRedirect.WriteBuffer(PByteArray(text)[textstart], textlen);
+      fRedirect.Write(PByteArray(text)[textstart], textlen);
       //TODO: optional TSynLog format with timestamps
     except
       on E: Exception do
@@ -1117,8 +1117,7 @@ begin
           try
             if not FileExists(lf) then
               TFileStreamEx.Create(lf, fmCreate).Free; // a new void file
-            ls := TFileStreamWithoutWriteError.Create(
-              lf, fmOpenReadWrite or fmShareDenyWrite);
+            ls := TFileStreamEx.Create(lf, fmOpenReadWrite or fmShareDenyWrite);
             ls.Seek(0, soEnd); // append
             Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
           except
