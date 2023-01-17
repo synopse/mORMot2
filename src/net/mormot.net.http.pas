@@ -1203,6 +1203,9 @@ begin
   SetRawUtf8(result, P, L, nointern);
 end;
 
+var
+  LastHost: RawUtf8;
+
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char;
   HeadersUnFiltered: boolean);
 var
@@ -1280,9 +1283,22 @@ begin
         end;
     ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
       if P[4] = ':' then
+      begin
         // 'HOST:'
-        GetTrimmed(P + 5, Host);
+        inc(P, 5);
+        while (P^ > #0) and
+              (P^ <= ' ') do
+          inc(P); // trim left
+        if StrComp(pointer(P), pointer(LastHost)) = 0 then
+          Host := LastHost // optimistic approach
+        else
+        begin
+          GetTrimmed(P, Host);
+          if LastHost = '' then
+            LastHost := Host;
+        end;
         // always add to headers - 'host:' sometimes parsed directly
+      end;
     ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
           ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
@@ -1435,6 +1451,9 @@ begin
         ComputeContentEncoding(Compress, pointer(AcceptEncoding));
 end;
 
+var
+  _GETVAR, _POSTVAR: RawUtf8;
+
 function THttpRequestContext.ParseCommand: boolean;
 var
   P, B: PUtf8Char;
@@ -1446,16 +1465,31 @@ begin
   P := pointer(CommandUri);
   if P = nil then
     exit;
-  B := P;
-  while true do
-    if P^ = ' ' then
-      break
-    else if P^ = #0 then
-      exit
-    else
-      inc(P);
-  SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
-  inc(P);
+  if PCardinal(P)^ =
+       ord('G') + ord('E') shl 8 + ord('T') shl 16 + ord(' ') shl 24 then
+  begin
+    CommandMethod := _GETVAR; // optimistic
+    inc(P, 4);
+  end else if (PCardinal(P)^ =
+       ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24) and
+       (P[5] = ' ') then
+  begin
+    CommandMethod := _POSTVAR;
+    inc(P, 5);
+  end
+  else
+  begin
+    B := P;
+    while true do
+      if P^ = ' ' then
+        break
+      else if P^ = #0 then
+        exit
+      else
+        inc(P);
+    SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
+    inc(P);
+  end;
   B := P;
   while true do
     if P^ = ' ' then
@@ -2434,6 +2468,12 @@ begin
 end;
 
 
+
+initialization
+  _GETVAR :=  'GET';
+  _POSTVAR := 'POST';
+
+finalization
 
 end.
 
