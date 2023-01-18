@@ -2549,7 +2549,8 @@ function UpdateIniNameValue(var Content: RawUtf8;
 // named from their section level and property (e.g. [mainprop.nested1.nested2])
 // - returns true if at least one property has been identified
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8 = 'Main'; Level: integer = 0): boolean;
+  const SectionName: RawUtf8 = 'Main'; DocVariantOptions: PDocVariantOptions = nil;
+  Level: integer = 0): boolean;
 
 /// serialize a class Instance properties into an .ini content
 // - the class property fields are written in the supplied main SectionName
@@ -4351,17 +4352,18 @@ begin
 end;
 
 function IniToObject(const Ini: RawUtf8; Instance: TObject;
-  const SectionName: RawUtf8; Level: integer): boolean;
+  const SectionName: RawUtf8; DocVariantOptions: PDocVariantOptions;
+  Level: integer): boolean;
 var
   r: TRttiCustom;
   i: integer;
   p: PRttiCustomProp;
-  section, nested: PUtf8Char;
+  section, nested, json: PUtf8Char;
   name: PAnsiChar;
   n, v: RawUtf8;
   up: array[byte] of AnsiChar;
 begin
-  result := false;
+  result := false; // true when at least one property has been read
   if (Ini = '') or
      (Instance = nil) then
     exit;
@@ -4375,37 +4377,60 @@ begin
   begin
     if p^.Prop <> nil then
       if p^.Value.Kind = rkClass then
-      begin // recursive load from another per-property section
+      begin
+        // recursive load from another per-property section
         if Level = 0 then
           n := p^.Name
         else
           n := SectionName + '.' + p^.Name;
-        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n, Level + 1) then
+        if IniToObject(Ini, p^.Prop^.GetObjProp(Instance), n,
+              DocVariantOptions, Level + 1) then
           result := true;
       end
       else
       begin
         PWord(UpperCopy255(up{%H-}, p^.Name))^ := ord('=');
         v := FindIniNameValue(section, @up, #0);
-        if (v = #0) and
-           (p^.Value.Parser in ptMultiLineStringTypes) then
+        if p^.Value.Parser in ptMultiLineStringTypes then
         begin
-          name := @up;
-          if Level <> 0 then
+          if v = #0 then // may be stored in a multi-line section body
           begin
-            name := UpperCopy255(name, SectionName);
-            name^ := '.';
-            inc(name);
-          end;
-          PWord(UpperCopy255(name, p^.Name))^ := ord(']');
-          nested := pointer(Ini);
-          if FindSectionFirstLine(nested, @up) then
-            // multi-line text value has been stored in its own section
-            v := GetSectionContent(nested);
-        end;
-        if v <> #0 then
-          if p^.Prop^.SetValueText(Instance, v) then
+            name := @up;
+            if Level <> 0 then
+            begin
+              name := UpperCopy255(name, SectionName);
+              name^ := '.';
+              inc(name);
+            end;
+            PWord(UpperCopy255(name, p^.Name))^ := ord(']');
+            nested := pointer(Ini);
+            if FindSectionFirstLine(nested, @up) then
+            begin
+              // multi-line text value has been stored in its own section
+              v := GetSectionContent(nested);
+              if p^.Prop^.SetValueText(Instance, v) then
+                result := true;
+            end;
+          end
+          else if p^.Prop^.SetValueText(Instance, v) then // single line text
             result := true;
+        end
+        else if v <> #0 then
+          if (p^.OffsetSet <= 0) or // has a setter?
+             (rcfBoolean in p^.Value.Cache.Flags) or // simple value?
+             (p^.Value.Kind in (rkGetIntegerPropTypes + [rkEnumeration, rkFloat])) then
+          begin
+            if p^.Prop^.SetValueText(Instance, v) then // RTTI conversion
+              result := true;
+          end
+          else // e.g. rkVariant, rkSet, rkDynArray
+          begin
+            json := pointer(v); // convert complex values from JSON
+            GetDataFromJson(@PByteArray(Instance)[p^.OffsetSet], json,
+              nil, p^.Value, DocVariantOptions, true, nil);
+            if json <> nil then
+              result := true;
+          end;
       end;
     inc(p);
   end;
@@ -4444,7 +4469,6 @@ var
   tmp: TTextWriterStackBuffer;
   nested: TRawUtf8DynArray;
   i, nestedcount: integer;
-  o: TTextWriterWriteObjectOptions;
   r: TRttiCustom;
   p: PRttiCustomProp;
   n, s: RawUtf8;
@@ -4509,13 +4533,10 @@ begin
         end
         else
         begin
-          o := Options - [woHumanReadableEnumSetAsComment];
-          if p^.Value.Kind = rkSet then
-            // not supported (yet) in IniToObject/SetValueText above
-            exclude(o, woEnumSetsAsText);
           W.AddString(p^.Name);
           W.Add('=');
-          p^.AddValueJson(W, Instance, o, twOnSameLine);
+          p^.AddValueJson(W, Instance, // simple and complex types
+            Options - [woHumanReadableEnumSetAsComment], twOnSameLine);
           W.Add(#10);
         end;
       inc(p);

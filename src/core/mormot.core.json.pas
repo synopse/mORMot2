@@ -11253,7 +11253,7 @@ begin
     result := JsonSettingsToObject(aJson, self);
   if not result then
   begin
-    result := IniToObject(aJson, self, aSectionName);
+    result := IniToObject(aJson, self, aSectionName, @JSON_[mFastFloat]);
     if result then
     begin
       fSectionName := aSectionName;
