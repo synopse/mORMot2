@@ -1131,16 +1131,16 @@ function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
 { ************** Send Email using the SMTP Protocol }
 
 const
-  /// the layout of TSMTPConnection.FromText method
+  /// the layout of TSmtpConnection.FromText method
   SMTP_DEFAULT = 'user:password@smtpserver:port';
 
 type
   /// may be used to store a connection to a SMTP server
   // - see SendEmail() overloaded function
   {$ifdef USERECORDWITHMETHODS}
-  TSMTPConnection = record
+  TSmtpConnection = record
   {$else}
-  TSMTPConnection = object
+  TSmtpConnection = object
   {$endif USERECORDWITHMETHODS}
   public
     /// the SMTP server IP or host name
@@ -1176,7 +1176,7 @@ function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
-function SendEmail(const Server: TSMTPConnection;
+function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject, Text: RawUtf8; const Headers: RawUtf8 = '';
   const TextCharSet: RawUtf8  = 'ISO-8859-1'; TLS: boolean = false): boolean; overload;
 
@@ -3382,7 +3382,7 @@ end;
 
 { ************** Send Email using the SMTP Protocol }
 
-function TSMTPConnection.FromText(const aText: RawUtf8): boolean;
+function TSmtpConnection.FromText(const aText: RawUtf8): boolean;
 var
   u, h: RawUtf8;
 begin
@@ -3391,13 +3391,10 @@ begin
     result := false;
     exit;
   end;
-  if Split(aText, '@', u, h) then
-  begin
-    if not Split(u, ':', User, Pass) then
-      User := u;
-  end
-  else
-    h := aText;
+  h := SplitRight(aText, '@', @u);
+  if (u <> '') and
+     not Split(u, ':', User, Pass) then
+    User := u;
   if not Split(h, ':', Host, Port) then
   begin
     Host := h;
@@ -3409,7 +3406,7 @@ begin
   result := Host <> '';
 end;
 
-function SendEmail(const Server: TSMTPConnection; const From, CsvDest, Subject,
+function SendEmail(const Server: TSmtpConnection; const From, CsvDest, Subject,
   Text, Headers, TextCharSet: RawUtf8; TLS: boolean): boolean;
 begin
   result := SendEmail(
