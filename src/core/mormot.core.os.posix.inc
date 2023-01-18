@@ -2949,11 +2949,45 @@ var
   f: file;
   fd: THandle;
   pid, res, wr: cint;
-  u: RawUtf8;
   n, l: TSsize;
   wait: cardinal;
   endtix: Int64;
   tmp: array[word] of byte; // 64KB stack buffer
+
+  function RedirectOutput(flush: boolean; var redir: RawByteString): boolean;
+  var
+    u: RawUtf8;
+  begin
+    result := false;
+    if WaitReadPending(fd, wait) then
+    begin
+      n := fpread(fd, tmp, SizeOf(tmp));
+      if n <= 0 then
+        exit; // pipe closed = execution finished
+      if setresult then
+        if redir = '' then
+          FastSetString(RawUtf8(redir), @tmp, n) // assume CP_UTF8
+        else
+        begin
+          SetLength(redir, l + n); // append
+          MoveFast(tmp, PByteArray(redir)[l], n);
+        end;
+      inc(l, n);
+      if Assigned(onoutput) then
+      begin
+        FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX
+        if onoutput(u, pid) and
+           not flush then
+          endtix := 1; // returned true: force kill() on abort
+      end;
+    end
+    else if Assigned(onoutput) and // idle
+            onoutput('', pid) and
+            not flush then
+      endtix := 1; // returned true to abort -> kill()
+    result := true;
+  end;
+
 begin
   result := '';
   if wrkdir <> '' then
@@ -2975,30 +3009,8 @@ begin
   end;
   l := 0;
   repeat
-    if WaitReadPending(fd, wait) then
-    begin
-      n := fpread(fd, tmp, SizeOf(tmp));
-      if n <= 0 then
-        break; // pipe closed = execution finished
-      if setresult then
-        if result = '' then
-          FastSetString(RawUtf8(result), @tmp, n) // assume CP_UTF8
-        else
-        begin
-          SetLength(result, l + n); // append
-          MoveFast(tmp, PByteArray(result)[l], n);
-        end;
-      inc(l, n);
-      if Assigned(onoutput) then
-      begin
-        FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX
-        if onoutput(u, pid) then
-          endtix := 1; // returned true: force kill() on abort
-      end;
-    end
-    else if Assigned(onoutput) and // idle
-            onoutput('', pid) then
-      endtix := 1; // returned true to abort -> kill()
+    if not RedirectOutput({flush=}false, result) then
+      break; // pipe closed = execution finished
     if (endtix <> 0) and
        (GetTickCount64 > endtix) then
     begin
@@ -3011,7 +3023,8 @@ begin
         begin
           endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
           repeat
-            wr := FpWaitPid(pid, @res, WNOHANG); // 0 = no state change
+            wr := FpWaitPid(pid, @res, WNOHANG);  // 0 = no state change
+            RedirectOutput({flush=}true, result); // continue redirection
             if (wr <> 0) or
                (GetTickCount64 > endtix) then
               break;
