@@ -59,7 +59,7 @@ type
     fLog: TSynLogClass;
     fSender: TSynAngelize;
     fService: TSynAngelizeService;
-    fCmd, fRedirectFileName: TFileName;
+    fCmd, fEnv, fWrkDir, fRedirectFileName: TFileName;
     fAbortRequested: boolean;
     fRedirect: TFileStreamEx;
     fRedirectSize: Int64;
@@ -70,7 +70,7 @@ type
   public
     /// start the execution of a command in a background thread
     constructor Create(aSender: TSynAngelize; aLog: TSynLog;
-      aService: TSynAngelizeService; const aCmd: TFileName;
+      aService: TSynAngelizeService; const aCmd, aEnv, aWrkDir: TFileName;
       aRedirect: TFileStreamEx); reintroduce;
     /// finalize the execution
     destructor Destroy; override;
@@ -91,6 +91,8 @@ type
     fOwner: TSynAngelize;
     fDescription: RawUtf8;
     fRun: RawUtf8;
+    fStartWorkDir: RawUtf8;
+    fStartEnv: TRawUtf8DynArray;
     fStart, fStop, fWatch: TSynAngelizeActions;
     fStateMessage: RawUtf8;
     fState: TServiceState;
@@ -170,6 +172,15 @@ type
     // - default void "Start":[] will assume executing 'start:%run%'
     property Start: TSynAngelizeActions
       read fStart write fStart;
+    /// array of "name=value" pairs to be added to the "start" env variables
+    // - only supported on Windows by now
+    // - could include %abc% place holders
+    property StartEnv: TRawUtf8DynArray
+      read fStartEnv write fStartEnv;
+    /// optional working folder for "start" monitored process
+    // - could include %abc% place holders
+    property StartWorkDir: RawUtf8
+      read fStartWorkDir write fStartWorkDir;
     /// the action(s) executed to stop the sub-process
     // - will be executed in-order
     // - could include %abc% place holders
@@ -383,7 +394,8 @@ implementation
 { TSynAngelizeRunner }
 
 constructor TSynAngelizeRunner.Create(aSender: TSynAngelize; aLog: TSynLog;
-  aService: TSynAngelizeService; const aCmd: TFileName; aRedirect: TFileStreamEx);
+  aService: TSynAngelizeService; const aCmd, aEnv, aWrkDir: TFileName;
+  aRedirect: TFileStreamEx);
 begin
   fSender := aSender;
   fLog := aLog.LogClass;
@@ -391,6 +403,8 @@ begin
   fService.fRunnerExitCode := -777;
   fService.fRunner := self;
   fCmd := aCmd;
+  fEnv := aEnv;
+  fWrkDir := aWrkDir;
   fRedirect := aRedirect;
   if fRedirect <> nil then
     fRedirectFileName := fRedirect.FileName;
@@ -453,7 +467,8 @@ begin
       try
         log.Log(sllTrace, 'Execute %: %', [sn, fCmd], self);
         // run the command in this thread, calling OnRedirect during execution
-        RunRedirect(fCmd, @err, OnRedirect, INFINITE, false);
+        RunRedirect(fCmd, @err, OnRedirect, INFINITE, {setresult=}false,
+          fEnv, fWrkDir);
         // if we reached here, the command was properly finished (or stopped)
         fService.SetState(ssStopped, 'ExitCode=%', [err]);
       except
@@ -1056,7 +1071,7 @@ function Exec(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
 var
   ms: integer;
   p, st: RawUtf8;
-  fn, lf: TFileName;
+  fn, lf, env, wd: TFileName;
   ls: TFileStreamEx;
   status, expectedstatus, sec: integer;
   sas: TSynAngelizeSettings;
@@ -1132,7 +1147,12 @@ begin
         end
         else
           ls := nil;
-        TSynAngelizeRunner.Create(Sender, Log, Service, fn, ls);
+        if Service.StartEnv <> nil then
+          env := Utf8ToString(Sender.Expand(Service,
+            RawUtf8ArrayToCsv(Service.StartEnv, #0) + #0#0));
+        if Service.StartWorkDir <> '' then
+          wd := Utf8ToString(Sender.Expand(Service, Service.StartWorkDir));
+        TSynAngelizeRunner.Create(Sender, Log, Service, fn, env, wd, ls);
         ObjArrayAdd(Sender.fStarted, Service); // for caller to wait for this level
         Service.fStarted := p;        
       end
