@@ -15,6 +15,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - AlexPirate
 - Alfred Glaenzer (alf)
 - Andre Heider (dhewg)
+- Andreas Leroux (andreaslrx)
 - ASiwon
 - Aweste
 - Bas Schouten
@@ -88,6 +89,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Ti Hory (tihorygit)
 - Tino Teuber
 - TTomas (tom)
+- Thomas (tbo)
 - Uian2000
 - Vaclav
 - Vadim Orel
