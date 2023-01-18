@@ -5441,8 +5441,7 @@ function TOrmTable.SearchValue(const UpperValue: RawUtf8;
 var
   Kind: TOrmFieldType;
   Search: PAnsiChar;
-  UpperUnicode: RawUnicode;
-  UpperUnicodeLen: integer;
+  UpperU, ValueU: SynUnicode;
   info: POrmTableFieldType;
   Val64: Int64;
   ValTimeLog: TTimelogBits absolute Val64;
@@ -5580,16 +5579,18 @@ begin
   else if UnicodeComparison then
   begin
     // slowest but always accurate Unicode comparison
-    UpperUnicode := Utf8DecodeToRawUnicodeUI(RawUtf8(Search), @UpperUnicodeLen);
+    Utf8ToSynUnicode(pointer(Search), StrLen(pointer(Search)), UpperU);
     while PtrUInt(result) <= PtrUInt(fRowCount) do
-      if FindUnicode(pointer(Utf8DecodeToRawUnicodeUI(GetResults(o))),
-          pointer(UpperUnicode), UpperUnicodeLen) then
+    begin
+      Utf8ToSynUnicode(GetResults(o), GetResultsLen(o), ValueU);
+      if FindUnicode(pointer(ValueU), pointer(UpperU), length(UpperU)) then
         exit
       else
       begin
         inc(o, fFieldCount);
         inc(result);
-      end
+      end;
+    end;
   end
   else // default fast Win1252 search
     while PtrUInt(result) <= PtrUInt(fRowCount) do

@@ -172,7 +172,7 @@ type
     fValDate: TDateTime;
     fData: RawBlob;
     fAnsi: WinAnsiString;
-    fUnicode: RawUnicode;
+    fUnicode: SynUnicode;
     fVariant: variant;
     procedure SetInt(const Value: int64);
   public
@@ -184,7 +184,7 @@ type
       read fInt write SetInt default 12;
     property Test: RawUtf8
       read fTest write fTest;
-    property Unicode: RawUnicode
+    property Unicode: SynUnicode
       read fUnicode write fUnicode;
     property Ansi: WinAnsiString
       read fAnsi write fAnsi;
@@ -300,7 +300,7 @@ begin
   Int := i;
   Test := Int32ToUtf8(i);
   Ansi := WinAnsiString(Test);
-  Unicode := WinAnsiToRawUnicode(Ansi);
+  Unicode := WinAnsiToSynUnicode(Ansi);
   ValFloat := i * 2.5;
   ValWord := i;
   ValDate := i + 30000;
@@ -318,7 +318,7 @@ begin
   test.Check(Int = i);
   test.Check(GetInteger(pointer(self.Test)) = i);
   test.Check(Ansi = WinAnsiString(self.Test));
-  test.Check(Unicode = WinAnsiToRawUnicode(Ansi));
+  test.Check(Unicode = WinAnsiToSynUnicode(Ansi));
   test.Check(ValFloat = i * 2.5);
   test.Check(ValWord = (i + offset) and $ffff);
   test.Check(ValDate = i + 30000);

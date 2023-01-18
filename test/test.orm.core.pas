@@ -597,8 +597,8 @@ begin
     wa[10] := #$E9;
     T.Ansi := wa;
     T.Test := WinAnsiToUtf8(T.Ansi);
-    T.Unicode := Utf8DecodeToRawUnicode(T.Test);
-    Check(RawUnicodeToWinAnsi(T.Unicode) = T.Ansi);
+    T.Unicode := Utf8ToSynUnicode(T.Test);
+    Check(RawUnicodeToWinAnsi(pointer(T.Unicode), length(T.Unicode)) = T.Ansi);
     // the same string is stored with some Delphi types, but will remain
     // identical in UTF-8 SQL, as all will be converted into UTF-8
     T.Valfloat := 3.141592653;

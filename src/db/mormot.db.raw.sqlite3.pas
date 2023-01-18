@@ -4572,8 +4572,10 @@ type
     function FieldS(Col: integer): string;
     /// return a field as Win-Ansi (i.e. code page 1252) encoded text value, first Col is 0
     function FieldA(Col: integer): WinAnsiString;
+    {$ifndef PUREMORMOT2}
     /// return a field RawUnicode encoded text value, first Col is 0
     function FieldW(Col: integer): RawUnicode;
+    {$endif PUREMORMOT2}
     /// return a field as a blob value (RawByteString/RawBlob is an AnsiString),
     // first Col is 0
     function FieldBlob(Col: integer): RawByteString;
@@ -8463,6 +8465,7 @@ begin
   result := sqlite3.column_value(Request, Col);
 end;
 
+{$ifndef PUREMORMOT2}
 function TSqlRequest.FieldW(Col: integer): RawUnicode;
 var
   P: PWideChar;
@@ -8472,6 +8475,7 @@ begin
   P := sqlite3.column_text16(Request, Col);
   SetString(result, PUtf8Char(pointer(P)), StrLenW(P) * 2 + 1);
 end;
+{$endif PUREMORMOT2}
 
 function TSqlRequest.Prepare(DB: TSqlite3DB; const SQL: RawUtf8;
   NoExcept: boolean): integer;

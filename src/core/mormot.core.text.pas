@@ -287,9 +287,11 @@ function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
 // the specified count
 function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boolean;
 
+{$ifndef PUREMORMOT2}
 /// return next string delimited with #13#10 from P, nil if no more
 // - this function returns a RawUnicode string type
 function GetNextStringLineToRawUnicode(var P: PChar): RawUnicode;
+{$endif PUREMORMOT2}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a PUtf8Char to avoid any memory allocation
@@ -3651,6 +3653,7 @@ begin
   result := true;
 end;
 
+{$ifndef PUREMORMOT2}
 function GetNextStringLineToRawUnicode(var P: PChar): RawUnicode;
 var
   S: PChar;
@@ -3672,6 +3675,7 @@ begin
       P := nil;
   end;
 end;
+{$endif PUREMORMOT2}
 
 function TrimLeftLowerCase(const V: RawUtf8): PUtf8Char;
 begin

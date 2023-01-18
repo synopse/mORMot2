@@ -1423,6 +1423,7 @@ type
     procedure GetJsonValues(Instance: TObject; W: TJsonWriter); override;
   end;
 
+  {$ifndef PUREMORMOT2}
   /// information about a RawUnicode published property
   TOrmPropInfoRttiRawUnicode = class(TOrmPropInfoRttiAnsi)
   protected
@@ -1438,6 +1439,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
+  {$endif PUREMORMOT2}
 
   /// information about a RawBlob published property
   TOrmPropInfoRttiRawBlob = class(TOrmPropInfoRttiAnsi)
@@ -2172,11 +2174,13 @@ type
     /// fill a unicode buffer with a particular field value
     // - return number of wide characters written in Dest^
     function GetWP(Row, Field: PtrInt; Dest: PWideChar; MaxDestChars: cardinal): integer;
+    {$ifndef PUREMORMOT2}
     /// read-only access to a particular field value, as UTF-16 Unicode text
     // - Raw Unicode is WideChar(zero) terminated
     // - its content is allocated to contain all WideChars (not trimed to 255,
     // like GetWP() above
     function GetW(Row, Field: PtrInt): RawUnicode;
+    {$endif PUREMORMOT2}
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row, Field: PtrInt): integer; overload;
     /// read-only access to a particular field value, as integer value
@@ -4471,8 +4475,10 @@ begin
                 C := TOrmPropInfoRttiAnsi; // regular AnsiString
             CP_UTF8:
               C := TOrmPropInfoRttiRawUtf8;
+            {$ifndef PUREMORMOT2}
             CP_UTF16:
               C := TOrmPropInfoRttiRawUnicode;
+            {$endif PUREMORMOT2}
           else
             C := TOrmPropInfoRttiAnsi; // will use the right TSynAnsiConvert
           end;
@@ -5862,6 +5868,7 @@ begin
   fPropInfo.SetLongStrProp(Instance, Value);
 end;
 
+{$ifndef PUREMORMOT2}
 
 { TOrmPropInfoRttiRawUnicode }
 
@@ -5933,6 +5940,7 @@ begin
   fPropInfo.SetLongStrProp(Instance, Utf8DecodeToRawUnicode(Value));
 end;
 
+{$endif PUREMORMOT2}
 
 { TOrmPropInfoRttiRawBlob }
 
@@ -9241,10 +9249,12 @@ begin
   end;
 end;
 
+{$ifndef PUREMORMOT2}
 function TOrmTableAbstract.GetW(Row, Field: PtrInt): RawUnicode;
 begin
   result := Utf8DecodeToRawUnicode(Get(Row, Field), 0);
 end;
+{$endif PUREMORMOT2}
 
 function TOrmTableAbstract.GetWP(Row, Field: PtrInt; Dest: PWideChar;
   MaxDestChars: cardinal): integer;

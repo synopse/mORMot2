@@ -4974,7 +4974,7 @@ begin
   Ctxt.W.Add('"');
   if Data^ <> nil then
     with PStrRec(Data^ - SizeOf(TStrRec))^ do
-      // will handle RawUtf8 but also AnsiString, WinAnsiString and RawUnicode
+      // will handle RawUtf8 but also AnsiString, WinAnsiString or other CP
       Ctxt.W.AddAnyAnsiBuffer(Data^, length, twJsonEscape,
        {$ifdef HASCODEPAGE} codePage {$else} Ctxt.Info.Cache.CodePage {$endif});
   Ctxt.W.Add('"');
@@ -7479,7 +7479,7 @@ end;
 procedure _JL_RawUtf8(Data: PRawByteString; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    // will handle RawUtf8 but also AnsiString, WinAnsiString and RawUnicode
+    // will handle RawUtf8 but also AnsiString, WinAnsiString or other CP
     if Ctxt.Info.Cache.CodePage = CP_UTF8 then
       Ctxt.Interning.Unique(RawUtf8(Data^), Ctxt.Value, Ctxt.ValueLen)
     else if Ctxt.Info.Cache.CodePage >= CP_RAWBLOB then

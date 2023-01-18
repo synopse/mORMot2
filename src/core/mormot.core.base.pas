@@ -246,7 +246,7 @@ type
   // (with our Enhanced RTL, WideString allocation can be made faster by using
   // an internal caching mechanism of allocation buffers - WideString allocation
   // has been made much faster since Windows Vista/Seven)
-  // - starting with Delphi 2009, it uses fastest UnicodeString type, which
+  // - starting with Delphi 2009, it uses the faster UnicodeString type, which
   // allow Copy On Write, Reference Counting and fast heap memory allocation
   // - on recent FPC, HASVARUSTRING is defined and native UnicodeString is set
   {$ifdef HASVARUSTRING}
@@ -255,8 +255,9 @@ type
   SynUnicode = WideString;
   {$endif HASVARUSTRING}
 
+  {$ifndef PUREMORMOT2}
   /// low-level RawUnicode as an Unicode String stored in an AnsiString
-  // - deprecated type, introduced in Delphi 7/2007 days: SynUnicode is to be used
+  // - DEPRECATED TYPE, introduced in Delphi 7/2007 days: SynUnicode is to be used
   // - faster than WideString, which are allocated in Global heap (for COM)
   // - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
   // - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
@@ -267,10 +268,12 @@ type
   // - all conversion to/from AnsiString or RawUtf8 must be explicit: the
   // compiler may not be able to perform implicit conversions on CP_UTF16
   {$ifdef HASCODEPAGE}
-  RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
+  RawUnicode = type AnsiString(CP_UTF16); // Codepage for an "Unicode" String
   {$else}
   RawUnicode = type AnsiString;
   {$endif HASCODEPAGE}
+  PRawUnicode = ^RawUnicode;
+  {$endif PUREMORMOT2}
 
   /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
   RawUcs4 = TIntegerDynArray;
@@ -279,7 +282,6 @@ type
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
   Ucs4CodePoint = cardinal;
 
-  PRawUnicode = ^RawUnicode;
   PRawJson = ^RawJson;
   PPRawJson = ^PRawJson;
   PRawUtf8 = ^RawUtf8;

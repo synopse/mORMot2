@@ -1187,7 +1187,7 @@ const
 procedure TSqlDBOleDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
   L: integer;
-  SQLW: RawUnicode;
+  tmp: RawByteString;
 begin
   SqlLogBegin(sllDB);
   if Assigned(fCommand) or
@@ -1209,9 +1209,9 @@ begin
     while (L > 0) and
           (fSql[L] in [#1..' ', ';']) do
       dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
-  SetLength(SQLW, L * 2 + 1);
-  Utf8ToWideChar(pointer(SQLW), pointer(fSql), L);
-  fCommand.SetCommandText(DBGUID_DEFAULT, pointer(SQLW));
+  SetLength(tmp, L * 2 + 1);
+  Utf8ToWideChar(pointer(tmp), pointer(fSql), L);
+  fCommand.SetCommandText(DBGUID_DEFAULT, pointer(tmp));
   SqlLogEnd;
 end;
 

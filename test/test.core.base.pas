@@ -1186,6 +1186,7 @@ var
   i, j, k, Len, count, AIcount: integer;
   U, U2: RawUtf8;
   P: PUtf8Char;
+  PA: PAnsiChar;
   PI: PIntegerArray;
   AB: TBooleanDynArray;
   R: TRec;
@@ -1941,7 +1942,9 @@ begin
   Check(length(Province.Cities) = 0);
   Check(ACities.Count = 0);
   Province.Year := 0;
-  Check(RecordLoad(Province, pointer(Test), TypeInfo(TProvince), nil, nil)^ = #0);
+  PA := RecordLoad(Province, pointer(Test), TypeInfo(TProvince), nil,
+    PAnsiChar(pointer(Test)) + length(Test));
+  Check((PA <> nil) and (PA^ = #0));
   Check(Province.Name = 'Test');
   Check(Province.Comment = 'comment');
   Check(Province.Year = 1000);
@@ -4522,12 +4525,7 @@ procedure TTestCoreBase._UTF8;
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
-    {$ifdef FPC}
     CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
-    {$else}
-    CheckUtf8(A = W, 'CP%-AW', [CP]);
-    CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
-    {$endif FPC}
   end;
 
   procedure CheckTrimCopy(const S: RawUtf8; start, count: PtrInt);
@@ -4551,7 +4549,7 @@ var
   P: PUtf8Char;
   PB: PByte;
   q: RawUtf8;
-  Unic: RawUnicode;
+  Unic: RawByteString;
   WA: Boolean;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
@@ -4836,20 +4834,19 @@ begin
     Check(IsAnsiCompatible(U) or (PosEx('\u', json1) > 0));
     json2 := JsonReformat(json1, jsonNoEscapeUnicode);
     Check(json2 = json, 'jeu2');
-    Unic := Utf8DecodeToRawUnicode(U);
+    Unic := Utf8DecodeToUnicodeRawByteString(pointer(U), length(U));
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U) = W);
     Check(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)) = W);
-    Check(WinAnsiConvert.RawUnicodeToAnsi(WinAnsiConvert.AnsiToRawUnicode(W)) = W);
+    Check(WinAnsiConvert.UnicodeStringToAnsi(WinAnsiConvert.AnsiToUnicodeString(W)) = W);
     if CurrentAnsiConvert.InheritsFrom(TSynAnsiFixedWidth) then
     begin
       Check(CurrentAnsiConvert.Utf8ToAnsi(CurrentAnsiConvert.AnsiToUtf8(W)) = W);
-      Check(CurrentAnsiConvert.RawUnicodeToAnsi(CurrentAnsiConvert.AnsiToRawUnicode
-        (W)) = W);
+      Check(CurrentAnsiConvert.UnicodeStringToAnsi(CurrentAnsiConvert.AnsiToUnicodeString(W)) = W);
     end;
-    res := RawUnicodeToUtf8(Unic);
+    res := RawUnicodeToUtf8(pointer(Unic), length(Unic) shr 1);
     Check(res = U);
-    Check(RawUnicodeToWinAnsi(Unic) = W);
+    Check(WinAnsiConvert.UnicodeBufferToAnsi(pointer(Unic), length(Unic) shr 1) = W);
     {$endif FPC_HAS_CPSTRING}
     WS := Utf8ToWideString(U);
     Check(length(WS) = length(Unic) shr 1);

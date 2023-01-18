@@ -398,8 +398,7 @@ begin
       ftWideMemo,
       {$endif HASDBFTWIDE}
       ftWideString:
-        result := TRawByteStringStream.Create(
-          Utf8DecodeToRawUnicode(data, len));
+        result := Utf8DecodeToUnicodeStream(data, len);
     else
       raise EVirtualDataSet.CreateUtf8('%.CreateBlobStream DataType=%',
         [self, ord(Field.DataType)]);

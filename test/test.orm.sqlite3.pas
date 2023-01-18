@@ -2079,9 +2079,9 @@ begin
               check(GetBlob(aR, aF) = J.GetBlob(aR, aF))
             else
             begin
-              CheckUtf8((GetW(aR, aF) = J.GetW(aR, aF)) and
+              CheckUtf8((GetSynUnicode(aR, aF) = J.GetSynUnicode(aR, aF)) and
                     (GetA(aR, aF) = J.GetA(aR, aF)) and
-                    (length(GetW(aR, aF)) shr 1 = LengthW(aR, aF)),
+                    (length(GetSynUnicode(aR, aF)) = LengthW(aR, aF)),
                 'Get() in Row=% Field=%', [aR, aF]);
               if (aR > 0) and
                  (aF > 3) then

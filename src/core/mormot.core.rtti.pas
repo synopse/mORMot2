@@ -3671,8 +3671,10 @@ begin
     result := CP_UTF8
   else if @self = TypeInfo(WinAnsiString) then
     result := CODEPAGE_US
+  {$ifndef PUREMORMOT2}
   else if @self = TypeInfo(RawUnicode) then
     result := CP_UTF16
+  {$endif PUREMORMOT2}
   else if @self = TypeInfo(RawByteString) then
     result := CP_RAWBYTESTRING // RawBlob has same internal code page
   else if @self = TypeInfo(AnsiString) then
