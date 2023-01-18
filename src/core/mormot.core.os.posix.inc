@@ -2943,7 +2943,7 @@ end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal;
-  setresult: boolean): RawByteString;
+  setresult: boolean; const env, wrkdir: TFileName): RawByteString;
 var
   // note: FPC popen(file) allows access to the pid whereas clib popen() won't
   f: file;
@@ -2956,7 +2956,9 @@ var
   tmp: array[word] of byte; // 64KB stack buffer
 begin
   result := '';
-  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd
+  if wrkdir <> '' then
+    ChDir(wrkdir);
+  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd - env is ignored by now
     exit;
   fd := TFileRec(f).Handle;
   pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp

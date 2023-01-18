@@ -4367,7 +4367,8 @@ end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   envaddexisting: boolean; waitfordelayms: cardinal; processhandle: PHandle;
-  redirected: PRawByteString; const onoutput: TOnRedirect): integer;
+  redirected: PRawByteString; const onoutput: TOnRedirect;
+  const wrkdir: TFileName): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
@@ -4444,7 +4445,9 @@ begin
     else
       exe := copy(cmd, 1, i - 1); // split exe and parameter(s)
   end;
-  if exe <> '' then
+  path := wrkdir;
+  if (path <> '') and
+     (exe <> '') then
     path := ExtractFilePath(exe);
   if (path = '') and
      FileExists(Executable.ProgramFilePath + exe) then
@@ -4578,7 +4581,7 @@ end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal;
-  setresult: boolean): RawByteString;
+  setresult: boolean; const env, wrkdir: TFileName): RawByteString;
 var
   res: integer;
   redir: PRawByteString;
@@ -4588,7 +4591,8 @@ begin
     redir := @result
   else
     redir := nil;
-  res := RunCommand(cmd, true, '', false, waitfordelayms, nil, redir, onoutput);
+  res := RunCommand(cmd, true, env, (env <> ''), waitfordelayms, nil,
+    redir, onoutput, wrkdir);
   if exitcode <> nil then
     exitcode^ := res;
 end;

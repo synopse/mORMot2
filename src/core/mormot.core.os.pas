@@ -4774,11 +4774,13 @@ type
 // and redirected is the raw byte output, which may be OEM, WinAnsi or UTF-16
 // depending on the program itself
 // - parsed is implemented on POSIX only
+// - optional env should be encoded as 'n1=v1'#0'n2=v2'#0#0 pairs
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
   {$ifdef OSWINDOWS}
   waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
-  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil
+  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
+  const wrkdir: TFileName = ''
   {$else}
   parsed: PParseCommands = nil
   {$endif OSWINDOWS}): integer;
@@ -4792,9 +4794,11 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // may consider using AnsiToUtf8() with the proper code page
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
+// - optional env is Windows only, and should be encoded as name=value#0 pairs
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
-  setresult: boolean = true): RawByteString;
+  setresult: boolean = true; const env: TFileName = '';
+  const wrkdir: TFileName = ''): RawByteString;
 
 var
   /// how many seconds we should wait for gracefull termination of a process
