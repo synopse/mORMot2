@@ -465,13 +465,13 @@ begin
         WriteCopyright;
         exe := StringFromFile(Executable.ProgramFileName);
         writeln(' ', Utf8ToConsole(fSettings.ServiceName),
-          #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
+          #13#10' Size:       ', length(exe), ' bytes (', KB(exe), ')' +
           #13#10' Build date: ', Executable.Version.BuildDateTimeString,
-          #13#10' MD5: ', Md5(exe),
-          #13#10' SHA256: ', Sha256(exe));
-        writeln(' OS: ', OSVersionText);
+          #13#10' MD5:        ', Md5(exe),
+          #13#10' SHA256:     ', Sha256(exe));
+        writeln(' Running OS: ', OSVersionText);
         if Executable.Version.Version32 <> 0 then
-          writeln(' Version: ', Executable.Version.Detailed);
+          writeln(' Version:    ', Executable.Version.Detailed);
       end;
     cConsole,
     cVerbose:
@@ -669,7 +669,10 @@ begin
       // allow e.g. --fork switch (idem to /f -f /fork -fork)
       inc(p);
     if CustomParseCmd(p) then
+    begin
+      TextColor(ccLightGray); // like Command()
       exit; // command has been identified and processed in overriden method
+    end;
     cmd := ParseCmd(p);
   end;
   Command(cmd, aAutoStart, param);
