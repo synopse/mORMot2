@@ -325,6 +325,9 @@ const
   rkGetInt64PropTypes =
      [rkInt64 {$ifdef FPC} , rkQWord {$endif} ];
 
+  /// maps value which are integer or Int64/QWord, but not ordinal char/enum/set
+  rkGetIntegerPropTypes = rkGetInt64PropTypes + [rkInteger];
+
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
 
@@ -1119,7 +1122,7 @@ type
     // - to be called when a setter is involved - not very fast, but safe
     function SetValue(Instance: TObject; const Value: variant): boolean;
     /// set a property value from a text value
-    // - handle all kind of fields, e.g. converting from text into ordinal or floats
+    // - handle simple kind of fields, e.g. converting from text into ordinal or floats
     function SetValueText(Instance: TObject; const Value: RawUtf8): boolean;
   end;
 
@@ -3947,7 +3950,7 @@ begin
     SetFloatProp(Instance, f);
   end
   else if k = rkVariant then
-    SetVariantProp(Instance, Value)
+    SetVariantProp(Instance, Value) // store as text
   else
     exit;
   result := true;
