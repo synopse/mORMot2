@@ -4372,7 +4372,6 @@ var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
   security: TSecurityAttributes;
-  h: array[0..1] of THandle;
   exe, path: TFileName;
   rd, wr: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
@@ -4510,10 +4509,9 @@ begin
         endtix := 0
       else
         endtix := GetTickCount64 + waitfordelayms;
-      h[0] := processinfo.hProcess;
-      h[1] := rd;
       repeat
-        exitcode := WaitForMultipleObjects(2, @h, false, 200);
+        exitcode := WaitForSingleObject(processinfo.hProcess, 50);
+        // note: WaitForMultipleObjects() with rd burns 100% of one core :(
         Win32Check(exitcode <> WAIT_FAILED);
         RedirectOutput({flush=}false);
       until (exitcode = WAIT_OBJECT_0) or
@@ -4550,7 +4548,11 @@ begin
            GetExitCodeProcess(processinfo.hProcess, exitcode) then
           result := exitcode
         else
+        begin
           TerminateProcess(processinfo.hProcess, result); // forced kill
+          TService.DoLog(sllTrace, 'TerminateProcess(%)=%',
+            [processinfo.dwProcessId, result], nil);
+        end;
       end;
     end
     else if waitfor then
