@@ -350,7 +350,7 @@ type
   PImageImportDescriptor = ^_IMAGE_IMPORT_DESCRIPTOR;
 
   /// .tls Section Header
-  // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-tls-directory
+  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-tls-directory
   _IMAGE_TLS_DIRECTORY32 = record
     StartAddressOfRawData: cardinal;
     EndAddressOfRawData: cardinal;
@@ -389,7 +389,7 @@ type
   PImageResourceDirectory = ^_IMAGE_RESOURCE_DIRECTORY;
 
   /// Resource directory entries
-  // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
+  // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
   PImageResourceDataEntry = ^_IMAGE_RESOURCE_DATA_ENTRY;
   _IMAGE_RESOURCE_DIRECTORY_ENTRY = object
     // Nested record to use a variable part not at the end of the record
@@ -475,22 +475,22 @@ type
   PVSFixedFileInfo = ^_VS_FIXEDFILEINFO;
 
   /// StringFileInfo struct, same as VS_VERSIONINFO
-  // https://learn.microsoft.com/en-us/windows/win32/menurc/stringfileinfo
+  // - https://learn.microsoft.com/en-us/windows/win32/menurc/stringfileinfo
   TStringFileInfo = TVsVersionInfo;
   PStringFileInfo = ^TStringFileInfo;
 
   /// StringTable struct, same as VS_VERSIONINFO
-  // https://learn.microsoft.com/en-us/windows/win32/menurc/stringtable
+  // - https://learn.microsoft.com/en-us/windows/win32/menurc/stringtable
   TStringTable = TVsVersionInfo;
   PStringTable = ^TStringTable;
 
   /// string struct, same as VS_VERSIONINFO
-  // https://learn.microsoft.com/en-us/windows/win32/menurc/string-str
+  // - https://learn.microsoft.com/en-us/windows/win32/menurc/string-str
   TStringTableEntry = TVsVersionInfo;
   PStringTableEntry = ^TStringTableEntry;
 
   /// VarFileInfo struct, same as VS_VERSIONINFO
-  // https://learn.microsoft.com/en-us/windows/win32/menurc/varfileinfo
+  // - https://learn.microsoft.com/en-us/windows/win32/menurc/varfileinfo
   TVarFileInfo = TVsVersionInfo;
   PVarFileInfo = ^TVarFileInfo;
 
@@ -581,16 +581,17 @@ type
     function GetPhAddByRVA(RVA: cardinal): cardinal; overload;
 
     /// Parse the Resource directory associated section
-    // see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-rsrc-section
+    // - see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-rsrc-section
     // - Return false if there is no resource section
     // - Set VersionInfo, FixedFileInfo, StringFileInfo, FirstStringTable
     // VarFileInfo pointers if found
     function ParseResources: boolean;
     /// Parse the StringFileInfo entries
-    // - Call ParseResources if StringFileInfo is nil before returning false if
-    // it is still nil
+    // - This is the main method to be called after Create
+    // - Call ParseResources if needed
     // - Parsed entries are accessible using the StringFileInfoEntries property
     function ParseStringFileInfoEntries: boolean;
+
     /// Check whether there is a valid PE file loaded
     function IsLoaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -876,38 +877,42 @@ var
   NextAddress: pointer;
 begin
   result := false;
-  ResourceSct := SectionHeaders[GetSectionIndexFromDirectory(IMAGE_DIRECTORY_ENTRY_RESOURCE)];
-  if not Assigned(ResourceSct) then
-    exit;
-  Directory := pointer(fMap.Buffer + ResourceSct^.PointerToRawData);
-  result := true;
-  for EntryId := 0 to Directory^.NumberOfEntries - 1 do
-  begin
-    Entry := Directory^.Entries[EntryId];
-    // Version Resource
-    if Entry^.Identifier.Id = RT_VERSION then
+  try
+    ResourceSct := SectionHeaders[GetSectionIndexFromDirectory(IMAGE_DIRECTORY_ENTRY_RESOURCE)];
+    if not Assigned(ResourceSct) then
+      exit;
+    Directory := pointer(fMap.Buffer + ResourceSct^.PointerToRawData);
+    result := true;
+    for EntryId := 0 to Directory^.NumberOfEntries - 1 do
     begin
-      VersionEntriesDir := Entry^.Directory(Directory)^.Entries[0]^.Directory(Directory);
-      for i := 0 to VersionEntriesDir^.NumberOfEntries - 1 do
+      Entry := Directory^.Entries[EntryId];
+      // Version Resource
+      if Entry^.Identifier.Id = RT_VERSION then
       begin
-        VersionData := VersionEntriesDir^.Entries[i]^.Data(Directory);
-        fVersionInfo := pointer(fMap.Buffer + GetPhAddByRVA(VersionData^.DataRVA));
-        // 'VS_VERSION_INFO', Strings are UTF-16 encoded which explains the
-        // 2 * StrLenW (2 bytes per WideChar) in later offset
-        VersionInfoStr := pointer(PAnsiChar(VersionInfo) + SizeOf(VersionInfo^));
-        // Invalid Entry
-        if StrCompW(VersionInfoStr, 'VS_VERSION_INFO') <> 0 then
-          break;
-        // Fixed File Info
-        fFixedFileInfo := pointer(PAnsiChar(VersionInfo) +
-          DWordAlign(SizeOf(VersionInfo^) + 2 * (StrLenW(VersionInfoStr) + 1),
-            VersionData^.DataRVA));
-        // string File Info / Var File Info
-        NextAddress := pointer(PAnsiChar(fFixedFileInfo) + SizeOf(fFixedFileInfo^));
-        while NextAddress <> nil do
-          NextAddress := ParseFileInfo(NextAddress);
+        VersionEntriesDir := Entry^.Directory(Directory)^.Entries[0]^.Directory(Directory);
+        for i := 0 to VersionEntriesDir^.NumberOfEntries - 1 do
+        begin
+          VersionData := VersionEntriesDir^.Entries[i]^.Data(Directory);
+          fVersionInfo := pointer(fMap.Buffer + GetPhAddByRVA(VersionData^.DataRVA));
+          // 'VS_VERSION_INFO', Strings are UTF-16 encoded which explains the
+          // 2 * StrLenW (2 bytes per WideChar) in later offset
+          VersionInfoStr := pointer(PAnsiChar(VersionInfo) + SizeOf(VersionInfo^));
+          // Invalid Entry
+          if StrCompW(VersionInfoStr, 'VS_VERSION_INFO') <> 0 then
+            break;
+          // Fixed File Info
+          fFixedFileInfo := pointer(PAnsiChar(VersionInfo) +
+            DWordAlign(SizeOf(VersionInfo^) + 2 * (StrLenW(VersionInfoStr) + 1),
+              VersionData^.DataRVA));
+          // string File Info / Var File Info
+          NextAddress := pointer(PAnsiChar(fFixedFileInfo) + SizeOf(fFixedFileInfo^));
+          while NextAddress <> nil do
+            NextAddress := ParseFileInfo(NextAddress);
+        end;
       end;
     end;
+  except
+    result := false; // on malformatted input: intercept the GPF/EPeCoffLoader
   end;
 end;
 
@@ -919,36 +924,40 @@ var
   StrEntry, StrEntryEnd: PStringTableEntry;
 begin
   result := false;
-  if StringFileInfo = nil then
-    ParseResources;
-  if (StringFileInfo = nil) or
-     (FirstStringTable = nil) then
-    exit;
-  result := true;
-  Offset := PAnsiChar(StringFileInfo) - pointer(VersionInfo);
-  StringTable := FirstStringTable;
-  StringTableEnd := pointer(PAnsiChar(StringFileInfo) + StringFileInfo^.Length); 
-  repeat
-    LangID := pointer(PAnsiChar(StringTable) + SizeOf(StringTable^));
-    StrEntry := pointer(PAnsiChar(StringTable) +
-      DWordAlign(SizeOf(StringTable^) + 2 * (StrLenW(LangID) + 1), Offset));
-    StrEntryEnd := pointer(PAnsiChar(StringTable) + StringTable^.Length);
-    while PtrUInt(StrEntry) < PtrUInt(StrEntryEnd) do
-    begin
-      Key := pointer(PAnsiChar(StrEntry) + SizeOf(StrEntry^));
-      Value := pointer(PAnsiChar(StrEntry) +
-        DWordAlign(SizeOf(StrEntry^) + 2 * (StrLenW(Key) + 1), Offset));
-      fStringFileInfoEntries.AddValue(UnicodeBufferToUtf8(Key), UnicodeBufferToUtf8(Value));
-      if StrEntry^.Length = 0 then
-        StrEntry := StrEntryEnd // end
-      else
-        StrEntry := pointer(PAnsiChar(StrEntry) +
-          DWordAlign(StrEntry^.Length, Offset));
-    end;
-    if StringTable^.Length = 0 then
-      break;
-    inc(PByte(StringTable), DWordAlign(StringTable^.Length, Offset));
-  until PtrUInt(StringTable) >= PtrUInt(StringTableEnd);
+  try
+    if StringFileInfo = nil then
+      ParseResources;
+    if (StringFileInfo = nil) or
+       (FirstStringTable = nil) then
+      exit;
+    result := true;
+    Offset := PAnsiChar(StringFileInfo) - pointer(VersionInfo);
+    StringTable := FirstStringTable;
+    StringTableEnd := pointer(PAnsiChar(StringFileInfo) + StringFileInfo^.Length);
+    repeat
+      LangID := pointer(PAnsiChar(StringTable) + SizeOf(StringTable^));
+      StrEntry := pointer(PAnsiChar(StringTable) +
+        DWordAlign(SizeOf(StringTable^) + 2 * (StrLenW(LangID) + 1), Offset));
+      StrEntryEnd := pointer(PAnsiChar(StringTable) + StringTable^.Length);
+      while PtrUInt(StrEntry) < PtrUInt(StrEntryEnd) do
+      begin
+        Key := pointer(PAnsiChar(StrEntry) + SizeOf(StrEntry^));
+        Value := pointer(PAnsiChar(StrEntry) +
+          DWordAlign(SizeOf(StrEntry^) + 2 * (StrLenW(Key) + 1), Offset));
+        fStringFileInfoEntries.AddValue(UnicodeBufferToUtf8(Key), UnicodeBufferToUtf8(Value));
+        if StrEntry^.Length = 0 then
+          StrEntry := StrEntryEnd // end
+        else
+          StrEntry := pointer(PAnsiChar(StrEntry) +
+            DWordAlign(StrEntry^.Length, Offset));
+      end;
+      if StringTable^.Length = 0 then
+        break;
+      inc(PByte(StringTable), DWordAlign(StringTable^.Length, Offset));
+    until PtrUInt(StringTable) >= PtrUInt(StringTableEnd);
+  except
+    result := false; // on malformatted input: intercept the GPF/EPeCoffLoader
+  end;
 end;
 
 function TSynPELoader.ParseFileInfo(Address: pointer): pointer;
@@ -990,7 +999,7 @@ begin
     DOSHeader := pointer(fMap.Buffer);
     if (fMap.Size > SizeOf(DOSHeader^)) and
        (DOSHeader^.e_magic = DOS_HEADER_MAGIC) then
-    begin
+    try
       // e_lfanew is pointer to PE Header (0x3c after start of file)
       // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#signature-image-only
       fPEHeader.PHeaders := pointer(fMap.Buffer + DOSHeader^.e_lfanew);
@@ -1004,6 +1013,8 @@ begin
                 (CoffHeader^.SizeOfOptionalHeader <> 0) and
                 ((PEHeader32^.OptionalHeader.Magic = PE_32_MAGIC) or
                  (PEHeader32^.OptionalHeader.Magic = PE_64_MAGIC));
+    except
+      result := false; // on malformatted input: intercept the GPF
     end;
   finally
     if not result then
@@ -1035,6 +1046,21 @@ begin
   end;
 end;
 
-
+{
+begin
+  with TSynPELoader.Create do
+  try
+    if LoadFromFile(paramstr(0)) then
+      if ParseStringFileInfoEntries then
+        writeln(StringFileInfoEntries.ToJSon);
+    writeln('FileVersionStr = ',FileVersionStr);
+  finally
+    Free;
+  end;
+  writeln('GetPEFileVersion = ', GetPEFileVersion(
+    // 'd:\dev\lib2\test\fpc\bin\x86_64-win64\mormot2tests.exe').ToJson);
+    Executable.ProgramFilePath + '/../x86_64-win64/mormot2tests.exe').ToJson);
+  readln;
+}
 end.
 
