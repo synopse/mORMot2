@@ -8,7 +8,7 @@ unit mormot2;
 interface
 
 uses
-  mormot.app.console, mormot.app.daemon, mormot.core.base, 
+  mormot.app.console, mormot.app.daemon, mormot.app.agl, mormot.core.base, 
   mormot.core.buffers, mormot.core.collections, mormot.core.data, 
   mormot.core.datetime, mormot.core.fpcx64mm, mormot.core.interfaces, 
   mormot.core.json, mormot.core.log, mormot.core.mustache, mormot.core.os, 
@@ -28,7 +28,7 @@ uses
   mormot.lib.static, mormot.lib.winhttp, mormot.lib.z, mormot.net.async, 
   mormot.net.client, mormot.net.http, mormot.net.relay, mormot.net.rtsphttp, 
   mormot.net.server, mormot.net.sock, mormot.net.tunnel, mormot.net.ws.client, 
-  mormot.net.ws.core, mormot.net.ws.server, mormot.orm.base, 
+  mormot.net.ws.core, mormot.net.ws.server, mormot.net.acme, mormot.orm.base, 
   mormot.orm.client, mormot.orm.core, mormot.orm.mongodb, mormot.orm.rest, 
   mormot.orm.server, mormot.orm.sql, mormot.orm.sqlite3, mormot.orm.storage, 
   mormot.rest.client, mormot.rest.core, mormot.rest.http.client, 

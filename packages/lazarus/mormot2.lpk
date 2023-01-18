@@ -8,7 +8,7 @@
       <SearchPaths>
         <IncludeFiles Value="../../src;../../src/core;../../src/net"/>
         <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script"/>
+        <OtherUnitFiles Value="../../src/app;../../src/core;../../src/crypt;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/script;../../src/misc"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
         <SrcPath Value="../../src"/>
       </SearchPaths>
@@ -47,7 +47,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
-    <Files Count="104">
+    <Files Count="105">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -465,6 +465,10 @@
         <Filename Value="../../src/core/mormot.core.os.mac.pas"/>
         <UnitName Value="mormot.core.os.mac"/>
       </Item104>
+      <Item105>
+        <Filename Value="../../src/app/mormot.app.agl.pas"/>
+        <UnitName Value="mormot.app.agl"/>
+      </Item105>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
