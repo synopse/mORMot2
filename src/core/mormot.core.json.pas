@@ -2208,8 +2208,8 @@ function JsonToObject(var ObjectInstance; From: PUtf8Char;
 /// parse the supplied JSON with some tolerance about Settings format
 // - will make a TSynTempBuffer copy for parsing, and un-comment it
 // - returns true if the supplied JSON was successfully retrieved
-// - returns false and set InitialJsonContent := '' on error
-function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
+// - returns false on error
+function JsonSettingsToObject(const JsonContent: RawUtf8;
   Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJson function
@@ -2444,7 +2444,7 @@ type
   public
     /// read existing settings from a JSON content
     // - if the input is no JSON object, then a .INI structure is tried
-    function LoadFromJson(var aJson: RawUtf8;
+    function LoadFromJson(const aJson: RawUtf8;
       const aSectionName: RawUtf8 = 'Main'): boolean;
     /// read existing settings from a JSON or INI file file
     function LoadFromFile(const aFileName: TFileName;
@@ -10950,20 +10950,18 @@ begin
   result := ctxt.Json;
 end;
 
-function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
+function JsonSettingsToObject(const JsonContent: RawUtf8;
   Instance: TObject): boolean;
 var
   tmp: TSynTempBuffer;
 begin
   result := false;
-  if InitialJsonContent = '' then
+  if JsonContent = '' then
     exit;
-  tmp.Init(InitialJsonContent);
+  tmp.Init(JsonContent); // copy for in-place comment removal and JSON parsing
   try
     RemoveCommentsFromJson(tmp.buf);
     JsonToObject(Instance, tmp.buf, result, nil, JSONPARSER_TOLERANTOPTIONS);
-    if not result then
-      InitialJsonContent := '';
   finally
     tmp.Done;
   end;
@@ -11241,7 +11239,7 @@ begin
   result := true; // success
 end;
 
-function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8;
+function TSynJsonFileSettings.LoadFromJson(const aJson: RawUtf8;
   const aSectionName: RawUtf8): boolean;
 begin
   if fsoReadIni in fSettingsOptions then
@@ -11270,6 +11268,8 @@ begin
   fFileName := aFileName;
   fInitialJsonContent := RawUtf8FromFile(aFileName); // may detect BOM
   result := LoadFromJson(fInitialJsonContent, aSectionName);
+  if not result then
+    fInitialJsonContent := ''; // file was neither valid JSON nor INI: ignore
 end;
 
 procedure TSynJsonFileSettings.SaveIfNeeded;
