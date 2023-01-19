@@ -2821,7 +2821,7 @@ begin
 end;
 
 function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TFileName;
-  envaddexisting: boolean): integer;
+  options: TRunOptions): integer;
 var
   pid: TPID;
   e: array[0..511] of PAnsiChar; // max 512 environment variables
@@ -2855,7 +2855,7 @@ begin
     begin
       n := 0;
       result := -ESysE2BIG;
-      if envaddexisting and
+      if (roEnvAddExisting in options) and
          (envpp <> nil) then
       begin
         while envpp^ <> nil do
@@ -2900,7 +2900,7 @@ end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2, arg3, arg4, arg5, env: TFileName;
-  envaddexisting: boolean): integer;
+  options: TRunOptions): integer;
 var
   a: array[0..6] of PAnsiChar; // assume no UNICODE on POSIX, i.e. as TFileName
 begin
@@ -2911,11 +2911,11 @@ begin
   a[4] := pointer(arg4);
   a[5] := pointer(arg5);
   a[6] := nil; // end pointer list with null
-  result := RunInternal(@a, waitfor, env, envaddexisting);
+  result := RunInternal(@a, waitfor, env, options);
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName; envaddexisting: boolean; parsed: PParseCommands): integer;
+  const env: TFileName; options: TRunOptions; parsed: PParseCommands): integer;
 var
   temp: RawUtf8;
   err: TParseCommands;
@@ -2926,7 +2926,7 @@ begin
     parsed^ := err;
   if err = [] then
     // no need to spawn the shell for simple commands
-    result := RunInternal(a, waitfor, env, envaddexisting)
+    result := RunInternal(a, waitfor, env, options)
   else if err * PARSECOMMAND_ERROR <> [] then
     // no system call for clearly invalid command line
     result := -ESysEPERM
@@ -2937,15 +2937,16 @@ begin
     a[1] := '-c';
     a[2] := pointer(cmd);
     a[3] := nil;
-    result := RunInternal(@a, waitfor, env, envaddexisting);
+    result := RunInternal(@a, waitfor, env, options);
   end;
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal;
-  setresult: boolean; const env, wrkdir: TFileName): RawByteString;
+  setresult: boolean; const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
-  // note: FPC popen(file) allows access to the pid whereas clib popen() won't
+  // notes: - FPC popen() allows access to the pid whereas clib popen() won't
+  //        - env and options params are not supported by popen() so are ignored
   f: file;
   fd: THandle;
   pid, res, wr: cint;
@@ -2962,9 +2963,11 @@ var
     if WaitReadPending(fd, wait) then
     begin
       n := fpread(fd, tmp, SizeOf(tmp));
-      if n <= 0 then
+      if n < 0 then
         exit; // pipe closed = execution finished
-      if setresult then
+      if setresult and
+         (n <> 0) then
+      begin
         if redir = '' then
           FastSetString(RawUtf8(redir), @tmp, n) // assume CP_UTF8
         else
@@ -2972,7 +2975,8 @@ var
           SetLength(redir, l + n); // append
           MoveFast(tmp, PByteArray(redir)[l], n);
         end;
-      inc(l, n);
+        inc(l, n);
+      end;
       if Assigned(onoutput) then
       begin
         FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX

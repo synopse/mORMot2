@@ -4338,10 +4338,10 @@ function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2, arg3, arg4, arg5, env: TFileName; envaddexisting: boolean): integer;
+  const arg2, arg3, arg4, arg5, env: TFileName; options: TRunOptions): integer;
 begin
   result := RunCommand(Format('"%s" %s %s %s %s %s',
-    [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, envaddexisting);
+    [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, options);
 end;
 
 var
@@ -4366,7 +4366,7 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
-  envaddexisting: boolean; waitfordelayms: cardinal; processhandle: PHandle;
+  options: TRunOptions; waitfordelayms: cardinal; processhandle: PHandle;
   redirected: PRawByteString; const onoutput: TOnRedirect;
   const wrkdir: TFileName): integer;
 var
@@ -4378,7 +4378,7 @@ var
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   endtix: Int64;
-  exitcode, res: cardinal;
+  flags, exitcode, res: cardinal;
   ram: TRunAbortMethods;
   terminated: boolean;
   i, l: PtrInt;
@@ -4459,7 +4459,7 @@ begin
   if env <> '' then
   begin
     wenv := SynUnicode(env);
-    if envaddexisting then
+    if roEnvAddExisting in options then
     begin
       if EnvironmentCache = '' then
         GetEnvironmentCache;
@@ -4495,9 +4495,9 @@ begin
       rd := 0;
   // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
   FillCharFast(processinfo, SizeOf(processinfo), 0);
-  if CreateProcessW(nil, pointer(wcmd), @security, @security, true,
-    CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
-      DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+  flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
+           DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP;
+  if CreateProcessW(nil, pointer(wcmd), @security, @security, true, flags,
     pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
     if processhandle <> nil then
@@ -4580,8 +4580,8 @@ begin
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal;
-  setresult: boolean; const env, wrkdir: TFileName): RawByteString;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
+  const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
   res: integer;
   redir: PRawByteString;
@@ -4591,7 +4591,7 @@ begin
     redir := @result
   else
     redir := nil;
-  res := RunCommand(cmd, true, env, (env <> ''), waitfordelayms, nil,
+  res := RunCommand(cmd, true, env, options, waitfordelayms, nil,
     redir, onoutput, wrkdir);
   if exitcode <> nil then
     exitcode^ := res;

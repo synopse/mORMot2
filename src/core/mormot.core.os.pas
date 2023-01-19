@@ -2939,7 +2939,7 @@ type
     // - file will be closed when UnMap will be called
     function Map(const aFileName: TFileName): boolean; overload;
     /// set a fixed buffer for the content
-    // - emulated a memory-mapping from an existing buffer
+    // - emulates memory-mapping over an existing buffer
     procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
     /// unmap the file
     procedure UnMap;
@@ -4746,13 +4746,6 @@ function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
   posix: boolean = {$ifdef OSWINDOWS} false {$else} true {$endif}): TParseCommands;
 
-/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-// - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
-function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2: TFileName = ''; const arg3: TFileName = '';
-  const arg4: TFileName = ''; const arg5: TFileName = '';
-  const env: TFileName = ''; envaddexisting: boolean = false): integer;
-
 type
   /// callback used by RunRedirect() to notify of console output at runtime
   // - newly console output text is given as raw bytes sent by the application,
@@ -4766,6 +4759,19 @@ type
   // - the raw process ID (dword on Windows, cint on POSIX) is also supplied
   TOnRedirect = function(const text: RawByteString; pid: cardinal): boolean of object;
 
+  /// define how RunCommand() and RunRedirect() run their sub-process
+  // - roEnvAddExisting is used when the env pairs should be added to the
+  // existing system environment variable
+  TRunOptions = set of (
+    roEnvAddExisting);
+
+/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+// - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2: TFileName = ''; const arg3: TFileName = '';
+  const arg4: TFileName = ''; const arg5: TFileName = '';
+  const env: TFileName = ''; options: TRunOptions = []): integer;
+
 /// like fpSystem, but cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
@@ -4776,7 +4782,7 @@ type
 // - parsed is implemented on POSIX only
 // - optional env should be encoded as 'n1=v1'#0'n2=v2'#0#0 pairs
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName = ''; envaddexisting: boolean = false;
+  const env: TFileName = ''; options: TRunOptions = [];
   {$ifdef OSWINDOWS}
   waitfordelayms: cardinal = INFINITE; processhandle: PHandle = nil;
   redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
@@ -4786,7 +4792,8 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
   {$endif OSWINDOWS}): integer;
 
 /// execute a command, returning its output console as UTF-8 text
-// - calling FPC RTL popen/pclose on POSIX, or CreateProcessW on Windows
+// - calling CreateProcessW on Windows (i.e. our RunCommand), and FPC RTL
+// popen/pclose on POSIX
 // - return '' on cmd execution error, or the whole output console content
 // with no conversion: on POSIX, it is likely to be UTF-8 but on Windows it
 // depends on the actual program so is likely to be CP_OEM but others could
@@ -4794,11 +4801,12 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // may consider using AnsiToUtf8() with the proper code page
 // - will optionally call onoutput() to notify the new output state
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
-// - optional env is Windows only, and should be encoded as name=value#0 pairs
+// - optional env is Windows only, (FPC popen does not support it), and should
+// be encoded as name=value#0 pairs
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
   setresult: boolean = true; const env: TFileName = '';
-  const wrkdir: TFileName = ''): RawByteString;
+  const wrkdir: TFileName = ''; options: TRunOptions = []): RawByteString;
 
 var
   /// how many seconds we should wait for gracefull termination of a process
