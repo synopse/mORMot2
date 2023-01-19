@@ -53,18 +53,27 @@ type
   TSynAngelize = class;
   TSynAngelizeService = class;
 
+  /// define how "start:exename" RunRedirect() is executed
+  // - soReplaceEnv let "StartEnv" values fully replace the existing environment
+  // - soWinJobCloseChildren will setup a Windows Job to close any child
+  // process(es) when the created process quits
+  TStartOptions = set of (
+    soReplaceEnv,
+    soWinJobCloseChildren);
+
   /// used to process a "start:exename" command in the background
   TSynAngelizeRunner = class(TThreadAbstract)
   protected
     fLog: TSynLogClass;
     fSender: TSynAngelize;
     fService: TSynAngelizeService;
+    fRetryEvent: TSynEvent;
+    fRedirect: TFileStreamEx;
+    fRedirectSize: Int64;
+    // copy of fService properties
     fCmd, fEnv, fWrkDir, fRedirectFileName: TFileName;
     fAbortRequested: boolean;
     fRunOptions: TRunOptions;
-    fRedirect: TFileStreamEx;
-    fRedirectSize: Int64;
-    fRetryEvent: TSynEvent;
     procedure Execute; override;
     procedure PerformRotation;
     function OnRedirect(const text: RawByteString; pid: cardinal): boolean;
@@ -97,7 +106,7 @@ type
     fStart, fStop, fWatch: TSynAngelizeActions;
     fStateMessage: RawUtf8;
     fState: TServiceState;
-    fStartOptions: TRunOptions;
+    fStartOptions: TStartOptions;
     fOS: TOperatingSystem;
     fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
     fRedirectLogFile: RawUtf8;
@@ -180,11 +189,7 @@ type
     property StartEnv: TRawUtf8DynArray
       read fStartEnv write fStartEnv;
     /// define how "start" RunRedirect() is executed
-    // - default roEnvAddExisting append "StartEnv" to the existing environment
-    // variables - only supported on Windows by now
-    // - roWinJobCloseChildren will setup a Windows Job to close any child
-    // process(es) when the created process quits - only supported on Windows 
-    property StartOptions: TRunOptions
+    property StartOptions: TStartOptions
       read fStartOptions write fStartOptions;
     /// optional working folder for "start" monitored process
     // - could include %abc% place holders
@@ -415,7 +420,10 @@ begin
   fCmd := aCmd;
   fEnv := aEnv;
   fWrkDir := aWrkDir;
-  fRunOptions := aService.fStartOptions;
+  if soWinJobCloseChildren in aService.StartOptions then
+    include(fRunOptions, roWinJobCloseChildren); // just ignored on POSIX
+  if not (soReplaceEnv in aService.StartOptions) then
+    include(fRunOptions, roEnvAddExisting);
   fRedirect := aRedirect;
   if fRedirect <> nil then
     fRedirectFileName := fRedirect.FileName;
@@ -644,7 +652,6 @@ begin
   fStopRunAbortTimeoutSec := 10;
   fRedirectLogRotateBytes := 100 shl 20; // 100MB
   fRetryStableSec := 60;
-  fStartOptions := [roEnvAddExisting];
 end;
 
 destructor TSynAngelizeService.Destroy;
