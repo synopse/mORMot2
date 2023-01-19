@@ -4246,7 +4246,6 @@ begin
   FreeConsole;                               // detach
   SetConsoleCtrlHandler(nil, false);         // remove our nil=ignore handler
   result := WaitProcess(pid, waitseconds);
-  TService.DoLog(sllTrace, 'CancelProcess(%)=%', [pid, ord(result)], nil);
 end;
 
 function QuitProcess(pid: cardinal; waitseconds: integer): boolean;
@@ -4272,7 +4271,6 @@ begin
   if result and
      (waitseconds <> 0) then
     result := WaitProcess(pid, waitseconds);
-  TService.DoLog(sllTrace, 'QuitProcess(%)=%', [pid, ord(result)], nil);
 end;
 
 function KillProcess(pid: cardinal; waitseconds: integer): boolean;
@@ -4326,6 +4324,69 @@ begin
   result := false;
 end;
 
+type
+  TJobObjectInfoClass = (
+    BasicLimitInformation = 2,
+    JobObjectBasicProcessIdList = 3,
+    BasicUIRestrictions = 4,
+    SecurityLimitInformation = 5,
+    EndOfJobTimeInformation = 6,
+    AssociateCompletionPortInformation = 7,
+    ExtendedLimitInformation = 9,
+    GroupInformation = 11);
+
+  TJobObjectBasicLimitInformation = record
+    PerProcessUserTimeLimit: LARGE_INTEGER;
+    PerJobUserTimeLimit: LARGE_INTEGER;
+    LimitFlags: DWord;
+    MinimumWorkingSetSize: PtrUInt;
+    MaximumWorkingSetSize: PtrUInt;
+    ActiveProcessLimit: DWord;
+    Affinity: PtrUInt;
+    PriorityClass: DWord;
+    SchedulingClass: DWord;
+  end;
+
+  TIOCounter = record
+    ReadOperationCount: ULONGLONG;
+    WriteOperationCount: ULONGLONG;
+    OtherOperationCount: ULONGLONG;
+    ReadTransferCount: ULONGLONG;
+    WriteTransferCount: ULONGLONG;
+    OtherTransferCount: ULONGLONG;
+  end;
+
+  TJobObjectExtendedLimitInformation = record
+    BasicLimitInformation: TJobObjectBasicLimitInformation;
+    IoInfo: TIOCounter;
+    ProcessMemoryLimit: PtrUInt;
+    JobMemoryLimit: PtrUInt;
+    PeakProcessMemoryUsed: PtrUInt;
+    PeakJobMemoryUsed: PtrUInt;
+  end;
+
+const
+  // to create a child process in a new job object
+  // https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
+  CREATE_BREAKAWAY_FROM_JOB =  $1000000;
+
+  JOB_OBJECT_LIMIT_PROCESS_MEMORY             = $00000100;
+  JOB_OBJECT_LIMIT_JOB_MEMORY                 = $00000200;
+  JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION = $00000400;
+  JOB_OBJECT_LIMIT_BREAKAWAY_OK               = $00000800;
+  JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK        = $00001000;
+  JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE          = $00002000;
+
+function CreateJobObjectW(lpJobAttributes: PSecurityAttributes;
+   lpName: PWideChar): THandle;
+  stdcall; external kernel32;
+function SetInformationJobObject(hJob: THandle;
+   JobObjectInformationClass: TJobObjectInfoClass; lpJobObjectInformation: pointer;
+   cbJobObjectInformationLength: DWord): BOOL;
+  stdcall; external kernel32;
+function AssignProcessToJobObject(hJob, hProcess: THandle): BOOL;
+  stdcall; external kernel32;
+
 // redefined here so that we can share code with FPC and Delphi
 function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
    lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;
@@ -4336,6 +4397,30 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
+
+// define a Job associated with the main process to close its children
+// - warning: main process should include the CREATE_BREAKAWAY_FROM_JOB flag
+function CreateJobToCloseChildren: THandle;
+var
+  security: TSecurityAttributes;
+  limits: TJobObjectExtendedLimitInformation;
+begin
+  security.nLength := SizeOf(security);
+  security.bInheritHandle := false; // should be false
+  security.lpSecurityDescriptor := nil;
+  result := CreateJobObjectW(@security, 'SubProcessesAutoRelease');
+  if result = 0 then
+    exit;
+  FillCharFast(limits, SizeOf(limits), 0);
+  limits.BasicLimitInformation.LimitFlags :=
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE or
+    JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+  if SetInformationJobObject(result, ExtendedLimitInformation,
+       @limits, SizeOf(limits)) then
+    exit;
+  CloseHandle(result); // error initializing the job (too old or too new OS?)
+  result := 0;
+end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2, arg3, arg4, arg5, env: TFileName; options: TRunOptions): integer;
@@ -4374,13 +4459,13 @@ var
   processinfo: TProcessInformation;
   security: TSecurityAttributes;
   exe, path: TFileName;
-  rd, wr: THandle;
+  rd, wr, job: THandle;
   // CreateProcess can alter the strings -> use local SynUnicode temp variables
   wcmd, wenv, wpath: SynUnicode;
   endtix: Int64;
   flags, exitcode, res: cardinal;
   ram: TRunAbortMethods;
-  terminated: boolean;
+  created, terminated: boolean;
   i, l: PtrInt;
 
   procedure RedirectOutput(flush: boolean);
@@ -4477,6 +4562,7 @@ begin
   ram := RunAbortMethods;
   l := 0;
   rd := 0;
+  job := 0;
   if Assigned(onoutput) or
      (redirected <> nil) then
     if CreatePipe(rd, wr, @security, 0) then
@@ -4497,86 +4583,133 @@ begin
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
            DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP;
-  if CreateProcessW(nil, pointer(wcmd), @security, @security, true, flags,
-    pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
+  if roWinJobCloseChildren in options then
+    // create the child process in a new job object
+    flags := flags or CREATE_BREAKAWAY_FROM_JOB;
+  // actually create the new process
+  created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
+    flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
+  if (not created) and
+     (roWinJobCloseChildren in options) then
   begin
-    if processhandle <> nil then
-      processhandle^ := processinfo.hProcess;
-    if Assigned(onoutput) then
-      onoutput('', processinfo.dwProcessId);
-    if rd <> 0 then
-    begin
-      // see https://stackoverflow.com/a/25725197/458259
-      CloseHandle(wr);
-      if waitfordelayms = INFINITE then
-        endtix := 0
-      else
-        endtix := GetTickCount64 + waitfordelayms;
-      repeat
-        exitcode := WaitForSingleObject(processinfo.hProcess, 50);
-        // note: WaitForMultipleObjects() with rd burns 100% of one core :(
-        Win32Check(exitcode <> WAIT_FAILED);
-        RedirectOutput({flush=}false);
-      until (exitcode = WAIT_OBJECT_0) or
-            ((endtix <> 0) and
-             (GetTickCount64 > endtix));
-      if GetExitCodeProcess(processinfo.hProcess, exitcode) and
-         (exitcode <> STILL_ACTIVE) then
-        result := exitcode // process ended from natural death -> return code
+    TService.DoLog(sllTrace,
+      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = %',
+      [GetLastError, WinErrorConstant(GetLastError)], nil);
+    flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
+    wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
+    UniqueString(wcmd);
+    created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
+      flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
+  end;
+  if not created then
+  begin
+    result := -GetLastError; // returns CreateProcessW() error as negative
+    TService.DoLog(sllTrace,  'RunCommand: CreateProcess = % %',
+      [-result, WinErrorConstant(-result)], nil);
+    exit;
+  end;
+  // setup the newly created process
+  if processhandle <> nil then
+    processhandle^ := processinfo.hProcess;
+  if roWinJobCloseChildren in options then
+  begin
+    job := CreateJobToCloseChildren;
+    if job <> 0 then
+      if AssignProcessToJobObject(job, processinfo.hProcess) then
+        TService.DoLog(sllTrace, 'RunCommand: CreateJobToCloseChildren(pid=%)',
+          [processinfo.dwProcessId], nil)
       else
       begin
-        result := -GetLastError; // not able to retrieve exit code
-        // e.g. -STILL_ACTIVE if aborted by onoutput()=true above
-        terminated := false;
-        if RunAbortTimeoutSecs > 0 then
+        CloseHandle(job);
+        job := 0;
+      end;
+  end;
+  if Assigned(onoutput) then
+    onoutput('', processinfo.dwProcessId);
+  // main wait (and redirect) until the process is finished (or not)
+  if rd <> 0 then
+  begin
+    // wait and redirect - see https://stackoverflow.com/a/25725197/458259
+    CloseHandle(wr);
+    if waitfordelayms = INFINITE then
+      endtix := 0
+    else
+      endtix := GetTickCount64 + waitfordelayms;
+    repeat
+      exitcode := WaitForSingleObject(processinfo.hProcess, 50);
+      // note: WaitForMultipleObjects() with rd burns 100% of one core :(
+      Win32Check(exitcode <> WAIT_FAILED);
+      RedirectOutput({flush=}false);
+    until (exitcode = WAIT_OBJECT_0) or
+          ((endtix <> 0) and
+           (GetTickCount64 > endtix));
+    if GetExitCodeProcess(processinfo.hProcess, exitcode) and
+       (exitcode <> STILL_ACTIVE) then
+      result := exitcode // process ended from natural death -> return code
+    else
+    begin
+      result := -GetLastError; // not able to retrieve exit code
+      // e.g. -STILL_ACTIVE if aborted by onoutput()=true above
+      terminated := false;
+      if RunAbortTimeoutSecs > 0 then
+      begin
+        if ramCtrlC in ram then  // try Ctrl+C (disabled above)
         begin
-          if ramCtrlC in ram then  // try Ctrl+C (disabled above)
-            terminated := CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
-          if (not terminated) and
-             (ramQuit in ram) then // try WM_QUIT
-            if QuitProcess(processinfo.dwProcessId, 0) then
-            begin
-              endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
-              repeat
-                res := WaitForSingleObject(processinfo.hProcess, 10);
-                RedirectOutput({flush=}true); // mandatory to unlock pipe
-              until (res <> WAIT_TIMEOUT) or
-                    (GetTickCount64 > endtix);
-              terminated := res = WAIT_OBJECT_0;
-            end;
+          terminated := CancelProcess(processinfo.dwProcessId, RunAbortTimeoutSecs);
+          TService.DoLog(sllTrace, 'RunCommand: CancelProcess(%)=%',
+            [processinfo.dwProcessId, ord(terminated)], nil);
         end;
-        RedirectOutput({flush=}true); // ensure there is no pending data
-        if terminated and
-           // gracefully ended -> try to retrieve the exit code
-           GetExitCodeProcess(processinfo.hProcess, exitcode) then
-          result := exitcode
-        else
-        begin
-          TerminateProcess(processinfo.hProcess, result); // forced kill
-          TService.DoLog(sllTrace, 'TerminateProcess(%)=%',
-            [processinfo.dwProcessId, result], nil);
+        if (not terminated) and
+           (ramQuit in ram) then
+        begin // try WM_QUIT
+          terminated := QuitProcess(processinfo.dwProcessId, 0);
+          TService.DoLog(sllTrace, 'RunCommand: QuitProcess(%)=%',
+            [processinfo.dwProcessId, ord(terminated)], nil);
+          if terminated then
+          begin
+            endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000; // wait ended
+            repeat
+              res := WaitForSingleObject(processinfo.hProcess, 10);
+              RedirectOutput({flush=}true); // mandatory to unlock pipe
+            until (res <> WAIT_TIMEOUT) or
+                  (GetTickCount64 > endtix);
+            terminated := res = WAIT_OBJECT_0;
+          end;
         end;
       end;
-    end
-    else if waitfor then
-      if WaitForSingleObject(processinfo.hProcess, waitfordelayms) = WAIT_FAILED then
-        if waitfordelayms <> INFINITE then
-          result := -1 // still runing after waitfordelayms
-        else
-          result := -GetLastError // failed to wait
-      else if GetExitCodeProcess(processinfo.hProcess, exitcode) then
-          result := exitcode      // waited for process to end -> return code
-        else
-          result := -GetLastError // was not able to retrieve exit code
-    else
-      result := 0; // asynchronous process launch
-    CloseHandle(processinfo.hProcess);
-    CloseHandle(processinfo.hThread);
+      RedirectOutput({flush=}true); // ensure there is no pending data
+      if terminated and
+         // gracefully ended -> try to retrieve the exit code
+         GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := exitcode
+      else
+      begin
+        TerminateProcess(processinfo.hProcess, result); // forced kill
+        TService.DoLog(sllTrace, 'RunCommand: TerminateProcess(%)=%',
+          [processinfo.dwProcessId, result], nil);
+      end;
+    end;
   end
+  else if waitfor then
+    if WaitForSingleObject(processinfo.hProcess, waitfordelayms) = WAIT_FAILED then
+      if waitfordelayms <> INFINITE then
+        result := -1 // still runing after waitfordelayms
+      else
+        result := -GetLastError // failed to wait
+    else if GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := exitcode      // waited for process to end -> return code
+      else
+        result := -GetLastError // was not able to retrieve exit code
   else
-    result := -GetLastError; // returns CreateProcessW() error as negative
+    // waitfor is false: asynchronous process launch
+    result := 0;
+  // release the handles created for this process
+  CloseHandle(processinfo.hProcess);
+  CloseHandle(processinfo.hThread);
   if rd <> 0 then // CloseHandle(wr) has already be done
     CloseHandle(rd);
+  if job <> 0 then
+    CloseHandle(job);
 end;
 
 function RunRedirect(const cmd: TFileName; exitcode: PInteger;

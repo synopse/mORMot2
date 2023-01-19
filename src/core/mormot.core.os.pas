@@ -4762,8 +4762,11 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
+  // - roWinJobCloseChildren will setup a Windows Job to close any child
+  // process(es) when the created process quits
   TRunOptions = set of (
-    roEnvAddExisting);
+    roEnvAddExisting,
+    roWinJobCloseChildren);
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout

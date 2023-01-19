@@ -180,7 +180,10 @@ type
     property StartEnv: TRawUtf8DynArray
       read fStartEnv write fStartEnv;
     /// define how "start" RunRedirect() is executed
-    // - default roEnvAddExisting append "StartEnv" to the existing env variables
+    // - default roEnvAddExisting append "StartEnv" to the existing environment
+    // variables - only supported on Windows by now
+    // - roWinJobCloseChildren will setup a Windows Job to close any child
+    // process(es) when the created process quits - only supported on Windows 
     property StartOptions: TRunOptions
       read fStartOptions write fStartOptions;
     /// optional working folder for "start" monitored process
