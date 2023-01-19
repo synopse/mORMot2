@@ -343,6 +343,7 @@ type
     fLevels: TIntegerDynArray;
     fLastGetServicesStateFile: RawByteString;
     fWatchThread: TSynBackgroundThreadProcess;
+    fRunJob: THandle; // a single Windows Job to rule them all
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
@@ -734,6 +735,10 @@ begin
   RunAbortTimeoutSecs := 0; // force RunRedirect() hard termination now
   ObjArrayClear(fService);
   fSettings.Free;
+  {$ifdef OSWINDOWS}
+  if fRunJob <> 0 then
+    CloseHandle(fRunJob);
+  {$endif OSWINDOWS}
 end;
 
 // TSynDaemon command line methods
@@ -1412,6 +1417,14 @@ begin
     one := log.Instance
   else
     one := nil;
+  {$ifdef OSWINDOWS}
+  // initialize a main Windows Job to kill all sub-process when main is killed
+  fRunJob := CreateJobToClose(GetCurrentProcessId);
+  AssignJobToProcess(fRunJob, GetCurrentProcess, 'CloseWithParent');
+  // all sub-processes will now be part of this Windows Job
+  // unless soWinJobCloseChildren is set, so RunRedirect() will use the
+  // CREATE_BREAKAWAY_FROM_JOB flag, then creates its own new Windows Job
+  {$endif OSWINDOWS}
   // start sub-services following their Level order
   for l := 0 to high(fLevels) do
   begin
