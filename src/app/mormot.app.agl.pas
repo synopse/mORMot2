@@ -336,7 +336,7 @@ type
     fSettingsClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
     fHasWatchs: boolean;
-    fState: set of (sasStarted, sasStopped);
+    fServiceStarted: boolean;
     fLastUpdateServicesFromSettingsFolder: cardinal;
     fSectionName: RawUtf8;
     fService, fStarted: array of TSynAngelizeService;
@@ -1579,9 +1579,9 @@ end;
 procedure TSynAngelize.Start;
 begin
   // should raise ESynAngelize on any issue, or let background work begin
-  if sasStarted in fState then
+  if fServiceStarted then
     exit;
-  include(fState, sasStarted);
+  fServiceStarted := true;
   ClearServicesState;
   if fService = nil then
     LoadServicesFromSettingsFolder;
@@ -1591,10 +1591,9 @@ end;
 
 procedure TSynAngelize.Stop;
 begin
-  if (sasStopped in fState) or
-     not (sasStarted in fState) then
+  if not fServiceStarted then
     exit;
-  include(fState, sasStopped);
+  fServiceStarted := false;
   StopWatching;
   StopServices;
 end;
