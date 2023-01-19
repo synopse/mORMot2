@@ -1941,6 +1941,10 @@ function GetCurrentThreadId: DWORD; stdcall;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcessId: DWORD; stdcall;
 
+/// retrieves the current process ID
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
+function GetCurrentProcess: THandle; stdcall;
+
 /// redefined in mormot.core.os to avoid dependency to the Windows unit
 function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD; stdcall;
 
@@ -4643,6 +4647,14 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 
 /// install a Windows event handler for Ctrl+C pressed on the Console
 function HandleCtrlC(const OnClose: TThreadMethod): boolean;
+
+/// define a Windows Job to close associated processes together
+// - warning: main process should include the CREATE_BREAKAWAY_FROM_JOB flag
+// - you should later call CloseHandle() on the returned handle, if not 0 
+function CreateJobToClose(parentpid: cardinal): THandle;
+
+/// associate a process to a Windows Job created by CreateJobToClose()
+function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boolean;
 
 {$else}
 

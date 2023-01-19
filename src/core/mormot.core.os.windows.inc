@@ -333,6 +333,7 @@ procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
 procedure SwitchToThread;             external kernel32;
 function  GetCurrentProcessId;        external kernel32;
+function  GetCurrentProcess;          external kernel32;
 function  WaitForSingleObject;        external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
 function  FreeEnvironmentStringsW;    external kernel32;
@@ -4377,7 +4378,7 @@ const
   JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK        = $00001000;
   JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE          = $00002000;
 
-function CreateJobObjectW(lpJobAttributes: PSecurityAttributes;
+function CreateJobObjectA(lpJobAttributes: PSecurityAttributes;
    lpName: PWideChar): THandle;
   stdcall; external kernel32;
 function SetInformationJobObject(hJob: THandle;
@@ -4398,17 +4399,17 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
-// define a Job associated with the main process to close its children
-// - warning: main process should include the CREATE_BREAKAWAY_FROM_JOB flag
-function CreateJobToCloseChildren: THandle;
+function CreateJobToClose(parentpid: cardinal): THandle;
 var
   security: TSecurityAttributes;
   limits: TJobObjectExtendedLimitInformation;
+  jobname: RawUtf8;
 begin
   security.nLength := SizeOf(security);
   security.bInheritHandle := false; // should be false
   security.lpSecurityDescriptor := nil;
-  result := CreateJobObjectW(@security, 'SubProcessesAutoRelease');
+  _fmt('AutoCloseChild%d', [parentpid], jobname);
+  result := CreateJobObjectA(@security, pointer(jobname));
   if result = 0 then
     exit;
   FillCharFast(limits, SizeOf(limits), 0);
@@ -4420,6 +4421,18 @@ begin
     exit;
   CloseHandle(result); // error initializing the job (too old or too new OS?)
   result := 0;
+end;
+
+function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boolean;
+begin
+  result := (job <> 0) and
+            AssignProcessToJobObject(job, process);
+  if result then
+    TService.DoLog(sllTrace, 'RunCommand: % AssignProcessToJobObject success',
+      [ctxt], nil)
+  else
+    TService.DoLog(sllDebug, 'RunCommand: % AssignProcessToJobObject failed % %',
+      [ctxt, GetLastError, WinErrorConstant(GetLastError)], nil);
 end;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -4590,10 +4603,10 @@ begin
   created := CreateProcessW(nil, pointer(wcmd), @security, @security, true,
     flags, pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo);
   if (not created) and
-     (roWinJobCloseChildren in options) then
+     (flags and CREATE_BREAKAWAY_FROM_JOB <> 0) then
   begin
     TService.DoLog(sllTrace,
-      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = %',
+      'RunCommand: unsupported CREATE_BREAKAWAY_FROM_JOB = % %',
       [GetLastError, WinErrorConstant(GetLastError)], nil);
     flags := flags and (not CREATE_BREAKAWAY_FROM_JOB);
     wcmd := SynUnicode(cmd); // CreateProcesW() modified wcmd content: recreate
@@ -4611,18 +4624,15 @@ begin
   // setup the newly created process
   if processhandle <> nil then
     processhandle^ := processinfo.hProcess;
-  if roWinJobCloseChildren in options then
+  if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
   begin
-    job := CreateJobToCloseChildren;
-    if job <> 0 then
-      if AssignProcessToJobObject(job, processinfo.hProcess) then
-        TService.DoLog(sllTrace, 'RunCommand: CreateJobToCloseChildren(pid=%)',
-          [processinfo.dwProcessId], nil)
-      else
-      begin
-        CloseHandle(job);
-        job := 0;
-      end;
+    job := CreateJobToClose(processinfo.dwProcessID);
+    if (job <> 0) and
+       not AssignJobToProcess(job, processinfo.hProcess, 'CloseChildren') then
+    begin
+      CloseHandle(job);
+      job := 0;
+    end;
   end;
   if Assigned(onoutput) then
     onoutput('', processinfo.dwProcessId);
