@@ -61,6 +61,7 @@ type
     fService: TSynAngelizeService;
     fCmd, fEnv, fWrkDir, fRedirectFileName: TFileName;
     fAbortRequested: boolean;
+    fRunOptions: TRunOptions;
     fRedirect: TFileStreamEx;
     fRedirectSize: Int64;
     fRetryEvent: TSynEvent;
@@ -96,8 +97,9 @@ type
     fStart, fStop, fWatch: TSynAngelizeActions;
     fStateMessage: RawUtf8;
     fState: TServiceState;
-    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
+    fStartOptions: TRunOptions;
     fOS: TOperatingSystem;
+    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
     fRedirectLogFile: RawUtf8;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
     fStarted: RawUtf8;
@@ -177,6 +179,10 @@ type
     // - could include %abc% place holders
     property StartEnv: TRawUtf8DynArray
       read fStartEnv write fStartEnv;
+    /// define how "start" RunRedirect() is executed
+    // - default roEnvAddExisting append "StartEnv" to the existing env variables
+    property StartOptions: TRunOptions
+      read fStartOptions write fStartOptions;
     /// optional working folder for "start" monitored process
     // - could include %abc% place holders
     property StartWorkDir: RawUtf8
@@ -402,9 +408,11 @@ begin
   fService := aService;
   fService.fRunnerExitCode := -777;
   fService.fRunner := self;
+  // fService may be set to nil: make a local copy of all RunRedirect() params
   fCmd := aCmd;
   fEnv := aEnv;
   fWrkDir := aWrkDir;
+  fRunOptions := aService.fStartOptions;
   fRedirect := aRedirect;
   if fRedirect <> nil then
     fRedirectFileName := fRedirect.FileName;
@@ -468,7 +476,7 @@ begin
         log.Log(sllTrace, 'Execute %: %', [sn, fCmd], self);
         // run the command in this thread, calling OnRedirect during execution
         RunRedirect(fCmd, @err, OnRedirect, INFINITE, {setresult=}false,
-          fEnv, fWrkDir);
+          fEnv, fWrkDir, fRunOptions);
         // if we reached here, the command was properly finished (or stopped)
         fService.SetState(ssStopped, 'ExitCode=%', [err]);
       except
@@ -633,6 +641,7 @@ begin
   fStopRunAbortTimeoutSec := 10;
   fRedirectLogRotateBytes := 100 shl 20; // 100MB
   fRetryStableSec := 60;
+  fStartOptions := [roEnvAddExisting];
 end;
 
 destructor TSynAngelizeService.Destroy;
