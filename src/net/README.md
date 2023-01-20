@@ -124,3 +124,7 @@ Automatic Certificate Management Environment (ACME v2) Client
 - Let's Encrypt TLS / HTTPS Encryption Certificates Support
 - HTTP-01 Let's Encrypt Challenges HTTP Server on port 80
 
+### mormot.net.ldap
+
+Low level Ldap client from synapse
+- Reworked to use mormot cross platform sockets
