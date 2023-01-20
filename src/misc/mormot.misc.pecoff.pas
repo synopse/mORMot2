@@ -534,7 +534,7 @@ type
     // Cached data
     // - Resource Section data
     fStringFileInfoEntries: TDocVariantData;
-    // raw PE File
+    // raw PE File as mapped in memory
     fMap: TMemoryMap;
     function GetImageDataDirectory(DirectoryId: cardinal): PImageDataDirectory;
     function GetSectionHeader(SectionId: cardinal): PImageSectionHeader;
@@ -656,9 +656,9 @@ type
 
 
 /// return all version information from a Portable Executable (Win32/Win64) file
-// - returns a TDocVariant with all parsed string versions, and 'FileVersionNum'
-// as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, and 'IsWin64'
-// as boolean TSynPELoader.Is64 value
+// - returns a TDocVariant with all parsed string versions, and "FileVersionNum"
+// as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, "IsWin64"
+// as boolean TSynPELoader.Is64 value, and "FullFileName" as aFileName value
 // - returns a void document if the file does not exist, or has no info resource
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
 
@@ -1038,6 +1038,7 @@ begin
       begin
         result := StringFileInfoEntries;
         result.AddNameValuesToObject([
+          'FullFileName',   aFileName,
           'FileVersionNum', FileVersionStr,
           'IsWin64',        Is64]);
       end;
@@ -1046,21 +1047,6 @@ begin
   end;
 end;
 
-{
-begin
-  with TSynPELoader.Create do
-  try
-    if LoadFromFile(paramstr(0)) then
-      if ParseStringFileInfoEntries then
-        writeln(StringFileInfoEntries.ToJSon);
-    writeln('FileVersionStr = ',FileVersionStr);
-  finally
-    Free;
-  end;
-  writeln('GetPEFileVersion = ', GetPEFileVersion(
-    // 'd:\dev\lib2\test\fpc\bin\x86_64-win64\mormot2tests.exe').ToJson);
-    Executable.ProgramFilePath + '/../x86_64-win64/mormot2tests.exe').ToJson);
-  readln;
-}
+
 end.
 
