@@ -1441,7 +1441,7 @@ function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 
 /// get the enumeration name, without the first lowercase chars, and uncamelcased
-// - e.g. otProcessDone -> 'Process Done'
+// - e.g. otProcessDone -> 'Process done'
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 
 /// helper to retrieve all texts of an enumerate
@@ -1453,6 +1453,11 @@ procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
+// - typical usage is the following:
+// ! var
+// !   TXT: array[TBenchmark] of RawUtf8;
+// ! ...
+// !   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
 function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUtf8DynArray; overload;
 
 /// helper to retrieve the index of an enumerate item from its text

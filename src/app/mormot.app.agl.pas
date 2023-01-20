@@ -56,7 +56,7 @@ type
   /// define how "start:exename" RunRedirect() is executed
   // - soReplaceEnv let "StartEnv" values fully replace the existing environment
   // - soWinJobCloseChildren will setup a Windows Job to close any child
-  // process(es) when the created process quits
+  // process(es) when the created process quits - not set by default
   TStartOptions = set of (
     soReplaceEnv,
     soWinJobCloseChildren);
@@ -457,10 +457,34 @@ begin
     fRetryEvent.SetEvent; // unlock WaitFor(pause) below
 end;
 
+function ComputePause(tix: Int64; var lastunstable: Int64): integer;
+var
+  min: integer;
+begin
+  result := 2;
+  if lastunstable = 0 then
+    lastunstable := tix
+  else
+  begin
+    min := (tix - lastunstable) div 60000;
+    if min > 0 then    // retry every 2 sec until 1 min
+      if min < 5 then
+        result := 15   // retry every 15 sec until 5 min
+      else if min > 10 then
+        result := 30   // retry every 30 sec until 10 min
+      else if min > 30 then
+        result := 60   // retry every min until 30 min
+      else if min > 60 then
+        result := 120  // retry every 2 min until 1 hour
+      else
+        result := 240; // retry every 4 min
+  end;
+end;
+
 procedure TSynAngelizeRunner.Execute;
 var
   log: TSynLog;
-  min, pause, err: integer;
+  pause, err: integer;
   tix, start, lastunstable: Int64;
   // some values are copied from fService to avoid most unexpected GPF
   timeout: integer;     // RetryStableSec
@@ -518,25 +542,9 @@ begin
         if tix - start < timeout then
         begin
           // it did not last RetryStableSec: seems not stable - pause and retry
-          pause := 2;
-          if lastunstable = 0 then
-            lastunstable := tix
-          else
-          begin
-            min := (tix - lastunstable) div 60000;
-            if min > 60 then  // retry every 2 sec until 1 min
-              if min < 5 then
-                pause := 15   // retry every 15 sec until 5 min
-              else if min > 10 then
-                pause := 30   // retry every 30 sec until 10 min
-              else if min > 30 then
-                pause := 60   // retry every min until 30 min
-              else if min > 60 then
-                pause := 120  // retry every 2 min until 1 hour
-              else
-                pause := 240; // retry every 4 min
-          end;
-          fService.SetState(ssPaused, 'Wait % sec', [pause]);
+          pause := ComputePause(tix, lastunstable);
+          if fService <> nil then
+            fService.SetState(ssPaused, 'Wait % sec', [pause]);
           pause := pause * 1000 + integer(Random32(pause) * 100);
           // add a small random threshold to smoothen several services restart
           log.Log(sllTrace, 'Execute %: pause % after ExitCode=%',
@@ -583,7 +591,9 @@ begin
   for i := n - 2 downto 1 do
     RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
   RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
-  fRedirect := TFileStreamEx.Create(fRedirectFileName, fmCreate); // 'xxx' 
+  TFileStreamEx.Create(fRedirectFileName, fmCreate).Free; // a new void file
+  fRedirect := TFileStreamEx.Create(
+    fRedirectFileName, fmOpenReadWrite or fmShareDenyWrite); // 'xxx'
 end;
 
 function TSynAngelizeRunner.OnRedirect(
