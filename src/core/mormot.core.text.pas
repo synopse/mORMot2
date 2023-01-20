@@ -2035,6 +2035,18 @@ procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
 
+/// append some text items to a RawUtf8 variable
+procedure Append(var Text: RawUtf8; const Args: array of const); overload;
+
+/// append some text items to a RawByteString variable
+procedure Append(var Text: RawByteString; const Args: array of const); overload;
+
+/// prepend some text items at the beginning of a RawUtf8 variable
+procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
+
+/// prepend some text items at the beginning of a RawByteString variable
+procedure Prepend(var Text: RawByteString; const Args: array of const); overload;
+
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
 // - could be used e.g. to update HTTP headers
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
@@ -9991,6 +10003,7 @@ type
       Delim: AnsiChar);
     procedure DoAppendLine(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer;
       const Separator: shortstring);
+    procedure DoPrepend(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer);
     procedure Write(Dest: PUtf8Char);
     procedure WriteUtf8(var result: RawUtf8);
     procedure WriteString(var result: string);
@@ -10111,8 +10124,31 @@ begin
     dec(ArgCount)
   until ArgCount = 0;
   last := c;
-  SetLength(Text, L);
+  SetLength(Text, L); // realloc in-place and append the new text
   Write(PUtf8Char(@PByteArray(Text)[argN]));
+end;
+
+procedure TFormatUtf8.DoPrepend(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer);
+var
+  c: PTempUtf8;
+  tmp: RawUtf8;
+begin
+  if ArgCount <= 0 then
+    exit;
+  argN := length(Text);
+  L := argN;
+  c := @blocks;
+  repeat
+    inc(L, VarRecToTempUtf8(Arg^, c^));
+    inc(Arg);
+    inc(c);
+    dec(ArgCount)
+  until ArgCount = 0;
+  last := c;
+  tmp := Text;
+  FastSetString(Text, nil, L);
+  MoveFast(pointer(tmp)^, PByteArray(Text)[L - argN], argN);
+  Write(PUtf8Char(pointer(Text)));
 end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);
@@ -10301,6 +10337,38 @@ var
   f: TFormatUtf8;
 begin
   {%H-}f.DoAppendLine(Text, @Args[0], length(Args), Separator);
+end;
+
+procedure Append(var Text: RawUtf8; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAppendLine(Text, @Args[0], length(Args), '');
+end;
+
+procedure Append(var Text: RawByteString; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAppendLine(RawUtf8(Text), @Args[0], length(Args), '');
+  if Text <> '' then
+    FakeCodePage(Text, CP_RAWBYTESTRING);
+end;
+
+procedure Prepend(var Text: RawUtf8; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoPrepend(Text, @Args[0], length(Args));
+end;
+
+procedure Prepend(var Text: RawByteString; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoPrepend(RawUtf8(Text), @Args[0], length(Args));
+  if Text <> '' then
+    FakeCodePage(Text, CP_RAWBYTESTRING);
 end;
 
 function MakePath(const Part: array of const; EndWithDelim: boolean;
