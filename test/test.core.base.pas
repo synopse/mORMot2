@@ -2194,6 +2194,8 @@ var
   bak, cpu: TX64CpuFeatures;
 {$endif ASMX64}
 begin
+  Check(FileIsExecutable(Executable.ProgramFileName));
+  Check(not FileIsExecutable(Executable.ProgramFilePath));
   SetLength(buf, 16 shl 20); // 16MB
   {$ifdef ASMX64} // activate and validate SSE2 + AVX branches
   bak := X64CpuFeatures;
@@ -2549,8 +2551,8 @@ end;
 
 procedure TTestCoreBase._ParseCommandArguments;
 
-  procedure Test(const cmd: RawUtf8; const expected: array of RawUtf8; const
-    flags: TParseCommands = []; posix: boolean = true);
+  procedure Test(const cmd: RawUtf8; const expected: array of RawUtf8;
+     const flags: TParseCommands = []; posix: boolean = true);
   var
     tmp: RawUtf8;
     n, i: integer;
@@ -4688,6 +4690,28 @@ begin
   Check(MakeCsv([1, 2, 3]) = '1,2,3');
   Check(MakeCsv([1, '2', 3], true) = '1,2,3,');
   Check(MakeCsv([1, '2 ,', 3]) = '1,2 ,3');
+  U := '';
+  Append(U, []);
+  CheckEqual(U, '');
+  Append(U, [1]);
+  CheckEqual(U, '1');
+  Append(U, [2, '34', 5]);
+  CheckEqual(U, '12345');
+  Append(U, []);
+  CheckEqual(U, '12345');
+  Append(U, [6]);
+  CheckEqual(U, '123456');
+  U := '';
+  Prepend(U, []);
+  CheckEqual(U, '');
+  Prepend(U, [1]);
+  CheckEqual(U, '1');
+  Prepend(U, [2, '34', 5]);
+  CheckEqual(U, '23451');
+  Prepend(U, []);
+  CheckEqual(U, '23451');
+  Prepend(U, [6]);
+  CheckEqual(U, '623451');
   U := '';
   AppendLine(U, []);
   CheckEqual(U, '');

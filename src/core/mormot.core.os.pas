@@ -8560,7 +8560,7 @@ var
   argc: integer;
 begin
   if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, posix)) or
-     (argc = 0) then
+     ({%H-}argc = 0) then
     result := ''
   else
     FastSetString(result, argv[0], StrLen(argv[0]));
