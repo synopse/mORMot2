@@ -69,7 +69,7 @@ type
     fService: TSynAngelizeService;
     fRetryEvent: TSynEvent;
     fRedirect: TFileStreamEx;
-    fRedirectSize: Int64;
+    fRedirectSize, fNotifyStableTix: Int64;
     // copy of fService properties
     fCmd, fEnv, fWrkDir, fRedirectFileName: TFileName;
     fAbortRequested: boolean;
@@ -90,6 +90,13 @@ type
     procedure RetryNow;
   end;
 
+  // define TSynAngelizeService.DoNotify() kind of notification
+  TDoNotify = (
+    doNothing,
+    doExitNoRetry,
+    doExitRetry,
+    doExitRecover);
+
   /// one sub-process definition as recognized by TSynAngelize
   // - TSynAngelizeAction properties will expand %abc% place-holders when needed
   // - specifies how to start, stop and watch a given sub-process
@@ -101,7 +108,7 @@ type
     fOwner: TSynAngelize;
     fDescription: RawUtf8;
     fRun: RawUtf8;
-    fStartWorkDir: RawUtf8;
+    fStartWorkDir, fNotify: RawUtf8;
     fStartEnv: TRawUtf8DynArray;
     fStart, fStop, fWatch: TSynAngelizeActions;
     fStateMessage: RawUtf8;
@@ -116,8 +123,12 @@ type
     fRunnerExitCode: integer;
     fAbortExitCodes: TIntegerDynArray;
     fNextWatch: Int64;
+    fLastNotify: TDoNotify;
+    fLastNotifyMsg: RawUtf8;
     procedure SetState(NewState: TServiceState; const Fmt: RawUtf8;
       const Args: array of const; ResetMessage: boolean = false);
+    procedure DoNotify(What: TDoNotify;
+      const Fmt: RawUtf8; const Args: array of const); virtual;
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -230,6 +241,23 @@ type
     // - call "agl /retry" to restart/retry all aborted or paused service(s)
     property AbortExitCodes: TIntegerDynArray
       read fAbortExitCodes write fAbortExitCodes;
+    /// where to send a notification message about a failure or recovery
+    // - e.g. when a "start" monitored process exited without "stop" signal
+    // or on "Watch" failure
+    // - could be a regular email address like 'sysadmin@mycorp.com' - with
+    // main TSynAngelizeSettings.Smtp/SmtpFrom properly defined
+    // - could be an executable file to run
+    // - could be a .log file to append the notification message as text
+    // - could be a http:// or https:// request to GET
+    // - could include %abc% place holders, e.g. %name% for the sub-process name
+    // or %msg% and %urimsg% for the context (URI-encoded) message, or %what%
+    // for the text of the associated TDoNotify enumerate
+    // - on restart failure, it won't send a notify unless RetryStableSec delay
+    // is reached (to avoid too verbose notifications)
+    // - you can specify several notifications as CSV, e.g.
+    // 'sysadmin@mycorp.com,%log%notif-%name%.log'
+    property Notify: RawUtf8
+      read fNotify write fNotify;
     // - will be executed in-order every at WatchDelaySec pace
     // - could include %abc% place holders
     // - "exec:/path/to/file" for not waiting up to its ending
@@ -237,12 +265,15 @@ type
     // - "http://127.0.0.1:8080/publish/watchme" for a local HTTP
     // request returning 200 on status success
     // - on Windows, "service:ServiceName" calls TServiceController.State
-    // - if no ':' is set, ":%run%" is assumed, e.g. "wait" = "wait:%run%"
-    // - you can add =## to change the expected result (0 as file exitcode, 200
-    // as http status)
+    // - if no ':###' is set, ":%run%" is assumed, e.g. "wait" = "wait:%run%"
+    // - you can add '=##' to change the expected result (0 as file exitcode,
+    // 200 as http status)
+    // - on failure, it will execute the "Notify" process, then try to restart
+    // the sub-process, i.e. call all "Stop" then "Start" steps, unless
+    // RetryStableSec was set to 0 to disable this restart feature
     // - note that a process monitored from a "Start": [ "start:/path/to/file" ]
     // previous command is automatically watched in its monitoring thread, so
-    // you can keep the default void "Watch":[] entry in this simple case
+    // you can keep the default void "Watch":[] entry, with "Notify" if needed
     property Watch: TSynAngelizeActions
       read fWatch write fWatch;
     /// how many seconds should we wait between each Watch method step
@@ -498,6 +529,7 @@ var
   log: TSynLog;
   pause, err: integer;
   tix, start, lastunstable: Int64;
+  notifytix: boolean;
   // some values are copied from fService to avoid most unexpected GPF
   timeout: integer;     // RetryStableSec
   sn: RawUtf8;          // Name
@@ -514,6 +546,7 @@ begin
   timeout := fService.RetryStableSec * 1000;
   sn := fService.Name;
   se := fService.AbortExitCodes;
+  notifytix := false;
   SetCurrentThreadName('run %', [sn]);
   try
     lastunstable := 0;
@@ -521,6 +554,13 @@ begin
       err := -7777777;
       fService.SetState(ssStarting, '%', [fCmd], {resetmessage=}true);
       start := GetTickCount64;
+      if notifytix then
+      begin
+        fNotifyStableTix := start + timeout;
+        notifytix := false;
+      end
+      else
+        fNotifyStableTix := 0;
       try
         log.Log(sllTrace, 'Execute %: %', [sn, fCmd], self);
         // run the command in this thread, calling OnRedirect during execution
@@ -544,7 +584,13 @@ begin
         // RetryStableSec=0 or AbortExitCodes[] match = no automatic retry
         log.Log(sllTrace, 'Execute %: pause forever after ExitCode=%',
           [sn, err], self);
-        fService.SetState(ssPaused, 'Wait for abort or /retry', []);
+        if fService <> nil then
+        begin
+          fService.DoNotify(doExitNoRetry,
+            '% exited as % - no retry', [fCmd, err]);
+          notifytix := true;
+          fService.SetState(ssPaused, 'Wait for abort or /retry', []);
+        end;
         fRetryEvent.WaitForEver; // will wait for abort or /retry
       end
       else
@@ -556,7 +602,12 @@ begin
           // it did not last RetryStableSec: seems not stable - pause and retry
           pause := ComputePause(tix, lastunstable);
           if fService <> nil then
+          begin
+            fService.DoNotify(doExitRetry,
+              '% exited as % - retry in % sec', [fCmd, err, pause]);
+            notifytix := true;
             fService.SetState(ssPaused, 'Wait % sec', [pause]);
+          end;
           pause := pause * 1000 + integer(Random32(pause) * 100);
           // add a small random threshold to smoothen several services restart
           log.Log(sllTrace, 'Execute %: pause % after ExitCode=%',
@@ -567,6 +618,8 @@ begin
         begin
           // stable for enough time: retry now, and reset increasing pauses
           lastunstable := 0;
+          fService.DoNotify(doExitRetry, '% exited as % - retry now', [fCmd, err]);
+          notifytix := true;
           log.Log(sllTrace, 'Execute %: retry after ExitCode=%', [sn, err], self);
         end;
       end;
@@ -614,6 +667,14 @@ var
   i, textstart, textlen: PtrInt;
 begin
   result := fAbortRequested or Terminated; // return true to quit RunRedirect
+  if not result and
+     (fNotifyStableTix <> 0) and
+     (GetTickCount64 > fNotifyStableTix) and
+     (fService <> nil) then
+  begin
+    fService.DoNotify(doExitRecover, '% recovered', [fCmd]);
+    fNotifyStableTix := 0;
+  end;
   if text = '' then
   begin
     // at startup, or idle
@@ -715,6 +776,63 @@ begin
     except
       // so that it is safe to call this method in any context
     end;
+end;
+
+procedure TSynAngelizeService.DoNotify(What: TDoNotify; const Fmt: RawUtf8;
+  const Args: array of const);
+var
+  n, w, msg: RawUtf8;
+  P: PUtf8Char;
+  fn: TFileName;
+  ishttp: boolean;
+  res: integer;
+  mem: TMemoryInfo;
+begin
+  if (fNotify = '') or
+     (fOwner = nil) then
+    exit;
+  FormatUtf8(Fmt, Args, msg);
+  if (fLastNotify = What) and
+     (fLastNotifyMsg = msg) then
+    exit; // nothing new to notify
+  fLastNotify := What;
+  fLastNotifyMsg := msg;
+  if What = doNothing then
+    exit;
+  w := GetEnumNameTrimed(TypeInfo(TDoNotify), ord(What));
+  P := pointer(fNotify);
+  while P <> nil do
+  begin
+    GetNextItemTrimed(P, ',', n);
+    if n = '' then
+      continue;
+    ishttp := IdemPChar(pointer(n), 'HTTP:') or
+              IdemPChar(pointer(n), 'HTTPS:');
+    n := StringReplaceAll(n, '%what%', w);
+    if ishttp then
+      n := StringReplaceAll(n, '%urimsg%', UrlEncode(msg));
+    n := fOwner.Expand(self, StringReplaceAll(n, '%msg%', msg));
+    res := 0;
+    if ishttp then
+      res := fOwner.DoHttpGet(n)
+    else if PosExChar('@', n) <> 0 then
+      res := ord(fOwner.DoNotifyByEmail(self, w, n, msg))
+    else
+    begin
+      Utf8ToFileName(ExtractExecutableName(n), fn);
+      if FileIsExecutable(fn) then
+        res := RunCommand(Utf8ToString(n), {waitfor=}true)
+      else
+      begin
+        GetMemoryInfo(mem, false);
+        res := ord(AppendToTextFile(FormatUtf8('% %: % [mem=%/%] %',
+          [w, Name, msg, KBNoSpace(mem.memfree), KBNoSpace(mem.memtotal),
+           RetrieveLoadAvg]), fn));
+      end;
+    end;
+    fOwner.fSettings.LogClass.Add.Log(sllTrace,
+      'DoNotify % %: % res=%', [w, Name, msg, res], self);
+  end;
 end;
 
 
