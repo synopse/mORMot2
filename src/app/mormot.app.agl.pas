@@ -192,6 +192,7 @@ type
     property StartOptions: TStartOptions
       read fStartOptions write fStartOptions;
     /// optional working folder for "start" monitored process
+    // - default void "" will use the sub-process "start" executable path
     // - could include %abc% place holders
     property StartWorkDir: RawUtf8
       read fStartWorkDir write fStartWorkDir;

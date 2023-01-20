@@ -4818,6 +4818,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // - can abort if onoutput() callback returns false, or waitfordelayms expires
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
+// - you can specify a wrkdir if the path specified by cmd is not good enough
 function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
   setresult: boolean = true; const env: TFileName = '';
