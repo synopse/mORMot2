@@ -1015,14 +1015,12 @@ type
   // - direct access to the OS (Windows, Linux) network layer API
   // - use Open constructor to create a client to be connected to a server
   // - use Bind constructor to initialize a server
-  // - use SockIn and SockOut (after CreateSock*) to read/readln or write/writeln
-  //  as with standard Delphi text files (see SendEmail implementation)
+  // - call CreateSockIn to use readln(SockIn^, ...) as with standard text files
   // - even if you do not use read(SockIn^), you may call CreateSockIn then
   // read the (binary) content via SockInRead/SockInPending methods, which would
   // benefit of the SockIn^ input buffer to maximize reading speed
-  // - to write data, CreateSockOut and write(SockOut^) is not mandatory: you
-  // rather may use SockSend() overloaded methods, followed by a SockFlush call
-  // - in fact, you can decide whatever to use none, one or both SockIn/SockOut
+  // - use SockSend() overloaded methods, followed by a SockFlush call
+  // - CreateSockOut for write/writeln is now deprected because it had no buffering
   // - since this class rely on its internal optimized buffering system,
   // TCP_NODELAY is set to disable the Nagle algorithm
   // - our classes are (much) faster than the Indy or Synapse implementation
@@ -1035,7 +1033,9 @@ type
     // set by AcceptRequest() from TVarSin
     fRemoteIP: RawUtf8;
     fSockIn: PTextFile;
+    {$ifndef PUREMORMOT2}
     fSockOut: PTextFile;
+    {$endif PUREMORMOT2}
     fTimeOut: PtrInt;
     fBytesIn: Int64;
     fBytesOut: Int64;
@@ -1111,21 +1111,23 @@ type
     // - by default, expect CR+LF as line feed (i.e. the HTTP way)
     procedure CreateSockIn(LineBreak: TTextLineBreakStyle = tlbsCRLF;
       InputBufferSize: integer = 1024);
-    /// initialize SockOut for sending with write[ln](SockOut^,....)
-    // - data is sent (flushed) after each writeln() - it's a compiler feature
-    // - use rather SockSend() + SockSendFlush to send headers at once e.g.
-    // since writeln(SockOut^,..) flush buffer each time
-    procedure CreateSockOut(OutputBufferSize: integer = 1024);
     /// finalize SockIn receiving buffer
     // - you may call this method when you are sure that you don't need the
     // input buffering feature on this connection any more (e.g. after having
     // parsed the HTTP header, then rely on direct socket comunication)
     procedure CloseSockIn;
+    {$ifndef PUREMORMOT2}
+    /// initialize SockOut for sending with write[ln](SockOut^,....)
+    // - data is sent (flushed) after each writeln() - it's a compiler feature
+    // - use rather SockSend() + SockSendFlush to send headers at once e.g.
+    // since writeln(SockOut^,..) flush buffer each time
+    procedure CreateSockOut(OutputBufferSize: integer = 1024);
     /// finalize SockOut receiving buffer
     // - you may call this method when you are sure that you don't need the
     // output buffering feature on this connection any more (e.g. after having
     // parsed the HTTP header, then rely on direct socket comunication)
     procedure CloseSockOut;
+    {$endif PUREMORMOT2}
     /// close and shutdown the connection
     // - called from Destroy, but is reintrant so could be called earlier
     procedure Close; virtual;
@@ -1219,16 +1221,16 @@ type
     procedure SockRecvLn; overload;
     /// direct send data through network
     // - raise a ENetSock exception on any error
-    // - bypass the SockSend() or SockOut^ buffers
+    // - bypass the SockSend() buffers
     procedure SndLow(P: pointer; Len: integer); overload;
     /// direct send data through network
     // - raise a ENetSock exception on any error
-    // - bypass the SndBuf or SockOut^ buffers
+    // - bypass the SockSend() buffers
     // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
     procedure SndLow(const Data: RawByteString); overload;
     /// direct send data through network
     // - return false on any error, true on success
-    // - bypass the SndBuf or SockOut^ buffers
+    // - bypass the SockSend() buffers
     function TrySndLow(P: pointer; Len: integer): boolean;
     /// returns the low-level error number
     // - i.e. returns WSAGetLastError
@@ -1291,9 +1293,12 @@ type
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
     property SockIn: PTextFile
       read fSockIn;
+    {$ifndef PUREMORMOT2}
     /// after CreateSockOut, use Writeln(SockOut^,s) to send a line to the opened socket
+    // - deprecated: SockSend/SockSendFlush have their own more efficient buffering
     property SockOut: PTextFile
       read fSockOut;
+    {$endif PUREMORMOT2}
   published
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TNetLayer
@@ -3965,6 +3970,7 @@ begin
   Reset(SockIn^);
 end;
 
+{$ifndef PUREMORMOT2}
 procedure TCrtSocket.CreateSockOut(OutputBufferSize: integer);
 begin
   if SockOut <> nil then
@@ -3986,16 +3992,6 @@ begin
   Rewrite(SockOut^);
 end;
 
-procedure TCrtSocket.CloseSockIn;
-begin
-  if (self <> nil) and
-     (fSockIn <> nil) then
-  begin
-    Freemem(fSockIn);
-    fSockIn := nil;
-  end;
-end;
-
 procedure TCrtSocket.CloseSockOut;
 begin
   if (self <> nil) and
@@ -4003,6 +3999,17 @@ begin
   begin
     Freemem(fSockOut);
     fSockOut := nil;
+  end;
+end;
+{$endif PUREMORMOT2}
+
+procedure TCrtSocket.CloseSockIn;
+begin
+  if (self <> nil) and
+     (fSockIn <> nil) then
+  begin
+    Freemem(fSockIn);
+    fSockIn := nil;
   end;
 end;
 
@@ -4024,11 +4031,13 @@ begin
     PTextRec(SockIn)^.BufPos := 0;  // reset input buffer, but keep allocated
     PTextRec(SockIn)^.BufEnd := 0;
   end;
+  {$ifndef PUREMORMOT2}
   if SockOut <> nil then
   begin
     PTextRec(SockOut)^.BufPos := 0; // reset output buffer
     PTextRec(SockOut)^.BufEnd := 0;
   end;
+  {$endif PUREMORMOT2}
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
   // perform the TLS shutdown round and release the TLS context
@@ -4060,7 +4069,9 @@ destructor TCrtSocket.Destroy;
 begin
   Close;
   CloseSockIn;
+  {$ifndef PUREMORMOT2}
   CloseSockOut;
+  {$endif PUREMORMOT2}
   if fPeerAddr <> nil then
     Dispose(fPeerAddr);
   inherited Destroy;
