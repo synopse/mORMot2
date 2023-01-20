@@ -22,6 +22,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -270,6 +271,28 @@ function ParseMonth(var P: PUtF8Char; var Month: word): boolean; overload;
 
 /// decode a month from its RFC 822 text value (Jan, Feb...)
 function ParseMonth(const s: RawUtf8; var Month: word): boolean; overload;
+
+const
+  /// Rotate local log file if reached this size (1MB by default)
+  // - .log file will be save as .log.bak file
+  // - a new .log file is created
+  // - used by AppendToTextFile() and LogToTextFile() functions (not TSynLog)
+  MAXLOGSIZE = 1024*1024;
+
+/// log a message with the current timestamp to a local text file
+// - the text file is located in the executable directory, and its name is
+// simply the executable file name with the '.log' extension instead of '.exe'
+// - format contains the current date and time, then the Msg on one line
+// - date and time format used is 'YYYYMMDD hh:mm:ss (i.e. ISO-8601)'
+procedure LogToTextFile(Msg: RawUtf8);
+
+/// log a message with the current timestamp to a local text file
+// - this version expects the filename to be specified
+// - format contains the current date and time, then the Msg on one line
+// - date and time format used is 'YYYYMMDD hh:mm:ss'
+function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
+  aMaxSize: Int64 = MAXLOGSIZE; aUtcTimeStamp: boolean = false): boolean;
+
 
 var
   /// custom TTimeLog date to ready to be displayed text function
@@ -1561,6 +1584,82 @@ begin
             (GotoNextNotSpace(P)^ = #0);
 end;
 
+function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
+  aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
+var
+  f: THandle;
+  old: TFileName;
+  buf: array[1..22] of AnsiChar;
+  size: Int64;
+  i: integer;
+  now: TSynSystemTime;
+begin
+  result := false;
+  if (aFileName = '') or
+     (aLine = '') then
+    exit;
+  f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
+  if not ValidHandle(f) then
+  begin
+    f := FileCreate(aFileName);
+    if not ValidHandle(f) then
+      exit; // you may not have write access to this folder
+  end;
+  // append to end of file
+  size := FileSeek64(f, 0, soFromEnd);
+  if (aMaxSize > 0) and
+     (size > aMaxSize) then
+  begin
+    // rotate log file if too big
+    FileClose(f);
+    old := aFileName + '.bak'; // '.log.bak'
+    DeleteFile(old); // rotate once
+    RenameFile(aFileName, old);
+    f := FileCreate(aFileName);
+    if not ValidHandle(f) then
+      exit;
+    FileClose(f);
+    f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
+    if not ValidHandle(f) then
+      exit;
+  end;
+  PWord(@buf)^ := 13 + 10 shl 8; // first go to next line
+  now.FromNow(not aUtcTimeStamp);
+  DateToIso8601PChar(@buf[3], true, now.Year, now.Month, now.Day);
+  TimeToIso8601PChar(@buf[13], true, now.Hour, now.Minute, now.Second, 0, ' ');
+  buf[22] := ' ';
+  for i := 1 to length(aLine) do
+    if aLine[i] < ' ' then
+      aLine[i] := ' '; // avoid line feed in text log file
+  result := (FileWrite(f, buf, SizeOf(buf)) = SizeOf(buf)) and
+            (FileWrite(f, pointer(aLine)^, length(aLine)) = length(aLine));
+  FileClose(f);
+end;
+
+var
+  LogToTextFileName: TFileName;
+
+procedure LogToTextFile(Msg: RawUtf8);
+begin
+  if Msg = '' then
+  begin
+    Msg := GetErrorText(GetLastError);
+    if Msg = '' then
+      exit;
+  end;
+  if LogToTextFileName = '' then
+  begin
+    GlobalLock;
+    try
+      LogToTextFileName := ChangeFileExt(Executable.ProgramFileName, '.log');
+      if not IsDirectoryWritable(Executable.ProgramFilePath) then
+        LogToTextFileName := GetSystemPath(spLog) + ExtractFileName(LogToTextFileName);
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  AppendToTextFile(Msg, LogToTextFileName);
+end;
 
 
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
@@ -1579,8 +1678,8 @@ var
 begin
   with GlobalTime[LocalTime] do
   begin
-    tix := GetTickCount64 {$ifdef OSPOSIX} shr 3 {$endif}; // Linux: 8ms refresh
-    if clock <> tix then // Windows: typically 16 ms
+    tix := GetTickCount64 shr 4;
+    if clock <> tix then // recompute every 16 ms
     begin
       clock := tix;
       NewTime.Clear;
