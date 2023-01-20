@@ -535,9 +535,10 @@ type
     fCompressAcceptHeader: THttpSocketCompressSet;
     fExtendedOptions: THttpRequestExtendedOptions;
     fTag: PtrInt;
-    class function InternalREST(const url, method: RawUtf8; const data:
-      RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
-      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
+    class function InternalREST(const url, method: RawUtf8;
+      const data: RawByteString; const header: RawUtf8;
+      aIgnoreTlsCertificateErrors: boolean; timeout: integer;
+      outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
@@ -593,7 +594,7 @@ type
     // TCurlHttp.Get() methods
     class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreTlsCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
-      outStatus: PInteger = nil): RawByteString;
+      outStatus: PInteger = nil; timeout: integer = 0): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -605,7 +606,8 @@ type
     // TCurlHttp.Post() methods
     class function Post(const aUri: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreTlsCertificateErrors: boolean = false;
-      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
+      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil;
+      timeout: integer = 0): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -617,7 +619,8 @@ type
     // TCurlHttp.Put() methods
     class function Put(const aUri: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreTlsCertificateErrors: boolean = false;
-      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
+      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil;
+      timeout: integer = 0): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -627,7 +630,7 @@ type
     // TCurlHttp.Delete() methods
     class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreTlsCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
-      outStatus: PInteger = nil): RawByteString;
+      outStatus: PInteger = nil; timeout: integer = 0): RawByteString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -1117,14 +1120,15 @@ type
 // - see also OpenHttpGet() for direct THttpClientSock call
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil;
-  timeout: integer = 0): RawByteString; overload;
+  timeout: integer = 0; forceSocket: boolean = false): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHttp/TCurlHttp for any https URI
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
-  outStatus: PInteger = nil; timeout: integer = 0): RawByteString; overload;
+  outStatus: PInteger = nil; timeout: integer = 0;
+  forceSocket: boolean = false): RawByteString; overload;
 
 
 
@@ -2129,7 +2133,7 @@ end;
 
 class function THttpRequest.InternalREST(const url, method: RawUtf8;
   const data: RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
-  outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+  timeout: integer; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 var
   uri: TUri;
   outh: RawUtf8;
@@ -2139,7 +2143,8 @@ begin
   with uri do
     if From(url) then
     try
-      with self.Create(Server, Port, Https, '', '', 0, 0, 0, Layer) do
+      with self.Create(
+        Server, Port, Https, '', '', timeout, timeout, timeout, Layer) do
       try
         IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
         status := Request(Address, method, 0, header, data, '', outh, result);
@@ -2253,34 +2258,35 @@ begin
 end;
 
 class function THttpRequest.Get(const aUri: RawUtf8; const aHeader: RawUtf8;
-  aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+  aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger;
+  timeout: integer): RawByteString;
 begin
   result := InternalREST(aUri, 'GET', '', aHeader, aIgnoreTlsCertificateErrors,
-    outHeaders, outStatus);
+    timeout, outHeaders, outStatus);
 end;
 
 class function THttpRequest.Post(const aUri: RawUtf8; const aData: RawByteString;
   const aHeader: RawUtf8; aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8;
-  outStatus: PInteger): RawByteString;
+  outStatus: PInteger; timeout: integer): RawByteString;
 begin
   result := InternalREST(aUri, 'POST', aData, aHeader,
-    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, timeout, outHeaders, outStatus);
 end;
 
 class function THttpRequest.Put(const aUri: RawUtf8; const aData: RawByteString;
-  const aHeader: RawUtf8; aIgnoreTlsCertificateErrors: boolean; outHeaders:
-  PRawUtf8; outStatus: PInteger): RawByteString;
+  const aHeader: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
+  outHeaders: PRawUtf8; outStatus: PInteger; timeout: integer): RawByteString;
 begin
   result := InternalREST(aUri, 'PUT', aData, aHeader,
-    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, timeout, outHeaders, outStatus);
 end;
 
 class function THttpRequest.Delete(const aUri: RawUtf8; const aHeader: RawUtf8;
   aIgnoreTlsCertificateErrors: boolean; outHeaders: PRawUtf8;
-  outStatus: PInteger): RawByteString;
+  outStatus: PInteger; timeout: integer): RawByteString;
 begin
   result := InternalREST(aUri, 'DELETE', '', aHeader,
-    aIgnoreTlsCertificateErrors, outHeaders, outStatus);
+    aIgnoreTlsCertificateErrors, timeout, outHeaders, outStatus);
 end;
 
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
@@ -3343,23 +3349,26 @@ end;
 
 
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8;
-  forceNotSocket: boolean; outStatus: PInteger; timeout: integer): RawByteString;
+  forceNotSocket: boolean; outStatus: PInteger; timeout: integer;
+  forceSocket: boolean): RawByteString;
 begin
-  result := HttpGet(aUri, '', outHeaders, forceNotSocket, outStatus, timeout);
+  result := HttpGet(aUri, '', outHeaders,
+    forceNotSocket, outStatus, timeout, forceSocket);
 end;
 
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8; forceNotSocket: boolean;
-  outStatus: PInteger; timeout: integer): RawByteString;
+  outStatus: PInteger; timeout: integer; forceSocket: boolean): RawByteString;
 var
   uri: TUri;
 begin
   if uri.From(aUri) then
-    if uri.Https or
-       forceNotSocket then
+    if (uri.Https or
+        forceNotSocket) and
+       not forceSocket then
       {$ifdef USEWININET}
       result := TWinHttp.Get(
-        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
+        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus, timeout)
       {$else}
       {$ifdef USELIBCURL2}
       if TCurlHttp.IsAvailable then
