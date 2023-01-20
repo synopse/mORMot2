@@ -4544,9 +4544,9 @@ begin
       exe := copy(cmd, 1, i - 1); // split exe and parameter(s)
   end;
   path := wrkdir;
-  if (path <> '') and
+  if (path = '') and
      (exe <> '') then
-    path := ExtractFilePath(exe);
+    path := ExtractFilePath(ExpandFileName(exe));
   if (path = '') and
      FileExists(Executable.ProgramFilePath + exe) then
     path := Executable.ProgramFilePath; // prefers the current folder
