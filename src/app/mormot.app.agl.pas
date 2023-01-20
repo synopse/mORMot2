@@ -1419,11 +1419,14 @@ begin
     one := nil;
   {$ifdef OSWINDOWS}
   // initialize a main Windows Job to kill all sub-process when main is killed
-  fRunJob := CreateJobToClose(GetCurrentProcessId);
-  AssignJobToProcess(fRunJob, GetCurrentProcess, 'CloseWithParent');
-  // all sub-processes will now be part of this Windows Job
-  // unless soWinJobCloseChildren is set, so RunRedirect() will use the
-  // CREATE_BREAKAWAY_FROM_JOB flag, then creates its own new Windows Job
+  if fRunJob = 0 then
+  begin
+    fRunJob := CreateJobToClose(GetCurrentProcessId);
+    AssignJobToProcess(fRunJob, GetCurrentProcess, 'CloseWithParent');
+    // all sub-processes will now be part of this Windows Job
+    // unless soWinJobCloseChildren is set, so RunRedirect() will use the
+    // CREATE_BREAKAWAY_FROM_JOB flag, then create its own new Windows Job
+  end;
   {$endif OSWINDOWS}
   // start sub-services following their Level order
   for l := 0 to high(fLevels) do
