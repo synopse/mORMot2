@@ -3490,18 +3490,18 @@ begin
     TCP.SockSend([
       'Subject: ', Subject, #13#10 +
       'From: ', From, ToList]);
+    head := trimU(Headers);
     if (TextCharSet <> '') or
        (head = '') then
       TCP.SockSend([
         'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
-    head := trimU(Headers);
     if head <> '' then
       TCP.SockSend(head);
     TCP.SockSendCRLF; // end of headers
     TCP.SockSend(Text);
     Exec('.', '25');
-    TCP.SockSendFlush('QUIT');
+    Exec('QUIT', '22');
     result := ioresult = 0;
   finally
     TCP.Free;
