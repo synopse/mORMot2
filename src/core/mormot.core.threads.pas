@@ -3303,7 +3303,6 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     thread: ^TSynThreadPoolWorkThread;
   begin
     result := false; // queue is full
-    found := nil;
     fSafe.Lock;
     thread := pointer(fWorkThread);
     for i := 1 to fWorkThreadCount do

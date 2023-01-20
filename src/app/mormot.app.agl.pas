@@ -32,6 +32,7 @@ uses
   mormot.core.json,
   mormot.core.data,
   mormot.core.log,
+  mormot.net.http,
   mormot.net.client,
   mormot.app.console,
   mormot.app.daemon;
@@ -812,7 +813,6 @@ begin
     if ishttp then
       n := StringReplaceAll(n, '%urimsg%', UrlEncode(msg));
     n := fOwner.Expand(self, StringReplaceAll(n, '%msg%', msg));
-    res := 0;
     if ishttp then
       res := fOwner.DoHttpGet(n)
     else if PosExChar('@', n) <> 0 then
@@ -1461,8 +1461,8 @@ begin
       [sas.ServiceName, aService.Name, Executable.Host, aWhat, NowUtcToString,
        KB(mem.memfree), KB(mem.memtotal),
        {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} aContext], body);
-    result := SendEmail(fSmtp, sas.SmtpFrom, aEmailTo, SendEmailSubject(title),
-      Utf8ToWinAnsi(body));
+    result := SendEmail(fSmtp, sas.SmtpFrom, aEmailTo,
+      MimeHeaderEncode(title), Utf8ToWinAnsi(body));
   except
     result := false;
   end;
