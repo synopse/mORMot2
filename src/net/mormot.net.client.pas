@@ -1165,7 +1165,9 @@ type
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body
+// - you can optionally set the encoding charset to be used for the Text body or
+// if TextCharSet is '', it will expect the 'Content-Type:' to be set in Headers
+// and Text to be the raw body (e.g. a multi-part encoded message)
 function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
   const Headers: RawUtf8 = ''; const User: RawUtf8 = ''; const Pass: RawUtf8 = '';
   const Port: RawUtf8 = '25'; const TextCharSet: RawUtf8  =  'ISO-8859-1';
@@ -1175,7 +1177,9 @@ function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body
+// - you can optionally set the encoding charset to be used for the Text body or
+// if TextCharSet is '', it will expect the 'Content-Type:' to be set in Headers
+// and Text to be the raw body (e.g. a multi-part encoded message)
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject, Text: RawUtf8; const Headers: RawUtf8 = '';
   const TextCharSet: RawUtf8  = 'ISO-8859-1'; TLS: boolean = false): boolean; overload;
@@ -3431,14 +3435,14 @@ var
       if ioresult <> 0 then
         raise ESendEmail.CreateUtf8('read error for %', [Res]);
     until (Length(Res) < 4) or
-          (Res[4] <> '-');
+          (Res[4] <> '-'); // - indicates there are other headers following
     if not IdemPChar(pointer(Res), pointer(Answer)) then
       raise ESendEmail.CreateU(Res);
   end;
 
   procedure Exec(const Command, Answer: RawUtf8);
   begin
-    writeln(TCP.SockOut^, Command);
+    TCP.SockSendFlush(Command + #13#10);
     if ioresult <> 0 then
       raise ESendEmail.CreateUtf8('write error for %', [Command]);
     Expect(Answer)
@@ -3455,8 +3459,7 @@ begin
   TCP := SocketOpen(Server, Port, TLS);
   if TCP <> nil then
   try
-    TCP.CreateSockIn; // we use SockIn and SockOut here
-    TCP.CreateSockOut;
+    TCP.CreateSockIn; // we use SockIn for readln in Expect()
     Expect('220');
     if (User <> '') and
        (Pass <> '') then
@@ -3468,7 +3471,7 @@ begin
     end
     else
       Exec('HELO ' + Server, '25');
-    writeln(TCP.SockOut^, 'MAIL FROM:<', From, '>');
+    TCP.SockSend(['MAIL FROM:<', From, '>']);
     Expect('250');
     repeat
       GetNextItem(P, ',', rec);
@@ -3484,17 +3487,21 @@ begin
         ToList := ToList + ', ' + rec;
     until P = nil;
     Exec('DATA', '354');
+    TCP.SockSend([
+      'Subject: ', Subject, #13#10 +
+      'From: ', From, ToList]);
+    if (TextCharSet <> '') or
+       (head = '') then
+      TCP.SockSend([
+        'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
+        'Content-Transfer-Encoding: 8bit']);
     head := trimU(Headers);
     if head <> '' then
-      head := head + #13#10;
-    writeln(TCP.SockOut^,
-      'Subject: ', Subject,
-      #13#10'From: ', From, ToList,
-      #13#10'Content-Type: text/plain; charset=', TextCharSet,
-      #13#10'Content-Transfer-Encoding: 8bit'#13#10, head,
-      #13#10, Text);
+      TCP.SockSend(head);
+    TCP.SockSendCRLF; // end of headers
+    TCP.SockSend(Text);
     Exec('.', '25');
-    writeln(TCP.SockOut^, 'QUIT');
+    TCP.SockSendFlush('QUIT');
     result := ioresult = 0;
   finally
     TCP.Free;
