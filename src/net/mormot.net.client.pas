@@ -1169,24 +1169,27 @@ type
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body or
-// if TextCharSet is '', it will expect the 'Content-Type:' to be set in Headers
-// and Text to be the raw body (e.g. a multi-part encoded message)
-function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
-  const Headers: RawUtf8 = ''; const User: RawUtf8 = ''; const Pass: RawUtf8 = '';
-  const Port: RawUtf8 = '25'; const TextCharSet: RawUtf8  =  'ISO-8859-1';
-  TLS: boolean = false): boolean; overload;
+// - by default, the text body is expected to be in ISO-8859-1, i.e. Utf8ToWinAnsi
+// - you can optionally set another encoding charset or force TextCharSet='' to
+// expect the 'Content-Type:' to be set in Headers and Text to be the raw body
+// (e.g. a multi-part encoded message)
+function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
+  const Text: RawByteString; const Headers: RawUtf8 = ''; const User: RawUtf8 = '';
+  const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
+  const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false): boolean; overload;
 
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
-// - you can optionally set the encoding charset to be used for the Text body or
-// if TextCharSet is '', it will expect the 'Content-Type:' to be set in Headers
-// and Text to be the raw body (e.g. a multi-part encoded message)
+// - by default, the text body is expected to be in ISO-8859-1, i.e. Utf8ToWinAnsi
+// - you can optionally set another encoding charset or force TextCharSet='' to
+// expect the 'Content-Type:' to be set in Headers and Text to be the raw body
+// (e.g. a multi-part encoded message)
 function SendEmail(const Server: TSmtpConnection;
-  const From, CsvDest, Subject, Text: RawUtf8; const Headers: RawUtf8 = '';
-  const TextCharSet: RawUtf8  = 'ISO-8859-1'; TLS: boolean = false): boolean; overload;
+  const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
+  const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
+  TLS: boolean = false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -3419,8 +3422,9 @@ begin
   result := Host <> '';
 end;
 
-function SendEmail(const Server: TSmtpConnection; const From, CsvDest, Subject,
-  Text, Headers, TextCharSet: RawUtf8; TLS: boolean): boolean;
+function SendEmail(const Server: TSmtpConnection;
+  const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
+  const Headers, TextCharSet: RawUtf8; TLS: boolean): boolean;
 begin
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
@@ -3430,8 +3434,9 @@ end;
 
 {$I-}
 
-function SendEmail(const Server, From, CsvDest, Subject, Text, Headers, User,
-  Pass, Port, TextCharSet: RawUtf8; TLS: boolean): boolean;
+function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
+  const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
+  TLS: boolean): boolean;
 var
   TCP: TCrtSocket;
 
