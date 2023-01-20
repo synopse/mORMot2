@@ -455,7 +455,8 @@ begin
   fFieldCount := length(fFields);
   Text := GotoNextLine(Text);
   P := pointer(Text);
-  while (Text <> nil) and (Text^ = '"') do
+  while (Text <> nil) and
+        (Text^ = '"') do
   begin
     Text := GotoNextLine(Text);
     inc(fRowCount);
@@ -638,7 +639,8 @@ var
             if PublicFolder <> '' then
             begin
               GetUrl(P + 8);
-              FN := PublicFolder + UTF8ToString(StringReplaceChars(url, '/', PathDelim));
+              FN := PublicFolder +
+                UTF8ToString(StringReplaceChars(url, '/', PathDelim));
               EnsureDirectoryExists(ExtractFilePath(FN));
               if not FileExists(FN) then
                 FileFromString(HttpGet(aDotClearRoot + '/public/' + url, nil,
@@ -650,20 +652,24 @@ var
               AddString(aDotClearRoot);
           end;
         end
-        else if (tag = src) and IdemPChar(P, 'HTTP') then
+        else if (tag = src) and
+                IdemPChar(P, 'HTTP') then
         begin
           GetUrl(P);
-          if IdemFileExts(pointer(urlnoparam), ['.JP', '.PNG', '.GIF', '.SVG']) >= 0 then
+          if IdemFileExts(pointer(urlnoparam),
+               ['.JP', '.PNG', '.GIF', '.SVG']) >= 0 then
           begin
             if FindRawUtf8(notfound, url) < 0 then
             begin
-              FN := 'ext-' + Ansi7ToString(MD5(url)) + SysUtils.lowercase(ExtractFileExt
-                (UTF8ToString(urlnoparam)));
+              FN := 'ext-' + Ansi7ToString(MD5(url)) +
+                SysUtils.lowercase(ExtractFileExt(UTF8ToString(urlnoparam)));
               if not FileExists(PublicFolder + FN) then
               begin
                 write(urlnoparam);
                 pic := HttpGet(url, nil, {forceNotSocket=}true, @status);
-                if (status <> 200) or (pic = '') or (PosExChar(#0, pic) = 0) or
+                if (status <> 200) or
+                   (pic = '') or
+                   (PosExChar(#0, pic) = 0) or
                   {%H-}IdemPChar(pointer(pic), '<!DOCTYPE') then
                 begin
                   if {%H-}IdemPChar(pointer(url), 'HTTP:') then
@@ -672,9 +678,10 @@ var
                     insert('s', pic, 5);
                     write(' https? ');
                     pic := HttpGet(pic, nil, {forceNotSocket=}true, @status);
-                    if (status <> 200) or (pic = '') or (PosExChar(#0, pic) = 0)
-                      or                       {%H-}IdemPChar(pointer(pic),
-                      '<!DOCTYPE') then
+                    if (status <> 200) or
+                       (pic = '') or
+                       (PosExChar(#0, pic) = 0) or
+                       {%H-}IdemPChar(pointer(pic), '<!DOCTYPE') then
                       pic := '';
                   end;
                 end;
