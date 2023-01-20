@@ -217,7 +217,7 @@ type
     // - you may set 0 for no gracefull stop, but direct TerminateProcess/SIGKILL
     property StopRunAbortTimeoutSec: integer
       read fStopRunAbortTimeoutSec write fStopRunAbortTimeoutSec;
-    /// how many seconds an exited process is considered "stable"
+    /// how many seconds a "start" monitored process exit is considered stable
     // - similar to NSSM, by default it will try to restart the executable if
     // the application died without a "stop" signal, with increasing pauses
     // - this value is the number of seconds after which a process could be 
@@ -277,7 +277,7 @@ type
   TSynAngelizeSettings = class(TSynDaemonSettings)
   protected
     fFolder, fExt, fStateFile: TFileName;
-    fHtmlStateFileIdentifier: RawUtf8;
+    fHtmlStateFileIdentifier, fSmtp, fSmtpFrom: RawUtf8;
     fHttpTimeoutMS, fStartTimeoutSec: integer;
   public
     /// set the default values
@@ -312,6 +312,14 @@ type
     // - you can set to 0 to not wait for starting
     property StartTimeoutSec: integer
       read fStartTimeoutSec write fStartTimeoutSec;
+    /// STMP server information for optional email notifications
+    // - expects TSmtpConnection.FromText 'user:password@smtpserver:port' format
+    property Smtp: RawUtf8
+      read fSmtp write fSmtp;
+    /// identify the SMTP sender From: when sending an email
+    // - expects it to be not '' void - otherwise Smtp is ignored
+    property SmtpFrom: RawUtf8
+      read fSmtpFrom write fSmtpFrom;
   end;
 
   /// used to serialize the current state of the services
@@ -345,6 +353,7 @@ type
     fLastGetServicesStateFile: RawByteString;
     fWatchThread: TSynBackgroundThreadProcess;
     fRunJob: THandle; // a single Windows Job to rule them all
+    fSmtp: TSmtpConnection;
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
@@ -367,6 +376,9 @@ type
       var aProp: RawUtf8; const aID: RawUtf8); virtual;
     procedure DoWatch(aLog: TSynLog; aService: TSynAngelizeService;
       const aAction: TSynAngelizeAction); virtual;
+    function DoHttpGet(const aUri: RawUtf8): integer;
+    function DoNotifyByEmail(const aService: TSynAngelizeService;
+      const aWhat, aEmailTo, aContext: RawUtf8): boolean;
   public
     /// initialize the main daemon/server redirection instance
     // - main TSynAngelizeSettings is loaded
@@ -647,8 +659,8 @@ begin
     except
       on E: Exception do
       begin
-        fLog.Add.Log(sllWarning, 'OnRedirect: abort log writing after %',
-          [E.ClassType], self);
+        fLog.Add.Log(sllWarning,
+          'OnRedirect: abort log writing after %', [E], self);
         FreeAndNil(fRedirect);
       end;
     end;
@@ -1109,7 +1121,6 @@ var
   fn, lf, env, wd: TFileName;
   ls: TFileStreamEx;
   status, expectedstatus, sec: integer;
-  sas: TSynAngelizeSettings;
   endtix: Int64;
   {$ifdef OSWINDOWS}
   sc: TServiceController;
@@ -1147,7 +1158,6 @@ begin
       if expectedstatus = 0 then // not overriden by ToInteger()
         expectedstatus := HTTP_SUCCESS;
   end;
-  sas := Sender.Settings as TSynAngelizeSettings;
   result := false;
   Status := 0;
   case Action of
@@ -1236,7 +1246,7 @@ begin
           p := 'https:' + p
         else
           p := 'http:' + p; // was trimmed by Parse()=aaHttp
-        HttpGet(p, '', nil, false, @status, sas.HttpTimeoutMS);
+        status := Sender.DoHttpGet(p);
         CheckStatus;
       end;
     aaSleep:
@@ -1292,6 +1302,52 @@ begin
   DoOne(self, aLog, aService, acDoWatch, aAction);
   aLog.Log(sllTrace, 'DoWatch % % = % [%]', [aService.Name,
     aAction, ToText(aService.State)^, aService.StateMessage], self);
+end;
+
+function TSynAngelize.DoHttpGet(const aUri: RawUtf8): integer;
+begin
+  result := 0;
+  try
+    HttpGet(aUri, nil, false, @result,
+      (fSettings as TSynAngelizeSettings).HttpTimeoutMS, true);
+  except
+    result := -500; // e.g. on TCP or TLS connection error
+  end;
+end;
+
+function TSynAngelize.DoNotifyByEmail(const aService: TSynAngelizeService;
+  const aWhat, aEmailTo, aContext: RawUtf8): boolean;
+var
+  sas: TSynAngelizeSettings;
+  title, body: RawUtf8;
+  mem: TMemoryInfo;
+begin
+  result := false;
+  sas := fSettings as TSynAngelizeSettings;
+  if (sas.Smtp = '') or
+     (sas.SmtpFrom = '') or
+     ((fSmtp.Host = '') and
+      not fSmtp.FromText(sas.Smtp)) then
+    exit;
+  try
+    FormatUtf8('[% %] % %',
+      [Executable.Host, sas.ServiceName, aWhat, aService.Name], title);
+    GetMemoryInfo(mem, false);
+    FormatUtf8('% % on host % triggered a "%" notification.'#13#10#13#10 +
+               'Local UTC date is %.'#13#10 +
+               'Memory is % free over %.'#13#10 +
+               {$ifdef OSPOSIX}
+               'LoadAvg = %'#13#10 +
+               {$endif OSPOSIX}
+               #13#10'Context = %'#13#10,
+      [sas.ServiceName, aService.Name, Executable.Host, aWhat, NowUtcToString,
+       KB(mem.memfree), KB(mem.memtotal),
+       {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} aContext], body);
+    result := SendEmail(fSmtp, sas.SmtpFrom, aEmailTo, SendEmailSubject(title),
+      Utf8ToWinAnsi(body));
+  except
+    result := false;
+  end;
 end;
 
 procedure TSynAngelize.ClearServicesState;
