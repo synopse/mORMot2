@@ -4750,6 +4750,8 @@ const
   PARSECOMMAND_ERROR =
     [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
 
+  PARSCOMMAND_POSIX = {$ifdef OSWINDOWS} false {$else} true {$endif};
+
 /// low-level parsing of a RunCommand() execution command
 // - parse and fills argv^[0..argc^-1] with corresponding arguments, after
 // un-escaping and un-quoting if applicable, using temp^ to store the content
@@ -4761,7 +4763,12 @@ const
 // should be considered as indicative only with posix=false
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
-  posix: boolean = {$ifdef OSWINDOWS} false {$else} true {$endif}): TParseCommands;
+  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
+
+/// low-level extration of the executable of a RunCommand() execution command
+// - returns the first parameter returned by ParseCommandArgs()
+function ExtractExecutableName(const cmd: RawUtf8;
+  posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
 
 type
   /// callback used by RunRedirect() to notify of console output at runtime
@@ -8544,6 +8551,19 @@ const
 function ToText(st: TServiceState): PShortString; overload;
 begin
   result := @_SERVICESTATE[st];
+end;
+
+function ExtractExecutableName(const cmd: RawUtf8; posix: boolean): RawUtf8;
+var
+  temp: RawUtf8;
+  argv: TParseCommandsArgs;
+  argc: integer;
+begin
+  if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, posix)) or
+     (argc = 0) then
+    result := ''
+  else
+    FastSetString(result, argv[0], StrLen(argv[0]));
 end;
 
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs;
