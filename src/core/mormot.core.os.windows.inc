@@ -779,6 +779,20 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
+function FileIsExecutable(const FileName: TFileName): boolean;
+var
+  h: THandle;
+  header: word;
+begin
+  result := false;
+  h := FileOpen(FileName, fmOpenReadDenyNone);
+  if not ValidHandle(h) then
+    exit;
+  result := (FileRead(h, header, 2) = 2) and
+            (header = $5A4D); // DOS Magic Number
+  FileClose(h);
+end;
+
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;

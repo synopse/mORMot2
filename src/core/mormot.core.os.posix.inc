@@ -1191,6 +1191,15 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
+function FileIsExecutable(const FileName: TFileName): boolean;
+var
+  st: TStat;
+begin
+  result := (fpStat(pointer(FileName), st) = 0) and
+            (st.st_mode and (S_IXUSR or S_IXGRP or S_IXOTH) <> 0) and
+            not FpS_ISDIR(st.st_mode);
+end;
+
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 var

@@ -2708,6 +2708,11 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
   out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
 
+/// check if a given file is likely to be an executable
+// - will check the DOS/WinPE executable header in its first bytes on Windows
+// - will call fpStat() on POSIX to check the File and Executable bits
+function FileIsExecutable(const FileName: TFileName): boolean;
+
 /// compute the size of a directory's files, optionally with nested folders
 // - basic implementation using FindFirst/FindNext so won't be the fastest
 // available, nor fully accurate when files are actually (hard) links
