@@ -122,11 +122,14 @@ type
     // https://www.postgresql.org/docs/current/libpq-pipeline-mode.html#LIBPQ-PIPELINE-USING
     procedure EnterPipelineMode;
     /// Exit Pipelining mode
-    // - if checkSync is false - exit pipeline without checking batch is complete
-    procedure ExitPipelineMode(checkSync: boolean = true);
+    procedure ExitPipelineMode;
     /// Marks a synchronization point in a pipeline by sending a sync message
     // and flushing the send buffer
     procedure PipelineSync;
+    /// Flush any queued output data to the server
+    procedure Flush;
+    /// Sends a request for the server to flush its output buffer
+    procedure SendFlushRequest;
     /// Return current pipeline status
     function PipelineStatus: integer;
     /// direct access to the associated PPGconn connection
@@ -176,11 +179,11 @@ type
     /// For connection in pipelining mode
     // - sends a request to execute a prepared statement with given parameters, 
     // without waiting for the result(s)
-    // - after all statements are sent, conn.PipelineSync should be called,
+    // - after all statements are sent, conn.SendFlushRequest should be called,
     // then GetPipelineResult is able to read results in order they were sent
     procedure SendPipelinePrepared;
     /// Retrieve next result for pipelined statement
-    procedure GetPipelineResult(isFirst: boolean = false);
+    procedure GetPipelineResult;
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
     // - warning: input JSON should already be in the expected format (ftDate)
@@ -443,38 +446,37 @@ begin
       [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
 end;
 
-procedure TSqlDBPostgresConnection.ExitPipelineMode(checkSync: boolean);
+procedure TSqlDBPostgresConnection.ExitPipelineMode;
 var
   res: pointer;
   err: integer;
 begin
-  if checkSync then
-  begin
-    res := PQ.getResult(fPGConn);
-    if (res <> nil) then 
-      // NULL represent end of the previous result set
-      raise ESqlDBPostgres.CreateUtf8(
-        '%.ExitPipelineMode: expect end of the last statement', [self]);
-    res := PQ.getResult(fPGConn);
-    if res = nil then
-      raise ESqlDBPostgres.CreateUtf8(
-        '%.ExitPipelineMode: returned nil when result in PGRES_PIPELINE_SYNC ' +
-        'status is expected %', [self, PQ.ErrorMessage(fPGConn)]);
-    err := PQ.ResultStatus(res);
-    if err <> PGRES_PIPELINE_SYNC then
-      raise ESqlDBPostgres.CreateUtf8(
-        '%.ExitPipelineMode: unexpected result code %', [self, err]);
-  end;
   if PQ.exitPipelineMode(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8(
-      'Exit pipeline mode % failed [%]',
-      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+      '%.ExitPipelineMode: attempt to exit pipeline mode failed when it should''ve succeeded [%]',
+      [self, PQ.ErrorMessage(fPGConn)]);
+  if (PQ.pipelineStatus(fPGConn) <> PQ_PIPELINE_OFF) then
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.ExitPipelineMode: exiting pipeline mode didn''t seem to work',
+      [self]);
 end;
 
 procedure TSqlDBPostgresConnection.PipelineSync;
 begin
   if PQ.pipelineSync(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8('Pipeline sync % failed [%]',
+      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+end;
+
+procedure TSqlDBPostgresConnection.Flush;
+begin
+  PQ.flush(fPGConn);
+end;
+
+procedure TSqlDBPostgresConnection.SendFlushRequest;
+begin
+  if PQ.sendFlushRequest(fPGConn) <> 1 then
+    raise ESqlDBPostgres.CreateUtf8('sendFlushRequest % failed [%]',
       [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
 end;
 
@@ -805,20 +807,13 @@ begin
   SqlLogEnd(' c=%', [fPreparedStmtName]);
 end;
 
-procedure TSqlDBPostgresStatement.GetPipelineResult(isFirst: boolean);
+procedure TSqlDBPostgresStatement.GetPipelineResult;
 var
   c: TSqlDBPostgresConnection;
+  endRes: pointer;
 begin
   SqlLogBegin(sllSQL);
   c := TSqlDBPostgresConnection(Connection);
-  if not isFirst then
-  begin
-    fRes := PQ.getResult(c.fPGConn);
-    if fRes <> nil then
-      // NULL represent end of the previous result set
-      raise ESqlDBPostgres.CreateUtf8(
-        '%.GetPipelineResult: returned something extra', [self]);
-  end;
   if fRes <> nil then
   begin
     PQ.Clear(fRes); // if forgot to call ReleaseRows
@@ -844,6 +839,12 @@ begin
   end
   else
     SqlLogEnd(' c=%', [fPreparedStmtName]);
+
+  endRes := PQ.getResult(c.fPGConn);
+  if endRes <> nil then
+    // NULL represent end of the result set
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.GetPipelineResult: returned something extra', [self]);
 end;
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;

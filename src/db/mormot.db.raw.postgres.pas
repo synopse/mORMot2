@@ -123,6 +123,8 @@ const
   PGRES_PIPELINE_SYNC = 10;   // pipeline synchronization point
   PGRES_PIPELINE_ABORTED= 11; // Command didn't run because of an abort
 
+  PQ_PIPELINE_OFF = 0;
+
   CONNECTION_OK = 0;
   CONNECTION_BAD = 1;
   CONNECTION_STARTED = 2;
