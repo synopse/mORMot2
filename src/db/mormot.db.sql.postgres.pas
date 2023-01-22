@@ -453,12 +453,11 @@ var
 begin
   if PQ.exitPipelineMode(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8(
-      '%.ExitPipelineMode: attempt to exit pipeline mode failed when it should''ve succeeded [%]',
+      '%.ExitPipelineMode: attempt to exit pipeline mode failed [%]',
       [self, PQ.ErrorMessage(fPGConn)]);
-  if (PQ.pipelineStatus(fPGConn) <> PQ_PIPELINE_OFF) then
+  if PQ.pipelineStatus(fPGConn) <> PQ_PIPELINE_OFF then
     raise ESqlDBPostgres.CreateUtf8(
-      '%.ExitPipelineMode: exiting pipeline mode didn''t seem to work',
-      [self]);
+      '%.ExitPipelineMode: exiting pipeline mode issue', [self]);
 end;
 
 procedure TSqlDBPostgresConnection.PipelineSync;
@@ -839,10 +838,9 @@ begin
   end
   else
     SqlLogEnd(' c=%', [fPreparedStmtName]);
-
   endRes := PQ.getResult(c.fPGConn);
   if endRes <> nil then
-    // NULL represent end of the result set
+    // nil represents end of the result set
     raise ESqlDBPostgres.CreateUtf8(
       '%.GetPipelineResult: returned something extra', [self]);
 end;

@@ -521,7 +521,7 @@ begin
   conn := fDbPool.ThreadSafeConnection;
   cnt := getQueriesParamValue(ctxt);
   if not getRawRandomWorlds(cnt, words) then
-    exit(HTTP_SERVERERROR);
+    exit;
   setLength(ids{%H-}, cnt);
   setLength(nums{%H-}, cnt);
   // generate new randoms, fill parameters arrays for update
