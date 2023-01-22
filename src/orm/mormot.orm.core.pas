@@ -4349,7 +4349,7 @@ type
     function Exists(aTableIndex: integer; aID: TID): boolean;
     /// fill a record specified by its ID from cache into a new TOrm instance
     // - return false if the item is not in cache
-    function Retrieve(aID: TID; aValue: TOrm): boolean;
+    function Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): boolean;
     /// return the JSON corresponding to the TOrm instance from cache
     function RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
     /// TRest instance shall call this method when a record is added or read
@@ -10951,19 +10951,16 @@ begin
             fCache[aTableIndex].Exists(aID);
 end;
 
-function TOrmCache.Retrieve(aID: TID; aValue: TOrm): boolean;
+function TOrmCache.Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): boolean;
 var
-  table: cardinal;
   bin: RawByteString;
 begin
   result := false;
-  if (self = nil) or
-     (aValue = nil) or
-     (aID <= 0) then
-    exit;
-  table := fModel.GetTableIndexExisting(POrmClass(aValue)^);
-  if table < cardinal(Length(fCache)) then
-    with fCache[table] do
+  if (self <> nil) and
+     (aValue <> nil) and
+     (aID > 0) and
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
+    with fCache[aTableIndex] do
       if CacheEnable and
          RetrieveBinary(aID, bin) then
       begin
@@ -10986,7 +10983,7 @@ begin
     exit;
   orm := aTable.Create;
   try
-    if Retrieve(aID, orm) then
+    if Retrieve(aID, orm, aTableIndex) then
       result := orm.GetJsonValues({expand=}true, {withid=}false,
         orm.Orm.SimpleFieldsBits[ooSelect]);
   finally

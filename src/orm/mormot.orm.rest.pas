@@ -1374,7 +1374,7 @@ begin
      not fModel.Lock(t, aID) then
     exit;
   // try to retrieve existing record from internal cache
-  result := fCache.Retrieve(aID, Value);
+  result := fCache.Retrieve(aID, Value, t);
   if result then
     exit;
   // get JSON object '{...}' in resp from corresponding EngineRetrieve() method
