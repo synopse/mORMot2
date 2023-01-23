@@ -1417,7 +1417,7 @@ var
   param, text: RawUtf8;
 begin
   aa := Parse(Action, Ctxt, param, text);
-  param := Expand(Service, param, false);
+  param := Sender.Expand(Service, param, false);
   Log.Log(sllDebug, '% %: % as [%] %',
     [ToText(Ctxt), Service.Name, Action, text, param], Sender);
   for a := 0 to high(aa) do
