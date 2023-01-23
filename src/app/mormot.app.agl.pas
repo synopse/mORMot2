@@ -96,7 +96,8 @@ type
     doNothing,
     doExitNoRetry,
     doExitRetry,
-    doExitRecover);
+    doExitRecover,
+    doWatchFailed);
 
   /// one sub-process definition as recognized by TSynAngelize
   // - TSynAngelizeAction properties will expand %abc% place-holders when needed
@@ -116,7 +117,8 @@ type
     fState: TServiceState;
     fStartOptions: TStartOptions;
     fOS: TOperatingSystem;
-    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fWatchCountRestart: integer;
+    fLevel, fStopRunAbortTimeoutSec: integer;
+    fWatchDelaySec, fWatchCountRestart, fWatchCount: integer;
     fRetryStableSec: integer;
     fRedirectLogFile: RawUtf8;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
@@ -129,8 +131,11 @@ type
     fLastNotifyMsg: RawUtf8;
     procedure SetState(NewState: TServiceState; const Fmt: RawUtf8;
       const Args: array of const; ResetMessage: boolean = false);
+    procedure DoStart(log: TSynLog);
+    function DoStop(log: TSynLog): boolean;
     procedure DoNotify(What: TDoNotify;
       const Fmt: RawUtf8; const Args: array of const); virtual;
+    procedure OnWatchFailed(const Msg: RawUtf8); virtual;
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -286,7 +291,7 @@ type
       read fWatchDelaySec write fWatchDelaySec;
     /// after how many "Watch" failures should we try to restart the sub-process
     // - restarting at the first failure may be too paranoid
-    // - default is 2, so it will restart after 2 minutes with WatchDelaySec=60
+    // - default is 2, so it will restart after 1..2 minutes with WatchDelaySec=60
     property WatchCountRestart: integer
       read fWatchCountRestart write fWatchCountRestart;
     /// redirect "start:/path/to/executable" console output to a log file
@@ -370,6 +375,13 @@ type
     end;
   end;
 
+  /// context enumerate for TSynAngelize internal process
+  TAglContext = (
+    acDoStart,
+    acDoStop,
+    acDoWatch
+  );
+
   /// can run a set of executables as sub-process(es) from *.service definitions
   // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
   // - at OS level, there will be a single agl daemon or service
@@ -400,6 +412,7 @@ type
     procedure ListServices;
     procedure NewService;
     procedure StartServices;
+    procedure WaitStarted(log: TSynLog; level: integer);
     procedure StopServices;
     procedure StartWatching;
     procedure WatchEverySecond(Sender: TSynBackgroundThreadProcess);
@@ -410,6 +423,8 @@ type
     procedure ComputeServicesHtmlFile;
     function DoExpand(aService: TSynAngelizeService;
       const aInput: TSynAngelizeAction): TSynAngelizeAction; virtual;
+    procedure DoOne(Log: TSynLog; Service: TSynAngelizeService;
+      Ctxt: TAglContext; const Action: TSynAngelizeAction);
     procedure DoExpandLookup(aInstance: TObject;
       var aProp: RawUtf8; const aID: RawUtf8); virtual;
     procedure DoWatch(aLog: TSynLog; aService: TSynAngelizeService;
@@ -786,6 +801,63 @@ begin
     end;
 end;
 
+procedure TSynAngelizeService.DoStart(log: TSynLog);
+var
+  a: PtrInt;
+begin
+  if (fStart = nil) and
+     (fRun <> '') then
+    // "Start":[] will assume 'start:%run%'
+    fOwner.DoOne(log, self, acDoStart, 'start')
+  else
+    // execute all "Start":[...,...,...] actions
+    for a := 0 to high(fStart) do
+      // any exception on DoOne() should break the starting
+      fOwner.DoOne(log, self, acDoStart, fStart[a]);
+  if fWatch <> nil then
+    fNextWatch := GetTickCount64 + fWatchDelaySec * 1000;
+end;
+
+function TSynAngelizeService.DoStop(log: TSynLog): boolean;
+var
+  a: PtrInt;
+  errmsg: string;
+begin
+  result := true;
+  errmsg := '';
+  if (fStop = nil) and
+     (fRun <> '') then
+  try
+    // "Stop":[] will assume 'stop:%run%'
+    fOwner.DoOne(log, self, acDoStop, 'stop')
+  except
+    on E: Exception do
+    begin
+      // any exception should continue the stopping
+      log.Log(sllWarning, 'StopServices: DoStop(%) failed as %',
+        [Name, E.ClassType], self);
+      FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
+      result := false;
+    end;
+  end
+  else
+    // execute all "Stop":[...,...,...] actions
+    for a := 0 to high(fStop) do
+    try
+      fOwner.DoOne(log, self, acDoStop, fStop[a]);
+    except
+      on E: Exception do
+      begin
+        // any exception should continue the stopping
+        log.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
+          [Name, fStop[a], E.ClassType], self);
+        FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
+        result := false;
+      end;
+    end;
+  SetState(ssStopped, 'Shutdown%', [errmsg]);
+end;
+
 procedure TSynAngelizeService.DoNotify(What: TDoNotify; const Fmt: RawUtf8;
   const Args: array of const);
 var
@@ -806,7 +878,7 @@ begin
   fLastNotify := What;
   fLastNotifyMsg := msg;
   if What = doNothing then
-    exit;
+    exit; // doNothing can be used to reset the notification message
   w := GetEnumNameTrimed(TypeInfo(TDoNotify), ord(What));
   P := pointer(fNotify);
   while P <> nil do
@@ -839,6 +911,35 @@ begin
     end;
     fOwner.fSettings.LogClass.Add.Log(sllTrace,
       'DoNotify % %: % res=%', [w, Name, msg, res], self);
+  end;
+end;
+
+procedure TSynAngelizeService.OnWatchFailed(const Msg: RawUtf8);
+var
+  log: TSynLog;
+begin
+  if fWatchCountRestart > 1 then
+  begin
+    inc(fWatchCount);
+    if fWatchCount < fWatchCountRestart then
+      exit;
+    fWatchCount := 0;
+  end;
+  SetState(ssFailed, '%', [Msg], {resetmessage=}true);
+  DoNotify(doWatchFailed, '%', [Msg]);
+  if fRetryStableSec <> 0 then
+  begin
+    log := fOwner.fSettings.LogClass.Add;
+    log.Log(sllTrace, 'OnWatchFailed [%]: try to restart %', [Msg, Name], self);
+    if not DoStop(log) then
+      exit;
+    SleepHiRes(500); // wait a little for its actual shutdown
+    try
+      DoStart(log);
+    except
+      on E: Exception do
+        log.Log(sllDebug, 'OnWatchFailed: DoStart raised %', [E.ClassType], self);
+    end;
   end;
 end;
 
@@ -1178,11 +1279,6 @@ begin
 end;
 
 type
-  TAglContext = (
-    acDoStart,
-    acDoStop,
-    acDoWatch
-  );
   TAglAction = (
     aaExec,
     aaWait,
@@ -1257,18 +1353,17 @@ var
   sc: TServiceController;
   {$endif OSWINDOWS}
 
-  procedure CheckStatus;
+  procedure StatusFailed;
+  var
+    msg: RawUtf8;
   begin
+    FormatUtf8('% returned % but expected %',
+      [ToText(Action), status, expectedstatus], msg);
     case Ctxt of
       acDoStart:
-        if status <> expectedstatus then
-          raise ESynAngelize.CreateUtf8(
-            'DoStart % % % returned % but expected %',
-            [Service.Name, ToText(Action), p, status, expectedstatus]);
+        raise ESynAngelize.CreateUtf8('DoStart % % %', [Service.Name, p, msg]);
       acDoWatch:
-        if status <> expectedstatus then
-          Service.SetState(ssFailed, '% returned % but expected %',
-            [ToText(Action), status, expectedstatus], {resetmessage=}true);
+        Service.OnWatchFailed(msg);
     end;
   end;
 
@@ -1296,7 +1391,8 @@ begin
     aaWait:
       begin
         status := RunCommand(fn{%H-}, Action = aaWait);
-        CheckStatus;
+        if status <> expectedstatus then
+          StatusFailed;
       end;
     aaStart:
       if Service.fStarted = '' then
@@ -1378,7 +1474,8 @@ begin
         else
           p := 'http:' + p; // was trimmed by Parse()=aaHttp
         status := Sender.DoHttpGet(p);
-        CheckStatus;
+        if status <> expectedstatus then
+          StatusFailed;
       end;
     aaSleep:
       if ToInteger(Param, ms) then
@@ -1409,7 +1506,7 @@ begin
   result := true;
 end;
 
-procedure DoOne(Sender: TSynAngelize; Log: TSynLog; Service: TSynAngelizeService;
+procedure TSynAngelize.DoOne(Log: TSynLog; Service: TSynAngelizeService;
   Ctxt: TAglContext; const Action: TSynAngelizeAction);
 var
   a: PtrInt;
@@ -1417,11 +1514,11 @@ var
   param, text: RawUtf8;
 begin
   aa := Parse(Action, Ctxt, param, text);
-  param := Sender.Expand(Service, param, false);
+  param := Expand(Service, param, false);
   Log.Log(sllDebug, '% %: % as [%] %',
-    [ToText(Ctxt), Service.Name, Action, text, param], Sender);
+    [ToText(Ctxt), Service.Name, Action, text, param], self);
   for a := 0 to high(aa) do
-    if Exec(Sender, Log, Service, aa[a], Ctxt, param) then
+    if Exec(self, Log, Service, aa[a], Ctxt, param) then
       break;
 end;
 
@@ -1430,7 +1527,7 @@ procedure TSynAngelize.DoWatch(aLog: TSynLog;
 begin
   aService.fState := ssErrorRetrievingState;
   aService.fStateMessage := '';
-  DoOne(self, aLog, aService, acDoWatch, aAction);
+  DoOne(aLog, aService, acDoWatch, aAction);
   aLog.Log(sllTrace, 'DoWatch % % = % [%]', [aService.Name,
     aAction, ToText(aService.State)^, aService.StateMessage], self);
 end;
@@ -1603,10 +1700,8 @@ end;
 
 procedure TSynAngelize.StartServices;
 var
-  l, i, a: PtrInt;
+  l, i: PtrInt;
   s: TSynAngelizeService;
-  sec: integer;
-  endtix: Int64;
   log: ISynLog;
   one: TSynLog;
 begin
@@ -1636,48 +1731,45 @@ begin
       s := fService[i];
       if (s.Level = fLevels[l]) and
          MatchOS(s.OS) then
-      begin
-        if (s.fStart = nil) and
-           (s.fRun <> '') then
-          // "Start":[] will assume 'start:%run%'
-          DoOne(self, one, s, acDoStart, 'start')
-        else
-          // execute all "Start":[...,...,...] actions
-          for a := 0 to high(s.fStart) do
-            // any exception on DoOne() should break the starting
-            DoOne(self, one, s, acDoStart, s.fStart[a]);
-        if s.Watch <> nil then
-          s.fNextWatch := GetTickCount64 + s.WatchDelaySec * 1000;
-      end;
+        s.DoStart(one);
     end;
     // wait for all services of this level to be running
-    sec := (fSettings as TSynAngelizeSettings).StartTimeoutSec;
-    if sec > 0 then
-    begin
-      one.Log(sllTrace, 'StartServices: wait % sec for level #% start',
-        [sec, fLevels[l]], self);
-      endtix := GetTickCount64 + sec * 1000;
-      for i := 0 to high(fStarted) do
-      begin
-        s := fStarted[i];
-        while s.fState <> ssRunning do
-          if GetTickCount64 > endtix then
-            raise ESynAngelize.CreateUtf8(
-              'StartServices timeout waiting for %', [s.Name])
-          else
-            SleepHiRes(10);
-      end;
-    end;
+    WaitStarted(one, fLevels[l]);
   end;
   ComputeServicesStateFiles; // save initial state before any watchdog
 end;
 
+procedure TSynAngelize.WaitStarted(log: TSynLog; level: integer);
+var
+  sec: integer;
+  endtix: Int64;
+  s: TSynAngelizeService;
+  i: PtrInt;
+begin
+  sec := (fSettings as TSynAngelizeSettings).StartTimeoutSec;
+  if sec > 0 then
+  begin
+    log.Log(sllTrace, 'StartServices: wait % sec for level #% start',
+      [sec, level], self);
+    endtix := GetTickCount64 + sec * 1000;
+    for i := 0 to high(fStarted) do
+    begin
+      s := fStarted[i];
+      while s.fState <> ssRunning do
+        if GetTickCount64 > endtix then
+          raise ESynAngelize.CreateUtf8(
+            'StartServices timeout waiting for %', [s.Name])
+        else
+          SleepHiRes(10);
+    end;
+  end;
+end;
+
 procedure TSynAngelize.StopServices;
 var
-  l, i, a: PtrInt;
+  l, i: PtrInt;
   s: TSynAngelizeService;
   sf: TFileName;
-  errmsg: string;
   sas: TSynAngelizeSettings;
   log: ISynLog;
   one: TSynLog;
@@ -1694,28 +1786,7 @@ begin
     begin
       s := fService[i];
       if s.Level = fLevels[l] then
-      begin
-        errmsg := '';
-        if (s.fStop = nil) and
-           (s.fRun <> '') then
-          // "Stop":[] will assume 'stop:%run%'
-          DoOne(self, one, s, acDoStop, 'stop')
-        else
-          // execute all "Stop":[...,...,...] actions
-          for a := 0 to high(s.fStop) do
-          try
-            DoOne(self, one, s, acDoStop, s.fStop[a]);
-          except
-            on E: Exception do
-            begin
-              // any exception should continue the stopping
-              one.Log(sllWarning, 'StopServices: DoStop(%,%) failed as %',
-                [s.Name, s.fStop[a], E.ClassType], self);
-              FormatString(' raised %: %', [E.ClassType, E.Message], errmsg);
-            end;
-          end;
-        s.SetState(ssStopped, 'Shutdown%', [errmsg]);
-      end;
+        s.DoStop(one);
     end;
   // finalize state files
   ComputeServicesHtmlFile;
@@ -1754,7 +1825,7 @@ begin
   // previous command is watched in its monitoring thread, not here
   one := nil;
   tix := GetTickCount64;
-  for i := 0 to high(fService) do
+  for i := 0 to high(fService) do // ordered by s.Level
   begin
     s := fService[i];
     if (s.fNextWatch = 0) or
