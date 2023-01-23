@@ -440,8 +440,8 @@ type
     // or %agl.logpath% for the/log sub-folder
     // - %propname% is the "propname": property value in the .service settings,
     // e.g. %run% is the main executable or service name as defined in "Run": "...."
-    function Expand(aService: TSynAngelizeService;
-      const aAction: TSynAngelizeAction): TSynAngelizeAction;
+    function Expand(aService: TSynAngelizeService; const aAction: TSynAngelizeAction;
+      aUnQuote: boolean): TSynAngelizeAction;
     /// overriden for proper sub-process starting
     procedure Start; override;
     /// overriden for proper sub-process stoping
@@ -819,7 +819,7 @@ begin
     n := StringReplaceAll(n, '%what%', w);
     if ishttp then
       n := StringReplaceAll(n, '%urimsg%', UrlEncode(msg));
-    n := fOwner.Expand(self, StringReplaceAll(n, '%msg%', msg));
+    n := fOwner.Expand(self, StringReplaceAll(n, '%msg%', msg), false);
     if ishttp then
       res := fOwner.DoHttpGet(n)
     else if PosExChar('@', n) <> 0 then
@@ -1082,10 +1082,16 @@ begin
 end;
 
 function TSynAngelize.Expand(aService: TSynAngelizeService;
-  const aAction: TSynAngelizeAction): TSynAngelizeAction;
+  const aAction: TSynAngelizeAction; aUnQuote: boolean): TSynAngelizeAction;
 begin
   fExpandLevel := 0;
-  result := DoExpand(aService, aAction); // internal recursive method
+  if aUnquote and
+     (length(aAction) > 1) and
+     (aAction[1] = '"') and
+     (aAction[length(aAction)] = '"') then
+     result := DoExpand(aService, copy(aAction, 2, length(aAction) - 2))
+  else
+    result := DoExpand(aService, aAction); // internal recursive method
 end;
 
 function TSynAngelize.DoExpand(aService: TSynAngelizeService;
@@ -1299,7 +1305,7 @@ begin
         begin
           // create log file before thread start to track file access issue
           lf := NormalizeFileName(Utf8ToString(
-            Sender.Expand(Service, Service.RedirectLogFile)));
+            Sender.Expand(Service, Service.RedirectLogFile, true)));
           try
             if not FileExists(lf) then
               TFileStreamEx.Create(lf, fmCreate).Free; // a new void file
@@ -1319,9 +1325,9 @@ begin
           ls := nil;
         if Service.StartEnv <> nil then
           env := Utf8ToString(Sender.Expand(Service,
-            RawUtf8ArrayToCsv(Service.StartEnv, #0) + #0#0));
+            RawUtf8ArrayToCsv(Service.StartEnv, #0) + #0#0, false));
         if Service.StartWorkDir <> '' then
-          wd := Utf8ToString(Sender.Expand(Service, Service.StartWorkDir));
+          wd := Utf8ToString(Sender.Expand(Service, Service.StartWorkDir, true));
         TSynAngelizeRunner.Create(Sender, Log, Service, fn, env, wd, ls);
         ObjArrayAdd(Sender.fStarted, Service); // for caller to wait for this level
         Service.fStarted := p;        
@@ -1411,7 +1417,7 @@ var
   param, text: RawUtf8;
 begin
   aa := Parse(Action, Ctxt, param, text);
-  param := Sender.Expand(Service, param);
+  param := Expand(Service, param, false);
   Log.Log(sllDebug, '% %: % as [%] %',
     [ToText(Ctxt), Service.Name, Action, text, param], Sender);
   for a := 0 to high(aa) do
