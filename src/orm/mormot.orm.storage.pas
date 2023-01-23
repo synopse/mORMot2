@@ -3765,7 +3765,7 @@ begin
     if i < 0 then
       result := ''
     else
-      GetJsonValue(fValue[i], {withID=}true, [], result);
+      GetJsonValue(fValue[i], {withID=}false, [], result);
   finally
     StorageUnLock;
   end;

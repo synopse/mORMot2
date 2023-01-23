@@ -1359,6 +1359,7 @@ end;
 function TRestOrm.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
 var
   t: integer; // used by EngineRetrieve() for SQL statement caching
+  ocr: TOrmCacheRetrieve;
   resp: RawUtf8;
 begin
   // check parameters
@@ -1369,15 +1370,20 @@ begin
   if (self = nil) or
      (aID = 0) then
     exit;
-  t := fModel.GetTableIndexExisting(POrmClass(Value)^);
+  t := fModel.GetTableIndex(POrmClass(Value)^);
+  if t < 0 then
+    exit;
   // try to lock before retrieval (if ForUpdate)
   if ForUpdate and
      not fModel.Lock(t, aID) then
     exit;
   // try to retrieve existing record from internal cache
-  result := fCache.Retrieve(aID, Value, t);
-  if result then
+  ocr := fCache.Retrieve(aID, Value, t);
+  if ocr = ocrRetrievedFromCache then
+  begin
+    result := true;
     exit;
+  end;
   // get JSON object '{...}' in resp from corresponding EngineRetrieve() method
   resp := EngineRetrieve(t, aID);
   if resp = '' then
@@ -1388,7 +1394,8 @@ begin
   // fill Value from JSON if was correctly retrieved
   Value.FillFrom(resp);
   Value.IDValue := aID; // resp may not contain the "RowID": field
-  if not ForUpdate then
+  if (ocr <> ocrCacheDisabled) and
+     not ForUpdate then
     fCache.NotifyAllFields(t, Value);
   result := true;
 end;

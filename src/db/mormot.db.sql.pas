@@ -2949,6 +2949,8 @@ type
     /// create a statement instance
     // - this overridden version will initialize the internal fColumn* fields
     constructor Create(aConnection: TSqlDBConnection); override;
+    /// retrieve one row of the resultset as a JSON object into a TResultsWriter
+    function StepToJson(W: TJsonWriter; SeekFirst: boolean = false): boolean; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
@@ -8174,6 +8176,25 @@ begin
   else
     PDynArray(@fColumn)^.Init(TypeInfo(TSqlDBColumnPropertyDynArray),
       fColumns, @fColumnCount); // no hash index created nor unicity check
+end;
+
+function TSqlDBStatementWithParamsAndColumns.StepToJson(W: TJsonWriter;
+  SeekFirst: boolean): boolean;
+var
+  col: integer;
+begin
+  result := Step(SeekFirst);
+  if not result then
+    exit;
+  W.Add('{');
+  for col := 0 to fColumnCount - 1 do
+  begin
+    W.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
+    ColumnToJson(col, W);
+    W.AddComma;
+  end;
+  W.CancelLastComma; // cancel last ','
+  W.Add('}');
 end;
 
 procedure TSqlDBStatementWithParamsAndColumns.ClearColumns;

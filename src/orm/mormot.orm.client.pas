@@ -531,7 +531,7 @@ begin
     if not fModel.Lock(tableindex, aID) then
       exit; // error marking as locked by the client
   end
-  else if fCache.Retrieve(aID, Value, tableindex) then
+  else if fCache.Retrieve(aID, Value, tableindex) = ocrRetrievedFromCache then
   begin
     result := true;
     exit; // fast retrieved from internal Client cache (BLOBs ignored)

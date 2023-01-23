@@ -1672,6 +1672,9 @@ type
     function GetFillCurrentRow: integer;
     function GetFillReachedEnd: boolean;
     function GetTable: TOrmTable;
+    procedure ManyFieldsCreate(many: POrmPropInfoRttiMany);
+    procedure InternalCreate;
+      {$ifdef HASINLINE}inline;{$endif}
     /// register RttiJsonRead/RttiJsonWrite callbacks for custom serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// 'fake' nested TOrm properties would be serialized as integer
@@ -4249,6 +4252,12 @@ type
 
   { -------------------- TOrmCache Definition }
 
+  /// the state result of TOrmCache.Retrieve method
+  TOrmCacheRetrieve = (
+    ocrCacheDisabled,
+    ocrRetrievedFromCache,
+    ocrNotInCache);
+
   /// implement a fast TOrm cache, per ID, at the TRest level
   // - purpose of this caching mechanism is to speed up retrieval of some common
   // values at either Client or Server level (like configuration settings)
@@ -4266,6 +4275,7 @@ type
     fModel: TOrmModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TOrm
     fCache: TOrmCacheEntryDynArray;
+    function RetrieveFromCache(aCache: POrmCacheEntry; aID: TID; aValue: TOrm): boolean;
   public
     /// create a cache instance
     // - the associated TOrmModel will be used internally
@@ -4349,7 +4359,8 @@ type
     function Exists(aTableIndex: integer; aID: TID): boolean;
     /// fill a record specified by its ID from cache into a new TOrm instance
     // - return false if the item is not in cache
-    function Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): boolean;
+    function Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): TOrmCacheRetrieve;
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the JSON corresponding to the TOrm instance from cache
     function RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
     /// TRest instance shall call this method when a record is added or read
@@ -6338,7 +6349,7 @@ begin
     result := POrmClass(self)^;
 end;
 
-procedure ManyFieldsCreate(self: TOrm; many: POrmPropInfoRttiMany);
+procedure TOrm.ManyFieldsCreate(many: POrmPropInfoRttiMany);
 var
   n: TDALen;
 begin
@@ -6350,14 +6361,19 @@ begin
   until n = 0;
 end;
 
-constructor TOrm.Create;
+procedure TOrm.InternalCreate;
 var
   props: TOrmProperties;
 begin // don't call inherited Create but make TOrmProperties custom setup
   props := OrmProps;
   if props.ManyFields <> nil then
     // auto-instanciate any TOrmMany instance
-    ManyFieldsCreate(self, pointer(props.ManyFields));
+    ManyFieldsCreate(pointer(props.ManyFields));
+end;
+
+constructor TOrm.Create;
+begin
+  InternalCreate;
 end;
 
 destructor TOrm.Destroy;
@@ -6389,7 +6405,7 @@ end;
 
 constructor TOrm.Create(const aSimpleFields: array of const; aID: TID);
 begin
-  Create;
+  InternalCreate;
   fID := aID;
   if not SimplePropertiesFill(aSimpleFields) then
     raise EOrmException.CreateUtf8('Incorrect %.Create(aSimpleFields) call', [self]);
@@ -6436,7 +6452,7 @@ end;
 
 constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
 begin
-  Create;
+  InternalCreate;
   if aClient <> nil then
     aClient.Retrieve(aID, self, ForUpdate);
 end;
@@ -6444,14 +6460,14 @@ end;
 constructor TOrm.Create(const aClient: IRestOrm;
   aPublishedRecord: TOrm; ForUpdate: boolean);
 begin
-  Create;
+  InternalCreate;
   if aClient <> nil then
     aClient.Retrieve(aPublishedRecord.ID, self, ForUpdate);
 end;
 
 constructor TOrm.Create(const aClient: IRestOrm; const aSqlWhere: RawUtf8);
 begin
-  Create;
+  InternalCreate;
   if aClient <> nil then
     aClient.Retrieve(aSqlWhere, self);
 end;
@@ -6459,7 +6475,7 @@ end;
 constructor TOrm.Create(const aClient: IRestOrm;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const);
 begin
-  Create;
+  InternalCreate;
   if aClient <> nil then
     aClient.Retrieve(FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere), self);
 end;
@@ -6467,26 +6483,26 @@ end;
 constructor TOrm.Create(const aClient: IRestOrm;
   const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const);
 begin
-  Create;
+  InternalCreate;
   if aClient <> nil then
     aClient.Retrieve(FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere), self);
 end;
 
 constructor TOrm.CreateFrom(const JsonRecord: RawUtf8);
 begin
-  Create;
+  InternalCreate;
   FillFrom(JsonRecord);
 end;
 
 constructor TOrm.CreateFrom(P: PUtf8Char);
 begin
-  Create;
+  InternalCreate;
   FillFrom(P);
 end;
 
 constructor TOrm.CreateFrom(const aDocVariant: variant);
 begin
-  Create;
+  InternalCreate;
   FillFrom(aDocVariant);
 end;
 
@@ -7523,7 +7539,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   aTable: TOrmTable;
 begin
-  Create;
+  InternalCreate;
   aTable := aClient.MultiFieldValues(RecordClass, aCustomFieldsCsv, aSqlWhere);
   if aTable = nil then
     exit;
@@ -7554,7 +7570,7 @@ end;
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
   const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8);
 begin
-  Create;
+  InternalCreate;
   FillPrepare(aClient, aIDs, aCustomFieldsCsv);
 end;
 
@@ -7562,7 +7578,7 @@ constructor TOrm.CreateAndFillPrepare(const aJson: RawUtf8);
 var
   aTable: TOrmTable;
 begin
-  Create;
+  InternalCreate;
   aTable := TOrmTableJson.CreateFromTables([RecordClass], '', aJson);
   aTable.OwnerMustFree := true;
   FillPrepare(aTable);
@@ -7572,7 +7588,7 @@ constructor TOrm.CreateAndFillPrepare(aJson: PUtf8Char; aJsonLen: integer);
 var
   aTable: TOrmTable;
 begin
-  Create;
+  InternalCreate;
   aTable := TOrmTableJson.CreateFromTables([RecordClass], '', aJson, aJsonLen);
   aTable.OwnerMustFree := true;
   FillPrepare(aTable);
@@ -7588,7 +7604,7 @@ var
   instance: TOrm;
   SQL: RawUtf8;
 begin
-  Create;
+  InternalCreate;
   props := aClient.Model.Props[POrmClass(self)^];
   if props.props.JoinedFields = nil then
     raise EModelException.CreateUtf8('No nested TOrm to JOIN in %', [self]);
@@ -7626,7 +7642,7 @@ end;
 constructor TOrm.CreateAndFillPrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 begin
-  Create;
+  InternalCreate;
   if Length(Orm.ManyFields) = 0 then
     raise EModelException.CreateUtf8(
       '%.CreateAndFillPrepareMany() with no many-to-many fields', [self]);
@@ -8566,7 +8582,7 @@ end;
 
 constructor TOrmMany.Create;
 begin
-  inherited Create;
+  InternalCreate;
   with Orm do
     if (fRecordManySourceProp <> nil) and
        (fRecordManyDestProp <> nil) then
@@ -10847,7 +10863,14 @@ begin
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries(aIDs);
 end;
 
+procedure SaveToCache(aCache: POrmCacheEntry; aRecord: TOrm);
+begin
+  aCache^.SetBinary(aRecord.fID, aRecord.GetBinary({withid=}false, {simple=}true));
+end;
+
 procedure TOrmCache.NotifyAllFields(aTableIndex: integer; aRecord: TOrm);
+var
+  c: POrmCacheEntry;
 begin
   if (self = nil) or
      (aRecord = nil) or
@@ -10856,9 +10879,11 @@ begin
   if aTableIndex < 0 then
     aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
   if cardinal(aTableIndex) < cardinal(Length(fCache)) then
-    with fCache[aTableIndex] do
-      if CacheEnable then
-        SetBinary(aRecord.fID, aRecord.GetBinary({withid=}false, {simple=}true));
+  begin
+    c := @fCache[aTableIndex];
+    if c^.CacheEnable then
+      SaveToCache(c, aRecord);
+  end;
 end;
 
 procedure TOrmCache.NotifyUpdate(aTableIndex: integer; aRecord: TOrm;
@@ -10951,28 +10976,42 @@ begin
             fCache[aTableIndex].Exists(aID);
 end;
 
-function TOrmCache.Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): boolean;
+function TOrmCache.RetrieveFromCache(aCache: POrmCacheEntry; aID: TID; aValue: TOrm): boolean;
 var
   bin: RawByteString;
 begin
-  result := false;
+  if aCache^.RetrieveBinary(aID, bin) then
+  begin
+   aValue.SetBinary(bin, {withid=}false, {simple=}true);
+   aValue.fID := aID; // override RowID field
+   result := true;
+  end
+  else
+    result := false;
+end;
+
+function TOrmCache.Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): TOrmCacheRetrieve;
+var
+  c: POrmCacheEntry;
+begin
+  result := ocrCacheDisabled;
   if (self <> nil) and
      (aValue <> nil) and
      (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
-    with fCache[aTableIndex] do
-      if CacheEnable and
-         RetrieveBinary(aID, bin) then
-      begin
-        aValue.SetBinary(bin, {withid=}false, {simple=}true);
-        aValue.fID := aID; // override RowID field
-        result := true;
-      end;
+  begin
+    c := @fCache[aTableIndex];
+    if c^.CacheEnable then
+      if RetrieveFromCache(c, aID, aValue) then
+        result := ocrRetrievedFromCache
+      else
+        result := ocrNotInCache;
+  end;
 end;
 
 function TOrmCache.RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
 var
-  orm: TOrm;
+  orm: TOrm; // we use a temporary TOrm instance for the serialization itself
 begin
   result := '';
   if (self = nil) or
@@ -10983,7 +11022,7 @@ begin
     exit;
   orm := aTable.Create;
   try
-    if Retrieve(aID, orm, aTableIndex) then
+    if Retrieve(aID, orm, aTableIndex) = ocrRetrievedFromCache then
       result := orm.GetJsonValues({expand=}true, {withid=}false,
         orm.Orm.SimpleFieldsBits[ooSelect]);
   finally

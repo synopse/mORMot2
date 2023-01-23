@@ -231,6 +231,8 @@ type
     // otherwise, it will fetch one row of data, to be called within a loop
     // - raise an ESqlite3Exception exception on any error
     function Step(SeekFirst: boolean = false): boolean; override;
+    /// retrieve one row of the resultset as a JSON object into a TResultsWriter
+    function StepToJson(W: TJsonWriter; SeekFirst: boolean = false): boolean; override;
     /// finalize the cursor
     procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
@@ -777,6 +779,25 @@ begin
   end
   else
     fCurrentRow := 0;
+end;
+
+function TSqlDBSQLite3Statement.StepToJson(W: TJsonWriter; SeekFirst: boolean): boolean;
+var
+  col: integer;
+begin
+  result := Step(SeekFirst);
+  if not result then
+    exit;
+  W.Add('{');
+  for col := 0 to fColumnCount - 1 do
+  begin
+    W.AddProp(sqlite3.column_name(fStatement.Request, col)); // '"ColumnName":'
+    fStatement.FieldToJson(W,
+      sqlite3.column_value(fStatement.Request, col), fForceBlobAsNull);
+    W.AddComma;
+  end;
+  W.CancelLastComma; // cancel last ','
+  W.Add('}');
 end;
 
 
