@@ -1938,6 +1938,7 @@ function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   WR: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
   // faster direct access with no ID inlining
   result := '';
@@ -1953,7 +1954,7 @@ begin
       Model.TableProps[TableModelIndex].Sql.SelectOneWithID, 1);
     fStatement^.Bind(1, ID);
     // faster than fStatement^.ExecuteJson()
-    WR := AcquireJsonWriter;
+    WR := AcquireJsonWriter(tmp);
     if fStatement^.ExecuteStepJson(DB.DB, WR) then
       WR.SetText(result);
   finally

@@ -1392,6 +1392,7 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
 var
   stmt: ISqlDBStatement;
   w: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
   // TableModelIndex is not useful here
   result := '';
@@ -1405,7 +1406,7 @@ begin
       exit;
     stmt.Bind(1, ID);
     stmt.ExecutePrepared;
-    w := AcquireJsonWriter;
+    w := AcquireJsonWriter(tmp);
     try
       stmt.StepToJson(w);
       w.SetText(result);

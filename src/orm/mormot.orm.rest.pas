@@ -247,7 +247,7 @@ type
       var Json: RawUtf8; LowerCaseID: boolean = false); overload;
       {$ifdef FPC} inline; {$endif} // avoid URW1111 on Delphi 2010
     /// access to a thread-safe internal cached TJsonWriter instance
-    function AcquireJsonWriter: TJsonWriter;
+    function AcquireJsonWriter(var tmp: TTextWriterStackBuffer): TJsonWriter;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the thread-safe cached TJsonWriter returned by AcquireJsonWriter
     procedure ReleaseJsonWriter(WR: TJsonWriter);
@@ -617,12 +617,12 @@ begin
         result := SqlFromSelect(SqlTableName, FieldNames, WhereClause, '');
 end;
 
-function TRestOrm.AcquireJsonWriter: TJsonWriter;
+function TRestOrm.AcquireJsonWriter(var tmp: TTextWriterStackBuffer): TJsonWriter;
 begin
   if fTempJsonWriterLock.TryLock then
     result := fTempJsonWriter
   else
-    result := TJsonWriter.CreateOwnedStream(8100);
+    result := TJsonWriter.CreateOwnedStream(tmp);
 end;
 
 procedure TRestOrm.ReleaseJsonWriter(WR: TJsonWriter);
@@ -647,9 +647,10 @@ procedure TRestOrm.GetJsonValue(Value: TOrm; withID: boolean;
   const Fields: TFieldBits; out Json: RawUtf8; LowerCaseID: boolean);
 var
   WR: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
 begin
   // faster than Json := Value.GetJsonValues(true, withID, Fields);
-  WR := AcquireJsonWriter;
+  WR := AcquireJsonWriter(tmp);
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
