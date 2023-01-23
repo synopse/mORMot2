@@ -1893,7 +1893,7 @@ begin
   fLock.Enter;
   try
     fValue.RetrieveValueOrRaiseException(pointer(Name), length(Name),
-      fValue.IsCaseSensitive, result, false);
+      fValue.IsCaseSensitive, result{%H-}, false);
   finally
     fLock.Leave;
   end;
@@ -1922,7 +1922,7 @@ end;
 
 function TLockedDocVariant.Copy: variant;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   fLock.Enter;
   try
     TDocVariantData(result).InitCopy(variant(fValue), JSON_FAST);

@@ -1435,7 +1435,7 @@ end;
 
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
 begin
-  FindNameValue(Headers, pointer(aUpperName), result, false, ':');
+  FindNameValue(Headers, pointer(aUpperName), result{%H-}, false, ':');
 end;
 
 procedure THttpRequestContext.ParseHeaderFinalize;

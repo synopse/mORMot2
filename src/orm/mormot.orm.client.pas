@@ -508,9 +508,9 @@ end;
 
 function TRestOrmClient.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8;
 var
-  dummy: cardinal;
+  state: cardinal;
 begin
-  if not ClientRetrieve(TableModelIndex, ID, false, dummy, result) then
+  if not ClientRetrieve(TableModelIndex, ID, false, state, result) then
     result := '';
 end;
 

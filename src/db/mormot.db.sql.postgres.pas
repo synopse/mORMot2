@@ -447,9 +447,6 @@ begin
 end;
 
 procedure TSqlDBPostgresConnection.ExitPipelineMode;
-var
-  res: pointer;
-  err: integer;
 begin
   if PQ.exitPipelineMode(fPGConn) <> 1 then
     raise ESqlDBPostgres.CreateUtf8(
