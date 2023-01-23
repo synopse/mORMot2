@@ -121,7 +121,7 @@ const
   HELLO_WORLD: RawUtf8 = 'Hello, World!';
   WORLD_COUNT = 10000;
 
-  WORLD_READ_SQL = 'select randomNumber from World where id=?';
+  WORLD_READ_SQL = 'select id,randomNumber from World where id=?';
   WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
@@ -289,17 +289,16 @@ function TRawAsyncServer.rawdb(ctxt: THttpServerRequestAbstract): cardinal;
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
-  id: integer;
 begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  id := RandomWorld;
-  stmt.Bind(1, id);
+  stmt.Bind(1, RandomWorld);
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
-    ctxt.SetOutJson('{"id":%,"randomNumber":%}', [id, stmt.ColumnInt(0)]);
+    ctxt.SetOutJson(
+      '{"id":%,"randomNumber":%}', [stmt.ColumnInt(0), stmt.ColumnInt(1)]);
     result := HTTP_SUCCESS;
     stmt.ReleaseRows;
   end;
@@ -346,12 +345,12 @@ begin
   for i := 0 to cnt - 1 do
   begin
     stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-    res[i].id := RandomWorld;
-    stmt.Bind(1, res[i].id);
+    stmt.Bind(1, RandomWorld);
     stmt.ExecutePrepared;
     if not stmt.Step then
       exit;
-    res[i].randomNumber := stmt.ColumnInt(0);
+    res[i].id := stmt.ColumnInt(0);
+    res[i].randomNumber := stmt.ColumnInt(1);
   end;
   {$else}
   // specific code to use PostgresSQL pipelining mode
@@ -361,8 +360,7 @@ begin
   pConn.EnterPipelineMode;
   for i := 0 to cnt - 1 do
   begin
-    res[i].id := RandomWorld;
-    pStmt.Bind(1, res[i].id);
+    pStmt.Bind(1, RandomWorld);
     pStmt.SendPipelinePrepared;
     pConn.Flush;
   end;
@@ -373,7 +371,8 @@ begin
     pStmt.GetPipelineResult;
     if not stmt.Step then
       exit;
-    res[i].randomNumber := pStmt.ColumnInt(0);
+    res[i].id := pStmt.ColumnInt(0);
+    res[i].randomNumber := pStmt.ColumnInt(1);
     pStmt.ReleaseRows;
   end;
   pConn.ExitPipelineMode;
