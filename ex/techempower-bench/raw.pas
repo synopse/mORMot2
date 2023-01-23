@@ -121,7 +121,7 @@ const
   HELLO_WORLD: RawUtf8 = 'Hello, World!';
   WORLD_COUNT = 10000;
 
-  WORLD_READ_SQL = 'select id, randomNumber from World where id=?';
+  WORLD_READ_SQL = 'select randomNumber from World where id=?';
   WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
@@ -289,16 +289,17 @@ function TRawAsyncServer.rawdb(ctxt: THttpServerRequestAbstract): cardinal;
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
+  id: integer;
 begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  stmt.Bind(1, RandomWorld);
+  id := RandomWorld;
+  stmt.Bind(1, id);
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
-    ctxt.SetOutJson('{"id":%,"randomNumber":%}',
-      [stmt.ColumnInt(0), stmt.ColumnInt(1)]);
+    ctxt.SetOutJson('{"id":%,"randomNumber":%}', [id, stmt.ColumnInt(0)]);
     result := HTTP_SUCCESS;
     stmt.ReleaseRows;
   end;
@@ -333,47 +334,49 @@ var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
   {$ifndef USE_SQLITE3}
-  pStmt: TSqlDBPostgresStatement;
+  pConn: TSqlDBPostgresConnection absolute conn;
+  pStmt: TSqlDBPostgresStatement absolute stmt;
   {$endif USE_SQLITE3}
   i: PtrInt;
 begin
   result := false;
   SetLength(res{%H-}, cnt);
   conn := fDbPool.ThreadSafeConnection;
-  stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
   {$ifdef USE_SQLITE3}
   for i := 0 to cnt - 1 do
   begin
-    stmt.Bind(1, RandomWorld);
+    stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
+    res[i].id := RandomWorld;
+    stmt.Bind(1, res[i].id);
     stmt.ExecutePrepared;
     if not stmt.Step then
       exit;
-    res[i].id := stmt.ColumnInt(0);
-    res[i].randomNumber := stmt.ColumnInt(1);
+    res[i].randomNumber := stmt.ColumnInt(0);
   end;
   {$else}
   // specific code to use PostgresSQL pipelining mode
-  // see test_nosync in https://github.com/postgres/postgres/blob/master/src/test/modules/libpq_pipeline/libpq_pipeline.c
-  TSqlDBPostgresConnection(conn).EnterPipelineMode;
-  pStmt := (stmt as TSqlDBPostgresStatement);
+  // see test_nosync in
+  // https://github.com/postgres/postgres/blob/master/src/test/modules/libpq_pipeline/libpq_pipeline.c
+  stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
+  pConn.EnterPipelineMode;
   for i := 0 to cnt - 1 do
   begin
-    stmt.Bind(1, RandomWorld);
+    res[i].id := RandomWorld;
+    pStmt.Bind(1, res[i].id);
     pStmt.SendPipelinePrepared;
-    TSqlDBPostgresConnection(conn).Flush;
+    pConn.Flush;
   end;
-  TSqlDBPostgresConnection(conn).SendFlushRequest;
-  TSqlDBPostgresConnection(conn).Flush;
+  pConn.SendFlushRequest;
+  pConn.Flush;
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
     if not stmt.Step then
       exit;
-    res[i].id := stmt.ColumnInt(0);
-    res[i].randomNumber := stmt.ColumnInt(1);
+    res[i].randomNumber := pStmt.ColumnInt(0);
     pStmt.ReleaseRows;
   end;
-  TSqlDBPostgresConnection(conn).ExitPipelineMode;
+  pConn.ExitPipelineMode;
   {$endif USE_SQLITE3}
   result := true;
 end;
