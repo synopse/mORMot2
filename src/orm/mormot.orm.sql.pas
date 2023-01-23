@@ -735,10 +735,9 @@ begin
   // compute the sql statements used internally for external DB requests
   with fStoredClassMapping^ do
   begin
-    s := SQL.TableSimpleFields[{withid=}false, {withtablename=}false];
-    if s <> '' then // compute if not only blob
-      FormatUtf8('select % from % where %=?', [s, fTableName, RowIDFieldName],
-        fSelectOneDirectSQL); // don't return ID field
+    FormatUtf8('select % from % where %=?',
+      [SQL.TableSimpleFields[{withid=}true, {withtablename=}false],
+       fTableName, RowIDFieldName], fSelectOneDirectSQL); // return ID field
     FormatUtf8('select %,% from %', [sql.InsertSet, RowIDFieldName, fTableName],
       fSelectAllDirectSQL);
     fRetrieveBlobFieldsSQL := InternalCsvToExternalCsv(
@@ -1398,10 +1397,8 @@ var
 begin
   // TableModelIndex is not useful here
   result := '';
-  if (self = nil) or
-     (ID <= 0) then
-    exit;
-  if fSelectOneDirectSQL <> '' then // has some simple fields to retrieve
+  if (self <> nil) and
+     (ID > 0) then
     try
       stmt := fProperties.NewThreadSafeStatementPrepared(
         fSelectOneDirectSQL, {results=}true, {except=}true);
@@ -1413,16 +1410,16 @@ begin
       try
         stmt.StepToJson(w, {seekfirst=}false);
         w.SetText(result);
-        // we don't return "ID": because caller will set it
+        // we do return "ID": even if caller will set it anyway, to follow TFB
+        // rules, and no performance change has been seen with an external DB
+        // https://synopse.info/forum/viewtopic.php?pid=38880#p38880
       finally
         ReleaseJsonWriter(w);
       end;
     except
       stmt := nil;
       HandleClearPoolOnConnectionIssue;
-    end
-  else if MemberExists(fStoredClass, ID) then
-    FormatUtf8('{"ID":%}', [ID], result); // only blob: returns something
+    end;
 end;
 
 function TRestStorageExternal.EngineExecute(const aSql: RawUtf8): boolean;
