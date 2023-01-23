@@ -1584,6 +1584,10 @@ begin
             (GotoNextNotSpace(P)^ = #0);
 end;
 
+var
+  AppendToTextFileSafe: TOSLightLock; // to make AppendToTextFile() thread-safe
+  AppendToTextFileSafeSet: boolean;
+
 function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
 var
@@ -1598,42 +1602,55 @@ begin
   if (aFileName = '') or
      (aLine = '') then
     exit;
-  f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
-  if not ValidHandle(f) then
+  if not AppendToTextFileSafeSet then
   begin
-    f := FileCreate(aFileName);
-    if not ValidHandle(f) then
-      exit; // you may not have write access to this folder
+    GlobalLock;
+    if not AppendToTextFileSafeSet then
+      AppendToTextFileSafe.Init;
+    AppendToTextFileSafeSet := true;
+    GlobalUnLock;
   end;
-  // append to end of file
-  size := FileSeek64(f, 0, soFromEnd);
-  if (aMaxSize > 0) and
-     (size > aMaxSize) then
-  begin
-    // rotate log file if too big
-    FileClose(f);
-    old := aFileName + '.bak'; // '.log.bak'
-    DeleteFile(old); // rotate once
-    RenameFile(aFileName, old);
-    f := FileCreate(aFileName);
-    if not ValidHandle(f) then
-      exit;
-    FileClose(f);
+  AppendToTextFileSafe.Lock;
+  try
     f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
     if not ValidHandle(f) then
-      exit;
+    begin
+      f := FileCreate(aFileName);
+      if not ValidHandle(f) then
+        exit; // you may not have write access to this folder
+    end;
+    // append to end of file
+    size := FileSeek64(f, 0, soFromEnd);
+    if (aMaxSize > 0) and
+       (size > aMaxSize) then
+    begin
+      // rotate log file if too big
+      FileClose(f);
+      old := aFileName + '.bak'; // '.log.bak'
+      DeleteFile(old); // rotate once
+      RenameFile(aFileName, old);
+      f := FileCreate(aFileName);
+      if not ValidHandle(f) then
+        exit;
+      FileClose(f);
+      f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
+      if not ValidHandle(f) then
+        exit;
+    end;
+    PWord(@buf)^ := 13 + 10 shl 8; // first go to next line
+    now.FromNow(not aUtcTimeStamp);
+    DateToIso8601PChar(@buf[3], true, now.Year, now.Month, now.Day);
+    TimeToIso8601PChar(@buf[13], true, now.Hour, now.Minute, now.Second, 0, ' ');
+    buf[22] := ' ';
+    for i := 1 to length(aLine) do
+      if aLine[i] < ' ' then
+        aLine[i] := ' '; // avoid line feed in text log file
+    result := (FileWrite(f, buf, SizeOf(buf)) = SizeOf(buf)) and
+              (FileWrite(f, pointer(aLine)^, length(aLine)) = length(aLine));
+    FileClose(f);
+  finally
+    AppendToTextFileSafe.UnLock;
   end;
-  PWord(@buf)^ := 13 + 10 shl 8; // first go to next line
-  now.FromNow(not aUtcTimeStamp);
-  DateToIso8601PChar(@buf[3], true, now.Year, now.Month, now.Day);
-  TimeToIso8601PChar(@buf[13], true, now.Hour, now.Minute, now.Second, 0, ' ');
-  buf[22] := ' ';
-  for i := 1 to length(aLine) do
-    if aLine[i] < ' ' then
-      aLine[i] := ' '; // avoid line feed in text log file
-  result := (FileWrite(f, buf, SizeOf(buf)) = SizeOf(buf)) and
-            (FileWrite(f, pointer(aLine)^, length(aLine)) = length(aLine));
-  FileClose(f);
 end;
 
 var
@@ -3207,13 +3224,26 @@ begin
 end;
 
 
-
-initialization
+procedure InitializeUnit;
+begin
   // as expected by ParseMonth() to call FindShortStringListExact()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
   _Iso8601ToDateTime := Iso8601ToDateTime;
+end;
+
+procedure FinalizeUnit;
+begin
+  if AppendToTextFileSafeSet then
+    AppendToTextFileSafe.Done;
+end;
+
+initialization
+  InitializeUnit;
+
+finalization
+  FinalizeUnit;
 
 end.
 
