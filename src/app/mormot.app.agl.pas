@@ -116,7 +116,8 @@ type
     fState: TServiceState;
     fStartOptions: TStartOptions;
     fOS: TOperatingSystem;
-    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fRetryStableSec: integer;
+    fLevel, fStopRunAbortTimeoutSec, fWatchDelaySec, fWatchCountRestart: integer;
+    fRetryStableSec: integer;
     fRedirectLogFile: RawUtf8;
     fRedirectLogRotateFiles, fRedirectLogRotateBytes: integer;
     fStarted: RawUtf8;
@@ -277,12 +278,17 @@ type
     // you can keep the default void "Watch":[] entry, with "Notify" if needed
     property Watch: TSynAngelizeActions
       read fWatch write fWatch;
-    /// how many seconds should we wait between each Watch method step
+    /// how many seconds should we wait between each "Watch" method step
     // - default is 60 seconds
     // - note that all "Watch" commands of all services are done in a single
     // thread, so a too small value here may have no practical impact
     property WatchDelaySec: integer
       read fWatchDelaySec write fWatchDelaySec;
+    /// after how many "Watch" failures should we try to restart the sub-process
+    // - restarting at the first failure may be too paranoid
+    // - default is 2, so it will restart after 2 minutes with WatchDelaySec=60
+    property WatchCountRestart: integer
+      read fWatchCountRestart write fWatchCountRestart;
     /// redirect "start:/path/to/executable" console output to a log file
     // - could include %abc% place holders, e.g. '%agl.base%' or %agl.now%
     // - a typical value is therefore "%agl.logpath%%name%-%agl.now%.log"
@@ -735,6 +741,7 @@ constructor TSynAngelizeService.Create;
 begin
   inherited Create;
   fWatchDelaySec := 60;
+  fWatchCountRestart := 2;
   fStopRunAbortTimeoutSec := 10;
   fRedirectLogRotateBytes := 100 shl 20; // 100MB
   fRetryStableSec := 60;
@@ -1747,7 +1754,7 @@ begin
     if (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
       continue;
-    if log = nil then
+    if {%H-}log = nil then
     begin
       log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
       if Assigned(log) then
