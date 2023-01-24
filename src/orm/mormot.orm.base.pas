@@ -2867,6 +2867,7 @@ type
       aTag: PCardinal = nil): boolean; overload;
     /// low-level retrieve of a cached TOrm entry
     // - returns nil if not found, ORMCACHE_DEPRECATED if deprecated
+    // - warning: should be called within proper Safe lock/unlock
     function RetrieveEntry(aID: TID): POrmCacheEntryValue;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
@@ -10607,6 +10608,8 @@ begin
       begin
         LockedFlushCacheEntry(i); // older than current threshold
         inc(result);
+        if CacheAll then
+          v := @Value[i]; // may have been reallocated/moved
       end;
     end;
   finally
