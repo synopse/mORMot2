@@ -99,12 +99,12 @@ Please submit pull requests for non-validated versions.
     - and [`mormot2ui.lpk`](packages/lazarus/mormot2ui.lpk) if needed.
   - On Delphi: 
     - Create a new environment variable `mormot2` with full path to your *mORMot 2* `src` sub-folder (*Tools - Options - IDE - Environment Variables*), e.g. `c:\github\mORMot2\src` or `d:\mormot2\src` depending on step 1; 
-    - Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui;$(mormot2)\tools`
+    - Add the following string to your IDE library paths (for all target platforms, i.e. Win32 and Win64):   `$(mormot2);$(mormot2)\core;$(mormot2)\lib;$(mormot2)\crypt;$(mormot2)\net;$(mormot2)\db;$(mormot2)\rest;$(mormot2)\orm;$(mormot2)\soa;$(mormot2)\app;$(mormot2)\script;$(mormot2)\ui;$(mormot2)\tools;$(mormot2)\misc`
     - There is no IDE or UI package needed (yet).
 3. Discover and enjoy:
   - Open and compile [`test/mormot2tests.dpr`](test/mormot2tests.dpr) in the IDE, and run the regression tests on your machine.
   - Browse the [examples folder](/ex) (work in progress) - especially [Thomas Tutorials](https://github.com/synopse/mORMot2/tree/master/ex/ThirdPartyDemos/tbo) which are realistic and pedagogical.
-  - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html);
+  - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html).
   - Feel free to contribute by posting enhancements and patches to this quickly evolving project.
 
 ## Coming From Version 2
