@@ -2799,6 +2799,11 @@ type
   /// for TOrmCache, stores all tables values
   TOrmCacheEntryValueDynArray = array of TOrmCacheEntryValue;
 
+const
+  /// fake value returned by TOrmCacheEntry.RetrieveEntry()
+  ORMCACHE_DEPRECATED = POrmCacheEntryValue(1);
+
+type
   /// for TOrmCache, stores a table cache settings and ORM cached values
   // - use a TOrmCacheEntryValue array sorted by ID for O(log(n)) search
   {$ifdef USERECORDWITHMETHODS}
@@ -2833,6 +2838,7 @@ type
     procedure Clear;
     /// returns 0 if TimeOutMS is 0, or the deprecated Value[].Timestamp512
     function GetOutdatedTimestamp512: cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
     /// flush cache for a given Value[] index
     // - note: caller should have made Safe.WriteLock
     procedure LockedFlushCacheEntry(Index: integer);
@@ -2859,6 +2865,9 @@ type
     /// retrieve the cached TOrm binary of a given ID
     function RetrieveBinary(aID: TID; var aOrm: RawByteString;
       aTag: PCardinal = nil): boolean; overload;
+    /// low-level retrieve of a cached TOrm entry
+    // - returns nil if not found, ORMCACHE_DEPRECATED if deprecated
+    function RetrieveEntry(aID: TID): POrmCacheEntryValue;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
@@ -10523,13 +10532,37 @@ begin
       end;
 end;
 
+function SortFind(P: TOrmCacheEntryValueDynArray; V: TID; R: PtrInt): PtrInt;
+var
+  m, L: PtrInt;
+  res: integer;
+begin
+  // fast O(log(n)) binary search by first ID field = inlined TDynArray.Find()
+  dec(R);
+  L := 0;
+  repeat
+    result := (L + R) shr 1;
+    res := CompareInt64(P[result].ID, V);
+    if res = 0 then
+      exit;
+    m := result - 1;
+    inc(result);
+    if res > 0 then // compile as cmovnle/cmovle opcodes on FPC x86_64
+      R := m
+    else
+      L := result;
+  until L > R;
+  result := -1;
+end;
+
 procedure TOrmCacheEntry.FlushCacheEntry(aID: TID);
 begin
   if not CacheEnable then
     exit;
   Safe.WriteLock;
   try
-    LockedFlushCacheEntry(Values.Find(aID));
+    if Value <> nil then
+      LockedFlushCacheEntry(SortFind(pointer(Value), aID, Count));
   finally
     Safe.WriteUnLock;
   end;
@@ -10543,8 +10576,9 @@ begin
     exit;
   Safe.WriteLock;
   try
-    for i := 0 to high(aID) do
-      LockedFlushCacheEntry(Values.Find(aID[i]));
+    if Value <> nil then
+      for i := 0 to high(aID) do
+        LockedFlushCacheEntry(SortFind(pointer(Value), aID[i], Count));
   finally
     Safe.WriteUnLock;
   end;
@@ -10678,44 +10712,56 @@ begin
   end;
 end;
 
+function TOrmCacheEntry.RetrieveEntry(aID: TID): POrmCacheEntryValue;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if Value = nil then
+    exit;
+  i := SortFind(pointer(Value), aID, Count);
+  if i < 0 then
+    exit;
+  result := @Value[i];
+  if result^.Timestamp512 = 0 then
+    result := nil // 0 when there is no binary value cached
+  else if (TimeOutMS <> 0) and
+          (result^.Timestamp512 < GetOutdatedTimestamp512) then
+    result := ORMCACHE_DEPRECATED; // too old
+end;
+
 function TOrmCacheEntry.RetrieveBinary(aID: TID; var aOrm: RawByteString;
   aTag: PCardinal): boolean;
 var
-  i: PtrInt;
-  deprecated: boolean;
+  e: POrmCacheEntryValue;
 begin
   result := false;
   if (Count <= 0) or
      (aID <= 0) or
      not CacheEnable then
     exit;
-  deprecated := false;
   Safe.ReadLock;
   try
-    i := Values.Find(aID); // fast O(log(n)) binary search by first ID field
-    if i >= 0 then
-      with Value[i] do
-        if Timestamp512 <> 0 then // 0 when there is no binary value cached
-          if (TimeOutMS <> 0) and
-             (Timestamp512 < GetOutdatedTimestamp512) then
-            deprecated := true // too old
-          else
-          begin
-            if aTag <> nil then
-              aTag^ := Tag;
-            aOrm := Binary;
-            result := true; // found a non outdated serialized value in cache
-          end;
+    e := RetrieveEntry(aID);
+    if (e <> nil) and
+       (e <> ORMCACHE_DEPRECATED) then
+    begin
+      if aTag <> nil then
+        aTag^ := e^.Tag;
+      aOrm := e^.Binary;
+      result := true; // found a non outdated serialized value in cache
+      exit;
+    end;
   finally
     Safe.ReadUnLock;
   end;
-  if deprecated then // happens at most every 512 ms
+  if e = ORMCACHE_DEPRECATED then // happens at most every 512 ms
     FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
 end;
 
 function TOrmCacheEntry.Exists(aID: TID): boolean;
 var
-  i: PtrInt;
+  e: POrmCacheEntryValue;
 begin
   result := false;
   if (Count <= 0) or
@@ -10724,12 +10770,14 @@ begin
     exit;
   Safe.ReadLock;
   try
-    i := Values.Find(aID); // fast O(log(n)) binary search by first ID field
-    if i >= 0 then
-      result := (Value[i].Timestamp512 > GetOutdatedTimestamp512);
+    e := RetrieveEntry(aID);
+    result := (e <> nil) and
+              (e <> ORMCACHE_DEPRECATED);
   finally
     Safe.ReadUnLock;
   end;
+  if e = ORMCACHE_DEPRECATED then // happens at most every 512 ms
+    FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
 end;
 
 function TOrmCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;

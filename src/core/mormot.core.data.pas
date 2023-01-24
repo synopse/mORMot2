@@ -6759,7 +6759,7 @@ begin
      (Info^.Kind in Kinds) and
      (SourceMax <> nil) then
   begin
-    read.Init(Source, SourceMax - Source);
+    {%H-}read.Init(Source, SourceMax - Source);
     read.CustomVariants := TryCustomVariants;
     size := load(Data, read, Info);
     if Len <> nil then
@@ -7550,7 +7550,7 @@ begin
     // mORMot 1 unsafe backward compatible: assume fake 100MB Source input
     SourceMax := Source + 100 shl 20;
   {$endif PUREMORMOT2}
-  read.Init(Source, SourceMax - Source);
+  {%H-}read.Init(Source, SourceMax - Source);
   LoadFromReader(read);
   if read.P <> Source then
     result := read.P

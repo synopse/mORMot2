@@ -1668,10 +1668,15 @@ type
     fFill: TOrmFill;
     /// internal properties getters (using fProps data for speed)
     function GetHasBlob: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetSimpleFieldCount: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetFillCurrentRow: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetFillReachedEnd: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetTable: TOrmTable;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure ManyFieldsCreate(many: POrmPropInfoRttiMany);
     procedure InternalCreate;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2337,6 +2342,7 @@ type
     /// set the record fields from a binary buffer saved by GetBinary()
     procedure SetBinary(const binary: RawByteString; WithID: boolean = true;
       SimpleFields: boolean = false); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// set all field values from a supplied array of TSqlVar values
     // - Values[] array must match the OrmProps.Field[] order: will return
     // false if the Values[].VType does not match OrmProps.FieldType[]
@@ -6893,7 +6899,7 @@ var
   f: PtrInt;
 begin
   with Orm do
-    for f := 0 to SimpleFieldCount - 1 do
+    for f := 0 to length(SimpleFields) - 1 do
       SimpleFields[f].GetBinary(self, W);
 end;
 
@@ -6960,7 +6966,7 @@ var
   f: PtrInt;
 begin
   with Orm do
-    for f := 0 to SimpleFieldCount - 1 do
+    for f := 0 to length(SimpleFields) - 1 do
       SimpleFields[f].SetBinary(self, Read);
 end;
 
@@ -10978,16 +10984,27 @@ end;
 
 function TOrmCache.RetrieveFromCache(aCache: POrmCacheEntry; aID: TID; aValue: TOrm): boolean;
 var
-  bin: RawByteString;
+  e: POrmCacheEntryValue;
+  r: TFastReader;
 begin
-  if aCache^.RetrieveBinary(aID, bin) then
-  begin
-   aValue.SetBinary(bin, {withid=}false, {simple=}true);
-   aValue.fID := aID; // override RowID field
-   result := true;
-  end
-  else
-    result := false;
+  result := false;
+  aCache^.Safe.ReadLock;
+  try // inlined TOrmCacheEntry.RetrieveBinary to avoid temporary RawByteString
+    e := aCache^.RetrieveEntry(aID);
+    if (e <> nil) and
+       (e <> ORMCACHE_DEPRECATED) then
+    begin
+      r.Init(pointer(e^.Binary), length(e^.Binary));
+      aValue.SetBinaryValuesSimpleFields(r);
+      aValue.fID := aID; // override RowID field
+      result := true;
+      exit;
+    end;
+  finally
+    aCache^.Safe.ReadUnLock;
+  end;
+  if e = ORMCACHE_DEPRECATED then // happens at most every 512 ms
+    aCache^.FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
 end;
 
 function TOrmCache.Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): TOrmCacheRetrieve;

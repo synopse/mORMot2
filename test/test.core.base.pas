@@ -4358,7 +4358,7 @@ begin
     for n := 0 to 49 do
       PC := ToVarUInt32(juint + n, PC);
     check(PC <> nil);
-    st.Init(@varint, PAnsiChar(PC) - PAnsiChar(@varint));
+    {%H-}st.Init(@varint, PAnsiChar(PC) - PAnsiChar(@varint));
     check(not st.EOF);
     for n := 0 to 48 do
       check(st.VarUInt32 = cardinal(juint + n));

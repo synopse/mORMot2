@@ -604,7 +604,7 @@ begin
     raise EAsn.CreateUtf8('ToOID with len=% class=% kind=%',
       [Len, ToText(TagClass)^, ASN1_TAG[TagKind]]);
   SetLength(result, ASN1_MAX_OID_LEN);
-  r.Init(Data, Len);
+  {%H-}r.Init(Data, Len);
   v := r.VarUInt32;
   f := v div 40; // first 2 nodes are encoded in the first integer
   if f > 2 then
@@ -871,7 +871,7 @@ var
   n: PtrInt;
 begin
   result := nil;
-  reader.Init(buf, buflen);
+  {%H-}reader.Init(buf, buflen);
   SetLength(result, 16); // initial capacity should be enough in most cases
   n := 0;
   repeat

@@ -643,6 +643,7 @@ type
     Tag: PtrInt;
     /// initialize the reader from a memory block
     procedure Init(Buffer: pointer; Len: PtrInt); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// initialize the reader from a RawByteString content
     procedure Init(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
