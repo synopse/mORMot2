@@ -1286,10 +1286,8 @@ type
     aaStop,
     aaHttp,
     aaHttps,
-    aaSleep
-    {$ifdef OSWINDOWS} ,
+    aaSleep,
     aaService
-    {$endif OSWINDOWS}
   );
   TAglActions = set of TAglAction;
   TAglActionDynArray = array of TAglAction;
