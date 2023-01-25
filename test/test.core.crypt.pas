@@ -21,6 +21,7 @@ uses
   mormot.core.perf,
   mormot.core.test,
   mormot.core.variants,
+  mormot.lib.pkcs11,
   mormot.crypt.jwt,
   mormot.crypt.ecc;
 
@@ -69,6 +70,8 @@ type
     procedure _JWT;
     /// validate TBinaryCookieGenerator object
     procedure _TBinaryCookieGenerator;
+    /// mormot.lib.pkcs11 unit validation
+    procedure Pkcs11;
     /// Cryptography Catalog
     procedure Catalog;
     /// compute some performance numbers, mostly against regression
@@ -2787,6 +2790,24 @@ begin
   for i := 0 to high(cook) do
     CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
   NotifyTestSpeed('validate', length(cook), 0, @timer);
+end;
+
+procedure TTestCoreCrypto.Pkcs11;
+var
+  t: CK_MECHANISM_TYPE;
+  r: CK_RV;
+begin
+  Check(1 shl ord(CKF_ERROR_STATE) = $01000000);
+  Check(ord(CKK_SHA512_T_HMAC) = $00000045);
+  Check(cardinal(1 shl ord(CKF_EXTENSION)) = $80000000);
+  for t := low(t) to pred(high(t)) do
+    Check(ToULONG(succ(t)) > ToULONG(t));
+  for t := low(t) to high(t) do
+    Check(MECHANISM_TYPE(ToULONG(t)) = t);
+  for r := low(r) to pred(high(r)) do
+    Check(ToULONG(succ(r)) > ToULONG(r));
+  for r := low(r) to high(r) do
+    Check(RV(ToULONG(r)) = r);
 end;
 
 initialization
