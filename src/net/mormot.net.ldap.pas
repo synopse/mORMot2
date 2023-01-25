@@ -61,7 +61,8 @@ uses
   SysUtils,
   Classes,
   mormot.net.sock,
-  mormot.core.base;
+  mormot.core.base,
+  mormot.core.data;
 
 const
   ASN1_BOOL = $01;
@@ -106,20 +107,18 @@ type
 
   {:@abstract(LDAP attribute with list of their values)
    This class holding name of LDAP attribute and list of their values. This is
-   descendant of TStringList class enhanced by some new properties.}
-  TLDAPAttribute = class(TStringList)
+   descendant of TRawUtf8List class enhanced by some new properties.}
+  TLDAPAttribute = class(TRawUtf8List)
   private
     FAttributeName: RawUtf8;
     FIsBinary: Boolean;
-  protected
-    function Get(Index: integer): string; override;
-    procedure Put(Index: integer; const Value: string); override;
-    procedure SetAttributeName(Value: RawUtf8);
   public
-    function Add(const S: string): Integer; override;
-  published
+    constructor Create(AttrName: RawUtf8);
+    function Add(const aText: RawUtf8): PtrInt;
+
+    function GetReadable(index: PtrInt): RawUtf8;
     {:Name of LDAP attribute.}
-    property AttributeName: RawUtf8 read FAttributeName Write SetAttributeName;
+    property AttributeName: RawUtf8 read FAttributeName;
     {:Return @true when attribute contains binary data.}
     property IsBinary: Boolean read FIsBinary;
   end;
@@ -138,13 +137,13 @@ type
     {:Return count of TLDAPAttribute objects in list.}
     function Count: integer;
     {:Add new TLDAPAttribute object to list.}
-    function Add: TLDAPAttribute;
+    function Add(AttributeName: RawUtf8): TLDAPAttribute;
     {:Delete one TLDAPAttribute object from list.}
     procedure Del(Index: integer);
     {:Find and return attribute with requested name. Returns nil if not found.}
     function Find(AttributeName: RawUtf8): TLDAPAttribute;
     {:Find and return attribute value with requested name. Returns empty string if not found.}
-    function Get(AttributeName: RawUtf8): string;
+    function Get(AttributeName: RawUtf8): RawUtf8;
     {:List of TLDAPAttribute objects.}
     property Items[Index: Integer]: TLDAPAttribute read GetAttribute; default;
   end;
@@ -159,7 +158,6 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-  published
     {:Name of this LDAP object.}
     property ObjectName: RawUtf8 read FObjectName write FObjectName;
     {:Here is list of object attributes.}
@@ -219,7 +217,6 @@ type
     FPassword: RawUtf8;
   public
     constructor Create;
-  published
     {:Specify terget server IP (or symbolic name). Default is 'localhost'.}
     property TargetHost: RawUtf8 read FTargetHost Write FTargetHost;
 
@@ -261,7 +258,7 @@ type
     FSeq: integer;
     FResponseCode: integer;
     FResponseDN: RawUtf8;
-    FReferals: TStringList;
+    FReferals: TRawUtf8List;
     FVersion: integer;
     FSearchScope: TLDAPSearchScope;
     FSearchAliases: TLDAPSearchAliases;
@@ -328,7 +325,7 @@ type
 
     {:Call any LDAPv3 extended command.}
     function Extended(const OID, Value: RawUtf8): Boolean;
-  published
+
     {:Specify version of used LDAP protocol. Default value is 3.}
     property Version: integer read FVersion Write FVersion;
 
@@ -374,7 +371,7 @@ type
 
     {:On each LDAP operation can LDAP server return some referals URLs. Here is
      their list.}
-    property Referals: TStringList read FReferals;
+    property Referals: TRawUtf8List read FReferals;
 
     {:When you call @link(Extended) operation, then here is result Name returned
      by server.}
@@ -397,6 +394,7 @@ uses
   StrUtils,
   mormot.core.buffers,
   mormot.core.text,
+  mormot.core.unicode,
   mormot.crypt.core,
   mormot.core.os;
 
@@ -480,7 +478,7 @@ begin
   end;
 end;
 
-function IndexByBegin(Value: RawUtf8; const List: TStrings): integer;
+function IndexByBegin(Value: RawUtf8; const List: TRawUtf8List): integer;
 var
   n: integer;
   s: RawUtf8;
@@ -853,7 +851,7 @@ var
     x: Integer;
     t: RawByteString;
   begin
-    x := Pos('.', s);
+    x := PosExChar('.', s);
     if x < 1 then
     begin
       t := s;
@@ -864,7 +862,7 @@ var
       t := Copy(s, 1, x - 1);
       s := Copy(s, x + 1, Length(s) - x);
     end;
-    result := StrToIntDef(t, 0);
+    result := Utf8ToInteger(t, 0);
   end;
 
 begin
@@ -892,7 +890,7 @@ begin
     begin
       y := x div 40;
       x := x mod 40;
-      result := IntToStr(y);
+      result := ToUtf8(y);
     end;
     Append(result, ['.', IntToStr(x)]);
   end;
@@ -905,7 +903,7 @@ begin
   y := 0;
   for n := 1 to Length(Value) - 1 do
     y := y * 256 + Ord(Value[n]);
-  result := IntToStr(y);
+  result := ToUtf8(y);
 end;
 
 function ASNItem(var Start: Integer; const Buffer: RawByteString;
@@ -954,7 +952,7 @@ begin
           end;
           if neg then
             y := -(y + 1);
-          result := IntToStr(y);
+          result := ToUtf8(y);
         end;
       ASN1_COUNTER, ASN1_GAUGE, ASN1_TIMETICKS, ASN1_COUNTER64:
         begin
@@ -964,7 +962,7 @@ begin
             y := y * 256 + Ord(Buffer[Start]);
             Inc(Start);
           end;
-          result := IntToStr(y);
+          result := ToUtf8(y);
         end;
       ASN1_OCTSTR, ASN1_OPAQUE:
         begin
@@ -1103,13 +1101,18 @@ begin
   FPassword := '';
 end;
 
-function TLDAPAttribute.Add(const S: string): Integer;
+function TLDAPAttribute.Add(const aText: RawUtf8): PtrInt;
+var
+  s: RawUtf8;
 begin
-  result := inherited Add('');
-  Put(result,S);
+  if FIsbinary then
+    s := BinToBase64(aText)
+  else
+    s := UnquoteStr(aText, '"');
+  result := inherited Add(s);
 end;
 
-function TLDAPAttribute.Get(Index: integer): string;
+function TLDAPAttribute.GetReadable(index: PtrInt): RawUtf8;
 begin
   result := inherited Get(Index);
   if FIsbinary then
@@ -1118,22 +1121,11 @@ begin
     result := BinToHex(result);
 end;
 
-procedure TLDAPAttribute.Put(Index: integer; const Value: string);
-var
-  s: RawUtf8;
+constructor TLDAPAttribute.Create(AttrName: RawUtf8);
 begin
-  s := Value;
-  if FIsbinary then
-    s := BinToBase64(Value)
-  else
-    s := UnquoteStr(s, '"');
-  inherited Put(Index, s);
-end;
-
-procedure TLDAPAttribute.SetAttributeName(Value: RawUtf8);
-begin
-  FAttributeName := Value;
-  FIsBinary := Pos(';binary', Lowercase(value)) > 0;
+  inherited Create;
+  FAttributeName := AttrName;
+  FIsBinary := mormot.core.base.PosEx(';binary', Lowercase(AttrName)) > 0;
 end;
 
 {==============================================================================}
@@ -1169,7 +1161,7 @@ begin
   result := FAttributeList.Count;
 end;
 
-function TLDAPAttributeList.Get(AttributeName: RawUtf8): string;
+function TLDAPAttributeList.Get(AttributeName: RawUtf8): RawUtf8;
 var
   attr: TLDAPAttribute;
 begin
@@ -1187,9 +1179,9 @@ begin
     result := TLDAPAttribute(FAttributeList[Index]);
 end;
 
-function TLDAPAttributeList.Add: TLDAPAttribute;
+function TLDAPAttributeList.Add(AttributeName: RawUtf8): TLDAPAttribute;
 begin
-  result := TLDAPAttribute.Create;
+  result := TLDAPAttribute.Create(AttributeName);
   FAttributeList.Add(result);
 end;
 
@@ -1285,7 +1277,7 @@ end;
 constructor TLDAPSend.Create;
 begin
   inherited Create;
-  FReferals := TStringList.Create;
+  FReferals := TRawUtf8List.Create;
   FFullresult := '';
   FTimeout := 60000;
   FSock := nil;
@@ -1417,7 +1409,7 @@ begin
   except on E:ENetSock do
   begin
     FSock := nil;
-    result := False;
+    Exit(False);
   end;
   end;
   result := FSock.SockConnected;
@@ -1481,7 +1473,7 @@ begin
   FReferals.Clear;
   i := 1;
   ASNItem(i, Asn1Response, Svt);
-  SeqNumber := StrToIntDef(ASNItem(i, Asn1Response, Svt), 0);
+  SeqNumber := Utf8ToInteger(ASNItem(i, Asn1Response, Svt), 0);
   if (svt <> ASN1_INT) or (SeqNumber <> FSeq) then
     Exit;
   s := ASNItem(i, Asn1Response, Svt);
@@ -1491,7 +1483,7 @@ begin
     LDAP_ASN1_MODIFYDN_RESPONSE, LDAP_ASN1_COMPARE_RESPONSE,
     LDAP_ASN1_EXT_RESPONSE] then
   begin
-    FresultCode := StrToIntDef(ASNItem(i, Asn1Response, Svt), -1);
+    FresultCode := Utf8ToInteger(ASNItem(i, Asn1Response, Svt), -1);
     FResponseDN := ASNItem(i, Asn1Response, Svt);
     FresultString := ASNItem(i, Asn1Response, Svt);
     if FresultString = '' then
@@ -1516,21 +1508,21 @@ end;
 function TLDAPSend.LdapSasl(Value: RawUtf8): RawByteString;
 var
   s, a1, a2, nonce, cnonce, nc, realm, qop, uri, response: RawUtf8;
-  l: TStringList;
+  l: TRawUtf8List;
   n: integer;
 begin
-  l := TStringList.Create;
+  l := TRawUtf8List.Create;
   try
     nonce := '';
     realm := '';
-    l.CommaText := Value;
+    l.SetText(Value, ',');
     n := IndexByBegin('nonce=', l);
     if n >= 0 then
       nonce := UnQuoteStr(Trim(SeparateRight(l[n], 'nonce=')), '"');
     n := IndexByBegin('realm=', l);
     if n >= 0 then
       realm := UnQuoteStr(Trim(SeparateRight(l[n], 'realm=')), '"');
-    cnonce := IntToHex(GetTickCount64, 8);
+    cnonce := Int64ToHex(GetTickCount64);
     nc := '00000001';
     qop := 'auth';
     uri := 'ldap/' + FSock.RemoteIP;
@@ -1562,7 +1554,7 @@ begin
   s := Filter;
   if Filter[1] = '(' then
   begin
-    x := RPos(')', Filter);
+    x := LastDelimiter(')', UTF8ToString(Filter));
     s := Copy(Filter, 2, x - 2);
   end;
   if s = '' then
@@ -1614,7 +1606,7 @@ begin
                 dn := False;
                 attr := '';
                 rule := '';
-                if Pos(':dn', l) > 0 then
+                if mormot.core.base.PosEx(':dn', l) > 0 then
                 begin
                   dn := True;
                   l := StringReplaceAll(l, ':dn', '');
@@ -1663,7 +1655,7 @@ begin
             if r = '*' then
               result := ASNOBject(l, $87)
             else
-              if Pos('*', r) > 0 then
+              if PosExChar('*', r) > 0 then
               // substrings
               begin
                 s := Fetch(r, '*');
@@ -1671,7 +1663,7 @@ begin
                   result := ASNOBject(DecodeTriplet(s, '\'), $80);
                 while r <> '' do
                 begin
-                  if Pos('*', r) <= 0 then
+                  if PosExChar('*', r) <= 0 then
                     break;
                   s := Fetch(r, '*');
                   Append(result, [ASNOBject(DecodeTriplet(s, '\'), $81)]);
@@ -1888,7 +1880,7 @@ begin
     Append(s, [t]);
   t := '';
   for n := 0 to Attributes.Count - 1 do
-    Append(t, [ASNObject(Attributes[n], ASN1_OCTSTR)]);
+    Append(t, [ASNObject(ToUtf8(Attributes[n]), ASN1_OCTSTR)]);
   Append(s, [ASNObject(t, ASN1_SEQ)]);
   s := ASNObject(s, LDAP_ASN1_SEARCH_REQUEST);
   if FSearchPageSize > 0 then
@@ -1920,9 +1912,8 @@ begin
           if x = ASN1_SEQ then
           begin
             i := n + Length(s);
-            a := r.Attributes.Add;
             u := ASNItem(n, t, x);
-            a.AttributeName := u;
+            a := r.Attributes.Add(u);
             ASNItem(n, t, x);
             if x = ASN1_SETOF then
               while n < i do
@@ -1994,10 +1985,10 @@ var
   res: TLDAPresult;
   attr: TLDAPAttribute;
 begin
-  result := 'results: ' + IntToStr(Value.Count) + CRLF +CRLF;
+  result := 'results: ' + ToUtf8(Value.Count) + CRLF +CRLF;
   for i := 0 to Value.Count - 1 do
   begin
-    result := result + 'result: ' + IntToStr(i) + CRLF;
+    result := result + 'result: ' + ToUtf8(i) + CRLF;
     res := Value[i];
     result := result + '  Object: ' + res.ObjectName + CRLF;
     for j := 0 to res.Attributes.Count - 1 do
@@ -2005,7 +1996,7 @@ begin
       attr := res.Attributes[j];
       result := result + '  Attribute: ' + attr.AttributeName + CRLF;
       for k := 0 to attr.Count - 1 do
-        result := result + '    ' + attr[k] + CRLF;
+        result := result + '    ' + attr.GetReadable(k) + CRLF;
     end;
   end;
 end;
