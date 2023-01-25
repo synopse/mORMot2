@@ -4363,12 +4363,12 @@ type
   end;
 
   TIOCounter = record
-    ReadOperationCount: ULONGLONG;
-    WriteOperationCount: ULONGLONG;
-    OtherOperationCount: ULONGLONG;
-    ReadTransferCount: ULONGLONG;
-    WriteTransferCount: ULONGLONG;
-    OtherTransferCount: ULONGLONG;
+    ReadOperationCount: QWord;
+    WriteOperationCount: QWord;
+    OtherOperationCount: QWord;
+    ReadTransferCount: QWord;
+    WriteTransferCount: QWord;
+    OtherTransferCount: QWord;
   end;
 
   TJobObjectExtendedLimitInformation = record
