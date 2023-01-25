@@ -7991,8 +7991,9 @@ begin
     if (L <> 0) and
        (PStrCnt(PAnsiChar(pointer(S)) - _STRCNT)^ = 1) then
     begin
-      MoveFast(PByteArray(S)[i], pointer(S)^, L); // move in place
-      FakeLength(S, L); // after move
+      if i <> 0 then
+        MoveFast(PByteArray(S)[i], pointer(S)^, L); // trim left: move in place
+      FakeLength(S, L); // after move, to properly set ending #0
     end
     else
       FastSetString(S, @PByteArray(S)[i], L); // allocate
