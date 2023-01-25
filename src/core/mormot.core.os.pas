@@ -7427,7 +7427,7 @@ end;
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
 var
   lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
-  len: PtrInt;
+  len, trimright: PtrInt;
   cur: ^TSmbiosBasicInfo;
   s, sEnd: PByteArray;
 begin
@@ -7518,7 +7518,13 @@ begin
         if cur^ <> sbiUndefined then
         begin
           if info[cur^] = '' then // only set the first occurence if multiple
-            FastSetString(info[cur^], s, len);
+          begin
+            trimright := len;
+            while (trimright <> 0) and
+                  (s[trimright - 1] <= ord(' ')) do
+              dec(trimright);
+            FastSetString(info[cur^], s, trimright);
+          end;
           cur^ := sbiUndefined; // reset slot in lines[]
         end;
         s := @s[len + 1]; // next string
