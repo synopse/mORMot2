@@ -1399,7 +1399,8 @@ function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
 // - Name: name of the part, is empty the name 'File###' is generated
 // - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddFile(const FileName: TFileName;
-  var MultiPart: TMultiPartDynArray; const Name: RawUtf8 = ''): boolean;
+  var MultiPart: TMultiPartDynArray; const Name: RawUtf8 = '';
+  const ForcedContentType: RawUtf8 = ''): boolean;
 
 /// encode a field in a multipart array
 // - FieldName: field name of the part
@@ -1407,7 +1408,7 @@ function MultiPartFormDataAddFile(const FileName: TFileName;
 // - Multipart: where the part is added
 // - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
-  var MultiPart: TMultiPartDynArray): boolean;
+  var MultiPart: TMultiPartDynArray; const ForcedContentType: RawUtf8 = ''): boolean;
 
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
@@ -7377,7 +7378,8 @@ begin
 end;
 
 function MultiPartFormDataAddFile(const FileName: TFileName;
-  var MultiPart: TMultiPartDynArray; const Name: RawUtf8): boolean;
+  var MultiPart: TMultiPartDynArray; const Name: RawUtf8;
+  const ForcedContentType: RawUtf8): boolean;
 var
   part: TMultiPart;
   newlen: integer;
@@ -7393,7 +7395,11 @@ begin
   else
     part.Name := Name;
   part.FileName := StringToUtf8(ExtractFileName(FileName));
-  part.ContentType := GetMimeContentType(pointer(content), length(content), FileName);
+  if ForcedContentType <> '' then
+    part.ContentType := ForcedContentType
+  else
+    part.ContentType := GetMimeContentType(
+      pointer(content), length(content), FileName);
   part.Encoding := 'base64';
   part.Content := BinToBase64(content);
   SetLength(MultiPart, newlen);
@@ -7402,7 +7408,7 @@ begin
 end;
 
 function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
-  var MultiPart: TMultiPartDynArray): boolean;
+  var MultiPart: TMultiPartDynArray; const ForcedContentType: RawUtf8): boolean;
 var
   part: TMultiPart;
   newlen: integer;
@@ -7412,8 +7418,11 @@ begin
     exit;
   newlen := length(MultiPart) + 1;
   part.Name := FieldName;
-  part.ContentType := GetMimeContentTypeFromBuffer(
-    pointer(FieldValue), length(FieldValue), TEXT_CONTENT_TYPE);
+  if ForcedContentType <> '' then
+    part.ContentType := ForcedContentType
+  else
+    part.ContentType := GetMimeContentTypeFromBuffer(
+      pointer(FieldValue), length(FieldValue), TEXT_CONTENT_TYPE);
   part.Content := FieldValue;
   SetLength(MultiPart, newlen);
   MultiPart[newlen - 1] := part;
