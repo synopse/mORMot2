@@ -3993,18 +3993,22 @@ type
   TGetProc = function: Pointer of object; // pointer result is a PtrInt register
   TGetIndexed = function(Index: integer): Pointer of object;
 var
+  rpc: TRttiPropCall;
   call: TMethod;
 begin
-  case Getter(Instance, @call) of
-    rpcField:
-      call.Code := PPointer({%H-}call.Data)^;
-    rpcMethod:
-      call.Code := TGetProc(call);
-    rpcIndexed:
-      call.Code := TGetIndexed(call)(Index);
+  rpc := Getter(Instance, @call);
+  if rpc = rpcField then
+    call.Code := PPointer({%H-}call.Data)^
+  else if TypeInfo^.Kind in [rkDynArray, rkInterface] then
+    raise ERttiException.CreateUtf8(
+      'TRttiProp.GetOrdProp(%) does not support a getter for %',
+      [Instance.ClassType, ToText(TypeInfo^.Kind)^])
+  else if rpc = rpcMethod then
+    call.Code := TGetProc(call)
+  else if rpc = rpcIndexed then
+    call.Code := TGetIndexed(call)(Index)
   else
     call.Code := nil; // call.Code is used to store the raw value
-  end;
   with TypeInfo^ do
     if (Kind = rkClass) or
        (Kind = rkDynArray) or
