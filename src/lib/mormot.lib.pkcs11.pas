@@ -24,6 +24,7 @@ uses
   mormot.core.os,
   mormot.core.text,
   mormot.core.rtti,
+  mormot.core.datetime,
   mormot.core.json;
 
 
@@ -56,6 +57,8 @@ type
   /// a signed value, the same size as a CK_ULONG
   CK_LONG = PtrInt;
 {$endif OSWINDOWS}
+
+  CK_ULONG_PTR = ^CK_ULONG;
 
 
 { ---------- 3.1 General information }
@@ -323,6 +326,22 @@ type
   // the object.
   // - stored as a CK_ULONG field - and CKO_VENDOR_DEFINED as $80000000 - use
   // ToULONG/OBJECT_CLASS() function wrappers for any conversion
+  // - CKO_DATA hold information defined by an application, with CKA_APPLICATION
+  // CKA_OBJECT_ID and CKA_VALUE attributes
+  // - CKO_CERTIFICATE hold public-key or attribute certificates, with
+  // CKA_CERTIFICATE_TYPE, CKA_CERTIFICATE_CATEGORY, CKA_CHECK_VALUE (SHA-1 sum),
+  // CKA_START_DATE, CKA_END_DATE and CKA_PUBLIC_KEY_INFO - and for CKC_X_509:
+  // CKA_SUBJECT CKA_ID CKA_ISSUER CKA_SERIAL_NUMBER CKA_VALUE CKA_URL; for
+  // CKC_WTLS: CKA_SUBJECT CKA_ISSUER CKA_VALUE CKA_URL; for CKC_X_509_ATTR_CERT:
+  // CKA_OWNER CKA_AC_ISSUER CKA_SERIAL_NUMBER CKA_ATTR_TYPES CKA_VALUE
+  // - CKO_PUBLIC_KEY (4.8), CKO_PRIVATE_KEY (4.9) and CKO_SECRET_KEY (4.10)
+  // hold encryption or authentication keys, with CKA_KEY_TYPE CKA_ID CKA_START_DATE
+  // CKA_END_DATE CKA_DERIVE CKA_KEY_GEN_MECHANISM CKA_ALLOWED_MECHANISMS
+  // - CKO_HW_FEATURE represent CKA_HW_FEATURE_TYPE of the device, e.g.
+  // CKH_CLOCK CKH_MONOTONIC_COUNTER CKH_USER_INTERFACE
+  // - CKO_DOMAIN_PARAMETERS store certain algorithm's (DSA,DH) extended parameters
+  // - CKO_MECHANISM provide extended information about supported mechanisms
+  // - CKO_PROFILE describe which PKCS #11 CKA_PROFILE_ID the token implements
   CK_OBJECT_CLASS = (
     CKO_DATA,
     CKO_CERTIFICATE,
@@ -618,7 +637,11 @@ type
   end;
   CK_ATTRIBUTE_PTR = ^CK_ATTRIBUTE;
 
+  // see below the CK_ATTRIBUTES helper to manage a set of CK_ATTRIBUTE
+
+
   /// structure that defines a date
+  // - this 8 bytes text match DateToIso8601() layout
   CK_DATE = record
     /// the year ("1900" - "9999")
     year: array[0..3] of AnsiChar;
@@ -1126,6 +1149,81 @@ type
     /// Mechanism Information Flags
     // - to be mapped to a CKM_FLAGS set
     flags: CKM_FLAGS_ULONG;
+  end;
+
+
+type
+  /// helper to manage a set of CK_ATTRIBUTE at runtime
+  {$ifdef USERECORDWITHMETHODS}
+  CK_ATTRIBUTES = record
+  {$else}
+  CK_ATTRIBUTES = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// storage of CK_ATTRIBUTE items
+    // - length(Attrs) is the capacity of the array: use Count for actual number
+    Attrs: array of CK_ATTRIBUTE;
+    /// how many items are currently stored in Attrs[]
+    Count: PtrInt;
+    /// append a raw CK_ATTRIBUTE
+    procedure Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer; aLen: CK_ULONG); overload;
+    /// append a CK_ULONG CK_ATTRIBUTE
+    procedure Add(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG); overload;
+    /// append a CK_BBOOL CK_ATTRIBUTE
+    procedure Add(aType: CK_ATTRIBUTE_TYPE; aValue: boolean); overload;
+    /// append a CK_DATE text/binary CK_ATTRIBUTE
+    procedure AddDate(aType: CK_ATTRIBUTE_TYPE; aValue: TDateTime);
+    /// append a text/binary CK_ATTRIBUTE
+    procedure Add(aType: CK_ATTRIBUTE_TYPE; const aValue: RawByteString); overload;
+    /// append a CKA_CLASS attribute
+    procedure Add(aClass: CK_OBJECT_CLASS); overload;
+    /// append a CKA_CERTIFICATE_TYPE attribute
+    procedure Add(aCert: CK_CERTIFICATE_TYPE); overload;
+    /// append a CKA_CERTIFICATE_CATEGORY attribute
+    procedure Add(aCert: CK_CERTIFICATE_CATEGORY); overload;
+    /// append a CKA_KEY_TYPE attribute
+    procedure Add(aKey: CK_KEY_TYPE); overload;
+    /// append a CKA_MECHANISM_TYPE attribute
+    procedure Add(aMech: CK_MECHANISM_TYPE); overload;
+    /// append another attribute template
+    procedure Add(aType: CK_ATTRIBUTE_TYPE; const aAttrib: CK_ATTRIBUTES); overload;
+    /// append a void CK_ATTRIBUTE - used e.g. for GetAttributeValue()
+    procedure Add(aType: CK_ATTRIBUTE_TYPE); overload;
+    /// append several void CK_ATTRIBUTE - used e.g. for GetAttributeValue()
+    procedure Add(const aType: array of CK_ATTRIBUTE_TYPE); overload;
+    /// reset the CK_ATTRIBUTE list
+    procedure Clear;
+    /// search for a given attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: CK_ATTRIBUTE_PTR): boolean; overload;
+    /// search for a given CK_ULONG attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: CK_ULONG): boolean; overload;
+    /// search for a given CK_BBOOL attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: boolean): boolean; overload;
+    /// search for a given CK_DATE attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: TDateTime): boolean; overload;
+    /// search for a given binary attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: RawByteString): boolean; overload;
+    /// search for a given binary attribute value
+    function Find(aType: CK_ATTRIBUTE_TYPE;
+      out aValue: RawUtf8): boolean; overload;
+    /// search and compare for a given CK_ULONG attribute value
+    function Equals(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG): boolean; overload;
+    /// search and compare for a given CK_ULONG attribute value
+    function Equals(aType: CK_ATTRIBUTE_TYPE; aValue: boolean): boolean; overload;
+    /// search and compare for a given attribute value
+    function Equals(aType: CK_ATTRIBUTE_TYPE;
+      const aValue: RawByteString): boolean; overload;
+  private
+    fStoreBin: TRawByteStringDynArray;
+    fStoreBinPos, fStoreUlongPos: PtrInt;
+    fStoreULong: array[0..31] of CK_ULONG;
+    function InternalStore(const aValue: RawByteString): pointer; overload;
+    function InternalStore(aValue: CK_ULONG): CK_ULONG_PTR; overload;
   end;
 
 
@@ -1713,7 +1811,7 @@ type
     function Loaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve information about all slots in Slots property
-    procedure GetSlots(WithTokenPresent: boolean = true);
+    procedure GetSlots(WithTokenPresent: boolean = false);
     /// low-level numerical version of the loaded library
     property VersionNum: CK_VERSION
       read fVersionNum;
@@ -2597,6 +2695,221 @@ begin
   Slot.Flags := CKSL_FLAGS(byte(Raw.flags));
   Slot.Hardware := Raw.hardwareVersion;
   Slot.Firmware := Raw.firmwareVersion;
+end;
+
+
+{ CK_ATTRIBUTES }
+
+function CK_ATTRIBUTES.InternalStore(const aValue: RawByteString): pointer;
+begin
+  if fStoreBinPos = length(fStoreBin) then
+    SetLength(fStoreBin, NextGrow(fStoreBinPos));
+  fStoreBin[fStoreBinPos] := aValue; // fast ref-count copy for safety
+  result := pointer(fStoreBin[fStoreBinPos]); // we know it won't disappear
+  inc(fStoreBinPos);
+end;
+
+function CK_ATTRIBUTES.InternalStore(aValue: CK_ULONG): CK_ULONG_PTR;
+begin
+  if fStoreUlongPos = high(fStoreUlong) then
+    raise EPkcs11.Create('CK_ATTRIBUTES: too many CK_ULONG attributes');
+  result := @fStoreUlong[fStoreUlongPos];
+  result^ := aValue;
+  inc(fStoreUlongPos);
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE);
+begin
+  Add(aType, nil, 0);
+end;
+
+procedure CK_ATTRIBUTES.Add(const aType: array of CK_ATTRIBUTE_TYPE);
+var
+  a: PtrInt;
+begin
+  for a := 0 to high(aType) do
+    Add(aType[a], nil, 0);
+end;
+
+procedure CK_ATTRIBUTES.Clear;
+begin
+  Count := 0; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
+  fStoreBinPos := 0;
+  fStoreULongPos := 0;
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer;
+  aLen: CK_ULONG);
+begin
+  if Attrs = nil then
+    Clear;
+  if Count = length(Attrs) then
+    SetLength(Attrs, NextGrow(Count)); // grow capacity by chunks
+  with Attrs[Count] do
+  begin
+    _type := ToULONG(aType);
+    pValue := aValue;
+    ulValueLen := aLen;
+  end;
+  inc(Count);
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG);
+begin
+  Add(aType, InternalStore(aValue), SizeOf(aValue));
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: boolean);
+begin
+  Add(aType, InternalStore(ord(aValue)), SizeOf(aValue));
+end;
+
+procedure CK_ATTRIBUTES.AddDate(aType: CK_ATTRIBUTE_TYPE; aValue: TDateTime);
+begin
+  if aValue = 0 then
+    Add(aType, nil, 0) // see Cryptoki CK_DATE spec for "empty" date
+  else
+    Add(aType, DateToIso8601(aValue, {expanded=}false)); // 'YYYYMMDD' format
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; const aValue: RawByteString);
+begin
+  if aValue = '' then
+    Add(aType, nil, 0)
+  else
+    Add(aType, InternalStore(aValue), length(aValue));
+end;
+
+procedure CK_ATTRIBUTES.Add(aClass: CK_OBJECT_CLASS);
+begin
+  Add(CKA_CLASS, ToULONG(aClass));
+end;
+
+procedure CK_ATTRIBUTES.Add(aCert: CK_CERTIFICATE_TYPE);
+begin
+  Add(CKA_CERTIFICATE_TYPE, ToULONG(aCert));
+end;
+
+procedure CK_ATTRIBUTES.Add(aCert: CK_CERTIFICATE_CATEGORY);
+begin
+  Add(CKA_CERTIFICATE_CATEGORY, ord(aCert));
+end;
+
+procedure CK_ATTRIBUTES.Add(aKey: CK_KEY_TYPE);
+begin
+  Add(CKA_KEY_TYPE, ToULONG(aKey));
+end;
+
+procedure CK_ATTRIBUTES.Add(aMech: CK_MECHANISM_TYPE);
+begin
+  Add(CKA_CERTIFICATE_TYPE, ToULONG(aMech));
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE;
+  const aAttrib: CK_ATTRIBUTES);
+begin
+  Add(aType, @aAttrib, aAttrib.Count * SizeOf(aAttrib.Attrs[0]));
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: CK_ATTRIBUTE_PTR): boolean;
+var
+  u: CK_ATTRIBUTE_TYPE_ULONG;
+  i: PtrInt;
+begin
+  result := true;
+  u := ToULong(aType);
+  aValue := pointer(Attrs);
+  if aValue <> nil then
+    for i := 1 to Count do
+      if aValue^._type = u then
+        exit
+      else
+        inc(aValue);
+  result := false;
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: CK_ULONG): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found) and
+            (found^.ulValueLen = SizeOf(aValue));
+  if result then
+    aValue := CK_ULONG_PTR(found^.pValue)^;
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: boolean): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found) and
+            (found^.ulValueLen = SizeOf(aValue));
+  if result then
+    aValue := PBoolean(found^.pValue)^;
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: TDateTime): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found);
+  if result then
+    if found^.ulValueLen <> SizeOf(CK_DATE) then
+      aValue := 0 // e.g. "empty" CK_DATE
+    else
+      Iso8601ToDateTimePUtf8CharVar(found^.pValue, SizeOf(CK_DATE), aValue);
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: RawByteString): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found);
+  if result then
+    FastSetRawByteString(aValue, found^.pValue, found^.ulValueLen);
+end;
+
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
+  out aValue: RawUtf8): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found);
+  if result then
+    FastSetString(aValue, found^.pValue, found^.ulValueLen);
+end;
+
+function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found) and
+            (found^.ulValueLen = SizeOf(aValue)) and
+            (CK_ULONG_PTR(found^.pValue)^ = aValue);
+end;
+
+function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE; aValue: boolean): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found) and
+            (found^.ulValueLen = SizeOf(aValue)) and
+            (PBoolean(found^.pValue)^ = aValue);
+end;
+
+function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE;
+  const aValue: RawByteString): boolean;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  result := Find(aType, found) and
+            (found^.ulValueLen = CK_ULONG(length(aValue))) and
+    mormot.core.base.CompareMem(found^.pValue, pointer(aValue), found^.ulValueLen);
 end;
 
 
