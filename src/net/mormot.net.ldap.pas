@@ -1,9 +1,9 @@
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
+
+unit mormot.net.ldap;
+
 {==============================================================================|
-| Project : Ararat Synapse                                       | 001.007.001 |
-|==============================================================================|
-| Content: LDAP client                                                         |
-|          support for ASN.1 BER coding and decoding                           |
-|==============================================================================|
 | Copyright (c)1999-2014, Lukas Gebauer                                        |
 | All rights reserved.                                                         |
 |                                                                              |
@@ -39,19 +39,9 @@
 |==============================================================================|
 | Contributor(s):                                                              |
 |==============================================================================|
-| History: see HISTORY.HTM from distribution package                           |
-|          (Found at URL: http://www.ararat.cz/synapse/)                       |
+| History: This file comes from the synapse library and was adapted to use     |
+|          mormot cross platform sockets                                       |
 |==============================================================================}
-
-{:@abstract(LDAP client)
-
-Used RFC: RFC-2251, RFC-2254, RFC-2696, RFC-2829, RFC-2830
-}
-
-// - this unit is a part of the Open Source Synopse mORMot framework 2,
-// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-
-unit mormot.net.ldap;
 
 interface
 
@@ -105,9 +95,11 @@ const
 
 type
 
-  {:@abstract(LDAP attribute with list of their values)
-   This class holding name of LDAP attribute and list of their values. This is
-   descendant of TRawUtf8List class enhanced by some new properties.}
+  TASNObject = type RawByteString;
+
+  /// LDAP attribute with list of their values
+  // This class holding name of LDAP attribute and list of their values. This is
+  // descendant of TRawUtf8List class enhanced by some new properties
   TLDAPAttribute = class(TRawUtf8List)
   private
     FAttributeName: RawUtf8;
@@ -117,14 +109,14 @@ type
     function Add(const aText: RawUtf8): PtrInt;
 
     function GetReadable(index: PtrInt): RawUtf8;
-    {:Name of LDAP attribute.}
+    /// Name of LDAP attribute
     property AttributeName: RawUtf8 read FAttributeName;
-    {:Return @true when attribute contains binary data.}
+    /// Return true when attribute contains binary data
     property IsBinary: Boolean read FIsBinary;
   end;
 
-  {:@abstract(List of @link(TLDAPAttribute))
-   This object can hold list of TLDAPAttribute objects.}
+  /// List of TLDAPAttribute
+  // This object can hold list of TLDAPAttribute objects
   TLDAPAttributeList = class(TObject)
   private
     FAttributeList: TList;
@@ -132,25 +124,26 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    {:Clear list.}
+    /// Clear list
     procedure Clear;
-    {:Return count of TLDAPAttribute objects in list.}
+    /// Count of TLDAPAttribute objects in list
     function Count: integer;
-    {:Add new TLDAPAttribute object to list.}
+    /// Add new TLDAPAttribute object to list
     function Add(AttributeName: RawUtf8): TLDAPAttribute;
-    {:Delete one TLDAPAttribute object from list.}
+    /// Delete one TLDAPAttribute object from list
     procedure Del(Index: integer);
-    {:Find and return attribute with requested name. Returns nil if not found.}
+    /// Find and return attribute with requested name. Returns nil if not found
     function Find(AttributeName: RawUtf8): TLDAPAttribute;
-    {:Find and return attribute value with requested name. Returns empty string if not found.}
+    /// Find and return attribute value with requested name.
+    // - Returns empty string if not found
     function Get(AttributeName: RawUtf8): RawUtf8;
-    {:List of TLDAPAttribute objects.}
+    /// List of TLDAPAttribute objects
     property Items[Index: Integer]: TLDAPAttribute read GetAttribute; default;
   end;
 
-  {:@abstract(LDAP result object)
-   This object can hold LDAP object. (their name and all their attributes with
-   values)}
+  /// LDAP result object
+  // This object can hold LDAP object (their name and all their attributes with
+  // values)
   TLDAPresult = class(TObject)
   private
     FObjectName: RawUtf8;
@@ -158,14 +151,14 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    {:Name of this LDAP object.}
+    /// Name of this LDAP object
     property ObjectName: RawUtf8 read FObjectName write FObjectName;
-    {:Here is list of object attributes.}
+    /// Here is list of object attributes
     property Attributes: TLDAPAttributeList read FAttributes;
   end;
 
-  {:@abstract(List of LDAP result objects)
-   This object can hold list of LDAP objects. (for example result of LDAP SEARCH.)}
+  /// List of LDAP result objects
+  // This object can hold list of LDAP objects (for example result of LDAP SEARCH)
   TLDAPresultList = class(TObject)
   private
     FresultList: TList;
@@ -173,31 +166,31 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    {:Clear all TLDAPresult objects in list.}
+    /// Clear all TLDAPresult objects in list
     procedure Clear;
-    {:Return count of TLDAPresult objects in list.}
+    /// Return count of TLDAPresult objects in list
     function Count: integer;
-    {:Create and add new TLDAPresult object to list.}
+    /// Create and add new TLDAPresult object to list
     function Add: TLDAPresult;
-    {:List of TLDAPresult objects.}
+    /// List of TLDAPresult objects
     property Items[Index: Integer]: TLDAPresult read Getresult; default;
   end;
 
-  {:Define possible operations for LDAP MODIFY operations.}
+  /// Define possible operations for LDAP MODIFY operations
   TLDAPModifyOp = (
     MO_Add,
     MO_Delete,
     MO_Replace
   );
 
-  {:Specify possible values for search scope.}
+  /// Specify possible values for search scope
   TLDAPSearchScope = (
     SS_BaseObject,
     SS_SingleLevel,
     SS_WholeSubtree
   );
 
-  {:Specify possible values about alias dereferencing.}
+  /// Specify possible values about alias dereferencing
   TLDAPSearchAliases = (
     SA_NeverDeref,
     SA_InSearching,
@@ -205,8 +198,8 @@ type
     SA_Always
   );
 
-  {:@abstract(Parent class of application protocol implementations.)
-   By this class is defined common properties.}
+  /// Parent class of application protocol implementations
+  // By this class is defined common properties
   TSynaClient = Class(TObject)
   protected
     FTargetHost: RawUtf8;
@@ -217,43 +210,39 @@ type
     FPassword: RawUtf8;
   public
     constructor Create;
-    {:Specify terget server IP (or symbolic name). Default is 'localhost'.}
+    /// Specify terget server IP (or symbolic name)
+    // - Default is 'localhost'
     property TargetHost: RawUtf8 read FTargetHost Write FTargetHost;
 
-    {:Specify terget server port (or symbolic name).}
+    /// Specify terget server port (or symbolic name)
     property TargetPort: RawUtf8 read FTargetPort Write FTargetPort;
 
-    {:Defined local socket address. (outgoing IP address). By default is used
-     '0.0.0.0' as wildcard for default IP.}
+    /// Defined local socket address (outgoing IP address)
+    // - Default is use '0.0.0.0' as wildcard for default IP
     property IPInterface: RawUtf8 read FIPInterface Write FIPInterface;
 
-    {:Specify default timeout for socket operations.}
+    /// Specify default timeout for socket operations
     property Timeout: integer read FTimeout Write FTimeout;
 
-    {:If protocol need user authorization, then fill here username.}
+    /// If protocol need user authorization, then fill here username
     property UserName: RawUtf8 read FUserName Write FUserName;
 
-    {:If protocol need user authorization, then fill here password.}
+    ///If protocol need user authorization, then fill here password
     property Password: RawUtf8 read FPassword Write FPassword;
   end;
 
-  {:@abstract(Implementation of LDAP client)
-   (version 2 and 3)
 
-   Note: Are you missing properties for setting Username and Password? Look to
-   parent @link(TSynaClient) object!
 
-   Are you missing properties for specify server address and port? Look to
-   parent @link(TSynaClient) too!}
-
-  { TLDAPSend }
-
+  /// Implementation of LDAP client
+  // - version 2 and 3
+  // - Authentication use parent TSynaClient Username/Password properties
+  // - Server/Port use parent TSynaClient TargetHost/TargetPort properties
   TLDAPSend = class(TSynaClient)
   private
     FSock: TCrtSocket;
     FresultCode: Integer;
     FresultString: RawUtf8;
-    FFullresult: RawByteString;
+    FFullresult: TASNObject;
     FFullSSL: Boolean;
     FSeq: integer;
     FResponseCode: integer;
@@ -270,122 +259,121 @@ type
     FExtName: RawUtf8;
     FExtValue: RawUtf8;
     function Connect: Boolean;
-    function BuildPacket(const Asn1Data: RawByteString): RawByteString;
-    function ReceiveResponse: RawByteString;
-    function DecodeResponse(const Asn1Response: RawByteString): RawByteString;
+    function BuildPacket(const Asn1Data: TASNObject): TASNObject;
+    function ReceiveResponse: TASNObject;
+    function DecodeResponse(const Asn1Response: TASNObject): TASNObject;
     function LdapSasl(Value: RawUtf8): RawByteString;
-    function TranslateFilter(Filter: RawUtf8): RawByteString;
+    function TranslateFilter(Filter: RawUtf8): TASNObject;
     function GetErrorString(ErrorCode: integer): RawUtf8;
     function ReceiveString(Length: integer): RawByteString;
   public
     constructor Create;
     destructor Destroy; override;
 
-    {:Try to connect to LDAP server and start secure channel, when it is required.}
+    /// Try to connect to LDAP server and start secure channel when it is required
     function Login: Boolean;
 
-    {:Try to bind to LDAP server with @link(TSynaClient.Username) and
-     @link(TSynaClient.Password). If this is empty strings, then it do annonymous
-     Bind. When you not call Bind on LDAPv3, then is automaticly used anonymous
-     mode.
-
-     This method using plaintext transport of password! It is not secure!}
+    /// Try to bind to LDAP server with Username/Password
+    // - If this is empty strings, then it do annonymous Bind
+    // - When you not call Bind on LDAPv3, then is automaticly used anonymous mode
+    // - This method using plaintext transport of password! It is not secure!
     function Bind: Boolean;
 
-    {:Try to bind to LDAP server with @link(TSynaClient.Username) and
-     @link(TSynaClient.Password). If this is empty strings, then it do annonymous
-     Bind. When you not call Bind on LDAPv3, then is automaticly used anonymous
-     mode.
-
-     This method using SASL with DIGEST-MD5 method for secure transfer of your
-     password.}
+    /// Try to bind to LDAP server with Username/Password
+    // - If this is empty strings, then it do annonymous Bind
+    // - When you not call Bind on LDAPv3, then is automaticly used anonymous mode.
+    // - This method using SASL with DIGEST-MD5 method for secure transfer of your
+    // password
     function BindSasl: Boolean;
 
-    {:Close connection to LDAP server.}
+    /// Close connection to LDAP server
     function Logout: Boolean;
 
-    {:Modify content of LDAP attribute on this object.}
+    /// Modify content of LDAP attribute on this object
     function Modify(obj: RawUtf8; Op: TLDAPModifyOp; const Value: TLDAPAttribute): Boolean;
 
-    {:Add list of attributes to specified object.}
+    /// Add list of attributes to specified object
     function Add(obj: RawUtf8; const Value: TLDAPAttributeList): Boolean;
 
-    {:Delete this LDAP object from server.}
+    /// Delete this LDAP object from server
     function Delete(obj: RawUtf8): Boolean;
 
-    {:Modify object name of this LDAP object.}
+    /// Modify object name of this LDAP object
     function ModifyDN(obj, newRDN, newSuperior: RawUtf8; DeleteoldRDN: Boolean): Boolean;
 
-    {:Try to compare Attribute value with this LDAP object.}
+    /// Try to compare Attribute value with this LDAP object
     function Compare(obj, AttributeValue: RawUtf8): Boolean;
 
-    {:Search LDAP base for LDAP objects by Filter.}
+    /// Search LDAP base for LDAP objects by Filter
     function Search(BaseDN: RawUtf8; TypesOnly: Boolean; Filter: RawUtf8;
       const Attributes: TStrings): Boolean;
 
-    {:Call any LDAPv3 extended command.}
+    /// Call any LDAPv3 extended command
     function Extended(const OID, Value: RawUtf8): Boolean;
 
-    {:Specify version of used LDAP protocol. Default value is 3.}
+    /// Specify version of used LDAP protocol
+    // - Default value is 3
     property Version: integer read FVersion Write FVersion;
 
-    {:result code of last LDAP operation.}
+    /// Result code of last LDAP operation
     property resultCode: Integer read FresultCode;
 
-    {:Human readable description of result code of last LDAP operation.}
+    /// Human readable description of result code of last LDAP operation
     property resultString: RawUtf8 read FresultString;
 
-    {:Binary string with full last response of LDAP server. This string is
-     encoded by ASN.1 BER encoding! You need this only for debugging.}
-    property Fullresult: RawByteString read FFullresult;
+    /// Binary string with full last response of LDAP server
+    // - This string is encoded by ASN.1 BER encoding
+    // - You need this only for debugging
+    property Fullresult: TASNObject read FFullresult;
 
-    {:If @true, then use connection to LDAP server through SSL/TLS tunnel.}
+    // If true use connection to LDAP server through SSL/TLS tunnel
     property FullSSL: Boolean read FFullSSL Write FFullSSL;
 
-    {:Sequence number of last LDAp command. It is incremented by any LDAP command.}
+    /// Sequence number of last LDAp command
+    // - It is incremented by any LDAP command
     property Seq: integer read FSeq;
 
-    {:Specify what search scope is used in search command.}
+    /// Specify what search scope is used in search command
     property SearchScope: TLDAPSearchScope read FSearchScope Write FSearchScope;
 
-    {:Specify how to handle aliases in search command.}
+    /// Specify how to handle aliases in search command
     property SearchAliases: TLDAPSearchAliases read FSearchAliases Write FSearchAliases;
 
-    {:Specify result size limit in search command. Value 0 means without limit.}
+    /// Specify result size limit in search command
+    // - 0 means without limit
     property SearchSizeLimit: integer read FSearchSizeLimit Write FSearchSizeLimit;
 
-    {:Specify search time limit in search command (seconds). Value 0 means
-     without limit.}
+    /// Specify search time limit in search command (seconds)
+    // - 0 means without limit
     property SearchTimeLimit: integer read FSearchTimeLimit Write FSearchTimeLimit;
 
-    {:Specify number of results to return per search request. Value 0 means
-     no paging.}
+    /// Specify number of results to return per search request
+    // - 0 means no paging
     property SearchPageSize: integer read FSearchPageSize Write FSearchPageSize;
 
-    {:Cookie returned by paged search results. Use an empty string for the first
-     search request.}
+    /// Cookie returned by paged search results
+    // - Use an empty string for the first search request
     property SearchCookie: RawUtf8 read FSearchCookie Write FSearchCookie;
 
-    {:Here is result of search command.}
+    /// Here is result of search command
     property Searchresult: TLDAPresultList read FSearchresult;
 
-    {:On each LDAP operation can LDAP server return some referals URLs. Here is
-     their list.}
+    /// On each LDAP operation LDAP server can return some referals URLs
+    //Here is their list
     property Referals: TRawUtf8List read FReferals;
 
-    {:When you call @link(Extended) operation, then here is result Name returned
-     by server.}
+    /// When you call Extended operation, here is result Name returned by server
     property ExtName: RawUtf8 read FExtName;
 
-    {:When you call @link(Extended) operation, then here is result Value returned
-     by server.}
+    /// When you call Extended operation, here is result Value returned by server
     property ExtValue: RawUtf8 read FExtValue;
 
-    {:TCP socket used by all LDAP operations.}
+    /// TCP socket used by all LDAP operations
     property Sock: TCrtSocket read FSock;
   end;
 
-{:Dump result of LDAP SEARCH into human readable form. Good for debugging.}
+/// Dump result of LDAP SEARCH into human readable form
+// - Used for debugging
 function LDAPresultDump(const Value: TLDAPresultList): RawUtf8;
 
 implementation
@@ -399,14 +387,11 @@ uses
   mormot.core.os;
 
 const
-  cLocalhost = '127.0.0.1';
-  cAnyHost = '0.0.0.0';
-  cAnyPort = '0';
   cLDAPProtocol = '389';
 
 { ****** From synautil ****** }
 
-{:@abstract(Support procedures and functions)}
+/// Support procedures and functions
 
 function UnquoteStr(const Value: RawUtf8; Quote: AnsiChar): RawUtf8;
 var
@@ -474,7 +459,7 @@ begin
     if x in [65..90, 97..122] then
       Append(result, [' +''', AnsiChar(x), ''''])
     else
-      Append(result, [' +#$' + IntToHex(Ord(Buffer[n]), 2)]);
+      Append(result, [' +#$',BinToHexDisplayLowerShort(@x, 1)]);
   end;
 end;
 
@@ -698,17 +683,25 @@ end;
 
 { ****** From asn1util ****** }
 
-{: @abstract(Utilities for handling ASN.1 BER encoding)
-By this unit you can parse ASN.1 BER encoded data to elements or build back any
- elements to ASN.1 BER encoded buffer. You can dump ASN.1 BER encoded data to
- human readable form for easy debugging, too.
-
-Supported element types are: ASN1_BOOL, ASN1_INT, ASN1_OCTSTR, ASN1_NULL,
- ASN1_OBJID, ASN1_ENUM, ASN1_SEQ, ASN1_SETOF, ASN1_IPADDR, ASN1_COUNTER,
- ASN1_GAUGE, ASN1_TIMETICKS, ASN1_OPAQUE
-
-For sample of using, look to @link(TSnmpSend) or @link(TLdapSend)class.
-}
+/// Utilities for handling ASN.1 BER encoding
+// By this unit you can parse ASN.1 BER encoded data to elements or build back any
+// elements to ASN.1 BER encoded buffer. You can dump ASN.1 BER encoded data to
+// human readable form for easy debugging, too.
+//
+// Supported element types are:
+// - ASN1_BOOL
+// - ASN1_INT
+// - ASN1_OCTSTR
+// - ASN1_NULL
+// - ASN1_OBJID
+// - ASN1_ENUM
+// - ASN1_SEQ
+// - ASN1_SETOF
+// - ASN1_IPADDR
+// - ASN1_COUNTER
+// - ASN1_GAUGE
+// - ASN1_TIMETICKS
+// - ASN1_OPAQUE
 
 function ASNEncOIDItem(Value: Int64): RawByteString;
 var
@@ -836,10 +829,25 @@ begin
     result[1] := AnsiChar(Ord(result[1]) or $80);
 end;
 
-function ASNObject(const Data: RawByteString; ASNType: Integer): RawByteString;
+function ASNObject(const Data: RawByteString; ASNType: Integer): TASNObject; overload;
 begin
   result := AnsiChar(ASNType);
   Append(result, [ASNEncLen(Length(Data)), Data]);
+end;
+
+
+function ASNObject(ASNType: Integer; const Content: array of RawByteString): TASNObject; overload;
+var
+  i, contentLength: Integer;
+begin
+  result := AnsiChar(ASNType);
+  contentLength := 0;
+  for i := 0 to high(Content) do
+  begin
+    Inc(contentLength, Length(Content[i]));
+    Append(result, [Content[i]]);
+  end;
+  Insert(ASNEncLen(contentLength), Result, 2);
 end;
 
 function MibToId(Mib: RawUtf8): RawByteString;
@@ -892,7 +900,7 @@ begin
       x := x mod 40;
       result := ToUtf8(y);
     end;
-    Append(result, ['.', IntToStr(x)]);
+    Append(result, ['.', x]);
   end;
 end;
 
@@ -906,7 +914,7 @@ begin
   result := ToUtf8(y);
 end;
 
-function ASNItem(var Start: Integer; const Buffer: RawByteString;
+function ASNItem(var Start: Integer; const Buffer: TASNObject;
   var ValueType: Integer): RawByteString;
 var
   ASNType: Integer;
@@ -915,7 +923,6 @@ var
   n: Integer;
   x: byte;
   s: RawByteString;
-  c: AnsiChar;
   neg: Boolean;
   l: Integer;
 begin
@@ -966,22 +973,15 @@ begin
         end;
       ASN1_OCTSTR, ASN1_OPAQUE:
         begin
-          for n := 1 to ASNSize do
-          begin
-            c := AnsiChar(Buffer[Start]);
-            Inc(Start);
-            s := s + c;
-          end;
-          result := s;
+          SetLength(Result, ASNSize);
+          MoveFast(Buffer[Start], Result[1], ASNSize);
+          Inc(Start, ASNSize);
         end;
       ASN1_OBJID:
         begin
-          for n := 1 to ASNSize do
-          begin
-            c := AnsiChar(Buffer[Start]);
-            Inc(Start);
-            s := s + c;
-          end;
+          SetLength(s, ASNSize);
+          MoveFast(Buffer[Start], s[1], ASNSize);
+          Inc(Start, ASNSize);
           result := IdToMib(s);
         end;
       ASN1_IPADDR:
@@ -1004,87 +1004,78 @@ begin
         end;
     else // unknown
       begin
-        for n := 1 to ASNSize do
-        begin
-          c := AnsiChar(Buffer[Start]);
-          Inc(Start);
-          Append(s, [c]);
-        end;
-        result := s;
+        SetLength(Result, ASNSize);
+        MoveFast(Buffer[Start], Result[1], ASNSize);
+        Inc(Start, ASNSize);
       end;
     end;
 end;
 
-function ASNdump(const Value: RawByteString): RawUtf8;
+function ASNdump(const Value: TASNObject): RawUtf8;
 var
   i, at, x, n: integer;
   s, indent: RawUtf8;
-  il: TStringList;
+  il: TIntegerDynArray;
 begin
-  il := TStringList.Create;
-  try
-    result := '';
-    i := 1;
-    indent := '';
-    while i < Length(Value) do
+  result := '';
+  i := 1;
+  indent := '';
+  while i < Length(Value) do
+  begin
+    for n := Length(il) - 1 downto 0 do
     begin
-      for n := il.Count - 1 downto 0 do
+      x := il[n];
+      if x <= i then
       begin
-        x := StrToIntDef(il[n], 0);
-        if x <= i then
-        begin
-          il.Delete(n);
-          Delete(indent, 1, 2);
-        end;
+        DeleteInteger(il, n);
+        Delete(indent, 1, 2);
       end;
-      s := ASNItem(i, Value, at);
-      Append(result, [indent, '$', IntToHex(at, 2)]);
-      if (at and $20) > 0 then
-      begin
-        x := Length(s);
-        Append(result, [' constructed: length ', IntToStr(x)]);
-        Append(indent, ['  ']);
-        il.Add(IntToStr(x + i - 1));
-      end
-      else
-      begin
-        case at of
-          ASN1_BOOL:
-            AppendToRawUtf8(result, ' BOOL: ');
-          ASN1_INT:
-            AppendToRawUtf8(result, ' INT: ');
-          ASN1_ENUM:
-            AppendToRawUtf8(result, ' ENUM: ');
-          ASN1_COUNTER:
-            AppendToRawUtf8(result, ' COUNTER: ');
-          ASN1_GAUGE:
-            AppendToRawUtf8(result, ' GAUGE: ');
-          ASN1_TIMETICKS:
-            AppendToRawUtf8(result, ' TIMETICKS: ');
-          ASN1_OCTSTR:
-            AppendToRawUtf8(result, ' OCTSTR: ');
-          ASN1_OPAQUE:
-            AppendToRawUtf8(result, ' OPAQUE: ');
-          ASN1_OBJID:
-            AppendToRawUtf8(result, ' OBJID: ');
-          ASN1_IPADDR:
-            AppendToRawUtf8(result, ' IPADDR: ');
-          ASN1_NULL:
-            AppendToRawUtf8(result, ' NULL: ');
-          ASN1_COUNTER64:
-            AppendToRawUtf8(result, ' COUNTER64: ');
-        else // other
-          AppendToRawUtf8(result, ' unknown: ');
-        end;
-        if IsBinaryString(s) then
-          s := DumpExStr(s);
-        AppendToRawUtf8(result, s);
-      end;
-      AppendCharToRawUtf8(result, #$0d);
-      AppendCharToRawUtf8(result, #$0a);
     end;
-  finally
-    il.Free;
+    s := ASNItem(i, Value, at);
+    Append(result, [indent, '$', IntToHex(at, 2)]);
+    if (at and $20) > 0 then
+    begin
+      x := Length(s);
+      Append(result, [' constructed: length ', IntToStr(x)]);
+      Append(indent, ['  ']);
+      AddInteger(il, x + i - 1);
+    end
+    else
+    begin
+      case at of
+        ASN1_BOOL:
+          AppendToRawUtf8(result, ' BOOL: ');
+        ASN1_INT:
+          AppendToRawUtf8(result, ' INT: ');
+        ASN1_ENUM:
+          AppendToRawUtf8(result, ' ENUM: ');
+        ASN1_COUNTER:
+          AppendToRawUtf8(result, ' COUNTER: ');
+        ASN1_GAUGE:
+          AppendToRawUtf8(result, ' GAUGE: ');
+        ASN1_TIMETICKS:
+          AppendToRawUtf8(result, ' TIMETICKS: ');
+        ASN1_OCTSTR:
+          AppendToRawUtf8(result, ' OCTSTR: ');
+        ASN1_OPAQUE:
+          AppendToRawUtf8(result, ' OPAQUE: ');
+        ASN1_OBJID:
+          AppendToRawUtf8(result, ' OBJID: ');
+        ASN1_IPADDR:
+          AppendToRawUtf8(result, ' IPADDR: ');
+        ASN1_NULL:
+          AppendToRawUtf8(result, ' NULL: ');
+        ASN1_COUNTER64:
+          AppendToRawUtf8(result, ' COUNTER64: ');
+      else // other
+        AppendToRawUtf8(result, ' unknown: ');
+      end;
+      if IsBinaryString(s) then
+        s := DumpExStr(s);
+      AppendToRawUtf8(result, s);
+    end;
+    AppendCharToRawUtf8(result, #$0d);
+    AppendCharToRawUtf8(result, #$0a);
   end;
 end;
 
@@ -1417,13 +1408,13 @@ begin
     FSock.ReceiveTimeout := Timeout;
 end;
 
-function TLDAPSend.BuildPacket(const Asn1Data: RawByteString): RawByteString;
+function TLDAPSend.BuildPacket(const Asn1Data: TASNObject): TASNObject;
 begin
   Inc(FSeq);
-  result := ASNObject(ASNObject(ASNEncInt(FSeq), ASN1_INT) + Asn1Data,  ASN1_SEQ);
+  result := ASNObject(ASN1_SEQ, [ASNObject(ASNEncInt(FSeq), ASN1_INT), Asn1Data]);
 end;
 
-function TLDAPSend.ReceiveResponse: RawByteString;
+function TLDAPSend.ReceiveResponse: TASNObject;
 var
   asn1Type: Byte;
   i, j: integer;
@@ -1458,12 +1449,11 @@ begin
   FFullresult := result;
 end;
 
-function TLDAPSend.DecodeResponse(const Asn1Response: RawByteString
-  ): RawByteString;
+function TLDAPSend.DecodeResponse(const Asn1Response: TASNObject): TASNObject;
 var
   i, x, SeqNumber: integer;
   Svt: Integer;
-  s, t: RawByteString;
+  s, t: TASNObject;
 begin
   result := '';
   FresultCode := -1;
@@ -1541,7 +1531,7 @@ begin
   end;
 end;
 
-function TLDAPSend.TranslateFilter(Filter: RawUtf8): RawByteString;
+function TLDAPSend.TranslateFilter(Filter: RawUtf8): TASNObject;
 var
   x: integer;
   c: Ansichar;
@@ -1573,7 +1563,7 @@ begin
           s := Trim(SeparateRight(s, t));
           if s <> '' then
             if s[1] = ')' then
-              {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(s, 1, 1);
+              System.Delete(s, 1, 1);
           Append(result, [TranslateFilter(t)]);
         until s = '';
         result := ASNOBject(result, $A0);
@@ -1586,7 +1576,7 @@ begin
           s := Trim(SeparateRight(s, t));
           if s <> '' then
             if s[1] = ')' then
-              {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(s, 1, 1);
+              System.Delete(s, 1, 1);
           Append(result, [TranslateFilter(t)]);
         until s = '';
         result := ASNOBject(result, $A1);
@@ -1602,7 +1592,7 @@ begin
             ':':
               // Extensible match
               begin
-                {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(l, Length(l), 1);
+                System.Delete(l, Length(l), 1);
                 dn := False;
                 attr := '';
                 rule := '';
@@ -1629,26 +1619,24 @@ begin
             '~':
               // Approx match
               begin
-                {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(l, Length(l), 1);
-                result := ASNOBject(l, ASN1_OCTSTR)
-                  + ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR);
-                result := ASNOBject(result, $a8);
+                System.Delete(l, Length(l), 1);
+                result := ASNOBject($a8, [ASNOBject(l, ASN1_OCTSTR), ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
               end;
             '>':
               // Greater or equal match
               begin
-                {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(l, Length(l), 1);
-                result := ASNOBject(l, ASN1_OCTSTR)
-                  + ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR);
-                result := ASNOBject(result, $a5);
+                System.Delete(l, Length(l), 1);
+                result := ASNOBject($a5, [
+                       ASNOBject(l, ASN1_OCTSTR),
+                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
               end;
             '<':
               // Less or equal match
               begin
-                {$IFDEF CIL}Borland.Delphi.{$ENDIF}System.Delete(l, Length(l), 1);
-                result := ASNOBject(l, ASN1_OCTSTR)
-                  + ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR);
-                result := ASNOBject(result, $a6);
+                System.Delete(l, Length(l), 1);
+                result := ASNOBject($a6, [
+                       ASNOBject(l, ASN1_OCTSTR),
+                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
               end;
           else
             // present
@@ -1670,16 +1658,16 @@ begin
                 end;
                 if r <> '' then
                   Append(result, [ASNOBject(DecodeTriplet(r, '\'), $82)]);
-                result := ASNOBject(l, ASN1_OCTSTR)
-                  + ASNOBject(result, ASN1_SEQ);
-                result := ASNOBject(result, $a4);
+                result := ASNOBject($a4, [
+                       ASNOBject(l, ASN1_OCTSTR),
+                       ASNOBject(result, ASN1_SEQ)]);
               end
               else
               begin
                 // Equality match
-                result := ASNOBject(l, ASN1_OCTSTR)
-                  + ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR);
-                result := ASNOBject(result, $a3);
+                result := ASNOBject($a3, [
+                       ASNOBject(l, ASN1_OCTSTR),
+                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
               end;
           end;
         end;
@@ -1699,11 +1687,10 @@ function TLDAPSend.Bind: Boolean;
 var
   Query, Response: RawByteString;
 begin
-  Query := ASNObject(
-             ASNObject(ASNEncInt(FVersion), ASN1_INT) +
-             ASNObject(FUsername, ASN1_OCTSTR) +
-             ASNObject(FPassword, $80),
-           LDAP_ASN1_BIND_REQUEST);
+  Query := ASNObject(LDAP_ASN1_BIND_REQUEST, [
+             ASNObject(ASNEncInt(FVersion), ASN1_INT),
+             ASNObject(FUsername, ASN1_OCTSTR),
+             ASNObject(FPassword, $80)]);
   FSock.SockSendFlush(BuildPacket(Query));
   Response := ReceiveResponse;
   DecodeResponse(Response);
@@ -1713,17 +1700,17 @@ end;
 function TLDAPSend.BindSasl: Boolean;
 var
   x, xt: integer;
-  s, t, digreq: RawByteString;
+  s, t, digreq: TASNObject;
 begin
   result := False;
   if FPassword = '' then
     result := Bind
   else
   begin
-    digreq := ASNObject(ASNEncInt(FVersion), ASN1_INT)
-      + ASNObject('', ASN1_OCTSTR)
-      + ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR), $A3);
-    digreq := ASNObject(digreq, LDAP_ASN1_BIND_REQUEST);
+    digreq := ASNObject(LDAP_ASN1_BIND_REQUEST, [
+           ASNObject(ASNEncInt(FVersion), ASN1_INT),
+           ASNObject('', ASN1_OCTSTR),
+           ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR), $A3)]);
     FSock.SockSendFlush(BuildPacket(digreq));
     s := ReceiveResponse;
     t := DecodeResponse(s);
@@ -1732,11 +1719,11 @@ begin
       s := t;
       x := 1;
       t := ASNItem(x, s, xt);
-      s := ASNObject(ASNEncInt(FVersion), ASN1_INT)
-        + ASNObject('', ASN1_OCTSTR)
-        + ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR)
-          + ASNObject(LdapSasl(t), ASN1_OCTSTR), $A3);
-      s := ASNObject(s, LDAP_ASN1_BIND_REQUEST);
+      s := ASNObject(LDAP_ASN1_BIND_REQUEST, [
+               ASNObject(ASNEncInt(FVersion), ASN1_INT),
+               ASNObject('', ASN1_OCTSTR),
+               ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR),
+               ASNObject(LdapSasl(t), ASN1_OCTSTR), $A3)]);
       FSock.SockSendFlush(BuildPacket(s));
       s := ReceiveResponse;
       DecodeResponse(s);
@@ -1762,7 +1749,7 @@ end;
 function TLDAPSend.Modify(obj: RawUtf8; Op: TLDAPModifyOp;
   const Value: TLDAPAttribute): Boolean;
 var
-  Query, Response: RawByteString;
+  Query, Response: TASNObject;
   i: integer;
 begin
   Query := '';
@@ -1782,7 +1769,7 @@ end;
 
 function TLDAPSend.Add(obj: RawUtf8; const Value: TLDAPAttributeList): Boolean;
 var
-  Query, SubQuery, Response: RawByteString;
+  Query, SubQuery, Response: TASNObject;
   i, j: integer;
 begin
   Query := '';
@@ -1795,8 +1782,9 @@ begin
       + ASNObject(SubQuery, ASN1_SETOF);
     Append(Query, [ASNObject(SubQuery, ASN1_SEQ)]);
   end;
-  Query := ASNObject(obj, ASN1_OCTSTR) + ASNObject(Query, ASN1_SEQ);
-  Query := ASNObject(Query, LDAP_ASN1_ADD_REQUEST);
+  Query := ASNObject(LDAP_ASN1_ADD_REQUEST, [
+        ASNObject(obj, ASN1_OCTSTR),
+        ASNObject(Query, ASN1_SEQ)]);
   FSock.SockSendFlush(BuildPacket(Query));
 
   Response := ReceiveResponse;
@@ -1806,7 +1794,7 @@ end;
 
 function TLDAPSend.Delete(obj: RawUtf8): Boolean;
 var
-  Query, Response: RawByteString;
+  Query, Response: TASNObject;
 begin
   Query := ASNObject(obj, LDAP_ASN1_DEL_REQUEST);
   FSock.SockSendFlush(BuildPacket(Query));
@@ -1819,7 +1807,7 @@ end;
 function TLDAPSend.ModifyDN(obj, newRDN, newSuperior: RawUtf8;
   DeleteoldRDN: Boolean): Boolean;
 var
-  Query, Response: RawByteString;
+  Query, Response: TASNObject;
 begin
   Query := ASNObject(obj, ASN1_OCTSTR) + ASNObject(newRDN, ASN1_OCTSTR);
   if DeleteOldRDN then
@@ -1838,7 +1826,7 @@ end;
 
 function TLDAPSend.Compare(obj, AttributeValue: RawUtf8): Boolean;
 var
-  Query, Response: RawByteString;
+  Query, Response: TASNObject;
 begin
   Query := ASNObject(Trim(SeparateLeft(AttributeValue, '=')), ASN1_OCTSTR)
     + ASNObject(Trim(SeparateRight(AttributeValue, '=')), ASN1_OCTSTR);
@@ -1854,7 +1842,7 @@ end;
 function TLDAPSend.Search(BaseDN: RawUtf8; TypesOnly: Boolean; Filter: RawUtf8;
   const Attributes: TStrings): Boolean;
 var
-  s, t, c: RawByteString;
+  s, t, c: TASNObject;
   u: RawUtf8;
   n, i, x: integer;
   r: TLDAPresult;
@@ -1958,7 +1946,7 @@ end;
 
 function TLDAPSend.Extended(const OID, Value: RawUtf8): Boolean;
 var
-  Query, Response, DecodedResponse: RawByteString;
+  Query, Response, DecodedResponse: TASNObject;
   itemStart, xt: integer;
 begin
   Query := ASNObject(OID, $80);
