@@ -10533,7 +10533,7 @@ begin
       end;
 end;
 
-function SortFind(P: TOrmCacheEntryValueDynArray; V: TID; R: PtrInt): PtrInt;
+function SortFind(const P: TOrmCacheEntryValueDynArray; V: TID; R: PtrInt): PtrInt;
 var
   m, L: PtrInt;
   res: integer;
@@ -10563,7 +10563,7 @@ begin
   Safe.WriteLock;
   try
     if Value <> nil then
-      LockedFlushCacheEntry(SortFind(pointer(Value), aID, Count));
+      LockedFlushCacheEntry(SortFind(Value, aID, Count));
   finally
     Safe.WriteUnLock;
   end;
@@ -10579,7 +10579,7 @@ begin
   try
     if Value <> nil then
       for i := 0 to high(aID) do
-        LockedFlushCacheEntry(SortFind(pointer(Value), aID[i], Count));
+        LockedFlushCacheEntry(SortFind(Value, aID[i], Count));
   finally
     Safe.WriteUnLock;
   end;
@@ -10722,7 +10722,7 @@ begin
   result := nil;
   if Value = nil then
     exit;
-  i := SortFind(pointer(Value), aID, Count);
+  i := SortFind(Value, aID, Count);
   if i < 0 then
     exit;
   result := @Value[i];
