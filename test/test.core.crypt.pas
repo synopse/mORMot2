@@ -2794,12 +2794,27 @@ end;
 
 procedure TTestCoreCrypto.Pkcs11;
 var
+  o: CK_OBJECT_CLASS;
+  h: CK_HW_FEATURE_TYPE;
+  k: CK_KEY_TYPE;
+  c: CK_CERTIFICATE_TYPE;
+  a: CK_ATTRIBUTE_TYPE;
   t: CK_MECHANISM_TYPE;
   r: CK_RV;
 begin
   Check(1 shl ord(CKF_ERROR_STATE) = $01000000);
   Check(ord(CKK_SHA512_T_HMAC) = $00000045);
   Check(cardinal(1 shl ord(CKF_EXTENSION)) = $80000000);
+  for o := low(o) to high(o) do
+    Check(OBJECT_CLASS(ToULONG(o)) = o);
+  for h := low(h) to high(h) do
+    Check(HW_FEATURE_TYPE(ToULONG(h)) = h);
+  for k := low(k) to high(k) do
+    Check(KEY_TYPE(ToULONG(k)) = k);
+  for c := low(c) to high(c) do
+    Check(CERTIFICATE_TYPE(ToULONG(c)) = c);
+  for a := low(a) to high(a) do
+    Check(ATTRIBUTE_TYPE(ToULONG(a)) = a);
   for t := low(t) to pred(high(t)) do
     Check(ToULONG(succ(t)) > ToULONG(t));
   for t := low(t) to high(t) do
@@ -2809,6 +2824,8 @@ begin
   for r := low(r) to high(r) do
     Check(RV(ToULONG(r)) = r);
 end;
+
+
 
 initialization
   {$ifdef USE_OPENSSL}

@@ -98,7 +98,7 @@ type
 
 type
   /// Cryptoki-assigned value that identifies a slot
-  CK_SLOT_ID = CK_ULONG;
+  CK_SLOT_ID = type CK_ULONG;
   CK_SLOT_ID_PTR = ^CK_SLOT_ID;
 
   /// Slot Information Flags
@@ -236,7 +236,7 @@ type
   end;
 
 const
-  /// specific value as used e.g. by CK_TOKEN_INFO
+  /// specific value as used e.g. by CK_TOKEN_INFO or CK_ATTRIBUTE.ulValueLen
   CK_UNAVAILABLE_INFORMATION = CK_ULONG(not CK_ULONG(0));
   /// specific value as used e.g. by CK_TOKEN_INFO
   CK_EFFECTIVELY_INFINITE = CK_ULONG(0);
@@ -252,7 +252,7 @@ type
   /// Cryptoki-assigned value that identifies a session
   // - Valid object handles in Cryptoki always have nonzero values; for
   // convenience, CK_INVALID_HANDLE (=0) identifies a non-valid session handle
-  CK_SESSION_HANDLE = CK_ULONG;
+  CK_SESSION_HANDLE = type CK_ULONG;
   CK_SESSION_HANDLE_PTR = ^CK_SESSION_HANDLE;
 
   /// holds the types of Cryptoki users described in [PKCS11-UG]
@@ -277,7 +277,7 @@ type
 
   /// define the type of session
   // - CKF_RW_SESSION is set if the session is read/write
-  // - deprecated CKF_SERIAL_SESSION flag is already set
+  // - deprecated CKF_SERIAL_SESSION flag should always be set
   CKSE_FLAG = (
     CKF_1,
     CKF_RW_SESSION,
@@ -317,7 +317,7 @@ type
   // and the object continues to be accessible to the session.
   // - Valid object handles in Cryptoki always have nonzero values; for
   // convenience, CK_INVALID_HANDLE (=0) identifies a non-valid object handle
-  CK_OBJECT_HANDLE = CK_ULONG;
+  CK_OBJECT_HANDLE = type CK_ULONG;
   CK_OBJECT_HANDLE_PTR = ^CK_OBJECT_HANDLE;
 
   /// identifies the classes (or types) of objects that Cryptoki recognizes
@@ -360,7 +360,9 @@ const
   CKO_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(oc: CK_OBJECT_CLASS): CK_ULONG; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 function OBJECT_CLASS(uu: CK_ULONG): CK_OBJECT_CLASS;
+  {$ifdef HASINLINE} inline; {$endif}
 function ToText(oc: CK_OBJECT_CLASS): PShortString; overload;
 
 type
@@ -380,7 +382,9 @@ const
   CKH_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(hw: CK_HW_FEATURE_TYPE): CK_ULONG; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 function HW_FEATURE_TYPE(uu: CK_ULONG): CK_HW_FEATURE_TYPE;
+  {$ifdef HASINLINE} inline; {$endif}
 function ToText(hw: CK_HW_FEATURE_TYPE): PShortString; overload;
 
 type
@@ -456,7 +460,9 @@ const
   CKK_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(kt: CK_KEY_TYPE): CK_ULONG; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 function KEY_TYPE(uu: CK_ULONG): CK_KEY_TYPE;
+  {$ifdef HASINLINE} inline; {$endif}
 function ToText(kt: CK_KEY_TYPE): PShortString; overload;
 
 type
@@ -474,7 +480,9 @@ const
   CKC_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(ct: CK_CERTIFICATE_TYPE): CK_ULONG; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 function CERTIFICATE_TYPE(uu: CK_ULONG): CK_CERTIFICATE_TYPE;
+  {$ifdef HASINLINE} inline; {$endif}
 function ToText(ct: CK_CERTIFICATE_TYPE): PShortString; overload;
 
 type
@@ -622,6 +630,7 @@ const
   CKF_ARRAY_ATTRIBUTE = $40000000;
 
 function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ULONG; overload;
+  {$ifdef FPC} inline; {$endif}
 function ATTRIBUTE_TYPE(uu: CK_ULONG): CK_ATTRIBUTE_TYPE;
 function ToText(at: CK_ATTRIBUTE_TYPE): PShortString; overload;
 
@@ -633,6 +642,7 @@ type
     /// pointer to the value of the attribute
     pValue: pointer;
     /// length in bytes of the value
+    // - may be CK_UNAVAILABLE_INFORMATION if this field does not exist
     ulValueLen: CK_ULONG;
   end;
   CK_ATTRIBUTE_PTR = ^CK_ATTRIBUTE;
@@ -1085,6 +1095,7 @@ const
   CKM_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(mt: CK_MECHANISM_TYPE): CK_ULONG; overload;
+  {$ifdef FPC} inline; {$endif}
 function MECHANISM_TYPE(uu: CK_ULONG): CK_MECHANISM_TYPE;
 function ToText(mt: CK_MECHANISM_TYPE): PShortString; overload;
 
@@ -1134,7 +1145,7 @@ type
   CKM_FLAGS = set of CKM_FLAG;
 
   /// the CK_ULONG integer value mapping CKM_FLAGS high-level set
-  CKM_FLAGS_ULONG = CK_ULONG;
+  CKM_FLAGS_ULONG = type CK_ULONG;
 
   /// provides information about a particular mechanism
   // - for some mechanisms, the ulMinKeySize and ulMaxKeySize fields have
@@ -1165,6 +1176,12 @@ type
     Attrs: array of CK_ATTRIBUTE;
     /// how many items are currently stored in Attrs[]
     Count: PtrInt;
+
+    /// append a CKA_CLASS attribute
+    procedure New(aClass: CK_OBJECT_CLASS); overload;
+    /// append a CKA_CLASS storage attribute as token object (CKA_TOKEN = true)
+    // - if aLabel is not '', will set CKA_LABEL
+    procedure New(aClass: CK_OBJECT_CLASS; const aLabel: RawUtf8); overload;
     /// append a raw CK_ATTRIBUTE
     procedure Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer; aLen: CK_ULONG); overload;
     /// append a CK_ULONG CK_ATTRIBUTE
@@ -1175,8 +1192,6 @@ type
     procedure AddDate(aType: CK_ATTRIBUTE_TYPE; aValue: TDateTime);
     /// append a text/binary CK_ATTRIBUTE
     procedure Add(aType: CK_ATTRIBUTE_TYPE; const aValue: RawByteString); overload;
-    /// append a CKA_CLASS attribute
-    procedure Add(aClass: CK_OBJECT_CLASS); overload;
     /// append a CKA_CERTIFICATE_TYPE attribute
     procedure Add(aCert: CK_CERTIFICATE_TYPE); overload;
     /// append a CKA_CERTIFICATE_CATEGORY attribute
@@ -1187,15 +1202,23 @@ type
     procedure Add(aMech: CK_MECHANISM_TYPE); overload;
     /// append another attribute template
     procedure Add(aType: CK_ATTRIBUTE_TYPE; const aAttrib: CK_ATTRIBUTES); overload;
+
     /// append a void CK_ATTRIBUTE - used e.g. for GetAttributeValue()
     procedure Add(aType: CK_ATTRIBUTE_TYPE); overload;
     /// append several void CK_ATTRIBUTE - used e.g. for GetAttributeValue()
     procedure Add(const aType: array of CK_ATTRIBUTE_TYPE); overload;
+
     /// reset the CK_ATTRIBUTE list
     procedure Clear;
+    /// reset the CK_ATTRIBUTE.pValue/ulValueLen fields, keeping _type
+    // - to be used e.g. before first GetAttributeValue() call
+    procedure ClearValues;
+    /// allocate CK_ATTRIBUTE.pValue from ulValueLen size
+    // - to be used e.g. after ClearValue then first GetAttributeValue() call
+    procedure AllocateValues;
+
     /// search for a given attribute value
-    function Find(aType: CK_ATTRIBUTE_TYPE;
-      out aValue: CK_ATTRIBUTE_PTR): boolean; overload;
+    function Find(aType: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_PTR; overload;
     /// search for a given CK_ULONG attribute value
     function Find(aType: CK_ATTRIBUTE_TYPE;
       out aValue: CK_ULONG): boolean; overload;
@@ -1210,7 +1233,8 @@ type
       out aValue: RawByteString): boolean; overload;
     /// search for a given binary attribute value
     function Find(aType: CK_ATTRIBUTE_TYPE;
-      out aValue: RawUtf8): boolean; overload;
+      out aValue: RawUtf8; aEncodeHex: boolean = false): boolean; overload;
+
     /// search and compare for a given CK_ULONG attribute value
     function Equals(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG): boolean; overload;
     /// search and compare for a given CK_ULONG attribute value
@@ -1219,12 +1243,14 @@ type
     function Equals(aType: CK_ATTRIBUTE_TYPE;
       const aValue: RawByteString): boolean; overload;
   private
+    // temp storage to maintain stable pointers for CK_ATTRIBUTE.pValue
     fStoreBin: TRawByteStringDynArray;
     fStoreBinPos, fStoreUlongPos: PtrInt;
     fStoreULong: array[0..31] of CK_ULONG;
     function InternalStore(const aValue: RawByteString): pointer; overload;
     function InternalStore(aValue: CK_ULONG): CK_ULONG_PTR; overload;
   end;
+  PCK_ATTRIBUTES = ^CK_ATTRIBUTES;
 
 
 { ---------- 3.6 Function types }
@@ -1337,11 +1363,15 @@ type
     CKR_VENDOR_DEFINED);
 
 const
-  CKR_SUCCESS = 0;
-  CKR_BUFFER_TOOSMALL = $0150;
-  CKR_VENDOR_DEFINED_ULONG = $80000000;
+  CKR_SUCCESS = 0;                       // = ToULONG(CKR_OK)
+  CKR_ABORT = 1;                         // = ToULONG(CKR_CANCEL)
+  CKR_SENSITIVE = $0011;                 // = ToULONG(CKR_ATTRIBUTE_SENSITIVE)
+  CKR_INVALID   = $0012;                 // = ToULONGCKR_ATTRIBUTE_TYPE_INVALID)
+  CKR_BUFFER_TOOSMALL = $0150;           // = ToULONG(CKR_BUFFER_TOO_SMALL)
+  CKR_VENDOR_DEFINED_ULONG = $80000000;  // = ToULONG(CKR_VENDOR_DEFINED)
 
 function ToULONG(rv: CK_RV): CK_RVULONG; overload;
+  {$ifdef FPC} inline; {$endif}
 function RV(uu: CK_RVULONG): CK_RV;
 function ToText(rv: CK_RV): PShortString; overload;
 
@@ -1350,7 +1380,7 @@ type
   CK_NOTIFICATION = type CK_ULONG;
 
   /// integer flags type for C_WaitForSlotEvent()
-  CKWAIT_FLAGS = CK_ULONG;
+  CKWAIT_FLAGS = type CK_ULONG;
 
 const
   /// CK_NOTIFICATION value indicating that Cryptoki is surrendering the
@@ -1371,6 +1401,7 @@ type
   // - event is the type of notification callback
   // - pApplication is an Opaque application-defined value, as was passed to
   // C_OpenSession to open the session performing the callback
+  // - should return CKR_SUCCESS (=CKR_OK) or CKR_ABORT (=CKR_CANCEL)
   CK_NOTIFY = function(hSession: CK_SESSION_HANDLE; event: CK_NOTIFICATION;
     pApplication: pointer): CK_RVULONG; cdecl;
 
@@ -1716,6 +1747,81 @@ type
   /// map CK_SLOT_ID but with a fixed 32-bit size
   TPkcs11SlotID = cardinal;
 
+  /// high-level information about a PKCS#11 Slot
+  // - can be (un) serialized as binary or JSON if needed
+  TPkcs11Slot = packed record
+    /// the internal ID of this slot
+    Slot: TPkcs11SlotID;
+    /// the description of the Slot
+    Description: RawUtf8;
+    /// the manufacturer of the Slot
+    Manufacturer: RawUtf8;
+    /// Slot Information Flags
+    Flags: CKSL_FLAGS;
+    /// the Mechanism supported by this Slot
+    Mechanism: CK_MECHANISM_TYPES;
+    /// version number of the slot's hardware
+    Hardware: CK_VERSION;
+    /// version number of the slot's firmware
+    Firmware: CK_VERSION;
+  end;
+
+  /// high-level information about several PKCS#11 Slots
+  // - can be (un) serialized as binary or JSON if needed
+  TPkcs11SlotDynArray = array of TPkcs11Slot;
+
+  /// the flags of PKCS#11 one Storage Object
+  // - mapping CKA_PRIVATE CKA_MODIFIABLE CKA_COPYABLE CKA_DESTROYABLE
+  // and CKA_ENCRYPT, CKA_VERIFY, CKA_TRUSTED
+  TPkcs11ObjectStorage = set of (
+    posPrivate,
+    posSensitive,
+    posModifiable,
+    posCopiable,
+    posDestroyable,
+    posEncrypt,
+    posDecrypt,
+    posVerify,
+    posVerifyRecover,
+    posSign,
+    posSignRecover,
+    posWrap,
+    posTrusted,
+    posX509,
+    posX509Attr,
+    posWtls);
+
+  /// high-level information about one PKCS#11 Object
+  TPkcs11Object = packed record
+    /// the class of the object (CKA_CLASS)
+    ObjClass: CK_OBJECT_CLASS;
+    /// the description of this Storage Object (CKA_LABEL value)
+    StorageLabel: RawUtf8;
+    /// the flags of a Storage Object (from various CKA_* boolean)
+    StorageFlags: TPkcs11ObjectStorage;
+    /// the stored Key Type
+    KeyType: CK_KEY_TYPE;
+    /// how this stored Key has been generated
+    KeyGen: CK_MECHANISM_TYPE;
+    /// start date of this Storage Object (CKA_START_DATE)
+    Start: TDateTime;
+    /// end date of this Storage Object (CKA_END_DATE)
+    Stop: TDateTime;
+    /// the identifier of this Storage Object (CKA_UNIQUE_ID or CKA_ID)
+    UniqueID: RawUtf8;
+    /// the application name of this Storage Object (CKA_APPLICATION)
+    Application: RawUtf8;
+    /// the DER subject of this Storage Object
+    Subject: RawByteString;
+    /// the DER serial number of this Storage Object
+    Serial: RawByteString;
+    /// the DER issuer of this Storage Object
+    Issuer: RawByteString;
+  end;
+  /// high-level information about several PKCS#11 Objects
+  // - can be (un) serialized as binary or JSON if needed
+  TPkcs11ObjectDynArray = array of TPkcs11Object;
+
   /// high-level information about a PKCS#11 Token
   // - can be (un) serialized as binary or JSON if needed
   TPkcs11Token = packed record
@@ -1742,34 +1848,13 @@ type
     MinPin: integer;
     /// maximum length of the PIN
     MaxPin: integer;
+    /// the PKCS#11 objects associated with this token
+    Objects: TPkcs11ObjectDynArray;
   end;
 
   /// high-level information about several PKCS#11 Tokens
   // - can be (un) serialized as binary or JSON if needed
   TPkcs11TokenDynArray = array of TPkcs11Token;
-
-  /// high-level information about a PKCS#11 Slot
-  // - can be (un) serialized as binary or JSON if needed
-  TPkcs11Slot = packed record
-    /// the internal ID of this slot
-    Slot: TPkcs11SlotID;
-    /// the description of the Slot
-    Description: RawUtf8;
-    /// the manufacturer of the Slot
-    Manufacturer: RawUtf8;
-    /// Slot Information Flags
-    Flags: CKSL_FLAGS;
-    /// the Mechanism supported by this Slot
-    Mechanism: CK_MECHANISM_TYPES;
-    /// version number of the slot's hardware
-    Hardware: CK_VERSION;
-    /// version number of the slot's firmware
-    Firmware: CK_VERSION;
-  end;
-
-  /// high-level information about several PKCS#11 Slots
-  // - can be (un) serialized as binary or JSON if needed
-  TPkcs11SlotDynArray = array of TPkcs11Slot;
 
 /// convert a raw CK_TOKEN_INFO into a high-level TPkcs11Token
 // - as used by TPkcs11.GetSlots
@@ -1783,6 +1868,12 @@ procedure FillSlot(ID: CK_SLOT_ID; const Raw: CK_SLOT_INFO;
 
 
 type
+  TPkcs11 = class;
+
+  /// a callback called during session long-process
+  // - return false to continue, or true to abort the process
+  TOnPkcs11Notify = function(Sender: TPkcs11; Slot: TPkcs11SlotID): boolean;
+
   /// can load and use a PKCS#11 library
   // - need to explicitely call Safe.Lock/UnLock if you need in a multi-thread usage
   TPkcs11 = class(TSynLocked)
@@ -1794,7 +1885,26 @@ type
     fSlots: TPkcs11SlotDynArray;
     fTokens: TPkcs11TokenDynArray;
     fApiNum, fVersionNum: CK_VERSION;
-    procedure Check(res: CK_RVULONG; const ctxt: ShortString);
+    fSession: CK_SESSION_HANDLE;
+    fSessionSlot: TPkcs11SlotID;
+    fSessionFlags: set of (sfLogIn);
+    fOnNotify: TOnPkcs11Notify;
+    procedure EnsureLoaded(const ctxt: ShortString);
+    procedure Check(res: CK_RVULONG; const ctxt: ShortString;
+      unlock: boolean = false);
+    procedure CheckAttr(res: CK_RVULONG);
+    /// enter R/W or R/O public session state
+    procedure BeginSession(slot: TPkcs11SlotID; rw: boolean); overload;
+    /// enter R/W or R/O user/so session state
+    procedure BeginSession(slot: TPkcs11SlotID; rw, so: boolean;
+      const pin: RawUtf8); overload;
+    // some actions within this session
+    function SessionCreateObject(const a: CK_ATTRIBUTES;
+      SlotID: TPkcs11SlotID; const Pin: RawUtf8; so: boolean): RawUtf8;
+    function SessionGetAttribute(obj: CK_OBJECT_HANDLE;
+      attr: CK_ATTRIBUTE_TYPE): RawUtf8;
+    /// leave the previous session
+    procedure EndSession;
   public
     /// try to load a PKCS#11 library, raising EPkcs11 on failure
     // - is just a wrapper around inherited Create and Load() + raise EPkcs11
@@ -1810,14 +1920,38 @@ type
     /// returns true if a previous Create(aFileName) or Load() was successfull
     function Loaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+
     /// retrieve information about all slots in Slots property
     procedure GetSlots(WithTokenPresent: boolean = false);
+    /// retrieve basic information about all objects in a given Slot
+    function GetObjects(SlotID: TPkcs11SlotID; Filter: PCK_ATTRIBUTES = nil;
+      GetValue: PRawByteStringDynArray = nil): TPkcs11ObjectDynArray;
+
+    /// initialize a Token on slot #SlotID
+    // - if the token has not been initialized (i.e. new from the factory), then
+    // the SOPin parameter becomes the initial value of the SO PIN
+    // - if the token is being reinitialized, the SOPin parameter is checked
+    // against the existing SO PIN to authorize the initialization operation
+    // - When a token is initialized, all objects that can be destroyed are
+    // destroyed, and access by the normal user is disabled until the SO sets
+    // the normal user PIN
+    procedure InitToken(SlotID: TPkcs11SlotID; const SOPin, TokenLabel: RawUtf8);
+    /// store a CKO_DATA object on slot #SlotID
+    // - return the CKA_UNIQUE_ID generated by the token, or raise EPkcs11
+    function AddData(SlotID: TPkcs11SlotID;
+      const Pin, Application, DataLabel: RawUtf8; const Data: RawByteString;
+      const DerID: RawByteString = ''; SO: boolean = false): RawUtf8;
+
     /// low-level numerical version of the loaded library
     property VersionNum: CK_VERSION
       read fVersionNum;
     /// low-level numerical version of the loaded library API
     property ApiNum: CK_VERSION
       read fApiNum;
+    /// event called during any long-term process, to notify the user
+    // - the callback could return TRUE to abort the process
+    property OnNotify: TOnPkcs11Notify
+      read fOnNotify write fOnNotify;
     /// access to the internal Cryptoki API raw functions, once loaded
     property C: CK_FUNCTION_LIST_PTR
       read fC;
@@ -2670,6 +2804,19 @@ begin
   TrimSelf(text);
 end;
 
+function Pad(const text: RawUtf8; max: integer): RawUtf8;
+var
+  len: integer;
+begin
+  FastSetString(result, nil, max);
+  len := length(text);
+  if len > max then
+    len := max
+  else
+    FillCharFast(PByteArray(result)[len], max - len, ord(' '));
+  MoveFast(pointer(text)^, pointer(result)^, len);
+end;
+
 procedure FillToken(ID: CK_SLOT_ID; const Raw: CK_TOKEN_INFO;
   out Token: TPkcs11Token);
 begin
@@ -2702,6 +2849,8 @@ end;
 
 function CK_ATTRIBUTES.InternalStore(const aValue: RawByteString): pointer;
 begin
+  if Attrs = nil then
+    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
   if fStoreBinPos = length(fStoreBin) then
     SetLength(fStoreBin, NextGrow(fStoreBinPos));
   fStoreBin[fStoreBinPos] := aValue; // fast ref-count copy for safety
@@ -2711,11 +2860,67 @@ end;
 
 function CK_ATTRIBUTES.InternalStore(aValue: CK_ULONG): CK_ULONG_PTR;
 begin
+  if Attrs = nil then
+    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
   if fStoreUlongPos = high(fStoreUlong) then
     raise EPkcs11.Create('CK_ATTRIBUTES: too many CK_ULONG attributes');
   result := @fStoreUlong[fStoreUlongPos];
   result^ := aValue;
   inc(fStoreUlongPos);
+end;
+
+procedure CK_ATTRIBUTES.Clear;
+begin
+  Count := 0;
+  fStoreBinPos := 0;
+  fStoreULongPos := 0;
+  // no need to reset the arrays
+end;
+
+procedure CK_ATTRIBUTES.ClearValues;
+var
+  i: PtrInt;
+begin
+  fStoreBinPos := 0;
+  fStoreULongPos := 0;
+  if Attrs <> nil then
+    for i := 0 to Count - 1 do
+      with Attrs[i] do
+      begin
+        pValue := nil;
+        ulValueLen := 0;
+      end;
+end;
+
+procedure CK_ATTRIBUTES.AllocateValues;
+var
+  i: PtrInt;
+begin
+  if Attrs <> nil then
+    for i := 0 to Count - 1 do
+      with Attrs[i] do
+        if ulValueLen = CK_UNAVAILABLE_INFORMATION then
+          ulValueLen := 0
+        else if ulValueLen <= SizeOf(CK_ULONG) then
+          pValue := InternalStore(0) // from static fStoreULong[]
+        else
+          pValue := InternalStore(RawUtf8OfChar(' ', ulValueLen)); // alloc
+end;
+
+procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer;
+  aLen: CK_ULONG);
+begin
+  if Attrs = nil then
+    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
+  if Count = length(Attrs) then
+    SetLength(Attrs, NextGrow(Count)); // grow capacity by chunks
+  with Attrs[Count] do
+  begin
+    _type := ToULONG(aType);
+    pValue := aValue;
+    ulValueLen := aLen;
+  end;
+  inc(Count);
 end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE);
@@ -2729,29 +2934,6 @@ var
 begin
   for a := 0 to high(aType) do
     Add(aType[a], nil, 0);
-end;
-
-procedure CK_ATTRIBUTES.Clear;
-begin
-  Count := 0; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
-  fStoreBinPos := 0;
-  fStoreULongPos := 0;
-end;
-
-procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer;
-  aLen: CK_ULONG);
-begin
-  if Attrs = nil then
-    Clear;
-  if Count = length(Attrs) then
-    SetLength(Attrs, NextGrow(Count)); // grow capacity by chunks
-  with Attrs[Count] do
-  begin
-    _type := ToULONG(aType);
-    pValue := aValue;
-    ulValueLen := aLen;
-  end;
-  inc(Count);
 end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG);
@@ -2780,9 +2962,18 @@ begin
     Add(aType, InternalStore(aValue), length(aValue));
 end;
 
-procedure CK_ATTRIBUTES.Add(aClass: CK_OBJECT_CLASS);
+procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS);
 begin
+  Clear;
   Add(CKA_CLASS, ToULONG(aClass));
+end;
+
+procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS; const aLabel: RawUtf8);
+begin
+  New(aClass);
+  Add(CKA_TOKEN, true); // token object
+  if aLabel <> '' then
+    Add(CKA_LABEL, aLabel);
 end;
 
 procedure CK_ATTRIBUTES.Add(aCert: CK_CERTIFICATE_TYPE);
@@ -2808,25 +2999,26 @@ end;
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE;
   const aAttrib: CK_ATTRIBUTES);
 begin
-  Add(aType, @aAttrib, aAttrib.Count * SizeOf(aAttrib.Attrs[0]));
+  Add(aType, pointer(aAttrib.Attrs), aAttrib.Count * SizeOf(aAttrib.Attrs[0]));
 end;
 
-function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
-  out aValue: CK_ATTRIBUTE_PTR): boolean;
+function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_PTR;
 var
   u: CK_ATTRIBUTE_TYPE_ULONG;
   i: PtrInt;
 begin
-  result := true;
   u := ToULong(aType);
-  aValue := pointer(Attrs);
-  if aValue <> nil then
+  result := pointer(Attrs);
+  if result <> nil then
     for i := 1 to Count do
-      if aValue^._type = u then
-        exit
+      if result^._type = u then
+        if result^.ulValueLen = CK_UNAVAILABLE_INFORMATION then
+          break // not existing or too sensitive
+        else
+          exit  // found
       else
-        inc(aValue);
-  result := false;
+        inc(result);
+  result := nil;
 end;
 
 function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
@@ -2834,7 +3026,8 @@ function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found) and
+  found := Find(aType);
+  result := (found <> nil) and
             (found^.ulValueLen = SizeOf(aValue));
   if result then
     aValue := CK_ULONG_PTR(found^.pValue)^;
@@ -2845,7 +3038,8 @@ function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found) and
+  found := Find(aType);
+  result := (found <> nil) and
             (found^.ulValueLen = SizeOf(aValue));
   if result then
     aValue := PBoolean(found^.pValue)^;
@@ -2856,10 +3050,11 @@ function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found);
+  found := Find(aType);
+  result := found <> nil;
   if result then
     if found^.ulValueLen <> SizeOf(CK_DATE) then
-      aValue := 0 // e.g. "empty" CK_DATE
+      aValue := 0     // e.g. "empty" CK_DATE
     else
       Iso8601ToDateTimePUtf8CharVar(found^.pValue, SizeOf(CK_DATE), aValue);
 end;
@@ -2869,26 +3064,32 @@ function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found);
+  found := Find(aType);
+  result := found <> nil;
   if result then
     FastSetRawByteString(aValue, found^.pValue, found^.ulValueLen);
 end;
 
 function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
-  out aValue: RawUtf8): boolean;
+  out aValue: RawUtf8; aEncodeHex: boolean): boolean;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found);
+  found := Find(aType);
+  result := found <> nil;
   if result then
-    FastSetString(aValue, found^.pValue, found^.ulValueLen);
+    if aEncodeHex then
+      BinToHexLower(found^.pValue, found^.ulValueLen, aValue)
+    else
+      FastSetString(aValue, found^.pValue, found^.ulValueLen);
 end;
 
 function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG): boolean;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found) and
+  found := Find(aType);
+  result := (found <> nil) and
             (found^.ulValueLen = SizeOf(aValue)) and
             (CK_ULONG_PTR(found^.pValue)^ = aValue);
 end;
@@ -2897,7 +3098,8 @@ function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE; aValue: boolean): boolea
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found) and
+  found := Find(aType);
+  result := (found <> nil) and
             (found^.ulValueLen = SizeOf(aValue)) and
             (PBoolean(found^.pValue)^ = aValue);
 end;
@@ -2907,7 +3109,8 @@ function CK_ATTRIBUTES.Equals(aType: CK_ATTRIBUTE_TYPE;
 var
   found: CK_ATTRIBUTE_PTR;
 begin
-  result := Find(aType, found) and
+  found := Find(aType);
+  result := (found <> nil) and
             (found^.ulValueLen = CK_ULONG(length(aValue))) and
     mormot.core.base.CompareMem(found^.pValue, pointer(aValue), found^.ulValueLen);
 end;
@@ -2928,11 +3131,96 @@ begin
   inherited Destroy;
 end;
 
-procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString);
+function TPkcs11.Loaded: boolean;
 begin
-  if res <> CKR_SUCCESS then
-    raise EPkcs11.CreateUtf8(
-      '%.%: failed as % (%)', [self, ctxt, ToText(RV(res))^, res]);
+  result := (self <> nil) and
+            (fHandle <> 0);
+end;
+
+procedure TPkcs11.EnsureLoaded(const ctxt: ShortString);
+begin
+  if not Loaded then
+    raise EPkcs11.CreateUtf8('%.%: no library loaded', [self, ctxt]);
+end;
+
+procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString;
+  unlock: boolean);
+begin
+  if res = CKR_SUCCESS then
+    exit;
+  if unlock then
+    Safe.UnLock;
+  raise EPkcs11.CreateUtf8(
+    '%.%: failed as % (%)', [self, ctxt, ToText(RV(res))^, res]);
+end;
+
+procedure TPkcs11.CheckAttr(res: CK_RVULONG);
+begin
+  if (res <> CKR_SUCCESS) and
+     (res <> CKR_SENSITIVE) and // more tolerant
+     (res <> CKR_INVALID) then
+    Check(res, 'GetAttributeValue');
+end;
+
+function DoNotify(hSession: CK_SESSION_HANDLE; event: CK_NOTIFICATION;
+  pApplication: TPkcs11): CK_RVULONG; cdecl;
+begin
+  result := CKR_SUCCESS;
+  if (event = CKN_SURRENDER) and
+     (pApplication <> nil) and
+     (pApplication.fSession <> 0) and
+     Assigned(pApplication.OnNotify) and
+     pApplication.OnNotify(pApplication, pApplication.fSessionSlot) then
+    result := CKR_ABORT; // callback returned TRUE to abort
+end;
+
+procedure TPkcs11.BeginSession(slot: TPkcs11SlotID; rw: boolean);
+const
+  FLAGS: array[boolean] of CKSE_FLAGS = (
+    [CKF_SERIAL_SESSION],
+    [CKF_RW_SESSION, CKF_SERIAL_SESSION]);
+var
+  notif: pointer;
+begin
+  if fSession <> 0 then
+    raise EPkcs11.CreateUtf8('%: pending session', [self]);
+  Safe.Lock;
+  fSessionSlot := slot;
+  fSessionFlags := [];
+  notif := nil;
+  if Assigned(OnNotify) then
+    notif := @DoNotify;
+  Check(fC.OpenSession(slot, byte(FLAGS[rw]), pointer(self), notif, fSession),
+    'BeginSession', {unlock=}true);
+end;
+
+procedure TPkcs11.BeginSession(slot: TPkcs11SlotID; rw, so: boolean;
+  const pin: RawUtf8);
+const
+  FLAGS: array[boolean] of CK_USER_TYPE = (CKU_USER, CKU_SO);
+begin
+  BeginSession(slot, rw);
+  try
+    Check(fC.Login(fSession, FLAGS[so], pointer(pin), length(pin)), 'Login');
+    include(fSessionFlags, sfLogIn);
+  except
+    begin
+      EndSession;
+      raise;
+    end;
+  end;
+end;
+
+procedure TPkcs11.EndSession;
+begin
+  if fSession = 0 then
+    exit; // it won't hurt if called more than once
+  if sfLogIn in fSessionFlags then
+    fC.Logout(fSession);     // no error check
+  fC.CloseSession(fSession); // no error check
+  fSession := 0;
+  fSessionFlags := [];
+  Safe.UnLock;
 end;
 
 function TPkcs11.Load(const aLibraryName: TFileName): boolean;
@@ -2985,12 +3273,6 @@ begin
   fSlots := nil;
 end;
 
-function TPkcs11.Loaded: boolean;
-begin
-  result := (self <> nil) and
-            (fHandle <> 0);
-end;
-
 procedure TPkcs11.GetSlots(WithTokenPresent: boolean);
 var
   n, mn: CK_ULONG;
@@ -3001,10 +3283,10 @@ var
   res: integer;
   i, j, ntok: PtrInt;
 begin
+  EnsureLoaded('GetSlots');
   fSlots := nil;
   fTokens := nil;
-  if Loaded and
-     Assigned(fC^.GetSlotList) then
+  if Assigned(fC^.GetSlotList) then
   try
     fSafe.Lock;
     Check(fC^.GetSlotList(WithTokenPresent, nil, n), 'GetSlotList');
@@ -3049,11 +3331,194 @@ begin
         FillCharFast(tok, SizeOf(tok), 0);
         Check(fC^.GetTokenInfo(s[i], tok), 'GetTokenInfo');
         FillToken(s[i], tok, fTokens[ntok]);
+        fTokens[ntok].Objects := GetObjects(s[i]);
         inc(ntok);
       end;
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TPkcs11.GetObjects(SlotID: TPkcs11SlotID;
+  Filter: PCK_ATTRIBUTES; GetValue: PRawByteStringDynArray): TPkcs11ObjectDynArray;
+var
+  n, count, u: CK_ULONG;
+  i: PtrInt;
+  b: boolean;
+  obj: array[byte] of CK_OBJECT_HANDLE;
+  arr: CK_ATTRIBUTES;
+begin
+  result := nil;
+  count := 0;
+  BeginSession(SlotID, {rw=}false);
+  try
+    if Filter = nil then
+      u := fC.FindObjectsInit(fSession, nil, 0) // find all
+    else // search from some attributes
+      u := fC.FindObjectsInit(fSession, pointer(Filter^.Attrs), Filter^.Count);
+    Check(u, 'FindObjectsInit');
+    arr.Clear;
+    arr.Add([CKA_CLASS, CKA_PRIVATE, CKA_SENSITIVE, CKA_MODIFIABLE, CKA_COPYABLE,
+             CKA_DESTROYABLE, CKA_LABEL, CKA_APPLICATION, CKA_UNIQUE_ID,
+             CKA_START_DATE, CKA_END_DATE, CKA_ENCRYPT, CKA_DECRYPT,
+             CKA_SIGN, CKA_SIGN_RECOVER, CKA_VERIFY, CKA_VERIFY_RECOVER,
+             CKA_WRAP, CKA_TRUSTED, CKA_ID, CKA_SERIAL_NUMBER,
+             CKA_ISSUER, CKA_SUBJECT, CKA_OWNER, CKA_URL, CKA_CERTIFICATE_TYPE,
+             CKA_KEY_TYPE, CKA_KEY_GEN_MECHANISM]);
+    if GetValue <> nil then
+      arr.Add(CKA_VALUE);
+    repeat
+      n := 0;
+      Check(fC.FindObjects(fSession, @obj, length(obj), n), 'FindObjects');
+      if n = 0 then
+        break;
+      SetLength(result, n + count);
+      if GetValue <> nil then
+        SetLength(GetValue^, n + count);
+      for i := 0 to CK_LONG(n) - 1 do
+      begin
+        arr.ClearValues;    // keep _type
+        CheckAttr(fC.GetAttributeValue(
+          fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get length
+        arr.AllocateValues; // fill pValue
+        CheckAttr(fC.GetAttributeValue(
+          fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get data
+        if arr.Find(CKA_CLASS, u) then
+          with result[count] do
+          begin
+            ObjClass := OBJECT_CLASS(u);
+            if arr.Find(CKA_PRIVATE, b) and b then
+              include(StorageFlags, posPrivate);
+            if arr.Find(CKA_SENSITIVE, b) and b then
+              include(StorageFlags, posSensitive);
+            if arr.Find(CKA_MODIFIABLE, b) and b then
+              include(StorageFlags, posModifiable);
+            if arr.Find(CKA_COPYABLE, b) and b then
+              include(StorageFlags, posCopiable);
+            if arr.Find(CKA_DESTROYABLE, b) and b then
+              include(StorageFlags, posDestroyable);
+            if arr.Find(CKA_ENCRYPT, b) and b then
+              include(StorageFlags, posEncrypt);
+            if arr.Find(CKA_DECRYPT, b) and b then
+              include(StorageFlags, posDecrypt);
+            if arr.Find(CKA_WRAP, b) and b then
+              include(StorageFlags, posWrap);
+            if arr.Find(CKA_TRUSTED, b) and b then
+              include(StorageFlags, posTrusted);
+            if arr.Find(CKA_VERIFY, b) and b then
+              include(StorageFlags, posVerify);
+            if arr.Find(CKA_VERIFY_RECOVER, b) and b then
+              include(StorageFlags, posVerifyRecover);
+            if arr.Find(CKA_SIGN, b) and b then
+              include(StorageFlags, posSign);
+            if arr.Find(CKA_SIGN_RECOVER, b) and b then
+              include(StorageFlags, posSignRecover);
+            arr.Find(CKA_LABEL, StorageLabel);
+            arr.Find(CKA_APPLICATION, Application);
+            arr.Find(CKA_ID, UniqueID, {hex=}true);
+            if UniqueID = '' then
+              arr.Find(CKA_UNIQUE_ID, UniqueID);
+            arr.Find(CKA_SUBJECT, Subject);
+            if arr.Find(CKA_CERTIFICATE_TYPE, u) then
+            begin
+              arr.Find(CKA_SERIAL_NUMBER, Serial);
+              arr.Find(CKA_ISSUER, Issuer);
+              if Subject = '' then
+                arr.Find(CKA_OWNER, Subject);
+              if Application = '' then
+                arr.Find(CKA_URL, Application);
+              case CERTIFICATE_TYPE(u) of
+                CKC_X_509:
+                  include(StorageFlags, posX509);
+                CKC_X_509_ATTR_CERT:
+                  include(StorageFlags, posX509Attr);
+                CKC_WTLS:
+                  include(StorageFlags, posWtls);
+              end;
+            end;
+            arr.Find(CKA_START_DATE, Start);
+            arr.Find(CKA_END_DATE, Stop);
+            if arr.Find(CKA_KEY_TYPE, u) then
+              KeyType := KEY_TYPE(u);
+            if arr.Find(CKA_KEY_GEN_MECHANISM, u) then
+              KeyGen := MECHANISM_TYPE(u);
+            if GetValue <> nil then
+              arr.Find(CKA_VALUE, GetValue^[count]);
+            inc(count);
+          end;
+      end;
+    until false;
+    Check(fc.FindObjectsFinal(fSession), 'FindObjectsFinal');
+    if count <> CK_ULONG(length(result)) then
+      SetLength(result, count);
+   if (GetValue <> nil) and
+      (count <> CK_ULONG(length(GetValue^))) then
+     SetLength(GetValue^, count);
+  finally
+    EndSession;
+  end;
+end;
+
+procedure TPkcs11.InitToken(SlotID: TPkcs11SlotID;
+  const SOPin, TokenLabel: RawUtf8);
+begin
+  EnsureLoaded('InitToken');
+  fSafe.Lock;
+  try
+    Check(fC.InitToken(SlotID, pointer(SOPin), length(SOPin),
+      pointer(Pad(TokenLabel, 32))), 'InitToken');
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPkcs11.SessionGetAttribute(
+  obj: CK_OBJECT_HANDLE; attr: CK_ATTRIBUTE_TYPE): RawUtf8;
+var
+  a: CK_ATTRIBUTE;
+begin
+  result := '';
+  a._type := ToULONG(attr);
+  a.pValue := nil;
+  a.ulValueLen := 0;
+  if (fC.GetAttributeValue(fSession, obj, @a, 1) <> CKR_SUCCESS) or
+     (a.ulValueLen = CK_UNAVAILABLE_INFORMATION) then
+    exit; // impossible to retrieve the length
+  FastSetString(result, nil, a.ulValueLen);
+  a.pValue := pointer(result); // copy the attribute value to result
+  if fC.GetAttributeValue(fSession, obj, @a, 1) <> CKR_SUCCESS then
+    result := '';
+end;
+
+function TPkcs11.SessionCreateObject(const a: CK_ATTRIBUTES;
+  SlotID: TPkcs11SlotID; const Pin: RawUtf8; so: boolean): RawUtf8;
+var
+  obj: CK_OBJECT_HANDLE;
+begin
+  result := '';
+  BeginSession(SlotID, {rw=}true, {so=}so, Pin);
+  try
+    Check(fC.CreateObject(
+      fSession, pointer(a.Attrs), a.Count, obj), 'CreateObject');
+    result := SessionGetAttribute(obj, CKA_UNIQUE_ID); // just generated
+  finally
+    EndSession;
+  end;
+end;
+
+function TPkcs11.AddData(SlotID: TPkcs11SlotID; const Pin, Application,
+  DataLabel: RawUtf8; const Data: RawByteString; const DerID: RawByteString;
+  SO: boolean): RawUtf8;
+var
+  a: CK_ATTRIBUTES;
+begin
+  a.New(CKO_DATA, DataLabel);
+  if Application <> '' then
+    a.Add(CKA_APPLICATION, Application);
+  if DerID <> '' then
+    a.Add(CKA_OBJECT_ID, DerID);
+  a.Add(CKA_VALUE, Data);
+  result := SessionCreateObject(a, SlotID, Pin, SO);
 end;
 
 
@@ -3068,15 +3533,22 @@ initialization
   Rtti.RegisterTypes([
     TypeInfo(CKT_FLAGS),
     TypeInfo(CKSL_FLAGS),
-    TypeInfo(CK_MECHANISM_TYPES)
+    TypeInfo(CK_MECHANISM_TYPES),
+    TypeInfo(CK_OBJECT_CLASS),
+    TypeInfo(CK_KEY_TYPE),
+    TypeInfo(TPkcs11ObjectStorage)
     ]);
   Rtti.RegisterFromText([
     TypeInfo(TPkcs11Slot),
       'Slot:cardinal Description,Manufacturer:RawUtf8 Flags:CKSL_FLAGS' +
       ' Mechanism:CK_MECHANISM_TYPES HwMaj,HwMin,FwMaj,FwMin:byte',
+    TypeInfo(TPkcs11ObjectDynArray),
+      'Class:CK_OBJECT_CLASS Label:RawUtf8 Flags:TPkcs11ObjectStorage' +
+      ' KeyType:CK_KEY_TYPE KeyGen:CK_MECHANISM_TYPE Start,End:TDateTime' +
+      ' ID,App:RawUtf8 Sub,SN,Issuer:RawByteString',
     TypeInfo(TPkcs11Token),
       'Slot:cardinal Name,Manufacturer,Model,Serial,Time:RawUtf8 Flags:CKT_FLAGS' +
-      ' Sessions,MaxSessions,MinPin,MaxPin: integer'
+      ' Sessions,MaxSessions,MinPin,MaxPin: integer Objects:TPkcs11ObjectDynArray'
     ]);
 
 
