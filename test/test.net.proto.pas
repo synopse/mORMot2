@@ -37,13 +37,14 @@ type
     three: boolean;
     request: integer;
     four: Int64;
-    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest2(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
+    // this is the main method called by RtspOverHttp[BufferedWrite]
+    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
     /// validate TUriTree high-level structure
     procedure _TUriTree;

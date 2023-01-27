@@ -3529,6 +3529,7 @@ initialization
   Rtti.RegisterTypes([
     TypeInfo(CKT_FLAGS),
     TypeInfo(CKSL_FLAGS),
+    TypeInfo(CK_MECHANISM_TYPE),
     TypeInfo(CK_MECHANISM_TYPES),
     TypeInfo(CK_OBJECT_CLASS),
     TypeInfo(CK_KEY_TYPE),
