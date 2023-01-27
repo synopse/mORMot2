@@ -2483,9 +2483,10 @@ begin
   CheckEqual(MacTextFromHex('12345'), '');
   CheckEqual(MacTextFromHex(s), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
   CheckEqual(MacTextFromHex(UpperCase(s)), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
-  s := s + s;
+  AppendToRawUtf8(s, s); // s := s + s triggers GPF with FPC_LIBCMM :(
   repeat
-    delete(s, Random32(length(s)) + 1, 1);
+    i := Random32(length(s)) + 1;
+    delete(s, i, 1);
     Check(TrimGuid(s) = (length(s) = 32));
   until s = '';
   s := '   ';
