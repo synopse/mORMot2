@@ -1815,7 +1815,11 @@ type
 
 /// fast add some content to a RawByteString buffer
 procedure AppendBufferToRawByteString(var Content: RawByteString;
-  const Buffer; BufferLen: PtrInt);
+  const Buffer; BufferLen: PtrInt); overload;
+
+/// fast add some content to a RawByteString buffer
+procedure AppendBufferToRawByteString(var Content: RawByteString;
+  const Buffer: RawByteString); overload;
 
 /// fast add some characters to a RawUtf8 string
 // - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
@@ -8791,6 +8795,18 @@ begin
   ContentLen := length(Content);
   SetLength(Content, ContentLen + BufferLen);
   MoveFast(Buffer, PByteArray(Content)^[ContentLen], BufferLen);
+end;
+
+procedure AppendBufferToRawByteString(var Content: RawByteString;
+  const Buffer: RawByteString);
+var
+  ContentLen: PtrInt;
+begin
+  if Buffer = '' then
+    exit;
+  ContentLen := length(Content);
+  SetLength(Content, ContentLen + length(Buffer));
+  MoveFast(Buffer, PByteArray(Content)^[ContentLen], length(Buffer));
 end;
 
 function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;

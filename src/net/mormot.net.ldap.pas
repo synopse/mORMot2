@@ -1,58 +1,596 @@
+/// Simple Network LDAP Client
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-
 unit mormot.net.ldap;
 
-{==============================================================================|
-| Copyright (c)1999-2014, Lukas Gebauer                                        |
-| All rights reserved.                                                         |
-|                                                                              |
-| Redistribution and use in source and binary forms, with or without           |
-| modification, are permitted provided that the following conditions are met:  |
-|                                                                              |
-| Redistributions of source code must retain the above copyright notice, this  |
-| list of conditions and the following disclaimer.                             |
-|                                                                              |
-| Redistributions in binary form must reproduce the above copyright notice,    |
-| this list of conditions and the following disclaimer in the documentation    |
-| and/or other materials provided with the distribution.                       |
-|                                                                              |
-| Neither the name of Lukas Gebauer nor the names of its contributors may      |
-| be used to endorse or promote products derived from this software without    |
-| specific prior written permission.                                           |
-|                                                                              |
-| THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"  |
-| AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE    |
-| IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE   |
-| ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR  |
-| ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL       |
-| DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR   |
-| SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER   |
-| CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT           |
-| LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY    |
-| OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH  |
-| DAMAGE.                                                                      |
-|==============================================================================|
-| The Initial Developer of the Original Code is Lukas Gebauer (Czech Republic).|
-| Portions created by Lukas Gebauer are Copyright (c)2003-2014.                |
-| All Rights Reserved.                                                         |
-|==============================================================================|
-| Contributor(s):                                                              |
-|==============================================================================|
-| History: This file comes from the synapse library and was adapted to use     |
-|          mormot cross platform sockets                                       |
-|==============================================================================}
+{
+  *****************************************************************************
+
+   Simple LDAP Protocol Client
+    - LDAP Response Storage
+    - LDAP Client Class
+
+  *****************************************************************************
+  Code below was inspired by Synapse Library code:
+   The Initial Developer of the Original Code is Lukas Gebauer (Czech Republic).
+   Portions created by Lukas Gebauer are (c)2003-2014. All Rights Reserved.
+}
 
 interface
 
 {$I ..\mormot.defines.inc}
 
 uses
-  SysUtils,
-  Classes,
+  sysutils,
+  classes,
   mormot.net.sock,
   mormot.core.base,
-  mormot.core.data;
+  mormot.core.os,
+  mormot.core.buffers,
+  mormot.core.text,
+  mormot.core.unicode,
+  mormot.core.data,
+  mormot.crypt.core;
+
+
+{ **************** LDAP Response Storage }
+
+type
+  /// store a named LDAP attribute with the list of its values
+  TLdapAttribute = class
+  private
+    fList: TRawUtf8DynArray;
+    fAttributeName: RawUtf8;
+    fCount: integer;
+    fIsBinary: boolean;
+  public
+    /// initialize the attribute(s) storage
+    constructor Create(const AttrName: RawUtf8);
+    /// include a new value to this list
+    // - IsBinary values will be stored base-64 encoded
+    procedure Add(const aValue: RawByteString);
+    /// retrieve a value as human-readable text
+    function GetReadable(index: PtrInt): RawUtf8;
+    /// retrieve a value as its inital value stored with Add()
+    function GetRaw(index: PtrInt): RawByteString;
+    /// how many values have been added to this attribute
+    property Count: integer
+      read fCount;
+    /// name of this LDAP attribute
+    property AttributeName: RawUtf8
+      read fAttributeName;
+    /// true if the attribute contains binary data
+    property IsBinary: boolean
+      read fIsBinary;
+  end;
+  /// dynamic array of LDAP attribute, as stored in TLdapAttributeList
+  TLdapAttributeDynArray = array of TLdapAttribute;
+
+  /// list one or several TLdapAttribute
+  TLdapAttributeList = class
+  private
+    fItems: TLdapAttributeDynArray;
+  public
+    /// finalize the list
+    destructor Destroy; override;
+    /// clear the list
+    procedure Clear;
+    /// number of TLdapAttribute objects in this list
+    function Count: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// allocate and a new TLdapAttribute object to the list
+    function Add(const AttributeName: RawUtf8): TLdapAttribute;
+    /// remove one TLdapAttribute object from the list
+    procedure Delete(const AttributeName: RawUtf8);
+    /// find and return attribute index with the requested name
+    // - returns -1 if not found
+    function FindIndex(const AttributeName: RawUtf8): PtrInt;
+    /// find and return attribute with the requested name
+    // - returns nil if not found
+    function Find(const AttributeName: RawUtf8): TLdapAttribute;
+    /// Find and return first attribute value with requested name
+    // - calls GetReadable(0) on the found attribute
+    // - returns empty string if not found
+    function Get(const AttributeName: RawUtf8): RawUtf8;
+    /// access to the internal list of TLdapAttribute objects
+    property Items: TLdapAttributeDynArray
+      read fItems;
+  end;
+
+  /// store one LDAP result, i.e. object name and attributes
+  TLdapResult = class
+  private
+    fObjectName: RawUtf8;
+    fAttributes: TLdapAttributeList;
+  public
+    /// initialize the instance
+    constructor Create; reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// Name of this LDAP object
+    property ObjectName: RawUtf8
+      read fObjectName write fObjectName;
+    /// Here is list of object attributes
+    property Attributes: TLdapAttributeList read fAttributes;
+  end;
+  TLdapResultObjArray = array of TLdapResult;
+
+  /// maintain a list of LDAP result objects
+  TLdapResultList = class(TObject)
+  private
+    fItems: TLdapResultObjArray;
+    fCount: integer;
+  public
+    /// finalize the list
+    destructor Destroy; override;
+    /// create and add new TLdapResult object to the list
+    function Add: TLdapResult;
+    /// clear all TLdapResult objects in list
+    procedure Clear;
+    /// dump the result of a LDAP search into human readable form
+    // - used for debugging
+    function Dump: RawUtf8;
+    /// number of TLdapResult objects in list
+    property Count: integer
+      read fCount;
+    /// List of TLdapResult objects
+    property Items: TLdapResultObjArray
+      read fItems;
+  end;
+
+
+{ **************** LDAP Client Class }
+
+type
+  /// define possible operations for LDAP MODIFY operations
+  TLdapModifyOp = (
+    MO_Add,
+    MO_Delete,
+    MO_Replace
+  );
+
+  /// define possible values for LDAP search scope
+  TLdapSearchScope = (
+    SS_BaseObject,
+    SS_SingleLevel,
+    SS_WholeSubtree
+  );
+
+  /// define possible values about LDAP alias dereferencing
+  TLdapSearchAliases = (
+    SA_NeverDeref,
+    SA_InSearching,
+    SA_FindingBaseObj,
+    SA_Always
+  );
+
+  /// parent class of application protocol implementations
+  // By this class is defined common properties
+  TAbstractClient = Class(TObject)
+  protected
+    fTargetHost: RawUtf8;
+    fTargetPort: RawUtf8;
+    fIPInterface: RawUtf8;
+    fTimeout: integer;
+    fUserName: RawUtf8;
+    fPassword: RawUtf8;
+  public
+    /// initialize the instance
+    constructor Create;
+    /// target server IP (or symbolic name)
+    // - default is 'localhost'
+    property TargetHost: RawUtf8
+      read fTargetHost Write fTargetHost;
+    /// target server port (or symbolic name)
+    property TargetPort: RawUtf8
+      read fTargetPort Write fTargetPort;
+    /// local socket address (outgoing IP address)
+    // - default is '0.0.0.0' as wildcard for default IP
+    property IPInterface: RawUtf8
+      read fIPInterface Write fIPInterface;
+    /// milliseconds timeout for socket operations
+    // - default is 5000, ie. 5 seconds
+    property Timeout: integer
+      read fTimeout Write fTimeout;
+    /// if protocol needs user authorization, then fill here user name
+    property UserName: RawUtf8
+      read fUserName Write fUserName;
+    /// if protocol needs user authorization, then fill here its password
+    property Password: RawUtf8
+      read fPassword Write fPassword;
+  end;
+
+  /// we defined our own type to hold an ASN object binary
+  TAsnObject = RawByteString;
+
+  /// implementation of LDAP client version 2 and 3
+  // - Authentication use parent TAbstractClient Username/Password properties
+  // - Server/Port use parent TAbstractClient TargetHost/TargetPort properties
+  TLdapClient = class(TAbstractClient)
+  private
+    fSock: TCrtSocket;
+    fResultCode: integer;
+    fResultString: RawUtf8;
+    fFullResult: TAsnObject;
+    fFullTls: boolean;
+    fTlsContext: PNetTlsContext;
+    fSeq: integer;
+    fResponseCode: integer;
+    fResponseDN: RawUtf8;
+    fReferals: TRawUtf8List;
+    fVersion: integer;
+    fSearchScope: TLdapSearchScope;
+    fSearchAliases: TLdapSearchAliases;
+    fSearchSizeLimit: integer;
+    fSearchTimeLimit: integer;
+    fSearchPageSize: integer;
+    fSearchCookie: RawUtf8;
+    fSearchResult: TLdapResultList;
+    fExtName: RawUtf8;
+    fExtValue: RawUtf8;
+    function Connect: boolean;
+    function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
+    procedure SendPacket(const Asn1Data: TAsnObject);
+    function ReceiveResponse: TAsnObject;
+    function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
+    function LdapSasl(const Value: RawUtf8): RawUtf8;
+    function TranslateFilter(const Filter: RawUtf8): TAsnObject;
+    class function GetErrorString(ErrorCode: integer): RawUtf8;
+    function ReceiveString(Size: integer): RawByteString;
+  public
+    /// initialize this LDAP client instance
+    constructor Create;
+    /// finalize this LDAP client instance
+    destructor Destroy; override;
+    /// try to connect to LDAP server and start secure channel when it is required
+    function Login: boolean;
+    /// try to bind to the LDAP server with Username/Password
+    // - if this is empty strings, then it does annonymous binding
+    // - when you not call Bind on LDAPv3, then anonymous mode is used
+    // - warning: uses plaintext transport of password: it is secure only on TLS
+    function Bind: boolean;
+    /// try to bind to the LDAP server with Username/Password
+    // - when you not call Bind on LDAPv3, then anonymous mode is used
+    // - warning: uses MD5 digest for password: it is really secure only on TLS
+    function BindSasl: boolean;
+    /// close connection to the LDAP server
+    function Logout: boolean;
+
+    /// modify content of a LDAP attribute on this object
+    function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+      Value: TLdapAttribute): boolean;
+    /// add list of attributes to specified object
+    function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
+    /// delete this LDAP object from server
+    function Delete(const Obj: RawUtf8): boolean;
+    /// modify the object name of this LDAP object
+    function ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
+      DeleteOldRdn: boolean): boolean;
+    /// try to compare Attribute value with this LDAP object
+    function Compare(const Obj, AttributeValue: RawUtf8): boolean;
+    /// search LDAP base for LDAP objects using a given Filter
+    function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
+      Filter: RawUtf8; const Attributes: array of RawByteString): boolean;
+    /// call any LDAPv3 extended command
+    function Extended(const Oid, Value: RawUtf8): boolean;
+    /// the version of LDAP protocol used
+    // - default value is 3
+    property Version: integer
+      read fVersion Write fVersion;
+    /// contains the result code of the last LDAP operation
+    property ResultCode: integer
+      read fResultCode;
+    /// human readable description of the last LDAP operation
+    property ResultString: RawUtf8
+      read fResultString;
+    /// binary string of the last full response from LDAP server
+    // - This string is encoded by ASN.1 BER encoding
+    // - You need this only for debugging
+    property FullResult: TAsnObject
+      read fFullResult;
+    /// if connection to the LDAP server is through TLS tunnel
+    property FullTls: boolean
+      read fFullTls Write fFullTls;
+    /// optional advanced options for FullTls = true
+    property TlsContext: PNetTlsContext
+      read fTlsContext write fTlsContext;
+    /// sequence number of the last LDAP command
+    // - incremented with any LDAP command
+    property Seq: integer
+      read fSeq;
+    /// the search scope used in search command
+    property SearchScope: TLdapSearchScope
+      read fSearchScope Write fSearchScope;
+    /// how to handle aliases in search command
+    property SearchAliases: TLdapSearchAliases
+      read fSearchAliases Write fSearchAliases;
+    /// result size limit in search command (bytes)
+    // - 0 means without size limit
+    property SearchSizeLimit: integer
+      read fSearchSizeLimit Write fSearchSizeLimit;
+    /// search time limit in search command (seconds)
+    // - 0 means without time limit
+    property SearchTimeLimit: integer
+      read fSearchTimeLimit Write fSearchTimeLimit;
+    /// number of results to return per search request
+    // - 0 means no paging
+    property SearchPageSize: integer
+      read fSearchPageSize Write fSearchPageSize;
+    /// cookie returned by paged search results
+    // - use an empty string for the first search request
+    property SearchCookie: RawUtf8
+      read fSearchCookie Write fSearchCookie;
+    /// result of the search command
+    property SearchResult: TLdapResultList read fSearchResult;
+    /// each LDAP operation on server can return some referals URLs
+    property Referals: TRawUtf8List
+      read fReferals;
+    /// on Extended operation, here is the result Name asreturned by server
+    property ExtName: RawUtf8
+      read fExtName;
+    /// on Extended operation, here is the result Value as returned by server
+    property ExtValue: RawUtf8 read
+      fExtValue;
+    /// raw TCP socket used by all LDAP operations
+    property Sock: TCrtSocket
+      read fSock;
+  end;
+
+
+
+implementation
+
+
+{ ****** Support procedures and functions ****** }
+
+function UnquoteStr(const Value: RawUtf8): RawUtf8;
+begin
+  if (Value = '') or
+     (Value[1] <> '"') then
+    result := Value
+  else
+    UnQuoteSqlStringVar(pointer(Value), result);
+end;
+
+function IsBinaryString(const Value: RawByteString): boolean;
+var
+  n: PtrInt;
+begin
+  result := true;
+  for n := 1 to length(Value) do
+    if ord(Value[n]) in [0..8, 10..31] then
+      // consider null-terminated strings as non-binary
+      if (n <> length(value)) or
+         (Value[n] = #0) then
+        exit;
+  result := false;
+end;
+
+function UnQuoteByBegin(const UpValue: RawUtf8; List: TRawUtf8List): RawUtf8;
+var
+  p: PPUtf8CharArray;
+  i: PtrInt;
+begin
+  p := List.TextPtr;
+  for i := 0 to List.Count - 1 do
+    if IdemPChar(p[i], pointer(UpValue)) then
+    begin
+      result := p[i];
+      delete(result, 1, length(UpValue));
+      result := UnQuoteStr(TrimU(result));
+      exit;
+    end;
+  result := '';
+end;
+
+function SeparateLeft(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
+var
+  x: PtrInt;
+begin
+  x := PosExChar(Delimiter, Value);
+  if x = 0 then
+    result := Value
+  else
+    result := copy(Value, 1, x - 1);
+end;
+
+function SeparateRight(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
+var
+  x: PtrInt;
+begin
+  x := PosExChar(Delimiter, Value);
+  result := copy(Value, x + 1, length(Value) - x);
+end;
+
+function SeparateRightU(const Value, Delimiter: RawUtf8): RawUtf8;
+var
+  x: PtrInt;
+begin
+  x := mormot.core.base.PosEx(Delimiter, Value);
+  TrimCopy(Value, x + 1, length(Value) - x, result);
+end;
+
+function GetBetween(PairBegin, PairEnd: AnsiChar; const Value: RawUtf8): RawUtf8;
+var
+  n, len, x: PtrInt;
+  s: RawUtf8;
+begin
+  n := length(Value);
+  if (n = 2) and
+     (Value[1] = PairBegin) and
+     (Value[2] = PairEnd) then
+  begin
+    result := '';//nothing between
+    exit;
+  end;
+  if n < 2 then
+  begin
+    result := Value;
+    exit;
+  end;
+  s := SeparateRight(Value, PairBegin);
+  if s = Value then
+  begin
+    result := Value;
+    exit;
+  end;
+  n := PosExChar(PairEnd, s);
+  if n = 0 then
+  begin
+    result := Value;
+    exit;
+  end;
+  len := length(s);
+  x := 1;
+  for n := 1 to len do
+  begin
+    if s[n] = PairBegin then
+      inc(x)
+    else if s[n] = PairEnd then
+    begin
+      dec(x);
+      if x <= 0 then
+      begin
+        len := n - 1;
+        break;
+      end;
+    end;
+  end;
+  result := copy(s, 1, len);
+end;
+
+function DecodeTriplet(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
+var
+  x, l, lv: integer;
+  c: AnsiChar;
+  b: byte;
+  bad: boolean;
+begin
+  lv := length(Value);
+  SetLength(result, lv);
+  x := 1;
+  l := 1;
+  while x <= lv do
+  begin
+    c := Value[x];
+    inc(x);
+    if c <> Delimiter then
+    begin
+      result[l] := c;
+      inc(l);
+    end
+    else
+      if x < lv then
+      begin
+        case Value[x] of
+          #13:
+            if Value[x + 1] = #10 then
+              inc(x, 2)
+            else
+              inc(x);
+          #10:
+            if Value[x + 1] = #13 then
+              inc(x, 2)
+            else
+              inc(x);
+        else
+          begin
+            bad := false;
+            case Value[x] of
+              '0'..'9':
+                b := (byte(Value[x]) - 48) shl 4;
+              'a'..'f', 'A'..'F':
+                b := ((byte(Value[x]) and 7) + 9) shl 4;
+            else
+              begin
+                b := 0;
+                bad := true;
+              end;
+            end;
+            case Value[x + 1] of
+              '0'..'9':
+                b := b or (byte(Value[x + 1]) - 48);
+              'a'..'f', 'A'..'F':
+                b := b or ((byte(Value[x + 1]) and 7) + 9);
+            else
+              bad := true;
+            end;
+            if bad then
+            begin
+              result[l] := c;
+              inc(l);
+            end
+            else
+            begin
+              inc(x, 2);
+              result[l] := AnsiChar(b);
+              inc(l);
+            end;
+          end;
+        end;
+      end
+      else
+        break;
+  end;
+  dec(l);
+  SetLength(result, l);
+end;
+
+function TrimSPLeft(const S: RawUtf8): RawUtf8;
+var
+  i, l: integer;
+begin
+  result := '';
+  if S = '' then
+    exit;
+  l := length(S);
+  i := 1;
+  while (i <= l) and
+        (S[i] = ' ') do
+    inc(i);
+  result := copy(S, i, Maxint);
+end;
+
+function TrimSPRight(const S: RawUtf8): RawUtf8;
+var
+  i: integer;
+begin
+  result := '';
+  if S = '' then
+    exit;
+  i := length(S);
+  while (i > 0) and
+        (S[i] = ' ') do
+    dec(i);
+  result := copy(S, 1, i);
+end;
+
+function TrimSP(const S: RawUtf8): RawUtf8;
+begin
+  result := TrimSPRight(TrimSPLeft(s));
+end;
+
+function FetchBin(var Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
+var
+  s: RawUtf8;
+begin
+  result := SeparateLeft(Value, Delimiter);
+  s := SeparateRight(Value, Delimiter);
+  if s = Value then
+    Value := ''
+  else
+    Value := s;
+end;
+
+function Fetch(var Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
+begin
+  result := TrimSP(FetchBin(Value, Delimiter));
+  Value := TrimSP(Value);
+end;
+
+
+
+{ ****** ASN.1 BER encoding/decoding ****** }
 
 const
   ASN1_BOOL = $01;
@@ -92,728 +630,345 @@ const
   LDAP_ASN1_EXT_RESPONSE = $78;
   LDAP_ASN1_CONTROLS = $A0;
 
-
-type
-
-  TASNObject = type RawByteString;
-
-  /// LDAP attribute with list of their values
-  // This class holding name of LDAP attribute and list of their values. This is
-  // descendant of TRawUtf8List class enhanced by some new properties
-  TLDAPAttribute = class(TRawUtf8List)
-  private
-    FAttributeName: RawUtf8;
-    FIsBinary: Boolean;
-  public
-    constructor Create(AttrName: RawUtf8);
-    function Add(const aText: RawUtf8): PtrInt;
-
-    function GetReadable(index: PtrInt): RawUtf8;
-    /// Name of LDAP attribute
-    property AttributeName: RawUtf8 read FAttributeName;
-    /// Return true when attribute contains binary data
-    property IsBinary: Boolean read FIsBinary;
-  end;
-
-  /// List of TLDAPAttribute
-  // This object can hold list of TLDAPAttribute objects
-  TLDAPAttributeList = class(TObject)
-  private
-    FAttributeList: TList;
-    function GetAttribute(Index: integer): TLDAPAttribute;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    /// Clear list
-    procedure Clear;
-    /// Count of TLDAPAttribute objects in list
-    function Count: integer;
-    /// Add new TLDAPAttribute object to list
-    function Add(AttributeName: RawUtf8): TLDAPAttribute;
-    /// Delete one TLDAPAttribute object from list
-    procedure Del(Index: integer);
-    /// Find and return attribute with requested name. Returns nil if not found
-    function Find(AttributeName: RawUtf8): TLDAPAttribute;
-    /// Find and return attribute value with requested name.
-    // - Returns empty string if not found
-    function Get(AttributeName: RawUtf8): RawUtf8;
-    /// List of TLDAPAttribute objects
-    property Items[Index: Integer]: TLDAPAttribute read GetAttribute; default;
-  end;
-
-  /// LDAP result object
-  // This object can hold LDAP object (their name and all their attributes with
-  // values)
-  TLDAPresult = class(TObject)
-  private
-    FObjectName: RawUtf8;
-    FAttributes: TLDAPAttributeList;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    /// Name of this LDAP object
-    property ObjectName: RawUtf8 read FObjectName write FObjectName;
-    /// Here is list of object attributes
-    property Attributes: TLDAPAttributeList read FAttributes;
-  end;
-
-  /// List of LDAP result objects
-  // This object can hold list of LDAP objects (for example result of LDAP SEARCH)
-  TLDAPresultList = class(TObject)
-  private
-    FresultList: TList;
-    function Getresult(Index: integer): TLDAPresult;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    /// Clear all TLDAPresult objects in list
-    procedure Clear;
-    /// Return count of TLDAPresult objects in list
-    function Count: integer;
-    /// Create and add new TLDAPresult object to list
-    function Add: TLDAPresult;
-    /// List of TLDAPresult objects
-    property Items[Index: Integer]: TLDAPresult read Getresult; default;
-  end;
-
-  /// Define possible operations for LDAP MODIFY operations
-  TLDAPModifyOp = (
-    MO_Add,
-    MO_Delete,
-    MO_Replace
-  );
-
-  /// Specify possible values for search scope
-  TLDAPSearchScope = (
-    SS_BaseObject,
-    SS_SingleLevel,
-    SS_WholeSubtree
-  );
-
-  /// Specify possible values about alias dereferencing
-  TLDAPSearchAliases = (
-    SA_NeverDeref,
-    SA_InSearching,
-    SA_FindingBaseObj,
-    SA_Always
-  );
-
-  /// Parent class of application protocol implementations
-  // By this class is defined common properties
-  TSynaClient = Class(TObject)
-  protected
-    FTargetHost: RawUtf8;
-    FTargetPort: RawUtf8;
-    FIPInterface: RawUtf8;
-    FTimeout: integer;
-    FUserName: RawUtf8;
-    FPassword: RawUtf8;
-  public
-    constructor Create;
-    /// Specify terget server IP (or symbolic name)
-    // - Default is 'localhost'
-    property TargetHost: RawUtf8 read FTargetHost Write FTargetHost;
-
-    /// Specify terget server port (or symbolic name)
-    property TargetPort: RawUtf8 read FTargetPort Write FTargetPort;
-
-    /// Defined local socket address (outgoing IP address)
-    // - Default is use '0.0.0.0' as wildcard for default IP
-    property IPInterface: RawUtf8 read FIPInterface Write FIPInterface;
-
-    /// Specify default timeout for socket operations
-    property Timeout: integer read FTimeout Write FTimeout;
-
-    /// If protocol need user authorization, then fill here username
-    property UserName: RawUtf8 read FUserName Write FUserName;
-
-    ///If protocol need user authorization, then fill here password
-    property Password: RawUtf8 read FPassword Write FPassword;
-  end;
-
-
-
-  /// Implementation of LDAP client
-  // - version 2 and 3
-  // - Authentication use parent TSynaClient Username/Password properties
-  // - Server/Port use parent TSynaClient TargetHost/TargetPort properties
-  TLDAPSend = class(TSynaClient)
-  private
-    FSock: TCrtSocket;
-    FresultCode: Integer;
-    FresultString: RawUtf8;
-    FFullresult: TASNObject;
-    FFullSSL: Boolean;
-    FSeq: integer;
-    FResponseCode: integer;
-    FResponseDN: RawUtf8;
-    FReferals: TRawUtf8List;
-    FVersion: integer;
-    FSearchScope: TLDAPSearchScope;
-    FSearchAliases: TLDAPSearchAliases;
-    FSearchSizeLimit: integer;
-    FSearchTimeLimit: integer;
-    FSearchPageSize: integer;
-    FSearchCookie: RawUtf8;
-    FSearchresult: TLDAPresultList;
-    FExtName: RawUtf8;
-    FExtValue: RawUtf8;
-    function Connect: Boolean;
-    function BuildPacket(const Asn1Data: TASNObject): TASNObject;
-    function ReceiveResponse: TASNObject;
-    function DecodeResponse(const Asn1Response: TASNObject): TASNObject;
-    function LdapSasl(Value: RawUtf8): RawByteString;
-    function TranslateFilter(Filter: RawUtf8): TASNObject;
-    function GetErrorString(ErrorCode: integer): RawUtf8;
-    function ReceiveString(Length: integer): RawByteString;
-  public
-    constructor Create;
-    destructor Destroy; override;
-
-    /// Try to connect to LDAP server and start secure channel when it is required
-    function Login: Boolean;
-
-    /// Try to bind to LDAP server with Username/Password
-    // - If this is empty strings, then it do annonymous Bind
-    // - When you not call Bind on LDAPv3, then is automaticly used anonymous mode
-    // - This method using plaintext transport of password! It is not secure!
-    function Bind: Boolean;
-
-    /// Try to bind to LDAP server with Username/Password
-    // - If this is empty strings, then it do annonymous Bind
-    // - When you not call Bind on LDAPv3, then is automaticly used anonymous mode.
-    // - This method using SASL with DIGEST-MD5 method for secure transfer of your
-    // password
-    function BindSasl: Boolean;
-
-    /// Close connection to LDAP server
-    function Logout: Boolean;
-
-    /// Modify content of LDAP attribute on this object
-    function Modify(obj: RawUtf8; Op: TLDAPModifyOp; const Value: TLDAPAttribute): Boolean;
-
-    /// Add list of attributes to specified object
-    function Add(obj: RawUtf8; const Value: TLDAPAttributeList): Boolean;
-
-    /// Delete this LDAP object from server
-    function Delete(obj: RawUtf8): Boolean;
-
-    /// Modify object name of this LDAP object
-    function ModifyDN(obj, newRDN, newSuperior: RawUtf8; DeleteoldRDN: Boolean): Boolean;
-
-    /// Try to compare Attribute value with this LDAP object
-    function Compare(obj, AttributeValue: RawUtf8): Boolean;
-
-    /// Search LDAP base for LDAP objects by Filter
-    function Search(BaseDN: RawUtf8; TypesOnly: Boolean; Filter: RawUtf8;
-      const Attributes: TStrings): Boolean;
-
-    /// Call any LDAPv3 extended command
-    function Extended(const OID, Value: RawUtf8): Boolean;
-
-    /// Specify version of used LDAP protocol
-    // - Default value is 3
-    property Version: integer read FVersion Write FVersion;
-
-    /// Result code of last LDAP operation
-    property resultCode: Integer read FresultCode;
-
-    /// Human readable description of result code of last LDAP operation
-    property resultString: RawUtf8 read FresultString;
-
-    /// Binary string with full last response of LDAP server
-    // - This string is encoded by ASN.1 BER encoding
-    // - You need this only for debugging
-    property Fullresult: TASNObject read FFullresult;
-
-    // If true use connection to LDAP server through SSL/TLS tunnel
-    property FullSSL: Boolean read FFullSSL Write FFullSSL;
-
-    /// Sequence number of last LDAp command
-    // - It is incremented by any LDAP command
-    property Seq: integer read FSeq;
-
-    /// Specify what search scope is used in search command
-    property SearchScope: TLDAPSearchScope read FSearchScope Write FSearchScope;
-
-    /// Specify how to handle aliases in search command
-    property SearchAliases: TLDAPSearchAliases read FSearchAliases Write FSearchAliases;
-
-    /// Specify result size limit in search command
-    // - 0 means without limit
-    property SearchSizeLimit: integer read FSearchSizeLimit Write FSearchSizeLimit;
-
-    /// Specify search time limit in search command (seconds)
-    // - 0 means without limit
-    property SearchTimeLimit: integer read FSearchTimeLimit Write FSearchTimeLimit;
-
-    /// Specify number of results to return per search request
-    // - 0 means no paging
-    property SearchPageSize: integer read FSearchPageSize Write FSearchPageSize;
-
-    /// Cookie returned by paged search results
-    // - Use an empty string for the first search request
-    property SearchCookie: RawUtf8 read FSearchCookie Write FSearchCookie;
-
-    /// Here is result of search command
-    property Searchresult: TLDAPresultList read FSearchresult;
-
-    /// On each LDAP operation LDAP server can return some referals URLs
-    //Here is their list
-    property Referals: TRawUtf8List read FReferals;
-
-    /// When you call Extended operation, here is result Name returned by server
-    property ExtName: RawUtf8 read FExtName;
-
-    /// When you call Extended operation, here is result Value returned by server
-    property ExtValue: RawUtf8 read FExtValue;
-
-    /// TCP socket used by all LDAP operations
-    property Sock: TCrtSocket read FSock;
-  end;
-
-/// Dump result of LDAP SEARCH into human readable form
-// - Used for debugging
-function LDAPresultDump(const Value: TLDAPresultList): RawUtf8;
-
-implementation
-
-uses
-  StrUtils,
-  mormot.core.buffers,
-  mormot.core.text,
-  mormot.core.unicode,
-  mormot.crypt.core,
-  mormot.core.os;
-
-const
   cLDAPProtocol = '389';
 
-{ ****** From synautil ****** }
 
-/// Support procedures and functions
-
-function UnquoteStr(const Value: RawUtf8; Quote: AnsiChar): RawUtf8;
+function AsnEncOidItem(Value: Int64): RawByteString;
 var
-  n: integer;
-  inq, dq: Boolean;
-  c, cn: AnsiChar;
+  r: PByte;
 begin
-  result := '';
-  if Value = '' then
-    Exit;
-  if Value = RawUtf8OfChar(Quote, 2) then
-    Exit;
-  inq := False;
-  dq := False;
-  for n := 1 to Length(Value) do
+  FastSetRawByteString(result, nil, 16);
+  r := pointer(result);
+  r^ := byte(Value) and $7f;
+  inc(r);
+  Value := Value shr 7;
+  while Value <> 0 do
   begin
-    c := Value[n];
-    if n <> Length(Value) then
-      cn := Value[n + 1]
-    else
-      cn := #0;
-    if c = quote then
-      if dq then
-        dq := False
-      else
-        if not inq then
-          inq := True
-        else
-          if cn = quote then
-          begin
-            AppendCharToRawUtf8(result, Quote);
-            dq := True;
-          end
-          else
-            inq := False
-    else
-      AppendCharToRawUtf8(result, c);
+    r^ := byte(Value) or $80;
+    inc(r);
+    Value := Value shr 7;
   end;
+  FakeLength(result, PAnsiChar(r) - pointer(result));
 end;
 
-function IsBinaryString(const Value: RawByteString): Boolean;
+function AsnDecOidItem(var Pos: integer; const Buffer: RawByteString): integer;
 var
-  n: integer;
-begin
-  result := False;
-  for n := 1 to Length(Value) do
-    if Ord(Value[n]) in [0..8, 10..31] then
-      //ignore null-terminated strings
-      if not ((n = Length(value)) and (Ord(Value[n]) = 0)) then
-      begin
-        result := True;
-        Break;
-      end;
-end;
-
-function DumpExStr(const Buffer: RawByteString): RawUtf8;
-var
-  n: Integer;
-  x: Byte;
-begin
-  result := '';
-  for n := 1 to Length(Buffer) do
-  begin
-    x := Ord(Buffer[n]);
-    if x in [65..90, 97..122] then
-      Append(result, [' +''', AnsiChar(x), ''''])
-    else
-      Append(result, [' +#$',BinToHexDisplayLowerShort(@x, 1)]);
-  end;
-end;
-
-function IndexByBegin(Value: RawUtf8; const List: TRawUtf8List): integer;
-var
-  n: integer;
-  s: RawUtf8;
-begin
-  result := -1;
-  Value := uppercase(Value);
-  for n := 0 to List.Count -1 do
-  begin
-    s := UpperCase(List[n]);
-    if Pos(Value, s) = 1 then
-    begin
-      result := n;
-      Break;
-    end;
-  end;
-end;
-
-function SeparateLeft(const Value, Delimiter: RawUtf8): RawUtf8;
-var
-  x: Integer;
-begin
-  x := Pos(Delimiter, Value);
-  if x < 1 then
-    result := Value
-  else
-    result := Copy(Value, 1, x - 1);
-end;
-
-function SeparateRight(const Value, Delimiter: RawUtf8): RawUtf8;
-var
-  x: Integer;
-begin
-  x := Pos(Delimiter, Value);
-  if x > 0 then
-    x := x + Length(Delimiter) - 1;
-  result := Copy(Value, x + 1, Length(Value) - x);
-end;
-
-function GetBetween(const PairBegin, PairEnd, Value: RawUtf8): RawUtf8;
-var
-  n: integer;
-  x: integer;
-  s: RawUtf8;
-  lenBegin: integer;
-  lenEnd: integer;
-  str: RawUtf8;
-  max: integer;
-begin
-  lenBegin := Length(PairBegin);
-  lenEnd := Length(PairEnd);
-  n := Length(Value);
-  if (Value = PairBegin + PairEnd) then
-  begin
-    result := '';//nothing between
-    exit;
-  end;
-  if (n < lenBegin + lenEnd) then
-  begin
-    result := Value;
-    exit;
-  end;
-  s := SeparateRight(Value, PairBegin);
-  if (s = Value) then
-  begin
-    result := Value;
-    exit;
-  end;
-  n := Pos(PairEnd, s);
-  if (n = 0) then
-  begin
-    result := Value;
-    exit;
-  end;
-  result := '';
-  x := 1;
-  max := Length(s) - lenEnd + 1;
-  for n := 1 to max do
-  begin
-    str := copy(s, n, lenEnd);
-    if (str = PairEnd) then
-    begin
-      Dec(x);
-      if (x <= 0) then
-        Break;
-    end;
-    str := copy(s, n, lenBegin);
-    if (str = PairBegin) then
-      Inc(x);
-    AppendCharToRawUtf8(result, s[n]);
-  end;
-end;
-
-function DecodeTriplet(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-var
-  x, l, lv: Integer;
-  c: AnsiChar;
-  b: Byte;
-  bad: Boolean;
-begin
-  lv := Length(Value);
-  SetLength(result, lv);
-  x := 1;
-  l := 1;
-  while x <= lv do
-  begin
-    c := Value[x];
-    Inc(x);
-    if c <> Delimiter then
-    begin
-      result[l] := c;
-      Inc(l);
-    end
-    else
-      if x < lv then
-      begin
-        Case Value[x] Of
-          #13:
-            if (Value[x + 1] = #10) then
-              Inc(x, 2)
-            else
-              Inc(x);
-          #10:
-            if (Value[x + 1] = #13) then
-              Inc(x, 2)
-            else
-              Inc(x);
-        else
-          begin
-            bad := False;
-            Case Value[x] Of
-              '0'..'9': b := (Byte(Value[x]) - 48) Shl 4;
-              'a'..'f', 'A'..'F': b := ((Byte(Value[x]) And 7) + 9) shl 4;
-            else
-              begin
-                b := 0;
-                bad := True;
-              end;
-            end;
-            Case Value[x + 1] Of
-              '0'..'9': b := b Or (Byte(Value[x + 1]) - 48);
-              'a'..'f', 'A'..'F': b := b Or ((Byte(Value[x + 1]) And 7) + 9);
-            else
-              bad := True;
-            end;
-            if bad then
-            begin
-              result[l] := c;
-              Inc(l);
-            end
-            else
-            begin
-              Inc(x, 2);
-              result[l] := AnsiChar(b);
-              Inc(l);
-            end;
-          end;
-        end;
-      end
-      else
-        break;
-  end;
-  Dec(l);
-  SetLength(result, l);
-end;
-
-function TrimSPLeft(const S: RawUtf8): RawUtf8;
-var
-  I, L: Integer;
-begin
-  result := '';
-  if S = '' then
-    Exit;
-  L := Length(S);
-  I := 1;
-  while (I <= L) and (S[I] = ' ') do
-    Inc(I);
-  result := Copy(S, I, Maxint);
-end;
-
-function TrimSPRight(const S: RawUtf8): RawUtf8;
-var
-  I: Integer;
-begin
-  result := '';
-  if S = '' then
-    Exit;
-  I := Length(S);
-  while (I > 0) and (S[I] = ' ') do
-    Dec(I);
-  result := Copy(S, 1, I);
-end;
-
-function TrimSP(const S: RawUtf8): RawUtf8;
-begin
-  result := TrimSPLeft(s);
-  result := TrimSPRight(result);
-end;
-
-function FetchBin(var Value: RawUtf8; const Delimiter: RawUtf8): RawUtf8;
-var
-  s: RawUtf8;
-begin
-  result := SeparateLeft(Value, Delimiter);
-  s := SeparateRight(Value, Delimiter);
-  if s = Value then
-    Value := ''
-  else
-    Value := s;
-end;
-
-function Fetch(var Value: RawUtf8; const Delimiter: RawUtf8): RawUtf8;
-begin
-  result := FetchBin(Value, Delimiter);
-  result := TrimSP(result);
-  Value := TrimSP(Value);
-end;
-
-{ ****** From asn1util ****** }
-
-/// Utilities for handling ASN.1 BER encoding
-// By this unit you can parse ASN.1 BER encoded data to elements or build back any
-// elements to ASN.1 BER encoded buffer. You can dump ASN.1 BER encoded data to
-// human readable form for easy debugging, too.
-//
-// Supported element types are:
-// - ASN1_BOOL
-// - ASN1_INT
-// - ASN1_OCTSTR
-// - ASN1_NULL
-// - ASN1_OBJID
-// - ASN1_ENUM
-// - ASN1_SEQ
-// - ASN1_SETOF
-// - ASN1_IPADDR
-// - ASN1_COUNTER
-// - ASN1_GAUGE
-// - ASN1_TIMETICKS
-// - ASN1_OPAQUE
-
-function ASNEncOIDItem(Value: Int64): RawByteString;
-var
-  x: Int64;
-  xm: Byte;
-  b: Boolean;
-begin
-  x := Value;
-  b := False;
-  result := '';
-  repeat
-    xm := x mod 128;
-    x := x div 128;
-    if b then
-      xm := xm or $80;
-    if x > 0 then
-      b := True;
-    Prepend(result, [AnsiChar(xm)]);
-  until x = 0;
-end;
-
-function ASNDecOIDItem(var Start: Integer; const Buffer: RawByteString): Int64;
-var
-  x: Integer;
-  b: Boolean;
+  x: byte;
 begin
   result := 0;
   repeat
     result := result shl 7;
-    x := Ord(Buffer[Start]);
-    Inc(Start);
-    b := x > $7F;
-    x := x and $7F;
-    result := result + x;
-  until not b;
+    x := ord(Buffer[Pos]);
+    inc(Pos);
+    inc(result, x and $7F);
+  until (x and $80) = 0;
 end;
 
-function ASNEncLen(Len: Integer): RawByteString;
+function AsnEncLen(Len: cardinal; dest: PByte): PtrInt;
 var
-  x, y: Integer;
+  n: PtrInt;
+  tmp: array[0..7] of byte;
 begin
   if Len < $80 then
-    result := AnsiChar(Len)
-  else
   begin
-    x := Len;
-    result := '';
-    repeat
-      y := x mod 256;
-      x := x div 256;
-      Prepend(result, [AnsiChar(y)]);
-    until x = 0;
-    y := Length(result);
-    y := y or $80;
-    Prepend(result, [AnsiChar(y)]);
+    dest^ := Len;
+    result := 1;
+    exit;
   end;
-end;
-
-function ASNDecLen(var Start: Integer; const Buffer: RawByteString): Integer;
-var
-  x, n: Integer;
-begin
-  x := Ord(Buffer[Start]);
-  Inc(Start);
-  if x < $80 then
-    result := x
-  else
-  begin
-    result := 0;
-    x := x and $7F;
-    for n := 1 to x do
-    begin
-      result := result * 256;
-      x := Ord(Buffer[Start]);
-      Inc(Start);
-      result := result + x;
-    end;
-  end;
-end;
-
-function ASNEncInt(Value: Int64): RawByteString;
-const
-  // Defining theses const to avoid implicit conversions from FPC
-  Char0: RawByteString = #0;
-  Char255: RawByteString = #255;
-var
-  x: Int64;
-  y: byte;
-  neg: Boolean;
-begin
-  neg := Value < 0;
-  x := Abs(Value);
-  if neg then
-    x := x - 1;
-  result := '';
+  n := 0;
   repeat
-    y := x mod 256;
-    x := x div 256;
+    tmp[n] := byte(Len);
+    inc(n);
+    Len := Len shr 8;
+  until Len = 0;
+  result := n + 1;
+  dest^ := byte(n) xor $80; // first byte is number of following bytes + $80
+  repeat
+    inc(dest);
+    dec(n);
+    dest^ := tmp[n]; // stored as big endian
+  until n = 0;
+end;
+
+function AsnDecLen(var Start: integer; const Buffer: RawByteString): cardinal;
+var
+  n: byte;
+begin
+  result := ord(Buffer[Start]);
+  inc(Start);
+  if result < $80 then
+    exit;
+  n := result and $7f;
+  result := 0;
+  repeat
+    result := (result shl 8) + cardinal(Buffer[Start]);
+    inc(Start);
+    dec(n);
+  until n = 0;
+end;
+
+function AsnEncInt(Value: Int64): RawByteString;
+var
+  y: byte;
+  neg: boolean;
+  n: PtrInt;
+  p: PByte;
+  tmp: array[0..15] of byte;
+begin
+  result := '';
+  neg := Value < 0;
+  Value := Abs(Value);
+  if neg then
+    dec(Value);
+  n := 0;
+  repeat
+    y := byte(Value);
     if neg then
       y := not y;
-    Prepend(result, [AnsiChar(y)]);
-  until x = 0;
-  if (not neg) and (result[1] > #$7F) then
-    Prepend(result, [Char0]);
-  if (neg) and (result[1] < #$80) then
-    Prepend(result, [Char255]);
+    tmp[n] := y;
+    inc(n);
+    Value := Value shr 8;
+  until Value = 0;
+  if neg then
+  begin
+    if y <= $7f then
+    begin
+      tmp[n] := $ff; // negative numbers start with ff or 8x
+      inc(n);
+    end;
+  end
+  else if y > $7F then
+  begin
+    tmp[n] := 0; // positive numbers start with a 0 or 0x..7x
+    inc(n);
+  end;
+  FastSetRawByteString(result, nil, n);
+  p := pointer(result);
+  repeat
+    dec(n);
+    p^ := tmp[n]; // stored as big endian
+    inc(p);
+  until n = 0;
 end;
 
-function ASNEncUInt(Value: Integer): RawByteString;
+function Asn(AsnType: integer;
+  const Content: array of RawByteString): TAsnObject; overload;
 var
-  x, y: Integer;
-  neg: Boolean;
+  tmp: array[0..7] of byte;
+  i, len, al: PtrInt;
+  p: PByte;
+begin
+  len := 0;
+  for i := 0 to high(Content) do
+    inc(len, length(Content[i]));
+  al := AsnEncLen(len, @tmp);
+  SetString(result, nil, 1 + al + len);
+  p := pointer(result);
+  p^ := AsnType;         // type
+  inc(p);
+  MoveFast(tmp, p^, al); // encoded length
+  inc(p, al);
+  for i := 0 to high(Content) do
+  begin
+    len := length(Content[i]);
+    MoveFast(pointer(Content[i])^, p^, len); // content
+    inc(p, len);
+  end;
+end;
+
+function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObject;
+  overload; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := Asn(AsnType, [Data]);
+end;
+
+function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
+begin
+  result := Asn(AsnType, [AsnEncInt(Value)]);
+end;
+
+function Asn(Value: boolean): TAsnObject; overload;
+var
+  i: integer;
+begin
+  if Value then
+    i := $ff
+  else
+    i := 0;
+  result := Asn(ASN1_BOOL, [AsnEncInt(i)]);
+end;
+
+function AsnSeq(const Data: RawByteString): TAsnObject;
+begin
+  result := Asn(ASN1_SEQ, [Data]);
+end;
+
+procedure AsnAdd(var Data: TAsnObject; const Buffer: RawByteString);
+  overload; {$ifdef HASINLINE} inline; {$endif}
+begin
+  AppendBufferToRawByteString(Data, Buffer);
+end;
+
+procedure AsnAdd(var Data: TAsnObject; const Buffer: RawByteString;
+  AsnType: integer); overload;
+begin
+  AppendBufferToRawByteString(Data, Asn(AsnType, [Buffer]));
+end;
+
+function IdToMib(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
+var
+  x, y: integer;
+begin
+  result := '';
+  while Pos < EndPos do
+  begin
+    x := AsnDecOidItem(Pos, Buffer);
+    if Pos = 2 then
+    begin
+      y := x div 40; // first byte = two first numbers modulo 40
+      x := x mod 40;
+      UInt32ToUtf8(y, result);
+    end;
+    Append(result, ['.', x]);
+  end;
+end;
+
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  var ValueType: integer): RawByteString;
+var
+  asntype, asnsize, n, l: integer;
+  y: int64;
+  x: byte;
+  neg: boolean;
+begin
+  result := '';
+  ValueType := ASN1_NULL;
+  l := length(Buffer);
+  if Pos > l then
+    exit;
+  asntype := ord(Buffer[Pos]);
+  ValueType := asntype;
+  inc(Pos);
+  asnsize := AsnDecLen(Pos, Buffer);
+  if (Pos + asnsize - 1) > l then
+    exit;
+  if (asntype and $20) <> 0 then
+    result := copy(Buffer, Pos, asnsize)
+  else
+    case asntype of
+      ASN1_INT,
+      ASN1_ENUM,
+      ASN1_BOOL:
+        begin
+          y := 0;
+          neg := false;
+          for n := 1 to asnsize do
+          begin
+            x := ord(Buffer[Pos]);
+            if (n = 1) and
+               (x > $7F) then
+              neg := true;
+            if neg then
+              x := not x;
+            y := (y shl 8) + x;
+            inc(Pos);
+          end;
+          if neg then
+            y := -(y + 1);
+          result := ToUtf8(y);
+        end;
+      ASN1_COUNTER,
+      ASN1_GAUGE,
+      ASN1_TIMETICKS,
+      ASN1_COUNTER64:
+        begin
+          y := 0;
+          for n := 1 to asnsize do
+          begin
+            y := (y shl 8) + ord(Buffer[Pos]);
+            inc(Pos);
+          end;
+          result := ToUtf8(y);
+        end;
+      ASN1_OBJID:
+        begin
+          result := IdToMib(Pos, Pos + asnsize, Buffer);
+          inc(Pos, asnsize);
+        end;
+      ASN1_IPADDR:
+        begin
+          case asnsize of
+            4:
+              IP4Text(pointer(@Buffer[Pos]), RawUtf8(result));
+            16:
+              IP6Text(pointer(@Buffer[Pos]), RawUtf8(result));
+          else
+            BinToHexLower(@Buffer[Pos], asnsize, RawUtf8(result));
+          end;
+          inc(Pos, asnsize);
+        end;
+      ASN1_NULL:
+        inc(Pos, asnsize);
+    else
+      // ASN1_OCTSTR, ASN1_OPAQUE or unknown: return as raw binary
+      begin
+        result := copy(Buffer, Pos, asnsize);
+        inc(Pos, asnsize);
+      end;
+    end;
+end;
+
+{$ifdef ASNDEBUG} // not used nor fully tested
+
+function IntMibToStr(const Value: RawByteString): RawUtf8;
+var
+  i, y: integer;
+begin
+  y := 0;
+  for i := 1 to length(Value) - 1 do
+    y := (y shl 8) + ord(Value[i]);
+  UInt32ToUtf8(y, result);
+end;
+
+function MibToId(Mib: RawUtf8): RawByteString;
+var
+  x: integer;
+
+  function WalkInt(var s: RawUtf8): integer;
+  var
+    x: integer;
+    t: RawByteString;
+  begin
+    x := PosExChar('.', s);
+    if x < 1 then
+    begin
+      t := s;
+      s := '';
+    end
+    else
+    begin
+      t := copy(s, 1, x - 1);
+      s := copy(s, x + 1, length(s) - x);
+    end;
+    result := Utf8ToInteger(t, 0);
+  end;
+
+begin
+  result := '';
+  x := WalkInt(Mib);
+  x := x * 40 + WalkInt(Mib);
+  result := AsnEncOidItem(x);
+  while Mib <> '' do
+  begin
+    x := WalkInt(Mib);
+    Append(result, [AsnEncOidItem(x)]);
+  end;
+end;
+
+function AsnEncUInt(Value: integer): RawByteString;
+var
+  x, y: integer;
+  neg: boolean;
 begin
   neg := Value < 0;
   x := Value;
@@ -826,192 +981,26 @@ begin
     Prepend(result, [AnsiChar(y)]);
   until x = 0;
   if neg then
-    result[1] := AnsiChar(Ord(result[1]) or $80);
+    result[1] := AnsiChar(ord(result[1]) or $80);
 end;
 
-function ASNObject(const Data: RawByteString; ASNType: Integer): TASNObject; overload;
-begin
-  result := AnsiChar(ASNType);
-  Append(result, [ASNEncLen(Length(Data)), Data]);
-end;
-
-
-function ASNObject(ASNType: Integer; const Content: array of RawByteString): TASNObject; overload;
+function DumpExStr(const Buffer: RawByteString): RawUtf8;
 var
-  i, contentLength: Integer;
-begin
-  result := AnsiChar(ASNType);
-  contentLength := 0;
-  for i := 0 to high(Content) do
-  begin
-    Inc(contentLength, Length(Content[i]));
-    Append(result, [Content[i]]);
-  end;
-  Insert(ASNEncLen(contentLength), Result, 2);
-end;
-
-function MibToId(Mib: RawUtf8): RawByteString;
-var
-  x: Integer;
-
-  function WalkInt(var s: RawUtf8): Integer;
-  var
-    x: Integer;
-    t: RawByteString;
-  begin
-    x := PosExChar('.', s);
-    if x < 1 then
-    begin
-      t := s;
-      s := '';
-    end
-    else
-    begin
-      t := Copy(s, 1, x - 1);
-      s := Copy(s, x + 1, Length(s) - x);
-    end;
-    result := Utf8ToInteger(t, 0);
-  end;
-
-begin
-  result := '';
-  x := WalkInt(Mib);
-  x := x * 40 + WalkInt(Mib);
-  result := ASNEncOIDItem(x);
-  while Mib <> '' do
-  begin
-    x := WalkInt(Mib);
-    Append(result, [ASNEncOIDItem(x)]);
-  end;
-end;
-
-function IdToMib(const Id: RawByteString): RawUtf8;
-var
-  x, y, n: Integer;
-begin
-  result := '';
-  n := 1;
-  while Length(Id) + 1 > n do
-  begin
-    x := ASNDecOIDItem(n, Id);
-    if (n - 1) = 1 then
-    begin
-      y := x div 40;
-      x := x mod 40;
-      result := ToUtf8(y);
-    end;
-    Append(result, ['.', x]);
-  end;
-end;
-
-function IntMibToStr(const Value: RawByteString): RawByteString;
-var
-  n, y: Integer;
-begin
-  y := 0;
-  for n := 1 to Length(Value) - 1 do
-    y := y * 256 + Ord(Value[n]);
-  result := ToUtf8(y);
-end;
-
-function ASNItem(var Start: Integer; const Buffer: TASNObject;
-  var ValueType: Integer): RawByteString;
-var
-  ASNType: Integer;
-  ASNSize: Integer;
-  y: int64;
-  n: Integer;
+  n: integer;
   x: byte;
-  s: RawByteString;
-  neg: Boolean;
-  l: Integer;
 begin
   result := '';
-  s := '';
-  ValueType := ASN1_NULL;
-  l := Length(Buffer);
-  if l < (Start + 1) then
-    Exit;
-  ASNType := Ord(Buffer[Start]);
-  ValueType := ASNType;
-  Inc(Start);
-  ASNSize := ASNDecLen(Start, Buffer);
-  if (Start + ASNSize - 1) > l then
-    Exit;
-  if (ASNType and $20) > 0 then
-//    result := '$' + IntToHex(ASNType, 2)
-    result := Copy(Buffer, Start, ASNSize)
-  else
-    case ASNType of
-      ASN1_INT, ASN1_ENUM, ASN1_BOOL:
-        begin
-          y := 0;
-          neg := False;
-          for n := 1 to ASNSize do
-          begin
-            x := Ord(Buffer[Start]);
-            if (n = 1) and (x > $7F) then
-              neg := True;
-            if neg then
-              x := not x;
-            y := y * 256 + x;
-            Inc(Start);
-          end;
-          if neg then
-            y := -(y + 1);
-          result := ToUtf8(y);
-        end;
-      ASN1_COUNTER, ASN1_GAUGE, ASN1_TIMETICKS, ASN1_COUNTER64:
-        begin
-          y := 0;
-          for n := 1 to ASNSize do
-          begin
-            y := y * 256 + Ord(Buffer[Start]);
-            Inc(Start);
-          end;
-          result := ToUtf8(y);
-        end;
-      ASN1_OCTSTR, ASN1_OPAQUE:
-        begin
-          SetLength(Result, ASNSize);
-          MoveFast(Buffer[Start], Result[1], ASNSize);
-          Inc(Start, ASNSize);
-        end;
-      ASN1_OBJID:
-        begin
-          SetLength(s, ASNSize);
-          MoveFast(Buffer[Start], s[1], ASNSize);
-          Inc(Start, ASNSize);
-          result := IdToMib(s);
-        end;
-      ASN1_IPADDR:
-        begin
-          s := '';
-          for n := 1 to ASNSize do
-          begin
-            if (n <> 1) then
-              s := s + '.';
-            y := Ord(Buffer[Start]);
-            Inc(Start);
-            Append(s, [IntToStr(y)]);
-          end;
-          result := s;
-        end;
-      ASN1_NULL:
-        begin
-          result := '';
-          Start := Start + ASNSize;
-        end;
-    else // unknown
-      begin
-        SetLength(Result, ASNSize);
-        MoveFast(Buffer[Start], Result[1], ASNSize);
-        Inc(Start, ASNSize);
-      end;
-    end;
+  for n := 1 to length(Buffer) do
+  begin
+    x := ord(Buffer[n]);
+    if x in [65..90, 97..122] then
+      Append(result, [' +''', AnsiChar(x), ''''])
+    else
+      Append(result, [' +#$', BinToHexDisplayLowerShort(@x, 1)]);
+  end;
 end;
 
-function ASNdump(const Value: TASNObject): RawUtf8;
+function AsnDump(const Value: TAsnObject): RawUtf8;
 var
   i, at, x, n: integer;
   s, indent: RawUtf8;
@@ -1020,9 +1009,9 @@ begin
   result := '';
   i := 1;
   indent := '';
-  while i < Length(Value) do
+  while i < length(Value) do
   begin
-    for n := Length(il) - 1 downto 0 do
+    for n := length(il) - 1 downto 0 do
     begin
       x := il[n];
       if x <= i then
@@ -1031,12 +1020,12 @@ begin
         Delete(indent, 1, 2);
       end;
     end;
-    s := ASNItem(i, Value, at);
+    s := AsnNext(i, Value, at);
     Append(result, [indent, '$', IntToHex(at, 2)]);
     if (at and $20) > 0 then
     begin
-      x := Length(s);
-      Append(result, [' constructed: length ', IntToStr(x)]);
+      x := length(s);
+      Append(result, [' constructed: length ', x]);
       Append(indent, ['  ']);
       AddInteger(il, x + i - 1);
     end
@@ -1079,221 +1068,199 @@ begin
   end;
 end;
 
-{==============================================================================}
+{$endif ASNDEBUG}
 
-constructor TSynaClient.Create;
+
+{ **************** LDAP Response Storage }
+
+{ TLdapAttribute }
+
+constructor TLdapAttribute.Create(const AttrName: RawUtf8);
 begin
   inherited Create;
-  FIPInterface := cAnyHost;
-  FTargetHost := cLocalhost;
-  FTargetPort := cAnyPort;
-  FTimeout := 5000;
-  FUsername := '';
-  FPassword := '';
+  fAttributeName := AttrName;
+  fIsBinary := StrPosI(';BINARY', pointer(AttrName)) <> nil;
 end;
 
-function TLDAPAttribute.Add(const aText: RawUtf8): PtrInt;
-var
-  s: RawUtf8;
+procedure TLdapAttribute.Add(const aValue: RawByteString);
 begin
-  if FIsbinary then
-    s := BinToBase64(aText)
+  AddRawUtf8(fList, fCount, aValue);
+end;
+
+function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
+begin
+  if (self = nil) or
+     (index >= fCount) then
+    result := ''
   else
-    s := UnquoteStr(aText, '"');
-  result := inherited Add(s);
+  begin
+    result := fList[index];
+    if fIsBinary then
+      result := BinToBase64(result)
+    else if IsBinaryString(result) then
+      result := LogEscapeFull(result);
+  end;
 end;
 
-function TLDAPAttribute.GetReadable(index: PtrInt): RawUtf8;
+function TLdapAttribute.GetRaw(index: PtrInt): RawByteString;
 begin
-  result := inherited Get(Index);
-  if FIsbinary then
-    result := Base64ToBin(result)
-  else if IsBinaryString(result) then
-    result := BinToHex(result);
+  if (self = nil) or
+     (index >= fCount) then
+    result := ''
+  else
+    result := fList[index];
 end;
 
-constructor TLDAPAttribute.Create(AttrName: RawUtf8);
-begin
-  inherited Create;
-  FAttributeName := AttrName;
-  FIsBinary := mormot.core.base.PosEx(';binary', Lowercase(AttrName)) > 0;
-end;
 
-{==============================================================================}
-constructor TLDAPAttributeList.Create;
-begin
-  inherited Create;
-  FAttributeList := TList.Create;
-end;
+{ TLdapAttributeList }
 
-destructor TLDAPAttributeList.Destroy;
+destructor TLdapAttributeList.Destroy;
 begin
   Clear;
-  FAttributeList.Free;
   inherited Destroy;
 end;
 
-procedure TLDAPAttributeList.Clear;
+procedure TLdapAttributeList.Clear;
+begin
+  ObjArrayClear(fItems);
+end;
+
+function TLdapAttributeList.Count: integer;
+begin
+  result := length(fItems);
+end;
+
+function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
+begin
+  if self <> nil then
+    for result := 0 to length(fItems) - 1 do
+      if IdemPropNameU(fItems[result].AttributeName, AttributeName) then
+        exit;
+  result := -1;
+end;
+
+function TLdapAttributeList.Find(const AttributeName: RawUtf8): TLdapAttribute;
 var
-  i: integer;
-  attr: TLDAPAttribute;
+  i: PtrInt;
 begin
-  for i := Count - 1 downto 0 do
-  begin
-    attr := GetAttribute(i);
-    if Assigned(attr) then
-      attr.Free;
-  end;
-  FAttributeList.Clear;
+  i := FindIndex(AttributeName);
+  if i >= 0 then
+    result := fItems[i]
+  else
+    result := nil;
 end;
 
-function TLDAPAttributeList.Count: integer;
+function TLdapAttributeList.Get(const AttributeName: RawUtf8): RawUtf8;
 begin
-  result := FAttributeList.Count;
+  result := Find(AttributeName).GetReadable(0);
 end;
 
-function TLDAPAttributeList.Get(AttributeName: RawUtf8): RawUtf8;
+function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
+begin
+  result := TLdapAttribute.Create(AttributeName);
+  ObjArrayAdd(fItems, result);
+end;
+
+procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
+begin
+  ObjArrayDelete(fItems, FindIndex(AttributeName));
+end;
+
+
+{ TLdapResult }
+
+constructor TLdapResult.Create;
+begin
+  inherited Create;
+  fAttributes := TLdapAttributeList.Create;
+end;
+
+destructor TLdapResult.Destroy;
+begin
+  fAttributes.Free;
+  inherited Destroy;
+end;
+
+
+{ TLdapResultList }
+
+destructor TLdapResultList.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TLdapResultList.Clear;
+begin
+  ObjArrayClear(fItems, fCount);
+end;
+
+function TLdapResultList.Add: TLdapResult;
+begin
+  result := TLdapResult.Create;
+  ObjArrayAddCount(fItems, result, fCount);
+end;
+
+function TLdapResultList.Dump: RawUtf8;
 var
-  attr: TLDAPAttribute;
+  i, j, k: PtrInt;
+  res: TLdapResult;
+  attr: TLdapAttribute;
 begin
-  result := '';
-  attr := self.Find(AttributeName);
-  if attr <> nil then
-    if attr.Count > 0 then
-      result := attr[0];
-end;
-
-function TLDAPAttributeList.GetAttribute(Index: integer): TLDAPAttribute;
-begin
-  result := nil;
-  if Index < Count then
-    result := TLDAPAttribute(FAttributeList[Index]);
-end;
-
-function TLDAPAttributeList.Add(AttributeName: RawUtf8): TLDAPAttribute;
-begin
-  result := TLDAPAttribute.Create(AttributeName);
-  FAttributeList.Add(result);
-end;
-
-procedure TLDAPAttributeList.Del(Index: integer);
-var
-  attr: TLDAPAttribute;
-begin
-  attr := GetAttribute(Index);
-  if Assigned(attr) then
-    attr.free;
-  FAttributeList.Delete(Index);
-end;
-
-function TLDAPAttributeList.Find(AttributeName: RawUtf8): TLDAPAttribute;
-var
-  i: integer;
-  attr: TLDAPAttribute;
-begin
-  result := nil;
-  AttributeName := lowercase(AttributeName);
+  result := 'results: ' + ToUtf8(Count) + CRLF + CRLF;
   for i := 0 to Count - 1 do
   begin
-    attr := GetAttribute(i);
-    if Assigned(attr) then
-      if lowercase(attr.AttributeName) = Attributename then
-      begin
-        result := attr;
-        break;
-      end;
+    result := result + 'result: ' + ToUtf8(i) + CRLF;
+    res := Items[i];
+    result := result + '  Object: ' + res.ObjectName + CRLF;
+    for j := 0 to res.Attributes.Count - 1 do
+    begin
+      attr := res.Attributes.Items[j];
+      result := result + '  Attribute: ' + attr.AttributeName + CRLF;
+      for k := 0 to attr.Count - 1 do
+        result := result + '    ' + attr.GetReadable(k) + CRLF;
+    end;
   end;
 end;
 
-{==============================================================================}
-constructor TLDAPresult.Create;
+
+{ **************** LDAP Client Class }
+
+{ TAbstractClient }
+
+constructor TAbstractClient.Create;
 begin
   inherited Create;
-  FAttributes := TLDAPAttributeList.Create;
+  fIPInterface := cAnyHost;
+  fTargetHost := cLocalhost;
+  fTargetPort := cAnyPort;
+  fTimeout := 5000;
 end;
 
-destructor TLDAPresult.Destroy;
+
+{ TLdapClient }
+
+constructor TLdapClient.Create;
 begin
-  FAttributes.Free;
+  inherited Create;
+  fReferals := TRawUtf8List.Create;
+  fTimeout := 60000;
+  fTargetPort := cLDAPProtocol;
+  fVersion := 3;
+  fSearchScope := SS_WholeSubtree;
+  fSearchAliases := SA_Always;
+  fSearchResult := TLdapResultList.Create;
+end;
+
+destructor TLdapClient.Destroy;
+begin
+  fSock.Free;
+  fSearchResult.Free;
+  fReferals.Free;
   inherited Destroy;
 end;
 
-{==============================================================================}
-constructor TLDAPresultList.Create;
-begin
-  inherited Create;
-  FresultList := TList.Create;
-end;
-
-destructor TLDAPresultList.Destroy;
-begin
-  Clear;
-  FresultList.Free;
-  inherited Destroy;
-end;
-
-procedure TLDAPresultList.Clear;
-var
-  i: integer;
-  attr: TLDAPresult;
-begin
-  for i := Count - 1 downto 0 do
-  begin
-    attr := Getresult(i);
-    if Assigned(attr) then
-      attr.Free;
-  end;
-  FresultList.Clear;
-end;
-
-function TLDAPresultList.Count: integer;
-begin
-  result := FresultList.Count;
-end;
-
-function TLDAPresultList.Getresult(Index: integer): TLDAPresult;
-begin
-  result := nil;
-  if Index < Count then
-    result := TLDAPresult(FresultList[Index]);
-end;
-
-function TLDAPresultList.Add: TLDAPresult;
-begin
-  result := TLDAPresult.Create;
-  FresultList.Add(result);
-end;
-
-{==============================================================================}
-constructor TLDAPSend.Create;
-begin
-  inherited Create;
-  FReferals := TRawUtf8List.Create;
-  FFullresult := '';
-  FTimeout := 60000;
-  FSock := nil;
-  FTargetPort := cLDAPProtocol;
-  FFullSSL := False;
-  FSeq := 0;
-  FVersion := 3;
-  FSearchScope := SS_WholeSubtree;
-  FSearchAliases := SA_Always;
-  FSearchSizeLimit := 0;
-  FSearchTimeLimit := 0;
-  FSearchPageSize := 0;
-  FSearchCookie := '';
-  FSearchresult := TLDAPresultList.Create;
-end;
-
-destructor TLDAPSend.Destroy;
-begin
-  FSock.Free;
-  FSearchresult.Free;
-  FReferals.Free;
-  inherited Destroy;
-end;
-
-function TLDAPSend.GetErrorString(ErrorCode: integer): RawUtf8;
+class function TLdapClient.GetErrorString(ErrorCode: integer): RawUtf8;
 begin
   case ErrorCode of
     0:
@@ -1307,9 +1274,9 @@ begin
     4:
       result := 'Size limit Exceeded';
     5:
-      result := 'Compare FALSE';
+      result := 'Compare false';
     6:
-      result := 'Compare TRUE';
+      result := 'Compare true';
     7:
       result := 'Auth method not supported';
     8:
@@ -1377,297 +1344,290 @@ begin
     80:
       result := 'Other';
   else
-    result := '--unknown--';
+    FormatUtf8('unknown #%', [ErrorCode], result);
   end;
 end;
 
-function TLDAPSend.ReceiveString(Length: integer): RawByteString;
+function TLdapClient.ReceiveString(Size: integer): RawByteString;
 begin
-  result := '';
-  SetLength(result, Length);
-  FSock.SockInRead(Pointer(result), Length);
+  FastSetRawByteString(result, nil, Size);
+  fSock.SockInRead(pointer(result), Size);
 end;
 
-function TLDAPSend.Connect: Boolean;
+function TLdapClient.Connect: boolean;
 begin
-  // Do not call this function! It is calling by LOGIN method!
-  if Assigned(FSock) then
-    FSock.Free;
-  FSeq := 0;
+  // do not call this function! It is calling by LOGIN method!
+  FreeAndNil(fSock);
+  result := false;
+  fSeq := 0;
   try
-    FSock := TCrtSocket.Open(FTargetHost, FTargetPort, nlTcp, 10000, FFullSSL);
-    FSock.CreateSockIn;
-  except on E:ENetSock do
-  begin
-    FSock := nil;
-    Exit(False);
+    fSock := TCrtSocket.Open(
+      fTargetHost, fTargetPort, nlTcp, 5000, fFullTls, fTlsContext);
+    fSock.CreateSockIn;
+    result := fSock.SockConnected;
+  except
+    on E: ENetSock do
+      FreeAndNil(fSock);
   end;
-  end;
-  result := FSock.SockConnected;
-  if result then
-    FSock.ReceiveTimeout := Timeout;
 end;
 
-function TLDAPSend.BuildPacket(const Asn1Data: TASNObject): TASNObject;
+function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
 begin
-  Inc(FSeq);
-  result := ASNObject(ASN1_SEQ, [ASNObject(ASNEncInt(FSeq), ASN1_INT), Asn1Data]);
+  inc(fSeq);
+  result := Asn(ASN1_SEQ, [
+    Asn(fSeq),
+    Asn1Data]);
 end;
 
-function TLDAPSend.ReceiveResponse: TASNObject;
+procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
+begin
+  fSock.SockSendFlush(BuildPacket(Asn1Data));
+end;
+
+function TLdapClient.ReceiveResponse: TAsnObject;
 var
-  asn1Type: Byte;
-  i, j: integer;
+  b: byte;
+  len, pos: integer;
 begin
   result := '';
-  FFullresult := '';
+  fFullResult := '';
   try
-    FSock.SockInRead(pointer(@asn1Type), 1);
-    if asn1Type <> ASN1_SEQ then
-      Exit;
-    result := AnsiChar(asn1Type);
-    FSock.SockInRead(pointer(@asn1Type), 1);
-    AppendBufferToRawByteString(result, asn1Type, 1);
-    if asn1Type < $80 then
-      i := 0
-    else
-      i := asn1Type and $7F;
-    if i > 0 then
-      Append(result, [ReceiveString(i)]);
-    //get length of LDAP packet
-    j := 2;
-    i := ASNDecLen(j, result);
-    //retreive rest of LDAP packet
-    if i > 0 then
-      Append(result, [ReceiveString(i)]);
-  except on E:ENetSock do
-  begin
-    result := '';
-    Exit;
+    // receive ASN type
+    fSock.SockInRead(pointer(@b), 1);
+    if b <> ASN1_SEQ then
+      exit;
+    result := AnsiChar(b);
+    // receive length
+    fSock.SockInRead(pointer(@b), 1);
+    AppendBufferToRawByteString(result, b, 1);
+    if b >= $80 then // $8x means x bytes of length
+      AsnAdd(result, ReceiveString(b and $7f));
+    // decode length of LDAP packet
+    pos := 2;
+    len := AsnDecLen(pos, result);
+    // retrieve rest of LDAP packet
+    if len > 0 then
+      AsnAdd(result, ReceiveString(len));
+  except
+    on E: ENetSock do
+    begin
+      result := '';
+      exit;
+    end;
   end;
-  end;
-  FFullresult := result;
+  fFullResult := result;
 end;
 
-function TLDAPSend.DecodeResponse(const Asn1Response: TASNObject): TASNObject;
+function TLdapClient.DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
 var
-  i, x, SeqNumber: integer;
-  Svt: Integer;
-  s, t: TASNObject;
+  i, x, numseq: integer;
+  asntype: integer;
+  s, t: TAsnObject;
 begin
   result := '';
-  FresultCode := -1;
-  Fresultstring := '';
-  FResponseCode := -1;
-  FResponseDN := '';
-  FReferals.Clear;
+  fResultCode := -1;
+  fResultString := '';
+  fResponseCode := -1;
+  fResponseDN := '';
+  fReferals.Clear;
   i := 1;
-  ASNItem(i, Asn1Response, Svt);
-  SeqNumber := Utf8ToInteger(ASNItem(i, Asn1Response, Svt), 0);
-  if (svt <> ASN1_INT) or (SeqNumber <> FSeq) then
-    Exit;
-  s := ASNItem(i, Asn1Response, Svt);
-  FResponseCode := svt;
-  if FResponseCode in [LDAP_ASN1_BIND_RESPONSE, LDAP_ASN1_SEARCH_DONE,
+  AsnNext(i, Asn1Response, asntype);
+  numseq := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), 0);
+  if (asntype <> ASN1_INT) or
+     (numseq <> fSeq) then
+    exit;
+  s := AsnNext(i, Asn1Response, asntype);
+  fResponseCode := asntype;
+  if fResponseCode in [LDAP_ASN1_BIND_RESPONSE, LDAP_ASN1_SEARCH_DONE,
     LDAP_ASN1_MODIFY_RESPONSE, LDAP_ASN1_ADD_RESPONSE, LDAP_ASN1_DEL_RESPONSE,
     LDAP_ASN1_MODIFYDN_RESPONSE, LDAP_ASN1_COMPARE_RESPONSE,
     LDAP_ASN1_EXT_RESPONSE] then
   begin
-    FresultCode := Utf8ToInteger(ASNItem(i, Asn1Response, Svt), -1);
-    FResponseDN := ASNItem(i, Asn1Response, Svt);
-    FresultString := ASNItem(i, Asn1Response, Svt);
-    if FresultString = '' then
-      FresultString := GetErrorString(FresultCode);
-    if FresultCode = 10 then
+    fResultCode := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), -1);
+    fResponseDN := AsnNext(i, Asn1Response, asntype);
+    fResultString := AsnNext(i, Asn1Response, asntype);
+    if fResultString = '' then
+      fResultString := GetErrorString(fResultCode);
+    if fResultCode = 10 then
     begin
-      s := ASNItem(i, Asn1Response, Svt);
-      if svt = $A3 then
+      s := AsnNext(i, Asn1Response, asntype);
+      if asntype = $A3 then
       begin
         x := 1;
-        while x < Length(s) do
+        while x < length(s) do
         begin
-          t := ASNItem(x, s, Svt);
-          FReferals.Add(t);
+          t := AsnNext(x, s, asntype);
+          fReferals.Add(t);
         end;
       end;
     end;
   end;
-  result := Copy(Asn1Response, i, Length(Asn1Response) - i + 1);
+  result := copy(Asn1Response, i, length(Asn1Response) - i + 1); // body
 end;
 
-function TLDAPSend.LdapSasl(Value: RawUtf8): RawByteString;
+function TLdapClient.LdapSasl(const Value: RawUtf8): RawUtf8;
 var
-  s, a1, a2, nonce, cnonce, nc, realm, qop, uri, response: RawUtf8;
+  s, a0, a1, a2, nonce, cnonce, nc, realm, qop, uri, response: RawUtf8;
   l: TRawUtf8List;
-  n: integer;
 begin
   l := TRawUtf8List.Create;
   try
-    nonce := '';
-    realm := '';
     l.SetText(Value, ',');
-    n := IndexByBegin('nonce=', l);
-    if n >= 0 then
-      nonce := UnQuoteStr(Trim(SeparateRight(l[n], 'nonce=')), '"');
-    n := IndexByBegin('realm=', l);
-    if n >= 0 then
-      realm := UnQuoteStr(Trim(SeparateRight(l[n], 'realm=')), '"');
-    cnonce := Int64ToHex(GetTickCount64);
-    nc := '00000001';
-    qop := 'auth';
-    uri := 'ldap/' + FSock.RemoteIP;
-    a1 := md5(FUsername + ':' + realm + ':' + FPassword)
-      + ':' + nonce + ':' + cnonce;
-    a2 := 'AUTHENTICATE:' + uri;
-    s := BinToHex(md5(a1))+':' + nonce + ':' + nc + ':' + cnonce + ':'
-      + qop +':'+BinToHex(md5(a2));
-    response := BinToHex(md5(s));
-
-    result := 'username="' + Fusername + '",realm="' + realm + '",nonce="';
-    result := result + nonce + '",cnonce="' + cnonce + '",nc=' + nc + ',qop=';
-    result := result + qop + ',digest-uri="' + uri + '",response=' + response;
+    nonce := UnQuoteByBegin('NONCE=', l);
+    realm := UnQuoteByBegin('REALM=', l);
   finally
     l.Free;
   end;
+  cnonce := Int64ToHex(GetTickCount64);
+  nc := '00000001';
+  qop := 'auth';
+  uri := 'ldap/' + fSock.RemoteIP;
+  FormatUtf8('%:%:%', [fUserName, realm, fPassword], a0);
+  FormatUtf8('%:%:%', [md5(a0), nonce, cnonce], a1);
+  FormatUtf8('AUTHENTICATE:%', [uri], a2);
+  FormatUtf8('%:%:%:%:%:%',
+    [BinToHex(md5(a1)), nonce, nc, cnonce, qop, BinToHex(md5(a2))], s);
+  response := BinToHex(md5(s));
+  FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
+    'digest-uri="%",response=%',
+    [fUserName, realm, nonce, cnonce, nc, qop, uri, response], result);
 end;
 
-function TLDAPSend.TranslateFilter(Filter: RawUtf8): TASNObject;
+function TLdapClient.TranslateFilter(const Filter: RawUtf8): TAsnObject;
 var
-  x: integer;
+  x, dn: integer;
   c: Ansichar;
   s, t, l, r, attr, rule: RawUtf8;
-  dn: Boolean;
 begin
   result := '';
   if Filter = '' then
-    Exit;
+    exit;
   s := Filter;
   if Filter[1] = '(' then
-  begin
-    x := LastDelimiter(')', UTF8ToString(Filter));
-    s := Copy(Filter, 2, x - 2);
-  end;
+    for x := length(Filter) downto 2 do
+      if Filter[x] = ')' then
+      begin
+        s := copy(Filter, 2, x - 2); // get value between (...)
+        break;
+      end;
   if s = '' then
-    Exit;
+    exit;
   case s[1] of
     '!':
       // NOT rule (recursive call)
-      begin
-        result := ASNOBject(TranslateFilter(GetBetween('(', ')', s)), $A2);
-      end;
+      result := Asn(TranslateFilter(GetBetween('(', ')', s)), $A2);
     '&':
-      // AND rule (recursive call)
+      // and rule (recursive call)
       begin
         repeat
           t := GetBetween('(', ')', s);
-          s := Trim(SeparateRight(s, t));
+          s := SeparateRightU(s, t);
           if s <> '' then
             if s[1] = ')' then
               System.Delete(s, 1, 1);
-          Append(result, [TranslateFilter(t)]);
+          AsnAdd(result, TranslateFilter(t));
         until s = '';
-        result := ASNOBject(result, $A0);
+        result := Asn(result, $A0);
       end;
     '|':
-      // OR rule (recursive call)
+      // or rule (recursive call)
       begin
         repeat
           t := GetBetween('(', ')', s);
-          s := Trim(SeparateRight(s, t));
+          s := SeparateRightU(s, t);
           if s <> '' then
             if s[1] = ')' then
               System.Delete(s, 1, 1);
-          Append(result, [TranslateFilter(t)]);
+          AsnAdd(result, TranslateFilter(t));
         until s = '';
-        result := ASNOBject(result, $A1);
+        result := Asn(result, $A1);
       end;
     else
       begin
-        l := Trim(SeparateLeft(s, '='));
-        r := Trim(SeparateRight(s, '='));
+        l := TrimU(SeparateLeft(s, '='));
+        r := TrimU(SeparateRight(s, '='));
         if l <> '' then
         begin
-          c := l[Length(l)];
+          c := l[length(l)];
           case c of
             ':':
               // Extensible match
               begin
-                System.Delete(l, Length(l), 1);
-                dn := False;
+                System.Delete(l, length(l), 1);
+                dn := 0;
                 attr := '';
                 rule := '';
                 if mormot.core.base.PosEx(':dn', l) > 0 then
                 begin
-                  dn := True;
+                  dn := $ff; // true
                   l := StringReplaceAll(l, ':dn', '');
                 end;
-                attr := Trim(SeparateLeft(l, ':'));
-                rule := Trim(SeparateRight(l, ':'));
+                attr := TrimU(SeparateLeft(l, ':'));
+                rule := TrimU(SeparateRight(l, ':'));
                 if rule = l then
                   rule := '';
                 if rule <> '' then
-                  result := ASNObject(rule, $81);
+                  result := Asn(rule, $81);
                 if attr <> '' then
-                  Append(result, [ASNObject(attr, $82)]);
-                result := result + ASNObject(DecodeTriplet(r, '\'), $83);
-                if dn then
-                  Append(result, [ASNObject(AsnEncInt($ff), $84)])
-                else
-                  Append(result, [ASNObject(AsnEncInt(0), $84)]);
-                result := ASNOBject(result, $a9);
+                  AsnAdd(result, attr, $82);
+                AsnAdd(result, DecodeTriplet(r, '\'), $83);
+                AsnAdd(result, AsnEncInt(dn), $84);
+                result := Asn(result, $a9);
               end;
             '~':
               // Approx match
               begin
-                System.Delete(l, Length(l), 1);
-                result := ASNOBject($a8, [ASNOBject(l, ASN1_OCTSTR), ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
+                System.Delete(l, length(l), 1);
+                result := Asn($a8, [
+                  Asn(l),
+                  Asn(DecodeTriplet(r, '\'))]);
               end;
             '>':
               // Greater or equal match
               begin
-                System.Delete(l, Length(l), 1);
-                result := ASNOBject($a5, [
-                       ASNOBject(l, ASN1_OCTSTR),
-                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
+                System.Delete(l, length(l), 1);
+                result := Asn($a5, [
+                   Asn(l),
+                   Asn(DecodeTriplet(r, '\'))]);
               end;
             '<':
               // Less or equal match
               begin
-                System.Delete(l, Length(l), 1);
-                result := ASNOBject($a6, [
-                       ASNOBject(l, ASN1_OCTSTR),
-                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
+                System.Delete(l, length(l), 1);
+                result := Asn($a6, [
+                   Asn(l),
+                   Asn(DecodeTriplet(r, '\'))]);
               end;
           else
             // present
             if r = '*' then
-              result := ASNOBject(l, $87)
+              result := Asn(l, $87)
             else
               if PosExChar('*', r) > 0 then
               // substrings
               begin
                 s := Fetch(r, '*');
                 if s <> '' then
-                  result := ASNOBject(DecodeTriplet(s, '\'), $80);
+                  result := Asn(DecodeTriplet(s, '\'), $80);
                 while r <> '' do
                 begin
                   if PosExChar('*', r) <= 0 then
                     break;
                   s := Fetch(r, '*');
-                  Append(result, [ASNOBject(DecodeTriplet(s, '\'), $81)]);
+                  AsnAdd(result, DecodeTriplet(s, '\'), $81);
                 end;
                 if r <> '' then
-                  Append(result, [ASNOBject(DecodeTriplet(r, '\'), $82)]);
-                result := ASNOBject($a4, [
-                       ASNOBject(l, ASN1_OCTSTR),
-                       ASNOBject(result, ASN1_SEQ)]);
+                  AsnAdd(result, DecodeTriplet(r, '\'), $82);
+                result := Asn($a4, [
+                   Asn(l),
+                   AsnSeq(result)]);
               end
               else
               begin
                 // Equality match
-                result := ASNOBject($a3, [
-                       ASNOBject(l, ASN1_OCTSTR),
-                       ASNOBject(DecodeTriplet(r, '\'), ASN1_OCTSTR)]);
+                result := Asn($a3, [
+                   Asn(l),
+                   Asn(DecodeTriplet(r, '\'))]);
               end;
           end;
         end;
@@ -1675,319 +1635,287 @@ begin
   end;
 end;
 
-function TLDAPSend.Login: Boolean;
+function TLdapClient.Login: boolean;
 begin
-  result := False;
+  result := false;
   if not Connect then
-    Exit;
-  result := True;
+    exit;
+  result := true;
 end;
 
-function TLDAPSend.Bind: Boolean;
+function TLdapClient.Bind: boolean;
 var
-  Query, Response: RawByteString;
+  query: RawByteString;
 begin
-  Query := ASNObject(LDAP_ASN1_BIND_REQUEST, [
-             ASNObject(ASNEncInt(FVersion), ASN1_INT),
-             ASNObject(FUsername, ASN1_OCTSTR),
-             ASNObject(FPassword, $80)]);
-  FSock.SockSendFlush(BuildPacket(Query));
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+  query := Asn(LDAP_ASN1_BIND_REQUEST, [
+             Asn(fVersion),
+             Asn(fUserName),
+             Asn(fPassword, $80)]);
+  SendPacket(query);
+  DecodeResponse(ReceiveResponse);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.BindSasl: Boolean;
+function TLdapClient.BindSasl: boolean;
 var
   x, xt: integer;
-  s, t, digreq: TASNObject;
+  s, t, digreq: TAsnObject;
 begin
-  result := False;
-  if FPassword = '' then
+  result := false;
+  if fPassword = '' then
     result := Bind
   else
   begin
-    digreq := ASNObject(LDAP_ASN1_BIND_REQUEST, [
-           ASNObject(ASNEncInt(FVersion), ASN1_INT),
-           ASNObject('', ASN1_OCTSTR),
-           ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR), $A3)]);
-    FSock.SockSendFlush(BuildPacket(digreq));
-    s := ReceiveResponse;
-    t := DecodeResponse(s);
-    if FresultCode = 14 then
+    digreq := Asn(LDAP_ASN1_BIND_REQUEST, [
+                 Asn(fVersion),
+                 Asn(''),
+                 Asn($A3, [
+                   Asn('DIGEST-MD5')])]);
+    SendPacket(digreq);
+    t := DecodeResponse(ReceiveResponse);
+    if fResultCode = 14 then
     begin
       s := t;
       x := 1;
-      t := ASNItem(x, s, xt);
-      s := ASNObject(LDAP_ASN1_BIND_REQUEST, [
-               ASNObject(ASNEncInt(FVersion), ASN1_INT),
-               ASNObject('', ASN1_OCTSTR),
-               ASNObject(ASNObject('DIGEST-MD5', ASN1_OCTSTR),
-               ASNObject(LdapSasl(t), ASN1_OCTSTR), $A3)]);
-      FSock.SockSendFlush(BuildPacket(s));
-      s := ReceiveResponse;
-      DecodeResponse(s);
-      if FresultCode = 14 then
+      t := AsnNext(x, s, xt);
+      s := Asn(LDAP_ASN1_BIND_REQUEST, [
+               Asn(fVersion),
+               Asn(''),
+               Asn($A3, [
+                 Asn('DIGEST-MD5'),
+                 Asn(LdapSasl(t))])]);
+      SendPacket(s);
+      DecodeResponse(ReceiveResponse);
+      if fResultCode = 14 then
       begin
-        FSock.SockSendFlush(BuildPacket(digreq));
+        SendPacket(digreq);
         s := ReceiveResponse;
         DecodeResponse(s);
       end;
-      result := FresultCode = 0;
+      result := fResultCode = 0;
     end;
   end;
 end;
 
-function TLDAPSend.Logout: Boolean;
+function TLdapClient.Logout: boolean;
 begin
-  FSock.SockSendFlush(BuildPacket(ASNObject('', LDAP_ASN1_UNBIND_REQUEST)));
-  FSock.Free;
-  FSock := nil;
-  result := True;
+  SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
+  FreeAndNil(fSock);
+  result := true;
 end;
 
-function TLDAPSend.Modify(obj: RawUtf8; Op: TLDAPModifyOp;
-  const Value: TLDAPAttribute): Boolean;
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  Value: TLdapAttribute): boolean;
 var
-  Query, Response: TASNObject;
+  query, resp: TAsnObject;
   i: integer;
 begin
-  Query := '';
+  query := '';
   for i := 0 to Value.Count -1 do
-    Append(Query, [ASNObject(Value[i], ASN1_OCTSTR)]);
-  Query := ASNObject(Value.AttributeName, ASN1_OCTSTR) + ASNObject(Query, ASN1_SETOF);
-  Query := ASNObject(ASNEncInt(Ord(Op)), ASN1_ENUM) + ASNObject(Query, ASN1_SEQ);
-  Query := ASNObject(Query, ASN1_SEQ);
-  Query := ASNObject(obj, ASN1_OCTSTR) + ASNObject(Query, ASN1_SEQ);
-  Query := ASNObject(Query, LDAP_ASN1_MODIFY_REQUEST);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+    Append(query, [Asn(Value.GetRaw(i))]);
+  query := Asn(LDAP_ASN1_MODIFY_REQUEST, [
+    Asn(obj),
+    Asn(ASN1_SEQ, [Asn(ASN1_SEQ, [
+      Asn(ord(Op), ASN1_ENUM),
+      Asn(ASN1_SEQ, [
+        Asn(Value.AttributeName),
+        Asn(query, ASN1_SETOF)])])])]);
+  SendPacket(query);
+  resp := ReceiveResponse;
+  DecodeResponse(resp);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.Add(obj: RawUtf8; const Value: TLDAPAttributeList): Boolean;
+function TLdapClient.Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
 var
-  Query, SubQuery, Response: TASNObject;
-  i, j: integer;
+  query, sub, resp: TAsnObject;
+  attr: TLdapAttribute;
+  i, j: PtrInt;
 begin
-  Query := '';
+  query := '';
   for i := 0 to Value.Count - 1 do
   begin
-    SubQuery := '';
-    for j := 0 to Value[i].Count - 1 do
-      Append(SubQuery, [ASNObject(Value[i][j], ASN1_OCTSTR)]);
-    SubQuery := ASNObject(Value[i].AttributeName, ASN1_OCTSTR)
-      + ASNObject(SubQuery, ASN1_SETOF);
-    Append(Query, [ASNObject(SubQuery, ASN1_SEQ)]);
+    attr := Value.Items[i];
+    sub := '';
+    for j := 0 to attr.Count - 1 do
+      Append(sub, [Asn(attr.GetRaw(j))]);
+    Append(query, [
+      Asn(ASN1_SEQ, [
+        Asn(attr.AttributeName),
+        Asn(ASN1_SETOF, [sub])])]);
   end;
-  Query := ASNObject(LDAP_ASN1_ADD_REQUEST, [
-        ASNObject(obj, ASN1_OCTSTR),
-        ASNObject(Query, ASN1_SEQ)]);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+  query := Asn(LDAP_ASN1_ADD_REQUEST, [
+             Asn(obj),
+             AsnSeq(query)]);
+  SendPacket(query);
+  resp := ReceiveResponse;
+  DecodeResponse(resp);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.Delete(obj: RawUtf8): Boolean;
+function TLdapClient.Delete(const Obj: RawUtf8): boolean;
 var
-  Query, Response: TASNObject;
+  query, resp: TAsnObject;
 begin
-  Query := ASNObject(obj, LDAP_ASN1_DEL_REQUEST);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+  query := Asn(obj, LDAP_ASN1_DEL_REQUEST);
+  SendPacket(query);
+  resp := ReceiveResponse;
+  DecodeResponse(resp);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.ModifyDN(obj, newRDN, newSuperior: RawUtf8;
-  DeleteoldRDN: Boolean): Boolean;
+function TLdapClient.ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
+  DeleteOldRdn: boolean): boolean;
 var
-  Query, Response: TASNObject;
+  query, resp: TAsnObject;
 begin
-  Query := ASNObject(obj, ASN1_OCTSTR) + ASNObject(newRDN, ASN1_OCTSTR);
-  if DeleteOldRDN then
-    Append(Query, [ASNObject(ASNEncInt($ff), ASN1_BOOL)])
-  else
-    Append(Query, [ASNObject(ASNEncInt(0), ASN1_BOOL)]);
+  query := Asn(obj);
+  Append(query, [Asn(newRdn), Asn(DeleteOldRdn)]);
   if newSuperior <> '' then
-    Append(Query, [ASNObject(newSuperior, $80)]);
-  Query := ASNObject(Query, LDAP_ASN1_MODIFYDN_REQUEST);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+    Append(query, [Asn(newSuperior, $80)]);
+  query := Asn(query, LDAP_ASN1_MODIFYDN_REQUEST);
+  SendPacket(query);
+  resp := ReceiveResponse;
+  DecodeResponse(resp);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.Compare(obj, AttributeValue: RawUtf8): Boolean;
+function TLdapClient.Compare(const Obj, AttributeValue: RawUtf8): boolean;
 var
-  Query, Response: TASNObject;
+  query, resp: TAsnObject;
 begin
-  Query := ASNObject(Trim(SeparateLeft(AttributeValue, '=')), ASN1_OCTSTR)
-    + ASNObject(Trim(SeparateRight(AttributeValue, '=')), ASN1_OCTSTR);
-  Query := ASNObject(obj, ASN1_OCTSTR) + ASNObject(Query, ASN1_SEQ);
-  Query := ASNObject(Query, LDAP_ASN1_COMPARE_REQUEST);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodeResponse(Response);
-  result := FresultCode = 0;
+  query := Asn(LDAP_ASN1_COMPARE_REQUEST, [
+    Asn(obj),
+    Asn(ASN1_SEQ, [
+      Asn(TrimU(SeparateLeft(AttributeValue, '='))),
+      Asn(TrimU(SeparateRight(AttributeValue, '=')))])]);
+  SendPacket(query);
+  resp := ReceiveResponse;
+  DecodeResponse(resp);
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.Search(BaseDN: RawUtf8; TypesOnly: Boolean; Filter: RawUtf8;
-  const Attributes: TStrings): Boolean;
+function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
+  Filter: RawUtf8; const Attributes: array of RawByteString): boolean;
 var
-  s, t, c: TASNObject;
+  s, t, c: TAsnObject;
   u: RawUtf8;
   n, i, x: integer;
-  r: TLDAPresult;
-  a: TLDAPAttribute;
+  r: TLdapResult;
+  a: TLdapAttribute;
 begin
-  FSearchresult.Clear;
-  FReferals.Clear;
-  s := ASNObject(BaseDN, ASN1_OCTSTR);
-  Append(s, [ASNObject(ASNEncInt(Ord(FSearchScope)), ASN1_ENUM),
-            ASNObject(ASNEncInt(Ord(FSearchAliases)), ASN1_ENUM),
-            ASNObject(ASNEncInt(FSearchSizeLimit), ASN1_INT),
-            ASNObject(ASNEncInt(FSearchTimeLimit), ASN1_INT)]);
-  if TypesOnly then
-    Append(s, [ASNObject(ASNEncInt($ff), ASN1_BOOL)])
-  else
-    Append(s, [ASNObject(ASNEncInt(0), ASN1_BOOL)]);
+  fSearchResult.Clear;
+  fReferals.Clear;
+  s := Asn(BaseDN);
+  Append(s, [Asn(ord(fSearchScope), ASN1_ENUM),
+             Asn(ord(fSearchAliases), ASN1_ENUM),
+             Asn(fSearchSizeLimit),
+             Asn(fSearchTimeLimit)]);
+  Append(s, [Asn(TypesOnly)]);
   if Filter = '' then
     Filter := '(objectclass=*)';
   t := TranslateFilter(Filter);
   if t = '' then
-    Append(s, [ASNObject('', ASN1_NULL)])
-  else
-    Append(s, [t]);
+    t := Asn('', ASN1_NULL);
+  Append(s, [t]);
   t := '';
-  for n := 0 to Attributes.Count - 1 do
-    Append(t, [ASNObject(ToUtf8(Attributes[n]), ASN1_OCTSTR)]);
-  Append(s, [ASNObject(t, ASN1_SEQ)]);
-  s := ASNObject(s, LDAP_ASN1_SEARCH_REQUEST);
-  if FSearchPageSize > 0 then
+  for n := 0 to high(Attributes) - 1 do
+    Append(t, [Asn(Attributes[n])]);
+  Append(s, [AsnSeq(t)]);
+  s := Asn(s, LDAP_ASN1_SEARCH_REQUEST);
+  if fSearchPageSize > 0 then
   begin
-    c := ASNObject('1.2.840.113556.1.4.319', ASN1_OCTSTR); // controlType: pagedresultsControl
-    Append(c, [ASNObject(ASNEncInt(0), ASN1_BOOL)]); // criticality: FALSE
-    t := ASNObject(ASNEncInt(FSearchPageSize), ASN1_INT); // page size
-    Append(t, [ASNObject(FSearchCookie, ASN1_OCTSTR)]); // search cookie
-    t := ASNObject(t, ASN1_SEQ); // wrap with SEQUENCE
-    Append(c, [ASNObject(t, ASN1_OCTSTR)]); // add searchControlValue as OCTET STRING
-    c := ASNObject(c, ASN1_SEQ); // wrap with SEQUENCE
-    Append(s, [ASNObject(c, LDAP_ASN1_CONTROLS)]); // append Controls to SearchRequest
+    t := Asn(ASN1_SEQ, [
+           Asn(fSearchPageSize),
+           Asn(fSearchCookie)]);
+    c := Asn(ASN1_SEQ, [
+           Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
+           Asn(false), // criticality: false
+           Asn(t)]);   // add searchControlValue as OCTET STRING
+    Append(s, [Asn(c, LDAP_ASN1_CONTROLS)]); // append Controls to SearchRequest
   end;
-  FSock.SockSendFlush(BuildPacket(s));
+  SendPacket(s);
   repeat
-    s := ReceiveResponse;
-    t := DecodeResponse(s);
-    if FResponseCode = LDAP_ASN1_SEARCH_ENTRY then
+    t := DecodeResponse(ReceiveResponse);
+    if fResponseCode = LDAP_ASN1_SEARCH_ENTRY then
     begin
-      r := FSearchresult.Add;
+      r := fSearchResult.Add;
       n := 1;
-      r.ObjectName := ASNItem(n, t, x);
-      ASNItem(n, t, x);
+      r.ObjectName := AsnNext(n, t, x);
+      AsnNext(n, t, x);
       if x = ASN1_SEQ then
       begin
-        while n < Length(t) do
+        while n < length(t) do
         begin
-          s := ASNItem(n, t, x);
+          s := AsnNext(n, t, x);
           if x = ASN1_SEQ then
           begin
-            i := n + Length(s);
-            u := ASNItem(n, t, x);
+            i := n + length(s);
+            u := AsnNext(n, t, x);
             a := r.Attributes.Add(u);
-            ASNItem(n, t, x);
+            AsnNext(n, t, x);
             if x = ASN1_SETOF then
               while n < i do
               begin
-                u := ASNItem(n, t, x);
+                u := AsnNext(n, t, x);
                 a.Add(u);
               end;
           end;
         end;
       end;
     end;
-    if FResponseCode = LDAP_ASN1_SEARCH_REFERENCE then
+    if fResponseCode = LDAP_ASN1_SEARCH_REFERENCE then
     begin
       n := 1;
-      while n < Length(t) do
-        FReferals.Add(ASNItem(n, t, x));
+      while n < length(t) do
+        fReferals.Add(AsnNext(n, t, x));
     end;
-  until FResponseCode = LDAP_ASN1_SEARCH_DONE;
+  until fResponseCode = LDAP_ASN1_SEARCH_DONE;
   n := 1;
-  ASNItem(n, t, x);
+  AsnNext(n, t, x);
   if x = LDAP_ASN1_CONTROLS then
   begin
-    ASNItem(n, t, x);
+    AsnNext(n, t, x);
     if x = ASN1_SEQ then
     begin
-      s := ASNItem(n, t, x);
+      s := AsnNext(n, t, x);
       if s = '1.2.840.113556.1.4.319' then
       begin
-        s := ASNItem(n, t, x); // searchControlValue
+        s := AsnNext(n, t, x); // searchControlValue
         n := 1;
-        ASNItem(n, s, x);
+        AsnNext(n, s, x);
         if x = ASN1_SEQ then
         begin
-          ASNItem(n, s, x); // total number of result records, if known, otherwise 0
-          FSearchCookie := ASNItem(n, s, x); // active search cookie, empty when done
+          AsnNext(n, s, x); // total number of result records, if known, otherwise 0
+          fSearchCookie := AsnNext(n, s, x); // active search cookie, empty when done
         end;
       end;
     end;
   end;
-  result := FresultCode = 0;
+  result := fResultCode = 0;
 end;
 
-function TLDAPSend.Extended(const OID, Value: RawUtf8): Boolean;
+function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
 var
-  Query, Response, DecodedResponse: TASNObject;
-  itemStart, xt: integer;
+  query, decoded: TAsnObject;
+  pos, xt: integer;
 begin
-  Query := ASNObject(OID, $80);
+  query := Asn(Oid, $80);
   if Value <> '' then
-    Append(Query, [ASNObject(Value, $81)]);
-  Query := ASNObject(Query, LDAP_ASN1_EXT_REQUEST);
-  FSock.SockSendFlush(BuildPacket(Query));
-
-  Response := ReceiveResponse;
-  DecodedResponse := DecodeResponse(Response);
-  result := FresultCode = 0;
+    Append(query, [Asn(Value, $81)]);
+  query := Asn(query, LDAP_ASN1_EXT_REQUEST);
+  SendPacket(query);
+  decoded := DecodeResponse(ReceiveResponse);
+  result := fResultCode = 0;
   if result then
   begin
-    itemStart := 1;
-    FExtName := ASNItem(itemStart, DecodedResponse, xt);
-    FExtValue := ASNItem(itemStart, DecodedResponse, xt);
+    pos := 1;
+    fExtName  := AsnNext(pos, decoded, xt);
+    fExtValue := AsnNext(pos, decoded, xt);
   end;
 end;
 
-{==============================================================================}
-function LDAPresultDump(const Value: TLDAPresultList): RawUtf8;
-var
-  i, j, k: integer;
-  res: TLDAPresult;
-  attr: TLDAPAttribute;
-begin
-  result := 'results: ' + ToUtf8(Value.Count) + CRLF +CRLF;
-  for i := 0 to Value.Count - 1 do
-  begin
-    result := result + 'result: ' + ToUtf8(i) + CRLF;
-    res := Value[i];
-    result := result + '  Object: ' + res.ObjectName + CRLF;
-    for j := 0 to res.Attributes.Count - 1 do
-    begin
-      attr := res.Attributes[j];
-      result := result + '  Attribute: ' + attr.AttributeName + CRLF;
-      for k := 0 to attr.Count - 1 do
-        result := result + '    ' + attr.GetReadable(k) + CRLF;
-    end;
-  end;
-end;
+
 
 end.
 

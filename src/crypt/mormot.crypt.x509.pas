@@ -578,7 +578,7 @@ begin
   v := reader.NextByte;
   if v and $80 <> 0 then
   begin
-    n := v and $7f;
+    n := v and $7f; // first byte is number of following bytes + $80
     if (n = 0) or
        (n > 4) then
       raise EAsn.CreateUtf8('Unexpected Len=%', [n]);

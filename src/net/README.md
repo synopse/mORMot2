@@ -126,5 +126,6 @@ Automatic Certificate Management Environment (ACME v2) Client
 
 ### mormot.net.ldap
 
-Low level Ldap client from synapse
-- Reworked to use mormot cross platform sockets
+Simple LDAP Protocol Client
+- LDAP Response Storage
+- LDAP Client Class
