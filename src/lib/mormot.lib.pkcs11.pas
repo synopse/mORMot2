@@ -1771,9 +1771,9 @@ type
   TPkcs11SlotDynArray = array of TPkcs11Slot;
 
   /// the flags of PKCS#11 one Storage Object
-  // - mapping CKA_PRIVATE CKA_MODIFIABLE CKA_COPYABLE CKA_DESTROYABLE
-  // and CKA_ENCRYPT, CKA_VERIFY, CKA_TRUSTED
-  TPkcs11ObjectStorage = set of (
+  // - mapping CKA_PRIVATE CKA_SENSITIVE ... CKA_TRUSTED boolean attributes
+  // - posX509 posX509Attr posWtls map CKA_CERTIFICATE_TYPE attribute
+  TPkcs11ObjectStorage = (
     posPrivate,
     posSensitive,
     posModifiable,
@@ -1790,6 +1790,8 @@ type
     posX509,
     posX509Attr,
     posWtls);
+  /// set of flags for PKCS#11 Storage Object
+  TPkcs11ObjectStorages = set of TPkcs11ObjectStorage;
 
   /// high-level information about one PKCS#11 Object
   TPkcs11Object = packed record
@@ -1798,7 +1800,7 @@ type
     /// the description of this Storage Object (CKA_LABEL value)
     StorageLabel: RawUtf8;
     /// the flags of a Storage Object (from various CKA_* boolean)
-    StorageFlags: TPkcs11ObjectStorage;
+    StorageFlags: TPkcs11ObjectStorages;
     /// the stored Key Type
     KeyType: CK_KEY_TYPE;
     /// how this stored Key has been generated
@@ -3339,11 +3341,28 @@ begin
   end;
 end;
 
+const
+  POS2CKA: array[low(TPkcs11ObjectStorage) .. pred(posX509)] of CK_ATTRIBUTE_TYPE = (
+    CKA_PRIVATE,         // posPrivate
+    CKA_SENSITIVE,       // posSensitive
+    CKA_MODIFIABLE,      // posModifiable
+    CKA_COPYABLE,        // posCopiable
+    CKA_DESTROYABLE,     // posDestroyable
+    CKA_ENCRYPT,         // posEncrypt
+    CKA_DECRYPT,         // posDecrypt
+    CKA_VERIFY,          // posVerify
+    CKA_VERIFY_RECOVER,  // posVerifyRecover
+    CKA_SIGN,            // posSign
+    CKA_SIGN_RECOVER,    // posSignRecover
+    CKA_WRAP,            // posWrap
+    CKA_TRUSTED);        // posTrusted
+
 function TPkcs11.GetObjects(SlotID: TPkcs11SlotID;
   Filter: PCK_ATTRIBUTES; GetValue: PRawByteStringDynArray): TPkcs11ObjectDynArray;
 var
   n, count, u: CK_ULONG;
   i: PtrInt;
+  s: TPkcs11ObjectStorage;
   b: boolean;
   obj: array[byte] of CK_OBJECT_HANDLE;
   arr: CK_ATTRIBUTES;
@@ -3358,13 +3377,12 @@ begin
       u := fC.FindObjectsInit(fSession, pointer(Filter^.Attrs), Filter^.Count);
     Check(u, 'FindObjectsInit');
     arr.Clear;
-    arr.Add([CKA_CLASS, CKA_PRIVATE, CKA_SENSITIVE, CKA_MODIFIABLE, CKA_COPYABLE,
-             CKA_DESTROYABLE, CKA_LABEL, CKA_APPLICATION, CKA_UNIQUE_ID,
-             CKA_START_DATE, CKA_END_DATE, CKA_ENCRYPT, CKA_DECRYPT,
-             CKA_SIGN, CKA_SIGN_RECOVER, CKA_VERIFY, CKA_VERIFY_RECOVER,
-             CKA_WRAP, CKA_TRUSTED, CKA_ID, CKA_SERIAL_NUMBER,
+    arr.Add([CKA_CLASS, CKA_LABEL, CKA_APPLICATION, CKA_UNIQUE_ID,
+             CKA_START_DATE, CKA_END_DATE, CKA_ID, CKA_SERIAL_NUMBER,
              CKA_ISSUER, CKA_SUBJECT, CKA_OWNER, CKA_URL, CKA_CERTIFICATE_TYPE,
              CKA_KEY_TYPE, CKA_KEY_GEN_MECHANISM]);
+    for s := low(POS2CKA) to high(POS2CKA) do
+      arr.Add(POS2CKA[s]);
     if GetValue <> nil then
       arr.Add(CKA_VALUE);
     repeat
@@ -3387,32 +3405,9 @@ begin
           with result[count] do
           begin
             ObjClass := OBJECT_CLASS(u);
-            if arr.Find(CKA_PRIVATE, b) and b then
-              include(StorageFlags, posPrivate);
-            if arr.Find(CKA_SENSITIVE, b) and b then
-              include(StorageFlags, posSensitive);
-            if arr.Find(CKA_MODIFIABLE, b) and b then
-              include(StorageFlags, posModifiable);
-            if arr.Find(CKA_COPYABLE, b) and b then
-              include(StorageFlags, posCopiable);
-            if arr.Find(CKA_DESTROYABLE, b) and b then
-              include(StorageFlags, posDestroyable);
-            if arr.Find(CKA_ENCRYPT, b) and b then
-              include(StorageFlags, posEncrypt);
-            if arr.Find(CKA_DECRYPT, b) and b then
-              include(StorageFlags, posDecrypt);
-            if arr.Find(CKA_WRAP, b) and b then
-              include(StorageFlags, posWrap);
-            if arr.Find(CKA_TRUSTED, b) and b then
-              include(StorageFlags, posTrusted);
-            if arr.Find(CKA_VERIFY, b) and b then
-              include(StorageFlags, posVerify);
-            if arr.Find(CKA_VERIFY_RECOVER, b) and b then
-              include(StorageFlags, posVerifyRecover);
-            if arr.Find(CKA_SIGN, b) and b then
-              include(StorageFlags, posSign);
-            if arr.Find(CKA_SIGN_RECOVER, b) and b then
-              include(StorageFlags, posSignRecover);
+            for s := low(POS2CKA) to high(POS2CKA) do
+              if arr.Find(POS2CKA[s], b) and b then
+                include(StorageFlags, s);
             arr.Find(CKA_LABEL, StorageLabel);
             arr.Find(CKA_APPLICATION, Application);
             arr.Find(CKA_ID, UniqueID, {hex=}true);
@@ -3421,12 +3416,6 @@ begin
             arr.Find(CKA_SUBJECT, Subject);
             if arr.Find(CKA_CERTIFICATE_TYPE, u) then
             begin
-              arr.Find(CKA_SERIAL_NUMBER, Serial);
-              arr.Find(CKA_ISSUER, Issuer);
-              if Subject = '' then
-                arr.Find(CKA_OWNER, Subject);
-              if Application = '' then
-                arr.Find(CKA_URL, Application);
               case CERTIFICATE_TYPE(u) of
                 CKC_X_509:
                   include(StorageFlags, posX509);
@@ -3435,6 +3424,12 @@ begin
                 CKC_WTLS:
                   include(StorageFlags, posWtls);
               end;
+              arr.Find(CKA_SERIAL_NUMBER, Serial);
+              arr.Find(CKA_ISSUER, Issuer);
+              if Subject = '' then
+                arr.Find(CKA_OWNER, Subject);
+              if Application = '' then
+                arr.Find(CKA_URL, Application);
             end;
             arr.Find(CKA_START_DATE, Start);
             arr.Find(CKA_END_DATE, Stop);
@@ -3529,6 +3524,7 @@ initialization
   assert(cardinal(1 shl ord(CKF_ERROR_STATE)) = $01000000);
   assert(cardinal(CKK_SHA512_T_HMAC) = $00000045);
   assert(cardinal(1 shl ord(CKF_EXTENSION)) = $80000000);
+  assert(SizeOf(CK_DATE) = 8);
   // allow proper JSON serialization of TPkcs11Slot/TPkcs11Token/TPkcs11
   Rtti.RegisterTypes([
     TypeInfo(CKT_FLAGS),
@@ -3536,14 +3532,14 @@ initialization
     TypeInfo(CK_MECHANISM_TYPES),
     TypeInfo(CK_OBJECT_CLASS),
     TypeInfo(CK_KEY_TYPE),
-    TypeInfo(TPkcs11ObjectStorage)
+    TypeInfo(TPkcs11ObjectStorages)
     ]);
   Rtti.RegisterFromText([
     TypeInfo(TPkcs11Slot),
       'Slot:cardinal Description,Manufacturer:RawUtf8 Flags:CKSL_FLAGS' +
       ' Mechanism:CK_MECHANISM_TYPES HwMaj,HwMin,FwMaj,FwMin:byte',
     TypeInfo(TPkcs11ObjectDynArray),
-      'Class:CK_OBJECT_CLASS Label:RawUtf8 Flags:TPkcs11ObjectStorage' +
+      'Class:CK_OBJECT_CLASS Label:RawUtf8 Flags:TPkcs11ObjectStorages' +
       ' KeyType:CK_KEY_TYPE KeyGen:CK_MECHANISM_TYPE Start,End:TDateTime' +
       ' ID,App:RawUtf8 Sub,SN,Issuer:RawByteString',
     TypeInfo(TPkcs11Token),
