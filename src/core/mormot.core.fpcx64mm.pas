@@ -20,7 +20,9 @@ unit mormot.core.fpcx64mm;
       but its threadvar arena for small blocks tends to consume a lot of memory
       on multi-threaded servers, and has suboptimal allocation performance
     - C memory managers (glibc, Intel TBB, jemalloc) have a very high RAM
-      consumption (especially Intel TBB) and do panic/SIGKILL on any GPF
+      consumption (especially Intel TBB) and do panic/SIG_KILL on any GPF - but
+      they were reported to scale better on heavy load with cpu core count > 16
+      even if getmem() is almost twice faster on single thread with fpcx64mm
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
     - Our lockess round-robin of tiny blocks and freemem bin list are unique
       algorithms among Memory Managers, and match modern CPUs and workloads
@@ -31,6 +33,20 @@ unit mormot.core.fpcx64mm;
 
   *****************************************************************************
 }
+
+(*
+  In practice, write in your main project (.dpr/.lpr) source:
+
+  uses
+    {$I mormot.uses.inc} // may include fpcx64mm or fpclibcmm
+    sysutils,
+    mormot.core.base,
+    ...
+
+  Then define either FPC_X64MM or FPC_LIBCMM conditional.
+  If both are set, FPC_64MM will be used on x86_64, and FPC_LIBCMM otherwise.
+*)
+
 
 { ---- Ready-To-Use Scenarios for Memory Manager Tuning }
 
