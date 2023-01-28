@@ -15,7 +15,7 @@ See https://github.com/TechEmpower/FrameworkBenchmarks/wiki/Project-Information-
 // logging is fine for debugging, less for benchmarking ;)
 
 uses
-  {$I mormot.uses.inc} // include mormot.core.fpcx64mm
+  {$I mormot.uses.inc} // include mormot.core.fpcx64mm or mormot.core.fpclibcmm
   sysutils,
   classes,
   BaseUnix,
@@ -125,7 +125,7 @@ const
   WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
-  FORTUNES_SQL = 'select id, message from Fortune';
+  FORTUNES_SQL = 'select id,message from Fortune';
 
   FORTUNES_MESSAGE = 'Additional fortune added at request time.';
   FORTUNES_TPL = '<!DOCTYPE html>' +
@@ -334,7 +334,7 @@ var
   stmt: ISQLDBStatement;
   {$ifndef USE_SQLITE3}
   pConn: TSqlDBPostgresConnection absolute conn;
-  pStmt: TSqlDBPostgresStatement absolute stmt;
+  pStmt: TSqlDBPostgresStatement;
   {$endif USE_SQLITE3}
   i: PtrInt;
 begin
@@ -356,8 +356,13 @@ begin
   // specific code to use PostgresSQL pipelining mode
   // see test_nosync in
   // https://github.com/postgres/postgres/blob/master/src/test/modules/libpq_pipeline/libpq_pipeline.c
+  if not conn.IsConnected then
+    conn.Connect;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
+  //w/o transaction pg_stat_statements view returns calls-1 and tfb verify fails
+  conn.StartTransaction;
   pConn.EnterPipelineMode;
+  pStmt := (stmt as TSqlDBPostgresStatement);
   for i := 0 to cnt - 1 do
   begin
     pStmt.Bind(1, RandomWorld);
@@ -376,6 +381,7 @@ begin
     pStmt.ReleaseRows;
   end;
   pConn.ExitPipelineMode;
+  conn.commit;
   {$endif USE_SQLITE3}
   result := true;
 end;
