@@ -2584,10 +2584,10 @@ function AesBlockToString(const block: TAesBlock): RawUtf8;
 
 
 /// direct MD5 hash calculation of some data (string-encoded)
-// - result is returned in hexadecimal format
+// - result is returned in lowercase hexadecimal format
 function Md5(const s: RawByteString): RawUtf8;
 
-/// compute the hexadecimal representation of a MD5 digest
+/// compute the lowercase hexadecimal representation of a MD5 digest
 function Md5DigestToString(const D: TMd5Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 

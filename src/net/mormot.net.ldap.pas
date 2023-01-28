@@ -1362,7 +1362,7 @@ begin
   fSeq := 0;
   try
     fSock := TCrtSocket.Open(
-      fTargetHost, fTargetPort, nlTcp, 5000, fFullTls, fTlsContext);
+      fTargetHost, fTargetPort, nlTcp, fTimeOut, fFullTls, fTlsContext);
     fSock.CreateSockIn;
     result := fSock.SockConnected;
   except
@@ -1467,9 +1467,10 @@ end;
 
 function TLdapClient.LdapSasl(const Value: RawUtf8): RawUtf8;
 var
-  s, a0, a1, a2, nonce, cnonce, nc, realm, qop, uri, response: RawUtf8;
+  ha0, ha1, ha2, nonce, cnonce, nc, realm, qop, uri, resp: RawUtf8;
   l: TRawUtf8List;
 begin
+  // see https://en.wikipedia.org/wiki/Digest_access_authentication
   l := TRawUtf8List.Create;
   try
     l.SetText(Value, ',');
@@ -1478,19 +1479,17 @@ begin
   finally
     l.Free;
   end;
-  cnonce := Int64ToHex(GetTickCount64);
+  cnonce := Int64ToHexLower(Random64);
   nc := '00000001';
   qop := 'auth';
-  uri := 'ldap/' + fSock.RemoteIP;
-  FormatUtf8('%:%:%', [fUserName, realm, fPassword], a0);
-  FormatUtf8('%:%:%', [md5(a0), nonce, cnonce], a1);
-  FormatUtf8('AUTHENTICATE:%', [uri], a2);
-  FormatUtf8('%:%:%:%:%:%',
-    [BinToHex(md5(a1)), nonce, nc, cnonce, qop, BinToHex(md5(a2))], s);
-  response := BinToHex(md5(s));
+  uri := 'ldap/' + fSock.Server;
+  ha0 := md5(FormatUtf8('%:%:%', [fUserName, realm, fPassword]));
+  ha1 := md5(FormatUtf8('%:%:%', [ha0, nonce, cnonce]));
+  ha2 := md5(FormatUtf8('AUTHENTICATE:%', [uri]));
+  resp := md5(FormatUtf8('%:%:%:%:%:%', [ha1, nonce, nc, cnonce, qop, ha2]));
   FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
-    'digest-uri="%",response=%',
-    [fUserName, realm, nonce, cnonce, nc, qop, uri, response], result);
+    'digest-uri="%",resp=%',
+    [fUserName, realm, nonce, cnonce, nc, qop, uri, resp], result);
 end;
 
 function TLdapClient.TranslateFilter(const Filter: RawUtf8): TAsnObject;
@@ -1642,6 +1641,8 @@ begin
     exit;
   result := true;
 end;
+
+// see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
 function TLdapClient.Bind: boolean;
 var
