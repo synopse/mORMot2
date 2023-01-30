@@ -823,10 +823,10 @@ procedure TTestCoreCrypto._JWT;
         check(jwt.result = jwtValid);
         check(jwt.reg[jrcIssuer] = 'myself');
       end;
-      inc(tok[length(tok) - 5]);
-      jwt.result := jwtWrongFormat;
+      inc(tok[length(tok) - 5]); // make signature either wrong or not base64uri
+      jwt.result := jwtNoToken;
       J.Verify(tok, jwt);
-      check(jwt.result = jwtInvalidSignature, 'detection');
+      check(jwt.result in [jwtInvalidSignature, jwtWrongFormat], 'detection');
       NotifyTestSpeed('%', [J.Algorithm], N, 0, @tim);
     finally
       J.Free;

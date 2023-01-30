@@ -7155,7 +7155,7 @@ end;
 const
   b32enc: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 var
-  b32dec: TBase64Dec;
+  ConvertBase32ToBin: TBase64Dec;
 
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8;
 begin
@@ -7178,17 +7178,15 @@ begin
   while len > 8 do  // handle whole blocks of 8 input text chars into 5 bytes
   begin
     c := decode[sp[0]];
-    if c < 0 then
-      exit;
     d := decode[sp[1]];
-    if d < 0 then
+    if (c < 0) or
+       (d < 0) then
       exit;
     rp[0] := ((c and $1f) shl 3) or ((d and $1c) shr 2);
     c := decode[sp[2]];
-    if c < 0 then
-      exit;
     e := decode[sp[3]];
-    if e < 0 then
+    if (c < 0) or
+       (e < 0) then
       exit;
     rp[1] := ((d and $03) shl 6) or ((c and $1f) shl 1) or ((e and $10) shr 4);
     c := decode[sp[4]];
@@ -7196,10 +7194,9 @@ begin
       exit;
     rp[2] := ((e and $0f) shl 4) or ((c and $1e) shr 1);
     d := decode[sp[5]];
-    if d < 0 then
-      exit;
     e := decode[sp[6]];
-    if e < 0 then
+    if (d < 0) or
+       (e < 0) then
       exit;
     rp[3] := ((c and $01) shl 7) or ((d and $1f) shl 2) or ((e and $18) shr 3);
     c := decode[sp[7]];
@@ -7211,10 +7208,9 @@ begin
     inc(sp, 8);
   end;
   c := decode[sp[0]]; // decode trailing text chars into 1..4 bytes
-  if c < 0 then
-    exit;
   d := decode[sp[1]];
-  if d < 0 then
+  if (c < 0) or
+     (d < 0) then
     exit;
   rp[0] := ((c and $1f) shl 3) or ((d and $1c) shr 2);
   rp := @rp[1];
@@ -7222,10 +7218,9 @@ begin
     if sp[2] = '=' then
       break;
     c := decode[sp[2]];
-    if c < 0 then
-      exit;
     e := decode[sp[3]];
-    if e < 0 then
+    if (c < 0) or
+       (e < 0) then
       exit;
     rp[0] := ((d and $03) shl 6) or ((c and $1f) shl 1) or ((e and $10) shr 4);
     rp := @rp[1];
@@ -7239,10 +7234,9 @@ begin
     if sp[5] = '=' then
       break;
     d := decode[sp[5]];
-    if d < 0 then
-      exit;
     e := decode[sp[6]];
-    if e < 0 then
+    if (d < 0) or
+       (e < 0) then
       exit;
     rp[0] := ((c and $01) shl 7) or ((d and $1f) shl 2) or ((e and $18) shr 3);
     rp := @rp[1];
@@ -7265,7 +7259,7 @@ begin
      ((B32Len and 7) = 0) then
   begin
     FastSetRawByteString(result, nil, (B32Len shr 3) * 5);
-    p := Base32Decode(@b32dec, B32, pointer(result), B32Len);
+    p := Base32Decode(@ConvertBase32ToBin, B32, pointer(result), B32Len);
     if p <> nil then
     begin
       FakeLength(result, p - pointer(result));
@@ -11009,19 +11003,20 @@ var
   i: PtrInt;
   e: TEmoji;
 begin
-  // initialize Base64/Base64Uri/Base58/Baudot encoding/decoding tables
+  // initialize Base64/Base64Uri/Base58/Base32/Baudot encoding/decoding tables
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
+  FillcharFast(ConvertBase64uriToBin, SizeOf(ConvertBase64uriToBin), 255);
+  FillcharFast(ConvertBase58ToBin, SizeOf(ConvertBase58ToBin), 255);
+  FillcharFast(ConvertBase32ToBin, SizeOf(ConvertBase32ToBin), 255);
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
   for i := 0 to high(b64urienc) do
     ConvertBase64uriToBin[b64urienc[i]] := i;
-  FillcharFast(ConvertBase58ToBin, SizeOf(ConvertBase58ToBin), 255); // -1 = invalid
   for i := 0 to high(b58enc) do
     ConvertBase58ToBin[b58enc[i]] := i;
-  FillcharFast(b32dec, SizeOf(b32dec), 255); // -1 = invalid
   for i := 0 to high(b32enc) do
-    b32dec[b32enc[i]] := i;
+    ConvertBase32ToBin[b32enc[i]] := i;
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i]<#128 then
       Char2Baudot[Baudot2Char[i]] := i;
