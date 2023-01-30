@@ -720,6 +720,7 @@ type
   // on the running Operating System
   // - actual classes are hidden in the implementation section of this unit,
   // and will use the fastest available API on each Operating System
+  // - this class is NOT thread-safe, with the exception of TPollSocketEpoll
   TPollSocketAbstract = class(TPollAbstract)
   protected
     fMaxSockets: integer;
@@ -745,8 +746,9 @@ type
     // - follow POLLSOCKETEPOLL conditional within this unit
     class function FollowEpoll: boolean;
   published
-    /// how many TSocket instances could be tracked, at most
+    /// how many TSocket instances could be tracked, at most, in a single instance
     // - depends on the API used
+    // - equals Count for TPollSocketEpoll, which has no absolute maximum
     property MaxSockets: integer
       read fMaxSockets;
   end;
@@ -790,7 +792,6 @@ type
     fPollIndex: integer;
     fGettingOne: integer;
     fTerminated: boolean;
-    fEpollGettingOne: boolean;
     fUnsubscribeShouldShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
@@ -2667,7 +2668,7 @@ end;
 class function TPollSocketAbstract.FollowEpoll: boolean;
 begin
   {$ifdef POLLSOCKETEPOLL}
-  result := true; // epoll API is thread-safe and has no size limit
+  result := true; // TPollSocketEpoll is thread-safe and has no size limit
   {$else}
   result := false; // select/poll API are not thread safe
   {$endif POLLSOCKETEPOLL}
@@ -2691,7 +2692,7 @@ begin
   fPendingSafe.Init; // mandatory for TOSLightLock
   {$ifdef POLLSOCKETEPOLL}
   // epoll has no size limit (so a single fPoll[0] can be assumed), and
-  // epoll_ctl() is thread-safe and let epoll_wait() work in the background
+  // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
   SetLength(fPoll, 1);
   fPoll[0] := fPollClass.Create(self);
   {$else}
@@ -2751,7 +2752,7 @@ begin
      (events = []) then
     exit;
   {$ifdef POLLSOCKETEPOLL}
-  // epoll_ctl() is thread-safe and let epoll_wait() work in the background
+  // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
   result := fPoll[0].Subscribe(socket, events, tag);
   if result then
     LockedInc32(@fCount);
@@ -2779,7 +2780,7 @@ procedure TPollSockets.Unsubscribe(socket: TNetSocket; tag: TPollSocketTag);
 begin
   // actually unsubscribe from the sockets monitoring API
   {$ifdef POLLSOCKETEPOLL}
-  // epoll_ctl() is thread-safe and let epoll_wait() work in the background
+  // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
   if fPoll[0].Unsubscribe(socket) then
   begin
     LockedDec32(@fCount);
@@ -2833,7 +2834,7 @@ end;
 function TPollSockets.GetSubscribeCount: integer;
 begin
   {$ifdef POLLSOCKETEPOLL}
-  result := 0; // epoll_ctl() is called directly
+  result := 0; // epoll_ctl() is called directly, so there is nothing pending
   {$else}
   result := fSubscription.SubscribeCount;
   {$endif POLLSOCKETEPOLL}
@@ -2989,15 +2990,10 @@ begin
     end;
     {$endif OSPOSIX}
     {$ifdef POLLSOCKETEPOLL}
-    // epoll_wait() is thread-safe and let epoll_ctl() work in the background
+    // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
     {if Assigned(OnLog) then
       OnLog(sllTrace, 'PollForPendingEvents: before WaitForModified(%) count=% pending=%',
         [timeoutMS, fCount, fPending.Count], self);}
-    if fEpollGettingOne then
-      // epoll_wait() is not expected to be used from several threads
-      raise ENetSock.Create('%s.PollForPendingEvents should be called from a ' +
-        'single thread: please refactor your code', [ClassNameShort(self)^]);
-    fEpollGettingOne := true;
     // if fCount=0 epoll_wait() still wait and allow background subscription
     fPoll[0].WaitForModified(new, timeoutMS);
     last := 0;
@@ -3151,9 +3147,6 @@ begin
     end;
   finally
     LockedDec32(@fGettingOne);
-    {$ifdef POLLSOCKETEPOLL}
-    fEpollGettingOne := false;
-    {$endif POLLSOCKETEPOLL}
   end;
 end;
 
@@ -3261,7 +3254,7 @@ begin
     exit;
   // here we need to ask the socket layer
   {$ifdef POLLSOCKETEPOLL}
-  // epoll_wait() is thread-safe and let epoll_ctl() work in the background
+  // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
   PollForPendingEvents(timeoutMS); // inc(fGettingOne) +  blocking epoll_wait
   result := GetOnePending(notif, call);
   if Assigned(fOnGetOneIdle) then

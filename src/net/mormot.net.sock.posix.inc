@@ -1013,10 +1013,10 @@ type
   /// socket polling via Linux epoll optimized API
   // - not available under Windows or BSD/Darwin
   // - direct call of the epoll API in level-triggered (LT) mode
+  // - this class IS thread-safe, as the epoll API itself
   TPollSocketEpoll = class(TPollSocketAbstract)
   protected
     fEPFD: integer;
-    fResults: array of EPoll_Event;
   public
     constructor Create(aOwner: TPollSockets); override;
     destructor Destroy; override;
@@ -1041,9 +1041,7 @@ type
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
 begin
   inherited Create(aOwner);
-  fMaxSockets := 100; // initial value: no limitation in practice and can grow
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
-  SetLength(fResults, fMaxSockets);
 end;
 
 destructor TPollSocketEpoll.Destroy;
@@ -1076,7 +1074,7 @@ const
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
-  e: EPoll_Event;
+  e: TEPoll_Event;
   err: integer;
 begin
   result := false;
@@ -1103,14 +1101,13 @@ begin
   result := err >= NO_ERROR;
   if not result then
     exit;
-  inc(fCount);
-  if fCount = fMaxSockets then
-    fMaxSockets := NextGrow(fMaxSockets); // epoll has no theoritical limit
+  LockedInc32(@fCount);
+  fMaxSockets := fCount;
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
-  e: EPoll_Event; // should be there even if not used (old kernel < 2.6.9)
+  e: TEPoll_Event; // should be there even if not used (old kernel < 2.6.9)
   err: integer;
 begin
   if (self = nil) or
@@ -1126,10 +1123,8 @@ begin
     result := err >= NO_ERROR;
     if result then
     begin
-      dec(fCount);
-      if (fMaxSockets > 100) and
-         (fCount < fMaxSockets shr 1) then
-        fMaxSockets := fMaxSockets shr 1; // size down fMaxSockets
+      LockedDec32(@fCount);
+      fMaxSockets := fCount;
     end;
     if (fOwner <> nil) and
        fOwner.fUnsubscribeShouldShutdownSocket then
@@ -1143,33 +1138,31 @@ var
   e: TPollSocketEvents;
   n: PtrInt;
   ev: integer;
-  ee: ^EPoll_Event;
+  ee: PEPoll_Event;
   er: PPollSocketResult;
+  tmp: array[byte] of TEPoll_Event; // up to 256 events at once seems fair
 begin
   result := false; // error or nothing new
   if (self = nil) or
      (fEPFD <= 0) then
     exit;
   // we allow fCount=0 which enable background epoll_ctl subscription
-  if fMaxSockets > length(fResults) then
-  begin
-    fResults := nil;
-    SetLength(fResults, fMaxSockets);
-  end;
-  n := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
+  n := epoll_wait(fEPFD, @tmp, length(tmp), timeoutMS);
+  // if pending > length(tmp): epoll_wait() would round-robin
   results.Count := n;
   if n <= 0 then
-    exit;
+    exit; // nothing new
+  // epoll notified some sockets
   if results.Events = nil then
     // temporary results.Events = new in PollForPendingEvents()
     SetLength(results.Events, n + 4)
   else if n > length(results.Events) then
   begin
-    // results.Events can be reused between PollForPendingEvents() calls
+    // results.Events reused between calls: allocate as much as possible
     results.Events := nil;
-    SetLength(results.Events, fMaxSockets)
+    SetLength(results.Events, length(tmp));
   end;
-  ee := pointer(fResults);
+  ee := @tmp;
   er := pointer(results.Events);
   repeat
     ev := ee^.events;
