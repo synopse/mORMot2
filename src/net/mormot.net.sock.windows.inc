@@ -23,6 +23,7 @@ const
   // https://devblogs.microsoft.com/oldnewthing/20161221-00/?p=94985
   // -> Xitami uses 1024 since 1996
   // -> safe since our TFDSet is INTERNAL to this unit, and never published :)
+  // -> not too big, since TFDSet is allocated on stack
   FD_SETSIZE = 512;
 
 type
@@ -831,12 +832,13 @@ type
   // grow FD_SETSIZE up to 512 for the purpose of this class
   // - under POSIX, select() is very limited, so poll/epoll APIs are to be used
   // - in practice, TPollSocketSelect is FASTER than TPollSocketPoll + WSAPoll()
-  // because the new WSAPoll API is just an emulator usinig select() internally
+  // because the new WSAPoll API is just an emulator using select() internally
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
     fHighestSocket: TNetSocket;
     fTagSocket: array of TNetSocket;
     fTagTag: array of TPollSocketTag;
+    // reference values prepared for Select() call
     fRead: TFDSet;
     fWrite: TFDSet;
   public
@@ -910,7 +912,7 @@ var
   tv: TTimeVal;
   rdp, wrp: PFDSet;
   ev: TPollSocketEvents;
-  i: PtrInt;
+  i, n: PtrInt;
   sock: TNetSocket;
   rd, wr: TFDSet; // modified by select() -> local copy on stack
 begin
@@ -919,16 +921,20 @@ begin
   if (self = nil) or
      (fCount = 0) then
     exit;
-  if fRead.fd_count > 0 then
+  n := fRead.fd_count; // fill local rd before select()
+  if n > 0 then
   begin
-    rd := fRead;
+    rd.fd_count := n;
+    MoveFast(fRead.fd_array, rd.fd_array, n * SizeOf(rd.fd_array[0]));
     rdp := @rd;
   end
   else
     rdp := nil;
-  if fWrite.fd_count > 0 then
+  n := fWrite.fd_count; // fill local wr
+  if n > 0 then
   begin
-    wr := fWrite;
+    wr.fd_count := n;
+    MoveFast(fWrite.fd_array, wr.fd_array, n * SizeOf(wr.fd_array[0]));
     wrp := @wr;
   end
   else
