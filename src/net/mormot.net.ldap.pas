@@ -202,7 +202,8 @@ type
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
-    function LdapSasl(const Value: RawUtf8): RawUtf8;
+    function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
+    function SaslDigestMd5(const Value: RawUtf8): RawUtf8;
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
     class function GetErrorString(ErrorCode: integer): RawUtf8;
     function ReceiveString(Size: integer): RawByteString;
@@ -221,7 +222,7 @@ type
     /// authenticate a client to the directory server with Username/Password
     // - when you not call Bind on LDAPv3, then anonymous mode is used
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
-    function BindSasl: boolean;
+    function BindSaslDigestMd5: boolean;
     /// close connection to the LDAP server
     function Logout: boolean;
     /// retrieve all entries that match a given set of criteria
@@ -340,13 +341,13 @@ implementation
 
 { ****** Support procedures and functions ****** }
 
-function UnquoteStr(const Value: RawUtf8): RawUtf8;
+procedure UnquoteStr(Value: PUtf8Char; var result: RawUtf8);
 begin
-  if (Value = '') or
-     (Value[1] <> '"') then
-    result := Value
+  if (Value = nil) or
+     (Value^ <> '"') then
+    FastSetString(result, Value, StrLen(Value))
   else
-    UnQuoteSqlStringVar(pointer(Value), result);
+    UnQuoteSqlStringVar(Value, result);
 end;
 
 function IsBinaryString(const Value: RawByteString): boolean;
@@ -361,23 +362,6 @@ begin
          (Value[n] = #0) then
         exit;
   result := false;
-end;
-
-function UnQuoteByBegin(const UpValue: RawUtf8; List: TRawUtf8List): RawUtf8;
-var
-  p: PPUtf8CharArray;
-  i: PtrInt;
-begin
-  p := List.TextPtr;
-  for i := 0 to List.Count - 1 do
-    if IdemPChar(p[i], pointer(UpValue)) then
-    begin
-      result := p[i];
-      delete(result, 1, length(UpValue));
-      result := UnQuoteStr(TrimU(result));
-      exit;
-    end;
-  result := '';
 end;
 
 function SeparateLeft(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
@@ -1445,7 +1429,7 @@ begin
   fResponseDN := '';
   fReferals.Clear;
   i := 1;
-  AsnNext(i, Asn1Response, asntype);
+  AsnNext(i, Asn1Response, asntype); // initial ANS1_SEQ
   numseq := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), 0);
   if (asntype <> ASN1_INT) or
      (numseq <> fSeq) then
@@ -1478,30 +1462,52 @@ begin
   result := copy(Asn1Response, i, length(Asn1Response) - i + 1); // body
 end;
 
-function TLdapClient.LdapSasl(const Value: RawUtf8): RawUtf8;
+function TLdapClient.SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
+begin
+  SendPacket(Asn1Data);
+  result := DecodeResponse(ReceiveResponse);
+end;
+
+function TLdapClient.SaslDigestMd5(const Value: RawUtf8): RawUtf8;
 var
-  ha0, ha1, ha2, nonce, cnonce, nc, realm, qop, uri, resp: RawUtf8;
-  l: TRawUtf8List;
+  v, ha0, ha1, ha2, nonce, cnonce, nc, realm, authzid, qop, uri, resp: RawUtf8;
+  p, s: PUtf8Char;
+  hasher: TMd5;
+  dig: TMd5Digest;
 begin
   // see https://en.wikipedia.org/wiki/Digest_access_authentication
-  l := TRawUtf8List.Create;
-  try
-    l.SetText(Value, ',');
-    nonce := UnQuoteByBegin('NONCE=', l);
-    realm := UnQuoteByBegin('REALM=', l);
-  finally
-    l.Free;
+  p := pointer(Value);
+  while p <> nil do
+  begin
+    v := GetNextItem(p);
+    s := pointer(v);
+    if IdemPChar(s, 'NONCE=') then
+      UnquoteStr(p + 6, nonce)
+    else if IdemPChar(s, 'REALM=') then
+      UnquoteStr(p + 6, realm)
+    else if IdemPChar(s, 'AUTHZID=') then
+      UnquoteStr(p + 8, authzid);
   end;
   cnonce := Int64ToHexLower(Random64);
   nc := '00000001';
   qop := 'auth';
-  uri := 'ldap/' + fSock.Server;
-  ha0 := Md5(FormatUtf8('%:%:%', [fUserName, realm, fPassword]));
-  ha1 := Md5(FormatUtf8('%:%:%', [ha0, nonce, cnonce]));
+  uri := 'ldap/' + LowerCaseU(fSock.Server);
+  hasher.Init;
+  hasher.Update(fUserName);
+  hasher.Update(':');
+  hasher.Update(realm);
+  hasher.Update(':');
+  hasher.Update(fPassword);
+  hasher.Final(dig);
+  FastSetString(ha0, @dig, SizeOf(dig)); // ha0 = md5 binary, not hexa
+  ha1 := FormatUtf8('%:%:%', [ha0, nonce, cnonce]);
+  if authzid <> '' then
+    Append(ha1, [':', authzid]);
+  ha1 := Md5(ha1); // Md5() = into lowercase hexadecimal
   ha2 := Md5(FormatUtf8('AUTHENTICATE:%', [uri]));
   resp := Md5(FormatUtf8('%:%:%:%:%:%', [ha1, nonce, nc, cnonce, qop, ha2]));
   FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
-    'digest-uri="%",resp=%',
+    'digest-uri="%",response=%',
     [fUserName, realm, nonce, cnonce, nc, qop, uri, resp], result);
 end;
 
@@ -1660,19 +1666,15 @@ end;
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
 function TLdapClient.Bind: boolean;
-var
-  query: RawByteString;
 begin
-  query := Asn(LDAP_ASN1_BIND_REQUEST, [
-             Asn(fVersion),
-             Asn(fUserName),
-             Asn(fPassword, ASN1_CTX0)]);
-  SendPacket(query);
-  DecodeResponse(ReceiveResponse);
+  SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+                   Asn(fVersion),
+                   Asn(fUserName),
+                   Asn(fPassword, ASN1_CTX0)]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
-function TLdapClient.BindSasl: boolean;
+function TLdapClient.BindSaslDigestMd5: boolean;
 var
   x, xt: integer;
   s, t, digreq: TAsnObject;
@@ -1683,35 +1685,32 @@ begin
   else
   begin
     digreq := Asn(LDAP_ASN1_BIND_REQUEST, [
-                 Asn(fVersion),
-                 Asn(''),
-                 Asn(ASN1_CTC3, [
-                   Asn('DIGEST-MD5')])]);
-    SendPacket(digreq);
-    t := DecodeResponse(ReceiveResponse);
+                Asn(fVersion),
+                Asn(''),
+                Asn(ASN1_CTC3, [
+                  Asn('DIGEST-MD5')])]);
+    t := SendAndReceive(digreq);
     if fResultCode = LDAP_RES_BINDING then
     begin
       s := t;
       x := 1;
       t := AsnNext(x, s, xt);
-      s := Asn(LDAP_ASN1_BIND_REQUEST, [
-               Asn(fVersion),
-               Asn(''),
-               Asn(ASN1_CTC3, [
-                 Asn('DIGEST-MD5'),
-                 Asn(LdapSasl(t))])]);
-      SendPacket(s);
-      DecodeResponse(ReceiveResponse);
+      SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+                       Asn(fVersion),
+                       Asn(''),
+                       Asn(ASN1_CTC3, [
+                         Asn('DIGEST-MD5'),
+                         Asn(SaslDigestMd5(t))])]));
       if fResultCode = LDAP_RES_BINDING then
-      begin
-        SendPacket(digreq);
-        s := ReceiveResponse;
-        DecodeResponse(s);
-      end;
+        SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
     end;
   end;
 end;
+
+// TODO: GSSAPI SASL authentication using mormot.lib.gssapi/sspi units
+// - see https://github.com/go-ldap/ldap/blob/master/bind.go#L561
+
 
 // https://ldap.com/ldapv3-wire-protocol-reference-unbind
 
@@ -1727,21 +1726,19 @@ end;
 function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
   Value: TLdapAttribute): boolean;
 var
-  query, resp: TAsnObject;
+  query: TAsnObject;
   i: integer;
 begin
   for i := 0 to Value.Count -1 do
     AsnAdd(query, Asn(Value.GetRaw(i)));
-  query := Asn(LDAP_ASN1_MODIFY_REQUEST, [
-    Asn(obj),
-    Asn(ASN1_SEQ, [Asn(ASN1_SEQ, [
-      Asn(ord(Op), ASN1_ENUM),
-      Asn(ASN1_SEQ, [
-        Asn(Value.AttributeName),
-        Asn(query, ASN1_SETOF)])])])]);
-  SendPacket(query);
-  resp := ReceiveResponse;
-  DecodeResponse(resp);
+  SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
+                   Asn(obj),
+                   Asn(ASN1_SEQ, [
+                     Asn(ASN1_SEQ, [
+                       Asn(ord(Op), ASN1_ENUM),
+                       Asn(ASN1_SEQ, [
+                         Asn(Value.AttributeName),
+                         Asn(query, ASN1_SETOF)])])])]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -1749,7 +1746,7 @@ end;
 
 function TLdapClient.Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
 var
-  query, sub, resp: TAsnObject;
+  query, sub: TAsnObject;
   attr: TLdapAttribute;
   i, j: PtrInt;
 begin
@@ -1764,25 +1761,17 @@ begin
         Asn(attr.AttributeName),
         Asn(ASN1_SETOF, [sub])])]);
   end;
-  query := Asn(LDAP_ASN1_ADD_REQUEST, [
-             Asn(obj),
-             AsnSeq(query)]);
-  SendPacket(query);
-  resp := ReceiveResponse;
-  DecodeResponse(resp);
+  SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
+                   Asn(obj),
+                   AsnSeq(query)]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-delete
 
 function TLdapClient.Delete(const Obj: RawUtf8): boolean;
-var
-  query, resp: TAsnObject;
 begin
-  query := Asn(obj, LDAP_ASN1_DEL_REQUEST);
-  SendPacket(query);
-  resp := ReceiveResponse;
-  DecodeResponse(resp);
+  SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -1791,33 +1780,25 @@ end;
 function TLdapClient.ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
   DeleteOldRdn: boolean): boolean;
 var
-  query, resp: TAsnObject;
+  query: TAsnObject;
 begin
   query := Asn(obj);
   Append(query, [Asn(newRdn), Asn(DeleteOldRdn)]);
   if newSuperior <> '' then
     AsnAdd(query, Asn(newSuperior, ASN1_CTX0));
-  query := Asn(query, LDAP_ASN1_MODIFYDN_REQUEST);
-  SendPacket(query);
-  resp := ReceiveResponse;
-  DecodeResponse(resp);
+  SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-compare
 
 function TLdapClient.Compare(const Obj, AttributeValue: RawUtf8): boolean;
-var
-  query, resp: TAsnObject;
 begin
-  query := Asn(LDAP_ASN1_COMPARE_REQUEST, [
-    Asn(obj),
-    Asn(ASN1_SEQ, [
-      Asn(TrimU(SeparateLeft(AttributeValue, '='))),
-      Asn(TrimU(SeparateRight(AttributeValue, '=')))])]);
-  SendPacket(query);
-  resp := ReceiveResponse;
-  DecodeResponse(resp);
+  SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
+                   Asn(obj),
+                   Asn(ASN1_SEQ, [
+                     Asn(TrimU(SeparateLeft(AttributeValue, '='))),
+                     Asn(TrimU(SeparateRight(AttributeValue, '=')))])]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -1932,9 +1913,7 @@ begin
   query := Asn(Oid, ASN1_CTX0);
   if Value <> '' then
     AsnAdd(query, Asn(Value, ASN1_CTX1));
-  query := Asn(query, LDAP_ASN1_EXT_REQUEST);
-  SendPacket(query);
-  decoded := DecodeResponse(ReceiveResponse);
+  decoded := SendAndReceive(Asn(query, LDAP_ASN1_EXT_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
   if result then
   begin

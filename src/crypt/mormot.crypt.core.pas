@@ -1843,6 +1843,7 @@ type
     procedure Update(Buffer: pointer; Len: integer); overload;
     /// update the SHA-256 context with some data
     procedure Update(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// finalize and compute the resulting SHA-256 hash Digest of all data
     // affected to Update() method
     procedure Final(out Digest: TSha256Digest; NoInit: boolean = false); overload;
@@ -1892,6 +1893,7 @@ type
     procedure Update(Buffer: pointer; Len: integer); overload;
     /// update the SHA-384 / SHA-512 context with some data
     procedure Update(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
   /// implements SHA-384 hashing
@@ -1986,6 +1988,7 @@ type
     procedure Update(Buffer: pointer; Len: integer); overload;
     /// update the SHA-3 context with some data
     procedure Update(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// finalize and compute the resulting SHA-3 hash 256-bit Digest
     procedure Final(out Digest: THash256; NoInit: boolean = false); overload;
     /// finalize and compute the resulting SHA-3 hash 512-bit Digest
@@ -2123,6 +2126,7 @@ type
     procedure Update(const buffer; Len: cardinal); overload;
     /// update the MD5 context with some data
     procedure Update(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// finalize the MD5 hash process
     // - the resulting hash digest would be stored in buf public variable
     procedure Finalize;
@@ -2199,6 +2203,7 @@ type
     procedure Update(Buffer: pointer; Len: integer); overload;
     /// update the SHA-1 context with some data
     procedure Update(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// finalize and compute the resulting SHA-1 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
@@ -8731,8 +8736,7 @@ end;
 
 procedure TSha3.Update(const Buffer: RawByteString);
 begin
-  if Buffer <> '' then
-    PSha3Context(@Context)^.Absorb(pointer(Buffer), Length(Buffer) shl 3);
+  Update(pointer(Buffer), Length(Buffer) shl 3);
 end;
 
 procedure TSha3.Update(Buffer: pointer; Len: integer);
