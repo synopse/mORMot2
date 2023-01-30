@@ -7089,17 +7089,24 @@ end;
 procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; b32enc: PAnsiChar);
 const
   b32pad: array[0..4] of byte = (8, 6, 4, 3, 1);
+var
+  c, d: PtrInt; // optimized for x86_64 and ARM/AARCH64
 begin
   while BinLen >= 5 do // handle whole blocks of 5 input bytes as 8 text chars
   begin
-    Dest[0] := b32enc[(Bin[0] and $f8) shr 3];
-    Dest[1] := b32enc[((Bin[1] and $c0) shr 6) or ((Bin[0] and $07) shl 2)];
-    Dest[2] := b32enc[(Bin[1] and $3e) shr 1];
-    Dest[3] := b32enc[((Bin[2] and $f0) shr 4) or ((Bin[1] and $01) shl 4)];
-    Dest[4] := b32enc[((Bin[3] and $80) shr 7) or ((Bin[2] and $0f) shl 1)];
-    Dest[5] := b32enc[(Bin[3] and $7c) shr 2];
-    Dest[6] := b32enc[((Bin[4] and $e0) shr 5) or ((Bin[3] and $03) shl 3)];
-    Dest[7] := b32enc[Bin[4] and $1f];
+    c := Bin[0];
+    d := Bin[1];
+    Dest[0] := b32enc[(c and $f8) shr 3];
+    Dest[1] := b32enc[((d and $c0) shr 6) or ((c and $07) shl 2)];
+    Dest[2] := b32enc[(d and $3e) shr 1];
+    c := Bin[2];
+    Dest[3] := b32enc[((c and $f0) shr 4) or ((d and $01) shl 4)];
+    d := Bin[3];
+    Dest[4] := b32enc[((d and $80) shr 7) or ((c and $0f) shl 1)];
+    Dest[5] := b32enc[(d and $7c) shr 2];
+    c := Bin[4];
+    Dest[6] := b32enc[((c and $e0) shr 5) or ((d and $03) shl 3)];
+    Dest[7] := b32enc[c and $1f];
     dec(BinLen, 5);
     if BinLen = 0 then
       exit;
@@ -7107,19 +7114,35 @@ begin
     inc(Dest, 8);
   end;
   repeat // remaining 1..4 bytes in a "repeat until true" block to avoid goto
-    Dest[0] := b32enc[(Bin[0] and $f8) shr 3];
-    Dest[1] := b32enc[((Bin[1] and $c0) shr 6) or ((Bin[0] and $07) shl 2)];
+    c := Bin[0];
+    Dest[0] := b32enc[(c and $f8) shr 3];
+    c := (c and $07) shl 2;
     if BinLen < 2 then
+    begin
+      Dest[1] := b32enc[c];
       break;
-    Dest[2] := b32enc[(Bin[1] and $3e) shr 1];
-    Dest[3] := b32enc[((Bin[2] and $f0) shr 4) or ((Bin[1] and $01) shl 4)];
+    end;
+    d := Bin[1];
+    Dest[1] := b32enc[((d and $c0) shr 6) or c];
+    Dest[2] := b32enc[(d and $3e) shr 1];
+    c := (d and $01) shl 4;
     if BinLen < 3 then
+    begin
+      Dest[3] := b32enc[c];
       break;
-    Dest[4] := b32enc[((Bin[3] and $80) shr 7) or ((Bin[2] and $0f) shl 1)];
+    end;
+    d := Bin[2];
+    Dest[3] := b32enc[((d and $f0) shr 4) or c];
+    c := (d and $0f) shl 1;
     if BinLen < 4 then
+    begin
+      Dest[4] := b32enc[c];
       break;
-    Dest[5] := b32enc[(Bin[3] and $7c) shr 2];
-    Dest[6] := b32enc[((Bin[4] and $e0) shr 5) or ((Bin[3] and $03) shl 3)];
+    end;
+    d := Bin[3];
+    Dest[4] := b32enc[((d and $80) shr 7) or c];
+    Dest[5] := b32enc[(d and $7c) shr 2];
+    Dest[6] := b32enc[(d and $03) shl 3];
   until true;
   BinLen := b32pad[BinLen];
   inc(Dest, 7 - BinLen);
@@ -7149,25 +7172,40 @@ end;
 function Base32Decode(decode: PBase64Dec; sp: PAnsiChar; rp: PByteArray;
   len: PtrInt): pointer;
 var
-  i: PtrInt;
-  c: integer;
-  b: array[0..7] of integer;
+  c, d, e: integer;
 begin
   result := nil;
   while len > 8 do  // handle whole blocks of 8 input text chars into 5 bytes
   begin
-    for i := 0 to 7 do
-    begin
-      c := decode[sp[i]];
-      if c < 0 then
-        exit;
-      b[i] := c;
-    end;
-    rp[0] := ((b[0] and $1f) shl 3) or ((b[1] and $1c) shr 2);
-    rp[1] := ((b[1] and $03) shl 6) or ((b[2] and $1f) shl 1) or ((b[3] and $10) shr 4);
-    rp[2] := ((b[3] and $0f) shl 4) or ((b[4] and $1e) shr 1);
-    rp[3] := ((b[4] and $01) shl 7) or ((b[5] and $1f) shl 2) or ((b[6] and $18) shr 3);
-    rp[4] := ((b[6] and $07) shl 5) or (b[7] and $1f);
+    c := decode[sp[0]];
+    if c < 0 then
+      exit;
+    d := decode[sp[1]];
+    if d < 0 then
+      exit;
+    rp[0] := ((c and $1f) shl 3) or ((d and $1c) shr 2);
+    c := decode[sp[2]];
+    if c < 0 then
+      exit;
+    e := decode[sp[3]];
+    if e < 0 then
+      exit;
+    rp[1] := ((d and $03) shl 6) or ((c and $1f) shl 1) or ((e and $10) shr 4);
+    c := decode[sp[4]];
+    if c < 0 then
+      exit;
+    rp[2] := ((e and $0f) shl 4) or ((c and $1e) shr 1);
+    d := decode[sp[5]];
+    if d < 0 then
+      exit;
+    e := decode[sp[6]];
+    if e < 0 then
+      exit;
+    rp[3] := ((c and $01) shl 7) or ((d and $1f) shl 2) or ((e and $18) shr 3);
+    c := decode[sp[7]];
+    if c < 0 then
+      exit;
+    rp[4] := ((e and $07) shl 5) or (c and $1f);
     rp := @rp[5];
     dec(len, 8);
     inc(sp, 8);
@@ -7175,12 +7213,10 @@ begin
   c := decode[sp[0]]; // decode trailing text chars into 1..4 bytes
   if c < 0 then
     exit;
-  b[0] := c;
-  c := decode[sp[1]];
-  if c < 0 then
+  d := decode[sp[1]];
+  if d < 0 then
     exit;
-  b[1] := c;
-  rp[0] := ((b[0] and $1f) shl 3) or ((b[1] and $1c) shr 2);
+  rp[0] := ((c and $1f) shl 3) or ((d and $1c) shr 2);
   rp := @rp[1];
   repeat
     if sp[2] = '=' then
@@ -7188,40 +7224,34 @@ begin
     c := decode[sp[2]];
     if c < 0 then
       exit;
-    b[2] := c;
-    c := decode[sp[3]];
-    if c < 0 then
+    e := decode[sp[3]];
+    if e < 0 then
       exit;
-    b[3] := c;
-    rp[0] := ((b[1] and $03) shl 6) or ((b[2] and $1f) shl 1) or ((b[3] and $10) shr 4);
+    rp[0] := ((d and $03) shl 6) or ((c and $1f) shl 1) or ((e and $10) shr 4);
     rp := @rp[1];
     if sp[4] = '=' then
       break;
     c := decode[sp[4]];
     if c < 0 then
       exit;
-    b[4] := c;
-    rp[0] := ((b[3] and $0f) shl 4) or ((b[4] and $1e) shr 1);
+    rp[0] := ((e and $0f) shl 4) or ((c and $1e) shr 1);
     rp := @rp[1];
     if sp[5] = '=' then
       break;
-    c := decode[sp[5]];
-    if c < 0 then
+    d := decode[sp[5]];
+    if d < 0 then
       exit;
-    b[5] := c;
-    c := decode[sp[6]];
-    if c < 0 then
+    e := decode[sp[6]];
+    if e < 0 then
       exit;
-    b[6] := c;
-    rp[0] := ((b[4] and $01) shl 7) or ((b[5] and $1f) shl 2) or ((b[6] and $18) shr 3);
+    rp[0] := ((c and $01) shl 7) or ((d and $1f) shl 2) or ((e and $18) shr 3);
     rp := @rp[1];
     if sp[7] = '=' then
       break;
     c := decode[sp[7]];
     if c < 0 then
       exit;
-    b[7] := c;
-    rp[0] := ((b[6] and $07) shl 5) or (b[7] and $1f);
+    rp[0] := ((e and $07) shl 5) or (c and $1f);
     rp := @rp[1];
   until true;
   result := rp;
