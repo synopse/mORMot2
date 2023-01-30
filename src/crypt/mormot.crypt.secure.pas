@@ -3352,6 +3352,7 @@ begin
     fCryptoAesE.EncryptInit(key, 128);
     fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);
     fCryptoCRC := key.c[7];
+    FillZero(key.b);
     // fCrypto[] is not used if fCryptoAes*.Initialized are set
   end
   else
