@@ -1276,13 +1276,13 @@ function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 function BinToBase58(Bin: PAnsiChar; BinLen: integer;
   var Dest: TSynTempBuffer): integer; overload;
 
-/// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
+/// conversion from a binary buffer into Base58 encoded text as RawUtf8
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
 // - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
 // and should not be used on big buffers
 function BinToBase58(Bin: PAnsiChar; BinLen: integer): RawUtf8; overload;
 
-/// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
+/// conversion from a binary buffer into Base58 encoded text as RawUtf8
 // - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
 // - Base58 is much slower than Base64, performing in O(n^2) instead of O(n),
 // and should not be used on big buffers
@@ -1309,6 +1309,36 @@ function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString; overload;
 // - Base58 is much slower than Base64, and should not be used on big buffers
 // - returns '' if input was not valid Base58 encoded
 function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the length resulting of Base32 encoding of a binary buffer
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+function BinToBase32Length(BinLen: cardinal): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// conversion from a binary buffer into Base32 encoded text  buffer
+// - default b32enc is RFC4648 upper alphanumeric without misleading 0O I1 8B
+procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt;
+  b32enc: PAnsiChar); overload;
+
+/// conversion from a binary buffer into Base32 encoded text as RawUtf8
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8; overload;
+
+/// conversion from a binary buffer into Base32 encoded text as RawUtf8
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+function BinToBase32(const Bin: RawByteString): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// conversion from Base32 encoded text into a binary string
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - returns '' if input was not valid Base32 encoded
+function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString; overload;
+
+/// conversion from Base32 encoded text into a binary string
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - returns '' if input was not valid Base32 encoded
+function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawBlob from TEXT-encoded blob data
@@ -7048,6 +7078,178 @@ begin
   result := Base58ToBin(pointer(base58), length(base58));
 end;
 
+function BinToBase32Length(BinLen: cardinal): cardinal;
+begin
+  if integer(BinLen) <= 0 then
+    result := 0
+  else
+    result := ((BinLen div 5) + cardinal(ord((BinLen mod 5) <> 0))) shl 3;
+end;
+
+procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt; b32enc: PAnsiChar);
+const
+  b32pad: array[0..4] of byte = (8, 6, 4, 3, 1);
+begin
+  while BinLen >= 5 do // handle whole blocks of 5 input bytes as 8 text chars
+  begin
+    Dest[0] := b32enc[(Bin[0] and $f8) shr 3];
+    Dest[1] := b32enc[((Bin[1] and $c0) shr 6) or ((Bin[0] and $07) shl 2)];
+    Dest[2] := b32enc[(Bin[1] and $3e) shr 1];
+    Dest[3] := b32enc[((Bin[2] and $f0) shr 4) or ((Bin[1] and $01) shl 4)];
+    Dest[4] := b32enc[((Bin[3] and $80) shr 7) or ((Bin[2] and $0f) shl 1)];
+    Dest[5] := b32enc[(Bin[3] and $7c) shr 2];
+    Dest[6] := b32enc[((Bin[4] and $e0) shr 5) or ((Bin[3] and $03) shl 3)];
+    Dest[7] := b32enc[Bin[4] and $1f];
+    dec(BinLen, 5);
+    if BinLen = 0 then
+      exit;
+    Bin := @Bin[5];
+    inc(Dest, 8);
+  end;
+  repeat // remaining 1..4 bytes in a "repeat until true" block to avoid goto
+    Dest[0] := b32enc[(Bin[0] and $f8) shr 3];
+    Dest[1] := b32enc[((Bin[1] and $c0) shr 6) or ((Bin[0] and $07) shl 2)];
+    if BinLen < 2 then
+      break;
+    Dest[2] := b32enc[(Bin[1] and $3e) shr 1];
+    Dest[3] := b32enc[((Bin[2] and $f0) shr 4) or ((Bin[1] and $01) shl 4)];
+    if BinLen < 3 then
+      break;
+    Dest[4] := b32enc[((Bin[3] and $80) shr 7) or ((Bin[2] and $0f) shl 1)];
+    if BinLen < 4 then
+      break;
+    Dest[5] := b32enc[(Bin[3] and $7c) shr 2];
+    Dest[6] := b32enc[((Bin[4] and $e0) shr 5) or ((Bin[3] and $03) shl 3)];
+  until true;
+  BinLen := b32pad[BinLen];
+  inc(Dest, 7 - BinLen);
+  repeat
+    Dest[BinLen] := '='; // padding
+    dec(BinLen);
+  until BinLen = 0;
+end;
+
+const
+  b32enc: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+var
+  b32dec: TBase64Dec;
+
+function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8;
+begin
+  FastSetString(result, nil, BinToBase32Length(BinLen));
+  if result <> '' then
+    BinToBase32(pointer(Bin), pointer(result), BinLen, @b32enc);
+end;
+
+function BinToBase32(const Bin: RawByteString): RawUtf8;
+begin
+  result := BinToBase32(pointer(Bin), length(Bin));
+end;
+
+function Base32Decode(decode: PBase64Dec; sp: PAnsiChar; rp: PByteArray;
+  len: PtrInt): pointer;
+var
+  i: PtrInt;
+  c: integer;
+  b: array[0..7] of integer;
+begin
+  result := nil;
+  while len > 8 do  // handle whole blocks of 8 input text chars into 5 bytes
+  begin
+    for i := 0 to 7 do
+    begin
+      c := decode[sp[i]];
+      if c < 0 then
+        exit;
+      b[i] := c;
+    end;
+    rp[0] := ((b[0] and $1f) shl 3) or ((b[1] and $1c) shr 2);
+    rp[1] := ((b[1] and $03) shl 6) or ((b[2] and $1f) shl 1) or ((b[3] and $10) shr 4);
+    rp[2] := ((b[3] and $0f) shl 4) or ((b[4] and $1e) shr 1);
+    rp[3] := ((b[4] and $01) shl 7) or ((b[5] and $1f) shl 2) or ((b[6] and $18) shr 3);
+    rp[4] := ((b[6] and $07) shl 5) or (b[7] and $1f);
+    rp := @rp[5];
+    dec(len, 8);
+    inc(sp, 8);
+  end;
+  c := decode[sp[0]]; // decode trailing text chars into 1..4 bytes
+  if c < 0 then
+    exit;
+  b[0] := c;
+  c := decode[sp[1]];
+  if c < 0 then
+    exit;
+  b[1] := c;
+  rp[0] := ((b[0] and $1f) shl 3) or ((b[1] and $1c) shr 2);
+  rp := @rp[1];
+  repeat
+    if sp[2] = '=' then
+      break;
+    c := decode[sp[2]];
+    if c < 0 then
+      exit;
+    b[2] := c;
+    c := decode[sp[3]];
+    if c < 0 then
+      exit;
+    b[3] := c;
+    rp[0] := ((b[1] and $03) shl 6) or ((b[2] and $1f) shl 1) or ((b[3] and $10) shr 4);
+    rp := @rp[1];
+    if sp[4] = '=' then
+      break;
+    c := decode[sp[4]];
+    if c < 0 then
+      exit;
+    b[4] := c;
+    rp[0] := ((b[3] and $0f) shl 4) or ((b[4] and $1e) shr 1);
+    rp := @rp[1];
+    if sp[5] = '=' then
+      break;
+    c := decode[sp[5]];
+    if c < 0 then
+      exit;
+    b[5] := c;
+    c := decode[sp[6]];
+    if c < 0 then
+      exit;
+    b[6] := c;
+    rp[0] := ((b[4] and $01) shl 7) or ((b[5] and $1f) shl 2) or ((b[6] and $18) shr 3);
+    rp := @rp[1];
+    if sp[7] = '=' then
+      break;
+    c := decode[sp[7]];
+    if c < 0 then
+      exit;
+    b[7] := c;
+    rp[0] := ((b[6] and $07) shl 5) or (b[7] and $1f);
+    rp := @rp[1];
+  until true;
+  result := rp;
+end;
+
+function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString;
+var
+  p: PAnsiChar;
+begin
+  if (B32Len > 0) and
+     ((B32Len and 7) = 0) then
+  begin
+    FastSetRawByteString(result, nil, (B32Len shr 3) * 5);
+    p := Base32Decode(@b32dec, B32, pointer(result), B32Len);
+    if p <> nil then
+    begin
+      FakeLength(result, p - pointer(result));
+      exit;
+    end;
+  end;
+  result := '';
+end;
+
+function Base32ToBin(const base32: RawUtf8): RawByteString;
+begin
+  result := Base32ToBin(pointer(base32), length(base32));
+end;
+
 function BlobToRawBlob(P: PUtf8Char; Len: integer): RawBlob;
 begin
   BlobToRawBlob(P, result{%H-}, Len);
@@ -10787,6 +10989,9 @@ begin
   FillcharFast(ConvertBase58ToBin, SizeOf(ConvertBase58ToBin), 255); // -1 = invalid
   for i := 0 to high(b58enc) do
     ConvertBase58ToBin[b58enc[i]] := i;
+  FillcharFast(b32dec, SizeOf(b32dec), 255); // -1 = invalid
+  for i := 0 to high(b32enc) do
+    b32dec[b32enc[i]] := i;
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i]<#128 then
       Char2Baudot[Baudot2Char[i]] := i;

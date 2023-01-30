@@ -52,8 +52,8 @@ type
     procedure Hashes;
     /// stream-oriented cryptography
     procedure Streams;
-    /// Base64 encoding/decoding functions
-    procedure _Base64;
+    /// Base64/Base58/Base32 encoding/decoding functions
+    procedure BaseEncoding;
     {$ifndef PUREMORMOT2}
     /// CompressShaAes() using SHA-256 / AES-256-CTR algorithm over SynLZ
     procedure _CompressShaAes;
@@ -1471,12 +1471,12 @@ begin
   end;
 end;
 
-procedure TTestCoreCrypto._Base64;
+procedure TTestCoreCrypto.BaseEncoding;
 const
   Value64: RawUtf8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
 var
   tmp, tmp2: RawByteString;
-  u, b64: RawUtf8;
+  u, b64, b58, b32: RawUtf8;
   msg: string;
   Value: WinAnsiString;
   P: PUtf8Char;
@@ -1484,6 +1484,7 @@ var
   i, j, L, n: Integer;
   i64: Qword;
   enc, dec: TPrecisionTimer;
+  c: byte;
 begin
   tmp := 'wrJQQCQkdzByZA==';
   Check(IsBase64(tmp));
@@ -1514,12 +1515,27 @@ begin
   tmp := Base58ToBin('111233QC4');
   CheckEqual(length(tmp), 7, 'b58-6');
   Check(CompareMem(pointer(tmp), @i64, 7), 'b58-7');
+  CheckEqual(BinToBase32(''), '');
+  CheckEqual(BinToBase32('f'), 'MY======');
+  CheckEqual(BinToBase32('fo'), 'MZXQ====');
+  CheckEqual(BinToBase32('foo'), 'MZXW6===');
+  CheckEqual(BinToBase32('foob'), 'MZXW6YQ=');
+  CheckEqual(BinToBase32('fooba'), 'MZXW6YTB');
+  CheckEqual(BinToBase32('foobar'), 'MZXW6YTBOI======');
+  CheckEqual(Base32ToBin(''), '');
+  CheckEqual(Base32ToBin('MY======'), 'f');
+  CheckEqual(Base32ToBin('MZXQ===='), 'fo');
+  CheckEqual(Base32ToBin('MZXW6==='), 'foo');
+  CheckEqual(Base32ToBin('MZXW6YQ='), 'foob');
+  CheckEqual(Base32ToBin('MZXW6YTB'), 'fooba');
+  CheckEqual(Base32ToBin('MZXW6YTBOI======'), 'foobar');
+  CheckEqual(Base32ToBin('MZXW6YTB1'), '');
+  CheckEqual(Base32ToBin('MZXW6YTB========'), '');
   tmp := '';
-  for i := 1 to 1998 do
+  for i := 1 to 1982 do
   begin
     b64 := BinToBase64(tmp);
     Check((tmp = '') or IsBase64(b64));
-    Check(BinToBase64(tmp) = b64);
     Check(Base64ToBin(b64) = tmp);
     if tmp <> '' then
     begin
@@ -1532,12 +1548,15 @@ begin
     Check(Base64uriToBin(b64) = tmp);
     if i < 67 then // Base58 is much slower than Base64: not used on big buffers
     begin
-      b64 := BinToBase58(tmp);
-      CheckEqual(Base58ToBin(b64), tmp);
+      b58 := BinToBase58(tmp);
+      Check(Base58ToBin(b58) = tmp);
     end;
+    b32 := BinToBase32(tmp);
+    Check(Base32ToBin(b32) = tmp);
     if tmp <> '' then
     begin
       Check(not IsPem(b64));
+      Check(not IsPem(b32));
       b64 := DerToPem(pointer(tmp), length(tmp), TPemKind(i and 7));
       Check(IsPem(b64));
       CheckUtf8(PemToDer(b64) = tmp, b64);
@@ -1550,7 +1569,8 @@ begin
     b64 := UnZeroed(tmp);
     Check(StrLen(pointer(b64)) = length(b64), 'unz');
     Check(Zeroed(b64) = tmp, 'UnZeroed');
-    tmp := tmp + AnsiChar(Random32(255));
+    c := Random32;
+    AppendBufferToRawByteString(tmp, c, 1);
   end;
   Check(Zeroed(UnZeroed(#0)) = #0, 'unz0');
   Check(Zeroed(UnZeroed(#0#0)) = #0#0, 'unz1');
@@ -1560,6 +1580,7 @@ begin
   enc.Init;
   dec.Init;
   tmp := RandomString(1 shl 20);
+  Check(Base32ToBin(BinToBase32(tmp)) = tmp);
   tmp2 := Zeroed(UnZeroed(tmp));
   {$ifdef FPC}
   SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug
@@ -1592,8 +1613,8 @@ begin
     inc(L, 1 shl i);
   end;
   i64 := Int64(L) * n; // may overflow 32-bit L with AVX
-  NotifyTestSpeed('encoding' + msg, 0, i64, @enc);
-  NotifyTestSpeed('decoding' + msg, 0, i64, @dec);
+  NotifyTestSpeed('base64 encoding' + msg, 0, i64, @enc);
+  NotifyTestSpeed('base64 decoding' + msg, 0, i64, @dec);
 end;
 
 const
