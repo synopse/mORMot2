@@ -8657,7 +8657,7 @@ begin
     begin
       // FastDynArrayClear() with ObjArray support
       dec(p);
-      if (p^.refCnt >= 0) and
+      if (p^.refCnt > 0) and
          DACntDecFree(p^.refCnt) then
       begin
         if (OldLength <> 0) and
@@ -8689,7 +8689,7 @@ begin
   else
   begin
     dec(p); // p^ = start of heap object
-    if p^.refCnt <= 1 then
+    if p^.refCnt = 1 then
     begin
       // we own the dynamic array instance -> direct reallocation
       if (NewLength < OldLength) and
