@@ -73,7 +73,7 @@ function realloc(p: pointer; size: PtrUInt): pointer;
 function msize(p: pointer): PtrUInt;
   cdecl; external 'c' name 'malloc_usable_size';
 
-// to enable paranoid checks (seems to be tedious about threading)
+// enable paranoid memory checks - but from SINGLE/MAIN thread only
 // - see http://man7.org/linux/man-pages/man3/mcheck.3.html
 function mcheck(abort: pointer): integer;
   cdecl external 'c' name 'mcheck';
@@ -150,7 +150,7 @@ var
   OldMM: TMemoryManager;
   
 initialization
-  // mcheck(nil); // enable paranoid extended memory checks
+  //mcheck(nil); // paranoid extended memory checks - NOT THREAD SAFE !!!
   GetMemoryManager(OldMM);
   SetMemoryManager(NewMM);
 

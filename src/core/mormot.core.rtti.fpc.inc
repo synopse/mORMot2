@@ -960,6 +960,7 @@ begin
     // we can safely concatenate the input with no conversion
     l1 := _lstrlen(s1);
     if (pointer(s1) = pointer(dest)) and
+       (pointer(s2) <> pointer(dest)) and // dest := dest+dest would fail
        (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
     begin
       // dest := dest+s2 -> resize dest inplace
@@ -1017,6 +1018,7 @@ procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
 var
   first, len, l, i: TStrLen;
   cpf, cpi: cardinal;
+  oneisdest: boolean;
   p: pointer;
   new: PAnsiChar;
 begin
@@ -1034,6 +1036,7 @@ begin
       break;
     inc(first);
   until false;
+  oneisdest := false;
   len := _lstrlen(RawByteString(p));
   cpf := _lstrcp(RawByteString(p), cp);
   if (cpf <> cp) and
@@ -1046,6 +1049,8 @@ begin
       p := pointer(s[i]);
       if p <> nil then
       begin
+        if p = pointer(dest) then
+          oneisdest := true; // dest := a + dest + c -> don't realloc in-place
         inc(len, _lstrlen(RawByteString(p)));
         cpi := PStrRec(PtrUInt(p) - _STRRECSIZE)^.codePage;
         if cpi <= CP_OEMCP then
@@ -1067,9 +1072,10 @@ begin
     p := pointer(s[first]);
     l := _lstrlen(RawByteString(p));
     if (p = pointer(dest)) and
-       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) then
+       (PStrCnt(PtrUInt(dest) - _STRCNT)^ = 1) and
+       not oneisdest then
     begin
-      // dest := dest+s... -> resize dest inplace
+      // dest := dest+s... -> realloc dest in-place
       new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
       PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
       PStrRec(new)^.length := len;

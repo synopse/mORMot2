@@ -7456,11 +7456,11 @@ begin
       if Password = '' then
         result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
       if result = nil then
-        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw);
+        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw); // try PKCS#8
       if result = nil then
       begin
-        pkcs12 := d2i_PKCS12_bio(priv, nil); // try private key in PKCS12
-        pkcs12.Extract(Password, @result, nil, nil); // ignore key
+        pkcs12 := d2i_PKCS12_bio(priv, nil); // try PKCS#12
+        pkcs12.Extract(Password, @result, nil, nil); // ignore cert
         pkcs12.Free;
       end;
     end;

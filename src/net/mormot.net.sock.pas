@@ -4460,7 +4460,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
           L := Length(Line);
           Setlength(Line, L + SizeOf(tmp));
           MoveFast(tmp, PByteArray(Line)[L], SizeOf(tmp));
-          P := tmp;
+          P := @tmp;
         end
         else
           inc(P);

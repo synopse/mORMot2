@@ -2483,7 +2483,7 @@ begin
   CheckEqual(MacTextFromHex('12345'), '');
   CheckEqual(MacTextFromHex(s), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
   CheckEqual(MacTextFromHex(UpperCase(s)), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
-  AppendToRawUtf8(s, s); // s := s + s triggers GPF with FPC_LIBCMM :(
+  s := s + s; // validates also our patched RTL
   repeat
     i := Random32(length(s)) + 1;
     delete(s, i, 1);
@@ -6435,6 +6435,7 @@ begin
         check(not gen.FromObfuscated(obfusc, i3), 'tempered text');
         dec(obfusc[12]);
       end;
+      check(gen.FromObfuscated(obfusc, i3), 'detempered');
       //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);
       //writeln('UnixTimeUtc=', UnixTimeUtc);
     finally
