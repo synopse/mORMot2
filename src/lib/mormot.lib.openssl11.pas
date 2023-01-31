@@ -2363,7 +2363,8 @@ function Digest(md: PEVP_MD; buf: pointer; buflen: integer): RawUtf8; overload;
 function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8; overload;
 
 /// load a private key from a PEM or DER buffer, optionally with a password
-// - try first with PEM text format, then will fallback to DER binary
+// - try first with PEM text format, then will fallback to DER binary (as raw,
+// PKCS#8 or PKCS#12 format)
 // - caller should make result.Free once done with the result
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const Password: SpiUtf8): PEVP_PKEY; overload;
@@ -7434,16 +7435,19 @@ end;
 function LoadPrivateKey(PrivateKey: pointer; PrivateKeyLen: integer;
   const Password: SpiUtf8): PEVP_PKEY;
 var
+  pw: pointer;
   priv: PBIO;
+  pkcs12: PPKCS12;
 begin
   if (PrivateKey = nil) or
      (PrivateKeyLen = 0) then
     result := nil
   else
   begin
+    pw := PassNotNil(Password);
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
     if IsPem(PrivateKey, '-----BEGIN') then
-      result := PEM_read_bio_PrivateKey(priv, nil, nil, PassNotNil(Password))
+      result := PEM_read_bio_PrivateKey(priv, nil, nil, pw)
     else
       result := nil;
     if result = nil then
@@ -7452,7 +7456,13 @@ begin
       if Password = '' then
         result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
       if result = nil then
-        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, PassNotNil(Password));
+        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw);
+      if result = nil then
+      begin
+        pkcs12 := d2i_PKCS12_bio(priv, nil); // try private key in PKCS12
+        pkcs12.Extract(Password, @result, nil, nil); // ignore key
+        pkcs12.Free;
+      end;
     end;
     priv.Free;
   end;

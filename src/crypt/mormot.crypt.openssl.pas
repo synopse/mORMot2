@@ -2154,11 +2154,19 @@ begin
     exit;
   case Content of
     cccCertOnly:
-      // input only include the X509 certificate as DER or PEM
+      // input only include the X509 certificate as PEM, DER or PKCS#12
       if IsPem(Saved) then
-        fX509 := LoadCertificate(PemToDer(Saved))
+        fX509 := LoadCertificate(PemToDer(Saved)) // PEM
       else
-        fX509 := LoadCertificate(Saved);
+      begin
+        fX509 := LoadCertificate(Saved); // DER
+        if not Assigned(fX509) then
+        begin
+          pkcs12 := LoadPkcs12(Saved); // need first PKCS12 certificate
+          pkcs12.Extract(PrivatePassword, nil, @fX509, nil); // ignore key
+          pkcs12.Free;
+        end;
+      end;
     cccCertWithPrivateKey:
       begin
         // input include the X509 certificate and its associated private key
