@@ -4429,18 +4429,20 @@ end;
 
 procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
 
-  procedure RecvLn(var Line: RawUtf8);
+  procedure RecvLn(eol: AnsiChar);
   var
     P: PAnsiChar;
     LP, L: PtrInt;
     tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
   begin
     P := @tmp;
-    Line := '';
+    L := 0;
     repeat
       SockRecv(P, 1); // this is very slow under Windows -> use SockIn^ instead
-      if P^ <> #13 then // at least NCSA 1.3 does send a #10 only -> ignore #13
-        if P^ = #10 then
+      if (eol = #13) or
+         (P^ <> #13) then // NCSA 1.3 does send a #10 only -> ignore #13
+        if (P^ = eol) or
+           (P^ = #0) then
         begin
           if Line = '' then // get line
             FastSetString(Line, @tmp, P - tmp)
@@ -4448,7 +4450,6 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
           begin
             // append to already read chars
             LP := P - tmp;
-            L := Length(Line);
             Setlength(Line, L + LP);
             MoveFast(tmp, PByteArray(Line)[L], LP);
           end;
@@ -4457,9 +4458,9 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
         else if P = @tmp[high(tmp)] then
         begin
           // tmp[] buffer full? -> append to already read chars
-          L := Length(Line);
           Setlength(Line, L + SizeOf(tmp));
           MoveFast(tmp, PByteArray(Line)[L], SizeOf(tmp));
+          inc(L, SizeOf(tmp));
           P := @tmp;
         end
         else
@@ -4468,34 +4469,22 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
   end;
 
 var
-  c: byte;
-  L, Error: PtrInt;
+  err: integer;
 begin
   if CROnly then
-  begin
-    // slower but accurate version expecting #13 as line end
-    // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
-    repeat
-      SockRecv(@c, 1); // this is slow but works
-      if c in [0, 13] then
-        exit; // end of line
-      L := Length({%H-}Line);
-      SetLength(Line, L + 1);
-      PByteArray(Line)[L] := c;
-    until false;
-  end
+    RecvLn(#13)
   else if SockIn <> nil then
   begin
     {$I-}
-    readln(SockIn^, Line); // example: HTTP/1.0 200 OK
-    Error := ioresult;
-    if Error <> 0 then
+    readln(SockIn^, Line); // use RTL over SockIn^ buffer
+    err := ioresult;
+    if err <> 0 then
       raise ENetSock.Create('%s.SockRecvLn error %d after %d chars',
-        [ClassNameShort(self)^, Error, Length(Line)]);
+        [ClassNameShort(self)^, err, Length(Line)]);
     {$I+}
   end
   else
-    RecvLn(Line); // slow under Windows -> use SockIn^ instead
+    RecvLn(#10); // slow under Windows -> prefer SockIn^
 end;
 
 procedure TCrtSocket.SockRecvLn;
