@@ -463,7 +463,7 @@ var
   list: TFortunes;
   arr: TDynArray;
   n: integer;
-  i: PtrInt;
+  f: ^TFortune;
 begin
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(FORTUNES_SQL, true, true);
@@ -471,13 +471,13 @@ begin
   arr.Init(TypeInfo(TFortunes), list, @n);
   while stmt.Step do
   begin
-    i := arr.new;
-    list[i].id := stmt.ColumnInt(0);
-    list[i].message := stmt.ColumnUtf8(1);
+    f := arr.NewPtr;
+    f.id := stmt.ColumnInt(0);
+    f.message := stmt.ColumnUtf8(1);
   end;
-  i := arr.new;
-  list[i].id := 0;
-  list[i].message := FORTUNES_MESSAGE;
+  f := arr.NewPtr;
+  f.id := 0;
+  f.message := FORTUNES_MESSAGE;
   arr.Sort(FortuneCompareByMessage);
   ctxt.OutContent := fTemplate.RenderDataArray(arr);
   ctxt.OutContentType := HTML_CONTENT_TYPE;
