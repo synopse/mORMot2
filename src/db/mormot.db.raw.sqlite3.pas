@@ -5772,46 +5772,47 @@ begin
 end;
 
 // under FPC, MemSize() returns the value expected by xSize()
-// under Delphi, we need to store the size as 4 bytes header for xSize()
+// under Delphi, of with a FPC MM which don't support MemSize(), we store the
+// size as 4 bytes header (a 32-bit header is enough for SQLite3)
 
 {$ifdef FPC}
 
-function xMalloc(size: integer): pointer; cdecl;
+function xMalloc1(size: integer): pointer; cdecl;
 begin
   result := GetMem(size);
 end;
 
-procedure xFree(ptr: pointer); cdecl;
+procedure xFree1(ptr: pointer); cdecl;
 begin
   FreeMem(ptr);
 end;
 
-function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
+function xRealloc1(ptr: pointer; size: integer): pointer; cdecl;
 begin
   result := ReAllocMem(ptr, size);
 end;
 
-function xSize(ptr: pointer): integer; cdecl;
+function xSize1(ptr: pointer): integer; cdecl;
 begin
   result := MemSize(ptr);
 end;
 
-{$else}
+{$endif FPC}
 
-function xMalloc(size: integer): pointer; cdecl;
+function xMalloc2(size: integer): pointer; cdecl;
 begin
   GetMem(result, size + 4);
   PInteger(result)^ := size;
   inc(PInteger(result));
 end;
 
-procedure xFree(ptr: pointer); cdecl;
+procedure xFree2(ptr: pointer); cdecl;
 begin
   dec(PInteger(ptr));
   FreeMem(ptr);
 end;
 
-function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
+function xRealloc2(ptr: pointer; size: integer): pointer; cdecl;
 begin
   dec(PInteger(ptr));
   ReallocMem(ptr, size + 4);
@@ -5820,18 +5821,13 @@ begin
   result := ptr;
 end;
 
-function xSize(ptr: pointer): integer; cdecl;
+function xSize2(ptr: pointer): integer; cdecl;
 begin
   if ptr = nil then
     result := 0
   else
-  begin
-    dec(PInteger(ptr));
-    result := PInteger(ptr)^;
-  end;
+    result := PInteger(PAnsiChar(ptr) - 4)^;
 end;
-
-{$endif FPC}
 
 function xRoundup(size: integer): integer; cdecl;
 begin
@@ -5848,28 +5844,39 @@ begin
 end;
 
 procedure TSqlite3Library.ForceToUseSharedMemoryManager;
-// due to FPC's linker limitation, all wrapper functions should be defined outside
+// due to FPC's linker limitation, wrapper functions should be defined outside
 var
   mem: TSqlite3MemMethods;
   res: integer;
-  {$ifdef FPC_X64}
+  {$ifdef FPC_SINGLEABI}
   mm: TMemoryManager;
-  {$endif FPC_X64}
+  {$endif FPC_SINGLEABI}
 begin
   if not Assigned(config) then
     exit;
-  {$ifdef FPC_X64} // SQLite3 prototypes match FPC RTL functions on x86_64 ABI
-  GetMemoryManager(mm);
-  mem.xMalloc := @mm.Getmem;
-  mem.xFree := @mm.Freemem;
-  mem.xSize := @mm.MemSize;
-  {$else}
-  mem.xMalloc := @xMalloc;
-  mem.xFree := @xFree;
-  mem.xSize := @xSize;
-  {$endif FPC_X64}
-  mem.xRealloc := @xRealloc;
+  // use the size header by default (and always on Delphi)
+  mem.xMalloc := @xMalloc2;
+  mem.xFree := @xFree2;
+  mem.xSize := @xSize2;
+  mem.xRealloc := @xRealloc2;
   mem.xRoundup := @xRoundup;
+  {$ifdef FPC}
+  if MemSize(self) <> 0 then
+  begin
+    // we can use directly the FPC MM which supports MemSize()
+    {$ifdef FPC_SINGLEABI} // SQLite3 prototypes match FPC RTL ABI on non-i386
+    GetMemoryManager(mm);
+    mem.xMalloc := @mm.Getmem;
+    mem.xFree := @mm.Freemem;
+    mem.xSize := @mm.MemSize;
+    {$else}
+    mem.xMalloc := @xMalloc1;
+    mem.xFree := @xFree1;
+    mem.xSize := @xSize1;
+    {$endif FPC_SINGLEABI}
+    mem.xRealloc := @xRealloc1;
+  end;
+  {$endif FPC}
   mem.xInit := @xInit;
   mem.xShutdown := @xShutdown;
   mem.pAppData := nil;

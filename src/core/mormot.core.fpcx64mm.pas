@@ -2994,12 +2994,12 @@ procedure WriteHeapStatusDetail(const arena: TMMStatusArena;
   const name: ShortString; Wr: TGetHeapStatusWrite);
 begin
   Wr([name, K(arena.CurrentBytes),
-    'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
+      'B/', K(arena.CumulativeBytes), 'B '], {crlf=}false);
   {$ifdef FPCMM_DEBUG}
-  Wr(['   peak=', K(arena.PeakBytes),
-    'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
-       ' alloc=', K(arena.CumulativeAlloc),
-        ' free=', K(arena.CumulativeFree)], false);
+  Wr([  '   peak=', K(arena.PeakBytes),
+      'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
+         ' alloc=', K(arena.CumulativeAlloc),
+          ' free=', K(arena.CumulativeFree)], false);
   {$endif FPCMM_DEBUG}
   Wr([' sleep=', K(arena.SleepCount)]);
 end;

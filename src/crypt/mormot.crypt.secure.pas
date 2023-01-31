@@ -1648,8 +1648,8 @@ type
     // - returns the reason why this certificate has been revoked otherwise
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload;
     /// register a certificate in the internal certificate chain
-    // - returns false e.g. if the certificate was not valid, or its
-    // serial was already part of the internal list
+    // - returns false e.g. if the certificate was not valid, or its serial was
+    // already part of the internal list, or not of a compatible class
     // - self-signed certificate could be included - but add them with caution
     // - the Certificate should have one of cuCA, cuDigitalSignature usages
     function Add(const cert: ICryptCert): boolean;

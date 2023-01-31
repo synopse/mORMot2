@@ -14,9 +14,9 @@ unit mormot.core.fpclibcmm;
     glibc free/realloc may scale better, but do abort/SIG_KILL on any GPF, so
     first ensure your project is very clean about its memory (using heaptrc)
     before running it on production - fpcx64mm or FPC RTL MM are less paranoid
-    - some patterns like "s := s + s" could even trigger abort/SIG_KILL :(
     - getmem() is almost twice slower on single thread than fpcx64mm
     - so only use it if you know what you are doing, and really see a difference
+    - consider it as a more direct (and correct?) alternative to FPC cmem unit
 
   *****************************************************************************
 }
@@ -37,10 +37,8 @@ unit mormot.core.fpclibcmm;
   much more memory on heavy load (TBB seems not usable for server work).
 *)
 
-// this unit setup its own memory manager only for FPC + Linux
+// this unit installs its own memory manager only for FPC + POSIX
 // - Delphi/Windows targets would compile as a void unit
-// - other POSIX (e.g. MaxOS/BSD) would fallback to FPC RTL cmem unit,
-//   because malloc_usable_size() is likely to be missing
 
 interface
 
@@ -51,32 +49,19 @@ implementation
 {$ifdef FPC}
 {$ifndef MSWINDOWS}
 
-{$ifdef LINUX}
-
 // low-level direct calls to the external libc library
 
 function malloc(size: PtrUInt): pointer;
   cdecl; external 'c' name 'malloc';
+
 function calloc(count, size: PtrUInt): pointer;
   cdecl; external 'c' name 'calloc';
+
 procedure free(p: pointer);
   cdecl; external 'c' name 'free';
+
 function realloc(p: pointer; size: PtrUInt): pointer;
   cdecl; external 'c' name 'realloc';
-
-// FPC RTL cmem includes a prefix to store the size, but any recent Linux glibc
-// has this convenient API call to retrieve it from its pointer
-// - may be missing on other platforms, so this code is enabled only on LINUX
-// see https://www.gnu.org/software/gnulib/manual/html_node/malloc_005fusable_005fsize.html
-// = MacOS 11.1, FreeBSD 6.0, NetBSD 9.0, OpenBSD 6.7, Minix 3.1.8, AIX 5.1,
-// HP-UX 11.00, IRIX 6.5, Solaris 11.4, mingw, MSVC 14, BeOS, Android 4.1.
-function msize(p: pointer): PtrUInt;
-  cdecl; external 'c' name 'malloc_usable_size';
-
-// enable paranoid memory checks - but from SINGLE/MAIN thread only
-// - see http://man7.org/linux/man-pages/man3/mcheck.3.html
-function mcheck(abort: pointer): integer;
-  cdecl external 'c' name 'mcheck';
 
 
 // TMemoryManager replacement
@@ -113,12 +98,43 @@ begin
   p := result;
 end;
 
+// we assume that MemSize() could return 0, so we won't store any length prefix
+// - FPC fpc_AnsiStr_SetLength() will always reallocate (rely on realloc)
+// - TSqlite3Library will detect it and use its own wrapper with a prefix
+// - note: the FPC RTL cmem unit triggers some errors during mormot2tests on
+// x86_64 (at least) whereas this unit won't
+
+{$ifdef LINUX}
+
+// any recent Linux glibc has this API call to retrieve a size from a pointer
+// - may be missing on other platforms, so this code is enabled only on LINUX
+// https://www.gnu.org/software/gnulib/manual/html_node/malloc_005fusable_005fsize.html
+// = MacOS 11.1, FreeBSD 6.0, NetBSD 9.0, OpenBSD 6.7, Minix 3.1.8, AIX 5.1,
+// HP-UX 11.00, IRIX 6.5, Solaris 11.4, mingw, MSVC 14, BeOS, Android 4.1.
+function msize(p: pointer): PtrUInt;
+  cdecl; external 'c' name 'malloc_usable_size';
+
+// enable paranoid memory checks - but for SINGLE/MAIN thread only
+// - see http://man7.org/linux/man-pages/man3/mcheck.3.html
+function mcheck(abort: pointer): integer;
+  cdecl external 'c' name 'mcheck';
+
 function _MemSize(p: pointer): PtrUInt;
 begin
-  // AFAIK used only by fpc_AnsiStr_SetLength() in RTL - which triggers some
-  // abort/SIG_KILL on s := s + s; followed by delete(s, i, 1);
   result := msize(p);
 end;
+
+{$else}
+
+function _MemSize(p: pointer): PtrUInt;
+begin
+  result := 0;
+  // good enough in practice: FPC fpc_AnsiStr_SetLength() will reallocate
+  // and TSqlite3Library will detect it and use a prefix
+end;
+
+{$endif LINUX}
+
 
 function _GetHeapStatus: THeapStatus;
 begin
@@ -157,12 +173,6 @@ initialization
 finalization
   SetMemoryManager(OldMM);
 
-{$else LINUX}
-
-uses
-  cmem; // missing malloc_usable_size(): need size prefix
- 
-{$endif LINUX}
 {$endif MSWINDOWS}
 {$endif FPC}
 

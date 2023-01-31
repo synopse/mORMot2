@@ -284,6 +284,7 @@
   // -----------
   // -- identify CPU Architectures
 
+  {$define FPC_SINGLEABI}      // only on i386 default ABI <> cdecl
   {$ifdef CPU64}
     // 64-bit Architecture
     {$define FPC_64}
@@ -320,6 +321,7 @@
         {$define HASAESNI}
       {$endif FPC_PIC}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
+      {$undef FPC_SINGLEABI}   // on i386, cdecl <> register convention
     {$endif CPUX86}
     {$ifdef CPUARM}
       {$define CPUARM3264}
