@@ -8736,7 +8736,7 @@ end;
 
 procedure TSha3.Update(const Buffer: RawByteString);
 begin
-  Update(pointer(Buffer), Length(Buffer) shl 3);
+  Update(pointer(Buffer), Length(Buffer));
 end;
 
 procedure TSha3.Update(Buffer: pointer; Len: integer);
