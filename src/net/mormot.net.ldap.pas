@@ -1824,7 +1824,7 @@ begin
   for n := 0 to high(Attributes) - 1 do
     AsnAdd(attr, Asn(Attributes[n]));
   s := Asn(LDAP_ASN1_SEARCH_REQUEST, [
-           BaseDN,
+           Asn(BaseDN),
            Asn(ord(fSearchScope),   ASN1_ENUM),
            Asn(ord(fSearchAliases), ASN1_ENUM),
            Asn(fSearchSizeLimit),
