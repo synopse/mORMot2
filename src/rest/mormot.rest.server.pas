@@ -2885,6 +2885,7 @@ var
 begin
   result := true;
   if Server.fHandleAuthentication and
+     (Server.fSessions <> nil) and
      not IsRemoteAdministrationExecute then
   begin
     fSession := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
@@ -6088,11 +6089,11 @@ begin
   inherited Destroy; // calls fServices.Free which will update fStats
   FreeAndNilSafe(fJwtForUnauthenticatedRequest);
   FreeAndNilSafe(fStats);
-  fSessions.Free;
-  fAssociatedServices.Free;
+  FreeAndNilSafe(fSessions);
+  FreeAndNilSafe(fAssociatedServices);
   if GlobalLibraryRequestServer = self then
     GlobalLibraryRequestServer := nil; // unregister
-  fRouter.Free;
+  FreeAndNilSafe(fRouter);
 end;
 
 constructor TRestServer.CreateWithOwnModel(const Tables: array of TOrmClass;
