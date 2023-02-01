@@ -1935,10 +1935,11 @@ var
   method: PInterfaceMethod;
   timer: TPrecisionTimer;
 begin
+  // 1. parse URI
   p := pointer(MethodName);
   if GetNextItemMultiple(p, '/?', rawMethodName) = '/' then
-    GetNextItemMultiple(p, '/?', rawFormat);
-  // 1. implement mvc-info endpoint
+    GetNextItem(p, '?', rawFormat);
+  // 2. implement mvc-info endpoint
   if (publishMvcInfo in fPublishOptions) and
      IdemPropNameU(rawMethodName, MVCINFO_URI) then
   begin
@@ -1951,7 +1952,7 @@ begin
     Ctxt.Returns(fMvcInfoCache, HTTP_SUCCESS, HTML_CONTENT_TYPE_HEADER, True);
   end
   else
-  // 2. serve static resources, with proper caching
+  // 3. serve static resources, with proper caching
   if (publishStatic in fPublishOptions) and
      IdemPropNameU(rawMethodName, STATIC_URI) then
   begin
@@ -1999,7 +2000,7 @@ begin
   end
   else
   begin
-    // 3. render regular page using proper viewer
+    // 4. render regular page using proper viewer
     timer.Start;
     if IdemPropNameU(rawFormat, 'json') then
       rendererClass := TMvcRendererJson
