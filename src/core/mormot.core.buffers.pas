@@ -9032,7 +9032,7 @@ begin
     exit;
   ContentLen := length(Content);
   SetLength(Content, ContentLen + length(Buffer));
-  MoveFast(Buffer, PByteArray(Content)^[ContentLen], length(Buffer));
+  MoveFast(pointer(Buffer)^, PByteArray(Content)^[ContentLen], length(Buffer));
 end;
 
 function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;
