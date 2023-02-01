@@ -121,7 +121,7 @@ function mcheck(abort: pointer): integer;
 
 function _MemSize(p: pointer): PtrUInt;
 begin
-  result := msize(p);
+  result := msize(p); // nice and easy
 end;
 
 {$else}
