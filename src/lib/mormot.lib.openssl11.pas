@@ -1259,7 +1259,8 @@ type
     function Len: integer;
       {$ifdef HASINLINE} inline; {$endif}
     function GetType: integer;
-    procedure ToUtf8(out result: RawUtf8; flags: cardinal = ASN1_STRFLGS_RFC2253);
+    procedure ToUtf8(out result: RawUtf8;
+      flags: cardinal = ASN1_STRFLGS_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure ToHex(out result: RawUtf8);
     function Equals(const another: asn1_string_st): boolean;
   end;
@@ -1410,7 +1411,8 @@ type
     function Item(ndx: integer): PX509_NAME_ENTRY;
     function GetEntry(NID: integer): RawUtf8; overload; // not MBSTRING ready
     function GetEntry(const Name: RawUtf8): RawUtf8; overload;
-    procedure ToUtf8(out result: RawUtf8; flags: cardinal = XN_FLAG_RFC2253);
+    procedure ToUtf8(out result: RawUtf8;
+      flags: cardinal = XN_FLAG_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure AddEntry(const Name, Value: RawUtf8);
     procedure AddEntries(const Country, State, Locality,
       Organization, OrgUnit, CommonName, EmailAddress, SurName, GivenName: RawUtf8);
