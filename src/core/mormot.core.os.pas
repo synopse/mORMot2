@@ -3492,9 +3492,9 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
-    {$ifndef ASMINTEL}
+    {$ifndef FPC_ASMX64}
     procedure ReadOnlyLockSpin;
-    {$endif ASMINTEL}
+    {$endif FPC_ASMX64}
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -3514,7 +3514,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
-      {$ifndef ASMINTEL} inline; {$endif}
+      {$ifdef HASINLINE} {$ifndef FPC_ASMX64} inline; {$endif} {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -7710,7 +7710,7 @@ begin
 end;
 
 // dedicated asm for this most simple (and used) method
-{$ifdef ASMX64}
+{$ifdef FPC_ASMX64} // some Delphi version was reported to fail with no clue why
 
 procedure TRWLock.ReadOnlyLock;
 asm     // since we may call SwitchToThread we need to have a stackframe
@@ -7732,29 +7732,6 @@ asm     // since we may call SwitchToThread we need to have a stackframe
         jmp     @retry
 @done:  // restore the stack frame
 end;
-
-{$else}
-
-{$ifdef ASMX86}
-
-procedure TRWLock.ReadOnlyLock;
-  {$ifdef FPCWINDOWS} nostackframe; assembler; {$endif}
-asm     // since we may call SwitchToThread we need to have a stackframe
-        push    ebx
-        mov     ebx, eax
-@retry: mov     ecx, SPIN_COUNT
-@spin:  mov     eax, dword ptr [ebx + TRWLock.Flags]
-        and     eax, not 1
-        lea     edx, [eax + 4]
-   lock cmpxchg dword ptr [ebx + TRWLock.Flags], edx
-        jz      @done
-        pause
-        dec     ecx
-        jnz     @spin
-        call    SwitchToThread
-        jmp     @retry
-@done:  pop     ebx
-end;    // restore the stack frame on systems which expects it
 
 {$else}
 
@@ -7780,8 +7757,7 @@ begin
         LockedExc(Flags, f + 4, f);
 end;
 
-{$endif ASMX86}
-{$endif ASMX64}
+{$endif FPC_ASMX64}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
