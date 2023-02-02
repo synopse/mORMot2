@@ -761,8 +761,8 @@ end;
 const
   // (sometimes) the more arenas, the better multi-threadable
   {$ifdef FPCMM_BOOSTER}
-  NumTinyBlockTypesPO2  = 4;
-  NumTinyBlockArenasPO2 = 4; // will probably end up with Medium lock contention
+  NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
+  NumTinyBlockArenasPO2 = 4; // 16 arenas
   {$else}
     {$ifdef FPCMM_BOOST}
     NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
@@ -988,7 +988,7 @@ asm
         xor     ecx, ecx
         xchg    [rbx].TSmallBlockType.LockLessFree, rcx // atomic rcx = to free
         test    rcx, rcx
-        jz      @Done2
+        jz      @Done2     // slot used by another thread in-between
         mov     r10, [rcx]
         test    r10, r10   // r10 = new head = the one following rcx
         jz      @Done
@@ -1509,7 +1509,10 @@ asm
         mov     dl, NumTinyBlockArenas + 1 // 8/16 arenas (including Small[])
 @TinyBlockArenaLoop:
         mov     eax, SizeOf(TTinyBlockTypes)
-        // note: "lock xadd" decreases the loop iterations but is slower
+        // "lock xadd" decreases loop iterations but is slower on normal load
+        {$ifdef FPCMM_BOOST}
+        lock
+        {$endif FPCMM_BOOST}
         xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
         lea     rbx, [r8 + rcx]
         and     eax, ((NumTinyBlockArenas + 1) * SizeOf(TTinyBlockTypes)) - 1
