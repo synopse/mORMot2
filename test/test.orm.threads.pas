@@ -68,7 +68,7 @@ const
   MAX_THREADS = 50; // 1, 2, 5, 10, 30, 50
   MAX_CLIENTS = 50;
 
-// may be implemented in the future
+// unlikely to be implemented in the future (can't work from Services)
 {.$define HAS_NAMEDPIPES}
 {.$define HAS_MESSAGES}
 

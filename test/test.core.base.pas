@@ -895,8 +895,8 @@ begin
     begin
       Rec := TSynFilterOrValidate.create;
       Rec.Parameters := Int32ToUtf8(i);
-      Check(L.AddObject(Rec.Parameters, Rec) = i - 1);
-      Check(L.IndexOf(Rec.Parameters) = i - 1);
+      CheckEqual(L.AddObject(Rec.Parameters, Rec), i - 1);
+      CheckEqual(L.IndexOf(Rec.Parameters), i - 1);
     end;
     Check(not L.Exists(''));
     Check(L.IndexOf('abcd') < 0);
@@ -905,14 +905,14 @@ begin
     for i := 1 to MAX do
     begin
       UInt32ToUtf8(i, s);
-      Check(L.IndexOf(s) = n);
-      Check(TSynFilterOrValidate(L.Objects[n]).Parameters = s);
+      CheckEqual(L.IndexOf(s), n);
+      CheckEqual(TSynFilterOrValidate(L.Objects[n]).Parameters, s);
       if i and 127 = 0 then
-        Check(L.Delete(s) = n)
+        CheckEqual(L.Delete(s), n)
       else
         inc(n);
     end;
-    Check(L.Count = n);
+    CheckEqual(L.Count, n);
     for i := 1 to MAX do
     begin
       UInt32ToUtf8(i, s);
@@ -920,9 +920,9 @@ begin
     end;
     L.SaveToFile(WorkDir + 'utf8list.txt');
     L.Clear;
-    Check(L.Count = 0);
+    CheckEqual(L.Count, 0);
     L.LoadFromFile(WorkDir + 'utf8list.txt');
-    Check(L.Count = n);
+    CheckEqual(L.Count, n);
     for i := 1 to MAX do
     begin
       UInt32ToUtf8(i, s);

@@ -1580,7 +1580,10 @@ begin
   enc.Init;
   dec.Init;
   tmp := RandomString(1 shl 20);
-  Check(Base32ToBin(BinToBase32(tmp)) = tmp);
+  b32 := BinToBase32(tmp);
+  tmp2 := Base32ToBin(b32);
+  CheckEqual(length(tmp2), length(tmp)); // tmp = tmp2 fails on FPC :(
+  Check(CompareMem(pointer(tmp), pointer(tmp2), length(tmp)));
   tmp2 := Zeroed(UnZeroed(tmp));
   {$ifdef FPC}
   SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug
