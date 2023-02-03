@@ -1262,6 +1262,7 @@ type
     function LastQueryPerformanceMicroSeconds: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
+    // - will enter the GlobalThreadLock - and is NOT rentrant
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
     // ! try
@@ -1269,7 +1270,7 @@ type
     // ! finally
     // !   log.DisableRemoteLog(false);
     // ! end;
-    procedure DisableRemoteLog(value: boolean);
+    procedure DisableRemoteLog(entervalue: boolean);
     /// the associated TSynLog class
     function LogClass: TSynLogClass;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4999,27 +5000,26 @@ begin
   end;
 end;
 
-procedure TSynLog.DisableRemoteLog(value: boolean);
+procedure TSynLog.DisableRemoteLog(entervalue: boolean);
 begin
-  if (fDisableRemoteLog = value) or
-     (not Assigned(fFamily.fEchoRemoteEvent)) then
+  if not Assigned(fFamily.fEchoRemoteEvent) then
     exit;
-  if value then
+  if entervalue then
   begin
-    // fDisableRemoteLog=false -> remove from events, within the global mutex
     mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-    if fDisableRemoteLog = value then // unlikely set in-between
-      mormot.core.os.LeaveCriticalSection(GlobalThreadLock)
-    else
+    if logRemoteDisable in fInternalFlags then
     begin
-      fDisableRemoteLog := true;
-      fWriterEcho.EchoRemove(fFamily.fEchoRemoteEvent);
+      mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+      raise ESynLogException.CreateUtf8('Nested %.DisableRotemoteLog', [self]);
     end;
+    include(fInternalFlags, logRemoteDisable);
   end
   else
   begin
-    // fDisableRemoteLog=true -> add to events, already within the global mutex
-    fDisableRemoteLog := false;
+    if not (logRemoteDisable in fInternalFlags) then
+      raise ESynLogException.CreateUtf8('Missing %.DisableRotemoteLog(true)', [self]);
+    // DisableRemoteLog(false) -> add to events, and quit the global mutex
+    exclude(fInternalFlags, logRemoteDisable);
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;

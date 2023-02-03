@@ -3236,6 +3236,22 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 function xxHash32Mixup(crc: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  /// Knuth's magic number for hashing a cardinal, using the golden ratio
+  // - then use the result high bits, i.e. via "shr" not via "and"
+  // - for instance, mormot.core.log uses it to hash the TThreadID:
+  // $ hash := cardinal(cardinal(id) * KNUTH_HASH32_MUL) shr (32 - MAXLOGTHREADBITS);
+  KNUTH_HASH32_MUL = $9E3779B1;
+
+  /// Knuth's magic number for hashing a PtrUInt, using the golden ratio
+  {$ifdef CPU32}
+  KNUTH_HASHPTR_MUL = $9E3779B1;
+  KNUTH_HASHPTR_SHR = 32;
+  {$else}
+  KNUTH_HASHPTR_MUL = $9E3779B97F4A7C15;
+  KNUTH_HASHPTR_SHR = 64;
+  {$endif CPU32}
+
 var
   /// the 32-bit default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
