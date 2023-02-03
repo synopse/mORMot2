@@ -11,7 +11,7 @@ unit mormot.core.fpcx64mm;
     - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
     - based on proven FastMM4 by Pierre le Riche - with tuning and enhancements
     - can report detailed statistics (with threads contention and memory leaks)
-    - three app modes: default mono-thread friendly, FPCMM_SERVER or FPCMM_BOOST
+    - three app modes: default GUI app, FPCMM_SERVER or FPCMM_BOOSTER
 
     Usage: include this unit as the very first in your FPC project uses clause
 
@@ -52,29 +52,26 @@ unit mormot.core.fpcx64mm;
 
 {
   TL;DR:
-    1. default settings target LCL/console mono-threaded apps;
+    1. default settings target GUI/console almost-mono-threaded apps;
     2. define FPCMM_SERVER for a multi-threaded service/daemon;
     3. try FPCMM_BOOSTER on high-end hardware;
-    4. try mormot.core.fpclibcmm as alternative on POSIX.
+    4. try mormot.core.fpclibcmm as POSIX alternative.
 }
 
 // target a multi-threaded service on a modern CPU
 // - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS
-// - currently mormot2tests run with no sleep when FPCMM_SERVER is set :)
-// - you may try to define FPCMM_BOOST for even more aggressive settings.
+// - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
 {.$define FPCMM_SERVER}
 
 // increase settings for more aggressive multi-threaded process
-// - try to enable it if unexpected SmallGetmemSleepCount and
-// SleepCount/SleepCycles contentions are reported by CurrentHeapStatus;
-// - tiny blocks will be <= 256 bytes (instead of 128 bytes);
-// - will enable FPCMM_SMALLNOTWITHMEDIUM trying to reduce medium sleeps.
+// - tiny blocks will up to 256 bytes (instead of 128 bytes);
+// - will enable FPCMM_SMALLNOTWITHMEDIUM to reduce medium sleeps.
 {.$define FPCMM_BOOST}
 
-// may be tried on high-end CPU if FPCMM_BOOST is not enough
-// - it will use 64 tiny blocks arenas to scale on high number of cores;
-// - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM for reduce small pools locks;
-// - enable FPCMM_TINYPERTHREAD to leverage the 64 arenas per thread.
+// target high-end CPU when FPCMM_SERVER/FPCMM_BOOST are not enough
+// - will use 128 arenas for <= 256B blocks to scale on high number of cores;
+// - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
+// - enable FPCMM_TINYPERTHREAD to assign threads to the 128 arenas.
 {.$define FPCMM_BOOSTER}
 
 
@@ -782,10 +779,10 @@ end;
 {$define FPCMM_MEDIUMPREFETCH}
 
 const
-  // (sometimes) the more arenas, the better multi-threadable
+  // define maximum size of tiny blocks, and the number of arenas
   {$ifdef FPCMM_BOOSTER}
   NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
-  NumTinyBlockArenasPO2 = 6; // 64 arenas
+  NumTinyBlockArenasPO2 = 7; // 128 arenas
   {$else}
     {$ifdef FPCMM_BOOST}
     NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
@@ -907,7 +904,7 @@ type
     GetmemSleepCount: array[0..NumSmallBlockTypesUnique - 1] of cardinal;
     {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM} // PMediumBlockInfo lookup
     SmallMediumBlockInfo: array[0..NumSmallInfoBlock - 1] of pointer;
-    // there was no room any more in TSmallBlockType for a new field
+    // here because there was no room for a new field in TSmallBlockType
     {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
   end;
 
@@ -985,8 +982,10 @@ var
   MediumBlockInfo: TMediumBlockInfo;
   {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
   {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-  SmallMediumBlockInfo: array[0..(NumTinyBlockTypes * 2) - 2] of TMediumBlockInfo;
+  SmallMediumBlockInfo: array[0..
+    (NumTinyBlockTypes * pred(NumTinyBlockArenasPO2)) - 2] of TMediumBlockInfo;
   // -2 to ensure same small block size won't share the same medium block
+  // include NumTinyBlockArenasPO2 to the calculation for scaling
   {$else}
   SmallMediumBlockInfo: array[0..0] of TMediumBlockInfo;
   {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
@@ -1545,10 +1544,10 @@ asm
         jz      @Aren0  // Arena 0 = TSmallBlockInfo.Small[]
         shl     eax, NumTinyBlockTypesPO2 + SmallBlockTypePO2 // TTinyBlockTypes
         lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
-@Aren0: mov     dl, NumTinyBlockArenas + 1 // 8/64 Small + Tiny[] arenas
+@Aren0: mov     edx, NumTinyBlockArenas + 1 // 8/128 Small + Tiny[] arenas
         jmp     @TinySmall
         {$else}
-        mov     dl, NumTinyBlockArenas + 1 // 8/64 Small + Tiny[] arenas
+        mov     edx, NumTinyBlockArenas + 1 // 8/128 Small + Tiny[] arenas
         {$endif FPCMM_TINYPERTHREAD}
         // Round-Robin attempt to lock next SmallBlockInfo.Tiny[]
 @TinyBlockArenaLoop:
@@ -1593,7 +1592,7 @@ asm
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextTinyBlockArena1:
-        dec     dl
+        dec     edx
         jnz     @TinyBlockArenaLoop
         // Fallback to SmallBlockInfo.Small[] next 2 small sizes - never occurs
         lea     rbx, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
@@ -3032,8 +3031,20 @@ begin
     Wr([' Flags:' + FPCMM_FLAGS]);
   with CurrentHeapStatus do
   begin
-    Wr([' Small:  blocks=', K(SmallBlocks),
-                  ' size=', K(SmallBlocksSize), 'B (part of Medium arena)']);
+    Wr([' Small:  ', K(SmallBlocks),
+                '/', K(SmallBlocksSize),
+        'B  including tiny<=', K(SmallBlockSizes[NumTinyBlockTypes - 1]),
+        'B arenas=', S(NumTinyBlockArenas + 1),
+       {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
+       {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+        ' pools=', S(length(SmallMediumBlockInfo))
+       {$else}
+        ' fed from its own pool'
+       {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+       {$else}
+        ' fed from Medium'
+       {$endif FPCMM_SMALLNOTWITHMEDIUM}
+       ]);
     WriteHeapStatusDetail(Medium, ' Medium: ', Wr);
     WriteHeapStatusDetail(Large,  ' Large:  ', Wr);
     if SleepCount <> 0 then
@@ -3225,9 +3236,7 @@ begin
   for i := 0 to high(SmallMediumBlockInfo) do
     InitializeMediumPool(SmallMediumBlockInfo[i]);
   {$endif FPCMM_SMALLNOTWITHMEDIUM}
-  {$ifndef FPCMM_ASSUMEMULTITHREAD2}
-  SmallBlockInfo.IsMultiThreadPtr  := @IsMultiThread;
-  {$endif FPCMM_ASSUMEMULTITHREAD}
+  SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread; // call GOT if needed
   small := @SmallBlockInfo;
   assert(SizeOf(small^) = 1 shl SmallBlockTypePO2);
   for a := 0 to NumTinyBlockArenas do
