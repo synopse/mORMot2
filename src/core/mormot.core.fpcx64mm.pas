@@ -75,7 +75,7 @@ unit mormot.core.fpcx64mm;
 // - it will use 64 tiny blocks arenas to scale on high number of cores;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM for reduce small pools locks;
 // - enable FPCMM_TINYPERTHREAD to leverage the 64 arenas per thread.
-{$define FPCMM_BOOSTER}
+{.$define FPCMM_BOOSTER}
 
 
 { ---- Fine Grained Memory Manager Tuning }
