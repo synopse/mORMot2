@@ -996,11 +996,9 @@ type
     fWriterEcho: TEchoWriter;
     fThreadContext: PSynLogThreadContext;
     fThreadID: TThreadID;
-    fThreadLastHash: integer;
     fThreadIndex: integer;
     fCurrentLevel: TSynLogInfo;
-    fInternalFlags: set of (logHeaderWritten, logInitDone);
-    fDisableRemoteLog: boolean;
+    fInternalFlags: set of (logHeaderWritten, logInitDone, logRemoteDisable);
     {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoredBackup: boolean;
     fExceptionIgnoreThreadVar: PBoolean;
@@ -4360,7 +4358,7 @@ const
 procedure TSynLog.GetThreadContextInternal(id: PtrUInt);
 var
   secondpass: boolean;
-  hash: PtrUInt;
+  ndx: PtrUInt;
 begin
   // method called when the thread context was changed
   fThreadID := TThreadID(id);
@@ -4368,40 +4366,45 @@ begin
   fExceptionIgnoreThreadVar := @ExceptionIgnorePerThread;
   fExceptionIgnoredBackup := fExceptionIgnoreThreadVar^;
   {$endif NOEXCEPTIONINTERCEPT}
-  // hashing algorithm should match TSynLog.ThreadContextRehash
-  if fFamily.fPerThreadLog <> ptNoThreadProcess then
+  if fFamily.fPerThreadLog = ptNoThreadProcess then
+    fThreadIndex := 1 // reuse the first context
+  else
   begin
-    secondpass := false;
-    // efficient TThreadID hash on all architectures
-    hash := 0;
-    repeat
-      hash := hash xor id;
-      id := id shr (MAXLOGTHREADBITS - 1); // -1 for less collisions under Linux
-    until id = 0; // on Windows, a single loop iteration is enough
-    hash := hash and (MAXLOGTHREAD - 1);
-    fThreadLastHash := hash;
-    fThreadIndex := fThreadHash[hash];
+    // efficient TThreadID hash on all architectures using Knuth magic number
+    id := cardinal(cardinal(id) * KNUTH_HASH32_MUL) shr (32 - MAXLOGTHREADBITS);
+    // warning: hashing algorithm should match TSynLog.ThreadContextRehash below
+    ndx := fThreadHash[id];
     // fast O(1) loookup of the associated thread context
-    if fThreadIndex <> 0 then
+    if ndx <> 0 then
+    begin
+      fThreadIndex := ndx;
+      fThreadContext := @fThreadContexts[ndx - 1];
+      if fThreadContext^.ID = fThreadID then
+        // ThreadID found (very likely)
+        exit;
+      // hash collision -> try next item in fThreadHash[] if possible
+      secondpass := false;
       repeat
-        fThreadContext := @fThreadContexts[fThreadIndex - 1];
-        if fThreadContext^.ID = fThreadID then
-          // ThreadID found (very likely)
-          exit;
-        // hash collision -> try next item in fThreadHash[] if possible
-        if fThreadLastHash = MAXLOGTHREAD - 1 then
+        if id = MAXLOGTHREAD - 1 then
           if secondpass then // avoid endless loop -> reuse last fThreadHash[]
             exit
           else
           begin
-            fThreadLastHash := 0;
+            id := 0;
             secondpass := true;
           end
         else
-          inc(fThreadLastHash);
-        fThreadIndex := fThreadHash[fThreadLastHash];
-      until fThreadIndex = 0;
-    // here we know that fThreadIndex=fThreadHash[hash]=0 -> register the thread
+          inc(id);
+        ndx := fThreadHash[id];
+        if ndx = 0 then
+          break; // not known yet
+        fThreadIndex := ndx;
+        fThreadContext := @fThreadContexts[ndx - 1];
+        if fThreadContext^.ID = fThreadID then
+          exit; // found after collision
+      until false;
+    end;
+    // first time for this thread -> register into fThreadHash[id]
     if fThreadIndexReleasedCount > 0 then
     begin
       // reuse an available NotifyThreadEnded() index
@@ -4416,11 +4419,8 @@ begin
       inc(fThreadContextCount);
       fThreadIndex := fThreadContextCount;
     end;
-    fThreadHash[fThreadLastHash] := fThreadIndex;
-  end
-  else
-    // ptNoThreadProcess will reuse the first context (assume a few threads)
-    fThreadIndex := 1;
+    fThreadHash[id] := fThreadIndex;
+  end;
   // if we reach here, this is either the first time for this thread,
   // or we have a single context (ptNoThreadProcess) which needs to be updated
   fThreadContext := @fThreadContexts[fThreadIndex - 1];
@@ -4436,45 +4436,42 @@ end;
 procedure TSynLog.ThreadContextRehash;
 var
   i: integer;
-  id, hash: PtrUInt;
+  hash: cardinal;
+  table: PWordArray;
   secondpass: boolean;
   ctxt: PSynLogThreadContext;
 begin
-  // hashing algorithm should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog = ptNoThreadProcess then
     exit;
   FillcharFast(fThreadHash[0], MAXLOGTHREAD * SizeOf(fThreadHash[0]), 0);
+  table := pointer(fThreadHash);
   ctxt := pointer(fThreadContexts);
   for i := 1 to fThreadContextCount do // i > 0 to be stored in fThreadHash[]
   begin
-    id := PtrUInt(ctxt^.id); // TThreadID  = ^TThreadRec under BSD
-    if id <> 0 then
+    hash := PtrUInt(ctxt^.id);
+    if hash <> 0 then
     begin
-      // not empty slot
-      hash := 0; // efficient TThreadID hash on all architectures
-      repeat
-        hash := hash xor id;
-        id := id shr (MAXLOGTHREADBITS - 1); // -1 for less collisions on Linux
-      until id = 0;
-      hash := hash and (MAXLOGTHREAD - 1);
-      secondpass := false;
-      repeat
-        if fThreadHash[hash] = 0 then
-          // found a void entry to be used for this thread ID
-          break;
-        // hash collision (no need to check the ID here)
-        if hash = MAXLOGTHREAD - 1 then
-          if secondpass then // avoid endless loop
-            break
+      // not empty slot: compute Knuth's hash
+      hash := cardinal(hash * KNUTH_HASH32_MUL) shr (32 - MAXLOGTHREADBITS);
+      // warning: hashing algorithm should match TSynLog.GetThreadContextInternal
+      if table[hash] <> 0 then
+      begin
+        // hash collision (no need to check the ID here - just fill table)
+        secondpass := false;
+        repeat
+          if hash = MAXLOGTHREAD - 1 then
+            if secondpass then // avoid endless loop
+              break
+            else
+            begin
+              hash := 0;
+              secondpass := true;
+            end
           else
-          begin
-            hash := 0;
-            secondpass := true;
-          end
-        else
-          inc(hash);
-      until false;
-      fThreadHash[hash] := i;
+            inc(hash);
+        until table[hash] = 0;
+      end;
+      table[hash] := i;
     end;
     inc(ctxt);
   end;
