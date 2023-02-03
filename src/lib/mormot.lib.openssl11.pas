@@ -9712,8 +9712,12 @@ begin
       SSL_CTX_set_default_verify_paths(fCtx);
   end;
   if FileExists(TFileName(Context.CertificateFile)) then
-     SSL_CTX_use_certificate_file(
-       fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM)
+     EOpenSslNetTls.Check(self, 'CertificateFile',
+       SSL_CTX_use_certificate_file(
+         fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
+  else if Context.CertificateRaw <> nil then
+    EOpenSslNetTls.Check(self, 'CertificateRaw',
+      SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
   if FileExists(TFileName(Context.PrivateKeyFile)) then
@@ -9725,6 +9729,12 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+    EOpenSslNetTls.Check(self, 'check_private_key',
+      SSL_CTX_check_private_key(fCtx), @Context.LastError);
+  end
+  else if Context.PrivateKeyRaw <> nil then
+  begin
+    SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
     EOpenSslNetTls.Check(self, 'check_private_key',
       SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end

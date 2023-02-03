@@ -512,6 +512,11 @@ type
     // ICryptCert.SaveToFile(FileName, cccCertWithPrivateKey, ', ccfBinary) or
     // openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
     CertificateFile: RawUtf8;
+    /// input: opaque pointer containing a certificate to be used
+    // - on OpenSSL client or server, calls SSL_CTX_use_certificate() API
+    // expecting the pointer to be of PEVP_PKEY type
+    // - not used on SChannel client
+    CertificateRaw: pointer;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_PrivateKey_file() API
@@ -522,6 +527,11 @@ type
     // - on OpenSSL client or server, calls SSL_CTX_set_default_passwd_cb_userdata() API
     // - not used on SChannel
     PrivatePassword: RawUtf8;
+    /// input: opaque pointer containing a private key to be used
+    // - on OpenSSL client or server, calls SSL_CTX_use_PrivateKey() API
+    // expecting the pointer to be of PX509 type
+    // - not used on SChannel
+    PrivateKeyRaw: pointer;
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -2570,6 +2580,7 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean;
   const CertificateFile, PrivateKeyFile: TFileName;
   const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
 begin
+  Finalize(TLS);
   FillCharFast(TLS, SizeOf(TLS), 0);
   TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
   TLS.CertificateFile := RawUtf8(CertificateFile);
