@@ -7454,13 +7454,19 @@ begin
       result := nil;
     if result = nil then
     begin
-      priv.reset;
       if Password = '' then
+      begin
+        priv.Reset;
         result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
-      if result = nil then
-        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw); // try PKCS#8
+      end;
       if result = nil then
       begin
+        priv.Reset;
+        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw); // try PKCS#8
+      end;
+      if result = nil then
+      begin
+        priv.Reset;
         pkcs12 := d2i_PKCS12_bio(priv, nil); // try PKCS#12
         pkcs12.Extract(Password, @result, nil, nil); // ignore cert
         pkcs12.Free;
@@ -9189,7 +9195,7 @@ function PKCS12.Extract(const password: SpiUtf8; privatekey: PPEVP_PKEY;
   cert: PPX509; ca: PPstack_st_X509): boolean;
 begin
   result := (@self <> nil) and
-    (PKCS12_parse(@self, pointer(password), privatekey, cert, ca) = OPENSSLSUCCESS);
+    (PKCS12_parse(@self, PassNotNil(password), privatekey, cert, ca) = OPENSSLSUCCESS);
 end;
 
 function PKCS12.ToBinary: RawByteString;
