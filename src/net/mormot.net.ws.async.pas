@@ -611,6 +611,7 @@ end;
 destructor TWebSocketAsyncServer.Destroy;
 var
   closing: TWebSocketFrame;
+  n: integer;
   log: ISynLog;
 begin
   log := TSynLog.Enter(self, 'Destroy');
@@ -618,8 +619,8 @@ begin
   closing.opcode := focConnectionClose;
   closing.content := [];
   closing.tix := 0;
-  WebSocketBroadcast(closing, nil);
-  log.Log(sllTrace, 'Destroy: WebSocketBroadcast(focConnectionClose) done', self);
+  n := WebSocketBroadcast(closing, nil);
+  log.Log(sllTrace, 'Destroy: WebSocketBroadcast(closing)=%', [n], self);
   // no more incoming request
   Shutdown;
   // close any pending connection
