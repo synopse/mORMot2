@@ -2598,7 +2598,7 @@ end;
 
 function ResToTag(const res: TPollSocketResult): TPollSocketTag;
 begin
-  result := res.Li;
+  result := res.Li; // 32-bit integer
 end;
 
 function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
@@ -2621,7 +2621,7 @@ end;
 
 function ResToTag(const res: TPollSocketResult): TPollSocketTag;
 begin
-  result := res and $00ffffffffffffff;
+  result := res and $00ffffffffffffff; // pointer from lower 56-bit integer
 end;
 
 function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
@@ -2882,7 +2882,7 @@ begin
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(ResToEvents(notif)) <> 0) and // DeleteOnePending() may have reset to 0
+        if (byte(ResToEvents(notif)) <> 0) and // DeleteOnePending() may set 0
            UnsetPending(ResToTag(notif)) then  // e.g. TPollAsyncReadSockets
         begin
           // there is a non-void event to return
@@ -2945,7 +2945,7 @@ begin
   n := new.Count;
   cap := length(fPending.Events);
   repeat
-    if // (byte(ResToEvents(p^)) <> 0) and
+    if (byte(ResToEvents(p^)) <> 0) and // DeleteOnePending() may set 0
        not EnsurePending(ResToTag(p^)) then // O(1) in TPollConnectionSockets
     begin
       // new event to process
@@ -3014,11 +3014,8 @@ begin
     if fCount + fSubscription.SubscribeCount = 0 then
       exit; // caller would loop
     fSubscriptionSafe.Lock;
-    sub.SubscribeCount := fSubscription.SubscribeCount;
-    sub.UnsubscribeCount := fSubscription.UnsubscribeCount;
-    if (sub.SubscribeCount <> 0) or
-       (sub.UnsubscribeCount <> 0) then
-      MoveAndZero(@fSubscription, @sub, SizeOf(fSubscription));
+    MoveFast(fSubscription, sub, SizeOf(sub));  // quick copy with no refcnt
+    FillCharFast(fSubscription, SizeOf(fSubscription), 0);
     fSubscriptionSafe.UnLock;
     if Assigned(fOnLog) and
        ((sub.SubscribeCount <> 0) or
