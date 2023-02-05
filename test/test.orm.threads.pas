@@ -495,6 +495,7 @@ var
   i, j: integer;
   allFinished: boolean;
   Thread: TTestMultiThreadProcessThread;
+  longstandingclient: TRest;
   {$ifdef HAS_MESSAGES}
   aMsg: TMsg;
   {$endif HAS_MESSAGES}
@@ -503,6 +504,7 @@ begin
     exit;
   fTestClass := aClass;
   fClientOnlyPort := aPort;
+  longstandingclient := nil;
   // 1. Prepare a new blank SQLite3 database in high speed mode
   if fClientOnlyServerIP = '' then
   begin
@@ -544,12 +546,17 @@ begin
     end;
   end;
   // 2. Perform the tests
+  if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
+    longstandingclient := CreateClient;
   fRunningThreadCount := fMinThreads;
   repeat
     // 2.1. Reset the DB content between loops
     if (fRunningThreadCount > 1) and
        (fDatabase <> nil) then
       fDatabase.DB.Execute('delete from people');
+    if longstandingclient <> nil then
+      Check(not longstandingclient.Orm.MemberExists(TOrmPeople,
+        TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 1');
     // 2.2. Launch the background client threads
     fPendingThreadFinished.ResetEvent;
     fPendingThreadCount := fRunningThreadCount;
@@ -586,6 +593,9 @@ begin
     //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
     fRunConsole := FormatString('%%=%/s  ',
       [fRunConsole, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
+    if longstandingclient <> nil then
+      Check(longstandingclient.Orm.MemberExists(TOrmPeople,
+        TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 2');
     // 2.4. Check INSERTed IDs consistency
     for n := 0 to fRunningThreadCount - 1 do
       with TTestMultiThreadProcessThread(fThreads.List[n]) do
@@ -628,6 +638,12 @@ begin
   // 3. Cleanup for this protocol (but reuse the same threadpool)
   DatabaseClose;
   Check(fDatabase = nil);
+  if longstandingclient <> nil then
+  begin
+    // validate server shutdown with connected client
+    with TSynLog.Enter(longstandingclient, 'Free') do
+      longstandingclient.Free;
+  end;
 end;
 
 procedure TTestMultiThreadProcess.Locked;
