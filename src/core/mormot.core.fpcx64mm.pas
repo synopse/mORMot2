@@ -982,10 +982,9 @@ var
   MediumBlockInfo: TMediumBlockInfo;
   {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
   {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-  SmallMediumBlockInfo: array[0..
-    (NumTinyBlockTypes * pred(NumTinyBlockArenasPO2)) - 2] of TMediumBlockInfo;
+  SmallMediumBlockInfo: array[0.. (NumTinyBlockTypes * 2) - 2] of TMediumBlockInfo;
   // -2 to ensure same small block size won't share the same medium block
-  // include NumTinyBlockArenasPO2 to the calculation for scaling
+  // note: including NumTinyBlockArenasPO2 to the calculation has no benefit
   {$else}
   SmallMediumBlockInfo: array[0..0] of TMediumBlockInfo;
   {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
