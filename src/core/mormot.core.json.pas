@@ -2468,6 +2468,7 @@ type
   /// meta-class definition of TSynJsonFileSettings
   TSynJsonFileSettingsClass = class of TSynJsonFileSettings;
 
+
 implementation
 
 uses
