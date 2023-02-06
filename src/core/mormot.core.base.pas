@@ -7100,7 +7100,7 @@ procedure FreeAndNilSafe(var aObj);
 begin
   if TObject(aObj) = nil then
     exit;
-  try
+  try // slower but paranoidically safe
     TObject(aObj).Destroy;
   except
   end;

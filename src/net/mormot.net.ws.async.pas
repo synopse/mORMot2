@@ -671,7 +671,7 @@ begin
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
   FrameSendEncode(aFrame, {mask=}0, tmp);
-  fAsync.Lock(cReadOnly);
+  fAsync.ConnectionLock.ReadOnlyLock;
   try
     // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
     if aClientsConnectionID = nil then
@@ -686,7 +686,7 @@ begin
           fAsync.LockedConnectionSearch(aClientsConnectionID[i])).
             SendDirect(tmp, aFrame.opcode, aTimeOut)));
   finally
-    fAsync.UnLock(cReadOnly);
+    fAsync.ConnectionLock.ReadOnlyUnLock;
     tmp.Done;
   end;
 end;

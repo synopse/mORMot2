@@ -510,7 +510,7 @@ type
     fLastConnectionFind: integer;
     fLastHandle: integer;
     fLog: TSynLogClass;
-    fConnectionLock: TRWLock; // would block only on connection add/remove
+    fConnectionLock: TRWLock; // write lock/block only on connection add/remove
     fOptions: TAsyncConnectionsOptions;
     fClientsEpoll: boolean; // = PollSocketClass.FollowEpoll
     fLastOperationSec: TAsyncConnectionSec;
@@ -573,13 +573,6 @@ type
     // - use efficient O(log(n)) binary search, since handles are increasing
     // - caller should have called Lock before this method is done
     function LockedConnectionSearch(aHandle: TPollAsyncConnectionHandle): TAsyncConnection;
-    /// just a wrapper around fConnectionLock.Lock
-    // - raise an exception if acoNoConnectionTrack option was defined
-    procedure Lock(aLock: TRWLockContext);
-    /// just a wrapper around fConnectionLock.UnLock
-    // - raise an exception if acoNoConnectionTrack option was defined
-    // - to be called e.g. after a successfull ConnectionFindAndLock(aLock)
-    procedure Unlock(aLock: TRWLockContext);
     /// remove an handle from the internal list, and close its connection
     // - raise an exception if acoNoConnectionTrack option was defined
     // - could be executed e.g. from a TAsyncConnection.OnRead method
@@ -641,9 +634,14 @@ type
     /// low-level unsafe direct access to the connection instances
     // - ensure this property is used in a thread-safe manner, i.e. calling
     // ConnectionFindAndLock() high-level function, ot via manual
-    // ! Lock; try ... finally UnLock; end;
+    // ! ConnectionLock.ReadOnlyLock;
+    // ! try ... finally ConnectionLock.ReadOnlyUnLock; end;
     property Connection: TAsyncConnectionDynArray
       read fConnection;
+    /// access to the R/W lock protecting the Connection[] array
+    // - will WriteLock/block only on connection add/remove
+    property ConnectionLock: TRWLock
+      read fConnectionLock;
   published
     /// how many read threads there are in this thread pool
     property ThreadPoolCount: integer
@@ -997,11 +995,11 @@ begin
     UnLock(false);
   end;
   if (fWr.Buffer <> nil) and
-     TryLock({fWr=}true) then
+     TryLock({wr=}true) then
   begin
     inc(result, fWr.Capacity);
     fWr.Clear;
-    UnLock(true);
+    UnLock({wr=}true);
   end;
   exclude(fFlags, fWasActive); // TryLock() was with no true activity here
 end;
@@ -1913,8 +1911,6 @@ begin
   fThreadPollingWakeupLoad := 32; // see ThreadPollingWakeup() below
   fLog := aLog;
   fConnectionClass := aConnectionClass;
-  if not (acoNoConnectionTrack in aOptions) then
-    fConnectionLock.Init;
   opt := [];
   if acoWritePollOnly in aOptions then
     include(opt, paoWritePollOnly);
@@ -2068,9 +2064,9 @@ begin
   if fThreads <> nil then
   begin
     for i := 0 to high(fThreads) do
-      fThreads[i].Terminate;
+      fThreads[i].Terminate; // set the Terminated flag
     p := 0;
-    endtix := mormot.core.os.GetTickCount64 + 10000;
+    endtix := mormot.core.os.GetTickCount64 + 10000; // wait up to 10 seconds
     repeat
       n := 0;
       for i := 0 to high(fThreads) do
@@ -2109,9 +2105,9 @@ begin
   begin
     if fConnectionCount <> 0 then
     begin
-      // they are normally no pending connection anymore
+      // they are normally no working connection anymore: time to free memory
       if Assigned(fLog) then
-        fLog.Add.Log(sllTrace, 'Destroy: GC connections=%', [fConnectionCount], self);
+        fLog.Add.Log(sllTrace, 'Destroy: connections=%', [fConnectionCount], self);
       ObjArrayClear(fConnection, {continueonexception=}true, @fConnectionCount);
     end;
   end;
@@ -2144,7 +2140,7 @@ end;
   // NOTICE on ThreadPollingWakeupLoad / acoThreadSmooting option (i.e.
   // how many events a fast active thread is supposed to handle in its loop)
   // - the naive/standard/well-used algorithm of waking up the threads on need
-  // does not perform well, especially with a high number of CPU cores: the
+  // does not perform well, especially with a high number of threads: the
   // global CPU usage remains idle, because most of the time is spent between
   // the threads, and not processing actual data
   // - we actually wake up the sub-threads only if it did not become idle within
@@ -2154,7 +2150,7 @@ end;
   // R2..Rmax threads are awaken once WAKEUP_LOAD events have been assigned
   // to processing threads
   // - it seems to leverage the CPU performance especially when the number of
-  // threads is higher than the number of cores, or on high number of cores CPU
+  // threads is higher than the number of cores
   // - this algorithm seems efficient, and simple enough to implement and debug,
   // in respect to what I have seen in high-performance thread pools (e.g. in
   // MariaDB), which have much bigger complexity (like a dynamic thread pool)
@@ -2173,7 +2169,8 @@ begin
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
   //{$I-}system.writeln('wakeup=',Events);
-  fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms Windows, 4ms Linux
+  fThreadPollingLastWakeUpTix :=
+    mormot.core.os.GetTickCount64; // 16ms resolution on Windows, 4ms on Linux
   if (acoThreadSmooting in fOptions) and
      (Events > 1) then
     tix := fThreadPollingLastWakeUpTix
@@ -2299,7 +2296,7 @@ var
   n: PtrInt;
   start, stop: Int64;
 begin
-  // caller should have done fConnectionLock.Lock(cWrite)
+  // caller should have done fConnectionLock.WriteLock
   try
     if acoVerboseLog in fOptions then
       QueryPerformanceMicroSeconds(start);
@@ -2358,7 +2355,7 @@ end;
 function TAsyncConnections.ConnectionDelete(
   aConnection: TPollAsyncConnection): boolean;
 var
-  i: integer;
+  i: integer; // integer, not PtrInt for ConnectionFindAndLock(@i)
   conn: TAsyncConnection;
 begin
   // don't call fClients.Stop() here - see ConnectionRemove()
@@ -2533,7 +2530,7 @@ end;
 function TAsyncConnections.ConnectionRemove(
   aHandle: TPollAsyncConnectionHandle): boolean;
 var
-  i: integer;
+  i: integer; // integer, not PtrInt for ConnectionFindAndLock(@i)
   conn: TAsyncConnection;
 begin
   result := false;
@@ -2564,20 +2561,6 @@ begin
   end
   else
     ConnectionDelete(connection);
-end;
-
-procedure TAsyncConnections.Lock(aLock: TRWLockContext);
-begin
-  if acoNoConnectionTrack in fOptions then
-    raise EAsyncConnections.CreateUtf8('Unexpected %.Lock', [self]);
-  fConnectionLock.Lock(aLock);
-end;
-
-procedure TAsyncConnections.Unlock(aLock: TRWLockContext);
-begin
-  if acoNoConnectionTrack in fOptions then
-    raise EAsyncConnections.CreateUtf8('Unexpected %.UnLock', [self]);
-  fConnectionLock.UnLock(aLock);
 end;
 
 function TAsyncConnections.Write(connection: TAsyncConnection; data: pointer;

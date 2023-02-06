@@ -179,7 +179,7 @@ begin
     fOwner.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
-    fOwner.Unlock(cReadOnly);
+    fOwner.ConnectionLock.ReadOnlyUnLock;
   end
   else
   begin
