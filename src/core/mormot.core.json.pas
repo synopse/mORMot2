@@ -2363,6 +2363,8 @@ type
     /// finalize the instance, and its class or T*ObjArray published properties
     destructor Destroy; override;
   end;
+  /// meta-class definition of TSynAutoCreateFields
+  TSynAutoCreateFieldsClass = class of TSynAutoCreateFields;
 
   /// adding locking methods to a TSynAutoCreateFields with virtual constructor
   TSynAutoCreateFieldsLocked = class(TSynPersistentLock)
@@ -2373,6 +2375,8 @@ type
     /// release the instance (including the locking resource) and nested classes
     destructor Destroy; override;
   end;
+  /// meta-class definition of TSynAutoCreateFieldsLocked
+  TSynAutoCreateFieldsLockedClass = class of TSynAutoCreateFieldsLocked;
 
   /// abstract TInterfacedObject class, which will instantiate all its nested
   // class published properties, then release them when freed
@@ -2395,6 +2399,8 @@ type
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
   end;
+  /// meta-class definition of TInterfacedObjectAutoCreateFields
+  TInterfacedObjectAutoCreateFieldsClass = class of TInterfacedObjectAutoCreateFields;
 
   /// abstract TCollectionItem class, which will instantiate all its nested class
   // published properties, then release them (and any T*ObjArray) when freed
@@ -2459,7 +2465,8 @@ type
     property SettingsOptions: TSynJsonFileSettingsOptions
       read fSettingsOptions write fSettingsOptions;
   end;
-
+  /// meta-class definition of TSynJsonFileSettings
+  TSynJsonFileSettingsClass = class of TSynJsonFileSettings;
 
 implementation
 
