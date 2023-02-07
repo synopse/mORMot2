@@ -464,7 +464,7 @@ begin
   begin
     result := result + '?ClientLibrary=';
     if aLibraryLocationAppendExePath then
-      result := result + StringToUtf8(ExtractFilePath(ParamStr(0)));
+      result := result + StringToUtf8(Executable.ProgramFilePath);
     result := result + StringToUtf8(aLibraryLocation);
   end;
   if aServerName <> '' then

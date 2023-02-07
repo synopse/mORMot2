@@ -2881,13 +2881,13 @@ function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): b
 // - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
 
-/// optimized RTL version to extract a path from a file name
-// - will be cross-platform, i.e. detect both '\' and '/' on all platforms
-function ExtractFilePath(const FileName: TFileName): TFileName;
+/// extract a path from a file name like ExtractFilePath function
+// - but cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractPath(const FileName: TFileName): TFileName;
 
-/// optimized RTL version to extract a path from a RawUtf8 file name
-// - will be cross-platform, i.e. detect both '\' and '/' on all platforms
-function ExtractFilePathU(const FileName: RawUtf8): RawUtf8;
+/// extract a path from a RawUtf8 file name like ExtractFilePath function
+// - but cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractPathU(const FileName: RawUtf8): RawUtf8;
 
 /// compute the file name, including its path if supplied, but without its extension
 // - e.g. GetFileNameWithoutExt('/var/toto.ext') = '/var/toto'
@@ -5852,12 +5852,12 @@ end;
 
 function SafeFileName(const FileName: TFileName): boolean;
 begin
-  result := SafePathName(ExtractFilePath(FileName));
+  result := SafePathName(ExtractPath(FileName));
 end;
 
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 begin
-  result := SafePathNameU(ExtractFilePathU(FileName));
+  result := SafePathNameU(ExtractPathU(FileName));
 end;
 
 function NormalizeFileName(const FileName: TFileName): TFileName;
@@ -6180,7 +6180,7 @@ begin
   raise EOSException.Create('TemporaryFileName failed');
 end;
 
-function ExtractFilePath(const FileName: TFileName): TFileName;
+function ExtractPath(const FileName: TFileName): TFileName;
 var
   i: PtrInt;
   {$ifdef UNICODE}
@@ -6197,7 +6197,7 @@ begin
   SetString(result, PChar(p), i);
 end;
 
-function ExtractFilePathU(const FileName: RawUtf8): RawUtf8;
+function ExtractPathU(const FileName: RawUtf8): RawUtf8;
 var
   i: PtrInt;
 begin

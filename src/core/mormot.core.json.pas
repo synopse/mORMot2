@@ -472,9 +472,9 @@ function JsonObjectAsJsonArrays(Json: PUtf8Char;
 // !var
 // !  cfg: RawUtf8;
 // ! ...
-// !  cfg := StringFromFile(ExtractFilePath(paramstr(0))+'Config.json');
+// !  cfg := StringFromFile(Executable.ProgramFilePath + 'config.json');
 // !  RemoveCommentsFromJson(@cfg[1]);
-// !  pLastChar := JsonToObject(sc,pointer(cfg),configValid);
+// !  pLastChar := JsonToObject(obj, pointer(cfg), isvalid);
 procedure RemoveCommentsFromJson(P: PUtf8Char); overload;
 
 /// remove comments from a text buffer before passing it to JSON parser
