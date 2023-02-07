@@ -26,6 +26,7 @@ uses
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.json;
 
 
@@ -3691,7 +3692,15 @@ begin
     s := SlotByID(SlotID, {addnew=}true);
     FillSlot(SlotID, sltnfo, s^);
     if not (CKF_TOKEN_PRESENT in s^.Flags) then
+    begin
+      for i := 0 to length(fTokens) - 1 do
+        if fTokens[i].Slot = SlotID then // there is no such token any more
+        begin
+          DynArray(TypeInfo(TPkcs11TokenDynArray), fTokens).Delete(i);
+          break;
+        end;
       exit;
+    end;
     mn := 64;
     repeat
       if length(m) < CK_LONG(mn) then
