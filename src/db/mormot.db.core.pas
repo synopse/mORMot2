@@ -2407,7 +2407,7 @@ begin
 end;
 
 const
-  _ENDCLAUSE: array[0..9] of PUtf8Char = (
+  _ENDCLAUSE: array[0..10] of PUtf8Char = (
       'ORDER BY ',
       'GROUP BY ',
       'LIMIT ',
@@ -2417,6 +2417,7 @@ const
       'INNER ',
       'OUTER ',
       'JOIN ',
+      'WHERE ', // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
       nil);
 
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
