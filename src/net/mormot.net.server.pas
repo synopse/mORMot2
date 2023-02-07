@@ -1766,10 +1766,18 @@ begin
     if n = nil then
       exit;
     // the leaf should have the Rewrite/Run information to process on match
-    if Assigned(n.Data.Execute) or
-       (n.Data.ToUri <> '') then
-      raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
-        [self, aFromUri]);
+    if n.Data.ToUri <> '' then
+      if aToUri = n.Data.ToUri then
+        exit // same redirection: do nothing
+      else
+        raise EUriRouter.CreateUtf8('%.Setup(''%''): already redirect to %',
+          [self, aFromUri, n.Data.ToUri]);
+    if Assigned(n.Data.Execute) then
+      if CompareMem(@n.Data.Execute, @aExecute, SizeOf(aExecute)) then
+        exit // same callback: do nothing
+      else
+        raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
+          [self, aFromUri]);
     if Assigned(aExecute) then
       // this URI should redirect to a TOnHttpServerRequest callback
       n.Data.Execute := aExecute
