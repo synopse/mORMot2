@@ -5833,21 +5833,55 @@ begin
 end;
 
 function SafePathName(const Path: TFileName): boolean;
+var
+  i, o: PtrInt;
 begin
-  result := (Path <> '') and
-            (Path[1] <> '/') and
-            (PosExString('..', Path) = 0) and
-            (PosExString(':', Path) = 0) and
-            (PosExString('\\', Path) = 0);
+  if Path <> '' then
+  begin
+    result := false;
+    if (Path[1] = '/') or
+       (PosExString(':', Path) <> 0) or
+       (PosExString('\\', Path) <> 0) then
+      exit;
+    o := 1;
+    repeat
+      i := PosExString('..', Path, o);
+      if i = 0 then
+        break;
+      o := i + 2; // '..test' or 'test..' are valid folder names
+      if cardinal(Path[o]) in [0, ord('\'), ord('/')] then
+        if (i = 1) or
+           (cardinal(Path[i - 1]) in [ord('\'), ord('/')]) then
+          exit;
+    until false;
+  end;
+  result := true;
 end;
 
 function SafePathNameU(const Path: RawUtf8): boolean;
+var
+  i, o: PtrInt;
 begin
-  result := (Path <> '') and
-            (Path[1] <> '/') and
-            (PosEx('..', Path) = 0) and
-            (PosExChar(':', Path) = 0) and
-            (PosEx('\\', Path) = 0);
+  if Path <> '' then
+  begin
+    result := false;
+    if (Path[1] = '/') or
+       (PosExChar(':', Path) <> 0) or
+       (PosEx('\\', Path) <> 0) then
+      exit;
+    o := 1;
+    repeat
+      i := PosEx('..', Path, o);
+      if i = 0 then
+        break;
+      o := i + 2;
+      if Path[o] in [#0, '\', '/'] then
+        if (i = 1) or
+           (Path[i - 1] in ['\', '/']) then
+          exit;
+    until false;
+  end;
+  result := true;
 end;
 
 function SafeFileName(const FileName: TFileName): boolean;
