@@ -3005,7 +3005,7 @@ type
   // either from rtoIntegerParams global flag, or individually as <int:###>
   // - rtfParamPath is for a rtfParam which value should be the whole path,
   // until the end of the URI or the beginning of the parameters (i.e. at '?'),
-  // set individually as <path:###> parameter
+  // set individually as <path:###> parameter - * being synonymous to <path:path>
   TRadixTreeNodeFlags = set of (
     rtfParam,
     rtfParamInteger,
@@ -10874,14 +10874,21 @@ begin
 end;
 
 function RadixTreeNodeCompare(const A, B): integer;
-begin // sort static first, then deeper first, then by longest path
+begin // sort static first, then deeper, by path:, by longest path, by text
   result := CompareInteger(ord(TRadixTreeNode(B).Chars[1] <> '<'),
                            ord(TRadixTreeNode(A).Chars[1] <> '<'));
+  if result = 0 then
+    result := CompareInteger(
+      ord(IdemPChar(pointer(TRadixTreeNode(A).Chars), '<PATH:')),
+      ord(IdemPChar(pointer(TRadixTreeNode(B).Chars), '<PATH:')));
   if result = 0 then
     result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
   if result = 0 then
     result := CompareInteger(length(TRadixTreeNode(B).FullText),
                              length(TRadixTreeNode(A).FullText));
+  if result = 0 then
+    result := StrComp(pointer(TRadixTreeNode(A).FullText),
+                      pointer(TRadixTreeNode(B).FullText));
 end;
 
 procedure TRadixTreeNode.SortChildren;
@@ -11154,7 +11161,7 @@ begin
       if (P^ <> #0) and (P^ <> '?') and (P^ <> '/') then
         exit; // not an integer
     end
-    else if rtfParamPath in f then // <path:filename>
+    else if rtfParamPath in f then // <path:filename> or * as <path:path>
       while (P^ <> #0) and (P^ <> '?') do
         inc(P)
     else // regular <param>

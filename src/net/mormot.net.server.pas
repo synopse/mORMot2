@@ -138,13 +138,17 @@ type
     // $ Rewrite(urmGet, '/path/from/<from>/to/<to>', urmPost,
     // $  '/root/myservice/convert?from=<from>&to=<to>'); // for IMyService.Convert
     // $ Rewrite(urmGet, '/index.php', '400'); // to avoid fuzzing
+    // $ Rewrite(urmGet, '/*', '/static/*' // '*' synonymous to '<path:path>'
     procedure Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8);
     /// just a wrapper around Rewrite(urmGet, aFrom, aToMethod, aTo)
     // - e.g. Route.Get('/info', 'root/timestamp/info');
     // - e.g. Route.Get('/user/<id>', '/root/userservice/new?id=<id>'); will
     // rewrite internally '/user/1234' URI as '/root/userservice/new?id=1234'
+    // - e.g. Route.Get('/user/<int:id>', '/root/userservice/new?id=<id>');
+    // to ensure id is a real integer before redirection
     // - e.g. Route.Get('/admin.php', '403');
+    // - e.g. Route.Get('/*', '/static/*'); with '*' synonymous to '<path:path>'
     procedure Get(const aFrom, aTo: RawUtf8;
       aToMethod: TUriRouterMethod = urmGet); overload;
     /// just a wrapper around Rewrite(urmPost, aFrom, aToMethod, aTo)
@@ -250,6 +254,11 @@ const
 // - may replace cascaded IsGet() IsPut() IsPost() IsDelete() function calls
 // - see URIROUTERMETHOD[] constant for the reverse conversion
 function UriMethod(const Text: RawUtf8; out Method: TUriRouterMethod): boolean;
+
+/// check if the supplied text contains only URI-valid characters
+// - excluding the parameters, i.e. rejecting the ? and % characters
+// - but allowing <param> place holders as recognized by TUriMethod
+function IsValidUriRoute(p: PUtf8Char): boolean;
 
 
 { ******************** Shared Server-Side HTTP Process }
@@ -1619,6 +1628,28 @@ begin
   result := true;
 end;
 
+function IsValidUriRoute(p: PUtf8Char): boolean;
+begin
+  result := false;
+  if p = nil then
+    exit;
+  repeat
+    if p^ = '<' then
+    begin
+      inc(p);
+      while p^ <> '>' do
+        if p^ = #0 then
+          exit
+        else
+          inc(p);
+    end
+    else if not (p^ in ['/', '_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z']) then
+      exit;
+    inc(p);
+  until p^ = #0;
+  result := true;
+end;
+
 
 { TUriTreeNode }
 
@@ -1749,31 +1780,33 @@ procedure TUriRouter.Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
 var
   n: TUriTreeNode;
   u: PUtf8Char;
-  item: RawUtf8;
+  fromU, toU, item: RawUtf8;
   names: TRawUtf8DynArray;
   pos: PtrInt;
 begin
   if self = nil then
     exit; // avoid unexpected GPF
-  if not IsValidRootUri(pointer(aFromUri)) then
+  fromU := StringReplaceAll(aFromUri, '*', '<path:path>');
+  toU := StringReplaceAll(aToUri, '*', '<path:path>');
+  if not IsValidUriRoute(pointer(fromU)) then
     raise EUriRouter.CreateUtf8('Invalid char in %.Setup(''%'')',
       [self, aFromUri]);
   fSafe.WriteLock;
   try
     if fTree[aFrom] = nil then
       fTree[aFrom] := TUriTree.Create(fTreeOptions);
-    n := fTree[aFrom].Setup(aFromUri, names) as TUriTreeNode;
+    n := fTree[aFrom].Setup(fromU, names) as TUriTreeNode;
     if n = nil then
       exit;
     // the leaf should have the Rewrite/Run information to process on match
     if n.Data.ToUri <> '' then
-      if aToUri = n.Data.ToUri then
+      if toU = n.Data.ToUri then
         exit // same redirection: do nothing
       else
         raise EUriRouter.CreateUtf8('%.Setup(''%''): already redirect to %',
           [self, aFromUri, n.Data.ToUri]);
     if Assigned(n.Data.Execute) then
-      if CompareMem(@n.Data.Execute, @aExecute, SizeOf(aExecute)) then
+      if CompareMem(@n.Data.Execute, @aExecute, SizeOf(TMethod)) then
         exit // same callback: do nothing
       else
         raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
@@ -1784,20 +1817,20 @@ begin
     else
     begin
       n.Data.ToUriMethod := aTo;
-      n.Data.ToUri := aToUri;
+      n.Data.ToUri := toU;
       n.Data.ToUriPosLen := nil; // store [pos1,len1,valndx1,...] trios
       n.Data.ToUriStaticLen := 0;
-      n.Data.ToUriErrorStatus := Utf8ToInteger(aToUri, 200, 599, 0);
+      n.Data.ToUriErrorStatus := Utf8ToInteger(toU, 200, 599, 0);
       if n.Data.ToUriErrorStatus = 0 then // a true URI, not an HTTP error code
       begin
         // pre-compute the rewritten URI into Data.ToUriPosLen[]
-        u := pointer(aToUri);
+        u := pointer(toU);
         if u = nil then
           raise EUriRouter.CreateUtf8('No ToUri in %.Setup(''%'')',
             [self, aFromUri]);
-        if PosExChar('<', aToUri) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
+        if PosExChar('<', toU) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
           repeat
-            pos := u - pointer(aToUri);
+            pos := u - pointer(toU);
             GetNextItem(u, '<', item); // static
             AddInteger(n.Data.ToUriPosLen, pos);          // position
             AddInteger(n.Data.ToUriPosLen, length(item)); // length (may be 0)
@@ -1808,6 +1841,9 @@ begin
             else
             begin
               GetNextItem(u, '>', item); // <name>
+              pos := PosExChar(':', item);
+              if pos <> 0 then
+                system.delete(item, 1, pos);
               if item = '' then
                 raise EUriRouter.CreateUtf8('Void <> in %.Setup(''%'')',
                   [self, aToUri]);
@@ -1816,7 +1852,7 @@ begin
                 raise EUriRouter.CreateUtf8('Unknown <%> in %.Setup(''%'')',
                   [item, self, aToUri]);
             end;
-            AddInteger(n.Data.ToUriPosLen, pos);          // value index in Names[]
+            AddInteger(n.Data.ToUriPosLen, pos);  // value index in Names[]
           until (u = nil) or
                 (u^ = #0);
       end;
