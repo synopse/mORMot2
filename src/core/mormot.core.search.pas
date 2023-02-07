@@ -1314,7 +1314,7 @@ function IsValidEmail(P: PUtf8Char): boolean;
 { ***************** Cross-Platform TSynTimeZone Time Zones }
 
 type
-  {$A-}
+  {$A-} { make all records packed for cross-platform binary serialization }
 
   /// used to store Time Zone bias in TSynTimeZone
   // - map how low-level information is stored in the Windows Registry
@@ -1345,6 +1345,7 @@ type
       year: integer;
       tzi: TTimeZoneInfo;
     end;
+    /// search for the TTimeZoneInfo of a given year
     function GetTziFor(year: integer): PTimeZoneInfo;
   end;
 

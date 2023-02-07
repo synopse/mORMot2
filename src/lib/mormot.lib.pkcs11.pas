@@ -630,9 +630,9 @@ type
 const
   CKF_ARRAY_ATTRIBUTE = $40000000;
 
-function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ULONG; overload;
+function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG; overload;
   {$ifdef FPC} inline; {$endif}
-function ATTRIBUTE_TYPE(uu: CK_ULONG): CK_ATTRIBUTE_TYPE;
+function ATTRIBUTE_TYPE(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
 function ToText(at: CK_ATTRIBUTE_TYPE): PShortString; overload;
 
 type
@@ -1090,15 +1090,46 @@ type
     CKM_VENDOR_DEFINED);
   CK_MECHANISM_TYPES = array of CK_MECHANISM_TYPE;
 
-  CK_MECHANISM_TYPE_ULONG_PTR = ^CK_ULONG;
+  CK_MECHANISM_TYPE_ULONG = type CK_ULONG;
+  CK_MECHANISM_TYPE_ULONG_PTR = ^CK_MECHANISM_TYPE_ULONG;
 
 const
   CKM_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(mt: CK_MECHANISM_TYPE): CK_ULONG; overload;
+function ToULONG(mt: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG; overload;
   {$ifdef FPC} inline; {$endif}
-function MECHANISM_TYPE(uu: CK_ULONG): CK_MECHANISM_TYPE;
+function MECHANISM_TYPE(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
 function ToText(mt: CK_MECHANISM_TYPE): PShortString; overload;
+
+/// the default CK_MECHANISM_TYPE used for most known key types generation
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultGenerateMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+
+/// the default CK_MECHANISM_TYPE used for most known key types domain generation
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultParamGenerateMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+
+/// the default CK_MECHANISM_TYPE used for most known key types encrypt/decrypt
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultEncryptMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+
+/// the default CK_MECHANISM_TYPE used for most known key types sign/verify
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultSignMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+
+/// the default CK_MECHANISM_TYPE used for most known key types wrap/unwrap
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultWrapMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+
+/// the default CK_MECHANISM_TYPE used for most known key types derivation
+// - returns false if not known enough, or true and set uu with the mechanism type
+function DefaultDeriveMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
 
 type
   /// specifies a particular mechanism and any parameters it requires
@@ -1182,7 +1213,9 @@ type
     procedure New(aClass: CK_OBJECT_CLASS); overload;
     /// append a CKA_CLASS storage attribute as token object (CKA_TOKEN = true)
     // - if aLabel is not '', will also set a CKA_LABEL attribute
-    procedure New(aClass: CK_OBJECT_CLASS; const aLabel: RawUtf8); overload;
+    // - if aID is not '', will also set CKA_ID attribute
+    procedure New(aClass: CK_OBJECT_CLASS; const aLabel: RawUtf8;
+      const aID: RawUtf8 = ''; aStore: boolean = true); overload;
     /// append a raw CK_ATTRIBUTE
     procedure Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer; aLen: CK_ULONG); overload;
     /// append a CK_ULONG CK_ATTRIBUTE
@@ -1529,7 +1562,7 @@ type
     /// initializes a decryption operation
     DecryptInit: function(hSession: CK_SESSION_HANDLE;
       var pMechanism: CK_MECHANISM; hKey: CK_OBJECT_HANDLE): CK_RVULONG; cdecl;
-    /// decrypts encrypted data in a single part
+    /// decrypts encrypted data in a single call
     Decrypt: function(hSession: CK_SESSION_HANDLE;
       pEncryptedData: PByte; ulEncryptedDataLen: CK_ULONG;
       pData: PByte; var DataLen: CK_ULONG): CK_RVULONG; cdecl;
@@ -1543,7 +1576,7 @@ type
     /// initializes a message-digesting operation
     DigestInit: function(hSession: CK_SESSION_HANDLE;
       var pMechanism: CK_MECHANISM): CK_RVULONG; cdecl;
-    /// digests data in a single part
+    /// digests data in a single call
     Digest: function(hSession: CK_SESSION_HANDLE;
       pData: PByte; ulDataLen: CK_ULONG;
       pDigest: PByte; var pulDigestLen: CK_ULONG): CK_RVULONG; cdecl;
@@ -1562,7 +1595,7 @@ type
     // - and plaintext cannot be recovered from the signature
     SignInit: function(hSession: CK_SESSION_HANDLE;
       var pMechanism: CK_MECHANISM;  hKey: CK_OBJECT_HANDLE): CK_RVULONG; cdecl;
-    /// signs (encrypts with private key) data in a single part
+    /// signs (encrypts with private key) data in a single call
     // - where the signature is (will be) an appendix to the data;
     // - and plaintext cannot be recovered from the signature
     Sign: function(hSession: CK_SESSION_HANDLE;
@@ -1745,7 +1778,8 @@ type
   /// exception class raised during TPkcs11 process
   EPkcs11 = class(ESynException);
 
-  /// map CK_SLOT_ID but with a fixed 32-bit size (raw CK_SLOT_ID may be 64-bit)
+  /// map CK_SLOT_ID but with a fixed 32-bit size
+  // - 32-bit is enough, and raw CK_SLOT_ID may be 64-bit
   TPkcs11SlotID = cardinal;
 
   /// map several CK_SLOT_ID but with a fixed 32-bit size
@@ -1769,6 +1803,7 @@ type
     /// version number of the slot's firmware
     Firmware: CK_VERSION;
   end;
+  /// pointer to high-level information about a PKCS#11 Slot
   PPkcs11Slot = ^TPkcs11Slot;
 
   /// high-level information about several PKCS#11 Slots
@@ -1777,7 +1812,7 @@ type
 
   /// the flags of PKCS#11 one Storage Object
   // - posToken .. posTrusted map CKA_TOKEN ... CKA_TRUSTED boolean attributes
-  // - posX509 posX509Attr posWtls map CKA_CERTIFICATE_TYPE attribute value
+  // - posX509 .. posWtls map CKA_CERTIFICATE_TYPE attribute value
   TPkcs11ObjectStorage = (
     posToken,
     posPrivate,
@@ -1793,38 +1828,43 @@ type
     posSign,
     posSignRecover,
     posWrap,
+    posUnWrap,
+    posDerive,
     posTrusted,
     posX509,
     posX509Attr,
     posWtls);
+
   /// set of flags for PKCS#11 Storage Object
+  // - see AddToAttributes() wrapper function to convert them to attributes
   TPkcs11ObjectStorages = set of TPkcs11ObjectStorage;
 
   /// high-level information about one PKCS#11 Object
+  // - can be (un) serialized as binary or JSON if needed
   TPkcs11Object = packed record
-    /// the class of the object (CKA_CLASS)
+    /// the class of the object (from CKA_CLASS)
     ObjClass: CK_OBJECT_CLASS;
-    /// the identifier of this Storage Object (CKA_UNIQUE_ID or CKA_ID)
+    /// the identifier of this Storage Object (from CKA_UNIQUE_ID or CKA_ID)
     StorageID: RawUtf8;
-    /// the description of this Storage Object (CKA_LABEL value)
+    /// the description of this Storage Object (from CKA_LABEL value)
     StorageLabel: RawUtf8;
-    /// the flags of a Storage Object (from various CKA_* boolean)
+    /// the flags of a Storage Object (from various CKA_* values)
     StorageFlags: TPkcs11ObjectStorages;
-    /// the stored Key Type
+    /// the stored Key Type (from CKA_KEY_TYPE value)
     KeyType: CK_KEY_TYPE;
-    /// how this stored Key has been generated
+    /// how this stored Key has been generated (from CKA_KEY_GEN_MECHANISM)
     KeyGen: CK_MECHANISM_TYPE;
-    /// start date of this Storage Object (CKA_START_DATE)
+    /// start date of this Storage Object (from CKA_START_DATE)
     Start: TDateTime;
-    /// end date of this Storage Object (CKA_END_DATE)
+    /// end date of this Storage Object (from CKA_END_DATE)
     Stop: TDateTime;
-    /// the application name of this Storage Object (CKA_APPLICATION)
+    /// the application name of this Storage Object (from CKA_APPLICATION)
     Application: RawUtf8;
-    /// the DER subject of this Storage Object
+    /// the DER subject of this Storage Object (from CKA_SUBJECT or CKA_OWNER)
     Subject: RawByteString;
-    /// the DER serial number of this Storage Object
+    /// the DER serial number of this Storage Object (from CKA_SERIAL_NUMBER)
     Serial: RawByteString;
-    /// the DER issuer of this Storage Object
+    /// the DER issuer of this Storage Object (from CKA_ISSUER)
     Issuer: RawByteString;
     /// the low-level CK_OBJECT_HANDLE, which lifetime would match the session
     SessionHandle: CK_OBJECT_HANDLE;
@@ -1876,6 +1916,12 @@ procedure FillToken(ID: CK_SLOT_ID; const Raw: CK_TOKEN_INFO;
 procedure FillSlot(ID: CK_SLOT_ID; const Raw: CK_SLOT_INFO;
   out Slot: TPkcs11Slot);
 
+/// append some CK_ATTRIBUTES boolean fields from a TPkcs11ObjectStorages set
+procedure AddToAttributes(var Attr: CK_ATTRIBUTES; Flags: TPkcs11ObjectStorages);
+
+/// the default TPkcs11ObjectStorages used for most known key types generation
+// - returns [] if not known enough, or the appropriate flags
+function DefaultKeyStorageFlags(kt: CK_KEY_TYPE): TPkcs11ObjectStorages;
 
 type
   TPkcs11 = class;
@@ -1971,11 +2017,27 @@ type
     // symmetric secret, to be used e.g. for AES encryption
     // - can optionally retrieve the whole object Value as RawByteString, if it
     // is allowed by the object itself (e.g. posExtractable key)
-    // - return false if there is no such object from this Session
+    // - return false if there is no such object in this Session
     // - return true and fill Info with the found Object information on success
     function GetObject(ObjectClass: CK_OBJECT_CLASS; out Info: TPkcs11Object;
       const StorageLabel: RawUtf8 = ''; const StorageID: RawUtf8 = '';
-      Value: PRawByteString = nil): boolean;
+      Value: PRawByteString = nil): boolean; overload;
+    /// retrieve one object handle by class type and label/ID from current Session
+    // - should have called Open() then call Close() once done
+    // - ObjectClass can be CKO_CERTIFICATE for a X509 certificate, CKO_PUBLIC_KEY
+    // or CKO_PRIVATE_KEY for asymmetric keys, and CKO_SECRET_KEY for some
+    // symmetric secret, to be used e.g. for AES encryption
+    // - return CK_INVALID_HANDLE (=0) if there is no such object in this Session
+    // - return the matching CK_OBJECT_HANDLE, which lifetime is the Session
+    function GetObject(ObjectClass: CK_OBJECT_CLASS; const StorageLabel: RawUtf8 = '';
+      const StorageID: RawUtf8 = ''): CK_OBJECT_HANDLE; overload;
+    /// digitally sign memory buffer using a supplied Private Key
+    // - you must supply a mechanism - method will setup its default parameters
+    // - return the signature as a binary blob
+    // - some keys (e.g. OpenSC Nitrokey) allow only to sign, not to verify using
+    // the device: so please extract the key and verify the signature in software
+    function Sign(Data: pointer; Len: PtrInt; PrivKeyType: CK_KEY_TYPE;
+      PrivKey: CK_OBJECT_HANDLE; Mechanism: CK_MECHANISM_TYPE): RawByteString;
     /// store a CKO_DATA object using the current R/W Session
     // - return the CKA_UNIQUE_ID generated by the token, or raise EPkcs11
     function AddSessionData(const Application, DataLabel: RawUtf8;
@@ -2260,12 +2322,12 @@ const
    $00000612,                         // CKA_X2RATCHET_RK
    $80000000);                        // CKA_VENDOR_DEFINED
 
-function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ULONG;
+function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG;
 begin
   result := CKA_ULONG[at];
 end;
 
-function ATTRIBUTE_TYPE(uu: CK_ULONG): CK_ATTRIBUTE_TYPE;
+function ATTRIBUTE_TYPE(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
 var
   i: PtrInt;
 begin
@@ -2703,7 +2765,7 @@ const
     $402D, // CKM_SALSA20_KEY_GEN
     $FFFF);// CKM_VENDOR_DEFINED = $80000000 > 16-bit word
 
-function ToULONG(mt: CK_MECHANISM_TYPE): CK_ULONG;
+function ToULONG(mt: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG;
 begin
   if mt = CKM_VENDOR_DEFINED then
     result := CKM_VENDOR_DEFINED_ULONG // = $80000000
@@ -2711,7 +2773,7 @@ begin
     result := CKM_WORD[mt];
 end;
 
-function MECHANISM_TYPE(uu: CK_ULONG): CK_MECHANISM_TYPE;
+function MECHANISM_TYPE(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
 var
   i: PtrInt;
 begin
@@ -2726,6 +2788,134 @@ end;
 function ToText(rv: CK_RV): PShortString;
 begin
   result := GetEnumName(TypeInfo(CK_RV), ord(rv));
+end;
+
+function DefaultGenerateMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_AES:
+      mt := CKM_AES_KEY_GEN;
+    CKK_DH:
+      mt := CKM_DH_PKCS_KEY_PAIR_GEN;
+    CKK_DSA:
+      mt := CKM_DSA_KEY_PAIR_GEN;
+    CKK_EC:
+      mt := CKM_EC_KEY_PAIR_GEN;
+    CKK_RSA:
+      mt := CKM_RSA_PKCS_KEY_PAIR_GEN;
+    CKK_X9_42_DH:
+      mt := CKM_X9_42_DH_KEY_PAIR_GEN;
+    CKK_EC_EDWARDS:
+      mt := CKM_EC_EDWARDS_KEY_PAIR_GEN;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
+end;
+
+function DefaultParamGenerateMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_DH:
+      mt := CKM_DH_PKCS_PARAMETER_GEN;
+    CKK_DSA:
+      mt := CKM_DSA_PARAMETER_GEN;
+    CKK_X9_42_DH:
+      mt := CKM_X9_42_DH_PARAMETER_GEN;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
+end;
+
+function DefaultEncryptMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_AES:
+      mt := CKM_AES_CBC_PAD;
+    CKK_RSA:
+      mt := CKM_RSA_PKCS_OAEP;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
+end;
+
+function DefaultSignMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_AES:
+      mt := CKM_AES_MAC;
+    CKK_RSA:
+      mt := CKM_SHA512_RSA_PKCS;
+    CKK_DSA:
+      mt := CKM_DSA_SHA512;
+    CKK_EC:
+      mt := CKM_ECDSA_SHA512;
+    CKK_EC_EDWARDS:
+      mt := CKM_EDDSA;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
+end;
+
+function DefaultWrapMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_AES:
+      mt := CKM_AES_KEY_WRAP;
+    CKK_RSA:
+      mt := CKM_RSA_PKCS_OAEP;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
+end;
+
+function DefaultDeriveMechanism(kt: CK_KEY_TYPE;
+  out uu: CK_MECHANISM_TYPE_ULONG): boolean;
+var
+  mt: CK_MECHANISM_TYPE;
+begin
+  result := false;
+  case kt of
+    CKK_DH:
+      mt := CKM_DH_PKCS_DERIVE;
+    CKK_EC:
+      mt := CKM_ECDH1_DERIVE;
+    CKK_X9_42_DH:
+      mt := CKM_X9_42_DH_DERIVE;
+  else
+    exit;
+  end;
+  uu := CKM_WORD[mt];
+  result := true;
 end;
 
 const
@@ -2852,54 +3042,6 @@ begin
 end;
 
 
-{ ***************** PKCS#11 High-Level Wrappers }
-
-procedure UnPad(p: PUtf8Char; max: integer; var text: RawUtf8);
-begin
-  FastSetString(text, p, max);
-  TrimSelf(text);
-end;
-
-function Pad(const text: RawUtf8; max: integer): RawUtf8;
-var
-  len: integer;
-begin
-  FastSetString(result, nil, max);
-  len := length(text);
-  if len > max then
-    len := max
-  else
-    FillCharFast(PByteArray(result)[len], max - len, ord(' '));
-  MoveFast(pointer(text)^, pointer(result)^, len);
-end;
-
-procedure FillToken(ID: CK_SLOT_ID; const Raw: CK_TOKEN_INFO;
-  out Token: TPkcs11Token);
-begin
-  Token.Slot:= ID;
-  UnPad(Raw._label, SizeOf(Raw._label), Token.Name);
-  UnPad(Raw.manufacturerID, SizeOf(Raw.manufacturerID), Token.Manufacturer);
-  UnPad(Raw.model, SizeOf(Raw.model), Token.Model);
-  UnPad(Raw.serialNumber, SizeOf(Raw.serialNumber), Token.Serial);
-  UnPad(Raw.utcTime, SizeOf(Raw.utcTime), Token.Time);
-  Token.Flags := CKT_FLAGS(cardinal(Raw.flags));
-  Token.Sessions := Raw.ulSessionCount;
-  Token.MaxSessions := Raw.ulMaxSessionCount;
-  Token.MinPin := Raw.ulMinPinLen;
-  Token.MaxPin := Raw.ulMaxPinLen;
-end;
-
-procedure FillSlot(ID: CK_SLOT_ID; const Raw: CK_SLOT_INFO;
-  out Slot: TPkcs11Slot);
-begin
-  Slot.Slot := ID;
-  UnPad(Raw.slotDescription, SizeOf(Raw.slotDescription), Slot.Description);
-  UnPad(Raw.manufacturerID, SizeOf(Raw.manufacturerID), Slot.Manufacturer);
-  Slot.Flags := CKSL_FLAGS(byte(Raw.flags));
-  Slot.Hardware := Raw.hardwareVersion;
-  Slot.Firmware := Raw.firmwareVersion;
-end;
-
 
 { CK_ATTRIBUTES }
 
@@ -3024,12 +3166,15 @@ begin
   Add(CKA_CLASS, ToULONG(aClass));
 end;
 
-procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS; const aLabel: RawUtf8);
+procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS; const aLabel, aID: RawUtf8;
+  aStore: boolean);
 begin
   New(aClass);
-  Add(CKA_TOKEN, true); // token object
+  Add(CKA_TOKEN, aStore); // stored token object
   if aLabel <> '' then
     Add(CKA_LABEL, aLabel);
+  if aID <> '' then
+    Add(CKA_ID, aID);
 end;
 
 procedure CK_ATTRIBUTES.Add(aCert: CK_CERTIFICATE_TYPE);
@@ -3169,6 +3314,109 @@ begin
   result := (found <> nil) and
             (found^.ulValueLen = CK_ULONG(length(aValue))) and
     mormot.core.base.CompareMem(found^.pValue, pointer(aValue), found^.ulValueLen);
+end;
+
+
+{ ***************** PKCS#11 High-Level Wrappers }
+
+procedure UnPad(p: PUtf8Char; max: integer; var text: RawUtf8);
+begin
+  FastSetString(text, p, max);
+  TrimSelf(text);
+end;
+
+function Pad(const text: RawUtf8; max: integer): RawUtf8;
+var
+  len: integer;
+begin
+  FastSetString(result, nil, max);
+  len := length(text);
+  if len > max then
+    len := max
+  else
+    FillCharFast(PByteArray(result)[len], max - len, ord(' '));
+  MoveFast(pointer(text)^, pointer(result)^, len);
+end;
+
+procedure FillToken(ID: CK_SLOT_ID; const Raw: CK_TOKEN_INFO;
+  out Token: TPkcs11Token);
+begin
+  Token.Slot:= ID;
+  UnPad(Raw._label, SizeOf(Raw._label), Token.Name);
+  UnPad(Raw.manufacturerID, SizeOf(Raw.manufacturerID), Token.Manufacturer);
+  UnPad(Raw.model, SizeOf(Raw.model), Token.Model);
+  UnPad(Raw.serialNumber, SizeOf(Raw.serialNumber), Token.Serial);
+  UnPad(Raw.utcTime, SizeOf(Raw.utcTime), Token.Time);
+  Token.Flags := CKT_FLAGS(cardinal(Raw.flags));
+  Token.Sessions := Raw.ulSessionCount;
+  Token.MaxSessions := Raw.ulMaxSessionCount;
+  Token.MinPin := Raw.ulMinPinLen;
+  Token.MaxPin := Raw.ulMaxPinLen;
+end;
+
+procedure FillSlot(ID: CK_SLOT_ID; const Raw: CK_SLOT_INFO;
+  out Slot: TPkcs11Slot);
+begin
+  Slot.Slot := ID;
+  UnPad(Raw.slotDescription, SizeOf(Raw.slotDescription), Slot.Description);
+  UnPad(Raw.manufacturerID, SizeOf(Raw.manufacturerID), Slot.Manufacturer);
+  Slot.Flags := CKSL_FLAGS(byte(Raw.flags));
+  Slot.Hardware := Raw.hardwareVersion;
+  Slot.Firmware := Raw.firmwareVersion;
+end;
+
+const
+  POS2CKA: array[low(TPkcs11ObjectStorage) .. pred(posX509)] of CK_ATTRIBUTE_TYPE = (
+    CKA_TOKEN,           // posToken
+    CKA_PRIVATE,         // posPrivate
+    CKA_SENSITIVE,       // posSensitive
+    CKA_MODIFIABLE,      // posModifiable
+    CKA_COPYABLE,        // posCopiable
+    CKA_DESTROYABLE,     // posDestroyable
+    CKA_EXTRACTABLE,     // posExtractable
+    CKA_ENCRYPT,         // posEncrypt
+    CKA_DECRYPT,         // posDecrypt
+    CKA_VERIFY,          // posVerify
+    CKA_VERIFY_RECOVER,  // posVerifyRecover
+    CKA_SIGN,            // posSign
+    CKA_SIGN_RECOVER,    // posSignRecover
+    CKA_WRAP,            // posWrap
+    CKA_UNWRAP,          // posUnWrap
+    CKA_DERIVE,          // posDerive
+    CKA_TRUSTED);        // posTrusted
+
+procedure AddToAttributes(var Attr: CK_ATTRIBUTES; Flags: TPkcs11ObjectStorages);
+var
+  s: TPkcs11ObjectStorage;
+begin
+  for s := low(POS2CKA) to high(POS2CKA) do
+    if s in Flags then
+      if Attr.Find(POS2CKA[s]) = nil then
+        Attr.Add(POS2CKA[s], true);
+  if posX509 in Flags then
+    Attr.Add(CKA_CERTIFICATE_TYPE, ToULONG(CKC_X_509))
+  else if posX509Attr in Flags then
+    Attr.Add(CKA_CERTIFICATE_TYPE, ToULONG(CKC_X_509_ATTR_CERT))
+  else if posWtls in Flags then
+    Attr.Add(CKA_CERTIFICATE_TYPE, ToULONG(CKC_WTLS));
+end;
+
+function DefaultKeyStorageFlags(kt: CK_KEY_TYPE): TPkcs11ObjectStorages;
+begin
+  case kt of
+    CKK_AES,
+    CKK_RSA:
+      result := [posEncrypt, posDecrypt, posSign, posVerify, posWrap, posUnWrap];
+    CKK_DH:
+      result := [posDerive];
+    CKK_DSA,
+    CKK_EC_EDWARDS:
+      result := [posSign, posVerify];
+    CKK_EC:
+      result := [posDerive, posSign, posVerify];
+  else
+    result := [];
+  end;
 end;
 
 
@@ -3423,25 +3671,6 @@ begin
   end;
 end;
 
-const
-  POS2CKA: array[low(TPkcs11ObjectStorage) .. pred(posX509)] of CK_ATTRIBUTE_TYPE = (
-    CKA_TOKEN,           // posToken
-    CKA_PRIVATE,         // posPrivate
-    CKA_SENSITIVE,       // posSensitive
-    CKA_MODIFIABLE,      // posModifiable
-    CKA_COPYABLE,        // posCopiable
-    CKA_DESTROYABLE,     // posDestroyable
-    CKA_EXTRACTABLE,     // posExtractable
-    CKA_ENCRYPT,         // posEncrypt
-    CKA_DECRYPT,         // posDecrypt
-    CKA_VERIFY,          // posVerify
-    CKA_VERIFY_RECOVER,  // posVerifyRecover
-    CKA_SIGN,            // posSign
-    CKA_SIGN_RECOVER,    // posSignRecover
-    CKA_WRAP,            // posWrap
-    CKA_TRUSTED);        // posTrusted
-
-
 function TPkcs11.SlotByID(SlotID: TPkcs11SlotID): PPkcs11Slot;
 var
   i: PtrInt;
@@ -3585,13 +3814,7 @@ var
 begin
   result := false;
   FillCharFast(Info, SizeOf(Info), 0);
-  if fSession = 0 then
-    raise EPkcs11.CreateUtf8('%.GetObject requires a session', [self]);
-  attr.New(ObjectClass);
-  if StorageLabel <> '' then
-    attr.Add(CKA_LABEL, StorageLabel);
-  if StorageID <> '' then
-    attr.Add(CKA_ID, StorageID);
+  attr.New(ObjectClass, StorageLabel, StorageID);
   if Value = nil then
     valp := nil
   else
@@ -3605,6 +3828,26 @@ begin
     else
       Value^ := val[0];
   result := true;
+end;
+
+function TPkcs11.GetObject(ObjectClass: CK_OBJECT_CLASS;
+  const StorageLabel, StorageID: RawUtf8): CK_OBJECT_HANDLE;
+var
+  attr: CK_ATTRIBUTES;
+  res: TPkcs11ObjectDynArray;
+begin
+  attr.New(ObjectClass, StorageLabel, StorageID);
+  res := GetObjects(@attr);
+  if length(res) = 1 then
+    result := res[0].SessionHandle
+  else
+    result := CK_INVALID_HANDLE; // return 0 on error
+end;
+
+function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKeyType: CK_KEY_TYPE;
+  PrivKey: CK_OBJECT_HANDLE; Mechanism: CK_MECHANISM_TYPE): RawByteString;
+begin
+  result := ''; // to be implemented
 end;
 
 procedure TPkcs11.InitToken(SlotID: TPkcs11SlotID;
