@@ -1397,8 +1397,9 @@ type
     CKR_VENDOR_DEFINED);
 
 const
-  CKR_SUCCESS = 0;                       // = ToULONG(CKR_OK)
-  CKR_ABORT = 1;                         // = ToULONG(CKR_CANCEL)
+  CKR_SUCCESS   = 0;                     // = ToULONG(CKR_OK)
+  CKR_ABORT     = 1;                     // = ToULONG(CKR_CANCEL)
+  CKR_NOEVENT   = 8;                     // = ToULONG(CKR_NO_EVENT)
   CKR_SENSITIVE = $0011;                 // = ToULONG(CKR_ATTRIBUTE_SENSITIVE)
   CKR_INVALID   = $0012;                 // = ToULONGCKR_ATTRIBUTE_TYPE_INVALID)
   CKR_BUFFER_TOOSMALL = $0150;           // = ToULONG(CKR_BUFFER_TOO_SMALL)
@@ -1906,6 +1907,10 @@ type
   // - can be (un) serialized as binary or JSON if needed
   TPkcs11TokenDynArray = array of TPkcs11Token;
 
+const
+  /// value return when TPkcs11 process return no actual slot value
+  PKCS11_NOSLOT = TPkcs11SlotID(-1);
+
 /// convert a raw CK_TOKEN_INFO into a high-level TPkcs11Token
 // - as used by TPkcs11.GetSlots
 procedure FillToken(ID: CK_SLOT_ID; const Raw: CK_TOKEN_INFO;
@@ -1947,6 +1952,7 @@ type
     fSessionFlags: set of (sfRW, sfLogIn);
     fOnNotify: TOnPkcs11Notify;
     procedure EnsureLoaded(const ctxt: ShortString);
+    procedure EnsureSession(const ctxt: ShortString);
     procedure Check(res: CK_RVULONG; const ctxt: ShortString;
       unlock: boolean = false);
     procedure CheckAttr(res: CK_RVULONG);
@@ -1957,12 +1963,14 @@ type
   public
     /// try to load a PKCS#11 library, raising EPkcs11 on failure
     // - is just a wrapper around inherited Create and Load() + raise EPkcs11
+    // - note that Load() could wait several seconds  - use plain Create for
+    // a lazy/quick initialization, then make "if not Loaded then Load(...)"
     constructor Create(const aLibraryName: TFileName); reintroduce; overload;
     /// finalize this instance
     destructor Destroy; override;
     /// try to load a PKCS#11 library, returning true on success
-    // - this method could take several seconds, because it will connect to the
-    // actual HSM peripheral, and communicate with it to retrieve its information
+    // - this method takes several seconds, because it will connect to the
+    // actual peripheral, and communicate with it to retrieve its information
     function Load(const aLibraryName: TFileName): boolean;
     /// unload a PKCS#11 previously loaded library
     procedure UnLoad;
@@ -1972,11 +1980,30 @@ type
 
     /// get information about this instance in Slots[] and Tokens[] properties
     procedure RetrieveConfig(IncludeVoidSlots: boolean = false);
+    /// update information in Slots[] and Tokens[] about a single slot
+    // - as called e.g. by RetrieveConfig() and also function WaitForSlotEvent()
+    procedure UpdateConfig(SlotID: TPkcs11SlotID);
+    /// wait for a Slot state to change, e.g. a credential to be inserted
+    // - if NotBlocking is default false, will wait for a change and always
+    // return true the changed Slot ID, or raise an EPkcs11 on error - note
+    // that the OnNotify event is sadly not triggerred by this Cryptoki API
+    // - if NotBlocking is true, return PKCS11_NOSLOT if no state changed, or
+    // the changed Slot ID
+    // - if a Slot ID is returned, will call UpdateConfig() to update Slots[]
+    // and Tokens[] so you can e.g. call SlotByID(Slot) to get information
+    // - this method process is protected via Safe.Lock/Unlock
+    function WaitForSlotEvent(NotBlocking: boolean = false): TPkcs11SlotID;
     /// search for a given TPkcs11Slot.Slot within current Slots[]
-    // - returns nil if the slot was not found
-    function SlotByID(SlotID: TPkcs11SlotID): PPkcs11Slot;
+    // - returns nil if no slot was found, or add a new entry if AddNew is set
+    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
+    function SlotByID(SlotID: TPkcs11SlotID; AddNew: boolean = false): PPkcs11Slot;
+    /// search for a given TPkcs11Token.Slot within current Token[]
+    // - returns nil if no token was found, or add a new entry if AddNew is set
+    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
+    function TokenByID(SlotID: TPkcs11SlotID; AddNew: boolean = false): PPkcs11Token;
     /// search for a given TPkcs11Token.Name within current Tokens[]
     // - returns nil if the token was not found
+    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
     function TokenByName(const TokenName: RawUtf8;
       CaseInsensitive: boolean = false): PPkcs11Token;
 
@@ -2031,20 +2058,25 @@ type
     // - return the matching CK_OBJECT_HANDLE, which lifetime is the Session
     function GetObject(ObjectClass: CK_OBJECT_CLASS; const StorageLabel: RawUtf8 = '';
       const StorageID: RawUtf8 = ''): CK_OBJECT_HANDLE; overload;
-    /// digitally sign memory buffer using a supplied Private Key
-    // - you must supply a mechanism - method will setup its default parameters
+    /// digitally sign a memory buffer using a supplied Private Key
+    // - you must supply a mechanism - method won't setup any default parameter
     // - return the signature as a binary blob
-    // - some keys (e.g. OpenSC Nitrokey) allow only to sign, not to verify using
-    // the device: so please extract the key and verify the signature in software
-    function Sign(Data: pointer; Len: PtrInt; PrivKeyType: CK_KEY_TYPE;
-      PrivKey: CK_OBJECT_HANDLE; Mechanism: CK_MECHANISM_TYPE): RawByteString;
+    function Sign(Data: pointer; Len: PtrInt; PrivKey: CK_OBJECT_HANDLE;
+      var Mechanism: CK_MECHANISM): RawByteString;
+    /// digitally verify a memory buffer signature using a supplied Public Key
+    // - you must supply a mechanism - method won't setup any default parameter
+    // - raise an EPkcs11 exception on error
+    // - some HW (e.g. OpenSC Nitrokey) does not allow to verify using the
+    // device: you need to extract the key and verify the signature in software
+    procedure Verify(Data, Sig: pointer; DataLen, SigLen: PtrInt;
+      PubKey: CK_OBJECT_HANDLE; var Mechanism: CK_MECHANISM);
     /// store a CKO_DATA object using the current R/W Session
     // - return the CKA_UNIQUE_ID generated by the token, or raise EPkcs11
     function AddSessionData(const Application, DataLabel: RawUtf8;
       const Data: RawByteString; const DerID: RawByteString = ''): RawUtf8;
-    /// leave the previous session
+    /// release a session previously created with Open() overloads
     // - will release the lock with Safe.UnLock
-    // - do nothing if not session did actually began with a former Open()
+    // - do nothing if no session did actually began with a former Open()
     procedure Close;
 
     /// initialize a Token on slot #SlotID
@@ -3363,6 +3395,7 @@ begin
   Slot.Flags := CKSL_FLAGS(byte(Raw.flags));
   Slot.Hardware := Raw.hardwareVersion;
   Slot.Firmware := Raw.firmwareVersion;
+  Slot.Mechanism := nil;
 end;
 
 const
@@ -3445,6 +3478,13 @@ procedure TPkcs11.EnsureLoaded(const ctxt: ShortString);
 begin
   if not Loaded then
     raise EPkcs11.CreateUtf8('%.%: no library loaded', [self, ctxt]);
+end;
+
+procedure TPkcs11.EnsureSession(const ctxt: ShortString);
+begin
+  if (self = nil) or
+     (fSession = 0) then
+    raise EPkcs11.CreateUtf8('%.% requires a session', [self, ctxt]);
 end;
 
 procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString;
@@ -3605,21 +3645,19 @@ end;
 
 procedure TPkcs11.RetrieveConfig(IncludeVoidSlots: boolean);
 var
-  n, mn: CK_ULONG;
+  n: CK_ULONG;
   s: array of CK_SLOT_ID; // may be 64-bit on POSIX
-  m: array of CK_ULONG;
-  info: CK_SLOT_INFO;
-  tok: CK_TOKEN_INFO;
   res: integer;
-  i, j, ntok: PtrInt;
+  i: PtrInt;
 begin
   EnsureLoaded('RetrieveConfig');
   fSlots := nil;
   fSlotIDs := nil;
   fTokens := nil;
-  if Assigned(fC^.GetSlotList) then
+  if not Assigned(fC^.GetSlotList) then
+    exit;
+  fSafe.Lock;
   try
-    fSafe.Lock;
     Check(fC^.GetSlotList(not IncludeVoidSlots, nil, n), 'GetSlotList');
     if n = 0 then
       exit;
@@ -3628,62 +3666,120 @@ begin
       res := fC^.GetSlotList(not IncludeVoidSlots, pointer(s), n);
     until res <> CKR_BUFFER_TOOSMALL;
     Check(res, 'GetSlotList');
-    ntok := 0;
-    mn := 64; // good enough in practice
-    SetLength(fSlots, n);
-    SetLength(fSlotIDs, n);
-    for i := 0 to n - 1 do
-    begin
-      fSlotIDs[i] := s[i];
-      FillCharFast(info, SizeOf(info), 0);
-      Check(fC^.GetSlotInfo(s[i], info), 'GetSlotInfo');
-      Check(res, 'GetMechanismList');
-      with fSlots[i] do
-      begin
-        FillSlot(s[i], info, fSlots[i]);
-        if CKF_TOKEN_PRESENT in Flags then
-        begin
-          inc(ntok);
-          repeat
-            if length(m) < CK_LONG(mn) then
-              SetLength(m, mn);
-            res := fC^.GetMechanismList(s[i], pointer(m), mn);
-          until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
-          SetLength(Mechanism, mn);
-          for j := 0 to CK_LONG(mn) - 1 do
-            Mechanism[j] := MECHANISM_TYPE(m[j]);
-          mn := length(m); // use max size for next token
-        end;
-      end;
-    end;
-    SetLength(fTokens, ntok);
-    ntok := 0;
-    for i := 0 to n - 1 do
-      if CKF_TOKEN_PRESENT in fSlots[i].Flags then
-      begin
-        FillCharFast(tok, SizeOf(tok), 0);
-        Check(fC^.GetTokenInfo(s[i], tok), 'GetTokenInfo');
-        FillToken(s[i], tok, fTokens[ntok]);
-        inc(ntok);
-      end;
+    for i := 0 to CK_LONG(n) - 1 do
+      UpdateConfig(s[i]);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TPkcs11.SlotByID(SlotID: TPkcs11SlotID): PPkcs11Slot;
+procedure TPkcs11.UpdateConfig(SlotID: TPkcs11SlotID);
 var
   i: PtrInt;
+  sltnfo: CK_SLOT_INFO;
+  toknfo: CK_TOKEN_INFO;
+  s: PPkcs11Slot;
+  mn, res: CK_ULONG;
+  m: array of CK_ULONG;
+begin
+  EnsureLoaded('UpdateConfig');
+  fSafe.Lock;
+  try
+    FillCharFast(sltnfo, SizeOf(sltnfo), 0);
+    Check(fC^.GetSlotInfo(SlotID, sltnfo), 'GetSlotInfo');
+    AddInteger(TIntegerDynArray(fSlotIDs), SlotID, {nodup=}true);
+    s := SlotByID(SlotID, {addnew=}true);
+    FillSlot(SlotID, sltnfo, s^);
+    if not (CKF_TOKEN_PRESENT in s^.Flags) then
+      exit;
+    mn := 64;
+    repeat
+      if length(m) < CK_LONG(mn) then
+        SetLength(m, mn);
+      res := fC^.GetMechanismList(SlotID, pointer(m), mn);
+    until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
+    Check(res, 'GetMechanismList');
+    SetLength(s^.Mechanism, mn);
+    for i := 0 to CK_LONG(mn) - 1 do
+      s^.Mechanism[i] := MECHANISM_TYPE(m[i]);
+    FillCharFast(toknfo, SizeOf(toknfo), 0);
+    Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
+    FillToken(SlotID, toknfo, TokenByID(SlotID, {addnew=}true)^);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPkcs11.WaitForSlotEvent(NotBlocking: boolean): TPkcs11SlotID;
+var
+  flags: CK_ULONG;
+  slotid: CK_SLOT_ID;
+  res: CK_RVULONG;
+begin
+  EnsureLoaded('WaitForSlotEvent');
+  flags := 0;
+  if NotBlocking then
+    flags := CKF_DONT_BLOCK;
+  result := PKCS11_NOSLOT;
+  fSafe.Lock;
+  try
+    res := fC.WaitForSlotEvent(flags, slotid, nil);
+    if res = CKR_NOEVENT then
+      exit;
+    Check(res, 'WaitForSlotEvent');
+    UpdateConfig(slotid);
+    result := slotid;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPkcs11.SlotByID(SlotID: TPkcs11SlotID; AddNew: boolean): PPkcs11Slot;
+var
+  i, n: PtrInt;
 begin
   if (self <> nil) and
      (integer(SlotID) >= 0) then
   begin
     result := pointer(fSlots);
-    for i := 0 to length(fSlots) - 1 do
+    n := length(fSlots);
+    for i := 0 to n - 1 do
       if result^.Slot = SlotID then
         exit
       else
         inc(result);
+    if AddNew then
+    begin
+      SetLength(fSlots, n + 1);
+      result := @fSlots[n];
+      result^.Slot := SlotID;
+      exit;
+    end;
+  end;
+  result := nil;
+end;
+
+function TPkcs11.TokenByID(SlotID: TPkcs11SlotID; AddNew: boolean): PPkcs11Token;
+var
+  i, n: PtrInt;
+begin
+  if (self <> nil) and
+     (integer(SlotID) >= 0) then
+  begin
+    result := pointer(fTokens);
+    n := length(fTokens);
+    for i := 0 to n - 1 do
+      if result^.Slot = SlotID then
+        exit
+      else
+        inc(result);
+    if AddNew then
+    begin
+      SetLength(fTokens, n + 1);
+      result := @fTokens[n];
+      result^.Slot := SlotID;
+      exit;
+    end;
   end;
   result := nil;
 end;
@@ -3719,8 +3815,7 @@ var
   obj: array[byte] of CK_OBJECT_HANDLE;
   arr: CK_ATTRIBUTES;
 begin
-  if fSession = 0 then
-    raise EPkcs11.CreateUtf8('%.GetObjects requires a session', [self]);
+  EnsureSession('GetObjects');
   result := nil;
   count := 0;
   if Filter = nil then
@@ -3812,6 +3907,7 @@ var
   val: TRawByteStringDynArray;
   valp: PRawByteStringDynArray;
 begin
+  EnsureSession('GetObject');
   result := false;
   FillCharFast(Info, SizeOf(Info), 0);
   attr.New(ObjectClass, StorageLabel, StorageID);
@@ -3836,6 +3932,7 @@ var
   attr: CK_ATTRIBUTES;
   res: TPkcs11ObjectDynArray;
 begin
+  EnsureSession('GetObject');
   attr.New(ObjectClass, StorageLabel, StorageID);
   res := GetObjects(@attr);
   if length(res) = 1 then
@@ -3844,10 +3941,31 @@ begin
     result := CK_INVALID_HANDLE; // return 0 on error
 end;
 
-function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKeyType: CK_KEY_TYPE;
-  PrivKey: CK_OBJECT_HANDLE; Mechanism: CK_MECHANISM_TYPE): RawByteString;
+function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKey: CK_OBJECT_HANDLE;
+  var Mechanism: CK_MECHANISM): RawByteString;
+var
+  reslen: CK_ULONG;
 begin
-  result := ''; // to be implemented
+  result := '';
+  if (Data = nil) or
+     (Len <= 0) or
+     (PrivKey = CK_INVALID_HANDLE) then
+    exit;
+  EnsureSession('Sign');
+  Check(fC.SignInit(fSession, Mechanism, PrivKey), 'SignInit');
+  Check(fC.Sign(fSession, Data, Len, nil, reslen), 'Sign');
+  SetLength(result, reslen);
+  Check(fC.Sign(fSession, Data, Len, pointer(result), reslen), 'Sign');
+  if len <> length(result) then
+    SetLength(result, reslen);
+end;
+
+procedure TPkcs11.Verify(Data, Sig: pointer; DataLen, SigLen: PtrInt;
+  PubKey: CK_OBJECT_HANDLE; var Mechanism: CK_MECHANISM);
+begin
+  EnsureSession('Verify');
+  Check(fC.VerifyInit(fSession, Mechanism, PubKey), 'VerifyInit');
+  Check(fC.Verify(fSession, Data, DataLen, Sig, SigLen), 'Verify');
 end;
 
 procedure TPkcs11.InitToken(SlotID: TPkcs11SlotID;
