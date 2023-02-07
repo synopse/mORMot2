@@ -556,7 +556,7 @@ procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
 // - warning: resources size may be rounded up to alignment
 // - you can specify a library (dll) resource instance handle, if needed
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
-  out buf: RawByteString; Instance: THandle = 0);
+  out buf: RawByteString; Instance: TLibHandle = 0);
 
 /// creates a RawByteString memory buffer from an SynLZ-compressed embedded resource
 // - returns '' if the resource is not found
@@ -564,7 +564,7 @@ procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
 // with a ResType=PChar(10) (i.e. RC_DATA)
 // - you can specify a library (dll) resource instance handle, if needed
 procedure ResourceSynLZToRawByteString(const ResName: string;
-  out buf: RawByteString; Instance: THandle = 0);
+  out buf: RawByteString; Instance: TLibHandle = 0);
 
 {$ifndef PUREMORMOT2}
 
@@ -6003,7 +6003,7 @@ begin
 end;
 
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
-  out buf: RawByteString; Instance: THandle);
+  out buf: RawByteString; Instance: TLibHandle);
 var
   res: TExecutableResource;
 begin
@@ -6015,7 +6015,7 @@ begin
 end;
 
 procedure ResourceSynLZToRawByteString(const ResName: string;
-  out buf: RawByteString; Instance: THandle);
+  out buf: RawByteString; Instance: TLibHandle);
 var
   res: TExecutableResource;
 begin

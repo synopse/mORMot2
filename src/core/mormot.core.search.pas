@@ -1409,7 +1409,7 @@ type
     // - you can specify a library (dll) resource instance handle, if needed
     // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
     // ! {$R mormot.tz.res}
-    procedure LoadFromResource(Instance: THandle = 0);
+    procedure LoadFromResource(Instance: TLibHandle = 0);
     /// write then time zone information into a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be created
     procedure SaveToFile(const FileName: TFileName);
@@ -5792,7 +5792,7 @@ begin
   LoadFromBuffer(StringFromFile(FN));
 end;
 
-procedure TSynTimeZone.LoadFromResource(Instance: THandle);
+procedure TSynTimeZone.LoadFromResource(Instance: TLibHandle);
 var
   buf: RawByteString;
 begin

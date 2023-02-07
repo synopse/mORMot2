@@ -823,7 +823,8 @@ type
     // with a resource type of 10
     // - uses the same compressed format as the overloaded stream/file method
     // - you can specify a library (dll) resource instance handle, if needed
-    procedure LoadFromResource(ResourceName: string = ''; Instance: THandle = 0);
+    procedure LoadFromResource(ResourceName: string = '';
+      Instance: TLibHandle = 0);
     /// save the values into a binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage: e.g. a 27 KB
@@ -3649,7 +3650,7 @@ begin
 end;
 
 procedure TRestStorageInMemory.LoadFromResource(ResourceName: string;
-  Instance: THandle);
+  Instance: TLibHandle);
 var
   S: TStream;
 begin

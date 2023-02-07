@@ -451,7 +451,7 @@ type
       Size: QWord = 0; WorkingMem: QWord = 1 shl 20;
       DontReleaseHandle: boolean = false); overload;
     /// open a .zip archive file directly from a resource
-    constructor Create(Instance: THandle; const ResName: string;
+    constructor Create(Instance: TLibHandle; const ResName: string;
       ResType: PChar); overload;
     /// open a .zip archive file directly from memory
     // - supplied BufZip[0 .. Size - 1] buffer contain at least the zip central
@@ -2265,7 +2265,7 @@ begin
     DynArrayFakeLength(fEntry, fCount); // so that length(Entry)=Count 
 end;
 
-constructor TZipRead.Create(Instance: THandle;
+constructor TZipRead.Create(Instance: TLibHandle;
   const ResName: string; ResType: PChar);
 // resources are memory maps of the executable -> direct access
 begin

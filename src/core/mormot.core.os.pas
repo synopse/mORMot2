@@ -2214,6 +2214,8 @@ type
   TRTLCriticalSection = Windows.TRTLCriticalSection;
 
   /// defined as in FPC RTL, to avoid dependency to Windows.pas unit
+  // - note that on POSIX, a THandle is a 32-bit integer, but library or
+  // resource handles are likely to map pointers, i.e. up to a 64-bit integer
   TLibHandle = THandle;
 
 {$endif ISDELPHI}
@@ -2994,8 +2996,9 @@ type
   // - so that Windows is not required in your unit uses clause
   TExecutableResource = object
   private
-    HResInfo: THandle;
-    HGlobal: THandle;
+    // note: we can't use THandle which is 32-bit on 64-bit POSIX
+    HResInfo: TLibHandle;
+    HGlobal: TLibHandle;
   public
     /// the resource memory pointer, after successful Open()
     Buffer: pointer;
@@ -3005,7 +3008,7 @@ type
     // - use the current executable if Instance is left to its 0 default value
     // - returns TRUE if the resource has been found, and Buffer/Size are set
     function Open(const ResourceName: string; ResType: PChar;
-      Instance: THandle = 0): boolean;
+      Instance: TLibHandle = 0): boolean;
     /// unlock and finalize a resource
     procedure Close;
   end;
@@ -6531,7 +6534,7 @@ end;
 { TExecutableResource }
 
 function TExecutableResource.Open(const ResourceName: string; ResType: PChar;
-  Instance: THandle): boolean;
+  Instance: TLibHandle): boolean;
 begin
   result := false;
   if Instance = 0 then
