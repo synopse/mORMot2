@@ -10875,12 +10875,11 @@ end;
 
 function RadixTreeNodeCompare(const A, B): integer;
 begin // sort static first, then deeper, by path:, by longest path, by text
-  result := CompareInteger(ord(TRadixTreeNode(B).Chars[1] <> '<'),
-                           ord(TRadixTreeNode(A).Chars[1] <> '<'));
+  result := ord(TRadixTreeNode(B).Chars[1] <> '<') -
+            ord(TRadixTreeNode(A).Chars[1] <> '<');
   if result = 0 then
-    result := CompareInteger(
-      ord(IdemPChar(pointer(TRadixTreeNode(A).Chars), '<PATH:')),
-      ord(IdemPChar(pointer(TRadixTreeNode(B).Chars), '<PATH:')));
+    result := ord(IdemPChar(pointer(TRadixTreeNode(A).Chars), '<PATH:')) -
+              ord(IdemPChar(pointer(TRadixTreeNode(B).Chars), '<PATH:'));
   if result = 0 then
     result := CompareInteger(TRadixTreeNode(B).Depth, TRadixTreeNode(A).Depth);
   if result = 0 then
@@ -10896,7 +10895,7 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(Child) do
-    Child[i].SortChildren; // compute nested children depth
+    Child[i].SortChildren; // recursive sorting
   ObjArraySort(Child, RadixTreeNodeCompare);
 end;
 
