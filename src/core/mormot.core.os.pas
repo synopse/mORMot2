@@ -2593,10 +2593,16 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 function ValidHandle(Handle: THandle): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a path
+function SafePathName(const Path: TFileName): boolean;
+
+/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a RawUtf8 path
+function SafePathNameU(const Path: RawUtf8): boolean;
+
 /// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
 function SafeFileName(const FileName: TFileName): boolean;
 
-/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a filename
+/// check for unsafe '..' '/xxx' 'c:xxx' '~/xxx' or '\\' patterns in a RawUtf8 filename
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 
 /// ensure all \ / path delimiters are normalized into the current OS expectation
@@ -2875,9 +2881,18 @@ function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): b
 // - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
 
+/// optimized RTL version to extract a path from a file name
+// - will be cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractFilePath(const FileName: TFileName): TFileName;
+
+/// optimized RTL version to extract a path from a RawUtf8 file name
+// - will be cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractFilePathU(const FileName: RawUtf8): RawUtf8;
+
 /// compute the file name, including its path if supplied, but without its extension
 // - e.g. GetFileNameWithoutExt('/var/toto.ext') = '/var/toto'
 // - may optionally return the extracted extension, as '.ext'
+// - will be cross-platform, i.e. detect both '\' and '/' on all platforms
 function GetFileNameWithoutExt(const FileName: TFileName;
   Extension: PFileName = nil): TFileName;
 
@@ -5817,24 +5832,32 @@ begin
   result := PtrInt(Handle) > 0;
 end;
 
+function SafePathName(const Path: TFileName): boolean;
+begin
+  result := (Path <> '') and
+            (Path[1] <> '/') and
+            (PosExString('..', Path) = 0) and
+            (PosExString(':', Path) = 0) and
+            (PosExString('\\', Path) = 0);
+end;
+
+function SafePathNameU(const Path: RawUtf8): boolean;
+begin
+  result := (Path <> '') and
+            (Path[1] <> '/') and
+            (PosEx('..', Path) = 0) and
+            (PosExChar(':', Path) = 0) and
+            (PosEx('\\', Path) = 0);
+end;
+
 function SafeFileName(const FileName: TFileName): boolean;
 begin
-  result := (FileName <> '') and
-            (FileName[1] <> '/') and
-            (PosExString('..', FileName) = 0) and
-            (PosExString(':', FileName) = 0) and
-            (PosExString('~', FileName) = 0) and
-            (PosExString('\\', FileName) = 0);
+  result := SafePathName(ExtractFilePath(FileName));
 end;
 
 function SafeFileNameU(const FileName: RawUtf8): boolean;
 begin
-  result := (FileName <> '') and
-            (FileName[1] <> '/') and
-            (PosEx('..', FileName) = 0) and
-            (PosExChar(':', FileName) = 0) and
-            (PosExChar('~', FileName) = 0) and
-            (PosEx('\\', FileName) = 0);
+  result := SafePathNameU(ExtractFilePathU(FileName));
 end;
 
 function NormalizeFileName(const FileName: TFileName): TFileName;
@@ -6157,14 +6180,42 @@ begin
   raise EOSException.Create('TemporaryFileName failed');
 end;
 
+function ExtractFilePath(const FileName: TFileName): TFileName;
+var
+  i: PtrInt;
+  {$ifdef UNICODE}
+  p: PWordArray;
+  {$else}
+  p: PByteArray;
+  {$endif UNICODE}
+begin
+  p := pointer(FileName);
+  i := length(FileName);
+  while (i > 0) and
+        not (P[i - 1] in [ord('\'), ord('/'), ord(':')]) do
+    dec(i);
+  SetString(result, PChar(p), i);
+end;
+
+function ExtractFilePathU(const FileName: RawUtf8): RawUtf8;
+var
+  i: PtrInt;
+begin
+  i := length(FileName);
+  while (i > 0) and
+        not (FileName[i] in ['\', '/', ':']) do
+    dec(i);
+  FastSetString(result, pointer(FileName), i);
+end;
+
 function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
 var
   i, max: PtrInt;
 begin
   i := length(FileName);
-  max := i - 16;
+  max := i - 16; // a file .extension is unlikely to be more than 16 chars
   while (i > 0) and
-        not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.')]) and
+        not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.'), ord(':')]) and
         (i >= max) do
     dec(i);
   if (i = 0) or
