@@ -11239,7 +11239,7 @@ begin
       AddRawUtf8(aNames, item);
       full := full + '<' + item + '>'; // avoid name collision with static
       result := Insert(full) as TRadixTreeNodeParams; // param (Names <> nil)
-      result.Names := copy(aNames);
+      result.Names := copy(aNames); // each node has its own Names copy
       result.Flags := flags;
       if (u = nil) or
          (u^ = #0) then

@@ -143,8 +143,7 @@ type
     afSecureConnectionRequired,
     afJWTRequired);
 
-  /// define the TRestTreeNode kind of REST requests
-  // - as registered by TRestServer.ComputeRoutes, i.e.
+  /// kind of REST requests defined by TRestServer.ComputeRoutes for TRestTreeNode
   // - rnTable for ModelRoot/TableName GET POST PUT DELETE BEGIN END ABORT
   // - rnTableID for ModelRoot/TableName/<id> GET LOCK UNLOCK PUT DELETE
   // - rnTableIDBlob for ModelRoot/TableName/<id>/Blob GET PUT

@@ -536,6 +536,7 @@ begin
     Compute('/root4/one', '/static/root4/one', 'DELETE');
     Compute('/root4/1', '/rootd/1', 'DELETE');
     Compute('/root4/123', '/rootd/123', 'DELETE');
+    Compute('/roota/one', '/static/roota/one', 'DELETE');
     Compute('/one', '/static/one', 'DELETE');
     Compute('/one/two', '/static/one/two', 'DELETE');
     //writeln(router.Tree[urmGet].ToText);

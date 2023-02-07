@@ -255,9 +255,9 @@ const
 // - see URIROUTERMETHOD[] constant for the reverse conversion
 function UriMethod(const Text: RawUtf8; out Method: TUriRouterMethod): boolean;
 
-/// check if the supplied text contains only URI-valid characters
+/// check if the supplied text contains only valid characters for a root URI
 // - excluding the parameters, i.e. rejecting the ? and % characters
-// - but allowing <param> place holders as recognized by TUriMethod
+// - but allowing <param> place holders as recognized by TUriRouter
 function IsValidUriRoute(p: PUtf8Char): boolean;
 
 
@@ -1634,7 +1634,7 @@ begin
   if p = nil then
     exit;
   repeat
-    if p^ = '<' then
+    if p^ = '<' then // parse <param> or <path:param> place-holders
     begin
       inc(p);
       while p^ <> '>' do
@@ -1644,7 +1644,7 @@ begin
           inc(p);
     end
     else if not (p^ in ['/', '_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z']) then
-      exit;
+      exit; // not a valid plain URI character
     inc(p);
   until p^ = #0;
   result := true;

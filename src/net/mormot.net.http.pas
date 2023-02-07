@@ -2153,7 +2153,7 @@ begin
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';
-  fRouteName := nil; // no fRouteValuePosLen release (safe to reuse)
+  fRouteName := nil; // no fRouteValuePosLen := nil (safe to reuse)
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
@@ -2200,7 +2200,7 @@ begin
   else
   begin
     i := FindNonVoidRawUtf8(fRouteName, pointer(Name), length(Name),
-      PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
+                            PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
     if i >= 0 then
       // result^ is one [pos,len] pair in fUrl
       result := @fRouteValuePosLen[i * 2]
