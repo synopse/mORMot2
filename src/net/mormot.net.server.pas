@@ -349,7 +349,7 @@ type
   // - do not use it, but rather THttpServer/THttpAsyncServer or THttpApiServer
   THttpServerGeneric = class(TNotifiedThread)
   protected
-    fShutdownInProgress: boolean;
+    fShutdownInProgress, fFavIconRouted: boolean;
     fOptions: THttpServerOptions;
     fRoute: TUriRouter;
     /// optional event handlers for process interception
@@ -2181,7 +2181,10 @@ begin
     fFavIcon := FavIconBinary
   else
     fFavIcon := FavIconContent;
+  if fFavIconRouted then
+    exit; // need to register the route once, but allow custom ico
   Route.Get('/favicon.ico', GetFavIcon);
+  fFavIconRouted := true;
 end;
 
 function THttpServerGeneric.GetFavIcon(Ctxt: THttpServerRequestAbstract): cardinal;
