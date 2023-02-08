@@ -80,6 +80,7 @@ type
   TEccSecretKey = THash256;
 
   PEccPublicKey = ^TEccPublicKey;
+  PEccPublicKeyUncompressed = ^TEccPublicKeyUncompressed;
   PEccPrivateKey = ^TEccPrivateKey;
   PEccHash = ^TEccHash;
   PEccSignature = ^TEccSignature;
@@ -139,6 +140,13 @@ var
   // since public key doesn't need to be uncompressed
   Ecc256r1VerifyUncomp: function(const PublicKey: TEccPublicKeyUncompressed;
     const Hash: TEccHash; const Signature: TEccSignature): boolean;
+
+/// compress a public key for ECC secp256r1 cryptography
+// - convert its uncompressed/flat form (64 bytes of memory) into its compressed
+// form with its standard byte header (33 bytes of memory)
+// - a pascal version is good enough for this immediate bit copy operation
+procedure Ecc256r1Compress(const Uncompressed: TEccPublicKeyUncompressed;
+  out Compressed: TEccPublicKey);
 
 
 /// pascal function to create a secp256r1 public/private key pair
@@ -1171,11 +1179,18 @@ begin
     EccPointMult(pub, Curve_G_32, priv, nil);
   until not (_isZero({%H-}pub.x) and _isZero(pub.y));
   _bswap256(@PrivateKey, @priv);
-  _bswap256(@PublicKey[1], @pub.x);
-  PublicKey[0] := 2 + (pub.y.B[0] and 1); // standard header for compressed form
+  Ecc256r1Compress(TEccPublicKeyUncompressed(pub), PublicKey);
   result := true;
   FillZero(priv.b); // erase sensitive information from stack
   FillZero(THash512(pub));
+end;
+
+procedure Ecc256r1Compress(const Uncompressed: TEccPublicKeyUncompressed;
+  out Compressed: TEccPublicKey);
+begin
+  // use standard compressed form header and byte order
+  Compressed[0] := 2 + (TEccPoint(Uncompressed).y.B[0] and 1);
+  _bswap256(@Compressed[1], @TEccPoint(Uncompressed).x);
 end;
 
 function ecdh_shared_secret_uncompressed_pas(

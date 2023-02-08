@@ -138,6 +138,7 @@ var
   timer: TPrecisionTimer;
   p, e: RawUtf8;
   sec1, sec2: TEccSecretKey;
+  comp: TEccPublicKey;
 begin
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
   timer.Start;
@@ -149,6 +150,11 @@ begin
   for i := 1 to ECC_COUNT - 1 do
     Ecc256r1Uncompress(pub[i], pubunc[i]); // may be OpenSSL
   NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
+  for i := 1 to ECC_COUNT - 1 do
+  begin
+    Ecc256r1Compress(pubunc[i], comp); // fast enough, but ensure accurate
+    Check(CompareMem(@comp, @pub[i], SizeOf(comp)), 'Ecc256r1Compress');
+  end;
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
     Check(Ecc256r1Sign(priv[i], hash, sign[i]));
