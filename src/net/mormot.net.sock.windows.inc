@@ -999,7 +999,7 @@ type
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
-    fAcceptCert: PCCERT_CONTEXT;
+    fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     procedure ESChannelRaiseLastError(res: cardinal);
     function CheckSEC_E_OK(res: integer): cardinal;
@@ -1158,7 +1158,7 @@ begin
       ESChannelRaiseLastError(SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store
-  fAcceptCert := CertFindCertificateInStore(
+  fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
     fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, nil);
   if fAcceptCert = nil then
     raise ESChannel.Create('AfterBind: no Certificate available');
