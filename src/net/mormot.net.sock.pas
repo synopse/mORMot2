@@ -586,7 +586,7 @@ type
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
     // bound server certificate context into each accepted connection
     // - so that certificates are decoded only once in AfterBind
-    // - is typically a PSSL_CTX on OpenSSL
+    // - is typically a PSSL_CTX on OpenSSL, or a PCCERT_CONTEXT on SChannel
     AcceptCert: pointer;
   end;
 

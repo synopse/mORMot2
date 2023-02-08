@@ -352,9 +352,6 @@ function FreeCredentialsHandle(phCredential: PSecHandle): integer; stdcall;
 
 
 type
-  HCRYPTPROV = pointer;
-  HCERTSTORE = pointer;
-  PCCERT_CONTEXT = pointer;
   _HMAPPER = pointer;
 
   /// SChannel credential information
@@ -397,7 +394,7 @@ const
   SP_PROT_TLS1_2_CLIENT = $800;
   SP_PROT_TLS1_3        = $3000; // Windows Server 2022 ;)
   SP_PROT_TLS1_3_SERVER = $1000;
-  SP_PROT_TLS1_3_CLIENT = $2000 ;
+  SP_PROT_TLS1_3_CLIENT = $2000;
 
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
 
@@ -409,6 +406,29 @@ const
   CERT_CLOSE_STORE_FORCE_FLAG = 1;
   // checks for nonfreed certificate, CRL, and CTL context to report an error on leak
   CERT_CLOSE_STORE_CHECK_FLAG = 2;
+
+  CRYPT_ASN_ENCODING  = $00000001;
+  CRYPT_NDR_ENCODING  = $00000002;
+  X509_ASN_ENCODING   = $00000001;
+  X509_NDR_ENCODING   = $00000002;
+  PKCS_7_ASN_ENCODING = $00010000;
+  PKCS_7_NDR_ENCODING = $00020000;
+                                          // TCryptCertUsage mormot.crypt.secure
+  CERT_OFFLINE_CRL_SIGN_KEY_USAGE  = $02; // cuCrlSign
+  CERT_KEY_CERT_SIGN_KEY_USAGE     = $04; // cuKeyCertSign
+  CERT_KEY_AGREEMENT_KEY_USAGE     = $08; // cuKeyAgreement
+  CERT_DATA_ENCIPHERMENT_KEY_USAGE = $10; // cuDataEncipherment
+  CERT_KEY_ENCIPHERMENT_KEY_USAGE  = $20; // cuKeyEncipherment
+  CERT_NON_REPUDIATION_KEY_USAGE   = $40; // cuNonRepudiation
+  CERT_DIGITAL_SIGNATURE_KEY_USAGE = $80; // cuDigitalSignature
+
+  CERT_KEY_PROV_INFO_PROP_ID = 2;
+
+  CERT_SIMPLE_NAME_STR = 1;
+  CERT_OID_NAME_STR    = 2;
+  CERT_X500_NAME_STR   = 3;
+
+  CRYPT_OID_INFO_OID_KEY   = 1;
 
 
 // crypt32.dll API calls
@@ -428,7 +448,22 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
 function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
   dwFlags: cardinal): HCERTSTORE; stdcall;
 
+function CertCreateCertificateContext(dwCertEncodingType: cardinal;
+  pbCertEncoded: PByte; cbCertEncoded: cardinal): PCCERT_CONTEXT; stdcall;
+
+function CertGetIntendedKeyUsage(dwCertEncodingType: cardinal; pCertInfo: PCERT_INFO;
+  pbKeyUsage: PByte; cbKeyUsage: cardinal): BOOL; stdcall;
+
+function CertGetCertificateContextProperty(pCertContext: PCCERT_CONTEXT;
+  dwPropId: cardinal; pvData: pointer; var pcbData: cardinal): BOOL; stdcall;
+
 function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
+
+function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
+  dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
+
+function CryptFindOIDInfo(dwKeyType: cardinal; pvKey: pointer;
+  dwGroupId: cardinal): PCRYPT_OID_INFO; stdcall;
 
 
 { ****************** Middle-Level SSPI Wrappers }
@@ -468,6 +503,96 @@ function SecDecrypt(var aSecContext: TSecContext;
 
 /// retrieve the connection information text of a given TLS connection
 function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
+
+type
+  /// each possible key usage of a certificate, as decoded into TWinCertInfo
+  // - wkuCrlSign .. wkuDigitalSignature match CertGetIntendedKeyUsage() API
+  // - wkuRoot is set if Issuer = Name
+  TWinCertKeyUsage = (
+    wkuCrlSign,
+    wkuKeyCertSign,
+    wkuKeyAgreement,
+    wkuDataEncipherment,
+    wkuKeyEncipherment,
+    wkuNonRepudiation,
+    wkuDigitalSignature,
+    wkuRoot);
+  /// the key usages of a certificate, as decoded into TWinCertInfo
+  TWinCertKeyUsages = set of TWinCertKeyUsage;
+
+  /// a X509 certificate extension, as decoded into TWinCertInfo.Extension
+  TWinCertExtension = record
+    OID: RawUtf8;
+    Critical: boolean;
+    Value: RawByteString;
+  end;
+  PWinCertExtension = ^TWinCertExtension;
+
+  /// decoded information about a X509 certificate as returned by WinCertDecode
+  TWinCertInfo = record
+    /// the certificate Serial Number, stored as raw binary
+    Serial: RawByteString;
+    /// the main key usages of this certificate
+    Usage: TWinCertKeyUsages;
+    /// the certificate Issuer, decoded as RFC 1779 text, with X500 key names
+    IssuerName: RawUtf8;
+    /// the certificate Subject, decoded as RFC 1779 text, with X500 key names
+    SubjectName: RawUtf8;
+    /// the certificate Issuer ID, stored as raw binary
+    IssuerID: RawByteString;
+    /// the certificate Subject ID, stored as raw binary
+    SubjectID: RawByteString;
+    /// the certificate validity start date, from Unix epoch 1/1/1970
+    NotBefore: TUnixTime;
+    /// the certificate validity end date, from Unix epoch 1/1/1970
+    NotAfter: TUnixTime;
+    /// the certificate algorithm, as OID text
+    Algorithm: RawUtf8;
+    /// the certificate algorithm name, as converted by WinCertAlgoName()
+    // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
+    AlgorithmName: RawUtf8;
+    /// the certificate public key algorithm, as OID text
+    PublicKeyAlgorithm: RawUtf8;
+    /// the certificate public key algorithm name, converted by WinCertAlgoName()
+    // - is most likely 'RSA', but could be e.g. 'ECC'
+    PublicKeyAlgorithmName: RawUtf8;
+    /// the certificate public key raw binary as stored in the certificate
+    // - for 'RSA', is a SEQUENCE of the two exponent + modulus INTEGER
+    // - for 'ECC', is a BITSTRING without the $04 leading byte (match e.g.
+    // TEccPublicKeyUncompressed from mormot.crypt.ecc256r1.pas)
+    PublicKeyContent: RawByteString;
+    /// the key container name
+    KeyContainer: RawUtf8;
+    /// the key container provider name
+    KeyProvider: RawUtf8;
+    /// the X509 extensions of this certificate
+    Extension: array of TWinCertExtension;
+  end;
+
+const
+  WIN_CERT_USAGE: array[wkuCrlSign .. wkuDigitalSignature] of byte = (
+    CERT_OFFLINE_CRL_SIGN_KEY_USAGE,    // wkuCrlSign
+    CERT_KEY_CERT_SIGN_KEY_USAGE,       // wkuKeyCertSign
+    CERT_KEY_AGREEMENT_KEY_USAGE,       // wkuKeyAgreement
+    CERT_DATA_ENCIPHERMENT_KEY_USAGE,   // wkuDataEncipherment
+    CERT_KEY_ENCIPHERMENT_KEY_USAGE,    // wkuKeyEncipherment
+    CERT_NON_REPUDIATION_KEY_USAGE,     // wkuNonRepudiation
+    CERT_DIGITAL_SIGNATURE_KEY_USAGE);  // wkuDigitalSignature
+
+/// return the whole algorithm name from a OID text
+procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+
+/// decode a CERT_NAME_BLOB binary blob into RFC 1779 text, with X500 key names
+procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
+  StrType: cardinal = CERT_X500_NAME_STR);
+
+/// decode an ASN-1 binary X509 certificate information using the WinCrypto API
+function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
+  StrType: cardinal = CERT_X500_NAME_STR): boolean;
+
+/// decode a raw WinCrypto API PCCERT_CONTEXT struct
+function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
+  StrType: cardinal = CERT_X500_NAME_STR): boolean;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -801,13 +926,17 @@ function FreeCredentialsHandle;      external secur32;
 const
   crypt32 = 'crypt32.dll';
 
-function CertOpenStoreW;             external crypt32;
-function CertOpenSystemStoreW;       external crypt32;
-function CertCloseStore;             external crypt32;
-function CertFindCertificateInStore; external crypt32;
-function PFXImportCertStore;         external crypt32;
-function CertFreeCertificateContext; external crypt32;
-
+function CertOpenStoreW;                    external crypt32;
+function CertOpenSystemStoreW;              external crypt32;
+function CertCloseStore;                    external crypt32;
+function CertFindCertificateInStore;        external crypt32;
+function PFXImportCertStore;                external crypt32;
+function CertCreateCertificateContext;      external crypt32;
+function CertGetIntendedKeyUsage;           external crypt32;
+function CertGetCertificateContextProperty; external crypt32;
+function CertFreeCertificateContext;        external crypt32;
+function CertNameToStrW;                    external crypt32;
+function CryptFindOIDInfo;                  external crypt32;
 
 { TSecBuffer }
 
@@ -1068,6 +1197,113 @@ begin
   end
   else
     result := nfo.ToText; // fallback on XP
+end;
+
+
+procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
+var
+  nfo: PCRYPT_OID_INFO;
+begin
+  nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, OID, 0);
+  if nfo <> nil then
+    Win32PWideCharToUtf8(nfo^.pwszName, Text);
+end;
+
+procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
+  StrType: cardinal);
+var
+  len: PtrInt;
+  tmp: TSynTempBuffer;
+begin
+  len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, nil, 0);
+  len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, tmp.Init(len), len);
+  Win32PWideCharToUtf8(tmp.buf, len - 1, Text);
+  tmp.Done;
+end;
+
+function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
+  StrType: cardinal): boolean;
+var
+  ctx: PCCERT_CONTEXT;
+begin
+  result := false;
+  ctx := CertCreateCertificateContext(
+    X509_ASN_ENCODING or PKCS_7_ASN_ENCODING, pointer(Asn1), length(Asn1));
+  if ctx = nil then
+    exit; // caller may use GetLastError
+  result := WinCertCtxtDecode(ctx, Cert, StrType);
+  CertFreeCertificateContext(ctx);
+end;
+
+function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
+  StrType: cardinal): boolean;
+var
+  nfo: PCERT_INFO;
+  prov: PCRYPT_KEY_PROV_INFO;
+  i: PtrInt;
+  ku: byte;
+  u: TWinCertKeyUsage;
+  len: cardinal;
+begin
+  result := false;
+  if Ctxt = nil then
+    exit;
+  Finalize(Cert);
+  FillcharFast(Cert, SizeOf(Cert), 0);
+  nfo := Ctxt^.pCertInfo;
+  with nfo^.SerialNumber do
+    FastSetRawByteString(Cert.Serial, pbData, cbData);
+  ku := 0;
+  CertGetIntendedKeyUsage(X509_ASN_ENCODING, nfo, @ku, SizeOf(ku));
+  for u := low(WIN_CERT_USAGE) to high(WIN_CERT_USAGE) do
+    if ku and WIN_CERT_USAGE[u] <> 0 then
+      include(Cert.Usage, u);
+  if (nfo^.Issuer.cbData = nfo^.Subject.cbData) and
+     CompareMem(nfo^.Issuer.pbData, nfo^.Subject.pbData, nfo^.Issuer.cbData) then
+    include(Cert.Usage, wkuRoot);
+  WinCertName(nfo^.Issuer, Cert.IssuerName, StrType);
+  WinCertName(nfo^.Subject, Cert.SubjectName, StrType);
+  with nfo^.IssuerUniqueId do
+    FastSetRawByteString(Cert.IssuerID, pbData, cbData);
+  with nfo^.SubjectUniqueId do
+    FastSetRawByteString(Cert.SubjectID, pbData, cbData);
+  Cert.NotBefore := FileTimeToUnixTime(nfo^.NotBefore);
+  Cert.NotAfter  := FileTimeToUnixTime(nfo^.NotAfter);
+  Cert.Algorithm := nfo^.SignatureAlgorithm.pszObjId;
+  WinCertAlgoName(nfo^.SignatureAlgorithm.pszObjId, Cert.AlgorithmName);
+  Cert.PublicKeyAlgorithm := nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId;
+  WinCertAlgoName(nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId,
+    Cert.PublicKeyAlgorithmName);
+  with nfo^.SubjectPublicKeyInfo.PublicKey do
+    FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
+  if (Cert.PublicKeyAlgorithmName = 'ECC') and
+     (Cert.PublicKeyContent <> '') and
+     (Cert.PublicKeyContent[1] = #4) then
+    delete(Cert.PublicKeyContent, 1, 1); // trim $04 leading byte
+  len := 0;
+  if OSVersion >= wVista then // MiniDriver needs Vista or later
+    if CertGetCertificateContextProperty(
+         Ctxt, CERT_KEY_PROV_INFO_PROP_ID, nil, len) then
+    begin
+      GetMem(prov, len);
+      if CertGetCertificateContextProperty(
+           Ctxt, CERT_KEY_PROV_INFO_PROP_ID, prov, len) then
+      begin
+        Win32PWideCharToUtf8(prov^.pwszContainerName, Cert.KeyContainer);
+        Win32PWideCharToUtf8(prov^.pwszProvName, Cert.KeyProvider);
+      end;
+      FreeMem(prov);
+    end;
+  SetLength(Cert.Extension, nfo^.cExtension);
+  for i := 0 to integer(nfo^.cExtension) - 1 do
+    with nfo^.rgExtension[i],
+         Cert.Extension[i] do
+    begin
+      OID := pszObjId;
+      Critical := fCritical;
+      FastSetRawByteString(Value, Blob.pbData, Blob.cbData);
+    end;
+  result := true;
 end;
 
 

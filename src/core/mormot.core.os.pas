@@ -1729,9 +1729,56 @@ type
   HCRYPTPROV = pointer;
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
-
-  PCERT_INFO = pointer;
   HCERTSTORE = pointer;
+
+  CRYPTOAPI_BLOB = record
+    cbData: DWORD;
+    pbData: PByteArray;
+  end;
+  CRYPT_INTEGER_BLOB = CRYPTOAPI_BLOB;
+  CERT_NAME_BLOB     = CRYPTOAPI_BLOB;
+  CRYPT_OBJID_BLOB   = CRYPTOAPI_BLOB;
+
+  CRYPT_BIT_BLOB = record
+    cbData: DWORD;
+    pbData: PByteArray;
+    cUnusedBits: DWORD;
+  end;
+
+  CRYPT_ALGORITHM_IDENTIFIER = record
+    pszObjId: PAnsiChar;
+    Parameters: CRYPT_OBJID_BLOB;
+  end;
+
+  CERT_PUBLIC_KEY_INFO = record
+    Algorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    PublicKey: CRYPT_BIT_BLOB;
+  end;
+
+  CERT_EXTENSION = record
+    pszObjId: PAnsiChar;
+    fCritical: BOOL;
+    Blob: CRYPT_OBJID_BLOB;
+  end;
+  PCERT_EXTENSION = ^CERT_EXTENSION;
+  CERT_EXTENSIONS = array[word] of CERT_EXTENSION;
+  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
+
+  CERT_INFO = record
+    dwVersion: DWORD;
+    SerialNumber: CRYPT_INTEGER_BLOB;
+    SignatureAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
+    Issuer: CERT_NAME_BLOB;
+    NotBefore: TFileTime;
+    NotAfter: TFileTime;
+    Subject: CERT_NAME_BLOB;
+    SubjectPublicKeyInfo: CERT_PUBLIC_KEY_INFO;
+    IssuerUniqueId: CRYPT_BIT_BLOB;
+    SubjectUniqueId: CRYPT_BIT_BLOB;
+    cExtension: DWORD;
+    rgExtension: PCERT_EXTENSIONS;
+  end;
+  PCERT_INFO = ^CERT_INFO;
 
   CERT_CONTEXT = record
     dwCertEncodingType: DWORD;
@@ -1743,21 +1790,43 @@ type
   PCCERT_CONTEXT = ^CERT_CONTEXT;
   PPCCERT_CONTEXT = ^PCCERT_CONTEXT;
 
+  CRYPT_KEY_PROV_PARAM = record
+    dwParam: DWORD;
+    pbData: PByte;
+    cbData: DWORD;
+    dwFlags: DWORD;
+  end;
+  PCRYPT_KEY_PROV_PARAM = ^CRYPT_KEY_PROV_PARAM;
+
+  CRYPT_KEY_PROV_INFO = record
+    pwszContainerName: PWideChar;
+    pwszProvName: PWideChar;
+    dwProvType: DWORD;
+    dwFlags: DWORD;
+    cProvParam: DWORD;
+    rgProvParam: PCRYPT_KEY_PROV_PARAM;
+    dwKeySpec: DWORD;
+  end;
+  PCRYPT_KEY_PROV_INFO = ^CRYPT_KEY_PROV_INFO;
+
+  CRYPT_OID_INFO = record
+    cbSize: DWORD;
+    pszOID: PAnsiChar;
+    pwszName: PWideChar;
+    dwGroupId: DWORD;
+    Union: record
+      case integer of
+        0: (dwValue: DWORD);
+        1: (Algid: DWORD);
+        2: (dwLength: DWORD);
+    end;
+    ExtraInfo: CRYPTOAPI_BLOB;
+  end;
+  PCRYPT_OID_INFO = ^CRYPT_OID_INFO;
+
   PCCRL_CONTEXT = pointer;
   PPCCRL_CONTEXT = ^PCCRL_CONTEXT;
   PCRYPT_ATTRIBUTE = pointer;
-
-  CRYPTOAPI_BLOB = record
-    cbData: DWORD;
-    pbData: PByte;
-  end;
-  CRYPT_OBJID_BLOB = CRYPTOAPI_BLOB;
-
-  PCRYPT_ALGORITHM_IDENTIFIER = ^CRYPT_ALGORITHM_IDENTIFIER;
-  CRYPT_ALGORITHM_IDENTIFIER = record
-    pszObjId: PAnsiChar;
-    Parameters: CRYPT_OBJID_BLOB;
-  end;
 
   CRYPT_SIGN_MESSAGE_PARA = record
     cbSize: DWORD;
