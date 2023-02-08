@@ -1,4 +1,4 @@
-/// low-level access to a PKCS#11 API
+﻿/// low-level access to a PKCS#11 API
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.pkcs11;
@@ -1869,7 +1869,8 @@ type
     /// the DER issuer of this Storage Object (from CKA_ISSUER)
     Issuer: RawByteString;
     /// the low-level CK_OBJECT_HANDLE, which lifetime would match the session
-    SessionHandle: CK_OBJECT_HANDLE;
+    // - not defined as CK_OBJECT_HANDLE because this type is not cross-platform
+    SessionHandle: cardinal;
   end;
   /// high-level information about several PKCS#11 Objects
   // - can be (un) serialized as binary or JSON if needed
@@ -3203,7 +3204,7 @@ procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS; const aLabel, aID: RawUtf8;
   aStore: boolean);
 begin
   New(aClass);
-  Add(CKA_TOKEN, aStore); // stored token object
+  Add(CKA_TOKEN, aStore); // object stored in token
   if aLabel <> '' then
     Add(CKA_LABEL, aLabel);
   if aID <> '' then
@@ -4059,7 +4060,7 @@ initialization
     TypeInfo(TPkcs11ObjectDynArray),
       'Class:CK_OBJECT_CLASS ID,Label:RawUtf8 Flags:TPkcs11ObjectStorages' +
       ' KeyType:CK_KEY_TYPE KeyGen:CK_MECHANISM_TYPE Start,End:TDateTime' +
-      ' App:RawUtf8 Sub,SN,Issuer:RawByteString Hdl:PtrUInt',
+      ' App:RawUtf8 Sub,SN,Issuer:RawByteString Hdl:cardinal',
     TypeInfo(TPkcs11Token),
       'Slot:cardinal Name,Manufacturer,Model,Serial,Time:RawUtf8 Flags:CKT_FLAGS' +
       ' Sessions,MaxSessions,MinPin,MaxPin: integer'
