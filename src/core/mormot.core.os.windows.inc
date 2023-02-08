@@ -154,6 +154,12 @@ begin
     end;
 end;
 
+procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
+begin
+  if P <> nil then
+    Win32PWideCharToUtf8(P, StrLenW(P), res);
+end;
+
 function Utf8ToWin32PWideChar(const Text: RawUtf8;
   var dest: TSynTempBuffer): PWideChar;
 var
@@ -1705,7 +1711,7 @@ begin
       else if DelayedProc(GetModuleFileNameExW,
                 'Psapi.dll', 'GetModuleFileNameExW') and
               (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
-        Win32PWideCharToUtf8(name, StrLenW(name), result);
+        Win32PWideCharToUtf8(name, result);
     finally
       CloseHandle(h);
     end;
@@ -2259,7 +2265,7 @@ var
     u := Utf8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
     VerQueryValueW(Pt, pointer(u), StrValPt, sz);
     if sz > 0 then
-      Win32PWideCharToUtf8(StrValPt, StrLenW(StrValPt), result)
+      Win32PWideCharToUtf8(StrValPt, result)
     else
       result := '';
   end;
@@ -2323,10 +2329,10 @@ var
 begin
   tmpsize := SizeOf(tmp);
   GetComputerNameW(tmp{%H-}, tmpsize);
-  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), Host);
+  Win32PWideCharToUtf8(@tmp, Host);
   tmpsize := SizeOf(tmp);
   GetUserNameW(tmp, tmpsize);
-  Win32PWideCharToUtf8(@tmp, StrLenW(tmp), User);
+  Win32PWideCharToUtf8(@tmp, User);
 end;
 
 var
@@ -2462,7 +2468,7 @@ begin
       REG_SZ,
       REG_EXPAND_SZ,
       REG_MULTI_SZ:
-        Win32PWideCharToUtf8(tmp.buf, StrLenW(tmp.buf), result);
+        Win32PWideCharToUtf8(tmp.buf, result);
     end;
     if andtrim then
       TrimSelf(result);
@@ -2815,8 +2821,8 @@ begin
   dl := SizeOf(d);
   if LookupAccountSidW(Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
   begin
-    Win32PWideCharToUtf8(@n, StrLenW(@n), name);
-    Win32PWideCharToUtf8(@d, StrLenW(@d), domain);
+    Win32PWideCharToUtf8(@n, name);
+    Win32PWideCharToUtf8(@d, domain);
     if use <= byte(high(TSidType)) then
       result := TSidType(use);
   end;
@@ -4063,7 +4069,7 @@ begin
     for i := 0 to ArgCount - 1 do
     begin
       inc(Args); // first was service name
-      Win32PWideCharToUtf8(Args^, StrLenW(Args^), fArgsList[i]); // to string
+      Win32PWideCharToUtf8(Args^, fArgsList[i]); // to string
     end;
   end;
   fStatusHandle := RegisterServiceCtrlHandlerW(

@@ -1277,7 +1277,7 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NAMES, @Names) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  Win32PWideCharToUtf8(Names.sUserName, StrLenW(Names.sUserName), aUserName);
+  Win32PWideCharToUtf8(Names.sUserName, aUserName);
   FreeContextBuffer(Names.sUserName);
 end;
 
@@ -1288,8 +1288,7 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name,
-               StrLenW(NegotiationInfo.PackageInfo^.Name), result);
+  Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name, result);
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
@@ -1369,7 +1368,7 @@ begin
   begin
     SetLength(res, n);
     for i := 0 to high(res) do
-      Win32PWideCharToUtf8(g[i].name, StrLenW(g[i].name), res[i]);
+      Win32PWideCharToUtf8(g[i].name, res[i]);
   end;
   NetAPIBufferFree(g);
 end;
@@ -1448,7 +1447,7 @@ begin
       SetLength(sid^, dwEntriesRead);
       for i := 0 to integer(dwEntriesRead) - 1 do
       begin
-        Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), result[i]);
+        Win32PWideCharToUtf8(g^.name, result[i]);
         sid^[i] := SidToText(g^.group_sid);
         inc(g);
       end;
@@ -1483,7 +1482,7 @@ begin
     g := v;
     while dwEntriesRead <> 0 do
     begin
-      Win32PWideCharToUtf8(g^.name, StrLenW(g^.name), Name);
+      Win32PWideCharToUtf8(g^.name, Name);
       if PropNameEquals(Name, GroupName) then
       begin
         result := SidToText(g^.group_sid);

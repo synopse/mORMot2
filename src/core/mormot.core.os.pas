@@ -3261,7 +3261,10 @@ function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
-  out res: RawUtf8);
+  out res: RawUtf8); overload;
+
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 // - returns dest.buf as PWideChar result, and dest.len as length

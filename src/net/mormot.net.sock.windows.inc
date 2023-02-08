@@ -767,8 +767,7 @@ begin
          (p^.PhysicalAddressLength = 6) then
       begin
         SetLength(result, n + 1);
-        Win32PWideCharToUtf8(
-          p^.Description, StrLenW(p^.Description), result[n].Name);
+        Win32PWideCharToUtf8(p^.Description, result[n].Name);
         result[n].Address := MacToText(@p^.PhysicalAddress);
         inc(n);
       end;
@@ -1159,8 +1158,8 @@ begin
       ESChannelRaiseLastError(SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store
-  fAcceptCert := CertFindCertificateInStore(fAcceptCertStore, 0, 0,
-    CERT_FIND_ANY, nil, nil);
+  fAcceptCert := CertFindCertificateInStore(
+    fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, nil);
   if fAcceptCert = nil then
     raise ESChannel.Create('AfterBind: no Certificate available');
   // this global certificate will be used by AfterAccept()
