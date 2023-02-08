@@ -148,6 +148,10 @@ var
 procedure Ecc256r1Compress(const Uncompressed: TEccPublicKeyUncompressed;
   out Compressed: TEccPublicKey);
 
+/// just a wrapper around Ecc256r1Verify/Ecc256r1VerifyUncomp depending on pubunc
+function Ecc256r1DoVerify(const pub: TEccPublicKey; pubunc: PEccPublicKeyUncompressed;
+  const hash: TEccHash; const sign: TEccSignature): boolean;
+
 
 /// pascal function to create a secp256r1 public/private key pair
 function ecc_make_key_pas(out PublicKey: TEccPublicKey;
@@ -432,8 +436,9 @@ type
     // - will verify all internal signature fields according to a supplied authority,
     // then will perform the ECDSA verification of the supplied 256-bit hash with
     // the authority public key
-    function Verify(const hash: THash256;
-      const auth: TEccCertificateContent): TEccValidity; overload;
+    // - optional authuncomp could be the uncompressed auth.Head.Signed.PublicKey
+    function Verify(const hash: THash256; const auth: TEccCertificateContent;
+      authuncomp: PEccPublicKeyUncompressed): TEccValidity; overload;
     /// low-level verification of a TEccSignatureCertifiedContent binary buffer
     // - will verify all internal signature fields according to a supplied authority
     // key, then perform the ECDSA verification of the supplied 256-bit hash with it
@@ -1813,8 +1818,17 @@ begin
     result := '';
 end;
 
+function Ecc256r1DoVerify(const pub: TEccPublicKey; pubunc: PEccPublicKeyUncompressed;
+  const hash: TEccHash; const sign: TEccSignature): boolean;
+begin
+  if pubunc = nil then
+    result := Ecc256r1Verify(pub, hash, sign)
+  else
+    result := Ecc256r1VerifyUncomp(pubunc^, hash, sign);
+end;
+
 function TEccSignatureCertifiedContent.Verify(const hash: THash256;
-  const auth: TEccCertificateContent): TEccValidity;
+  const auth: TEccCertificateContent; authuncomp: PEccPublicKeyUncompressed): TEccValidity;
 var
   now: TEccDate;
 begin
@@ -1828,7 +1842,7 @@ begin
     result := ecvDeprecatedAuthority
   else if Date > now then
     result := ecvInvalidDate
-  else if not Ecc256r1Verify(auth.Head.Signed.PublicKey, hash, Signature) then
+  else if not Ecc256r1DoVerify(auth.Head.Signed.PublicKey, authuncomp, hash, Signature) then
     result := ecvInvalidSignature
   else if auth.IsSelfSigned then
     result := ecvValidSelfSigned

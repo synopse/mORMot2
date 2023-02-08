@@ -188,6 +188,7 @@ type
     fContent: TEccCertificateContent;
     fStoreOnlyPublicKey: boolean;
     fMaxVersion: byte;
+    fUncompressed: TEccPublicKeyUncompressed; // =fContent.Head.Signed.PublicKey
     function GetAuthorityIssuer: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetAuthoritySerial: RawUtf8;
@@ -2314,6 +2315,8 @@ function TEccCertificate.LoadFromStream(Stream: TStream): boolean;
 begin
   result := fContent.LoadFromStream(Stream, fMaxVersion) and
             AppendLoad(ReadStringFromStream(Stream, 524288));
+  if result then
+    Ecc256r1Uncompress(fContent.Head.Signed.PublicKey, fUncompressed);
 end;
 
 function TEccCertificate.SaveToStream(Stream: TStream): boolean;
@@ -2341,7 +2344,7 @@ begin
   else if not (cuDigitalSignature in GetUsage) then
     result := ecvWrongUsage
   else
-    result := Signature.Verify(hash, fContent);
+    result := Signature.Verify(hash, fContent, @fUncompressed);
 end;
 
 function TEccCertificate.VerifyCertificate(Authority: TEccCertificate): TEccValidity;
@@ -2373,8 +2376,7 @@ begin
   if not (result in ECC_VALIDSIGN) then
     exit;
   fContent.ComputeHash(hash); // sha-256 cryptographic hash
-  if not Ecc256r1Verify(Authority.fContent.Head.Signed.PublicKey, hash,
-       fContent.Head.Signature) then
+  if not Ecc256r1VerifyUncomp(Authority.fUncompressed, hash, fContent.Head.Signature) then
     result := ecvInvalidSignature;
 end;
 
@@ -2616,6 +2618,7 @@ begin
       EccIssuer(IssuerText, Issuer);
     if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
       raise EEccException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
+    Ecc256r1Uncompress(PublicKey, fUncompressed);
   end;
   Authority.SignCertificate(self, ParanoidVerify);
 end;
@@ -2660,6 +2663,7 @@ begin
     raise EEccException.CreateUtf8('Invalid %.CreateFrom(nil)', [self]);
   CreateVersion(Cert.fMaxVersion);
   fContent := Cert.fContent; // inject whole certificate information at once
+  fUncompressed := Cert.fUncompressed;
   if EccPrivateKey <> nil then
     fPrivateKey := EccPrivateKey^;
   if FreeCert then
