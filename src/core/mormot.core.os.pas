@@ -7169,7 +7169,7 @@ function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean; now: cardinal): RawUtf8;
 begin
   if now = 0 then
-    now := GetTickCount64 shr 18; // div 262.144 seconds = refresh every 4.4 min
+    now := GetTickCount64 shr 18 + 1; // div 262.144 seconds = every 4.4 min
   with _SystemStoreAsPem[ord(CertStore) + 1] do
   begin
     if not FlushCache then
@@ -7195,7 +7195,7 @@ label
   notfound;
 begin
   result := '';
-  now := GetTickCount64 shr 18;
+  now := GetTickCount64 shr 18 + 1;
   // first search if bounded within the application
   with _SystemStoreAsPem[0] do // cached in slot [0]
   begin

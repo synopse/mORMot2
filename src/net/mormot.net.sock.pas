@@ -2482,7 +2482,7 @@ begin
   if Sep = ' ' then
     with IPAddresses[Kind] do
     begin
-      now := mormot.core.os.GetTickCount64 shr 15; // refresh every 32768 ms
+      now := mormot.core.os.GetTickCount64 shr 15 + 1; // refresh every 32768 ms
       Safe.Lock;
       try
         if now <> Tix then
