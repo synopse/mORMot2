@@ -7430,7 +7430,7 @@ begin
   if Ctxt.ParseNext then
   begin
     unaligned(Data^) := GetExtended(Ctxt.Value, err);
-    Ctxt.Valid := err = 0;
+    Ctxt.Valid := (Ctxt.Value = nil) or (err = 0);
   end;
 end;
 
@@ -7441,7 +7441,7 @@ begin
   if Ctxt.ParseNext then
   begin
     Data^ := GetExtended(Ctxt.Value, err);
-    Ctxt.Valid := err = 0;
+    Ctxt.Valid := (Ctxt.Value = nil) or (err = 0);
   end;
 end;
 
