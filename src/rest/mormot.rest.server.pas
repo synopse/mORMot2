@@ -2914,6 +2914,7 @@ begin
         else
           Call^.LowLevelConnectionOpaque^.ValueInternal := 0; // paranoid
     end;
+    // parse signature to retrieve the associated session
     Server.fSessions.Safe.ReadOnlyLock; // allow concurrent authentication
     try
       a := pointer(Server.fSessionAuthentication);
@@ -4437,7 +4438,6 @@ var
   services: TServiceContainerServer;
   i: PtrInt;
   ndx: integer;
-  noID: boolean;
   sic: TServiceInstanceImplementation;
   rn: TRestNode;
   met: PServiceContainerInterfaceMethod;
@@ -4448,15 +4448,13 @@ begin
   for i := 0 to high(Server.Services.InterfaceMethod) do
   begin
     met := @services.InterfaceMethod[i];
-    nam := met^.InterfaceDotMethodName;
     ndx := met^.InterfaceMethodIndex; // 0..3 are im* pseudo-methods
     sic := met^.InterfaceService.InstanceCreation;
-    noID := true;
-    rn := rnInterface;
+    rn := rnInterface; // with no <clientid> by default
     case ndx of
       // pseudo-methods have a specific URI behavior
       ord(imContract):
-        ; // keep noID = true
+        ; // keep rnInterface with no <clientid>
       ord(imInstance):
         if sic <> sicClientDriven then
           // imInstance is for a new sicClientDriven only
@@ -4470,35 +4468,22 @@ begin
           // imFree need an ID to release the instance
           continue
         else
-        begin
           // imFree can make early release, e.g. from sicThread
-          noID := false;
-          rn := rnInterfaceClientID; // with an ID
-        end
+          rn := rnInterfaceClientID; // free requires a <clientid>
     else
-      begin
-        // interface methods need a /ClientDrivenID only if sicClientDriven
-        noID := sic <> sicClientDriven;
-        if not noID then
-          rn := rnInterfaceClientID;
-      end;
+      // interface methods need a /ClientDrivenID only if sicClientDriven
+      if sic = sicClientDriven then
+        rn := rnInterfaceClientID;
     end;
+    nam := met^.InterfaceDotMethodName;
+    if rn = rnInterfaceClientID then
+      nam := nam + '/<int:clientid>';
     // URI sent as GET/POST /Model/Interface.Method[/ClientDrivenID]
-    if noID then
-      Router.Setup([mGET, mPOST], nam,
-        rn, nil, nil, ndx, met^.InterfaceService)
-    else
-      Router.Setup([mGET, mPOST], nam + '/<int:clientid>',
-        rn, nil, nil, ndx, met^.InterfaceService);
+    Router.Setup([mGET, mPOST], nam,
+      rn, nil, nil, ndx, met^.InterfaceService);
     // URI sent as GET/POST /Model/Interface/Method[/ClientDrivenID]
-    nam := StringReplaceChars(nam, '.', '/');
-    if nam <> met^.InterfaceDotMethodName then
-      if noID then
-        Router.Setup([mGET, mPOST], nam,
-          rn, nil, nil, ndx, met^.InterfaceService)
-      else
-        Router.Setup([mGET, mPOST], nam + '/<int:clientid>',
-          rn, nil, nil, ndx, met^.InterfaceService);
+    Router.Setup([mGET, mPOST], StringReplaceChars(nam, '.', '/'),
+      rn, nil, nil, ndx, met^.InterfaceService);
   end;
 end;
 
