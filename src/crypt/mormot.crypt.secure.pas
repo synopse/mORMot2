@@ -2087,9 +2087,14 @@ function PemToDer(const pem: TCertPem; kind: PPemKind = nil): TCertDer;
 
 /// parse a multi-PEM text input and return the next PEM content
 // - search and identify any PEM_BEGIN/PEM_END markers
-// - ready to be decoded via PemToDer()
 // - optionally returning the recognized TPemKind (maybe pemUnspecified)
+// - see also NextPemToDer()
 function NextPem(var P: PUtf8Char; Kind: PPemKind = nil): TCertPem;
+
+/// parse a multi-PEM text input and return the next PEM content as binary DER
+// - search and identify any PEM_BEGIN/PEM_END markers
+// - optionally returning the recognized TPemKind (maybe pemUnspecified)
+function NextPemToDer(var P: PUtf8Char; Kind: PPemKind = nil): TCertDer;
 
 /// quickly check the begin/end of a single-instance PEM text
 // - do not validate the internal Base64 encoding, just the trailer/ending lines
@@ -5368,21 +5373,29 @@ end;
 function PemToDer(const pem: TCertPem; kind: PPemKind): TCertDer;
 var
   P: PUtf8Char;
-  len: PtrInt;
-  base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
 begin
   P := pointer(pem);
-  P := ParsePem(P, kind, len, {excludemarkers=}true);
-  if P <> nil then
+  result := NextPemToDer(P, kind);
+  if result = '' then
+    result := pem;
+end;
+
+function NextPemToDer(var P: PUtf8Char; Kind: PPemKind): TCertDer;
+var
+  len: PtrInt;
+  pem: PUtf8Char;
+  base64: TSynTempBuffer; // pem is small, so a 4KB temp buffer is fine enough
+begin
+  pem := ParsePem(P, kind, len, {excludemarkers=}true);
+  if pem <> nil then
   begin
     base64.Init(len);
-    len := Base64IgnoreLineFeeds(P, base64.buf) - base64.buf;
+    len := Base64IgnoreLineFeeds(pem, base64.buf) - base64.buf;
     result := Base64ToBinSafe(base64.buf, len);
     base64.Done;
-    if result <> '' then
-      exit;
-  end;
-  result := pem;
+  end
+  else
+    result := '';
 end;
 
 function NextPem(var P: PUtf8Char; Kind: PPemKind): TCertPem;
