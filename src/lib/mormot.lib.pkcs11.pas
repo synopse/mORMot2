@@ -1,4 +1,4 @@
-﻿/// low-level access to a PKCS#11 API
+/// low-level access to a PKCS#11 API
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.pkcs11;
@@ -231,7 +231,7 @@ type
     /// current time as a character-string of length 16
     // - represented in the format YYYYMMDDhhmmssxx (4 characters for the year;
     // 2 characters each for the month, the day, the hour, the minute, and the
-    // second; and 2 additional reserved ‘0’ characters).
+    // second; and 2 additional reserved '0' characters).
     // - The value of this field only makes sense for tokens equipped with a
     // clock, as indicated in the token information flags
     utcTime: array[0..15] of AnsiChar;
