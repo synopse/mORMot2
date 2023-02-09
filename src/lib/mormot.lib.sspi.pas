@@ -423,6 +423,8 @@ const
   CERT_DIGITAL_SIGNATURE_KEY_USAGE = $80; // cuDigitalSignature
 
   CERT_KEY_PROV_INFO_PROP_ID = 2;
+  CERT_HASH_PROP_ID          = 3;
+  CERT_FRIENDLY_NAME_PROP_ID = 11;
 
   CERT_SIMPLE_NAME_STR = 1;
   CERT_OID_NAME_STR    = 2;
@@ -507,7 +509,7 @@ function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 type
   /// each possible key usage of a certificate, as decoded into TWinCertInfo
   // - wkuCrlSign .. wkuDigitalSignature match CertGetIntendedKeyUsage() API
-  // - wkuRoot is set if Issuer = Name
+  // - wkuSelfSigned is set if Issuer = Name
   TWinCertKeyUsage = (
     wkuCrlSign,
     wkuKeyCertSign,
@@ -516,7 +518,7 @@ type
     wkuKeyEncipherment,
     wkuNonRepudiation,
     wkuDigitalSignature,
-    wkuRoot);
+    wkuSelfSigned);
   /// the key usages of a certificate, as decoded into TWinCertInfo
   TWinCertKeyUsages = set of TWinCertKeyUsage;
 
@@ -534,9 +536,14 @@ type
     Serial: RawByteString;
     /// the main key usages of this certificate
     Usage: TWinCertKeyUsages;
+    /// the friendly name of this certificate
+    // - will try subject CN= O= then CERT_FRIENDLY_NAME_PROP_ID property
+    Name: RawUtf8;
     /// the certificate Issuer, decoded as RFC 1779 text, with X500 key names
+    // - you can use ExtractX500() to retrieve one actual field value
     IssuerName: RawUtf8;
     /// the certificate Subject, decoded as RFC 1779 text, with X500 key names
+    // - you can use ExtractX500() to retrieve one actual field value
     SubjectName: RawUtf8;
     /// the certificate Issuer ID, stored as raw binary
     IssuerID: RawByteString;
@@ -551,6 +558,8 @@ type
     /// the certificate algorithm name, as converted by WinCertAlgoName()
     // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
     AlgorithmName: RawUtf8;
+    /// the certificate binary SHA1 fingerprint of 20 bytes
+    Hash: RawByteString;
     /// the certificate public key algorithm, as OID text
     PublicKeyAlgorithm: RawUtf8;
     /// the certificate public key algorithm name, converted by WinCertAlgoName()
@@ -558,8 +567,8 @@ type
     PublicKeyAlgorithmName: RawUtf8;
     /// the certificate public key raw binary as stored in the certificate
     // - for 'RSA', is a SEQUENCE of the two exponent + modulus INTEGER
-    // - for 'ECC', is a BITSTRING without the $04 leading byte (match e.g.
-    // TEccPublicKeyUncompressed from mormot.crypt.ecc256r1.pas)
+    // - for 'ECC', is a BITSTRING with a $04 leading byte - use e.g.
+    // Ecc256r1CompressAsn1() decoder from mormot.crypt.ecc256r1.pas
     PublicKeyContent: RawByteString;
     /// the key container name
     KeyContainer: RawUtf8;
@@ -593,6 +602,10 @@ function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
 /// decode a raw WinCrypto API PCCERT_CONTEXT struct
 function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal = CERT_X500_NAME_STR): boolean;
+
+/// could be used to extract CERT_X500_NAME_STR values
+// - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
+function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -1199,6 +1212,9 @@ begin
     result := nfo.ToText; // fallback on XP
 end;
 
+const
+  RSA_PREFIX: PAnsiChar = '1.2.840.113549.1.1.'; // len=19
+  ECC_PREFIX: PAnsiChar = '1.2.840.10045.';      // len=14
 
 procedure WinCertAlgoName(OID: PAnsiChar; out Text: RawUtf8);
 var
@@ -1206,7 +1222,37 @@ var
 begin
   nfo := CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, OID, 0);
   if nfo <> nil then
-    Win32PWideCharToUtf8(nfo^.pwszName, Text);
+    Win32PWideCharToUtf8(nfo^.pwszName, Text)
+  else if OID <> nil then
+    // minimal decoding fallback for Windows XP
+    if CompareMemSmall(OID, RSA_PREFIX, 19) then
+    begin
+      inc(OID, 19);
+      if StrComp(OID, PAnsiChar('4'#0)) = 0 then
+        Text := 'md5RSA'
+      else if StrComp(OID, PAnsiChar('5'#0)) = 0 then
+        Text := 'sha1RSA'
+      else if StrComp(OID, PAnsiChar('11')) = 0 then
+        Text := 'sha256RSA'
+      else if StrComp(OID, PAnsiChar('12')) = 0 then
+        Text := 'sha384RSA'
+      else if StrComp(OID, PAnsiChar('13')) = 0 then
+        Text := 'sha512RSA'
+      else if StrComp(OID, PAnsiChar('14')) = 0 then
+        Text := 'sha224RSA'
+      else
+        Text := 'RSA';
+    end
+    else if CompareMemSmall(OID, ECC_PREFIX, 14) then
+    begin
+      inc(OID, 14);
+      if StrComp(OID, PAnsiChar('4.1')) = 0 then
+        Text := 'sha1ECDSA'
+      else if StrComp(OID, PAnsiChar('4.2')) = 0 then
+        Text := 'sha2ECDSA'
+      else
+        Text := 'ECC';
+    end;
 end;
 
 procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
@@ -1235,15 +1281,52 @@ begin
   CertFreeCertificateContext(ctx);
 end;
 
+function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
+var
+  i, j, o: PtrInt;
+  t: RawUtf8;
+begin
+  result := '';
+  o := 1;
+  repeat
+    i := PosEx(Pattern, Text, o);
+    if i = 0 then
+      exit;
+    o := i + 1;
+  until (i = 1) or
+        (Text[i - 1] in [',', ' ']);
+  inc(i, length(Pattern));
+  t := Text;
+  if t[i] = '"' then
+  begin
+    inc(i);
+    o := i;
+    repeat
+      j := PosEx('"', t, o);
+      if (j = 0) or
+         (t[j + 1] <> '"') then
+        break;
+      delete(t, j, 1); // "" -> "
+      o := j + 1;
+    until false;
+  end
+  else
+    j := PosEx(',', t, i);
+  if j = 0 then
+    j := 1000;
+  TrimCopy(t, i, j - i, result);
+end;
+
 function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal): boolean;
 var
   nfo: PCERT_INFO;
-  prov: PCRYPT_KEY_PROV_INFO;
   i: PtrInt;
   ku: byte;
   u: TWinCertKeyUsage;
   len: cardinal;
+  sub: RawUtf8;
+  tmp: TSynTempBuffer;
 begin
   result := false;
   if Ctxt = nil then
@@ -1260,9 +1343,26 @@ begin
       include(Cert.Usage, u);
   if (nfo^.Issuer.cbData = nfo^.Subject.cbData) and
      CompareMem(nfo^.Issuer.pbData, nfo^.Subject.pbData, nfo^.Issuer.cbData) then
-    include(Cert.Usage, wkuRoot);
+    include(Cert.Usage, wkuSelfSigned);
   WinCertName(nfo^.Issuer, Cert.IssuerName, StrType);
   WinCertName(nfo^.Subject, Cert.SubjectName, StrType);
+  if StrType = CERT_X500_NAME_STR then
+    sub := Cert.SubjectName // we already have the expected layout
+  else
+    WinCertName(nfo^.Subject, sub, CERT_X500_NAME_STR);
+  Cert.Name := ExtractX500('CN=', sub);
+  if Cert.Name = '' then
+    Cert.Name := ExtractX500('O=', sub);
+  if Cert.Name = '' then
+    if CertGetCertificateContextProperty(
+         Ctxt, CERT_FRIENDLY_NAME_PROP_ID, nil, len) then
+    begin
+      tmp.Init(len);
+      if CertGetCertificateContextProperty(
+           Ctxt, CERT_FRIENDLY_NAME_PROP_ID, tmp.buf, len) then
+        Win32PWideCharToUtf8(tmp.buf, Cert.Name);
+      tmp.Done;
+    end;
   with nfo^.IssuerUniqueId do
     FastSetRawByteString(Cert.IssuerID, pbData, cbData);
   with nfo^.SubjectUniqueId do
@@ -1276,24 +1376,25 @@ begin
     Cert.PublicKeyAlgorithmName);
   with nfo^.SubjectPublicKeyInfo.PublicKey do
     FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
-  if (Cert.PublicKeyAlgorithmName = 'ECC') and
-     (Cert.PublicKeyContent <> '') and
-     (Cert.PublicKeyContent[1] = #4) then
-    delete(Cert.PublicKeyContent, 1, 1); // trim $04 leading byte
   len := 0;
-  if OSVersion >= wVista then // MiniDriver needs Vista or later
+  if CertGetCertificateContextProperty(
+       Ctxt, CERT_KEY_PROV_INFO_PROP_ID, nil, len) then
+  begin
+    tmp.Init(len);
     if CertGetCertificateContextProperty(
-         Ctxt, CERT_KEY_PROV_INFO_PROP_ID, nil, len) then
+         Ctxt, CERT_KEY_PROV_INFO_PROP_ID, tmp.buf, len) then
+    with PCRYPT_KEY_PROV_INFO(tmp.buf)^ do
     begin
-      GetMem(prov, len);
-      if CertGetCertificateContextProperty(
-           Ctxt, CERT_KEY_PROV_INFO_PROP_ID, prov, len) then
-      begin
-        Win32PWideCharToUtf8(prov^.pwszContainerName, Cert.KeyContainer);
-        Win32PWideCharToUtf8(prov^.pwszProvName, Cert.KeyProvider);
-      end;
-      FreeMem(prov);
+      Win32PWideCharToUtf8(pwszContainerName, Cert.KeyContainer);
+      Win32PWideCharToUtf8(pwszProvName, Cert.KeyProvider);
     end;
+    tmp.Done;
+  end;
+  len := SizeOf(THash160); // 20 bytes of a SHA-1 hash
+  SetLength(Cert.Hash, len);
+  if not CertGetCertificateContextProperty(
+           Ctxt, CERT_HASH_PROP_ID, pointer(Cert.Hash), len) then
+    Cert.Hash := '';
   SetLength(Cert.Extension, nfo^.cExtension);
   for i := 0 to integer(nfo^.cExtension) - 1 do
     with nfo^.rgExtension[i],
