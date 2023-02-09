@@ -1,4 +1,4 @@
-/// Database Framework for FireDac/AnyDac TDataSet Connection
+/// Database Framework for FireDAC/AnyDAC TDataSet Connection
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.db.rad.firedac;
@@ -6,8 +6,8 @@ unit mormot.db.rad.firedac;
 {
   *****************************************************************************
 
-   Third Party FireDac/AnyDac Components Database Access for mormot.db.rad
-    - FireDac Database Engine Connection
+   Third Party FireDAC/AnyDAC Components Database Access for mormot.db.rad
+    - FireDAC Database Engine Connection
 
   *****************************************************************************
 }
@@ -53,13 +53,14 @@ uses
 
 type
   /// Exception type associated to FireDAC/AnyDAC database access
-  ESqlDBFireDAC = class(ESqlDBDataset);
+  ESqlDBFireDac = class(ESqlDBDataset);
 
 
   ///	connection properties definition using FireDAC/AnyDAC database access
-  TSqlDBFireDACConnectionProperties = class(TSqlDBDatasetConnectionProperties)
+  TSqlDBFireDacConnectionProperties = class(TSqlDBDatasetConnectionProperties)
   protected
-    fFireDACOptions: TStringList;
+    fFireDacOptions: TStringList;
+    fForceTableNameUpper: boolean;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now (FireDAC metadata may be used in the future)
     procedure GetForeignKeys; override;
@@ -95,7 +96,7 @@ type
     destructor Destroy; override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSqlDBFireDACConnection instance
+    // - this overridden method will create an TSqlDBFireDacConnection instance
     function NewConnection: TSqlDBConnection; override;
 
     /// retrieve the column/field layout of a specified table
@@ -113,12 +114,17 @@ type
     // the Create() constructor according to the underlying FireDAC driver
     // - you can add some additional options here
     property Parameters: TStringList
-      read fFireDACOptions;
+      read fFireDacOptions;
+    /// if GetFields/GetIndexes should search with uppercased table name
+    // - was reported to be necessary with some DB or FireDac versions
+    // - try this if you have troubles about errors like "table does not exist" 
+    property ForceTableNameUpper: boolean
+      read fForceTableNameUpper write fForceTableNameUpper;
   end;
 
 
   ///	implements a direct connection via FireDAC/AnyDAC database access
-  TSqlDBFireDACConnection = class(TSqlDBConnectionThreadSafe)
+  TSqlDBFireDacConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: {$ifdef ISDELPHIXE5}TFDConnection{$else}TADConnection{$endif};
   public
@@ -127,10 +133,10 @@ type
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified database server using FireDAC
-    // - should raise an ESqlDBFireDAC on error
+    // - should raise an ESqlDBFireDac on error
     procedure Connect; override;
     /// stop connection to the specified database server using FireDAC
-    // - should raise an ESqlDBFireDAC on error
+    // - should raise an ESqlDBFireDac on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
@@ -152,7 +158,7 @@ type
   ///	implements a statement via a FireDAC connection
   // - this specific version will handle the FireDAC specific parameter classes
   // - it will also handle Array DML commands, if possible
-  TSqlDBFireDACStatement = class(TSqlDBDatasetStatementAbstract)
+  TSqlDBFireDacStatement = class(TSqlDBDatasetStatementAbstract)
   protected
     fQueryParams: {$ifdef ISDELPHIXE5}TFDParams{$else}TADParams{$endif};
     fPreparedUseArrayDML: boolean;
@@ -173,7 +179,7 @@ type
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
-    // - raise an ESqlDBFireDAC on any error
+    // - raise an ESqlDBFireDac on any error
     procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false); overload; override;
   end;
 
@@ -218,9 +224,9 @@ uses
 {$endif ISDELPHIXE5}
 
 
-{ TSqlDBFireDACConnectionProperties }
+{ TSqlDBFireDacConnectionProperties }
 
-constructor TSqlDBFireDACConnectionProperties.Create(const aServerName,
+constructor TSqlDBFireDacConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 var
   p: TSqlDBDefinition;
@@ -237,7 +243,7 @@ begin
       end;
   inherited Create(server, aDatabaseName, aUserID, aPassWord);
   fOnBatchInsert := nil; // MultipleValuesInsert is slower than FireDAC ArrayDML
-  fFireDACOptions := TStringList.Create;
+  fFireDacOptions := TStringList.Create;
   if ((fDbms < low(FIREDAC_PROVIDER)) or
       (fDbms > high(FIREDAC_PROVIDER))) and
      (fDbms <> dNexusDB) then
@@ -247,12 +253,12 @@ begin
     begin
       for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
         namevalue := ' ' + namevalue + FIREDAC_PROVIDER[p];
-      raise ESqlDBFireDAC.CreateUtf8('%.Create: unknown provider - available:%',
+      raise ESqlDBFireDac.CreateUtf8('%.Create: unknown provider - available:%',
         [self, namevalue]);
     end;
   if server = '' then
     server := FIREDAC_PROVIDER[fDbms];
-  fFireDACOptions.Text := FormatString(
+  fFireDacOptions.Text := FormatString(
     'DriverID=%'#13#10'User_Name=%'#13#10'Password=%'#13#10'Database=%',
     [server, fUserId, fPassWord, fDatabaseName]);
   opt := pointer(options);
@@ -260,19 +266,19 @@ begin
   begin
     GetNextItem(opt, ';', namevalue);
     if namevalue <> '' then
-      fFireDACOptions.Add(Utf8ToString(namevalue));
+      fFireDacOptions.Add(Utf8ToString(namevalue));
   end;
   case fDbms of
     dSQLite:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then
+        if fFireDacOptions.Values['CharacterSet'] = '' then
           // force UTF-8 for mormot.db.sql
-          fFireDACOptions.Values['CharacterSet'] := 'UTF8';
+          fFireDacOptions.Values['CharacterSet'] := 'UTF8';
         {$ifdef UNICODE}
         // CreateUTF16 is the default value for Delphi 2009+
-        if fFireDACOptions.Values['OpenMode'] = '' then
+        if fFireDacOptions.Values['OpenMode'] = '' then
           // force UTF-8 for mormot.db.sql
-          fFireDACOptions.Values['OpenMode'] := 'CreateUtf8';
+          fFireDacOptions.Values['OpenMode'] := 'CreateUtf8';
         {$else}
         // as expected by FireDAC when UTF-8 is enabled
         ForceUseWideString := true;
@@ -282,9 +288,9 @@ begin
       end;
     dFirebird, dMySQL, dPostgreSQL, dDB2:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then
+        if fFireDacOptions.Values['CharacterSet'] = '' then
           // force UTF-8 for mormot.db.sql
-          fFireDACOptions.Values['CharacterSet'] := 'UTF8';
+          fFireDacOptions.Values['CharacterSet'] := 'UTF8';
         {$ifndef UNICODE}
         ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
         {$endif UNICODE}
@@ -292,19 +298,19 @@ begin
   end;
 end;
 
-destructor TSqlDBFireDACConnectionProperties.Destroy;
+destructor TSqlDBFireDacConnectionProperties.Destroy;
 begin
-  fFireDACOptions.Free;
+  fFireDacOptions.Free;
   inherited;
 end;
 
-procedure TSqlDBFireDACConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
+procedure TSqlDBFireDacConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
 var
   List: TStringList;
 begin
   List := TStringList.Create;
   try
-    (MainConnection as TSqlDBFireDACConnection).fDatabase.GetTableNames(
+    (MainConnection as TSqlDBFireDacConnection).fDatabase.GetTableNames(
       '', '', '', List, [osMy], [tkTable]);
     StringListToRawUtf8DynArray(List, Tables);
     exit;
@@ -314,22 +320,26 @@ begin
   inherited;
 end;
 
-procedure TSqlDBFireDACConnectionProperties.GetFields(const aTableName: RawUtf8;
+procedure TSqlDBFireDacConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: TADMetaInfoQuery;
   n: integer;
   F: TSqlDBColumnDefine;
   FA: TDynArray;
+  t: RawUtf8;
 begin
   meta := TADMetaInfoQuery.Create(nil);
   try
-    meta.Connection := (MainConnection as TSqlDBFireDACConnection).fDatabase;
+    meta.Connection := (MainConnection as TSqlDBFireDacConnection).fDatabase;
     FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
     FillCharFast(F, SizeOf(F), 0);
     meta.MetaInfoKind := mkTableFields;
-    meta.ObjectName := Utf8ToString(UpperCase(aTableName));
+    t := aTableName;
+    if fForceTableNameUpper then            
+      UpperCaseSelf(t);
+    meta.ObjectName := Utf8ToString(t);
     meta.Open;
     while not meta.Eof do
     begin
@@ -350,7 +360,7 @@ begin
   end;
 end;
 
-procedure TSqlDBFireDACConnectionProperties.GetIndexes(const aTableName: RawUtf8;
+procedure TSqlDBFireDacConnectionProperties.GetIndexes(const aTableName: RawUtf8;
   out Indexes: TSqlDBIndexDefineDynArray);
 var
   kind: boolean;
@@ -364,13 +374,15 @@ const
   MASTER: array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKey, mkIndexes);
   CHILD: array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKeyFields, mkIndexFields);
 begin
-  TableName := Utf8ToString(UpperCase(aTableName));
+  TableName := Utf8ToString(aTableName);
+  if fForceTableNameUpper then
+    TableName := sysutils.UpperCase(TableName);
   FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
   FillCharFast(F, SizeOf(F), 0);
   meta := TADMetaInfoQuery.Create(nil);
   indexs := TADMetaInfoQuery.Create(nil);
   try
-    meta.Connection := (MainConnection as TSqlDBFireDACConnection).fDatabase;
+    meta.Connection := (MainConnection as TSqlDBFireDacConnection).fDatabase;
     indexs.Connection := meta.Connection;
     for kind := true to true do
     begin
@@ -409,21 +421,21 @@ begin
   end;
 end;
 
-procedure TSqlDBFireDACConnectionProperties.GetForeignKeys;
+procedure TSqlDBFireDacConnectionProperties.GetForeignKeys;
 begin
   { TODO : get FOREIGN KEYS from FireDAC metadata using mkForeignKeys  }
 end;
 
-function TSqlDBFireDACConnectionProperties.NewConnection: TSqlDBConnection;
+function TSqlDBFireDacConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSqlDBFireDACConnection.Create(self);
-  TSqlDBFireDACConnection(result).InternalProcess(speCreated);
+  result := TSqlDBFireDacConnection.Create(self);
+  TSqlDBFireDacConnection(result).InternalProcess(speCreated);
 end;
 
 
-{ TSqlDBFireDACConnection }
+{ TSqlDBFireDacConnection }
 
-procedure TSqlDBFireDACConnection.Commit;
+procedure TSqlDBFireDacConnection.Commit;
 begin
   inherited Commit;
   try
@@ -434,22 +446,22 @@ begin
   end;
 end;
 
-constructor TSqlDBFireDACConnection.Create(aProperties: TSqlDBConnectionProperties);
+constructor TSqlDBFireDacConnection.Create(aProperties: TSqlDBConnectionProperties);
 begin
   inherited Create(aProperties);
   fDatabase := TADConnection.Create(nil);
   fDatabase.ResourceOptions.SilentMode := True; // no need for wait cursor
   fDatabase.LoginPrompt := false;
-  fDatabase.Params.Text := (fProperties as TSqlDBFireDACConnectionProperties).
-    fFireDACOptions.Text;
+  fDatabase.Params.Text := (fProperties as TSqlDBFireDacConnectionProperties).
+    fFireDacOptions.Text;
 end;
 
-procedure TSqlDBFireDACConnection.Connect;
+procedure TSqlDBFireDacConnection.Connect;
 var
   Log: ISynLog;
 begin
   if fDatabase = nil then
-    raise ESqlDBFireDAC.CreateUtf8('%.Connect(%): Database=nil',
+    raise ESqlDBFireDac.CreateUtf8('%.Connect(%): Database=nil',
       [self, fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to DriverID=% Database=%',
     [FIREDAC_PROVIDER[fProperties.Dbms], fProperties.DatabaseName], self);
@@ -467,7 +479,7 @@ begin
   end;
 end;
 
-procedure TSqlDBFireDACConnection.Disconnect;
+procedure TSqlDBFireDacConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statement
@@ -477,7 +489,7 @@ begin
   end;
 end;
 
-destructor TSqlDBFireDACConnection.Destroy;
+destructor TSqlDBFireDacConnection.Destroy;
 begin
   try
     Disconnect;
@@ -489,56 +501,56 @@ begin
   FreeAndNil(fDatabase);
 end;
 
-function TSqlDBFireDACConnection.IsConnected: boolean;
+function TSqlDBFireDacConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             fDatabase.Connected;
 end;
 
-function TSqlDBFireDACConnection.NewStatement: TSqlDBStatement;
+function TSqlDBFireDacConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSqlDBFireDACStatement.Create(self);
+  result := TSqlDBFireDacStatement.Create(self);
 end;
 
-procedure TSqlDBFireDACConnection.Rollback;
+procedure TSqlDBFireDacConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
 end;
 
-procedure TSqlDBFireDACConnection.StartTransaction;
+procedure TSqlDBFireDacConnection.StartTransaction;
 begin
   inherited StartTransaction;
   fDatabase.StartTransaction;
 end;
 
 
-{ TSqlDBFireDACStatement }
+{ TSqlDBFireDacStatement }
 
-procedure TSqlDBFireDACStatement.DatasetCreate;
+procedure TSqlDBFireDacStatement.DatasetCreate;
 begin
   fQuery := TADQuery.Create(nil);
-  TADQuery(fQuery).Connection := (fConnection as TSqlDBFireDACConnection).Database;
+  TADQuery(fQuery).Connection := (fConnection as TSqlDBFireDacConnection).Database;
   fDatasetSupportBatchBinding := true;
 end;
 
-function TSqlDBFireDACStatement.DatasetPrepare(const aSQL: string): boolean;
+function TSqlDBFireDacStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as TADQuery).SQL.Text := aSQL;
   fQueryParams := TADQuery(fQuery).Params;
   result := fQueryParams <> nil;
 end;
 
-procedure TSqlDBFireDACStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBFireDacStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
 begin
   inherited;
   if fPreparedParamsCount <> fQueryParams.Count then
-    raise ESqlDBFireDAC.CreateUtf8(
+    raise ESqlDBFireDac.CreateUtf8(
       '%.Prepare() expected % parameters in request, found % - [%]',
       [self, fPreparedParamsCount, fQueryParams.Count, aSQL]);
 end;
 
-procedure TSqlDBFireDACStatement.DatasetExecSQL;
+procedure TSqlDBFireDacStatement.DatasetExecSQL;
 begin
   if fPreparedUseArrayDML then
     (fQuery as TADQuery).Execute(fParamsArrayCount)
@@ -546,7 +558,7 @@ begin
     (fQuery as TADQuery).Execute;
 end;
 
-procedure TSqlDBFireDACStatement.DataSetBindSqlParam(const aArrayIndex,
+procedure TSqlDBFireDacStatement.DataSetBindSqlParam(const aArrayIndex,
   aParamIndex: integer; const aParam: TSqlDBParam);
 var
   P: TADParam;
@@ -702,14 +714,14 @@ begin
           else
             P.AsBlob := VData;
         else
-          raise ESqlDBFireDAC.CreateUtf8(
+          raise ESqlDBFireDac.CreateUtf8(
             '%.DataSetBindSqlParam: invalid type % on bound parameter #%',
             [Self,ord(VType),aParamIndex + 1]);
         end;   
   end;
 end;
 
-procedure TSqlDBFireDACStatement.DataSetOutSqlParam(const aParamIndex: integer;
+procedure TSqlDBFireDacStatement.DataSetOutSqlParam(const aParamIndex: integer;
   var aParam: TSqlDBParam);
 var
   Par: TADParam;
@@ -732,7 +744,7 @@ begin
 end;
 
 initialization
-  TSqlDBFireDACConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBFireDacConnectionProperties.RegisterClassNameForDefinition;
 
 {$endif FPC} // FireDac is a Delphi-specific
 
