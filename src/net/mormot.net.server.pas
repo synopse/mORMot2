@@ -1727,8 +1727,7 @@ begin
     t := @t[3];
     dec(n, 3)
   until n = 0;
-  Ctxt.Url := '';
-  pointer(THttpServerRequest(Ctxt).fUrl) := new; // replace
+  FastAssignNew(THttpServerRequest(Ctxt).fUrl, new); // replace
   //if p - new <> len then raise EUriRouter.Create('??');
 end;
 
