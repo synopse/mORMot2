@@ -238,6 +238,7 @@ type
     // - default is 60000, i.e. DEFAULT_ECCROUNDS
     EcdheRounds: integer;
     /// will set the default values
+    // - will also reset the HeartbeatDelay to 0, as expected on client side
     procedure SetDefaults;
     /// will set LogDetails to its highest level of verbosity
     // - used only if WebSocketLog global variable is set

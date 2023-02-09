@@ -16,6 +16,7 @@ interface
 
 {$define JSONBENCHMARK_FPJSON}         // fpjson = 24 MB/s
 {.$define JSONBENCHMARK_JSONTOOLS}     // jsontools = 38 MB /s
+{.$define JSONBENCHMARK_LGENERICS}     // lgenerics = 48 MB /s
 
 {.$define JSONBENCHMARK_DELPHIJSON}    // Delphi system.json = 5.8 MB/s on XE8
 {.$define JSONBENCHMARK_JDO}           // JsonDataObjects = 103 MB/s
@@ -65,6 +66,10 @@ uses
   {$ifdef JSONBENCHMARK_WSFT}
   WinJson,
   {$endif JSONBENCHMARK_WSFT}
+  {$ifdef JSONBENCHMARK_LGENERICS}
+  lgUtils,
+  lgJson,
+  {$endif JSONBENCHMARK_LGENERICS}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -3263,6 +3268,9 @@ var
   {$ifdef JSONBENCHMARK_WSFT}
   ws: WinJson.TJson;
   {$endif JSONBENCHMARK_WSFT}
+  {$ifdef JSONBENCHMARK_LGENERICS}
+  lg: lgJson.TJsonNode;
+  {$endif JSONBENCHMARK_LGENERICS}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -3572,6 +3580,18 @@ begin
   end;
   NotifyTestSpeed('WinSoft WinJson', c div 10, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_WSFT}
+  {$ifdef JSONBENCHMARK_LGENERICS}
+  timer.Start;
+  for i := 1 to ITER div 10 do
+  begin
+    if CheckFailed(lgJson.TJsonNode.TryParse(peoples, lg)) then
+      continue;
+    CheckEqual(lg.Count, Count);
+    lg.Free;
+  end;
+  NotifyTestSpeed('LGenerics', c div 10, len div 10, @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_LGENERICS}
+
   sample := StringFromFile(WorkDir + 'sample.json');
   if sample <> '' then
     begin
