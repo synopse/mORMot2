@@ -189,6 +189,7 @@ type
     fStoreOnlyPublicKey: boolean;
     fMaxVersion: byte;
     fUncompressed: TEccPublicKeyUncompressed; // =fContent.Head.Signed.PublicKey
+    fUncompressedP: PEccPublicKeyUncompressed;
     function GetAuthorityIssuer: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetAuthoritySerial: RawUtf8;
@@ -2315,8 +2316,13 @@ function TEccCertificate.LoadFromStream(Stream: TStream): boolean;
 begin
   result := fContent.LoadFromStream(Stream, fMaxVersion) and
             AppendLoad(ReadStringFromStream(Stream, 524288));
-  if result then
+  if result and
+     (@Ecc256r1Verify = @ecdsa_verify_pas) then
+  begin
+     // OpenSSL Ecc256r1VerifyUncomp() is actually slower than Ecc256r1Verify()
     Ecc256r1Uncompress(fContent.Head.Signed.PublicKey, fUncompressed);
+    fUncompressedP := @fUncompressed;
+  end;
 end;
 
 function TEccCertificate.SaveToStream(Stream: TStream): boolean;
@@ -2344,7 +2350,7 @@ begin
   else if not (cuDigitalSignature in GetUsage) then
     result := ecvWrongUsage
   else
-    result := Signature.Verify(hash, fContent, @fUncompressed);
+    result := Signature.Verify(hash, fContent, fUncompressedP);
 end;
 
 function TEccCertificate.VerifyCertificate(Authority: TEccCertificate): TEccValidity;
@@ -2376,8 +2382,14 @@ begin
   if not (result in ECC_VALIDSIGN) then
     exit;
   fContent.ComputeHash(hash); // sha-256 cryptographic hash
-  if not Ecc256r1VerifyUncomp(Authority.fUncompressed, hash, fContent.Head.Signature) then
-    result := ecvInvalidSignature;
+  if fUncompressedP = nil then
+  begin
+    if not Ecc256r1Verify( // OpenSSL compressed is faster than uncompressed
+             Authority.Signed.PublicKey, hash, fContent.Head.Signature) then
+      result := ecvInvalidSignature;
+  end else if not Ecc256r1VerifyUncomp(
+              Authority.fUncompressed, hash, fContent.Head.Signature) then
+      result := ecvInvalidSignature;
 end;
 
 {$ifdef ISDELPHI20062007}
@@ -2618,7 +2630,12 @@ begin
       EccIssuer(IssuerText, Issuer);
     if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
       raise EEccException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
-    Ecc256r1Uncompress(PublicKey, fUncompressed);
+    if @Ecc256r1Verify = @ecdsa_verify_pas then
+    begin
+       // OpenSSL Ecc256r1VerifyUncomp() is actually slower than Ecc256r1Verify()
+      Ecc256r1Uncompress(fContent.Head.Signed.PublicKey, fUncompressed);
+      fUncompressedP := @fUncompressed;
+    end;
   end;
   Authority.SignCertificate(self, ParanoidVerify);
 end;
@@ -2664,6 +2681,7 @@ begin
   CreateVersion(Cert.fMaxVersion);
   fContent := Cert.fContent; // inject whole certificate information at once
   fUncompressed := Cert.fUncompressed;
+  fUncompressedP := Cert.fUncompressedP;
   if EccPrivateKey <> nil then
     fPrivateKey := EccPrivateKey^;
   if FreeCert then
