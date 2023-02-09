@@ -1444,6 +1444,32 @@ begin
   EC_KEY_free(key);
 end;
 
+function ecdsa_verify_uncompressed_osl(const PublicKey: TEccPublicKeyUncompressed;
+  const Hash: TEccHash; const Signature: TEccSignature): boolean;
+var
+  key: PEC_KEY;
+  pub: THash512Rec;
+  x, y: PBIGNUM;
+  der: RawByteString;
+begin
+  result := false;
+  if not NewPrime256v1Key(key) then
+    exit;
+  _bswap256(@pub.l, @THash512Rec(PublicKey).l);
+  _bswap256(@pub.h, @THash512Rec(PublicKey).h);
+  x := BN_bin2bn(@pub.l, SizeOf(pub.l), nil);
+  y := BN_bin2bn(@pub.h, SizeOf(pub.h), nil);
+  if EC_KEY_set_public_key_affine_coordinates(key, x, y) = OPENSSLSUCCESS then
+  begin
+    der := EccToDer(Signature);
+    result := ECDSA_verify(
+      0, @Hash, SizeOf(Hash), pointer(der), length(der), key) = OPENSSLSUCCESS;
+  end;
+  x.Free;
+  y.Free;
+  EC_KEY_free(key);
+end;
+
 function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
@@ -2817,6 +2843,7 @@ begin
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
+  @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   // register OpenSSL methods to our high-level cryptographic catalog

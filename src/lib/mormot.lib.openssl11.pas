@@ -2243,7 +2243,9 @@ function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): integer; cdecl;
 function ASN1_ENUMERATED_new(): PASN1_ENUMERATED; cdecl;
 procedure ASN1_ENUMERATED_free(a: PASN1_ENUMERATED); cdecl;
 function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+function EC_POINT_hex2point(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
+function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
 function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
   sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
 procedure EC_POINT_free(point: PEC_POINT); cdecl;
@@ -3175,7 +3177,9 @@ type
     ASN1_ENUMERATED_new: function(): PASN1_ENUMERATED; cdecl;
     ASN1_ENUMERATED_free: procedure(a: PASN1_ENUMERATED); cdecl;
     EC_POINT_bn2point: function(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+    EC_POINT_hex2point: function(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
     EC_KEY_set_public_key: function(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
+    EC_KEY_set_public_key_affine_coordinates: function(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
     ECDSA_verify: function(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
     EC_POINT_free: procedure(point: PEC_POINT); cdecl;
     BN_free: procedure(a: PBIGNUM); cdecl;
@@ -3221,7 +3225,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..323] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..325] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3504,7 +3508,9 @@ const
     'ASN1_ENUMERATED_new',
     'ASN1_ENUMERATED_free',
     'EC_POINT_bn2point',
+    'EC_POINT_hex2point',
     'EC_KEY_set_public_key',
+    'EC_KEY_set_public_key_affine_coordinates',
     'ECDSA_verify',
     'EC_POINT_free',
     'BN_free',
@@ -5002,9 +5008,19 @@ begin
   result := libcrypto.EC_POINT_bn2point(p1, p2, p3, p4);
 end;
 
+function EC_POINT_hex2point(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT;
+begin
+  result := libcrypto.EC_POINT_hex2point(p1, p2, p3, p4);
+end;
+
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer;
 begin
   result := libcrypto.EC_KEY_set_public_key(key, pub);
+end;
+
+function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer;
+begin
+  result := libcrypto.EC_KEY_set_public_key_affine_coordinates(key, x, y);
 end;
 
 function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
@@ -6459,8 +6475,15 @@ function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT;
   p4: PBN_CTX): PEC_POINT; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_bn2point';
 
+function EC_POINT_hex2point(p1: PEC_GROUP; p2: PUtf8Char; p3: PEC_POINT;
+  p4: PBN_CTX): PEC_POINT; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_hex2point';
+
 function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
+
+function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key_affine_coordinates';
 
 function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
   sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;

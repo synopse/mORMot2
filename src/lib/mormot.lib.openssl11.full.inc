@@ -15342,9 +15342,6 @@ function EC_KEY_check_key(key: PEC_KEY): integer; cdecl;
 function EC_KEY_can_sign(eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_can_sign';
 
-function EC_KEY_set_public_key_affine_coordinates(key: PEC_KEY; x: PBIGNUM; y: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key_affine_coordinates';
-
 function EC_KEY_oct2key(key: PEC_KEY; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_oct2key';
 
