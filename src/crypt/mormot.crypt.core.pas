@@ -252,6 +252,10 @@ procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
 function _cmp256(const Left, Right: THash256Rec): integer;
   {$ifdef CPU64}inline;{$endif}
 
+/// move and change endianness of a 256-bit value
+// - warning: this code requires dest <> source
+procedure _bswap256(dest, source: PQWordArray);
+
 /// right shift of 1 bit of a 256-bit value
 procedure _rshift1(var V: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
@@ -3742,7 +3746,11 @@ begin
     begin
       result := BsrQWord(V.Q[1]) + 1;
       if byte(result) = 0 then
-        result := BsrQWord(V.Q[0])
+      begin
+        result := BsrQWord(V.Q[0]) + 1;
+        if byte(result) = 0 then
+          result := 0;
+      end
       else
         inc(result, 64);
     end
@@ -3781,6 +3789,15 @@ begin
   until digit = 0;
 end;
 {$endif FPC}
+
+procedure _bswap256(dest, source: PQWordArray);
+begin
+  // warning: our code requires dest <> source
+  dest[0] := bswap64(source[3]);
+  dest[1] := bswap64(source[2]);
+  dest[2] := bswap64(source[1]);
+  dest[3] := bswap64(source[0]);
+end;
 
 
 { ********************* AES Encoding/Decoding }

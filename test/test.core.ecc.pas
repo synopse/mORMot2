@@ -138,7 +138,7 @@ var
   timer: TPrecisionTimer;
   p, e: RawUtf8;
   sec1, sec2: TEccSecretKey;
-  comp: TEccPublicKey;
+  c1, c2: TEccPublicKey;
 begin
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
   timer.Start;
@@ -152,25 +152,27 @@ begin
   NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   for i := 1 to ECC_COUNT - 1 do
   begin
-    Ecc256r1Compress(pubunc[i], comp); // fast enough, but ensure accurate
-    Check(CompareMem(@comp, @pub[i], SizeOf(comp)), 'Ecc256r1Compress');
+    Ecc256r1Compress(pubunc[i], c1); // fast enough, but ensure accurate
+    Check(CompareMem(@c1, @pub[i], SizeOf(c1)), 'Ecc256r1Compress');
+    Ecc256r1CompressAsn1(Ecc256r1UncompressAsn1(c1), c2);
+    Check(CompareMem(@c2, @c1, SizeOf(c1)), 'Ecc256r1CompressAsn1');
   end;
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do
     Check(Ecc256r1Sign(priv[i], hash, sign[i]));
   NotifyTestSpeed('Ecc256r1Sign', ECC_COUNT - 1, 0, @timer);
   Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]), 's');
-  Check(ecdsa_verify_pas(pub[7], hash, sign[7]));
+  Check(ecdsa_verify_pas(pub[7], hash, sign[7]), 'vp');
   timer.Start;
   for i := 0 to ECC_COUNT - 1 do
     if i <> 7 then
-      check(Ecc256r1Verify(pub[i], hash, sign[i]));
+      check(Ecc256r1Verify(pub[i], hash, sign[i]), 'v');
   NotifyTestSpeed('Ecc256r1Verify', ECC_COUNT - 1, 0, @timer);
-  Check(ecdsa_verify_uncompressed_pas(pubunc[7], hash, sign[7]), 'vu');
+  Check(ecdsa_verify_uncompressed_pas(pubunc[7], hash, sign[7]), 'vup');
   timer.Start;
   for i := 0 to ECC_COUNT - 1 do
     if i <> 7 then
-      check(Ecc256r1VerifyUncomp(pubunc[i], hash, sign[i]));
+      check(Ecc256r1VerifyUncomp(pubunc[i], hash, sign[i]), 'vu');
   NotifyTestSpeed('Ecc256r1VerifyUncomp', ECC_COUNT - 1, 0, @timer);
   timer.Start;
   for i := 0 to ECC_COUNT - 2 do

@@ -137,7 +137,8 @@ var
   // - returns false if an error occurred
   // - this function is thread-safe and does not perform any memory allocation
   // - it is slightly faster than plain Ecc256r1Verify() using TEccPublicKey,
-  // since public key doesn't need to be uncompressed
+  // with the pascal version since public key doesn't need to be uncompressed,
+  // but it is slower when using the OpenSSL backend
   Ecc256r1VerifyUncomp: function(const PublicKey: TEccPublicKeyUncompressed;
     const Hash: TEccHash; const Signature: TEccSignature): boolean;
 
@@ -147,6 +148,15 @@ var
 // - a pascal version is good enough for this immediate bit copy operation
 procedure Ecc256r1Compress(const Uncompressed: TEccPublicKeyUncompressed;
   out Compressed: TEccPublicKey);
+
+/// compress an ASN-1 public key for ECC secp256r1 cryptography
+// - input is likely to have a $04 initial byte for ASN-1 uncompressed key
+function Ecc256r1CompressAsn1(const Uncompressed: RawByteString;
+  out Compressed: TEccPublicKey): boolean;
+
+/// compress an ECC secp256r1 cryptography public key as expected by ASN-1
+// - include a $04 initial byte as uncompressed key, and change endianness
+function Ecc256r1UncompressAsn1(const Compressed: TEccPublicKey): RawByteString;
 
 /// just a wrapper around Ecc256r1Verify/Ecc256r1VerifyUncomp depending on pubunc
 function Ecc256r1DoVerify(const pub: TEccPublicKey; pubunc: PEccPublicKeyUncompressed;
@@ -1134,15 +1144,6 @@ begin
   _mv(a, result);
 end;
 
-procedure _bswap256(dest, source: PQWordArray);
-begin
-  // warning: our code requires dest <> source
-  dest[0] := bswap64(source[3]);
-  dest[1] := bswap64(source[2]);
-  dest[2] := bswap64(source[1]);
-  dest[3] := bswap64(source[0]);
-end;
-
 procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicKey);
 begin
   _bswap256(@Point.x, @Compressed[1]);
@@ -1196,6 +1197,48 @@ begin
   // use standard compressed form header and byte order
   Compressed[0] := 2 + (TEccPoint(Uncompressed).y.B[0] and 1);
   _bswap256(@Compressed[1], @TEccPoint(Uncompressed).x);
+end;
+
+function Ecc256r1CompressAsn1(const Uncompressed: RawByteString;
+  out Compressed: TEccPublicKey): boolean;
+var
+  len: integer;
+  p: PHash512Rec;
+  u: THash512Rec;
+begin
+  result := false;
+  FillCharFast(Compressed, SizeOf(Compressed), 0);
+  len := length(Uncompressed);
+  p := pointer(Uncompressed);
+  if (len = SizeOf(TEccPublicKeyUncompressed) + 1) and
+     (p.b[0] = 4) then
+  begin
+    inc(PByte(p)); // ignore $04 ASN-1 uncompressed public key marker
+    dec(len);
+  end;
+  if len <> SizeOf(TEccPublicKeyUncompressed) then
+    exit;
+  _bswap256(@u.l, @p.l); // change endianness
+  _bswap256(@u.h, @p.h);
+  Ecc256r1Compress(TEccPublicKeyUncompressed(u), Compressed);
+  result := true;
+end;
+
+function Ecc256r1UncompressAsn1(const Compressed: TEccPublicKey): RawByteString;
+var
+  p: PHash512Rec;
+  u: THash512Rec;
+begin
+  result := '';
+  if IsZero(Compressed) then
+    exit;
+  SetLength(result, SizeOf(p^) + 1);
+  p := pointer(result);
+  p.b[0] := $04; // ASN-1 uncompressed public key marker
+  inc(PByte(p));
+  Ecc256r1Uncompress(Compressed, PEccPublicKeyUncompressed(@u)^);
+  _bswap256(@p.l, @u.l);
+  _bswap256(@p.h, @u.h);
 end;
 
 function ecdh_shared_secret_uncompressed_pas(
