@@ -5210,9 +5210,10 @@ type
     function IsEqual(const another: ICryptCert): boolean; override;
     function Sign(Data: pointer; Len: integer): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
-    function Verify(Sign, Data: pointer;
-      SignLen, DataLen: integer): TCryptCertValidity; override;
-    function Verify(const Authority: ICryptCert): TCryptCertValidity; override;
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -5642,11 +5643,13 @@ begin
     RaiseError('Sign: CA');
 end;
 
-function TCryptCertInternal.Verify(Sign, Data: pointer;
-  SignLen, DataLen: integer): TCryptCertValidity;
+function TCryptCertInternal.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+  IgnoreError: TCryptCertValidities): TCryptCertValidity;
 var
   s: PEccSignatureCertifiedContent absolute Sign;
 begin
+  if IgnoreError <> [] then
+    RaiseError('Verify: unsupported IgnoreError');
   if (fEcc = nil) or
      (SignLen <> SizeOf(s^)) or
      (DataLen <= 0) then
@@ -5655,10 +5658,13 @@ begin
     result := TCryptCertValidity(fEcc.Verify(Sha256Digest(Data, DataLen), s^));
 end;
 
-function TCryptCertInternal.Verify(const Authority: ICryptCert): TCryptCertValidity;
+function TCryptCertInternal.Verify(const Authority: ICryptCert;
+  IgnoreError: TCryptCertValidities): TCryptCertValidity;
 var
   auth: TEccCertificate;
 begin
+  if IgnoreError <> [] then
+    RaiseError('Verify: unsupported IgnoreError');
   result := cvBadParameter;
   if fEcc = nil then
     exit;
@@ -5754,8 +5760,8 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
-    function Verify(const Signature: RawByteString;
-      Data: pointer; Len: integer): TCryptCertValidity; override;
+    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
     function DefaultCertAlgo: TCryptCertAlgo; override;
@@ -5843,10 +5849,12 @@ begin
 end;
 
 function TCryptStoreInternal.Verify(const Signature: RawByteString;
-  Data: pointer; Len: integer): TCryptCertValidity;
+  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities): TCryptCertValidity;
 var
   s: PEccSignatureCertifiedContent absolute Signature;
 begin
+  if IgnoreError <> [] then
+    raise ECryptCert.CreateUtf8('%.Verify: unsupported IgnoreError', [self]);
   if length(Signature) <> SizeOf(s^) then
     result := cvBadParameter
   else

@@ -1284,6 +1284,8 @@ type
     cvInvalidSignature,
     cvRevoked,
     cvWrongUsage);
+  /// a set of Digital Signature results
+  TCryptCertValidities = set of TCryptCertValidity;
 
   /// convenient wrapper of X509 Certificate subject name fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
@@ -1434,16 +1436,19 @@ type
     // - will use the public key of this certificate
     // - this certificate should have the cuDigitalSignature usage
     // - see ICryptStore.Verify() for a complete CA chain validation
-    function Verify(Sign, Data: pointer;
-      SignLen, DataLen: integer): TCryptCertValidity; overload;
+    // - depending on the engine, some errors can be ignored, e.g.
+    // cvWrongUsage and cvDeprecatedAuthority with OpenSSL
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+      IgnoreError: TCryptCertValidities = []): TCryptCertValidity; overload;
     /// verify a digital signature of some digital content
     // - just a wrapper around the overloaded Verify() function
-    function Verify(
-      const Signature, Data: RawByteString): TCryptCertValidity; overload;
+    function Verify(const Signature, Data: RawByteString;
+      IgnoreError: TCryptCertValidities = []): TCryptCertValidity; overload;
     /// verify another certificate signature with this certificate public key
     // (if self-signed), or a supplied Authority reference
     // - Authority certificate should have the cuKeyCertSign usage
-    function Verify(const Authority: ICryptCert): TCryptCertValidity; overload;
+    function Verify(const Authority: ICryptCert;
+      IgnoreError: TCryptCertValidities = []): TCryptCertValidity; overload;
     /// compute a new JWT for a given payload using this certificate private key
     // - will use the private key and Sign() to compute the signature
     // - this certificate should have the cuDigitalSignature usage
@@ -1457,7 +1462,8 @@ type
     // - this certificate should have the cuDigitalSignature usage
     // - can optionally return the payload fields and/or the signature
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
-      Payload: PDocVariantData = nil; Signature: PRawByteString = nil): TCryptCertValidity;
+      Payload: PDocVariantData = nil; Signature: PRawByteString = nil;
+      IgnoreError: TCryptCertValidities = []): TCryptCertValidity;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use OpenSSL Envelope key
@@ -1558,17 +1564,21 @@ type
       overload; virtual; abstract;
     function Sign(const Data: RawByteString): RawByteString; overload; virtual;
     procedure Sign(const Authority: ICryptCert); overload; virtual; abstract;
-    function Verify(Sign, Data: pointer; SignLen, DataLen: integer): TCryptCertValidity;
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity;
       overload; virtual; abstract;
-    function Verify(const Signature, Data: RawByteString): TCryptCertValidity;
+    function Verify(const Signature, Data: RawByteString;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity;
       overload; virtual;
-    function Verify(const Authority: ICryptCert): TCryptCertValidity;
+    function Verify(const Authority: ICryptCert;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity;
       overload; virtual; abstract;
     function JwtCompute(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
       ExpirationMinutes: integer; Signature: PRawByteString): RawUtf8; virtual;
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
-      Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity; virtual;
+      Payload: PDocVariantData; Signature: PRawByteString;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -1682,8 +1692,8 @@ type
     // the associated signing authority (which should be in this Store)
     // - warning: only supported by our 'syn-store' algorithm: OpenSSL Store
     // has no way to lookup the X509 certificate which actually signed the buffer
-    function Verify(const Signature: RawByteString;
-      Data: pointer; Len: integer): TCryptCertValidity;
+    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+      IgnoreError: TCryptCertValidities = []): TCryptCertValidity;
     /// how many certificates are currently stored
     function Count: integer;
     /// how many CRLs are currently stored
@@ -1711,8 +1721,8 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
-    function Verify(const Signature: RawByteString;
-      Data: pointer; Len: integer): TCryptCertValidity; virtual; abstract;
+    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+      IgnoreError: TCryptCertValidities): TCryptCertValidity; virtual; abstract;
     function Count: integer; virtual; abstract;
     function CrlCount: integer; virtual; abstract;
     function DefaultCertAlgo: TCryptCertAlgo; virtual; abstract;
@@ -4749,10 +4759,11 @@ begin
   result := Sign(pointer(Data), length(Data));
 end;
 
-function TCryptCert.Verify(const Signature, Data: RawByteString): TCryptCertValidity;
+function TCryptCert.Verify(const Signature, Data: RawByteString;
+  IgnoreError: TCryptCertValidities): TCryptCertValidity;
 begin
   result := Verify(pointer(Signature), pointer(Data),
-                   length(Signature), length(Data));
+                   length(Signature), length(Data), IgnoreError);
 end;
 
 function TCryptCert.JwtCompute(const DataNameValue: array of const;
@@ -4794,7 +4805,8 @@ end;
 
 function TCryptCert.JwtVerify(const Jwt: RawUtf8;
   Issuer, Subject, Audience: PRawUtf8;
-  Payload: PDocVariantData; Signature: PRawByteString): TCryptCertValidity;
+  Payload: PDocVariantData; Signature: PRawByteString;
+  IgnoreError: TCryptCertValidities): TCryptCertValidity;
 var
   P, S: PUtf8Char;
   pl: TDocVariantData;
@@ -4831,7 +4843,8 @@ begin
   if pl.GetAsInt64('nbf', ms) and
      (UnixTimeUtc + 15 < ms) then
     exit;
-  result := Verify(pointer(sig), pointer(Jwt), length(sig), S - 1 - pointer(Jwt));
+  result := Verify(pointer(sig), pointer(Jwt),
+              length(sig), S - 1 - pointer(Jwt), IgnoreError);
   if not (result in CV_VALIDSIGN) then
     exit;
   if Issuer <> nil then
