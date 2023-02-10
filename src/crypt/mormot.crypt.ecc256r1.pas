@@ -387,7 +387,8 @@ type
     function Check: boolean;
     /// fast check of the dates stored in a certificate binary buffer
     // - could be validated against EccCheck()
-    function CheckDate(nowdate: PEccDate = nil): boolean;
+    // - you can specify your own UTC timestamp for expiration instead of NowUtc
+    function CheckDate(nowdate: PEccDate = nil; TimeUtc: TDateTime = 0): boolean;
     /// fast check if the binary buffer storage of a certificate was self-signed
     // - a self-signed certificate has its AuthoritySerial field matching Seial
     function IsSelfSigned: boolean;
@@ -448,13 +449,15 @@ type
     // the authority public key
     // - optional authuncomp could be the uncompressed auth.Head.Signed.PublicKey
     function Verify(const hash: THash256; const auth: TEccCertificateContent;
-      authuncomp: PEccPublicKeyUncompressed): TEccValidity; overload;
+      authuncomp: PEccPublicKeyUncompressed;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// low-level verification of a TEccSignatureCertifiedContent binary buffer
     // - will verify all internal signature fields according to a supplied authority
     // key, then perform the ECDSA verification of the supplied 256-bit hash with it
     // - returns ecvValidSigned on success, or an error value otherwise
     function Verify(const hash: THash256; const authkey: TEccPublicKey;
-      valid: TEccValidity = ecvValidSigned): TEccValidity; overload;
+      valid: TEccValidity = ecvValidSigned;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
   end;
 
   /// points to a TEccSignatureCertified buffer for ECDSA secp256r1 signature
@@ -1755,11 +1758,15 @@ begin
               (ComputeCrc32 = Head.CRC);
 end;
 
-function TEccCertificateContent.CheckDate(nowdate: PEccDate): boolean;
+function TEccCertificateContent.CheckDate(nowdate: PEccDate;
+  TimeUtc: TDateTime): boolean;
 var
   now: TEccDate;
 begin
-  now := NowEccDate;
+  if TimeUtc = 0 then
+    now := NowEccDate // default is to check validity against current timestamp
+  else
+    now := EccDate(TimeUtc);
   if nowdate <> nil then
     nowdate^ := now;
   result := (Head.Signed.IssueDate <= now) and
@@ -1871,7 +1878,8 @@ begin
 end;
 
 function TEccSignatureCertifiedContent.Verify(const hash: THash256;
-  const auth: TEccCertificateContent; authuncomp: PEccPublicKeyUncompressed): TEccValidity;
+  const auth: TEccCertificateContent; authuncomp: PEccPublicKeyUncompressed;
+  TimeUtc: TDateTime): TEccValidity;
 var
   now: TEccDate;
 begin
@@ -1881,7 +1889,7 @@ begin
     result := ecvCorrupted
   else if not auth.Check then
     result := ecvUnknownAuthority
-  else if not auth.CheckDate(@now) then
+  else if not auth.CheckDate(@now, TimeUtc) then
     result := ecvDeprecatedAuthority
   else if Date > now then
     result := ecvInvalidDate
@@ -1894,13 +1902,20 @@ begin
 end;
 
 function TEccSignatureCertifiedContent.Verify(const hash: THash256;
-  const authkey: TEccPublicKey; valid: TEccValidity): TEccValidity;
+  const authkey: TEccPublicKey; valid: TEccValidity;
+  TimeUtc: TDateTime): TEccValidity;
+var
+  now: TEccDate;
 begin
+  if TimeUtc = 0 then
+    now := NowEccDate
+  else
+    now := EccDate(TimeUtc);
   if IsZero(hash) then
     result := ecvBadParameter
   else if not Check then
     result := ecvCorrupted
-  else if Date > NowEccDate then
+  else if Date > now then
     result := ecvInvalidDate
   else if not Ecc256r1Verify(authkey, hash, Signature) then
     result := ecvInvalidSignature

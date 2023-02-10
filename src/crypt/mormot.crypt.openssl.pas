@@ -1840,9 +1840,9 @@ type
     function Sign(Data: pointer; Len: integer): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
-    function Verify(const Authority: ICryptCert;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert; IgnoreError: TCryptCertValidities;
+      TimeUtc: TDateTime): TCryptCertValidity; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -1877,7 +1877,7 @@ type
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
     function DefaultCertAlgo: TCryptCertAlgo; override;
@@ -2304,32 +2304,31 @@ begin
 end;
 
 function CanVerify(auth: PX509; usage: TX509Usage; selfsigned: boolean;
-  IgnoreError: TCryptCertValidities): TCryptCertValidity;
-var
-  now: TDateTime;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 begin
-  now := NowUtc;
+  if TimeUtc = 0 then
+    TimeUtc := NowUtc;
   if auth = nil then
     result := cvUnknownAuthority
   else if (not (cvWrongUsage in IgnoreError)) and
           (not (selfsigned or auth.HasUsage(usage))) then
     result := cvWrongUsage
   else if (not (cvDeprecatedAuthority in IgnoreError)) and
-          ((now >= auth.NotAfter) or
-           (now < auth.NotBefore)) then
+          ((TimeUtc >= auth.NotAfter) or
+           (TimeUtc < auth.NotBefore)) then
     result := cvDeprecatedAuthority
   else
     result := cvValidSigned;
 end;
 
 function TCryptCertOpenSsl.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-  IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 begin
   if (SignLen <= 0) or
      (DataLen <= 0) then
     result := cvBadParameter
   else
-    result := CanVerify(fX509, kuDigitalSignature, false, IgnoreError);
+    result := CanVerify(fX509, kuDigitalSignature, false, IgnoreError, TimeUtc);
   if result = cvValidSigned then
     if fX509.GetPublicKey.Verify(GetMD, Sign, Data, SignLen, DataLen) then
       if fX509.IsSelfSigned then
@@ -2341,7 +2340,7 @@ begin
 end;
 
 function TCryptCertOpenSsl.Verify(const Authority: ICryptCert;
-  IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
   auth: PX509;
 begin
@@ -2361,7 +2360,7 @@ begin
       exit
   else
     auth := nil;
-  result := CanVerify(auth, kuKeyCertSign, auth = fX509, IgnoreError);
+  result := CanVerify(auth, kuKeyCertSign, auth = fX509, IgnoreError, TimeUtc);
   if result = cvValidSigned then
     if X509_verify(fX509, auth.GetPublicKey) <> 1 then
       result := cvInvalidSignature
@@ -2722,7 +2721,8 @@ begin
 end;
 
 function TCryptStoreOpenSsl.Verify(const Signature: RawByteString;
-  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities;
+  TimeUtc: TDateTime): TCryptCertValidity;
 begin
   result := cvNotSupported;
 end;

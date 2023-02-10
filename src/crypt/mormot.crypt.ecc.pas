@@ -290,9 +290,11 @@ type
     function CheckCRC: boolean;
     /// use this Certificate as Authority to verify an ECC digital signature
     function Verify(const hash: THash256;
-      const Signature: TEccSignatureCertifiedContent): TEccValidity;
+      const Signature: TEccSignatureCertifiedContent;
+      TimeUtc: TDateTime = 0): TEccValidity;
     /// verify the certificate signature using the given Authority public key
-    function VerifyCertificate(Authority: TEccCertificate): TEccValidity;
+    function VerifyCertificate(Authority: TEccCertificate;
+      TimeUtc: TDateTime = 0): TEccValidity;
     /// encrypt using the ECIES scheme, using this public certificate as key,
     // via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - returns the encrypted content, in the .synecc optimized format
@@ -729,16 +731,16 @@ type
     // the supplied signing authority
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - this method is thread-safe, and not blocking
-    function Verify(Authority: TEccCertificate;
-      const hash: THash256): TEccValidity; overload;
+    function Verify(Authority: TEccCertificate; const hash: THash256;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// check if this digital signature matches a given memory buffer
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the supplied signing authority
     // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
-    function Verify(Authority: TEccCertificate;
-      Data: pointer; Len: integer): TEccValidity; overload;
+    function Verify(Authority: TEccCertificate; Data: pointer; Len: integer;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// persist the signature as some Base64 encoded binary
     function ToBase64: RawUtf8;
     /// persist the signature as raw TEccSignatureCertifiedContent binary buffer
@@ -899,7 +901,8 @@ type
     // otherwise
     // - this method is thread-safe, since it makes a private copy of the key
     function GetKeyBySerial(const Serial: TEccCertificateID; Usage: TCryptCertUsages;
-      out PublicKey: TEccPublicKey; Valid: TEccValidity = ecvUnknown): TEccValidity;
+      out PublicKey: TEccPublicKey; Valid: TEccValidity = ecvUnknown;
+      TimeUtc: TDateTime = 0): TEccValidity;
     /// quickly check if a given certificate ID is part of the CRL
     // - will check the internal Certificate Revocation List and the current date
     // - returns crrNotRevoked is the serial is not known as part of the CRL
@@ -933,7 +936,8 @@ type
     // - consider setting IsValidCached property to TRUE to reduce resource use
     // - this method is thread-safe, and not blocking
     function IsValidRaw(const content: TEccCertificateContent;
-      ignoreDate: boolean = false; allowSelfSigned: boolean = false): TEccValidity;
+      ignoreDate: boolean = false; allowSelfSigned: boolean = false;
+      TimeUtc: TDateTime = 0): TEccValidity;
     /// check all stored certificates and their authorization chain
     // - returns nil if all items were valid
     // - returns the list of any invalid instances
@@ -987,7 +991,7 @@ type
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - this method is thread-safe, and not blocking
     function IsSigned(const sign: TEccSignatureCertifiedContent;
-      const hash: THash256): TEccValidity; overload;
+      const hash: THash256; TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// check if the digital signature of a given memory buffer is valid
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
@@ -995,7 +999,7 @@ type
     // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
     function IsSigned(const sign: TEccSignatureCertifiedContent;
-      Data: pointer; Len: integer): TEccValidity; overload;
+      Data: pointer; Len: integer; TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// verify the Base64 encoded digital signature of a given hash
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
@@ -1003,15 +1007,15 @@ type
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - this method is thread-safe, and not blocking
     function IsSigned(const base64sign: RawUtf8;
-      const hash: THash256): TEccValidity; overload;
+      const hash: THash256; TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// verify the Base64 encoded digital signature of a given memory buffer
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
     // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
-    function IsSigned(const base64sign: RawUtf8;
-      Data: pointer; Len: integer): TEccValidity; overload;
+    function IsSigned(const base64sign: RawUtf8; Data: pointer; Len: integer;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// register a certificate in the internal certificate chain
     // - returns the index of the newly inserted certificate
     // - returns -1 on error, e.g. if the certificate was not valid, if it has
@@ -2343,17 +2347,18 @@ begin
 end;
 
 function TEccCertificate.Verify(const hash: THash256;
-  const Signature: TEccSignatureCertifiedContent): TEccValidity;
+  const Signature: TEccSignatureCertifiedContent; TimeUtc: TDateTime): TEccValidity;
 begin
   if self = nil then
     result := ecvUnknownAuthority
   else if not (cuDigitalSignature in GetUsage) then
     result := ecvWrongUsage
   else
-    result := Signature.Verify(hash, fContent, fUncompressedP);
+    result := Signature.Verify(hash, fContent, fUncompressedP, TimeUtc);
 end;
 
-function TEccCertificate.VerifyCertificate(Authority: TEccCertificate): TEccValidity;
+function TEccCertificate.VerifyCertificate(Authority: TEccCertificate;
+  TimeUtc: TDateTime): TEccValidity;
 var
   hash: THash256;
 begin
@@ -2361,7 +2366,7 @@ begin
     result := ecvBadParameter
   else if not fContent.Check then
     result := ecvCorrupted
-  else if not fContent.CheckDate then
+  else if not fContent.CheckDate(nil, TimeUtc) then
     result := ecvInvalidDate
   else if fContent.IsSelfSigned then
   begin
@@ -2373,7 +2378,7 @@ begin
             Authority.fContent.Head.Signed.Serial) or
           not Authority.fContent.Check then
     result := ecvUnknownAuthority
-  else if not Authority.fContent.CheckDate then
+  else if not Authority.fContent.CheckDate(nil, TimeUtc) then
     result := ecvDeprecatedAuthority
   else if not (cuKeyCertSign in Authority.GetUsage) then
     result := ecvWrongUsage
@@ -3374,18 +3379,18 @@ begin
 end;
 
 function TEccSignatureCertified.Verify(Authority: TEccCertificate;
-  const hash: THash256): TEccValidity;
+  const hash: THash256; TimeUtc: TDateTime): TEccValidity;
 begin
   if self = nil then
     result := ecvBadParameter
   else
-    result := Authority.Verify(hash, fCertified);
+    result := Authority.Verify(hash, fCertified, TimeUtc);
 end;
 
 function TEccSignatureCertified.Verify(Authority: TEccCertificate;
-  Data: pointer; Len: integer): TEccValidity;
+  Data: pointer; Len: integer; TimeUtc: TDateTime): TEccValidity;
 begin
-  result := Verify(Authority, Sha256Digest(Data, Len));
+  result := Verify(Authority, Sha256Digest(Data, Len), TimeUtc);
 end;
 
 function TEccSignatureCertified.SaveToDerBinary: RawByteString;
@@ -3537,7 +3542,7 @@ begin
 end;
 
 function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
-  ignoreDate: boolean; allowSelfSigned: boolean): TEccValidity;
+  ignoreDate: boolean; allowSelfSigned: boolean; TimeUtc: TDateTime): TEccValidity;
 var
   auth: TEccPublicKey;
   hash: THash256Rec;
@@ -3549,7 +3554,7 @@ begin
   if not ignoreDate then
   begin
     result := ecvInvalidDate;
-    if not content.CheckDate then
+    if not content.CheckDate(nil, TimeUtc) then
       exit;
   end;
   if content.IsSelfSigned then
@@ -3750,7 +3755,8 @@ begin
 end;
 
 function TEccCertificateChain.GetKeyBySerial(const Serial: TEccCertificateID;
-  Usage: TCryptCertUsages; out PublicKey: TEccPublicKey; Valid: TEccValidity): TEccValidity;
+  Usage: TCryptCertUsages; out PublicKey: TEccPublicKey; Valid: TEccValidity;
+  TimeUtc: TDateTime): TEccValidity;
 var
   cert: TEccCertificate;
   now: TEccDate;
@@ -3762,7 +3768,7 @@ begin
       result := ecvUnknownAuthority
     else if Usage * cert.GetUsage = [] then
       result := ecvWrongUsage
-    else if not cert.fContent.CheckDate(@now) then
+    else if not cert.fContent.CheckDate(@now, TimeUtc) then
       result := ecvDeprecatedAuthority
     else if (fCrl <> nil) and
             (FindRevoked(pointer(fCrl), length(fCrl), @Serial, now) <> crrNotRevoked) then
@@ -4054,39 +4060,39 @@ begin
 end;
 
 function TEccCertificateChain.IsSigned(const sign: TEccSignatureCertifiedContent;
-  Data: pointer; Len: integer): TEccValidity;
+  Data: pointer; Len: integer; TimeUtc: TDateTime): TEccValidity;
 begin
   if (Data = nil) or
      (Len <= 0) then
     result := ecvBadParameter
   else
-    result := IsSigned(sign, Sha256Digest(Data, Len));
+    result := IsSigned(sign, Sha256Digest(Data, Len), TimeUtc);
 end;
 
 function TEccCertificateChain.IsSigned(const base64sign: RawUtf8;
-  const hash: THash256): TEccValidity;
+  const hash: THash256; TimeUtc: TDateTime): TEccValidity;
 var
   sign: TEccSignatureCertifiedContent;
 begin
   if sign.FromBase64(base64sign) then
-    result := IsSigned(sign, hash)
+    result := IsSigned(sign, hash, TimeUtc)
   else
     result := ecvBadParameter;
 end;
 
 function TEccCertificateChain.IsSigned(const base64sign: RawUtf8;
-  Data: pointer; Len: integer): TEccValidity;
+  Data: pointer; Len: integer; TimeUtc: TDateTime): TEccValidity;
 var
   sign: TEccSignatureCertifiedContent;
 begin
   if sign.FromBase64(base64sign) then
-    result := IsSigned(sign, Data, Len)
+    result := IsSigned(sign, Data, Len, TimeUtc)
   else
     result := ecvBadParameter;
 end;
 
 function TEccCertificateChain.IsSigned(const sign: TEccSignatureCertifiedContent;
-  const hash: THash256): TEccValidity;
+  const hash: THash256; TimeUtc: TDateTime): TEccValidity;
 var
   authkey: TEccPublicKey;
 begin
@@ -4096,7 +4102,7 @@ begin
   begin
     result := GetKeyBySerial(sign.AuthoritySerial, [cuDigitalSignature], authkey);
     if result in ECC_VALIDSIGN then
-      result := sign.Verify(hash, authkey, result);
+      result := sign.Verify(hash, authkey, result, TimeUtc);
   end;
 end;
 
@@ -5211,9 +5217,9 @@ type
     function Sign(Data: pointer; Len: integer): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Verify(const Authority: ICryptCert;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function Decrypt(const Message: RawByteString;
@@ -5644,7 +5650,7 @@ begin
 end;
 
 function TCryptCertInternal.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-  IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
   s: PEccSignatureCertifiedContent absolute Sign;
 begin
@@ -5655,11 +5661,12 @@ begin
      (DataLen <= 0) then
     result := cvBadParameter
   else
-    result := TCryptCertValidity(fEcc.Verify(Sha256Digest(Data, DataLen), s^));
+    result := TCryptCertValidity(
+      fEcc.Verify(Sha256Digest(Data, DataLen), s^, TimeUtc));
 end;
 
 function TCryptCertInternal.Verify(const Authority: ICryptCert;
-  IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
   auth: TEccCertificate;
 begin
@@ -5674,7 +5681,7 @@ begin
       auth := Authority.handle
     else
       exit;
-  result := TCryptCertValidity(fEcc.VerifyCertificate(auth));
+  result := TCryptCertValidity(fEcc.VerifyCertificate(auth, TimeUtc));
 end;
 
 function TCryptCertInternal.Encrypt(const Message: RawByteString;
@@ -5761,7 +5768,7 @@ type
       Reason: TCryptCertRevocationReason): boolean; override;
     function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
-      IgnoreError: TCryptCertValidities): TCryptCertValidity; override;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
     function CrlCount: integer; override;
     function DefaultCertAlgo: TCryptCertAlgo; override;
@@ -5849,7 +5856,8 @@ begin
 end;
 
 function TCryptStoreInternal.Verify(const Signature: RawByteString;
-  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities): TCryptCertValidity;
+  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities;
+  TimeUtc: TDateTime): TCryptCertValidity;
 var
   s: PEccSignatureCertifiedContent absolute Signature;
 begin
