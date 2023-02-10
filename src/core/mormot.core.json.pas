@@ -307,19 +307,21 @@ procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString); overload
 function GetJsonObjectOrArray(P: PUtf8Char;
   EndOfObject: PUtf8Char; Len: PInteger = nil): PUtf8Char;
 
-/// retrieve the next JSON item as a RawJson variable
-// - buffer can be either any JSON item, i.e. a string, a number or even a
+/// retrieve the next JSON item as a RawJson undecoded variable
+// - P buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
+// - input buffer is not modified in-place, since result is directly copied
 procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
   EndOfObject: PAnsiChar = nil);
 
 /// retrieve the next JSON item as a RawUtf8 decoded buffer
-// - buffer can be either any JSON item, i.e. a string, a number or even a
+// - P buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
 // - just call GetJsonField(), and create a new RawUtf8 from the returned value,
-// after proper unescape if WasString^=true
+// after proper string unescape (with WasString^=true)
+// - warning: input buffer is modified in-place during output value parsing
 function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil): boolean;
 
@@ -420,27 +422,34 @@ function JsonObjectPropCount(P: PUtf8Char; PMax: PUtf8Char = nil;
 /// go to a named property of a JSON object
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
 // nor no memory buffer allocated neither content copied
+// - PropName is search case-insensitively  as 'propertyname' or 'property*'
 // - returns nil if the supplied property name does not exist
-// - returns a pointer to the matching item in the JSON object
+// - returns a pointer to the matching item value in the JSON object
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
-  PropNameFound: PRawUtf8 = nil): PUtf8Char;
+  PropNameFound: PRawUtf8 = nil): PUtf8Char; overload;
+
+/// go to a buffer-named property of a JSON object
+// - as called by overloaded JsonObjectItem()
+function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
+  PropNameFound: PRawUtf8): PUtf8Char; overload;
 
 /// go to a property of a JSON object, by its full path, e.g. 'parent.child'
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
 // nor no memory buffer allocated neither content copied
+// - PropPath is search case-insensitively as 'parent.child' or 'parent.ch*'
 // - returns nil if the supplied property path does not exist
-// - returns a pointer to the matching item in the JSON object
+// - returns a pointer to the matching item value in the JSON object
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
 function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
 
 /// return all matching properties of a JSON object
-// - here the PropPath could be a comma-separated list of full paths,
-// e.g. 'Prop1,Prop2' or 'Obj1.Obj2.Prop1,Obj1.Prop2'
+// - here the PropPath could be a comma-separated list of case-insensitive full
+// paths, e.g. 'Prop1,Prop2' or 'Obj1.Obj2.Prop*,Obj1.Prop1'
 // - returns '' if no property did match
 // - returns a JSON object of all matching properties
 // - this will handle any kind of objects, including those with nested
@@ -4052,23 +4061,26 @@ end;
 
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
   PropNameFound: PRawUtf8): PUtf8Char;
+begin
+  result := JsonObjectItem(P, pointer(PropName), length(PropName), PropNameFound);
+end;
+
+function JsonObjectItem(P: PUtf8Char; PropName: PUtf8Char; PropNameLen: PtrInt;
+  PropNameFound: PRawUtf8): PUtf8Char;
 var
   name: ShortString; // no memory allocation nor P^ modification
-  PropNameLen: integer;
   PropNameUpper: array[byte] of AnsiChar;
   parser: TJsonGotoEndParser;
 begin
   if P <> nil then
   begin
     P := GotoNextNotSpace(P);
-    PropNameLen := length(PropName);
-    if PropNameLen <> 0 then
+    if PropNameLen > 0 then
     begin
-      if PropName[PropNameLen] = '*' then
+      if PropName[PropNameLen - 1] = '*' then
       begin
-        UpperCopy255Buf(PropNameUpper{%H-},
-          pointer(PropName), PropNameLen - 1)^ := #0;
-        PropNameLen := 0;
+        UpperCopy255Buf(PropNameUpper{%H-}, PropName, PropNameLen - 1)^ := #0;
+        PropNameLen := 0; // mark 'PropName*' search
       end;
       if P^ = '{' then
         P := GotoNextNotSpace(P + 1);
@@ -4092,7 +4104,7 @@ begin
               exit;
             end;
           end
-          else if IdemPropName(name, pointer(PropName), PropNameLen) then
+          else if IdemPropName(name, PropName, PropNameLen) then
           begin
             result := P;
             exit;
@@ -4111,17 +4123,17 @@ end;
 
 function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
 var
-  objName: RawUtf8;
+  objName: ShortString;
 begin
   result := nil;
   if (JsonObject = nil) or
      (PropPath = nil) then
     exit;
   repeat
-    GetNextItem(PropPath, '.', objName);
-    if objName = '' then
+    GetNextItemShortString(PropPath, @objName, '.');
+    if objName[0] = #0 then
       exit;
-    JsonObject := JsonObjectItem(JsonObject, objName);
+    JsonObject := JsonObjectItem(JsonObject, @objName[1], ord(objName[0]), nil);
     if JsonObject = nil then
       exit;
   until PropPath = nil; // found full name scope
@@ -4166,13 +4178,13 @@ begin
       GetNextItem(PropPath, ',', itemName);
       if itemName = '' then
         break;
-      if itemName[length(itemName)] <> '*' then
+      if itemName[length(itemName)] <> '*' then // single property lookup
       begin
         start := JsonObjectByPath(JsonObject, pointer(itemName));
         if start <> nil then
           AddFromStart(itemName);
       end
-      else
+      else // 'propname*' may append several properties
       begin
         objPath := '';
         obj := pointer(itemName);

@@ -601,8 +601,8 @@ const
      wEightOne,
      wServer2012R2,
      wTen,
-     wEleven,
-     wServer2016];
+     wServer2016,
+     wEleven];
 
   /// translate one operating system (and distribution) into a its common name
   OS_NAME: array[TOperatingSystem] of RawUtf8 = (
