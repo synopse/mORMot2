@@ -3988,7 +3988,7 @@ begin
     exit;
   EnsureSession('Sign');
   Check(fC.SignInit(fSession, Mechanism, PrivKey), 'SignInit');
-  Check(fC.Sign(fSession, Data, Len, nil, reslen), 'Sign');
+  Check(fC.Sign(fSession, nil, 0, nil, reslen), 'Sign');
   SetLength(result, reslen);
   Check(fC.Sign(fSession, Data, Len, pointer(result), reslen), 'Sign');
   if len <> length(result) then
