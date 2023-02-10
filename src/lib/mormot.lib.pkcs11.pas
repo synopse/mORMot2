@@ -1477,7 +1477,7 @@ type
     GetMechanismList: function(slotID: CK_SLOT_ID;
       pMechanismList: CK_MECHANISM_TYPE_ULONG_PTR; var Count: CK_ULONG): CK_RVULONG; cdecl;
     /// obtains information about a particular mechanism possibly supported by a token
-    GetMechanismInfo: function(slotID: CK_SLOT_ID; _type: CK_MECHANISM_TYPE;
+    GetMechanismInfo: function(slotID: CK_SLOT_ID; _type: CK_MECHANISM_TYPE_ULONG;
       out pInfo: CK_MECHANISM_INFO): CK_RVULONG; cdecl;
     /// initializes a token
     // - ulPinLen is the length in bytes of the PIN
@@ -1788,6 +1788,20 @@ type
   /// map several CK_SLOT_ID but with a fixed 32-bit size
   TPkcs11SlotIDDynArray = array of TPkcs11SlotID;
 
+  /// high-level information about a PKCS#11 mechanism
+  TPkcs11Mechanism = packed record
+    /// the type of Mechanism
+    Kind: CK_MECHANISM_TYPE;
+    /// minimum size of the Mechanism key (in bits or bytes, or even meaningless)
+    MinKey: cardinal;
+    /// maximum size of the Mechanism key (in bits or bytes, or even meaningless)
+    MaxKey: cardinal;
+    /// define the Mechanism behavior
+    Flags: CKM_FLAGS;
+  end;
+  /// high-level information about one or several PKCS#11 mechanism(s)
+  TPkcs11Mechanisms = array of TPkcs11Mechanism;
+
   /// high-level information about a PKCS#11 Slot
   // - can be (un) serialized as binary or JSON if needed
   TPkcs11Slot = packed record
@@ -1800,7 +1814,7 @@ type
     /// Slot Information Flags
     Flags: CKSL_FLAGS;
     /// the Mechanism supported by this Slot
-    Mechanism: CK_MECHANISM_TYPES;
+    Mechanism: TPkcs11Mechanisms;
     /// version number of the slot's hardware
     Hardware: CK_VERSION;
     /// version number of the slot's firmware
@@ -3681,6 +3695,7 @@ var
   i: PtrInt;
   sltnfo: CK_SLOT_INFO;
   toknfo: CK_TOKEN_INFO;
+  mecnfo: CK_MECHANISM_INFO;
   s: PPkcs11Slot;
   mn, res: CK_ULONG;
   m: array of CK_ULONG;
@@ -3712,7 +3727,16 @@ begin
     Check(res, 'GetMechanismList');
     SetLength(s^.Mechanism, mn);
     for i := 0 to CK_LONG(mn) - 1 do
-      s^.Mechanism[i] := MECHANISM_TYPE(m[i]);
+    begin
+      Check(fC^.GetMechanismInfo(SlotID, m[i], mecnfo), 'GetMechanismInfo');
+      with s^.Mechanism[i] do
+      begin
+        Kind := MECHANISM_TYPE(m[i]);
+        MinKey := mecnfo.ulMinKeySize;
+        MaxKey := mecnfo.ulMaxKeySize;
+        Flags := CKM_FLAGS(cardinal(mecnfo.flags));
+      end;
+    end;
     FillCharFast(toknfo, SizeOf(toknfo), 0);
     Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
     FillToken(SlotID, toknfo, TokenByID(SlotID, {addnew=}true)^);
@@ -4060,22 +4084,24 @@ initialization
     TypeInfo(CKT_FLAGS),
     TypeInfo(CKSL_FLAGS),
     TypeInfo(CK_MECHANISM_TYPE),
-    TypeInfo(CK_MECHANISM_TYPES),
+    TypeInfo(CKM_FLAGS),
     TypeInfo(CK_OBJECT_CLASS),
     TypeInfo(CK_KEY_TYPE),
     TypeInfo(TPkcs11ObjectStorages)
     ]);
   Rtti.RegisterFromText([
+    TypeInfo(TPkcs11Mechanisms),
+      'type:CK_MECHANISM_TYPE min,max:cardinal flags:CKM_FLAGS',
     TypeInfo(TPkcs11Slot),
-      'Slot:cardinal Description,Manufacturer:RawUtf8 Flags:CKSL_FLAGS' +
-      ' Mechanism:CK_MECHANISM_TYPES HwMaj,HwMin,FwMaj,FwMin:byte',
+      'slot:cardinal description,manufacturer:RawUtf8 flags:CKSL_FLAGS' +
+      ' mechanism:TPkcs11Mechanisms hwmaj,hwmin,fwmaj,fwmin:byte',
     TypeInfo(TPkcs11ObjectDynArray),
-      'Class:CK_OBJECT_CLASS ID,Label:RawUtf8 Flags:TPkcs11ObjectStorages' +
-      ' KeyType:CK_KEY_TYPE KeyGen:CK_MECHANISM_TYPE Start,End:TDateTime' +
-      ' App:RawUtf8 Sub,SN,Issuer:RawByteString Hdl:cardinal',
+      'class:CK_OBJECT_CLASS id,label:RawUtf8 flags:TPkcs11ObjectStorages' +
+      ' keytype:CK_KEY_TYPE keygen:CK_MECHANISM_TYPE start,end:TDateTime' +
+      ' app:RawUtf8 sub,sn,issuer:RawByteString hdl:cardinal',
     TypeInfo(TPkcs11Token),
-      'Slot:cardinal Name,Manufacturer,Model,Serial,Time:RawUtf8 Flags:CKT_FLAGS' +
-      ' Sessions,MaxSessions,MinPin,MaxPin: integer'
+      'slot:cardinal name,manufacturer,model,serial,time:RawUtf8 flags:CKT_FLAGS' +
+      ' sessions,maxsessions,minpin,maxpin: integer'
     ]);
 
 

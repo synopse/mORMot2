@@ -2523,6 +2523,7 @@ type
     /// speedup search by PRttiInfo e.g. from a loop
     LastInfo: TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
+    // - hashing by name allows fast per-TypeInfo() and per-Name lookup
     PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
