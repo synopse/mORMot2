@@ -2463,7 +2463,7 @@ var
   tmp: TSynTempBuffer;
 begin
   result := '';
-  rsize := tmp.Init; // most of the time, a single call is enough
+  rsize := {%H-}tmp.Init; // most of the time, a single call is enough
   res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
   if res <> 0 then
     if res = ERROR_MORE_DATA then
@@ -2478,7 +2478,7 @@ begin
     case rtype of
       REG_SZ,
       REG_EXPAND_SZ,
-      REG_MULTI_SZ:
+      REG_MULTI_SZ: // StrLen() will return the first value of REG_MULTI_SZ
         Win32PWideCharToUtf8(tmp.buf, result);
     end;
     if andtrim then

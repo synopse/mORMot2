@@ -1469,7 +1469,8 @@ type
     procedure Close;
     /// read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
-    // (return the first value of the multi-list)
+    // (return the first value of the multi-list) - use ReadData to retrieve
+    // all REG_MULTI_SZ values as one blob
     // - we don't use string here since it would induce a dependency to
     // mormot.core.unicode
     function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUtf8;
