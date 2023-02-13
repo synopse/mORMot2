@@ -2088,6 +2088,8 @@ type
     // - return the matching CK_OBJECT_HANDLE, which lifetime is the Session
     function GetObject(ObjectClass: CK_OBJECT_CLASS; const StorageLabel: RawUtf8 = '';
       const StorageID: RawUtf8 = ''): CK_OBJECT_HANDLE; overload;
+    /// retrieve some random bytes using the device opened in the current Session
+    function GetRandom(Len: PtrInt): RawByteString;
     /// digitally sign a memory buffer using a supplied Private Key
     // - you must supply a mechanism - method won't setup any default parameter
     // - return the signature as a binary blob
@@ -4024,6 +4026,16 @@ begin
     result := CK_INVALID_HANDLE; // return 0 on error
 end;
 
+function TPkcs11.GetRandom(Len: PtrInt): RawByteString;
+begin
+  EnsureSession('GetRandom');
+  if Len > 0 then
+    FastSetRawByteString(result, nil, Len);
+  if (Len <= 0) or
+     (fC.GenerateRandom(fSession, pointer(result), Len) <> CKR_SUCCESS) then
+    result := '';
+end;
+
 function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKey: CK_OBJECT_HANDLE;
   var Mechanism: CK_MECHANISM): RawByteString;
 var
@@ -4050,6 +4062,12 @@ var
 begin
   EnsureSession('Verify');
   result := false;
+  if (Data = nil) or
+     (Sig = nil) or
+     (DataLen <= 0) or
+     (SigLen <= 0) or
+     (PubKey = CK_INVALID_HANDLE) then
+    exit;
   Check(fC.VerifyInit(fSession, Mechanism, PubKey), 'VerifyInit');
   res := fC.Verify(fSession, Data, DataLen, Sig, SigLen);
   case res of
