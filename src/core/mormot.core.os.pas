@@ -1467,23 +1467,26 @@ type
       closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
-    /// low-level read a UTF-8 string from the Windows Registry after ReadOpen()
+    /// read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
     // (return the first value of the multi-list)
     // - we don't use string here since it would induce a dependency to
     // mormot.core.unicode
     function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUtf8;
-    /// low-level read a Windows Registry content after ReadOpen()
+    /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
     function ReadData(const entry: SynUnicode): RawByteString;
-    /// low-level read a Windows Registry 32-bit REG_DWORD value after ReadOpen()
+    /// read a Windows Registry 32-bit REG_DWORD value after ReadOpen()
     function ReadDword(const entry: SynUnicode): cardinal;
-    /// low-level read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
+    /// read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
     function ReadQword(const entry: SynUnicode): QWord;
-    /// low-level read a Windows Registry content as binary buffer after ReadOpen()
+    /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
     function ReadBuffer(const entry: SynUnicode; Data: pointer; DataLen: DWORD): boolean;
-    /// low-level enumeration of all sub-entries names of a Windows Registry key
+    /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
+    // - returns -1 if the entry is not found
+    function ReadSize(const entry: SynUnicode): integer;
+    /// enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUtf8DynArray;
   end;
 

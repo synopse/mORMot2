@@ -130,11 +130,22 @@ begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
+procedure DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Len * 3);
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL if complex
+  if Len > 0 then
+    dec(Len); // UnicodeToUtf8() result includes the null terminator
+  FastSetString(res, tmp.buf, Len);
+  tmp.Done;
+end;
+
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
   i: PtrInt;
-  tmp: TSynTempBuffer;
 begin
   if Len > 0 then
     if IsAnsiCompatibleW(P, Len) then
@@ -144,14 +155,7 @@ begin
         PByteArray(res)[i] := PWordArray(P)[i]; // fast direct conversion
     end
     else
-    begin
-      tmp.Init(Len * 3);
-      Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL if complex
-      if Len > 0 then
-        dec(Len); // UnicodeToUtf8() result includes the null terminator
-      FastSetString(res, tmp.buf, Len);
-      tmp.Done;
-    end;
+      DoWin32PWideCharToUtf8(P, Len, res);
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
@@ -2455,14 +2459,21 @@ end;
 
 function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
 var
-  rtype, rsize: DWord;
+  rtype, rsize, res: DWord;
   tmp: TSynTempBuffer;
 begin
   result := '';
-  if RegQueryValueExW(key, pointer(entry), nil, @rtype, nil, @rsize) <> 0 then
-    exit;
-  tmp.Init(rsize);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, tmp.buf, @rsize) = 0 then
+  rsize := tmp.Init; // most of the time, a single call is enough
+  res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
+  if res <> 0 then
+    if res = ERROR_MORE_DATA then
+    begin
+      tmp.Init(rsize); // more than 4KB of data (unlikely)
+      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.buf, @rsize);
+    end
+    else
+      exit;
+  if res = 0 then
   begin
     case rtype of
       REG_SZ,
@@ -2478,10 +2489,10 @@ end;
 
 function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
 var
-  rtype, rsize: DWord;
+  rsize: DWord;
 begin
   result := '';
-  if RegQueryValueExW(key, pointer(entry), nil, @rtype, nil, @rsize) <> 0 then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> 0 then
     exit;
   SetLength(result, rsize);
   if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> 0 then
@@ -2504,6 +2515,12 @@ function TWinRegistry.ReadBuffer(const entry: SynUnicode;
   Data: pointer; DataLen: DWord): boolean;
 begin
   result := RegQueryValueExW(key, pointer(entry), nil, nil, Data, @DataLen) = 0;
+end;
+
+function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+begin
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @result) <> 0 then
+    result := -1;
 end;
 
 function TWinRegistry.ReadEnumEntries: TRawUtf8DynArray;
