@@ -1254,6 +1254,9 @@ type
 
     /// search for a given attribute value
     function Find(aType: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_PTR; overload;
+    /// search for a given attribute len
+    // - returns -1 if not found
+    function FindLen(aType: CK_ATTRIBUTE_TYPE): integer;
     /// search for a given CK_ULONG attribute value
     function Find(aType: CK_ATTRIBUTE_TYPE;
       out aValue: CK_ULONG): boolean; overload;
@@ -1861,7 +1864,7 @@ type
   TPkcs11Object = packed record
     /// the class of the object (from CKA_CLASS)
     ObjClass: CK_OBJECT_CLASS;
-    /// the identifier of this Storage Object (from CKA_UNIQUE_ID or CKA_ID)
+    /// the identifier of this Storage Object (from CKA_ID), as hexadecimal
     StorageID: RawUtf8;
     /// the description of this Storage Object (from CKA_LABEL value)
     StorageLabel: RawUtf8;
@@ -1871,6 +1874,11 @@ type
     KeyType: CK_KEY_TYPE;
     /// how this stored Key has been generated (from CKA_KEY_GEN_MECHANISM)
     KeyGen: CK_MECHANISM_TYPE;
+    /// the size of the object key in bits
+    // - e.g. from CKA_MODULUS_BITS (for CKK_RSA) or CKA_EC_POINT (for CKK_EC)
+    // - may be 0 for not-so-used/unsupported algorithms
+    // - note that CKA_VALUE_LEN is likely to be not present on most HW
+    KeyBits: cardinal;
     /// start date of this Storage Object (from CKA_START_DATE)
     Start: TDateTime;
     /// end date of this Storage Object (from CKA_END_DATE)
@@ -1883,6 +1891,8 @@ type
     Serial: RawByteString;
     /// the DER issuer of this Storage Object (from CKA_ISSUER)
     Issuer: RawByteString;
+    /// the DER unique ID of this Certificate (from CKA_UNIQUE_ID)
+    UniqueID: RawByteString;
     /// the low-level CK_OBJECT_HANDLE, which lifetime would match the session
     // - not defined as CK_OBJECT_HANDLE because this type is not cross-platform
     SessionHandle: cardinal;
@@ -1944,6 +1954,9 @@ procedure AddToAttributes(var Attr: CK_ATTRIBUTES; Flags: TPkcs11ObjectStorages)
 /// the default TPkcs11ObjectStorages used for most known key types generation
 // - returns [] if not known enough, or the appropriate flags
 function DefaultKeyStorageFlags(kt: CK_KEY_TYPE): TPkcs11ObjectStorages;
+
+/// compute the ECC bits (e.g. 256) from the CKA_EC_POINT attribute length
+function EccBitsFromPointLen(bytes: integer; out bits: cardinal): boolean;
 
 type
   TPkcs11 = class;
@@ -3271,6 +3284,17 @@ begin
   result := nil;
 end;
 
+function CK_ATTRIBUTES.FindLen(aType: CK_ATTRIBUTE_TYPE): integer;
+var
+  found: CK_ATTRIBUTE_PTR;
+begin
+  found := Find(aType);
+  if found = nil then
+    result := - 1
+  else
+    result := found^.ulValueLen;
+end;
+
 function CK_ATTRIBUTES.Find(aType: CK_ATTRIBUTE_TYPE;
   out aValue: CK_ULONG): boolean;
 var
@@ -3467,6 +3491,23 @@ begin
   else
     result := [];
   end;
+end;
+
+function EccBitsFromPointLen(bytes: integer; out bits: cardinal): boolean;
+begin
+  // ECC uncompressed key is ASN1/DER encoded as 04 41 04 ..x.. ..y..
+  if bytes <= 3 then
+  begin
+    result := false;
+    exit;
+  end;
+  if bytes <= 127 + 2 then
+    bits := (bytes - 3) * 4
+  else if bytes <= 255 + 3 then
+    bits := (bytes - 4) * 4
+  else
+    bits := (bytes - 5) * 4;
+  result := true;
 end;
 
 
@@ -3862,7 +3903,8 @@ begin
   arr.Add([CKA_CLASS, CKA_LABEL, CKA_APPLICATION, CKA_UNIQUE_ID,
            CKA_START_DATE, CKA_END_DATE, CKA_ID, CKA_SERIAL_NUMBER,
            CKA_ISSUER, CKA_SUBJECT, CKA_OWNER, CKA_URL, CKA_CERTIFICATE_TYPE,
-           CKA_KEY_TYPE, CKA_KEY_GEN_MECHANISM]);
+           CKA_KEY_TYPE, CKA_KEY_GEN_MECHANISM, CKA_MODULUS_BITS,
+           CKA_EC_POINT, CKA_VALUE_LEN]);
   for s := low(POS2CKA) to high(POS2CKA) do
     arr.Add(POS2CKA[s]);
   if Values <> nil then
@@ -3893,8 +3935,7 @@ begin
           arr.Find(CKA_LABEL, StorageLabel);
           arr.Find(CKA_APPLICATION, Application);
           arr.Find(CKA_ID, StorageID, {hex=}true);
-          if StorageID = '' then
-            arr.Find(CKA_UNIQUE_ID, StorageID);
+          arr.Find(CKA_UNIQUE_ID, UniqueID);
           arr.Find(CKA_SUBJECT, Subject);
           if arr.Find(CKA_CERTIFICATE_TYPE, u) then
           begin
@@ -3916,9 +3957,16 @@ begin
           arr.Find(CKA_START_DATE, Start);
           arr.Find(CKA_END_DATE, Stop);
           if arr.Find(CKA_KEY_TYPE, u) then
+          begin
             KeyType := KEY_TYPE(u);
-          if arr.Find(CKA_KEY_GEN_MECHANISM, u) then
-            KeyGen := MECHANISM_TYPE(u);
+            if arr.Find(CKA_KEY_GEN_MECHANISM, u) then
+              KeyGen := MECHANISM_TYPE(u);
+            if arr.Find(CKA_MODULUS_BITS, u) then // for RSA
+              KeyBits := u
+            else if not EccBitsFromPointLen(arr.FindLen(CKA_EC_POINT), KeyBits) then
+              if arr.Find(CKA_VALUE_LEN, u) then // CKK_EC
+                KeyBits := u shl 3; // CKK_AES
+          end;
           SessionHandle := obj[i];
           if Values <> nil then
             arr.Find(CKA_VALUE, Values^[count]);
@@ -4097,8 +4145,8 @@ initialization
       ' mechanism:TPkcs11Mechanisms hwmaj,hwmin,fwmaj,fwmin:byte',
     TypeInfo(TPkcs11ObjectDynArray),
       'class:CK_OBJECT_CLASS id,label:RawUtf8 flags:TPkcs11ObjectStorages' +
-      ' keytype:CK_KEY_TYPE keygen:CK_MECHANISM_TYPE start,end:TDateTime' +
-      ' app:RawUtf8 sub,sn,issuer:RawByteString hdl:cardinal',
+      ' keytype:CK_KEY_TYPE keygen:CK_MECHANISM_TYPE keybits:cardinal ' +
+      ' start,end:TDateTime app:RawUtf8 sub,sn,iss,uid:RawByteString hdl:cardinal',
     TypeInfo(TPkcs11Token),
       'slot:cardinal name,manufacturer,model,serial,time:RawUtf8 flags:CKT_FLAGS' +
       ' sessions,maxsessions,minpin,maxpin: integer'
