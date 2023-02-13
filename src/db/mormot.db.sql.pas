@@ -3959,7 +3959,7 @@ const
     'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,' +
     'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,' +
     'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,' +
-    'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,' +
+    'conversion,copy,cost,createdb,createrole,createuser,csv,ctid,current_role,cycle,database,' +
     'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,' +
     'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,' +
     'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,' +
