@@ -126,6 +126,14 @@ type
 
 implementation  
 
+type
+  TOrmJson = class(TOrm)
+  protected
+    fJson: RawJson;
+  published
+    property Json: RawJson
+      read fJson write fJson;
+  end;
 
 { TTestOrmCore }
 
@@ -135,11 +143,12 @@ var
   U: TRestServerUri;
   met: TUriMethod;
 begin
-  M := TOrmModel.Create([TOrmTest]);
+  M := TOrmModel.Create([TOrmTest, TOrmJson]);
   try
     Check(M['Test'] <> nil);
     Check(M['Test2'] = nil);
     Check(M['TEST'] = TOrmTest);
+    Check(M['Json'] = TOrmJSON);
   finally
     M.Free;
   end;
@@ -515,6 +524,8 @@ var
   wa: WinAnsiString;
   M: TOrmModel;
   T, T2: TOrmTest;
+  J, J2: TOrmJson;
+  pi: TOrmPropInfo;
   s3: RawUtf8;
   bin: RawByteString;
   valid: boolean;
@@ -549,11 +560,25 @@ begin
   Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
     'select a,b  from  titi, tutu ,  tata where a=2')) = 'titi,tutu,tata');
   T := TOrmTest.Create;
-  M := TOrmModel.Create([TOrmTest]);
+  J := TOrmJson.Create;
+  M := TOrmModel.Create([TOrmTest, TOrmJson]);
   for i := 0 to GetRttiProp(TOrmTest, P) - 1 do
   begin
     Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
     Check(T.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8) <> nil);
+    P := P^.Next;
+  end;
+  for i := 0 to GetRttiProp(TOrmJson, P) - 1 do
+  begin
+    Check(TOrmJson.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
+    pi := J.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8);
+    check(pi <> nil);
+    if pi.name = 'Json' then
+    begin
+      check(pi.SqlDBFieldType = ftUtf8);
+      check(pi.OrmFieldType = oftUtf8Text);
+      check(pi.OrmFieldTypeStored = oftUtf8Text);
+    end;
     P := P^.Next;
   end;
   Check(TOrmTest.OrmProps.Fields.IndexByName('') < 0);
@@ -702,6 +727,7 @@ begin
     M.Free;
     T2.Free;
     T.Free;
+    J.Free;
   end;
 end;
 
