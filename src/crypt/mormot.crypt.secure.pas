@@ -5536,9 +5536,7 @@ begin
         SetLength(result, certlen);
         if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
           raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
-        while result[certlen] = #0 do
-          dec(certlen);
-        FakeLength(result, certlen); // trim ending #0 used for padding
+        // note: don't remove ending #0 padding because some may be needed
         if lenoffs <> nil then
           lenoffs^ := certlenoffs;
         if offs <> nil then
