@@ -1091,6 +1091,7 @@ procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
 var
   cred: TSChannelCred;
   buf: THandshakeBuf;
+  nfo: TWinCertInfo;
   res, f: cardinal;
 begin
   // prepare execution context
@@ -1123,6 +1124,13 @@ begin
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
   Context.CipherName := GetCipherName;
+  if TlsCertInfo(fCtxt, nfo) then
+  begin
+    Context.PeerIssuer := nfo.IssuerName;
+    Context.PeerSubject := nfo.SubjectName;
+    if Context.WithPeerInfo then
+      Context.PeerInfo := ToText(nfo);
+  end;
 end;
 
 procedure TSChannelNetTls.AfterBind(var Context: TNetTlsContext);

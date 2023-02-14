@@ -497,7 +497,6 @@ type
     // i.e. if OnPeerValidate/OnEachPeerVerify callbacks are not set
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
-    // - ignored on SChannel
     WithPeerInfo: boolean;
     /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
     // - default is TLS 1.2+ only, and deprecated SSL 2/3 are always disabled
@@ -552,14 +551,15 @@ type
     CipherName: RawUtf8;
     /// output: the connected Peer issuer name
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
-    // - not populated on SChannel, always on OpenSSL
+    // - populated on both SChannel and OpenSSL
     PeerIssuer: RawUtf8;
     /// output: the connected Peer subject name
     // - e.g. 'CN=synopse.info'
-    // - not populated on SChannel, always on OpenSSL
+    // - populated on both SChannel and OpenSSL
     PeerSubject: RawUtf8;
     /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()
+    // or ToText(TWinCertInfo)
     // - only populated if WithPeerInfo was set to true, or an error occurred
     PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
