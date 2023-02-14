@@ -302,6 +302,11 @@ begin
   {$endif CPU64}
 end;
 
+function FileTimeToDateTime(const FT: TFileTime): TDateTime;
+begin
+  result := FileTimeToUnixMSTime(FT) / MSecsPerDay + UnixDateDelta;
+end;
+
 function UnixTimeUtc: TUnixTime;
 var
   ft: TFileTime;
