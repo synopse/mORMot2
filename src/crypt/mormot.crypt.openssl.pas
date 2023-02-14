@@ -641,6 +641,12 @@ function ToText(u: TX509Usage): RawUtf8; overload;
 function ToText(u: TX509Usages): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// high-level function to decode X509 certificate main properties using OpenSSL
+// - assigned to mormot.core.secure X509Parse() redirection by RegisterOpenSsl
+function OpenSslX509Parse(const Cert: RawByteString;
+  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
+  out Usage: TCryptCertUsages; out NotBef, NotAft: TDateTime): boolean;
+
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
@@ -2819,6 +2825,33 @@ begin
   x.Free;
 end;
 
+function OpenSslX509Parse(const Cert: RawByteString;
+  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
+  out Usage: TCryptCertUsages; out NotBef, NotAft: TDateTime): boolean;
+var
+  x: PX509;
+begin
+  result := false;
+  x := LoadCertificate(Cert);
+  if x <> nil then
+    try
+      SN := x.SerialNumber;
+      SubDN := x.SubjectName;
+      IssDN := x.IssuerName;
+      SubID := x.SubjectKeyIdentifier;
+      IssID := x.AuthorityKeyIdentifier;
+      SigAlg := x.GetSignatureAlgo;
+      PeerInfo := x.PeerInfo;
+      Usage := TCryptCertUsages(x.GetUsage); // TX509Usages match ASN1 16-bit
+      NotBef := x.NotBefore;
+      NotAft := x.NotAfter;
+      result := true;
+    finally
+      x.Free;
+    end;
+end;
+
+
 
 procedure RegisterOpenSsl;
 var
@@ -2860,6 +2893,8 @@ begin
   CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;
+  // and also for X509 parsing
+  X509Parse := @OpenSslX509Parse;
 end;
 
 procedure FinalizeUnit;

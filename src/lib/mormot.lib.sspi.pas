@@ -629,11 +629,6 @@ function ToText(const c: TWinCertInfo): RawUtf8; overload;
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
 function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
 
-/// high-level function to decode X509 main properties using WinCrypto API
-function WinX509Parse(const Cert: RawByteString;
-  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
-  out Usage: word; out NotBef, NotAft: TDateTime): boolean;
-
 /// retrieve the end certificate information of a given TLS connection
 function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 
@@ -1500,27 +1495,6 @@ begin
   end;
 end;
 
-
-function WinX509Parse(const Cert: RawByteString;
-  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
-  out Usage: word; out NotBef, NotAft: TDateTime): boolean;
-var
-  c: TWinCertInfo;
-begin
-  result := WinCertDecode(Cert, c);
-  if not result then
-    exit;
-  SN := c.Serial;
-  SubDN := c.SubjectName;
-  IssDN := c.IssuerName;
-  SubID := c.SubjectID;
-  IssID := c.IssuerID;
-  SigAlg := c.AlgorithmName;
-  PeerInfo := ToText(c);
-  Usage := word(c.Usage); // TWinCertUsages match the ASN1/X509 16-bit value
-  NotBef := c.NotBefore;
-  NotAft := c.NotAfter;
-end;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
