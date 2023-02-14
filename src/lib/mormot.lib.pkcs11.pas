@@ -2036,6 +2036,9 @@ type
     // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
     function TokenByName(const TokenName: RawUtf8;
       CaseInsensitive: boolean = false): PPkcs11Token;
+    /// search for a given TPkcs11Token.Slot within current Tokens[].Name
+    function SlotByTokenName(const TokenName: RawUtf8; out Slot: TPkcs11SlotID;
+      CaseInsensitive: boolean = false): boolean;
 
     /// enter public session by Slot ID, R/O by default
     // - only a single session can be opened at once in a TPkcs11 instance
@@ -3886,6 +3889,19 @@ begin
           inc(result);
   end;
   result := nil;
+end;
+
+function TPkcs11.SlotByTokenName(const TokenName: RawUtf8;
+  out Slot: TPkcs11SlotID; CaseInsensitive: boolean): boolean;
+var
+  tok: PPkcs11Token;
+begin
+  result := false;
+  tok := TokenByName(TokenName, CaseInsensitive);
+  if tok = nil then
+    exit;
+  Slot := tok^.Slot;
+  result := true;
 end;
 
 function TPkcs11.GetObjects(Filter: PCK_ATTRIBUTES;

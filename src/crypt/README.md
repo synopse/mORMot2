@@ -58,7 +58,7 @@ If `mormot.crypt.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library wi
 Certificate-based Public Key Cryptography Classes
 - High-Level Certificate-based Public Key Cryptography
 - `IProtocol` Implemented using Public Key Cryptography
-- Registration of our ECC Engine to the `TCryptAsym` Factory
+- Registration of our ECC Engine to the `TCryptAsym`/`TCryptCert` Factories
 
 ### mormot.crypt.jwt
 
