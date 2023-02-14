@@ -827,6 +827,7 @@ procedure ClassToText(C: TClass; var result: RawUtf8);
 function ToText(C: TClass): RawUtf8; overload;
   {$ifdef HASSAFEINLINE}inline;{$endif}
 
+
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
@@ -860,6 +861,13 @@ function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 // - slow function, here to avoid linking mormot.core.datetime
 function DateTimeToIsoString(dt: TDateTime): string;
 
+/// convert a binary into its human-friendly per-byte hexadecimal lowercase text
+// - returns e.g. '12:50:b6:1e:c6:aa', i.e. the DN/MAC format
+// - used e.g. in mormot.lib.openssl11 and mormot.net.sock
+procedure ToHumanHex(var result: RawUtf8; bin: PByteArray; len: PtrInt);
+
+/// convert a binary into its human-friendly hexadecimal in reverse order
+procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
@@ -4429,6 +4437,7 @@ end;
 
 const
   HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
 var
@@ -4601,6 +4610,63 @@ function DateTimeToIsoString(dt: TDateTime): string;
 begin
   // avoid to link mormot.core.datetime
   DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
+end;
+
+procedure ToHumanHex(var result: RawUtf8; bin: PByteArray; len: PtrInt);
+var
+  P: PAnsiChar;
+  i, c: PtrInt;
+  tab: PAnsichar;
+begin
+  if len <= 0 then
+  begin
+    result := '';
+    exit;
+  end;
+  FastSetString(result, nil, (len * 3) - 1);
+  dec(len);
+  tab := @HexCharsLower;
+  P := pointer(result);
+  i := 0;
+  repeat
+    c := bin[i];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
+    if i = len then
+      break;
+    P[2] := ':'; // to please human limited hexadecimal capabilities
+    inc(P, 3);
+    inc(i);
+  until false;
+end;
+
+procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
+var
+  P: PAnsiChar;
+  i, c: PtrInt;
+  tab: PAnsichar;
+begin
+  if len <= 0 then
+  begin
+    result := '';
+    exit;
+  end;
+  FastSetString(result, nil, (len * 3) - 1);
+  tab := @HexCharsLower;
+  P := pointer(result);
+  i := len;
+  repeat
+    dec(i);
+    c := bin[i];
+    P[0] := tab[c shr 4];
+    c := c and 15;
+    P[1] := tab[c];
+    if i = 0 then
+      break;
+    P[2] := ':';
+    inc(P, 3);
+  until false;
 end;
 
 

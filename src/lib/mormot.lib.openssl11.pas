@@ -8636,7 +8636,7 @@ end;
 procedure asn1_string_st.ToHex(out result: RawUtf8);
 begin
   if @self <> nil then
-    result := MacToText(Data, Len);
+    ToHumanHex(result, Data, Len);
 end;
 
 function asn1_string_st.Equals(const another: asn1_string_st): boolean;

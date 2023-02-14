@@ -371,10 +371,9 @@ procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
 procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
-// - returns e.g. '12:50:b6:1e:c6:aa'
-// - could be used to convert some binary buffer into human-friendly hexadecimal
-// string, e.g. by asn1_string_st.ToHex() in our mormot.lib.openssl11 wrapper
-function MacToText(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
+// - calls ToHumanHex(mac, 6), returning e.g. '12:50:b6:1e:c6:aa'
+function MacToText(mac: PByteArray): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a MAC address value from its standard hexadecimal text representation
 // - returns e.g. '12:50:b6:1e:c6:aa' from '1250b61ec6aa' or '1250B61EC6AA'
@@ -2352,28 +2351,9 @@ begin
   FastSetString(result, @s[1], ord(s[0]));
 end;
 
-function MacToText(mac: PByteArray; maclen: PtrInt): RawUtf8;
-var
-  P: PAnsiChar;
-  i, c: PtrInt;
-  tab: PAnsichar;
+function MacToText(mac: PByteArray): RawUtf8;
 begin
-  FastSetString(result, nil, (maclen * 3) - 1);
-  dec(maclen);
-  tab := @HexCharsLower;
-  P := pointer(result);
-  i := 0;
-  repeat
-    c := mac[i];
-    P[0] := tab[c shr 4];
-    c := c and 15;
-    P[1] := tab[c];
-    if i = maclen then
-      break;
-    P[2] := ':'; // as in Linux
-    inc(P, 3);
-    inc(i);
-  until false;
+  ToHumanHex(result, mac, 6);
 end;
 
 function MacTextFromHex(const Hex: RawUtf8): RawUtf8;
