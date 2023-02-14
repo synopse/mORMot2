@@ -524,7 +524,7 @@ var
   wa: WinAnsiString;
   M: TOrmModel;
   T, T2: TOrmTest;
-  J, J2: TOrmJson;
+  J: TOrmJson;
   pi: TOrmPropInfo;
   s3: RawUtf8;
   bin: RawByteString;
