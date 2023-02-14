@@ -228,12 +228,13 @@ const
   SECPKG_CRED_INBOUND  = 1;
   SECPKG_CRED_OUTBOUND = 2;
 
-  SECPKG_ATTR_SIZES            = 0;
-  SECPKG_ATTR_NAMES            = 1;
-  SECPKG_ATTR_STREAM_SIZES     = 4;
-  SECPKG_ATTR_NEGOTIATION_INFO = 12;
-  SECPKG_ATTR_CONNECTION_INFO  = $5a;
-  SECPKG_ATTR_CIPHER_INFO      = $64; // Vista+ new API
+  SECPKG_ATTR_SIZES               = 0;
+  SECPKG_ATTR_NAMES               = 1;
+  SECPKG_ATTR_STREAM_SIZES        = 4;
+  SECPKG_ATTR_NEGOTIATION_INFO    = 12;
+  SECPKG_ATTR_REMOTE_CERT_CONTEXT = $53;
+  SECPKG_ATTR_CONNECTION_INFO     = $5a;
+  SECPKG_ATTR_CIPHER_INFO         = $64; // Vista+ new API
 
   SECPKGCONTEXT_CIPHERINFO_V1 = 1;
 
@@ -508,9 +509,10 @@ function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
 
 type
   /// each possible key usage of a certificate, as decoded into TWinCertInfo
-  // - wkuCrlSign .. wkuDigitalSignature match CertGetIntendedKeyUsage() API
-  // - wkuSelfSigned is set if Issuer = Name
-  TWinCertKeyUsage = (
+  // - match ASN1/X509 16-bit TCryptCertUsage from mormot.crypt.secure
+  TWinCertUsage = (
+    wkuCA,
+    wkuEncipherOnly,
     wkuCrlSign,
     wkuKeyCertSign,
     wkuKeyAgreement,
@@ -518,49 +520,65 @@ type
     wkuKeyEncipherment,
     wkuNonRepudiation,
     wkuDigitalSignature,
-    wkuSelfSigned);
+    wkuDecipherOnly,
+    wkuTlsServer,
+    wkuTlsClient,
+    wkuEmail,
+    wkuCodeSign,
+    wkuOcspSign,
+    wkuTimestamp);
+
   /// the key usages of a certificate, as decoded into TWinCertInfo
-  TWinCertKeyUsages = set of TWinCertKeyUsage;
+  // - match ASN1/X509 16-bit TCryptCertUsage from mormot.crypt.secure
+  TWinCertUsages = set of TWinCertUsage;
 
   /// a X509 certificate extension, as decoded into TWinCertInfo.Extension
   TWinCertExtension = record
+    /// the OID of this extension
     OID: RawUtf8;
+    /// if this extension was marked as "critical"
     Critical: boolean;
-    Value: RawByteString;
+    /// the extension data, stored as 'xx:xx:xx:xx...' hexa text
+    Value: RawUtf8;
   end;
   PWinCertExtension = ^TWinCertExtension;
 
   /// decoded information about a X509 certificate as returned by WinCertDecode
   TWinCertInfo = record
-    /// the certificate Serial Number, stored as raw binary
-    Serial: RawByteString;
+    /// the certificate Serial Number, stored as 'xx:xx:xx:xx...' hexa text
+    Serial: RawUtf8;
     /// the main key usages of this certificate
-    Usage: TWinCertKeyUsages;
+    // - match ASN1/X509 16-bit TCryptCertUsage from mormot.crypt.secure
+    Usage: TWinCertUsages;
     /// the friendly name of this certificate
     // - will try subject CN= O= then CERT_FRIENDLY_NAME_PROP_ID property
     Name: RawUtf8;
     /// the certificate Issuer, decoded as RFC 1779 text, with X500 key names
+    // - contains e.g. 'C=FR, O=Certplus, CN=Class 3P Primary CA'
     // - you can use ExtractX500() to retrieve one actual field value
     IssuerName: RawUtf8;
     /// the certificate Subject, decoded as RFC 1779 text, with X500 key names
+    // - contains e.g. 'C=FR, O=Certplus, CN=Class 3P Primary CA'
     // - you can use ExtractX500() to retrieve one actual field value
     SubjectName: RawUtf8;
-    /// the certificate Issuer ID, stored as raw binary
-    IssuerID: RawByteString;
-    /// the certificate Subject ID, stored as raw binary
-    SubjectID: RawByteString;
-    /// the certificate validity start date, from Unix epoch 1/1/1970
-    NotBefore: TUnixTime;
-    /// the certificate validity end date, from Unix epoch 1/1/1970
-    NotAfter: TUnixTime;
+    /// the certificate Issuer ID, stored as 'xx:xx:xx:xx...' hexa text
+    IssuerID: RawUtf8;
+    /// the certificate Subject ID, stored as 'xx:xx:xx:xx...' hexa text
+    SubjectID: RawUtf8;
+    /// the certificate validity start date
+    NotBefore: TDateTime;
+    /// the certificate validity end date
+    NotAfter: TDateTime;
     /// the certificate algorithm, as OID text
+    // - e.g. '1.2.840.113549.1.1.5' for 'sha1RSA' AlgorithmName
     Algorithm: RawUtf8;
     /// the certificate algorithm name, as converted by WinCertAlgoName()
     // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
     AlgorithmName: RawUtf8;
     /// the certificate binary SHA1 fingerprint of 20 bytes
-    Hash: RawByteString;
+    Hash: RawUtf8;
     /// the certificate public key algorithm, as OID text
+    // - e.g. ' 1.2.840.113549.1.1.1' for 'RSA' PublicKeyAlgorithmName
     PublicKeyAlgorithm: RawUtf8;
     /// the certificate public key algorithm name, converted by WinCertAlgoName()
     // - is most likely 'RSA', but could be e.g. 'ECC'
@@ -603,9 +621,21 @@ function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
 function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal = CERT_X500_NAME_STR): boolean;
 
+/// return some multi-line text of the main TWinCertInfo fields
+// - in a layout similar to X509_print OpenSSL formatting
+function ToText(const c: TWinCertInfo): RawUtf8; overload;
+
 /// could be used to extract CERT_X500_NAME_STR values
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
 function ExtractX500(const Pattern, Text: RawUtf8): RawUtf8;
+
+/// high-level function to decode X509 main properties using WinCrypto API
+function WinX509Parse(const Cert: RawByteString;
+  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
+  out Usage: word; out NotBef, NotAft: TDateTime): boolean;
+
+/// retrieve the end certificate information of a given TLS connection
+function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -951,6 +981,7 @@ function CertFreeCertificateContext;        external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 
+
 { TSecBuffer }
 
 procedure TSecBuffer.Init(aType: cardinal; aData: pointer;
@@ -1212,6 +1243,19 @@ begin
     result := nfo.ToText; // fallback on XP
 end;
 
+function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
+var
+  nfo: PCCERT_CONTEXT;
+begin
+  result := false;
+  nfo := nil;
+  if QueryContextAttributesW(
+      @Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @nfo) <> SEC_E_OK then
+    exit;
+  result := WinCertCtxtDecode(nfo, Info);
+  CertFreeCertificateContext(nfo);
+end;
+
 const
   RSA_PREFIX: PAnsiChar = '1.2.840.113549.1.1.'; // len=19
   ECC_PREFIX: PAnsiChar = '1.2.840.10045.';      // len=14
@@ -1321,11 +1365,12 @@ function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal): boolean;
 var
   nfo: PCERT_INFO;
-  i: PtrInt;
+  i, o: PtrInt;
   ku: byte;
-  u: TWinCertKeyUsage;
+  u: TWinCertUsage;
   len: cardinal;
   sub: RawUtf8;
+  h: THash160;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -1335,15 +1380,12 @@ begin
   FillcharFast(Cert, SizeOf(Cert), 0);
   nfo := Ctxt^.pCertInfo;
   with nfo^.SerialNumber do
-    FastSetRawByteString(Cert.Serial, pbData, cbData);
+    ToHumanHexReverse(Cert.Serial, pbData, cbData);
   ku := 0;
   CertGetIntendedKeyUsage(X509_ASN_ENCODING, nfo, @ku, SizeOf(ku));
   for u := low(WIN_CERT_USAGE) to high(WIN_CERT_USAGE) do
     if ku and WIN_CERT_USAGE[u] <> 0 then
       include(Cert.Usage, u);
-  if (nfo^.Issuer.cbData = nfo^.Subject.cbData) and
-     CompareMem(nfo^.Issuer.pbData, nfo^.Subject.pbData, nfo^.Issuer.cbData) then
-    include(Cert.Usage, wkuSelfSigned);
   WinCertName(nfo^.Issuer, Cert.IssuerName, StrType);
   WinCertName(nfo^.Subject, Cert.SubjectName, StrType);
   if StrType = CERT_X500_NAME_STR then
@@ -1364,11 +1406,11 @@ begin
       tmp.Done;
     end;
   with nfo^.IssuerUniqueId do
-    FastSetRawByteString(Cert.IssuerID, pbData, cbData);
+    ToHumanHex(Cert.IssuerID, pbData, cbData);
   with nfo^.SubjectUniqueId do
-    FastSetRawByteString(Cert.SubjectID, pbData, cbData);
-  Cert.NotBefore := FileTimeToUnixTime(nfo^.NotBefore);
-  Cert.NotAfter  := FileTimeToUnixTime(nfo^.NotAfter);
+    ToHumanHex(Cert.SubjectID, pbData, cbData);
+  Cert.NotBefore := FileTimeToDateTime(nfo^.NotBefore);
+  Cert.NotAfter  := FileTimeToDateTime(nfo^.NotAfter);
   Cert.Algorithm := nfo^.SignatureAlgorithm.pszObjId;
   WinCertAlgoName(nfo^.SignatureAlgorithm.pszObjId, Cert.AlgorithmName);
   Cert.PublicKeyAlgorithm := nfo^.SubjectPublicKeyInfo.Algorithm.pszObjId;
@@ -1390,11 +1432,9 @@ begin
     end;
     tmp.Done;
   end;
-  len := SizeOf(THash160); // 20 bytes of a SHA-1 hash
-  SetLength(Cert.Hash, len);
-  if not CertGetCertificateContextProperty(
-           Ctxt, CERT_HASH_PROP_ID, pointer(Cert.Hash), len) then
-    Cert.Hash := '';
+  len := SizeOf(h); // 20 bytes of a SHA-1 hash
+  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
+    ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
   for i := 0 to integer(nfo^.cExtension) - 1 do
     with nfo^.rgExtension[i],
@@ -1402,9 +1442,84 @@ begin
     begin
       OID := pszObjId;
       Critical := fCritical;
-      FastSetRawByteString(Value, Blob.pbData, Blob.cbData);
+      ToHumanHex(Value, Blob.pbData, Blob.cbData);
+      if (OID = '2.5.29.19') and
+         (Value = '30:03:01:01:ff') then
+        include(Cert.Usage, wkuCA) // X509v3 Basic Constraints: CA:TRUE
+      else if (Cert.SubjectID = '') and
+              (OID = '2.5.29.14') and
+              (copy(Value, 1, 6) = '04:14:') then
+        Cert.SubjectID := copy(Value, 7, 2000) // rough parsing of 20-byte IDs
+      else if (Cert.IssuerID = '') and
+              (OID = '2.5.29.35') and // authorityKeyIdentifier
+              (length(Value) > 60) then
+      begin
+        o := PosEx('80:14:', Value); // rough detection of 20-byte IDs
+        if o <> 0 then
+          Cert.IssuerID := copy(Value, o + 6, 59);
+      end;
     end;
   result := true;
+end;
+
+function ToText(const c: TWinCertInfo): RawUtf8;
+var
+  pub: RawUtf8;
+begin
+  // roughly follow X509_print() OpenSSL formatting
+  ToHumanHex(pub, pointer(c.PublicKeyContent), length(c.PublicKeyContent));
+  result := 'Certificate:'#13#10 +
+            '  Serial Number:'#13#10 +
+            '    ' + c.Serial + #13#10 +
+            '  Signature Algorithm: ' + c.AlgorithmName + #13#10 +
+            '  Issuer: ' + c.IssuerName + #13#10 +
+            '  Validity:'#13#10 +
+            '    Not Before: ' + RawUtf8(DateTimeToIsoString(c.NotBefore)) + #13#10 +
+            '    Not After: ' + RawUtf8(DateTimeToIsoString(c.NotAfter)) + #13#10 +
+            '  Subject: ' + c.SubjectName + #13#10 +
+            '  Subject Public Key Info:'#13#10 +
+            '    Public Key Algorithm: ' + c.PublicKeyAlgorithmName + #13#10 +
+            '    Public Key:'#13#10 +
+            '      ' + pub + #13#10 +
+            '    OID: ' + c.PublicKeyAlgorithm + #13#10;
+  if (wkuCA in c.Usage) or
+     (c.SubjectID <> '') or
+     (c.IssuerID <> '') then
+  begin
+    // append the known extensions
+    result := result + '  X509v3 extensions:'#13#10;
+    if wkuCA in c.Usage then
+      result := result + '    X509v3 Basic Constraints:'#13#10 +
+                         '      CA:TRUE'#13#10;
+    if c.SubjectID <> '' then
+      result := result + '    X509v3 Subject Key Identifier:'#13#10 +
+                         '      ' + c.SubjectID + #13#10;
+    if c.IssuerID <> '' then
+      result := result + '    X509v3 Authority Key Identifier:'#13#10 +
+                         '      ' + c.IssuerID + #13#10;
+  end;
+end;
+
+
+function WinX509Parse(const Cert: RawByteString;
+  out SN, SubDN, IssDN, SubID, IssID, SigAlg, PeerInfo: RawUtf8;
+  out Usage: word; out NotBef, NotAft: TDateTime): boolean;
+var
+  c: TWinCertInfo;
+begin
+  result := WinCertDecode(Cert, c);
+  if not result then
+    exit;
+  SN := c.Serial;
+  SubDN := c.SubjectName;
+  IssDN := c.IssuerName;
+  SubID := c.SubjectID;
+  IssID := c.IssuerID;
+  SigAlg := c.AlgorithmName;
+  PeerInfo := ToText(c);
+  Usage := word(c.Usage); // TWinCertUsages match the ASN1/X509 16-bit value
+  NotBef := c.NotBefore;
+  NotAft := c.NotAfter;
 end;
 
 
