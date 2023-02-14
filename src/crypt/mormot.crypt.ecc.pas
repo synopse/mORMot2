@@ -5175,8 +5175,7 @@ type
   end;
 
   /// class implementing ICryptCert using our ECC Public Key Cryptography
-  // - TEccCertificate will store Subjects Baudot-encoded, and as issuer in V1
-  // - with the current implementation, GetUsages returns CU_ALL
+  // - V2 TEccCertificate will store Subjects Baudot-encoded, and as issuer in V1
   TCryptCertInternal = class(TCryptCert)
   protected
     fEcc: TEccCertificate; // TEccCertificate or TEccCertificateSecret
@@ -5200,7 +5199,7 @@ type
     function IsSelfSigned: boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
-    function IsValidDate: boolean; override;
+    function IsValidDate(date: TDateTime): boolean; override;
     function IsVoid: boolean; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
@@ -5389,10 +5388,10 @@ begin
     result := 0;
 end;
 
-function TCryptCertInternal.IsValidDate: boolean;
+function TCryptCertInternal.IsValidDate(date: TDateTime): boolean;
 begin
   result := (fEcc <> nil) and
-            fEcc.Content.CheckDate;
+            fEcc.Content.CheckDate(nil, date);
 end;
 
 function TCryptCertInternal.IsVoid: boolean;

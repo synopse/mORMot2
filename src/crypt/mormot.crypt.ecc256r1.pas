@@ -42,6 +42,7 @@ const
 
   /// Mon, 01 Aug 2016 encoded as COM/TDateTime value
   // - used to compute TEccDate 16-bit values to/from a TDateTime
+  // - 16-bit day resolution allow values from year 2016 to 2196
   ECC_DELTA = 42583;
 
 
@@ -366,7 +367,7 @@ type
     Head: TEccCertificateContentV1;
     /// new version >= 2 with additional information (up to 512 bytes)
     Info: TEccCertificateContentV2;
-    /// set Certificate usage, as 16-bit TCryptCertUsage value
+    /// set Certificate usage, as ASN1/X509 16-bit TCryptCertUsage value
     // - will also force the version to be 2 if maxversion allow it
     procedure SetUsage(usage: integer; maxversion: byte);
     /// get Certificate 16-bit TCryptCertUsage usage

@@ -1230,7 +1230,8 @@ type
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
-  // - stored as a 16-bit memory block, with CU_ALL = 65535
+  // and TWinCertUsage in mormot.lib.sspi
+  // - stored as its ASN1/X509 16-bit value, with CU_ALL = 65535
   TCryptCertUsage = (
     cuCA,
     cuEncipherOnly,
@@ -1375,7 +1376,8 @@ type
     /// the maximum Validity timestamp of this Certificate
     function GetNotAfter: TDateTime;
     /// check GetNotBefore/GetNotAfter validity
-    function IsValidDate: boolean;
+    // - validate against current UTC date/time if none is specified
+    function IsValidDate(date: TDateTime = 0): boolean;
     /// returns true e.g. after TCryptCertAlgo.New but before Generate()
     function IsVoid: boolean;
     /// the Key Usages of this Certificate
@@ -1545,7 +1547,7 @@ type
     function IsSelfSigned: boolean; virtual; abstract;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
-    function IsValidDate: boolean; virtual;
+    function IsValidDate(date: TDateTime): boolean; virtual;
     function IsVoid: boolean; virtual;
     function GetUsage: TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
@@ -4697,16 +4699,17 @@ begin
   RaiseError('Generate: % error', [api]); // raise ECryptCert
 end;
 
-function TCryptCert.IsValidDate: boolean;
+function TCryptCert.IsValidDate(date: TDateTime): boolean;
 var
-  na, nb, now: TDateTime;
+  na, nb: TDateTime;
 begin
-  now := NowUtc;
+  if date = 0 then
+    date := NowUtc;
   na := GetNotAfter;
   nb := GetNotBefore;
   result := (not IsVoid) and
-            ((na <= 0) or (na > now)) and
-            ((nb <= 0) or (nb <= now));
+            ((na <= 0) or (na > date)) and
+            ((nb <= 0) or (nb <= date));
 end;
 
 function TCryptCert.IsVoid: boolean;

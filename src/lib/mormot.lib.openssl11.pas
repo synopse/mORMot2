@@ -1634,6 +1634,8 @@ type
 
   /// X509v3 Key and Extended Key Usage Flags
   // - is a convenient way to get or set a Certificate extensions
+  // - is an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
+  // and TWinCertUsages in mormot.lib.sspi
   TX509Usages = set of TX509Usage;
 
   PX509V3_CTX = ^v3_ext_ctx;
