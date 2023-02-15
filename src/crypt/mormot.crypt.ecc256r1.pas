@@ -367,7 +367,7 @@ type
     Head: TEccCertificateContentV1;
     /// new version >= 2 with additional information (up to 512 bytes)
     Info: TEccCertificateContentV2;
-    /// set Certificate usage, as ASN1/X509 16-bit TCryptCertUsage value
+    /// set Certificate usage, as 16-bit TCryptCertUsages value
     // - will also force the version to be 2 if maxversion allow it
     procedure SetUsage(usage: integer; maxversion: byte);
     /// get Certificate 16-bit TCryptCertUsage usage

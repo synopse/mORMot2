@@ -1128,8 +1128,9 @@ begin
   begin
     Context.PeerIssuer := nfo.IssuerName;
     Context.PeerSubject := nfo.SubjectName;
-    if Context.WithPeerInfo then
-      Context.PeerInfo := ToText(nfo);
+    if Context.WithPeerInfo and
+       Assigned(WinCertInfoToText) then
+      Context.PeerInfo := WinCertInfoToText(nfo);
   end;
 end;
 
