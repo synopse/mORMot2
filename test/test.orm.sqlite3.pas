@@ -645,8 +645,8 @@ procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileNam
       res := Slave.Server.RecordVersionSynchronizeSlave(
         TOrmPeopleVersioned, SynchronizeFromMaster.Orm, 500)
     else
-      res := Slave.Server.RecordVersionCurrent;
-    Test.CheckEqual(res, Master.Server.RecordVersionCurrent);
+      res := Slave.Server.RecordVersionCurrent(TOrmPeopleVersioned);
+    Test.CheckEqual(res, Master.Server.RecordVersionCurrent(TOrmPeopleVersioned));
     Rec1 := TOrmPeopleVersioned.CreateAndFillPrepare(
       Master.Orm, 'order by ID', '*');
     Rec2 := TOrmPeopleVersioned.CreateAndFillPrepare(
@@ -782,7 +782,8 @@ begin
         Slave2Callback := TServiceRecordVersionCallback.Create(
           Slave2, MasterAccess, TOrmPeopleVersioned, nil);
         Master.RecordVersionSynchronizeSubscribeMaster(TOrmPeopleVersioned,
-          Slave2.Server.RecordVersionCurrent, Slave2Callback);
+          Slave2.Server.RecordVersionCurrent(TOrmPeopleVersioned),
+          Slave2Callback);
       end;
       Test.check(Rec.FillRewind);
       for i := 0 to 20 do
@@ -807,7 +808,8 @@ begin
         repeat
           sleep(1)
         until (GetTickCount64 > timeout) or // wait all callbacks to be received
-          (Slave2.Server.RecordVersionCurrent = Master.Server.RecordVersionCurrent);
+          (Slave2.Server.RecordVersionCurrent(TOrmPeopleVersioned) =
+           Master.Server.RecordVersionCurrent(TOrmPeopleVersioned));
         Test.check(Slave2.RecordVersionSynchronizeSlaveStop(TOrmPeopleVersioned));
       end;
       TestMasterSlave(Master, Slave2, nil);

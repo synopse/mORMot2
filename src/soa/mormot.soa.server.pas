@@ -514,6 +514,7 @@ type
     IServiceRecordVersionCallback)
   protected
     fTable: TOrmClass;
+    fTableIndex: PtrInt;
     fRecordVersionField: TOrmPropInfoRttiRecordVersion;
     fBatch: TRestBatch;
     fSlave: TRestServer; // fRest is master remote access
@@ -1968,7 +1969,7 @@ begin
     exit;
   fRestServer.AcquireExecution[execOrmWrite].Safe.Lock;
   try
-    if RecordVersion <> fRestServer.RecordVersionMax then
+    if RecordVersion <> fRestServer.GetRecordVersionMax(TableIndex) then
       // there are some missing items on the client side -> synch not possible
       exit;
     if fRecordVersionCallback = nil then
@@ -2238,10 +2239,10 @@ begin
   if fRecordVersionField = nil then
     raise EServiceException.CreateUtf8('%.Create: % has no TRecordVersion field',
       [self, aTable]);
-  fTableDeletedIDOffset := Int64(fSlave.Model.GetTableIndexExisting(aTable))
-    shl ORMVERSION_DELETEID_SHIFT;
-  inherited Create(aMaster, IServiceRecordVersionCallback);
   fTable := aTable;
+  fTableIndex := fSlave.Model.GetTableIndexExisting(aTable);
+  fTableDeletedIDOffset := Int64(fTableIndex) shl ORMVERSION_DELETEID_SHIFT;
+  inherited Create(aMaster, IServiceRecordVersionCallback);
   fOnNotify := aOnNotify;
 end;
 
@@ -2250,14 +2251,14 @@ procedure TServiceRecordVersionCallback.SetCurrentRevision(
 var
   current: TRecordVersion;
 begin
-  current := fSlave.RecordVersionMax;
+  current := fSlave.GetRecordVersionMax(fTableIndex);
   if (Revision < current) or
      ((Revision = current) and
       (Event <> ooInsert)) then
     raise EServiceException.CreateUtf8(
       '%.SetCurrentRevision(%) on %: previous was %',
       [self, Revision, fTable, current]);
-  fSlave.RecordVersionMax := Revision;
+  fSlave.SetRecordVersionMax(fTableIndex, Revision);
 end;
 
 procedure TServiceRecordVersionCallback.Added(const NewContent: RawJson);

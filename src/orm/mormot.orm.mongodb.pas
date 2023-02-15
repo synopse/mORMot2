@@ -645,7 +645,8 @@ begin
           [self, fStoredClass, fStoredClassRecordProps.RecordVersionField.Name])
       else
         // compute new monotonic TRecordVersion value if not supplied by sender
-        Doc.AddValue(RecordVersionName, Owner.RecordVersionCompute);
+        Doc.AddValue(RecordVersionName,
+          Owner.RecordVersionCompute(fStoredClassProps.TableIndex));
     if (Owner <> nil) and
        (Owner.Owner <> nil) and
        (Owner.Owner.Services <> nil) then

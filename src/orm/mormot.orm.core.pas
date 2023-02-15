@@ -1436,9 +1436,13 @@ type
     // when the server is in Idle state, and ready for process
     procedure TrackChangesFlush(aTableHistory: TOrmClass);
     /// will compute the next monotonic value for a TRecordVersion field
-    function RecordVersionCompute: TRecordVersion;
-    /// read only access to the current monotonic value for a TRecordVersion field
-    function RecordVersionCurrent: TRecordVersion;
+    function RecordVersionCompute(aTableIndex: integer): TRecordVersion;
+    /// read only access to the current monotonic value for the TRecordVersion
+    // field of a given table
+    function RecordVersionCurrent(aTableIndex: integer): TRecordVersion; overload;
+    /// read only access to the current monotonic value for the TRecordVersion
+    // field of a given table
+    function RecordVersionCurrent(aTable: TOrmClass): TRecordVersion; overload;
     /// synchronous master/slave replication from a slave TRest
     // - apply all the updates from another (distant) master TRestOrm for a given
     // TOrm table, using its TRecordVersion field, to the calling slave
@@ -1473,8 +1477,8 @@ type
     // - usually, you should not need to use this method, but rather the more
     // straightforward RecordVersionSynchronizeSlave()
     function RecordVersionSynchronizeSlaveToBatch(Table: TOrmClass;
-      const Master: IRestOrm; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
-      const OnWrite: TOnBatchWrite = nil): TRestBatch;
+      const Master: IRestOrm; var RecordVersion: TRecordVersion;
+      MaxRowLimit: integer = 0; const OnWrite: TOnBatchWrite = nil): TRestBatch;
 
     /// check if the supplied TOrm is not a virtual or static table
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;

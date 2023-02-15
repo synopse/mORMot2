@@ -1802,9 +1802,6 @@ type
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetRecordVersionMax: TRecordVersion;
-      {$ifdef HASINLINE}inline;{$endif}
-    procedure SetRecordVersionMax(Value: TRecordVersion);
     function GetAuthenticationSchemesCount: integer;
     /// ensure the thread will be taken into account during process
     procedure OnBeginCurrentThread(Sender: TThread); override;
@@ -1994,10 +1991,12 @@ type
     // - is a TRestOrmServer instance
     function OrmInstance: TRestOrm;
       {$ifdef HASINLINE}inline;{$endif}
-    /// access TRestOrmServer.RecordVersionMax property
+    /// read access to the TRestOrmServer.RecordVersionMax[TableIndex] property
     // - used internally by TServiceContainerServer for client/server synchronization
-    property RecordVersionMax: TRecordVersion
-      read GetRecordVersionMax write SetRecordVersionMax;
+    function GetRecordVersionMax(TableIndex: integer): TRecordVersion;
+    /// write access to the TRestOrmServer.RecordVersionMax[TableIndex] property
+    // - used internally by TServiceContainerServer for client/server synchronization
+    procedure SetRecordVersionMax(TableIndex: integer; Value: TRecordVersion);
     /// low-level propagation of a record content
     // - used internally by TServiceContainerServer for client/server synchronization
     procedure RecordVersionHandle(Occasion: TOrmOccasion;
@@ -6176,14 +6175,19 @@ begin
   result := length(fSessionAuthentication);
 end;
 
-function TRestServer.GetRecordVersionMax: TRecordVersion;
+function TRestServer.GetRecordVersionMax(TableIndex: integer): TRecordVersion;
 begin
-  result := TRestOrmServer(fOrmInstance).RecordVersionMax;
+  with TRestOrmServer(fOrmInstance) do
+    if cardinal(TableIndex) >= cardinal(length(RecordVersionMax)) then
+      result := 0
+    else
+      result := RecordVersionMax[TableIndex];
 end;
 
-procedure TRestServer.SetRecordVersionMax(Value: TRecordVersion);
+procedure TRestServer.SetRecordVersionMax(
+  TableIndex: integer; Value: TRecordVersion);
 begin
-  TRestOrmServer(fOrmInstance).RecordVersionMax := Value;
+  TRestOrmServer(fOrmInstance).SetRecordVersionMax(TableIndex, Value);
 end;
 
 procedure TRestServer.RecordVersionHandle(Occasion: TOrmOccasion;
@@ -6195,8 +6199,8 @@ begin
     exit;
   if Decoder.FindFieldName(RecordVersionField.Name) < 0 then
     // only compute new monotonic TRecordVersion if not already supplied by sender
-    Decoder.AddFieldValue(RecordVersionField.Name,
-      Int64ToUtf8(TRestOrmServer(fOrmInstance).RecordVersionCompute), ftaNumber);
+    Decoder.AddFieldValue(RecordVersionField.Name, Int64ToUtf8(
+      TRestOrmServer(fOrmInstance).RecordVersionCompute(TableIndex)), ftaNumber);
   if fServices <> nil then
     (fServices as TServiceContainerServer).RecordVersionNotifyAddUpdate(
       Occasion, TableIndex, Decoder);

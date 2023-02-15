@@ -2168,7 +2168,7 @@ function TRestOrmServerDB.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
   props: TOrmProperties;
-  whereid, recvers: TID;
+  whereid: TID;
   i: PtrInt;
   json, IDs: RawUtf8;
   ID: TIDDynArray;
@@ -2216,7 +2216,8 @@ begin
       else
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
           [props.SqlTableName, SetFieldName, SetValue,
-           props.RecordVersionField.Name, RecordVersionCompute, ID[0]])
+           props.RecordVersionField.Name,
+           RecordVersionCompute(TableModelIndex), ID[0]])
     else
     begin
       IDs := Int64DynArrayToCsv(pointer(ID), length(ID));
@@ -2224,12 +2225,10 @@ begin
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
           [props.SqlTableName, SetFieldName, SetValue, IDs])
       else
-      begin
-        recvers := RecordVersionCompute;
         result := ExecuteFmt('UPDATE % SET %=%,%=% WHERE RowID IN (%)',
           [props.SqlTableName, SetFieldName, SetValue,
-           props.RecordVersionField.Name, recvers, IDs]);
-      end;
+           props.RecordVersionField.Name,
+           RecordVersionCompute(TableModelIndex), IDs]);
     end;
     if not result then
       exit;
