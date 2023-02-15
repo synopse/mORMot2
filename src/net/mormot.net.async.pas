@@ -1262,7 +1262,6 @@ var
 begin
   result := false;
   repeat
-    // try to send now in non-blocking mode (works most of the time)
     if fWrite.Terminated or
        (connection.fSocket = nil) then
       exit;
@@ -1308,6 +1307,7 @@ begin
     previous := connection.fWr.Len;
     if (previous = 0) and
        not (paoWritePollOnly in fOptions) then
+      // try to send now in non-blocking mode (works most of the time)
       if not RawWrite(connection, P, datalen) then
         exit; // aborted
     if connection.fSocket = nil then
@@ -1317,7 +1317,7 @@ begin
       // use fWrite output polling for the remaining data in ProcessWrite
       connection.fWr.Append(P, datalen)
     else
-      // notify everything written - maybe call slot.fWr.Append
+      // notify everything written - and maybe call slot.fWr.Append
       try
         result := connection.AfterWrite = soContinue;
         if (not result) and
@@ -3118,23 +3118,16 @@ begin
   begin
     // use the HTTP state machine to asynchronously parse fRd input
     result := soContinue;
-    if fHttp.Process.Len = 0 then
-    begin
-      st.P := fRd.Buffer;
-      st.Len := fRd.Len;
-    end
-    else
-    begin
-      fHttp.Process.Append(fRd.Buffer, fRd.Len);
-      st.P := fHttp.Process.Buffer;
-      st.Len := fHttp.Process.Len;
-    end;
+    st.P := fRd.Buffer;
+    st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
     fPipelinedWrite := false;
     while fHttp.ProcessRead(st) do
     begin
       // detect pipelined input
-      if st.Len <> 0 then
+      if (st.Len <> 0) and
+         (fKeepAliveSec > 0) and
+         not (hfConnectionClose in fHttp.HeaderFlags) then
         fPipelinedWrite := true; // DoRequest will gather output in fWR
       // handle main steps change
       case fHttp.State of
@@ -3187,16 +3180,11 @@ begin
       end;
     {fOwner.DoLog(sllCustom2, 'OnRead % result=%', [ToText(fHttp.State)^, ord(result)], self);}
     // finalize the memory buffers
-    if st.Len = 0 then
-      fHttp.Process.Reset // all input processed (usual and nominal case)
-    else if fHttp.Process.Len <> 0 then
-      fHttp.Process.Remove(st.P - fHttp.Process.Buffer) // some input processed
+    if (st.Len = 0) or
+       (result = soClose) then
+      fRd.Reset // all input processed (usual and nominal case)
     else
-    begin
-      fHttp.Process.Reset;
-      fHttp.Process.Append(st.P, st.Len); // keep remaining input for next time
-    end;
-    fRd.Reset;
+      fRd.Remove(st.P - fRd.Buffer);  // keep remaining input for next time
   end;
 end;
 

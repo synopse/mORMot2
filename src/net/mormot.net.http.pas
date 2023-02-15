@@ -950,7 +950,6 @@ begin
     ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
 end;
 
-
 function IsUrlFavIcon(P: PUtf8Char): boolean;
 begin
   result := (P <> nil) and
@@ -1486,7 +1485,10 @@ begin
           exit
         else
           inc(P);
-      SetRawUtf8(CommandMethod, B, P - B, {nointern=}false);
+      L := P - B;
+      if L > 10 then
+        exit; // clearly invalid input (method name should be short)
+      SetRawUtf8(CommandMethod, B, L, {nointern=}false);
       inc(P);
     end;
   end;
@@ -1537,6 +1539,7 @@ procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;
   P: pointer; PLen: PtrInt; nointern: boolean);
 begin
   if (Interning <> nil) and
+     (PLen < 256) and
      not nointern then
     Interning^.UniqueFromBuffer(res, P, PLen, InterningHasher(0, P, PLen))
   else
