@@ -14475,18 +14475,6 @@ function EVP_PKEY_decrypt_old(dec_key: PByte; enc_key: PByte; enc_key_len: integ
 function EVP_PKEY_encrypt_old(enc_key: PByte; key: PByte; key_len: integer; pub_key: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_encrypt_old';
 
-function EVP_PKEY_type(typ: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_type';
-
-function EVP_PKEY_id(pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_id';
-
-function EVP_PKEY_base_id(pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_base_id';
-
-function EVP_PKEY_bits(pkey: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_bits';
-
 function EVP_PKEY_security_bits(pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_security_bits';
 
