@@ -532,7 +532,7 @@ function DateTimeMSToString(HH, MM, SS, MS, Y, M, D: cardinal; Expanded: boolean
 /// convert some date/time to the "HTTP-date" format as defined by RFC 7231
 // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
 // "Date", "Expires" or "Last-Modified" HTTP header
-// - if you care about timezones Value must be converted to UTC first
+// - if you care about timezones, dt value must be converted to UTC first
 // using TSynTimeZone.LocalToUtc, or tz should be properly set
 function DateTimeToHttpDate(dt: TDateTime; const tz: RawUtf8 = 'GMT'): RawUtf8; overload;
 

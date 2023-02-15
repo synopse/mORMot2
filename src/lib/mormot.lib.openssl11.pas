@@ -1130,6 +1130,7 @@ type
     function CreateSelfSignedCsr(Algo: PEVP_MD;
       const Subjects: TRawUtf8DynArray): RawByteString;
     function Size: integer;
+    function AlgoName: RawUtf8;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
     // methods below are for RSA algorithm only
@@ -1264,6 +1265,9 @@ type
     procedure ToHex(out result: RawUtf8);
     function Equals(const another: asn1_string_st): boolean;
   end;
+  ASN1_STRING = asn1_string_st;
+  PASN1_STRING = ^ASN1_STRING;
+  PPASN1_STRING = ^PASN1_STRING;
 
   ASN1_INTEGER = object(asn1_string_st)
   public
@@ -1271,6 +1275,8 @@ type
     function ToDecimal: RawUtf8;
     procedure Free;
   end;
+  PASN1_INTEGER = ^ASN1_INTEGER;
+  PPASN1_INTEGER = ^PASN1_INTEGER;
 
   ASN1_OBJECT = object
   public
@@ -1278,14 +1284,9 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function Name: PUtf8Char;
   end;
-
-  PASN1_INTEGER = ^ASN1_INTEGER;
-  PPASN1_INTEGER = ^PASN1_INTEGER;
   PASN1_OBJECT = ^ASN1_OBJECT;
   PPASN1_OBJECT = ^PASN1_OBJECT;
-  ASN1_STRING = asn1_string_st;
-  PASN1_STRING = ^ASN1_STRING;
-  PPASN1_STRING = ^PASN1_STRING;
+
   ASN1_BOOLEAN = integer;
   ASN1_NULL = integer;
   PASN1_NULL = ^ASN1_NULL;
@@ -1318,6 +1319,7 @@ type
   PASN1_UTF8STRING = ^ASN1_UTF8STRING;
   PASN1_VALUE = type pointer;
   PPASN1_VALUE = ^PASN1_VALUE;
+
   ASN1_TIME = object
   public
     function ToDateTime: TDateTime;
@@ -1634,7 +1636,7 @@ type
 
   /// X509v3 Key and Extended Key Usage Flags
   // - is a convenient way to get or set a Certificate extensions
-  // - is an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
+  // - an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
   // and TWinCertUsages in mormot.lib.sspi
   TX509Usages = set of TX509Usage;
 
@@ -1678,7 +1680,7 @@ type
     /// returns the hexadecimal SHA-1 digest of the whole certificate
     // - you can set e.g. md = EVP_sha256 to retrieve the SHA-256 digest
     function FingerPrint(md: PEVP_MD = nil): RawUtf8;
-    /// verbose certificate information, returned as huge text blob
+    /// verbose certificate information, returned as X509_print() huge text blob
     function PeerInfo: RawUtf8;
     /// access a Certificate extension by NID
     function Extension(nid: integer): PX509_EXTENSION;
@@ -1919,6 +1921,10 @@ function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
+function EVP_PKEY_type(typ: integer): integer; cdecl;
+function EVP_PKEY_id(pkey: PEVP_PKEY): integer; cdecl;
+function EVP_PKEY_base_id(pkey: PEVP_PKEY): integer; cdecl;
+function EVP_PKEY_bits(pkey: PEVP_PKEY): integer; cdecl;
 procedure EVP_PKEY_free(pkey: PEVP_PKEY); cdecl;
 function EVP_PKEY_decrypt_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
 function EVP_PKEY_decrypt(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt;
@@ -2908,6 +2914,10 @@ type
     EVP_MD_CTX_create: function(): PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
+    EVP_PKEY_type: function(typ: integer): integer; cdecl;
+    EVP_PKEY_id: function(pkey: PEVP_PKEY): integer; cdecl;
+    EVP_PKEY_base_id: function(pkey: PEVP_PKEY): integer; cdecl;
+    EVP_PKEY_bits: function(pkey: PEVP_PKEY): integer; cdecl;
     EVP_PKEY_free: procedure(pkey: PEVP_PKEY); cdecl;
     EVP_PKEY_decrypt_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
     EVP_PKEY_decrypt: function(ctx: PEVP_PKEY_CTX; output: PByte; var outlen: PtrUInt; input: PByte; inputLen: PtrUInt): integer; cdecl;
@@ -3227,7 +3237,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..325] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..329] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3240,6 +3250,10 @@ const
     'EVP_MD_CTX_new',
     'EVP_MD_CTX_free',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1.1 alternate names
+    'EVP_PKEY_type',
+    'EVP_PKEY_id',
+    'EVP_PKEY_base_id',
+    'EVP_PKEY_bits',
     'EVP_PKEY_free',
     'EVP_PKEY_decrypt_init',
     'EVP_PKEY_decrypt',
@@ -3618,6 +3632,26 @@ end;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer;
 begin
   result := libcrypto.EVP_PKEY_size(pkey);
+end;
+
+function EVP_PKEY_type(typ: integer): integer;
+begin
+  result := libcrypto.EVP_PKEY_type(typ);
+end;
+
+function EVP_PKEY_id(pkey: PEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_id(pkey);
+end;
+
+function EVP_PKEY_base_id(pkey: PEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_base_id(pkey);
+end;
+
+function EVP_PKEY_bits(pkey: PEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_bits(pkey);
 end;
 
 procedure EVP_PKEY_free(pkey: PEVP_PKEY);
@@ -5646,6 +5680,18 @@ procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_size';
 
+function EVP_PKEY_type(typ: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_type';
+
+function EVP_PKEY_id(pkey: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_id';
+
+function EVP_PKEY_base_id(pkey: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_base_id';
+
+function EVP_PKEY_bits(pkey: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_bits';
+
 procedure EVP_PKEY_free(pkey: PEVP_PKEY); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_free';
 
@@ -7227,6 +7273,14 @@ begin
     result := EVP_PKEY_size(@self)
   else
     result := 0;
+end;
+
+function EVP_PKEY.AlgoName: RawUtf8;
+begin
+  if @self <> nil then
+    result := OBJ_nid2sn(EVP_PKEY_id(@self))
+  else
+    result := '';
 end;
 
 procedure EVP_PKEY.Free;
@@ -8917,12 +8971,12 @@ begin
   if IsCA then
     include(result, kuCA);
   f := X509_get_key_usage(@self); // returns -1 if not present
-  if f >= 0 then
+  if f > 0 then
     for u := low(KU) to high(KU) do
       if (f and KU[u]) <> 0 then
         include(result, u);
   f := X509_get_extended_key_usage(@self);
-  if f >= 0 then
+  if f > 0 then
     for u := low(XU) to high(XU) do
       if (f and XU[u]) <> 0 then
         include(result, u);
@@ -8941,13 +8995,13 @@ begin
           (u <= high(KU)) then
   begin
     f := X509_get_key_usage(@self); // -1 if not present
-    result := (f >= 0) and ((f and KU[u]) <> 0);
+    result := (f > 0) and ((f and KU[u]) <> 0);
   end
   else if (u >= low(XU)) and
           (u <= high(XU)) then
   begin
     f := X509_get_extended_key_usage(@self);
-    result := (f >= 0) and ((f and XU[u]) <> 0);
+    result := (f > 0) and ((f and XU[u]) <> 0);
   end
   else
     result := false;
