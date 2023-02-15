@@ -639,7 +639,8 @@ function TlsCertInfo(var Ctxt: TCtxtHandle; out Info: TWinCertInfo): boolean;
 
 /// return some multi-line text of the main TWinCertInfo fields
 // - in a layout similar to X509_print() OpenSSL formatting
-// - implemented by mormot.crypt.secure
+// - fully implemented by mormot.crypt.secure - a cut-down version is set by
+// this unit
 var
   WinCertInfoToText: function(const c: TWinCertInfo): RawUtf8;
 
@@ -1484,6 +1485,25 @@ begin
   result := true;
 end;
 
+function _WinCertInfoToText(const c: TWinCertInfo): RawUtf8;
+begin
+  // roughly follow X509_print() OpenSSL formatting with basic fields only
+  result :=
+    'Certificate:'#13#10 +
+    '  Serial Number:'#13#10 +
+    '    ' + c.Serial + #13#10 +
+    '  Signature Algorithm: ' + c.AlgorithmName + #13#10 +
+    '  Issuer: ' + c.IssuerName + #13#10 +
+    '  Validity:'#13#10 +
+    '    Not Before: ' + RawUtf8(DateTimeToIsoString(c.NotBefore)) + #13#10 +
+    '    Not After : ' + RawUtf8(DateTimeToIsoString(c.NotAfter)) + #13#10 +
+    '  Subject: ' + c.SubjectName + #13#10 +
+    '  Subject Public Key Info:'#13#10 +
+    '    Public Key Algorithm: ' + c.PublicKeyAlgorithmName + #13#10 +
+    '    OID: ' + c.PublicKeyAlgorithm + #13#10;
+  // known extensions will be properly written by mormot.crypt.secure code
+end;
+
 
 { ****************** High-Level Client and Server Authentication using SSPI }
 
@@ -1940,6 +1960,12 @@ begin
   srv.Done;
   grp.Done;
 end;
+
+
+initialization
+  WinCertInfoToText := @_WinCertInfoToText;
+
+finalization
 
 {$endif OSPOSIX}
 
