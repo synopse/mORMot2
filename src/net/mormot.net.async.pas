@@ -64,6 +64,7 @@ type
   // - fInList indicates that the connection was Added to the list
   // - fReadPending states that there is a pending event for this connection
   // - fFromGC is set when the connection has been recycled from the GC list
+  // - note: better keep it as 8 items to fit in a byte (faster access)
   TPollAsyncConnectionFlags = set of (
     fWasActive,
     fClosed,
@@ -232,6 +233,8 @@ type
     function SubscribeConnection(const caller: shortstring;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection);
+    function RawWrite(connection: TPollAsyncConnection;
+      var data: PByte; var datalen: integer): boolean;
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -791,6 +794,7 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
+    fPipelinedWrite: boolean;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     procedure AfterCreate; override;
@@ -798,6 +802,8 @@ type
     procedure HttpInit;
     // redirect to fHttp.ProcessRead()
     function OnRead: TPollAsyncSocketOnReadWrite; override;
+    // DoRequest gathered all output in fWR buffer to be sent at once
+    function FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
     // redirect to fHttp.ProcessWrite()
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     // quickly reject incorrect requests (payload/timeout/OnBeforeBody)
@@ -1248,12 +1254,44 @@ begin
     result := Write(connection, pointer(data), length(data), timeout);
 end;
 
+function TPollAsyncSockets.RawWrite(connection: TPollAsyncConnection;
+  var data: PByte; var datalen: integer): boolean;
+var
+  res: TNetResult;
+  sent: integer;
+begin
+  result := false;
+  repeat
+    // try to send now in non-blocking mode (works most of the time)
+    if fWrite.Terminated or
+       (connection.fSocket = nil) then
+      exit;
+    sent := datalen;
+    res := connection.Send(data, sent);
+    if connection.fSocket = nil then
+      exit;  // Stop() called
+    if res = nrRetry then
+      break; // fails now -> retry later in ProcessWrite
+    if res <> nrOK then
+    begin
+      if fDebugLog <> nil then
+        DoLog('Write: Send(%)=% len=% handle=%', [pointer(connection.Socket),
+          ToText(res)^, sent, connection.Handle]);
+      exit;  // connection closed or broken -> abort
+    end;
+    inc(data, sent);
+    inc(fWriteCount);
+    inc(fWriteBytes, sent);
+    dec(datalen, sent);
+  until datalen = 0;
+  result := true; // sent some data - some may be pending in data/datalen
+end;
+
 function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
   data: pointer; datalen: integer; timeout: integer): boolean;
 var
   P: PByte;
-  res: TNetResult;
-  sent, previous: integer;
+  previous: integer;
 begin
   result := false;
   if (datalen <= 0) or
@@ -1270,29 +1308,8 @@ begin
     previous := connection.fWr.Len;
     if (previous = 0) and
        not (paoWritePollOnly in fOptions) then
-      repeat
-        // try to send now in non-blocking mode (works most of the time)
-        if fWrite.Terminated or
-           (connection.fSocket = nil) then
-          exit;
-        sent := datalen;
-        res := connection.Send(P, sent);
-        if connection.fSocket = nil then
-          exit;  // Stop() called
-        if res = nrRetry then
-          break; // fails now -> retry later in ProcessWrite
-        if res <> nrOK then
-        begin
-          if fDebugLog <> nil then
-            DoLog('Write: Send(%)=% len=% handle=%', [pointer(connection.Socket),
-              ToText(res)^, sent, connection.Handle]);
-          exit;  // connection closed or broken -> abort
-        end;
-        inc(P, sent);
-        inc(fWriteCount);
-        inc(fWriteBytes, sent);
-        dec(datalen, sent);
-      until datalen = 0;
+      if not RawWrite(connection, P, datalen) then
+        exit; // aborted
     if connection.fSocket = nil then
       exit;
     result := true;
@@ -3064,6 +3081,26 @@ begin
   fHeadersSec := 0;
 end;
 
+function THttpAsyncConnection.FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
+var
+  P: PByte;
+  PLen: integer;
+begin
+  result := soContinue;
+  fPipelinedWrite := false;
+  PLen := fWR.Len;
+  if PLen = 0 then
+    exit;
+  P := fWR.Buffer;
+  if not fOwner.fClients.RawWrite(self, P, PLen) or
+     (PLen <> 0) then // PLen<>0 if OS sending buffer is full
+  begin
+    fOwner.DoLog(sllWarning, 'OnRead: pipelined send error', [], self);
+    result := soClose;
+  end;
+  fWR.Reset;
+end;
+
 function THttpAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
 var
   st: TProcessParseLine;
@@ -3092,9 +3129,13 @@ begin
       st.P := fHttp.Process.Buffer;
       st.Len := fHttp.Process.Len;
     end;
+    // process one request (or several in case of pipelined input/output)
+    fPipelinedWrite := false;
     while fHttp.ProcessRead(st) do
     begin
-      {fOwner.DoLog(sllCustom2, 'OnRead % st.len=%', [ToText(fHttp.State)^, st.Len], self);}
+      // detect pipelined input
+      if st.Len <> 0 then
+        fPipelinedWrite := true; // DoRequest will gather output in fWR
       // handle main steps change
       case fHttp.State of
         hrsGetBodyChunkedHexFirst,
@@ -3111,10 +3152,17 @@ begin
           result := soClose;
         end;
       end;
+      if fPipelinedWrite and
+         (fWR.Len > 128 shl 10) then // flush more than 128KB of pending output
+         if FlushPipelinedWrite <> soContinue then
+           result := soClose;
       if (result <> soContinue) or
          (fHttp.State = hrsUpgraded) then
         break; // rejected or upgraded
     end;
+    if fPipelinedWrite then
+       if FlushPipelinedWrite <> soContinue then
+         result := soClose;
     if fHttp.State = hrsGetHeaders then
       if (fHeadersSec = 0) and
          (fServer.HeaderRetrieveAbortDelay >= 1000) then
@@ -3346,11 +3394,27 @@ begin
     FreeAndNil(fRequest) // more efficient to create a new instance
   else
     fRequest.CleanupInstance; // let all headers have refcount=1
-  // now try socket send() with headers (and small body if hrsResponseDone)
-  // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
-  fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
-  // will call THttpAsyncConnection.AfterWrite once sent to finish/continue
-  // see THttpServer.Process() for the blocking equivalency of this async code
+  if fPipelinedWrite then
+    // we are in HTTP pipelined mode: input stream had several requests
+    if fHttp.State <> hrsResponseDone then
+    begin
+      fOwner.DoLog(sllWarning, 'DoRequest: pipelining with streaming', [], self);
+      if FlushPipelinedWrite = soContinue then // back to regular process
+        fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, 1000)
+      else
+        result := soClose;
+    end
+    else
+    begin
+      fWr.Append(output.Buffer, output.Len); // append to the fWR output buffer
+      result := AfterWrite; // process next pipelined request as usual
+    end
+  else
+    // now try socket send() with headers (and small body if hrsResponseDone)
+    // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
+    fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
+    // will call THttpAsyncConnection.AfterWrite once sent to finish/continue
+    // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
 
