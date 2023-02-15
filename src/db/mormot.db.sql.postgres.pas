@@ -132,6 +132,8 @@ type
     procedure SendFlushRequest;
     /// Return current pipeline status
     function PipelineStatus: integer;
+    /// Read PipelineSync result and check it's OK
+    procedure CheckPipelineSync;
     /// direct access to the associated PPGconn connection
     property Direct: pointer
       read fPGConn;
@@ -479,6 +481,22 @@ end;
 function TSqlDBPostgresConnection.PipelineStatus: integer;
 begin
   Result := PQ.pipelineStatus(fPGConn);
+end;
+
+procedure TSqlDBPostgresConnection.CheckPipelineSync;
+var
+  syncRes: pointer;
+  syncResStatus: integer;
+begin
+  syncRes := PQ.getResult(fPGConn);
+  PQ.Check(fPGConn, syncRes, @syncRes, {forceClean=}false);
+  syncResStatus := PQ.ResultStatus(syncRes);
+  if syncResStatus <> PGRES_PIPELINE_SYNC then
+    raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: unexpected result code ' +
+      '% instead of sync result [%] ',
+      [self, syncResStatus, PQ.ErrorMessage(fPGConn)])
+  else
+    PQ.Clear(syncRes);
 end;
 
 function TSqlDBPostgresConnection.PreparedCount: integer;
