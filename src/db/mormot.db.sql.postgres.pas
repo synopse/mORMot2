@@ -117,22 +117,22 @@ type
     /// discard changes of a Transaction for this connection
     // - StartTransaction method must have been called before
     procedure Rollback; override;
-    /// Enter Pipelining mode
+    /// enter Pipelining mode
     // - *Warning* - connection is in blocking mode, see notes about possible deadlock
     // https://www.postgresql.org/docs/current/libpq-pipeline-mode.html#LIBPQ-PIPELINE-USING
     procedure EnterPipelineMode;
-    /// Exit Pipelining mode
+    /// exit Pipelining mode
     procedure ExitPipelineMode;
-    /// Marks a synchronization point in a pipeline by sending a sync message
+    /// marks a synchronization point in a pipeline by sending a sync message
     // and flushing the send buffer
     procedure PipelineSync;
-    /// Flush any queued output data to the server
+    /// flush any queued output data to the server
     procedure Flush;
-    /// Sends a request for the server to flush its output buffer
+    /// sends a request for the server to flush its output buffer
     procedure SendFlushRequest;
-    /// Return current pipeline status
+    /// return current pipeline status
     function PipelineStatus: integer;
-    /// Read PipelineSync result and check it's OK
+    /// read PipelineSync result and check it's OK
     procedure CheckPipelineSync;
     /// direct access to the associated PPGconn connection
     property Direct: pointer
@@ -165,26 +165,26 @@ type
   public
     /// finalize the statement for a given connection
     destructor Destroy; override;
-    /// Prepare an UTF-8 encoded SQL statement
+    /// prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBPostgres on any error
     procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = False); overload; override;
-    /// Execute a prepared SQL statement
+    /// execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also handle bound array of values (if any)
     // - this overridden method will log the SQL statement if sllSQL has been
     // enabled in SynDBLog.Family.Level
     // - raise an ESqlDBPostgres on any error
     procedure ExecutePrepared; override;
-    /// For connection in pipelining mode
+    /// execute a prepared SQL statement, for connection in pipelining mode
     // - sends a request to execute a prepared statement with given parameters, 
     // without waiting for the result(s)
     // - after all statements are sent, conn.SendFlushRequest should be called,
     // then GetPipelineResult is able to read results in order they were sent
     procedure SendPipelinePrepared;
-    /// Retrieve next result for pipelined statement
+    /// retrieve next result for pipelined statement
     procedure GetPipelineResult;
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
@@ -193,12 +193,12 @@ type
       var JsonArray: RawUtf8; ValuesCount: integer); override;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
-    /// Reset the previous prepared statement
+    /// reset the previous prepared statement
     // - this overridden implementation will reset all bindings and the cursor state
     // - raise an ESqlDBPostgres on any error
     procedure Reset; override;
 
-    /// Access the next or first row of data from the SQL Statement result
+    /// access the next or first row of data from the SQL Statement result
     // - return true on success, with data ready to be retrieved by Column*() methods
     // - return false if no more row is available (e.g. if the SQL statement
     // is not a SELECT but an UPDATE or INSERT command)
@@ -266,13 +266,13 @@ begin
   end;
   result := fPrepared.Add(aSql);
   aName := Int64ToHexLower(result);
-  PQ.Check(fPGConn,
+  PQ.Check(fPGConn, 'Prepare',
     PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
 end;
 
 procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8);
 begin
-  PQ.Check(fPGConn,
+  PQ.Check(fPGConn, 'Exec',
     PQ.Exec(fPGConn, pointer(SQL)));
 end;
 
@@ -282,7 +282,7 @@ var
   res: PPGresult;
 begin
   res := PQ.Exec(fPGConn, pointer(SQL));
-  PQ.Check(fPGConn, res, nil, {andclear=}false);
+  PQ.Check(fPGConn, 'Exec', res, nil, {andclear=}false);
   PQ.GetRawUtf8(res, 0, 0, Value);
   PQ.Clear(res);
 end;
@@ -441,29 +441,24 @@ procedure TSqlDBPostgresConnection.EnterPipelineMode;
 begin
   if not Assigned(PQ.enterPipelineMode) then
     raise ESqlDBPostgres.CreateUtf8(
-      'EnterPipelineMonde(%): pipelining unsupported in % v%',
-      [Properties.DatabaseNameSafe, PQ.LibraryPath, PQ.LibVersion]);
+      '%.EnterPipelineMonde: pipelining unsupported in % v%',
+      [self, PQ.LibraryPath, PQ.LibVersion]);
   if PQ.enterPipelineMode(fPGConn) <> 1 then
-    raise ESqlDBPostgres.CreateUtf8('Enter pipeline mode % failed [%]',
-      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+    PQ.RaiseError(fPGConn, 'EnterPipelineMonde');
 end;
 
 procedure TSqlDBPostgresConnection.ExitPipelineMode;
 begin
   if PQ.exitPipelineMode(fPGConn) <> 1 then
-    raise ESqlDBPostgres.CreateUtf8(
-      '%.ExitPipelineMode: attempt to exit pipeline mode failed [%]',
-      [self, PQ.ErrorMessage(fPGConn)]);
+    PQ.RaiseError(fPGConn, 'ExitPipelineMode');
   if PQ.pipelineStatus(fPGConn) <> PQ_PIPELINE_OFF then
-    raise ESqlDBPostgres.CreateUtf8(
-      '%.ExitPipelineMode: exiting pipeline mode issue', [self]);
+    PQ.RaiseError(fPGConn, 'ExitPipelineMode status');
 end;
 
 procedure TSqlDBPostgresConnection.PipelineSync;
 begin
   if PQ.pipelineSync(fPGConn) <> 1 then
-    raise ESqlDBPostgres.CreateUtf8('Pipeline sync % failed [%]',
-      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+    PQ.RaiseError(fPGConn, 'PipelineSync');
 end;
 
 procedure TSqlDBPostgresConnection.Flush;
@@ -474,8 +469,7 @@ end;
 procedure TSqlDBPostgresConnection.SendFlushRequest;
 begin
   if PQ.sendFlushRequest(fPGConn) <> 1 then
-    raise ESqlDBPostgres.CreateUtf8('sendFlushRequest % failed [%]',
-      [Properties.DatabaseNameSafe, PQ.ErrorMessage(fPGConn)]);
+    PQ.RaiseError(fPGConn, 'SendFlushRequest');
 end;
 
 function TSqlDBPostgresConnection.PipelineStatus: integer;
@@ -485,18 +479,18 @@ end;
 
 procedure TSqlDBPostgresConnection.CheckPipelineSync;
 var
-  syncRes: pointer;
-  syncResStatus: integer;
+  res: pointer;
+  err: integer;
 begin
-  syncRes := PQ.getResult(fPGConn);
-  PQ.Check(fPGConn, syncRes, @syncRes, {forceClean=}false);
-  syncResStatus := PQ.ResultStatus(syncRes);
-  if syncResStatus <> PGRES_PIPELINE_SYNC then
-    raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: unexpected result code ' +
-      '% instead of sync result [%] ',
-      [self, syncResStatus, PQ.ErrorMessage(fPGConn)])
+  res := PQ.getResult(fPGConn);
+  PQ.Check(fPGConn, 'GetResult', res, @res, {forceClean=}false);
+  err := PQ.ResultStatus(res);
+  if err <> PGRES_PIPELINE_SYNC then
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.CheckPipelineSync returned % instead of PGRES_PIPELINE_SYNC [%] ',
+      [self, err, PQ.ErrorMessage(fPGConn)])
   else
-    PQ.Clear(syncRes);
+    PQ.Clear(res);
 end;
 
 function TSqlDBPostgresConnection.PreparedCount: integer;
@@ -643,14 +637,14 @@ var
   i: PtrInt;
   p: PSqlDBParam;
 begin
+  // mark parameter as textual by default, with no blob length
+  FillCharFast(pointer(fPGParamFormats)^, fParamCount shl 2, 0);
+  FillCharFast(pointer(fPGParamLengths)^, fParamCount shl 2, 0);
   // bind fParams[] as expected by PostgreSQL - potentially as array
+  p := pointer(fParams);
   for i := 0 to fParamCount - 1 do 
   begin
-    // mark parameter as textual by default, with no blob len
-    fPGParamFormats[i] := 0;
-    fPGParamLengths[i] := 0;
     // convert parameter value as text stored in p^.VData
-    p := @fParams[i];
     if p^.VArray <> nil then
     begin
       if not (p^.VType in [
@@ -660,10 +654,10 @@ begin
            ftDate,
            ftUtf8]) then
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
-          'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
+          'type % on bound parameter #%', [self, ToText(p^.VType)^, i]);
       if p^.VArray[0] <> _BindArrayJson[0] then
         // p^.VData was not already set by BindArrayJson() -> convert now
-        p^.VData := BoundArrayToJsonArray(p^.VArray); // e.g. '{1,2,3}'
+        BoundArrayToJsonArray(p^.VArray, RawUtf8(p^.VData)); // e.g. '{1,2,3}'
     end
     else
     begin
@@ -693,6 +687,7 @@ begin
       end;
     end;
     fPGParams[i] := pointer(p^.VData);
+    inc(p);
   end;
 end;
 
@@ -758,7 +753,7 @@ begin
       'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
   inherited ExecutePrepared;
   BindParams;
-  c := TSqlDBPostgresConnection(Connection);
+  c := TSqlDBPostgresConnection(fConnection);
   if fPreparedStmtName <> '' then
     fRes := PQ.ExecPrepared(c.fPGConn, pointer(fPreparedStmtName),
       fPreparedParamsCount, pointer(fPGParams), pointer(fPGParamLengths),
@@ -770,7 +765,7 @@ begin
     fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared),
       fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
-  PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
+  PQ.Check(c.fPGConn, 'Exec', fRes, @fRes, {forceClean=}false);
   fResStatus := PQ.ResultStatus(fRes);
   if fExpectResults then
   begin
@@ -784,11 +779,12 @@ begin
     end;
     fTotalRowsRetrieved := PQ.ntuples(fRes);
     fCurrentRow := -1;
-    if fColumn.Count = 0 then // if columns exist then statement is already cached
+    if fColumn.Count = 0 then // columns exist when statement was cached
       BindColumns;
-    SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
+    if fSqlLogLog <> nil then
+      SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
   end
-  else
+  else if fSqlLogLog <> nil then
     SqlLogEnd(' c=%', [fPreparedStmtName]);
 end;
 
@@ -806,7 +802,7 @@ begin
       'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
   inherited ExecutePrepared;
   BindParams;
-  c := TSqlDBPostgresConnection(Connection);
+  c := TSqlDBPostgresConnection(fConnection);
   if fPreparedStmtName <> '' then
     res := PQ.sendQueryPrepared(c.fPGConn, pointer(fPreparedStmtName),
       fPreparedParamsCount, pointer(fPGParams), pointer(fPGParamLengths),
@@ -816,9 +812,9 @@ begin
       fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
   if res <> 1 then
-    raise ESqlDBPostgres.CreateUtf8(
-      '%.SendPrepared: %', [self, PQ.ErrorMessage(c.fPGConn)]);
-  SqlLogEnd(' c=%', [fPreparedStmtName]);
+    PQ.RaiseError(c.fPGConn, 'SendPipelinePrepared');
+  if fSqlLogLog <> nil then
+    SqlLogEnd(' c=%', [fPreparedStmtName]);
 end;
 
 procedure TSqlDBPostgresStatement.GetPipelineResult;
@@ -827,14 +823,14 @@ var
   endRes: pointer;
 begin
   SqlLogBegin(sllSQL);
-  c := TSqlDBPostgresConnection(Connection);
+  c := TSqlDBPostgresConnection(fConnection);
   if fRes <> nil then
   begin
     PQ.Clear(fRes); // if forgot to call ReleaseRows
     fRes := nil;
   end;
   fRes := PQ.getResult(c.fPGConn);
-  PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
+  PQ.Check(c.fPGConn, 'GetResult', fRes, @fRes, {forceClean=}false);
   fResStatus := PQ.ResultStatus(fRes);
   if fExpectResults then
   begin
@@ -847,11 +843,12 @@ begin
     end;
     fTotalRowsRetrieved := PQ.ntuples(fRes);
     fCurrentRow := -1;
-    if fColumn.Count = 0 then // if columns exist then statement is already cached
+    if fColumn.Count = 0 then // columns exist when statement was cached
       BindColumns;
-    SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
+    if fSqlLogLog <> nil then
+      SqlLogEnd(' c=% r=%', [fPreparedStmtName, fTotalRowsRetrieved]);
   end
-  else
+  else if fSqlLogLog <> nil then
     SqlLogEnd(' c=%', [fPreparedStmtName]);
   endRes := PQ.getResult(c.fPGConn);
   if endRes <> nil then
@@ -973,7 +970,7 @@ begin
   if (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) or
      (fCurrentRow < 0) then
-    raise ESqlDBPostgres.CreateUtf8('%.ColumnToJson unexpected', [self]);
+    raise ESqlDBPostgres.CreateUtf8('Unexpected %.ColumnToJson', [self]);
   with fColumns[Col] do
   begin
     P := PQ.GetValue(fRes, fCurrentRow, Col);

@@ -118,10 +118,10 @@ const
   PGRES_BAD_RESPONSE = 5;
   PGRES_NONFATAL_ERROR = 6;
   PGRES_FATAL_ERROR = 7;
-  PGRES_COPY_BOTH = 8;        // Copy In/Out data transfer in progress
-  PGRES_SINGLE_TUPLE = 9;     // single tuple from larger resultset
-  PGRES_PIPELINE_SYNC = 10;   // pipeline synchronization point
-  PGRES_PIPELINE_ABORTED= 11; // Command didn't run because of an abort
+  PGRES_COPY_BOTH = 8;         // Copy In/Out data transfer in progress
+  PGRES_SINGLE_TUPLE = 9;      // single tuple from larger resultset
+  PGRES_PIPELINE_SYNC = 10;    // pipeline synchronization point
+  PGRES_PIPELINE_ABORTED = 11; // Command didn't run because of an abort
 
   PQ_PIPELINE_OFF = 0;
 
@@ -154,7 +154,6 @@ type
   /// direct access to the libpq native Postgres protocol 3 library
   // - only the endpoints needed by this unit are imported
   TSqlDBPostgresLib = class(TSynLibrary)
-  protected
   public
     LibVersion: function: integer; cdecl;
     IsThreadSafe: function: integer; cdecl;
@@ -211,8 +210,12 @@ type
     /// raise an exception on error and clean result
     // - will set pRes to nil if passed
     // - if andClear is true - will call always PQ.Clear(res)
-    procedure Check(conn: PPGconn; res: PPGresult;
-      pRes: PPPGresult = nil; andClear: boolean = true);
+    procedure Check(conn: PPGconn; const ctxt: ShortString; res: PPGresult;
+      pRes: PPPGresult = nil; andClear: boolean = true); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// raise an exception and clean result
+    procedure RaiseError(conn: PPGconn; const ctxt: ShortString;
+      res: PPGresult = nil);
   end;
 
 var
@@ -315,25 +318,33 @@ begin
     GetLength(res, tup_num, field_num));
 end;
 
-procedure TSqlDBPostgresLib.Check(conn: PPGconn; res: PPGresult;
-  pRes: PPPGresult; andClear: boolean);
+procedure TSqlDBPostgresLib.RaiseError(conn: PPGconn; const ctxt: ShortString;
+  res: PPGresult);
 var
   errMsg, errCode: PUtf8Char;
 begin
-  if (res = nil) or // nil in case of very fatal error, out of emory for example
+  errMsg := ErrorMessage(conn);
+  if res <> nil then
+  begin
+    errCode := ResultErrorField(res, ord('C'){PG_DIAG_SQLSTATE});
+    Clear(res);
+  end
+  else
+    errCode := nil;
+  raise ESqlDBPostgres.CreateUtf8(
+          '% % failed: % [%]', [self, ctxt, errCode, errMsg]);
+end;
+
+procedure TSqlDBPostgresLib.Check(conn: PPGconn; const ctxt: ShortString;
+  res: PPGresult; pRes: PPPGresult; andClear: boolean);
+begin
+  if (res = nil) or // nil in case of very fatal error, e.g. out of memory
      (ResultStatus(res) in
        [PGRES_BAD_RESPONSE, PGRES_NONFATAL_ERROR, PGRES_FATAL_ERROR]) then
   begin
-    errMsg := ErrorMessage(conn);
-    if res <> nil then
-      errCode := ResultErrorField(res, Ord('C'){PG_DIAG_SQLSTATE})
-    else
-      errCode := nil;
-    Clear(res);
     if pRes <> nil then
       pRes^ := nil;
-    raise ESqlDBPostgres.CreateUtf8(
-            '% PGERRCODE: %, %', [self, errCode, errMsg]);
+    RaiseError(conn, ctxt, res);
   end
   else if andClear then
     Clear(res);

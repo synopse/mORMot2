@@ -342,7 +342,6 @@ begin
   except
     on E: Exception do
     begin
-      Log.Log(sllError, E);
       Disconnect; // clean up on fail
       raise;
     end;
@@ -371,12 +370,15 @@ begin
     SetServerEngine(NexusEmbeddedEngine);
     if not lProp.DatabaseExists then
     begin
-      Log.Log(sllDB, 'Database % does not exists -> create folder', [lProp.DatabaseName]);
+      if Log <> nil then
+        Log.Log(sllDB, 'Database % does not exists -> create folder',
+          [lProp.DatabaseName]);
       lProp.CreateDatabase;
     end;
     Database.AliasPath := lProp.DatabaseName;
-    Log.Log(sllDB, 'NexusDB % using database folder %', [fDatabase.Version,
-      lProp.DatabaseName]);
+    if Log <> nil then
+      Log.Log(sllDB, 'NexusDB % using database folder %',
+        [fDatabase.Version, lProp.DatabaseName]);
   end
   else
   begin

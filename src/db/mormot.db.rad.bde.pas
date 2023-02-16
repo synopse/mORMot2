@@ -216,7 +216,6 @@ begin
   except
     on E: Exception do
     begin
-      Log.Log(sllError, E);
       Disconnect; // clean up on fail
       raise;
     end;

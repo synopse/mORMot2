@@ -40,7 +40,7 @@ uses
   mormot.db.core;
 
 {.$define SYNDB_SILENCE}
-// if defined, this unit won't log the statement execution to SynDBLog
+// if defined, this unit won't log the statement execution
 
 
 { ************ SQL Fields and Columns Definitions }
@@ -632,7 +632,11 @@ function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
 // - as used e.g. by PostgreSQL library (note that its syntax as {} not []
 // unless you change the Open/Close optional parameters)
 function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
-  Open: AnsiChar = '{'; Close: AnsiChar = '}'): RawUtf8;
+  Open: AnsiChar = '{'; Close: AnsiChar = '}'): RawUtf8; overload;
+
+/// create a JSON array from an array of UTF-8 SQL bound values
+procedure BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
+  out Result: RawUtf8; Open: AnsiChar = '{'; Close: AnsiChar = '}'); overload;
 
 /// create an array of UTF-8 SQL bound values from a JSON array
 // - as generated during array binding, i.e. with quoted strings
@@ -1905,7 +1909,7 @@ type
   /// abstract connection created from TSqlDBConnectionProperties
   // - more than one TSqlDBConnection instance can be run for the same
   // TSqlDBConnectionProperties
-  TSqlDBConnection = class(TSynPersistentLock)
+  TSqlDBConnection = class(TSynPersistent)
   protected
     fProperties: TSqlDBConnectionProperties;
     fErrorException: ExceptClass;
@@ -1913,14 +1917,15 @@ type
     fTransactionCount: integer;
     fServerTimestampOffset: TDateTime;
     fServerTimestampAtConnection: TDateTime;
-    fCache: TRawUtf8List; // statements cache protected by main Safe.Lock/UnLock
-    fOnProcess: TOnSqlDBProcess;
+    fCacheSafe: TOSLightLock; // protect fCache - warning: not reentrant!
+    fCache: TRawUtf8List; // statements cache
     fCacheLast: RawUtf8;
     fCacheLastIndex: integer;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
     fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
+    fOnProcess: TOnSqlDBProcess;
     function IsOutdated(tix: Int64): boolean; // do not make virtual nor inline
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
@@ -2074,7 +2079,6 @@ type
   TSqlDBStatement = class(TInterfacedObject, ISqlDBRows, ISqlDBStatement)
   protected
     fConnection: TSqlDBConnection;
-    fSql: RawUtf8;
     fParamCount: integer;
     fColumnCount: integer;
     fTotalRowsRetrieved: integer;
@@ -2084,11 +2088,10 @@ type
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDbms: TSqlDBDefinition;
-    fCache: TSqlDBStatementCache;
-    {$ifndef SYNDB_SILENCE}
     fSqlLogLevel: TSynLogInfo;
+    fSql: RawUtf8;
+    fCache: TSqlDBStatementCache;
     fSqlLogLog: TSynLog;
-    {$endif SYNDB_SILENCE}
     fSqlWithInlinedParams: RawUtf8;
     fSqlLogTimer: TPrecisionTimer;
     fSqlPrepared: RawUtf8;
@@ -2119,8 +2122,14 @@ type
     function Instance: TSqlDBStatement;
     /// wrappers to compute sllSQL/sllDB SQL context with a local timer
     function SqlLogBegin(Level: TSynLogInfo): TSynLog;
+      {$ifdef HASINLINE} inline; {$endif}
     function SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
     function SqlLogEnd(Msg: PShortString = nil): Int64; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    {$ifndef SYNDB_SILENCE}
+    function DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogInfo): TSynLog;
+    function DoSqlLogEnd(Msg: PShortString): Int64;
+    {$endif SYNDB_SILENCE}
   public
     /// create a statement instance
     constructor Create(aConnection: TSqlDBConnection); virtual;
@@ -3179,6 +3188,12 @@ end;
 
 function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
   Open, Close: AnsiChar): RawUtf8;
+begin
+  BoundArrayToJsonArray(Values, result, Open, Close);
+end;
+
+procedure BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
+  out Result: RawUtf8; Open, Close: AnsiChar);
 //  'one', 't"wo' -> '{"one","t\"wo"}'  and  1,2,3 -> '{1,2,3}'
 var
   V: ^RawUtf8;
@@ -3188,7 +3203,6 @@ var
 label
   _dq;
 begin
-  result := '';
   // fist compute the resulting length
   n := length(Values);
   if n = 0 then
@@ -3226,8 +3240,8 @@ begin
     dec(n);
   until n = 0;
   // generate the output JSON
-  FastSetString(result, nil, L);
-  d := pointer(result);
+  FastSetString(Result, nil, L);
+  d := pointer(Result);
   d^ := Open;
   inc(d);
   v := pointer(Values);
@@ -6745,42 +6759,55 @@ begin
   result := Self;
 end;
 
+{$ifdef SYNDB_SILENCE}
+
 function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
 begin
+  result := nil;
   if Level = sllDB then // prepare
     fSqlLogTimer.Start
   else
     fSqlLogTimer.Resume;
-  {$ifdef SYNDB_SILENCE}
-  result := nil;
-  {$else SYNDB_SILENCE}
-  result := SynDBLog.Add;
-  if result <> nil then
-    if Level in result.Family.Level then
-    begin
-      fSqlLogLevel := Level;
-      if Level = sllSQL then
-        ComputeSqlWithInlinedParams;
-    end
-    else
-      result := nil; // fSqlLogLog=nil if this Level is disabled
-  fSqlLogLog := result;
-  {$endif SYNDB_SILENCE}
 end;
 
 function TSqlDBStatement.SqlLogEnd(Msg: PShortString): Int64;
-{$ifndef SYNDB_SILENCE}
-var
-  tmp: TShort16;
-{$endif SYNDB_SILENCE}
 begin
   fSqlLogTimer.Pause;
-  {$ifdef SYNDB_SILENCE}
   result := fSqlLogTimer.LastTimeInMicroSec;
-  {$else}
-  result := 0;
-  if fSqlLogLog = nil then // fSqlLogLog=nil if this level is disabled
-    exit;
+end;
+
+{$else}
+
+function TSqlDBStatement.DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogInfo): TSynLog;
+begin
+  result := Log.SynLog;
+  fSqlLogLevel := Level;
+  if Level = sllSQL then
+    ComputeSqlWithInlinedParams;
+  if Level = sllDB then // prepare
+    fSqlLogTimer.Start
+  else
+    fSqlLogTimer.Resume;
+end;
+
+function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
+var
+  fam: TSynLogFamily;
+begin
+  fam := SynDBLog.Family;
+  if (fam <> nil) and
+     (Level in fam.Level) then
+    result := DoSqlLogBegin(fam, Level)
+  else
+    result := nil; // fSqlLogLog=nil if this Level is disabled
+  fSqlLogLog := result;
+end;
+
+function TSqlDBStatement.DoSqlLogEnd(Msg: PShortString): Int64;
+var
+  tmp: TShort16;
+begin
+  fSqlLogTimer.Pause;
   tmp[0] := #0;
   if fSqlLogLevel = sllSQL then
   begin
@@ -6802,8 +6829,16 @@ begin
   end;
   result := fSqlLogTimer.LastTimeInMicroSec;
   fSqlLogLog := nil;
-  {$endif SYNDB_SILENCE}
 end;
+
+function TSqlDBStatement.SqlLogEnd(Msg: PShortString): Int64;
+begin
+  result := 0;
+  if fSqlLogLog <> nil then // fSqlLogLog=nil if this level is disabled
+    result := DoSqlLogEnd(Msg);
+end;
+
+{$endif SYNDB_SILENCE}
 
 function TSqlDBStatement.SqlLogEnd(const Fmt: RawUtf8;
   const Args: array of const): Int64;
@@ -7022,7 +7057,8 @@ end;
 
 procedure TSqlDBStatement.ExecutePrepared;
 begin
-  if fConnection <> nil then
+  if (fConnection <> nil) and
+     (fConnection.fProperties.fConnectionTimeOutTicks <> 0) then
     fConnection.fLastAccessTicks := GetTickCount64;
   // a do-nothing default method
 end;
@@ -7162,6 +7198,7 @@ end;
 constructor TSqlDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 begin
   inherited Create;
+  fCacheSafe.Init; // mandatory for TOSLightLock
   fProperties := aProperties;
   if aProperties <> nil then
   begin
@@ -7202,7 +7239,7 @@ begin
   if fCache <> nil then
   begin
     InternalProcess(speActive);
-    fSafe.Lock; // protect fCache access e.g. for a single SQLite3 DB
+    fCacheSafe.Lock; // protect fCache access e.g. for a single SQLite3 DB
     try
       obj := fCache.ObjectPtr;
       if obj <> nil then
@@ -7210,7 +7247,7 @@ begin
           TSqlDBStatement(obj[i]).FRefCount := 0; // force clean release
       FreeAndNilSafe(fCache); // release all cached statements
     finally
-      fSafe.UnLock;
+      fCacheSafe.UnLock;
       InternalProcess(speNonActive);
     end;
   end;
@@ -7235,6 +7272,7 @@ begin
       SynDBLog.Add.Log(sllError, 'e=%', [E]);
   end;
   inherited;
+  fCacheSafe.Done;
 end;
 
 function TSqlDBConnection.IsOutdated(tix: Int64): boolean;
@@ -7322,7 +7360,7 @@ var
         stmt.Prepare(aSql, ExpectResults);
         if tocache then
         begin
-          fSafe.Lock; // protect fCache access
+          fCacheSafe.Lock; // protect fCache access
           try
             if fCache = nil then
               fCache := TRawUtf8List.CreateEx(
@@ -7339,7 +7377,7 @@ var
               SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
                 'cache duplicate for %', [stmt.SqlWithInlinedParams], self);
           finally
-            fSafe.UnLock;
+            fCacheSafe.UnLock;
           end;
         end;
         result := stmt;
@@ -7372,12 +7410,12 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
-  fSafe.Lock; // protect fCache access
+  fCacheSafe.Lock; // protect fCache access
   try
     stmt := nil;
     if fCache <> nil then
     begin
-      // most common case: we have this statement in cache
+      // most common case: we have just used this statement
       if (fCacheLast = cachedsql) and
          (fCache.Strings[fCacheLastIndex] = cachedsql) then
         ndx := fCacheLastIndex // no need to use the hash lookup
@@ -7436,7 +7474,7 @@ begin
         tocache := iscacheable;
     end;
   finally
-    fSafe.UnLock;
+    fCacheSafe.UnLock;
   end;
   if result <> nil then
   begin

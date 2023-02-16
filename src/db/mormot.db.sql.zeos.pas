@@ -1131,7 +1131,7 @@ begin
          (fConnection.Properties.Dbms = dPostgreSQL) then
       begin
         if VType in [ftInt64, ftCurrency, ftDouble, ftUtf8] then
-          VData := BoundArrayToJsonArray(VArray)
+          BoundArrayToJsonArray(VArray, RawUtf8(VData)) // e.g. '{1,2,3}'
         else
           raise ESqlDBZeos.CreateUtf8('%.ExecutePrepared: Invalid array type % ' +
             'on bound parameter #%', [self, ToText(VType)^, i]);

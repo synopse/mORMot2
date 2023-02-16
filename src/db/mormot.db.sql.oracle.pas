@@ -576,8 +576,6 @@ begin
   except
     on E: Exception do
     begin
-      if log <> nil then
-        log.log(sllError, E);
       Disconnect; // clean up on fail
       raise;
     end;

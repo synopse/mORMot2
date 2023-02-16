@@ -563,12 +563,12 @@ begin
     end;
     fDatabase.Open;
     inherited Connect; // notify any re-connection
-    Log.Log(sllDB, 'Connected to % (%)',
-      [fDatabase.ProviderName, fDatabase.ServerVersionFull]);
+    if Log <> nil then
+      Log.Log(sllDB, 'Connected to % (%)',
+        [fDatabase.ProviderName, fDatabase.ServerVersionFull]);
   except
     on E: Exception do
     begin
-      Log.Log(sllError, E);
       Disconnect; // clean up on fail
       raise;
     end;

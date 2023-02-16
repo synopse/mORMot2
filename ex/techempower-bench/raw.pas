@@ -165,6 +165,7 @@ constructor TRawAsyncServer.Create(
   threadCount: integer; flags: THttpServerOptions);
 begin
   inherited Create;
+  // setup the DB connection
   {$ifdef USE_SQLITE3}
   fDbPool := TSqlDBSQLite3ConnectionProperties.Create(
       SQLITE_MEMORY_DATABASE_NAME, '', '', '');
@@ -173,11 +174,13 @@ begin
   fDbPool := TSqlDBPostgresConnectionProperties.Create(
     'tfb-database:5432', 'hello_world', 'benchmarkdbuser', 'benchmarkdbpass');
   {$endif USE_SQLITE3}
+  // setup the ORM data model
   fModel := TOrmModel.Create([TOrmWorld, TOrmFortune, TOrmCachedWorld]);
   OrmMapExternal(fModel, [TOrmWorld, TOrmFortune], fDbPool);
   // CachedWorld table doesn't exists in DB, but should as read in requirements.
   // Use world table as in other implementations.
   OrmMapExternal(fModel, TOrmCachedWorld, fDbPool, 'world');
+  // setup the main ORM store
   fStore := TRestServerDB.Create(fModel, SQLITE_MEMORY_DATABASE_NAME);
   fStore.NoAjaxJson := true;
   {$ifdef USE_SQLITE3}
@@ -187,7 +190,9 @@ begin
   {$endif USE_SQLITE3}
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
+  // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
+  // setup the HTTP server
   fHttpServer := THttpAsyncServer.Create(
     '8080', nil, nil, '', threadCount,
     5 * 60 * 1000,         // 5 minutes keep alive connections
@@ -203,6 +208,7 @@ begin
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ] + flags);
   fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
+  // use default routing using RTTI on the TRawAsyncServer published methods
   fHttpServer.Route.RunMethods([urmGet], self);
   // writeln(fHttpServer.Route.Tree[urmGet].ToText);
   fHttpServer.WaitStarted; // raise exception e.g. on binding issue
@@ -282,6 +288,7 @@ var
 begin
   msgRec.message := HELLO_WORLD;
   ctxt.SetOutJson(SaveJson(msgRec, TypeInfo(TMessageRec)));
+  //SleepHiRes(1); // emulate slow DB access
   result := HTTP_SUCCESS;
 end;
 
@@ -359,12 +366,11 @@ begin
   if not conn.IsConnected then
     conn.Connect;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  //conn.StartTransaction;
   pConn.EnterPipelineMode;
-  pStmt := (stmt as TSqlDBPostgresStatement);
+  pStmt := TSqlDBPostgresStatement(stmt.Instance);
   for i := 0 to cnt - 1 do
   begin
-    stmt.Bind(1, RandomWorld);
+    pStmt.Bind(1, RandomWorld);
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync;
   end;
@@ -379,7 +385,6 @@ begin
     pConn.CheckPipelineSync;
   end;
   pConn.ExitPipelineMode;
-  //conn.commit;
   {$endif USE_SQLITE3}
   result := true;
 end;
@@ -562,6 +567,7 @@ begin
   {$ifdef USE_SQLITE3}
   TSynLog.Family.Level := LOG_STACKTRACE; // minimal debug logs on fatal errors
   {$endif USE_SQLITE3}
+  SynDBLog := nil; // slightly faster: no need to check log level
   {$endif WITH_LOGS}
   TSynLog.Family.PerThreadLog := ptIdentifiedInOneFile;
 

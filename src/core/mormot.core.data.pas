@@ -2688,7 +2688,7 @@ type
     fOnChangeTrigerred,
     fNoThreadLock);
 
-  /// TStringList-class optimized to work with our native UTF-8 string type
+  /// thread-safe TStringList-class optimized for our native UTF-8 string type
   // - can optionally store associated some TObject instances
   // - high-level methods of this class are thread-safe
   // - if fNoDuplicate flag is defined, an internal hash table will be
