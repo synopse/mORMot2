@@ -1109,7 +1109,7 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
                 end
                 else
                 begin
-                  VData := Utf8DecodeToUnicodeRawByteString(pointer(VData), length(VData));
+                  VData := Utf8DecodeToUnicodeRawByteString(VData);
                   if fDbms = dMSSQL then
                   begin
                     // CONTAINS(field, ?) do not accept NVARCHAR(max)
@@ -1282,7 +1282,7 @@ begin
       '%.Prepare should be called only once', [self]);
   // 1. process SQL
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
-  fSqlW := Utf8DecodeToUnicodeRawByteString(pointer(fSQL), length(fSQL));
+  fSqlW := Utf8DecodeToUnicodeRawByteString(fSQL);
   // 2. prepare statement and bind result columns (if any)
   AllocStatement;
   try

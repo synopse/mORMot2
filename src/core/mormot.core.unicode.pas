@@ -884,7 +884,11 @@ function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; in
 
 /// convert an UTF-8 encoded buffer into a UTF-16 encoded RawByteString buffer
 // - could be used instead of deprecated RawUnicode when a temp UTF-16 buffer is needed
-function Utf8DecodeToUnicodeRawByteString(P: PUtf8Char; L: integer): RawByteString;
+function Utf8DecodeToUnicodeRawByteString(P: PUtf8Char; L: integer): RawByteString; overload;
+
+/// convert an UTF-8 encoded buffer into a UTF-16 encoded RawByteString buffer
+// - could be used instead of deprecated RawUnicode when a temp UTF-16 buffer is needed
+function Utf8DecodeToUnicodeRawByteString(const U: RawUtf8): RawByteString; overload;
 
 /// convert an UTF-8 encoded buffer into a UTF-16 encoded stream of bytes
 function Utf8DecodeToUnicodeStream(P: PUtf8Char; L: integer): TStream;
@@ -4445,6 +4449,11 @@ begin
   end
   else
     result := '';
+end;
+
+function Utf8DecodeToUnicodeRawByteString(const U: RawUtf8): RawByteString;
+begin
+  result := Utf8DecodeToUnicodeRawByteString(pointer(U), length(U));
 end;
 
 function Utf8DecodeToUnicodeStream(P: PUtf8Char; L: integer): TStream;

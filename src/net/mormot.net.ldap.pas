@@ -1237,50 +1237,6 @@ end;
 
 { TLdapResult }
 
-function TLdapResult.CopyObjectSid(out objectSid: TSid): Boolean;
-var
-  SidAttr: TLdapAttribute;
-  SidBinary: RawByteString;
-  SidBytesLen: SizeInt;
-begin
-  Result := True;
-  SidAttr := Attributes.Find('objectSid');
-  if not Assigned(SidAttr) then
-    Exit;
-
-  SidBinary := SidAttr.GetRaw;
-  SidBytesLen := Length(SidBinary);
-  // Sid can fit in the struct TSid
-  if (SidBytesLen <= SizeOf(objectSid))
-   // Sid has the mandatory fields
-   and (SidBytesLen >= (Sizeof(Byte) * 2 + SizeOf(TSidAuth)))
-   // Sid size is coherent with the sub authority count
-   and ((SidBytesLen - (Sizeof(Byte) * 2 + SizeOf(TSidAuth))) = SizeOf(Cardinal) * PSid(@SidBinary[1])^.SubAuthorityCount)
-  then
-  begin
-    Result := True;
-    Move(SidBinary[1], objectSid, Length(SidBinary));
-  end;
-end;
-
-function TLdapResult.CopyObjectGUID(out objectGUID: TGUID): Boolean;
-var
-  GuidAttr: TLdapAttribute;
-  GuidBinary: RawByteString;
-begin
-  Result := False;
-  GuidAttr := Attributes.Find('objectGUID');
-  if not Assigned(GuidAttr) then
-    Exit;
-
-  GuidBinary := GuidAttr.GetRaw;
-  if Length(GuidBinary) = SizeOf(TGuid) then
-  begin
-    Result := True;
-    objectGUID := PGuid(@GuidBinary[1])^;
-  end;
-end;
-
 constructor TLdapResult.Create;
 begin
   inherited Create;
