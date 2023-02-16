@@ -359,18 +359,15 @@ begin
   if not conn.IsConnected then
     conn.Connect;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  //w/o transaction pg_stat_statements view returns calls-1 and tfb verify fails
-  conn.StartTransaction;
+  //conn.StartTransaction;
   pConn.EnterPipelineMode;
   pStmt := (stmt as TSqlDBPostgresStatement);
   for i := 0 to cnt - 1 do
   begin
-    pStmt.Bind(1, RandomWorld);
+    stmt.Bind(1, RandomWorld);
     pStmt.SendPipelinePrepared;
-    pConn.Flush;
+    pConn.PipelineSync;
   end;
-  pConn.SendFlushRequest;
-  pConn.Flush;
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
@@ -379,9 +376,10 @@ begin
     res[i].id := pStmt.ColumnInt(0);
     res[i].randomNumber := pStmt.ColumnInt(1);
     pStmt.ReleaseRows;
+    pConn.CheckPipelineSync;
   end;
   pConn.ExitPipelineMode;
-  conn.commit;
+  //conn.commit;
   {$endif USE_SQLITE3}
   result := true;
 end;
