@@ -27,6 +27,7 @@ uses
   mormot.net.http,
   mormot.net.server,
   mormot.net.async,
+  mormot.net.ldap,
   mormot.net.rtsphttp;
 
 type
@@ -352,6 +353,11 @@ var
   end;
 
 begin
+  CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
+    'xyz.local/Users/London/User1');
+  CheckEqual(DNToCN(
+    'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
+    'USRegion.OrgName.com/Widgets/Manufacturing/JDoe');
   tree := TUriTree.Create;
   try
     tree.insert('romane');

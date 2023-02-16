@@ -35,9 +35,6 @@ uses
 
 { **************** LDAP Response Storage }
 
-/// Convert a Distinguished Name to a Cannonical Name
-function DNToCannonical(DN: RawUtf8): RawUtf8;
-
 type
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
@@ -81,8 +78,11 @@ type
     /// number of TLdapAttribute objects in this list
     function Count: integer;
       {$ifdef HASINLINE} inline; {$endif}
+    /// allocate and a new TLdapAttribute object and its value to the list
+    function Add(const AttributeName: RawUtf8;
+      const AttributeValue: RawByteString): TLdapAttribute; overload;
     /// allocate and a new TLdapAttribute object to the list
-    function Add(const AttributeName: RawUtf8): TLdapAttribute;
+    function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
     /// remove one TLdapAttribute object from the list
     procedure Delete(const AttributeName: RawUtf8);
     /// find and return attribute index with the requested name
@@ -117,10 +117,10 @@ type
     property Attributes: TLdapAttributeList read fAttributes;
     /// Copy the 'objectSid' attribute if present
     // - Return true on success
-    function CopyObjectSid(out objectSid: TSid): Boolean;
+    function CopyObjectSid(out objectSid: TSid): boolean;
     /// Copy the 'objectGUID' attribute if present
     // - Return true on success
-    function CopyObjectGUID(out objectGUID: TGUID): Boolean;
+    function CopyObjectGUID(out objectGUID: TGuid): boolean;
   end;
   TLdapResultObjArray = array of TLdapResult;
 
@@ -146,6 +146,13 @@ type
     property Items: TLdapResultObjArray
       read fItems;
   end;
+
+
+/// convert a Distinguished Name to a Canonical Name
+// - raise an exception if the supplied DN is not a valid Distinguished Name
+// - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
+// 'xyz.local/london/users/user1'
+function DNToCN(const DN: RawUtf8): RawUtf8;
 
 
 { **************** LDAP Client Class }
@@ -243,7 +250,8 @@ type
     // first result
     // - Will call Search method, therefore SearchResult will contains all the results
     // - Returns nil if no result is found or if the search failed
-    function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8; const Attributes: array of RawByteString): TLdapResult;
+    function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
+      const Attributes: array of RawByteString): TLdapResult;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -251,7 +259,8 @@ type
     // - If DeleteIfPresent is False and there is already a computer with this
     // name in the domain, the operation fail
     // - Return false if the operation failed
-    function AddComputer(const ComputerParentDN, ComputerName: RawUtf8; Password: SpiUtf8 = ''; DeleteIfPresent : Boolean = False): Boolean;
+    function AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
+      const Password: SpiUtf8 = ''; DeleteIfPresent : boolean = False): boolean;
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Value: TLdapAttribute): boolean;
@@ -948,42 +957,32 @@ begin
     end;
 end;
 
-function DNToCannonical(DN: RawUtf8): RawUtf8;
-const
-  DomainComponent = 'DC';
-  OrganizationalUnit = 'OU';
-  CommonName = 'CN';
+function DNToCN(const DN: RawUtf8): RawUtf8;
 var
-  P: PUtf8Char;
-  Domain, OU, Common, PartType, Value: RawUtf8;
+  p: PUtf8Char;
+  DC, OU, CN, PartType, Value: RawUtf8;
 begin
-  Result := '';
-  if DN = '' then
-    Exit;
-
-  P := Pointer(DN);
-  while Assigned(P) do
+  p := pointer(DN);
+  while p <> nil do
   begin
-    GetNextItemTrimed(P, '=', PartType);
-    if not Assigned(P) then
-      raise Exception.CreateFmt('Invalid Distinguished Name: ', [DN]);
-    GetNextItemTrimed(P, ',', Value);
-    if (PartType = '') or (Value = '') then
-      raise Exception.CreateFmt('Invalid Distinguished Name: ', [DN]);
-
-    if PartType = DomainComponent then
+    GetNextItemTrimed(p, '=', PartType);
+    GetNextItemTrimed(p, ',', Value);
+    if (PartType = '') or
+       (Value = '') then
+      raise ENetSock.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
+    UpperCaseSelf(PartType);
+    if PartType = 'DC' then
     begin
-      if Length(Domain) > 0 then
-        Append(Domain, ['.', Value])
-      else
-        Domain := Value;
+      if DC <> '' then
+        DC := DC +'.';
+      DC := DC + Value;
     end
-    else if PartType = OrganizationalUnit then
+    else if PartType = 'OU' then
       Append(OU, ['/', Value])
-    else if PartType = CommonName then
-      Append(Common, ['/', Value]);
+    else if PartType = 'CN' then
+      Append(CN, ['/', Value]);
   end;
-  Result := Domain + OU + Common;
+  result := DC + OU + CN;
 end;
 
 {$ifdef ASNDEBUG} // not used nor fully tested
@@ -1148,6 +1147,7 @@ begin
   inherited Create;
   fAttributeName := AttrName;
   fIsBinary := StrPosI(';BINARY', pointer(AttrName)) <> nil;
+  SetLength(fList, 1); // optimized for a single value (most used case)
 end;
 
 procedure TLdapAttribute.Add(const aValue: RawByteString);
@@ -1229,6 +1229,13 @@ begin
   ObjArrayAdd(fItems, result);
 end;
 
+function TLdapAttributeList.Add(const AttributeName: RawUtf8;
+  const AttributeValue: RawByteString): TLdapAttribute;
+begin
+  result := Add(AttributeName);
+  result.Add(AttributeValue);
+end;
+
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
 begin
   ObjArrayDelete(fItems, FindIndex(AttributeName));
@@ -1247,6 +1254,46 @@ destructor TLdapResult.Destroy;
 begin
   fAttributes.Free;
   inherited Destroy;
+end;
+
+function TLdapResult.CopyObjectSid(out objectSid: TSid): boolean;
+var
+  SidAttr: TLdapAttribute;
+  SidBinary: RawByteString;
+  SidBytesLen: PtrInt;
+begin
+  result := false;
+  SidAttr := Attributes.Find('objectSid');
+  if SidAttr = nil then
+    exit;
+  SidBinary := SidAttr.GetRaw;
+  SidBytesLen := length(SidBinary);
+  // Sid can fit in the struct TSid
+  if (SidBytesLen <= SizeOf(objectSid)) and
+     // Sid size is coherent with the sub authority count
+     (SidBytesLen = Sizeof(byte) * 2 + SizeOf(TSidAuth) +
+        SizeOf(cardinal) * PSid(SidBinary)^.SubAuthorityCount) then
+  begin
+    MoveFast(SidBinary[1], objectSid, SidBytesLen);
+    result := true;
+  end;
+end;
+
+function TLdapResult.CopyObjectGUID(out objectGUID: TGuid): boolean;
+var
+  GuidAttr: TLdapAttribute;
+  GuidBinary: RawByteString;
+begin
+  result := false;
+  GuidAttr := Attributes.Find('objectGUID');
+  if GuidAttr = nil then
+    exit;
+  GuidBinary := GuidAttr.GetRaw;
+  if length(GuidBinary) = SizeOf(TGuid) then
+  begin
+    objectGUID := PGuid(GuidBinary)^;
+    result := True;
+  end;
 end;
 
 
@@ -1827,43 +1874,40 @@ begin
 end;
 
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-  Password: SpiUtf8; DeleteIfPresent: Boolean): Boolean;
+  const Password: SpiUtf8; DeleteIfPresent: boolean): boolean;
 var
   PwdU8: SpiUtf8;
   ComputerDN: RawUtf8;
+  PwdU16: RawByteString;
   Attributes: TLdapAttributeList;
 begin
-  Result := True;
-  ComputerDN := 'CN='+ComputerName+',' + ComputerParentDN;
-
+  result := false;
+  ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
-  if not Search(ComputerDN, False, '', []) then
-    Result := False
-  else if SearchResult.Count > 0 then
-  begin
+  if not Search(ComputerDN, false, '', []) then
+    exit;
+  if SearchResult.Count > 0 then
     if DeleteIfPresent then
       Delete(ComputerDN)
     else
-      Result := False;
-  end;
-
-  if Result then
-  begin
-    Attributes := TLDAPAttributeList.Create;
-    try
-      Attributes.Add('objectClass').Add('computer');
-      Attributes.Add('cn').Add(ComputerName);
-      Attributes.Add('sAMAccountName').Add(UpperCase(ComputerName)+'$');
-      Attributes.Add('userAccountControl').Add('4096');
-      if Password <> '' then
-      begin
-        PwdU8 := '"'+Password+'"';
-        Attributes.Add('unicodePwd').Add(Utf8DecodeToUnicodeRawByteString(@PwdU8[1], Length(PwdU8)));
-      end;
-      Result := Add(ComputerDN, Attributes);
-    finally
-      Attributes.Free;
+      exit;
+  Attributes := TLDAPAttributeList.Create;
+  try
+    Attributes.Add('objectClass', 'computer');
+    Attributes.Add('cn', ComputerName);
+    Attributes.Add('sAMAccountName', UpperCase(ComputerName) + '$');
+    Attributes.Add('userAccountControl', '4096');
+    if Password <> '' then
+    begin
+      PwdU8 := '"' + Password + '"';
+      PwdU16 := Utf8DecodeToUnicodeRawByteString(PwdU8);
+      Attributes.Add('unicodePwd', PwdU16);
     end;
+    result := Add(ComputerDN, Attributes);
+  finally
+    Attributes.Free;
+    FillZero(PwdU8);
+    FillZero(PwdU16);
   end;
 end;
 
@@ -2006,9 +2050,10 @@ end;
 function TLdapClient.SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
   const Attributes: array of RawByteString): TLdapResult;
 begin
-  Result := nil;
-  if Search(BaseDN, False, Filter, Attributes) and (SearchResult.Count > 0) then
-    Result := SearchResult.Items[0];
+  result := nil;
+  if Search(BaseDN, False, Filter, Attributes) and
+     (SearchResult.Count > 0) then
+    result := SearchResult.Items[0];
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
