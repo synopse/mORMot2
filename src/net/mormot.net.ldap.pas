@@ -213,8 +213,11 @@ type
     fSearchResult: TLdapResultList;
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
+    fRootDN: RawUtf8;
+    fBound: Boolean;
     function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
+    function GetRootDN: RawUtf8;
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
@@ -276,6 +279,12 @@ type
     /// call any LDAP v3 extended operations
     // - e.g. StartTLS, cancel, transactions
     function Extended(const Oid, Value: RawUtf8): boolean;
+    /// Try to discover the root DN of the AD
+    // Return an empty string if not found 
+    function DiscoverRootDN: RawUtf8;
+    /// Test whether the client is connected to the server
+    // - if AndBound is set, it also checks that a successfull bind request has been made
+    function Connected(AndBound: Boolean = True): Boolean;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
@@ -356,6 +365,9 @@ type
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
+    /// Root DN, retrieved using DiscoverRootDN if possible
+    property RootDN: RawUtf8
+      read GetRootDN Write fRootDN;
   end;
 
 const
@@ -978,9 +990,9 @@ begin
       DC := DC + Value;
     end
     else if PartType = 'OU' then
-      Append(OU, ['/', Value])
+      Prepend(OU, ['/', Value])
     else if PartType = 'CN' then
-      Append(CN, ['/', Value]);
+      Prepend(CN, ['/', Value]);
   end;
   result := DC + OU + CN;
 end;
@@ -1355,6 +1367,8 @@ begin
   fSearchScope := SS_WholeSubtree;
   fSearchAliases := SA_Always;
   fSearchResult := TLdapResultList.Create;
+  fBound := False;
+  fRootDN := '';
 end;
 
 destructor TLdapClient.Destroy;
@@ -1479,6 +1493,13 @@ begin
   result := Asn(ASN1_SEQ, [
     Asn(fSeq),
     Asn1Data]);
+end;
+
+function TLdapClient.GetRootDN: RawUtf8;
+begin
+  if (fRootDN = '') and Connected then
+    fRootDN := DiscoverRootDN;
+  Result := fRootDN;
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
@@ -1778,6 +1799,7 @@ begin
                    Asn(fUserName),
                    Asn(fPassword, ASN1_CTX0)]));
   result := fResultCode = LDAP_RES_SUCCESS;
+  fBound := result;
 end;
 
 function TLdapClient.BindSaslDigestMd5: boolean;
@@ -1825,6 +1847,8 @@ begin
   SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
   FreeAndNil(fSock);
   result := true;
+  fBound := false;
+  fRootDN := '';
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
@@ -1965,7 +1989,7 @@ begin
   filt := TranslateFilter(Filter);
   if filt = '' then
     filt := Asn('', ASN1_NULL);
-  for n := 0 to high(Attributes) - 1 do
+  for n := 0 to high(Attributes) do
     AsnAdd(attr, Asn(Attributes[n]));
   s := Asn(LDAP_ASN1_SEARCH_REQUEST, [
            Asn(BaseDN),
@@ -2076,7 +2100,32 @@ begin
   end;
 end;
 
+function TLdapClient.DiscoverRootDN: RawUtf8;
+var
+  PreviousSearchScope: TLdapSearchScope;
+  RootObject: TLdapResult;
+  RootDnAttr: TLdapAttribute;
+begin
+  Result := '';
+  PreviousSearchScope := SearchScope;
+  try
+    SearchScope := SS_BaseObject;
+    RootObject := SearchFirst('', '*', ['rootDomainNamingContext']);
+    if Assigned(RootObject) then
+    begin
+      RootDnAttr := RootObject.Attributes.Find('rootDomainNamingContext');
+      if Assigned(RootDnAttr) then
+        Result := RootDnAttr.GetReadable;
+    end;
+  finally
+    SearchScope := PreviousSearchScope;
+  end;
+end;
 
+function TLdapClient.Connected(AndBound: Boolean): Boolean;
+begin
+  Result := Sock.SockConnected and fBound;
+end;
 
 end.
 
