@@ -1468,6 +1468,8 @@ type
     /// returns the function list
     GetFunctionList: TfC_GetFunctionList;
     /// obtains a list of slots in the system
+    // - warning: tokenPresent is sometimes ignored and void slots can be
+    // returned if GetSlotList() is called several times: never trust this flag!
     GetSlotList: function(tokenPresent: boolean;
       pSlotList: CK_SLOT_ID_PTR; var Count: CK_ULONG): CK_RVULONG; cdecl;
     /// obtains information about a particular slot in the system
@@ -1986,6 +1988,7 @@ type
     procedure Check(res: CK_RVULONG; const ctxt: ShortString;
       unlock: boolean = false);
     procedure CheckAttr(res: CK_RVULONG);
+    function DoGetSlotList(Present: boolean): TPkcs11SlotIDDynArray;
     // some actions within the current opened session
     function SessionCreateObject(const a: CK_ATTRIBUTES): RawUtf8;
     function SessionGetAttribute(obj: CK_OBJECT_HANDLE;
@@ -2010,6 +2013,8 @@ type
 
     /// get information about this instance in Slots[] and Tokens[] properties
     procedure RetrieveConfig(IncludeVoidSlots: boolean = false);
+    /// retrieve the list of Void slots
+    function RetrieveVoidSlots: TPkcs11SlotIDDynArray;
     /// update information in Slots[] and Tokens[] about a single slot
     // - as called e.g. by RetrieveConfig() and also function WaitForSlotEvent()
     procedure UpdateConfig(SlotID: TPkcs11SlotID);
@@ -3711,31 +3716,62 @@ begin
   fTokens := nil;
 end;
 
-procedure TPkcs11.RetrieveConfig(IncludeVoidSlots: boolean);
+function TPkcs11.DoGetSlotList(Present: boolean): TPkcs11SlotIDDynArray;
 var
   n: CK_ULONG;
   s: array of CK_SLOT_ID; // may be 64-bit on POSIX
   res: integer;
   i: PtrInt;
 begin
-  EnsureLoaded('RetrieveConfig');
-  fSlots := nil;
-  fSlotIDs := nil;
-  fTokens := nil;
+  result := nil;
   if not Assigned(fC^.GetSlotList) then
     exit;
+  Check(fC^.GetSlotList(Present, nil, n), 'GetSlotList');
+  if n = 0 then
+    exit;
+  repeat // need to loop because token number may have changed in-between!
+    SetLength(s, n);
+    res := fC^.GetSlotList(Present, pointer(s), n);
+  until res <> CKR_BUFFER_TOOSMALL;
+  Check(res, 'GetSlotList');
+  if n = 0 then
+    exit;
+  SetLength(result, n);
+  for i := 0 to CK_LONG(n) - 1 do
+    result[i] := s[i]; // from CK_SLOT_ID to TPkcs11SlotID
+end;
+
+procedure TPkcs11.RetrieveConfig(IncludeVoidSlots: boolean);
+var
+  i: PtrInt;
+begin
+  EnsureLoaded('RetrieveConfig');
   fSafe.Lock;
   try
-    Check(fC^.GetSlotList(not IncludeVoidSlots, nil, n), 'GetSlotList');
-    if n = 0 then
-      exit;
-    repeat // need to loop because token number may have changed in-between!
-      SetLength(s, n);
-      res := fC^.GetSlotList(not IncludeVoidSlots, pointer(s), n);
-    until res <> CKR_BUFFER_TOOSMALL;
-    Check(res, 'GetSlotList');
-    for i := 0 to CK_LONG(n) - 1 do
-      UpdateConfig(s[i]);
+    fSlots := nil;
+    fTokens := nil;
+    fSlotIDs := DoGetSlotList(not IncludeVoidSlots);
+    for i := 0 to high(fSlotIDs) do
+      UpdateConfig(fSlotIDs[i]);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPkcs11.RetrieveVoidSlots: TPkcs11SlotIDDynArray;
+var
+  all, present: TPkcs11SlotIDDynArray;
+  i: PtrInt;
+begin
+  EnsureLoaded('RetrieveVoidSlots');
+  result := nil;
+  fSafe.Lock;
+  try
+    present := DoGetSlotList(true); // when called twice: return ALL :(
+    all := DoGetSlotList(false);
+    for i := 0 to high(all) do
+      if not IntegerScanExists(pointer(present), length(present), all[i]) then
+        AddInteger(TIntegerDynArray(result), all[i]);
   finally
     fSafe.UnLock;
   end;
@@ -3748,16 +3784,25 @@ var
   toknfo: CK_TOKEN_INFO;
   mecnfo: CK_MECHANISM_INFO;
   s: PPkcs11Slot;
-  mn, res: CK_ULONG;
+  mn: CK_ULONG;
+  res: CK_RVULONG;
   m: array of CK_ULONG;
 begin
   EnsureLoaded('UpdateConfig');
+  FillCharFast(sltnfo, SizeOf(sltnfo), 0);
+  FillCharFast(toknfo, SizeOf(toknfo), 0);
   fSafe.Lock;
   try
-    FillCharFast(sltnfo, SizeOf(sltnfo), 0);
-    Check(fC^.GetSlotInfo(SlotID, sltnfo), 'GetSlotInfo');
     AddInteger(TIntegerDynArray(fSlotIDs), SlotID, {nodup=}true);
     s := SlotByID(SlotID, {addnew=}true);
+    res := fC^.GetSlotInfo(SlotID, sltnfo);
+    if res = CKR_WORD[CKR_FUNCTION_NOT_SUPPORTED] then
+    begin
+      // some hardware won't support this call if no token is available
+      FormatUtf8('Undefined: GetSlotInfo(#%) failed', [SlotID], s^.Description);
+      exit;
+    end;
+    Check(res, 'GetSlotInfo');
     FillSlot(SlotID, sltnfo, s^);
     if not (CKF_TOKEN_PRESENT in s^.Flags) then
     begin
@@ -3788,7 +3833,6 @@ begin
         Flags := CKM_FLAGS(cardinal(mecnfo.flags));
       end;
     end;
-    FillCharFast(toknfo, SizeOf(toknfo), 0);
     Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
     FillToken(SlotID, toknfo, TokenByID(SlotID, {addnew=}true)^);
   finally
