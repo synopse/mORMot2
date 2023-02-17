@@ -285,15 +285,18 @@ const
 
   SEC_E_OK = 0;
 
-  SEC_E_UNSUPPORTED_FUNCTION   = $80090302;
-  SEC_E_INVALID_TOKEN          = $80090308;
   SEC_I_CONTINUE_NEEDED        = $00090312;
   SEC_I_COMPLETE_NEEDED        = $00090313;
   SEC_I_COMPLETE_AND_CONTINUE  = $00090314;
   SEC_I_CONTEXT_EXPIRED	       = $00090317;
-  SEC_E_INCOMPLETE_MESSAGE     = $80090318;
   SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
   SEC_I_RENEGOTIATE            = $00090321;
+  
+  SEC_E_UNSUPPORTED_FUNCTION   = $80090302;
+  SEC_E_INVALID_TOKEN          = $80090308;
+  SEC_E_MESSAGE_ALTERED        = $8009030F;
+  SEC_E_INCOMPLETE_MESSAGE     = $80090318;
+  SEC_E_BUFFER_TOO_SMALL       = $80090321;
   SEC_E_ILLEGAL_MESSAGE        = $80090326;
   SEC_E_CERT_UNKNOWN           = $80090327;
   SEC_E_CERT_EXPIRED           = $80090328;
@@ -323,7 +326,7 @@ const
   SCH_CRED_CACHE_ONLY_URL_RETRIEVAL_ON_CREATE  = $00020000;
   SCH_SEND_ROOT_CERT                           = $00040000;
 
-function SspiResToText(res: cardinal): string;
+function SspiResToText(res: cardinal): TShort31;
 
 
 // secur32.dll API calls
@@ -945,7 +948,7 @@ implementation
 
 { ****************** Low-Level SSPI/SChannel Functions }
 
-function SspiResToText(res: cardinal): string;
+function SspiResToText(res: cardinal): TShort31;
 begin
   case res of
     SEC_E_OK:
@@ -972,8 +975,12 @@ begin
       result := 'SEC_E_ALGORITHM_MISMATCH';
     SEC_E_UNSUPPORTED_FUNCTION:
       result := 'SEC_E_UNSUPPORTED_FUNCTION';
+    SEC_E_MESSAGE_ALTERED:
+      result := 'SEC_E_MESSAGE_ALTERED';
+    SEC_E_BUFFER_TOO_SMALL:
+      result := 'SEC_E_BUFFER_TOO_SMALL';
   else
-    result := IntToStr(res);
+    str(res, result);
   end;
 end;
 

@@ -994,6 +994,7 @@ type
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
+    fLastCheckSecError: cardinal;
     fSizes: TSecPkgContext_StreamSizes;
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
@@ -1004,6 +1005,7 @@ type
     procedure ESChannelRaiseLastError(const ctx: shortstring; res: cardinal);
     function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
     procedure HandshakeLoop;
+    procedure FinalizeCredCtxt;
   public
     destructor Destroy; override;
     // INetTls methods
@@ -1024,29 +1026,38 @@ type
 procedure TSChannelNetTls.ESChannelRaiseLastError(
   const ctx: shortstring; res: cardinal);
 var
-  LastError: integer;
+  syserr: integer;
 begin
-  LastError := GetLastError;
-  raise ESChannel.CreateFmt('<%s>: %s returned %x [%s], System Error %d ''%s''',
-    [fServerAddressW, ctx, res, SspiResToText(res), LastError,
-     string(GetErrorText(LastError))]);
+  syserr := GetLastError;
+  raise ESChannel.CreateFmt('<%s>: %s returned %x [%s], System Error %d [%s]',
+    [fServerAddressW, ctx, res, SspiResToText(res), syserr,
+     string(GetErrorText(syserr))]);
 end;
 
 function TSChannelNetTls.CheckSEC_E_OK(
   const ctx: shortstring; res: integer): cardinal;
 begin
+  fLastCheckSecError := res;
   if res <> SEC_E_OK then
     ESChannelRaiseLastError(ctx, res);
   result := res;
 end;
 
-function CheckSocket(res: integer): cardinal;
+function CheckSocket(const ctx: shortstring; res: integer): cardinal;
 begin
   if res = SOCKET_ERROR then
-    raise ESChannel.CreateFmt('Socket Error %d', [sockerrno]);
+    raise ESChannel.CreateFmt('%s: Socket Error %d', [ctx, sockerrno]);
   if res = 0 then
-    raise ESChannel.Create('Handshake aborted');
+    raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
   result := res;
+end;
+
+procedure TSChannelNetTls.FinalizeCredCtxt;
+begin
+  DeleteSecurityContext(@fCtxt);
+  FreeCredentialsHandle(@fCred);
+  FillCharFast(fCtxt, SizeOf(fCtxt), 0);
+  FillCharFast(fCred, SizeOf(fCred), 0);
 end;
 
 const
@@ -1094,43 +1105,63 @@ var
   cred: TSChannelCred;
   buf: THandshakeBuf;
   nfo: TWinCertInfo;
-  res, f: cardinal;
+  res, f, trial: cardinal;
 begin
   // prepare execution context
   fSocket := Socket;
   fServerAddressW := SynUnicode(ServerAddress);
-  fAccept := false;
-  CredInit(cred, Context.AllowDeprecatedTLS);
-  if Context.IgnoreCertificateErrors then
-    cred.dwFlags := SCH_CRED_MANUAL_CRED_VALIDATION
-  else
-    cred.dwFlags := SCH_CRED_REVOCATION_CHECK_CHAIN or
-                    SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-  CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
-    nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
-  fDataPos := 0;
-  fDataCount := 0;
-  fFlags := ISC_REQ_FLAGS;
-  if Context.IgnoreCertificateErrors then
-    // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
-    fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
-  // initiate a ClientHello TLS message and a new fCtxt
-  HandshakeBufInit(buf);
-  res := InitializeSecurityContextW(
-    @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
-    nil, 0, @fCtxt, @buf.output, f, nil);
-  if res <> SEC_I_CONTINUE_NEEDED then
-    ESChannelRaiseLastError('InitializeSecurityContextW', res);
-  if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
-     (buf.buf[2].pvBuffer = nil) then
-    raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
-  CheckSocket(mormot.net.sock.Send(
-    fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-  CheckSEC_E_OK('FreeContextBuffer',
-    FreeContextBuffer(buf.buf[2].pvBuffer));
-  // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
-  HandshakeLoop;
+  fAccept := false;
+  trial := 0;
+  while true do
+    try
+      CredInit(cred, Context.AllowDeprecatedTLS);
+      if Context.IgnoreCertificateErrors then
+        cred.dwFlags := SCH_CRED_MANUAL_CRED_VALIDATION
+      else
+        cred.dwFlags := SCH_CRED_REVOCATION_CHECK_CHAIN or
+                        SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+      CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
+        nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
+      fDataPos := 0;
+      fDataCount := 0;
+      fFlags := ISC_REQ_FLAGS;
+      if Context.IgnoreCertificateErrors then
+        // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
+        fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
+      // initiate a ClientHello TLS message and a new fCtxt
+      HandshakeBufInit(buf);
+      res := InitializeSecurityContextW(
+        @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
+        nil, 0, @fCtxt, @buf.output, f, nil);
+      if res <> SEC_I_CONTINUE_NEEDED then
+        ESChannelRaiseLastError('InitializeSecurityContextW', res);
+      if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
+         (buf.buf[2].pvBuffer = nil) then
+        raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
+      CheckSocket('send', mormot.net.sock.Send(
+        fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+      CheckSEC_E_OK('FreeContextBuffer',
+        FreeContextBuffer(buf.buf[2].pvBuffer));
+      // make TLS handshake and prepare for process
+      HandshakeLoop;
+      break; // we are connected
+    except
+      // circumvent Windows 7/8 random bug identified on TLS 1.2 and
+      // TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 TLS_DHE_RSA_WITH_AES_256_GCM_SHA384
+      // https://github.com/Waffle/waffle/pull/128#issuecomment-163342222
+      on E: ESChannel do
+        if (trial = 0) and
+           ((fLastCheckSecError = SEC_E_BUFFER_TOO_SMALL) or
+            (fLastCheckSecError = SEC_E_MESSAGE_ALTERED)) then
+        begin
+          // just retry once
+          FinalizeCredCtxt;
+          inc(trial);
+        end
+        else
+          raise;
+    end;
   Context.CipherName := GetCipherName;
   if TlsCertInfo(fCtxt, nfo) then
   begin
@@ -1256,7 +1287,7 @@ procedure TSChannelNetTls.HandshakeLoop;
          (buf.buf[2].pvBuffer <> nil) then
       begin
         // need to send back something to the server
-        CheckSocket(mormot.net.sock.Send(
+        CheckSocket('send', mormot.net.sock.Send(
           fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
         CheckSEC_E_OK('FreeContextBuffer',
           FreeContextBuffer(buf.buf[2].pvBuffer));
@@ -1278,7 +1309,7 @@ var
   res: cardinal;
 begin
   repeat
-    inc(fDataCount, CheckSocket(
+    inc(fDataCount, CheckSocket('recv',
       Recv(fSocket.Socket, @PByteArray(fData)[fDataCount],
         length(fData) - fDataCount, MSG_NOSIGNAL)));
     res := ComputeAndSendAnswer;
@@ -1308,7 +1339,7 @@ destructor TSChannelNetTls.Destroy;
 var
   desc: TSecBufferDesc;
   buf: TSecBuffer;
-  dt, f: cardinal;
+  dt, f, res: cardinal;
 begin
   try
     if {%H-}PtrInt(fSocket.Socket) > 0 then
@@ -1327,28 +1358,21 @@ begin
         buf.BufferType := SECBUFFER_TOKEN;
         buf.pvBuffer := nil;
         if fAccept then
-        begin
-          if AcceptSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
-             nil, @desc, f, nil) = SEC_E_OK then
-          begin
-            mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
-            FreeContextBuffer(buf.pvBuffer);
-          end;
-        end
+          res := AcceptSecurityContext(
+            @fCred, @fCtxt, nil, fFlags, 0, nil, @desc, f, nil)
         else
+          res := InitializeSecurityContextW(
+            @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
+            nil, 0, @fCtxt, @desc, f, nil);
+        if res = SEC_E_OK then
         begin
-          if InitializeSecurityContextW(@fCred, @fCtxt, nil, fFlags, 0,
-             0, nil, 0, @fCtxt, @desc, f, nil) = SEC_E_OK then
-          begin
-            mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
-            FreeContextBuffer(buf.pvBuffer);
-          end;
+          mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
+          FreeContextBuffer(buf.pvBuffer);
         end;
       end;
     end;
     // finalize TLS context for this connection
-    DeleteSecurityContext(@fCtxt);
-    FreeCredentialsHandle(@fCred);
+    FinalizeCredCtxt;
   finally
     // release AfterBind() certificates information
     if fAcceptCert <> nil then
