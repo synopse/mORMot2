@@ -5352,24 +5352,54 @@ begin
   fOwnedRecords.Add(result);
 end;
 
+type
+  TOrmTableFillOrm = record map: byte; ws: boolean; prop: TOrmPropInfo; end;
+
 procedure TOrmTable.FillOrms(P: POrm; RecordType: TOrmClass);
 var
-  cloned: TOrm;
-  r: PtrInt;
-begin
-  cloned := RecordType.Create;
-  try
-    cloned.FillPrepare(self);
-    for r := 1 to fRowCount do
+  r: integer;
+  fid, f, o, nmap: PtrInt;
+  map: ^TOrmTableFillOrm;
+  fields: TOrmPropInfoList;
+  u: PUtf8Char;
+  maps: array[0..MAX_SQLFIELDS - 1] of TOrmTableFillOrm;
+begin // inlined FillPrepare/TOrmFill process
+  nmap := 0;
+  fields := RecordType.OrmProps.Fields;
+  fid := fFieldIndexID;;
+  for o := 0 to fFieldCount - 1 do
+    if o <> fid then
     begin
-      P^ := RecordType.Create;
-      cloned.fFill.Fill(r, P^);
-      P^.fInternalState := fInternalState;
-      inc(P);
+      f := fields.IndexByName(GetResults(o));
+      if f < 0 then
+        continue;
+      with {%H-}maps[nmap] do
+      begin
+        map := o;
+        ws := byte(o) in fFieldParsedAsString;
+        prop := fields.List[f];
+      end;
+      inc(nmap);
     end;
-  finally
-    cloned.Free;
-  end;
+  r := fRowCount;
+  o := 0;
+  repeat
+    inc(o, fFieldCount);
+    P^ := RecordType.Create;
+    if fid >= 0 then
+      P^.IDValue := GetInt64(GetResults(o + fid));
+    map := @maps;
+    for f := 1 to nmap do
+    begin
+      u := GetResults(o + map^.map);
+      map^.prop.SetValue(P^, u, {$ifdef NOTORMTABLELEN} StrLen(u)
+            {$else} fLen[o + map^.map] {$endif}, map^.ws);
+      inc(map);
+    end;
+    P^.fInternalState := fInternalState;
+    inc(P);
+    dec(r);
+  until r = 0;
 end;
 
 procedure TOrmTable.ToObjectList(DestList: TObjectList; RecordType: TOrmClass);
@@ -6126,19 +6156,22 @@ end;
 
 procedure TOrmFill.AddMap(aRecord: TOrm; aField: TOrmPropInfo;
   aIndex: integer);
+var
+  n: PtrInt;
 begin
   if (self = nil) or
      (aRecord = nil) then
     exit;
-  if fTableMapCount >= length(fTableMap) then
-    SetLength(fTableMap, fTableMapCount + fTableMapCount shr 1 + 16);
-  with fTableMap[fTableMapCount] do
+  n := fTableMapCount;
+  if n >= length(fTableMap) then
+    SetLength(fTableMap, n + n shr 1 + 16);
+  with fTableMap[n] do
   begin
     Dest := aRecord;
     DestField := aField;
     TableIndex := aIndex;
-    inc(fTableMapCount);
   end;
+  inc(fTableMapCount);
 end;
 
 procedure TOrmFill.AddMapFromName(aRecord: TOrm; aName: PUtf8Char; aIndex: integer);
