@@ -108,8 +108,8 @@ type
       const SentData: RawUtf8): TID; override;
     function EngineRetrieve(TableModelIndex: integer;
       ID: TID): RawUtf8; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt=nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
       const SentData: RawUtf8): boolean; override;
     function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
@@ -1093,19 +1093,21 @@ begin
     result := rest.EngineRetrieve(TableModelIndex, ID);
 end;
 
-function TRestOrmServer.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
-  ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestOrmServer.EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
   rest: TRestOrm;
   sqladapted: RawUtf8;
 begin
   sqladapted := SQL;
-  rest := InternalAdaptSql(
-    fModel.GetTableIndexFromSqlSelect(SQL, false), sqladapted);
+  if TableModelIndex < 0 then
+    TableModelIndex := fModel.GetTableIndexFromSqlSelect(SQL, false);
+  rest := InternalAdaptSql(TableModelIndex, sqladapted);
   if rest = nil then
     result := MainEngineList(SQL, ForceAjax, ReturnedRowCount)
   else
-    result := rest.EngineList(sqladapted, ForceAjax, ReturnedRowCount);
+    result := rest.EngineList(
+      TableModelIndex, sqladapted, ForceAjax, ReturnedRowCount);
 end;
 
 function TRestOrmServer.EngineUpdate(TableModelIndex: integer;
@@ -1531,7 +1533,7 @@ begin
   Rest := InternalAdaptSql(TableIndex, aSql);
   if Rest <> nil then
      // this SQL statement is handled by direct connection, faster adaptation
-    result := Rest.EngineList(aSql)
+    result := Rest.EngineList(TableIndex, aSql)
   else
     // complex TOrmVirtualTableJson/External queries will rely on virtual table
     result := MainEngineList(SQL, false, nil);

@@ -7410,7 +7410,7 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
-  fCacheSafe.Lock; // protect fCache access
+  fCacheSafe.Lock; // protect fCache (never lock on per-thread connection)
   try
     stmt := nil;
     if fCache <> nil then

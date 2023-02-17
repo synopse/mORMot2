@@ -297,8 +297,8 @@ type
     function ClientRetrieve(TableModelIndex: integer; ID: TID;
       ForUpdate: boolean; var InternalState: cardinal;
       var Resp: RawUtf8): boolean; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineExecute(const SQL: RawUtf8): boolean; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
@@ -712,8 +712,8 @@ begin
     result := false;
 end;
 
-function TRestOrmClientUri.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
-  ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestOrmClientUri.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
   if ReturnedRowCount <> nil then
     raise EOrmException.CreateUtf8(

@@ -772,8 +772,8 @@ type
     function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
     /// overridden methods for direct in-memory database engine thread-safe process
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
       const SentData: RawUtf8): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -1264,8 +1264,8 @@ type
     fRemoteTableIndex: integer;
   public
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineExecute(const aSql: RawUtf8): boolean; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
@@ -1349,8 +1349,8 @@ type
   public
     // overriden methods which will handle all ORM process
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineExecute(const aSql: RawUtf8): boolean; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
@@ -3244,8 +3244,8 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
-  ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestStorageInMemory.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 // - GetJsonValues/FindWhere(Equal) will handle basic REST commands (not all SQL)
 // - note: sufficient for OneFieldValue() and MultiFieldValue() to work
 var
@@ -4799,10 +4799,11 @@ begin
   result := fRemoteRest.EngineExecute(aSql);
 end;
 
-function TRestStorageRemote.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
-  ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestStorageRemote.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
-  result := fRemoteRest.EngineList(SQL, ForceAjax, ReturnedRowCount);
+  result := fRemoteRest.EngineList(
+    TableModelIndex, SQL, ForceAjax, ReturnedRowCount);
 end;
 
 function TRestStorageRemote.EngineRetrieve(TableModelIndex: integer;
@@ -5151,8 +5152,8 @@ begin
       inc(result, fShards[i].TableRowCount(fStoredClass));
 end;
 
-function TRestStorageShard.EngineList(const SQL: RawUtf8;
-  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestStorageShard.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
   ResCount: PtrInt;
 begin
@@ -5179,7 +5180,8 @@ begin
     begin
       if (fShardLast >= 0) and
          not (ssoNoList in fOptions) then
-        result := fShards[fShardLast].EngineList(SQL, ForceAjax, @ResCount);
+        result := fShards[fShardLast].EngineList(
+          TableModelIndex, SQL, ForceAjax, @ResCount);
     end;
     if ReturnedRowCount <> nil then
       ReturnedRowCount^ := ResCount;

@@ -3556,7 +3556,7 @@ begin
                 if StaticOrm <> nil then
                 begin
                   fTableEngine := StaticOrm;
-                  fCall^.OutBody := TableEngine.EngineList(sql);
+                  fCall^.OutBody := StaticOrm.EngineList(tableindexes[0], sql);
                 end
                 else
                   fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).

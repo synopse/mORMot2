@@ -112,8 +112,8 @@ type
   public
     // overridden methods calling the MongoDB external server
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
@@ -1190,8 +1190,8 @@ end;
 const
   ORDERBY_FIELD: array[boolean] of Integer = (1, -1);
 
-function TRestStorageMongoDB.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
-  ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestStorageMongoDB.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
   ResCount: PtrInt;
   Stmt: TSelectStatement;

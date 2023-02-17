@@ -158,8 +158,8 @@ type
        SentData: RawUtf8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
@@ -1366,8 +1366,8 @@ begin
   result := true;
 end;
 
-function TRestStorageExternal.EngineList(const SQL: RawUtf8;
-  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
+function TRestStorageExternal.EngineList(TableModelIndex: integer;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
   stmt: ISqlDBStatement;
 begin

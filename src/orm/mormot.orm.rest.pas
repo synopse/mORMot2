@@ -87,7 +87,7 @@ type
     fTempJsonWriter: TJsonWriter;
     fTempJsonWriterLock: TLightLock;
     /// compute SELECT ... FROM TABLE WHERE ...
-    function SQLComputeForSelect(Table: TOrmClass;
+    function SQLComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
       const FieldNames, WhereClause: RawUtf8): RawUtf8;
     /// used by all overloaded Add/Delete methods
     procedure GetJsonValuesForAdd(TableIndex: integer; Value: TOrm;
@@ -111,8 +111,8 @@ type
     // - if ReturnedRowCount points to an integer variable, it must be filled with
     // the number of row data returned (excluding field names)
     // - this method must be implemented in a thread-safe manner
-    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUtf8; virtual; abstract;
+    function EngineList(TableModelIndex: integer; const SQL: RawUtf8;
+      ForceAjax: boolean = false; ReturnedRowCount: PPtrInt = nil): RawUtf8; virtual; abstract;
     /// Execute directly a SQL statement, without any result
     // - implements POST SQL on ModelRoot URI
     // - return true on success
@@ -595,7 +595,7 @@ begin
   fTempJsonWriter.Free;
 end;
 
-function TRestOrm.SQLComputeForSelect(Table: TOrmClass;
+function TRestOrm.SQLComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
   const FieldNames, WhereClause: RawUtf8): RawUtf8;
 begin
   result := '';
@@ -603,11 +603,13 @@ begin
      (Table = nil) then
     exit;
   if FieldNames = '' then
-    result := fModel.Props[Table].SqlFromSelectWhere('*', WhereClause)
+    result := fModel.TableProps[TableModelIndex].
+      SqlFromSelectWhere('*', WhereClause)
   else
     with Table.OrmProps do
       if FieldNames = '*' then
-        result := SqlFromSelect(SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
+        result := SqlFromSelect(
+          SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
       else if (PosExChar(',', FieldNames) = 0) and
               (PosExChar('(', FieldNames) = 0) and
               not IsFieldName(pointer(FieldNames)) then
@@ -1198,13 +1200,18 @@ end;
 function TRestOrm.MultiFieldValues(Table: TOrmClass;
   const FieldNames, WhereClause: RawUtf8): TOrmTable;
 var
-  sql: RawUtf8;
+  sql, json: RawUtf8;
+  t: PtrInt;
 begin
-  sql := SQLComputeForSelect(Table, FieldNames, WhereClause);
+  t := Model.GetTableIndexExisting(Table);
+  sql := SQLComputeForSelect(t, Table, FieldNames, WhereClause);
+  result := nil;
   if sql = '' then
-    result := nil
-  else
-    result := ExecuteList([Table], sql);
+    exit;
+  json := EngineList(t, sql, false, nil);
+  if json <> '' then
+    result := TOrmTableJson.CreateFromTables([Table], sql, json,
+      {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1)
 end;
 
 function TRestOrm.MultiFieldValues(Table: TOrmClass;
@@ -1456,12 +1463,14 @@ function TRestOrm.RetrieveListJson(Table: TOrmClass;
   aForceAjax: boolean): RawJson;
 var
   sql: RawUtf8;
+  t: PtrInt;
 begin
-  sql := SQLComputeForSelect(Table, CustomFieldsCsv, SqlWhere);
+  t := Model.GetTableIndexExisting(Table);
+  sql := SQLComputeForSelect(t, Table, CustomFieldsCsv, SqlWhere);
   if sql = '' then
     result := ''
   else
-    result := EngineList(sql, aForceAjax);
+    result := EngineList(t, sql, aForceAjax);
 end;
 
 function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
@@ -1584,7 +1593,10 @@ begin
   if (self = nil) or
      (Table = nil) then
     exit;
-  T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
+  if FormatSqlWhere = '' then
+    T := MultiFieldValues(Table, CustomFieldsCsv, '')
+  else
+    T := MultiFieldValues(Table, CustomFieldsCsv, FormatSqlWhere, BoundsSqlWhere);
   if T <> nil then
   try
     result := T.ToObjArray(ObjArray, Table);
@@ -1683,7 +1695,7 @@ function TRestOrm.ExecuteList(const Tables: array of TOrmClass;
 var
   json: RawUtf8;
 begin
-  json := EngineList(SQL, false);
+  json := ExecuteJson(Tables, SQL, false, nil);
   if json <> '' then
     result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
       {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1)
@@ -1693,8 +1705,14 @@ end;
 
 function TRestOrm.ExecuteJson(const Tables: array of TOrmClass;
   const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawJson;
+var
+  t: integer;
 begin
-  result := EngineList(SQL, ForceAjax, ReturnedRowCount);
+  if length(Tables) = 1 then
+    t := Model.GetTableIndexExisting(Tables[0])
+  else
+    t := -1;
+  result := EngineList(t, SQL, ForceAjax, ReturnedRowCount);
 end;
 
 function TRestOrm.Execute(const aSql: RawUtf8): boolean;
