@@ -1001,8 +1001,8 @@ type
     fAccept: boolean;
     fAcceptCert: mormot.core.os.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
-    procedure ESChannelRaiseLastError(res: cardinal);
-    function CheckSEC_E_OK(res: integer): cardinal;
+    procedure ESChannelRaiseLastError(const ctx: shortstring; res: cardinal);
+    function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
     procedure HandshakeLoop;
   public
     destructor Destroy; override;
@@ -1021,20 +1021,22 @@ type
 
 { TSChannelNetTls }
 
-procedure TSChannelNetTls.ESChannelRaiseLastError(res: cardinal);
+procedure TSChannelNetTls.ESChannelRaiseLastError(
+  const ctx: shortstring; res: cardinal);
 var
   LastError: integer;
 begin
   LastError := GetLastError;
-  raise ESChannel.CreateFmt('<%s>: Result %x [%s], System Error %d ''%s''',
-    [fServerAddressW, res, SspiResToText(res), LastError,
+  raise ESChannel.CreateFmt('<%s>: %s returned %x [%s], System Error %d ''%s''',
+    [fServerAddressW, ctx, res, SspiResToText(res), LastError,
      string(GetErrorText(LastError))]);
 end;
 
-function TSChannelNetTls.CheckSEC_E_OK(res: integer): cardinal;
+function TSChannelNetTls.CheckSEC_E_OK(
+  const ctx: shortstring; res: integer): cardinal;
 begin
   if res <> SEC_E_OK then
-    ESChannelRaiseLastError(res);
+    ESChannelRaiseLastError(ctx, res);
   result := res;
 end;
 
@@ -1077,13 +1079,13 @@ begin
   FillCharFast(cred, SizeOf(cred), 0);
   cred.dwVersion := SCHANNEL_CRED_VERSION;
   cred.grbitEnabledProtocols :=
-     SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_3_CLIENT or
-     SP_PROT_TLS1_2_SERVER or SP_PROT_TLS1_3_SERVER;
+      SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_3_CLIENT or
+      SP_PROT_TLS1_2_SERVER or SP_PROT_TLS1_3_SERVER;
   if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
      AllowDeprecatedTls then
     cred.grbitEnabledProtocols := cred.grbitEnabledProtocols or
-     SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
-     SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
+      SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
+      SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
 end;
 
 procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
@@ -1099,7 +1101,12 @@ begin
   fServerAddressW := SynUnicode(ServerAddress);
   fAccept := false;
   CredInit(cred, Context.AllowDeprecatedTLS);
-  CheckSEC_E_OK(AcquireCredentialsHandleW(
+  if Context.IgnoreCertificateErrors then
+    cred.dwFlags := SCH_CRED_MANUAL_CRED_VALIDATION
+  else
+    cred.dwFlags := SCH_CRED_REVOCATION_CHECK_CHAIN or
+                    SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+  CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
     nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
   fDataPos := 0;
   fDataCount := 0;
@@ -1113,13 +1120,14 @@ begin
     @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
     nil, 0, @fCtxt, @buf.output, f, nil);
   if res <> SEC_I_CONTINUE_NEEDED then
-    ESChannelRaiseLastError(res);
-  if (buf.buf[2].cbBuffer = 0) or
+    ESChannelRaiseLastError('InitializeSecurityContextW', res);
+  if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
      (buf.buf[2].pvBuffer = nil) then
     raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
   CheckSocket(mormot.net.sock.Send(
     fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-  CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+  CheckSEC_E_OK('FreeContextBuffer',
+    FreeContextBuffer(buf.buf[2].pvBuffer));
   // make TLS handshake and prepare for process
   SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
@@ -1164,7 +1172,8 @@ begin
     if pass <> '' then
       FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
     if fAcceptCertStore = nil then
-      ESChannelRaiseLastError(SEC_E_CERT_UNKNOWN);
+      ESChannelRaiseLastError('PFXImportCertStoreSEC_E_CERT_UNKNOWN',
+        SEC_E_CERT_UNKNOWN);
   end;
   // find first certificate in store
   fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
@@ -1189,8 +1198,9 @@ begin
   CredInit(cred, BoundContext.AllowDeprecatedTls);
   cred.cCreds := 1;
   cred.paCred := @BoundContext.AcceptCert;
-  CheckSEC_E_OK(AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
-    nil, @cred, nil, nil, @fCred, nil));
+  CheckSEC_E_OK('AcquireCredentialsHandleW',
+    AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
+      nil, @cred, nil, nil, @fCred, nil));
   fDataPos := 0;
   fDataCount := 0;
   fFlags := ASC_REQ_FLAGS;
@@ -1222,7 +1232,7 @@ procedure TSChannelNetTls.HandshakeLoop;
     LInCtxPtr: PSecHandle;
   begin
     HandshakeBufInit(buf);
-    buf.buf[0].cbBuffer := fDataCount;
+    buf.buf[0].cbBuffer := fDataCount; // SECBUFFER_TOKEN
     buf.buf[0].pvBuffer := pointer(fData);
     f := 0;
     if fAccept then
@@ -1231,8 +1241,8 @@ procedure TSChannelNetTls.HandshakeLoop;
         LInCtxPtr := nil
       else
         LInCtxPtr := @fCtxt;
-      result := AcceptSecurityContext(@fCred, LInCtxPtr, @buf.input,
-        fFlags, 0, @fCtxt, @buf.output, f, nil);
+      result := AcceptSecurityContext(
+        @fCred, LInCtxPtr, @buf.input, fFlags, 0, @fCtxt, @buf.output, f, nil);
     end
     else
       result := InitializeSecurityContextW(
@@ -1248,7 +1258,8 @@ procedure TSChannelNetTls.HandshakeLoop;
         // need to send back something to the server
         CheckSocket(mormot.net.sock.Send(
           fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-        CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+        CheckSEC_E_OK('FreeContextBuffer',
+          FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
     if (buf.buf[1].BufferType = SECBUFFER_EXTRA) and
        (buf.buf[1].cbBuffer <> 0) then
@@ -1276,14 +1287,14 @@ begin
       res := ComputeAndSendAnswer; // run twice to let the handshake pass
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
-  CheckSEC_E_OK(res);
+  CheckSEC_E_OK('ComputeAndSendAnswer', res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
   fCipherName := ''; // will be retrieved if needed 
   if fInputSize = 0 then
   begin
     // retrieve the TLS field sizes during first handshake
-    CheckSEC_E_OK(QueryContextAttributesW(
-      @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+    CheckSEC_E_OK('QueryContextAttributesW',
+      QueryContextAttributesW(@fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
     fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
     if (fInputSize = 0) or
        (fInputSize > TLSRECMAXSIZE) then
@@ -1416,7 +1427,7 @@ begin
         SEC_E_INCOMPLETE_MESSAGE:
           break;
         else
-          CheckSEC_E_OK(res);
+          CheckSEC_E_OK('DecryptInput', res);
       end;
       fInputCount := 0;
       for i := 1 to 3 do
