@@ -1128,7 +1128,7 @@ type
     // objects, e.g. {"Main":{"Second":{"Third":value}}}
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObjectFromPath(const aPath: RawUtf8; const aValue: variant;
-      aOptions: TDocVariantOptions = []);
+      aOptions: TDocVariantOptions = []; aPathDelim: AnsiChar = '.');
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - warning: the incoming JSON buffer will be modified in-place: so you should
@@ -5315,7 +5315,7 @@ begin
 end;
 
 procedure TDocVariantData.InitObjectFromPath(const aPath: RawUtf8;
-  const aValue: variant; aOptions: TDocVariantOptions);
+  const aValue: variant; aOptions: TDocVariantOptions; aPathDelim: AnsiChar);
 var
   right: RawUtf8;
 begin
@@ -5327,11 +5327,12 @@ begin
     VCount := 1;
     SetLength(VName, 1);
     SetLength(VValue, 1);
-    Split(aPath, '.', VName[0], right);
+    Split(aPath, aPathDelim, VName[0], right);
     if right = '' then
       VValue[0] := aValue
     else
-      PDocVariantData(@VValue[0])^.InitObjectFromPath(right, aValue, aOptions);
+      PDocVariantData(@VValue[0])^.InitObjectFromPath(
+        right, aValue, aOptions, aPathDelim);
   end;
 end;
 
