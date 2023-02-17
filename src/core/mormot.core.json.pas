@@ -2038,11 +2038,13 @@ procedure SaveJson(const Value; TypeInfo: PRttiInfo;
 
 /// serialize most kind of content as JSON, using its RTTI
 // - is just a wrapper around TJsonWriter.AddTypedJson()
-// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
-// tkVariant kind of content - other kinds would return 'null'
 function SaveJson(const Value; TypeInfo: PRttiInfo;
-  EnumSetsAsText: boolean = false): RawUtf8; overload;
+  EnumSetsAsText: boolean): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// serialize most kind of content as JSON, using its RTTI
+// - is just a wrapper around TJsonWriter.AddTypedJson()
+function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8; overload;
 
 /// serialize most kind of content as JSON, using its RTTI and a type name
 // - could be used if you know the type name and not the TypeInfo()
@@ -4989,12 +4991,29 @@ begin
   Ctxt.W.AddRawJson(Data^);
 end;
 
-procedure _JS_RawUtf8(Data: PPAnsiChar; const Ctxt: TJsonSaveContext);
+procedure _JS_RawUtf8(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
+var
+  cp: cardinal;
+begin
+  Ctxt.W.Add('"');
+  Data := PPointer(Data)^;
+  if Data <> nil then
+  begin
+    cp := Ctxt.Info.Cache.CodePage;
+    if cp = CP_UTF8 then
+      Ctxt.W.AddJsonEscape(Data, {len=}0)
+    else
+      Ctxt.W.AddAnyAnsiBuffer(Data, PStrLen(Data - _STRLEN)^, twJsonEscape, cp);
+  end;
+  Ctxt.W.Add('"');
+end;
+
+procedure _JS_Ansi(Data: PPAnsiChar; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   if Data^ <> nil then
     with PStrRec(Data^ - SizeOf(TStrRec))^ do
-      // will handle RawUtf8 but also AnsiString, WinAnsiString or other CP
+      // will handle any AnsiString, WinAnsiString or other CP
       Ctxt.W.AddAnyAnsiBuffer(Data^, length, twJsonEscape,
        {$ifdef HASCODEPAGE} codePage {$else} Ctxt.Info.Cache.CodePage {$endif});
   Ctxt.W.Add('"');
@@ -5378,7 +5397,7 @@ const
     nil, @_JS_Array, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJson, @_JS_RawUtf8, nil, @_JS_Single,
-    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_RawUtf8 {$endif},
+    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_Ansi {$endif},
     @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
@@ -5496,7 +5515,7 @@ begin
       // this is the main loop serializing Info.Props[]
       repeat
         p := c.Prop;
-        if // handle Props.NameChange() set to New='' to ignore this field
+        if // handle Props.NameChange() set to Name='' to ignore this field
            (p^.Name <> '') and
            // handle woStoreStoredFalse flag and "stored" attribute in code
            ((noStored in flags) or
@@ -10692,6 +10711,19 @@ end;
 function SaveJson(const Value; TypeInfo: PRttiInfo; EnumSetsAsText: boolean): RawUtf8;
 begin
   SaveJson(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
+end;
+
+function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+begin
+  with TJsonWriter.CreateOwnedStream(temp) do
+  try
+    AddTypedJson(@Value, TypeInfo);
+    SetText(result);
+  finally
+    Free;
+  end;
 end;
 
 function SaveJson(const Value; const TypeName: RawUtf8;

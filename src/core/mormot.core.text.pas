@@ -883,7 +883,7 @@ type
     function Text: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// write pending data, then retrieve the whole text as a UTF-8 string
-    procedure SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
+    procedure SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
     /// write pending data to the Stream, with automatic buffer resizal
@@ -901,6 +901,7 @@ type
     // - if you don't call FlushToStream or FlushFinal, some pending characters
     // may not be copied to the Stream: you should call it before using the Stream
     procedure FlushFinal;
+      {$ifdef HASINLINE}inline;{$endif}
 
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload;
@@ -5386,7 +5387,7 @@ begin
   fTotalFileSize := fInitialStreamPosition + PtrUInt(length(text));
 end;
 
-procedure TTextWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
+procedure TTextWriter.SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat);
 var
   Len: cardinal;
   temp: TTextWriter;
@@ -5394,8 +5395,11 @@ begin
   FlushFinal;
   Len := fTotalFileSize - fInitialStreamPosition;
   if Len = 0 then
-    exit
-  else if fStream.InheritsFrom(TRawByteStringStream) then
+  begin
+    result := '';
+    exit;
+  end;
+  if fStream.InheritsFrom(TRawByteStringStream) then
     TRawByteStringStream(fStream).GetAsText(fInitialStreamPosition, Len, result)
   else if fStream.InheritsFrom(TCustomMemoryStream) then
     with TCustomMemoryStream(fStream) do
