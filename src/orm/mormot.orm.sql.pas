@@ -72,7 +72,7 @@ type
     fTableName: RawUtf8;
     fProperties: TSqlDBConnectionProperties;
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUtf8;
-    fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUtf8;
+    fSelectAllWithID, fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUtf8;
     // ID handling during Add/Insert
     fEngineAddUseSelectMaxID: boolean;
     fEngineLockedMaxID: TID;
@@ -740,6 +740,8 @@ begin
        fTableName, RowIDFieldName], fSelectOneDirectSQL); // return ID field
     FormatUtf8('select %,% from %', [sql.InsertSet, RowIDFieldName, fTableName],
       fSelectAllDirectSQL);
+    FormatUtf8('select %,% from %', [RowIDFieldName, sql.InsertSet, fTableName],
+      fSelectAllWithID);
     fRetrieveBlobFieldsSQL := InternalCsvToExternalCsv(
       StoredClassRecordProps.SqlTableRetrieveBlobFields);
     fUpdateBlobFieldsSQL := InternalCsvToExternalCsv(
@@ -774,6 +776,14 @@ begin
   result := false;
   if SQL = '' then
     exit;
+  if IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL) or
+     IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL) then
+  begin
+    SQL := fSelectAllWithID; // pre-computed for this common statement
+    result := true;
+    exit;
+  end;
+  // parse the ORM-level SQL statement
   stmt := TSelectStatement.Create(SQL,
     fStoredClassRecordProps.Fields.IndexByName,
     fStoredClassRecordProps.SimpleFieldSelect);
@@ -809,6 +819,7 @@ begin
       else
         FormatUtf8(limit.InsertFmt, [stmt.Limit], limitSQL);
     end;
+    // generate the SQL statement matching the external database
     W := TJsonWriter.CreateOwnedStream(temp);
     try
       W.AddShorter('select ');
