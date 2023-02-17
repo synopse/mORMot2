@@ -30,7 +30,6 @@ uses
   mormot.core.data,
   mormot.core.buffers,
   mormot.core.zip,
-  mormot.core.threads,
   mormot.core.rtti,
   mormot.net.sock;
 
@@ -560,7 +559,7 @@ type
     fConnectionFlags: THttpServerRequestFlags;
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fRespStatus: integer;
-    fConnectionThread: TSynThread;
+    fConnectionThread: TThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fUrlParamPos: PUtf8Char; // may be set by TUriTreeNode.LookupParam
     fRouteName: pointer; // = pointer(TUriTreeNodeData.Names)
@@ -593,7 +592,7 @@ type
     /// the thread which owns the connection of this execution context
     // - may be nil, depending on the HTTP server used
     // - depending on the HTTP server used, may not follow ConnectionID
-    property ConnectionThread: TSynThread
+    property ConnectionThread: TThread
       read fConnectionThread;
     /// some HTTP servers support a per-connection pointer storage
     // - may be nil if unsupported, e.g. by the http.sys servers

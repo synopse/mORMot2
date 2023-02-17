@@ -2264,8 +2264,9 @@ begin
   else
   begin
     if Assigned(Ctxt.ConnectionThread) and
-       (not Assigned(Ctxt.ConnectionThread.StartNotified)) then
-      NotifyThreadStart(Ctxt.ConnectionThread);
+       Ctxt.ConnectionThread.InheritsFrom(TSynThread) and
+       (not Assigned(TSynThread(Ctxt.ConnectionThread).StartNotified)) then
+      NotifyThreadStart(TSynThread(Ctxt.ConnectionThread));
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
     else
