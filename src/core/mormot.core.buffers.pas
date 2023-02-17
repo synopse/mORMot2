@@ -2576,12 +2576,14 @@ type
     fBuffer: RawByteString;
     fLen: PtrInt;
     fCapacity: PtrInt; // may not be length(fBuffer) after AsText(UseMainBuffer)
+    procedure GrowBuffer(needed: PtrInt);
   public
     /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
       {$ifdef HASINLINE}inline;{$endif}
     /// release/free the internal Buffer storage
     procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// a convenient wrapper to pointer(fBuffer) for direct Buffer/Len use
     function Buffer: pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2593,6 +2595,7 @@ type
       read fCapacity;
     /// add some UTF-8 buffer content to the Buffer, resizing it if needed
     procedure Append(P: pointer; PLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// add some UTF-8 string content to the Buffer, resizing it if needed
     procedure Append(const Text: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2609,6 +2612,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// add some UTF-8 buffer content to the Buffer, without resizing it
     function CanAppend(P: pointer; PLen: PtrInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// ensure the internal Buffer has at least MaxSize bytes and return it
     // - also reset the internal Len to 0
     function Reserve(MaxSize: PtrInt): pointer;
@@ -10820,26 +10824,34 @@ begin
   result := pointer(fBuffer);
 end;
 
+procedure TRawByteStringBuffer.GrowBuffer(needed: PtrInt);
+begin
+  if fCapacity = 0 then
+    inc(needed, 128) // small overhead at first
+  else
+    inc(needed, needed shr 3 + 2048); // generous overhead
+  fCapacity := needed;
+  SetLength(fBuffer, needed);
+end;
+
 procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt);
 var
   needed: PtrInt;
 begin
   needed := fLen + PLen + 2;
   if needed > fCapacity then
-  begin
-    if fCapacity = 0 then
-      fCapacity := needed + 128 // small overhead at first
-    else
-      fCapacity := needed + needed shr 3 + 2048; // generous overhead
-    SetLength(fBuffer, fCapacity);
-  end;
+    GrowBuffer(needed);
   MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
   inc(fLen, PLen);
 end;
 
 procedure TRawByteStringBuffer.Append(const Text: RawUtf8);
+var
+  P: PAnsiChar;
 begin
-  Append(pointer(Text), length(Text));
+  P := pointer(Text);
+  if P <> nil then
+    Append(P, PStrLen(P - _STRLEN)^);
 end;
 
 procedure TRawByteStringBuffer.Append(Value: QWord);
