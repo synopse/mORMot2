@@ -3324,6 +3324,8 @@ function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   output: PRawByteStringBuffer;
   remoteID: THttpServerConnectionID;
+  sent: integer;
+  p: PByte;
   flags: THttpServerRequestFlags;
 begin
   // check the status
@@ -3395,14 +3397,30 @@ begin
     else
     begin
       fWr.Append(output.Buffer, output.Len); // append to the fWR output buffer
-      result := AfterWrite; // process next pipelined request as usual
+      result := AfterWrite; // be ready for the next pipelined request
     end
   else
     // now try socket send() with headers (and small body if hrsResponseDone)
-    // then TPollAsyncSockets.ProcessWrite/subscribe would process hrsSendBody
-    fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
-    // will call THttpAsyncConnection.AfterWrite once sent to finish/continue
-    // see THttpServer.Process() for the blocking equivalency of this async code
+    if fHttp.State = hrsResponseDone then
+    begin
+      // we can send the response in a single syscall
+      p := output.Buffer;
+      sent := output.Len;
+      if not fServer.fAsync.fClients.RawWrite(self, p, sent) then
+        result := soClose
+      else if sent <> 0 then // OS buffer was not big enough (paranoid)
+      begin
+        output.Remove(output.Len - sent);
+        fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, 1000);
+      end
+      else
+        result := AfterWrite; // be ready for the next request
+    end
+    else
+      // let TPollAsyncSockets.ProcessWrite/subscribe process hrsSendBody
+      // in the background, then call AfterWrite once finished
+      fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, {timeout=}1000);
+      // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
 

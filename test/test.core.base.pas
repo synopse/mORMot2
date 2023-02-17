@@ -4919,7 +4919,7 @@ begin
     Check(IsAnsiCompatible(U) or (PosEx('\u', json1) > 0));
     json2 := JsonReformat(json1, jsonNoEscapeUnicode);
     Check(json2 = json, 'jeu2');
-    Unic := Utf8DecodeToUnicodeRawByteString(pointer(U), length(U));
+    Unic := Utf8DecodeToUnicodeRawByteString(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U) = W);
     Check(WinAnsiConvert.Utf8ToAnsi(WinAnsiConvert.AnsiToUtf8(W)) = W);

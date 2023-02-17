@@ -2098,11 +2098,13 @@ begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
   // process content
   Context.ContentLength := 0;
-  if OutContentType = NORESPONSE_CONTENT_TYPE then
-    OutContentType := '' // true HTTP always expects a response
-  else if (OutContent <> '') and
-          (OutContentType = STATICFILE_CONTENT_TYPE) then
-    ProcessStaticFile;
+  if (OutContentType <> '') and
+     (OutContentType[1] = '!') then
+    if OutContentType = NORESPONSE_CONTENT_TYPE then
+      OutContentType := '' // true HTTP always expects a response
+    else if (OutContent <> '') and
+            (OutContentType = STATICFILE_CONTENT_TYPE) then
+      ProcessStaticFile;
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
