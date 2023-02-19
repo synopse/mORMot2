@@ -148,6 +148,7 @@ type
     function GetConnectionProperties: TSqlDBConnectionProperties;
     /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
     function HandleClearPoolOnConnectionIssue: boolean;
+    function DoAdaptSqlForEngineList(var SQL: RawUtf8): boolean;
   public
     // overridden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
@@ -740,8 +741,6 @@ begin
        fTableName, RowIDFieldName], fSelectOneDirectSQL); // return ID field
     FormatUtf8('select %,% from %', [sql.InsertSet, RowIDFieldName, fTableName],
       fSelectAllDirectSQL);
-    FormatUtf8('select %,% from %', [RowIDFieldName, sql.InsertSet, fTableName],
-      fSelectAllWithID);
     fRetrieveBlobFieldsSQL := InternalCsvToExternalCsv(
       StoredClassRecordProps.SqlTableRetrieveBlobFields);
     fUpdateBlobFieldsSQL := InternalCsvToExternalCsv(
@@ -749,7 +748,9 @@ begin
   end;
   fSelectTableHasRowsSQL := FormatUtf8('select ID from % limit 1',
     [StoredClassRecordProps.SqlTableName]);
-  AdaptSqlForEngineList(fSelectTableHasRowsSQL);
+  DoAdaptSqlForEngineList(fSelectTableHasRowsSQL);
+  fSelectAllWithID := fStoredClassProps.Sql.SelectAllWithRowID;
+  DoAdaptSqlForEngineList(fSelectAllWithID);
 end;
 
 constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServer);
@@ -765,6 +766,20 @@ begin
 end;
 
 function TRestStorageExternal.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
+begin
+  if SQL = '' then
+    result := false
+  else if IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL) or
+          IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL) then
+  begin
+    SQL := fSelectAllWithID; // pre-computed for this common statement
+    result := true;
+  end
+  else
+    result := DoAdaptSqlForEngineList(SQL);
+end;
+
+function TRestStorageExternal.DoAdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
   stmt: TSelectStatement;
   W: TJsonWriter;
@@ -773,16 +788,6 @@ var
   f, n: PtrInt;
   temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
-  result := false;
-  if SQL = '' then
-    exit;
-  if IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL) or
-     IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL) then
-  begin
-    SQL := fSelectAllWithID; // pre-computed for this common statement
-    result := true;
-    exit;
-  end;
   // parse the ORM-level SQL statement
   stmt := TSelectStatement.Create(SQL,
     fStoredClassRecordProps.Fields.IndexByName,

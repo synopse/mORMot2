@@ -2601,7 +2601,7 @@ begin
     result := true;
     exit;
   end;
-  if fBasicUpperSqlSelect[false] = '' then
+  if fBasicUpperSqlSelect[false] = '' then // = upper SelectAllWith[Row]ID
     exit;
   if IdemPChar(pointer(SQL), pointer(fBasicUpperSqlSelect[false])) then
     WithoutRowID := false

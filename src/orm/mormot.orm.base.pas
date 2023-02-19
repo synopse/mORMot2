@@ -613,8 +613,8 @@ type
 
   /// pre-computed SQL statements for ORM operations for a given
   // TOrmModelProperties instance
-  // - those statements will work for internal tables, not for external
-  // tables with mapped table or fields names
+  // - those statements will work for internal tables, not for external DB with
+  // mapped table or fields names, which needs proper adaptation
   TOrmModelPropertiesSql = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
@@ -2781,6 +2781,7 @@ type
   TOrmCacheEntryValue = packed record
     /// corresponding TOrm ID
     // - stored in increasing order for efficient O(log(n)) binary search
+    // within L1/L2 CPU cache
     ID: TID;
     /// GetTickCount64 shr 9 timestamp when this cached value was stored
     // - resulting time period has therefore a resolution of 512 ms, and

@@ -5366,7 +5366,7 @@ var
 begin // inlined FillPrepare/TOrmFill process
   nmap := 0;
   fields := RecordType.OrmProps.Fields;
-  fid := fFieldIndexID;;
+  fid := fFieldIndexID;
   for o := 0 to fFieldCount - 1 do
     if o <> fid then
     begin
