@@ -8065,6 +8065,7 @@ begin
     W.AddNull;
     exit;
   end;
+  props := TOrm(Instance).Orm.Fields;
   W.BlockBegin('{', Options);
   if woIDAsIDstr in Options then
   begin
@@ -8072,15 +8073,18 @@ begin
     W.AddPropInt64('ID_str', TOrm(Instance).fID, '"'); // for AJAX
   end
   else
-    W.AddPropInt64('RowID', TOrm(Instance).fID);
-  props := TOrm(Instance).Orm.Fields;
+  begin
+    W.AddProp(pointer(props.IDJsonName), length(props.IDJsonName));
+    W.Add(TOrm(Instance).fID);
+    W.AddComma;
+  end;
   cur := pointer(props.List);
   n := props.Count;
   repeat
     if woHumanReadable in Options then
-      W.WriteObjectPropNameHumanReadable(pointer(cur^.Name), length(cur^.Name))
+      W.WriteObjectPropNameHumanReadable(pointer(cur^.JsonName), length(cur^.JsonName))
     else
-      W.AddProp(pointer(cur^.Name), length(cur^.Name));
+      W.AddProp(pointer(cur^.JsonName), length(cur^.JsonName));
     cur^.GetJsonValues(Instance, W);
     inc(cur);
     dec(n);

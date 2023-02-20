@@ -925,6 +925,7 @@ type
     fPropInfoClass: TOrmPropInfoClassType;
     fFieldWidth: integer;
     fPropertyIndex: integer;
+    fJsonName: RawUtf8;
     function GetNameDisplay: string; virtual;
     /// those two protected methods allow custom storage of binary content as text
     // - default implementation is to use hexa (ToSql=true) or Base64 encodings
@@ -946,7 +947,10 @@ type
     /// the property definition Name
     property Name: RawUtf8
       read fName;
-    /// the property definition Name, afer un-camelcase and translation
+    /// the property definition Name, for TOrm.RttiJsonWrite serialization
+    property JsonName: RawUtf8
+      read fJsonName;
+    /// the property definition Name, after un-camelcase and translation
     property NameDisplay: string
       read GetNameDisplay;
     /// the property definition Name, with full path name if has been flattened
@@ -1913,6 +1917,7 @@ type
     fOptions: TOrmPropInfoListOptions;
     fOrderedByName: TByteDynArray;
     fLast: TOrmPropInfo;
+    fIDJsonName: RawUtf8;
     function GetItem(aIndex: PtrInt): TOrmPropInfo;
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
@@ -1972,6 +1977,8 @@ type
     /// fill a TRawUtf8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
+    /// rename the properties for custom TOrm.RttiJsonWrite serialization
+    procedure JsonRenameProperties(const OriginalNewPairs: array of RawUtf8);
     /// returns the number of TOrmPropInfo in the list, i.e. length(List)
     property Count: integer
       read fCount;
@@ -1985,6 +1992,9 @@ type
     // - will raise an exception if out of range
     property Items[aIndex: PtrInt]: TOrmPropInfo
       read GetItem;
+    /// ID field name for TOrm.RttiJsonWrite serialization - 'RowID' by default
+    property IDJsonName: RawUtf8
+      read fIDJsonName;
   end;
 
 
@@ -4035,6 +4045,7 @@ begin
     fName := copy(aName, 2, MaxInt)
   else
     fName := aName;
+  fJsonName := fName;
   fNameUnflattened := fName;
   fOrmFieldType := aOrmFieldType;
   fOrmFieldTypeStored := aOrmFieldType;
@@ -4396,10 +4407,14 @@ var
     begin
       // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
       res.fName := ToUtf8(aFlattenedProps[max]^.Name^);
+      res.fJsonName := res.fName;
       dec(max);
     end;
     for i := max downto 0 do
+    begin
       res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
+      res.fJsonName := res.fName;
+    end;
   end;
 
 begin
@@ -7208,6 +7223,7 @@ begin
     InternalAddParentsFirst(aTable, nil)
   else
     InternalAddParentsFirst(aTable);
+  fIDJsonName := 'RowID'; // default name for TOrm.RttiJsonWrite
 end;
 
 destructor TOrmPropInfoList.Destroy;
@@ -7522,6 +7538,20 @@ begin
   SetLength(Names, Count);
   for i := 0 to Count - 1 do
     Names[i] := fList[i].Name;
+end;
+
+procedure TOrmPropInfoList.JsonRenameProperties(const OriginalNewPairs: array of RawUtf8);
+var
+  i, p: PtrInt;
+begin
+  for i := 0 to (length(OriginalNewPairs) shr 1) - 1 do
+  begin
+    p := IndexByNameOrExcept(OriginalNewPairs[i * 2]);
+    if p < 0 then // ID
+      fIDJsonName := OriginalNewPairs[i * 2 + 1]
+    else
+      List[p].fJsonName := OriginalNewPairs[i * 2 + 1];
+  end;
 end;
 
 function TOrmPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
