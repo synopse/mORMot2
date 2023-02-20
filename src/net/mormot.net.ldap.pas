@@ -35,6 +35,20 @@ uses
 
 { **************** LDAP Response Storage }
 
+const
+  GUID_COMPUTERS_CONTAINER_W = 'AA312825768811D1ADED00C04FD8D5CD';
+  GUID_DELETED_OBJECTS_CONTAINER_W = '18E2EA80684F11D2B9AA00C04F79F805';
+  GUID_DOMAIN_CONTROLLERS_CONTAINER_W = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
+  GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W = '22B70C67D56E4EFB91E9300FCA3DC1AA';
+  GUID_INFRASTRUCTURE_CONTAINER_W = '2FBAC1870ADE11D297C400C04FD8D5CD';
+  GUID_LOSTANDFOUND_CONTAINER_W = 'AB8153B7768811D1ADED00C04FD8D5CD';
+  GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W = 'F4BE92A4C777485E878E9421D53087DB';
+  GUID_NTDS_QUOTAS_CONTAINER_W = '6227F0AF1FC2410D8E3BB10615BB5B0F';
+  GUID_PROGRAM_DATA_CONTAINER_W = '09460C08AE1E4A4EA0F64AEE7DAA1E5A';
+  GUID_SYSTEMS_CONTAINER_W = 'AB1D30F3768811D1ADED00C04FD8D5CD';
+  GUID_USERS_CONTAINER_W = 'A9D1CA15768811D1ADED00C04FD8D5CD';
+  GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W = '1EB93889E40C45DF9F0C64D23BBB6237';
+
 type
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
@@ -255,6 +269,10 @@ type
     // - Returns nil if no result is found or if the search failed
     function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
       const Attributes: array of RawByteString): TLdapResult;
+    /// retrieve the entry matching the given ObjectDN
+    // - Will call Search method, therefore SearchResult will contains all the results
+    // - Returns nil if the object is not found or if the search failed
+    function SearchObject(const ObjectDN: RawUtf8; const Attributes: array of RawByteString): TLdapResult;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -285,6 +303,10 @@ type
     /// Test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: Boolean = True): Boolean;
+    /// Try to retrieve a well known object DN from its GUID (see GUID_*_W const above)
+    // - Search in object identified by the RootDN property
+    // - Return an empty string if not found
+    function GetWellKnownObjectDN(ObjectGUID: RawUtf8): RawUtf8;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
@@ -2080,6 +2102,20 @@ begin
     result := SearchResult.Items[0];
 end;
 
+function TLdapClient.SearchObject(const ObjectDN: RawUtf8;
+  const Attributes: array of RawByteString): TLdapResult;
+var
+  PreviousSearchScope: TLdapSearchScope;
+begin
+  PreviousSearchScope := SearchScope;
+  try
+    SearchScope := SS_BaseObject;
+    Result := SearchFirst(ObjectDN, '', Attributes);
+  finally
+    SearchScope := PreviousSearchScope;
+  end;
+end;
+
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
 
 function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
@@ -2125,6 +2161,31 @@ end;
 function TLdapClient.Connected(AndBound: Boolean): Boolean;
 begin
   Result := Sock.SockConnected and fBound;
+end;
+
+function TLdapClient.GetWellKnownObjectDN(ObjectGUID: RawUtf8): RawUtf8;
+var
+  RootObject: TLdapResult;
+  wellKnownObjAttrs: TLdapAttribute;
+  i: Integer;
+  SearchPrefix: RawUtf8;
+begin
+  Result := '';
+  if RootDN = '' then
+    Exit;
+  RootObject := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(RootObject) then
+    Exit;
+  wellKnownObjAttrs := RootObject.Attributes.Find('wellKnownObjects');
+  if not Assigned(wellKnownObjAttrs) then
+    Exit;
+  SearchPrefix := 'B:32:' + ObjectGUID;
+  for i := 0 to wellKnownObjAttrs.Count - 1 do
+    if Pos(SearchPrefix, wellKnownObjAttrs.GetReadable(i)) = 1 then
+    begin
+      Result := Copy(wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2);
+      break;
+    end;
 end;
 
 end.
