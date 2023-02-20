@@ -788,6 +788,7 @@ var
   f, n: PtrInt;
   temp: TTextWriterStackBuffer; // shared fTempBuffer is not protected now
 begin
+  result := false;
   // parse the ORM-level SQL statement
   stmt := TSelectStatement.Create(SQL,
     fStoredClassRecordProps.Fields.IndexByName,
