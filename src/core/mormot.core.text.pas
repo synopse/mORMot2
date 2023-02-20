@@ -1276,7 +1276,12 @@ var
 // TRttiJson.RegisterCustomSerializer() class method
 // - call internally TTextWriter.WriteObject() method from DefaultJsonWriter
 function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
+  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// will serialize any TObject into its UTF-8 JSON representation
+procedure ObjectToJson(Value: TObject; var result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); overload;
 
 /// check if some UTF-8 text would need HTML escaping
 function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
@@ -6831,17 +6836,23 @@ end;
 
 
 function ObjectToJson(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUtf8;
+begin
+  ObjectToJson(Value, result, Options);
+end;
+
+procedure ObjectToJson(Value: TObject; var Result: RawUtf8;
+  Options: TTextWriterWriteObjectOptions);
 var
   temp: TTextWriterStackBuffer;
 begin
   if Value = nil then
-    result := NULL_STR_VAR
+    Result := NULL_STR_VAR
   else
     with DefaultJsonWriter.CreateOwnedStream(temp) do
     try
       include(fCustomOptions, twoForceJsonStandard);
       WriteObject(Value, Options);
-      SetText(result);
+      SetText(Result);
     finally
       Free;
     end;
