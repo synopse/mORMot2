@@ -666,6 +666,10 @@ type
 
 { ---------- 3.5 Data types for mechanisms }
 
+// about CKM_RSA_PKCS see https://crypto.stackexchange.com/a/10103/40200
+// https://github.com/aws-samples/aws-cloudhsm-pkcs11-examples/blob/master/src/sign/ec_sign.c
+// https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INITIALIZING.md
+
 type
   /// identifies a mechanism type
   // - stored as a CK_ULONG field but NOT FOLLOWING ord(CK_MECHANISM_TYPE) - use
