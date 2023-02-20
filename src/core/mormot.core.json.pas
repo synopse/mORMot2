@@ -656,12 +656,14 @@ type
     function GetTempJsonWriter: TJsonWriter;
     /// append '[' or '{' with proper indentation
     procedure BlockBegin(Starter: AnsiChar; Options: TTextWriterWriteObjectOptions);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append ',' with proper indentation
     // - warning: this will break CancelLastComma, since CRLF+tabs are added
     procedure BlockAfterItem(Options: TTextWriterWriteObjectOptions);
       {$ifdef HASINLINE}inline;{$endif}
     /// append ']' or '}' with proper indentation
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
+      {$ifdef HASINLINE}inline;{$endif}
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropNameHumanReadable(PropName: PUtf8Char; PropNameLen: PtrInt);
@@ -4855,12 +4857,34 @@ end;
 
 { ********** Low-Level JSON Serialization for all TRttiParserType }
 
-// defined here for proper inlining
+// some methods defined here for proper inlining
 procedure TJsonWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
   AddComma;
   if woHumanReadable in Options then
     AddCRAndIndent;
+end;
+
+procedure TJsonWriter.BlockBegin(Starter: AnsiChar;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  if woHumanReadable in Options then
+  begin
+    AddCRAndIndent;
+    inc(fHumanReadableLevel);
+  end;
+  Add(Starter);
+end;
+
+procedure TJsonWriter.BlockEnd(Stopper: AnsiChar;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  if woHumanReadable in Options then
+  begin
+    dec(fHumanReadableLevel);
+    AddCRAndIndent;
+  end;
+  Add(Stopper);
 end;
 
 
@@ -5772,28 +5796,6 @@ begin
   W.AddDynArrayJson(temp, WriteOptions);
   AddJsonEscape(W);
   Add('"');
-end;
-
-procedure TJsonWriter.BlockBegin(Starter: AnsiChar;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  if woHumanReadable in Options then
-  begin
-    AddCRAndIndent;
-    inc(fHumanReadableLevel);
-  end;
-  Add(Starter);
-end;
-
-procedure TJsonWriter.BlockEnd(Stopper: AnsiChar;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  if woHumanReadable in Options then
-  begin
-    dec(fHumanReadableLevel);
-    AddCRAndIndent;
-  end;
-  Add(Stopper);
 end;
 
 procedure TJsonWriter.AddCRAndIndent;
