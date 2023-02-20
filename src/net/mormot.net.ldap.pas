@@ -35,6 +35,20 @@ uses
 
 { **************** LDAP Response Storage }
 
+const
+  GUID_COMPUTERS_CONTAINER_W = 'AA312825768811D1ADED00C04FD8D5CD';
+  GUID_DELETED_OBJECTS_CONTAINER_W = '18E2EA80684F11D2B9AA00C04F79F805';
+  GUID_DOMAIN_CONTROLLERS_CONTAINER_W = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
+  GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W = '22B70C67D56E4EFB91E9300FCA3DC1AA';
+  GUID_INFRASTRUCTURE_CONTAINER_W = '2FBAC1870ADE11D297C400C04FD8D5CD';
+  GUID_LOSTANDFOUND_CONTAINER_W = 'AB8153B7768811D1ADED00C04FD8D5CD';
+  GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W = 'F4BE92A4C777485E878E9421D53087DB';
+  GUID_NTDS_QUOTAS_CONTAINER_W = '6227F0AF1FC2410D8E3BB10615BB5B0F';
+  GUID_PROGRAM_DATA_CONTAINER_W = '09460C08AE1E4A4EA0F64AEE7DAA1E5A';
+  GUID_SYSTEMS_CONTAINER_W = 'AB1D30F3768811D1ADED00C04FD8D5CD';
+  GUID_USERS_CONTAINER_W = 'A9D1CA15768811D1ADED00C04FD8D5CD';
+  GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W = '1EB93889E40C45DF9F0C64D23BBB6237';
+
 type
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
@@ -213,8 +227,11 @@ type
     fSearchResult: TLdapResultList;
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
+    fRootDN: RawUtf8;
+    fBound: Boolean;
     function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
+    function GetRootDN: RawUtf8;
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
@@ -252,15 +269,21 @@ type
     // - Returns nil if no result is found or if the search failed
     function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
       const Attributes: array of RawByteString): TLdapResult;
+    /// retrieve the entry matching the given ObjectDN
+    // - Will call Search method, therefore SearchResult will contains all the results
+    // - Returns nil if the object is not found or if the search failed
+    function SearchObject(const ObjectDN: RawUtf8; const Attributes: array of RawByteString): TLdapResult;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
     // - If password is empty, it isn't set in the attributes
     // - If DeleteIfPresent is False and there is already a computer with this
     // name in the domain, the operation fail
+    // - ErrorMessage contains the failure reason (if the operation failed)
     // - Return false if the operation failed
     function AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-      const Password: SpiUtf8 = ''; DeleteIfPresent : boolean = False): boolean;
+      out ErrorMessage: RawUtf8; const Password: SpiUtf8 = '';
+      DeleteIfPresent : boolean = False): boolean;
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Value: TLdapAttribute): boolean;
@@ -276,6 +299,16 @@ type
     /// call any LDAP v3 extended operations
     // - e.g. StartTLS, cancel, transactions
     function Extended(const Oid, Value: RawUtf8): boolean;
+    /// Try to discover the root DN of the AD
+    // Return an empty string if not found 
+    function DiscoverRootDN: RawUtf8;
+    /// Test whether the client is connected to the server
+    // - if AndBound is set, it also checks that a successfull bind request has been made
+    function Connected(AndBound: Boolean = True): Boolean;
+    /// Try to retrieve a well known object DN from its GUID (see GUID_*_W const above)
+    // - Search in object identified by the RootDN property
+    // - Return an empty string if not found
+    function GetWellKnownObjectDN(ObjectGUID: RawUtf8): RawUtf8;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
@@ -356,12 +389,86 @@ type
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
+    /// Root DN, retrieved using DiscoverRootDN if possible
+    property RootDN: RawUtf8
+      read GetRootDN Write fRootDN;
   end;
 
 const
-  LDAP_RES_SUCCESS  = 0;
+  LDAP_RES_SUCCESS = 0;
+  LDAP_RES_OPERATIONS_ERROR = 1;
+  LDAP_RES_PROTOCOL_ERROR = 2;
+  LDAP_RES_TIME_LIMIT_EXCEEDED = 3;
+  LDAP_RES_SIZE_LIMIT_EXCEEDED = 4;
+  LDAP_RES_COMPARE_FALSE = 5;
+  LDAP_RES_COMPARE_TRUE = 6;
+  LDAP_RES_AUTH_METHOD_NOT_SUPPORTED = 7;
+  LDAP_RES_STRONGER_AUTH_REQUIRED = 8;
   LDAP_RES_REFERRAL = 10;
-  LDAP_RES_BINDING  = 14;
+  LDAP_RES_ADMIN_LIMIT_EXCEEDED = 11;
+  LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION = 12;
+  LDAP_RES_CONFIDENTIALITY_REQUIRED = 13;
+  LDAP_RES_SASL_BIND_IN_PROGRESS = 14;
+  LDAP_RES_NO_SUCH_ATTRIBUTE = 16;
+  LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE = 17;
+  LDAP_RES_INAPPROPRIATE_MATCHING = 18;
+  LDAP_RES_CONSTRAINT_VIOLATION = 19;
+  LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS = 20;
+  LDAP_RES_INVALID_ATTRIBUTE_SYNTAX = 21;
+  LDAP_RES_NO_SUCH_OBJECT = 32;
+  LDAP_RES_ALIAS_PROBLEM = 33;
+  LDAP_RES_INVALID_DN_SYNTAX = 34;
+  LDAP_RES_IS_LEAF = 35;
+  LDAP_RES_ALIAS_DEREFERENCING_PROBLEM = 36;
+  LDAP_RES_INAPPROPRIATE_AUTHENTICATION = 48;
+  LDAP_RES_INVALID_CREDENTIALS = 49;
+  LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS = 50;
+  LDAP_RES_BUSY = 51;
+  LDAP_RES_UNAVAILABLE = 52;
+  LDAP_RES_UNWILLING_TO_PERFORM = 53;
+  LDAP_RES_LOOP_DETECT = 54;
+  LDAP_RES_SORT_CONTROL_MISSING = 60;
+  LDAP_RES_OFFSET_RANGE_ERROR = 61;
+  LDAP_RES_NAMING_VIOLATION = 64;
+  LDAP_RES_OBJECT_CLASS_VIOLATION = 65;
+  LDAP_RES_NOT_ALLOWED_ON_NON_LEAF = 66;
+  LDAP_RES_NOT_ALLOWED_ON_RDN = 67;
+  LDAP_RES_ENTRY_ALREADY_EXISTS = 68;
+  LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED = 69;
+  LDAP_RES_RESULTS_TOO_LARGE = 70;
+  LDAP_RES_AFFECTS_MULTIPLE_DSAS = 71;
+  LDAP_RES_CONTROL_ERROR = 76;
+  LDAP_RES_OTHER = 80;
+  LDAP_RES_SERVER_DOWN = 81;
+  LDAP_RES_LOCAL_ERROR = 82;
+  LDAP_RES_ENCODING_ERROR = 83;
+  LDAP_RES_DECODING_ERROR = 84;
+  LDAP_RES_TIMEOUT = 85;
+  LDAP_RES_AUTH_UNKNOWN = 86;
+  LDAP_RES_FILTER_ERROR = 87;
+  LDAP_RES_USER_CANCELED = 88;
+  LDAP_RES_PARAM_ERROR = 89;
+  LDAP_RES_NO_MEMORY = 90;
+  LDAP_RES_CONNECT_ERROR = 91;
+  LDAP_RES_NOT_SUPPORTED = 92;
+  LDAP_RES_CONTROL_NOT_FOUND = 93;
+  LDAP_RES_NO_RESULTS_RETURNED = 94;
+  LDAP_RES_MORE_RESULTS_TO_RETURN = 95;
+  LDAP_RES_CLIENT_LOOP = 96;
+  LDAP_RES_REFERRAL_LIMIT_EXCEEDED = 97;
+  LDAP_RES_INVALID_RESPONSE = 100;
+  LDAP_RES_AMBIGUOUS_RESPONSE = 101;
+  LDAP_RES_TLS_NOT_SUPPORTED = 112;
+  LDAP_RES_INTERMEDIATE_RESPONSE = 113;
+  LDAP_RES_UNKNOWN_TYPE = 114;
+  LDAP_RES_CANCELED = 118;
+  LDAP_RES_NO_SUCH_OPERATION = 119;
+  LDAP_RES_TOO_LATE = 120;
+  LDAP_RES_CANNOT_CANCEL = 121;
+  LDAP_RES_ASSERTION_FAILED = 122;
+  LDAP_RES_AUTHORIZATION_DENIED = 123;
+  LDAP_RES_ESYNC_REFRESH_REQUIRED = 4096;
+  LDAP_RES_NO_OPERATION = 16654;
 
 
 
@@ -978,9 +1085,9 @@ begin
       DC := DC + Value;
     end
     else if PartType = 'OU' then
-      Append(OU, ['/', Value])
+      Prepend(OU, ['/', Value])
     else if PartType = 'CN' then
-      Append(CN, ['/', Value]);
+      Prepend(CN, ['/', Value]);
   end;
   result := DC + OU + CN;
 end;
@@ -1355,6 +1462,8 @@ begin
   fSearchScope := SS_WholeSubtree;
   fSearchAliases := SA_Always;
   fSearchResult := TLdapResultList.Create;
+  fBound := False;
+  fRootDN := '';
 end;
 
 destructor TLdapClient.Destroy;
@@ -1370,81 +1479,81 @@ begin
   case ErrorCode of
     LDAP_RES_SUCCESS:
       result := 'Success';
-    1:
+    LDAP_RES_OPERATIONS_ERROR:
       result := 'Operations error';
-    2:
+    LDAP_RES_PROTOCOL_ERROR:
       result := 'Protocol error';
-    3:
+    LDAP_RES_TIME_LIMIT_EXCEEDED:
       result := 'Time limit Exceeded';
-    4:
+    LDAP_RES_SIZE_LIMIT_EXCEEDED:
       result := 'Size limit Exceeded';
-    5:
+    LDAP_RES_COMPARE_FALSE:
       result := 'Compare false';
-    6:
+    LDAP_RES_COMPARE_TRUE:
       result := 'Compare true';
-    7:
+    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED:
       result := 'Auth method not supported';
-    8:
+    LDAP_RES_STRONGER_AUTH_REQUIRED:
       result := 'Strong auth required';
     LDAP_RES_REFERRAL:
       result := 'Referral';
-    11:
+    LDAP_RES_ADMIN_LIMIT_EXCEEDED:
       result := 'Admin limit exceeded';
-    12:
+    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION:
       result := 'Unavailable critical extension';
-    13:
+    LDAP_RES_CONFIDENTIALITY_REQUIRED:
       result := 'Confidentality required';
-    LDAP_RES_BINDING:
+    LDAP_RES_SASL_BIND_IN_PROGRESS:
       result := 'Sasl bind in progress';
-    16:
+    LDAP_RES_NO_SUCH_ATTRIBUTE:
       result := 'No such attribute';
-    17:
+    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE:
       result := 'Undefined attribute type';
-    18:
+    LDAP_RES_INAPPROPRIATE_MATCHING:
       result := 'Inappropriate matching';
-    19:
+    LDAP_RES_CONSTRAINT_VIOLATION:
       result := 'Constraint violation';
-    20:
+    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS:
       result := 'Attribute or value exists';
-    21:
+    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX:
       result := 'Invalid attribute syntax';
-    32:
+    LDAP_RES_NO_SUCH_OBJECT:
       result := 'No such object';
-    33:
+    LDAP_RES_ALIAS_PROBLEM:
       result := 'Alias problem';
-    34:
+    LDAP_RES_INVALID_DN_SYNTAX:
       result := 'Invalid DN syntax';
-    36:
+    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM:
       result := 'Alias dereferencing problem';
-    48:
+    LDAP_RES_INAPPROPRIATE_AUTHENTICATION:
       result := 'Inappropriate authentication';
-    49:
+    LDAP_RES_INVALID_CREDENTIALS:
       result := 'Invalid credentials';
-    50:
+    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS:
       result := 'Insufficient access rights';
-    51:
+    LDAP_RES_BUSY:
       result := 'Busy';
-    52:
+    LDAP_RES_UNAVAILABLE:
       result := 'Unavailable';
-    53:
+    LDAP_RES_UNWILLING_TO_PERFORM:
       result := 'Unwilling to perform';
-    54:
+    LDAP_RES_LOOP_DETECT:
       result := 'Loop detect';
-    64:
+    LDAP_RES_NAMING_VIOLATION:
       result := 'Naming violation';
-    65:
+    LDAP_RES_OBJECT_CLASS_VIOLATION:
       result := 'Object class violation';
-    66:
+    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF:
       result := 'Not allowed on non leaf';
-    67:
+    LDAP_RES_NOT_ALLOWED_ON_RDN:
       result := 'Not allowed on RDN';
-    68:
+    LDAP_RES_ENTRY_ALREADY_EXISTS:
       result := 'Entry already exists';
-    69:
+    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED:
       result := 'Object class mods prohibited';
-    71:
+    LDAP_RES_AFFECTS_MULTIPLE_DSAS:
       result := 'Affects multiple DSAs';
-    80:
+    LDAP_RES_OTHER:
       result := 'Other';
   else
     FormatUtf8('unknown #%', [ErrorCode], result);
@@ -1479,6 +1588,13 @@ begin
   result := Asn(ASN1_SEQ, [
     Asn(fSeq),
     Asn1Data]);
+end;
+
+function TLdapClient.GetRootDN: RawUtf8;
+begin
+  if (fRootDN = '') and Connected then
+    fRootDN := DiscoverRootDN;
+  Result := fRootDN;
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
@@ -1778,6 +1894,7 @@ begin
                    Asn(fUserName),
                    Asn(fPassword, ASN1_CTX0)]));
   result := fResultCode = LDAP_RES_SUCCESS;
+  fBound := result;
 end;
 
 function TLdapClient.BindSaslDigestMd5: boolean;
@@ -1796,7 +1913,7 @@ begin
                 Asn(ASN1_CTC3, [
                   Asn('DIGEST-MD5')])]);
     t := SendAndReceive(digreq);
-    if fResultCode = LDAP_RES_BINDING then
+    if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
     begin
       s := t;
       x := 1;
@@ -1807,7 +1924,7 @@ begin
                        Asn(ASN1_CTC3, [
                          Asn('DIGEST-MD5'),
                          Asn(SaslDigestMd5(t))])]));
-      if fResultCode = LDAP_RES_BINDING then
+      if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
         SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
     end;
@@ -1825,6 +1942,8 @@ begin
   SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
   FreeAndNil(fSock);
   result := true;
+  fBound := false;
+  fRootDN := '';
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
@@ -1874,7 +1993,8 @@ begin
 end;
 
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-  const Password: SpiUtf8; DeleteIfPresent: boolean): boolean;
+  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean
+  ): boolean;
 var
   PwdU8: SpiUtf8;
   ComputerDN: RawUtf8;
@@ -1885,12 +2005,19 @@ begin
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
   if not Search(ComputerDN, false, '', []) then
+  begin
+    ErrorMessage := GetErrorString(ResultCode);
     exit;
+  end;
   if SearchResult.Count > 0 then
     if DeleteIfPresent then
       Delete(ComputerDN)
     else
+    begin
+      ErrorMessage := 'Computer is already present';
+      result := True;
       exit;
+    end;
   Attributes := TLDAPAttributeList.Create;
   try
     Attributes.Add('objectClass', 'computer');
@@ -1904,6 +2031,8 @@ begin
       Attributes.Add('unicodePwd', PwdU16);
     end;
     result := Add(ComputerDN, Attributes);
+    if not result then
+      ErrorMessage := GetErrorString(ResultCode);
   finally
     Attributes.Free;
     FillZero(PwdU8);
@@ -1965,7 +2094,7 @@ begin
   filt := TranslateFilter(Filter);
   if filt = '' then
     filt := Asn('', ASN1_NULL);
-  for n := 0 to high(Attributes) - 1 do
+  for n := 0 to high(Attributes) do
     AsnAdd(attr, Asn(Attributes[n]));
   s := Asn(LDAP_ASN1_SEARCH_REQUEST, [
            Asn(BaseDN),
@@ -2056,6 +2185,20 @@ begin
     result := SearchResult.Items[0];
 end;
 
+function TLdapClient.SearchObject(const ObjectDN: RawUtf8;
+  const Attributes: array of RawByteString): TLdapResult;
+var
+  PreviousSearchScope: TLdapSearchScope;
+begin
+  PreviousSearchScope := SearchScope;
+  try
+    SearchScope := SS_BaseObject;
+    Result := SearchFirst(ObjectDN, '', Attributes);
+  finally
+    SearchScope := PreviousSearchScope;
+  end;
+end;
+
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
 
 function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
@@ -2076,7 +2219,57 @@ begin
   end;
 end;
 
+function TLdapClient.DiscoverRootDN: RawUtf8;
+var
+  PreviousSearchScope: TLdapSearchScope;
+  RootObject: TLdapResult;
+  RootDnAttr: TLdapAttribute;
+begin
+  Result := '';
+  PreviousSearchScope := SearchScope;
+  try
+    SearchScope := SS_BaseObject;
+    RootObject := SearchFirst('', '*', ['rootDomainNamingContext']);
+    if Assigned(RootObject) then
+    begin
+      RootDnAttr := RootObject.Attributes.Find('rootDomainNamingContext');
+      if Assigned(RootDnAttr) then
+        Result := RootDnAttr.GetReadable;
+    end;
+  finally
+    SearchScope := PreviousSearchScope;
+  end;
+end;
 
+function TLdapClient.Connected(AndBound: Boolean): Boolean;
+begin
+  Result := Sock.SockConnected and fBound;
+end;
+
+function TLdapClient.GetWellKnownObjectDN(ObjectGUID: RawUtf8): RawUtf8;
+var
+  RootObject: TLdapResult;
+  wellKnownObjAttrs: TLdapAttribute;
+  i: Integer;
+  SearchPrefix: RawUtf8;
+begin
+  Result := '';
+  if RootDN = '' then
+    Exit;
+  RootObject := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(RootObject) then
+    Exit;
+  wellKnownObjAttrs := RootObject.Attributes.Find('wellKnownObjects');
+  if not Assigned(wellKnownObjAttrs) then
+    Exit;
+  SearchPrefix := 'B:32:' + ObjectGUID;
+  for i := 0 to wellKnownObjAttrs.Count - 1 do
+    if Pos(SearchPrefix, wellKnownObjAttrs.GetReadable(i)) = 1 then
+    begin
+      Result := Copy(wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2, MaxInt);
+      break;
+    end;
+end;
 
 end.
 
