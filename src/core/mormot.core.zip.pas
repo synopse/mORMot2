@@ -2360,7 +2360,7 @@ var
   read, i: PtrInt;
   P: PByteArray;
   local: TLocalFileHeader;
-  centraldirsize: QWord;
+  centraldirsize: Int64;
 begin
   if not ValidHandle(aFile) then
     exit;
@@ -2387,13 +2387,13 @@ begin
       fSource.ReadBuffer(P^, WorkingMem);
       centraldirsize := Size - LocateCentralDirectoryOffset(
         P, WorkingMem, Size - WorkingMem);
-      if centraldirsize > WorkingMem then
+      if centraldirsize > Int64(WorkingMem) then
       begin
         // 1MB of WorkingMem was not enough (a lot of files indeed!)
         WorkingMem := centraldirsize + 1024;
         if WorkingMem > Size then
           WorkingMem := Size;
-        FastSetRawByteString(fSourceBuffer, nil, WorkingMem);
+        FastSetRawByteString(fSourceBuffer, nil, WorkingMem); // alloc bigger
         P := pointer(fSourceBuffer);
         fSource.Seek(Size - WorkingMem, soBeginning);
         fSource.ReadBuffer(P^, WorkingMem);
