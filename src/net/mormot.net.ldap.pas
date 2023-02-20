@@ -393,9 +393,80 @@ type
   end;
 
 const
-  LDAP_RES_SUCCESS  = 0;
+  LDAP_RES_SUCCESS = 0;
+  LDAP_RES_OPERATIONS_ERROR = 1;
+  LDAP_RES_PROTOCOL_ERROR = 2;
+  LDAP_RES_TIME_LIMIT_EXCEEDED = 3;
+  LDAP_RES_SIZE_LIMIT_EXCEEDED = 4;
+  LDAP_RES_COMPARE_FALSE = 5;
+  LDAP_RES_COMPARE_TRUE = 6;
+  LDAP_RES_AUTH_METHOD_NOT_SUPPORTED = 7;
+  LDAP_RES_STRONGER_AUTH_REQUIRED = 8;
   LDAP_RES_REFERRAL = 10;
-  LDAP_RES_BINDING  = 14;
+  LDAP_RES_ADMIN_LIMIT_EXCEEDED = 11;
+  LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION = 12;
+  LDAP_RES_CONFIDENTIALITY_REQUIRED = 13;
+  LDAP_RES_SASL_BIND_IN_PROGRESS = 14;
+  LDAP_RES_NO_SUCH_ATTRIBUTE = 16;
+  LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE = 17;
+  LDAP_RES_INAPPROPRIATE_MATCHING = 18;
+  LDAP_RES_CONSTRAINT_VIOLATION = 19;
+  LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS = 20;
+  LDAP_RES_INVALID_ATTRIBUTE_SYNTAX = 21;
+  LDAP_RES_NO_SUCH_OBJECT = 32;
+  LDAP_RES_ALIAS_PROBLEM = 33;
+  LDAP_RES_INVALID_DN_SYNTAX = 34;
+  LDAP_RES_IS_LEAF = 35;
+  LDAP_RES_ALIAS_DEREFERENCING_PROBLEM = 36;
+  LDAP_RES_INAPPROPRIATE_AUTHENTICATION = 48;
+  LDAP_RES_INVALID_CREDENTIALS = 49;
+  LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS = 50;
+  LDAP_RES_BUSY = 51;
+  LDAP_RES_UNAVAILABLE = 52;
+  LDAP_RES_UNWILLING_TO_PERFORM = 53;
+  LDAP_RES_LOOP_DETECT = 54;
+  LDAP_RES_SORT_CONTROL_MISSING = 60;
+  LDAP_RES_OFFSET_RANGE_ERROR = 61;
+  LDAP_RES_NAMING_VIOLATION = 64;
+  LDAP_RES_OBJECT_CLASS_VIOLATION = 65;
+  LDAP_RES_NOT_ALLOWED_ON_NON_LEAF = 66;
+  LDAP_RES_NOT_ALLOWED_ON_RDN = 67;
+  LDAP_RES_ENTRY_ALREADY_EXISTS = 68;
+  LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED = 69;
+  LDAP_RES_RESULTS_TOO_LARGE = 70;
+  LDAP_RES_AFFECTS_MULTIPLE_DSAS = 71;
+  LDAP_RES_CONTROL_ERROR = 76;
+  LDAP_RES_OTHER = 80;
+  LDAP_RES_SERVER_DOWN = 81;
+  LDAP_RES_LOCAL_ERROR = 82;
+  LDAP_RES_ENCODING_ERROR = 83;
+  LDAP_RES_DECODING_ERROR = 84;
+  LDAP_RES_TIMEOUT = 85;
+  LDAP_RES_AUTH_UNKNOWN = 86;
+  LDAP_RES_FILTER_ERROR = 87;
+  LDAP_RES_USER_CANCELED = 88;
+  LDAP_RES_PARAM_ERROR = 89;
+  LDAP_RES_NO_MEMORY = 90;
+  LDAP_RES_CONNECT_ERROR = 91;
+  LDAP_RES_NOT_SUPPORTED = 92;
+  LDAP_RES_CONTROL_NOT_FOUND = 93;
+  LDAP_RES_NO_RESULTS_RETURNED = 94;
+  LDAP_RES_MORE_RESULTS_TO_RETURN = 95;
+  LDAP_RES_CLIENT_LOOP = 96;
+  LDAP_RES_REFERRAL_LIMIT_EXCEEDED = 97;
+  LDAP_RES_INVALID_RESPONSE = 100;
+  LDAP_RES_AMBIGUOUS_RESPONSE = 101;
+  LDAP_RES_TLS_NOT_SUPPORTED = 112;
+  LDAP_RES_INTERMEDIATE_RESPONSE = 113;
+  LDAP_RES_UNKNOWN_TYPE = 114;
+  LDAP_RES_CANCELED = 118;
+  LDAP_RES_NO_SUCH_OPERATION = 119;
+  LDAP_RES_TOO_LATE = 120;
+  LDAP_RES_CANNOT_CANCEL = 121;
+  LDAP_RES_ASSERTION_FAILED = 122;
+  LDAP_RES_AUTHORIZATION_DENIED = 123;
+  LDAP_RES_ESYNC_REFRESH_REQUIRED = 4096;
+  LDAP_RES_NO_OPERATION = 16654;
 
 
 
@@ -1406,81 +1477,81 @@ begin
   case ErrorCode of
     LDAP_RES_SUCCESS:
       result := 'Success';
-    1:
+    LDAP_RES_OPERATIONS_ERROR:
       result := 'Operations error';
-    2:
+    LDAP_RES_PROTOCOL_ERROR:
       result := 'Protocol error';
-    3:
+    LDAP_RES_TIME_LIMIT_EXCEEDED:
       result := 'Time limit Exceeded';
-    4:
+    LDAP_RES_SIZE_LIMIT_EXCEEDED:
       result := 'Size limit Exceeded';
-    5:
+    LDAP_RES_COMPARE_FALSE:
       result := 'Compare false';
-    6:
+    LDAP_RES_COMPARE_TRUE:
       result := 'Compare true';
-    7:
+    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED:
       result := 'Auth method not supported';
-    8:
+    LDAP_RES_STRONGER_AUTH_REQUIRED:
       result := 'Strong auth required';
     LDAP_RES_REFERRAL:
       result := 'Referral';
-    11:
+    LDAP_RES_ADMIN_LIMIT_EXCEEDED:
       result := 'Admin limit exceeded';
-    12:
+    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION:
       result := 'Unavailable critical extension';
-    13:
+    LDAP_RES_CONFIDENTIALITY_REQUIRED:
       result := 'Confidentality required';
-    LDAP_RES_BINDING:
+    LDAP_RES_SASL_BIND_IN_PROGRESS:
       result := 'Sasl bind in progress';
-    16:
+    LDAP_RES_NO_SUCH_ATTRIBUTE:
       result := 'No such attribute';
-    17:
+    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE:
       result := 'Undefined attribute type';
-    18:
+    LDAP_RES_INAPPROPRIATE_MATCHING:
       result := 'Inappropriate matching';
-    19:
+    LDAP_RES_CONSTRAINT_VIOLATION:
       result := 'Constraint violation';
-    20:
+    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS:
       result := 'Attribute or value exists';
-    21:
+    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX:
       result := 'Invalid attribute syntax';
-    32:
+    LDAP_RES_NO_SUCH_OBJECT:
       result := 'No such object';
-    33:
+    LDAP_RES_ALIAS_PROBLEM:
       result := 'Alias problem';
-    34:
+    LDAP_RES_INVALID_DN_SYNTAX:
       result := 'Invalid DN syntax';
-    36:
+    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM:
       result := 'Alias dereferencing problem';
-    48:
+    LDAP_RES_INAPPROPRIATE_AUTHENTICATION:
       result := 'Inappropriate authentication';
-    49:
+    LDAP_RES_INVALID_CREDENTIALS:
       result := 'Invalid credentials';
-    50:
+    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS:
       result := 'Insufficient access rights';
-    51:
+    LDAP_RES_BUSY:
       result := 'Busy';
-    52:
+    LDAP_RES_UNAVAILABLE:
       result := 'Unavailable';
-    53:
+    LDAP_RES_UNWILLING_TO_PERFORM:
       result := 'Unwilling to perform';
-    54:
+    LDAP_RES_LOOP_DETECT:
       result := 'Loop detect';
-    64:
+    LDAP_RES_NAMING_VIOLATION:
       result := 'Naming violation';
-    65:
+    LDAP_RES_OBJECT_CLASS_VIOLATION:
       result := 'Object class violation';
-    66:
+    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF:
       result := 'Not allowed on non leaf';
-    67:
+    LDAP_RES_NOT_ALLOWED_ON_RDN:
       result := 'Not allowed on RDN';
-    68:
+    LDAP_RES_ENTRY_ALREADY_EXISTS:
       result := 'Entry already exists';
-    69:
+    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED:
       result := 'Object class mods prohibited';
-    71:
+    LDAP_RES_AFFECTS_MULTIPLE_DSAS:
       result := 'Affects multiple DSAs';
-    80:
+    LDAP_RES_OTHER:
       result := 'Other';
   else
     FormatUtf8('unknown #%', [ErrorCode], result);
@@ -1840,7 +1911,7 @@ begin
                 Asn(ASN1_CTC3, [
                   Asn('DIGEST-MD5')])]);
     t := SendAndReceive(digreq);
-    if fResultCode = LDAP_RES_BINDING then
+    if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
     begin
       s := t;
       x := 1;
@@ -1851,7 +1922,7 @@ begin
                        Asn(ASN1_CTC3, [
                          Asn('DIGEST-MD5'),
                          Asn(SaslDigestMd5(t))])]));
-      if fResultCode = LDAP_RES_BINDING then
+      if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
         SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
     end;
@@ -1930,13 +2001,16 @@ begin
   result := false;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
-  if not Search(ComputerDN, false, '', []) then
+  if not Search(ComputerDN, false, '', []) and (ResultCode <> LDAP_RES_NO_SUCH_OBJECT)  then
     exit;
   if SearchResult.Count > 0 then
     if DeleteIfPresent then
       Delete(ComputerDN)
     else
+    begin
+      result := True;
       exit;
+    end;
   Attributes := TLDAPAttributeList.Create;
   try
     Attributes.Add('objectClass', 'computer');
