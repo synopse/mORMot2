@@ -71,6 +71,7 @@ type
       read fRandomNumber write fRandomNumber;
   end;
   TOrmCachedWorld = class(TOrmWorld);
+  TOrmWorlds = array of TOrmWorld;
   TOrmWorldClass = class of TOrmWorld;
   TOrmFortune = class(TOrm)
   protected
@@ -174,6 +175,13 @@ begin
   fDbPool := TSqlDBPostgresConnectionProperties.Create(
     'tfb-database:5432', 'hello_world', 'benchmarkdbuser', 'benchmarkdbpass');
   {$endif USE_SQLITE3}
+  // customize JSON serializatoin for TFB expectations
+  TOrmWorld.OrmProps.Fields.JsonRenameProperties([
+    'ID', 'id',
+    'RandomNumber', 'randomNumber']);
+  TOrmCachedWorld.OrmProps.Fields.JsonRenameProperties([
+    'ID', 'id',
+    'RandomNumber', 'randomNumber']);
   // setup the ORM data model
   fModel := TOrmModel.Create([TOrmWorld, TOrmFortune, TOrmCachedWorld]);
   OrmMapExternal(fModel, [TOrmWorld, TOrmFortune], fDbPool);
@@ -318,7 +326,8 @@ var
 begin
   w := TOrmWorld.Create(fStore.Orm, RandomWorld);
   try
-    ctxt.SetOutJson('{"id":%,"randomNumber":%}', [w.IDValue, w.randomNumber]);
+    ctxt.OutContent := ObjectToJson(w);
+    ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;;
     result := HTTP_SUCCESS;
   finally
     w.Free;
@@ -405,25 +414,19 @@ function TRawAsyncServer.doqueries(ctxt: THttpServerRequestAbstract;
   orm: TOrmWorldClass; const search: RawUtf8): cardinal;
 var
   cnt, i: PtrInt;
-  res: TWorlds;
-  w: TOrmWorld;
+  res: TOrmWorlds;
 begin
   result := HTTP_SERVERERROR;
   cnt := getQueriesParamValue(ctxt, search);
   SetLength(res, cnt);
-  w := orm.Create; // TOrmWorld or TOrmCachedWorld
-  try
-    for i := 0 to cnt - 1 do
-    begin
-      if not fStore.Orm.Retrieve(RandomWorld, w) then
-        exit;
-      res[i].id := w.IDValue;
-      res[i].randomNumber := w.RandomNumber;
-    end;
-  finally
-    w.Free;
+  for i := 0 to cnt - 1 do
+  begin
+    res[i] := orm.Create; // TOrmWorld or TOrmCachedWorld
+    if not fStore.Orm.Retrieve(RandomWorld, res[i]) then
+      exit;
   end;
-  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
+  ctxt.SetOutJson(SaveJson(res, TypeInfo(TOrmWorlds)));
+  ObjArrayClear(res);
   result := HTTP_SUCCESS;
 end;
 
@@ -490,7 +493,7 @@ end;
 function TRawAsyncServer.updates(ctxt: THttpServerRequestAbstract): cardinal;
 var
   cnt, i: PtrInt;
-  res: TWorlds;
+  res: TOrmWorlds;
   w: TOrmWorld;
   b: TRestBatch;
 begin
@@ -499,25 +502,23 @@ begin
   SetLength(res, cnt);
   b := TRestBatch.Create(fStore.ORM, TOrmWorld, {transrows=}0,
     [boExtendedJson, boNoModelEncoding, boPutNoCacheFlush]);
-  w := TOrmWorld.Create;
   try
     for i := 0 to cnt - 1 do
     begin
+      w := TOrmWorld.Create;
+      res[i] := w;
       if not fStore.Orm.Retrieve(RandomWorld, w) then
         exit;
       w.RandomNumber := RandomWorld;
       b.Update(w);
-      res[i].id := w.IDValue;
-      res[i].randomNumber := w.RandomNumber;
     end;
-    result := fStore.Orm.BatchSend(b);
+    result := b.Send;
+    if result = HTTP_SUCCESS then
+      ctxt.SetOutJson(SaveJson(res, TypeInfo(TOrmWorlds)));
   finally
-    w.Free;
     b.Free;
+    ObjArrayClear(res);
   end;
-  if result <> HTTP_SUCCESS then
-    exit;
-  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
 end;
 
 function TRawAsyncServer.rawupdates(ctxt: THttpServerRequestAbstract): cardinal;

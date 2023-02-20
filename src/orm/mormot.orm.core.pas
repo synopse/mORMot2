@@ -4542,6 +4542,9 @@ type
     // - will also notify the TRest.Cache for all deleted IDs
     // - you should not have to call it in normal use cases
     function PrepareForSending(out Data: RawUtf8): boolean; virtual;
+    /// just a wrapper around Rest.BatchSend
+    function Send: integer;
+      {$ifdef HASINLINE} inline; {$endif}
     /// read only access to the associated TRest instance
     property Rest: IRestOrm
       read fRest;
@@ -11557,6 +11560,17 @@ begin
     end;
     result := true;
   end;
+end;
+
+function TRestBatch.Send: integer;
+var
+  dummy: TIDDynArray;
+begin
+  if (self = nil) or
+     (fRest = nil) then
+    result := HTTP_SERVERERROR
+  else
+    result := fRest.BatchSend(self, dummy);
 end;
 
 
