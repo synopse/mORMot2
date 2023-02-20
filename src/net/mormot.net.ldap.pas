@@ -279,9 +279,11 @@ type
     // - If password is empty, it isn't set in the attributes
     // - If DeleteIfPresent is False and there is already a computer with this
     // name in the domain, the operation fail
+    // - ErrorMessage contains the failure reason (if the operation failed)
     // - Return false if the operation failed
     function AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-      const Password: SpiUtf8 = ''; DeleteIfPresent : boolean = False): boolean;
+      out ErrorMessage: RawUtf8; const Password: SpiUtf8 = '';
+      DeleteIfPresent : boolean = False): boolean;
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Value: TLdapAttribute): boolean;
@@ -1991,7 +1993,8 @@ begin
 end;
 
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-  const Password: SpiUtf8; DeleteIfPresent: boolean): boolean;
+  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean
+  ): boolean;
 var
   PwdU8: SpiUtf8;
   ComputerDN: RawUtf8;
@@ -2001,13 +2004,17 @@ begin
   result := false;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
-  if not Search(ComputerDN, false, '', []) and (ResultCode <> LDAP_RES_NO_SUCH_OBJECT)  then
+  if not Search(ComputerDN, false, '', []) then
+  begin
+    ErrorMessage := GetErrorString(ResultCode);
     exit;
+  end;
   if SearchResult.Count > 0 then
     if DeleteIfPresent then
       Delete(ComputerDN)
     else
     begin
+      ErrorMessage := 'Computer is already present';
       result := True;
       exit;
     end;
@@ -2024,6 +2031,8 @@ begin
       Attributes.Add('unicodePwd', PwdU16);
     end;
     result := Add(ComputerDN, Attributes);
+    if not result then
+      ErrorMessage := GetErrorString(ResultCode);
   finally
     Attributes.Free;
     FillZero(PwdU8);
@@ -2257,7 +2266,7 @@ begin
   for i := 0 to wellKnownObjAttrs.Count - 1 do
     if Pos(SearchPrefix, wellKnownObjAttrs.GetReadable(i)) = 1 then
     begin
-      Result := Copy(wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2);
+      Result := Copy(wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2, MaxInt);
       break;
     end;
 end;
