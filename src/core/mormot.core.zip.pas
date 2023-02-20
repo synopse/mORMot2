@@ -2157,10 +2157,12 @@ var
   lh64: PLastHeader64;
 begin
   lh32 := LocateLastHeader(BufZip, Size, Offset, lh64);
+  if lh32 = nil then
+    raise ESynZip.Create('zip trailer signature not found');
   if lh64 <> nil then
-    result := lh64.headerOffset
+    result := lh64^.headerOffset
   else
-    result := lh32.headerOffset;
+    result := lh32^.headerOffset;
 end;
 
 constructor TZipRead.Create(BufZip: PByteArray; Size: PtrInt; Offset: Int64);
