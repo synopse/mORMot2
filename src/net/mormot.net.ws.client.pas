@@ -453,9 +453,13 @@ begin
       // validate the response as WebSockets upgrade
       SockRecvLn(cmd);
       GetHeader(false);
-      result := cmd;
       if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') then
+      begin
+        result := cmd;
+        if result = '' then
+          result := 'No server response';
         exit; // return the unexpected command line as error message
+      end;
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not (hfConnectionUpgrade in Http.HeaderFlags) or

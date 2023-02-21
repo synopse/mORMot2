@@ -315,7 +315,9 @@ end;
 
 procedure TSynDaemon.AfterCreate;
 begin
-  if not RunFromSynTests then
+  if RunFromSynTests then
+    fSettings.fLogClass := TSynLog // share the same TSynLog for all daemons
+  else
     fSettings.SetLog(TSynLog);
 end;
 
