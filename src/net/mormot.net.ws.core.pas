@@ -2346,7 +2346,7 @@ function TWebSocketProtocolList.ServerUpgrade(
   ConnectionOpaque: PHttpServerConnectionOpaque;
   out Protocol: TWebSocketProtocol; out Response: RawUtf8): integer;
 var
-  uri, version, prot, subprot, key, extin, extout: RawUtf8;
+  uri, version, prot, subprot, key, extin, extout, protout: RawUtf8;
   extins: TRawUtf8DynArray;
   P: PUtf8Char;
   Digest: TSha1Digest;
@@ -2376,14 +2376,16 @@ begin
       Protocol := CloneByName(subprot, uri);
     until (P = nil) or
           (Protocol <> nil);
-    if (Protocol <> nil) and
-       (Protocol.Uri = '') and
-       not Protocol.ProcessHandshakeUri(uri) then
-    begin
-      Protocol.Free;
-      result := HTTP_NOTFOUND;
-      exit;
-    end;
+    if Protocol <> nil then
+      if (Protocol.Uri = '') and
+         not Protocol.ProcessHandshakeUri(uri) then
+      begin
+        Protocol.Free;
+        result := HTTP_NOTFOUND;
+        exit;
+      end
+      else
+        FormatUtf8('Sec-WebSocket-Protocol: %'#13#10, [Protocol.Name], protout);
   end
   else
     // if no protocol is specified, try to match by URI
@@ -2435,9 +2437,11 @@ begin
              'Upgrade: websocket'#13#10 +
              'Connection: Upgrade'#13#10 +
              'Sec-WebSocket-Connection-ID: %'#13#10 +
-             'Sec-WebSocket-Protocol: %'#13#10 +
+             '%' +
              '%Sec-WebSocket-Accept: %'#13#10#13#10,
-    [ConnectionID, Protocol.Name, extout,
+    [ConnectionID,
+     protout,
+     extout,
      BinToBase64Short(@Digest, SizeOf(Digest))], Response);
   result := HTTP_SUCCESS;
   // on connection upgrade, will never be back to plain HTTP/1.1
