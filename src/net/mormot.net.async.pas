@@ -3328,6 +3328,9 @@ var
   p: PByte;
   flags: THttpServerRequestFlags;
 begin
+  // setup the connection specific information (remote IP and connection ID)
+  remoteid := fHandle;
+  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
     fServer.IncStat(grBodyReceived)
@@ -3337,15 +3340,13 @@ begin
       result := DoHeaders;
       if (result <> soContinue) or
          (fHttp.State = hrsUpgraded) then
-        exit; // rejected or upgraded
+        exit; // rejected or upgraded to WebSockets
     end;
   // optionaly uncompress content
   if fHttp.CompressContentEncoding >= 0 then
     fHttp.UncompressData;
   // prepare the HTTP/REST process reusing the THttpServerRequest instance
   result := soClose;
-  remoteid := fHandle;
-  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
   flags := HTTP_TLS_FLAGS[Assigned(fSecure)] +
            HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
   if fRequest = nil then // created once, if not rejected by OnBeforeBody
