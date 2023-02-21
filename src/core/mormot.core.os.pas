@@ -1431,6 +1431,7 @@ function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
 // - otherwise, will compute a genuine hash from known hardware information
 // (CPU, Bios, MAC) and store it in a local file for the next access, e.g. into
 // '/var/tmp/.synopse.uid' on POSIX
+// - on Mac, include the mormot.core.os.mac unit to properly read this UUID
 // - note: some BIOS have no UUID, so we fallback to our hardware hash on those
 procedure GetComputerUuid(out uuid: TGuid);
 
@@ -2992,6 +2993,10 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 // - returns the full expanded directory name, including trailing path delimiter
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is true
 function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+
+/// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
+function NormalizeDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean = false): TFileName;
 
 /// delete the content of a specified directory
@@ -6381,6 +6386,13 @@ begin
         result := ''
       else
         raise Exception.CreateFmt('Impossible to create folder %s', [result]);
+end;
+
+function NormalizeDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean): TFileName;
+begin
+  result := EnsureDirectoryExists(NormalizeFileName(Directory),
+    RaiseExceptionOnCreationFailure);
 end;
 
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
