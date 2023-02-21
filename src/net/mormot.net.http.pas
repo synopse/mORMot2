@@ -27,10 +27,10 @@ uses
   mormot.core.os,
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text,
-  mormot.core.data,
-  mormot.core.buffers,
-  mormot.core.zip,
   mormot.core.rtti,
+  mormot.core.buffers,
+  mormot.core.data,
+  mormot.core.zip,
   mormot.net.sock;
 
 

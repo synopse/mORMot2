@@ -2045,7 +2045,6 @@ function SaveJson(const Value; TypeInfo: PRttiInfo;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// serialize most kind of content as JSON, using its RTTI
-// - is just a wrapper around TJsonWriter.AddTypedJson()
 function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8; overload;
 
 /// serialize most kind of content as JSON, using its RTTI and a type name
@@ -10716,16 +10715,8 @@ begin
 end;
 
 function SaveJson(const Value; TypeInfo: PRttiInfo): RawUtf8;
-var
-  temp: TTextWriterStackBuffer;
 begin
-  with TJsonWriter.CreateOwnedStream(temp) do
-  try
-    AddTypedJson(@Value, TypeInfo);
-    SetText(result);
-  finally
-    Free;
-  end;
+  SaveJson(Value, TypeInfo, [], Result, []);
 end;
 
 function SaveJson(const Value; const TypeName: RawUtf8;

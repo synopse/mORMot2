@@ -34,6 +34,7 @@ uses
   mormot.core.rtti,
   mormot.core.datetime,
   mormot.core.zip,
+  mormot.core.json,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}
@@ -296,6 +297,12 @@ type
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
     /// just a wrapper around fErrorMessage := FormatString()
     procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
+    /// serialize a given value as JSON into OutContent and OutContentType fields
+    procedure SetOutJson(Value: pointer; TypeInfo: PRttiInfo); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// serialize a given TObject as JSON into OutContent and OutContentType fields
+    procedure SetOutJson(Value: TObject); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -2168,6 +2175,18 @@ procedure THttpServerRequest.SetErrorMessage(const Fmt: RawUtf8;
   const Args: array of const);
 begin
   FormatString(Fmt, Args, fErrorMessage);
+end;
+
+procedure THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo);
+begin
+  SaveJson(Value^, TypeInfo, [], RawUtf8(fOutContent), []);
+  fOutContentType := JSON_CONTENT_TYPE_VAR;
+end;
+
+procedure THttpServerRequest.SetOutJson(Value: TObject);
+begin
+  ObjectToJson(Value, RawUtf8(fOutContent), []);
+  fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
 {$ifdef USEWININET}

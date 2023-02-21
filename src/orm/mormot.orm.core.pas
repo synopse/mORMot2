@@ -8079,7 +8079,7 @@ begin
   begin
     W.AddProp(pointer(props.IDJsonName), length(props.IDJsonName));
     W.Add(TOrm(Instance).fID);
-    W.AddComma;
+    W.BlockAfterItem(Options);
   end;
   cur := pointer(props.List);
   n := props.Count;

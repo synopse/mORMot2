@@ -97,24 +97,24 @@ type
     // as used by rawqueries and rawupdates
     function getRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
     // implements /queries and /cached-queries endpoints
-    function doqueries(ctxt: THttpServerRequestAbstract; orm: TOrmWorldClass;
+    function doqueries(ctxt: THttpServerRequest; orm: TOrmWorldClass;
       const search: RawUtf8): cardinal;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions); reintroduce;
     destructor Destroy; override;
   published
     // all service URI are implemented by these published methods using RTTI
-    function plaintext(ctxt: THttpServerRequestAbstract): cardinal;
-    function json(ctxt: THttpServerRequestAbstract): cardinal;
-    function db(ctxt: THttpServerRequestAbstract): cardinal;
-    function queries(ctxt: THttpServerRequestAbstract): cardinal;
-    function cached_queries(ctxt: THttpServerRequestAbstract): cardinal;
-    function fortunes(ctxt: THttpServerRequestAbstract): cardinal;
-    function updates(ctxt: THttpServerRequestAbstract): cardinal;
-    function rawdb(ctxt: THttpServerRequestAbstract): cardinal;
-    function rawqueries(ctxt: THttpServerRequestAbstract): cardinal;
-    function rawfortunes(ctxt: THttpServerRequestAbstract): cardinal;
-    function rawupdates(ctxt: THttpServerRequestAbstract): cardinal;
+    function plaintext(ctxt: THttpServerRequest): cardinal;
+    function json(ctxt: THttpServerRequest): cardinal;
+    function db(ctxt: THttpServerRequest): cardinal;
+    function queries(ctxt: THttpServerRequest): cardinal;
+    function cached_queries(ctxt: THttpServerRequest): cardinal;
+    function fortunes(ctxt: THttpServerRequest): cardinal;
+    function updates(ctxt: THttpServerRequest): cardinal;
+    function rawdb(ctxt: THttpServerRequest): cardinal;
+    function rawqueries(ctxt: THttpServerRequest): cardinal;
+    function rawfortunes(ctxt: THttpServerRequest): cardinal;
+    function rawupdates(ctxt: THttpServerRequest): cardinal;
   end;
 
 const
@@ -148,7 +148,7 @@ begin
   result := Random32(WORLD_COUNT) + 1;
 end;
 
-function getQueriesParamValue(ctxt: THttpServerRequestAbstract;
+function getQueriesParamValue(ctxt: THttpServerRequest;
   const search: RawUtf8 = 'QUERIES='): cardinal;
 begin
   if not ctxt.UrlParam(search, result) then
@@ -283,24 +283,24 @@ end;
 
 {$endif USE_SQLITE3}
 
-function TRawAsyncServer.plaintext(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.plaintext(ctxt: THttpServerRequest): cardinal;
 begin
   ctxt.OutContentType := TEXT_CONTENT_TYPE_NO_ENCODING;
   ctxt.OutContent := HELLO_WORLD;
   result := HTTP_SUCCESS;
 end;
 
-function TRawAsyncServer.json(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.json(ctxt: THttpServerRequest): cardinal;
 var
   msgRec: TMessageRec;
 begin
   msgRec.message := HELLO_WORLD;
-  ctxt.SetOutJson(SaveJson(msgRec, TypeInfo(TMessageRec)));
+  ctxt.SetOutJson(@msgRec, TypeInfo(TMessageRec));
   //SleepHiRes(1); // emulate slow DB access
   result := HTTP_SUCCESS;
 end;
 
-function TRawAsyncServer.rawdb(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.rawdb(ctxt: THttpServerRequest): cardinal;
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
@@ -320,26 +320,25 @@ begin
   stmt := nil;
 end;
 
-function TRawAsyncServer.db(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.db(ctxt: THttpServerRequest): cardinal;
 var
   w: TOrmWorld;
 begin
   w := TOrmWorld.Create(fStore.Orm, RandomWorld);
   try
-    ctxt.OutContent := ObjectToJson(w);
-    ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;;
+    ctxt.SetOutJson(w);
     result := HTTP_SUCCESS;
   finally
     w.Free;
   end;
 end;
 
-function TRawAsyncServer.queries(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.queries(ctxt: THttpServerRequest): cardinal;
 begin
   result := doqueries(ctxt, TOrmWorld, 'QUERIES=');
 end;
 
-function TRawAsyncServer.cached_queries(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
 begin
   result := doqueries(ctxt, TOrmCachedWorld, 'COUNT=');
 end;
@@ -398,7 +397,7 @@ begin
   result := true;
 end;
 
-function TRawAsyncServer.rawqueries(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.rawqueries(ctxt: THttpServerRequest): cardinal;
 var
   cnt: PtrInt;
   res: TWorlds;
@@ -406,11 +405,11 @@ begin
   cnt := getQueriesParamValue(ctxt);
   if not getRawRandomWorlds(cnt, res) then
     exit(HTTP_SERVERERROR);
-  ctxt.SetOutJson(SaveJson(res, TypeInfo(TWorlds)));
+  ctxt.SetOutJson(@res, TypeInfo(TWorlds));
   result := HTTP_SUCCESS;
 end;
 
-function TRawAsyncServer.doqueries(ctxt: THttpServerRequestAbstract;
+function TRawAsyncServer.doqueries(ctxt: THttpServerRequest;
   orm: TOrmWorldClass; const search: RawUtf8): cardinal;
 var
   cnt, i: PtrInt;
@@ -425,7 +424,7 @@ begin
     if not fStore.Orm.Retrieve(RandomWorld, res[i]) then
       exit;
   end;
-  ctxt.SetOutJson(SaveJson(res, TypeInfo(TOrmWorlds)));
+  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   ObjArrayClear(res);
   result := HTTP_SUCCESS;
 end;
@@ -435,7 +434,7 @@ begin
   result := StrComp(pointer(TOrmFortune(A).Message), pointer(TOrmFortune(B).Message));
 end;
 
-function TRawAsyncServer.fortunes(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.fortunes(ctxt: THttpServerRequest): cardinal;
 var
   list: TOrmFortunes;
   new: TOrmFortune;
@@ -462,7 +461,7 @@ begin
   result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
 end;
 
-function TRawAsyncServer.rawfortunes(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.rawfortunes(ctxt: THttpServerRequest): cardinal;
 var
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
@@ -490,7 +489,7 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-function TRawAsyncServer.updates(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.updates(ctxt: THttpServerRequest): cardinal;
 var
   cnt, i: PtrInt;
   res: TOrmWorlds;
@@ -514,14 +513,14 @@ begin
     end;
     result := b.Send;
     if result = HTTP_SUCCESS then
-      ctxt.SetOutJson(SaveJson(res, TypeInfo(TOrmWorlds)));
+      ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   finally
     b.Free;
     ObjArrayClear(res);
   end;
 end;
 
-function TRawAsyncServer.rawupdates(ctxt: THttpServerRequestAbstract): cardinal;
+function TRawAsyncServer.rawupdates(ctxt: THttpServerRequest): cardinal;
 var
   cnt, i: PtrInt;
   words: TWorlds;
@@ -548,7 +547,7 @@ begin
   stmt.BindArray(2, nums);
   stmt.ExecutePrepared;
   //conn.Commit; // autocommit
-  ctxt.SetOutJson(SaveJson(words, TypeInfo(TWorlds)));
+  ctxt.SetOutJson(@words, TypeInfo(TWorlds));
   result := HTTP_SUCCESS;
 end;
 
@@ -648,8 +647,7 @@ begin
       writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
         [woDontStoreVoid, woHumanReadable]));
   finally
-     for i := 0 to servers - 1 do
-      rawServers[i].Free;
+    ObjArrayClear(rawServers);
   end;
 
   {$ifdef FPC_X64MM}
