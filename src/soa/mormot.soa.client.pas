@@ -783,7 +783,11 @@ begin
   inherited Create(aRest, aInterface, aInstanceCreation, aContractExpected);
   // initialize a shared instance (if needed)
   case fInstanceCreation of
-    sicShared, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
+    sicShared,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread:
       begin
         // the instance shall remain active during the whole client session
         fSharedInstance := CreateFakeInstance;
@@ -841,9 +845,14 @@ begin
   if self = nil then
     exit;
   case fInstanceCreation of
-    sicShared, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
+    sicShared,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread:
       O := TInterfacedObjectFake(fSharedInstance);
-    sicSingle, sicClientDriven:
+    sicSingle,
+    sicClientDriven:
       O := TInterfacedObjectFake(CreateFakeInstance);
   else
     exit;

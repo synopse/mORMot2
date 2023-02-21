@@ -2455,7 +2455,7 @@ begin
   SendDelay := 10;
   DisconnectAfterInvalidHeartbeatCount := 5;
   CallbackAcquireTimeOutMS := 5000;
-  CallbackAnswerTimeOutMS := 5000;
+  CallbackAnswerTimeOutMS := 30000;
   LogDetails := [];
   OnClientConnected := nil;
   OnClientDisconnected := nil;

@@ -318,7 +318,7 @@ begin
   if RunFromSynTests then
     fSettings.fLogClass := TSynLog // share the same TSynLog for all daemons
   else
-    fSettings.SetLog(TSynLog);
+    fSettings.SetLog(TSynLog); // real world logging
 end;
 
 destructor TSynDaemon.Destroy;
