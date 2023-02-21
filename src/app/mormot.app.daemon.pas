@@ -289,7 +289,7 @@ begin
   if aWorkFolder = '' then
     fWorkFolderName := Executable.ProgramFilePath
   else
-    fWorkFolderName := EnsureDirectoryExists(aWorkFolder, true);
+    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, true);
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;
@@ -297,7 +297,7 @@ begin
   fn := aSettingsFolder;
   if fn = '' then
     fn := {$ifdef OSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
-  fn :=  EnsureDirectoryExists(fn);
+  fn :=  NormalizeDirectoryExists(fn);
   if aSettingsName = '' then
     fn := fn + Utf8ToString(Executable.ProgramName)
   else
@@ -308,14 +308,15 @@ begin
       fSettings.LogPath :=
         {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
-      fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
+      fSettings.LogPath := NormalizeDirectoryExists(aLogFolder);
   fShowExceptionWaitEnter := true; // default/legacy behavior
   AfterCreate;
 end;
 
 procedure TSynDaemon.AfterCreate;
 begin
-  fSettings.SetLog(TSynLog);
+  if not RunFromSynTests then
+    fSettings.SetLog(TSynLog);
 end;
 
 destructor TSynDaemon.Destroy;
