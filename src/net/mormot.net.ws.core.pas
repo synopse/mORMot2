@@ -563,6 +563,9 @@ type
   // - should return HTTP_SUCCESS to continue, or an error code to abort
   TOnWebSocketProtocolUpgraded =
     function(Protocol: TWebSocketProtocol): integer of object;
+  /// event signature trigerred on WS connection close
+  TOnWebSocketProtocolClosed =
+    procedure(Protocol: TWebSocketProtocol) of object;
 
   /// used to maintain a list of websocket protocols (for the server side)
   TWebSocketProtocolList = class(TSynPersistentRWLightLock)

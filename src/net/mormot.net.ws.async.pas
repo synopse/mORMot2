@@ -134,6 +134,7 @@ type
     fSettings: TWebSocketProcessSettings;
     fProcessClass: TWebSocketAsyncProcessClass;
     fOnWSUpgraded: TOnWebSocketProtocolUpgraded;
+    fOnWSClose: TOnWebSocketProtocolClosed;
     fOnWSConnect, fOnWSDisconnect: TOnWebSocketAsyncServerEvent;
     function DoUpgrade(Protocol: TWebSocketProtocol): integer; virtual;
     procedure DoConnect(Context: TWebSocketAsyncConnection); virtual;
@@ -182,6 +183,9 @@ type
     // - just after the main processing WebSockets frames process finished
     property OnWebSocketDisconnect: TOnWebSocketAsyncServerEvent
       read fOnWSDisconnect write fOnWSDisconnect;
+    /// same as OnWebSocketDisconnect, but using TWebSocketProtocol as parameter
+    property OnWebSocketClose: TOnWebSocketProtocolClosed
+      read fOnWSClose write fOnWSClose;
   end;
 
 
@@ -650,6 +654,11 @@ begin
     try
       fOnWSDisconnect(Context);
     except // ignore any external callback error during shutdown
+    end;
+  if Assigned(fOnWSClose) then
+    try
+      fOnWSClose(Context.fProcess.Protocol);
+    finally
     end;
 end;
 
