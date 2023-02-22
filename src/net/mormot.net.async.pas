@@ -789,7 +789,7 @@ type
   /// handle one HTTP client connection to our non-blocking THttpAsyncServer
   THttpAsyncConnection = class(TAsyncConnection)
   protected
-    fHttp: THttpRequestContext;
+    fHttp: THttpRequestContext; // non-blocking HTTP state machine
     fServer: THttpAsyncServer;
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
@@ -814,6 +814,9 @@ type
   public
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); override;
+    /// access to the internal two PtrUInt tags of this connection
+    function GetConnectionOpaque: PHttpServerConnectionOpaque;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
   /// event-driven process of HTTP/WebSockets connections
@@ -3067,6 +3070,11 @@ begin
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
   end;
+end;
+
+function THttpAsyncConnection.GetConnectionOpaque: PHttpServerConnectionOpaque;
+begin
+  result := @fConnectionOpaque;
 end;
 
 procedure THttpAsyncConnection.BeforeDestroy;

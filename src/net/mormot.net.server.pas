@@ -691,6 +691,9 @@ type
     // - returned enumeration will indicates the processing state
     function GetRequest(withBody: boolean;
       headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
+    /// access to the internal two PtrUInt tags of this connection
+    function GetConnectionOpaque: PHttpServerConnectionOpaque;
+      {$ifdef HASINLINE} inline; {$endif}
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
     property Method: RawUtf8
       read Http.CommandMethod;
@@ -3324,6 +3327,11 @@ begin
     on E: Exception do
       result := grException;
   end;
+end;
+
+function THttpServerSocket.GetConnectionOpaque: PHttpServerConnectionOpaque;
+begin
+  result := @fConnectionOpaque;
 end;
 
 
