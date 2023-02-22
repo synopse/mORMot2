@@ -1910,6 +1910,7 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
+  n: cardinal;
   tix: Int64;
   opt: TPollAsyncSocketsOptions;
   {%H-}log: ISynLog;
@@ -1925,7 +1926,10 @@ begin
   fLastOperationReleaseMemorySeconds := 60;
   fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
-  fThreadPollingWakeupLoad := 32; // see ThreadPollingWakeup() below
+  n := (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
+  if n < 4 then
+    n := 4; // below 4, the whole algorithm seems pointless
+  fThreadPollingWakeupLoad := n;
   fLog := aLog;
   fConnectionClass := aConnectionClass;
   opt := [];
