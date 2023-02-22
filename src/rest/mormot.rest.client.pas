@@ -2226,11 +2226,11 @@ begin
     end;
     FreeAndNilSafe(fSession.User);
     try
+      InternalClose; // e.g. websockets calls OnWebSocketsClosed to unregister
+    finally
       inherited Destroy; // fModel.Free if owned by this TRest instance
       FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
       fOnIdle := nil;
-    finally
-      InternalClose;
     end;
   end;
 end;

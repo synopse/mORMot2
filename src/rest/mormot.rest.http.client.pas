@@ -395,6 +395,7 @@ type
     /// this event handler will be executed when the WebSocket link is destroyed
     // - may happen e.g. after graceful close from the server side, or
     // after DisconnectAfterInvalidHeartbeatCount is reached
+    // - supplied Sender parameter is a TWebSocketProcessClientThread instance
     property OnWebSocketsClosed: TNotifyEvent
       read fOnWebSocketsClosed write fOnWebSocketsClosed;
     /// customize the internal REST loop delay
@@ -767,8 +768,9 @@ end;
 
 procedure TRestHttpClientSocket.InternalClose;
 begin
-  if fSocket <> nil then
-    InternalLog('InternalClose: fSocket.Free', sllTrace);
+  if fSocket = nil then
+    exit;
+  InternalLog('InternalClose: fSocket.Free', sllTrace);
   FreeAndNilSafe(fSocket);
 end;
 
