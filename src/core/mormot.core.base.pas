@@ -1851,6 +1851,12 @@ procedure RawObjectsClear(o: PObject; n: integer);
 // - only difference is that aObj is set to nil AFTER being destroyed
 procedure FreeAndNilSafe(var aObj);
 
+/// same as aInterface := nil but ignoring any exception
+procedure InterfaceNilSafe(var aInterface);
+
+/// same as aInterface := nil but ignoring any exception
+procedure InterfacesNilSafe(const aInterfaces: array of pointer);
+
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 
@@ -7171,6 +7177,24 @@ begin
   except
   end;
   TObject(aObj) := nil; // we could do it AFTER destroy
+end;
+
+procedure InterfaceNilSafe(var aInterface);
+begin
+  if IInterface(aInterface) <> nil then
+    try // slower but paranoidically safe
+      IInterface(aInterface) := nil;
+    except
+      pointer(aInterface) := nil; // force variable to nil
+    end;
+end;
+
+procedure InterfacesNilSafe(const aInterfaces: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(aInterfaces) do
+    InterfaceNilSafe(aInterfaces[i]^);
 end;
 
 procedure ObjArrayClear(var aObjArray);
