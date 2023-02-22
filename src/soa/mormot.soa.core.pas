@@ -768,7 +768,7 @@ type
     /// will be called when a callback is released on the client side
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
     // signature, so that it will be called with the interface instance by
-    // TServiceContainerServer.FakeCallbackRelease
+    // TServiceContainerServer.ReleaseFakeCallback
     // - you may use it as such - see sample restws_chatserver.dpr:
     // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
     // !   const interfaceName: RawUtf8);

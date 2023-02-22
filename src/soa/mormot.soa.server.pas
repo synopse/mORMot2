@@ -402,7 +402,15 @@ type
     procedure GetFakeCallback(Ctxt: TRestServerUriContext;
       ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
     /// low-level function called from TRestServer.CacheFlush URI method
-    procedure FakeCallbackRelease(Ctxt: TRestServerUriContext);
+    procedure ReleaseFakeCallback(Ctxt: TRestServerUriContext);
+    /// purge a fake callback from the internal list
+    // - called e.g. by ReleaseFakeCallback() or
+    // RemoveFakeCallbackOnConnectionClose()
+    procedure RemoveFakeCallback(FakeObj: TObject; {TInterfacedObjectFakeServer}
+      Ctxt: TRestServerUriContext);
+    /// purge all fake callbacks on a given connection
+    procedure RemoveFakeCallbackOnConnectionClose(aConnectionID: TRestConnectionID;
+      aConnectionOpaque: PRestServerConnectionOpaque);
     /// class method able to check if a given server-side callback event fake
     // instance has been released on the client side
     // - may be used to automatically purge a list of subscribed callbacks,
@@ -1798,7 +1806,8 @@ begin
   for i := 0 to length(c) - 1 do
     fCallbackNamesSorted[i + n] := aService.InterfaceFactory.
       Methods[c[i].MethodIndex].Args[c[i].ArgIndex].ArgRtti.Name;
-  QuickSortRawUtf8(pointer(fCallbackNamesSorted), 0, length(fCallbackNamesSorted) - 1);
+  QuickSortRawUtf8(pointer(fCallbackNamesSorted),
+    0, length(fCallbackNamesSorted) - 1, {caseins=}true);
 end;
 
 procedure TServiceContainerServer.FakeCallbackAdd(aFakeInstance: TObject);
@@ -1878,7 +1887,7 @@ begin
     repeat
       result := list^;
       inc(list);
-      if (result.FakeID = id) and
+      if (result.fFakeID = id) and
          (result.fLowLevelConnectionID = conn) then
         exit;
       dec(n);
@@ -1886,15 +1895,85 @@ begin
   result := nil;
 end;
 
-procedure TServiceContainerServer.FakeCallbackRelease(
+procedure TServiceContainerServer.RemoveFakeCallback(FakeObj: TObject;
   Ctxt: TRestServerUriContext);
 var
-  fake: TInterfacedObjectFakeServer;
+  fake: TInterfacedObjectFakeServer absolute FakeObj;
+  params: RawUtf8;
+begin
+  if fake = nil then
+    exit;
+  fake.fReleasedOnClientSide := true;
+  if Assigned(OnCallbackReleasedOnClientSide) then
+    OnCallbackReleasedOnClientSide(self, fake, fake.fFakeInterface);
+  if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
+  begin
+    // emulate a call to CallbackReleased(callback,'ICallbackName')
+    Ctxt.ServiceMethodIndex :=
+      fake.fService.fInterface.MethodIndexCallbackReleased;
+    Ctxt.ServiceMethod :=
+      @fake.fService.fInterface.Methods[Ctxt.ServiceMethodIndex];
+    Ctxt.ServiceExecution :=
+      @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
+    Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
+    Ctxt.Service := fake.fService;
+    Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex + SERVICE_PSEUDO_METHOD_COUNT;
+    fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
+    FormatUtf8('[%,"%"]',
+      [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
+    Ctxt.ServiceParameters := pointer(params);
+    fake.fService.ExecuteMethod(Ctxt);
+    if not IdemPropNameU(fake.Factory.InterfaceName, 'ISynLogCallback') then
+      fRestServer.InternalLog('I%() returned %',
+        [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
+         Ctxt.Call^.OutStatus], sllDebug);
+  end
+  else
+    Ctxt.Success;
+end;
+
+procedure TServiceContainerServer.RemoveFakeCallbackOnConnectionClose(
+  aConnectionID: TRestConnectionID; aConnectionOpaque: PRestServerConnectionOpaque);
+var
+  call: TRestUriParams;
+  ctxt: TRestServerUriContext;
+  fake: ^TInterfacedObjectFakeServer;
+  i: integer;
+begin
+  if (self = nil) or
+     (fFakeCallbacks = nil) or
+     (fFakeCallbacks.Count = 0) then
+    exit;
+  call.Init;
+  call.LowLevelConnectionID := aConnectionID;
+  call.LowLevelConnectionOpaque := aConnectionOpaque;
+  ctxt := TRestServerUriContext.Create(fRestServer, call){%H-};
+  try
+    fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
+    try
+      fake := pointer(fFakeCallbacks.List);
+      for i := 1 to fFakeCallbacks.Count do
+      begin
+        if (fake^.fLowLevelConnectionID = aConnectionID) and
+           not fake^.fReleasedOnClientSide then
+          RemoveFakeCallback(fake^, ctxt);
+        inc(fake);
+      end;
+    finally
+      fFakeCallbacks.Safe.WriteUnLock;
+    end;
+  finally
+    ctxt.Free;
+  end;
+end;
+
+procedure TServiceContainerServer.ReleaseFakeCallback(
+  Ctxt: TRestServerUriContext);
+var
   connectionID: TRestConnectionID;
   fakeID: TInterfacedObjectFakeID;
-  Values: TNameValuePUtf8CharDynArray;
-  params: RawUtf8;
-  withLog: boolean; // avoid stack overflow
+  fake: TInterfacedObjectFakeServer;
+  params: TNameValuePUtf8CharDynArray;
 begin
   if (self = nil) or
     (fFakeCallbacks = nil) or
@@ -1903,55 +1982,25 @@ begin
     exit;
   connectionID := Ctxt.Call^.LowLevelConnectionID;
   // decode {"ICallbackName":1234} input body
-  JsonDecode(pointer(Ctxt.Call^.InBody), Values);
-  if length(Values) <> 1 then
+  JsonDecode(pointer(Ctxt.Call^.InBody), params);
+  if length(params) <> 1 then
     exit;
-  fakeID := Values[0].Value.ToCardinal;
+  fakeID := params[0].Value.ToCardinal;
   if (fakeID = 0) or
      (connectionID = 0) or
-     (Values[0].Name.Text = nil) or
+     (params[0].Name.Text = nil) or
      (FastFindPUtf8CharSorted(pointer(fCallbackNamesSorted),
-       length(fCallbackNamesSorted) - 1, Values[0].Name.Text) < 0) then
+       length(fCallbackNamesSorted) - 1, params[0].Name.Text) < 0) then
     exit;
-  withLog := not Values[0].Name.Idem('ISynLogCallback');
-  if withLog then
-    // avoid stack overflow ;)
-    fRestServer.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
-      [ClassType, fakeID, Values[0].Name.Text], sllDebug);
-  fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)  
+  if not params[0].Name.Idem('ISynLogCallback') then // avoid stack overflow
+    fRestServer.InternalLog('%.ReleaseFakeCallback(%,"%") remote call',
+      [ClassType, fakeID, params[0].Name.Text], sllDebug);
+  fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
   try
-    fake := FakeCallbackFind(
-      pointer(fFakeCallbacks.List), fFakeCallbacks.Count, fakeID, connectionID);
+    fake := FakeCallbackFind(pointer(fFakeCallbacks.List), fFakeCallbacks.Count,
+      fakeID, Ctxt.Call^.LowLevelConnectionID);
     if fake <> nil then
-    begin
-      fake.fReleasedOnClientSide := true;
-      if Assigned(OnCallbackReleasedOnClientSide) then
-        OnCallbackReleasedOnClientSide(self, fake, fake.fFakeInterface);
-      if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
-      begin
-        // emulate a call to CallbackReleased(callback,'ICallbackName')
-        Ctxt.ServiceMethodIndex :=
-          fake.fService.fInterface.MethodIndexCallbackReleased;
-        Ctxt.ServiceMethod :=
-          @fake.fService.fInterface.Methods[Ctxt.ServiceMethodIndex];
-        Ctxt.ServiceExecution :=
-          @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
-        Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
-        Ctxt.Service := fake.fService;
-        Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex + SERVICE_PSEUDO_METHOD_COUNT;
-        fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
-        FormatUtf8('[%,"%"]',
-          [PtrInt(PtrUInt(fake.fFakeInterface)), Values[0].Name.Text], params);
-        Ctxt.ServiceParameters := pointer(params);
-        fake.fService.ExecuteMethod(Ctxt);
-        if withLog then
-          fRestServer.InternalLog('I%() returned %',
-            [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
-             Ctxt.Call^.OutStatus], sllDebug);
-      end
-      else
-        Ctxt.Success;
-    end;
+      RemoveFakeCallback(fake, Ctxt);
   finally
     fFakeCallbacks.Safe.WriteUnLock;
   end;

@@ -268,6 +268,10 @@ type
       const aInterfaceDotMethodName, aParams: RawUtf8;
       aConnectionID: THttpServerConnectionID;
       aFakeCallID: integer; aResult, aErrorMsg: PRawUtf8): boolean;
+    procedure OnWSClose(aConnectionID: TRestConnectionID;
+      aConnectionOpaque: pointer);
+    procedure OnWSSocketClose(Sender: TWebSocketServerSocket);
+    procedure OnWSAsyncClose(Sender: TWebSocketAsyncConnection);
   public
     /// create a HTTP/HTTPS Server instance, to serve REST requests
     // - this is the easiest constructor to publish TRestServer(s) over HTTP/HTTPS
@@ -1392,11 +1396,13 @@ begin
     begin
       TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
       TWebSocketAsyncServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      TWebSocketAsyncServer(fHttpServer).OnWebSocketDisconnect := OnWSAsyncClose;
     end
     else if fHttpServer is TWebSocketServer then
     begin
       TWebSocketServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
       TWebSocketServer(fHttpServer).OnWebSocketClose := aOnWSClosed;
+      TWebSocketServer(fHttpServer).OnWebSocketDisconnect := OnWSSocketClose;
     end;
 end;
 
@@ -1461,6 +1467,40 @@ begin
       if aErrorMsg <> nil then
         aErrorMsg^ := ObjectToJsonDebug(E);
   end;
+end;
+
+procedure TRestHttpServer.OnWSClose(aConnectionID: TRestConnectionID;
+  aConnectionOpaque: pointer);
+var
+  i: PtrInt;
+  services: TServiceContainer;
+begin
+  if aConnectionID = 0 then
+    exit;
+  // we need to notify all REST servers, since a single connection could
+  // in practice redirect to any of them
+  fSafe.ReadLock; // protect fDBServers[]
+  try
+    for i := 0 to length(fDBServers) - 1 do
+    begin
+      services := fDBServers[i].Server.Services;
+      if services <> nil then
+        (services as TServiceContainerServer).
+          RemoveFakeCallbackOnConnectionClose(aConnectionID, aConnectionOpaque);
+    end;
+  finally
+    fSafe.ReadLock;
+  end;
+end;
+
+procedure TRestHttpServer.OnWSSocketClose(Sender: TWebSocketServerSocket);
+begin
+  OnWSClose(Sender.RemoteConnectionID, Sender.GetConnectionOpaque);
+end;
+
+procedure TRestHttpServer.OnWSAsyncClose(Sender: TWebSocketAsyncConnection);
+begin
+  OnWSClose(Sender.Handle, Sender.GetConnectionOpaque);
 end;
 
 constructor TRestHttpServer.Create(aServer: TRestServer;

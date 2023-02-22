@@ -52,6 +52,7 @@ type
   TWebSocketAsyncProcess = class(TWebSocketProcess)
   protected
     fConnection: TWebSocketAsyncConnection;
+    // non-blocking state machine to parse incoming frames
     fProcessPos: PtrInt;   // index in fConnection.fHttp.Process.Buffer/Len
     fReadPos: PtrInt;      // index in fConnection.fRd.Buffer/Len
     fOnRead: TWebProcessInFrame;

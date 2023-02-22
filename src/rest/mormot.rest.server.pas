@@ -258,8 +258,7 @@ type
     function IsRemoteIPBanned: boolean; // as method to avoid temp IP string
     /// register the interface-based SOA URIs to Server.Router multiplexer
     // - abstract implementation which is to be overridden
-    class procedure UriComputeRoutes(
-      Router: TRestRouter; Server: TRestServer); virtual; abstract;
+    class procedure UriComputeRoutes(Router: TRestRouter; Server: TRestServer); virtual;
     /// copy TAuthSession values into the Session* members
     // - this method is not thread-safe: caller should use Sessions.Safe.ReadOnlyLock
     procedure SessionAssign(AuthSession: TAuthSession);
@@ -277,7 +276,7 @@ type
     /// direct launch of an interface-based service
     // - Uri() will ensure that Service<>nil before calling it
     // - abstract implementation which is to be overridden
-    procedure ExecuteSoaByInterface; virtual; abstract;
+    procedure ExecuteSoaByInterface; virtual;
     /// handle GET/LOCK/UNLOCK/STATE verbs for ORM/CRUD process
     procedure ExecuteOrmGet; virtual;
     /// handle POST/PUT/DELETE/BEGIN/END/ABORT verbs for ORM/CRUD process
@@ -439,7 +438,7 @@ type
     property AuthSession: TAuthSession
       read fAuthSession;
     /// the associated routing class on the client side
-    class function ClientRouting: TRestClientRoutingClass; virtual; abstract;
+    class function ClientRouting: TRestClientRoutingClass; virtual;
     /// identify if the request is about a Table containing nested objects or
     // arrays, which could be serialized as JSON objects or arrays, instead
     // of plain JSON string (as stored in the database)
@@ -4342,6 +4341,17 @@ begin
     result := true;
 end;
 
+class procedure TRestServerUriContext.UriComputeRoutes(
+  Router: TRestRouter; Server: TRestServer);
+begin
+  raise EParsingException.CreateUtf8('Unexpected %.UriComputeRoutes', [self]);
+end;
+
+procedure TRestServerUriContext.ExecuteSoaByInterface;
+begin
+  raise EParsingException.CreateUtf8('Unexpected %.ExecuteSoaByInterface', [self]);
+end;
+
 function TRestServerUriContext.AuthenticationBearerToken: RawUtf8;
 begin
   result := inherited AuthenticationBearerToken;
@@ -4367,6 +4377,11 @@ begin
     Error('Invalid IP [%]', [fCall^.LowLevelRemoteIP], HTTP_FORBIDDEN);
     result := false;
   end;
+end;
+
+class function TRestServerUriContext.{%H-}ClientRouting: TRestClientRoutingClass;
+begin
+  raise EParsingException.CreateUtf8('Unexpected %.ClientRouting', [self]);
 end;
 
 function TRestServerUriContext.ClientOrmOptions: TOrmWriterOptions;
@@ -7706,7 +7721,7 @@ begin
         if Ctxt.fUriMethodPath = '_callback_' then
           // POST root/cacheflush/_callback_ with {"ICallbackName":1234} body
           // as called from TRestHttpClientWebsockets.FakeCallbackUnregister
-          (fServices as TServiceContainerServer).FakeCallbackRelease(Ctxt)
+          (fServices as TServiceContainerServer).ReleaseFakeCallback(Ctxt)
         else if Ctxt.fUriMethodPath = '_replaceconn_' then
         begin
           // POST root/cacheflush/_replaceconn_ (over a secured connection)
