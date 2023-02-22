@@ -1999,7 +1999,8 @@ begin
   try
     fake := FakeCallbackFind(pointer(fFakeCallbacks.List), fFakeCallbacks.Count,
       fakeID, Ctxt.Call^.LowLevelConnectionID);
-    if fake <> nil then
+    if (fake <> nil) and
+       params[0].Name.Idem(fake.Factory.InterfaceName) then
       RemoveFakeCallback(fake, Ctxt);
   finally
     fFakeCallbacks.Safe.WriteUnLock;
