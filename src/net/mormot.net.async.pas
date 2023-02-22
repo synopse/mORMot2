@@ -797,6 +797,7 @@ type
     fPipelinedWrite: boolean;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
+    fConnectionID: THttpServerConnectionID;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
@@ -3307,6 +3308,8 @@ begin
      not fHttp.ParseCommand then
     exit;
   fHttp.ParseHeaderFinalize;
+  fConnectionID := fHandle; // ID is local socket handle by default
+  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, fConnectionID);
   // immediate reject of clearly invalid requests
   status := DecodeHeaders; // may handle hfConnectionUpgrade when overriden
   if status <> HTTP_SUCCESS then
@@ -3335,14 +3338,10 @@ end;
 function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   output: PRawByteStringBuffer;
-  remoteID: THttpServerConnectionID;
   sent: integer;
   p: PByte;
   flags: THttpServerRequestFlags;
 begin
-  // setup the connection specific information (remote IP and connection ID)
-  remoteid := fHandle;
-  fServer.ParseRemoteIPConnID(fHttp.Headers, fRemoteIP, remoteid);
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
     fServer.IncStat(grBodyReceived)
@@ -3363,9 +3362,9 @@ begin
            HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
   if fRequest = nil then // created once, if not rejected by OnBeforeBody
     fRequest := THttpServerRequest.Create(
-      fServer, remoteid, fReadThread, flags, @fConnectionOpaque)
+      fServer, fConnectionID, fReadThread, flags, @fConnectionOpaque)
   else
-    fRequest.Recycle(remoteid, fReadThread, flags);
+    fRequest.Recycle(fConnectionID, fReadThread, flags);
   fRequest.Prepare(fHttp, fRemoteIP);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then

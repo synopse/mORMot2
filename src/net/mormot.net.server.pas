@@ -406,6 +406,7 @@ type
     function NextConnectionID: integer; // 31-bit internal sequence
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
+      {$ifdef HASINLINE}inline;{$endif}
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); virtual;
     function GetFavIcon(Ctxt: THttpServerRequestAbstract): cardinal;
   public
