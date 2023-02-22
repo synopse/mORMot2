@@ -1236,7 +1236,7 @@ begin
   result := '';
   if IsZero(Compressed) then
     exit;
-  SetLength(result, SizeOf(p^) + 1);
+  SetLength(result, SizeOf({%H-}p^) + 1);
   p := pointer(result);
   p.b[0] := $04; // ASN-1 uncompressed public key marker
   inc(PByte(p));

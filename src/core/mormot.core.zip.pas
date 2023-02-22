@@ -2132,7 +2132,7 @@ begin
         dec(loc64);
         if (PtrUInt(loc64) < PtrUInt(BufZip)) or
            (loc64^.signature + 1 <> LASTHEADERLOCATOR64_SIGNATURE_INC) or
-           (loc64^.headerOffset + SizeOf(head64^) >= QWord(Offset + Size)) then
+           (loc64^.headerOffset + SizeOf({%H-}head64^) >= QWord(Offset + Size)) then
           raise ESynZip.Create('zip64 header signature not found');
         head64 := @BufZip[loc64^.headerOffset - QWord(Offset)];
         if head64^.signature + 1 <> LASTHEADER64_SIGNATURE_INC then

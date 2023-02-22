@@ -1781,6 +1781,7 @@ type
     function Add(const cert: ICryptCert): TCryptCertUsages;
     /// fast lookup of a certificate per its usage
     function GetUsage(u: TCryptCertUsage; out cert: ICryptCert): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// fast lookup of a certificate per its usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
       {$ifdef HASINLINE} inline; {$endif}

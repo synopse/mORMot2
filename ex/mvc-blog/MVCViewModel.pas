@@ -135,7 +135,8 @@ type
     function ArticleCommit(
       ID: TID;
       const Title, Content: RawUtf8): TMvcAction;
-    property HasFts: boolean read fHasFts write fHasFts;
+    property HasFts: boolean
+      read fHasFts write fHasFts;
   end;
 
 

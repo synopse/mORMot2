@@ -1318,7 +1318,7 @@ type
     // - may return '127.0.0.1'
     procedure SetRemoteIP(var IP: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
-    /// "RemoteIP" value from Call^.LowLevelRemoteIP  but nil for '127.0.0.1'
+    /// "RemoteIP" value from Call^.LowLevelRemoteIP but nil for '127.0.0.1'
     // - won't scan the incoming HTTP headers, but it is usually not needed
     function RemoteIPNotLocal: PUtf8Char;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
@@ -3805,6 +3805,7 @@ end;
 function TRestUriContext.RemoteIPNotLocal: PUtf8Char;
 begin
   if (self <> nil) and
+     (fCall^.LowLevelRemoteIP <> '') and
      (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
     result := pointer(fCall^.LowLevelRemoteIP)
   else
