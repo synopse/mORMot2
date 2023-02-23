@@ -1780,7 +1780,7 @@ type
     // is returned by PerUsage/GetUsage for the actual process
     function Add(const cert: ICryptCert): TCryptCertUsages;
     /// fast lookup of a certificate per its usage
-    function GetUsage(u: TCryptCertUsage; out cert: ICryptCert): boolean;
+    function GetUsage(u: TCryptCertUsage; var cert: ICryptCert): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// fast lookup of a certificate per its usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
@@ -5033,14 +5033,14 @@ begin
 end;
 
 function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
-  out cert: ICryptCert): boolean;
+  var cert: ICryptCert): boolean;
 var
   i: PtrInt;
 begin
   i := Index[u]; // contains index + 1
   if i = 0 then
   begin
-    cert := nil; // circumvent FPC inlining bug
+    cert := nil; // circumvent FPC inlining bug for "out cert"
     result := false;
   end
   else
