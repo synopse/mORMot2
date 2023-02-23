@@ -1584,11 +1584,13 @@ type
   protected
     fServer: TRestServer;
     fLowLevelConnectionID: TRestConnectionID;
+    fLowLevelConnectionOpaque: PRestServerConnectionOpaque;
     fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
     fFakeInterface: Pointer;
     fOpaque: Pointer;
     fRaiseExceptionOnInvokeError: boolean;
+    function CanLog: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;
       const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
       aFakeID: PInterfacedObjectFakeID;
@@ -1611,6 +1613,7 @@ begin
   fServer := aRequest.Server;
   fService := aRequest.Service as TServiceFactoryServer;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
+  fLowLevelConnectionOpaque := aRequest.Call^.LowLevelConnectionOpaque;
   fFakeID := aFakeID;
   inherited Create(aFactory, nil, opt, CallbackInvoke, nil);
   Get(fFakeInterface);
@@ -1629,6 +1632,11 @@ begin
           FakeCallbackRemove(self);
   end;
   inherited Destroy;
+end;
+
+function TInterfacedObjectFakeServer.CanLog: boolean;
+begin
+  result := not IdemPropName(fFactory.InterfaceTypeInfo^.RawName, 'ISynLogCallback');
 end;
 
 function TInterfacedObjectFakeServer.CallbackInvoke(
@@ -1650,7 +1658,7 @@ begin
   if fReleasedOnClientSide then
   begin
     // there is no client side to call any more
-    if not IdemPropName(fFactory.InterfaceTypeInfo^.RawName, 'ISynLogCallback') then
+    if CanLog then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on ' +
         'the client side, so I% callback notification was NOT sent', [self,
         fFactory.InterfaceTypeInfo^.RawName, aMethod.InterfaceDotMethodName], sllWarning);
@@ -1819,7 +1827,7 @@ begin
     fRestServer.AcquireExecution[execSoaByInterface].Safe.Lock;
     try
       if fFakeCallbacks = nil then
-        fFakeCallbacks := TSynObjectListLocked.Create(false);
+        fFakeCallbacks := TSynObjectListLocked.Create({ownobject=}false);
     finally
       fRestServer.AcquireExecution[execSoaByInterface].Safe.UnLock;
     end;
@@ -1853,7 +1861,7 @@ begin
         if Assigned(OnCallbackReleasedOnServerSide) then
           OnCallbackReleasedOnServerSide(self, fake, fake.fFakeInterface);
       end;
-      fFakeCallbacks.Delete(i);
+      fFakeCallbacks.Delete(i); // remove from list, but don't own/free it
     end;
   finally
     fFakeCallbacks.Safe.WriteUnLock;
@@ -1900,6 +1908,7 @@ procedure TServiceContainerServer.RemoveFakeCallback(FakeObj: TObject;
 var
   fake: TInterfacedObjectFakeServer absolute FakeObj;
   params: RawUtf8;
+  withlog: boolean;
 begin
   if fake = nil then
     exit;
@@ -1909,6 +1918,8 @@ begin
   if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
   begin
     // emulate a call to CallbackReleased(callback,'ICallbackName')
+    Ctxt.Call^.LowLevelConnectionID := fake.fLowLevelConnectionID;
+    Ctxt.Call^.LowLevelConnectionOpaque := fake.fLowLevelConnectionOpaque;
     Ctxt.ServiceMethodIndex :=
       fake.fService.fInterface.MethodIndexCallbackReleased;
     Ctxt.ServiceMethod :=
@@ -1921,8 +1932,9 @@ begin
     FormatUtf8('[%,"%"]',
       [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
     Ctxt.ServiceParameters := pointer(params);
+    withlog := fake.canlog; // before ExcuteMethod which may free fake instance
     fake.fService.ExecuteMethod(Ctxt);
-    if not IdemPropNameU(fake.Factory.InterfaceName, 'ISynLogCallback') then
+    if withlog then
       fRestServer.InternalLog('I%() returned %',
         [PInterfaceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName,
          Ctxt.Call^.OutStatus], sllDebug);
@@ -1944,8 +1956,6 @@ begin
      (fFakeCallbacks.Count = 0) then
     exit;
   call.Init;
-  call.LowLevelConnectionID := aConnectionID;
-  call.LowLevelConnectionOpaque := aConnectionOpaque;
   ctxt := TRestServerUriContext.Create(fRestServer, call){%H-};
   try
     fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
