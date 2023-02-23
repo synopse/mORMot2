@@ -5039,7 +5039,10 @@ var
 begin
   i := Index[u]; // contains index + 1
   if i = 0 then
-    result := false
+  begin
+    cert := nil; // circumvent FPC inlining bug
+    result := false;
+  end
   else
   begin
     cert := List[i - 1];
