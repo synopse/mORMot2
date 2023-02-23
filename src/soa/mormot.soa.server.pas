@@ -1699,15 +1699,32 @@ end;
 
 destructor TServiceContainerServer.Destroy;
 var
-  i: PtrInt;
+  i: integer;
+  call: TRestUriParams;
+  ctxt: TRestServerUriContext;
+  fake: ^TInterfacedObjectFakeServer;
 begin
-  if fFakeCallbacks <> nil then
+  if (fFakeCallbacks <> nil) and
+     (fFakeCallbacks.Count <> 0) then
   begin
-    for i := 0 to fFakeCallbacks.Count - 1 do
-      // prevent GPF in TInterfacedObjectFakeServer.Destroy
-      TInterfacedObjectFakeServer(fFakeCallbacks.List[i]).fServer := nil;
-    FreeAndNil(fFakeCallbacks); // do not own objects
+    call.Init;
+    ctxt := TRestServerUriContext.Create(fRestServer, call);
+    try
+      fake := pointer(fFakeCallbacks.List);
+      for i := 1 to fFakeCallbacks.Count do
+      begin
+        // prevent GPF in TInterfacedObjectFakeServer.Destroy
+        fake^.fServer := nil;
+        // notify as to be released (paranoid)
+        if not fake^.fReleasedOnClientSide then
+          RemoveFakeCallback(fake^, ctxt);
+        inc(fake);
+      end;
+    finally
+      ctxt.Free;
+    end;
   end;
+  FreeAndNil(fFakeCallbacks); // note: we don't own the objects
   fRecordVersionCallback := nil; // done after fFakeCallbacks[].fServer := nil
   inherited Destroy;
 end;
