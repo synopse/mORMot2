@@ -7379,7 +7379,7 @@ begin
       [self, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> Sender then
-      // e.g. if length(TRestHttpServer.fDBServers)>1
+      // e.g. if length(TRestHttpServer.fRestServers)>1
       if RunningThread <> nil then
         raise ERestException.CreateUtf8('%.BeginCurrentThread() twice', [self])
       else
@@ -7416,7 +7416,7 @@ begin
   end;
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> nil then
-      // e.g. if length(TRestHttpServer.fDBServers)>1
+      // e.g. if length(TRestHttpServer.fRestServers)>1
       if RunningThread <> Sender then
         raise ERestException.CreateUtf8(
           '%.EndCurrentThread(%) should match RunningThread=%',

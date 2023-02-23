@@ -232,10 +232,10 @@ type
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: RawUtf8;
     fPublicAddress, fPublicPort: RawUtf8;
-    fDBServers: array of TRestHttpOneServer;
-    fDBServerNames: RawUtf8;
-    fDBSingleServer: PRestHttpOneServer;
-    fSafe: TRWLightLock; // protect fDBServers[]
+    fRestServers: array of TRestHttpOneServer;
+    fRestServerNames: RawUtf8;
+    fSingleRestServer: PRestHttpOneServer;
+    fSafe: TRWLightLock; // protect fRestServers[]
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -254,12 +254,12 @@ type
     procedure HttpThreadTerminate(Sender: TThread); virtual;
     // implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
-    function GetDBServerCount: integer;
+    function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetDBServer(Index: Integer): TRestServer;
+    function GetRestServer(Index: Integer): TRestServer;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetDBServerAccessRight(Index: integer; Value: POrmAccessRights);
-    procedure SetDBServer(aIndex: integer; aServer: TRestServer;
+    procedure SetRestServerAccessRight(Index: integer; Value: POrmAccessRights);
+    procedure SetRestServer(aIndex: integer; aServer: TRestServer;
       aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
     function HttpApiAddUri(const aRoot, aDomainName: RawByteString;
       aSecurity: TRestHttpServerSecurity;
@@ -469,21 +469,31 @@ type
     property Use: TRestHttpServerUse
       read fUse;
     /// read-only access to all internal servers
-    property DBServer[Index: integer]: TRestServer
-      read GetDBServer;
+    property RestServer[Index: integer]: TRestServer
+      read GetRestServer;
     /// write-only access to all internal servers access right
     // - can be used to override the default HTTP_DEFAULT_ACCESS_RIGHTS setting
-    property DBServerAccessRight[Index: integer]: POrmAccessRights
-      write SetDBServerAccessRight;
+    property RestServerAccessRight[Index: integer]: POrmAccessRights
+      write SetRestServerAccessRight;
     /// find the first instance of a registered REST server
     // - note that the same REST server may appear several times in this HTTP
     // server instance, e.g. with diverse security options
-    function DBServerFind(aServer: TRestServer): integer;
+    function RestServerFind(aServer: TRestServer): integer;
     /// low-level interception of all incoming requests
     // - this callback is called BEFORE any registered TRestServer.Uri() methods
     // so allow any kind of custom routing or process
     property OnCustomRequest: TOnRestHttpServerRequest
       read fOnCustomRequest write fOnCustomRequest;
+    // backward compatibility methods and properties
+    {$ifndef PUREMORMOT2}
+    function DBServerFind(aServer: TRestServer): integer;
+    property DBServerCount: integer
+      read GetRestServerCount;
+    property DBServer[Index: integer]: TRestServer
+      read GetRestServer;
+    property DBServerAccessRight[Index: integer]: POrmAccessRights
+      write SetRestServerAccessRight;
+    {$endif PUREMORMOT2}
   published
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer,
@@ -494,8 +504,8 @@ type
     property DomainName: RawUtf8
       read fDomainName;
     /// read-only access to the number of registered internal servers
-    property DBServerCount: integer
-      read GetDBServerCount;
+    property RestServerCount: integer
+      read GetRestServerCount;
     /// allow to customize this TRestHttpServer process
     property Options: TRestHttpServerOptions
       read fOptions;
@@ -602,12 +612,12 @@ begin
      (aServer.Model = nil) then
     exit;
   log := fLog.Enter(self, 'AddServer');
-  fSafe.WriteLock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fRestServers[]
   try
-    n := length(fDBServers);
+    n := length(fRestServers);
     for i := 0 to n - 1 do
-      if (fDBServers[i].Security = aSecurity) and
-         (fDBServers[i].Server.Model.
+      if (fRestServers[i].Security = aSecurity) and
+         (fRestServers[i].Server.Model.
            UriMatch(aServer.Model.Root, false) <> rmNoMatch) then
         exit; // register only once per URI Root address and per protocol
     {$ifdef USEHTTPSYS}
@@ -616,32 +626,39 @@ begin
           fUse in HTTP_API_REGISTERING_MODES, false) <> '' then
         exit;
     {$endif USEHTTPSYS}
-    SetLength(fDBServers, n + 1);
-    SetDBServer(n, aServer, aSecurity, aRestAccessRights);
-    fDBServerNames := TrimU(fDBServerNames + ' ' + aServer.Model.Root);
-    fHttpServer.ProcessName := fDBServerNames;
+    SetLength(fRestServers, n + 1);
+    SetRestServer(n, aServer, aSecurity, aRestAccessRights);
+    fRestServerNames := TrimU(fRestServerNames + ' ' + aServer.Model.Root);
+    fHttpServer.ProcessName := fRestServerNames;
     result := true;
   finally
     fSafe.WriteUnLock;
     if log <> nil then
       log.Log(sllHttp, 'AddServer(%,Root=%,Port=%,Public=%:%)=% servers=%',
         [aServer, aServer.Model.Root, fPort, fPublicAddress, fPublicPort,
-         BOOL_STR[result], fDBServerNames], self);
+         BOOL_STR[result], fRestServerNames], self);
   end;
 end;
 
-function TRestHttpServer.DBServerFind(aServer: TRestServer): integer;
+function TRestHttpServer.RestServerFind(aServer: TRestServer): integer;
 begin
-  fSafe.ReadLock; // protect fDBServers[]
+  fSafe.ReadLock; // protect fRestServers[]
   try
-    for result := 0 to Length(fDBServers) - 1 do
-      if fDBServers[result].Server = aServer then
+    for result := 0 to Length(fRestServers) - 1 do
+      if fRestServers[result].Server = aServer then
         exit;
     result := -1;
   finally
     fSafe.ReadUnLock;
   end;
 end;
+
+{$ifndef PUREMORMOT2}
+function TRestHttpServer.DBServerFind(aServer: TRestServer): integer;
+begin
+  result := RestServerFind(aServer);
+end;
+{$endif PUREMORMOT2}
 
 function TRestHttpServer.RemoveServer(aServer: TRestServer): boolean;
 var
@@ -654,28 +671,28 @@ begin
      (aServer.Model = nil) then
     exit;
   log := fLog.Enter(self, 'RemoveServer');
-  fSafe.WriteLock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fRestServers[]
   try
-    n := high(fDBServers);
+    n := high(fRestServers);
     for i := n downto 0 do // may appear several times, with another Security
-      if fDBServers[i].Server = aServer then
+      if fRestServers[i].Server = aServer then
       begin
         {$ifdef USEHTTPSYS}
         if fHttpServer.InheritsFrom(THttpApiServer) then
           if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,
-             fPublicPort, fDBServers[i].Security in SEC_TLS,
+             fPublicPort, fRestServers[i].Security in SEC_TLS,
              fDomainName) <> NO_ERROR then
             log.Log(sllLastError, '%.RemoveUrl(%)',
               [self, aServer.Model.Root], self);
         {$endif USEHTTPSYS}
         for j := i to n - 1 do
-          fDBServers[j] := fDBServers[j + 1];
-        SetLength(fDBServers, n);
+          fRestServers[j] := fRestServers[j + 1];
+        SetLength(fRestServers, n);
         dec(n);
         if n = 1 then
-          fDBSingleServer := pointer(fDBServers)
+          fSingleRestServer := pointer(fRestServers)
         else
-          fDBSingleServer := nil;
+          fSingleRestServer := nil;
         aServer.OnNotifyCallback := nil;
         aServer.SetPublicUri('', '');
         result := true; // don't break here: may appear with another Security
@@ -778,7 +795,7 @@ begin
       for i := 0 to high(aServers) do
         with aServers[i].Model do
         begin
-          fDBServerNames := fDBServerNames + ' ' + Root;
+          fRestServerNames := fRestServerNames + ' ' + Root;
           for j := i + 1 to high(aServers) do
             if aServers[j].Model.UriMatch(Root, false) <> rmNoMatch then
               FormatUtf8('Duplicated Root URI: % and %',
@@ -786,12 +803,12 @@ begin
         end;
     if ErrMsg <> '' then
       raise ERestHttpServer.CreateUtf8(
-        '%.Create(% ): %', [self, fDBServerNames, ErrMsg]);
-    TrimSelf(fDBServerNames);
+        '%.Create(% ): %', [self, fRestServerNames, ErrMsg]);
+    TrimSelf(fRestServerNames);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
-    SetLength(fDBServers, length(aServers));
+    SetLength(fRestServers, length(aServers));
     for i := 0 to high(aServers) do
-      SetDBServer(i, aServers[i], aSecurity, HTTP_DEFAULT_ACCESS_RIGHTS);
+      SetRestServer(i, aServers[i], aSecurity, HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
   // start the actual Server threads
   hso := [];
@@ -821,7 +838,7 @@ begin
     try
       // first try to use fastest http.sys
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fDBServerNames), hso);
+        HttpThreadTerminate, TrimU(fRestServerNames), hso);
       for i := 0 to high(aServers) do
         HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
           fUse in HTTP_API_REGISTERING_MODES, true);
@@ -833,7 +850,7 @@ begin
       begin
         if Assigned(log) then
           log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
-            [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
+            [E, ToText(aUse)^, fHttpServer, fRestServerNames], self);
         FreeAndNilSafe(fHttpServer); // if http.sys initialization failed
         if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
           // propagate fatal exception with no fallback to the sockets server
@@ -848,10 +865,10 @@ begin
     // (on Windows, may be used as fallback if http.sys was unsuccessfull)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000, hso)
+        HttpThreadTerminate, TrimU(fRestServerNames), aThreadPoolCount, 30000, hso)
     else
       raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
-        [self, fDBServerNames, ToText(aUse)^]);
+        [self, fRestServerNames, ToText(aUse)^]);
     if aSecurity = secTLSSelfSigned then
     begin
       InitNetTlsContextSelfSignedServer(net {, caaES256}); // RSA is more common
@@ -886,13 +903,13 @@ begin
   {$endif USEHTTPSYS}
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
+    for i := 0 to high(fRestServers) do
+      fRestServers[i].Server.OnNotifyCallback := NotifyCallback;
   // finish the TRestServer(s) startup
-  for i := 0 to high(fDBServers) do
-    fDBServers[i].Server.ComputeRoutes; // pre-compute URI routes
+  for i := 0 to high(fRestServers) do
+    fRestServers[i].Server.ComputeRoutes; // pre-compute URI routes
   if Assigned(log) then
-    log.Log(sllHttp, '% initialized for %', [fHttpServer, fDBServerNames], self);
+    log.Log(sllHttp, '% initialized for %', [fHttpServer, fRestServerNames], self);
 end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
@@ -904,7 +921,7 @@ begin
   Create(aPort, [aServer], aDomainName, aUse, aThreadPoolCount,
     aSecurity, aAdditionalUrl, aQueueName, aOptions);
   if aRestAccessRights <> nil then
-    DBServerAccessRight[0] := aRestAccessRights;
+    RestServerAccessRight[0] := aRestAccessRights;
 end;
 
 destructor TRestHttpServer.Destroy;
@@ -914,8 +931,8 @@ begin
   log := fLog.Enter(self, 'Destroy');
   if log <> nil then
     log.Log(sllHttp, '% finalized for %',
-      [fHttpServer, Plural('server', length(fDBServers))], self);
-  Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
+      [fHttpServer, Plural('server', length(fRestServers))], self);
+  Shutdown(true); // but don't call fRestServers[i].Server.Shutdown
   FreeAndNilSafe(fHttpServer);
   inherited Destroy;
   fAccessControlAllowOriginsMatch.Free;
@@ -932,15 +949,15 @@ begin
     log := fLog.Enter('Shutdown(%)', [BOOL_STR[noRestServerShutdown]], self);
     fShutdownInProgress := true;
     fHttpServer.Shutdown;
-    fSafe.WriteLock; // protect fDBServers[]
+    fSafe.WriteLock; // protect fRestServers[]
     try
-      for i := 0 to high(fDBServers) do
+      for i := 0 to high(fRestServers) do
       begin
         if not noRestServerShutdown then
-          fDBServers[i].Server.Shutdown;
-        if TMethod(fDBServers[i].Server.OnNotifyCallback).Data = self then
+          fRestServers[i].Server.Shutdown;
+        if TMethod(fRestServers[i].Server.OnNotifyCallback).Data = self then
           // avoid unexpected GPF, and proper TRestServer reuse
-          fDBServers[i].Server.OnNotifyCallback := nil;
+          fRestServers[i].Server.OnNotifyCallback := nil;
       end;
     finally
       fSafe.WriteUnLock;
@@ -948,49 +965,49 @@ begin
   end;
 end;
 
-function TRestHttpServer.GetDBServer(Index: Integer): TRestServer;
+function TRestHttpServer.GetRestServer(Index: Integer): TRestServer;
 begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.ReadLock; // protect fDBServers[]
+  fSafe.ReadLock; // protect fRestServers[]
   try
-    if cardinal(Index) < cardinal(length(fDBServers)) then
-      result := fDBServers[Index].Server;
+    if cardinal(Index) < cardinal(length(fRestServers)) then
+      result := fRestServers[Index].Server;
   finally
     fSafe.ReadUnLock;
   end;
 end;
 
-function TRestHttpServer.GetDBServerCount: integer;
+function TRestHttpServer.GetRestServerCount: integer;
 begin
-  result := length(fDBServers);
+  result := length(fRestServers);
 end;
 
-procedure TRestHttpServer.SetDBServerAccessRight(Index: integer;
+procedure TRestHttpServer.SetRestServerAccessRight(Index: integer;
   Value: POrmAccessRights);
 begin
   if self = nil then
     exit;
-  fSafe.WriteLock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fRestServers[]
   try
     if Value = nil then
       Value := HTTP_DEFAULT_ACCESS_RIGHTS;
-    if cardinal(Index) < cardinal(length(fDBServers)) then
-      fDBServers[Index].RestAccessRights := Value;
+    if cardinal(Index) < cardinal(length(fRestServers)) then
+      fRestServers[Index].RestAccessRights := Value;
   finally
     fSafe.WriteUnLock;
   end;
 end;
 
-procedure TRestHttpServer.SetDBServer(aIndex: integer; aServer: TRestServer;
+procedure TRestHttpServer.SetRestServer(aIndex: integer; aServer: TRestServer;
   aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
 begin
   // note: caller should have made fSafe.WriteLock
   if self = nil then
     exit;
-  if cardinal(aIndex) < cardinal(length(fDBServers)) then
-    with fDBServers[aIndex] do
+  if cardinal(aIndex) < cardinal(length(fRestServers)) then
+    with fRestServers[aIndex] do
     begin
       Server := aServer;
       if (fHttpServer <> nil) and
@@ -1003,10 +1020,10 @@ begin
       else
         RestAccessRights := aRestAccessRights;
     end;
-  if length(fDBServers) = 1 then
-    fDBSingleServer := pointer(fDBServers)
+  if length(fRestServers) = 1 then
+    fSingleRestServer := pointer(fRestServers)
   else
-    fDBSingleServer := nil;
+    fSingleRestServer := nil;
 end;
 
 const
@@ -1112,7 +1129,7 @@ var
 begin
   // validate non-REST kind of requests
   if (self = nil) or
-     (pointer(fDBServers) = nil) or
+     (pointer(fRestServers) = nil) or
      fShutdownInProgress then
   begin
     result := HTTP_NOTFOUND;
@@ -1198,9 +1215,9 @@ begin
     result := HTTP_NOTFOUND; // page not found by default (e.g. wrong URL)
     match := rmNoMatch;
     matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
-    if fDBSingleServer <> nil then
+    if fSingleRestServer <> nil then
       // optimized for the most common case of a single DB server
-      with fDBSingleServer^ do
+      with fSingleRestServer^ do
       begin
         if (Security in SEC_TLS) = tls then
         begin
@@ -1219,11 +1236,11 @@ begin
       end
     else
     begin
-      // thread-safe use of dynamic fDBServers[] array
+      // thread-safe use of dynamic fRestServers[] array
       fSafe.ReadLock;
       try
-        for i := 0 to length(fDBServers) - 1 do
-          with fDBServers[i] do
+        for i := 0 to length(fRestServers) - 1 do
+          with fRestServers[i] do
             if (Security in SEC_TLS) = tls then
             begin
               // registered for http or https
@@ -1286,10 +1303,10 @@ var
 begin
   if self = nil then
     exit;
-  fSafe.WriteLock; // protect fDBServers[]
+  fSafe.WriteLock; // protect fRestServers[]
   try
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.Run.EndCurrentThread(Sender);
+    for i := 0 to high(fRestServers) do
+      fRestServers[i].Server.Run.EndCurrentThread(Sender);
   finally
     fSafe.WriteUnLock;
   end;
@@ -1302,11 +1319,11 @@ begin
   if self = nil then
     exit;
   if CurrentThreadName = '' then
-    SetCurrentThreadName('% %% %', [self, fPort, fDBServerNames, Sender]);
-  fSafe.WriteLock; // protect fDBServers[]
+    SetCurrentThreadName('% %% %', [self, fPort, fRestServerNames, Sender]);
+  fSafe.WriteLock; // protect fRestServers[]
   try
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.Run.BeginCurrentThread(Sender);
+    for i := 0 to high(fRestServers) do
+      fRestServers[i].Server.Run.BeginCurrentThread(Sender);
   finally
     fSafe.WriteUnLock;
   end;
@@ -1413,7 +1430,7 @@ function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
   const aOnWSClosed: TOnWebSocketProtocolClosed): PWebSocketProcessSettings;
 begin
   if (aServer = nil) or
-     (DBServerFind(aServer) < 0) then
+     (RestServerFind(aServer) < 0) then
     raise EWebSockets.CreateUtf8(
       '%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWSEncryptionKey,
@@ -1479,11 +1496,11 @@ begin
     exit;
   // we need to notify all REST servers, since a single connection could
   // in practice redirect to any of them
-  fSafe.ReadLock; // protect fDBServers[]
+  fSafe.ReadLock; // protect fRestServers[]
   try
-    for i := 0 to length(fDBServers) - 1 do
+    for i := 0 to length(fRestServers) - 1 do
     begin
-      services := fDBServers[i].Server.Services;
+      services := fRestServers[i].Server.Services;
       if services <> nil then
         (services as TServiceContainerServer).
           RemoveFakeCallbackOnConnectionClose(aConnectionID, aConnectionOpaque);
