@@ -2224,8 +2224,8 @@ type
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fServiceFactory: TObject; // holds a TServiceFactory instance
-    fParamsSafe: TLightLock; // thread-safe acquisition of fParams
-    fParams: TJsonWriter;
+    fParamsSafe: TLightLock;  // thread-safe acquisition of fParams
+    fParams: TJsonWriter;     // reused if possible between calls
     fNotifyDestroy: TOnFakeInstanceDestroy;
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(

@@ -5108,7 +5108,7 @@ begin
   begin
     FormatUtf8(Format, Args, Msg);
     Add.LogInternalText(Level, Msg, nil, maxInt);
-    {$ifdef OSWINDOWS}
+    {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
     if IsDebuggerPresent then
       {$ifdef CPU64DELPHI}
       DebugBreak;
@@ -5117,9 +5117,9 @@ begin
         int  3
       end;
       {$endif CPU64DELPHI}
-    {$else not OSWINDOWS}
+    {$else not ISDELPHI}
     ConsoleWrite('%  ', [Msg], LOG_CONSOLE_COLORS[Level], {noLF=}true);
-    {$endif OSWINDOWS}
+    {$endif ISDELPHI}
   end;
 end;
 
