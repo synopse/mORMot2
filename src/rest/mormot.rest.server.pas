@@ -3129,7 +3129,7 @@ var
   fakeid: PtrInt;
 begin
   if not Assigned(Server.OnNotifyCallback) then
-    raise EServiceException.CreateUtf8('% does not implement callbacks for I%',
+    raise EServiceException.CreateUtf8('% does not implement callbacks for %',
       [Server, ParamInterfaceInfo.Name]);
   // Par is the callback ID transmitted from the client side
   fakeid := Ctxt.ParseInteger;

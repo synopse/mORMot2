@@ -1932,7 +1932,9 @@ begin
   fake.fReleasedOnClientSide := true;
   if Assigned(OnCallbackReleasedOnClientSide) then
     OnCallbackReleasedOnClientSide(self, fake, fake.fFakeInterface);
-  if fake.fService.fInterface.MethodIndexCallbackReleased >= 0 then
+  if (fake.fService.fInterface.MethodIndexCallbackReleased >= 0) and
+     (fRestServer <> nil) and
+     Assigned(fRestServer.OnNotifyCallback) then
   begin
     // emulate a call to CallbackReleased(callback,'ICallbackName')
     Ctxt.Call^.LowLevelConnectionID := fake.fLowLevelConnectionID;
