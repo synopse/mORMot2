@@ -1952,6 +1952,7 @@ begin
       [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
     Ctxt.ServiceParameters := pointer(params);
     withlog := fake.canlog; // before ExcuteMethod which may free fake instance
+    fake._AddRef; // ExecuteMethod() calls fake._Release on its parameter
     fake.fService.ExecuteMethod(Ctxt);
     if withlog then
       fRestServer.InternalLog('I%() returned %',
