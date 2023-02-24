@@ -2536,6 +2536,10 @@ function CurrentNonce(Ctxt: TRestServerUriContext;
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64 = 0); overload;
 
+/// returns a safe 256-bit nonce as binary, changing every 5 minutes
+function CurrentNonce256(Previous: boolean): THash256;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// this function can be exported from a DLL to remotely access to a TRestServer
 // - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
 // - return the HTTP status, e.g. 501 HTTP_NOTIMPLEMENTED if no
@@ -5144,6 +5148,11 @@ end;
 function CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean): RawUtf8;
 begin
   CurrentNonce(Ctxt, Previous, @result, nil);
+end;
+
+function CurrentNonce256(Previous: boolean): THash256;
+begin
+  CurrentNonce(nil, Previous, nil, @result, GetTickCount64);
 end;
 
 
