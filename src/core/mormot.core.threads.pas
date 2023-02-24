@@ -742,8 +742,9 @@ type
     // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUtf8;
       const aOnBeforeExecute: TOnNotifyThread = nil;
-      const aOnAfterExecute: TOnNotifyThread = nil;
-      aStats: TSynMonitorClass = nil); reintroduce; virtual;
+      aOnAfterExecute: TOnNotifyThread = nil;
+      aStats: TSynMonitorClass = nil;
+      aLogClass: TSynLogClass = nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// define a process method for a task running on a periodic number of seconds
@@ -2407,12 +2408,16 @@ var
   ProcessSystemUse: TSystemUse;
 
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
-  const aOnBeforeExecute: TOnNotifyThread;
-  const aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
+  const aOnBeforeExecute: TOnNotifyThread; aOnAfterExecute: TOnNotifyThread;
+  aStats: TSynMonitorClass; aLogClass: TSynLogClass);
 begin
   fTasks.DynArray.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),
     fTask, @fTasks.Count);
-  inherited Create(aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
+  if not Assigned(aOnAfterExecute) and
+     Assigned(aLogClass) then // minimal TSynLog support
+    aOnAfterExecute := aLogClass.Family.OnThreadEnded;
+  inherited Create(
+    aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
 end;
 
 destructor TSynBackgroundTimer.Destroy;
