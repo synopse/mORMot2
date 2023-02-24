@@ -1780,9 +1780,11 @@ type
     // is returned by PerUsage/GetUsage for the actual process
     function Add(const cert: ICryptCert): TCryptCertUsages;
     /// fast lookup of a certificate per its usage
+    // - i.e. returns the last/weakest certificate having the supplied usage
     function GetUsage(u: TCryptCertUsage; var cert: ICryptCert): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// fast lookup of a certificate per its usage
+    // - i.e. returns the last/weakest certificate having the supplied usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
       {$ifdef HASINLINE} inline; {$endif}
     /// save all items as a CRLF separated list of cccCertOnly PEM certificates

@@ -2526,6 +2526,7 @@ function ServiceRunningContext: PServiceRunningContext;
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
+// - Ctxt may be nil (only used for faster GetTickCount64)
 function CurrentNonce(Ctxt: TRestServerUriContext;
   Previous: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -2533,7 +2534,7 @@ function CurrentNonce(Ctxt: TRestServerUriContext;
 /// returns a safe 256-bit nonce, changing every 5 minutes
 // - can return the (may be cached) value as hexadecimal text or THash256 binary
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
-  Nonce: PRawUtf8; Nonce256: PHash256); overload;
+  Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64 = 0); overload;
 
 /// this function can be exported from a DLL to remotely access to a TRestServer
 // - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
@@ -5111,11 +5112,13 @@ begin
 end;
 
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
-  Nonce: PRawUtf8; Nonce256: PHash256);
+  Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64);
 var
   ticks: cardinal;
 begin
-  ticks := Ctxt.TickCount64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
+  if Tix64 = 0 then
+    Tix64 := Ctxt.TickCount64;
+  ticks := Tix64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
   if Previous then
     dec(ticks);
   with ServerNonceCache[Previous] do
