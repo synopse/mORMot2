@@ -457,8 +457,6 @@ type
     end;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     procedure SetLogClass(aClass: TSynLogClass); virtual;
-    /// compute the server time stamp offset from the given date/time
-    procedure SetServerTimestamp(const Value: TTimeLog);
     /// wrapper methods to access fAcquireExecution[]
     function GetAcquireExecutionMode(
       Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
@@ -555,6 +553,9 @@ type
     // - inherited classes may override this method, or set the appropriate
     // value in Offset field
     function GetServerTimestamp(tix64: Int64): TTimeLog; virtual;
+    /// set the server time stamp offset from the given date/time
+    // - if Value is 0, the current local UTC time will be used
+    procedure SetServerTimestamp(const Value: TTimeLog);
 
     /// main access to the IRestOrm methods of this instance
     property Orm: IRestOrm
@@ -2101,7 +2102,10 @@ end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
 begin
-  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
+  if Value = 0 then
+    fServerTimestamp.Offset := 0
+  else
+    fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
   if fServerTimestamp.Offset = 0 then
     fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
 end;
