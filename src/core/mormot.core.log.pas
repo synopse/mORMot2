@@ -263,9 +263,11 @@ const
     ' dddIN ',  // sllDDDInfo
     ' mon   '); // sllMonitoring
 
+var
   /// RGB colors corresponding to each logging level
   // - matches the TColor values, as used by the VCL
   // - first array is for the background, second is for the text (black/white)
+  // - is defined as var and not const to allow customization at runtime
   LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
    ($FFFFFF,  // sllNone
     $DCC0C0,  // sllInfo
@@ -335,6 +337,7 @@ const
 
   /// console colors corresponding to each logging level
   // - to be used with mormot.core.os TextColor()
+  // - is defined as var and not const to allow customization at runtime
   LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
     ccLightGray,    // sllNone
     ccWhite,        // sllInfo
@@ -369,6 +372,7 @@ const
     ccWhite,        // sllDDDInfo
     ccLightBlue);   // sllMonitoring
 
+const
   /// how TLogFilter map TSynLogInfo events
   LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
     [],                                                       // lfNone
