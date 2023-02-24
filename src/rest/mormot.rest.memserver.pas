@@ -183,11 +183,10 @@ type
     constructor Create(aModel: TOrmModel;
       const aFileName: TFileName; aBinaryFile: boolean = false;
       aHandleUserAuthentication: boolean = false); reintroduce; overload; virtual;
-  published
     /// this method-based service will be accessible from PUT ModelRoot/Flush,
     // and will write any modification into file
     // - method parameters signature matches TOnRestServerCallBack type
-    // - do nothing if file name was not assigned
+    // - do nothing if file name was not assigned, or the Model is void
     // - can be used from a remote client to ensure that any Add/Update/Delete
     // will be stored to disk, via
     // ! aClient.CallBackPut('Flush','',dummy)
@@ -399,24 +398,24 @@ end;
 procedure TRestOrmServerFullMemory.UpdateToFile;
 const
   CHARS: array[0..6] of AnsiChar = '[{":,}]';
-                                 // 0123456
+  // for S.WriteBuffer(): as CHARS[ 0123456 ]
 var
   S: TStream;
   t: PtrInt;
-  Modified: boolean;
+  modified: boolean;
   timer: TPrecisionTimer;
 begin
   if (self = nil) or
      (FileName = '') then
     exit;
-  Modified := false;
+  modified := false;
   for t := 0 to fStaticDataCount - 1 do
     if TRestStorageInMemory(fStaticData[t]).Modified then
     begin
-      Modified := true;
+      modified := true;
       break;
     end;
-  if not Modified then
+  if not modified then
     exit;
   timer.Start;
   S := TFileStreamEx.Create(fFileName, fmCreate);
@@ -666,6 +665,8 @@ constructor TRestServerFullMemory.Create(aModel: TOrmModel;
   aHandleUserAuthentication: boolean);
 begin
   inherited Create(aModel, aHandleUserAuthentication);
+  if not (rsoNoTableURI in fOptions) then
+    ServiceMethodRegister('Flush', Flush, false, [mPUT]);
   TRestOrmServerFullMemory.Create(self); // assign the ORM in-memory engine
 end;
 
@@ -673,6 +674,8 @@ constructor TRestServerFullMemory.Create(aModel: TOrmModel;
   const aFileName: TFileName; aBinaryFile, aHandleUserAuthentication: boolean);
 begin
   inherited Create(aModel, aHandleUserAuthentication);
+  if not (rsoNoTableURI in fOptions) then
+    ServiceMethodRegister('Flush', Flush, false, [mPUT]);
   TRestOrmServerFullMemory.Create(self, aFileName, aBinaryFile);
 end;
 
@@ -694,11 +697,10 @@ end;
 
 procedure TRestServerFullMemory.Flush(Ctxt: TRestServerUriContext);
 begin
-  if Ctxt.Method = mPUT then
-  begin
-    (fOrmInstance as TRestOrmServerFullMemory).UpdateToFile;
-    Ctxt.Success;
-  end;
+  if Ctxt.Method <> mPUT then
+    exit;
+  (fOrmInstance as TRestOrmServerFullMemory).UpdateToFile;
+  Ctxt.Success;
 end;
 
 // backward compatibility types redirections

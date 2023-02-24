@@ -249,8 +249,6 @@ type
     function GetInputStringOrVoid(const ParamName: RawUtf8): string;
     function GetResourceFileName: TFileName;
     procedure InternalSetTableFromTableIndex(Index: PtrInt); virtual;
-    procedure InternalSetTableFromTableName(
-      TableName: PUtf8Char; TableNameLen: PtrInt); virtual;
     procedure InternalExecuteSoaByInterface; virtual;
     procedure InternalExecuteSoaByInterfaceComputeResult;
     procedure ComputeStatsAfterCommand;
@@ -1777,10 +1775,10 @@ type
     fSessionCounterMin: cardinal;
     fTimestampInfoCacheTix: cardinal;
     fOnIdleLastTix: cardinal;
-    fPublishedMethodTimestampIndex: byte;
-    fPublishedMethodAuthIndex: byte;
-    fPublishedMethodBatchIndex: byte;
-    fPublishedMethodStatIndex: byte;
+    fPublishedMethodTimestampIndex: ShortInt;
+    fPublishedMethodAuthIndex: ShortInt;
+    fPublishedMethodBatchIndex: ShortInt;
+    fPublishedMethodStatIndex: ShortInt;
     fSessionAuthentication: TRestServerAuthenticationDynArray;
     fPublishedMethod: TRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
@@ -2403,7 +2401,7 @@ type
     property AuthGroupClass: TAuthGroupClass
       read fAuthGroupClass;
 
-    { standard method-based services }
+    { standard method-based services - not published because added if needed }
   public
     /// REST service accessible from the ModelRoot/Timestamp URI
     // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
@@ -2780,23 +2778,6 @@ begin
   if rsoCookieIncludeRootPath in Server.fOptions then
     // case-sensitive Path=/ModelRoot
     fCall^.OutHead := fCall^.OutHead + '; Path=/';
-end;
-
-procedure TRestServerUriContext.InternalSetTableFromTableName(
-  TableName: PUtf8Char; TableNameLen: PtrInt);
-begin
-  fTableEngine := TRestOrm(Server.fOrmInstance);
-  if rsoNoTableURI in Server.Options then
-    fTableIndex := -1
-  else
-    InternalSetTableFromTableIndex(
-      Server.fModel.GetTableIndexPtrLen(TableName, TableNameLen));
-  if fTableIndex < 0 then
-    exit;
-  fStaticOrm := TRestOrmServer(Server.fOrmInstance).
-    GetStaticTableIndex(TableIndex, fStaticKind);
-  if fStaticOrm <> nil then
-    fTableEngine := StaticOrm;
 end;
 
 procedure TRestServerUriContext.InternalSetTableFromTableIndex(Index: PtrInt);
@@ -6035,8 +6016,6 @@ begin
   fAuthUserClass := TAuthUser;
   fAuthGroupClass := TAuthGroup;
   fModel := aModel; // we need this property ASAP
-  if fModel.TablesMax < 0 then
-    fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fSessionClass := TAuthSession;
   if aHandleUserAuthentication then
     // default mORMot authentication schemes
@@ -6045,6 +6024,8 @@ begin
       {$ifdef DOMAINRESTAUTH},
       TRestServerAuthenticationSspi
       {$endif DOMAINRESTAUTH}]);
+  if fModel.TablesMax < 0 then
+    fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   fServicesRouting := TRestServerRoutingRest;
   inherited Create(aModel);
@@ -6061,12 +6042,18 @@ begin
   // manually add default method-based services
   fPublishedMethodTimestampIndex := ServiceMethodRegister(
     'timestamp', Timestamp, true, [mGET]);
-  fPublishedMethodAuthIndex := ServiceMethodRegister(
-    'auth', Auth, {bypassauth=}true, [mGET]);
-  fPublishedMethodBatchIndex := ServiceMethodRegister(
-    'batch', Batch, false, [mPUT, mPOST]);
+  if aHandleUserAuthentication then
+    fPublishedMethodAuthIndex := ServiceMethodRegister(
+      'auth', Auth, {bypassauth=}true, [mGET])
+  else
+    fPublishedMethodAuthIndex := -1;
+  if rsoNoTableURI in fOptions then
+    fPublishedMethodBatchIndex := -1
+  else
+    fPublishedMethodBatchIndex := ServiceMethodRegister(
+      'batch', Batch, false, [mPUT, mPOST]);
   ServiceMethodRegister(
-    'cacheflush', CacheFlush, false, [mGET, mPOST]);
+    'cacheflush', CacheFlush, false, [mGET, mPOST]); // for ORM and callbacks
   fPublishedMethodStatIndex := ServiceMethodRegister(
     'stat', Stat, false, [mGET]);
 end;
