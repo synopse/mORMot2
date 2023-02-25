@@ -4698,6 +4698,10 @@ begin
     begin
       sa^.ParamName := a^.ParamName;
       sa^.ArgTypeName := a^.TypeName;
+      if a^.TypeInfo = nil then
+        raise EInterfaceFactory.CreateUtf8(
+          '%.AddMethodsFromTypeInfo: parameter %: % in method % has no RTTI',
+          [self, a^.ParamName^, a^.TypeName^, m^.Name]);
       sa^.ArgRtti := Rtti.RegisterType(a^.TypeInfo) as TRttiJson;
       sa^.ValueDirection := TInterfaceMethodValueDirection(a^.Direction);
       inc(sa);
