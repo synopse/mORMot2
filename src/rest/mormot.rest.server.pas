@@ -4478,11 +4478,11 @@ begin
     nam := met^.InterfaceDotMethodName;
     if rn = rnInterfaceClientID then
       nam := nam + '/<int:clientid>';
-    // URI sent as GET/POST /Model/Interface.Method[/ClientDrivenID]
-    Router.Setup([mGET, mPOST], nam,
+    // URI sent as /Model/Interface.Method[/ClientDrivenID]
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam,
       rn, nil, nil, ndx, met^.InterfaceService);
-    // URI sent as GET/POST /Model/Interface/Method[/ClientDrivenID]
-    Router.Setup([mGET, mPOST], StringReplaceChars(nam, '.', '/'),
+    // URI sent as /Model/Interface/Method[/ClientDrivenID]
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], StringReplaceChars(nam, '.', '/'),
       rn, nil, nil, ndx, met^.InterfaceService);
   end;
 end;
