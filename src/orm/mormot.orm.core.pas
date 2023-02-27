@@ -4543,6 +4543,7 @@ type
     // - you should not have to call it in normal use cases
     function PrepareForSending(out Data: RawUtf8): boolean; virtual;
     /// just a wrapper around Rest.BatchSend
+    // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     function Send: integer;
       {$ifdef HASINLINE} inline; {$endif}
     /// read only access to the associated TRest instance

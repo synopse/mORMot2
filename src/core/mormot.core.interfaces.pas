@@ -4698,7 +4698,7 @@ begin
     begin
       sa^.ParamName := a^.ParamName;
       sa^.ArgTypeName := a^.TypeName;
-      if a^.TypeInfo = nil then
+      if a^.TypeInfo = nil then // happens e.g. for enumerates with values
         raise EInterfaceFactory.CreateUtf8(
           '%.AddMethodsFromTypeInfo: parameter %: % in method %.% has no RTTI',
           [self, a^.ParamName^, a^.TypeName^, info.Name, m^.Name]);

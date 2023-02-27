@@ -2540,6 +2540,14 @@ procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
 function CurrentNonce256(Previous: boolean): THash256;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// validate a 256-bit binary nonce against current or previous nonce
+function IsCurrentNonce(Ctxt: TRestServerUriContext;
+  const Nonce256: THash256): boolean; overload;
+
+/// validate a 256-bit hexadecimal nonce against current or previous nonce
+function IsCurrentNonce(Ctxt: TRestServerUriContext;
+  const Nonce: RawUtf8): boolean; overload;
+
 /// this function can be exported from a DLL to remotely access to a TRestServer
 // - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
 // - return the HTTP status, e.g. 501 HTTP_NOTIMPLEMENTED if no
@@ -5153,6 +5161,31 @@ end;
 function CurrentNonce256(Previous: boolean): THash256;
 begin
   CurrentNonce(nil, Previous, nil, @result, GetTickCount64);
+end;
+
+function IsCurrentNonce(Ctxt: TRestServerUriContext;
+  const Nonce256: THash256): boolean;
+var
+  n: THash256;
+begin
+  result := true;
+  CurrentNonce(Ctxt, {previous=}false, nil, @n);
+  if IsEqual(n, Nonce256) then
+    exit;
+  CurrentNonce(Ctxt, {previous=}true, nil, @n);
+  if IsEqual(n, Nonce256) then
+    exit;
+  result := false;
+end;
+
+function IsCurrentNonce(Ctxt: TRestServerUriContext;
+  const Nonce: RawUtf8): boolean;
+var
+  n: THash256;
+begin
+  result := (length(Nonce) = SizeOf(n) * 2) and
+            HexToBin(pointer(nonce), @n, SizeOf(n)) and
+            IsCurrentNonce(Ctxt, n);
 end;
 
 
