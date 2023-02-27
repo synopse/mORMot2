@@ -1116,15 +1116,15 @@ begin
   {$ifndef NOPATCHRTL}
   RedirectCode(@system.Move, @MoveFast);
   RedirectCode(@system.FillChar, @FillCharFast);
-  PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
-  PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
-  PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $7f); // fpclen=$12f
+  PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17);      // fpclen=$2f
+  PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27);       // fpclen=$3f
+  PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);           // fpclen=$3f
+  PatchCode(@fpc_ansistr_compare, @_ansistr_compare, $7f);        // fpclen=$12f
   PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
-  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
-  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
-  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);         // fpc=$3f
-  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);    // fpc=$2f
+  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);       // fpc=$2f
+  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);        // fpc=$3f
+  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);            // fpc=$3f
+  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);        // fpc=$2f
   PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);

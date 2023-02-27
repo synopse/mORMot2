@@ -2467,6 +2467,8 @@ type
     /// read existing settings from a JSON or INI file file
     function LoadFromFile(const aFileName: TFileName;
       const aSectionName: RawUtf8 = 'Main'): boolean; virtual;
+    /// just a wrapper around ExtractFilePath(FileName);
+    function FolderName: TFileName;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
     // - will use the INI format if it was used at loading, or fsoWriteIni is set
     procedure SaveIfNeeded; virtual;
@@ -11315,6 +11317,14 @@ begin
   result := LoadFromJson(fInitialJsonContent, aSectionName);
   if not result then
     fInitialJsonContent := ''; // file was neither valid JSON nor INI: ignore
+end;
+
+function TSynJsonFileSettings.FolderName: TFileName;
+begin
+  if self = nil then
+    result := ''
+  else
+    result := ExtractFilePath(fFileName);
 end;
 
 procedure TSynJsonFileSettings.SaveIfNeeded;

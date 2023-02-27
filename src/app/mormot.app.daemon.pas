@@ -205,6 +205,15 @@ type
     procedure Resume; virtual;
     /// call Stop, finalize the instance, and its settings
     destructor Destroy; override;
+    /// the folder which was defined to contain this daemon's data
+    property WorkFolderName: TFileName
+      read fWorkFolderName;
+    /// the folder which was defined to contain this daemon's settings
+    // - just a wrapper around ExtractFilePath(fSettings.FileName)
+    function SettingsFolderName: TFileName;
+    /// the folder which was defined to contain this daemon's logs
+    // - just a wrapper to retrieve fSettings.LogPath
+    function LogFolderName: TFileName;
   published
     /// if this instance was run as /console or /verb
     property ConsoleMode: boolean
@@ -328,6 +337,24 @@ begin
   Stop;
   inherited Destroy;
   FreeAndNil(fSettings);
+end;
+
+function TSynDaemon.SettingsFolderName: TFileName;
+begin
+  if (self = nil) or
+     (fSettings = nil) then
+    result := ''
+  else
+    result := fSettings.FolderName;
+end;
+
+function TSynDaemon.LogFolderName: TFileName;
+begin
+  if (self = nil) or
+     (fSettings = nil) then
+    result := ''
+  else
+    result := fSettings.LogPath;
 end;
 
 procedure TSynDaemon.Resume;

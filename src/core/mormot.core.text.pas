@@ -1011,7 +1011,7 @@ type
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal); overload;
     /// append some UTF-8 content to the buffer, with no JSON escape
-    // - if supplied json is '', will write 'null'
+    // - if supplied json is '', will write 'null' so that valid JSON is written
     // - redirect to AddNoJsonEscape() otherwise
     procedure AddRawJson(const json: RawJson);
     /// append a line of text with CR+LF at the end
