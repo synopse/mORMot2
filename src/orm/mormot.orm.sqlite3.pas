@@ -2180,7 +2180,9 @@ begin
   props := Model.TableProps[TableModelIndex].Props;
   if props.Fields.IndexByName(SetFieldName) < 0 then
     exit;
-  if IsRowID(pointer(WhereFieldName)) then
+  if WhereFieldName = '' then
+    whereid := -1 // update all
+  else if IsRowID(pointer(WhereFieldName)) then
   begin
     whereid := GetInt64(Pointer(WhereValue));
     if whereid <= 0 then
@@ -2198,12 +2200,18 @@ begin
       SetLength(ID, 1);
       ID[0] := whereid;
     end
+    else if whereid < 0 then
+    begin
+      if not InternalExecute(FormatUtf8('select RowID from %',
+          [props.SqlTableName]), true, nil, nil, @ID) then
+        exit;
+    end
     else if not InternalExecute(FormatUtf8('select RowID from % where %=:(%):',
        [props.SqlTableName, WhereFieldName, WhereValue]), true, nil, nil, @ID) then
-      exit
-    else if ID = nil then
+      exit;
+    if ID = nil then
     begin
-      result := true; // nothing to update, but return success
+      result := true; // nothing to update, so will return success
       exit;
     end;
     for i := 0 to high(ID) do
@@ -2238,9 +2246,13 @@ begin
   end
   else if (whereid > 0) and
           not RecordCanBeUpdated(props.Table, whereid, oeUpdate) then
+    // limitation: will only check for update when RowID is provided
     exit
-  else // limitation: will only check for update when RowID is provided
-    result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
+  else if whereid < 0 then
+    result := ExecuteFmt('UPDATE % SET %=:(%):', // update ALL
+      [props.SqlTableName, SetFieldName, SetValue])
+  else
+    result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):', // update WHERE
       [props.SqlTableName, SetFieldName, SetValue, WhereFieldName, WhereValue]);
 end;
 

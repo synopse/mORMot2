@@ -1570,14 +1570,42 @@ end;
 function TRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
-  rows: ISqlDBRows;
-  ExtWhereFieldName, json: RawUtf8;
+  ExtWhereFieldName: RawUtf8;
+
+  procedure EventUpdateRows(const Fmt: RawUtf8; const Args: array of const);
+  var
+    rows: ISqlDBRows;
+    json: RawUtf8;
+  begin
+    rows := ExecuteInlined(Fmt, Args, true);
+    if rows = nil then
+      exit;
+    JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
+    while rows.Step do
+      Owner.InternalUpdateEvent(
+        oeUpdate, TableModelIndex, rows.ColumnInt(0), json, nil, nil);
+    rows.ReleaseRows;
+  end;
+
 begin
   if (TableModelIndex < 0) or
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     result := false
   else
     with fStoredClassMapping^ do
+    if WhereFieldName = '' then
+    begin
+      result := ExecuteInlined('update % set %=:(%):',
+        [fTableName, InternalToExternal(SetFieldName), SetValue], false) <> nil;
+      if result and
+         (Owner <> nil) then
+      begin
+        if Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) then
+          EventUpdateRows('select % from %', [RowIDFieldName, fTableName]);
+        Owner.FlushInternalDBCache;
+      end;
+    end
+    else
     begin
       ExtWhereFieldName := InternalToExternal(WhereFieldName);
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
@@ -1587,17 +1615,8 @@ begin
          (Owner <> nil) then
       begin
         if Owner.InternalUpdateEventNeeded(oeUpdate, TableModelIndex) then
-        begin
-          rows := ExecuteInlined('select % from % where %=:(%):',
-            [RowIDFieldName, fTableName, ExtWhereFieldName, WhereValue], true);
-          if rows = nil then
-            exit;
-          JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
-          while rows.Step do
-            Owner.InternalUpdateEvent(
-              oeUpdate, TableModelIndex, rows.ColumnInt(0), json, nil, nil);
-          rows.ReleaseRows;
-        end;
+          EventUpdateRows('select % from % where %=:(%):',
+            [RowIDFieldName, fTableName, ExtWhereFieldName, WhereValue]);
         Owner.FlushInternalDBCache;
       end;
     end;

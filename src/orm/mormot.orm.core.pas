@@ -825,8 +825,9 @@ type
     // - only one single field shall be specified in FieldValue, but could
     // be of any kind of value - for BLOBs, you should better use UpdateBlob()
     // - only one single field shall be specified in WhereFieldValue, but could
-    // be of any kind of value - for security reasons, void WHERE clause will
-    // be rejected
+    // be of any kind of value
+    // - warning: void WHERE clause won't be rejected, but interpreted as a
+    // "UPDATE ... from ...", i.e. modifying ALL rows of the table
     // - return true on success
     // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
@@ -851,7 +852,8 @@ type
     // - implements REST PUT collection with one field value on a one where value
     // - any value can be set in FieldValue, but for BLOBs, you should better
     // use UpdateBlob()
-    // - for security reasons, void WHERE clause will be rejected
+    // - warning: void WHERE clause won't be rejected, but interpreted as a
+    // "UPDATE ... from ...", i.e. modifying ALL rows of the table
     // - return true on success
     // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties, nor the
