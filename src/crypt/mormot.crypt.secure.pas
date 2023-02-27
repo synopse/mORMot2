@@ -2889,7 +2889,8 @@ end;
 class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
   PlainPasswordLen: integer; CustomKey: cardinal): SpiUtf8;
 begin
-  result := ComputePassword(BinToBase64uri(PlainPassword, PlainPasswordLen));
+  result := ComputePassword(
+    BinToBase64uri(PlainPassword, PlainPasswordLen), CustomKey);
 end;
 
 class function TSynPersistentWithPassword.ComputePlainPassword(
@@ -2918,7 +2919,11 @@ end;
 
 function TSynPersistentWithPassword.GetPassWordPlain: SpiUtf8;
 begin
-  result := GetPassWordPlainInternal('');
+  if (self = nil) or
+     (fPassWord = '') then
+    result := ''
+  else
+    result := GetPassWordPlainInternal('');
 end;
 
 function TSynPersistentWithPassword.GetPassWordPlainInternal(
