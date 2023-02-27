@@ -3251,9 +3251,9 @@ const
     'EVP_MD_CTX_free',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1.1 alternate names
     'EVP_PKEY_type',
-    'EVP_PKEY_id',
-    'EVP_PKEY_base_id',
-    'EVP_PKEY_bits',
+    'EVP_PKEY_get_id EVP_PKEY_id',
+    'EVP_PKEY_get_base_id EVP_PKEY_base_id',
+    'EVP_PKEY_get_bits EVP_PKEY_bits',
     'EVP_PKEY_free',
     'EVP_PKEY_decrypt_init',
     'EVP_PKEY_decrypt',
