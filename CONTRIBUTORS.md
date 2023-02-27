@@ -58,6 +58,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Martin Doyle
 - Martin Eckes
 - Martin Suer
+- Mateus Abade
 - Matkov
 - Maxim Masiutin
 - Mazinsw

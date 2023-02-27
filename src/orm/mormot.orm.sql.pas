@@ -1020,6 +1020,7 @@ begin
      (BATCH[Method] in fProperties.BatchSendingAbilities) then
   begin
     if (boMayHaveBlob in BatchOptions) and
+       (Method <> mDELETE) and
        fProperties.NoBlobBindArray then
       exit; // slower but safer access with no array binding
     StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ExtBatchStart' {$endif});
