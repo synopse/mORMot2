@@ -980,6 +980,11 @@ begin
   result := TPollSocketSelect;
 end;
 
+function NewEventFD: IEventFD;
+begin
+  result := nil; // unsupported on Windows
+end;
+
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 

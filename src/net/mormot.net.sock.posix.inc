@@ -10,7 +10,8 @@ uses
   termio,
   sockets,
   {$ifdef OSLINUXANDROID}
-  linux, // for epoll
+  linux,   // for epoll
+  syscall, // for eventfd()
   {$endif OSLINUXANDROID}
   initc; // link clib='c' for our socket purpose
 
@@ -1007,6 +1008,11 @@ begin
   PollSocketClass := TPollSocketPoll;
 end;
 
+function NewEventFD: IEventFD;
+begin
+  result := nil; // unsupported on non-Linux POSIX systems
+end;
+
 {$else}
 
 type
@@ -1196,6 +1202,104 @@ function PollSocketClass: TPollSocketClass;
 begin
   PollSocketClass := TPollSocketEpoll;
 end;
+
+// eventfd() is only tested on Linux X86_64 by now
+
+{$ifdef OSLINUXX64}
+const
+  EFD_SEMAPHORE = $00000001;
+  EFD_NONBLOCK  = O_NONBLOCK;
+  EFD_CLOEXEC   = O_CLOEXEC;
+
+  // exists since Kernel 2.6.27
+  syscall_nr_eventfd2 = 290;
+  // = 328 on i386
+  // = 356 on AARM64
+
+function eventfd(initval, flags: cardinal): integer; inline;
+begin
+  result := do_syscall(syscall_nr_eventfd2, TSysParam(initval), TSysParam(flags));
+end;
+
+type
+  TLinuxEventFD = class(TInterfacedObject, IEventFD)
+  public
+    Handle: integer;
+    constructor Create(h: integer);
+    destructor Destroy; override;
+    // IEventFD methods
+    function WaitFor(ms: integer): boolean;
+    function GetNext: boolean;
+    procedure SetEvent(count: integer);
+  end;
+
+constructor TLinuxEventFD.Create(h: integer);
+begin
+  Handle := h;
+end;
+
+destructor TLinuxEventFD.Destroy;
+begin
+  fpClose(Handle);
+  inherited Destroy;
+end;
+
+function TLinuxEventFD.WaitFor(ms: integer): boolean;
+var
+  p: TPollFD;
+begin
+  p.fd := Handle;
+  p.events := POLLIN or POLLPRI;
+  p.revents := 0;
+  result := (poll(@p, 1, ms) > 0) and
+            ((p.revents and (POLLIN or POLLPRI)) <> 0);
+end;
+
+function TLinuxEventFD.GetNext: boolean;
+var
+  cnt: Int64;
+begin
+  { If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
+    then a read returns 8 bytes containing the value 1, and the counter's value
+    is decremented by 1 }
+  cnt := 0;
+  result := (fpRead(Handle, cnt, SizeOf(cnt)) = SizeOf(cnt)) and
+            (cnt = 1);
+end;
+
+procedure TLinuxEventFD.SetEvent(count: integer);
+var
+  cnt: Int64;
+begin
+  cnt := count;
+  fpWrite(Handle, cnt, SizeOf(cnt));
+end;
+
+function NewEventFD: IEventFD;
+var
+  h: integer;
+begin
+  h := 0;
+  if (OSVersion32.utsrelease[2] > 2) or
+     ((OSVersion32.utsrelease[2] = 2) and
+      ((OSVersion32.utsrelease[1] > 6) or
+       ((OSVersion32.utsrelease[1] = 6) and
+        (OSVersion32.utsrelease[0] >= 27)))) then // need kernel >= 2.6.27
+    h := eventfd(0, EFD_NONBLOCK or EFD_SEMAPHORE);
+  if ValidHandle(h) then
+    result := TLinuxEventFD.Create(h)
+  else
+    result := nil;
+end;
+
+{$else}
+
+function NewEventFD: IEventFD;
+begin
+  result := nil; // unsupported platform
+end;
+
+{$endif OSLINUXX64}
 
 {$endif USEPOLL}
 

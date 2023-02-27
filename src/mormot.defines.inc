@@ -260,6 +260,9 @@
         {$define OSLINUX}       // e.g. to disable epoll API
         {$define FPCLINUX}
         {$define OSLINUXANDROID}
+        {$ifdef CPUX64}
+          {$define OSLINUXX64}
+        {$endif CPUX64}
       {$else}
         {$ifdef ANDROID}
           // conditionals for Android
