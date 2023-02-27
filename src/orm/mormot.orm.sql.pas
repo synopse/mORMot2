@@ -115,7 +115,7 @@ type
     // - should return nil on error, and not raise an exception
     function PrepareInlinedForRows(const aSql: RawUtf8): ISqlDBStatement;
     /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
-    function PrepareDirectForRows(SqlFormat: PUtf8Char;
+    function PrepareDirectForRows(const SqlFormat: RawUtf8;
       const Args, Params: array of const): ISqlDBStatement;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - this implementation will call the ThreadSafeConnection virtual method,
@@ -124,13 +124,13 @@ type
     function ExecuteInlined(const aSql: RawUtf8;
       ExpectResults: boolean): ISqlDBRows; overload;
     /// overloaded method using FormatUtf8() and inlined parameters
-    function ExecuteInlined(SqlFormat: PUtf8Char; const Args: array of const;
+    function ExecuteInlined(const SqlFormat: RawUtf8; const Args: array of const;
       ExpectResults: boolean): ISqlDBRows; overload;
     /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
-    function ExecuteDirect(SqlFormat: PUtf8Char; const Args, Params: array of const;
+    function ExecuteDirect(const SqlFormat: RawUtf8; const Args, Params: array of const;
       ExpectResults: boolean): ISqlDBRows;
     /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
-    function ExecuteDirectSqlVar(SqlFormat: PUtf8Char; const Args: array of const;
+    function ExecuteDirectSqlVar(const SqlFormat: RawUtf8; const Args: array of const;
        var Params: TSqlVarDynArray; const LastIntegerParam: Int64;
        ParamsMatchCopiableFields: boolean): boolean;
     /// run INSERT of UPDATE from the corresponding JSON object
@@ -681,7 +681,7 @@ begin
         TableCreated := fProperties.OnTableCreate(
           fProperties, fTableName, CreateColumns, s)
       else if s <> '' then
-        TableCreated := ExecuteDirect(pointer(s), [], [], false) <> nil;
+        TableCreated := ExecuteDirect(s, [], [], false) <> nil;
       if TableCreated then
       begin
         LogFields(log);
@@ -718,7 +718,7 @@ begin
                     TableModified := true; // don't raise ERestStorage from here
                 end
                 else if s <> '' then
-                  if ExecuteDirect(pointer(s), [], [], false) <> nil then
+                  if ExecuteDirect(s, [], [], false) <> nil then
                     TableModified := true
                   else
                     raise ERestStorage.CreateUtf8('%.Create: %: ' +
@@ -1456,7 +1456,7 @@ begin
     result := false
   else
   begin
-    rows := ExecuteDirect(pointer(fSelectTableHasRowsSQL), [], [], true);
+    rows := ExecuteDirect(fSelectTableHasRowsSQL, [], [], true);
     if rows = nil then
       result := false
     else
@@ -1784,13 +1784,16 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteInlined(SqlFormat: PUtf8Char;
+function TRestStorageExternal.ExecuteInlined(const SqlFormat: RawUtf8;
   const Args: array of const; ExpectResults: boolean): ISqlDBRows;
+var
+  sql: RawUtf8;
 begin
-  result := ExecuteInlined(FormatUtf8(SqlFormat, Args), ExpectResults);
+  FormatUtf8(SqlFormat, Args, sql);
+  result := ExecuteInlined(sql, ExpectResults);
 end;
 
-function TRestStorageExternal.PrepareDirectForRows(SqlFormat: PUtf8Char;
+function TRestStorageExternal.PrepareDirectForRows(const SqlFormat: RawUtf8;
   const Args, Params: array of const): ISqlDBStatement;
 var
   stmt: ISqlDBStatement;
@@ -1812,7 +1815,7 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteDirect(SqlFormat: PUtf8Char;
+function TRestStorageExternal.ExecuteDirect(const SqlFormat: RawUtf8;
   const Args, Params: array of const; ExpectResults: boolean): ISqlDBRows;
 var
   stmt: ISqlDBStatement;
@@ -1831,7 +1834,7 @@ begin
        (oftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
-    if IdemPChar(SqlFormat, 'DROP TABLE ') then
+    if IdemPChar(pointer(SqlFormat), 'DROP TABLE ') then
       fEngineLockedMaxID := 0;
     result := stmt;
   except
@@ -1840,7 +1843,7 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteDirectSqlVar(SqlFormat: PUtf8Char;
+function TRestStorageExternal.ExecuteDirectSqlVar(const SqlFormat: RawUtf8;
   const Args: array of const; var Params: TSqlVarDynArray;
   const LastIntegerParam: Int64; ParamsMatchCopiableFields: boolean): boolean;
 var
@@ -2006,7 +2009,7 @@ begin
     result := fProperties.OnTableCreateMultiIndex(
       fProperties, fTableName, FieldNames, Unique, IndexName, SQL)
   else if SQL <> '' then
-    result := ExecuteDirect(pointer(SQL), [], [], false) <> nil;
+    result := ExecuteDirect(SQL, [], [], false) <> nil;
   if not result then
     exit;
   extfield := fFieldsInternalToExternal[IntFieldIndex[0] + 1];
