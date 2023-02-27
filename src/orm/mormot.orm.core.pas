@@ -11168,10 +11168,10 @@ begin
     fBatch.AddComma;
   end;
   Options := Options - BATCH_OPTIONS_CLIENTONLY;
-  if byte(Options) <> 0 then
+  if word(Options) <> 0 then
   begin
     fBatch.AddShort('"options",');
-    fBatch.Add(byte(Options));
+    fBatch.Add(word(Options));
     fBatch.AddComma;
   end;
 end;

@@ -960,6 +960,7 @@ var
   rec: TOrm;
   deletedminid: TID;
   deleted: TOrmTableDeleted;
+  opt: TRestBatchOptions;
   {%H-}log: ISynLog;
 begin
   log := fRest.LogClass.Enter(
@@ -997,7 +998,11 @@ begin
          deletedminid + ORMVERSION_DELETEID_RANGE]);
       if listdeleted = nil then
         exit; // DB error
-      result := TRestBatch.Create(self, nil, 10000);
+      opt := [boExtendedJson]; // default options
+      if (listupdated.RowCount <> 0) and
+         (props.BlobFields <> nil) then
+        include(opt, boMayHaveBlob);
+      result := TRestBatch.Create(self, nil, 10000, opt);
       result.OnWrite := OnWrite;
       if (listupdated.RowCount = 0) and
          (listdeleted.RowCount = 0) then
@@ -2030,8 +2035,9 @@ function TRestOrmServerBatchSend.IsNotAllowed: boolean;
 begin
   result := (fUriContext <> nil) and
             (fUriContext.Command = execOrmWrite) and
-            not fUriContext.CanExecuteOrmWrite(BATCH_METHOD[fEncoding],
-    fRunTable, fRunTableIndex, fValueID, fUriContext.Call.RestAccessRights^);
+            not fUriContext.CanExecuteOrmWrite(
+              BATCH_METHOD[fEncoding], fRunTable, fRunTableIndex,
+              fValueID, fUriContext.Call.RestAccessRights^);
 end;
 
 procedure TRestOrmServerBatchSend.ParseCommand;
@@ -2411,10 +2417,10 @@ begin
   if IdemPChar(fParse.Json, '"OPTIONS",') then
   begin
     inc(fParse.Json, 10);
-    byte(fBatchOptions) := GetNextItemCardinal(fParse.Json, ',');
+    word(fBatchOptions) := GetNextItemCardinal(fParse.Json, ',');
   end
   else
-    byte(fBatchOptions) := 0;
+    word(fBatchOptions) := 0;
 end;
 
 procedure TRestOrmServerBatchSend.ParseAndExecute;

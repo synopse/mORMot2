@@ -1220,6 +1220,8 @@ type
   // and server TOrmModel tables or fields do not match
   // - boOnlyObjects will force to generate only a JSON array of raw JSON
   // objects with no BATCH prefix nor verbs
+  // - boMayHaveBlob could be set if some BLOB are likely to appear in the datga
+  // so that some engines could disabled e.g. array binding
   TRestBatchOption = (
     boInsertOrIgnore,
     boInsertOrReplace,
@@ -1228,7 +1230,8 @@ type
     boPutNoCacheFlush,
     boRollbackOnError,
     boNoModelEncoding,
-    boOnlyObjects);
+    boOnlyObjects,
+    boMayHaveBlob);
 
   /// a set of options for TRest.BatchStart() process
   // - TJsonObjectDecoder will use it to compute the corresponding SQL

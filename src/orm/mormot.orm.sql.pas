@@ -1019,6 +1019,9 @@ begin
      (Method in [mPOST..mDELETE]) and
      (BATCH[Method] in fProperties.BatchSendingAbilities) then
   begin
+    if (boMayHaveBlob in BatchOptions) and
+       fProperties.NoBlobBindArray then
+      exit; // slower but safer access with no array binding
     StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ExtBatchStart' {$endif});
     // lock protected by try..finally in TRestServer.RunBatch caller
     try
@@ -1100,8 +1103,9 @@ begin
                 if {%H-}Fields = nil then
                 begin
                   Decode.AssignFieldNamesTo(Fields);
-                  SQL := JsonDecodedPrepareToSql(Decode, ExternalFields, Types,
-                    Occasion, fBatchOptions, {array=}true);
+                  SQL := JsonDecodedPrepareToSql(
+                    Decode, ExternalFields, Types, Occasion, fBatchOptions,
+                    {array=}true);
                   SetLength(Values, Decode.FieldCount);
                   ValuesMax := fBatchCount - BatchBegin;
                   if ValuesMax > max then

@@ -557,6 +557,7 @@ begin
   // JsonDecodedPrepareToSql will detect cPostgreBulkArray and set
   // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
   fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
+  fNoBlobBindArray := true; // no BindArray() on ftBlob
   // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
   fOnBatchInsert := nil; // see TRestStorageExternal.InternalBatchStop
 end;

@@ -1243,7 +1243,8 @@ type
     fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
     fRollbackOnDisconnect, fReconnectAfterConnectionError,
-    fEnsureColumnNameUnique, fFilterTableViewSchemaName: boolean;
+    fEnsureColumnNameUnique, fFilterTableViewSchemaName,
+    fNoBlobBindArray: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
@@ -1875,6 +1876,10 @@ type
     // - as used by SqlDateToIso8601Quoted() and BindArray()
     property DateTimeFirstChar: AnsiChar
       read fDateTimeFirstChar write fDateTimeFirstChar;
+    /// if the engine do not support BindArray(ftBlob)
+    // - only set for TSqlDBPostgresConnectionProperties by now
+    property NoBlobBindArray: boolean
+      read fNoBlobBindArray write fNoBlobBindArray;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
