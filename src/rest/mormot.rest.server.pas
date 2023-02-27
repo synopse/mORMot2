@@ -5184,7 +5184,7 @@ var
   n: THash256;
 begin
   result := (length(Nonce) = SizeOf(n) * 2) and
-            HexToBin(pointer(nonce), @n, SizeOf(n)) and
+            mormot.core.text.HexToBin(pointer(nonce), @n, SizeOf(n)) and
             IsCurrentNonce(Ctxt, n);
 end;
 
