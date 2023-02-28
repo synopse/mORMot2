@@ -1876,7 +1876,7 @@ type
     // - as used by SqlDateToIso8601Quoted() and BindArray()
     property DateTimeFirstChar: AnsiChar
       read fDateTimeFirstChar write fDateTimeFirstChar;
-    /// if the engine do not support BindArray(ftBlob)
+    /// defines if the engine does not support BindArray(ftBlob)
     // - only set for TSqlDBPostgresConnectionProperties by now
     property NoBlobBindArray: boolean
       read fNoBlobBindArray write fNoBlobBindArray;

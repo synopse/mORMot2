@@ -1022,7 +1022,7 @@ begin
     if (boMayHaveBlob in BatchOptions) and
        (Method <> mDELETE) and
        fProperties.NoBlobBindArray then
-      exit; // slower but safer access with no array binding
+      exit; // slower but safer access with no BLOB array binding
     StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'ExtBatchStart' {$endif});
     // lock protected by try..finally in TRestServer.RunBatch caller
     try
