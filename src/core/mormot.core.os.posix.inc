@@ -2687,20 +2687,22 @@ begin
 end;
 
 function RunUntilSigTerminatedPidFile(ensureWritable: boolean): TFileName;
+var
+  pidpath: TFileName;
 begin
-  result := RunUntilSigTerminatedPidFilePath;
-  if result = '' then
-    result := Executable.ProgramFilePath;
+  pidpath := RunUntilSigTerminatedPidFilePath;
+  if pidpath = '' then
+    pidpath := Executable.ProgramFilePath;
   if not ensureWritable then
   begin
-    result := Format('%s.%s.pid', [result, Executable.ProgramName]);
+    result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
     if FileExists(result) then
       exit;
   end;
-  if not IsDirectoryWritable(result) then
+  if not IsDirectoryWritable(pidpath) then
     // if the executable folder is not writable, use the temporary folder
-    result := GetSystemPath(spTempFolder);
-  result := Format('%s.%s.pid', [result, Executable.ProgramName]);
+    pidpath := GetSystemPath(spTempFolder);
+  result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
 end;
 
 function RunUntilSigTerminatedState: TServiceState;
