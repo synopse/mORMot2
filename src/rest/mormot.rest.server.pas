@@ -5185,7 +5185,7 @@ var
 begin
   result := (length(Nonce) = SizeOf(n) * 2) and
             mormot.core.text.HexToBin(pointer(nonce), @n, SizeOf(n)) and
-            IsCurrentNonce(Ctxt, n);
+            IsCurrentNonce(Ctxt, n{%H-});
 end;
 
 

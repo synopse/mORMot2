@@ -501,6 +501,16 @@ type
     /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
     // - default is TLS 1.2+ only, and deprecated SSL 2/3 are always disabled
     AllowDeprecatedTls: boolean;
+    /// input: enable two-way TLS for the server
+    // - to be used with OnEachPeerVerify callback
+    // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode
+    // - not used on SChannel
+    ClientCertificateAuthentication: boolean;
+    /// input: if two-way TLS client should be verified only once on the server
+    // - to be used with OnEachPeerVerify callback
+    // - on OpenSSL client or server, set SSL_VERIFY_CLIENT_ONCE mode
+    // - not used on SChannel
+    ClientVerifyOnce: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
@@ -570,6 +580,7 @@ type
     OnPeerValidate: TOnNetTlsPeerValidate;
     /// called by INetTls.AfterConnection for each peer validation
     // - allow e.g. to verify CN or DNSName fields of each peer certificate
+    // - see also ClientCertificateAuthentication and ClientVerifyOnce options
     // - not used on SChannel
     OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation

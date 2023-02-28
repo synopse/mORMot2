@@ -1109,7 +1109,7 @@ type
   PEVP_MD = type pointer;
   PPEVP_MD = ^PEVP_MD;
 
-  /// buffer able to hold up to the maximum PEVP_MD digest size
+  /// buffer able to hold up to the maximum PEVP_MD digest size (i.e. 512-bit)
   EVP_MD_DIG = array[0..EVP_MAX_MD_SIZE - 1] of byte;
   PEVP_MD_DIG = ^EVP_MD_DIG;
 
@@ -9773,7 +9773,7 @@ end;
 
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v: integer;
+  v, mode: integer;
 begin
   _PeerVerify := self; // safe and simple context for the callbacks
   if Context.IgnoreCertificateErrors then
@@ -9781,7 +9781,14 @@ begin
   else
   begin
     if Assigned(Context.OnEachPeerVerify) then
-      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify)
+    begin
+      mode := SSL_VERIFY_PEER;
+      if Context.ClientCertificateAuthentication then
+        mode := mode or SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+      if Context.ClientVerifyOnce then
+        mode := mode or SSL_VERIFY_CLIENT_ONCE;
+      SSL_CTX_set_verify(fCtx, mode, AfterConnectionPeerVerify);
+    end
     else
       SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
     if FileExists(TFileName(Context.CACertificatesFile)) then
