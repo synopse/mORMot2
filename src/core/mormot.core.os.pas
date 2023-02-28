@@ -413,6 +413,7 @@ type
 
 
 /// a wrapper around MemCmp() on two Security IDentifier binary buffers
+// - will first compare by length, then by content
 function SidCompare(a, b: PSid): integer;
 
 /// compute the actual binary length of a Security IDentifier buffer, in bytes
@@ -428,9 +429,11 @@ procedure SidToTextShort(sid: PSid; var result: shortstring);
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
 
+/// check if a RawSid binary buffer has the expected length of a valid SID
+function IsValidSid(const sid: RawSid): boolean;
+
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(const sid: RawSid): RawUtf8; overload;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// parse a Security IDentifier text, following the standard representation
 // - won't support hexadecimal IdentifierAuthority, i.e. S-1-0x######-....
@@ -5142,7 +5145,7 @@ var
   u, v: cardinal;
 begin
   u := 0;
-  v := (Size + 1 shl 29) shr 30;
+  v := (Size + 1 shl 29) shr 30; // "+ 1 shl ##" to round up the value
   if v = 0 then
   begin
     inc(u);
@@ -5219,9 +5222,21 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
+function IsValidSid(const sid: RawSid): boolean;
+var
+  l: PtrInt;
+begin
+  l := length(sid);
+  result := (l >= SizeOf(TSidAuth) + 2) and
+            (SidLength(pointer(sid)) = l)
+end;
+
 function SidToText(const sid: RawSid): RawUtf8;
 begin
-  result := SidToText(pointer(sid));
+  if IsValidSid(sid) then
+    result := SidToText(pointer(sid))
+  else
+    result := '';
 end;
 
 // GetNextCardinal() on POSIX does not ignore trailing '-'
