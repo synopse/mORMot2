@@ -471,6 +471,8 @@ type
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
   // focus the process on the first threads of the pool - by design, this
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
+  // - acoEventFD (on Linux only) will use eventfd() instead of futexes to
+  // notify the processing threads - by design, will disable acoThreadSmooting
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -483,7 +485,8 @@ type
     acoThreadCpuAffinity,
     acoThreadSocketAffinity,
     acoReusePort,
-    acoThreadSmooting
+    acoThreadSmooting,
+    acoEventFD
   );
 
   /// to implement generational garbage collector of asynchronous connections
@@ -1843,10 +1846,7 @@ begin
                 //fOwner.fClients.fRead.PendingLogDebug('Wakeup');
                 fEvent.ResetEvent;
                 fWaitForReadPending := true; // should be set before wakeup
-                if Assigned(fOwner.fThreadPollingEventFD) then
-                  fOwner.fThreadPollingEventFD.SetEvent(new)
-                else
-                  fOwner.ThreadPollingWakeup(pending);
+                fOwner.ThreadPollingWakeup(new);
                 //fOwner.DoLog(sllCustom1, 'Execute: WaitFor ReadPending', [], self);
                 if not Terminated then
                   fEvent.WaitFor(20);
@@ -1978,7 +1978,8 @@ begin
   // prepare this main thread: fThreads[] requires proper fOwner.OnStart/OnStop
   inherited Create({suspended=}false, OnStart, OnStop, ProcessName);
   // initiate the read/receive thread(s)
-  // fThreadPollingEventFD := NewEventFD; // nil if unsupported
+  if acoEventFD in aOptions then
+    fThreadPollingEventFD := NewEventFD; // nil if unsupported
   fThreadPoolCount := aThreadPoolCount;
   SetLength(fThreads, fThreadPoolCount);
   if aThreadPoolCount = 1 then
@@ -3528,7 +3529,10 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
-  if hsoThreadSmooting in ProcessOptions then
+  if (hsoEventFD in ProcessOptions) and
+     (NewEventFD <> nil) then // try to allocate a temporary eventfd() instance
+    include(aco, acoEventFD)        // and exclude other options
+  else if hsoThreadSmooting in ProcessOptions then
     include(aco, acoThreadSmooting) // and exclude any thread affinity
   else
   begin

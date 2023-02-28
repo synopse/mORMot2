@@ -343,6 +343,8 @@ type
   // - hsoThreadSmooting will change the TAsyncConnections.ThreadPollingWakeup()
   // algorithm to focus the process on the first threads of the pool - by design,
   // this will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
+  // - hsoEventFD (on Linux only) will use eventfd() instead of futexes to
+  // notify the TAsyncConnections threads - by design, disable acoThreadSmooting
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -356,7 +358,8 @@ type
     hsoThreadCpuAffinity,
     hsoThreadSocketAffinity,
     hsoReusePort,
-    hsoThreadSmooting);
+    hsoThreadSmooting,
+    hsoEventFD);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;

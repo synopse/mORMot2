@@ -1214,7 +1214,7 @@ const
   // exists since Kernel 2.6.27
   syscall_nr_eventfd2 = 290;
   // = 328 on i386
-  // = 356 on AARM64
+  // = 356 on AARCH64
 
 function eventfd(initval, flags: cardinal): integer; inline;
 begin
