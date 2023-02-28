@@ -1769,6 +1769,9 @@ type
     Index: array[TCryptCertUsage] of byte;
     /// reset all storage and indexes
     procedure Clear;
+    /// quickly check if there is no stored certificate
+    function IsVoid: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// register the certificate to the internal list
     // - returns the duplicated usages
     // - if no usage(s) was already set as in the added one, returns []
@@ -5012,6 +5015,11 @@ begin
   FillCharFast(self, SizeOf(self), 0);
 end;
 
+function TCryptCertPerUsage.IsVoid: boolean;
+begin
+  result := List = nil;
+end;
+
 function TCryptCertPerUsage.Add(const cert: ICryptCert): TCryptCertUsages;
 var
   u: TCryptCertUsage;
@@ -5044,7 +5052,10 @@ function TCryptCertPerUsage.GetUsage(u: TCryptCertUsage;
 var
   i: PtrInt;
 begin
-  i := Index[u]; // contains index + 1
+  if List = nil then
+    i := 0
+  else
+    i := Index[u]; // contains index + 1
   if i = 0 then
   begin
     cert := nil; // circumvent FPC inlining bug for "out cert"
