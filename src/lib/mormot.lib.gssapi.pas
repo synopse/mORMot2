@@ -415,7 +415,8 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 // - aUserName contains authenticated user name
 procedure ServerSspiAuthUser(var aSecContext: TSecContext; out aUserName: RawUtf8);
 
-/// Returns name of the security package that has been used with the negotiation process
+/// Returns name of the security package that has been used with the
+// negotiation process
 // - aSecContext must be received from previous success call to ServerSspiAuth
 // or ClientSspiAuth
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;

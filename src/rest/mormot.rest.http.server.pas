@@ -752,6 +752,7 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
 var
   i, j: PtrInt;
   hso: THttpServerOptions;
+  cpus: integer;
   ErrMsg: RawUtf8;
   net: TNetTlsContext;
   log: ISynLog;
@@ -825,6 +826,12 @@ begin
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);
+  cpus := SystemInfo.dwNumberOfProcessors;
+  if aThreadPoolCount < cpus * 5 then
+    include(hso, hsoThreadSmooting) // regular HW tends to like it
+  else if (aThreadPoolCount > cpus * 4) and
+          (SystemInfo.dwNumberOfProcessors > 15) then
+    include(hso, hsoEventFD); // on high-end HW + Linux, try to saturate cores
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
     if PosEx('Wine', OSVersionInfoEx) > 0 then

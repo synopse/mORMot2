@@ -5437,6 +5437,9 @@ begin
   inherited Destroy;
 end;
 
+// about Browser support and SPNEGO handshake via HTTP headers, see e.g.
+// https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
+
 function TRestServerAuthenticationSspi.Auth(Ctxt: TRestServerUriContext): boolean;
 var
   i, ndx: PtrInt;
