@@ -534,6 +534,20 @@ begin
   end;
 end;
 
+procedure TNetSocketWrap.SetCork(cork: boolean);
+var
+  v: integer;
+begin
+  v := ord(cork);
+  {$ifdef OSLINUXANDROID}
+  SetOpt(IPPROTO_TCP, TCP_CORK, @v, SizeOf(v));
+  {$else}
+  {$ifdef OSBSDDARWIN}
+  SetOpt(IPPROTO_TCP, TCP_NOPUSH, @v, SizeOf(v));
+  {$endif OSBSDDARWIN}
+  {$endif OSLINUXANDROID}
+end;
+
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: system.PInteger): TNetEvents;
 var

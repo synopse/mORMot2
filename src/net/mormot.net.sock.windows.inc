@@ -525,6 +525,11 @@ begin
   SetOpt(SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
 end;
 
+procedure TNetSocketWrap.SetCork(cork: boolean);
+begin
+  // do nothing on Windows
+end;
+
 procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
 begin
   if ms = 0 then

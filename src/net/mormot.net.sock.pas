@@ -215,6 +215,8 @@ type
     procedure SetLinger(linger: integer);
     /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
+    /// set the TCP_CORK (Linux) or TCP_NOPUSH (BSD) option
+    procedure SetCork(cork: boolean);
     /// set the SO_REUSEPORT option, to allow several servers to bind on a port
     // - do nothing on Windows
     procedure ReusePort;
