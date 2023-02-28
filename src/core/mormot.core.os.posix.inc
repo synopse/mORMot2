@@ -2130,26 +2130,41 @@ begin
   result := StringFromFile('/proc/loadavg', {nosize=}true);
 end;
 
+function FindMemInfo(const meminfo, up: RawUtf8): PtrUInt;
+var
+  v: RawUtf8;
+begin
+  FindNameValue(meminfo, up, v);
+  result := GetCardinal(pointer(v)) shl 10;
+end;
+
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
-  si: TSysInfo; // Linuxism
+  proc: RawUtf8;
   P: PUtf8Char;
-  mu: PtrUInt;
 begin
+  result := false;
   FillCharFast(info, SizeOf(info), 0);
-  result := SysInfo(@si) = 0;
-  mu := si.mem_unit;
-  if si.totalram <> 0 then // avoid div per 0 exception
-    info.percent := ((si.totalram - si.freeram) * 100) div si.totalram;
-  info.memtotal := si.totalram * mu;
-  info.memfree := si.freeram * mu;
-  info.filetotal := si.totalswap * mu;
-  info.filefree := si.freeswap * mu;
+  proc := StringFromFile('/proc/meminfo', {hasnosize=}true);
+  if proc = '' then
+    exit;
+  info.memtotal := FindMemInfo(proc, 'MEMTOTAL:');
+  info.memfree := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
+  if info.memtotal <> 0 then
+  begin
+    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
+    result := true;
+  end;
+  info.filetotal := FindMemInfo(proc, 'SWAPTOTAL:');
+  info.filefree := FindMemInfo(proc, 'SWAPFREE:');
+  info.vmtotal := FindMemInfo(proc, 'COMMITLIMIT:');
+  info.vmfree := FindMemInfo(proc, 'MEMFREE:');
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
   if withalloc then
   begin
     // virtual memory information is not available under Linux
-    P := pointer(StringFromFile('/proc/self/statm', {hasnosize=}true));
+    proc := StringFromFile('/proc/self/statm', {hasnosize=}true);
+    P := pointer(proc);
     info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
     info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
   end;

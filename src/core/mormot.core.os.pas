@@ -3241,6 +3241,11 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
 // - allocreserved and allocused are set only if withalloc is TRUE
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 
+/// retrieve some human-readable text from GetMemoryInfo
+// - numbers are rounded up to a single GB number with no decimals
+// - returns e.g. 'used 6GB/16GB (35% free)' text
+function GetMemoryInfoText: RawUtf8;
+
 /// retrieve low-level information about a given disk partition
 // - as used by TSynMonitorDisk and GetDiskPartitionsText()
 // - warning: aDriveFolderOrFile may be modified at input
@@ -3361,7 +3366,8 @@ function PosixParseHex32(p: PAnsiChar): integer;
 {$endif OSWINDOWS}
 
 /// internal function to avoid linking mormot.core.buffers.pas
-function _oskb(Size: cardinal): string;
+// - will round up the value to fit in a single number without decimals
+function _oskb(Size: QWord): string;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEM encoding
@@ -5129,22 +5135,22 @@ begin
   result := false;
 end;
 
-function _oskb(Size: cardinal): string;
+function _oskb(Size: QWord): string;
 const
   _U: array[0..2] of string[3] = ('GB', 'MB', 'KB');
 var
   u, v: cardinal;
 begin
   u := 0;
-  v := Size shr 30;
+  v := (Size + 1 shl 29) shr 30;
   if v = 0 then
   begin
     inc(u);
-    v := Size shr 20;
+    v := (Size + 1 shl 19) shr 20;
     if v = 0 then
     begin
       inc(u);
-      v := Size shr 10;
+      v := (Size + 1 shl 9) shr 10;
     end;
   end;
   result := format('%d%s', [v, _U[u]]);
@@ -6849,6 +6855,17 @@ begin
   result := COMPILER_VERSION;
 end;
 {$endif PUREMORMOT2}
+
+function GetMemoryInfoText: RawUtf8;
+var
+  info: TMemoryInfo;
+begin
+  if GetMemoryInfo(info, false) then
+    _fmt('used %s/%s (%d%s free)', [_oskb(info.memtotal - info.memfree),
+      _oskb(info.memtotal), info.percent, '%'], result)
+  else
+    result := '';
+end;
 
 function ConsoleReadBody: RawByteString;
 var
@@ -8994,7 +9011,6 @@ begin
   RawExceptionIntercepted := true;
   {$endif NOEXCEPTIONINTERCEPT}
 end;
-
 
 
 initialization
