@@ -3531,10 +3531,10 @@ begin
     include(aco, acoEnableTls);
   if (hsoEventFD in ProcessOptions) and
      (NewEventFD <> nil) then // try to allocate a temporary eventfd() instance
-    include(aco, acoEventFD)        // and exclude other options
+    include(aco, acoEventFD) // and exclude hsoThreadSmooting
   else if hsoThreadSmooting in ProcessOptions then
-    include(aco, acoThreadSmooting) // and exclude any thread affinity
-  else
+    include(aco, acoThreadSmooting);
+  if not (acoThreadSmooting in aco) then // affinity may help acoEventFD
   begin
     if hsoThreadCpuAffinity in ProcessOptions then
       include(aco, acoThreadCpuAffinity);
