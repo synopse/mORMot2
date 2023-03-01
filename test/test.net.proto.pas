@@ -354,10 +354,10 @@ var
 
 begin
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
-    'xyz.local/Users/London/User1');
+    'xyz.local/London/Users/User1');
   CheckEqual(DNToCN(
     'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
-    'USRegion.OrgName.com/Widgets/Manufacturing/JDoe');
+    'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
   tree := TUriTree.Create;
   try
     tree.insert('romane');
