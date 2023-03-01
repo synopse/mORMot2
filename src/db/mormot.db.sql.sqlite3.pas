@@ -672,7 +672,7 @@ begin
     // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
     until fStatement.Step <> SQLITE_ROW;
-    fUpdateCount := fDB.LastChangeCount;
+    fUpdateCount := sqlite3.changes(fDB.DB);
   finally
     fDB.UnLock;
     if fShouldLogSQL then
@@ -757,12 +757,7 @@ begin
     //fStatement.Reset;
   end;
   try
-    fDB.Lock;
-    try
-      result := fStatement.Step = SQLITE_ROW;
-    finally
-      fDB.UnLock;
-    end;
+    result := fStatement.Step = SQLITE_ROW;
   except
     on E: Exception do
     begin

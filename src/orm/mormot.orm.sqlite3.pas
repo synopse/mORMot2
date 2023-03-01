@@ -1782,8 +1782,8 @@ begin
           end;
           if LastChangeCount <> nil then
           begin
-            LastChangeCount^ := DB.LastChangeCount;
-            FormatShort(' lastChangeCount=%', [LastChangeCount^], msg);
+            LastChangeCount^ := sqlite3.changes(DB.DB);
+            FormatShort('% lastChangeCount=%', [msg, LastChangeCount^], msg);
           end;
         end
         else
@@ -2249,7 +2249,7 @@ begin
     // limitation: will only check for update when RowID is provided
     exit
   else if whereid < 0 then
-    result := ExecuteFmt('UPDATE % SET %=:(%):', // update ALL
+    result := ExecuteFmt('UPDATE % SET %=%', // update ALL with no inline
       [props.SqlTableName, SetFieldName, SetValue])
   else
     result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):', // update WHERE

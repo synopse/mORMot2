@@ -6606,7 +6606,7 @@ begin
   Lock;
   try
     if RowID = 0 then
-      RowID := LastInsertRowID; // warning: won't work on multi-thread process
+      RowID := sqlite3.last_insert_rowid(DB); // warning: not multi-thread safe
     result := TSqlBlobStream.Create(DB, DBName, TableName, ColumnName, RowID, ReadWrite);
   finally
     UnLock;

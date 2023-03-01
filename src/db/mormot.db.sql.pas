@@ -1556,8 +1556,8 @@ type
     // - will fail if the same connection is not used for the whole process,
     // which would induce a potentially incorrect behavior
     // - returns the connection corresponding to the session, nil on error
-    function SharedTransaction(SessionID: cardinal; action:
-      TSqlDBSharedTransactionAction): TSqlDBConnection; virtual;
+    function SharedTransaction(SessionID: cardinal;
+      action: TSqlDBSharedTransactionAction): TSqlDBConnection; virtual;
 
     /// convert a textual column data type, as retrieved e.g. from SqlGetField,
     // into our internal primitive types
