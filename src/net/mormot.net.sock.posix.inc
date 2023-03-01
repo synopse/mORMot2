@@ -11,7 +11,6 @@ uses
   sockets,
   {$ifdef OSLINUXANDROID}
   linux,   // for epoll
-  syscall, // for eventfd()
   {$endif OSLINUXANDROID}
   initc; // link clib='c' for our socket purpose
 
@@ -1022,11 +1021,6 @@ begin
   PollSocketClass := TPollSocketPoll;
 end;
 
-function NewEventFD: IEventFD;
-begin
-  result := nil; // unsupported on non-Linux POSIX systems
-end;
-
 {$else}
 
 type
@@ -1216,66 +1210,6 @@ function PollSocketClass: TPollSocketClass;
 begin
   PollSocketClass := TPollSocketEpoll;
 end;
-
-{$ifdef OSLINUX}
-type
-  TLinuxEventFD = class(TInterfacedObject, IEventFD)
-  public
-    Handle: integer;
-    constructor Create(h: integer);
-    destructor Destroy; override;
-    // IEventFD methods
-    function WaitFor(ms: integer): boolean;
-    function GetNext: boolean;
-    procedure SetEvent(count: integer);
-  end;
-
-constructor TLinuxEventFD.Create(h: integer);
-begin
-  Handle := h;
-end;
-
-destructor TLinuxEventFD.Destroy;
-begin
-  fpClose(Handle);
-  inherited Destroy;
-end;
-
-function TLinuxEventFD.WaitFor(ms: integer): boolean;
-begin
-  result := LinuxEventFDWait(Handle, ms);
-end;
-
-function TLinuxEventFD.GetNext: boolean;
-begin
-  result := LinuxEventFDRead(Handle) = 1;
-end;
-
-procedure TLinuxEventFD.SetEvent(count: integer);
-begin
-  if count > 0 then
-    LinuxEventFDWrite(Handle, count);
-end;
-
-function NewEventFD: IEventFD;
-var
-  h: integer;
-begin
-  h := LinuxEventFD({nonblocking=}true, {semaphore=}true);
-  if h <> 0 then
-    result := TLinuxEventFD.Create(h)
-  else
-    result := nil; // unsupported
-end;
-
-{$else}
-
-function NewEventFD: IEventFD;
-begin
-  result := nil; // unsupported platform
-end;
-
-{$endif OSLINUX}
 
 {$endif USEPOLL}
 

@@ -945,25 +945,6 @@ function PollSocketClass: TPollSocketClass;
 
 function ToText(ev: TPollSocketEvents): TShort8; overload;
 
-type
-  /// map the Linux eventfd() mechanism
-  // - to implement an efficient write one / multiple read thread pool
-  IEventFD = interface
-    /// check if events could be processed for this thread
-    // - return true if some event is available, or false on error or timeout
-    function WaitFor(ms: integer): boolean;
-    /// get one event from a processing thread
-    // - return true if one event was notified, or false if the counter is 0
-    function GetNext: boolean;
-    /// notify the threads that some events are available
-    procedure SetEvent(count: integer);
-  end;
-
-/// on Linux, return a eventfd() wrapper instance
-// - returns nil on unsupported platforms (e.g. Windows or BSD/MacOS)
-function NewEventFD: IEventFD;
-
-
 
 { *************************** TUri parsing/generating URL wrapper }
 

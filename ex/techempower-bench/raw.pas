@@ -208,7 +208,6 @@ begin
      hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
      hsoNoStats,           // disable low-level statistic counters
      //hsoThreadCpuAffinity, // better scaling of /plaintext in some cases
-     hsoReusePort,         // allow several processes binding on the same port
      //hsoThreadSmooting,  // set below in flags parameter
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
@@ -619,7 +618,9 @@ begin
     end;
   end;
   if servers = 1 then
-    include(flags, hsoThreadSmooting); // 30% better /plaintext e.g. on i5 7300U
+    include(flags, hsoThreadSmooting) // 30% better /plaintext e.g. on i5 7300U
+  else
+    include(flags, hsoReusePort);     // allow several bindings on the same port
 
   // start the server instance(s), in hsoReusePort mode
   SetLength(rawServers, servers);
@@ -635,6 +636,7 @@ begin
             ', num servers=', servers,
             ', total workers=', threads * servers,
             ', db=', rawServers[0].fDbPool.DbmsEngineName);
+    writeln(' options=', GetSetName(TypeInfo(THttpServerOptions), flags));
     {$ifdef USE_SQLITE3}
     writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
     ConsoleWaitForEnterKey;

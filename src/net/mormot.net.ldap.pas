@@ -165,7 +165,7 @@ type
 /// convert a Distinguished Name to a Canonical Name
 // - raise an exception if the supplied DN is not a valid Distinguished Name
 // - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
-// 'xyz.local/london/users/user1'
+// 'xyz.local/London/Users/User1'
 function DNToCN(const DN: RawUtf8): RawUtf8;
 
 

@@ -471,8 +471,6 @@ type
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
   // focus the process on the first threads of the pool - by design, this
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
-  // - acoEventFD (on Linux only) will use eventfd() instead of futexes to
-  // notify the processing threads - by design, will disable acoThreadSmooting
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -485,8 +483,7 @@ type
     acoThreadCpuAffinity,
     acoThreadSocketAffinity,
     acoReusePort,
-    acoThreadSmooting,
-    acoEventFD
+    acoThreadSmooting
   );
 
   /// to implement generational garbage collector of asynchronous connections
@@ -533,7 +530,6 @@ type
     fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupLoad: integer;
     fThreadPollingLastWakeUpTix: integer;
-    fThreadPollingEventFD: IEventFD;
     fGC: array[1..2] of TAsyncConnectionsGC;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
@@ -1837,6 +1833,7 @@ begin
                 else
                 begin
                   // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
+                  fWaitForReadPending := true;
                   fEvent.SleepStep(start, @Terminated);
                   continue;
                 end;
@@ -1858,34 +1855,21 @@ begin
         atpReadPending:
           // secondary threads wait, then read and process pending events
           begin
-            if Assigned(fOwner.fThreadPollingEventFD) then
+            fWaitForReadPending := true;
+            fEvent.WaitForEver;
+            if Terminated then
+              break;
+            //{$I-}system.writeln(Name,' start loop ',fThreadPollingLastWakeUpCount);
+            fWakeUpFromSlowProcess := false;
+            while GetNextRead(notif) do
+              fOwner.fClients.ProcessRead(self, notif);
+            if acoThreadSmooting in fOwner.Options then
             begin
-              // Linux/eventfd algorithm: let the kernel awake the thread
-              if fOwner.fThreadPollingEventFD.WaitFor(5000) then
-                while fOwner.fThreadPollingEventFD.GetNext and
-                      fOwner.fClients.fRead.GetOnePending(notif, fName) and
-                      not Terminated do
-                  fOwner.fClients.ProcessRead(self, notif);
-            end
-            else
-            begin
-              // regular algorithm: the threads are waken using SetEvent
-              fWaitForReadPending := true;
-              fEvent.WaitForEver;
-              if Terminated then
-                break;
-              //{$I-}system.writeln(Name,' start loop ',fThreadPollingLastWakeUpCount);
-              fWakeUpFromSlowProcess := false;
-              while GetNextRead(notif) do
-                fOwner.fClients.ProcessRead(self, notif);
-              if acoThreadSmooting in fOwner.Options then
-              begin
-                fOwner.fThreadPollingWakeupSafe.Lock;
-                fThreadPollingLastWakeUpTix := 0; // this thread will now need to wakeup
-                fOwner.fThreadPollingWakeupSafe.UnLock;
-              end;
-              //{$I-}system.writeln(Name,' stop loop ',fThreadPollingLastWakeUpCount);
+              fOwner.fThreadPollingWakeupSafe.Lock;
+              fThreadPollingLastWakeUpTix := 0; // this thread will now need to wakeup
+              fOwner.fThreadPollingWakeupSafe.UnLock;
             end;
+            //{$I-}system.writeln(Name,' stop loop ',fThreadPollingLastWakeUpCount);
             // release atpReadPoll lock above
             with fOwner.fThreadReadPoll do
               if fWaitForReadPending then
@@ -1978,8 +1962,6 @@ begin
   // prepare this main thread: fThreads[] requires proper fOwner.OnStart/OnStop
   inherited Create({suspended=}false, OnStart, OnStop, ProcessName);
   // initiate the read/receive thread(s)
-  if acoEventFD in aOptions then
-    fThreadPollingEventFD := NewEventFD; // nil if unsupported
   fThreadPoolCount := aThreadPoolCount;
   SetLength(fThreads, fThreadPoolCount);
   if aThreadPoolCount = 1 then
@@ -2115,8 +2097,6 @@ begin
   begin
     for i := 0 to high(fThreads) do
       fThreads[i].Terminate; // set the Terminated flag
-    if Assigned(fThreadPollingEventFD) then
-      fThreadPollingEventFD.SetEvent(1000); // release all sub threads now
     p := 0;
     endtix := mormot.core.os.GetTickCount64 + 10000; // wait up to 10 seconds
     repeat
@@ -2216,13 +2196,6 @@ var
   tix: integer; // 32-bit is enough to check for
   ndx: array[byte] of byte; // wake up to 256 threads at once
 begin
-  // on Linux, use the Linux Kernel eventfd()
-  if Assigned(fThreadPollingEventFD) then
-  begin
-    fThreadPollingEventFD.SetEvent(Events);
-    result := Events;
-    exit;
-  end;
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
@@ -3530,13 +3503,10 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
-  if (hsoEventFD in ProcessOptions) and
-     (NewEventFD <> nil) then // try to allocate a temporary eventfd() instance
-    include(aco, acoEventFD) // and exclude hsoThreadSmooting
-  else if hsoThreadSmooting in ProcessOptions then
-    include(aco, acoThreadSmooting);
-  if not (acoThreadSmooting in aco) then // affinity may help acoEventFD
-  begin
+  if hsoThreadSmooting in ProcessOptions then
+    include(aco, acoThreadSmooting)
+  else // our thread smooting algorithm excludes CPU affinity
+  begin 
     if hsoThreadCpuAffinity in ProcessOptions then
       include(aco, acoThreadCpuAffinity);
     if hsoThreadSocketAffinity in ProcessOptions then
