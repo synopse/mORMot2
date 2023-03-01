@@ -757,7 +757,12 @@ begin
     //fStatement.Reset;
   end;
   try
-    result := fStatement.Step = SQLITE_ROW;
+    fDB.Lock;
+    try
+      result := fStatement.Step = SQLITE_ROW;
+    finally
+      fDB.UnLock;
+    end;
   except
     on E: Exception do
     begin
