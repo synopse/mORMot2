@@ -1367,33 +1367,66 @@ end;
 
 constructor TSynEvent.Create;
 begin
-  fHandle := RTLEventCreate;
+  {$ifdef HASEVENTFD}
+  fFD := LinuxEventFD({nonblocking=}false, {semaphore=}false);
+  if fFD = 0 then // fallback to PRTLEvent on oldest kernel
+  {$endif HASEVENTFD}
+    fHandle := RTLEventCreate;
 end;
 
 destructor TSynEvent.Destroy;
 begin
-  RTLEventDestroy(fHandle);
+  {$ifdef HASEVENTFD}
+  if fFD <> 0 then
+  begin
+    LinuxEventFDWrite(fFD, 1); // release the lock
+    fpClose(fFD);
+  end
+  else
+  {$endif HASEVENTFD}
+    RTLEventDestroy(fHandle);
   inherited Destroy;
 end;
 
 procedure TSynEvent.ResetEvent;
 begin
-  RTLEventResetEvent(fHandle);
+  {$ifdef HASEVENTFD}
+  if fFD = 0 then // no need to reset the eventfd() handle
+  {$endif HASEVENTFD}
+    RTLEventResetEvent(fHandle);
 end;
 
 procedure TSynEvent.SetEvent;
 begin
-  RTLEventSetEvent(fHandle);
+  {$ifdef HASEVENTFD}
+  if fFD <> 0 then
+    LinuxEventFDWrite(fFD, 1)
+  else
+  {$endif HASEVENTFD}
+    RTLEventSetEvent(fHandle);
 end;
 
 procedure TSynEvent.WaitFor(TimeoutMS: integer);
 begin
-  RTLEventWaitFor(fHandle, TimeoutMS);
+  {$ifdef HASEVENTFD}
+  if fFD <> 0 then
+  begin
+    if LinuxEventFDWait(fFD, TimeoutMS) then
+      LinuxEventFDRead(fFD);
+  end
+  else
+  {$endif HASEVENTFD}
+    RTLEventWaitFor(fHandle, TimeoutMS);
 end;
 
 procedure TSynEvent.WaitForEver;
 begin
-  RTLEventWaitFor(fHandle);
+  {$ifdef HASEVENTFD}
+  if fFD <> 0 then
+    LinuxEventFDRead(fFD)
+  else
+  {$endif HASEVENTFD}
+    RTLEventWaitFor(fHandle);
 end;
 
 

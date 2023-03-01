@@ -4030,13 +4030,15 @@ type
   end;
 
   /// our light cross-platform TEvent-like component
-  // - on POSIX, FPC will use PRTLEvent which is lighter than TEvent BasicEvent
+  // - on Linux, will use eventfd() in blocking and non-semaphore mode
+  // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
   // - only limitation is that we don't know if WaitFor is signaled or timeout,
   // but this is not a real one in practice since most code don't need it
   // or has already its own flag in its implementation logic
   TSynEvent = class
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
+    fFD: integer;     // for eventfd()
   public
     /// initialize an instance of cross-platform event
     constructor Create;
@@ -4050,6 +4052,7 @@ type
       {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
     // - does not return if it was signaled or timeout
+    // - WARNING: you should wait from a single thread at once
     procedure WaitFor(TimeoutMS: integer);
       {$ifdef OSPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with no maximum time
