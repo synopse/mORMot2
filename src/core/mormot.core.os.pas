@@ -2258,6 +2258,30 @@ var
   // - this unit will make sd.Done in its finalization section
   sd: TSystemD;
 
+  /// contains the current Linux kernel revision, as one 24-bit integer
+  // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
+  LinuxKernelRevision: cardinal;
+
+/// a wrapper to the eventfd() syscall
+// - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or
+// if the platform is not supported (only tested on Linux x86_64 by now)
+// - returns a file descriptor handle on success, which should be fpclose()
+function LinuxEventFD(nonblocking, semaphore: boolean): integer;
+
+/// wrapper to read from a eventfd() file
+// - return 1 and decrement the counter by 1 in semaphore mode
+// - return the current counter value and set it to 0 in non-semaphor mode
+// - may be blocking or not blocking, depending on how LinuxEventFD() was called
+// - return -1 on error
+function LinuxEventFDRead(fd: integer): Int64;
+
+/// wrapper to write to a eventfd() file
+procedure LinuxEventFDWrite(fd: integer; count: QWord);
+
+/// wrapper to wait for a eventfd() file read
+// - return true if was notified for reading, or false on timeout
+function LinuxEventFDWait(fd: integer; ms: integer): boolean;
+
 {$endif OSLINUX}
 
 var
