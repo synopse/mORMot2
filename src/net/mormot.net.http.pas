@@ -291,7 +291,7 @@ type
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
     /// stream-oriented alternative to the Content in-memory buffer
-    // - is typically a TFileStream
+    // - is typically a TFileStreamEx
     ContentStream: TStream;
     /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved by ParseHeader
     // - proprietary header, used with our RESTful ORM access

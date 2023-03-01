@@ -2853,7 +2853,7 @@ type
     // - typical use may be:
     // ! with TPdfDocumentGdi.Create do
     // !   try
-    // !     Stream := TFileStream.Create(FileName, fmCreate);
+    // !     Stream := TFileStreamEx.Create(FileName, fmCreate);
     // !     try
     // !       SaveToStreamDirectBegin(Stream);
     // !       for i := 1 to 9 do

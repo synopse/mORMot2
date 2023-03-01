@@ -1285,6 +1285,8 @@ procedure TLinuxEventFD.SetEvent(count: integer);
 var
   cnt: Int64;
 begin
+  if count <= 0 then
+    exit;
   cnt := count;
   fpWrite(Handle, cnt, SizeOf(cnt));
 end;

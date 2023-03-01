@@ -2233,7 +2233,7 @@ type
     /// finalize the nested TStream instance
     destructor Destroy; override;
     /// append a nested TStream instance
-    // - you could use a TFileStream here for efficient chunked reading
+    // - you could use a TFileStreamEx here for efficient chunked reading
     function NewStream(Stream: TStream): TStream;
     /// get the last TRawByteStringStream, or append a new one if needed
     function ForText: TRawByteStringStream;

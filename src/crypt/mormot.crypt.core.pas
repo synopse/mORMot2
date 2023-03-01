@@ -1259,7 +1259,7 @@ type
     fBufPos, fBufAvailable: integer;
   public
     /// initialize AES encryption/decryption stream for a given stream and key
-    // - aStream is typically a TMemoryStream or a TFileStream
+    // - aStream is typically a TMemoryStream or a TFileStreamEx
     // - a trailing random IV is generated/retrieved, unless an IV is supplied
     // - AES is performed on an internal buffer of 128KB by default for efficiency
     constructor Create(aStream: TStream; const key; keySizeBits: cardinal;
@@ -1276,7 +1276,7 @@ type
     destructor Destroy; override;
     /// position change is not allowed: this method will raise an exception
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    /// access to the associated stream, e.g. a TFileStream instance
+    /// access to the associated stream, e.g. a TFileStreamEx instance
     property Stream: TStream
       read fStream;
   end;
@@ -1287,7 +1287,7 @@ type
   TAesPkcs7Writer = class(TAesPkcs7Abstract)
   public
     /// initialize the AES encryption stream into a given stream and a key
-    // - outStream is typically a TMemoryStream or a TFileStream
+    // - outStream is typically a TMemoryStream or a TFileStreamEx
     // - aesMode should be one of the supported AES_PKCS7WRITER chaining mode
     // - by default, a trailing random IV is generated, unless IV is supplied
     // - see also Create() overload with PBKDF2 password derivation
@@ -1315,7 +1315,7 @@ type
     fStreamSize: Int64;
   public
     /// initialize the AES decryption stream from an intput stream and a key
-    // - inStream is typically a TMemoryStream or a TFileStream
+    // - inStream is typically a TMemoryStream or a TFileStreamEx
     // - inStream size will be checked for proper PKCS7 padding
     // - aesMode should be one of the supported AES_PKCS7WRITER chaining mode
     // - by default, a trailing random IV is read, unless IV is supplied
@@ -1342,7 +1342,7 @@ function AesPkcs7(const src: RawByteString; encrypt: boolean;
   rounds: cardinal = 1000; aesMode: TAesMode = mCtr): RawByteString; overload;
 
 /// cypher/decypher any file using AES and PKCS7 padding, from a key buffer
-// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
+// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStreamEx
 // - by default, a trailing random IV is expected, unless IV is supplied
 // - if src=dst a temporary .partial file is created, then will replace src
 // - raise an exception on error (e.g. missing or invalid input file)
@@ -1351,7 +1351,7 @@ function AesPkcs7File(const src, dst: TFileName; encrypt: boolean; const key;
   keySizeBits: cardinal; aesMode: TAesMode = mCtr; IV: PAesBlock = nil): Int64; overload;
 
 /// cypher/decypher any file using AES and PKCS7 padding, from a password
-// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStream
+// - just a wrapper around TAesPkcs7Writer/TAesPkcs7Reader and TFileStreamEx
 // - will derivate the password using PBKDF2 over HMAC-SHA256, using lower
 // 128-bit as AES-CTR-128 key, and the upper 128-bit as IV
 // - returns the number of bytes written to dst file
@@ -2741,7 +2741,7 @@ type
     NoCrypt: boolean; // if KeySize=0
   public
     /// initialize the AES encryption stream for an output stream (e.g.
-    // a TMemoryStream or a TFileStream)
+    // a TMemoryStream or a TFileStreamEx)
     constructor Create(outStream: TStream; const Key; KeySize: cardinal);
     /// finalize the AES encryption stream
     // - internally call the Finish method

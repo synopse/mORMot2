@@ -4134,7 +4134,6 @@ const
   MAXPREVIOUSCONTENTSIZE = 128 shl 20;
 var
   log: TSynLog;
-  stream: TFileStream;
   endpos, start: Int64;
   c: AnsiChar;
   i, len, read, total: integer;
@@ -4151,47 +4150,43 @@ begin
       if log.fFamily <> self then
         continue;
       log.Writer.FlushToStream;
-      if log.Writer.Stream.InheritsFrom(TFileStream) then
-      begin
-        stream := TFileStream(log.Writer.Stream);
-        endpos := stream.Position;
-        try
-          if endpos > MAXPREVIOUSCONTENTSIZE then
-            len := MAXPREVIOUSCONTENTSIZE
-          else
-            len := MaximumKB shl 10;
-          start := log.fStreamPositionAfterHeader;
-          if (len <> 0) and
-             (endpos - start > len) then
-          begin
-            start := endpos - len;
-            stream.Position := start;
-            repeat
-              inc(start)
-            until (stream.Read(c, 1) = 0) or
-                  (ord(c) in [10, 13]);
-          end
-          else
-            stream.Position := start;
-          len := endpos - start;
-          SetLength(result, len);
-          P := pointer(result);
-          total := 0;
+      endpos := log.Writer.Stream.Position;
+      try
+        if endpos > MAXPREVIOUSCONTENTSIZE then
+          len := MAXPREVIOUSCONTENTSIZE
+        else
+          len := MaximumKB shl 10;
+        start := log.fStreamPositionAfterHeader;
+        if (len <> 0) and
+           (endpos - start > len) then
+        begin
+          start := endpos - len;
+          log.Writer.Stream.Position := start;
           repeat
-            read := stream.Read(P^, len);
-            if read <= 0 then
-            begin
-              if total <> len then
-                SetLength(result, total); // truncate on read error
-              break;
-            end;
-            inc(P, read);
-            dec(len, read);
-            inc(total, read);
-          until len = 0;
-        finally
-          stream.Position := endpos;
-        end;
+            inc(start)
+          until (log.Writer.Stream.Read(c, 1) = 0) or
+                (ord(c) in [10, 13]);
+        end
+        else
+          log.Writer.Stream.Position := start;
+        len := endpos - start;
+        SetLength(result, len);
+        P := pointer(result);
+        total := 0;
+        repeat
+          read := log.Writer.Stream.Read(P^, len);
+          if read <= 0 then
+          begin
+            if total <> len then
+              SetLength(result, total); // truncate on read error
+            break;
+          end;
+          inc(P, read);
+          dec(len, read);
+          inc(total, read);
+        until len = 0;
+      finally
+        log.Writer.Stream.Position := endpos;
       end;
       break;
     end;
@@ -4626,8 +4621,8 @@ begin
   try
     fWriter.FlushToStream;
     if ForceDiskWrite and
-       fWriterStream.InheritsFrom(TFileStream) then
-      diskflush := TFileStream(fWriterStream).Handle;
+       fWriterStream.InheritsFrom(THandleStream) then
+      diskflush := THandleStream(fWriterStream).Handle;
     if AutoFlushThread = nil then
       fFamily.StartAutoFlush;
     fNextFlushTix10 := fFamily.AutoFlushTimeOut;

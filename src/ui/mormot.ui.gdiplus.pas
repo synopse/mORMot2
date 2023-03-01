@@ -1075,7 +1075,7 @@ procedure SaveAs(Graphic: TPersistent; const FileName: TFileName;
 var
   s: TStream;
 begin
-  s := TFileStream.Create(FileName, fmCreate);
+  s := TFileStreamEx.Create(FileName, fmCreate);
   try
     SaveAs(Graphic, s, Format,
       CompressionQuality, MaxPixelsForBiggestSide, BitmapSetResolution);

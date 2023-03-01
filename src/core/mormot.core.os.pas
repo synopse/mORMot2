@@ -2876,7 +2876,7 @@ type
       read fDontReleaseHandle write fDontReleaseHandle;
   end;
 
-  /// a TFileStream which supports FileName longer than MAX_PATH
+  /// a TFileStream replacement which supports FileName longer than MAX_PATH
   TFileStreamEx = class(TFileStreamFromHandle)
   Private
     fFileName : TFileName;
@@ -2913,7 +2913,7 @@ type
 // - is used e.g. by StringFromFile() or HashFile() functions
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 
-/// returns a TFileStream optimized for one pass file reading
+/// returns a TFileStreamFromHandle optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress

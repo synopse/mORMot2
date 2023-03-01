@@ -2228,13 +2228,14 @@ begin
     Events := high(ndx); // paranoid avoid ndx[] buffer overflow
   result := 0;
   //{$I-}system.writeln('wakeup=',Events);
-  fThreadPollingLastWakeUpTix :=
-    mormot.core.os.GetTickCount64; // 16ms resolution on Windows, 4ms on Linux
-  if (acoThreadSmooting in fOptions) and
-     (Events > 1) then
-    tix := fThreadPollingLastWakeUpTix
-  else
-    tix := 0; // after accept() or on idle server, we can always wake threads
+  tix := 0;
+  if acoThreadSmooting in fOptions then
+  begin
+    fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
+    if Events > 1 then
+      // after accept() or on idle server, we should always wake threads
+      tix := fThreadPollingLastWakeUpTix;
+  end;
   fThreadPollingWakeupSafe.Lock;
   try
     th := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here

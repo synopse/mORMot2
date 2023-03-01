@@ -97,7 +97,7 @@ type
       const encoding: RawUtf8 = '');
     /// append a file upload section from a local file
     // - the supplied file won't be loaded into memory, but created as an
-    // internal TFileStream to be retrieved by successive Read() calls
+    // internal TFileStreamEx to be retrieved by successive Read() calls
     // - warning: should be called after AddContent
     procedure AddFile(const name: RawUtf8; const filename: TFileName;
       const contenttype: RawUtf8 = '');
@@ -1283,7 +1283,7 @@ begin
     if content <> '' then
       s := s + #13#10 + content + #13#10
     else
-      s := s + #13#10; // a TFileStream content will be appended
+      s := s + #13#10; // a TFileStreamEx content will be appended
     inc(fFilesCount);
   end;
   Append(s);
