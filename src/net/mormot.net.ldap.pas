@@ -231,7 +231,7 @@ type
     fBound: boolean;
     function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
-    function GetNETBIOSDomainName: RawUtf8;
+    function GetNetbiosDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
@@ -393,9 +393,10 @@ type
       read fSock;
     /// Root DN, retrieved using DiscoverRootDN if possible
     property RootDN: RawUtf8
-      read GetRootDN Write fRootDN;
+      read GetRootDN write fRootDN;
     /// domain NETBIOS name, Empty string if not found 
-    property NETBIOSDomainName: RawUtf8 read GetNETBIOSDomainName;
+    property NetbiosDomainName: RawUtf8
+      read GetNetbiosDomainName;
   end;
 
 const
@@ -1368,18 +1369,9 @@ begin
 end;
 
 function TLdapResult.CopyObjectSid(out objectSid: RawUtf8): boolean;
-var
-  SidAttr: TLdapAttribute;
-  SidBinary: RawByteString;
 begin
-  result := false;
-  SidAttr := Attributes.Find('objectSid');
-  if SidAttr = nil then
-    exit;
-  SidBinary := SidAttr.GetRaw;
-  objectSid := SidToText(PSid(@SidBinary[1]));
-  if objectSid <> '' then
-    result := true
+  objectSid := SidToText(Attributes.Find('objectSid').GetRaw);
+  result := objectSid <> '';
 end;
 
 function TLdapResult.CopyObjectGUID(out objectGUID: TGuid): boolean;
@@ -1584,15 +1576,16 @@ begin
     Asn1Data]);
 end;
 
-function TLdapClient.GetNETBIOSDomainName: RawUtf8;
+function TLdapClient.GetNetbiosDomainName: RawUtf8;
 var
   NetbiosObject: TLdapResult;
 begin
-  NetbiosObject := SearchFirst('CN=Partitions,CN=Configuration,' + RootDN, '(nETBIOSName=*)', ['nETBIOSName']);
+  NetbiosObject := SearchFirst('CN=Partitions,CN=Configuration,' + RootDN,
+    '(nETBIOSName=*)', ['nETBIOSName']);
   if Assigned(NetbiosObject) then
-    Result := NetbiosObject.Attributes.Get('nETBIOSName')
+    result := NetbiosObject.Attributes.Get('nETBIOSName')
   else
-    Result := '';
+    result := '';
 end;
 
 function TLdapClient.GetRootDN: RawUtf8;
