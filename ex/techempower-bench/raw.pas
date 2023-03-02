@@ -523,7 +523,7 @@ var
 
 function ComputeUpdateSql(cnt: integer): RawUtf8;
 var
-  i, p: integer;
+  i: integer;
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 begin
@@ -539,25 +539,15 @@ begin
     W := TTextWriter.CreateOwnedStream(tmp);
     try
       W.AddShort('UPDATE world SET randomnumber = CASE id');
-      p := 1;
       for i := 1 to cnt do
-      begin
-        W.AddShort(' when $');
-        W.AddU(p);
-        W.AddShort(' then $');
-        W.AddU(p + 1);
-        inc(p, 2);
-      end;
+        W.AddShort(' when ? then ?');
       W.AddShort(' else randomNumber end where id in (');
-      p := 1;
       repeat
-        W.Add('$');
-        W.AddU(p);
+        W.Add('?');
         dec(cnt);
         if cnt = 0 then
           break;
         W.Add(',');
-        inc(p, 2);
       until false;
       W.Add(')');
       W.SetText(LastComputeUpdateSql);
@@ -587,6 +577,7 @@ begin
     words[i].randomNumber := RandomWorld;
     stmt.Bind(i * 2 + 1, words[i].id);
     stmt.Bind(i * 2 + 2, words[i].randomNumber);
+    stmt.Bind(cnt * 2 + i + 1, words[i].id);
   end;
   stmt.ExecutePrepared;
   //conn.Commit; // autocommit
