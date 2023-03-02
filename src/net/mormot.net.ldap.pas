@@ -131,7 +131,7 @@ type
     property Attributes: TLdapAttributeList read fAttributes;
     /// Copy the 'objectSid' attribute if present
     // - Return true on success
-    function CopyObjectSid(out objectSid: TSid): boolean;
+    function CopyObjectSid(out objectSid: RawUtf8): boolean;
     /// Copy the 'objectGUID' attribute if present
     // - Return true on success
     function CopyObjectGUID(out objectGUID: TGuid): boolean;
@@ -231,6 +231,7 @@ type
     fBound: boolean;
     function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
+    function GetNETBIOSDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
@@ -393,6 +394,8 @@ type
     /// Root DN, retrieved using DiscoverRootDN if possible
     property RootDN: RawUtf8
       read GetRootDN Write fRootDN;
+    /// domain NETBIOS name, Empty string if not found 
+    property NETBIOSDomainName: RawUtf8 read GetNETBIOSDomainName;
   end;
 
 const
@@ -1364,27 +1367,19 @@ begin
   inherited Destroy;
 end;
 
-function TLdapResult.CopyObjectSid(out objectSid: TSid): boolean;
+function TLdapResult.CopyObjectSid(out objectSid: RawUtf8): boolean;
 var
   SidAttr: TLdapAttribute;
   SidBinary: RawByteString;
-  SidBytesLen: PtrInt;
 begin
   result := false;
   SidAttr := Attributes.Find('objectSid');
   if SidAttr = nil then
     exit;
   SidBinary := SidAttr.GetRaw;
-  SidBytesLen := length(SidBinary);
-  // Sid can fit in the struct TSid
-  if (SidBytesLen <= SizeOf(objectSid)) and
-     // Sid size is coherent with the sub authority count
-     (SidBytesLen = Sizeof(byte) * 2 + SizeOf(TSidAuth) +
-        SizeOf(cardinal) * PSid(SidBinary)^.SubAuthorityCount) then
-  begin
-    MoveFast(SidBinary[1], objectSid, SidBytesLen);
-    result := true;
-  end;
+  objectSid := SidToText(PSid(@SidBinary[1]));
+  if objectSid <> '' then
+    result := true
 end;
 
 function TLdapResult.CopyObjectGUID(out objectGUID: TGuid): boolean;
@@ -1587,6 +1582,17 @@ begin
   result := Asn(ASN1_SEQ, [
     Asn(fSeq),
     Asn1Data]);
+end;
+
+function TLdapClient.GetNETBIOSDomainName: RawUtf8;
+var
+  NetbiosObject: TLdapResult;
+begin
+  NetbiosObject := SearchFirst('CN=Partitions,CN=Configuration,' + RootDN, '(nETBIOSName=*)', ['nETBIOSName']);
+  if Assigned(NetbiosObject) then
+    Result := NetbiosObject.Attributes.Get('nETBIOSName')
+  else
+    Result := '';
 end;
 
 function TLdapClient.GetRootDN: RawUtf8;
