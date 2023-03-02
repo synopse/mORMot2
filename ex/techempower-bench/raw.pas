@@ -123,9 +123,6 @@ const
   WORLD_COUNT = 10000;
 
   WORLD_READ_SQL = 'select id,randomNumber from World where id=?';
-  WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
-    '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
-    ' where t.id = v.id';
   FORTUNES_SQL = 'select id,message from Fortune';
 
   FORTUNES_MESSAGE = 'Additional fortune added at request time.';
@@ -519,11 +516,63 @@ begin
   end;
 end;
 
+var
+  LastComputeUpdateSqlCnt: integer;
+  LastComputeUpdateSql: RawUtf8;
+  LastComputeUpdateSqlLock: TLightLock;
+
+function ComputeUpdateSql(cnt: integer): RawUtf8;
+var
+  i, p: integer;
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  LastComputeUpdateSqlLock.Lock;
+  if cnt <> LastComputeUpdateSqlCnt then
+  begin
+    // update table set randomNumber = CASE id when $1 then $2 when $3 then $4 ...
+    // when $9 then $10 else randomNumber end where id in ($1,$3,$5,$7,$9)
+    // - this weird syntax gives best number for TFB /rawupdates?queries=20 but
+    // is not good for smaller or higher count - we won't include it in the ORM
+    // but only for our RAW results - as other frameworks (e.g. ntex) do
+    W := TTextWriter.CreateOwnedStream(tmp);
+    try
+      W.AddShort('UPDATE world SET randomnumber = CASE id');
+      p := 1;
+      for i := 1 to cnt do
+      begin
+        W.AddShort(' when $');
+        W.AddU(p);
+        W.AddShort(' then $');
+        W.AddU(p + 1);
+        inc(p, 2);
+      end;
+      W.AddShort(' else randomNumber end where id in (');
+      p := 1;
+      repeat
+        W.Add('$');
+        W.AddU(p);
+        dec(cnt);
+        if cnt = 0 then
+          break;
+        W.Add(',');
+        inc(p, 2);
+      until false;
+      W.Add(')');
+      W.SetText(LastComputeUpdateSql);
+    finally
+      W.Free;
+    end;
+    LastComputeUpdateSqlCnt := cnt;
+  end;
+  result := LastComputeUpdateSql;
+  LastComputeUpdateSqlLock.UnLock;
+end;
+
 function TRawAsyncServer.rawupdates(ctxt: THttpServerRequest): cardinal;
 var
   cnt, i: PtrInt;
   words: TWorlds;
-  ids, nums: TInt64DynArray;
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
 begin
@@ -532,18 +581,13 @@ begin
   cnt := getQueriesParamValue(ctxt);
   if not getRawRandomWorlds(cnt, words) then
     exit;
-  setLength(ids{%H-}, cnt);
-  setLength(nums{%H-}, cnt);
-  // generate new randoms, fill parameters arrays for update
+  stmt := conn.NewStatementPrepared(ComputeUpdateSql(cnt), false, true);
   for i := 0 to cnt - 1 do
   begin
     words[i].randomNumber := RandomWorld;
-    ids[i] := words[i].id;
-    nums[i] := words[i].randomNumber;
+    stmt.Bind(i * 2 + 1, words[i].id);
+    stmt.Bind(i * 2 + 2, words[i].randomNumber);
   end;
-  stmt := conn.NewStatementPrepared(WORLD_UPDATE_SQLN, false, true);
-  stmt.BindArray(1, ids);
-  stmt.BindArray(2, nums);
   stmt.ExecutePrepared;
   //conn.Commit; // autocommit
   ctxt.SetOutJson(@words, TypeInfo(TWorlds));
