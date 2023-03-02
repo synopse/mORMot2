@@ -543,7 +543,7 @@ type
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ConnectionAdd(conn: TAsyncConnection);
-    function ThreadPollingWakeup(Events: PtrInt): PtrInt;
+    function ThreadPollingWakeup(Events: integer): PtrInt;
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
@@ -1768,7 +1768,7 @@ end;
 
 procedure TAsyncConnectionsThread.Execute;
 var
-  new, pending, ms: integer;
+  new, ms: integer;
   start: Int64;
   notif: TPollSocketResult;
 begin
@@ -1808,48 +1808,30 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            start := 0; // back to SleepStep(0)
+            start := 0;
             while not Terminated do
             begin
               fWaitForReadPending := false;
               new := fOwner.fClients.fRead.PollForPendingEvents(ms);
               if Terminated then
                 break;
-              fWaitForReadPending := true;
-              pending := fOwner.fClients.fRead.fPending.Count;
-              if new = 0 then // fRead has nothing new
-                if (pending = 0) and
-                   (fOwner.fClients.fRead.Count = 0) then
-                begin
-                  // avoid void PollForPendingEvents/SleepStep loop
-                  fOwner.DoGC;
-                  fEvent.ResetEvent;
-                  fWaitForReadPending := true;
-                  //fOwner.DoLog(sllInfo, 'Execute: % sleep', [fName], self);
-                  fEvent.WaitForEver; // blocking until next accept()
-                  //fOwner.DoLog(sllInfo, 'Execute: % wakeup', [fName], self);
-                  continue;
-                end
+              fEvent.ResetEvent;
+              fWaitForReadPending := true; // should be set before wakeup
+              if new <> 0 then
+                fOwner.ThreadPollingWakeup(new);
+              // wait for the sub-threads to wake up this one
+              if not Terminated then
+                if fEvent.IsEventFD or
+                   ((fOwner.fClients.fRead.fPending.Count = 0) and
+                    (fOwner.fClients.fRead.Count = 0)) then
+                  fEvent.WaitForEver
+                else if new = 0 then
+                  fEvent.SleepStep(start, @Terminated)
                 else
                 begin
-                  // 0/1/10/50/150 ms steps, checking fThreadReadPoll.fEvent
-                  fWaitForReadPending := true;
-                  fEvent.SleepStep(start, @Terminated);
-                  continue;
-                end;
-              if pending > 0 then
-              begin
-                // process fOwner.fClients.fPending in atpReadPending threads
-                //fOwner.fClients.fRead.PendingLogDebug('Wakeup');
-                fEvent.ResetEvent;
-                fWaitForReadPending := true; // should be set before wakeup
-                fOwner.ThreadPollingWakeup(new);
-                //fOwner.DoLog(sllCustom1, 'Execute: WaitFor ReadPending', [], self);
-                if not Terminated then
                   fEvent.WaitFor(20);
-                //fOwner.DoLog(sllCustom1, 'Execute: WaitFor out', [], self);
-                break; // back to SleepStep(0) if new=0
-              end;
+                  break;
+                end;
             end;
           end;
         atpReadPending:
@@ -1863,12 +1845,7 @@ begin
             fWakeUpFromSlowProcess := false;
             while GetNextRead(notif) do
               fOwner.fClients.ProcessRead(self, notif);
-            if acoThreadSmooting in fOwner.Options then
-            begin
-              fOwner.fThreadPollingWakeupSafe.Lock;
-              fThreadPollingLastWakeUpTix := 0; // this thread will now need to wakeup
-              fOwner.fThreadPollingWakeupSafe.UnLock;
-            end;
+            fThreadPollingLastWakeUpTix := 0; // this thread will now need to wakeup
             //{$I-}system.writeln(Name,' stop loop ',fThreadPollingLastWakeUpCount);
             // release atpReadPoll lock above
             with fOwner.fThreadReadPoll do
@@ -2188,17 +2165,17 @@ end;
   // MariaDB), which have much bigger complexity (like a dynamic thread pool)
   // - current default value of 32 has been set from trials of wrk benchmarks
 
-function TAsyncConnections.ThreadPollingWakeup(Events: PtrInt): PtrInt;
+function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
 var
   i: PtrInt;
   th: PAsyncConnectionsThread;
   t: TAsyncConnectionsThread;
-  tix: integer; // 32-bit is enough to check for
+  c, tix: integer; // 32-bit is enough to check for
   ndx: array[byte] of byte; // wake up to 256 threads at once
 begin
   // simple thread-safe fair round-robin over fThreads[]
   if Events > high(ndx) then
-    Events := high(ndx); // paranoid avoid ndx[] buffer overflow
+    Events := high(ndx); // paranoid to avoid ndx[] buffer overflow
   result := 0;
   //{$I-}system.writeln('wakeup=',Events);
   tix := 0;
@@ -2234,8 +2211,9 @@ begin
       begin
         // this thread is likely to be available very soon: consider it done
         //{$I-}system.writeln(t.Name,' cnt=',t.fThreadPollingLastWakeUpCount,'-',Events);
+        c := t.fThreadPollingLastWakeUpCount;
         dec(t.fThreadPollingLastWakeUpCount, Events);
-        dec(Events, t.fThreadPollingLastWakeUpCount);
+        dec(Events, c);
       end
       else if t.fWaitForReadPending then
       begin

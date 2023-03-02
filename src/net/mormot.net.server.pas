@@ -885,6 +885,8 @@ type
     /// ensure the HTTP server thread is actually bound to the specified port
     // - for hsoEnableTls support, allow to specify all server-side TLS
     // events, including callbacks, as supported by OpenSSL
+    // - will raise EHttpServer if the server did not start properly, e.g.
+    // could not bind the port within the supplied time
     procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
       overload;
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
@@ -1681,7 +1683,7 @@ begin
   result := false;
   if Len < 0 then // Pos^ = '?par=val&par=val&...'
   begin
-    req.fUrlParamPos := Pos;
+    req.fUrlParamPos := Pos; // for faster req.UrlParam()
     exit;
   end;
   req.fRouteName := pointer(Names); // fast assign as pointer reference
