@@ -1790,12 +1790,12 @@ type
     // - i.e. returns the last/weakest certificate having the supplied usage
     function PerUsage(u: TCryptCertUsage): ICryptCert;
       {$ifdef HASINLINE} inline; {$endif}
-    /// save all items as a CRLF separated list of cccCertOnly PEM certificates
+    /// save all items as a cccCertOnly CRLF separated list of PEM certificates
     function AsPem: RawUtf8;
     /// clear and load a CRLF separated list of PEM certificates
     // - returns the duplicated usages found during adding certificates
     function FromPem(algo: TCryptCertAlgo; const pem: RawUtf8): TCryptCertUsages;
-    /// save all items as a single binary blob of cccCertOnly certificates
+    /// save all items as a cccCertOnly binary blob of certificates
     // - binary layout is TBufferWriter.WriteVar() of all DER serialization
     function AsBinary: RawByteString;
     /// clear and load a binary blob of certificates saved by AsBinary
@@ -3610,6 +3610,7 @@ constructor TProtocolAes.CreateFrom(aAnother: TProtocolAes);
 begin
   inherited Create;
   fAes[false] := aAnother.fAes[false].Clone;
+  fAheadMode := aAnother.fAheadMode;
   fAes[true] := fAes[false].CloneEncryptDecrypt;
 end;
 
