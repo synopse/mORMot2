@@ -4204,7 +4204,11 @@ function ErrorCodeToText(err: TSqlite3ErrorCode): RawUtf8;
 // - raise a ESqlite3Exception if the result state is within SQLITE_ERRORS
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSqlite3DB; aResult: integer;
-  const SQL: RawUtf8 = ''): integer;
+  const Ctxt: RawUtf8 = ''): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+
+// raise a ESqlite3Exception as called from inlined sqlite3_check()
+procedure sqlite3_failed(DB: TSqlite3DB; Code: integer; const Ctxt: RawUtf8);
 
 var
   /// global access to linked SQLite3 library API calls
@@ -5707,12 +5711,17 @@ begin
 end;
 
 function sqlite3_check(DB: TSqlite3DB; aResult: integer;
-  const SQL: RawUtf8): integer;
+  const Ctxt: RawUtf8): integer;
 begin
   if (DB = 0) or
      (aResult in SQLITE_ERRORS) then // possible error codes
-    raise ESqlite3Exception.Create(DB, aResult, SQL);
+    sqlite3_failed(DB, aResult, Ctxt);
   result := aResult;
+end;
+
+procedure sqlite3_failed(DB: TSqlite3DB; Code: integer; const Ctxt: RawUtf8);
+begin
+  raise ESqlite3Exception.Create(DB, Code, Ctxt);
 end;
 
 function sqlite3_resultToErrorCode(aResult: integer): TSqlite3ErrorCode;
@@ -6688,7 +6697,7 @@ begin
   fSqlFunctions := TSynObjectList.Create;
   result := DBOpen;
   if result <> SQLITE_OK then
-    raise ESqlite3Exception.Create(fDB, result, 'DBOpen');
+    sqlite3_failed(fDB, result, 'DBOpen');
 end;
 
 destructor TSqlDataBase.Destroy;
@@ -7929,7 +7938,7 @@ end;
 procedure TSqlRequest.ExecuteAll;
 begin
   if RequestDB = 0 then
-    raise ESqlite3Exception.Create(0, SQLITE_CANTOPEN, 'ExecuteAll');
+    sqlite3_failed(0, SQLITE_CANTOPEN, 'ExecuteAll');
   try
     repeat
       repeat
@@ -7943,7 +7952,7 @@ end;
 procedure TSqlRequest.Execute;
 begin
   if RequestDB = 0 then
-    raise ESqlite3Exception.Create(0, SQLITE_CANTOPEN, 'Execute');
+    sqlite3_failed(0, SQLITE_CANTOPEN, 'Execute');
   try
     repeat
     until Step <> SQLITE_ROW; // Execute all steps of the first statement
@@ -8269,7 +8278,7 @@ var
 begin
   result := '';
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldA');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldA');
   P := sqlite3.column_text(Request, Col);
   L := StrLen(P); // faster than sqlite3.column_bytes(Request,Col)
   if L > 0 then
@@ -8286,7 +8295,7 @@ var
   P: pointer;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldBlob');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldBlob');
   P := sqlite3.column_blob(Request, Col);
   FastSetRawByteString(result, P, sqlite3.column_bytes(Request, Col));
 end;
@@ -8299,7 +8308,7 @@ end;
 function TSqlRequest.FieldDouble(Col: integer): double;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldDouble');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldDouble');
   result := sqlite3.column_double(Request, Col);
 end;
 
@@ -8307,7 +8316,7 @@ function TSqlRequest.FieldInt(Col: integer): Int64;
 begin
   // internally, SQLite always uses Int64 -> pure integer function is useless
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldInt');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldInt');
   result := sqlite3.column_int64(Request, Col);
 end;
 
@@ -8316,7 +8325,7 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldName');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldName');
   P := sqlite3.column_name(Request, Col);
   FastSetString(result, P, StrLen(P));
 end;
@@ -8324,7 +8333,7 @@ end;
 function TSqlRequest.FieldIndex(const aColumnName: RawUtf8): integer;
 begin
   if Request = 0 then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'FieldIndex');
+    sqlite3_failed(RequestDB, SQLITE_MISUSE, 'FieldIndex');
   for result := 0 to FieldCount - 1 do
     if StrIComp(pointer(aColumnName), sqlite3.column_name(Request, result)) = 0 then
       exit;
@@ -8334,7 +8343,7 @@ end;
 function TSqlRequest.FieldNull(Col: integer): boolean;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldNull');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldNull');
   result := sqlite3.column_type(Request, Col) = SQLITE_NULL;
 end;
 
@@ -8348,7 +8357,7 @@ var
   d: TRttiVarData absolute Value;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldVariant');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldVariant');
   if d.VType <> 0 then
     VarClearProc(d.Data);
   v := sqlite3.column_value(Request, Col);
@@ -8391,7 +8400,7 @@ var
   v: TSqlite3Value;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldDateTime');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldDateTime');
   v := sqlite3.column_value(Request, Col);
   case sqlite3.value_type(v) of
     SQLITE_TEXT:
@@ -8408,7 +8417,7 @@ end;
 function TSqlRequest.FieldType(Col: integer): integer;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldType');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldType');
   result := sqlite3.column_type(Request, Col);
 end;
 
@@ -8417,7 +8426,7 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldDeclaredType');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldDeclaredType');
   P := pointer(sqlite3.column_decltype(Request, Col));
   FastSetString(result, P, StrLen(P));
 end;
@@ -8427,7 +8436,7 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldDeclaredTypeS');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldDeclaredTypeS');
   P := pointer(sqlite3.column_decltype(Request, Col));
   result := Utf8DecodeToString(P, StrLen(P));
 end;
@@ -8437,7 +8446,7 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldUTF8');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldUTF8');
   P := pointer(sqlite3.column_text(Request, Col));
   FastSetString(result, P, StrLen(P));
 end;
@@ -8447,7 +8456,7 @@ end;
 function TSqlRequest.FieldS(Col: integer): string;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldS');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldS');
   result := sqlite3.column_text16(Request, Col);
 end;
 
@@ -8458,7 +8467,7 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldS');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldS');
   P := pointer(sqlite3.column_text(Request, Col));
   CurrentAnsiConvert.Utf8BufferToAnsi(P, StrLen(P), RawByteString(result));
 end;
@@ -8468,7 +8477,7 @@ end;
 function TSqlRequest.FieldValue(Col: integer): TSqlite3Value;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldValue');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldValue');
   result := sqlite3.column_value(Request, Col);
 end;
 
@@ -8478,7 +8487,7 @@ var
   P: PWideChar;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldW');
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldW');
   P := sqlite3.column_text16(Request, Col);
   SetString(result, PUtf8Char(pointer(P)), StrLenW(P) * 2 + 1);
 end;
@@ -8496,7 +8505,7 @@ begin
   fResetDone := false;
   ClearDbError;
   if DB = 0 then
-    raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
+    sqlite3_failed(0, SQLITE_CANTOPEN, SQL);
   {$ifndef NOSQLITE3FPUSAVE}
   saved := SetFpuFlags;
   try
@@ -8511,7 +8520,7 @@ begin
         fNextSQL, -1, fRequest, fNextSQL);
       if fNextSQL^ = #0 then
         // statement contains only comment
-       raise ESqlite3Exception.Create(DB, SQLITE_EMPTY, SQL);
+       sqlite3_failed(DB, SQLITE_EMPTY, SQL);
     end;
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
@@ -8582,7 +8591,7 @@ var
 {$endif NOSQLITE3FPUSAVE}
 begin
   if Request = 0 then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'Step');
+    sqlite3_failed(RequestDB, SQLITE_MISUSE, 'Step');
   fResetDone := false;
   {$ifdef NOSQLITE3FPUSAVE}
   result := sqlite3.step(Request);
@@ -8592,13 +8601,13 @@ begin
   ResetFpuFlags(saved);
   {$endif NOSQLITE3FPUSAVE}
   if result in SQLITE_ERRORS then // put sqlite3_check() after nested FpuFlags
-     raise ESqlite3Exception.Create(RequestDB, result, 'Step');
+    sqlite3_failed(RequestDB, result, 'Step');
 end;
 
 function TSqlRequest.GetReadOnly: boolean;
 begin
   if Request = 0 then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'IsReadOnly');
+    sqlite3_failed(RequestDB, SQLITE_MISUSE, 'IsReadOnly');
   result := sqlite3.stmt_readonly(Request) <> 0;
 end;
 
@@ -8633,7 +8642,7 @@ var
   v: TSqlite3Value; // faster to work at SQLite3 value level
 begin
   if Request = 0 then
-    raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'FieldsToJson');
+    sqlite3_failed(RequestDB, SQLITE_MISUSE, 'FieldsToJson');
   if WR.Expand then
     WR.Add('{');
   for f := 0 to FieldCount - 1 do
@@ -8986,7 +8995,7 @@ begin
               SQLITE_DONE:
                 break;
             else
-              raise ESqlite3Exception.Create(fDestDB.DB, res, 'Backup');
+              sqlite3_failed(fDestDB.DB, res, 'Backup');
             end;
             if Terminated then
               raise ESqlite3Exception.Create('Backup process forced to terminate');

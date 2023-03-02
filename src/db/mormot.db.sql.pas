@@ -7393,9 +7393,10 @@ var
       on E: Exception do
       begin
         {$ifndef SYNDB_SILENCE}
-        with SynDBLog.Add do
-          if [sllSQL, sllDB, sllException, sllError] * Family.Level <> [] then
-            LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--');
+        if SynDBLog <> nil then
+          with SynDBLog.Add do
+            if [sllSQL, sllDB, sllException, sllError] * Family.Level <> [] then
+              LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--');
         {$endif SYNDB_SILENCE}
         stmt.Free;
         result := nil;
