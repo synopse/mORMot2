@@ -535,6 +535,7 @@ begin
     // - this weird syntax gives best number for TFB /rawupdates?queries=20 but
     // is not good for smaller or higher count - we won't include it in the ORM
     // but only for our RAW results - as other frameworks (e.g. ntex) do
+    LastComputeUpdateSqlCnt := cnt;
     W := TTextWriter.CreateOwnedStream(tmp);
     try
       W.AddShort('UPDATE world SET randomnumber = CASE id');
@@ -563,7 +564,6 @@ begin
     finally
       W.Free;
     end;
-    LastComputeUpdateSqlCnt := cnt;
   end;
   result := LastComputeUpdateSql;
   LastComputeUpdateSqlLock.UnLock;
