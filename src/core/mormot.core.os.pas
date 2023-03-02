@@ -4060,6 +4060,9 @@ type
       {$ifdef OSPOSIX} inline; {$endif}
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
+    /// could be used to tune your algorithm if the eventfd() API is used
+    function IsEventFD: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 
@@ -8560,6 +8563,15 @@ begin
         exit;
       result := GetTickCount64;
     until result >= endtix;
+end;
+
+function TSynEvent.IsEventFD: boolean;
+begin
+  {$ifdef HASEVENTFD}
+  result := fFD <> 0;
+  {$else}
+  result := false;
+  {$endif HASEVENTFD}
 end;
 
 
