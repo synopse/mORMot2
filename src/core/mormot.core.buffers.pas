@@ -716,6 +716,9 @@ type
     /// read the next 2 bytes from the buffer as a 16-bit unsigned value
     function Next2: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 2 bytes from the buffer as a 16-bit big-endian value
+    function Next2BigEndian: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
@@ -852,6 +855,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append 2 bytes of data at the current position
     procedure Write2(Data: cardinal);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append 2 bytes of data, encoded as BigEndian,  at the current position
+    procedure Write2BigEndian(Data: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer);
@@ -3409,6 +3415,14 @@ begin
   inc(P, 2);
 end;
 
+function TFastReader.Next2BigEndian: cardinal;
+begin
+  if P + 1 >= Last then
+    ErrorOverflow;
+  result := swap(PWord(P)^);
+  inc(P, 2);
+end;
+
 function TFastReader.Next4: cardinal;
 begin
   if P + 3 >= Last then
@@ -4356,6 +4370,11 @@ begin
     InternalFlush;
   PWord(@fBuffer^[fPos])^ := Data;
   inc(fPos, SizeOf(Word));
+end;
+
+procedure TBufferWriter.Write2BigEndian(Data: cardinal);
+begin
+  Write2(swap(word(Data)));
 end;
 
 procedure TBufferWriter.Write4(Data: integer);
