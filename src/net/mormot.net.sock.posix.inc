@@ -816,6 +816,63 @@ end;
 
 {$endif USE_IFADDRS}
 
+function ParseLine(P: PUtf8Char): PUtf8Char;
+begin
+  result := P;
+  if P = nil then
+    exit;
+  repeat
+    inc(P);
+  until (P^ = #0) or
+        (P^ > ' ');
+  result := P;
+  while not (ord(P^) in [0, 10, 13]) do
+  begin
+    if P^ < ' ' then
+      P^ := ' '; // change any tab into space
+    inc(P);
+  end;
+  P^ := #0; // make asciiz
+end;
+
+function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
+var
+  resolv, one: RawUtf8;
+  p, n: PUtf8Char;
+  l, c: PtrInt;
+begin
+  result := nil;
+  if usePosixEnv then
+    resolv := StringFromFile(GetEnvironmentVariable('ETC'), true);
+  if resolv = '' then
+    // all systems are likely to have or generate this file
+    // - the libc seems to read it for its gethostname()
+    resolv := StringFromFile('/etc/resolv.conf');
+  c := 0;
+  p := pointer(resolv);
+  while p <> nil do
+  begin
+    n := GotoNextLine(p);
+    if NetStartWith(p, 'NAMESERVER ') then
+    begin
+      inc(p, 11);
+      if n = nil then
+        l := StrLen(p)
+      else
+        l := n - p - 1;
+      FastSetString(one, p, l);
+      TrimSelf(one);
+      if one <> '' then
+      begin
+        SetLength(result, c + 1);
+        result[c] := one;
+        inc(c);
+      end;
+    end;
+    p := n;
+  end;
+end;
+
 
 { ******************** Efficient Multiple Sockets Polling }
 

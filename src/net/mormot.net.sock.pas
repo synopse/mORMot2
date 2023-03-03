@@ -412,10 +412,9 @@ type
 /// enumerate all Mac addresses of the current computer
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 
-/// enumerate all Mac addresses of the current computer as 'name1=addr1 name2=addr2'
+/// enumerate all MAC addresses of the current computer as 'name1=addr1 name2=addr2'
 function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
-
 
 {$ifdef OSWINDOWS}
 /// remotly get the MAC address of a computer, from its IP Address
@@ -423,6 +422,10 @@ function GetMacAddressesText(WithoutName: boolean = true;
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 {$endif OSWINDOWS}
+
+/// retrieve all Domain Name Servers addresses known by the Operating System
+// - on POSIX, will use /etc/resolv.conf content unless usePosixEnv is set
+function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
@@ -4622,7 +4625,7 @@ initialization
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
 
 finalization
-  FinalizeUnit;
+  FinalizeUnit;  // in mormot.net.sock.windows/posix.inc
 
 end.
 

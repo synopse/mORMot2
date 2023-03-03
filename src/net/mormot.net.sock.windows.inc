@@ -687,6 +687,9 @@ const
               GAA_FLAG_SKIP_FRIENDLY_NAME;
               // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
   IfOperStatusUp = 1;
+  MAX_HOSTNAME_LEN = 128;
+  MAX_DOMAIN_NAME_LEN = 128;
+  MAX_SCOPE_ID_LEN = 256;
 
 type
   SOCKET_ADDRESS = record
@@ -741,6 +744,32 @@ type
     TunnelType: DWORD;
     // DHCP v6 Info following (not used by our code)
   end;
+  IP_ADDRESS_STRING = array [0..15] of AnsiChar;
+  IP_ADDR_IP4 = cardinal;
+  IP_ADDR_STRING = packed record
+    IpAddress: IP_ADDRESS_STRING;
+    IpMask: IP_ADDRESS_STRING;
+    Context: IP_ADDR_IP4;
+  end;
+  PIP_ADDR_STRING = ^IP_ADDR_STRING;
+  PIP_ADDR_STRING_LINKED_LIST = ^IP_ADDR_STRING_LINKED_LIST;
+  IP_ADDR_STRING_LINKED_LIST = packed record
+    Next: PIP_ADDR_STRING_LINKED_LIST;
+    Current: IP_ADDR_STRING;
+  end;
+  FIXED_INFO = packed record
+    HostName: array[0..MAX_HOSTNAME_LEN + 3] of AnsiChar;
+    DomainName: array[0..MAX_DOMAIN_NAME_LEN + 3] of AnsiChar;
+    CurrentDnsServer: PIP_ADDR_STRING;
+    DnsServerList: IP_ADDR_STRING_LINKED_LIST;
+    NodeType: DWORD;
+    ScopeId: array[0 .. MAX_SCOPE_ID_LEN + 3] of AnsiChar;
+    EnableRouting: DWORD;
+    EnableProxy: DWORD;
+    EnableDns: DWORD;
+  end;
+  PFIXED_INFO = ^FIXED_INFO;
+
 
 var
   // some iphlpapi.dll late-binded APIs via DelayedProc()
@@ -748,6 +777,38 @@ var
     pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
   SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
     PhyAddrLen: Pointer): DWORD; stdcall;
+  GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
+    pOutBufLen: PULONG): DWORD; stdcall;
+
+function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
+var
+  n, l: PtrInt;
+  siz: ULONG;
+  p: PIP_ADDR_STRING_LINKED_LIST;
+  tmp: RawByteString;
+begin
+  result := nil;
+  siz := 0;
+  if not DelayedProc(GetNetworkParams, iphlpapiDll, 'iphlpapi.dll',
+           'GetNetworkParams') or
+     (GetNetworkParams(nil, @siz) <> ERROR_BUFFER_OVERFLOW) then
+    exit;
+  SetLength(tmp, siz);
+  if GetNetworkParams(pointer(tmp), @siz) <> ERROR_SUCCESS then
+    exit;
+  n := 0;
+  p := @PFIXED_INFO(tmp)^.DnsServerList;
+  repeat
+    l := StrLen(@p^.Current.IpAddress);
+    if l <> 0 then
+    begin
+      SetLength(result, n + 1);
+      FastSetString(result[n], @p^.Current.IpAddress, l);
+      inc(n);
+    end;
+    p := p^.Next;
+  until p = nil;
+end;
 
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
