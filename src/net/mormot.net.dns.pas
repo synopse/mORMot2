@@ -189,6 +189,12 @@ function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
 function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// raw parsing of best-known DNS record data
+// - as used by DnsParseRecord() to fill the TDnsAnswer.Text field
+// - only recognize A AAAA CNAME TXT NS PTR MX SOA SRV Resource Records
+procedure DnsParseData(RR: TDnsResourceRecord;
+  const Answer: RawByteString; Pos, Len: PtrInt; var Text: RawUtf8);
+
 /// compute a DNS query message
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal = QC_INET): RawByteString;
@@ -200,21 +206,36 @@ function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
 {$A+}
 
 type
+  /// one DNS decoded record
   TDnsAnswer = record
+    /// the Name of this record
     QName: RawUtf8;
+    /// the type of this record
     QType: TDnsResourceRecord;
+    /// after how many seconds this record information is deprecated
     TTL: cardinal;
-    Data: RawByteString;
+    /// 0-based position of the raw binary of the record content
+    // - pointing into TDnsResult.RawAnswer binary buffer
+    Position: integer;
+    /// main text information decoded from Data binary
+    // - only best-known DNS resource record QType are recognized, i.e.
+    // A AAAA CNAME TXT NS PTR MX SOA SRV as decoded by DnsParseData()
+    Text: RawUtf8;
   end;
   PDnsAnswer = ^TDnsAnswer;
   TDnsAnswers = array of TDnsAnswer;
 
   /// the resultset of a DnsQuery() process
   TDnsResult = record
+    /// the decoded DNS header of this query
     Header: TDnsHeader;
+    /// the Answers records
     Answer: TDnsAnswers;
+    /// the Authorities records
     Authority: TDnsAnswers;
+    /// the Additionals records
     Additional: TDnsAnswers;
+    /// the raw binary UDP response frame, needed by DnsParseString() decoding
     RawAnswer: RawByteString;
   end;
 
@@ -330,7 +351,7 @@ begin
   p := pointer(Answer);
   tmp[0] := #0;
   repeat
-    if Pos > length(Answer) then
+    if Pos >= length(Answer) then
       exit;
     len := p[Pos];
     inc(Pos);
@@ -340,10 +361,10 @@ begin
     begin
       if nextpos = 0 then
         nextpos := Pos + 1; // if compressed, return end of 16-bit offset
-      if Pos > length(Answer) then
+      if Pos >= length(Answer) then
         exit;
       Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos];
-      if Pos > length(Answer) then
+      if Pos >= length(Answer) then
         exit;
       len := p[Pos];
       inc(Pos);
@@ -371,6 +392,47 @@ function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
 begin
   result := swap(PWord(@p[pos])^);
   inc(pos, 2);
+end;
+
+procedure DnsParseData(RR: TDnsResourceRecord;
+  const Answer: RawByteString; Pos, Len: PtrInt; var Text: RawUtf8);
+var
+  p: PByteArray;
+  s1, s2: RawUtf8;
+begin
+  p := @PByteArray(Answer)[Pos];
+  case RR of
+    drrA:
+      // IPv4 binary address
+      if Len = 4 then
+        IP4Text(p, Text);
+    drrAAAA:
+      // IPv6 binary address
+      if Len = 16 then
+        IP6Text(p, Text);
+    drrCNAME,
+    drrTXT,
+    drrNS,
+    drrPTR:
+      // single text Value
+      DnsParseString(Answer, Pos, Text);
+    drrMX:
+      // Priority / Value
+      DnsParseString(Answer, Pos + 2, Text);
+    drrSOA:
+      begin
+        // MName / RName / Serial / Refresh / Retry / Expire / TTL
+        Pos := DnsParseString(Answer, Pos, s1);
+        if (Pos <> 0) and
+           (DnsParseString(Answer, Pos, s2) <> 0) then
+          Text := s1 + ' ' + s2;
+      end;
+    drrSRV:
+      // Priority / Weight / Port / QName
+      if Len > 6 then
+        if DnsParseString(Answer, Pos + 6, Text) <> 0 then
+          Text := Text + ':' + UInt32ToUtf8(swap(PWordArray(p)[2])); // :port
+  end;
 end;
 
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
@@ -461,7 +523,8 @@ begin
   len := DnsParseWord(p, Pos);
   if Pos + len > length(Answer) then
     exit;
-  FastSetRawByteString(Dest.Data, @p[Pos], len);
+  Dest.Position := Pos;
+  DnsParseData(Dest.QType, Answer, Pos, len, Dest.Text);
   inc(Pos, len);
   result := true;
 end;
