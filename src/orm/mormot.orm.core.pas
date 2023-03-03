@@ -458,12 +458,12 @@ type
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
-    procedure GetJsonValue(Value: TOrm; withID: boolean; const Fields: TFieldBits;
-      out Json: RawUtf8; LowerCaseID: boolean = false); overload;
+    procedure GetJsonValue(Value: TOrm; withID: boolean;
+      const Fields: TFieldBits; out Json: RawUtf8); overload;
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
-    procedure GetJsonValue(Value: TOrm; withID: boolean; Occasion: TOrmOccasion;
-      var Json: RawUtf8; LowerCaseID: boolean = false); overload;
+    procedure GetJsonValue(Value: TOrm; withID: boolean;
+      Occasion: TOrmOccasion; var Json: RawUtf8); overload;
     /// get a list of members from a SQL statement as TObjectList
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2307,7 +2307,7 @@ type
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
     procedure AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
-      WithID: boolean; LowerCaseID: boolean = false);
+      WithID: boolean);
     /// will append all the FillPrepare() records as an expanded JSON array
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
     // ! while FillOne do .. AppendJsonObject() ..
@@ -2317,7 +2317,7 @@ type
     // parameter is customized to a non void value
     // - see also IRestOrm.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUtf8; W: TJsonWriter;
-      const Fields: TFieldBits = []; WithID: boolean = true; LowerCaseID: boolean = false);
+      const Fields: TFieldBits = []; WithID: boolean = true);
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_FAST_EXTENDED by JSON_FAST
     procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_FAST);
@@ -7006,11 +7006,21 @@ end;
 
 procedure TOrm.SetBinaryValuesSimpleFields(var Read: TFastReader);
 var
-  f: PtrInt;
+  n: integer;
+  p: POrmPropInfo;
 begin
   with Orm do
-    for f := 0 to length(SimpleFields) - 1 do
-      SimpleFields[f].SetBinary(self, Read);
+  begin
+    p := pointer(SimpleFields);
+    if p = nil then
+      exit;
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+    repeat
+      p^.SetBinary(self, Read);
+      inc(p);
+      dec(n);
+    until n = 0;
+  end;
 end;
 
 const
@@ -7063,12 +7073,8 @@ begin
     W.Add('}');
 end;
 
-const
-  _ID: array[boolean] of string[7] = (
-    '{"ID":', '{"id":');
-
 procedure TOrm.AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
-  WithID, LowerCaseID: boolean);
+  WithID: boolean);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
   P: TOrmProperties;
@@ -7081,7 +7087,7 @@ begin
   end;
   if WithID then
   begin
-    W.AddShorter(_ID[LowerCaseID]);
+    W.AddShorter('{"ID":');
     W.Add(fID);
     W.AddComma;
   end
@@ -7108,14 +7114,14 @@ begin
 end;
 
 procedure TOrm.AppendFillAsJsonArray(const FieldName: RawUtf8;
-  W: TJsonWriter; const Fields: TFieldBits; WithID, LowerCaseID: boolean);
+  W: TJsonWriter; const Fields: TFieldBits; WithID: boolean);
 begin
   if FieldName <> '' then
     W.AddFieldName(FieldName);
   W.Add('[');
   while FillOne do
   begin
-    AppendAsJsonObject(W, Fields, WithID, LowerCaseID);
+    AppendAsJsonObject(W, Fields, WithID);
     W.AddComma;
   end;
   W.CancelLastComma;
@@ -11036,7 +11042,12 @@ var
 begin
   result := false;
   aCache^.Safe.ReadLock;
-  try // inlined TOrmCacheEntry.RetrieveBinary to avoid temporary RawByteString
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    // inlined TOrmCacheEntry.RetrieveBinary to avoid temporary RawByteString
     e := aCache^.RetrieveEntry(aID);
     if (e <> nil) and
        (e <> ORMCACHE_DEPRECATED) then
@@ -11045,9 +11056,10 @@ begin
       aValue.SetBinaryValuesSimpleFields(r);
       aValue.fID := aID; // override RowID field
       result := true;
-      exit;
     end;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     aCache^.Safe.ReadUnLock;
   end;
   if e = ORMCACHE_DEPRECATED then // happens at most every 512 ms
