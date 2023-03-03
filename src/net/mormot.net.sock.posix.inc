@@ -816,25 +816,6 @@ end;
 
 {$endif USE_IFADDRS}
 
-function ParseLine(P: PUtf8Char): PUtf8Char;
-begin
-  result := P;
-  if P = nil then
-    exit;
-  repeat
-    inc(P);
-  until (P^ = #0) or
-        (P^ > ' ');
-  result := P;
-  while not (ord(P^) in [0, 10, 13]) do
-  begin
-    if P^ < ' ' then
-      P^ := ' '; // change any tab into space
-    inc(P);
-  end;
-  P^ := #0; // make asciiz
-end;
-
 function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
