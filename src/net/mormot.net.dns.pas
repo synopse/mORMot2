@@ -20,12 +20,12 @@ interface
 uses
   sysutils,
   classes,
-  mormot.net.sock,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.buffers,
   mormot.core.text,
-  mormot.core.unicode;
+  mormot.core.buffers,
+  mormot.net.sock;
+
 
 { **************** Low-Level DNS Protocol Definitions }
 
@@ -249,6 +249,18 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
   RR: TDnsResourceRecord = drrA; const NameServer: RawUtf8 = '';
   QClass: cardinal = QC_INET): boolean;
 
+/// retrieve the IPv4 address of a DNS host name - using drrA
+function DnsLookup(const HostName: RawUtf8;
+  const NameServer: RawUtf8 = ''): RawUtf8;
+
+/// retrieve the DNS host name of an IPv4 address - using drrPTR
+function DnsReverseLookup(const IP4: RawUtf8;
+  const NameServer: RawUtf8 = ''): RawUtf8;
+
+/// retrieve the Services of a DNS host name - using drrSRV
+function DnsService(const HostName: RawUtf8;
+  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+
 
 
 implementation
@@ -322,14 +334,14 @@ procedure TDnsHeader.SetQR(AValue: boolean);
 begin
   Flags := Flags and not(QF_QR);
   if AValue then
-    Flags := Flags or (1 shl 7);
+    Flags := Flags or QF_QR;
 end;
 
 procedure TDnsHeader.SetRD(AValue: boolean);
 begin
   Flags := Flags and not(QF_RD);
   if AValue then
-    Flags := Flags or 1;
+    Flags := Flags or QF_RD;
 end;
 
 procedure TDnsHeader.SetZ(AValue: byte);
@@ -578,6 +590,52 @@ begin
         exit;
   end;
   result := true;
+end;
+
+function DnsLookup(const HostName, NameServer: RawUtf8): RawUtf8;
+var
+  res: TDnsResult;
+  i: PtrInt;
+begin
+  if DnsQuery(HostName, res, drrA, NameServer) then
+    for i := 0 to high(res.Answer) do
+      if res.Answer[i].QType = drrA then
+      begin
+        result := res.Answer[i].Text; // ignore CNAME but return first A record
+        exit;
+      end;
+  result := '';
+end;
+
+function DnsReverseLookup(const IP4, NameServer: RawUtf8): RawUtf8;
+var
+  b: array[0..3] of byte;
+  res: TDnsResult;
+  i: PtrInt;
+begin
+  result := '';
+  if IPToCardinal(IP4, PCardinal(@b)^) and
+     DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa',
+       [{%H-}b[3], {%H-}b[2], {%H-}b[1], {%H-}b[0]]),
+       res, drrPTR, NameServer) then
+    for i := 0 to high(res.Answer) do
+      if res.Answer[i].QType = drrPTR then
+      begin
+        result := res.Answer[i].Text;
+        exit;
+      end;
+end;
+
+function DnsService(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
+var
+  res: TDnsResult;
+  i: PtrInt;
+begin
+  result := nil;
+  if DnsQuery(HostName, res, drrSRV, NameServer) then
+    for i := 0 to high(res.Answer) do
+      if res.Answer[i].QType = drrSRV then
+        AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
 end;
 
 
