@@ -1849,6 +1849,7 @@ begin
           // secondary threads wait, then read and process pending events
           begin
             fWaitForReadPending := true;
+            fEvent.ResetEvent;
             fEvent.WaitForEver;
             if Terminated then
               break;
