@@ -37,8 +37,7 @@ type
   // name server, or drrCNAME for the alias canonical name
   // - this enumerate has no RTTI because it is mapped to the integer values
   TDnsResourceRecord = (
-    drrUndefined,
-    drrA,
+    drrA = 1,
     drrNS,
     drrMD,
     drrMF,
@@ -216,11 +215,12 @@ type
     Answer: TDnsAnswers;
     Authority: TDnsAnswers;
     Additional: TDnsAnswers;
+    RawAnswer: RawByteString;
   end;
 
 /// parse a DNS answer record entry
-function DnsParseRecord(const answer: RawByteString; var pos: PtrInt;
-  var dest: TDnsAnswer): boolean;
+function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
+  var Dest: TDnsAnswer; QClass: cardinal): boolean;
 
 /// send a DNS query and parse the answer
 // - if no NameServer[] is supplied, will use GetDnsAddresses list from OS
@@ -321,32 +321,37 @@ function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
   var Text: RawUtf8): PtrInt;
 var
   p: PByteArray;
+  nextpos: PtrInt;
   len: byte;
   tmp: ShortString;
 begin
-  result := 0;
+  nextpos := 0;
+  result := 0; // indicates error (malformated input detected)
   p := pointer(Answer);
   tmp[0] := #0;
   repeat
+    if Pos > length(Answer) then
+      exit;
     len := p[Pos];
     inc(Pos);
     if len = 0 then
       break;
     while (len and DNS_RELATIVE) =  DNS_RELATIVE do
     begin
-      if result = 0 then
-        result := Pos + 1; // if compressed, return end of 16-bit offset
+      if nextpos = 0 then
+        nextpos := Pos + 1; // if compressed, return end of 16-bit offset
+      if Pos > length(Answer) then
+        exit;
       Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos];
+      if Pos > length(Answer) then
+        exit;
       len := p[Pos];
       inc(Pos);
     end;
     if len = 0 then
       break;
     if Pos + len > length(Answer) then
-    begin
-      result := 0; // avoid buffer overflow, and return 0 as error parsing
       exit;
-    end;
     AppendShortBuffer(pointer(@p[Pos]), len, tmp);
     AppendShortChar('.', tmp);
     inc(Pos, len);
@@ -356,8 +361,10 @@ begin
   if tmp[ord(tmp[0])] = '.' then
     dec(tmp[0]);
   FastSetString(Text, @tmp[1], ord(tmp[0]));
-  if result = 0 then
-    result := Pos;
+  if nextpos = 0 then
+    result := Pos
+  else
+    result := nextpos;
 end;
 
 function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
@@ -435,27 +442,27 @@ end;
 
 { **************** High-Level DNS Query }
 
-function DnsParseRecord(const answer: RawByteString; var pos: PtrInt;
-  var dest: TDnsAnswer): boolean;
+function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
+  var Dest: TDnsAnswer; QClass: cardinal): boolean;
 var
   len: PtrInt;
   p: PByteArray;
 begin
   result := false;
-  p := pointer(answer);
-  pos := DnsParseString(answer, pos, dest.QName);
-  if pos = 0 then
+  p := pointer(Answer);
+  Pos := DnsParseString(Answer, Pos, Dest.QName);
+  if Pos = 0 then
     exit;
-  word(dest.QType) := DnsParseWord(p, pos);
-  if DnsParseWord(p, pos) <> QC_INET then
+  word(Dest.QType) := DnsParseWord(p, Pos);
+  if DnsParseWord(p, Pos) <> QClass then
     exit;
-  dest.TTL := bswap32(PCardinal(@p[pos])^);
-  inc(pos, 4);
-  len := DnsParseWord(p, pos);
-  if pos + len > length(answer) then
+  Dest.TTL := bswap32(PCardinal(@p[Pos])^);
+  inc(Pos, 4);
+  len := DnsParseWord(p, Pos);
+  if Pos + len > length(Answer) then
     exit;
-  FastSetRawByteString(dest.Data, @p[pos], len);
-  inc(pos, len);
+  FastSetRawByteString(Dest.Data, @p[Pos], len);
+  inc(Pos, len);
   result := true;
 end;
 
@@ -464,7 +471,7 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
 var
   i, pos: PtrInt;
   servers: TRawUtf8DynArray;
-  request, answer: RawByteString;
+  request: RawByteString;
 begin
   result := false;
   Finalize(Res);
@@ -473,38 +480,38 @@ begin
   begin
     servers := GetDnsAddresses;
     for i := 0 to high(servers) do
-      if DnsSendQuestion(servers[i], DnsPort, request, answer) then
+      if DnsSendQuestion(servers[i], DnsPort, request, Res.RawAnswer) then
         break;
-    if answer = '' then
+    if Res.RawAnswer = '' then
       exit;
   end
-  else if not DnsSendQuestion(NameServer, DnsPort, request, answer) then
+  else if not DnsSendQuestion(NameServer, DnsPort, request, Res.RawAnswer) then
     exit;
-  Res.Header := PDnsHeader(answer)^;
+  Res.Header := PDnsHeader(Res.RawAnswer)^;
   Res.Header.QuestionCount := swap(Res.Header.QuestionCount);
   Res.Header.AnswerCount := swap(Res.Header.AnswerCount);
   Res.Header.NameServerCount := swap(Res.Header.NameServerCount);
   Res.Header.AdditionalCount := swap(Res.Header.AdditionalCount);
-  pos := length(request); // jump Header + Question
+  pos := length(request); // jump Header + Question = point to records
   if Res.Header.AnswerCount <> 0 then
   begin
     SetLength(Res.Answer, Res.Header.AnswerCount);
     for i := 0 to high(Res.Answer) do
-      if not DnsParseRecord(answer, pos, Res.Answer[i]) then
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Answer[i], QClass) then
         exit;
   end;
   if Res.Header.NameServerCount <> 0 then
   begin
     SetLength(Res.Authority, Res.Header.NameServerCount);
     for i := 0 to high(Res.Authority) do
-      if not DnsParseRecord(answer, pos, Res.Authority[i]) then
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Authority[i], QClass) then
         exit;
   end;
   if Res.Header.AdditionalCount <> 0 then
   begin
     SetLength(Res.Additional, Res.Header.AdditionalCount);
     for i := 0 to high(Res.Additional) do
-      if not DnsParseRecord(answer, pos, Res.Additional[i]) then
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Additional[i], QClass) then
         exit;
   end;
   result := true;
