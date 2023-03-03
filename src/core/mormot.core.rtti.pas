@@ -315,6 +315,9 @@ const
   /// maps integer and floating point types in TRttiKind RTTI enumerates
   rkNumberTypes = rkOrdinalTypes + [ rkFloat ];
 
+  /// maps enumeration types in TRttiKind RTTI
+  rkEnumerationTypes = [rkEnumeration {$ifdef FPC}, rkBool {$endif}];
+
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes 32-bit ordinals and pointers
   rkGetOrdPropTypes =

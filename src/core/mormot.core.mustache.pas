@@ -1110,23 +1110,29 @@ begin
     if fEscapeInvert then
       UnEscape := not UnEscape;
     if UnEscape or
-       (rc.Kind in rkNumberTypes) then
-      // no HTML escape needed for numbers
+       (rcfIsNumber in rc.Cache.Flags) then
+      // numbers or true/false don't need any HTML escape
       fWriter.AddRttiCustomJson(d, rc, twNone, [])
-    // try direct UTF-8 and UTF-16 strings rendering
-    else if rc.Kind = rkLString then
-      fWriter.AddHtmlEscape(PPointer(d)^) // faster with no length
-    else if rc.Kind in rkWideStringTypes then
-      fWriter.AddHtmlEscapeW(PPointer(d)^)
     else
-    begin
-      // use a temporary variant for any complex content (including JSON)
-      rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
-      if fEscapeInvert then
-        UnEscape := not UnEscape;
-      AppendVariant(variant(tmp), UnEscape);
-      VarClearProc(tmp);
-    end;
+      case rc.Kind of
+        // try direct UTF-8 and UTF-16 strings rendering
+        rkLString:
+          fWriter.AddHtmlEscape(PPointer(d)^); // faster with no length
+        {$ifdef HASVARUSTRING}
+        rkUString,
+        {$endif HASVARUSTRING}
+        rkWString:
+          fWriter.AddHtmlEscapeW(PPointer(d)^);
+      else
+        begin
+          // use a temporary variant for any complex content (including JSON)
+          rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
+          if fEscapeInvert then
+            UnEscape := not UnEscape; // AppendVariant() does reverse it
+          AppendVariant(variant(tmp), UnEscape);
+          VarClearProc(tmp);
+        end;
+      end;
   end
   else
   begin

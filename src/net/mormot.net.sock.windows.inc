@@ -614,7 +614,7 @@ type
   PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
   MIB_IPADDRTABLE = record
     dwNumEntries: DWORD;
-    ip: array[0..200] of record
+    ip: array[byte] of record
       dwAddr: DWORD;
       dwIndex: DWORD;
       dwMask: DWORD;
@@ -626,6 +626,7 @@ type
   end;
 
 var
+  iphlpapiDll: THandle;
   // some iphlpapi.dll late-binded API via DelayedProc()
   GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
     var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall;
@@ -641,7 +642,8 @@ begin
   if Kind = tiaIPv6 then
     exit; // GetIpAddrTable() is an IPv4 only API
   Size := SizeOf(Table);
-  if not DelayedProc(GetIpAddrTable, 'iphlpapi.dll', 'GetIpAddrTable') or
+  if not DelayedProc(GetIpAddrTable, iphlpapiDll, 'iphlpapi.dll',
+           'GetIpAddrTable') or
      (GetIpAddrTable(@Table, Size, false) <> NO_ERROR) then
     exit;
   SetLength(result, Table.dwNumEntries);
@@ -668,7 +670,7 @@ end;
 
 
 
-{ ******************** Mac Addresses Support }
+{ ******************** MAC and DNS Addresses Support }
 
 const
   MAX_ADAPTER_ADDRESS_LENGTH = 8;
@@ -756,29 +758,29 @@ var
 begin
   result := nil;
   siz := 0;
-  if not DelayedProc(GetAdaptersAddresses, 'iphlpapi.dll', 'GetAdaptersAddresses') or
+  if not DelayedProc(GetAdaptersAddresses, iphlpapiDll, 'iphlpapi.dll',
+           'GetAdaptersAddresses') or
      (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <>
        ERROR_BUFFER_OVERFLOW) then
     exit;
   SetLength(tmp, siz); // around 600 bytes per interface
   p := pointer(tmp);
-  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then
-  begin
-    n := 0;
-    repeat
-      if (p^.Flags <> 0) and
-         (UpAndDown or
-          (p^.OperStatus = IfOperStatusUp)) and
-         (p^.PhysicalAddressLength = 6) then
-      begin
-        SetLength(result, n + 1);
-        Win32PWideCharToUtf8(p^.Description, result[n].Name);
-        result[n].Address := MacToText(@p^.PhysicalAddress);
-        inc(n);
-      end;
-      p := p^.Next;
-    until p = nil;
-  end;
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) <> ERROR_SUCCESS then
+    exit;
+  n := 0;
+  repeat
+    if (p^.Flags <> 0) and
+       (UpAndDown or
+        (p^.OperStatus = IfOperStatusUp)) and
+       (p^.PhysicalAddressLength = 6) then
+    begin
+      SetLength(result, n + 1);
+      Win32PWideCharToUtf8(p^.Description, result[n].Name);
+      result[n].Address := MacToText(@p^.PhysicalAddress);
+      inc(n);
+    end;
+    p := p^.Next;
+  until p = nil;
 end;
 
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
@@ -791,7 +793,7 @@ begin
   result := '';
   dwremoteIP := inet_addr(pointer(IP));
   if (dwremoteIP <> 0) and
-     DelayedProc(SendARP, 'iphlpapi.dll', 'SendARP') then
+     DelayedProc(SendARP, iphlpapiDll, 'iphlpapi.dll', 'SendARP') then
   begin
     PhyAddrLen := 8;
     if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen) = NO_ERROR then

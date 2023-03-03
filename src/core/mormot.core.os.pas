@@ -1731,7 +1731,8 @@ function ReadRegString(Key: THandle; const Path, Value: string): string;
 
 /// convenient late-binding of any external library function
 // - just wrapper around LoadLibray + GetProcAddress once over a pointer
-function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
+function DelayedProc(var api; var lib: THandle;
+  libname: PChar; procname: PAnsiChar): boolean;
 
 type
   HCRYPTPROV = pointer;

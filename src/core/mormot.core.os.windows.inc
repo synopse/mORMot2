@@ -1602,19 +1602,21 @@ var
   GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
     lpBaseName: PWideChar; nSize: DWord): DWord; stdcall;
 
-function DelayedProc(var api; libname: PChar; procname: PAnsiChar): boolean;
+function DelayedProc(var api; var lib: THandle;
+  libname: PChar; procname: PAnsiChar): boolean;
 var
-  h: THandle;
   proc: pointer;
 begin
   if pointer(api) = nil then
   begin
-    // try to load the library once
     proc := nil;
     GlobalLock; // avoid race condition
-    h := Windows.LoadLibrary(libname);
-    if h >= 32 then
-      proc := Windows.GetProcAddress(h, procname);
+    if lib = 0 then
+      lib := Windows.LoadLibrary(libname);
+    if lib >= 32 then
+      proc := Windows.GetProcAddress(lib, procname)
+    else
+      lib := 1; // try to load the library once
     if proc = nil then
       proc := pointer(1); // mark non available
     pointer(api) := proc; // set it last
@@ -1674,11 +1676,14 @@ begin
   end;
 end;
 
+var
+  PsapiDll: THandle;
+
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var n: cardinal;
 begin
   result := nil;
-  if not DelayedProc(EnumProcesses, 'Psapi.dll', 'EnumProcesses') then
+  if not DelayedProc(EnumProcesses, PsapiDll, 'Psapi.dll', 'EnumProcesses') then
     exit;
   n := 2048;
   repeat
@@ -1717,8 +1722,8 @@ begin
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           Win32PWideCharToUtf8(name, len, result);
       end
-      else if DelayedProc(GetModuleFileNameExW,
-                'Psapi.dll', 'GetModuleFileNameExW') and
+      else if DelayedProc(GetModuleFileNameExW, PsapiDll, 'Psapi.dll',
+                'GetModuleFileNameExW') and
               (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
         Win32PWideCharToUtf8(name, result);
     finally
@@ -1746,7 +1751,8 @@ end;
 
 function DelayedGetProcessMemoryInfo: boolean;
 begin
-  result:= DelayedProc(GetProcessMemoryInfo, 'Psapi.dll', 'GetProcessMemoryInfo');
+  result:= DelayedProc(GetProcessMemoryInfo, PsapiDll, 'Psapi.dll',
+    'GetProcessMemoryInfo');
 end;
 
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
@@ -2347,6 +2353,7 @@ end;
 var
   // ComputeSystemPath() cache
   _SystemPath: array[TSystemPath] of TFileName;
+  SHFolderDll: THandle;
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
   // - late binding also ensure that we load libraries only when needed
@@ -2380,7 +2387,8 @@ begin
      IsDirectoryWritable(Executable.ProgramFilePath) then
     result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
   else if (CSIDL[kind] <> 0) and
-     DelayedProc(SHGetFolderPath, 'SHFolder.dll', 'SHGetFolderPath' + _AW) and
+     DelayedProc(SHGetFolderPath, SHFolderDll, 'SHFolder.dll',
+       'SHGetFolderPath' + _AW) and
      (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
     result := tmp
   else
