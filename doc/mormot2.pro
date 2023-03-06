@@ -53,7 +53,7 @@ ApprovedBy=
 ; Revision* multiple revision Table: ignored values are taken from current, older below
 RevisionDescription=Current Version
 RevisionDate=
-Revision=2.0
+Revision=2.1
 ; [DILayout] list the global DI outline (lines beginning with : are titles)
 ; [DI-*] details all items
 DefaultPreparedBy=Arnaud Bouchez
@@ -112,7 +112,7 @@ This document is intended to describe the Design Input Product Specifications.
 : Project Concept
 :  Purpose and Scope
 This document focuses on the {\i mORMot 2} library.
-The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.0 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
+The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.1 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
 It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
 Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.
@@ -168,7 +168,7 @@ Purpose=List {\i Failure Modes and Effects Analysis} (FMEA)
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -235,7 +235,7 @@ Purpose=Interpret design inputs and specify software design features
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -295,7 +295,7 @@ Purpose=Perform a risk assessment of the SWRS implementation
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -436,6 +436,7 @@ Feel free to give your feedback at @https://synopse.info/forum asking new questi
 {\b Where should I start?}\line Quickly browse this documentation, then download and install the sources @44@, then compile and run the {\f1\fs20 mormot2tests.dpr} program. Check about the various samples from the {\f1\fs20 ex} sub-folders.
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services over existing "manual" SQL statements.
+{\b I am a great fan of ORM, sorry, and your ORM seems limited: I don't see any constraint generation, it is hard to work with legacy databases.}\line You saw right: the {\i mORMot} ORM is not a fully bloated ORM. It was meant to create straightforward object persistence, typically a local MicroService database. It lacks full relational mapping, but features some unique advantages, like requests over several DB using SQLite3 virtual tables. It supports a very fast in-memory engine, and ODM/MongoDB backend, which do not have any SQL constraints. You can use another ORM, or plain SQL, if you want to support legacy or pure relational databases - see the next question. But take a look at the notion of Aggregates, and why a full RDBMS is not always mandatory.
 {\b I would like to replace pieces of Delphi-code by using mORMot and the @*DDD@-concept in a huge system, but its legacy database doesn't have integer primary keys, and {\i mORMot} ORM expects a {\f1\fs20 TID}-like field.}\line By design, such legacy tables are not compatible with {\i SQLite3} virtual tables, or our ORM - unless you define an {\f1\fs20 ID} integer additional primary key, which may not be the best idea. Some hints: write a {\i persistence service} as {\f1\fs20 interface}/{\f1\fs20 class}; uncouple persistence and @*SOA@ services (i.e. the SOA {\f1\fs20 @*TRestServer@} is a {\f1\fs20 @*TRestServerFullMemory@} and not a DB/ORM {\f1\fs20 @*TRestServerDB@}); reuse your existing SQL statements, with {\f1\fs20 mormot.db.*} units as access layer if possible (you will have better performance, and direct @*JSON@ support); use the ORM for @*MicroService@ local persistence (with {\i SQLite3}), and/or for new tables in your legacy DB (or another storage, e.g. @*MongoDB@).
 {\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our framework does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient. But we include some generic-oriented methods, and even a {\f1\fs20 {\f1\fs20 @*mormot.core.generics.pas@}} unit as an alternative to the Delphi/FPC RTL. We offer enumerates when possible, e.g. {\f1\fs20 for .. in ...} over a {\f1\fs20 @*TDocVariantData@}.
 {\b I also notice in your documentation, data types are different from Delphi. You have {\f1\fs20 RawUtf8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} type, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we encourage using the {\f1\fs20 @*RawUtf8@}={\f1\fs20 @*Utf8String@} type, which works with all versions of {\i Delphi} and FPC. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
@@ -461,7 +462,7 @@ SourceFile=mormot2tests.dpr;mormot.*.pas
 ; mormot.*.pas will find all official mORMot units in all IncludePath folders :)
 SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 SourceIgnoreSymbolByUnit=SynCrossPlatformJSON,SynCrossPlatformREST,SynCrossPlatformSpecific,SynCrossPlatformTests
-Version=2.0
+Version=2.1
 TitleOffset=0
 DisplayName=mORMot2
 
@@ -478,7 +479,7 @@ Purpose=Summarize the software DI implementation for QA review
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -519,7 +520,7 @@ Purpose=Define the testing required for the updates to the mORMot Framework soft
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -579,7 +580,7 @@ Purpose=Describe all Test protocols with specific pass/fail criteria
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -664,7 +665,7 @@ ItemName=SCRS
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -699,7 +700,7 @@ Purpose=Present all software modifications introduced in the current release
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.0
+Revision=2.1
 RevisionDate=
 RevisionDescription=Initial version
 ; Revision* multiple revision Table: ignored values are taken from current
