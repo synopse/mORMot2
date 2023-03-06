@@ -28,6 +28,7 @@ uses
   mormot.net.server,
   mormot.net.async,
   mormot.net.ldap,
+  mormot.net.dns,
   mormot.net.rtsphttp;
 
 type
@@ -49,6 +50,8 @@ type
   published
     /// validate TUriTree high-level structure
     procedure _TUriTree;
+    /// validate DNS and LDAP clients
+    procedure DnsLdap;
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
     /// RTSP over HTTP, with always temporary buffering
@@ -353,11 +356,6 @@ var
   end;
 
 begin
-  CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
-    'xyz.local/London/Users/User1');
-  CheckEqual(DNToCN(
-    'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
-    'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
   tree := TUriTree.Create;
   try
     tree.insert('romane');
@@ -563,6 +561,30 @@ begin
     router.Free;
     ctxt.Free;
   end;
+end;
+
+procedure TNetworkProtocols.DnsLdap;
+var
+  ip: RawUtf8;
+begin
+  // validate DNS client with some known values
+  CheckEqual(DnsLookup(''), '');
+  CheckEqual(DnsLookup('localhost'), '127.0.0.1');
+  CheckEqual(DnsLookup('LocalHost'), '127.0.0.1');
+  CheckEqual(DnsLookup('::1'), '127.0.0.1');
+  CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
+  ip := DnsLookup('synopse.info');
+  CheckEqual(ip, '62.210.254.173', 'dns1');
+  ip := DnsLookup('blog.synopse.info');
+  CheckEqual(ip, '62.210.254.173', 'dns2');
+  CheckEqual(DnsReverseLookup(ip), '62-210-254-173.rev.poneytelecom.eu', 'rev');
+  Check(DnsLookups('yahoo.com') <> nil, 'dns3');
+  // validate LDAP distinguished name conversion (no client)
+  CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
+    'xyz.local/London/Users/User1');
+  CheckEqual(DNToCN(
+    'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
+    'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
 end;
 
 

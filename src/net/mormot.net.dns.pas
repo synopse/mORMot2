@@ -23,6 +23,7 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
+  mormot.core.unicode,
   mormot.core.buffers,
   mormot.net.sock;
 
@@ -139,15 +140,23 @@ const
 
 type
   /// map a DNS header binary record
+  // - with some easy getter/setter for the bit-oriented flags
   TDnsHeader = object
   private
     function GetAA: boolean;
+      {$ifdef FPC} inline; {$endif}
     function GetOpCode: byte;
+      {$ifdef FPC} inline; {$endif}
     function GetQR: boolean;
+      {$ifdef FPC} inline; {$endif}
     function GetRA: boolean;
+      {$ifdef FPC} inline; {$endif}
     function GetRCode: byte;
+      {$ifdef FPC} inline; {$endif}
     function GetRD: boolean;
+      {$ifdef FPC} inline; {$endif}
     function GetTC: boolean;
+      {$ifdef FPC} inline; {$endif}
     function GetZ: byte;
     procedure SetOpCode(AValue: byte);
     procedure SetQR(AValue: boolean);
@@ -189,15 +198,24 @@ function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
 function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// raw parsing of best-known DNS record data
+/// parse a DNS 32-bit big endian value
+function DnsParseCardinal(p: PByteArray; var pos: PtrInt): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// raw parsing of best-known DNS record data into human readable text
 // - as used by DnsParseRecord() to fill the TDnsAnswer.Text field
 // - only recognize A AAAA CNAME TXT NS PTR MX SOA SRV Resource Records
 procedure DnsParseData(RR: TDnsResourceRecord;
   const Answer: RawByteString; Pos, Len: PtrInt; var Text: RawUtf8);
 
-/// compute a DNS query message
+/// raw computation of a DNS query message
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal = QC_INET): RawByteString;
+
+/// raw sending and receiving of DNS query message over UDP
+function DnsSendQuestion(const Address, Port: RawUtf8;
+  const Request: RawByteString; out Answer: RawByteString;
+  out TimeElapsed: cardinal; TimeOutMS: integer = 2000): boolean;
 
 
 
@@ -229,6 +247,8 @@ type
   TDnsResult = record
     /// the decoded DNS header of this query
     Header: TDnsHeader;
+    /// the time needed for this DNS server lookup
+    ElapsedMicroSec: cardinal;
     /// the Answers records
     Answer: TDnsAnswers;
     /// the Authorities records
@@ -245,20 +265,40 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
 
 /// send a DNS query and parse the answer
 // - if no NameServer[] is supplied, will use GetDnsAddresses list from OS
+// - the TDnsResult output gives access to all returned DNS records
+// - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
   RR: TDnsResourceRecord = drrA; const NameServer: RawUtf8 = '';
-  QClass: cardinal = QC_INET): boolean;
+  TimeOutMS: integer = 2000; QClass: cardinal = QC_INET): boolean;
 
-/// retrieve the IPv4 address of a DNS host name - using drrA
+
+/// retrieve the IPv4 address of a DNS host name - using DnsQuery(drrA)
+// - e.g. DnsLookup('synopse.info') currently returns '62.210.254.173'
+// - for aliases, the CNAME is ignored and only the first A is returned, e.g.
+// DnsLookup('blog.synopse.info') would simply return '62.210.254.173'
+// - will also recognize obvious values like 'localhost' or an IPv4 address
 function DnsLookup(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): RawUtf8;
 
-/// retrieve the DNS host name of an IPv4 address - using drrPTR
+/// retrieve the IPv4 address(es) of a DNS host name - using DnsQuery(drrA)
+// - e.g. DnsLookups('synopse.info') currently returns ['62.210.254.173'] but
+// DnsLookups('yahoo.com') returns an array of several IPv4 addresses
+// - will also recognize obvious values like 'localhost' or an IPv4 address
+function DnsLookups(const HostName: RawUtf8;
+  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+
+/// retrieve the DNS host name of an IPv4 address - using DnsQuery(drrPTR)
+// - note that the reversed host name is the one from the hosting company, and
+// unlikely the usual name: e.g. DnsReverseLookup(DnsLookup('synopse.info'))
+// returns the horsey '62-210-254-173.rev.poneytelecom.eu' from online.net
 function DnsReverseLookup(const IP4: RawUtf8;
   const NameServer: RawUtf8 = ''): RawUtf8;
 
-/// retrieve the Services of a DNS host name - using drrSRV
-function DnsService(const HostName: RawUtf8;
+/// retrieve the Services of a DNS host name - using DnsQuery(drrSRV)
+// - services addresses are returned with their port, e.g.
+// DnsServices('_ldap._tcp.ad.mycorp.com') returns
+// ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+function DnsServices(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
 
 
@@ -281,6 +321,7 @@ const
   QF_RCODE  = $0F;
 
   DNS_RELATIVE = $c0;
+  DNS_RESP_SUCCESS = $00;
 
 
 { TDnsHeader }
@@ -354,17 +395,18 @@ function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
   var Text: RawUtf8): PtrInt;
 var
   p: PByteArray;
-  nextpos: PtrInt;
+  nextpos, max: PtrInt;
   len: byte;
   tmp: ShortString;
 begin
   nextpos := 0;
-  result := 0; // indicates error (malformated input detected)
+  result := 0; // indicates error
   p := pointer(Answer);
+  max := length(Answer);
   tmp[0] := #0;
   repeat
-    if Pos >= length(Answer) then
-      exit;
+    if Pos >= max then
+      exit; // avoid any buffer overflow on malformated/malinuous input
     len := p[Pos];
     inc(Pos);
     if len = 0 then
@@ -373,17 +415,17 @@ begin
     begin
       if nextpos = 0 then
         nextpos := Pos + 1; // if compressed, return end of 16-bit offset
-      if Pos >= length(Answer) then
+      if Pos >= max then
         exit;
       Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos];
-      if Pos >= length(Answer) then
+      if Pos >= max then
         exit;
       len := p[Pos];
       inc(Pos);
     end;
     if len = 0 then
       break;
-    if Pos + len > length(Answer) then
+    if Pos + len > max then
       exit;
     AppendShortBuffer(pointer(@p[Pos]), len, tmp);
     AppendShortChar('.', tmp);
@@ -404,6 +446,12 @@ function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
 begin
   result := swap(PWord(@p[pos])^);
   inc(pos, 2);
+end;
+
+function DnsParseCardinal(p: PByteArray; var pos: PtrInt): cardinal;
+begin
+  result := bswap32(PCardinal(@p[pos])^);
+  inc(pos, 4);
 end;
 
 procedure DnsParseData(RR: TDnsResourceRecord;
@@ -482,30 +530,39 @@ begin
 end;
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
-  const Request: RawByteString; out Answer: RawByteString): boolean;
+  const Request: RawByteString; out Answer: RawByteString;
+  out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
 var
   addr, resp: TNetAddr;
   sock: TNetSocket;
   len: PtrInt;
+  start, stop: Int64;
   tmp: TSynTempBuffer;
-  h: PDnsHeader;
 begin
   result := false;
+  TimeElapsed := 0;
+  QueryPerformanceMicroSeconds(start);
   if addr.SetFrom(Address, Port, nlUdp) <> nrOk then
     exit;
   sock := addr.NewSocket(nlUdp);
   if sock <> nil then
     try
-      sock.SetReceiveTimeout(2000);
+      sock.SetReceiveTimeout(TimeOutMS);
       if sock.SendTo(pointer(Request), length(Request), addr) <> nrOk then
         exit;
       len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
-      h := @tmp;
-      if (len <= length(Request)) or
-         not addr.IsEqual(resp) or
-         (h.Xid <> PDnsHeader(Request)^.Xid) or
-         (h^.AnswerCount + h^.NameServerCount + h^.AdditionalCount = 0) then
-        exit;
+      with PDnsHeader(@tmp)^ do
+        if (len <= length(Request)) or
+           not addr.IsEqual(resp) or
+           (Xid <> PDnsHeader(Request)^.Xid) or
+           not IsResponse or
+           Truncation or
+           not RecursionAvailable or
+           (ResponseCode <> DNS_RESP_SUCCESS) or
+           (AnswerCount + NameServerCount + AdditionalCount = 0) then
+          exit;
+      QueryPerformanceMicroSeconds(stop);
+      TimeElapsed := stop - start;
       FastSetRawByteString(answer, @tmp, len);
       result := true;
     finally
@@ -525,13 +582,13 @@ begin
   result := false;
   p := pointer(Answer);
   Pos := DnsParseString(Answer, Pos, Dest.QName);
-  if Pos = 0 then
+  if (Pos = 0) or
+     (Pos + 10 > length(Answer)) then
     exit;
   word(Dest.QType) := DnsParseWord(p, Pos);
   if DnsParseWord(p, Pos) <> QClass then
     exit;
-  Dest.TTL := bswap32(PCardinal(@p[Pos])^);
-  inc(Pos, 4);
+  Dest.TTL := DnsParseCardinal(p, Pos);
   len := DnsParseWord(p, Pos);
   if Pos + len > length(Answer) then
     exit;
@@ -542,25 +599,32 @@ begin
 end;
 
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
-  RR: TDnsResourceRecord; const NameServer: RawUtf8; QClass: cardinal): boolean;
+  RR: TDnsResourceRecord; const NameServer: RawUtf8;
+  TimeOutMS: integer; QClass: cardinal): boolean;
 var
   i, pos: PtrInt;
   servers: TRawUtf8DynArray;
   request: RawByteString;
 begin
   result := false;
+  if (QName = '') or
+     not IsAnsiCompatible(QName) then
+    exit;
   Finalize(Res);
+  FillCharFast(Res, SizeOf(Res), 0);
   request := DnsBuildQuestion(QName, RR, QClass);
   if NameServer = '' then
   begin
     servers := GetDnsAddresses;
     for i := 0 to high(servers) do
-      if DnsSendQuestion(servers[i], DnsPort, request, Res.RawAnswer) then
+      if DnsSendQuestion(servers[i], DnsPort,
+           request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
         break;
     if Res.RawAnswer = '' then
       exit;
   end
-  else if not DnsSendQuestion(NameServer, DnsPort, request, Res.RawAnswer) then
+  else if not DnsSendQuestion(NameServer, DnsPort,
+                request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
     exit;
   Res.Header := PDnsHeader(Res.RawAnswer)^;
   Res.Header.QuestionCount := swap(Res.Header.QuestionCount);
@@ -592,19 +656,46 @@ begin
   result := true;
 end;
 
+function DnsLookupKnown(const HostName: RawUtf8; out Ip: RawUtf8): boolean;
+begin
+  result := true;
+  if IdemPropNameU(HostName, 'localhost') or
+     (HostName = c6Localhost) then
+    Ip := IP4local
+  else if IPToCardinal(HostName) <> 0 then
+    Ip := HostName
+  else
+    result := false;
+end;
+
 function DnsLookup(const HostName, NameServer: RawUtf8): RawUtf8;
 var
   res: TDnsResult;
   i: PtrInt;
 begin
-  if DnsQuery(HostName, res, drrA, NameServer) then
+  if not DnsLookupKnown(HostName, result) then
+    if DnsQuery(HostName, res, drrA, NameServer) then
+      for i := 0 to high(res.Answer) do
+        if res.Answer[i].QType = drrA then
+        begin
+          result := res.Answer[i].Text;
+          break; // ignore CNAME but return first A record
+        end;
+end;
+
+function DnsLookups(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
+var
+  res: TDnsResult;
+  known: RawUtf8;
+  i: PtrInt;
+begin
+  result := nil;
+  if DnsLookupKnown(HostName, known) then
+    AddRawUtf8(result, known)
+  else if DnsQuery(HostName, res, drrA, NameServer) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrA then
-      begin
-        result := res.Answer[i].Text; // ignore CNAME but return first A record
-        exit;
-      end;
-  result := '';
+        AddRawUtf8(result, res.Answer[i].Text); // return all A records
 end;
 
 function DnsReverseLookup(const IP4, NameServer: RawUtf8): RawUtf8;
@@ -626,7 +717,7 @@ begin
       end;
 end;
 
-function DnsService(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
+function DnsServices(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
 var
   res: TDnsResult;
   i: PtrInt;

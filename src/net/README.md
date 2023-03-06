@@ -129,3 +129,9 @@ Automatic Certificate Management Environment (ACME v2) Client
 Simple LDAP Protocol Client
 - LDAP Response Storage
 - LDAP Client Class
+
+### mormot.net.dns
+
+Simple DNS Protocol Client
+- Low-Level DNS Protocol Definitions
+- High-Level DNS Query
