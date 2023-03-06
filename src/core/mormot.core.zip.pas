@@ -2385,7 +2385,7 @@ begin
       // it seems to be a regular .zip -> read WorkingMem trailing content
       fSource.Seek(Size - WorkingMem, soBeginning);
       fSource.ReadBuffer(P^, WorkingMem);
-      centraldirsize := Size - LocateCentralDirectoryOffset(
+      centraldirsize := Int64(Size) - LocateCentralDirectoryOffset(
         P, WorkingMem, Size - WorkingMem);
       if centraldirsize > Int64(WorkingMem) then
       begin
