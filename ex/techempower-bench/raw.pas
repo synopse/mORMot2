@@ -604,8 +604,8 @@ begin
     cores := 16;
   if not TryStrToInt(ParamStr(3), servers) then
     servers := 1;
-  if threads < 16 then
-    threads := 16
+  if threads < 2 then
+    threads := 2
   else if threads > 256 then
     threads := 256; // max. threads for THttpAsyncServer
   {if SystemInfo.dwNumberOfProcessors > cores then
@@ -622,7 +622,7 @@ var
 begin
   // automatically guess best parameters depending on available CPU cores
   logicalcores := SystemInfo.dwNumberOfProcessors;
-  if logicalcores > 12 then
+  if logicalcores >= 12 then
   begin
     // high-end CPU - scale using several listeners (one per core)
     // see https://synopse.info/forum/viewtopic.php?pid=39263#p39263

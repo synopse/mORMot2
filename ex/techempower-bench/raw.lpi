@@ -84,15 +84,14 @@
       </Debugging>
     </Linking>
     <Other>
-      <CustomOptions Value="-dFPC_X64MM
--dFPCMM_SERVER
--dFPCMM_REPORTMEMORYLEAKS
--dFPCMM_DEBUG"/>
-      <OtherDefines Count="4">
+      <CustomOptions Value="-dFPC_LIBCMM"/>
+      <OtherDefines Count="6">
         <Define0 Value="FPC_X64MM"/>
         <Define1 Value="FPCMM_SERVER"/>
         <Define2 Value="FPCMM_REPORTMEMORYLEAKS"/>
         <Define3 Value="FPCMM_DEBUG"/>
+        <Define4 Value="USE_SQLITE3"/>
+        <Define5 Value="FPC_LIBCMM"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>
