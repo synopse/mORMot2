@@ -478,7 +478,8 @@ begin
       DnsParseString(Answer, Pos, Text);
     drrMX:
       // Priority / Value
-      DnsParseString(Answer, Pos + 2, Text);
+      if Len > 2 then
+        DnsParseString(Answer, Pos + 2, Text);
     drrSOA:
       begin
         // MName / RName / Serial / Refresh / Retry / Expire / TTL
