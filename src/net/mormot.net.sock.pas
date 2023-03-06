@@ -1023,6 +1023,10 @@ const
 /// IdemPChar() like function, to avoid linking mormot.core.text
 function NetStartWith(p, up: PUtf8Char): boolean;
 
+/// check is the supplied address text is on format '1.2.3.4'
+// - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
+function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
+
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
@@ -1664,6 +1668,9 @@ begin
        (address = cLocalhost) or
        (address = cAnyHost) then // for client: '0.0.0.0'->'127.0.0.1'
       result := addr.SetFrom(cLocalhost, port, layer)
+    else if (layer = nlUnix) or
+            NetIsIP4(pointer(address)) then
+       result := addr.SetFrom(address, port, layer)
     else if NewSocketAddressCache.Search(address, addr) then
     begin
       fromcache := true;
@@ -3384,6 +3391,56 @@ begin
       exit;
   until false;
   result := true;
+end;
+
+function NetIsIP4(text: PUtf8Char; value: PByte): boolean;
+var
+  n, o, b: integer;
+begin
+  result := false;
+  if text = nil then
+    exit;
+  b := -1;
+  n := 0;
+  while true do
+    case text^ of
+      #0:
+        if (b > 255) or
+           (b < 0) or
+           (n <> 3) then
+          exit
+        else
+          break;
+      '.':
+        begin
+          if (b > 255) or
+             (b < 0) or
+             (n = 3) then
+            exit;
+          if value <> nil then
+          begin
+            value^ := b;
+            inc(value);
+          end;
+          b := -1;
+          inc(n);
+          inc(text);
+        end;
+      '0' .. '9':
+        begin
+          o := ord(text^) - 48;
+          if b < 0 then
+            b := o
+          else
+            b := b * 10 + o;
+          inc(text);
+        end
+    else
+      exit;
+    end;
+  if value <> nil then
+    value^ := b;
+  result := true; // 1.2.3.4
 end;
 
 procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);

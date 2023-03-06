@@ -51,7 +51,7 @@ type
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients
-    procedure DnsLdap;
+    procedure IpDnsLdap;
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RtspOverHttp;
     /// RTSP over HTTP, with always temporary buffering
@@ -563,10 +563,32 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.DnsLdap;
+procedure TNetworkProtocols.IpDnsLdap;
 var
   ip: RawUtf8;
+  c: cardinal;
 begin
+  // validate some IP releated process
+  Check(not NetIsIP4(nil));
+  Check(not NetIsIP4('1'));
+  Check(not NetIsIP4('1.2'));
+  Check(not NetIsIP4('1.2.3'));
+  Check(not NetIsIP4('1.2.3.'));
+  Check(not NetIsIP4('1.2.3.4.'));
+  Check(not NetIsIP4('1.2.3.4.5'));
+  Check(NetIsIP4('1.2.3.4'));
+  Check(NetIsIP4('12.3.4.5'));
+  Check(NetIsIP4('12.34.5.6'));
+  Check(NetIsIP4('12.34.56.7'));
+  Check(NetIsIP4('12.34.56.78'));
+  Check(NetIsIP4('112.134.156.178'));
+  Check(not NetIsIP4('312.34.56.78'));
+  Check(not NetIsIP4('12.334.56.78'));
+  Check(not NetIsIP4('12.34.256.78'));
+  Check(not NetIsIP4('12.34.56.278'));
+  c := 0;
+  Check(NetIsIP4('1.2.3.4', @c));
+  CheckEqual(c, $04030201);
   // validate DNS client with some known values
   CheckEqual(DnsLookup(''), '');
   CheckEqual(DnsLookup('localhost'), '127.0.0.1');

@@ -2392,7 +2392,9 @@ procedure THttpAcceptBan.BanIP(const ip4: RawUtf8);
 var
   c: cardinal;
 begin
-  if IPToCardinal(pointer(ip4), c) then
+  if NetIsIP4(pointer(ip4), @c) and
+     (c <> 0) and
+     (c <> $0100007f) then
     BanIP(c);
 end;
 

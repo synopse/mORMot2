@@ -662,7 +662,7 @@ begin
   if IdemPropNameU(HostName, 'localhost') or
      (HostName = c6Localhost) then
     Ip := IP4local
-  else if IPToCardinal(HostName) <> 0 then
+  else if NetIsIP4(pointer(HostName)) then
     Ip := HostName
   else
     result := false;
@@ -700,14 +700,14 @@ end;
 
 function DnsReverseLookup(const IP4, NameServer: RawUtf8): RawUtf8;
 var
-  b: array[0..3] of byte;
+  b: array[0..3] of byte; // to be asked in inverse byte order
   res: TDnsResult;
   i: PtrInt;
 begin
   result := '';
-  if IPToCardinal(IP4, PCardinal(@b)^) and
-     DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa',
-       [{%H-}b[3], {%H-}b[2], {%H-}b[1], {%H-}b[0]]),
+  cardinal(b) := 0;
+  if NetIsIP4(pointer(IP4), @b) and
+     DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
        res, drrPTR, NameServer) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrPTR then
