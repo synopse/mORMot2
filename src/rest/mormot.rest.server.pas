@@ -1509,14 +1509,14 @@ type
 
   /// store per-method URI multiplexing Radix Tree in TRestRouter
   // - each HTTP method would have its dedicated TRestTree parser in TRestRouter
-  TRestRouterTree = array[TUriMethod] of TRestTree;
+  TRestRouterTree = array[mGET .. high(TUriMethod)] of TRestTree;
 
   /// efficient server-side URI routing for TRestServer
   TRestRouter = class(TSynPersistent)
   protected
     fTree: TRestRouterTree;
     fOwner: TRestServer;
-    fTreeCount: array[TUriMethod] of integer;
+    fTreeCount: array[mGET .. high(TUriMethod)] of integer;
     fNodeCount: array[TRestNode] of integer;
   public
     /// initialize this URI routine engine
@@ -5952,12 +5952,13 @@ begin
      (Ctxt = nil) or
      (Ctxt.Call^.Url = '') or
      (Ctxt.Method < low(fTree)) or
-     (Ctxt.Method > high(fTree)) then
+     (Ctxt.Method > high(fTree)) or
+     (fTree[Ctxt.Method] = nil) then
     exit;
   p := pointer(Ctxt.Call^.Url);
   if p^ = '/' then
     inc(p);
-  result := pointer((fTree[Ctxt.Method].Root as TRestTreeNode).Lookup(p, Ctxt));
+  result := pointer(TRestTreeNode(fTree[Ctxt.Method].Root).Lookup(p, Ctxt));
   if result = nil then
     exit;
   // save the execution node information into Ctxt

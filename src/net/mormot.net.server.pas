@@ -213,6 +213,7 @@ type
     procedure Clear(aMethods: TUriRouterMethods = [urmGet .. high(TUriRouterMethod)]);
     /// access to the internal per-method TUriTree instance
     // - some Tree[] may be nil if the HTTP method has not been registered yet
+    // - used only for testing/validation purpose
     property Tree: TUriRouterTree
       read fTree;
     /// how the TUriRouter instance should be created
