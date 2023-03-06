@@ -5353,11 +5353,14 @@ var
   api: PtrInt;
   lib1, lib3: TFileName;
 begin
-  result := false; // make old Delphi compilers happy
+  result := true;
+  if openssl_initialized = osslAvailable then
+    // set it once, but allow to retry with specific alternate libnames
+    exit;
   GlobalLock;
   try
+    // paranoid thread-safe double check
     if openssl_initialized = osslAvailable then
-      // set it once, but allow to retry given libnames
       exit;
     // initialize library loaders
     libcrypto := TLibCrypto.Create;
