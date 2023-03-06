@@ -13,6 +13,7 @@ unit mormot.db.raw.sqlite3.static;
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
     sqlite3 global variable will be filled with linked .o/.obj API entries -
     ensure you downloaded latest https://synopse.info/files/mormot2static.7z
+    or https://synopse.info/files/mormot2static.tgz
       If the platform is not supported yet, fallback loading a system library.
       To patch and compile the official SQlite3 amalgamation file, follow the
     instruction from the res/static/sqlite3 folder.
@@ -100,10 +101,15 @@ const
   // same binaries expected by this unit, in one of its previous version
   // - you could download the static for this exact mORMot source revision e.g. as
   // https://github.com/synopse/mORMot2/releases/download/2.0.stable/mormot2static.7z
+  // https://github.com/synopse/mORMot2/releases/download/2.0.stable/mormot2static.tgz
   EXPECTED_RELEASE_TAG = '2.0.stable';
 
   /// where to download the latest available static binaries, including SQLite3
+  {$ifdef OSWINDOWS}
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
+  {$else}
+  EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.tgz';
+  {$endif OSWINDOWS}
 
 
 { ************ Encryption-Related Functions }

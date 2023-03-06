@@ -16,8 +16,9 @@ unit mormot.lib.static;
 
   *****************************************************************************
 
-  Please download latest https://synopse.info/files/mormot2static.7z and
-  extract its content to the /static sub-folder of the mORMot 2 repository.
+  Please download latest https://synopse.info/files/mormot2static.7z or
+  https://synopse.info/files/mormot2static.tgz and extract its content to
+  the /static sub-folder of the mORMot 2 repository.
 
 }
 
