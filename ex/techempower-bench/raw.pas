@@ -6,6 +6,7 @@ program raw;
    in modern pascal and the mORMot 2 framework
  ----------------------------------------------------
  https://github.com/TechEmpower/FrameworkBenchmarks/wiki
+ command line optional syntax: raw [threads] [cores] [servers]
 }
 
 {$I mormot.defines.inc}
@@ -205,8 +206,8 @@ begin
     [hsoNoXPoweredHeader,  // not needed for a benchmark
      hsoHeadersInterning,  // reduce memory contention for /plaintext and /json
      hsoNoStats,           // disable low-level statistic counters
-     //hsoThreadCpuAffinity, // better scaling of /plaintext in some cases
-     //hsoThreadSmooting,  // set below in flags parameter
+     //hsoThreadCpuAffinity, // worse scaling on multi-servers
+     hsoThreadSmooting,    // seems a good option, even if not magical
      {$ifdef WITH_LOGS}
      hsoLogVerbose,
      {$endif WITH_LOGS}
@@ -532,11 +533,11 @@ begin
   LastComputeUpdateSqlSafe.Lock;
   if cnt <> LastComputeUpdateSqlCnt then
   begin
-    // update table set randomNumber = CASE id when $1 then $2 when $3 then $4 ...
-    // when $9 then $10 else randomNumber end where id in ($1,$3,$5,$7,$9)
+    // update table set randomNumber = CASE id when ? then ? when ? then ? ...
+    // when ? then ? else randomNumber end where id in (?,?,?,?,?)
     // - this weird syntax gives best number for TFB /rawupdates?queries=20 but
-    // is not good for smaller or higher count - we won't include it in the ORM
-    // but only for our RAW results - as other frameworks (e.g. ntex) do
+    // seems not good for smaller or higher count - we won't include it in the
+    // ORM but only for our RAW results - as other frameworks (e.g. ntex) do
     LastComputeUpdateSqlCnt := cnt;
     W := TTextWriter.CreateOwnedStream(tmp);
     try
@@ -545,12 +546,10 @@ begin
         W.AddShort(' when ? then ?');
       W.AddShort(' else randomNumber end where id in (');
       repeat
-        W.Add('?');
+        W.Add('?', ',');
         dec(cnt);
-        if cnt = 0 then
-          break;
-        W.Add(',');
-      until false;
+      until cnt = 0;
+      W.CancelLastComma;
       W.Add(')');
       W.SetText(LastComputeUpdateSql);
     finally
@@ -582,7 +581,6 @@ begin
     stmt.Bind(cnt * 2 + i + 1, res[i].id);
   end;
   stmt.ExecutePrepared;
-  //conn.Commit; // autocommit
   ctxt.SetOutJson(@res, TypeInfo(TWorlds));
   result := HTTP_SUCCESS;
 end;
@@ -599,43 +597,43 @@ var
   cores: integer;
 begin
   // user specified some values at command line: raw [threads] [cores] [servers]
+  // in practice, [cores] is just ignored
   if not TryStrToInt(ParamStr(1), threads) then
     threads := SystemInfo.dwNumberOfProcessors * 4;
+  if not TryStrToInt(ParamStr(2), cores) then
+    cores := 16;
+  if not TryStrToInt(ParamStr(3), servers) then
+    servers := 1;
   if threads < 16 then
     threads := 16
   else if threads > 256 then
     threads := 256; // max. threads for THttpAsyncServer
-  if not TryStrToInt(ParamStr(2), cores) then
-    cores := 16;
-  if SystemInfo.dwNumberOfProcessors > cores then
-    SystemInfo.dwNumberOfProcessors := cores; //for hsoThreadCpuAffinity
-  if not TryStrToInt(ParamStr(3), servers) then
-    servers := 1;
+  {if SystemInfo.dwNumberOfProcessors > cores then
+    SystemInfo.dwNumberOfProcessors := cores; // for hsoThreadCpuAffinity}
   if servers < 1 then
     servers := 1
-  else if servers > 16 then
-    servers := 16;
+  else if servers > 256 then
+    servers := 256;
 end;
 
 procedure ComputeExecutionContextFromNumberOfProcessors;
 var
-  cores: integer;
+  logicalcores: integer;
 begin
   // automatically guess best parameters depending on available CPU cores
-  cores := SystemInfo.dwNumberOfProcessors;
-  if cores > 12 then
+  logicalcores := SystemInfo.dwNumberOfProcessors;
+  if logicalcores > 12 then
   begin
-    // high-end CPU - scale using several listeners
-    threads := cores;
-    servers := cores div 4;
-    if servers > 6 then
-      servers := 6;
+    // high-end CPU - scale using several listeners (one per core)
+    // see https://synopse.info/forum/viewtopic.php?pid=39263#p39263
+    servers := logicalcores;
+    threads := 8;
   end
   else
   begin
-    // regular CPU
-    threads := cores * 4;
+    // regular CPU - a single instance and a few threads per core
     servers := 1;
+    threads := logicalcores * 4;
   end;
 end;
 
@@ -664,10 +662,8 @@ begin
     ComputeExecutionContextFromParams
   else
     ComputeExecutionContextFromNumberOfProcessors;
-  if servers = 1 then
-    include(flags, hsoThreadSmooting) // 30% better /plaintext e.g. on i5 7300U
-  else
-    include(flags, hsoReusePort);     // allow several bindings on the same port
+  if servers > 1 then
+    include(flags, hsoReusePort); // allow several bindings on the same port
 
   // start the server instance(s), in hsoReusePort mode if needed
   SetLength(rawServers, servers);

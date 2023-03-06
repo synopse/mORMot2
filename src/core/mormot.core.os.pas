@@ -1063,7 +1063,9 @@ var
   SystemInfo: record
     /// retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
-    /// retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    /// the number of available logical CPUs
+    // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    // - see CpuSockets for the number of physical CPU sockets
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
     uts: record
