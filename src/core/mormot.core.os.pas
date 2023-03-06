@@ -2383,9 +2383,9 @@ type
 // some pthread_mutex_*() API defined here for proper inlining
 {$ifdef OSPTHREADSLIB}
 var
-  pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_lock:    function(mutex: pointer): integer; cdecl;
   pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
-  pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_unlock:  function(mutex: pointer): integer; cdecl;
 {$endif OSPTHREADSLIB}
 {$ifdef OSPTHREADSSTATIC}
 function pthread_mutex_lock(mutex: pointer): integer; cdecl;
