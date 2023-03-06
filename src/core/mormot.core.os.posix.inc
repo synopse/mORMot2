@@ -1573,7 +1573,7 @@ var
   flags: cardinal;
 begin
   result := 0;
-  if LinuxKernelRevision < $02061b then
+  if KernelRevision < $02061b then
     exit; // not available prior to kernel 2.6.27
   flags := 0;
   if nonblocking then
@@ -3704,11 +3704,11 @@ begin
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
   P := @uts.release[0];
-  LinuxKernelRevision := GetNextCardinal(P) shl 16 +
-                         GetNextCardinal(P) shl 8 +
-                         GetNextCardinal(P);
+  KernelRevision := GetNextCardinal(P) shl 16 +
+                    GetNextCardinal(P) shl 8 +
+                    GetNextCardinal(P);
   OSVersion32.os := OS_KIND;
-  MoveByOne(@LinuxKernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
+  MoveByOne(@KernelRevision, @OSVersion32.utsrelease, 3); // 24-bit
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then

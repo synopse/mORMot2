@@ -2193,8 +2193,13 @@ var
   // - this unit will make icu.Done in its finalization section
   icu: TIcuLibrary;
 
+  /// contains the current POSIX kernel revision, as one 24-bit integer
+  // - allow quick comparison mainly for kernel feature checking
+  // - e.g. on Linux, may equal $030d02 for 3.13.2, or $020620 for 2.6.32
+  KernelRevision: cardinal;
 
-{$ifdef OSLINUX} { the systemd API is Linux-specific }
+
+{$ifdef OSLINUX} { some Linux-specific APIs (e.g. systemd or eventfd) }
 
 const
   /// The first passed file descriptor is fd 3
@@ -2261,13 +2266,9 @@ var
   // - this unit will make sd.Done in its finalization section
   sd: TSystemD;
 
-  /// contains the current Linux kernel revision, as one 24-bit integer
-  // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
-  LinuxKernelRevision: cardinal;
-
 /// a wrapper to the eventfd() syscall
 // - returns 0 if the kernel does not support eventfd2 (before 2.6.27) or
-// if the platform is not supported (only tested on Linux x86_64 by now)
+// if the platform is not supported (only validated on Linux x86_64 by now)
 // - returns a file descriptor handle on success, which should be fpclose()
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 
@@ -2370,7 +2371,7 @@ type
   TOSLightMutex = TRTLCriticalSection;
 
 {$ifdef OSLINUX}
-  {$define OSPTHREADSLIB} // direct pthread calls were tested on Linux only
+  {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
 {$endif OSLINUX}
 {$ifdef OSDARWIN}
   {$define OSPTHREADSSTATIC} // direct pthread calls from the 'c' library
