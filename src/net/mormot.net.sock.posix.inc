@@ -816,7 +816,7 @@ end;
 
 {$endif USE_IFADDRS}
 
-function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
+function _GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
   p, n: PUtf8Char;

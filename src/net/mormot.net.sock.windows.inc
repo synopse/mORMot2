@@ -780,7 +780,7 @@ var
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
 
-function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
+function _GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   n, l: PtrInt;
   siz: ULONG;

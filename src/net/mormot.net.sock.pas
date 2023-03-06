@@ -387,14 +387,16 @@ function MacToHex(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
+// - no cache is used for this function - consider GetIPAddressesText instead
 function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 
 /// returns all IP addresses of the current computer as a single CSV text
 // - may be used to enumerate all adapters
+// - an internal cache of the result with Sep=' ' is refreshed every 32 seconds
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
-/// flush the GetIPAddresses/GetMacAddresses internal cache
+/// flush the GetIPAddressesText/GetMacAddresses internal cache
 // - may be set to force detection after HW configuration change
 procedure MacIPAddressFlush;
 
@@ -410,9 +412,11 @@ type
   TMacAddressDynArray = array of TMacAddress;
 
 /// enumerate all Mac addresses of the current computer
+// - an internal cache is used, with refresh on explicit MacIPAddressFlush call
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 
 /// enumerate all MAC addresses of the current computer as 'name1=addr1 name2=addr2'
+// - an internal cache is used, with refresh on explicit MacIPAddressFlush call
 function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
 
@@ -425,6 +429,7 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 
 /// retrieve all Domain Name Servers addresses known by the Operating System
 // - on POSIX, will use /etc/resolv.conf content unless usePosixEnv is set
+// - an internal cache of the result will be refreshed every 8 seconds
 function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 
@@ -2526,14 +2531,18 @@ var
   i: PtrInt;
   addr: TMacAddressDynArray;
   w, wo: RawUtf8;
+  ok: boolean;
 begin
   with MacAddresses[UpAndDown] do
   begin
+    Safe.Lock; // to avoid memory leak
     result := Text[WithoutName];
-    if (result <> '') or
-       Searched then
+    ok := (result <> '') or
+          Searched;
+    Safe.UnLock; // TLightLock is not rentrant
+    if ok then
       exit;
-    addr := GetMacAddresses(UpAndDown);
+    addr := GetMacAddresses(UpAndDown); // will call Safe.Lock/UnLock
     if addr = nil then
       exit;
     for i := 0 to high(addr) do
@@ -2544,11 +2553,11 @@ begin
       end;
     SetLength(w, length(w) - 1);
     SetLength(wo, length(wo) - 1);
-    Safe.Lock; // to avoid memory leak
+    Safe.Lock;
     Text[false] := w;
     Text[true] := wo;
-    Safe.UnLock;
     result := Text[WithoutName];
+    Safe.UnLock;
   end;
 end;
 
@@ -2567,6 +2576,34 @@ begin
       inc(n);
     end;
   SetLength(result, n);
+end;
+
+var
+  DnsCache: record
+    Safe: TLightLock;
+    Tix: cardinal;
+    Value: TRawUtf8DynArray;
+  end;
+
+function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
+var
+  tix32: cardinal;
+begin
+  tix32 := mormot.core.os.GetTickCount64 shr 13 + 1; // refresh every 8192 ms
+  with DnsCache do
+  begin
+    Safe.Lock;
+    try
+      if tix32 <> Tix then
+      begin
+        Value := _GetDnsAddresses(usePosixEnv);
+        Tix := tix32;
+      end;
+      result := Value;
+    finally
+      Safe.UnLock;
+    end;
+  end;
 end;
 
 
