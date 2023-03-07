@@ -1504,7 +1504,8 @@ begin
       // <>'' for TServiceCustomAnswer, where body has already been written
       Ctxt.ServiceResultEnd(WR, Inst.InstanceID);
       Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
-      Ctxt.Call.OutStatus := HTTP_SUCCESS;
+      if exec.ServiceCustomAnswerStatus = 0 then // if none has been set
+        Ctxt.Call.OutStatus := HTTP_SUCCESS;
     end;
     WR.SetText(Ctxt.Call.OutBody);
   finally

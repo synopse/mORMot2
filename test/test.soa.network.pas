@@ -73,6 +73,7 @@ type
     ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
     function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestRestStatus(a: integer): TServiceCustomStatus;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsyncCallback(a: integer);
     procedure RemoveCallback;
@@ -84,6 +85,7 @@ type
     // IBidirService implementation methods
     function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestRestStatus(a: integer): TServiceCustomStatus;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsyncCallback(a: integer);
     procedure RemoveCallback;
@@ -105,7 +107,7 @@ type
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol;
       opcode: TWebSocketFrameOpCode; const name: RawUtf8);
     procedure TestRest(Rest: TRest);
-    procedure TestCallback(Rest: TRest);
+    procedure TestCallback(Rest: TRest; TryReconnect: boolean);
     procedure SoaCallbackViaWebsockets(Ajax, Relay: boolean);
   public
     property HttpServer: TRestHttpServer
@@ -172,6 +174,11 @@ begin
   result.Header := BINARY_CONTENT_TYPE_HEADER;
   result.Content := Int32ToUtf8(a) + #0#1;
   result.Status := HTTP_SUCCESS;
+end;
+
+function TBidirServer.TestRestStatus(a: integer): TServiceCustomStatus;
+begin
+  result := a;
 end;
 
 function TBidirServer.TestCallback(d: Integer;
@@ -360,7 +367,7 @@ begin
     for b := -10 to 10 do
     begin
       v := I.TestRest(a, b, c);
-      CheckEqual(GetInteger(pointer(c)), a + b);
+      CheckEqual(GetInteger(pointer(c)), a + b, 'TestRest');
       if CheckFailed(DocVariantType.IsOfType(v)) then
         continue;
       check(v.a = a);
@@ -370,17 +377,26 @@ begin
   for a := -10 to 10 do
   begin
     res := I.TestRestCustom(a);
-    check(res.Status = HTTP_SUCCESS);
+    check(res.Status = HTTP_SUCCESS, 'TestRestCustom');
     check(GetInteger(pointer(res.Content)) = a);
     check(res.Content[Length(res.Content)] = #1);
   end;
+  for a := 0 to 10 do
+  begin
+    b := a * 35 + 200;
+    check(b >= 200, '>= http range');
+    check(b <= 599, '<= http range');
+    CheckEqual(I.TestRestStatus(b), b, 'TestRestStatus');
+  end;
 end;
 
-procedure TTestBidirectionalRemoteConnection.TestCallback(Rest: TRest);
+procedure TTestBidirectionalRemoteConnection.TestCallback(
+  Rest: TRest; TryReconnect: boolean);
 var
   I: IBidirService;
   d: integer;
   subscribed: IBidirCallback;
+  resp: RawUtf8;
 
   procedure WaitUntilNotified;
   var
@@ -417,6 +433,14 @@ begin
   for d := -5 to 6 do
   begin
     check(I.TestCallback(d, subscribed) = (d <> 0));
+    if TryReconnect and
+       (d and 3 = 0) then
+    begin
+      // simulate a broken connection
+      //TRestHttpClientWebsockets(Rest).WebSockets.Close;
+      // should reconnect and upgrade the socket, then move the callbacks
+      CheckEqual(TRestClientUri(Rest).CallBackGet('timestamp', [], resp), 200);
+    end;
     I.LaunchAsyncCallback(d);
     I.RemoveCallback;
   end;
@@ -427,17 +451,17 @@ end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 procedure TTestBidirectionalRemoteConnection.SoaCallbackOnServerSide;
 begin
   TestRest(fServer);
-  TestCallback(fServer);
+  TestCallback(fServer, {tryreconnect=}false);
   TestRest(fServer);
 end;
 
 function TTestBidirectionalRemoteConnection.NewClient(const port: RawUtf8):
   TRestHttpClientWebsockets;
 begin
-  result := TRestHttpClientWebsockets.Create('127.0.0.1', port, TOrmModel.Create
-    (fServer.Model));
+  result := TRestHttpClientWebsockets.Create(
+    '127.0.0.1', port, TOrmModel.Create(fServer.Model));
   result.Model.Owner := result;
-  result.WebSockets.Settings.SetFullLog;
+  result.WebSockets.Settings.SetFullLog.ClientRestoreCallbacks := true;
 end;
 
 procedure TTestBidirectionalRemoteConnection.SoaCallbackViaWebsockets(
@@ -461,19 +485,19 @@ begin
   c1 := NewClient(port);
   try
     // check plain HTTP REST calls
-    check(c1.ServerTimestampSynchronize);
+    check(c1.ServerTimestampSynchronize, 'ServerTimestampSynchronize');
     ServiceDefine(c1, '1');
     TestRest(c1);
     // check WebSockets communication
     CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
       'WebSocketsUpgrade1');
-    TestCallback(c1);
+    TestCallback(c1, {tryreconnect=}false);
     c2 := NewClient(port);
     try
       CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
         'WebSocketsUpgrade2');
       ServiceDefine(c2, '2');
-      TestCallback(c2);
+      TestCallback(c2, {tryreconnect=}true);
       if Relay then
       begin
         stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
@@ -512,7 +536,8 @@ begin
     'X-Real-IP');
   check(not fPrivateRelay.Connected);
   check(fPrivateRelay.TryConnect);
-  checkEqual(OpenHttpGet('127.0.0.1', fPublicRelayPort, '/invalid', ''), '', 'wrong URI');
+  checkEqual(OpenHttpGet(
+    '127.0.0.1', fPublicRelayPort, '/invalid', ''), '', 'wrong URI');
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
   check(PosEx('version', stats) > 0, 'stats');
 end;

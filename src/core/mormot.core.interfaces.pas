@@ -288,6 +288,9 @@ type
     /// true if the result is a TServiceCustomAnswer record
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
+    /// true if the result is a TServiceCustomStatus 32-bit integer
+    // - that is, a custom HTTP status
+    ArgsResultIsServiceCustomStatus: boolean;
     /// true if there is a single input parameter as RawByteString/RawBlob
     // - TRestRoutingRest.ExecuteSoaByInterface will identify binary input
     // with mime-type 'application/octet-stream' as expected
@@ -755,8 +758,16 @@ type
     // TServiceFactoryClient.GetErrorMessage for decoding REST/SOA errors)
     Status: cardinal;
   end;
-
   PServiceCustomAnswer = ^TServiceCustomAnswer;
+
+  /// an integer type to be used as result for a function method to customize
+  // the HTTP response code for interface-based services
+  // - by default, our protocol returns HTTP_SUCCESS = 200 for any process
+  // - using this type as result allow to return the execution error code as a
+  // regular HTTP_* response code, in addition to the regular JSON answer - i.e.
+  // there will be a "result" member in the transmitted JSON anyway
+  // - the returned value should be in HTTP response code range, i.e. 200..599
+  TServiceCustomStatus = type cardinal;
 
 
 /// returns the interface name of a registered Guid, or its hexadecimal value
@@ -2491,7 +2502,8 @@ type
     /// set from output TServiceCustomAnswer.Header result parameter
     property ServiceCustomAnswerHead: RawUtf8
       read fServiceCustomAnswerHead write fServiceCustomAnswerHead;
-    /// set from output TServiceCustomAnswer.Status result parameter
+    /// set from output TServiceCustomAnswer.Status or TServiceCustomStatus
+    // result parameter
     property ServiceCustomAnswerStatus: cardinal
       read fServiceCustomAnswerStatus write fServiceCustomAnswerStatus;
     /// points e.g. to TRestServerUriContext.ExecuteCallback which
@@ -3937,6 +3949,9 @@ begin
           raise EInterfaceFactory.CreateUtf8(
             '%.Create: I% unexpected result type %',
             [self, InterfaceDotMethodName, ArgTypeName^]);
+        imvCardinal:
+          if ArgRtti.Info = TypeInfo(TServiceCustomStatus) then
+            ArgsResultIsServiceCustomStatus := true;
         imvRecord:
           if ArgRtti.Info = TypeInfo(TServiceCustomAnswer) then
           begin
@@ -7522,7 +7537,7 @@ begin
       // handle custom content (not JSON array/object answer)
       if fMethod^.ArgsResultIsServiceCustomAnswer then
       begin
-        c := pointer(fValues[fMethod^.ArgsResultIndex]);
+        c := fValues[fMethod^.ArgsResultIndex];
         if c^.Header = '' then
           // set to 'Content-Type: application/json' by default
           c^.Header := JSON_CONTENT_TYPE_HEADER_VAR;
@@ -7535,7 +7550,9 @@ begin
         fServiceCustomAnswerStatus := c^.Status;
         result := true;
         exit;
-      end;
+      end
+      else if fMethod^.ArgsResultIsServiceCustomStatus then
+        fServiceCustomAnswerStatus := PCardinal(fValues[fMethod^.ArgsResultIndex])^;
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
       opt[{smdVar=}true] := []; // let var params override void/default values

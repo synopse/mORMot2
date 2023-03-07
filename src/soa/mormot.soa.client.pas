@@ -670,7 +670,9 @@ begin
   if aServiceCustomAnswer = nil then
   begin
     // handle errors at REST level
-    if not StatusCodeIsSuccess(status) then
+    if ((service = nil) or
+        not service^.ArgsResultIsServiceCustomStatus) and
+       not StatusCodeIsSuccess(status) then
     begin
       if aErrorMsg <> nil then
       begin

@@ -5894,12 +5894,13 @@ begin
   case aNode of
     rnTable,
     rnTableID,
-    rnTableIDBlob,
-    rnState:
-      if aFrom in [mGET, mLOCK, mUNLOCK, mHEAD, mSTATE] then
+    rnTableIDBlob:
+      if aFrom in [mGET, mLOCK, mUNLOCK, mHEAD] then
         result.Data.Command := execOrmGet
       else
         result.Data.Command := execOrmWrite;
+    rnState:
+      result.Data.Command := execOrmGet;
     rnTableMethod,
     rnTableIDMethod,
     rnMethod,
@@ -6798,7 +6799,7 @@ begin
     if (fModel.TablesMax >= 0) and
        not (rsoNoTableURI in fOptions) then
     begin
-      // ModelRoot for
+      // ModelRoot
       r.Setup([mGET, mPOST, mBEGIN, mEND, mABORT], '', rnTable, nil);
       if not (rsoNoInternalState in fOptions) then
         r.Setup(mSTATE, '', rnState);
