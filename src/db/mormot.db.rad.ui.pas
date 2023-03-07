@@ -346,7 +346,11 @@ begin
       begin
         if len <> 0 then
         begin
+          {$ifdef UNICODE}
+          tmp:= RawByteString( Utf8DecodeToUnicodeString(data, len) );
+          {$else}
           CurrentAnsiConvert.Utf8BufferToAnsi(data, len, tmp);
+          {$endif UNICODE}
           len := length(tmp);
           maxlen := Field.DataSize - 1; // without trailing #0
           if len > maxlen then
@@ -392,8 +396,14 @@ begin
         result := TSynMemoryStream.Create(data, len);
       ftMemo,
       ftString:
+        begin
+        {$ifdef UNICODE}
+        result := TRawByteStringStream.Create( RawByteString( Utf8DecodeToUnicodeString(data, len) ));
+        {$else}
         result := TRawByteStringStream.Create(
           CurrentAnsiConvert.Utf8BufferToAnsi(data, len));
+        {$endif UNICODE}
+        end;
       {$ifdef HASDBFTWIDE}
       ftWideMemo,
       {$endif HASDBFTWIDE}
