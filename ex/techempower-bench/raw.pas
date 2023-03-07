@@ -386,7 +386,7 @@ begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
   cache := fStore.Orm.CacheOrNil;
   for i := 0 to length(res) - 1 do
-    res[i] := pointer(cache.Get(TOrmCachedWorld, ComputeRandomWorld));
+    res[i] := cache.Get(TOrmCachedWorld, ComputeRandomWorld);
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;

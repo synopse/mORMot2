@@ -4361,7 +4361,7 @@ type
     /// return the TOrm instance stored in the cache
     // - warning: not thread-safe - use Retrieve() to get a proper copy
     // - returns nil if not found or SetTimeOut was called
-    function Get(aTable: TOrmClass; aID: TID): TOrm;
+    function Get(aTable: TOrmClass; aID: TID): pointer;
     /// read-only access to the associated TRest.ORM instance
     property Rest: IRestOrm
       read fRest;
@@ -10763,7 +10763,7 @@ end;
 
 function TOrmCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
 var
-  i: PtrInt;
+  i: PtrUInt;
 begin
   result := false;
   if (self = nil) or
@@ -10771,17 +10771,16 @@ begin
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
-    if PtrUInt(i) < PtrUInt(Length(fCache)) then
+    if i < PtrUInt(Length(fCache)) then
     begin
       fCache[i].TimeOutMS := aTimeoutMS;
       result := true;
     end;
 end;
 
-function TOrmCache.Get(aTable: TOrmClass; aID: TID): TOrm;
+function TOrmCache.Get(aTable: TOrmClass; aID: TID): pointer;
 var
-  i: PtrInt;
-  e: POrmCacheEntryValue;
+  i: PtrUInt;
 begin
   result := nil;
   if (self = nil) or
@@ -10790,15 +10789,7 @@ begin
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if i < PtrUInt(Length(fCache)) then
-    with fCache[i] do
-      if CacheEnable and
-         (TimeOutMS = 0) then
-      begin
-        e := RetrieveEntry(aID);
-        if (e <> nil) and
-           (e <> ORMCACHE_DEPRECATED) then
-          result := pointer(e^.Value); // no copy
-      end;
+    result := fCache[i].Get(aID);
 end;
 
 function TOrmCache.IsCached(aTable: TOrmClass): boolean;

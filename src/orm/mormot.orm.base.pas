@@ -2870,6 +2870,10 @@ type
     procedure SetValue(aID: TID; aOrm: TObject);
     /// check if a record specified by its ID is in cache
     function Exists(aID: TID): boolean;
+    /// return the TOrm instance stored in the cache
+    // - warning: not thread-safe - use Retrieve() to get a proper copy
+    // - returns nil if not found or SetTimeOut was called
+    function Get(aID: TID): pointer;
     /// low-level retrieve of a cached TOrm entry
     // - returns nil if not found, ORMCACHE_DEPRECATED if deprecated
     // - warning: should be called within proper Safe lock/unlock
@@ -10807,6 +10811,20 @@ begin
   end;
   if e = ORMCACHE_DEPRECATED then // happens at most every 512 ms
     FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
+end;
+
+function TOrmCacheEntry.Get(aID: TID): pointer;
+var
+  e: POrmCacheEntryValue;
+begin
+  result := nil;
+  if not CacheEnable or
+     (TimeOutMS <> 0) then
+    exit;
+  e := RetrieveEntry(aID);
+  if (e <> nil) and
+     (e <> ORMCACHE_DEPRECATED) then
+    result := e^.Value; // no copy
 end;
 
 function TOrmCacheEntry.CachedEntries: cardinal;
