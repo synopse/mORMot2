@@ -11073,7 +11073,7 @@ begin
   if (e <> nil) and
      (e <> ORMCACHE_DEPRECATED) and
      (e^.Value <> nil) then
-    aValue.FillFrom(TOrm(e^.Value), aValue.Orm.SimpleFieldsBits[soInsert])
+    aValue.FillFrom(TOrm(e^.Value), aValue.Orm.SimpleFieldsBits[ooInsert])
   else
     result := ocrNotInCache;
   c^.Safe.ReadUnLock;
