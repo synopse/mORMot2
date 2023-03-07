@@ -75,7 +75,6 @@ type
   end;
   TOrmCachedWorld = class(TOrmWorld);
   TOrmWorlds = array of TOrmWorld;
-  TOrmWorldClass = class of TOrmWorld;
   TOrmFortune = class(TOrm)
   protected
     fMessage: RawUtf8;
@@ -99,9 +98,6 @@ type
     {$endif USE_SQLITE3}
     // as used by /rawqueries and /rawupdates
     function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
-    // as used by /queries and /cached-queries
-    function DoOrmQueries(ctxt: THttpServerRequest; orm: TOrmWorldClass;
-      const search: RawUtf8): cardinal;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions); reintroduce;
     destructor Destroy; override;
@@ -337,27 +333,6 @@ begin
   result := true;
 end;
 
-// ORM queries as shared by /queries and /cached-queries endpoints
-
-function TRawAsyncServer.DoOrmQueries(ctxt: THttpServerRequest;
-  orm: TOrmWorldClass; const search: RawUtf8): cardinal;
-var
-  i: PtrInt;
-  res: TOrmWorlds;
-begin
-  result := HTTP_SERVERERROR;
-  SetLength(res, GetQueriesParamValue(ctxt, search));
-  for i := 0 to length(res) - 1 do
-  begin
-    res[i] := orm.Create; // TOrmWorld or TOrmCachedWorld
-    if not fStore.Orm.Retrieve(ComputeRandomWorld, res[i]) then
-      exit;
-  end;
-  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
-  ObjArrayClear(res);
-  result := HTTP_SUCCESS;
-end;
-
 // following methods implement the server endpoints
 
 function TRawAsyncServer.plaintext(ctxt: THttpServerRequest): cardinal;
@@ -390,13 +365,30 @@ begin
 end;
 
 function TRawAsyncServer.queries(ctxt: THttpServerRequest): cardinal;
+var
+  i: PtrInt;
+  res: TOrmWorlds;
 begin
-  result := DoOrmQueries(ctxt, TOrmWorld, 'QUERIES=');
+  SetLength(res, GetQueriesParamValue(ctxt, 'QUERIES='));
+  for i := 0 to length(res) - 1 do
+    res[i] := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld);
+  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
+  ObjArrayClear(res);
+  result := HTTP_SUCCESS;
 end;
 
 function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
+var
+  i: PtrInt;
+  res: TOrmWorlds;
+  cache: TOrmCache;
 begin
-  result := DoOrmQueries(ctxt, TOrmCachedWorld, 'COUNT=');
+  SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
+  cache := fStore.Orm.CacheOrNil;
+  for i := 0 to length(res) - 1 do
+    res[i] := pointer(cache.Get(TOrmCachedWorld, ComputeRandomWorld));
+  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
+  result := HTTP_SUCCESS;
 end;
 
 function OrmFortuneCompareByMessage(const A, B): integer;

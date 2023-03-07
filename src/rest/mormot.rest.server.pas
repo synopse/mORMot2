@@ -6605,8 +6605,8 @@ begin
   W.CancelLastChar('}');
   if fOrm.CacheOrNil <> nil then
   begin
-    W.AddShort(',"cachedMemoryBytes":');
-    W.AddU(fOrm.CacheOrNil.CachedMemory); // will also flush outdated JSON
+    W.AddShort(',"cachedFlush":');
+    W.AddU(fOrm.CacheOrNil.FlushDeprecated);
     W.AddComma;
   end;
   if (fRun.BackgroundTimer <> nil) and

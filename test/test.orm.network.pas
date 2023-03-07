@@ -295,23 +295,23 @@ begin
     Check(Rec.ID = IDTOUPDATE, 'retrieve record');
     CheckEqual(Database.Orm.Cache.CachedEntries, 0);
     CheckEqual(Client.Orm.Cache.CachedEntries, 0);
-    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
+    CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
     TestOne;
     CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     Client.Orm.Cache.SetCache(TOrmPeople); // cache whole table
     CheckEqual(Client.Orm.Cache.CachedEntries, 0);
-    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
+    CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
     TestOne;
     CheckEqual(Client.Orm.Cache.CachedEntries, 1);
-    Check(Client.Orm.Cache.CachedMemory > 0);
+    CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
     Client.Orm.Cache.Clear; // reset cache settings
     CheckEqual(Client.Orm.Cache.CachedEntries, 0);
     Client.Orm.Cache.SetCache(Rec); // cache one = SetCache(TOrmPeople,Rec.ID)
     CheckEqual(Client.Orm.Cache.CachedEntries, 0);
-    CheckEqual(Client.Orm.Cache.CachedMemory, 0);
+    CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
     TestOne;
     CheckEqual(Client.Orm.Cache.CachedEntries, 1);
-    Check(Client.Orm.Cache.CachedMemory > 0);
+    CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
     Client.Orm.Cache.SetCache(TOrmPeople);
     TestOne;
     CheckEqual(Client.Orm.Cache.CachedEntries, 1);
@@ -341,7 +341,7 @@ begin
       else
         Database.Orm.Cache.Flush;
       CheckEqual(Database.Orm.Cache.CachedEntries, 0);
-      CheckEqual(Database.Orm.Cache.CachedMemory, 0);
+      CheckEqual(Client.Orm.Cache.FlushDeprecated, 0);
       Database.Orm.Cache.Clear;
     end;
   finally
