@@ -3191,28 +3191,28 @@ begin
   end;
 end;
 
+{$ifdef MONGO_OLDPROTOCOL}
+function NewCommand(c: TMongoClient; const db: RawUtf8; const command: variant;
+  flags: TMongoQueryFlags; const aCollectionName: RawUtf8): TMongoRequest;
+begin
+  result := TMongoRequestQuery.Create(db + '.$cmd', command, null, 1, 0, flags);
+end;
+{$else}
 function NewCommand(c: TMongoClient; const db: RawUtf8; const command: variant;
   flags: TMongoQueryFlags; const aCollectionName: RawUtf8): TMongoRequest;
 var
-  _command: Variant;
+  _command: variant;
 begin
-  {$ifdef MONGO_OLDPROTOCOL}
-  result := TMongoRequestQuery.Create(db + '.$cmd', command, null, 1, 0, flags);
-  {$else}
+  _command := command;
   // since OP_MSG mqfSlaveOk was replaced by Global Command Argument
   // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst
-  if VarIsStr(command) then begin
-    result := TMongoMsg.Create(c, db, aCollectionName, command, flags, 1);
-    Exit;
-  end;
-
-  _command:= command;
-  if c.ReadPreference in [rpPrimaryPreferred,rpNearest] then
-    BsonVariantType.AddItem(_command, ['$readPreference', _OBJ(['mode', 'primaryPreferred'])]);
-
+  if (c.ReadPreference in [rpPrimaryPreferred, rpNearest]) and
+     not VarIsStr(_command) then
+    BsonVariantType.AddItem(_command,
+      ['$readPreference', BsonVariant(['mode', 'primaryPreferred'])]);
   result := TMongoMsg.Create(c, db, aCollectionName, _command, flags, 1);
-  {$endif MONGO_OLDPROTOCOL}
 end;
+{$endif MONGO_OLDPROTOCOL}
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUtf8;
   const command: variant; var returnedValue: variant;
