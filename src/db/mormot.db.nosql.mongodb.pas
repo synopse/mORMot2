@@ -3193,11 +3193,24 @@ end;
 
 function NewCommand(c: TMongoClient; const db: RawUtf8; const command: variant;
   flags: TMongoQueryFlags; const aCollectionName: RawUtf8): TMongoRequest;
+var
+  _command: Variant;
 begin
   {$ifdef MONGO_OLDPROTOCOL}
   result := TMongoRequestQuery.Create(db + '.$cmd', command, null, 1, 0, flags);
   {$else}
-  result := TMongoMsg.Create(c, db, aCollectionName, command, flags, 1);
+  // since OP_MSG mqfSlaveOk was replaced by Global Command Argument
+  // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst
+  if VarIsStr(command) then begin
+    result := TMongoMsg.Create(c, db, aCollectionName, command, flags, 1);
+    Exit;
+  end;
+
+  _command:= command;
+  if c.ReadPreference in [rpPrimaryPreferred,rpNearest] then
+    BsonVariantType.AddItem(_command, ['$readPreference', _OBJ(['mode', 'primaryPreferred'])]);
+
+  result := TMongoMsg.Create(c, db, aCollectionName, _command, flags, 1);
   {$endif MONGO_OLDPROTOCOL}
 end;
 
