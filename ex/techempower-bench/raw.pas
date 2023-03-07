@@ -34,6 +34,7 @@ uses
   mormot.core.perf,
   mormot.core.mustache,
   mormot.orm.core,
+  mormot.orm.base,
   mormot.orm.sql,
   mormot.db.core,
   mormot.db.raw.sqlite3,
@@ -381,12 +382,12 @@ function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
-  cache: TOrmCache;
+  cache: POrmCacheEntry;
 begin
+  cache := fStore.Orm.Cache.Table(TOrmCachedWorld);
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
-  cache := fStore.Orm.CacheOrNil;
   for i := 0 to length(res) - 1 do
-    res[i] := cache.Get(TOrmCachedWorld, ComputeRandomWorld);
+    res[i] := cache.Get(ComputeRandomWorld);
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;

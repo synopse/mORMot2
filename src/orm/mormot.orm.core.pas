@@ -4368,6 +4368,8 @@ type
     /// read-only access to the associated TOrmModel instance
     property Model: TOrmModel
       read fModel;
+    /// access to one TOrm cache instance
+    function Table(aTable: TOrmClass): POrmCacheEntry;
   public { TRest low level methods which are not to be called usualy: }
     /// check if a record specified by its table and ID is in the cache
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
@@ -10761,6 +10763,19 @@ begin
       inc(result, fCache[i].FlushCacheOutdatedEntries);
 end;
 
+function TOrmCache.Table(aTable: TOrmClass): POrmCacheEntry;
+var
+  i: PtrUInt;
+begin
+  result := nil;
+  if (self = nil) or
+     (aTable = nil) then
+    exit;
+  i := fModel.GetTableIndexExisting(aTable);
+  if i < PtrUInt(Length(fCache)) then
+    result := @fCache[i];
+end;
+
 function TOrmCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
 var
   i: PtrUInt;
@@ -10779,17 +10794,8 @@ begin
 end;
 
 function TOrmCache.Get(aTable: TOrmClass; aID: TID): pointer;
-var
-  i: PtrUInt;
 begin
-  result := nil;
-  if (self = nil) or
-     (aTable = nil) or
-     (aID <= 0) then
-    exit;
-  i := fModel.GetTableIndexExisting(aTable);
-  if i < PtrUInt(Length(fCache)) then
-    result := fCache[i].Get(aID);
+  result := Table(aTable).Get(aID);
 end;
 
 function TOrmCache.IsCached(aTable: TOrmClass): boolean;
@@ -10838,7 +10844,7 @@ begin
     exit;
   if Rest.CacheWorthItForTable(i) then
     fCache[i].SetCache(aID);
-  result := True;
+  result := true;
 end;
 
 function TOrmCache.SetCache(aTable: TOrmClass;
@@ -10858,7 +10864,7 @@ begin
   if Rest.CacheWorthItForTable(i) then
     for j := 0 to high(aIDs) do
       fCache[i].SetCache(aIDs[j]);
-  result := True;
+  result := true;
 end;
 
 function TOrmCache.SetCache(aRecord: TOrm): boolean;

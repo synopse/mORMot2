@@ -10818,7 +10818,8 @@ var
   e: POrmCacheEntryValue;
 begin
   result := nil;
-  if not CacheEnable or
+  if (@self = nil) or
+     not CacheEnable or
      (TimeOutMS <> 0) then
     exit;
   e := RetrieveEntry(aID);
