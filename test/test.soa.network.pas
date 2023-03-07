@@ -338,7 +338,7 @@ begin
   WebSocketLog := TSynLog; // for very detailed log
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService), TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
-  fServer := TRestServerFullMemory.CreateWithOwnModel([], true);
+  fServer := TRestServerFullMemory.CreateWithOwnModel([], {withauth=}true);
   fServer.Server.CreateMissingTables;
   fBidirServer := TBidirServer.Create;
   check(fServer.ServiceDefine(fBidirServer, [IBidirService]) <> nil);

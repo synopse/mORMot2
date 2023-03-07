@@ -7523,7 +7523,8 @@ begin
     fRouterSafe.ReadLock;
     node := fRouter.Lookup(ctxt);
     fRouterSafe.ReadUnLock;
-    if node = nil then
+    if (node = nil) or
+       (ctxt.fNode = rnNone) then
       ctxt.Error('Invalid URI', HTTP_BADREQUEST) // root ok: error 400, not 404
     else if (RootRedirectGet <> '') and
             (ctxt.Method = mGet) and
