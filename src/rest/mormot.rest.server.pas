@@ -7588,9 +7588,10 @@ begin
       if ctxt.fMicroSecondsStart <> 0 then
         fStats.ProcessSuccess(outcomingfile);
     end
-    else
-      // OutStatus is an error code
-      if Call.OutBody = '' then
+    else if (Call.OutStatus < 200) or
+            (Call.OutStatus > 599) then
+        ctxt.Error('Invalid HTTP status %', [Call.OutStatus], HTTP_SERVERERROR)
+    else if Call.OutBody = '' then // OutStatus is an error code
         // if no custom error message, compute it now as JSON
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
     // 7. compute returned ORM InternalState indicator
