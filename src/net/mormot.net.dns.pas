@@ -303,8 +303,9 @@ function DnsServices(const HostName: RawUtf8;
 
 /// retrieve the LDAP controlers from the current AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+// - optionally return the associated AD controler host name, e.g. 'mycorp.com'
 function DnsLdapControlers(const NameServer: RawUtf8 = '';
-  UsePosixEnv: boolean = false): TRawUtf8DynArray;
+  UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
 
 implementation
@@ -734,8 +735,8 @@ begin
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
 end;
 
-function DnsLdapControlers(
-  const NameServer: RawUtf8; UsePosixEnv: boolean): TRawUtf8DynArray;
+function DnsLdapControlers(const NameServer: RawUtf8; UsePosixEnv: boolean;
+  DomainName: PRawUtf8): TRawUtf8DynArray;
 var
   ad: TRawUtf8DynArray;
   i: PtrInt;
@@ -746,7 +747,11 @@ begin
   begin
     result := DnsServices('_ldap._tcp.' + ad[i], NameServer);
     if result <> nil then
+    begin
+      if DomainName <> nil then
+        DomainName^ := ad[i];
       exit;
+    end;
   end;
 end;
 

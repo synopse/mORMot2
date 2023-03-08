@@ -198,6 +198,22 @@ type
   /// we defined our own type to hold an ASN object binary
   TAsnObject = RawByteString;
 
+  /// the resultset of TLdapClient.GetWellKnownObjects()
+  TLdapKnownCommonNames = record
+    Computers: RawUtf8;
+    DeletedObjects: RawUtf8;
+    DomainControllers: RawUtf8;
+    ForeignSecurityPrincipals: RawUtf8;
+    Infrastructure: RawUtf8;
+    LostAndFound: RawUtf8;
+    MicrosoftProgramData: RawUtf8;
+    NtdsQuotas: RawUtf8;
+    ProgramData: RawUtf8;
+    Systems: RawUtf8;
+    Users: RawUtf8;
+    ManagedServiceAccounts: RawUtf8;
+  end;
+
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
@@ -253,12 +269,11 @@ type
     function Login: boolean;
     /// authenticate a client to the directory server with Username/Password
     // - if these are empty strings, then it does annonymous binding
-    // - when Bind is not called on LDAPv3, then anonymous mode is used
     // - warning: uses plaintext transport of password - consider using TLS
     function Bind: boolean;
     /// authenticate a client to the directory server with Username/Password
-    // - when you not call Bind on LDAPv3, then anonymous mode is used
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
+    // - seems not implemented by OpenLdap
     function BindSaslDigestMd5: boolean;
     /// close connection to the LDAP server
     function Logout: boolean;
@@ -309,11 +324,14 @@ type
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
-    /// try to retrieve a well known object DN from its GUID
+    /// retrieve a well known object DN or CN from its GUID
     // - see GUID_*_W constants, e.g. GUID_COMPUTERS_CONTAINER_W
-    // - search in object identified by the RootDN property
+    // - search in objects identified by the RootDN property
     // - return an empty string if not found
-    function GetWellKnownObjectDN(const ObjectGUID: RawUtf8): RawUtf8;
+    function GetWellKnownObject(const ObjectGUID: RawUtf8;
+      AsCN: boolean = false): RawUtf8;
+    /// retrieve al well known object DN or CN as a single convenient record
+    function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
@@ -1077,27 +1095,27 @@ end;
 function DNToCN(const DN: RawUtf8): RawUtf8;
 var
   p: PUtf8Char;
-  DC, OU, CN, PartType, Value: RawUtf8;
+  DC, OU, CN, kind, value: RawUtf8;
 begin
   p := pointer(DN);
   while p <> nil do
   begin
-    GetNextItemTrimed(p, '=', PartType);
-    GetNextItemTrimed(p, ',', Value);
-    if (PartType = '') or
-       (Value = '') then
+    GetNextItemTrimed(p, '=', kind);
+    GetNextItemTrimed(p, ',', value);
+    if (kind = '') or
+       (value = '') then
       raise ENetSock.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
-    UpperCaseSelf(PartType);
-    if PartType = 'DC' then
+    UpperCaseSelf(kind);
+    if kind = 'DC' then
     begin
       if DC <> '' then
-        DC := DC +'.';
-      DC := DC + Value;
+        DC := DC + '.';
+      DC := DC + value;
     end
-    else if PartType = 'OU' then
-      Prepend(OU, ['/', Value])
-    else if PartType = 'CN' then
-      Prepend(CN, ['/', Value]);
+    else if kind = 'OU' then
+      Prepend(OU, ['/', value])
+    else if kind = 'CN' then
+      Prepend(CN, ['/', value]);
   end;
   result := DC + OU + CN;
 end;
@@ -2288,25 +2306,25 @@ end;
 
 function TLdapClient.DiscoverRootDN: RawUtf8;
 var
-  PreviousSearchScope: TLdapSearchScope;
-  RootObject: TLdapResult;
-  RootDnAttr: TLdapAttribute;
+  prev: TLdapSearchScope;
+  root: TLdapResult;
+  attr: TLdapAttribute;
 begin
   result := '';
   if not fSock.SockConnected then
     exit;
-  PreviousSearchScope := SearchScope;
+  prev := SearchScope;
   try
     SearchScope := SS_BaseObject;
-    RootObject := SearchFirst('', '*', ['rootDomainNamingContext']);
-    if Assigned(RootObject) then
+    root := SearchFirst('', '*', ['rootDomainNamingContext']);
+    if Assigned(root) then
     begin
-      RootDnAttr := RootObject.Attributes.Find('rootDomainNamingContext');
-      if Assigned(RootDnAttr) then
-        result := RootDnAttr.GetReadable;
+      attr := root.Attributes.Find('rootDomainNamingContext');
+      if Assigned(attr) then
+        result := attr.GetReadable;
     end;
   finally
-    SearchScope := PreviousSearchScope;
+    SearchScope := prev;
   end;
 end;
 
@@ -2318,32 +2336,92 @@ begin
     result := fBound;
 end;
 
-function TLdapClient.GetWellKnownObjectDN(const ObjectGUID: RawUtf8): RawUtf8;
+function TLdapClient.GetWellKnownObject(const ObjectGUID: RawUtf8;
+  AsCN: boolean): RawUtf8;
 var
-  RootObject: TLdapResult;
-  wellKnownObjAttrs: TLdapAttribute;
+  root: TLdapResult;
+  attr: TLdapAttribute;
   i: integer;
-  SearchPrefix: RawUtf8;
+  sn, v: RawUtf8;
 begin
   result := '';
   if not Connected or
      (RootDN = '') then
     exit;
-  RootObject := SearchObject(RootDN, ['wellKnownObjects']);
-  if not Assigned(RootObject) then
+  root := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(root) then
     exit;
-  wellKnownObjAttrs := RootObject.Attributes.Find('wellKnownObjects');
-  if not Assigned(wellKnownObjAttrs) then
+  attr := root.Attributes.Find('wellKnownObjects');
+  if not Assigned(attr) then
     exit;
-  SearchPrefix := 'B:32:' + ObjectGUID;
-  for i := 0 to wellKnownObjAttrs.Count - 1 do
-    if PosEx(SearchPrefix, wellKnownObjAttrs.GetReadable(i)) = 1 then
+  sn := 'B:32:' + ObjectGUID;
+  for i := 0 to attr.Count - 1 do
+  begin
+    v := attr.GetReadable(i);
+    if NetStartWith(pointer(v), pointer(sn)) then
     begin
-      result := Copy(
-        wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2, MaxInt);
+      result := Copy(v, Length(sn) + 2, MaxInt);
+      if AsCN then
+        result := DNToCN(result);
       break;
     end;
+  end;
 end;
+
+function TLdapClient.GetWellKnownObjects(AsCN: boolean): TLdapKnownCommonNames;
+var
+  root: TLdapResult;
+  attr: TLdapAttribute;
+  tmp: TRawUtf8DynArray;
+  i: PtrInt;
+
+  function One(const guid: RawUtf8): RawUtf8;
+  var
+    sn: RawUtf8;
+    i: PtrInt;
+  begin
+    sn := 'B:32:' + guid;
+    for i := 0 to high(tmp) do
+      if (tmp[i] <> '') and
+         NetStartWith(pointer(tmp[i]), pointer(sn)) then
+      begin
+        result := copy(tmp[i], Length(sn) + 2, MaxInt);
+        if AsCN then
+          result := DNToCN(result);
+        tmp[i] := ''; // no need to search this one any more
+        exit;
+      end;
+    result := '';
+  end;
+
+begin
+  Finalize(result);
+  if not Connected or
+     (RootDN = '') then
+    exit;
+  root := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(root) then
+    exit;
+  attr := root.Attributes.Find('wellKnownObjects');
+  if not Assigned(attr) then
+    exit;
+  SetLength(tmp, attr.Count);
+  for i := 0 to attr.Count - 1 do
+    tmp[i] := attr.GetReadable(i);
+  result.Computers                 := One(GUID_COMPUTERS_CONTAINER_W);
+  result.DeletedObjects            := One(GUID_DELETED_OBJECTS_CONTAINER_W);
+  result.DomainControllers         := One(GUID_DOMAIN_CONTROLLERS_CONTAINER_W);
+  result.ForeignSecurityPrincipals := One(GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W);
+  result.Infrastructure            := One(GUID_INFRASTRUCTURE_CONTAINER_W);
+  result.LostAndFound              := One(GUID_LOSTANDFOUND_CONTAINER_W);
+  result.MicrosoftProgramData      := One(GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W);
+  result.NtdsQuotas                := One(GUID_NTDS_QUOTAS_CONTAINER_W);
+  result.ProgramData               := One(GUID_PROGRAM_DATA_CONTAINER_W);
+  result.Systems                   := One(GUID_SYSTEMS_CONTAINER_W);
+  result.Users                     := One(GUID_USERS_CONTAINER_W);
+  result.ManagedServiceAccounts    := One(GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W);
+end;
+
 
 end.
 
