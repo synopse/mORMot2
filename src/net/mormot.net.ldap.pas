@@ -1,4 +1,4 @@
-/// Simple Network LDAP Client
+﻿/// Simple Network LDAP Client
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.net.ldap;
@@ -24,6 +24,7 @@ uses
   sysutils,
   classes,
   mormot.net.sock,
+  mormot.net.dns,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -198,8 +199,8 @@ type
   TAsnObject = RawByteString;
 
   /// implementation of LDAP client version 2 and 3
-  // - Authentication use Username/Password properties
-  // - Server/Port use TargetHost/TargetPort properties
+  // - will default setup a TLS connection on the OS-designed LDAP server
+  // - Authentication will use Username/Password properties
   TLdapClient = class(TSynPersistent)
   private
     fTargetHost: RawUtf8;
@@ -212,7 +213,7 @@ type
     fResultString: RawUtf8;
     fFullResult: TAsnObject;
     fFullTls: boolean;
-    fTlsContext: PNetTlsContext;
+    fTlsContext: TNetTlsContext;
     fSeq: integer;
     fResponseCode: integer;
     fResponseDN: RawUtf8;
@@ -246,11 +247,13 @@ type
     constructor Create; override;
     /// finalize this LDAP client instance
     destructor Destroy; override;
-    /// try to connect to LDAP server and start secure channel when it is required
+    /// try to connect to LDAP server
+    // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
+    // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
     function Login: boolean;
     /// authenticate a client to the directory server with Username/Password
-    // - if this is empty strings, then it does annonymous binding
-    // - when you not call Bind on LDAPv3, then anonymous mode is used
+    // - if these are empty strings, then it does annonymous binding
+    // - when Bind is not called on LDAPv3, then anonymous mode is used
     // - warning: uses plaintext transport of password - consider using TLS
     function Bind: boolean;
     /// authenticate a client to the directory server with Username/Password
@@ -316,7 +319,9 @@ type
     property Version: integer
       read fVersion Write fVersion;
     /// target server IP (or symbolic name)
-    // - default is 'localhost'
+    // - default is '' but if not set, Login will call DnsLdapControlers() from
+    // mormot.net.dns to retrieve the current value from the system
+    // - after connect, will contain the actual server name
     property TargetHost: RawUtf8
       read fTargetHost Write fTargetHost;
     /// target server port (or symbolic name)
@@ -349,7 +354,7 @@ type
     property FullTls: boolean
       read fFullTls Write fFullTls;
     /// optional advanced options for FullTls = true
-    property TlsContext: PNetTlsContext
+    property TlsContext: TNetTlsContext
       read fTlsContext write fTlsContext;
     /// sequence number of the last LDAP command
     // - incremented with any LDAP command
@@ -1443,8 +1448,8 @@ constructor TLdapClient.Create;
 begin
   inherited Create;
   fReferals := TRawUtf8List.Create;
-  fTargetHost := cLocalhost;
   fTargetPort := '389';
+  fTlsContext.IgnoreCertificateErrors := true;
   fTimeout := 60000;
   fVersion := 3;
   fSearchScope := SS_WholeSubtree;
@@ -1558,19 +1563,53 @@ begin
 end;
 
 function TLdapClient.Connect: boolean;
+var
+  dc: TRawUtf8DynArray;
+  h, p: RawUtf8;
+  i: PtrInt;
 begin
   FreeAndNil(fSock);
   result := false;
+  if fTargetHost = '' then
+    dc := DnsLdapControlers // from OS
+  else
+    AddRawUtf8(dc, fTargetHost + ':' + fTargetPort); // from instance properties
   fSeq := 0;
-  try
-    fSock := TCrtSocket.Open(
-      fTargetHost, fTargetPort, nlTcp, fTimeOut, fFullTls, fTlsContext);
-    fSock.CreateSockIn;
-    result := fSock.SockConnected;
-  except
-    on E: ENetSock do
-      FreeAndNil(fSock);
-  end;
+  for i := 0 to high(dc) do
+    try
+      Split(dc[i], ':', h, p);
+      if fTargetHost = '' then // not from DnsLdapControlers
+      begin
+        if (p = '389') and
+           not fFullTls then
+        try
+          // always first try to connect with TLS on its default port (much safer)
+          fSock := TCrtSocket.Open(h, '636', nlTcp, fTimeOut, {tls=}true, @fTlsContext);
+          p := '636';
+        except
+          on E: ENetSock do
+            FreeAndNil(fSock); // no TLS support on this port
+        end;
+      end
+      else
+        fFullTls := (p = '636') or // this TargetPort is likely to be over TLS
+                    (p = '3269');
+      if fSock = nil then
+        // try connection to the server
+        fSock := TCrtSocket.Open(h, p, nlTcp, fTimeOut, fFullTls, @fTlsContext);
+      fSock.CreateSockIn;
+      result := fSock.SockConnected;
+      if result then
+      begin
+        fTargetHost := h;
+        fTargetPort := p;
+        fFullTls := fSock.TLS.Enabled;
+        exit;
+      end;
+    except
+      on E: ENetSock do
+        FreeAndNil(fSock); // abort and try next dc[]
+    end;
 end;
 
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
