@@ -1548,8 +1548,13 @@ end;
 
 function TLdapClient.ReceiveString(Size: integer): RawByteString;
 begin
-  FastSetRawByteString(result, nil, Size);
-  fSock.SockInRead(pointer(result), Size);
+  if fSock = nil then
+    result := ''
+  else
+  begin
+    FastSetRawByteString(result, nil, Size);
+    fSock.SockInRead(pointer(result), Size);
+  end;
 end;
 
 function TLdapClient.Connect: boolean;
@@ -1590,14 +1595,16 @@ end;
 
 function TLdapClient.GetRootDN: RawUtf8;
 begin
-  if (fRootDN = '') and Connected then
+  if (fRootDN = '') and
+     fSock.SockConnected then
     fRootDN := DiscoverRootDN;
   result := fRootDN;
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
 begin
-  fSock.SockSendFlush(BuildPacket(Asn1Data));
+  if fSock <> nil then
+    fSock.SockSendFlush(BuildPacket(Asn1Data));
 end;
 
 function TLdapClient.ReceiveResponse: TAsnObject;
@@ -1606,6 +1613,8 @@ var
   len, pos: integer;
 begin
   result := '';
+  if fSock = nil then
+    exit;
   fFullResult := '';
   try
     // receive ASN type
@@ -1887,6 +1896,9 @@ end;
 
 function TLdapClient.Bind: boolean;
 begin
+  result := false;
+  if not fSock.SockConnected then
+    exit;
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
                    Asn(fUserName),
@@ -1901,6 +1913,8 @@ var
   s, t, digreq: TAsnObject;
 begin
   result := false;
+  if not fSock.SockConnected then
+     exit;
   if fPassword = '' then
     result := Bind
   else
@@ -1973,6 +1987,9 @@ var
   attr: TLdapAttribute;
   i, j: PtrInt;
 begin
+  result := false;
+  if not Connected then
+    exit;
   for i := 0 to Value.Count - 1 do
   begin
     attr := Value.Items[i];
@@ -1999,6 +2016,8 @@ var
   Attributes: TLdapAttributeList;
 begin
   result := false;
+  if not Connected then
+    exit;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
   if not Search(ComputerDN, false, '', []) then
@@ -2041,6 +2060,9 @@ end;
 
 function TLdapClient.Delete(const Obj: RawUtf8): boolean;
 begin
+  result := false;
+  if not Connected then
+    exit;
   SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
@@ -2052,6 +2074,9 @@ function TLdapClient.ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
 var
   query: TAsnObject;
 begin
+  result := false;
+  if not Connected then
+    exit;
   query := Asn(obj);
   Append(query, [Asn(newRdn), Asn(DeleteOldRdn)]);
   if newSuperior <> '' then
@@ -2083,6 +2108,9 @@ var
   r: TLdapResult;
   a: TLdapAttribute;
 begin
+  result := false;
+  if not fSock.SockConnected then
+    exit;
   // see https://ldap.com/ldapv3-wire-protocol-reference-search
   fSearchResult.Clear;
   fReferals.Clear;
@@ -2203,6 +2231,9 @@ var
   query, decoded: TAsnObject;
   pos, xt: integer;
 begin
+  result := false;
+  if not Connected then
+    exit;
   query := Asn(Oid, ASN1_CTX0);
   if Value <> '' then
     AsnAdd(query, Asn(Value, ASN1_CTX1));
@@ -2223,6 +2254,8 @@ var
   RootDnAttr: TLdapAttribute;
 begin
   result := '';
+  if not fSock.SockConnected then
+    exit;
   PreviousSearchScope := SearchScope;
   try
     SearchScope := SS_BaseObject;
@@ -2240,7 +2273,10 @@ end;
 
 function TLdapClient.Connected(AndBound: boolean): boolean;
 begin
-  result := Sock.SockConnected and fBound;
+  result := fSock.SockConnected;
+  if result and
+     AndBound then
+    result := fBound;
 end;
 
 function TLdapClient.GetWellKnownObjectDN(const ObjectGUID: RawUtf8): RawUtf8;
@@ -2251,7 +2287,8 @@ var
   SearchPrefix: RawUtf8;
 begin
   result := '';
-  if RootDN = '' then
+  if not Connected or
+     (RootDN = '') then
     exit;
   RootObject := SearchObject(RootDN, ['wellKnownObjects']);
   if not Assigned(RootObject) then
