@@ -427,10 +427,17 @@ function GetMacAddressesText(WithoutName: boolean = true;
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 {$endif OSWINDOWS}
 
-/// retrieve all Domain Name Servers addresses known by the Operating System
-// - on POSIX, will use /etc/resolv.conf content unless usePosixEnv is set
+/// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
+// - on POSIX, return "nameserver" from /etc/resolv.conf unless usePosixEnv is set
+// - on Windows, calls GetNetworkParams API from iphlpapi
 // - an internal cache of the result will be refreshed every 8 seconds
 function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
+
+/// retrieve the AD Domain Name addresses known by the Operating System
+// - on POSIX, return all "search" from /etc/resolv.conf unless usePosixEnv is set
+// - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single item
+// - no cache is used for this function
+function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
@@ -2603,7 +2610,7 @@ begin
     try
       if tix32 <> Tix then
       begin
-        Value := _GetDnsAddresses(usePosixEnv);
+        Value := _GetDnsAddresses(usePosixEnv, false);
         Tix := tix32;
       end;
       result := Value;
@@ -2611,6 +2618,11 @@ begin
       Safe.UnLock;
     end;
   end;
+end;
+
+function GetDomainNames(usePosixEnv: boolean): TRawUtf8DynArray;
+begin
+  result := _GetDnsAddresses(usePosixEnv, true); // no cache for the AD
 end;
 
 
