@@ -2048,7 +2048,7 @@ begin
         Context.header := Context.header + #13#10 + bak;
       Sender.RequestInternal(Context);
     until Context.status <> unauthstatus;
-    // here Context is the final answer (sucess or auth error) from the server
+    // here Context is the final answer (success or auth error) from the server
   finally
     FreeSecContext(sc);
     if Assigned(Sender.OnLog) then

@@ -1306,15 +1306,15 @@ type
     // - you could specify the roles to use, for this database or others:
     // ! reportingDB.CreateUser('reportsUser','12345678',BsonVariant(
     // !  '[{ role: "readWrite", db: "reporting" }, { role: "read", db: "products" }]'));
-    // - returns '' on sucess, an error message otherwise
+    // - returns '' on success, an error message otherwise
     function CreateUser(const UserName, Password: RawUtf8;
       const roles: variant): RawUtf8;
     /// create the user with a read or read/write role on the current database
-    // - returns '' on sucess, an error message otherwise
+    // - returns '' on success, an error message otherwise
     function CreateUserForThisDatabase(const UserName, Password: RawUtf8;
       allowWrite: boolean = true): RawUtf8;
     /// deletes the supplied user on the current database
-    // - returns '' on sucess, an error message otherwise
+    // - returns '' on success, an error message otherwise
     function DropUser(const UserName: RawUtf8): RawUtf8;
 
     /// access to a given MongoDB collection

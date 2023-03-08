@@ -2058,6 +2058,8 @@ begin
       t := SendAndReceive(req2);
     until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
     result := fResultCode = LDAP_RES_SUCCESS;
+    if result then
+      ServerSspiAuthUser(sc, fUserName);
     fBound := result;
   finally
     FreeSecContext(sc);
