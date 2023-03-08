@@ -31,6 +31,8 @@ uses
   mormot.core.text,
   mormot.core.unicode,
   mormot.core.data,
+  mormot.lib.sspi, // do-nothing units on non compliant OS
+  mormot.lib.gssapi,
   mormot.crypt.core;
 
 
@@ -245,8 +247,8 @@ type
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
+    fDomainName: RawUtf8;
     fBound: boolean;
-    function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     function GetNetbiosDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
@@ -275,6 +277,11 @@ type
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
     // - seems not implemented by OpenLdap
     function BindSaslDigestMd5: boolean;
+    /// authenticate a client to the directory server with current logged user
+    // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
+    // - if no SPN is supplied, derivate one from Login's DnsLdapControlers()
+    function BindSaslKerberos(const ServicePrincipalName: RawUtf8 = '';
+      const AuthIdentify: RawUtf8 = ''): boolean;
     /// close connection to the LDAP server
     function Logout: boolean;
     /// retrieve all entries that match a given set of criteria
@@ -1580,7 +1587,7 @@ begin
   end;
 end;
 
-function TLdapClient.Connect: boolean;
+function TLdapClient.Login: boolean;
 var
   dc: TRawUtf8DynArray;
   h, p: RawUtf8;
@@ -1589,7 +1596,7 @@ begin
   FreeAndNil(fSock);
   result := false;
   if fTargetHost = '' then
-    dc := DnsLdapControlers // from OS
+    dc := DnsLdapControlers('', false, @fDomainName)  // from OS
   else
     AddRawUtf8(dc, fTargetHost + ':' + fTargetPort); // from instance properties
   fSeq := 0;
@@ -1941,20 +1948,12 @@ begin
   end;
 end;
 
-function TLdapClient.Login: boolean;
-begin
-  result := false;
-  if not Connect then
-    exit;
-  result := true;
-end;
-
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
 function TLdapClient.Bind: boolean;
 begin
   result := false;
-  if not fSock.SockConnected then
+  if not Login then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
@@ -1970,8 +1969,8 @@ var
   s, t, digreq: TAsnObject;
 begin
   result := false;
-  if not fSock.SockConnected then
-     exit;
+  if not Login then
+    exit;
   if fPassword = '' then
     result := Bind
   else
@@ -1996,12 +1995,74 @@ begin
       if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
         SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
+      fBound := result;
     end;
   end;
 end;
 
-// TODO: GSSAPI SASL authentication using mormot.lib.gssapi/sspi units
-// - see https://github.com/go-ldap/ldap/blob/master/bind.go#L561
+function TLdapClient.BindSaslKerberos(
+  const ServicePrincipalName, AuthIdentify: RawUtf8): boolean;
+var
+  sc: TSecContext;
+  spn: RawUtf8;
+  datain, dataout: RawByteString;
+  x, xt: integer;
+  t, req1, req2: TAsnObject;
+begin
+  result := false;
+  if not Login or
+     not InitializeDomainAuth then
+     exit;
+  spn := ServicePrincipalName;
+  if (spn = '') and
+     (fDomainName <> '') then
+    spn := 'LDAP/' + fTargetHost + '@' + UpperCase(fDomainName);
+  req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
+            Asn(fVersion),
+            Asn(''),
+            Asn(ASN1_CTC3, [
+              Asn('GSSAPI')])]);
+  t := SendAndReceive(req1);
+  if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+    exit;
+  InvalidateSecContext(sc, 0);
+  try
+    repeat
+      x := 1;
+      datain := AsnNext(x, t, xt);
+      ClientSspiAuth(sc, datain, spn, dataout);
+      if dataout = '' then
+      begin
+        // last step of SASL handshake - see RFC 4752 section 3.1
+        t := SendAndReceive(req1);
+        if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+          exit;
+        x := 1;
+        datain := AsnNext(x, t, xt);
+        datain := SecDecrypt(sc, datain);
+        if (length(datain) <> 4) or
+           ((datain[1] = #0) and
+            (PCardinal(datain)^ <> 0)) then
+          exit; // invalid token
+        PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
+        if AuthIdentify <> '' then
+          AppendBufferToRawByteString(datain, AuthIdentify);
+        dataout := SecEncrypt(sc, datain);
+      end;
+      req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
+                Asn(fVersion),
+                Asn(''),
+                Asn(ASN1_CTC3, [
+                  Asn('GSSAPI'),
+                  Asn(dataout)])]);
+      t := SendAndReceive(req2);
+    until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
+    result := fResultCode = LDAP_RES_SUCCESS;
+    fBound := result;
+  finally
+    FreeSecContext(sc);
+  end;
+end;
 
 
 // https://ldap.com/ldapv3-wire-protocol-reference-unbind

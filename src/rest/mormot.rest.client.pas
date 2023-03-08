@@ -26,7 +26,7 @@ uses
   variants,
   contnrs,
   {$ifdef DOMAINRESTAUTH}
-  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.sspi, // do-nothing units on non compliant OS
   mormot.lib.gssapi,
   {$endif DOMAINRESTAUTH}
   mormot.core.base,
