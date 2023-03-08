@@ -433,6 +433,10 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 // - an internal cache of the result will be refreshed every 8 seconds
 function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
+var
+  /// if manually set, GetDomainNames() will return this value
+  ForcedDomainName: RawUtf8;
+
 /// retrieve the AD Domain Name addresses known by the Operating System
 // - on POSIX, return all "search" from /etc/resolv.conf unless usePosixEnv is set
 // - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single item
@@ -648,9 +652,6 @@ type
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
-  /// signature of a factory for a new TLS encrypted layer
-  TOnNewNetTls = function: INetTls;
-
   /// event called by HTTPS server to publish HTTP-01 challenges on port 80
   // - Let's Encrypt typical uri is '/.well-known/acme-challenge/<TOKEN>'
   // - the server should send back the returned content as response with
@@ -668,7 +669,7 @@ var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
   // - on other targets, could be set by the mormot.lib.openssl11.pas unit
-  NewNetTls: TOnNewNetTls;
+  NewNetTls: function: INetTls;
 
   /// global callback set to TNetTlsContext.AfterAccept from InitNetTlsContext()
   // - defined e.g. by mormot.net.acme.pas unit to support Let's Encrypt
@@ -2622,7 +2623,13 @@ end;
 
 function GetDomainNames(usePosixEnv: boolean): TRawUtf8DynArray;
 begin
-  result := _GetDnsAddresses(usePosixEnv, true); // no cache for the AD
+  if ForcedDomainName <> '' then
+  begin
+    SetLength(result, 1);
+    result[0] := ForcedDomainName;
+  end
+  else
+    result := _GetDnsAddresses(usePosixEnv, true); // no cache for the AD
 end;
 
 
