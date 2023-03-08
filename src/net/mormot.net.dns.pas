@@ -301,6 +301,10 @@ function DnsReverseLookup(const IP4: RawUtf8;
 function DnsServices(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
 
+/// retrieve the LDAP controlers from the current AD domain name
+// - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+function DnsLdapControlers(const NameServer: RawUtf8 = '';
+  UsePosixEnv: boolean = false): TRawUtf8DynArray;
 
 
 implementation
@@ -728,6 +732,22 @@ begin
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrSRV then
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
+end;
+
+function DnsLdapControlers(
+  const NameServer: RawUtf8; UsePosixEnv: boolean): TRawUtf8DynArray;
+var
+  ad: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  result := nil;
+  ad := GetDomainNames(UsePosixEnv);
+  for i := 0 to high(ad) do
+  begin
+    result := DnsServices('_ldap._tcp.' + ad[i], NameServer);
+    if result <> nil then
+      exit;
+  end;
 end;
 
 
