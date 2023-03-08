@@ -13,7 +13,7 @@ unit mormot.orm.base;
    - TOrmPropInfo ORM / RTTI Classes
    - Abstract TOrmTableAbstract Parent Class
    - TOrmTableRowVariant Custom Variant Type
-   - TOrmLocks and TOrmCacheEntry Basic Structures
+   - TOrmLocks and TOrmCacheTable Basic Structures
    - Abstract TOrmPropertiesAbstract Parent Class
 
   *****************************************************************************
@@ -2743,7 +2743,7 @@ type
 
 
 
-{ ************ TOrmLocks and TOrmCacheEntry Basic Structures }
+{ ************ TOrmLocks and TOrmCacheTable Basic Structures }
 
 type
   /// used to store the locked record list, in a specified table
@@ -2788,7 +2788,7 @@ type
   TOrmLocksDynArray = array of TOrmLocks;
 
   /// for TOrmCache, stores one ORM value
-  TOrmCacheEntryValue = packed record
+  TOrmCacheTableValue = packed record
     /// corresponding TOrm ID
     // - stored in increasing order for efficient O(log(n)) binary search
     // within L1/L2 CPU cache
@@ -2801,22 +2801,22 @@ type
     /// the TOrm cached instance, with all simple fields
     Value: TObject;
   end;
-  POrmCacheEntryValue = ^TOrmCacheEntryValue;
+  POrmCacheTableValue = ^TOrmCacheTableValue;
 
   /// for TOrmCache, stores all tables values
-  TOrmCacheEntryValueDynArray = array of TOrmCacheEntryValue;
+  TOrmCacheTableValueDynArray = array of TOrmCacheTableValue;
 
 const
-  /// fake value returned by TOrmCacheEntry.RetrieveEntry()
-  ORMCACHE_DEPRECATED = POrmCacheEntryValue(1);
+  /// fake value returned by TOrmCacheTable.RetrieveEntry()
+  ORMCACHE_DEPRECATED = POrmCacheTableValue(1);
 
 type
   /// for TOrmCache, stores a table cache settings and ORM cached values
-  // - use a TOrmCacheEntryValue array sorted by ID for O(log(n)) search
+  // - use a TOrmCacheTableValue array sorted by ID for O(log(n)) search
   {$ifdef USERECORDWITHMETHODS}
-  TOrmCacheEntry = record
+  TOrmCacheTable = record
   {$else}
-  TOrmCacheEntry = object
+  TOrmCacheTable = object
   {$endif USERECORDWITHMETHODS}
   private
     procedure ClearValue;
@@ -2836,12 +2836,12 @@ type
     /// used to R/W lock the table cache for multi-thread safety
     Safe: TRWLightLock;
     /// all cached IDs and ORM content
-    Value: TOrmCacheEntryValueDynArray;
+    Value: TOrmCacheTableValueDynArray;
     /// TDynArray wrapper around the Value[] array
     Values: TDynArray;
     /// initialize this table cache
     // - will set Values wrapper - other fields should have been cleared by
-    // caller (is the case for a TOrmCacheEntryDynArray)
+    // caller (is the case for a TOrmCacheTableDynArray)
     procedure Init;
     /// reset all settings corresponding to this table cache
     procedure Clear;
@@ -2877,16 +2877,16 @@ type
     /// low-level retrieve of a cached TOrm entry
     // - returns nil if not found, ORMCACHE_DEPRECATED if deprecated
     // - warning: should be called within proper Safe lock/unlock
-    function RetrieveEntry(aID: TID): POrmCacheEntryValue;
+    function RetrieveEntry(aID: TID): POrmCacheTableValue;
     /// returns the number of TOrm instances within this cache
     function CachedEntries: cardinal;
   end;
-  POrmCacheEntry = ^TOrmCacheEntry;
+  POrmCacheTable = ^TOrmCacheTable;
 
   /// for TOrmCache, stores per-table settings and JSON values
   // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
   // entry per TOrm class in the data model
-  TOrmCacheEntryDynArray = array of TOrmCacheEntry;
+  TOrmCacheTableDynArray = array of TOrmCacheTable;
 
 
 
@@ -10362,7 +10362,7 @@ begin
 end;
 
 
-{ ************ TOrmLocks and TOrmCacheEntry Basic Structures }
+{ ************ TOrmLocks and TOrmCacheTable Basic Structures }
 
 { TOrmLocks }
 
@@ -10524,15 +10524,15 @@ begin
 end;
 
 
-{ TOrmCacheEntry }
+{ TOrmCacheTable }
 
-procedure TOrmCacheEntry.Init;
+procedure TOrmCacheTable.Init;
 begin
-  Values.InitSpecific(TypeInfo(TOrmCacheEntryValueDynArray),
+  Values.InitSpecific(TypeInfo(TOrmCacheTableValueDynArray),
     Value, ptInt64, @Count); // will search/sort by first field ID: TID/ptInt64
 end;
 
-procedure TOrmCacheEntry.ClearValue;
+procedure TOrmCacheTable.ClearValue;
 var
   i: PtrInt;
 begin
@@ -10541,7 +10541,7 @@ begin
   Values.Clear;
 end;
 
-procedure TOrmCacheEntry.Clear;
+procedure TOrmCacheTable.Clear;
 begin
   Safe.WriteLock;
   try
@@ -10554,7 +10554,7 @@ begin
   end;
 end;
 
-procedure TOrmCacheEntry.LockedFlushCacheEntry(Index: integer);
+procedure TOrmCacheTable.LockedFlushCacheEntry(Index: integer);
 begin
   if cardinal(Index) < cardinal(Count) then
     if CacheAll then
@@ -10570,7 +10570,7 @@ begin
       end;
 end;
 
-function SortFind(const P: TOrmCacheEntryValueDynArray; V: TID; R: PtrInt): PtrInt;
+function SortFind(const P: TOrmCacheTableValueDynArray; V: TID; R: PtrInt): PtrInt;
 var
   m, L: PtrInt;
   res: integer;
@@ -10593,7 +10593,7 @@ begin
   result := -1;
 end;
 
-procedure TOrmCacheEntry.FlushCacheEntry(aID: TID);
+procedure TOrmCacheTable.FlushCacheEntry(aID: TID);
 begin
   if not CacheEnable then
     exit;
@@ -10606,7 +10606,7 @@ begin
   end;
 end;
 
-procedure TOrmCacheEntry.FlushCacheEntries(const aID: array of TID);
+procedure TOrmCacheTable.FlushCacheEntries(const aID: array of TID);
 var
   i: PtrInt;
 begin
@@ -10622,11 +10622,11 @@ begin
   end;
 end;
 
-function TOrmCacheEntry.FlushCacheOutdatedEntries: cardinal;
+function TOrmCacheTable.FlushCacheOutdatedEntries: cardinal;
 var
   tix512: cardinal;
   i: integer;
-  v: POrmCacheEntryValue;
+  v: POrmCacheTableValue;
 begin
   result := 0;
   tix512 := GetOutdatedTimestamp512;
@@ -10672,10 +10672,10 @@ begin
   end;
 end;
 
-procedure TOrmCacheEntry.FlushCacheAllEntries;
+procedure TOrmCacheTable.FlushCacheAllEntries;
 var
   i: integer;
-  v: POrmCacheEntryValue;
+  v: POrmCacheTableValue;
 begin
   if not CacheEnable then
     exit;
@@ -10698,7 +10698,7 @@ begin
   end;
 end;
 
-procedure TOrmCacheEntry.SetCacheAll;
+procedure TOrmCacheTable.SetCacheAll;
 begin
   Safe.WriteLock;
   try
@@ -10710,9 +10710,9 @@ begin
   end;
 end;
 
-procedure TOrmCacheEntry.SetCache(aID: TID);
+procedure TOrmCacheTable.SetCache(aID: TID);
 var
-  Rec: TOrmCacheEntryValue;
+  Rec: TOrmCacheTableValue;
   i: integer; // FastLocateSorted() requires integer
 begin
   if CacheAll then
@@ -10733,7 +10733,7 @@ begin
   end;
 end;
 
-function TOrmCacheEntry.GetOutdatedTimestamp512: cardinal;
+function TOrmCacheTable.GetOutdatedTimestamp512: cardinal;
 var
   graceperiod: Int64;
 begin
@@ -10745,9 +10745,9 @@ begin
     result := graceperiod shr 9;
 end;
 
-procedure TOrmCacheEntry.SetValue(aID: TID; aOrm: TObject);
+procedure TOrmCacheTable.SetValue(aID: TID; aOrm: TObject);
 var
-  new: TOrmCacheEntryValue;
+  new: TOrmCacheTableValue;
   i: integer; // FastLocateSorted() requires integer
 begin
   if not CacheEnable then
@@ -10773,7 +10773,7 @@ begin
   end;
 end;
 
-function TOrmCacheEntry.RetrieveEntry(aID: TID): POrmCacheEntryValue;
+function TOrmCacheTable.RetrieveEntry(aID: TID): POrmCacheTableValue;
 var
   i: PtrInt;
 begin
@@ -10790,9 +10790,9 @@ begin
     result := ORMCACHE_DEPRECATED; // too old
 end;
 
-function TOrmCacheEntry.Exists(aID: TID): boolean;
+function TOrmCacheTable.Exists(aID: TID): boolean;
 var
-  e: POrmCacheEntryValue;
+  e: POrmCacheTableValue;
 begin
   result := false;
   if (Count <= 0) or
@@ -10813,9 +10813,9 @@ begin
     FlushCacheEntry(aID); // Safe.WriteLock outside Safe.ReadLock
 end;
 
-function TOrmCacheEntry.Get(aID: TID): pointer;
+function TOrmCacheTable.Get(aID: TID): pointer;
 var
-  e: POrmCacheEntryValue;
+  e: POrmCacheTableValue;
 begin
   result := nil;
   if (@self = nil) or
@@ -10828,7 +10828,7 @@ begin
     result := e^.Value; // no copy
 end;
 
-function TOrmCacheEntry.CachedEntries: cardinal;
+function TOrmCacheTable.CachedEntries: cardinal;
 var
   i: PtrInt;
 begin

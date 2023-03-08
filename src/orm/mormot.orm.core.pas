@@ -4286,7 +4286,7 @@ type
     fRest: IRestOrm;
     fModel: TOrmModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TOrm
-    fCache: TOrmCacheEntryDynArray;
+    fCache: TOrmCacheTableDynArray;
   public
     /// create a cache instance
     // - the associated TOrmModel will be used internally
@@ -4369,7 +4369,7 @@ type
     property Model: TOrmModel
       read fModel;
     /// access to one TOrm cache instance
-    function Table(aTable: TOrmClass): POrmCacheEntry;
+    function Table(aTable: TOrmClass): POrmCacheTable;
   public { TRest low level methods which are not to be called usualy: }
     /// check if a record specified by its table and ID is in the cache
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
@@ -10763,7 +10763,7 @@ begin
       inc(result, fCache[i].FlushCacheOutdatedEntries);
 end;
 
-function TOrmCache.Table(aTable: TOrmClass): POrmCacheEntry;
+function TOrmCache.Table(aTable: TOrmClass): POrmCacheTable;
 var
   i: PtrUInt;
 begin
@@ -10890,7 +10890,7 @@ function TOrmCache.FillFromQuery(aTable: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): integer;
 var
   rec: TOrm;
-  c: ^TOrmCacheEntry;
+  c: ^TOrmCacheTable;
 begin
   result := 0;
   if self = nil then
@@ -10948,7 +10948,7 @@ end;
 
 procedure TOrmCache.NotifyAllFields(aTableIndex: integer; aRecord: TOrm);
 var
-  c: POrmCacheEntry;
+  c: POrmCacheTable;
 begin
   if (self = nil) or
      (aRecord = nil) or
@@ -10967,7 +10967,7 @@ end;
 procedure TOrmCache.NotifyUpdate(aTableIndex: integer; aRecord: TOrm;
   const aFields: TFieldBits);
 var
-  c: POrmCacheEntryValue;
+  c: POrmCacheTableValue;
 begin
   if (self <> nil) and
      (aRecord <> nil) and
@@ -11061,8 +11061,8 @@ end;
 
 function TOrmCache.Retrieve(aID: TID; aValue: TOrm; aTableIndex: integer): TOrmCacheRetrieve;
 var
-  c: POrmCacheEntry;
-  e: POrmCacheEntryValue;
+  c: POrmCacheTable;
+  e: POrmCacheTableValue;
 begin
   result := ocrCacheDisabled;
   if (self = nil) or
