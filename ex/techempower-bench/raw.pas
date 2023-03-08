@@ -383,7 +383,7 @@ function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
-  cache: POrmCacheEntry;
+  cache: POrmCacheTable;
 begin
   cache := fStore.Orm.Cache.Table(TOrmCachedWorld);
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));

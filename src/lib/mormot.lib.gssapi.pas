@@ -608,7 +608,8 @@ procedure RequireGssApi;
 begin
   if GssApi = nil then
     raise ENotSupportedException.Create('No GSSAPI library found - please ' +
-      'install either MIT or Heimdal GSSAPI implementation');
+      'install either MIT or Heimdal GSSAPI implementation and do not ' +
+      'forget to call InitializeDomainAuth once');
 end;
 
 

@@ -1,4 +1,4 @@
-/// Simple Network LDAP Client
+﻿/// Simple Network LDAP Client
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.net.ldap;
@@ -24,12 +24,15 @@ uses
   sysutils,
   classes,
   mormot.net.sock,
+  mormot.net.dns,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
   mormot.core.text,
   mormot.core.unicode,
   mormot.core.data,
+  mormot.lib.sspi, // do-nothing units on non compliant OS
+  mormot.lib.gssapi,
   mormot.crypt.core;
 
 
@@ -197,9 +200,25 @@ type
   /// we defined our own type to hold an ASN object binary
   TAsnObject = RawByteString;
 
+  /// the resultset of TLdapClient.GetWellKnownObjects()
+  TLdapKnownCommonNames = record
+    Computers: RawUtf8;
+    DeletedObjects: RawUtf8;
+    DomainControllers: RawUtf8;
+    ForeignSecurityPrincipals: RawUtf8;
+    Infrastructure: RawUtf8;
+    LostAndFound: RawUtf8;
+    MicrosoftProgramData: RawUtf8;
+    NtdsQuotas: RawUtf8;
+    ProgramData: RawUtf8;
+    Systems: RawUtf8;
+    Users: RawUtf8;
+    ManagedServiceAccounts: RawUtf8;
+  end;
+
   /// implementation of LDAP client version 2 and 3
-  // - Authentication use Username/Password properties
-  // - Server/Port use TargetHost/TargetPort properties
+  // - will default setup a TLS connection on the OS-designed LDAP server
+  // - Authentication will use Username/Password properties
   TLdapClient = class(TSynPersistent)
   private
     fTargetHost: RawUtf8;
@@ -212,7 +231,7 @@ type
     fResultString: RawUtf8;
     fFullResult: TAsnObject;
     fFullTls: boolean;
-    fTlsContext: PNetTlsContext;
+    fTlsContext: TNetTlsContext;
     fSeq: integer;
     fResponseCode: integer;
     fResponseDN: RawUtf8;
@@ -228,8 +247,8 @@ type
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
+    fDomainName: RawUtf8;
     fBound: boolean;
-    function Connect: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     function GetNetbiosDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
@@ -246,17 +265,23 @@ type
     constructor Create; override;
     /// finalize this LDAP client instance
     destructor Destroy; override;
-    /// try to connect to LDAP server and start secure channel when it is required
+    /// try to connect to LDAP server
+    // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
+    // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
     function Login: boolean;
     /// authenticate a client to the directory server with Username/Password
-    // - if this is empty strings, then it does annonymous binding
-    // - when you not call Bind on LDAPv3, then anonymous mode is used
+    // - if these are empty strings, then it does annonymous binding
     // - warning: uses plaintext transport of password - consider using TLS
     function Bind: boolean;
     /// authenticate a client to the directory server with Username/Password
-    // - when you not call Bind on LDAPv3, then anonymous mode is used
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
+    // - seems not implemented by OpenLdap
     function BindSaslDigestMd5: boolean;
+    /// authenticate a client to the directory server with current logged user
+    // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
+    // - if no SPN is supplied, derivate one from Login's DnsLdapControlers()
+    function BindSaslKerberos(const ServicePrincipalName: RawUtf8 = '';
+      const AuthIdentify: RawUtf8 = ''): boolean;
     /// close connection to the LDAP server
     function Logout: boolean;
     /// retrieve all entries that match a given set of criteria
@@ -306,17 +331,22 @@ type
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
-    /// try to retrieve a well known object DN from its GUID
+    /// retrieve a well known object DN or CN from its GUID
     // - see GUID_*_W constants, e.g. GUID_COMPUTERS_CONTAINER_W
-    // - search in object identified by the RootDN property
+    // - search in objects identified by the RootDN property
     // - return an empty string if not found
-    function GetWellKnownObjectDN(const ObjectGUID: RawUtf8): RawUtf8;
+    function GetWellKnownObject(const ObjectGUID: RawUtf8;
+      AsCN: boolean = false): RawUtf8;
+    /// retrieve al well known object DN or CN as a single convenient record
+    function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
       read fVersion Write fVersion;
     /// target server IP (or symbolic name)
-    // - default is 'localhost'
+    // - default is '' but if not set, Login will call DnsLdapControlers() from
+    // mormot.net.dns to retrieve the current value from the system
+    // - after connect, will contain the actual server name
     property TargetHost: RawUtf8
       read fTargetHost Write fTargetHost;
     /// target server port (or symbolic name)
@@ -349,7 +379,7 @@ type
     property FullTls: boolean
       read fFullTls Write fFullTls;
     /// optional advanced options for FullTls = true
-    property TlsContext: PNetTlsContext
+    property TlsContext: TNetTlsContext
       read fTlsContext write fTlsContext;
     /// sequence number of the last LDAP command
     // - incremented with any LDAP command
@@ -1072,27 +1102,27 @@ end;
 function DNToCN(const DN: RawUtf8): RawUtf8;
 var
   p: PUtf8Char;
-  DC, OU, CN, PartType, Value: RawUtf8;
+  DC, OU, CN, kind, value: RawUtf8;
 begin
   p := pointer(DN);
   while p <> nil do
   begin
-    GetNextItemTrimed(p, '=', PartType);
-    GetNextItemTrimed(p, ',', Value);
-    if (PartType = '') or
-       (Value = '') then
+    GetNextItemTrimed(p, '=', kind);
+    GetNextItemTrimed(p, ',', value);
+    if (kind = '') or
+       (value = '') then
       raise ENetSock.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
-    UpperCaseSelf(PartType);
-    if PartType = 'DC' then
+    UpperCaseSelf(kind);
+    if kind = 'DC' then
     begin
       if DC <> '' then
-        DC := DC +'.';
-      DC := DC + Value;
+        DC := DC + '.';
+      DC := DC + value;
     end
-    else if PartType = 'OU' then
-      Prepend(OU, ['/', Value])
-    else if PartType = 'CN' then
-      Prepend(CN, ['/', Value]);
+    else if kind = 'OU' then
+      Prepend(OU, ['/', value])
+    else if kind = 'CN' then
+      Prepend(CN, ['/', value]);
   end;
   result := DC + OU + CN;
 end;
@@ -1443,8 +1473,8 @@ constructor TLdapClient.Create;
 begin
   inherited Create;
   fReferals := TRawUtf8List.Create;
-  fTargetHost := cLocalhost;
   fTargetPort := '389';
+  fTlsContext.IgnoreCertificateErrors := true;
   fTimeout := 60000;
   fVersion := 3;
   fSearchScope := SS_WholeSubtree;
@@ -1548,24 +1578,63 @@ end;
 
 function TLdapClient.ReceiveString(Size: integer): RawByteString;
 begin
-  FastSetRawByteString(result, nil, Size);
-  fSock.SockInRead(pointer(result), Size);
+  if fSock = nil then
+    result := ''
+  else
+  begin
+    FastSetRawByteString(result, nil, Size);
+    fSock.SockInRead(pointer(result), Size);
+  end;
 end;
 
-function TLdapClient.Connect: boolean;
+function TLdapClient.Login: boolean;
+var
+  dc: TRawUtf8DynArray;
+  h, p: RawUtf8;
+  i: PtrInt;
 begin
   FreeAndNil(fSock);
   result := false;
+  if fTargetHost = '' then
+    dc := DnsLdapControlers('', false, @fDomainName)  // from OS
+  else
+    AddRawUtf8(dc, fTargetHost + ':' + fTargetPort); // from instance properties
   fSeq := 0;
-  try
-    fSock := TCrtSocket.Open(
-      fTargetHost, fTargetPort, nlTcp, fTimeOut, fFullTls, fTlsContext);
-    fSock.CreateSockIn;
-    result := fSock.SockConnected;
-  except
-    on E: ENetSock do
-      FreeAndNil(fSock);
-  end;
+  for i := 0 to high(dc) do
+    try
+      Split(dc[i], ':', h, p);
+      if fTargetHost = '' then // not from DnsLdapControlers
+      begin
+        if (p = '389') and
+           not fFullTls then
+        try
+          // always first try to connect with TLS on its default port (much safer)
+          fSock := TCrtSocket.Open(h, '636', nlTcp, fTimeOut, {tls=}true, @fTlsContext);
+          p := '636';
+        except
+          on E: ENetSock do
+            FreeAndNil(fSock); // no TLS support on this port
+        end;
+      end
+      else
+        fFullTls := (p = '636') or // this TargetPort is likely to be over TLS
+                    (p = '3269');
+      if fSock = nil then
+        // try connection to the server
+        fSock := TCrtSocket.Open(h, p, nlTcp, fTimeOut, fFullTls, @fTlsContext);
+      fSock.CreateSockIn;
+      result := fSock.SockConnected;
+      if result then
+      begin
+        fTargetHost := h;
+        fTargetPort := p;
+        fFullTls := fSock.TLS.Enabled;
+        exit;
+      end;
+    except
+      on E: ENetSock do
+        FreeAndNil(fSock); // abort and try next dc[]
+    end;
 end;
 
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
@@ -1590,14 +1659,16 @@ end;
 
 function TLdapClient.GetRootDN: RawUtf8;
 begin
-  if (fRootDN = '') and Connected then
+  if (fRootDN = '') and
+     fSock.SockConnected then
     fRootDN := DiscoverRootDN;
   result := fRootDN;
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
 begin
-  fSock.SockSendFlush(BuildPacket(Asn1Data));
+  if fSock <> nil then
+    fSock.SockSendFlush(BuildPacket(Asn1Data));
 end;
 
 function TLdapClient.ReceiveResponse: TAsnObject;
@@ -1606,6 +1677,8 @@ var
   len, pos: integer;
 begin
   result := '';
+  if fSock = nil then
+    exit;
   fFullResult := '';
   try
     // receive ASN type
@@ -1875,18 +1948,13 @@ begin
   end;
 end;
 
-function TLdapClient.Login: boolean;
-begin
-  result := false;
-  if not Connect then
-    exit;
-  result := true;
-end;
-
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
 function TLdapClient.Bind: boolean;
 begin
+  result := false;
+  if not Login then
+    exit;
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
                    Asn(fUserName),
@@ -1901,6 +1969,8 @@ var
   s, t, digreq: TAsnObject;
 begin
   result := false;
+  if not Login then
+    exit;
   if fPassword = '' then
     result := Bind
   else
@@ -1925,12 +1995,76 @@ begin
       if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
         SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
+      fBound := result;
     end;
   end;
 end;
 
-// TODO: GSSAPI SASL authentication using mormot.lib.gssapi/sspi units
-// - see https://github.com/go-ldap/ldap/blob/master/bind.go#L561
+function TLdapClient.BindSaslKerberos(
+  const ServicePrincipalName, AuthIdentify: RawUtf8): boolean;
+var
+  sc: TSecContext;
+  spn: RawUtf8;
+  datain, dataout: RawByteString;
+  x, xt: integer;
+  t, req1, req2: TAsnObject;
+begin
+  result := false;
+  if not Login or
+     not InitializeDomainAuth then
+     exit;
+  spn := ServicePrincipalName;
+  if (spn = '') and
+     (fDomainName <> '') then
+    spn := 'LDAP/' + fTargetHost + '@' + UpperCase(fDomainName);
+  req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
+            Asn(fVersion),
+            Asn(''),
+            Asn(ASN1_CTC3, [
+              Asn('GSSAPI')])]);
+  t := SendAndReceive(req1);
+  if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+    exit;
+  InvalidateSecContext(sc, 0);
+  try
+    repeat
+      x := 1;
+      datain := AsnNext(x, t, xt);
+      ClientSspiAuth(sc, datain, spn, dataout);
+      if dataout = '' then
+      begin
+        // last step of SASL handshake - see RFC 4752 section 3.1
+        t := SendAndReceive(req1);
+        if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+          exit;
+        x := 1;
+        datain := AsnNext(x, t, xt);
+        datain := SecDecrypt(sc, datain);
+        if (length(datain) <> 4) or
+           ((datain[1] = #0) and
+            (PCardinal(datain)^ <> 0)) then
+          exit; // invalid token
+        PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
+        if AuthIdentify <> '' then
+          AppendBufferToRawByteString(datain, AuthIdentify);
+        dataout := SecEncrypt(sc, datain);
+      end;
+      req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
+                Asn(fVersion),
+                Asn(''),
+                Asn(ASN1_CTC3, [
+                  Asn('GSSAPI'),
+                  Asn(dataout)])]);
+      t := SendAndReceive(req2);
+    until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
+    result := fResultCode = LDAP_RES_SUCCESS;
+    if result then
+      ServerSspiAuthUser(sc, fUserName);
+    fBound := result;
+  finally
+    FreeSecContext(sc);
+  end;
+end;
 
 
 // https://ldap.com/ldapv3-wire-protocol-reference-unbind
@@ -1973,6 +2107,9 @@ var
   attr: TLdapAttribute;
   i, j: PtrInt;
 begin
+  result := false;
+  if not Connected then
+    exit;
   for i := 0 to Value.Count - 1 do
   begin
     attr := Value.Items[i];
@@ -1999,6 +2136,8 @@ var
   Attributes: TLdapAttributeList;
 begin
   result := false;
+  if not Connected then
+    exit;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
   if not Search(ComputerDN, false, '', []) then
@@ -2041,6 +2180,9 @@ end;
 
 function TLdapClient.Delete(const Obj: RawUtf8): boolean;
 begin
+  result := false;
+  if not Connected then
+    exit;
   SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
@@ -2052,6 +2194,9 @@ function TLdapClient.ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
 var
   query: TAsnObject;
 begin
+  result := false;
+  if not Connected then
+    exit;
   query := Asn(obj);
   Append(query, [Asn(newRdn), Asn(DeleteOldRdn)]);
   if newSuperior <> '' then
@@ -2083,6 +2228,9 @@ var
   r: TLdapResult;
   a: TLdapAttribute;
 begin
+  result := false;
+  if not fSock.SockConnected then
+    exit;
   // see https://ldap.com/ldapv3-wire-protocol-reference-search
   fSearchResult.Clear;
   fReferals.Clear;
@@ -2203,6 +2351,9 @@ var
   query, decoded: TAsnObject;
   pos, xt: integer;
 begin
+  result := false;
+  if not Connected then
+    exit;
   query := Asn(Oid, ASN1_CTX0);
   if Value <> '' then
     AsnAdd(query, Asn(Value, ASN1_CTX1));
@@ -2218,56 +2369,122 @@ end;
 
 function TLdapClient.DiscoverRootDN: RawUtf8;
 var
-  PreviousSearchScope: TLdapSearchScope;
-  RootObject: TLdapResult;
-  RootDnAttr: TLdapAttribute;
+  prev: TLdapSearchScope;
+  root: TLdapResult;
+  attr: TLdapAttribute;
 begin
   result := '';
-  PreviousSearchScope := SearchScope;
+  if not fSock.SockConnected then
+    exit;
+  prev := SearchScope;
   try
     SearchScope := SS_BaseObject;
-    RootObject := SearchFirst('', '*', ['rootDomainNamingContext']);
-    if Assigned(RootObject) then
+    root := SearchFirst('', '*', ['rootDomainNamingContext']);
+    if Assigned(root) then
     begin
-      RootDnAttr := RootObject.Attributes.Find('rootDomainNamingContext');
-      if Assigned(RootDnAttr) then
-        result := RootDnAttr.GetReadable;
+      attr := root.Attributes.Find('rootDomainNamingContext');
+      if Assigned(attr) then
+        result := attr.GetReadable;
     end;
   finally
-    SearchScope := PreviousSearchScope;
+    SearchScope := prev;
   end;
 end;
 
 function TLdapClient.Connected(AndBound: boolean): boolean;
 begin
-  result := Sock.SockConnected and fBound;
+  result := fSock.SockConnected;
+  if result and
+     AndBound then
+    result := fBound;
 end;
 
-function TLdapClient.GetWellKnownObjectDN(const ObjectGUID: RawUtf8): RawUtf8;
+function TLdapClient.GetWellKnownObject(const ObjectGUID: RawUtf8;
+  AsCN: boolean): RawUtf8;
 var
-  RootObject: TLdapResult;
-  wellKnownObjAttrs: TLdapAttribute;
+  root: TLdapResult;
+  attr: TLdapAttribute;
   i: integer;
-  SearchPrefix: RawUtf8;
+  sn, v: RawUtf8;
 begin
   result := '';
-  if RootDN = '' then
+  if not Connected or
+     (RootDN = '') then
     exit;
-  RootObject := SearchObject(RootDN, ['wellKnownObjects']);
-  if not Assigned(RootObject) then
+  root := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(root) then
     exit;
-  wellKnownObjAttrs := RootObject.Attributes.Find('wellKnownObjects');
-  if not Assigned(wellKnownObjAttrs) then
+  attr := root.Attributes.Find('wellKnownObjects');
+  if not Assigned(attr) then
     exit;
-  SearchPrefix := 'B:32:' + ObjectGUID;
-  for i := 0 to wellKnownObjAttrs.Count - 1 do
-    if PosEx(SearchPrefix, wellKnownObjAttrs.GetReadable(i)) = 1 then
+  sn := 'B:32:' + ObjectGUID;
+  for i := 0 to attr.Count - 1 do
+  begin
+    v := attr.GetReadable(i);
+    if NetStartWith(pointer(v), pointer(sn)) then
     begin
-      result := Copy(
-        wellKnownObjAttrs.GetReadable(i), Length(SearchPrefix) + 2, MaxInt);
+      result := Copy(v, Length(sn) + 2, MaxInt);
+      if AsCN then
+        result := DNToCN(result);
       break;
     end;
+  end;
 end;
+
+function TLdapClient.GetWellKnownObjects(AsCN: boolean): TLdapKnownCommonNames;
+var
+  root: TLdapResult;
+  attr: TLdapAttribute;
+  tmp: TRawUtf8DynArray;
+  i: PtrInt;
+
+  function One(const guid: RawUtf8): RawUtf8;
+  var
+    sn: RawUtf8;
+    i: PtrInt;
+  begin
+    sn := 'B:32:' + guid;
+    for i := 0 to high(tmp) do
+      if (tmp[i] <> '') and
+         NetStartWith(pointer(tmp[i]), pointer(sn)) then
+      begin
+        result := copy(tmp[i], Length(sn) + 2, MaxInt);
+        if AsCN then
+          result := DNToCN(result);
+        tmp[i] := ''; // no need to search this one any more
+        exit;
+      end;
+    result := '';
+  end;
+
+begin
+  Finalize(result);
+  if not Connected or
+     (RootDN = '') then
+    exit;
+  root := SearchObject(RootDN, ['wellKnownObjects']);
+  if not Assigned(root) then
+    exit;
+  attr := root.Attributes.Find('wellKnownObjects');
+  if not Assigned(attr) then
+    exit;
+  SetLength(tmp, attr.Count);
+  for i := 0 to attr.Count - 1 do
+    tmp[i] := attr.GetReadable(i);
+  result.Computers                 := One(GUID_COMPUTERS_CONTAINER_W);
+  result.DeletedObjects            := One(GUID_DELETED_OBJECTS_CONTAINER_W);
+  result.DomainControllers         := One(GUID_DOMAIN_CONTROLLERS_CONTAINER_W);
+  result.ForeignSecurityPrincipals := One(GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W);
+  result.Infrastructure            := One(GUID_INFRASTRUCTURE_CONTAINER_W);
+  result.LostAndFound              := One(GUID_LOSTANDFOUND_CONTAINER_W);
+  result.MicrosoftProgramData      := One(GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W);
+  result.NtdsQuotas                := One(GUID_NTDS_QUOTAS_CONTAINER_W);
+  result.ProgramData               := One(GUID_PROGRAM_DATA_CONTAINER_W);
+  result.Systems                   := One(GUID_SYSTEMS_CONTAINER_W);
+  result.Users                     := One(GUID_USERS_CONTAINER_W);
+  result.ManagedServiceAccounts    := One(GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W);
+end;
+
 
 end.
 
