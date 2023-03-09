@@ -277,7 +277,8 @@ type
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
     // - seems not implemented by OpenLdap
     function BindSaslDigestMd5: boolean;
-    /// authenticate a client to the directory server with current logged user
+    /// authenticate a client to the directory server using Kerberos
+    // - if no UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
     // - if no SPN is supplied, derivate one from Login's DnsLdapControlers()
     function BindSaslKerberos(const ServicePrincipalName: RawUtf8 = '';
@@ -2030,7 +2031,14 @@ begin
     repeat
       x := 1;
       datain := AsnNext(x, t, xt);
-      ClientSspiAuth(sc, datain, spn, dataout);
+      try
+        if fUserName <> '' then
+          ClientSspiAuthWithPassword(sc, datain, fUserName, fPassword, spn, dataout)
+        else
+          ClientSspiAuth(sc, datain, spn, dataout);
+      except
+        exit; // catch SSPI/GSSAPI errors and return false
+      end;
       if dataout = '' then
       begin
         // last step of SASL handshake - see RFC 4752 section 3.1
