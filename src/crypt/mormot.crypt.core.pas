@@ -209,6 +209,9 @@ var
   // - DefaultHasher128() is assigned to this function, when available on the CPU
   AesNiHash128: procedure(hash: PHash128; data: pointer; len: PtrUInt);
 
+  /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
+  HasOpenSsl: boolean;
+  
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
@@ -766,6 +769,7 @@ type
   // - IV property should be set to a fixed value to encode the trailing bytes
   // of the buffer by a simple XOR - but you should better use the PKC7 pattern
   // - this class will use AES-NI hardware instructions, if available
+  // - use TAesFast[mEcb] to retrieve the fastest implementation at runtime
   TAesEcb = class(TAesAbstractSyn)
   public
     /// perform the AES cypher in the ECB mode
@@ -777,6 +781,7 @@ type
   /// handle AES cypher/uncypher with Cipher-block chaining (CBC)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
+  // - use TAesFast[mCbc] to retrieve the fastest implementation at runtime
   TAesCbc = class(TAesAbstractSyn)
   protected
     procedure AfterCreate; override;
@@ -812,6 +817,7 @@ type
   // $ openssl aes-128-cfb in 12.01ms i.e. 208142/s or 442.9 MB/s
   // $ openssl aes-256-cfb in 14.49ms i.e. 172449/s or 367 MB/s
   // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
+  // - use TAesFast[mCfb] to retrieve the fastest implementation at runtime
   TAesCfb = class(TAesAbstractEncryptOnly)
   protected
     procedure AfterCreate; override;
@@ -835,6 +841,7 @@ type
   // $ mormot aes-256-ofb in 9.59ms i.e. 260552/s or 554.5 MB/s
   // $ openssl aes-128-ofb in 9.21ms i.e. 271267/s or 577.3 MB/s
   // $ openssl aes-256-ofb in 11.53ms i.e. 216806/s or 461.4 MB/s
+  // - use TAesFast[mOfb] to retrieve the fastest implementation at runtime
   TAesOfb = class(TAesAbstractEncryptOnly)
   protected
     procedure AfterCreate; override;
@@ -894,6 +901,7 @@ type
   // $ mormot aes-256-ctr in 12.47ms i.e. 200368/s or 426.4 MB/s
   // $ openssl aes-128-ctr in 3.01ms i.e. 830288/s or 1.7 GB/s
   // $ openssl aes-256-ctr in 3.52ms i.e. 709622/s or 1.4 GB/s
+  // - use TAesFast[mCtr] to retrieve the fastest implementation at runtime
   TAesCtr = class(TAesC64)
   protected
     procedure AfterCreate; override;
@@ -926,6 +934,7 @@ type
 
 
   /// AEAD (authenticated-encryption with associated-data) abstract class
+  // - don't use this abstract class, but actual usable inherited classes
   // - perform AES encryption and on-the-fly MAC computation, i.e. computes
   // a proprietary 256-bit MAC during AES cyphering, as 128-bit CRC of the
   // encrypted data and 128-bit CRC of the plain data, seeded from a Key, then
@@ -1003,6 +1012,7 @@ type
   end;
 
   /// AEAD combination of AES and 256-bit MAC with symmetrical Encrypt/Decrypt
+  // - don't use this abstract class, but actual usable TAesOfc or TAesCtc
   TAesSymCrc = class(TAesAbstractAead)
   public
     /// perform the AES uncypher calling Encrypt()
@@ -1057,7 +1067,7 @@ type
   /// abstract parent to handle AES-GCM cypher/uncypher with built-in authentication
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
-  // - don't use this abstract class, but TAesGcm or TAesGcmOsl
+  // - don't use this abstract class, but TAesFast[mGcm] - i.e. TAesGcm/TAesGcmOsl
   TAesGcmAbstract = class(TAesAbstract)
   protected
     fStarted: (stNone, stEnc, stDec); // used to call AES.Reset()
@@ -1125,7 +1135,7 @@ type
   // - our TAesGcm class is 8x interleaved for both GMAC and AES-CTR
   // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
   // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
-  // - OpenSSL is faster since it performs GMAC and AES-CTR in a single pass
+  // - OpenSSL is slightly faster since performs GMAC and AES-CTR as single pass
   // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   // - on i386, numbers are much lower, since lacks interleaved asm
@@ -1133,6 +1143,7 @@ type
   // $  mormot aes-256-gcm in 18.23ms i.e. 137083/s or 291.7 MB/s
   // $  openssl aes-128-gcm in 5.49ms i.e. 455290/s or 0.9 GB/s
   // $  openssl aes-256-gcm in 6.11ms i.e. 408630/s or 869.6 MB/s
+  // - use TAesFast[mGcm] to retrieve the fastest implementation at runtime
   TAesGcm = class(TAesGcmAbstract)
   protected
     fGcm: TAesGcmEngine;
@@ -11057,8 +11068,6 @@ begin
   else
     SHA.Full(p, L, Digest);
 end;
-
-
 
 
 procedure InitializeUnit;

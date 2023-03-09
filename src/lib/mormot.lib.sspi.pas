@@ -687,8 +687,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // user credentials (not credentials of logged-in user)
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aUserName is the domain and user name, in form of
-// 'DomainName\UserName'
+// - aUserName is the domain and user name, in form of 'DomainName\UserName' -
+// if no DomainName is set, it will be extracted from aSecKerberosSpn
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server

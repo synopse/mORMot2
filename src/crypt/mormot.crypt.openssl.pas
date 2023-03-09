@@ -2855,7 +2855,7 @@ procedure RegisterOpenSsl;
 var
   osa: TCryptAsymAlgo;
 begin
-  if (TAesFast[mGcm] = TAesGcmOsl) or
+  if HasOpenSsl or
      not OpenSslIsAvailable then
     exit;
   // set the fastest AES implementation classes according to the actual platform
@@ -2874,6 +2874,7 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
+  HasOpenSsl := true; // global mormot.crypt.core flag
   // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;
