@@ -1878,8 +1878,8 @@ begin
   fPublishOptions := aPublishOptions;
   bypass := bypassAuthentication in fPublishOptions;
   if aSubURI <> '' then
-    fRestServer.ServiceMethodRegister(
-      aSubURI, RunOnRestServerSub, bypass, [mGET, mPOST]) // POST for www-form
+    fRestServer.ServiceMethodRegister(aSubURI, RunOnRestServerSub, bypass,
+      [mGET, mPOST, mHEAD]) // POST for www-form, HEAD for browsers
   else
   begin
     for m := 0 to fApplication.fFactory.MethodsCount - 1 do
@@ -1894,10 +1894,10 @@ begin
     end;
     if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        MVCINFO_URI, RunOnRestServerRoot, bypass, [mGET]);
+        MVCINFO_URI, RunOnRestServerRoot, bypass, [mGET, mHEAD]);
     if publishStatic in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        STATIC_URI, RunOnRestServerRoot, bypass, [mGET]);
+        STATIC_URI, RunOnRestServerRoot, bypass, [mGET, mHEAD]);
   end;
   if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
