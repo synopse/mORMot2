@@ -213,8 +213,15 @@ type
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
     hfExpect100,
-    hfHasRemoteIP,
-    hfContentStreamNeedFree);
+    hfHasRemoteIP);
+
+  /// map the output state for THttpRequestContext.ResponseFlags
+  // - separated from THttpRequestHeaderFlags so that they would both be stored
+  // and accessed as one byte - which is faster than word on Intel CPUs
+  THttpRequestReponseFlags = set of (
+    rfAcceptRange,
+    rfRange,
+    rfContentStreamNeedFree);
 
   PHttpRequestContext = ^THttpRequestContext;
 
@@ -261,6 +268,8 @@ type
     State: THttpRequestState;
     /// map the presence of some HTTP headers, but retrieved during ParseHeader
     HeaderFlags: THttpRequestHeaderFlags;
+    /// define some flags when sending the response
+    ResponseFlags: THttpRequestReponseFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
     /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
@@ -1199,6 +1208,7 @@ begin
   Process.Reset;
   State := hrsNoStateMachine;
   HeaderFlags := [];
+  ResponseFlags := [];
   Options := [];
   Headers := '';
   ContentType := '';
@@ -1790,6 +1800,8 @@ begin
     CompressContent(CompressAcceptHeader, Compress, ContentType,
       Content, ContentEncoding);
   result := @Head;
+  if rfAcceptRange in ResponseFlags then
+    result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentEncoding <> '' then
   begin
     result^.AppendShort('Content-Encoding: ');
@@ -1800,22 +1812,18 @@ begin
   begin
     ContentPos := pointer(Content);
     ContentLength := length(Content);
-  end
-  else
-  begin
     // ContentLength has been set by ContentFromFile (also for HEAD responses)
-    if RangeLength >= 0 then
-    begin
-      // Content-Range: bytes 0-1023/146515
-      result^.AppendShort('Content-Range: bytes ');
-      result^.Append(RangeOffset);
-      result^.Append('-');
-      result^.Append(RangeOffset + ContentLength - 1);
-      result^.Append('/');
-      result^.Append(RangeLength); // = FileSize after ContentFromFile()
-      result^.AppendCRLF;
-    end;
-    result^.AppendShort('Accept-Ranges: bytes'#13#10);
+  end;
+  if rfRange in ResponseFlags then
+  begin
+    // Content-Range: bytes 0-1023/146515
+    result^.AppendShort('Content-Range: bytes ');
+    result^.Append(RangeOffset);
+    result^.Append('-');
+    result^.Append(RangeOffset + ContentLength - 1);
+    result^.Append('/');
+    result^.Append(RangeLength); // = FileSize after ContentFromFile()
+    result^.AppendCRLF;
   end;
   result^.AppendShort('Content-Length: ');
   result^.Append(ContentLength);
@@ -1905,7 +1913,7 @@ end;
 
 procedure THttpRequestContext.ProcessDone;
 begin
-  if hfContentStreamNeedFree in HeaderFlags then
+  if rfContentStreamNeedFree in ResponseFlags then
     FreeAndNilSafe(ContentStream);
 end;
 
@@ -1932,7 +1940,7 @@ begin
       // there is an already-compressed .gz file to send away
       ContentStream := TFileStreamEx.Create(gz, fmOpenReadDenyNone);
       ContentEncoding := 'gzip';
-      include(HeaderFlags, hfContentStreamNeedFree);
+      include(ResponseFlags, rfContentStreamNeedFree);
       result := true;
       exit; // only use ContentStream to bypass recompression
     end;
@@ -1950,14 +1958,17 @@ begin
         tosend := ContentLength - RangeOffset; // truncate
       RangeLength := ContentLength; // contains size for Content-Range: header
       ContentLength := tosend;
+      include(ResponseFlags, rfRange);
     end;
   if not result then
-    // there is no such file available
+    // there is no such file available, or range clearly wrong
     exit;
+  include(ResponseFlags, rfAcceptRange);
   ContentStream := TFileStreamEx.Create(FileName, fmOpenReadDenyNone);
+  if RangeOffset <> 0 then
+    ContentStream.Seek(RangeOffset, soBeginning);
   if (ContentLength < 1 shl 20) and
-     (CommandMethod <> 'HEAD') and
-     not hasRange then
+     (CommandMethod <> 'HEAD') then
   begin
     // smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
@@ -1967,9 +1978,7 @@ begin
   else
   begin
     // stream existing big file by chunks (also used for HEAD or Range)
-    if RangeOffset <> 0 then
-      ContentStream.Seek(RangeOffset, soBeginning);
-    include(HeaderFlags, hfContentStreamNeedFree);
+    include(ResponseFlags, rfContentStreamNeedFree);
   end;
 end;
 

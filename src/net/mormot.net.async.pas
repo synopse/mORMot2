@@ -3156,6 +3156,7 @@ begin
         begin
           fOwner.DoLog(sllWarning, 'OnRead: close connection after %',
             [ToText(fHttp.State)^], self);
+          DoReject(HTTP_BADREQUEST);
           result := soClose;
         end;
       end;
