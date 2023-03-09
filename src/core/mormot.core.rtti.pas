@@ -1698,6 +1698,10 @@ type
   TRttiCopiers = array[TRttiKind] of TRttiCopier;
   PRttiCopiers = ^TRttiCopiers;
 
+  /// internal function handler for copying a class instance
+  // - use TRttiCustom.Props.CopyProperties but may be overriden e.g. for TOrm
+  TRttiClassCopier = procedure(Dest, Source: TObject);
+
 
 var
   /// lookup table of finalization functions for managed types
@@ -2310,6 +2314,7 @@ type
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
+    fCopyObject: TRttiClassCopier;
     procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); virtual;
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
@@ -2496,6 +2501,11 @@ type
     /// redirect to the low-level value copy - use rather ValueCopy()
     property Copy: TRttiCopier
       read fCopy;
+    /// redirect to the low-level class instance copy
+    // - nil by default, to use Props.CopyProperties()
+    // - is overwritten e.g. by TOrm.RttiCustomSetParser
+    property CopyObject: TRttiClassCopier
+      read fCopyObject write fCopyObject;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -2573,8 +2583,8 @@ type
     /// efficient search of TRttiCustom from a given TObject class
     // - returns nil if Info is not known
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
-    function Find(ObjectClass: TClass): TRttiCustom; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    class function Find(ObjectClass: TClass): TRttiCustom; overload;
+      {$ifdef HASINLINE}static; inline;{$endif}
     /// efficient search of TRttiCustom from a given type name
     // - internally use our "hash table of the poor" (tm) for quick search
     function Find(Name: PUtf8Char; NameLen: PtrInt;
@@ -7431,7 +7441,11 @@ var
   p: PRttiCustomProp;
   n: integer;
   v: TRttiVarData;
+  d, s: pointer;
 begin
+  if (Dest = nil) or
+     (Source = nil) then
+    exit; // avoid GPF
   p := pointer(List); // all published properties, not only Managed[]
   if p <> nil then
   begin
@@ -7445,12 +7459,19 @@ begin
           GetValue(Source, v);
           SetValue(Dest, v, {andclear=}true);
         end
-        else if Value.Kind = rkClass then
-          // explicit copy of nested instances properties
-          Value.Props.CopyProperties(Dest + OffsetSet, Source + OffsetGet)
         else
-          // direct content copy from the fields memory buffers
-          Value.ValueCopy(Dest + OffsetSet, Source + OffsetGet);
+        begin
+          d := Dest + OffsetSet;
+          s := Source + OffsetGet;
+          if p^.Value.Kind = rkClass then
+            if Assigned(Value.CopyObject) then
+              Value.CopyObject(PPointer(d)^, PPointer(s)^)
+            else
+              Value.Props.CopyProperties(PPointer(d)^, PPointer(s)^)
+          else
+            // direct content copy from the fields memory buffers
+            Value.ValueCopy(d, s);
+        end;
       inc(p);
       dec(n);
     until n = 0;
@@ -8306,7 +8327,7 @@ begin
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
 end;
 
-function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
+class function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
 begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
@@ -8894,7 +8915,10 @@ begin
       TStrings(aTo).Assign(TStrings(aFrom))
     else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
       // fast copy from RTTI properties of the common (or same) hierarchy
-      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
+      if Assigned(cf.CopyObject) then
+        cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
+      else
+        cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
     else
     begin
       // no common inheritance -> slower lookup by property name
@@ -9216,7 +9240,7 @@ begin
         RTTI_TO_VARTYPE[k] := varAny; // TVarData.VAny pointing to the value
     end;
   end;
-  RTTI_FINALIZE[rkClass] := @_ObjClear;
+  RTTI_FINALIZE[rkClass]   := @_ObjClear;
   PT_INFO[ptBoolean]       := TypeInfo(boolean);
   PT_INFO[ptByte]          := TypeInfo(byte);
   PT_INFO[ptCardinal]      := TypeInfo(cardinal);

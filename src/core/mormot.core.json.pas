@@ -7837,7 +7837,8 @@ begin
       end;
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
         PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
-      else if jpoClearValues in Ctxt.Options then
+      else if (jpoClearValues in Ctxt.Options) and
+              not (rcfClassMayBeID in Ctxt.Info.Flags) then
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;

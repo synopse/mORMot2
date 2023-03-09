@@ -7996,6 +7996,18 @@ begin
   result := true;
 end;
 
+procedure OrmCopyObject(Dest, Source: TObject);
+var
+  i: PtrInt;
+begin
+  if (Source = nil) or (Dest = nil) then
+    exit;
+  TOrm(Dest).fID := TOrm(Source).fID;
+  with TOrm(Dest).Orm do
+    for i := 0 to length(CopiableFields) - 1 do
+      CopiableFields[i].CopyValue(Source, Dest);
+end;
+
 class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
 var
   read: TOnClassJsonRead;
@@ -8006,6 +8018,7 @@ begin
   Rtti.JsonReader := TMethod(read);
   write := RttiJsonWrite;
   Rtti.JsonWriter := TMethod(write);
+  Rtti.CopyObject := OrmCopyObject;
 end;
 
 function TOrm.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
