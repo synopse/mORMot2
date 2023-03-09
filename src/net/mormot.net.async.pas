@@ -532,6 +532,7 @@ type
     fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupLoad: integer;
     fThreadPollingLastWakeUpTix: integer;
+    fThreadPollingAwakeCount: integer;
     fGC: array[1..2] of TAsyncConnectionsGC;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
@@ -1832,14 +1833,20 @@ begin
                 fOwner.ThreadPollingWakeup(new);
               // wait for the sub-threads to wake up this one
               if not Terminated then
-                if fEvent.IsEventFD or
+                if (fEvent.IsEventFD and
+                    (fOwner.fThreadPollingAwakeCount <> 0)) or
                    ((fOwner.fClients.fRead.fPending.Count = 0) and
                     (fOwner.fClients.fRead.Count = 0)) then
-                  fEvent.WaitForEver
+                begin
+                  fWaitForReadPending := true; // better safe than sorry
+                  fEvent.WaitForEver;
+                  break;
+                end
                 else if new = 0 then
                   fEvent.SleepStep(start, @Terminated)
                 else
                 begin
+                  fWaitForReadPending := true;
                   fEvent.WaitFor(20);
                   break;
                 end;
@@ -1853,10 +1860,12 @@ begin
             fEvent.WaitForEver;
             if Terminated then
               break;
+            LockedInc32(@fOwner.fThreadPollingAwakeCount);
             fWakeUpFromSlowProcess := false;
             while GetNextRead(notif) do
               fOwner.fClients.ProcessRead(self, notif);
             fThreadPollingLastWakeUpTix := 0; // will now need to wakeup
+            LockedDec32(@fOwner.fThreadPollingAwakeCount);
             fOwner.fThreadReadPoll.ReleaseEvent; // atpReadPoll lock above
           end;
       else
@@ -2611,7 +2620,8 @@ begin
 end;
 
 procedure TAsyncConnections.LogVerbose(connection: TPollAsyncConnection;
-  const ident: RawUtf8; const identargs: array of const; const frame: TRawByteStringBuffer);
+  const ident: RawUtf8; const identargs: array of const;
+  const frame: TRawByteStringBuffer);
 begin
   LogVerbose(connection, ident, identargs, frame.Buffer, frame.Len)
 end;
@@ -2776,7 +2786,7 @@ begin
         host := '127.0.0.1';
       port := fSockPort;
     end;
-    DoLog(sllTrace, 'Shutdown %:% release request', [host, port], self);
+    DoLog(sllTrace, 'Shutdown %:% accept release request', [host, port], self);
     if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
          10, 0, 0, 0, touchandgo) = nrOk then
     begin
