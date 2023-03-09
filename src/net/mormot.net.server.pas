@@ -3253,7 +3253,12 @@ begin
                         IdemPChar(P, 'HTTP/1.1');
     Http.Content := '';
     // get and parse HTTP request header
-    GetHeader(noheaderfilter);
+    if not GetHeader(noheaderfilter) then
+    begin
+      SockSendFlush('HTTP/1.0 400 Bad Request'#13#10#13#10'Rejected Headers');
+      result := grRejected;
+      exit;
+    end;
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
       fKeepAliveClient := false;
@@ -3847,23 +3852,6 @@ begin
   result := 0;
 end;
 
-// returned P^ points to the first non digit char - not as GetNextItemQWord()
-function GetNextNumber(var P: PUtf8Char): Qword;
-var
-  c: PtrUInt;
-begin
-  result := 0;
-  if P <> nil then
-    repeat
-      c := byte(P^) - 48;
-      if c > 9 then
-        break
-      else
-        result := result * 10 + Qword(c);
-      inc(P);
-    until false;
-end;
-
 type
   TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUtf8;
 
@@ -4017,7 +4005,7 @@ var
           begin
             FastSetString(range, pRawValue + 6, RawValueLength - 6); // need #0 end
             R := pointer(range);
-            rangestart := GetNextNumber(R);
+            rangestart := GetNextRange(R);
             if R^ = '-' then
             begin
               outcontlen.QuadPart := FileSize(filehandle);
@@ -4028,11 +4016,13 @@ var
               datachunkfile.ByteRange.StartingOffset.QuadPart := rangestart;
               if R^ in ['0'..'9'] then
               begin
-                rangelen := GetNextNumber(R) - rangestart + 1;
+                rangelen := GetNextRange(R) - rangestart + 1;
+                if Int64(rangelen) < 0 then
+                  rangelen := 0;
                 if rangelen < datachunkfile.ByteRange.Length.QuadPart then
                   // "bytes=0-499" -> start=0, len=500
                   datachunkfile.ByteRange.Length.QuadPart := rangelen;
-              end; // "bytes=1000-" -> start=1000, to eof)
+              end; // "bytes=1000-" -> start=1000, to eof
               FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
                 rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
                 outcontlen.QuadPart], contrange);
@@ -4040,11 +4030,11 @@ var
               resp^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
-          with resp^.headers.KnownHeaders[respAcceptRanges] do
-          begin
-            pRawValue := 'bytes';
-            RawValueLength := 5;
-          end;
+        end;
+        with resp^.headers.KnownHeaders[respAcceptRanges] do
+        begin
+          pRawValue := 'bytes';
+          RawValueLength := 5;
         end;
         resp^.EntityChunkCount := 1;
         resp^.pEntityChunks := @datachunkfile;
@@ -4113,7 +4103,7 @@ begin
       // retrieve next pending request, and read its headers
       FillcharFast(req^, SizeOf(HTTP_REQUEST), 0);
       err := Http.ReceiveHttpRequest(fReqQueue, reqid, 0,
-        req^, length(reqbuf), bytesread);
+        req^, length(reqbuf), bytesread); // blocking until received something
       if Terminated then
         break;
       case err of
@@ -4146,6 +4136,7 @@ begin
               {out} ctxt.fRemoteIP, PQword(@ctxt.fConnectionID)^);
             // retrieve any SetAuthenticationSchemes() information
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
+              // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
               for i := 0 to req^.RequestInfoCount - 1 do
                 if req^.pRequestInfo^[i].InfoType = HttpRequestInfoTypeAuth then
                   with PHTTP_REQUEST_AUTH_INFO(req^.pRequestInfo^[i].pInfo)^ do
@@ -4156,9 +4147,8 @@ begin
                           byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
                           if AccessToken <> 0 then
                           begin
-                            // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
                             GetDomainUserNameFromToken(AccessToken, ctxt.fAuthenticatedUser);
-                            // AccessToken lifecycle is application responsability and should be closed after use
+                            // AccessToken lifecycle is application responsability
                             CloseHandle(AccessToken);
                           end;
                         end;

@@ -435,12 +435,16 @@ function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 var
   /// if manually set, GetDomainNames() will return this value
+  // - e.g. 'ad.mycompany.com'
   ForcedDomainName: RawUtf8;
 
 /// retrieve the AD Domain Name addresses known by the Operating System
 // - on POSIX, return all "search" from /etc/resolv.conf unless usePosixEnv is set
 // - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single item
 // - no cache is used for this function
+// - you can force for a given value using ForcedDomainName, e.g. if the
+// machine is not actually registered for / part of the domain, but has access
+// to the domain controller
 function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 
