@@ -695,7 +695,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // and call function again with the data returned from server
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
-  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
+  const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
+  out aOutData: RawByteString): boolean;
 
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -1613,28 +1614,40 @@ var
 begin
   if aSecKerberosSpn <> '' then
     TargetName := pointer(SynUnicode(aSecKerberosSpn))
-  else if ForceSecKerberosSpn <> '' then
-    TargetName := pointer(ForceSecKerberosSpn)
   else
-    TargetName := nil;
+    TargetName := pointer(ForceSecKerberosSpn);
   result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
-  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
+  const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
+  out aOutData: RawByteString): boolean;
 var
-  UserPos: Integer;
+  UserPos, TargetPos: Integer;
   Domain, User, Password: SynUnicode;
   AuthIdentity: TSecWinntAuthIdentityW;
   TargetName: PWideChar;
+  TargetUtf8: RawUtf8;
 begin
+  if aSecKerberosSpn <> '' then
+    TargetName := pointer(SynUnicode(aSecKerberosSpn))
+  else
+    TargetName := pointer(ForceSecKerberosSpn);
   UserPos := PosExChar('\', aUserName);
   if UserPos = 0 then
   begin
-    Domain := '';
-    User := SynUnicode(User);
+    if TargetName <> nil then
+    begin
+      // extract from 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+      TargetUtf8 := RawUtf8(TargetName);
+      TargetPos := PosExChar('@', TargetUtf8);
+      if TargetPos <> 0 then
+        Domain := SynUnicode(copy(TargetUtf8, TargetPos + 1, 100));
+      // Domain is required, otherwise deprecated NTLM is used
+    end;
+    User := SynUnicode(aUserName);
   end
   else
   begin
@@ -1649,12 +1662,9 @@ begin
   AuthIdentity.Password := pointer(Password);
   AuthIdentity.PasswordLength := Length(Password);
   AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  if ForceSecKerberosSpn <> '' then
-    TargetName := pointer(ForceSecKerberosSpn)
-  else
-    TargetName := nil;
   result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
+  FillCharFast(pointer(Password)^, length(Password) * 2, 0); // anti-forensic
 end;
 
 // mormot.core.unicode is overkill here - avoid a conversion with a temp string
