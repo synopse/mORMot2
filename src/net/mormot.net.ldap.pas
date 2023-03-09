@@ -268,6 +268,7 @@ type
     /// try to connect to LDAP server
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
     // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
+    // - do nothing if was already connected
     function Login: boolean;
     /// authenticate a client to the directory server with Username/Password
     // - if these are empty strings, then it does annonymous binding
@@ -1594,8 +1595,9 @@ var
   h, p: RawUtf8;
   i: PtrInt;
 begin
-  FreeAndNil(fSock);
-  result := false;
+  result := fSock <> nil;
+  if result then
+    exit; // socket was already connected
   if fTargetHost = '' then
     dc := DnsLdapControlers('', false, @fDomainName)  // from OS
   else
@@ -1606,7 +1608,8 @@ begin
       Split(dc[i], ':', h, p);
       if fTargetHost = '' then // not from DnsLdapControlers
       begin
-        if (p = '389') and
+        if HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
+           (p = '389') and
            not fFullTls then
         try
           // always first try to connect with TLS on its default port (much safer)
@@ -2066,7 +2069,8 @@ begin
       t := SendAndReceive(req2);
     until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
     result := fResultCode = LDAP_RES_SUCCESS;
-    if result then
+    if result and
+       (fUserName = '') then
       ServerSspiAuthUser(sc, fUserName);
     fBound := result;
   finally
