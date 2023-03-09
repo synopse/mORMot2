@@ -1594,9 +1594,9 @@ begin
   Sender.fSession.Data := '';
   try
     repeat
-      if WithPassword then
+      if WithPassword then // will use ClientForceSpn() value
         ClientSspiAuthWithPassword(SecCtx, Sender.fSession.Data,
-          User.LogonName, User.PasswordHashHexa, '', OutData)
+          User.LogonName, User.PasswordHashHexa, {spn=}'', OutData)
       else
         ClientSspiAuth(SecCtx, Sender.fSession.Data,
           {passKerberosSpn=} User.PasswordHashHexa, OutData);
