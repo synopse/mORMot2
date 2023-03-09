@@ -399,7 +399,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - you must use ClientForceSpn to specify server SPN before call
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
-  const aPassword: SpiUtf8; out aOutData: RawByteString): boolean;
+  const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
+  out aOutData: RawByteString): boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -810,11 +811,12 @@ end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8; const aPassword: SpiUtf8;
-  out aOutData: RawByteString): boolean;
+  const aSecKerberosSpn: RawUtf8; out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
+  SecKerberosSpn: RawUtf8;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then
@@ -833,8 +835,12 @@ begin
     GccCheck(MajStatus, MinStatus,
       'Failed to acquire credentials for specified user');
   end;
+  if aSecKerberosSpn <> '' then
+    SecKerberosSpn := aSecKerberosSpn
+  else
+    SecKerberosSpn := ForceSecKerberosSpn;
   result := ClientSspiAuthWorker(
-    aSecContext, aInData, ForceSecKerberosSpn, aOutData);
+    aSecContext, aInData, SecKerberosSpn, aOutData);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;

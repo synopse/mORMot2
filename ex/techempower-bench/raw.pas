@@ -121,12 +121,12 @@ const
   HELLO_WORLD: RawUtf8 = 'Hello, World!';
   TEXT_CONTENT_TYPE_NO_ENCODING: RawUtf8 = 'text/plain';
 
-  WORLD_COUNT      = 10000;
-  WORLD_READ_SQL   = 'select id,randomNumber from World where id=?';
+  WORLD_COUNT       = 10000;
+  WORLD_READ_SQL    = 'select id,randomNumber from World where id=?';
   WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
-  FORTUNES_SQL     = 'select id,message from Fortune';
+  FORTUNES_SQL      = 'select id,message from Fortune';
 
   FORTUNES_MESSAGE = 'Additional fortune added at request time.';
   FORTUNES_TPL     = '<!DOCTYPE html>' +

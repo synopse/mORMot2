@@ -1595,11 +1595,11 @@ begin
   try
     repeat
       if WithPassword then
-        ClientSspiAuthWithPassword(SecCtx,
-          Sender.fSession.Data, User.LogonName, User.PasswordHashHexa, OutData)
+        ClientSspiAuthWithPassword(SecCtx, Sender.fSession.Data,
+          User.LogonName, User.PasswordHashHexa, '', OutData)
       else
-        ClientSspiAuth(SecCtx,
-          Sender.fSession.Data, User.PasswordHashHexa, OutData);
+        ClientSspiAuth(SecCtx, Sender.fSession.Data,
+          {passKerberosSpn=} User.PasswordHashHexa, OutData);
       if OutData = '' then
         break;
       if result <> '' then
