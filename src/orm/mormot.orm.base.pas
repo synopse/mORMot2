@@ -2833,10 +2833,10 @@ type
     TimeOutMS: cardinal;
     /// the number of entries stored in Values[]
     Count: integer;
-    /// used to R/W lock the table cache for multi-thread safety
-    Safe: TRWLightLock;
     /// all cached IDs and ORM content
     Value: TOrmCacheTableValueDynArray;
+    /// used to R/W lock the table cache for multi-thread safety
+    Safe: TRWLightLock;
     /// TDynArray wrapper around the Value[] array
     Values: TDynArray;
     /// initialize this table cache
@@ -2844,6 +2844,7 @@ type
     // caller (is the case for a TOrmCacheTableDynArray)
     procedure Init;
     /// reset all settings corresponding to this table cache
+    // - warning: owner Destroy should call it to release stored TOrm instances
     procedure Clear;
     /// returns 0 if TimeOutMS is 0, or the deprecated Value[].Timestamp512
     function GetOutdatedTimestamp512: cardinal;
@@ -2871,7 +2872,7 @@ type
     /// check if a record specified by its ID is in cache
     function Exists(aID: TID): boolean;
     /// return the TOrm instance stored in the cache
-    // - warning: not thread-safe - use Retrieve() to get a proper copy
+    // - warning: not thread-safe - use TOrmCache.Retrieve to get a proper copy
     // - returns nil if not found or SetTimeOut was called
     function Get(aID: TID): pointer;
     /// low-level retrieve of a cached TOrm entry
@@ -10595,7 +10596,7 @@ end;
 
 procedure TOrmCacheTable.FlushCacheEntry(aID: TID);
 begin
-  if not CacheEnable then
+  if (@self = nil) or not CacheEnable then
     exit;
   Safe.WriteLock;
   try
@@ -10610,7 +10611,7 @@ procedure TOrmCacheTable.FlushCacheEntries(const aID: array of TID);
 var
   i: PtrInt;
 begin
-  if not CacheEnable then
+  if (@self = nil) or not CacheEnable then
     exit;
   Safe.WriteLock;
   try
@@ -10677,7 +10678,7 @@ var
   i: integer;
   v: POrmCacheTableValue;
 begin
-  if not CacheEnable then
+  if (@self = nil) or not CacheEnable then
     exit;
   Safe.WriteLock;
   try
@@ -10738,7 +10739,7 @@ var
   graceperiod: Int64;
 begin
   result := 0; // means no deprecation (either TimeOutMS=0 or too soon)
-  if TimeOutMS = 0 then
+  if (@self = nil) or (TimeOutMS = 0) then
     exit;
   graceperiod := GetTickCount64 - Int64(TimeOutMS);
   if graceperiod > 0 then // may be < 0 if the computer just started
@@ -10820,7 +10821,7 @@ begin
   result := nil;
   if (@self = nil) or
      not CacheEnable or
-     (TimeOutMS <> 0) then
+     (TimeOutMS <> 0) then // by safety: TimeOutMS may delete the instance
     exit;
   e := RetrieveEntry(aID);
   if (e <> nil) and

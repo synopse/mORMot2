@@ -4287,6 +4287,7 @@ type
     fModel: TOrmModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TOrm
     fCache: TOrmCacheTableDynArray;
+    function TableSet(aTable: TOrmClass): POrmCacheTable;
   public
     /// create a cache instance
     // - the associated TOrmModel will be used internally
@@ -4362,14 +4363,14 @@ type
     // - warning: not thread-safe - use Retrieve() to get a proper copy
     // - returns nil if not found or SetTimeOut was called
     function Get(aTable: TOrmClass; aID: TID): pointer;
+    /// access to one TOrm cache instance
+    function Table(aTable: TOrmClass): POrmCacheTable;
     /// read-only access to the associated TRest.ORM instance
     property Rest: IRestOrm
       read fRest;
     /// read-only access to the associated TOrmModel instance
     property Model: TOrmModel
       read fModel;
-    /// access to one TOrm cache instance
-    function Table(aTable: TOrmClass): POrmCacheTable;
   public { TRest low level methods which are not to be called usualy: }
     /// check if a record specified by its table and ID is in the cache
     // - TOrmClass to be specified as its index in Rest.Model.Tables[]
@@ -10737,7 +10738,7 @@ destructor TOrmCache.Destroy;
 var
   i: PtrInt;
 begin
-  pointer(fRest) := nil; // don't change reference count
+  pointer(fRest) := nil; // was a weak copy: don't change reference count
   for i := 0 to length(fCache) - 1 do
     fCache[i].Clear; // release any stored TOrm instance
   inherited Destroy;
@@ -10768,29 +10769,33 @@ var
   i: PtrUInt;
 begin
   result := nil;
-  if (self = nil) or
-     (aTable = nil) then
+  if (self = nil) or (aTable = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
   if i < PtrUInt(Length(fCache)) then
     result := @fCache[i];
 end;
 
-function TOrmCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
+function TOrmCache.TableSet(aTable: TOrmClass): POrmCacheTable;
 var
   i: PtrUInt;
 begin
-  result := false;
-  if (self = nil) or
-     (aTable = nil) then
+  result := nil;
+  if (self = nil) or (aTable = nil) or (Rest = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
-  if Rest.CacheWorthItForTable(i) then
-    if i < PtrUInt(Length(fCache)) then
-    begin
-      fCache[i].TimeOutMS := aTimeoutMS;
-      result := true;
-    end;
+  if (i < PtrUInt(Length(fCache))) and Rest.CacheWorthItForTable(i) then
+    result := @fCache[i];
+end;
+
+function TOrmCache.SetTimeOut(aTable: TOrmClass; aTimeoutMS: cardinal): boolean;
+var
+  c: POrmCacheTable;
+begin
+  c := TableSet(aTable);
+  result := c <> nil;
+  if result then
+    c^.TimeOutMS := aTimeoutMS;
 end;
 
 function TOrmCache.Get(aTable: TOrmClass; aID: TID): pointer;
@@ -10800,78 +10805,52 @@ end;
 
 function TOrmCache.IsCached(aTable: TOrmClass): boolean;
 var
-  i: PtrUInt;
+  c: POrmCacheTable;
 begin
-  result := false;
-  if (self = nil) or
-     (aTable = nil) then
-    exit;
-  i := fModel.GetTableIndexExisting(aTable);
-  if i < PtrUInt(Length(fCache)) then
-    if fCache[i].CacheEnable then
-      result := true;
+  c := Table(aTable);
+  result := (c <> nil) and (c^.CacheEnable);
 end;
 
 function TOrmCache.SetCache(aTable: TOrmClass): boolean;
 var
-  i: PtrInt;
+  c: POrmCacheTable;
 begin
-  result := false;
-  if (self = nil) or
-     (aTable = nil) then
-    exit;
-  i := fModel.GetTableIndexExisting(aTable);
-  if Rest.CacheWorthItForTable(i) then
-    if PtrUInt(i) < PtrUInt(Length(fCache)) then
-    begin
-      // global cache of all records of this table
-      fCache[i].SetCacheAll;
-      result := true;
-    end;
+  c := TableSet(aTable);
+  result := c <> nil;
+  if result then
+    c^.SetCacheAll;
 end;
 
 function TOrmCache.SetCache(aTable: TOrmClass; aID: TID): boolean;
 var
-  i: PtrInt;
+  c: POrmCacheTable;
 begin
   result := false;
-  if (self = nil) or
-     (aTable = nil) or
-     (aID <= 0) then
+  c := TableSet(aTable);
+  if (c = nil) or (aID <= 0) then
     exit;
-  i := fModel.GetTableIndex(aTable);
-  if PtrUInt(i) >= PtrUInt(Length(fCache)) then
-    exit;
-  if Rest.CacheWorthItForTable(i) then
-    fCache[i].SetCache(aID);
+  c^.SetCache(aID);
   result := true;
 end;
 
 function TOrmCache.SetCache(aTable: TOrmClass;
   const aIDs: array of TID): boolean;
 var
-  i: PtrUInt;
+  c: POrmCacheTable;
   j: PtrInt;
 begin
   result := false;
-  if (self = nil) or
-     (aTable = nil) or
-     (length(aIDs) = 0) then
+  c := TableSet(aTable);
+  if (c = nil) or (length(aIDs) = 0) then
     exit;
-  i := fModel.GetTableIndex(aTable);
-  if i >= PtrUInt(Length(fCache)) then
-    exit;
-  if Rest.CacheWorthItForTable(i) then
-    for j := 0 to high(aIDs) do
-      fCache[i].SetCache(aIDs[j]);
+  for j := 0 to high(aIDs) do
+    c^.SetCache(aIDs[j]);
   result := true;
 end;
 
 function TOrmCache.SetCache(aRecord: TOrm): boolean;
 begin
-  if (self = nil) or
-     (aRecord = nil) or
-     (aRecord.fID <= 0) then
+  if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
     result := false
   else
     result := SetCache(POrmClass(aRecord)^, aRecord.fID);
@@ -10890,13 +10869,11 @@ function TOrmCache.FillFromQuery(aTable: TOrmClass;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): integer;
 var
   rec: TOrm;
-  c: ^TOrmCacheTable;
+  c: POrmCacheTable;
 begin
   result := 0;
-  if self = nil then
-    exit;
-  c := @fCache[fModel.GetTableIndexExisting(aTable)];
-  if not c^.CacheEnable then
+  c := Table(aTable);
+  if c = nil then
     exit;
   rec := aTable.CreateAndFillPrepare(fRest, FormatSqlWhere, BoundsSqlWhere);
   try
@@ -10921,19 +10898,17 @@ end;
 
 procedure TOrmCache.Flush(aTable: TOrmClass);
 begin
-  if self <> nil then // includes *CriticalSection(Mutex):
-    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
+  Table(aTable).FlushCacheAllEntries;
 end;
 
 procedure TOrmCache.Flush(aTable: TOrmClass; aID: TID);
 begin
-  if self <> nil then
-    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntry(aID);
+  Table(aTable).FlushCacheEntry(aID);
 end;
 
 procedure TOrmCache.Flush(aTableIndex: PtrInt; aID: TID);
 begin
-  if self <> nil then
+  if (self <> nil) and (PtrUInt(aTableIndex) < PtrUInt(length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
         FlushCacheEntry(aID);
@@ -10941,18 +10916,15 @@ end;
 
 procedure TOrmCache.Flush(aTable: TOrmClass; const aIDs: array of TID);
 begin
-  if (self <> nil) and
-     (length(aIDs) > 0) then
-    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheEntries(aIDs);
+  if high(aIDs) >= 0 then
+    Table(aTable).FlushCacheEntries(aIDs);
 end;
 
 procedure TOrmCache.NotifyAllFields(aTableIndex: integer; aRecord: TOrm);
 var
   c: POrmCacheTable;
 begin
-  if (self = nil) or
-     (aRecord = nil) or
-     (aRecord.fID <= 0) then
+  if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
     exit;
   if aTableIndex < 0 then
     aTableIndex := fModel.GetTableIndex(POrmClass(aRecord)^);
@@ -10969,9 +10941,7 @@ procedure TOrmCache.NotifyUpdate(aTableIndex: integer; aRecord: TOrm;
 var
   c: POrmCacheTableValue;
 begin
-  if (self <> nil) and
-     (aRecord <> nil) and
-     (aRecord.fID > 0) and
+  if (self <> nil) and (aRecord <> nil) and (aRecord.fID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) and
      not IsZero(aFields) then
     with fCache[aTableIndex] do
@@ -10983,10 +10953,10 @@ begin
           if c <> nil then
           begin
             if c.Value = nil then
-              c.Value := aRecord.CreateCopy(aFields)
+              c.Value := aRecord.CreateCopy(aFields)    // newly cached
             else
               TOrm(c.Value).FillFrom(aRecord, aFields); // complete existing
-            c.Timestamp512 := GetTickCount64 shr 9; // 512ms resolution
+            c.Timestamp512 := GetTickCount64 shr 9;     // 512ms resolution
           end;
         finally
           Safe.WriteUnLock;
@@ -11004,10 +10974,7 @@ var
   fields: TFieldBits;
   tmp: TSynTempBuffer; // work on a private copy
 begin
-  if (self = nil) or
-     (aID <= 0) or
-     (aTable = nil) or
-     (aJson = '') or
+  if (self = nil) or (aID <= 0) or (aTable = nil) or (aJson = '') or
      (cardinal(aTableIndex) >= cardinal(Length(fCache))) or
      not fCache[aTableIndex].CacheEnable then
     exit;
@@ -11024,8 +10991,7 @@ end;
 
 procedure TOrmCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
-  if (self <> nil) and
-     (aID > 0) and
+  if (self <> nil) and (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -11035,8 +11001,7 @@ end;
 procedure TOrmCache.NotifyDeletions(aTableIndex: integer;
   const aIDs: array of TID);
 begin
-  if (self <> nil) and
-     (high(aIDs) >= 0) and
+  if (self <> nil) and (high(aIDs) >= 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
      with fCache[aTableIndex] do
        if CacheEnable then
@@ -11045,16 +11010,13 @@ end;
 
 procedure TOrmCache.NotifyDeletion(aTable: TOrmClass; aID: TID);
 begin
-  if (self <> nil) and
-     (aTable <> nil) and
-     (aID > 0) then
+  if (self <> nil) and (aTable <> nil) and (aID > 0) then
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
 function TOrmCache.Exists(aTableIndex: integer; aID: TID): boolean;
 begin
-  result := (self <> nil) and
-            (aID > 0) and
+  result := (self <> nil) and (aID > 0) and
             (cardinal(aTableIndex) < cardinal(Length(fCache))) and
             fCache[aTableIndex].Exists(aID);
 end;
@@ -11065,9 +11027,7 @@ var
   e: POrmCacheTableValue;
 begin
   result := ocrCacheDisabled;
-  if (self = nil) or
-     (aValue = nil) or
-     (aID <> 0) or
+  if (self = nil) or (aValue = nil) or (aID <= 0) or
      (cardinal(aTableIndex) >= cardinal(Length(fCache))) then
     exit;
   c := @fCache[aTableIndex];
@@ -11079,7 +11039,7 @@ begin
   if (e <> nil) and
      (e <> ORMCACHE_DEPRECATED) and
      (e^.Value <> nil) then
-    aValue.FillFrom(TOrm(e^.Value), aValue.Orm.SimpleFieldsBits[ooInsert])
+    aValue.FillFrom(TOrm(e^.Value), aValue.Orm.SimpleFieldsBits[ooSelect])
   else
     result := ocrNotInCache;
   c^.Safe.ReadUnLock;
@@ -11089,22 +11049,20 @@ end;
 
 function TOrmCache.RetrieveJson(aTable: TOrmClass; aTableIndex: integer; aID: TID): RawUtf8;
 var
-  orm: TOrm; // we use a temporary TOrm instance for the serialization itself
+  tmp: TOrm; // we use a temporary TOrm instance for the serialization itself
 begin
   result := '';
-  if (self = nil) or
-     (aTable = nil) or
-     (aID <= 0) or
+  if (self = nil) or (aTable = nil) or (aID <= 0) or
      (cardinal(aTableIndex) >= cardinal(Length(fCache))) or
      not fCache[aTableIndex].CacheEnable then
     exit;
-  orm := aTable.Create;
+  tmp := aTable.Create;
   try
-    if Retrieve(aID, orm, aTableIndex) = ocrRetrievedFromCache then
-      result := orm.GetJsonValues({expand=}true, {withid=}false,
-        orm.Orm.SimpleFieldsBits[ooSelect]);
+    if Retrieve(aID, tmp, aTableIndex) = ocrRetrievedFromCache then
+      result := tmp.GetJsonValues({expand=}true, {withid=}false,
+        tmp.Orm.SimpleFieldsBits[ooSelect]);
   finally
-    orm.Free;
+    tmp.Free;
   end;
 end;
 
