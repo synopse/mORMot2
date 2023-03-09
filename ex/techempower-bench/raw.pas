@@ -123,6 +123,9 @@ const
 
   WORLD_COUNT      = 10000;
   WORLD_READ_SQL   = 'select id,randomNumber from World where id=?';
+  WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
+    '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
+    ' where t.id = v.id';
   FORTUNES_SQL     = 'select id,message from Fortune';
 
   FORTUNES_MESSAGE = 'Additional fortune added at request time.';
@@ -171,7 +174,7 @@ begin
   fDbPool := TSqlDBPostgresConnectionProperties.Create(
     'tfb-database:5432', 'hello_world', 'benchmarkdbuser', 'benchmarkdbpass');
   {$endif USE_SQLITE3}
-  // customize JSON serializatoin for TFB expectations
+  // customize JSON serialization for TFB expectations
   TOrmWorld.OrmProps.Fields.JsonRenameProperties([
     'ID',           'id',
     'RandomNumber', 'randomNumber']);
@@ -210,7 +213,7 @@ begin
      {$endif WITH_LOGS}
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ] + flags);
-  fHttpServer.HttpQueueLength := 100000; // needed e.g. from wrk/ab benchmarks
+  fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
   // use default routing using RTTI on the TRawAsyncServer published methods
   fHttpServer.Route.RunMethods([urmGet], self);
   // wait for the server to be ready and raise exception e.g. on binding issue
@@ -308,8 +311,6 @@ begin
   // specific code to use PostgresSQL pipelining mode
   // see test_nosync in
   // https://github.com/postgres/postgres/blob/master/src/test/modules/libpq_pipeline/libpq_pipeline.c
-  if not conn.IsConnected then
-    conn.Connect;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
   pConn.EnterPipelineMode;
   pStmt := TSqlDBPostgresStatement(stmt.Instance);
@@ -557,6 +558,7 @@ function TRawAsyncServer.rawupdates(ctxt: THttpServerRequest): cardinal;
 var
   cnt, i: PtrInt;
   res: TWorlds;
+  ids, nums: TInt64DynArray;
   conn: TSqlDBConnection;
   stmt: ISQLDBStatement;
 begin
@@ -565,13 +567,31 @@ begin
   cnt := getQueriesParamValue(ctxt);
   if not getRawRandomWorlds(cnt, res) then
     exit;
-  stmt := conn.NewStatementPrepared(ComputeUpdateSql(cnt), false, true);
-  for i := 0 to cnt - 1 do
+  if cnt > 20 then
   begin
-    res[i].randomNumber := ComputeRandomWorld;
-    stmt.Bind(i * 2 + 1, res[i].id);
-    stmt.Bind(i * 2 + 2, res[i].randomNumber);
-    stmt.Bind(cnt * 2 + i + 1, res[i].id);
+    setLength(ids{%H-}, cnt);
+    setLength(nums{%H-}, cnt);
+    // generate new randoms, fill parameters arrays for update
+    for i := 0 to cnt - 1 do
+    begin
+      res[i].randomNumber := ComputeRandomWorld;
+      ids[i] := res[i].id;
+      nums[i] := res[i].randomNumber;
+    end;
+    stmt := conn.NewStatementPrepared(WORLD_UPDATE_SQLN, false, true);
+    stmt.BindArray(1, ids);
+    stmt.BindArray(2, nums);
+  end
+  else
+  begin
+    stmt := conn.NewStatementPrepared(ComputeUpdateSql(cnt), false, true);
+    for i := 0 to cnt - 1 do
+    begin
+      res[i].randomNumber := ComputeRandomWorld;
+      stmt.Bind(i * 2 + 1, res[i].id);
+      stmt.Bind(i * 2 + 2, res[i].randomNumber);
+      stmt.Bind(cnt * 2 + i + 1, res[i].id);
+    end;
   end;
   stmt.ExecutePrepared;
   ctxt.SetOutJson(@res, TypeInfo(TWorlds));
