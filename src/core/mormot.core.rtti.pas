@@ -1405,6 +1405,10 @@ procedure SetDefaultValuesObject(Instance: TObject);
 function SetValueObject(Instance: TObject; const Path: RawUtf8;
   const Value: variant): boolean;
 
+/// get any (potentially nested) object property by path
+function GetValueObject(Instance: TObject; const Path: RawUtf8;
+  out Value: variant): boolean;
+
 /// returns TRUE on a nil instance or if all its published properties are default/0
 // - calls internally TPropInfo.IsDefaultOrVoid()
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
@@ -2779,6 +2783,11 @@ type
 // - caller should ensure that namelen <> 0
 function FindCustomProp(p: PRttiCustomProp; name: pointer; namelen: TStrLen;
   count: integer): PRttiCustomProp;
+
+/// retrieve a (possibly nested) class property RTTI and instance by path
+// - as used e.g. by GetValueObject/SetValueObject wrapper functions
+function GetInstanceByPath(var Instance: TObject; const Path: RawUtf8;
+  out Prop: PRttiCustomProp; PathDelim: AnsiChar = '.'): boolean;
 
 var
   /// low-level access to the list of registered PRttiInfo/TRttiCustom/TRttiJson
@@ -7891,12 +7900,13 @@ begin
     result := nil;
     if (rc = nil) or
        (Data = nil) or
-       (Props.Count = 0) then
+       (rc.Props.Count = 0) then
       exit;
     GetNextItemShortString(FullName, @n, PathDelim);
     if n[0] in [#0, #254] then
       exit;
-    result := FindCustomProp(pointer(Props.List), @n[1], ord(n[0]), Props.Count);
+    result := FindCustomProp(
+      pointer(rc.Props.List), @n[1], ord(n[0]), rc.Props.Count);
     if (result = nil) or
        (FullName = nil) then
       exit;
@@ -8973,38 +8983,36 @@ begin
   end;
 end;
 
+function GetInstanceByPath(var Instance: TObject; const Path: RawUtf8;
+  out Prop: PRttiCustomProp; PathDelim: AnsiChar): boolean;
+begin
+  result := false;
+  if (Instance = nil) or
+     (Path = '') then
+    exit;
+  Prop := Rtti.RegisterClass(Instance).
+    PropFindByPath(pointer(Instance), pointer(Path), PathDelim);
+  result := (Prop <> nil) and
+            (Instance <> nil);
+end;
+
 function SetValueObject(Instance: TObject; const Path: RawUtf8;
   const Value: variant): boolean;
 var
-  rc: TRttiCustom;
   p: PRttiCustomProp;
-  paf: PUtf8Char;
-  n: ShortString;
 begin
-  result := false;
-  paf := pointer(Path);
-  if (Instance = nil) or
-     (paf = nil) then
-    exit;
-  rc := Rtti.RegisterClass(Instance);
-  repeat
-    GetNextItemShortString(paf, @n, '.');
-    if n[0] in [#0, #254] then
-      exit;
-    p := FindCustomProp(pointer(rc.Props.List), @n[1], ord(n[0]), rc.Props.Count);
-    if p = nil then
-      exit; // incorrect path (property not found)
-    if paf = nil then
-      break; // we reached the full path
-    if (p^.Value.Kind <> rkClass) or
-       (p^.Prop = nil) then
-      exit;
-    Instance := p^.Prop^.GetObjProp(Instance); // go one nested class level
-    if Instance = nil then
-      exit;
-    rc := p^.Value;
-  until false;
-  result := p^.Prop^.SetValue(Instance, Value);
+  result := GetInstanceByPath(Instance, Path, p) and
+            p^.Prop^.SetValue(Instance, Value);
+end;
+
+function GetValueObject(Instance: TObject; const Path: RawUtf8;
+  out Value: variant): boolean;
+var
+  p: PRttiCustomProp;
+begin
+  result := GetInstanceByPath(Instance, Path, p);
+  if result then
+    p^.GetValue(Instance, TRttiVarData(Value));
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
