@@ -1279,6 +1279,7 @@ var
   J, J2, U, U2: RawUtf8;
   info: TGetJsonField;
   P: PUtf8Char;
+  vv: variant;
   binary, zendframeworkJson, discogsJson: RawByteString;
   V: array[0..4] of TValuePUtf8Char;
   i, a, n, err: integer;
@@ -1879,8 +1880,13 @@ var
     J := ObjectToJson(GDtoObject, [woDontStoreVoid]);
     CheckEqual(J, U);
     Check(G2.NestedObject.FieldInteger = 0);
+    Check(GetValueObject(G2, 'nestedobject.fieldinteger', vv));
+    Check(vv = 0);
     Check(SetValueObject(G2, 'nestedobject.fieldinteger', 10));
     Check(G2.NestedObject.FieldInteger = 10);
+    Check(GetValueObject(G2, 'nestedobject.fieldinteger', vv));
+    Check(vv = 10);
+    Check(not GetValueObject(G2, 'nestedobject.wrongfield', vv));
 
     ClearObject(G2);
     U := ObjectToIni(G2);
