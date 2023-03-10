@@ -3742,6 +3742,7 @@ type
     procedure SetSize(NewSize: Longint); override;
   public
     /// initialize the storage, optionally with some RawByteString content
+    // - to be used for Read() from this memory buffer
     constructor Create(const aString: RawByteString); overload;
     /// read some bytes from the internal storage
     // - returns the number of bytes filled into Buffer (<=Count)
@@ -11545,7 +11546,12 @@ begin
   L := length(fDataString);
   if (StartPos = 0) and
      (Len = L) then
-    FastAssignUtf8(Text, fDataString) // FPC expects this
+  begin
+    {$ifdef HASCODEPAGE}
+    SetCodePage(fDataString, CP_UTF8, false);
+    {$endif HASCODEPAGE}
+    Text:= fDataString;
+  end
   else
   begin
     if Len - StartPos > L then
