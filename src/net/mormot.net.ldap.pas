@@ -364,6 +364,7 @@ type
   private
     fItems: TLdapResultObjArray;
     fCount: integer;
+    procedure CleanItems; // ensure Count = length(fItems)
   public
     /// finalize the list
     destructor Destroy; override;
@@ -374,12 +375,13 @@ type
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump: RawUtf8;
+    /// access to the TLdapResult objects
+    // - you can write e.g. "for res in Items do writeln(res.ObjectName)"
+    property Items: TLdapResultObjArray
+      read fItems;
     /// number of TLdapResult objects in list
     property Count: integer
       read fCount;
-    /// List of TLdapResult objects
-    property Items: TLdapResultObjArray
-      read fItems;
   end;
 
 
@@ -614,20 +616,6 @@ type
       AsCN: boolean = false): RawUtf8;
     /// retrieve al well known object DN or CN as a single convenient record
     function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
-    /// the authentication and connection settings of a this instance
-    property Settings: TLdapClientSettings
-      read fSettings;
-    /// the version of LDAP protocol used
-    // - default value is 3
-    property Version: integer
-      read fVersion Write fVersion;
-    /// contains the result code of the last LDAP operation
-    // - could be e.g. LDAP_RES_SUCCESS or an error code - see ResultString
-    property ResultCode: integer
-      read fResultCode;
-    /// human readable description of the last LDAP operation
-    property ResultString: RawUtf8
-      read fResultString;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -663,7 +651,8 @@ type
     property SearchCookie: RawUtf8
       read fSearchCookie Write fSearchCookie;
     /// result of the search command
-    property SearchResult: TLdapResultList read fSearchResult;
+    property SearchResult: TLdapResultList
+      read fSearchResult;
     /// each LDAP operation on server can return some referals URLs
     property Referals: TRawUtf8List
       read fReferals;
@@ -682,6 +671,21 @@ type
     /// domain NETBIOS name, Empty string if not found 
     property NetbiosDomainName: RawUtf8
       read GetNetbiosDomainName;
+  published
+    /// the authentication and connection settings of a this instance
+    property Settings: TLdapClientSettings
+      read fSettings;
+    /// the version of LDAP protocol used
+    // - default value is 3
+    property Version: integer
+      read fVersion write fVersion default 3;
+    /// contains the result code of the last LDAP operation
+    // - could be e.g. LDAP_RES_SUCCESS or an error code - see ResultString
+    property ResultCode: integer
+      read fResultCode;
+    /// human readable description of the last LDAP operation
+    property ResultString: RawUtf8
+      read fResultString;
   end;
 
 
@@ -1537,6 +1541,12 @@ begin
   fCount := 0;
 end;
 
+procedure TLdapResultList.CleanItems;
+begin
+  if fItems <> nil then
+    DynArrayFakeLength(fItems, fCount);
+end;
+
 function TLdapResultList.Add: TLdapResult;
 begin
   result := TLdapResult.Create;
@@ -1552,7 +1562,7 @@ begin
   result := 'results: ' + ToUtf8(Count) + CRLF + CRLF;
   for i := 0 to Count - 1 do
   begin
-    result := result + 'result: ' + ToUtf8(i) + CRLF;
+    result := result + ToUtf8(i) + ':' + CRLF;
     res := Items[i];
     result := result + '  Object: ' + res.ObjectName + CRLF;
     for j := 0 to res.Attributes.Count - 1 do
@@ -2483,6 +2493,7 @@ begin
       end;
     end;
   end;
+  fSearchResult.CleanItems; // allow "for res in ldap.SearchResult.Items do"
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
