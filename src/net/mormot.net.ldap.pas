@@ -1,4 +1,4 @@
-﻿/// Simple Network LDAP Client
+/// Simple Network LDAP Client
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.net.ldap;
@@ -315,7 +315,7 @@ type
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Value: TLdapAttribute): boolean;
-    /// change an entry’s DN
+    /// change an entry DN
     // - it can be used to rename the entry (by changing its RDN), move it to a
     // different location in the DIT (by specifying a new parent entry), or both
     function ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
