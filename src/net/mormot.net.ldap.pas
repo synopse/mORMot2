@@ -426,6 +426,10 @@ type
     /// Root DN, retrieved using DiscoverRootDN if possible
     property RootDN: RawUtf8
       read GetRootDN write fRootDN;
+    /// Cannonical domain name
+    // - Set by Login when TargetHost is empty
+    // - Used by BindSaslKerberos to discover SPN if set
+    property DomainName: RawUtf8 read fDomainName write fDomainName;
     /// domain NETBIOS name, Empty string if not found 
     property NetbiosDomainName: RawUtf8
       read GetNetbiosDomainName;
@@ -2152,7 +2156,7 @@ begin
     exit;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
-  if not Search(ComputerDN, false, '', []) then
+  if not Search(ComputerDN, false, '', []) and (ResultCode <> LDAP_RES_NO_SUCH_OBJECT) then
   begin
     ErrorMessage := GetErrorString(ResultCode);
     exit;
