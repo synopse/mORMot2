@@ -90,6 +90,7 @@ type
     BufferType: cardinal;
     pvBuffer: pointer;
     procedure Init(aType: cardinal; aData: pointer; aSize: cardinal);
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PSecBuffer = ^TSecBuffer;
 
@@ -105,6 +106,7 @@ type
     pBuffers: PSecBuffer;
     procedure Init(aVersion: cardinal;
       aBuffers: PSecBuffer; aBuffersCount: cardinal);
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PSecBufferDesc = ^TSecBufferDesc;
 
@@ -1179,6 +1181,7 @@ var
   Status: integer;
   BufPtr: PByte;
 begin
+  result := '';
   // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(
        @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
@@ -1204,13 +1207,13 @@ begin
   InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
   Assert(Sizes.cbBlockSize <= High(Padding)+1);
   InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
-  InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
+  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
   EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
   SetLength(result, EncLen);
-  BufPtr := PByte(result);
+  BufPtr := pointer(result);
   MoveFast(PByte(InBuf[0].pvBuffer)^, BufPtr^, InBuf[0].cbBuffer);
   Inc(BufPtr, InBuf[0].cbBuffer);
   MoveFast(PByte(InBuf[1].pvBuffer)^, BufPtr^, InBuf[1].cbBuffer);
@@ -1248,12 +1251,11 @@ begin
   end;
   {%H-}InBuf[0].Init(SECBUFFER_STREAM, BufPtr, EncLen);
   InBuf[1].Init(SECBUFFER_DATA, nil, 0);
-  InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
+  {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
   FastSetRawByteString(result, InBuf[1].pvBuffer, InBuf[1].cbBuffer);
-  FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
 function TlsConnectionInfo(var Ctxt: TCtxtHandle): RawUtf8;
