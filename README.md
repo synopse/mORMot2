@@ -82,6 +82,8 @@ The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
 - Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4 and 11.1.
 
+Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - use FPC 3.2.2 fixes branch instead.
+
 Please submit pull requests for non-validated versions.
 
 ### Installation
