@@ -11550,7 +11550,7 @@ begin
     {$ifdef HASCODEPAGE}
     SetCodePage(fDataString, CP_UTF8, false);
     {$endif HASCODEPAGE}
-    Text:= fDataString;
+    Text := fDataString;
   end
   else
   begin

@@ -303,7 +303,7 @@ function DnsServices(const HostName: RawUtf8;
 
 /// retrieve the LDAP controlers from the current AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
-// - optionally return the associated AD controler host name, e.g. 'mycorp.com'
+// - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
 function DnsLdapControlers(const NameServer: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 

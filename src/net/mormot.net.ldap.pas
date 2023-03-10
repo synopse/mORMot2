@@ -441,15 +441,20 @@ type
     constructor Create; override;
     /// finalize this instance
     destructor Destroy; override;
+    /// try to setup the LDAP server information from the system
+    // - use a temporary TLdapClient.Login then optionally call BindSaslKerberos
+    // - any existing KerberosDN and KerberosSpn will be used during discovery
+    function LoadDefaultFromSystem(TryKerberos: boolean): boolean;
   published
     /// target server IP (or symbolic name)
     // - default is '' but if not set, Login will call DnsLdapControlers() from
     // mormot.net.dns to retrieve the current value from the system
     // - after connect, will contain the actual server name
+    // - typical value is 'dc-one.mycorp.com'
     property TargetHost: RawUtf8
       read fTargetHost Write fTargetHost;
     /// target server port (or symbolic name)
-    // - is '389' by default but should be '636' (or '3269') on TLS
+    // - is '389' by default but could be '636' (or '3269') on TLS
     property TargetPort: RawUtf8
       read fTargetPort Write fTargetPort;
     /// milliseconds timeout for socket operations
@@ -460,18 +465,27 @@ type
     property Tls: boolean
       read fTls Write fTls;
     /// if protocol needs user authorization, then fill here user name
+    // - if you can, use instead password-less Kerberos authentication, or
+    // at least ensure the connection is secured via TLS
     property UserName: RawUtf8
       read fUserName Write fUserName;
     /// if protocol needs user authorization, then fill here its password
+    // - if you can, use instead password-less Kerberos authentication, or
+    // at least ensure the connection is secured via TLS
     property Password: SpiUtf8
       read fPassword Write fPassword;
     /// Kerberos Canonical Domain Name
     // - as set by Login when TargetHost is empty
+    // - can be pre-set before Login if the system is not part of the domain
     // - used by BindSaslKerberos to compute the SPN
+    // - typical value is 'ad.mycorp.com'
     property KerberosDN: RawUtf8
       read fKerberosDN write fKerberosDN;
     /// Kerberos Canonical Domain Name
-    // - as used or set by BindSaslKerberos for its SPN
+    // - as used or computed by BindSaslKerberos for its SPN
+    // - can be pre-set before BindSaslKerberos if the SPN is not of a standard
+    // 'LDAP/<targethost>@<DOMAIN>' form
+    // - typical value is e.g. 'LDAP/dc-one.mycorp.com@AD.MYCORP.COM'
     property KerberosSpn: RawUtf8
       read fKerberosSpn write fKerberosSpn;
   end;
@@ -1570,6 +1584,29 @@ begin
   FillZero(fPassword);
 end;
 
+function TLdapClientSettings.LoadDefaultFromSystem(TryKerberos: boolean): boolean;
+var
+  test: TLdapClient;
+begin
+  result := false;
+  test := TLdapClient.Create;
+  try
+    test.Settings.KerberosDN := fKerberosDN; // allow customization
+    if not test.Login then
+      exit;
+    if TryKerberos then
+    begin
+      test.Settings.KerberosSpn := fKerberosSpn;
+      if not test.BindSaslKerberos then
+        exit;
+    end;
+    CopyObject(test.Settings, self);
+  finally
+    test.Free;
+  end;
+  result := true;
+end;
+
 
 { TLdapClient }
 
@@ -1707,7 +1744,11 @@ begin
   if result then
     exit; // socket was already connected
   if fSettings.TargetHost = '' then
-    dc := DnsLdapControlers('', false, @fSettings.KerberosDN)  // from OS
+  begin
+    if ForcedDomainName = '' then
+      ForcedDomainName := fSettings.KerberosDN; // may be pre-set
+    dc := DnsLdapControlers('', false, @fSettings.fKerberosDN);  // from OS
+  end
   else
     AddRawUtf8(dc,  // from instance properties
       fSettings.TargetHost + ':' + fSettings.TargetPort);
