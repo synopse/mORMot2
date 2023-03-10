@@ -7,6 +7,8 @@ unit mormot.net.ldap;
   *****************************************************************************
 
    Simple LDAP Protocol Client
+    - Basic ASN.1 Support
+    - LDAP Protocol Definitions
     - LDAP Response Storage
     - LDAP Client Class
 
@@ -23,22 +25,211 @@ interface
 uses
   sysutils,
   classes,
-  mormot.net.sock,
-  mormot.net.dns,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
   mormot.core.text,
   mormot.core.unicode,
+  mormot.core.rtti,
   mormot.core.data,
   mormot.lib.sspi, // do-nothing units on non compliant OS
   mormot.lib.gssapi,
-  mormot.crypt.core;
+  mormot.crypt.core,
+  mormot.net.sock,
+  mormot.net.dns;
 
 
-{ **************** LDAP Response Storage }
+{ **************** Basic ASN.1 Support }
+
+type
+  /// we defined our own type to hold an ASN object binary
+  TAsnObject = RawByteString;
 
 const
+  // base types
+  ASN1_BOOL        = $01;
+  ASN1_INT         = $02;
+  ASN1_BITSTR      = $03;
+  ASN1_OCTSTR      = $04;
+  ASN1_NULL        = $05;
+  ASN1_OBJID       = $06;
+  ASN1_ENUM        = $0a;
+  ASN1_UTF8STRING  = $0c;
+  ASN1_SEQ         = $30;
+  ASN1_SETOF       = $31;
+  ASN1_IPADDR      = $40;
+  ASN1_COUNTER     = $41;
+  ASN1_GAUGE       = $42;
+  ASN1_TIMETICKS   = $43;
+  ASN1_OPAQUE      = $44;
+  ASN1_COUNTER64   = $46;
+
+  // class type masks
+  ASN1_CL_APP   = $40;
+  ASN1_CL_CTX   = $80;
+  ASN1_CL_PRI   = $c0;
+
+  //  context-specific class, tag #n
+  ASN1_CTX0  = $80;
+  ASN1_CTX1  = $81;
+  ASN1_CTX2  = $82;
+  ASN1_CTX3  = $83;
+  ASN1_CTX4  = $84;
+  ASN1_CTX5  = $85;
+  ASN1_CTX6  = $86;
+  ASN1_CTX7  = $87;
+  ASN1_CTX8  = $88;
+  ASN1_CTX9  = $89;
+
+  //  context-specific class, constructed, tag #n
+  ASN1_CTC0  = $a0;
+  ASN1_CTC1  = $a1;
+  ASN1_CTC2  = $a2;
+  ASN1_CTC3  = $a3;
+  ASN1_CTC4  = $a4;
+  ASN1_CTC5  = $a5;
+  ASN1_CTC6  = $a6;
+  ASN1_CTC7  = $a7;
+  ASN1_CTC8  = $a8;
+  ASN1_CTC9  = $a9;
+
+  ASN1_BOOLEAN: array[boolean] of byte = (
+    $00,
+    $ff);
+
+/// encode a 64-bit signed integer value into ASN.1 binary
+function AsnEncInt(Value: Int64): TAsnObject;
+
+/// encode a 64-bit unsigned OID integer value into ASN.1 binary
+function AsnEncOidItem(Value: Int64): TAsnObject;
+
+/// encode the len of a ASN.1 binary item
+function AsnEncLen(Len: cardinal; dest: PByte): PtrInt;
+
+/// create an ASN.1 binary from the aggregation of several binaries
+function Asn(AsnType: integer;
+  const Content: array of TAsnObject): TAsnObject; overload;
+
+/// create an ASN.1 binary from some raw data - as OCTSTR by default
+function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObject;
+  overload; {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
+function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
+
+/// create an ASN.1 binary from a boolean value
+function Asn(Value: boolean): TAsnObject; overload;
+
+/// create an ASN.1 SEQuence from some raw data
+function AsnSeq(const Data: TAsnObject): TAsnObject;
+
+/// raw append some binary to an ASN.1 object buffer
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
+  overload; {$ifdef HASINLINE} inline; {$endif}
+
+/// encode and append some raw data as ASN.1
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
+  AsnType: integer); overload;
+
+/// decode the len of a ASN.1 binary item
+function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
+
+/// decode an OID ASN.1 value into human-readable text
+function OidToText(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
+
+/// parse the next ASN.1 value as text
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  out ValueType: integer): RawByteString;
+
+/// convert a Distinguished Name to a Canonical Name
+// - raise an exception if the supplied DN is not a valid Distinguished Name
+// - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
+// 'xyz.local/London/Users/User1'
+function DNToCN(const DN: RawUtf8): RawUtf8;
+
+
+
+{ **************** LDAP Protocol Definitions }
+
+const
+  // LDAP result codes
+  LDAP_RES_SUCCESS                        = 0;
+  LDAP_RES_OPERATIONS_ERROR               = 1;
+  LDAP_RES_PROTOCOL_ERROR                 = 2;
+  LDAP_RES_TIME_LIMIT_EXCEEDED            = 3;
+  LDAP_RES_SIZE_LIMIT_EXCEEDED            = 4;
+  LDAP_RES_COMPARE_FALSE                  = 5;
+  LDAP_RES_COMPARE_TRUE                   = 6;
+  LDAP_RES_AUTH_METHOD_NOT_SUPPORTED      = 7;
+  LDAP_RES_STRONGER_AUTH_REQUIRED         = 8;
+  LDAP_RES_REFERRAL                       = 10;
+  LDAP_RES_ADMIN_LIMIT_EXCEEDED           = 11;
+  LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION = 12;
+  LDAP_RES_CONFIDENTIALITY_REQUIRED       = 13;
+  LDAP_RES_SASL_BIND_IN_PROGRESS          = 14;
+  LDAP_RES_NO_SUCH_ATTRIBUTE              = 16;
+  LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE       = 17;
+  LDAP_RES_INAPPROPRIATE_MATCHING         = 18;
+  LDAP_RES_CONSTRAINT_VIOLATION           = 19;
+  LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS      = 20;
+  LDAP_RES_INVALID_ATTRIBUTE_SYNTAX       = 21;
+  LDAP_RES_NO_SUCH_OBJECT                 = 32;
+  LDAP_RES_ALIAS_PROBLEM                  = 33;
+  LDAP_RES_INVALID_DN_SYNTAX              = 34;
+  LDAP_RES_IS_LEAF                        = 35;
+  LDAP_RES_ALIAS_DEREFERENCING_PROBLEM    = 36;
+  LDAP_RES_INAPPROPRIATE_AUTHENTICATION   = 48;
+  LDAP_RES_INVALID_CREDENTIALS            = 49;
+  LDAP_RES_INSUFFICIENT_ACCElssRIGHTS     = 50;
+  LDAP_RES_BUSY                           = 51;
+  LDAP_RES_UNAVAILABLE                    = 52;
+  LDAP_RES_UNWILLING_TO_PERFORM           = 53;
+  LDAP_RES_LOOP_DETECT                    = 54;
+  LDAP_RES_SORT_CONTROL_MISSING           = 60;
+  LDAP_RES_OFFSET_RANGE_ERROR             = 61;
+  LDAP_RES_NAMING_VIOLATION               = 64;
+  LDAP_RES_OBJECT_CLAlssVIOLATION         = 65;
+  LDAP_RES_NOT_ALLOWED_ON_NON_LEAF        = 66;
+  LDAP_RES_NOT_ALLOWED_ON_RDN             = 67;
+  LDAP_RES_ENTRY_ALREADY_EXISTS           = 68;
+  LDAP_RES_OBJECT_CLAlssMODS_PROHIBITED   = 69;
+  LDAP_RES_RESULTS_TOO_LARGE              = 70;
+  LDAP_RES_AFFECTS_MULTIPLE_DSAS          = 71;
+  LDAP_RES_CONTROL_ERROR                  = 76;
+  LDAP_RES_OTHER                          = 80;
+  LDAP_RES_SERVER_DOWN                    = 81;
+  LDAP_RES_LOCAL_ERROR                    = 82;
+  LDAP_RES_ENCODING_ERROR                 = 83;
+  LDAP_RES_DECODING_ERROR                 = 84;
+  LDAP_RES_TIMEOUT                        = 85;
+  LDAP_RES_AUTH_UNKNOWN                   = 86;
+  LDAP_RES_FILTER_ERROR                   = 87;
+  LDAP_RES_USER_CANCELED                  = 88;
+  LDAP_RES_PARAM_ERROR                    = 89;
+  LDAP_RES_NO_MEMORY                      = 90;
+  LDAP_RES_CONNECT_ERROR                  = 91;
+  LDAP_RES_NOT_SUPPORTED                  = 92;
+  LDAP_RES_CONTROL_NOT_FOUND              = 93;
+  LDAP_RES_NO_RESULTS_RETURNED            = 94;
+  LDAP_RES_MORE_RESULTS_TO_RETURN         = 95;
+  LDAP_RES_CLIENT_LOOP                    = 96;
+  LDAP_RES_REFERRAL_LIMIT_EXCEEDED        = 97;
+  LDAP_RES_INVALID_RESPONSE               = 100;
+  LDAP_RES_AMBIGUOUS_RESPONSE             = 101;
+  LDAP_RES_TLS_NOT_SUPPORTED              = 112;
+  LDAP_RES_INTERMEDIATE_RESPONSE          = 113;
+  LDAP_RES_UNKNOWN_TYPE                   = 114;
+  LDAP_RES_CANCELED                       = 118;
+  LDAP_RES_NO_SUCH_OPERATION              = 119;
+  LDAP_RES_TOO_LATE                       = 120;
+  LDAP_RES_CANNOT_CANCEL                  = 121;
+  LDAP_RES_ASSERTION_FAILED               = 122;
+  LDAP_RES_AUTHORIZATION_DENIED           = 123;
+  LDAP_RES_ESYNC_REFRESH_REQUIRED         = 4096;
+  LDAP_RES_NO_OPERATION                   = 16654;
+
+const
+  // Well-Known LDAP Objects GUID
   GUID_COMPUTERS_CONTAINER_W                 = 'AA312825768811D1ADED00C04FD8D5CD';
   GUID_DELETED_OBJECTS_CONTAINER_W           = '18E2EA80684F11D2B9AA00C04F79F805';
   GUID_DOMAIN_CONTROLLERS_CONTAINER_W        = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
@@ -51,6 +242,33 @@ const
   GUID_SYSTEMS_CONTAINER_W                   = 'AB1D30F3768811D1ADED00C04FD8D5CD';
   GUID_USERS_CONTAINER_W                     = 'A9D1CA15768811D1ADED00C04FD8D5CD';
   GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W  = '1EB93889E40C45DF9F0C64D23BBB6237';
+
+const
+  // LDAP ASN.1 types
+  LDAP_ASN1_BIND_REQUEST      = $60;
+  LDAP_ASN1_BIND_RESPONSE     = $61;
+  LDAP_ASN1_UNBIND_REQUEST    = $42;
+  LDAP_ASN1_SEARCH_REQUEST    = $63;
+  LDAP_ASN1_SEARCH_ENTRY      = $64;
+  LDAP_ASN1_SEARCH_DONE       = $65;
+  LDAP_ASN1_SEARCH_REFERENCE  = $73;
+  LDAP_ASN1_MODIFY_REQUEST    = $66;
+  LDAP_ASN1_MODIFY_RESPONSE   = $67;
+  LDAP_ASN1_ADD_REQUEST       = $68;
+  LDAP_ASN1_ADD_RESPONSE      = $69;
+  LDAP_ASN1_DEL_REQUEST       = $4a;
+  LDAP_ASN1_DEL_RESPONSE      = $6b;
+  LDAP_ASN1_MODIFYDN_REQUEST  = $6c;
+  LDAP_ASN1_MODIFYDN_RESPONSE = $6d;
+  LDAP_ASN1_COMPARE_REQUEST   = $6e;
+  LDAP_ASN1_COMPARE_RESPONSE  = $6f;
+  LDAP_ASN1_ABANDON_REQUEST   = $70;
+  LDAP_ASN1_EXT_REQUEST       = $77;
+  LDAP_ASN1_EXT_RESPONSE      = $78;
+  LDAP_ASN1_CONTROLS          = $a0;
+
+
+{ **************** LDAP Response Storage }
 
 type
   /// store a named LDAP attribute with the list of its values
@@ -165,40 +383,31 @@ type
   end;
 
 
-/// convert a Distinguished Name to a Canonical Name
-// - raise an exception if the supplied DN is not a valid Distinguished Name
-// - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
-// 'xyz.local/London/Users/User1'
-function DNToCN(const DN: RawUtf8): RawUtf8;
-
 
 { **************** LDAP Client Class }
 
 type
   /// define possible operations for LDAP MODIFY operations
   TLdapModifyOp = (
-    MO_Add,
-    MO_Delete,
-    MO_Replace
+    lmoAdd,
+    lmoDelete,
+    lmoReplace
   );
 
   /// define possible values for LDAP search scope
   TLdapSearchScope = (
-    SS_BaseObject,
-    SS_SingleLevel,
-    SS_WholeSubtree
+    lssBaseObject,
+    lssSingleLevel,
+    lssWholeSubtree
   );
 
   /// define possible values about LDAP alias dereferencing
   TLdapSearchAliases = (
-    SA_NeverDeref,
-    SA_InSearching,
-    SA_FindingBaseObj,
-    SA_Always
+    lsaNeverDeref,
+    lsaInSearching,
+    lsaFindingBaseObj,
+    lsaAlways
   );
-
-  /// we defined our own type to hold an ASN object binary
-  TAsnObject = RawByteString;
 
   /// the resultset of TLdapClient.GetWellKnownObjects()
   TLdapKnownCommonNames = record
@@ -216,27 +425,74 @@ type
     ManagedServiceAccounts: RawUtf8;
   end;
 
+  /// store the authentication and connection settings of a TLdapClient instance
+  TLdapClientSettings = class(TSynPersistent)
+  protected
+    fTargetHost: RawUtf8;
+    fTargetPort: RawUtf8;
+    fUserName: RawUtf8;
+    fPassword: SpiUtf8;
+    fKerberosDN: RawUtf8;
+    fKerberosSpn: RawUtf8;
+    fTimeout: integer;
+    fTls: boolean;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// finalize this instance
+    destructor Destroy; override;
+  published
+    /// target server IP (or symbolic name)
+    // - default is '' but if not set, Login will call DnsLdapControlers() from
+    // mormot.net.dns to retrieve the current value from the system
+    // - after connect, will contain the actual server name
+    property TargetHost: RawUtf8
+      read fTargetHost Write fTargetHost;
+    /// target server port (or symbolic name)
+    // - is '389' by default but should be '636' (or '3269') on TLS
+    property TargetPort: RawUtf8
+      read fTargetPort Write fTargetPort;
+    /// milliseconds timeout for socket operations
+    // - default is 5000, ie. 5 seconds
+    property Timeout: integer
+      read fTimeout Write fTimeout;
+    /// if connection to the LDAP server is secured via TLS
+    property Tls: boolean
+      read fTls Write fTls;
+    /// if protocol needs user authorization, then fill here user name
+    property UserName: RawUtf8
+      read fUserName Write fUserName;
+    /// if protocol needs user authorization, then fill here its password
+    property Password: SpiUtf8
+      read fPassword Write fPassword;
+    /// Kerberos Canonical Domain Name
+    // - as set by Login when TargetHost is empty
+    // - used by BindSaslKerberos to compute the SPN
+    property KerberosDN: RawUtf8
+      read fKerberosDN write fKerberosDN;
+    /// Kerberos Canonical Domain Name
+    // - as used or set by BindSaslKerberos for its SPN
+    property KerberosSpn: RawUtf8
+      read fKerberosSpn write fKerberosSpn;
+  end;
+
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
   TLdapClient = class(TSynPersistent)
-  private
-    fTargetHost: RawUtf8;
-    fTargetPort: RawUtf8;
-    fTimeout: integer;
-    fUserName: RawUtf8;
-    fPassword: RawUtf8;
+  protected
+    fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
+    fSeq: integer;
     fResultCode: integer;
     fResultString: RawUtf8;
     fFullResult: TAsnObject;
-    fFullTls: boolean;
     fTlsContext: TNetTlsContext;
-    fSeq: integer;
     fResponseCode: integer;
     fResponseDN: RawUtf8;
     fReferals: TRawUtf8List;
     fVersion: integer;
+    fBound: boolean;
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
     fSearchSizeLimit: integer;
@@ -247,8 +503,6 @@ type
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
-    fDomainName: RawUtf8;
-    fBound: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     function GetNetbiosDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
@@ -262,7 +516,10 @@ type
     function ReceiveString(Size: integer): RawByteString;
   public
     /// initialize this LDAP client instance
-    constructor Create; override;
+    constructor Create; overload; override;
+    /// initialize this LDAP client instance with the given settings
+    // - which may be persisted as JSON e.g. into a TSynAutoCreateFields holder
+    constructor Create(aSettings: TLdapClientSettings); reintroduce; overload;
     /// finalize this LDAP client instance
     destructor Destroy; override;
     /// try to connect to LDAP server
@@ -282,8 +539,9 @@ type
     // - if no UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
     // - if no SPN is supplied, derivate one from Login's DnsLdapControlers()
-    function BindSaslKerberos(const ServicePrincipalName: RawUtf8 = '';
-      const AuthIdentify: RawUtf8 = ''): boolean;
+    // - can optionally return the KerberosUser which made the authentication
+    function BindSaslKerberos(const AuthIdentify: RawUtf8 = '';
+      KerberosUser: PRawUtf8 = nil): boolean;
     /// close connection to the LDAP server
     function Logout: boolean;
     /// retrieve all entries that match a given set of criteria
@@ -300,7 +558,8 @@ type
     /// retrieve the entry matching the given ObjectDN
     // - Will call Search method, therefore SearchResult will contains all the results
     // - Returns nil if the object is not found or if the search failed
-    function SearchObject(const ObjectDN: RawUtf8; const Attributes: array of RawByteString): TLdapResult;
+    function SearchObject(const ObjectDN: RawUtf8;
+      const Attributes: array of RawByteString): TLdapResult;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -341,30 +600,13 @@ type
       AsCN: boolean = false): RawUtf8;
     /// retrieve al well known object DN or CN as a single convenient record
     function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
+    /// the authentication and connection settings of a this instance
+    property Settings: TLdapClientSettings
+      read fSettings;
     /// the version of LDAP protocol used
     // - default value is 3
     property Version: integer
       read fVersion Write fVersion;
-    /// target server IP (or symbolic name)
-    // - default is '' but if not set, Login will call DnsLdapControlers() from
-    // mormot.net.dns to retrieve the current value from the system
-    // - after connect, will contain the actual server name
-    property TargetHost: RawUtf8
-      read fTargetHost Write fTargetHost;
-    /// target server port (or symbolic name)
-    // - is '389' by default but should be '636' (or '3269') on TLS
-    property TargetPort: RawUtf8
-      read fTargetPort Write fTargetPort;
-    /// milliseconds timeout for socket operations
-    // - default is 5000, ie. 5 seconds
-    property Timeout: integer
-      read fTimeout Write fTimeout;
-    /// if protocol needs user authorization, then fill here user name
-    property UserName: RawUtf8
-      read fUserName Write fUserName;
-    /// if protocol needs user authorization, then fill here its password
-    property Password: RawUtf8
-      read fPassword Write fPassword;
     /// contains the result code of the last LDAP operation
     // - could be e.g. LDAP_RES_SUCCESS or an error code - see ResultString
     property ResultCode: integer
@@ -377,9 +619,6 @@ type
     // - You need this only for debugging
     property FullResult: TAsnObject
       read fFullResult;
-    /// if connection to the LDAP server is through TLS tunnel
-    property FullTls: boolean
-      read fFullTls Write fFullTls;
     /// optional advanced options for FullTls = true
     property TlsContext: TNetTlsContext
       read fTlsContext write fTlsContext;
@@ -418,105 +657,25 @@ type
     property ExtName: RawUtf8
       read fExtName;
     /// on Extended operation, here is the result Value as returned by server
-    property ExtValue: RawUtf8 read
-      fExtValue;
+    property ExtValue: RawUtf8
+      read fExtValue;
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
     /// Root DN, retrieved using DiscoverRootDN if possible
     property RootDN: RawUtf8
       read GetRootDN write fRootDN;
-    /// Cannonical domain name
-    // - Set by Login when TargetHost is empty
-    // - Used by BindSaslKerberos to discover SPN if set
-    property DomainName: RawUtf8 read fDomainName write fDomainName;
     /// domain NETBIOS name, Empty string if not found 
     property NetbiosDomainName: RawUtf8
       read GetNetbiosDomainName;
   end;
-
-const
-  LDAP_RES_SUCCESS                        = 0;
-  LDAP_RES_OPERATIONS_ERROR               = 1;
-  LDAP_RES_PROTOCOL_ERROR                 = 2;
-  LDAP_RES_TIME_LIMIT_EXCEEDED            = 3;
-  LDAP_RES_SIZE_LIMIT_EXCEEDED            = 4;
-  LDAP_RES_COMPARE_FALSE                  = 5;
-  LDAP_RES_COMPARE_TRUE                   = 6;
-  LDAP_RES_AUTH_METHOD_NOT_SUPPORTED      = 7;
-  LDAP_RES_STRONGER_AUTH_REQUIRED         = 8;
-  LDAP_RES_REFERRAL                       = 10;
-  LDAP_RES_ADMIN_LIMIT_EXCEEDED           = 11;
-  LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION = 12;
-  LDAP_RES_CONFIDENTIALITY_REQUIRED       = 13;
-  LDAP_RES_SASL_BIND_IN_PROGRESS          = 14;
-  LDAP_RES_NO_SUCH_ATTRIBUTE              = 16;
-  LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE       = 17;
-  LDAP_RES_INAPPROPRIATE_MATCHING         = 18;
-  LDAP_RES_CONSTRAINT_VIOLATION           = 19;
-  LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS      = 20;
-  LDAP_RES_INVALID_ATTRIBUTE_SYNTAX       = 21;
-  LDAP_RES_NO_SUCH_OBJECT                 = 32;
-  LDAP_RES_ALIAS_PROBLEM                  = 33;
-  LDAP_RES_INVALID_DN_SYNTAX              = 34;
-  LDAP_RES_IS_LEAF                        = 35;
-  LDAP_RES_ALIAS_DEREFERENCING_PROBLEM    = 36;
-  LDAP_RES_INAPPROPRIATE_AUTHENTICATION   = 48;
-  LDAP_RES_INVALID_CREDENTIALS            = 49;
-  LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS     = 50;
-  LDAP_RES_BUSY                           = 51;
-  LDAP_RES_UNAVAILABLE                    = 52;
-  LDAP_RES_UNWILLING_TO_PERFORM           = 53;
-  LDAP_RES_LOOP_DETECT                    = 54;
-  LDAP_RES_SORT_CONTROL_MISSING           = 60;
-  LDAP_RES_OFFSET_RANGE_ERROR             = 61;
-  LDAP_RES_NAMING_VIOLATION               = 64;
-  LDAP_RES_OBJECT_CLASS_VIOLATION         = 65;
-  LDAP_RES_NOT_ALLOWED_ON_NON_LEAF        = 66;
-  LDAP_RES_NOT_ALLOWED_ON_RDN             = 67;
-  LDAP_RES_ENTRY_ALREADY_EXISTS           = 68;
-  LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED   = 69;
-  LDAP_RES_RESULTS_TOO_LARGE              = 70;
-  LDAP_RES_AFFECTS_MULTIPLE_DSAS          = 71;
-  LDAP_RES_CONTROL_ERROR                  = 76;
-  LDAP_RES_OTHER                          = 80;
-  LDAP_RES_SERVER_DOWN                    = 81;
-  LDAP_RES_LOCAL_ERROR                    = 82;
-  LDAP_RES_ENCODING_ERROR                 = 83;
-  LDAP_RES_DECODING_ERROR                 = 84;
-  LDAP_RES_TIMEOUT                        = 85;
-  LDAP_RES_AUTH_UNKNOWN                   = 86;
-  LDAP_RES_FILTER_ERROR                   = 87;
-  LDAP_RES_USER_CANCELED                  = 88;
-  LDAP_RES_PARAM_ERROR                    = 89;
-  LDAP_RES_NO_MEMORY                      = 90;
-  LDAP_RES_CONNECT_ERROR                  = 91;
-  LDAP_RES_NOT_SUPPORTED                  = 92;
-  LDAP_RES_CONTROL_NOT_FOUND              = 93;
-  LDAP_RES_NO_RESULTS_RETURNED            = 94;
-  LDAP_RES_MORE_RESULTS_TO_RETURN         = 95;
-  LDAP_RES_CLIENT_LOOP                    = 96;
-  LDAP_RES_REFERRAL_LIMIT_EXCEEDED        = 97;
-  LDAP_RES_INVALID_RESPONSE               = 100;
-  LDAP_RES_AMBIGUOUS_RESPONSE             = 101;
-  LDAP_RES_TLS_NOT_SUPPORTED              = 112;
-  LDAP_RES_INTERMEDIATE_RESPONSE          = 113;
-  LDAP_RES_UNKNOWN_TYPE                   = 114;
-  LDAP_RES_CANCELED                       = 118;
-  LDAP_RES_NO_SUCH_OPERATION              = 119;
-  LDAP_RES_TOO_LATE                       = 120;
-  LDAP_RES_CANNOT_CANCEL                  = 121;
-  LDAP_RES_ASSERTION_FAILED               = 122;
-  LDAP_RES_AUTHORIZATION_DENIED           = 123;
-  LDAP_RES_ESYNC_REFRESH_REQUIRED         = 4096;
-  LDAP_RES_NO_OPERATION                   = 16654;
 
 
 
 implementation
 
 
-{ ****** Support procedures and functions ****** }
+{****** Support procedures and functions }
 
 procedure UnquoteStr(Value: PUtf8Char; var result: RawUtf8);
 begin
@@ -657,7 +816,8 @@ begin
             case Value[x] of
               '0'..'9':
                 b := (byte(Value[x]) - 48) shl 4;
-              'a'..'f', 'A'..'F':
+              'a'..'f',
+              'A'..'F':
                 b := ((byte(Value[x]) and 7) + 9) shl 4;
             else
               begin
@@ -668,7 +828,8 @@ begin
             case Value[x + 1] of
               '0'..'9':
                 b := b or (byte(Value[x + 1]) - 48);
-              'a'..'f', 'A'..'F':
+              'a'..'f',
+              'A'..'F':
                 b := b or ((byte(Value[x + 1]) and 7) + 9);
             else
               bad := true;
@@ -748,83 +909,7 @@ end;
 
 
 
-{ ****** ASN.1 BER encoding/decoding ****** }
-
-const
-  // base types
-  ASN1_BOOL        = $01;
-  ASN1_INT         = $02;
-  ASN1_BITSTR      = $03;
-  ASN1_OCTSTR      = $04;
-  ASN1_NULL        = $05;
-  ASN1_OBJID       = $06;
-  ASN1_ENUM        = $0a;
-  ASN1_UTF8STRING  = $0c;
-  ASN1_SEQ         = $30;
-  ASN1_SETOF       = $31;
-  ASN1_IPADDR      = $40;
-  ASN1_COUNTER     = $41;
-  ASN1_GAUGE       = $42;
-  ASN1_TIMETICKS   = $43;
-  ASN1_OPAQUE      = $44;
-  ASN1_COUNTER64   = $46;
-
-  // class type masks
-  ASN1_CL_APP   = $40;
-  ASN1_CL_CTX   = $80;
-  ASN1_CL_PRI   = $c0;
-
-  //  context-specific class, tag #n
-  ASN1_CTX0  = $80;
-  ASN1_CTX1  = $81;
-  ASN1_CTX2  = $82;
-  ASN1_CTX3  = $83;
-  ASN1_CTX4  = $84;
-  ASN1_CTX5  = $85;
-  ASN1_CTX6  = $86;
-  ASN1_CTX7  = $87;
-  ASN1_CTX8  = $88;
-  ASN1_CTX9  = $89;
-
-  //  context-specific class, constructed, tag #n
-  ASN1_CTC0  = $a0;
-  ASN1_CTC1  = $a1;
-  ASN1_CTC2  = $a2;
-  ASN1_CTC3  = $a3;
-  ASN1_CTC4  = $a4;
-  ASN1_CTC5  = $a5;
-  ASN1_CTC6  = $a6;
-  ASN1_CTC7  = $a7;
-  ASN1_CTC8  = $a8;
-  ASN1_CTC9  = $a9;
-
-  ASN1_BOOLEAN: array[boolean] of byte = (
-    $00,
-    $ff);
-
-  // LDAP types
-  LDAP_ASN1_BIND_REQUEST      = $60;
-  LDAP_ASN1_BIND_RESPONSE     = $61;
-  LDAP_ASN1_UNBIND_REQUEST    = $42;
-  LDAP_ASN1_SEARCH_REQUEST    = $63;
-  LDAP_ASN1_SEARCH_ENTRY      = $64;
-  LDAP_ASN1_SEARCH_DONE       = $65;
-  LDAP_ASN1_SEARCH_REFERENCE  = $73;
-  LDAP_ASN1_MODIFY_REQUEST    = $66;
-  LDAP_ASN1_MODIFY_RESPONSE   = $67;
-  LDAP_ASN1_ADD_REQUEST       = $68;
-  LDAP_ASN1_ADD_RESPONSE      = $69;
-  LDAP_ASN1_DEL_REQUEST       = $4a;
-  LDAP_ASN1_DEL_RESPONSE      = $6b;
-  LDAP_ASN1_MODIFYDN_REQUEST  = $6c;
-  LDAP_ASN1_MODIFYDN_RESPONSE = $6d;
-  LDAP_ASN1_COMPARE_REQUEST   = $6e;
-  LDAP_ASN1_COMPARE_RESPONSE  = $6f;
-  LDAP_ASN1_ABANDON_REQUEST   = $70;
-  LDAP_ASN1_EXT_REQUEST       = $77;
-  LDAP_ASN1_EXT_RESPONSE      = $78;
-  LDAP_ASN1_CONTROLS          = $a0;
-
+{ **************** Basic ASN.1 Support }
 
 function AsnEncOidItem(Value: Int64): TAsnObject;
 var
@@ -944,8 +1029,7 @@ begin
   until n = 0;
 end;
 
-function Asn(AsnType: integer;
-  const Content: array of TAsnObject): TAsnObject; overload;
+function Asn(AsnType: integer; const Content: array of TAsnObject): TAsnObject;
 var
   tmp: array[0..7] of byte;
   i, len, al: PtrInt;
@@ -969,18 +1053,17 @@ begin
   end;
 end;
 
-function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObject;
-  overload; {$ifdef HASINLINE} inline; {$endif}
+function Asn(const Data: RawByteString; AsnType: integer): TAsnObject;
 begin
   result := Asn(AsnType, [Data]);
 end;
 
-function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
+function Asn(Value: Int64; AsnType: integer): TAsnObject;
 begin
   result := Asn(AsnType, [AsnEncInt(Value)]);
 end;
 
-function Asn(Value: boolean): TAsnObject; overload;
+function Asn(Value: boolean): TAsnObject;
 begin
   result := Asn(ASN1_BOOL, [AsnEncInt(ASN1_BOOLEAN[Value])]);
 end;
@@ -991,18 +1074,16 @@ begin
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
-  overload; {$ifdef HASINLINE} inline; {$endif}
 begin
   AppendBufferToRawByteString(Data, Buffer);
 end;
 
-procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
-  AsnType: integer); overload;
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
 begin
   AppendBufferToRawByteString(Data, Asn(AsnType, [Buffer]));
 end;
 
-function IdToMib(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
+function OidToText(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
 var
   x, y: integer;
 begin
@@ -1079,7 +1160,7 @@ begin
         end;
       ASN1_OBJID:
         begin
-          result := IdToMib(Pos, Pos + asnsize, Buffer);
+          result := OidToText(Pos, Pos + asnsize, Buffer);
           inc(Pos, asnsize);
         end;
       ASN1_IPADDR:
@@ -1473,19 +1554,41 @@ end;
 
 { **************** LDAP Client Class }
 
+
+{ TLdapClientSettings }
+
+constructor TLdapClientSettings.Create;
+begin
+  inherited Create;
+  fTargetPort := '389';
+  fTimeout := 5000;
+end;
+
+destructor TLdapClientSettings.Destroy;
+begin
+  inherited Destroy;
+  FillZero(fPassword);
+end;
+
+
 { TLdapClient }
 
 constructor TLdapClient.Create;
 begin
   inherited Create;
+  fSettings := TLdapClientSettings.Create;
   fReferals := TRawUtf8List.Create;
-  fTargetPort := '389';
   fTlsContext.IgnoreCertificateErrors := true;
-  fTimeout := 60000;
   fVersion := 3;
-  fSearchScope := SS_WholeSubtree;
-  fSearchAliases := SA_Always;
+  fSearchScope := lssWholeSubtree;
+  fSearchAliases := lsaAlways;
   fSearchResult := TLdapResultList.Create;
+end;
+
+constructor TLdapClient.Create(aSettings: TLdapClientSettings);
+begin
+  Create;
+  CopyObject(aSettings, fSettings);
 end;
 
 destructor TLdapClient.Destroy;
@@ -1493,6 +1596,7 @@ begin
   fSock.Free;
   fSearchResult.Free;
   fReferals.Free;
+  fSettings.Free;
   inherited Destroy;
 end;
 
@@ -1551,7 +1655,7 @@ begin
       result := 'Inappropriate authentication';
     LDAP_RES_INVALID_CREDENTIALS:
       result := 'Invalid credentials';
-    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS:
+    LDAP_RES_INSUFFICIENT_ACCElssRIGHTS:
       result := 'Insufficient access rights';
     LDAP_RES_BUSY:
       result := 'Busy';
@@ -1563,7 +1667,7 @@ begin
       result := 'Loop detect';
     LDAP_RES_NAMING_VIOLATION:
       result := 'Naming violation';
-    LDAP_RES_OBJECT_CLASS_VIOLATION:
+    LDAP_RES_OBJECT_CLAlssVIOLATION:
       result := 'Object class violation';
     LDAP_RES_NOT_ALLOWED_ON_NON_LEAF:
       result := 'Not allowed on non leaf';
@@ -1571,7 +1675,7 @@ begin
       result := 'Not allowed on RDN';
     LDAP_RES_ENTRY_ALREADY_EXISTS:
       result := 'Entry already exists';
-    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED:
+    LDAP_RES_OBJECT_CLAlssMODS_PROHIBITED:
       result := 'Object class mods prohibited';
     LDAP_RES_AFFECTS_MULTIPLE_DSAS:
       result := 'Affects multiple DSAs';
@@ -1602,22 +1706,24 @@ begin
   result := fSock <> nil;
   if result then
     exit; // socket was already connected
-  if fTargetHost = '' then
-    dc := DnsLdapControlers('', false, @fDomainName)  // from OS
+  if fSettings.TargetHost = '' then
+    dc := DnsLdapControlers('', false, @fSettings.KerberosDN)  // from OS
   else
-    AddRawUtf8(dc, fTargetHost + ':' + fTargetPort); // from instance properties
+    AddRawUtf8(dc,  // from instance properties
+      fSettings.TargetHost + ':' + fSettings.TargetPort);
   fSeq := 0;
   for i := 0 to high(dc) do
     try
       Split(dc[i], ':', h, p);
-      if fTargetHost = '' then // not from DnsLdapControlers
+      if fSettings.TargetHost = '' then // not from DnsLdapControlers
       begin
         if HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
            (p = '389') and
-           not fFullTls then
+           not fSettings.Tls then
         try
           // always first try to connect with TLS on its default port (much safer)
-          fSock := TCrtSocket.Open(h, '636', nlTcp, fTimeOut, {tls=}true, @fTlsContext);
+          fSock := TCrtSocket.Open(
+            h, '636', nlTcp, fSettings.TimeOut, {tls=}true, @fTlsContext);
           p := '636';
         except
           on E: ENetSock do
@@ -1625,18 +1731,19 @@ begin
         end;
       end
       else
-        fFullTls := (p = '636') or // this TargetPort is likely to be over TLS
-                    (p = '3269');
+        fSettings.Tls := (p = '636') or // this port is likely to be over TLS
+                         (p = '3269');
       if fSock = nil then
         // try connection to the server
-        fSock := TCrtSocket.Open(h, p, nlTcp, fTimeOut, fFullTls, @fTlsContext);
+        fSock := TCrtSocket.Open(
+          h, p, nlTcp, fSettings.TimeOut, fSettings.Tls, @fTlsContext);
       fSock.CreateSockIn;
       result := fSock.SockConnected;
       if result then
       begin
-        fTargetHost := h;
-        fTargetPort := p;
-        fFullTls := fSock.TLS.Enabled;
+        fSettings.TargetHost := h;
+        fSettings.TargetPort := p;
+        fSettings.Tls := fSock.TLS.Enabled;
         exit;
       end;
     except
@@ -1702,7 +1809,7 @@ begin
     // decode length of LDAP packet
     pos := 2;
     len := AsnDecLen(pos, result);
-    // retrieve rest of LDAP packet
+    // retrieve body of LDAP packet
     if len > 0 then
       AsnAdd(result, ReceiveString(len));
   except
@@ -1794,11 +1901,11 @@ begin
   qop := 'auth';
   uri := 'ldap/' + LowerCaseU(fSock.Server);
   hasher.Init;
-  hasher.Update(fUserName);
+  hasher.Update(fSettings.UserName);
   hasher.Update(':');
   hasher.Update(realm);
   hasher.Update(':');
-  hasher.Update(fPassword);
+  hasher.Update(fSettings.Password);
   hasher.Final(dig);
   FastSetString(ha0, @dig, SizeOf(dig)); // ha0 = md5 binary, not hexa
   ha1 := FormatUtf8('%:%:%', [ha0, nonce, cnonce]);
@@ -1809,7 +1916,7 @@ begin
   resp := Md5(FormatUtf8('%:%:%:%:%:%', [ha1, nonce, nc, cnonce, qop, ha2]));
   FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
     'digest-uri="%",response=%',
-    [fUserName, realm, nonce, cnonce, nc, qop, uri, resp], result);
+    [fSettings.UserName, realm, nonce, cnonce, nc, qop, uri, resp], result);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
@@ -1965,8 +2072,8 @@ begin
     exit;
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
-                   Asn(fUserName),
-                   Asn(fPassword, ASN1_CTX0)]));
+                   Asn(fSettings.UserName),
+                   Asn(fSettings.Password, ASN1_CTX0)]));
   result := fResultCode = LDAP_RES_SUCCESS;
   fBound := result;
 end;
@@ -1979,7 +2086,7 @@ begin
   result := false;
   if not Login then
     exit;
-  if fPassword = '' then
+  if fSettings.Password = '' then
     result := Bind
   else
   begin
@@ -2008,11 +2115,10 @@ begin
   end;
 end;
 
-function TLdapClient.BindSaslKerberos(
-  const ServicePrincipalName, AuthIdentify: RawUtf8): boolean;
+function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
+  KerberosUser: PRawUtf8): boolean;
 var
   sc: TSecContext;
-  spn: RawUtf8;
   datain, dataout: RawByteString;
   x, xt: integer;
   t, req1, req2: TAsnObject;
@@ -2021,10 +2127,10 @@ begin
   if not Login or
      not InitializeDomainAuth then
      exit;
-  spn := ServicePrincipalName;
-  if (spn = '') and
-     (fDomainName <> '') then
-    spn := 'LDAP/' + fTargetHost + '@' + UpperCase(fDomainName);
+  if (fSettings.KerberosSpn = '') and
+     (fSettings.KerberosDN <> '') then
+    fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost +
+                             '@' + UpperCase(fSettings.KerberosDN);
   req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
             Asn(fVersion),
             Asn(''),
@@ -2039,10 +2145,11 @@ begin
       x := 1;
       datain := AsnNext(x, t, xt);
       try
-        if fUserName <> '' then
-          ClientSspiAuthWithPassword(sc, datain, fUserName, fPassword, spn, dataout)
+        if fSettings.UserName <> '' then
+          ClientSspiAuthWithPassword(sc, datain, fSettings.UserName,
+            fSettings.Password, fSettings.KerberosSpn, dataout)
         else
-          ClientSspiAuth(sc, datain, spn, dataout);
+          ClientSspiAuth(sc, datain, fSettings.KerberosSpn, dataout);
       except
         exit; // catch SSPI/GSSAPI errors and return false
       end;
@@ -2074,8 +2181,8 @@ begin
     until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
     result := fResultCode = LDAP_RES_SUCCESS;
     if result and
-       (fUserName = '') then
-      ServerSspiAuthUser(sc, fUserName);
+       (KerberosUser <> nil) then
+      ServerSspiAuthUser(sc, KerberosUser^);
     fBound := result;
   finally
     FreeSecContext(sc);
@@ -2156,7 +2263,8 @@ begin
     exit;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   // Search if computer is already present in the domain
-  if not Search(ComputerDN, false, '', []) and (ResultCode <> LDAP_RES_NO_SUCH_OBJECT) then
+  if not Search(ComputerDN, false, '', []) and
+     (ResultCode <> LDAP_RES_NO_SUCH_OBJECT) then
   begin
     ErrorMessage := GetErrorString(ResultCode);
     exit;
@@ -2353,7 +2461,7 @@ var
 begin
   PreviousSearchScope := SearchScope;
   try
-    SearchScope := SS_BaseObject;
+    SearchScope := lssBaseObject;
     result := SearchFirst(ObjectDN, '', Attributes);
   finally
     SearchScope := PreviousSearchScope;
@@ -2394,7 +2502,7 @@ begin
     exit;
   prev := SearchScope;
   try
-    SearchScope := SS_BaseObject;
+    SearchScope := lssBaseObject;
     root := SearchFirst('', '*', ['rootDomainNamingContext']);
     if Assigned(root) then
     begin
