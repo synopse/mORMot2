@@ -364,14 +364,18 @@ type
   private
     fItems: TLdapResultObjArray;
     fCount: integer;
-    procedure CleanItems; // ensure Count = length(fItems)
   public
     /// finalize the list
     destructor Destroy; override;
     /// create and add new TLdapResult object to the list
     function Add: TLdapResult;
+    /// ensure Count = length(fItems) to allow proper "for res in Items do"
+    // - is called e.g. by TLdapClient.Search after all its Add()
+    procedure AfterAdd;
     /// clear all TLdapResult objects in list
     procedure Clear;
+    /// return all Items[].ObjectName as a sorted array
+    function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump: RawUtf8;
@@ -1541,7 +1545,25 @@ begin
   fCount := 0;
 end;
 
-procedure TLdapResultList.CleanItems;
+function TLdapResultList.ObjectNames(asCN: boolean): TRawUtf8DynArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  SetLength(result, fCount);
+  for i := 0 to fCount - 1 do
+  begin
+    result[i] := fItems[i].ObjectName;
+    if asCN then
+      result[i] := DNToCN(result[i]);
+  end;
+  QuickSortRawUtf8(result, fCount);
+end;
+
+procedure TLdapResultList.AfterAdd;
 begin
   if fItems <> nil then
     DynArrayFakeLength(fItems, fCount);
@@ -2493,7 +2515,7 @@ begin
       end;
     end;
   end;
-  fSearchResult.CleanItems; // allow "for res in ldap.SearchResult.Items do"
+  fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
