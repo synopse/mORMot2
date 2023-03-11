@@ -4718,7 +4718,7 @@ var
   n: integer;
 begin
   n := length(List);
-  while Csv <> nil do
+  while (Csv <> nil) and (Csv^ <> #0) do
   begin
     if TrimItems then
       GetNextItemTrimed(Csv, Sep, s)
@@ -4874,7 +4874,7 @@ var
   n: integer;
 begin
   n := length(List);
-  while Csv <> nil do
+  while (Csv <> nil) and (Csv^ <> #0) do
     AddInteger(List, n, GetNextItemInteger(Csv, Sep));
   if List <> nil then
     DynArrayFakeLength(List, n);
@@ -4886,7 +4886,7 @@ var
   n: integer;
 begin
   n := length(List);
-  while Csv <> nil do
+  while (Csv <> nil) and (Csv^ <> #0) do
     AddInt64(List, n, GetNextItemInt64(Csv, Sep));
   if List <> nil then
     DynArrayFakeLength(List, n);
@@ -4897,7 +4897,7 @@ var
   n: integer;
 begin
   n := 0;
-  while Csv <> nil do
+  while (Csv <> nil) and (Csv^ <> #0) do
     AddInt64(result, n, GetNextItemInt64(Csv, Sep));
   if result <> nil then
     DynArrayFakeLength(result, n);
