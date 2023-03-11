@@ -6314,7 +6314,7 @@ begin
         log.Timestamp64 := GetTickCount64;
         log.WasError := not result;
         log.Method := @aMethod;
-        log.Params := aParams;
+        FastSetString(log.Params, pointer(aParams), length(aParams));
         fLog.Add(log);
       end;
     end;
