@@ -36,6 +36,7 @@ psql postgres://benchmarkdbuser:benchmarkdbpass@tfb-database:5432/hello_world < 
 Those two `.sql` scripts are located in this folder for convenience.
 
 ## Command line  parameters
+
 Working threads (per server), used CPU cores, and servers count can be specified in command line as such:
 ```
 $ raw threads cores servers
@@ -44,6 +45,7 @@ Default values are computed at startup depending on the available CPU cores on t
 
 Note that currently, the `cores` number is ignored.
 
+Depending on the hardware you have, you may consider using our [x86_64 Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpcx64mm.pas) if your CPU has less than 8/16 cores, but would rather switch to [the libc Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpclibcmm.pas) for high-end harware. On the TFB hardware, we enable the libc heap, which has lower performance with a few cores, but scales better when allocating small blocks with a high number of cores.
 
 ## Some Numbers
 
@@ -51,11 +53,11 @@ As reference, the current status of the TFB challenge internal rounds is availab
 
 Some discussion, with updated numbers after each framework tuning, is available [in the Synopse forum website](https://synopse.info/forum/viewtopic.php?id=6443).
 
-In practice, *mORMot* "raw" numbers are within the top #20 of all frameworks, among 766 tested.
+In practice, *mORMot* "raw" numbers are within the top #20 of all frameworks, among 766 tested. So pascal as a language is still in the race. :)
 
-*mORMot* is within the top with a full ORM. Note that drogon and lithium are not full ORM frameworks. They are C++ templates engines, with pre-generated code. So they don't use RTTI or a separated Mustache template as *mORMot*.
+**mORMot is within the top #3 frameworks with a full ORM**. Note that drogon and lithium are not full ORM frameworks. They are C++ templates engines, with pre-generated code. So they don't use RTTI or a separated Mustache template as *mORMot*.
 
-Also note that those tests use PostgreSQL. In most *mORMot* configurations, a typical MicroService would rather use its own embedded SQLite3 database. And here, the numbers are twice higher. So in fact, a production-ready *mORMot* service with its stand-alone database is likely to blow away any other framework using a separated PostgreSQL database. As such, the [cached-queries](#cached queries) test, which returns some items using the DB/ORM cache, is a typical workload on a production system, and *mORMot* shines in this test. It is currently the first full ORM listed (excluding lithium which is not a full ORM as we explained above).
+Also note that those tests use PostgreSQL. In most *mORMot* configurations, a typical MicroService would rather use its own embedded SQLite3 database. And here, the numbers are twice higher. So in fact, a production-ready *mORMot* service with its stand-alone database is likely to blow away any other framework using a separated PostgreSQL database. As such, the [cached-queries](#cached-queries) test, which returns some items using the DB/ORM cache, is a typical workload on a production system, and *mORMot* shines in this test. It is currently the first full ORM listed (excluding lithium which is not a full ORM as we explained above).
 
 ## Test URLs
 
@@ -66,7 +68,7 @@ The plain `/*` URI are using the ORM, and the `/raw*` URI have a direct access t
 You can reproduce most TFB tests by using the [wrk tool](https://github.com/wg/wrk), on Linux. Here are some command lines:
 ```shell
 wrk -c 256 -t 3 -d 5 http://localhost:8080/plaintext
-wrk -c 256 -t 3 -d 5 http://localhost:8080/plaintext -s pipeline.lua --16
+wrk -c 256 -t 3 -d 5 http://localhost:8080/plaintext -s pipeline.lua -- 16
 wrk -c 256 -t 3 -d 5 http://localhost:8080/json
 wrk -c 256 -t 3 -d 5 http://localhost:8080/db
 wrk -c 256 -t 3 -d 5 http://localhost:8080/queries
@@ -96,35 +98,70 @@ request = function()
   return req
 end
 ```
+For instance, you can stress the *mORMot 2* new async Web Server by using 16,384 concurrent connections:
+```
+$ ulimit -n 40000
+
+$ wrk -c 16384 -t 3 -d 15 http://localhost:8080/plaintext -s pipeline.lua -- 16
+Running 15s test @ http://localhost:8080/plaintext
+  3 threads and 16384 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    79.45ms   42.01ms 442.43ms   51.90%
+    Req/Sec   343.91k   148.00k  728.32k    65.58%
+  12112848 requests in 15.09s, 1.85GB read
+Requests/sec: 802682.65
+Transfer/sec:    125.54MB
+
+$ wrk -c 16384 -t 3 -d 15 http://localhost:8080/plaintext
+Running 15s test @ http://localhost:8080/plaintext
+  3 threads and 16384 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    69.83ms   26.50ms 233.33ms   74.04%
+    Req/Sec    40.98k    13.39k   86.03k    73.23%
+  1486190 requests in 15.04s, 232.44MB read
+Requests/sec:  98841.92
+Transfer/sec:     15.46MB
+```
+Those numbers are taken on my old TP470 Core i5 laptop on Debian 11, consuming 150MB of RAM with our [x86_64 asm MM](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpcx64mm.pas). I don't think any other Delphi or FPC web server could sustain those numbers. In pipelined mode, it achieves more than 800,000 requests per second over 16,364 concurrent connections. On Linux, don't forget to call first `ulimit` to open so many sockets at once.
 
 ### JSON
 
 **JSON Serialization**: Exercises the framework fundamentals including keep-alive support, request routing, request header parsing, object instantiation, JSON serialization, response header generation, and request count throughput.
 
+```
 http://localhost:8080/json
+```
+
+We use a `record` and regular *mORMot* JSON serialization, which its custom RTTI, for this endpoint.
 
 ### PLAINTEXT
 
 **Plaintext**: An exercise of the request-routing fundamentals only, designed to demonstrate the capacity of high-performance platforms in particular. Requests will be sent using HTTP pipelining. The response payload is still small, meaning good performance is still necessary in order to saturate the gigabit Ethernet of the test environment.
 
+```
 http://localhost:8080/plaintext
+```
 
-Notice: the latest *mORMot* async HTTP server does support [HTTP pipelining](https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x#http_pipelining), so numbers are very good, very close to the best frameworks - in fact, the 2.5Gb ethernet link of TFB hardware seems saturated. See [above](#test urls) about how to make pipelined queries with `wrk`.
+Notice: the latest *mORMot 2* async HTTP server does support [HTTP pipelining](https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x#http_pipelining), so numbers are very good, very close to the best frameworks - in fact, the 2.5Gb ethernet link of TFB hardware seems saturated. See [above](#test-urls) about how to make pipelined queries with `wrk`.
 But note that pipelining is clearly something we should not see on production, for security and stability reasons.
 
 ### DB
 
 **Single Database Query**: Exercises the framework's object-relational mapper (ORM), random number generator, database driver, and database connection pool.
 
+```
 http://localhost:8080/db
 http://localhost:8080/rawdb
+```
 
 ### QUERIES
 
 **Multiple Database Queries**: A variation of the [previous Test](#db), also using the same World table. Multiple rows are fetched to more dramatically punish the database driver and connection pool. At the highest queries-per-request tested (20), this test demonstrates all frameworks' convergence toward zero requests-per-second as database activity increases.
 
+```
 http://localhost:8080/queries?queries=##
 http://localhost:8080/rawqueries?queries=##
+```
 
 On PostgreSQL, `/rawqueries` is written with manually pipelined requests, so is faster than the ORM `/queries`, which uses the default blocking sequential requests.
 
@@ -132,8 +169,10 @@ On PostgreSQL, `/rawqueries` is written with manually pipelined requests, so is 
 
 **Caching**: Exercises the platform or framework's in-memory caching of information sourced from a database. For implementation simplicity, the requirements are very similar to the [multiple database query test](#queries), but use a separate database table and are fairly generous/forgiving, allowing for each platform or framework's best practices to be applied.
 
+```
 http://localhost:8080/cached-queries?count=##
 http://localhost:8080/rawcached?count=##
+```
 
 Note that here, the number of objects retrieved is specified as `?count=##` and not as `?queries=##` as with other DB requests - this is as specified by TFB requirements.
 
@@ -143,8 +182,10 @@ The plain `/cached-queries` uses the regular ORM cache, and `/rawcached` uses a 
 
 **Database Updates**: A variation of the [multiple database query test](#queries) that exercises the ORM's persistence of objects and the database driver's performance at running UPDATE statements or similar. The spirit of this test is to exercise a variable number of read-then-write style database operations.
 
+```
 http://localhost:8080/update?queries=##
 http://localhost:8080/rawupdate?queries=##
+```
 
 On PostgreSQL, `/rawupgrade` is written with two algorithms: `UPDATE ... CASE ... THEN .. WHERE` up to `?queries=20` (this is the weird but efficient syntax as used by the faster frameworks), then `UNNEST` above 20 objects, as the `/update` endpoint with *mORMot* ORM does.
 
@@ -152,8 +193,10 @@ On PostgreSQL, `/rawupgrade` is written with two algorithms: `UPDATE ... CASE ..
 
 **Fortunes**: Exercises the ORM, database connectivity, dynamic-size collections, sorting, server-side templates, XSS countermeasures, and character encoding.
 
+```
 http://localhost:8080/fortunes
 http://localhost:8080/rawfortunes
+```
 
 This *fortune* test is interresting: it runs a query on PostgreSQL of several lines using the *mORMot* ORM, then add a line at runtime, sort the items by name, then run it using a Mustache template - over a HTTP kept-alive connection. This is certainly a realistic approach.
 
@@ -182,5 +225,3 @@ begin
 end;
 ```
 This above code sounds pretty readable. Much more readable for sure than the C++ or Rust alternatives, or even C# asp.net circumvoluted code.
-
-
