@@ -11551,6 +11551,7 @@ begin
     SetCodePage(fDataString, CP_UTF8, false);
     {$endif HASCODEPAGE}
     Text := fDataString;
+    fDataString := ''; // release it ASAP to avoid multi-threading reuse bug
   end
   else
   begin

@@ -335,8 +335,8 @@ begin
                 break
               else
               begin
-                fTest.Check(Rec.YearOfBirth = 1000 + i, 'yob');
-                fTest.Check(Rec.YearOfDeath = (1040 + i) and $ffff, 'yod');
+                fTest.CheckEqual(Rec.YearOfBirth, 1000 + i, 'yob');
+                fTest.CheckEqual(Rec.YearOfDeath, (1040 + i) and $ffff, 'yod');
                 //if (Rec.YearOfBirth<>1000+i) or (Rec.YearOfDeath<>1040+i) then writeln(i,'  ',ObjectToJSON(Rec));
                 if r = high(Rest) then
                   r := 0
