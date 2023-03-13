@@ -192,6 +192,7 @@ var
 
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. $1010106f
+  // - "if OpenSslVersion >= OPENSSL3_VERNUM then" to detect OpenSSL 3.x
   OpenSslVersion: cardinal;
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. '1010106F'
@@ -227,13 +228,18 @@ var
 
 
 const
+  /// the minimal 32-bit OpenSslVersion value for Open SSL 1.1.1
+  OPENSSL1_VERNUM = $10101000;
+  /// the minimal 32-bit OpenSslVersion value for Open SSL 3.0.0
+  OPENSSL3_VERNUM = $30000000;
+
   {$ifdef NOOPENSSL3}
   LIB_TXT = '1.1.1';
-  LIB_MIN = $10101000;
+  LIB_MIN = OPENSSL1_VERNUM;
   {$else}
   {$ifdef NOOPENSSL1}
   LIB_TXT = '3.x';
-  LIB_MIN = $30000000;
+  LIB_MIN = OPENSSL3_VERNUM;
   {$else}
   LIB_TXT = '1.1.1/3.x';
   LIB_MIN = $10101000;
@@ -7381,11 +7387,14 @@ end;
 
 procedure RsaSetPadding(ctx: PEVP_PKEY_CTX; md: PEVP_MD);
 begin
-  EOpenSsl.Check(
-    EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING),
-    'EVP_PKEY_CTX_set_rsa_padding');
-  EOpenSsl.Check(
-    EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_mgf1_md');
+  if OpenSslVersion < OPENSSL3_VERNUM then
+  begin
+    EOpenSsl.Check(
+      EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING),
+      'EVP_PKEY_CTX_set_rsa_padding');
+    EOpenSsl.Check(
+      EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_mgf1_md');
+  end;
   EOpenSsl.Check(
     EVP_PKEY_CTX_set_rsa_oaep_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_oaep_md');
 end;
