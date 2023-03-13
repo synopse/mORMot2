@@ -920,15 +920,14 @@ begin
                 [self]);
           end;
           PRemoteMessageHeader(msgout)^.sessionID := session;
-          AppendCharToRawUtf8(msgout, AnsiChar(Connection.Properties.Dbms));
+          Append(msgout, AnsiChar(Connection.Properties.Dbms));
         end;
       cConnect:
         Connection.Connect;
       cDisconnect:
         Connection.Disconnect;
       cTryStartTransaction:
-        AppendCharToRawUtf8(msgout,
-          AnsiChar(TransactionStarted(Connection, header.SessionID)));
+        Append(msgout, AnsiChar(TransactionStarted(Connection, header.SessionID)));
       cCommit:
         begin
           TransactionEnd(header.SessionID);
@@ -944,25 +943,25 @@ begin
       cGetFields:
         begin
           Connection.Properties.GetFields(P, colarr);
-          AppendToRawUtf8(msgout, DynArraySave(
+          Append(msgout, DynArraySave(
             colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
         end;
       cGetIndexes:
         begin
           Connection.Properties.GetIndexes(P, defarr);
-          AppendToRawUtf8(msgout, DynArraySave(
+          Append(msgout, DynArraySave(
             defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
         end;
       cGetTableNames:
         begin
           Connection.Properties.GetTableNames(outarr);
-          AppendToRawUtf8(msgout, DynArraySave(
+          Append(msgout, DynArraySave(
             outarr, TypeInfo(TRawUtf8DynArray)));
         end;
       cGetForeignKeys:
         begin
           Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          AppendToRawUtf8(msgout, Connection.Properties.ForeignKeysData);
+          Append(msgout, Connection.Properties.ForeignKeysData);
         end;
       cExecute,
       cExecuteToBinary,
@@ -1023,7 +1022,7 @@ begin
             end;
           end
           else if not (fNoUpdateCount in exec.Force) then
-            AppendToRawUtf8(msgout, UInt32ToUtf8(stmt.UpdateCount));
+            Append(msgout, UInt32ToUtf8(stmt.UpdateCount));
         end;
       cQuit:
         begin
@@ -1040,7 +1039,7 @@ begin
     on E: Exception do
     begin
       PRemoteMessageHeader(msgout)^.Command := cExceptionRaised;
-      AppendToRawUtf8(msgout, StringToUtf8(E.ClassName + #0 + E.Message));
+      Append(msgout, StringToUtf8(E.ClassName + #0 + E.Message));
     end;
   end;
   Output := HandleOutput(msgout);
@@ -1154,12 +1153,12 @@ begin
     cGetDbms,
     cGetFields,
     cGetIndexes:
-      AppendToRawUtf8(msgin, intext);
+      Append(msgin, intext);
     cExecute,
     cExecuteToBinary,
     cExecuteToJson,
     cExecuteToExpandedJson:
-      AppendToRawUtf8(msgin,
+      Append(msgin,
         RecordSave(inexec, TypeInfo(TSqlDBProxyConnectionCommandExecute)));
   else
     raise ESqlDBRemote.CreateUtf8('Unknown %.Process() input command % (%)',

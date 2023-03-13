@@ -4466,6 +4466,21 @@ begin
   end;
 end;
 
+function ARawSetString: RawByteString;
+var
+  S: RawByteString;
+begin
+  S := '123456';
+  SetString(result, PAnsiChar(pointer(S)), Length(S));
+end;
+
+function ARawFastSetString: RawByteString;
+var
+  S: RawByteString;
+begin
+  S := '123456';
+  FastSetRawByteString(result, pointer(S), Length(S));
+end;
 
 procedure TTestCoreBase._UTF8;
 
@@ -4554,6 +4569,7 @@ var
   q: RawUtf8;
   Unic: RawByteString;
   WA: Boolean;
+  rb1, rb2, rb3: RawByteString;
 const
   ROWIDS: array[0..17] of PUtf8Char = ('id', 'ID', 'iD', 'rowid', 'ROWid',
     'ROWID', 'rowiD', 'ROWId', // ok
@@ -4563,6 +4579,22 @@ const
   IDPA: array[0..15] of PAnsiChar = (nil, 'T', '1', 'TE', 'TE', 'TE', 'TES',
     'TEST', 'TEST', 'TES', 'TEST', 'TESTE', 't', 'U', '2', 'TESTe');
 begin
+  // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
+  rb2 := ARawSetString;
+  rb1 := rb2 + RawByteString('test');
+  Check(rb1 = '123456test', 'ARawSetString1');
+  Append(rb2, 'test');
+  Check(rb2 = '123456test', 'ARawSetString2');
+  rb2 := ARawFastSetString;
+  rb3 := 'test';
+  {$ifdef FPC} // circumvent FPC RTL oddity on Win32 :(
+  SetCodePage(rb3, CP_RAWBYTESTRING, false);
+  {$endif FPC}
+  rb1 := rb2 + rb3;
+  Check(rb1 = '123456test', 'ARawFastSetString1');
+  rb1 := ARawFastSetString;
+  Append(rb1, 'test');
+  Check(rb1 = '123456test', 'ARawFastSetString2');
   Check(SafeFileName(''));
   Check(SafePathName(''));
   Check(SafeFileName('toto'));

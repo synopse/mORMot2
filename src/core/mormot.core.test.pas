@@ -1441,7 +1441,7 @@ begin
       result := GetLastError
     else
       result := 0;
-    AppendBufferToRawUtf8(PPRawUtf8(@t.UserData)^^, t.BufPtr, t.Bufpos);
+    Append(PPRawUtf8(@t.UserData)^^, t.BufPtr, t.Bufpos);
     t.BufPos := 0;
   end;
 end;

@@ -1570,7 +1570,7 @@ begin
     Check(StrLen(pointer(b64)) = length(b64), 'unz');
     Check(Zeroed(b64) = tmp, 'UnZeroed');
     c := Random32;
-    AppendBufferToRawByteString(tmp, c, 1);
+    Append(tmp, @c, 1);
   end;
   Check(Zeroed(UnZeroed(#0)) = #0, 'unz0');
   Check(Zeroed(UnZeroed(#0#0)) = #0#0, 'unz1');

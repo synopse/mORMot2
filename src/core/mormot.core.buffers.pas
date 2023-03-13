@@ -1843,34 +1843,20 @@ type
   end;
   {$M-}
 
-
-/// fast add some content to a RawByteString buffer
+{$ifndef PUREMORMOT2} // just redirect to mormot.core.text Append(...) overloads
 procedure AppendBufferToRawByteString(var Content: RawByteString;
   const Buffer; BufferLen: PtrInt); overload;
-
-/// fast add some content to a RawByteString buffer
 procedure AppendBufferToRawByteString(var Content: RawByteString;
-  const Buffer: RawByteString); overload;
-
-/// fast add some characters to a RawUtf8 string
-// - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
-procedure AppendBufferToRawUtf8(var Text: RawUtf8;
-  Buffer: pointer; BufferLen: PtrInt);
-
-/// fast add one character to a RawUtf8 string
-// - avoid a temporary memory allocation of a string, so slightly faster than
-// ! Text := Text + ch;
-procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
-
-/// fast add one Ansi String to a RawUtf8 string
-// - append "After" directly, with no code page conversion (needed on FPC)
-// ! Text := Text + After;
+  const Buffer: RawByteString); overload; {$ifdef HASINLINE} inline; {$endif}
 procedure AppendToRawUtf8(var Text: RawUtf8; const After: RawByteString); overload;
-
-/// fast add two Ansi Strings to a RawUtf8 string
-// - append After1 and After2 directly, with no code page conversion (needed on FPC)
-// ! Text := Text + After1 + After2;
-procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+procedure AppendBufferToRawUtf8(var Text: RawUtf8;
+  Buffer: PUtf8Char; BufferLen: PtrInt); {$ifdef HASINLINE} inline; {$endif}
+procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
+procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString);
+  overload; {$ifdef HASINLINE} inline; {$endif}
+{$endif PUREMORMOT2}
 
 /// fast add one character to a RawUtf8 string, if not already present
 // - avoid a temporary memory allocation of a string, so faster alternative to
@@ -6165,6 +6151,37 @@ begin
   AlgoSynLZ.Decompress(pointer(Data), length(Data), result);
 end;
 
+procedure AppendBufferToRawByteString(
+  var Content: RawByteString; const Buffer; BufferLen: PtrInt);
+begin
+  Append(Content, @Buffer, BufferLen);
+end;
+
+procedure AppendBufferToRawByteString(var Content: RawByteString; const Buffer: RawByteString);
+begin
+  Append(Content, Buffer);
+end;
+
+procedure AppendToRawUtf8(var Text: RawUtf8; const After: RawByteString);
+begin
+  Append(Text, After);
+end;
+
+procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: PUtf8Char; BufferLen: PtrInt);
+begin
+  Append(Text, Buffer, BufferLen);
+end;
+
+procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+begin
+  Append(Text, @Ch, 1);
+end;
+
+procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString);
+begin
+  Append(Text, After1, After2);
+end;
+
 {$endif PUREMORMOT2}
 
 
@@ -8883,38 +8900,6 @@ begin
   fAppendedLines := nil;
 end;
 
-
-procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
-var
-  L: PtrInt;
-begin
-  L := length(Text);
-  SetLength(Text, L + 1); // reallocate - most MM keep in-place with no move
-  PByteArray(Text)[L] := ord(Ch);
-end;
-
-procedure AppendToRawUtf8(var Text: RawUtf8; const After: RawByteString);
-var
-  L, A: PtrInt;
-begin
-  L := length(Text);
-  A := length(After);
-  SetLength(Text, L + A);
-  MoveFast(pointer(After)^, PByteArray(Text)[L], A);
-end;
-
-procedure AppendToRawUtf8(var Text: RawUtf8; const After1, After2: RawByteString);
-var
-  L, A1, A2: PtrInt;
-begin
-  L := length(Text);
-  A1 := length(After1);
-  A2 := length(After2);
-  SetLength(Text, L + A1 + A2);
-  MoveFast(pointer(After1)^, PByteArray(Text)[L], A1);
-  MoveFast(pointer(After2)^, PByteArray(Text)[L + A1], A2);
-end;
-
 procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 var
   L: PtrInt;
@@ -8925,17 +8910,6 @@ begin
     exit;
   SetLength(Text, L + 1);
   PByteArray(Text)[L] := ord(Ch);
-end;
-
-procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
-var
-  L: PtrInt;
-begin
-  if BufferLen <= 0 then
-    exit;
-  L := length(Text);
-  SetLength(Text, L + BufferLen);
-  MoveFast(Buffer^, PByteArray(Text)[L], BufferLen);
 end;
 
 procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf8Char);
@@ -9013,30 +8987,6 @@ begin
     MoveFast(P^, Buffer^, L);
   end;
   result := Buffer + L;
-end;
-
-procedure AppendBufferToRawByteString(
-  var Content: RawByteString; const Buffer; BufferLen: PtrInt);
-var
-  ContentLen: PtrInt;
-begin
-  if BufferLen <= 0 then
-    exit;
-  ContentLen := length(Content);
-  SetLength(Content, ContentLen + BufferLen);
-  MoveFast(Buffer, PByteArray(Content)^[ContentLen], BufferLen);
-end;
-
-procedure AppendBufferToRawByteString(var Content: RawByteString;
-  const Buffer: RawByteString);
-var
-  ContentLen: PtrInt;
-begin
-  if Buffer = '' then
-    exit;
-  ContentLen := length(Content);
-  SetLength(Content, ContentLen + length(Buffer));
-  MoveFast(pointer(Buffer)^, PByteArray(Content)^[ContentLen], length(Buffer));
 end;
 
 function Plural(const itemname: ShortString; itemcount: cardinal): ShortString;

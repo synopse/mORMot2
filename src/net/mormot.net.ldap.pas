@@ -1097,12 +1097,12 @@ end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
 begin
-  AppendBufferToRawByteString(Data, Buffer);
+  Append(Data, Buffer);
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
 begin
-  AppendBufferToRawByteString(Data, Asn(AsnType, [Buffer]));
+  Append(Data, Asn(AsnType, [Buffer]));
 end;
 
 function OidToText(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
@@ -1279,7 +1279,7 @@ begin
   while Mib <> '' do
   begin
     x := WalkInt(Mib);
-    Append(result, [AsnEncOidItem(x)]);
+    Append(result, AsnEncOidItem(x));
   end;
 end;
 
@@ -1351,38 +1351,38 @@ begin
     begin
       case at of
         ASN1_BOOL:
-          AppendToRawUtf8(result, ' BOOL: ');
+          Append(result, ' BOOL: ');
         ASN1_INT:
-          AppendToRawUtf8(result, ' INT: ');
+          Append(result, ' INT: ');
         ASN1_ENUM:
-          AppendToRawUtf8(result, ' ENUM: ');
+          Append(result, ' ENUM: ');
         ASN1_COUNTER:
-          AppendToRawUtf8(result, ' COUNTER: ');
+          Append(result, ' COUNTER: ');
         ASN1_GAUGE:
-          AppendToRawUtf8(result, ' GAUGE: ');
+          Append(result, ' GAUGE: ');
         ASN1_TIMETICKS:
-          AppendToRawUtf8(result, ' TIMETICKS: ');
+          Append(result, ' TIMETICKS: ');
         ASN1_OCTSTR:
-          AppendToRawUtf8(result, ' OCTSTR: ');
+          Append(result, ' OCTSTR: ');
         ASN1_OPAQUE:
-          AppendToRawUtf8(result, ' OPAQUE: ');
+          Append(result, ' OPAQUE: ');
         ASN1_OBJID:
-          AppendToRawUtf8(result, ' OBJID: ');
+          Append(result, ' OBJID: ');
         ASN1_IPADDR:
-          AppendToRawUtf8(result, ' IPADDR: ');
+          Append(result, ' IPADDR: ');
         ASN1_NULL:
-          AppendToRawUtf8(result, ' NULL: ');
+          Append(result, ' NULL: ');
         ASN1_COUNTER64:
-          AppendToRawUtf8(result, ' COUNTER64: ');
+          Append(result, ' COUNTER64: ');
       else // other
-        AppendToRawUtf8(result, ' unknown: ');
+        Append(result, ' unknown: ');
       end;
       if IsBinaryString(s) then
         s := DumpExStr(s);
-      AppendToRawUtf8(result, s);
+      Append(result, s);
     end;
-    AppendCharToRawUtf8(result, #$0d);
-    AppendCharToRawUtf8(result, #$0a);
+    Append(result, #$0d);
+    Append(result, #$0a);
   end;
 end;
 
@@ -1876,7 +1876,7 @@ begin
     result := AnsiChar(b);
     // receive length
     fSock.SockInRead(pointer(@b), 1);
-    AppendBufferToRawByteString(result, b, 1);
+    Append(result, @b, 1);
     if b >= $80 then // $8x means x bytes of length
       AsnAdd(result, ReceiveString(b and $7f));
     // decode length of LDAP packet
@@ -2241,7 +2241,7 @@ begin
           exit; // invalid token
         PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
         if AuthIdentify <> '' then
-          AppendBufferToRawByteString(datain, AuthIdentify);
+          Append(datain, AuthIdentify);
         dataout := SecEncrypt(sc, datain);
       end;
       req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
@@ -2312,10 +2312,10 @@ begin
     sub := '';
     for j := 0 to attr.Count - 1 do
       AsnAdd(sub, Asn(attr.GetRaw(j)));
-    Append(query, [
+    Append(query,
       Asn(ASN1_SEQ, [
         Asn(attr.AttributeName),
-        Asn(ASN1_SETOF, [sub])])]);
+        Asn(ASN1_SETOF, [sub])]));
   end;
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
                    Asn(obj),
@@ -2448,13 +2448,13 @@ begin
            filt,
            AsnSeq(attr)]);
   if fSearchPageSize > 0 then
-    Append(s, [Asn(
+    Append(s, Asn(
         Asn(ASN1_SEQ, [
            Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
            Asn(false), // criticality: false
            Asn(Asn(ASN1_SEQ, [
              Asn(fSearchPageSize),
-             Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS)]);
+             Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));
   SendPacket(s);
   repeat
     resp := DecodeResponse(ReceiveResponse);

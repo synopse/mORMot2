@@ -2042,10 +2042,33 @@ procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
 
 /// append some text items to a RawUtf8 variable
+// - see also AppendLine() below if you need a separator
 procedure Append(var Text: RawUtf8; const Args: array of const); overload;
+
+/// append one text item to a RawUtf8 variable with no code page conversion
+procedure Append(var Text: RawUtf8; const Added: RawByteString); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append two text items to a RawUtf8 variable with no code page conversion
+procedure Append(var Text: RawUtf8; const Added1, Added2: RawByteString); overload;
+
+/// append one char to a RawUtf8 variable with no code page conversion
+procedure Append(var Text: RawUtf8; Added: AnsiChar); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append one text buffer to a RawUtf8 variable with no code page conversion
+procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt); overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// append some text items to a RawByteString variable
 procedure Append(var Text: RawByteString; const Args: array of const); overload;
+
+/// append one text item to a RawByteString variable with no code page conversion
+procedure Append(var Text: RawByteString; const Added: RawByteString); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append one text buffer to a RawByteString variable with no code page conversion
+procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt); overload;
 
 /// prepend some text items at the beginning of a RawUtf8 variable
 procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
@@ -10366,6 +10389,59 @@ var
   f: TFormatUtf8;
 begin
   {%H-}f.DoAppendLine(RawUtf8(Text), @Args[0], length(Args), '');
+  if Text <> '' then
+    FakeCodePage(Text, CP_RAWBYTESTRING);
+end;
+
+procedure Append(var Text: RawUtf8; const Added: RawByteString);
+begin
+  if Added <> '' then
+    Append(Text, pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^);
+end;
+
+procedure Append(var Text: RawUtf8; const Added1, Added2: RawByteString);
+var
+  l, a1, a2: PtrInt;
+begin
+  l := length(Text);
+  a1 := length(Added1);
+  a2 := length(Added2);
+  SetLength(Text, l + a1 + a2);
+  MoveFast(pointer(Added1)^, PByteArray(Text)[l], a1);
+  MoveFast(pointer(Added2)^, PByteArray(Text)[l + a1], a2);
+end;
+
+procedure Append(var Text: RawUtf8; Added: AnsiChar);
+begin
+  Append(Text, @Added, 1);
+end;
+
+procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt);
+var
+  t: PtrInt;
+begin
+  if (Added = nil) or (AddedLen <= 0) then
+    exit;
+  t := length(Text);
+  SetLength(Text, t + AddedLen);
+  MoveFast(pointer(Added)^, PByteArray(Text)[t], AddedLen);
+end;
+
+procedure Append(var Text: RawByteString; const Added: RawByteString);
+begin
+  if Added <> '' then
+    Append(Text, pointer(Added), PStrLen(PtrUInt(Added) - _STRLEN)^);
+end;
+
+procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt);
+var
+  t: PtrInt;
+begin
+  if (Added = nil) or (AddedLen <= 0) then
+    exit;
+  t := length(Text);
+  SetLength(Text, t + AddedLen);
+  MoveFast(Added^, PByteArray(Text)^[t], AddedLen);
   if Text <> '' then
     FakeCodePage(Text, CP_RAWBYTESTRING);
 end;
