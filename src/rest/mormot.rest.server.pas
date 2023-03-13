@@ -7567,7 +7567,9 @@ begin
       on E: Exception do
         if (not Assigned(OnErrorUri)) or
            OnErrorUri(ctxt, E) then
-          if E.ClassType = EInterfaceFactory then
+          if E.ClassType = EInterfaceCustomStatus then
+            ctxt.Error(E, '', [], EInterfaceCustomStatus(e).Status)
+          else if E.ClassType = EInterfaceFactory then
             ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
           else
             ctxt.Error(E, '', [], HTTP_SERVERERROR);

@@ -493,6 +493,21 @@ type
   /// exception dedicated to interface factory, used e.g. for services and mock/stubs
   EInterfaceFactory = class(ESynException);
 
+  /// exception dedicated to interface factory, used e.g. for services and mock/stubs
+  EInterfaceCustomStatus = class(ESynException)
+  private
+    fStatus: cardinal;
+  public
+    /// constructor which will use FormatUtf8() instead of Format()
+    // - expect % as delimiter, so is less error prone than %s %d %g
+    // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
+    // appending class name for any class or object, the hexa value for a
+    // pointer, or the JSON representation of any supplied TDocVariant
+    constructor CreateUtf8WithStatus(const Format: RawUtf8; const Args: array of const; const Status: cardinal);
+    /// the CustomStatus to return
+    property Status: Cardinal read fStatus;
+  end;
+
   /// may be used to store the Methods[] indexes of a TInterfaceFactory
   // - current implementation handles up to 128 methods, a limit above
   // which "Interface Segregation" principle is obviously broken
@@ -760,14 +775,24 @@ type
   end;
   PServiceCustomAnswer = ^TServiceCustomAnswer;
 
-  /// an integer type to be used as result for a function method to customize
-  // the HTTP response code for interface-based services
-  // - by default, our protocol returns HTTP_SUCCESS = 200 for any process
-  // - using this type as result allow to return the execution error code as a
-  // regular HTTP_* response code, in addition to the regular JSON answer - i.e.
-  // there will be a "result" member in the transmitted JSON anyway
-  // - the returned value should be in HTTP response code range, i.e. 200..599
-  TServiceCustomStatus = type cardinal;
+  /// a record type to be used as result for a function method for custom content
+  // for interface-based services
+  // - all answers are pure JSON object by default: using this kind of record
+  // as result will allow a response of any type (e.g. binary, HTML or text)
+  // - this kind of answer will be understood by our TServiceContainerClient
+  // implementation, and it may be used with plain AJAX or HTML requests
+  // (via POST), to retrieve some custom content
+  TServiceCustomStatus = record
+    /// the error message to return to client
+    // - by default is empty. set the this field with error message
+    // - this value will be have effect just when Status 400..599
+    ErrorMessage: RawByteString;
+    // regular HTTP_* response code to return to client
+    // this value will not be transmitted JSON anyway when between 200.399
+    // case value between 400..599, will be transmitted JSON like a exception
+    Status: cardinal;
+  end;
+  PServiceCustomStatus = ^TServiceCustomStatus;
 
 
 /// returns the interface name of a registered Guid, or its hexadecimal value
@@ -2607,6 +2632,14 @@ implementation
 {.$define SOA_DEBUG} // write the low-level interface info as json
 
 
+{ EInterfaceCustomStatus }
+
+constructor EInterfaceCustomStatus.CreateUtf8WithStatus(const Format: RawUtf8; const Args: array of const; const Status: cardinal);
+begin
+  fStatus := Status;
+  inherited CreateUtf8(Format, Args);
+end;
+
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
 
 procedure TInterfaceMethodArgument.SerializeToContract(WR: TJsonWriter);
@@ -3949,11 +3982,10 @@ begin
           raise EInterfaceFactory.CreateUtf8(
             '%.Create: I% unexpected result type %',
             [self, InterfaceDotMethodName, ArgTypeName^]);
-        imvCardinal:
-          if ArgRtti.Info = TypeInfo(TServiceCustomStatus) then
-            ArgsResultIsServiceCustomStatus := true;
         imvRecord:
-          if ArgRtti.Info = TypeInfo(TServiceCustomAnswer) then
+          if ArgRtti.Info = TypeInfo(TServiceCustomStatus) then
+            ArgsResultIsServiceCustomStatus := true
+          else if ArgRtti.Info = TypeInfo(TServiceCustomAnswer) then
           begin
             for a := ArgsOutFirst to ArgsOutLast do
               if Args[a].ValueDirection in [imdVar, imdOut] then
@@ -7423,6 +7455,7 @@ var
   ParObjValuesUsed: boolean;
   opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
   c: PServiceCustomAnswer;
+  cs: PServiceCustomStatus;
   ctxt: TJsonParserContext;
   arg: PInterfaceMethodArgument;
   ParObjValues: array[0 .. MAX_METHOD_ARGS - 1] of PUtf8Char;
@@ -7552,12 +7585,20 @@ begin
         exit;
       end
       else if fMethod^.ArgsResultIsServiceCustomStatus then
-        fServiceCustomAnswerStatus := PCardinal(fValues[fMethod^.ArgsResultIndex])^;
+      begin
+        cs := fValues[fMethod^.ArgsResultIndex];
+        fServiceCustomAnswerStatus := cs^.Status;
+        if (fServiceCustomAnswerStatus >= HTTP_NOTFOUND) then
+          raise EInterfaceCustomStatus.CreateUtf8WithStatus(cs^.ErrorMessage, [], fServiceCustomAnswerStatus);
+      end;
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
       opt[{smdVar=}true] := []; // let var params override void/default values
       for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
       begin
+        // Do not put Result of funcition on Json
+        if fMethod^.ArgsResultIsServiceCustomStatus and (a=fMethod^.ArgsOutLast) then
+          Break;
         arg := @fMethod^.Args[a];
         if arg^.ValueDirection <> imdConst then
         begin
@@ -7771,7 +7812,6 @@ end;
 
 initialization
   InitializeUnit;
-
 
 end.
 
