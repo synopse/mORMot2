@@ -7387,16 +7387,16 @@ end;
 
 procedure RsaSetPadding(ctx: PEVP_PKEY_CTX; md: PEVP_MD);
 begin
+  EOpenSsl.Check(
+    EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING),
+    'EVP_PKEY_CTX_set_rsa_padding');
   if OpenSslVersion < OPENSSL3_VERNUM then
   begin
     EOpenSsl.Check(
-      EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING),
-      'EVP_PKEY_CTX_set_rsa_padding');
-    EOpenSsl.Check(
       EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_mgf1_md');
+    EOpenSsl.Check(
+      EVP_PKEY_CTX_set_rsa_oaep_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_oaep_md');
   end;
-  EOpenSsl.Check(
-    EVP_PKEY_CTX_set_rsa_oaep_md(ctx, md), 'EVP_PKEY_CTX_set_rsa_oaep_md');
 end;
 
 function EVP_PKEY.RsaEncrypt(const Content: RawByteString; MD: PEVP_MD): RawByteString;
