@@ -93,6 +93,7 @@ type
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
+    fRawCache: TOrmWorlds;
   protected
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
@@ -113,6 +114,7 @@ type
     function updates(ctxt: THttpServerRequest): cardinal;
     function rawdb(ctxt: THttpServerRequest): cardinal;
     function rawqueries(ctxt: THttpServerRequest): cardinal;
+    function rawcached(ctxt: THttpServerRequest): cardinal;
     function rawfortunes(ctxt: THttpServerRequest): cardinal;
     function rawupdates(ctxt: THttpServerRequest): cardinal;
   end;
@@ -195,8 +197,10 @@ begin
   {$else}
   fStore.Server.CreateMissingTables; // create SQlite3 virtual tables
   {$endif USE_SQLITE3}
+  // pre-fill the ORM and raw caches
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
+  fStore.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
   // setup the HTTP server
@@ -226,6 +230,7 @@ begin
   fStore.Free;
   fModel.Free;
   fDBPool.free;
+  ObjArrayClear(fRawCache);
   inherited Destroy;
 end;
 
@@ -480,6 +485,18 @@ begin
   result := HTTP_SUCCESS;
 end;
 
+function TRawAsyncServer.rawcached(ctxt: THttpServerRequest): cardinal;
+var
+  i: PtrInt;
+  res: TOrmWorlds;
+begin
+  SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
+  for i := 0 to length(res) - 1 do
+    res[i] := fRawCache[ComputeRandomWorld - 1];
+  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
+  result := HTTP_SUCCESS;
+end;
+
 function FortuneCompareByMessage(const A, B): integer;
 begin
   result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
@@ -535,7 +552,7 @@ begin
     LastComputeUpdateSqlCnt := cnt;
     W := TTextWriter.CreateOwnedStream(tmp);
     try
-      W.AddShort('UPDATE world SET randomnumber = CASE id');
+      W.AddShort('update world set randomnumber = case id');
       for i := 1 to cnt do
         W.AddShort(' when ? then ?');
       W.AddShort(' else randomNumber end where id in (');
@@ -567,14 +584,16 @@ begin
   cnt := getQueriesParamValue(ctxt);
   if not getRawRandomWorlds(cnt, res) then
     exit;
+  // generate new randoms
+  for i := 0 to cnt - 1 do
+    res[i].randomNumber := ComputeRandomWorld;
   if cnt > 20 then
   begin
+    // fill parameters arrays for update with nested select (PostgreSQL only)
     setLength(ids{%H-}, cnt);
     setLength(nums{%H-}, cnt);
-    // generate new randoms, fill parameters arrays for update
     for i := 0 to cnt - 1 do
     begin
-      res[i].randomNumber := ComputeRandomWorld;
       ids[i] := res[i].id;
       nums[i] := res[i].randomNumber;
     end;
@@ -584,10 +603,10 @@ begin
   end
   else
   begin
+    // fill parameters for update up to 20 items as CASE .. WHEN .. THEN ..
     stmt := conn.NewStatementPrepared(ComputeUpdateSql(cnt), false, true);
     for i := 0 to cnt - 1 do
     begin
-      res[i].randomNumber := ComputeRandomWorld;
       stmt.Bind(i * 2 + 1, res[i].id);
       stmt.Bind(i * 2 + 2, res[i].randomNumber);
       stmt.Bind(cnt * 2 + i + 1, res[i].id);
