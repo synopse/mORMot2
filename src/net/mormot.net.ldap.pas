@@ -180,7 +180,7 @@ const
   LDAP_RES_ALIAS_DEREFERENCING_PROBLEM    = 36;
   LDAP_RES_INAPPROPRIATE_AUTHENTICATION   = 48;
   LDAP_RES_INVALID_CREDENTIALS            = 49;
-  LDAP_RES_INSUFFICIENT_ACCElssRIGHTS     = 50;
+  LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS     = 50;
   LDAP_RES_BUSY                           = 51;
   LDAP_RES_UNAVAILABLE                    = 52;
   LDAP_RES_UNWILLING_TO_PERFORM           = 53;
@@ -188,11 +188,11 @@ const
   LDAP_RES_SORT_CONTROL_MISSING           = 60;
   LDAP_RES_OFFSET_RANGE_ERROR             = 61;
   LDAP_RES_NAMING_VIOLATION               = 64;
-  LDAP_RES_OBJECT_CLAlssVIOLATION         = 65;
+  LDAP_RES_OBJECT_CLASS_VIOLATION         = 65;
   LDAP_RES_NOT_ALLOWED_ON_NON_LEAF        = 66;
   LDAP_RES_NOT_ALLOWED_ON_RDN             = 67;
   LDAP_RES_ENTRY_ALREADY_EXISTS           = 68;
-  LDAP_RES_OBJECT_CLAlssMODS_PROHIBITED   = 69;
+  LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED   = 69;
   LDAP_RES_RESULTS_TOO_LARGE              = 70;
   LDAP_RES_AFFECTS_MULTIPLE_DSAS          = 71;
   LDAP_RES_CONTROL_ERROR                  = 76;
@@ -1724,7 +1724,7 @@ begin
       result := 'Inappropriate authentication';
     LDAP_RES_INVALID_CREDENTIALS:
       result := 'Invalid credentials';
-    LDAP_RES_INSUFFICIENT_ACCElssRIGHTS:
+    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS:
       result := 'Insufficient access rights';
     LDAP_RES_BUSY:
       result := 'Busy';
@@ -1736,7 +1736,7 @@ begin
       result := 'Loop detect';
     LDAP_RES_NAMING_VIOLATION:
       result := 'Naming violation';
-    LDAP_RES_OBJECT_CLAlssVIOLATION:
+    LDAP_RES_OBJECT_CLASS_VIOLATION:
       result := 'Object class violation';
     LDAP_RES_NOT_ALLOWED_ON_NON_LEAF:
       result := 'Not allowed on non leaf';
@@ -1744,7 +1744,7 @@ begin
       result := 'Not allowed on RDN';
     LDAP_RES_ENTRY_ALREADY_EXISTS:
       result := 'Entry already exists';
-    LDAP_RES_OBJECT_CLAlssMODS_PROHIBITED:
+    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED:
       result := 'Object class mods prohibited';
     LDAP_RES_AFFECTS_MULTIPLE_DSAS:
       result := 'Affects multiple DSAs';
