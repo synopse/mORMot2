@@ -503,7 +503,7 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateUtf8WithStatus(const Format: RawUtf8; const Args: array of const; const Status: cardinal);
+    constructor CreateUWithStatus(const msg: RawUtf8; const Status: cardinal);
     /// the CustomStatus to return
     property Status: Cardinal read fStatus;
   end;
@@ -2634,10 +2634,10 @@ implementation
 
 { EInterfaceCustomStatus }
 
-constructor EInterfaceCustomStatus.CreateUtf8WithStatus(const Format: RawUtf8; const Args: array of const; const Status: cardinal);
+constructor EInterfaceCustomStatus.CreateUWithStatus(const msg: RawUtf8; const Status: cardinal);
 begin
   fStatus := Status;
-  inherited CreateUtf8(Format, Args);
+  inherited CreateU(msg);
 end;
 
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
@@ -7589,7 +7589,7 @@ begin
         cs := fValues[fMethod^.ArgsResultIndex];
         fServiceCustomAnswerStatus := cs^.Status;
         if (fServiceCustomAnswerStatus >= HTTP_NOTFOUND) then
-          raise EInterfaceCustomStatus.CreateUtf8WithStatus(cs^.ErrorMessage, [], fServiceCustomAnswerStatus);
+          raise EInterfaceCustomStatus.CreateUWithStatus(ToUtf8(cs^.ErrorMessage), fServiceCustomAnswerStatus);
       end;
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
