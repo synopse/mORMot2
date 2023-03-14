@@ -668,14 +668,14 @@ begin
           p^.VData := '';
         ftInt64:
           case p^.VDBType of
-            INT4OID:
+            INT4OID: // ORM create such fields for 32-bit values (ftUnknown)
               begin
                 fPGParamFormats[i] := PGFMT_BIN;
                 fPGParamLengths[i] := 4;
                 p^.VInt64 := bswap32(p^.VInt64); // libpq expects network order
                 fPGParams[i] := @p^.VInt64;
               end;
-            INT8OID:
+            INT8OID: // ORM create such fields for 64-bit values (ftInt64)
               begin
                 fPGParamFormats[i] := PGFMT_BIN;
                 fPGParamLengths[i] := 8;
@@ -688,7 +688,7 @@ begin
         ftCurrency:
           Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
         ftDouble:
-          if p^.VDBType = FLOAT8OID then
+          if p^.VDBType = FLOAT8OID then // ORM create such fields for ftDouble
           begin
             fPGParamFormats[i] := PGFMT_BIN;
             fPGParamLengths[i] := 8;

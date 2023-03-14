@@ -6822,8 +6822,12 @@ begin
         FormatShort16(' wr=%', [UpdateCount], tmp);
       Msg := @tmp;
     end;
-    fSqlLogLog.Log(fSqlLogLevel, 'Execute t=%% q=%',
-      [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
+    if fSqlLogLevel = sllSQL then
+      fSqlLogLog.Log(sllSQL, 'Execute t=%% q=%',
+        [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
+    else // from TSqlDBPostgresStatement.GetPipelineResult
+      fSqlLogLog.Log(fSqlLogLevel, 'Return t=%%',
+        [fSqlLogTimer.Time, Msg^], self);
   end
   else
   begin
