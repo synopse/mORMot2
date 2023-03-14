@@ -666,7 +666,24 @@ begin
         ftNull:
           p^.VData := '';
         ftInt64:
-          Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
+          begin
+            if p^.VDBType = INT4OID then
+            begin
+              fPGParamFormats[i] := 1; // binary
+              fPGParamLengths[i] := 4;
+              p^.VInt64 := bswap32(p^.VInt64);
+              fPGParams[i] := @p^.VInt64;
+            end
+            else if p^.VDBType = INT8OID then
+            begin
+              fPGParamFormats[i] := 1; // binary
+              fPGParamLengths[i] := 8;
+              p^.VInt64 := bswap64(p^.VInt64);
+              fPGParams[i] := @p^.VInt64;
+            end
+            else
+              Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
+          end;
         ftCurrency:
           Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
         ftDouble:
@@ -687,7 +704,8 @@ begin
           'parameter #% of type %', [self, i, ToText(p^.VType)^]);
       end;
     end;
-    fPGParams[i] := pointer(p^.VData);
+    if (fPGParamFormats[i] <> 1) or (p^.VType = ftBlob) then
+      fPGParams[i] := pointer(p^.VData);
     inc(p);
   end;
 end;
@@ -714,6 +732,10 @@ end;
 
 procedure TSqlDBPostgresStatement.Prepare(
   const aSql: RawUtf8; ExpectResults: boolean);
+var
+  i: integer;
+  res: PPGresult;
+  c: TSqlDBPostgresConnection;
 begin
   // it is called once: already cached in TSqlDBConnection.NewStatementPrepared
   SqlLogBegin(sllDB);
@@ -725,8 +747,21 @@ begin
   begin
     // preparable statements will be cached server-side by index hexa as name
     include(fCache, scOnServer);
-    TSqlDBPostgresConnection(fConnection).PrepareCached(
-      fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
+    c := TSqlDBPostgresConnection(fConnection);
+    c.PrepareCached(fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
+    // get param types for possible binary binding
+    if fPreparedParamsCount > 0 then
+    begin
+      // allocate params in dynamic array
+      fParam.Count := fPreparedParamsCount;
+      res := PQ.DescribePrepared(c.fPGConn, pointer(fPreparedStmtName));
+      PQ.Check(c.fPGConn, 'DescribePrepared', res, nil, {forceClean=}false);
+      for i := 0 to fPreparedParamsCount - 1 do
+      begin
+        fParams[i].VDBType := PQ.ParamType(res, i);
+      end;
+      PQ.Clear(res);
+    end;
     SqlLogEnd(' c=%', [fPreparedStmtName]);
   end
   else
