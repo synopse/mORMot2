@@ -149,11 +149,11 @@ type
     fRes: pointer;
     fResStatus: integer;
     fPreparedParamsCount: integer;
-    // pointers to query parameters; initialized by Prepare, filled in Executeprepared
+    // pointers to query parameters: allocated in Prepare, filled in BindParams
     fPGParams: TPointerDynArray;
-    // 0 - text, 1 - binary; initialized by Prepare, filled in Executeprepared
+    // PGFMT_TEXT or PGFMT_BIN: allocated in Prepare, filled in BindParams
     fPGParamFormats: TIntegerDynArray;
-    // non zero for binary params
+    // non zero for PGFMT_BIN params
     fPGParamLengths: TIntegerDynArray;
     /// define the result columns name and content
     procedure BindColumns;
@@ -639,7 +639,8 @@ var
   p: PSqlDBParam;
 begin
   // mark parameter as textual by default, with no blob length
-  FillCharFast(pointer(fPGParamFormats)^, fParamCount shl 2, 0);
+  FillCharFast(pointer(fPGParams)^, fParamCount shl POINTERSHR, 0);
+  FillCharFast(pointer(fPGParamFormats)^, fParamCount shl 2, PGFMT_TEXT);
   FillCharFast(pointer(fPGParamLengths)^, fParamCount shl 2, 0);
   // bind fParams[] as expected by PostgreSQL - potentially as array
   p := pointer(fParams);
@@ -666,28 +667,36 @@ begin
         ftNull:
           p^.VData := '';
         ftInt64:
-          begin
-            if p^.VDBType = INT4OID then
-            begin
-              fPGParamFormats[i] := 1; // binary
-              fPGParamLengths[i] := 4;
-              p^.VInt64 := bswap32(p^.VInt64);
-              fPGParams[i] := @p^.VInt64;
-            end
-            else if p^.VDBType = INT8OID then
-            begin
-              fPGParamFormats[i] := 1; // binary
-              fPGParamLengths[i] := 8;
-              p^.VInt64 := bswap64(p^.VInt64);
-              fPGParams[i] := @p^.VInt64;
-            end
-            else
-              Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
+          case p^.VDBType of
+            INT4OID:
+              begin
+                fPGParamFormats[i] := PGFMT_BIN;
+                fPGParamLengths[i] := 4;
+                p^.VInt64 := bswap32(p^.VInt64); // LIBPQ expects network order
+                fPGParams[i] := @p^.VInt64;
+              end;
+            INT8OID:
+              begin
+                fPGParamFormats[i] := PGFMT_BIN;
+                fPGParamLengths[i] := 8;
+                p^.VInt64 := bswap64(p^.VInt64);
+                fPGParams[i] := @p^.VInt64;
+              end;
+          else
+            Int64ToUtf8(p^.VInt64, RawUtf8(p^.VData));
           end;
         ftCurrency:
           Curr64ToStr(p^.VInt64, RawUtf8(p^.VData));
         ftDouble:
-          DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
+          if p^.VDBType = FLOAT8OID then
+          begin
+            fPGParamFormats[i] := PGFMT_BIN;
+            fPGParamLengths[i] := 8;
+            p^.VInt64 := bswap64(p^.VInt64); // double also in network order!
+            fPGParams[i] := @p^.VInt64;
+          end
+          else
+            DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
         ftDate:
           // Postgres expects space instead of T in ISO-8601 expanded format
           DateTimeToIso8601Var(PDateTime(@p^.VInt64)^,
@@ -696,7 +705,7 @@ begin
           ; // UTF-8 text already in p^.VData buffer
         ftBlob:
           begin
-            fPGParamFormats[i] := 1; // binary
+            fPGParamFormats[i] := PGFMT_BIN;
             fPGParamLengths[i] := length(p^.VData);
           end;
       else
@@ -704,7 +713,7 @@ begin
           'parameter #% of type %', [self, i, ToText(p^.VType)^]);
       end;
     end;
-    if (fPGParamFormats[i] <> 1) or (p^.VType = ftBlob) then
+    if fPGParams[i] = nil then
       fPGParams[i] := pointer(p^.VData);
     inc(p);
   end;
@@ -733,7 +742,7 @@ end;
 procedure TSqlDBPostgresStatement.Prepare(
   const aSql: RawUtf8; ExpectResults: boolean);
 var
-  i: integer;
+  i: PtrInt;
   res: PPGresult;
   c: TSqlDBPostgresConnection;
 begin
@@ -757,9 +766,7 @@ begin
       res := PQ.DescribePrepared(c.fPGConn, pointer(fPreparedStmtName));
       PQ.Check(c.fPGConn, 'DescribePrepared', res, nil, {forceClean=}false);
       for i := 0 to fPreparedParamsCount - 1 do
-      begin
         fParams[i].VDBType := PQ.ParamType(res, i);
-      end;
       PQ.Clear(res);
     end;
     SqlLogEnd(' c=%', [fPreparedStmtName]);

@@ -137,7 +137,7 @@ const
   CONNECTION_NEEDED = 8;
 
   PGFMT_TEXT = 0;
-  PGFMT_BIN = 1;
+  PGFMT_BIN  = 1;
 
 
 { ************ PostgreSQL Client Library Loading }
