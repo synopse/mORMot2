@@ -80,6 +80,7 @@ const
   CIDROID = 650;
   INT2ARRAYOID = 1005;
   INT4ARRAYOID = 1007;
+  INT8ARRAYOID = 1016;
   TEXTARRAYOID= 1009;
   OIDARRAYOID = 1028;
   FLOAT4ARRAYOID = 1021;
@@ -136,7 +137,7 @@ const
   CONNECTION_NEEDED = 8;
 
   PGFMT_TEXT = 0;
-  PGFMT_BIN = 1;
+  PGFMT_BIN  = 1;
 
 
 { ************ PostgreSQL Client Library Loading }
@@ -171,6 +172,9 @@ type
     Exec: function(conn: PPGconn; query: PUtf8Char): PPGresult; cdecl;
     Prepare: function(conn: PPGconn; stmtName, query: PUtf8Char; nParams: integer;
       paramTypes: PCardinal): PPGresult; cdecl;
+    DescribePrepared: function(conn: PPGconn; stmtName: PUtf8Char): PPGresult; cdecl;
+    NParams: function(res: PPGresult): integer; cdecl;
+    ParamType: function(res: PPGresult; param_number: integer): word; cdecl;
     ExecPrepared: function(conn: PPGconn; stmtName: PUtf8Char; nParams: integer;
       paramValues: PPchar; paramLengths, paramFormats: PInteger;
       resultFormat: integer): PPGresult; cdecl;
@@ -238,7 +242,7 @@ implementation
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..32] of RawUtf8 = (
+  PQ_ENTRIES: array[0..35] of RawUtf8 = (
     'libVersion',
     'isthreadsafe',
     'setdbLogin',
@@ -252,6 +256,9 @@ const
     'freemem',
     'exec',
     'prepare',
+    'describePrepared',
+    'nparams',
+    'paramtype',
     'execPrepared',
     'execParams',
     'nfields',

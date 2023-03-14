@@ -631,6 +631,8 @@ type
     function Final(out aDigest: THash512Rec): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+    /// one-step hash computation of a buffer as lowercase hexadecimal string
+    function Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
     /// one-step hash computation of a buffer as a binary buffer
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
       out aDigest: THash512Rec): integer; overload;
@@ -762,6 +764,31 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
+/// compute the Digest access authentication client code for a given algorithm
+// - as defined in https://en.wikipedia.org/wiki/Digest_access_authentication
+// - may return '' if Algo does not match algorithm=... value (MD5 or SHA-256)
+function DigestClient(Algo: THashAlgo;
+  const FromServer, DigestUri, UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+
+/// extract the Digest access authentication realm on client side
+// - could be proposed to the user interation UI to specify the auth context
+function DigestRealm(const FromServer: RawUtf8): RawUtf8;
+
+const
+  /// the Digest access authentication algorithm name
+  // - SASL only defines DIGEST-MD5 but nothing prevents use from extending it
+  DIGEST_ALGONAME: array[THashAlgo] of RawUtf8 = (
+    'DIGEST-MD5',
+    'DIGEST-SHA1',
+    'DIGEST-SHA-256',
+    'DIGEST-SHA-384',
+    'DIGEST-SHA-512',
+    'DIGEST-SHA3-256',
+    'DIGEST-SHA3-512');
+
+/// quickly recognize a Digest access authentication algorithm name
+// - returns e.g. true and Algo = hfMd5 for both 'DIGEST-MD5' or 'MD5'
+function DigestAlgo(AlgoName: PUtf8Char; var Algo: THashAlgo): boolean;
 
 
 { ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
@@ -2320,6 +2347,13 @@ begin
   result := Final;
 end;
 
+function TSynHasher.Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8;
+begin
+  Init(aAlgo);
+  Update(aBuffer);
+  result := Final;
+end;
+
 function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
   out aDigest: THash512Rec): integer;
 begin
@@ -2575,6 +2609,96 @@ begin
   result := HashFile(FileName, hfSHA3_512);
 end;
 
+procedure DigestUnquote(Value: PUtf8Char; var result: RawUtf8);
+begin
+  if (Value = nil) or
+     (Value^ <> '"') then
+    FastSetString(result, Value, StrLen(Value))
+  else
+    UnQuoteSqlStringVar(Value, result);
+end;
+
+function DigestRealm(const FromServer: RawUtf8): RawUtf8;
+var
+  p: PUtf8Char;
+begin
+  result := '';
+  p := pointer(FromServer);
+  while p <> nil do
+    if IdemPChar(pointer(GetNextItem(p)), 'REALM=') then
+    begin
+      DigestUnquote(p + 6, result);
+      exit;
+    end
+end;
+
+function DigestAlgo(AlgoName: PUtf8Char; var Algo: THashAlgo): boolean;
+var
+  a: THashAlgo;
+begin
+  result := false;
+  if AlgoName = nil then
+    exit;
+  if IdemPChar(AlgoName, 'DIGEST-') then
+    inc(AlgoName, 7);
+  for a := low(a) to high(a) do
+    if IdemPChar(AlgoName, PAnsiChar(pointer(DIGEST_ALGONAME[a])) + 7) then
+    begin
+      Algo := a;
+      result := true;
+      exit;
+    end;
+end;
+
+function DigestClient(Algo: THashAlgo;
+  const FromServer, DigestUri, UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+var
+  ha0, ha1, ha2, nonce, cnonce, nc, realm, authzid, qop, uri, resp: RawUtf8;
+  p, s: PUtf8Char;
+  hasher: TSynHasher;
+  dig: THash512Rec;
+begin
+  result := '';
+  p := pointer(FromServer);
+  while p <> nil do
+  begin
+    s := pointer(GetNextItem(p));
+    case IdemPCharArray(s, ['NONCE=', 'REALM=', 'ALGORITHM=', 'AUTHZID=']) of
+      0:
+        DigestUnquote(s + 6, nonce);
+      1:
+        DigestUnquote(s + 6, realm);
+      2:
+        // ensure the supplied Algo is correct - see RFC 7616
+        if not DigestAlgo(s + 10, hasher.fAlgo) or
+           (Algo <> hasher.fAlgo) then
+             exit; // unsupported algorithm
+      3:
+        DigestUnquote(p + 8, authzid);
+    end;
+  end;
+  cnonce := Int64ToHexLower(Random64);
+  nc := '00000001';
+  qop := 'auth';
+  hasher.Init(Algo);
+  hasher.Update(UserName);
+  hasher.Update(':');
+  hasher.Update(realm);
+  hasher.Update(':');
+  hasher.Update(Password);
+  FastSetString(ha0, @dig, hasher.Final(dig)); // ha0 = hash binary, not hexa
+  ha1 := FormatUtf8('%:%:%', [ha0, nonce, cnonce]);
+  if authzid <> '' then
+    Append(ha1, [':', authzid]);
+  ha1 := hasher.Full(Algo, ha1); // into lowercase hexadecimal
+  FormatUtf8('AUTHENTICATE:%', [DigestUri], uri);
+  ha2 := hasher.Full(Algo, uri);
+  FormatUtf8('%:%:%:%:%:%', [ha1, nonce, nc, cnonce, qop, ha2], resp);
+  resp := hasher.Full(Algo, resp);
+  FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
+    'digest-uri="%",response=%',
+    [UserName, realm, nonce, cnonce, nc, qop, DigestUri, resp], result);
+end;
 
 
 { TSynSigner }
