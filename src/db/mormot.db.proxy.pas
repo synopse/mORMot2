@@ -649,7 +649,7 @@ type
     // - aServerName should be the HTTP server address as 'server:port'
     // - aDatabaseName would be used to compute the URI as in TSqlDBServerAbstract
     // - the user/password credential should match server-side authentication
-    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUtf8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID,aPassWord: RawUtf8); override;
     /// released used memory
     destructor Destroy; override;
     /// low-level direct access to the Socket implementation instance
@@ -1121,9 +1121,9 @@ var
   msgin, msgout, msgRaw: RawUtf8;
   header: TRemoteMessageHeader;
   outheader: PRemoteMessageHeader;
+  msg, msgmax: PAnsiChar;
   intext: RawUtf8                             absolute Input;
   inexec: TSqlDBProxyConnectionCommandExecute absolute Input;
-  msg, msgmax: PAnsiChar;
   outdef: TSqlDBDefinition                    absolute Output;
   outint64: Int64                             absolute Output;
   outboolean: boolean                         absolute Output;

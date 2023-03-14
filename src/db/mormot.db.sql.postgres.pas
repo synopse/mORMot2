@@ -483,7 +483,7 @@ var
   err: integer;
 begin
   res := PQ.getResult(fPGConn);
-  PQ.Check(fPGConn, 'GetResult', res, @res, {forceClean=}false);
+  PQ.Check(fPGConn, 'GetResult', res, @res, {andclear=}false);
   err := PQ.ResultStatus(res);
   if err <> PGRES_PIPELINE_SYNC then
     raise ESqlDBPostgres.CreateUtf8(
@@ -672,7 +672,7 @@ begin
               begin
                 fPGParamFormats[i] := PGFMT_BIN;
                 fPGParamLengths[i] := 4;
-                p^.VInt64 := bswap32(p^.VInt64); // LIBPQ expects network order
+                p^.VInt64 := bswap32(p^.VInt64); // libpq expects network order
                 fPGParams[i] := @p^.VInt64;
               end;
             INT8OID:
@@ -698,7 +698,7 @@ begin
           else
             DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
         ftDate:
-          // Postgres expects space instead of T in ISO-8601 expanded format
+          // libpq expects space instead of T in ISO-8601 expanded format
           DateTimeToIso8601Var(PDateTime(@p^.VInt64)^,
             {expand=}true, fForceDateWithMS, ' ', #0, RawUtf8(p^.VData));
         ftUtf8:
@@ -758,13 +758,12 @@ begin
     include(fCache, scOnServer);
     c := TSqlDBPostgresConnection(fConnection);
     c.PrepareCached(fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
-    // get param types for possible binary binding
+    // get param types into VDBType for possible binary binding in BindParams
     if fPreparedParamsCount > 0 then
     begin
-      // allocate params in dynamic array
       fParam.Count := fPreparedParamsCount;
       res := PQ.DescribePrepared(c.fPGConn, pointer(fPreparedStmtName));
-      PQ.Check(c.fPGConn, 'DescribePrepared', res, nil, {forceClean=}false);
+      PQ.Check(c.fPGConn, 'DescribePrepared', res, nil, {andclear=}false);
       for i := 0 to fPreparedParamsCount - 1 do
         fParams[i].VDBType := PQ.ParamType(res, i);
       PQ.Clear(res);
@@ -773,6 +772,7 @@ begin
   end
   else
     SqlLogEnd;
+  // allocate libpq parameter buffers as dynamic arrays
   SetLength(fPGParams, fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
   SetLength(fPGParamLengths, fPreparedParamsCount);
@@ -808,7 +808,7 @@ begin
     fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared),
       fPreparedParamsCount, nil, pointer(fPGParams), pointer(fPGParamLengths),
       pointer(fPGParamFormats), PGFMT_TEXT);
-  PQ.Check(c.fPGConn, 'Exec', fRes, @fRes, {forceClean=}false);
+  PQ.Check(c.fPGConn, 'Exec', fRes, @fRes, {andclear=}false);
   fResStatus := PQ.ResultStatus(fRes);
   if fExpectResults then
   begin
@@ -839,9 +839,9 @@ begin
   SqlLogBegin(sllSQL);
   if fSqlPrepared = '' then
     raise ESqlDBPostgres.CreateUtf8(
-      '%.ExecutePrepared: Statement not prepared', [self]);
+      '%.SendPipelinePrepared: Statement not prepared', [self]);
   if fParamCount <> fPreparedParamsCount then
-    raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % ' +
+    raise ESqlDBPostgres.CreateUtf8('%.SendPipelinePrepared: Query expects % ' +
       'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
   inherited ExecutePrepared;
   BindParams;
@@ -865,7 +865,7 @@ var
   c: TSqlDBPostgresConnection;
   endRes: pointer;
 begin
-  SqlLogBegin(sllSQL);
+  SqlLogBegin(sllResult);
   c := TSqlDBPostgresConnection(fConnection);
   if fRes <> nil then
   begin
@@ -873,7 +873,7 @@ begin
     fRes := nil;
   end;
   fRes := PQ.getResult(c.fPGConn);
-  PQ.Check(c.fPGConn, 'GetResult', fRes, @fRes, {forceClean=}false);
+  PQ.Check(c.fPGConn, 'GetPipelineResult', fRes, @fRes, {andclear=}false);
   fResStatus := PQ.ResultStatus(fRes);
   if fExpectResults then
   begin

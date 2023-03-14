@@ -2125,7 +2125,7 @@ type
     function GetColumnVariant(const ColName: RawUtf8): Variant;
     /// return the associated statement instance for a ISqlDBRows interface
     function Instance: TSqlDBStatement;
-    /// wrappers to compute sllSQL/sllDB SQL context with a local timer
+    /// wrappers to compute sllSQL/sllDB/sllResult SQL context with a local timer
     function SqlLogBegin(Level: TSynLogInfo): TSynLog;
       {$ifdef HASINLINE} inline; {$endif}
     function SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
@@ -2749,8 +2749,8 @@ type
   // this type can be used to implement a generic parameter
   // - used e.g. by TSqlDBStatementWithParams as a dynamic array
   // (and its inherited TSqlDBOracleStatement)
-  // - don't change this structure, since it will be serialized as binary
-  // for TSqlDBProxyConnectionCommandExecute
+  // - warning: don't change this structure, since it will be serialized as
+  // SaveRecord() binary for TSqlDBProxyConnectionCommandExecute
   TSqlDBParam = packed record
     /// storage used for TEXT (ftUtf8) and BLOB (ftBlob) values
     // - ftBlob are stored as RawByteString
@@ -2769,7 +2769,7 @@ type
     VType: TSqlDBFieldType;
     /// define if parameter can be retrieved after a stored procedure execution
     VInOut: TSqlDBParamInOutType;
-    /// used e.g. by TSqlDBOracleStatement
+    /// used e.g. by TSqlDBOracleStatement or TSqlDBPostgresStatement
     VDBType: word;
   end;
 
@@ -6769,10 +6769,10 @@ end;
 function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
 begin
   result := nil;
-  if Level = sllDB then // prepare
+  if Level = sllDB then  // sllDB = prepare
     fSqlLogTimer.Start
   else
-    fSqlLogTimer.Resume;
+    fSqlLogTimer.Resume; // sllSQL or sllResult
 end;
 
 function TSqlDBStatement.SqlLogEnd(Msg: PShortString): Int64;
@@ -6787,12 +6787,12 @@ function TSqlDBStatement.DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogInfo): 
 begin
   result := Log.SynLog;
   fSqlLogLevel := Level;
-  if Level = sllSQL then
+  if Level = sllSQL then // sllSQL = executeprepared
     ComputeSqlWithInlinedParams;
-  if Level = sllDB then // prepare
+  if Level = sllDB then  // sllDB = prepare
     fSqlLogTimer.Start
   else
-    fSqlLogTimer.Resume;
+    fSqlLogTimer.Resume; // sllSQL or sllResult
 end;
 
 function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
@@ -6814,7 +6814,7 @@ var
 begin
   fSqlLogTimer.Pause;
   tmp[0] := #0;
-  if fSqlLogLevel = sllSQL then
+  if fSqlLogLevel <> sllDB then // sllSQL or sllResult
   begin
     if Msg = nil then
     begin
@@ -6822,7 +6822,7 @@ begin
         FormatShort16(' wr=%', [UpdateCount], tmp);
       Msg := @tmp;
     end;
-    fSqlLogLog.Log(fSqlLogLevel, 'ExecutePrepared t=%% q=%',
+    fSqlLogLog.Log(fSqlLogLevel, 'Execute t=%% q=%',
       [fSqlLogTimer.Time, Msg^, fSqlWithInlinedParams], self)
   end
   else
