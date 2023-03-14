@@ -937,7 +937,7 @@ end;
 
 procedure ConvertUserName(P: PUtf8Char; Len: PtrUInt; out aUserName: RawUtf8);
 var
-  DomainStart, DomainEnd: PUtf8Char;
+  DomainStart, DomainEnd, DomainNext: PUtf8Char;
   DomainLen, i: PtrInt;
   Domain, User: RawUtf8;
 begin
@@ -949,22 +949,33 @@ begin
   begin
     DomainStart^ := #0;
     Inc(DomainStart);
-    DomainLen := StrLen(DomainStart);
-    ServerDomainMapSafe.ReadLock;
-    try
-      for i := 0 to high(ServerDomainMap) do
-        with ServerDomainMap[i] do
-          if IdemPropNameU(Old, DomainStart, DomainLen) then
-          begin
-            Domain := New;
-            break;
-          end;
-    finally
-      ServerDomainMapSafe.ReadUnLock;
+    if ServerDomainMap <> nil then
+    begin
+      DomainLen := StrLen(DomainStart);
+      ServerDomainMapSafe.ReadLock;
+      try
+        for i := 0 to high(ServerDomainMap) do
+          with ServerDomainMap[i] do
+            if IdemPropNameU(Old, DomainStart, DomainLen) then
+            begin
+              Domain := New;
+              break;
+            end;
+      finally
+        ServerDomainMapSafe.ReadUnLock;
+      end;
     end;
     if {%H-}Domain = '' then
     begin
       DomainEnd := PosChar(DomainStart, '.');
+      if DomainEnd <> nil then
+        repeat // e.g. 'user@AD.MYCOMP.TLD' -> 'MYCOMP'
+          DomainNext := PosChar(DomainEnd + 1, '.');
+          if DomainNext = nil then
+            break; // we found the last '.TLD'
+          DomainStart := DomainEnd + 1;
+          DomainEnd := DomainNext;
+        until false;
       if DomainEnd <> nil then
         DomainEnd^ := #0;
       Domain := DomainStart;
