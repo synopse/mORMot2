@@ -232,7 +232,6 @@ type
 implementation
 
 uses
-  sockets, // htonl
   mormot.db.raw.postgres; // raw libpq library API access
 
 
@@ -672,15 +671,14 @@ begin
             begin
               fPGParamFormats[i] := 1; // binary
               fPGParamLengths[i] := 4;
-              p^.VInt64 := htonl(p^.VInt64);
+              p^.VInt64 := bswap32(p^.VInt64);
               fPGParams[i] := @p^.VInt64;
             end
             else if p^.VDBType = INT8OID then
             begin
               fPGParamFormats[i] := 1; // binary
               fPGParamLengths[i] := 8;
-              Int64Rec(p^.VInt64).Hi := htonl(Int64Rec(p^.VInt64).Hi);
-              Int64Rec(p^.VInt64).Lo := htonl(Int64Rec(p^.VInt64).Lo);
+              p^.VInt64 := bswap64(p^.VInt64);
               fPGParams[i] := @p^.VInt64;
             end
             else
