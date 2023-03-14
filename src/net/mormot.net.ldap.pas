@@ -35,6 +35,7 @@ uses
   mormot.lib.sspi, // do-nothing units on non compliant OS
   mormot.lib.gssapi,
   mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.dns;
 
@@ -530,7 +531,6 @@ type
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
-    function SaslDigestMd5(const Value: RawUtf8): RawUtf8;
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
     class function GetErrorString(ErrorCode: integer): RawUtf8;
     function ReceiveString(Size: integer): RawByteString;
@@ -553,8 +553,9 @@ type
     function Bind: boolean;
     /// authenticate a client to the directory server with Username/Password
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
+    // - you can specify a stronger algorithm if MD5 is not strong enough
     // - seems not implemented by OpenLdap
-    function BindSaslDigestMd5: boolean;
+    function BindSaslDigest(Algo: THashAlgo = hfMD5): boolean;
     /// authenticate a client to the directory server using Kerberos
     // - if no UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
@@ -698,15 +699,6 @@ implementation
 
 
 {****** Support procedures and functions }
-
-procedure UnquoteStr(Value: PUtf8Char; var result: RawUtf8);
-begin
-  if (Value = nil) or
-     (Value^ <> '"') then
-    FastSetString(result, Value, StrLen(Value))
-  else
-    UnQuoteSqlStringVar(Value, result);
-end;
 
 function IsBinaryString(const Value: RawByteString): boolean;
 var
@@ -1344,7 +1336,7 @@ begin
     begin
       x := length(s);
       Append(result, [' constructed: length ', x]);
-      Append(indent, ['  ']);
+      Append(indent, '  ');
       AddInteger(il, x + i - 1);
     end
     else
@@ -1949,49 +1941,6 @@ begin
   result := DecodeResponse(ReceiveResponse);
 end;
 
-function TLdapClient.SaslDigestMd5(const Value: RawUtf8): RawUtf8;
-var
-  v, ha0, ha1, ha2, nonce, cnonce, nc, realm, authzid, qop, uri, resp: RawUtf8;
-  p, s: PUtf8Char;
-  hasher: TMd5;
-  dig: TMd5Digest;
-begin
-  // see https://en.wikipedia.org/wiki/Digest_access_authentication
-  p := pointer(Value);
-  while p <> nil do
-  begin
-    v := GetNextItem(p);
-    s := pointer(v);
-    if IdemPChar(s, 'NONCE=') then
-      UnquoteStr(p + 6, nonce)
-    else if IdemPChar(s, 'REALM=') then
-      UnquoteStr(p + 6, realm)
-    else if IdemPChar(s, 'AUTHZID=') then
-      UnquoteStr(p + 8, authzid);
-  end;
-  cnonce := Int64ToHexLower(Random64);
-  nc := '00000001';
-  qop := 'auth';
-  uri := 'ldap/' + LowerCaseU(fSock.Server);
-  hasher.Init;
-  hasher.Update(fSettings.UserName);
-  hasher.Update(':');
-  hasher.Update(realm);
-  hasher.Update(':');
-  hasher.Update(fSettings.Password);
-  hasher.Final(dig);
-  FastSetString(ha0, @dig, SizeOf(dig)); // ha0 = md5 binary, not hexa
-  ha1 := FormatUtf8('%:%:%', [ha0, nonce, cnonce]);
-  if authzid <> '' then
-    Append(ha1, [':', authzid]);
-  ha1 := Md5(ha1); // Md5() = into lowercase hexadecimal
-  ha2 := Md5(FormatUtf8('AUTHENTICATE:%', [uri]));
-  resp := Md5(FormatUtf8('%:%:%:%:%:%', [ha1, nonce, nc, cnonce, qop, ha2]));
-  FormatUtf8('username="%",realm="%",nonce="%",cnonce="%",nc=%,qop=%,' +
-    'digest-uri="%",response=%',
-    [fSettings.UserName, realm, nonce, cnonce, nc, qop, uri, resp], result);
-end;
-
 // https://ldap.com/ldapv3-wire-protocol-reference-search
 
 function TLdapClient.TranslateFilter(const Filter: RawUtf8): TAsnObject;
@@ -2151,9 +2100,10 @@ begin
   fBound := result;
 end;
 
-function TLdapClient.BindSaslDigestMd5: boolean;
+function TLdapClient.BindSaslDigest(Algo: THashAlgo): boolean;
 var
   x, xt: integer;
+  dig: RawUtf8;
   s, t, digreq: TAsnObject;
 begin
   result := false;
@@ -2167,19 +2117,21 @@ begin
                 Asn(fVersion),
                 Asn(''),
                 Asn(ASN1_CTC3, [
-                  Asn('DIGEST-MD5')])]);
+                  Asn(DIGEST_ALGONAME[Algo])])]);
     t := SendAndReceive(digreq);
     if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
     begin
       s := t;
       x := 1;
       t := AsnNext(x, s, xt);
+      dig := DigestClient(Algo, t, 'ldap/' + LowerCaseU(fSock.Server),
+        fSettings.UserName, fSettings.Password);
       SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                        Asn(fVersion),
                        Asn(''),
                        Asn(ASN1_CTC3, [
-                         Asn('DIGEST-MD5'),
-                         Asn(SaslDigestMd5(t))])]));
+                         Asn(DIGEST_ALGONAME[Algo]),
+                         Asn(dig)])]));
       if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
         SendAndReceive(digreq);
       result := fResultCode = LDAP_RES_SUCCESS;
