@@ -2200,7 +2200,8 @@ begin
          (PInteger(VBlob)^ <> Length(RawByteString(VBlob)) - (SizeOf(integer) + 1)) then
         Blob := ''
       else
-        FastSetRawByteString(Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
+        FastSetRawByteString(
+          Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
   end;
 end;
 

@@ -4440,9 +4440,7 @@ begin
   check(u = 'abc');
   b := AsciiToBaudot('mORMot.net');
   check(BaudotToAscii(b) = 'mormot.net');
-  {$ifdef FPC}
-  SetCodePage(b, CP_UTF8);
-  {$endif FPC}
+  EnsureRawUtf8(b);
   b := b + #0#0#0;
   u := BaudotToAscii(b);
   check(u = 'mormot.net');

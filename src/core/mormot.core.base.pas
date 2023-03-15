@@ -727,6 +727,14 @@ procedure FastAssignNew(var d; s: pointer = nil);
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// ensure the supplied variable will have a CP_UTF8 - making it unique if needed
+procedure EnsureRawUtf8(var s: RawByteString); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// ensure the supplied variable will have a CP_UTF8 - making it unique if needed
+procedure EnsureRawUtf8(var s: RawUtf8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// internal function which could be used instead of SetLength() if RefCnt = 1
 procedure FakeLength(var s: RawUtf8; len: PtrInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
@@ -4257,6 +4265,23 @@ begin
 end;
 
 {$ifdef HASCODEPAGE}
+
+procedure EnsureRawUtf8(var s: RawByteString);
+begin
+  if s <> '' then
+    with PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^ do
+      if CodePage <> CP_UTF8 then
+        if refCnt <> 1 then
+          FastSetString(RawUtf8(s), pointer(s), length) // make copy
+        else
+          CodePage := CP_UTF8; // just replace in-place
+end;
+
+procedure EnsureRawUtf8(var s: RawUtf8);
+begin
+  EnsureRawUtf8(RawByteString(s));
+end;
+
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
 var
   p: PAnsiChar;
@@ -4270,9 +4295,16 @@ function GetCodePage(const s: RawByteString): cardinal;
 begin
   result := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage;
 end;
-{$else}
+
+{$else} // do nothing on Delphi 7-2007
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
-begin // do nothing on Delphi 7-2007
+begin
+end;
+procedure EnsureRawUtf8(var s: RawByteString);
+begin
+end;
+procedure EnsureRawUtf8(var s: RawUtf8);
+begin
 end;
 {$endif HASCODEPAGE}
 
@@ -11148,9 +11180,7 @@ begin
   if Txt = '' then
     exit;
   RawUtf8(TVarData(Value).VAny) := Txt;
-  {$ifdef HASCODEPAGE} // Txt may be read-only: no FastAssignUtf8/FakeCodePage
-  SetCodePage(RawByteString(TVarData(Value).VAny), CP_UTF8, false);
-  {$endif HASCODEPAGE}
+  EnsureRawUtf8(RawByteString(TVarData(Value).VAny));
 end;
 
 function RawUtf8ToVariant(const Txt: RawUtf8): variant;
@@ -11547,11 +11577,9 @@ begin
   if (StartPos = 0) and
      (Len = L) then
   begin
-    {$ifdef HASCODEPAGE}
-    SetCodePage(fDataString, CP_UTF8, false);
-    {$endif HASCODEPAGE}
     Text := fDataString;
     fDataString := ''; // release it ASAP to avoid multi-threading reuse bug
+    EnsureRawUtf8(Text);
   end
   else
   begin
