@@ -532,7 +532,6 @@ type
     function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
-    class function GetErrorString(ErrorCode: integer): RawUtf8;
     function ReceiveString(Size: integer): RawByteString;
   public
     /// initialize this LDAP client instance
@@ -621,6 +620,8 @@ type
       AsCN: boolean = false): RawUtf8;
     /// retrieve al well known object DN or CN as a single convenient record
     function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
+    /// Translate a result code into its string explanation
+    class function GetErrorString(ErrorCode: integer): RawUtf8;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -1410,6 +1411,7 @@ begin
       result := BinToBase64(result)
     else if IsBinaryString(result) then
       result := LogEscapeFull(result);
+    SetCodePage(RawByteString(Result), CP_UTF8, False);
   end;
 end;
 
@@ -1829,7 +1831,7 @@ function TLdapClient.GetNetbiosDomainName: RawUtf8;
 var
   NetbiosObject: TLdapResult;
 begin
-  NetbiosObject := SearchFirst('CN=Partitions,CN=Configuration,' + RootDN,
+  NetbiosObject := SearchFirst(FormatUtf8('CN=Partitions,CN=Configuration,%', [RootDN]),
     '(nETBIOSName=*)', ['nETBIOSName']);
   if Assigned(NetbiosObject) then
     result := NetbiosObject.Attributes.Get('nETBIOSName')
