@@ -602,6 +602,7 @@ type
     hfSHA256,
     hfSHA384,
     hfSHA512,
+    hfSHA512_256,
     hfSHA3_256,
     hfSHA3_512);
 
@@ -686,6 +687,12 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-512/256 cryptographic hashing
+  TStreamRedirectSha512_256 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-3-256 cryptographic hashing
   TStreamRedirectSha3_256 = class(TStreamRedirectSynHasher)
   protected
@@ -755,6 +762,10 @@ function HashFileSha384(const FileName: TFileName): RawUtf8;
 /// compute the SHA-512 checksum of a given file
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha512(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-512/256 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha512_256(const FileName: TFileName): RawUtf8;
 
 /// compute the SHA-3-256 checksum of a given file
 // - this function maps the THashFile signature as defined in mormot.core.buffers
@@ -2266,6 +2277,8 @@ begin
       PSha384(@ctxt)^.Init;
     hfSHA512:
       PSha512(@ctxt)^.Init;
+    hfSHA512_256:
+      PSha512_256(@ctxt)^.Init;
     hfSHA3_256:
       PSha3(@ctxt)^.Init(SHA3_256);
     hfSHA3_512:
@@ -2288,6 +2301,8 @@ begin
       PSha384(@ctxt)^.Update(aBuffer, aLen);
     hfSHA512:
       PSha512(@ctxt)^.Update(aBuffer, aLen);
+    hfSHA512_256:
+      PSha512_256(@ctxt)^.Update(aBuffer, aLen);
     hfSHA3_256:
       PSha3(@ctxt)^.Update(aBuffer, aLen);
     hfSHA3_512:
@@ -2312,7 +2327,7 @@ const
   HASH_SIZE: array[THashAlgo] of integer = (
     SizeOf(TMd5Digest), SizeOf(TSHA1Digest), SizeOf(TSHA256Digest),
     SizeOf(TSHA384Digest), SizeOf(TSHA512Digest), SizeOf(THash256),
-    SizeOf(THash512));
+    SizeOf(THash256), SizeOf(THash512));
 
 function TSynHasher.HashSize: integer;
 begin
@@ -2332,6 +2347,8 @@ begin
       PSha384(@ctxt)^.Final(aDigest.b384);
     hfSHA512:
       PSha512(@ctxt)^.Final(aDigest.b);
+    hfSHA512_256:
+      PSha512_256(@ctxt)^.Final(aDigest.Lo);
     hfSHA3_256:
       PSha3(@ctxt)^.Final(aDigest.Lo);
     hfSHA3_512:
@@ -2388,6 +2405,7 @@ const
     '.sha256',
     '.sha384',
     '.sha512',
+    '.sha512-256',
     '.sha3-256',
     '.sha3-512');
 
@@ -2416,6 +2434,13 @@ end;
 class function TStreamRedirectSha512.GetAlgo: THashAlgo;
 begin
   result := hfSHA512;
+end;
+
+{ TStreamRedirectSha512_256 }
+
+class function TStreamRedirectSha512_256.GetAlgo: THashAlgo;
+begin
+  result := hfSHA512_256;
 end;
 
 { TStreamRedirectSha384 }
@@ -2544,12 +2569,13 @@ begin
 end;
 
 const
-  ALGO_EXT: array[THashAlgo] of string[8] = (
+  ALGO_EXT: array[THashAlgo] of string[10] = (
     'md5',
     'sha1',
     'sha256',
     'sha384',
     'sha512',
+    'sha512_256',
     'sha3_256',
     'sha3_512');
 
@@ -2597,6 +2623,11 @@ end;
 function HashFileSha512(const FileName: TFileName): RawUtf8;
 begin
   result := HashFile(FileName, hfSHA512);
+end;
+
+function HashFileSha512_256(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA512_256);
 end;
 
 function HashFileSha3_256(const FileName: TFileName): RawUtf8;

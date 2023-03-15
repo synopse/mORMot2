@@ -1936,6 +1936,29 @@ type
   /// points to SHA-384 hashing instance
   PSha384 = ^TSha384;
 
+  /// implements SHA-512/256 hashing
+  // - it is in fact a TSha512 truncated hash, with other initial hash values
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
+  TSha512_256 = object(TSha384512)
+  public
+    /// initialize SHA-512/256 context for hashing
+    procedure Init;
+    /// finalize and compute the resulting SHA-512/256 hash Digest of all data
+    // affected to Update() method
+    // - will also call Init to reset all internal temporary context, for safety
+    procedure Final(out Digest: TSha256Digest; NoInit: boolean = false); overload;
+    /// finalize and compute the resulting SHA-384 hash Digest of all data
+    // affected to Update() method
+    function Final(NoInit: boolean = false): TSha256Digest; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// one method to rule them all
+    // - call Init, then Update(), then Final()
+    procedure Full(Buffer: pointer; Len: integer; out Digest: TSha256Digest);
+  end;
+
+  /// points to SHA-512/256 hashing instance
+  PSha512_256= ^TSha512_256;
+
   /// implements SHA-512 hashing
   // - by design, this algorithm is expected to be much faster on 64-bit CPU,
   // since all internal process involves QWord - but we included a SSE3 asm
@@ -2658,6 +2681,10 @@ function Sha384(const s: RawByteString): RawUtf8;
 /// compute the hexadecimal representation of a SHA-384 digest
 function Sha384DigestToString(const D: TSha384Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// direct SHA-512/256 hash calculation of some data (string-encoded)
+// - result is returned in hexadecimal format
+function Sha512_256(const s: RawByteString): RawUtf8;
 
 
 /// direct SHA-512 hash calculation of some data (string-encoded)
@@ -8246,6 +8273,44 @@ begin
 end;
 
 
+{ TSha512_256 }
+
+procedure TSha512_256.Init;
+begin
+  Hash.a := QWord($22312194fc2bf72c);
+  Hash.b := QWord($9f555fa3c84c64c2);
+  Hash.c := QWord($2393b86b6f53b151);
+  Hash.d := QWord($963877195940eabd);
+  Hash.e := QWord($96283ee2a88effe3);
+  Hash.f := QWord($be5e1e2553863992);
+  Hash.g := QWord($2b0199fc2c85b8aa);
+  Hash.h := QWord($0eb72ddc81c52ca2);
+  MLen := 0;
+  Index := 0;
+  FillcharFast(Data, SizeOf(Data), 0);
+end;
+
+procedure TSha512_256.Final(out Digest: TSha256Digest; NoInit: boolean);
+begin
+  FinalStep;
+  bswap64array(@Hash, @Digest, 4);
+  if not NoInit then
+    Init;
+end;
+
+function TSha512_256.Final(NoInit: boolean): TSha256Digest;
+begin
+  Final(result, NoInit);
+end;
+
+procedure TSha512_256.Full(Buffer: pointer; Len: integer; out Digest: TSha256Digest);
+begin
+  Init;
+  Update(Buffer, Len); // final bytes
+  Final(Digest);
+end;
+
+
 { TSha384 }
 
 procedure TSha384.Init;
@@ -10501,6 +10566,15 @@ begin
   FillZero(Digest);
 end;
 
+function Sha512_256(const s: RawByteString): RawUtf8;
+var
+  SHA: TSha512_256;
+  Digest: TSha256Digest;
+begin
+  SHA.Full(pointer(s), length(s), Digest);
+  result := Sha256DigestToString(Digest);
+  FillZero(Digest);
+end;
 
 function Sha512DigestToString(const D: TSha512Digest): RawUtf8;
 begin

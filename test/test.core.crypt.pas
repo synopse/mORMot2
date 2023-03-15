@@ -322,6 +322,8 @@ procedure TTestCoreCrypto._SHA512;
 
 const
   FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
+  ABCU: RawByteString = 'abcdefghbcdefghicdefghijdefghijkefghijklfghijk' +
+    'lmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu';
 var
   dig: THash512Rec;
   i: PtrInt;
@@ -329,24 +331,28 @@ var
   c: AnsiChar;
   temp: RawByteString;
 begin
-  // includes SHA-384, which is a truncated SHA-512
-  Check(SHA384('') =
+  // includes SHA-384 and SHA-512/256, which are truncated SHA-512
+  CheckEqual(SHA384(''),
     '38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63' +
     'f6e1da274edebfe76f65fbd51ad2f14898b95b');
-  Check(SHA384('abc') =
+  CheckEqual(SHA384('abc'),
     'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605' +
     'a43ff5bed8086072ba1e7cc2358baeca134c825a7');
-  Check(SHA384(
-    'abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn' +
-    'hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu') = '09330c33f711' +
+  CheckEqual(SHA384(ABCU), '09330c33f711' +
     '47e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712fcc7c71a557e2db966c3e9fa91746039');
-  Check(Sha512('') =
+  CheckEqual(Sha512_256(''),
+    'c672b8d1ef56ed28ab87c3622c5114069bdd3ad7b8f9737498d0c01ecef0967a');
+  CheckEqual(Sha512_256('abc'),
+    '53048e2681941ef99b2e29b76b4c7dabe4c2d0c634fc6d46e0e2f13107e7af23');
+  CheckEqual(Sha512_256(ABCU),
+    '3928e184fb8690f840da3988121d31be65cb9d3ef83ee6146feac861e19b563a');
+  CheckEqual(Sha512(''),
     'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
     '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
-  Check(Sha512(FOX) =
+  CheckEqual(Sha512(FOX),
     '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
     '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
-  Check(Sha512(FOX + '.') =
+  CheckEqual(Sha512(FOX + '.'),
     '91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128' +
     '90cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed');
   sha.Init;
@@ -935,7 +941,7 @@ type
     // cryptographic hashes
     bMD5,
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
-    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
+    bSHA384, bHMACSHA384, bSHA512, bSHA512_256, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
@@ -983,6 +989,7 @@ var
   SHA256: TSha256;
   SHA384: TSha384;
   SHA512: TSha512;
+  SHA512_256: TSha512_256;
   SHA3, SHAKE128, SHAKE256: TSha3;
   RC4: TRC4;
   timer: TPrecisionTimer;
@@ -1059,6 +1066,8 @@ begin
             HmacSha384('secret', data, dig.b384);
           bSHA512:
             SHA512.Full(pointer(data), SIZ[s], dig.b);
+          bSHA512_256:
+            SHA512_256.Full(pointer(data), SIZ[s], dig.Lo);
           bHMACSHA512:
             HmacSha512('secret', data, dig.b);
           bSHA3_256:
