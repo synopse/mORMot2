@@ -612,6 +612,8 @@ type
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
+    /// translate a LDAP_RES_* result code into some human-readable text
+    class function GetErrorString(ErrorCode: integer): RawUtf8;
     /// retrieve a well known object DN or CN from its GUID
     // - see GUID_*_W constants, e.g. GUID_COMPUTERS_CONTAINER_W
     // - search in objects identified by the RootDN property
@@ -620,8 +622,6 @@ type
       AsCN: boolean = false): RawUtf8;
     /// retrieve al well known object DN or CN as a single convenient record
     function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
-    /// Translate a result code into its string explanation
-    class function GetErrorString(ErrorCode: integer): RawUtf8;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -1411,7 +1411,7 @@ begin
       result := BinToBase64(result)
     else if IsBinaryString(result) then
       result := LogEscapeFull(result);
-    SetCodePage(RawByteString(Result), CP_UTF8, False);
+    EnsureRawUtf8(result);
   end;
 end;
 
@@ -1831,7 +1831,7 @@ function TLdapClient.GetNetbiosDomainName: RawUtf8;
 var
   NetbiosObject: TLdapResult;
 begin
-  NetbiosObject := SearchFirst(FormatUtf8('CN=Partitions,CN=Configuration,%', [RootDN]),
+  NetbiosObject := SearchFirst('CN=Partitions,CN=Configuration,' + RootDN,
     '(nETBIOSName=*)', ['nETBIOSName']);
   if Assigned(NetbiosObject) then
     result := NetbiosObject.Attributes.Get('nETBIOSName')
