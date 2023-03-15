@@ -626,6 +626,8 @@ type
     /// hash the supplied string content
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// hash the supplied strings content
+    procedure Update(const aBuffer: array of RawByteString); overload;
     /// returns the resulting hash as lowercase hexadecimal string
     function Final: RawUtf8; overload;
     /// set the resulting hash into a binary buffer, and the size as result
@@ -634,6 +636,8 @@ type
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
+    /// one-step hash computation of several buffers as lowercase hexadecimal string
+    function Full(aAlgo: THashAlgo; const aBuffer: array of RawByteString): RawUtf8; overload;
     /// one-step hash computation of a buffer as a binary buffer
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
       out aDigest: THash512Rec): integer; overload;
@@ -2315,6 +2319,14 @@ begin
   Update(pointer(aBuffer), length(aBuffer));
 end;
 
+procedure TSynHasher.Update(const aBuffer: array of RawByteString);
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(aBuffer) - 1 do
+    Update(pointer(aBuffer[i]), length(aBuffer[i]));
+end;
+
 function TSynHasher.Final: RawUtf8;
 var
   dig: THash512Rec;
@@ -2365,6 +2377,14 @@ begin
 end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8;
+begin
+  Init(aAlgo);
+  Update(aBuffer);
+  result := Final;
+end;
+
+function TSynHasher.Full(aAlgo: THashAlgo;
+  const aBuffer: array of RawByteString): RawUtf8;
 begin
   Init(aAlgo);
   Update(aBuffer);
