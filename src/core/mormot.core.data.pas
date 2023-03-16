@@ -8850,7 +8850,7 @@ begin
   else
   begin
     dec(n, Offset);
-    if Limit >= n  then
+    if Limit > n  then
       Limit := n;
   end;
   dst.InitRtti(fInfo, Dest);

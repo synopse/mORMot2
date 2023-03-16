@@ -50,7 +50,7 @@ type
 
 
 /// extract a line from source array of chars
-// - next will contain the beginning of next line, or nil if source if ended
+// - next will contain the beginning of next line, or nil if source has ended
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char;
   andtrim: boolean = false): RawUtf8;
 
@@ -1124,7 +1124,7 @@ type
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
-    procedure AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
+    procedure AddBinToHex(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean = false);
     /// fast conversion from binary data into hexa chars, ready to be displayed
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
@@ -4114,8 +4114,10 @@ begin
     P := UnQuoteSqlStringVar(P, result);
     if P = nil then
       result := ''
+    else if P^ = #0 then
+      P := nil
     else
-      inc(P, ord(P^ <> #0));
+      inc(P);
   end
   else
     GetNextItem(P, Sep, result);
@@ -6451,7 +6453,7 @@ begin
   AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
 end;
 
-procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
+procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean);
 var
   chunk: PtrInt;
 begin
@@ -6466,7 +6468,10 @@ begin
     if BinBytes < chunk then
       chunk := BinBytes;
     // add hexa characters
-    mormot.core.text.BinToHex(PAnsiChar(Bin), PAnsiChar(B), chunk);
+    if LowerHex then
+      mormot.core.text.BinToHexLower(PAnsiChar(Bin), PAnsiChar(B), chunk)
+    else
+      mormot.core.text.BinToHex(PAnsiChar(Bin), PAnsiChar(B), chunk);
     inc(B, chunk * 2);
     inc(PByte(Bin), chunk);
     dec(BinBytes, chunk);

@@ -39,6 +39,7 @@ Authentication and Security types shared by all framework units.
 - `TSyn*Password` and `TSynConnectionDefinition` Classes
 - Reusable Authentication Classes
 - High-Level `TSynSigner`/`TSynHasher` Multi-Algorithm Wrappers
+- Client and Server Digest Access Authentication
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym` High-Level Algorithms Factories
@@ -79,3 +80,11 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1.1
 
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM`.
 For `ECC`, our `mormot.crypt.ecc256r1` unit is noticeably slower than *OpenSSL*.
+
+### mormot.crypt.pkcs11
+
+Access Hardware Security Modules (HSM) via PKCS#11
+- High-Level *PKCS#11* Integration with the Framework Types
+- Registration of the *PKCS#11* Engine to the `TCryptAsym`/`TCryptCert` Factories
+
+

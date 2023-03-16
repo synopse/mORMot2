@@ -1894,19 +1894,19 @@ type
     a, b, c, d, e, f, g, h: QWord;
   end;
 
-  /// abstract parent for implementing both SHA-384 and SHA-512 hashing
+  /// abstract parent for implementing SHA-384, SHA-512/256 and SHA-512 hashing
   TSha384512 = object
   private
     Index: PtrUInt;
     MLen: QWord;
     Hash: TSha512Hash;
     Data: array[0..127] of byte;
-    /// perform the final step of SHA-384 / SHA-512 into Hash private field
+    /// perform the final step into Hash private field
     procedure FinalStep;
   public
-    /// update the SHA-384 / SHA-512 context with some data
+    /// update the SHA-384 / SHA-512/256 /  SHA-512 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA-384 / SHA-512 context with some data
+    /// update the SHA-384 / SHA-512/256 / SHA-512 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
   end;

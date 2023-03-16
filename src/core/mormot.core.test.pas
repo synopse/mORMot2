@@ -838,7 +838,7 @@ end;
 class function TSynTestCase.RandomUri(CharCount: integer): RawByteString;
 const
   URL_CHARS: array[0..63] of AnsiChar =
-    'abcdefghijklmnopqrstuvwxyz0123456789-abCdEfGH.JKlmnOP.RsTuVWxyz.';
+    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
 begin
   InitRandom64(@URL_CHARS, CharCount, result);
 end;
