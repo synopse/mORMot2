@@ -552,9 +552,9 @@ type
     function Bind: boolean;
     /// authenticate a client to the directory server with Username/Password
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
-    // - you can specify a stronger algorithm if MD5 is not strong enough
+    // - you can specify a stronger algorithm if DIGEST-MD5 is not strong enough
     // - seems not implemented by OpenLdap
-    function BindSaslDigest(Algo: THashAlgo = hfMD5): boolean;
+    function BindSaslDigest(Algo: TDigestAlgo = daMD5_Sess): boolean;
     /// authenticate a client to the directory server using Kerberos
     // - if no UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
@@ -2102,7 +2102,19 @@ begin
   fBound := result;
 end;
 
-function TLdapClient.BindSaslDigest(Algo: THashAlgo): boolean;
+const
+  DIGEST_ALGONAME: array[TDigestAlgo] of RawUtf8 = (
+    '',                     // daUndefined
+    '',                     // daMD5
+    'DIGEST-MD5',           // daMD5_Sess
+    '',                     // daSHA256
+    'DIGEST-SHA-256',       // daSHA256_Sess
+    '',                     // daSHA512_256
+    'DIGEST-SHA-512-256',   // daSHA512_256_Sess
+    '',                     // daSHA3_256
+    'DIGEST-SHA3-256');     // daSHA3_256_Sess
+
+function TLdapClient.BindSaslDigest(Algo: TDigestAlgo): boolean;
 var
   x, xt: integer;
   dig: RawUtf8;
@@ -2111,6 +2123,9 @@ begin
   result := false;
   if not Login then
     exit;
+  if DIGEST_ALGONAME[Algo] = '' then
+    raise ESynCrypto.CreateUtf8('%.BindSaslDigest(%) requires a *-sess algo',
+      [self, DIGEST_NAME[Algo]]);
   if fSettings.Password = '' then
     result := Bind
   else
@@ -2127,7 +2142,7 @@ begin
       x := 1;
       t := AsnNext(x, s, xt);
       dig := DigestClient(Algo, t, 'ldap/' + LowerCaseU(fSock.Server),
-        fSettings.UserName, fSettings.Password);
+        fSettings.UserName, fSettings.Password, 'digest-uri');
       SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                        Asn(fVersion),
                        Asn(''),

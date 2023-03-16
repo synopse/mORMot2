@@ -2564,7 +2564,7 @@ procedure Pbkdf2HmacSha256(const password, salt: RawByteString;
   count: integer; out result: TSha256Digest;
   const saltdefault: RawByteString = ''); overload;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-256, into
+/// compute the PBKDF2 derivations of a password using HMAC over SHA-256, into
 // several 256-bit items, so can be used to return any size of output key
 // - this function expect the result array to have the expected output length
 // - allows resulting key length to be more than one SHA-256 digest size, e.g.

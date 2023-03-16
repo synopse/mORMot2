@@ -29,8 +29,10 @@ type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features
   TTestCoreCrypto = class(TSynTestCase)
   public
+    fDigestAlgo: TDigestAlgo;
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
+    function DigestUser(const User, Realm: RawUtf8; out HA0: THash512Rec): integer;
   published
     /// MD5 hashing functions
     procedure _MD5;
@@ -72,7 +74,9 @@ type
     procedure _TBinaryCookieGenerator;
     /// mormot.lib.pkcs11 unit validation
     procedure Pkcs11;
-    /// Cryptography Catalog
+    /// validate client-server DIGEST access authentication
+    procedure Digest;
+    /// High-Level Cryptography Catalog
     procedure Catalog;
     /// compute some performance numbers, mostly against regression
     procedure Benchmark;
@@ -2233,6 +2237,186 @@ begin
     md.Full(pointer(tmp), n, dig2);
     check(IsEqual(dig, dig2));
     check(CompareMem(@dig, @dig2, SizeOf(dig)));
+  end;
+end;
+
+function TTestCoreCrypto.DigestUser(const User, Realm: RawUtf8;
+  out HA0: THash512Rec): integer;
+begin
+  result := DigestHA0(fDigestAlgo, User, Realm, User + '"pass', HA0);
+end;
+
+procedure TTestCoreCrypto.Digest;
+var
+  n, u: integer;
+  a: TDigestAlgo;
+  h32: cardinal;
+  realm, user, url, pwd, s, c, authuser, authurl, fpwd: RawUtf8;
+  opaque: Int64;
+  fn: TFileName;
+  dig: TDigestAuthServerFile;
+  users, pwds, users2: TRawUtf8DynArray;
+  bak: RawByteString;
+begin
+  // validate raw client-server Digest access authentication
+  Check(DigestServerInit(daUndefined, '', '', 0) = '');
+  Check(DigestClient(daUndefined, '', '', '', '') = '');
+  for n := 1 to 10 do
+  begin
+    realm := RandomAnsi7(10) + '"';
+    user := RandomUri(10);
+    pwd := user + '"pass';
+    url := '/' + RandomUri(15);
+    opaque := Random64;
+    // pwd and realm have a quote within
+    for a := daMD5 to high(a) do
+    begin
+      Check(DigestServerInit(a, '', '', opaque) = '');
+      s := DigestServerInit(a, QuotedStr(realm, '"'), '', opaque);
+      Check(s <> '');
+      CheckEqual(DigestRealm(s), realm, 'realm server');
+      Check(DigestClient(daUndefined, s, url, user, pwd) = '');
+      c := DigestClient(a, s, url, user, pwd);
+      Check(c <> '');
+      CheckEqual(DigestRealm(c), realm, 'realm client');
+      fDigestAlgo := a;
+      Check(DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+        authuser, authurl), 'auth ok');
+      dec(opaque);
+      Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+        authuser, authurl), 'connection change detection');
+      inc(opaque);
+      fDigestAlgo := daUndefined;
+      Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+        authuser, authurl), 'wrong algo');
+    end;
+  end;
+  Check(DigestServerInit(daUndefined, realm, '', opaque) = '');
+  // validate TDigestAuthServerFile
+  SetLength(users, 100);
+  SetLength(pwds, length(users));
+  for u := 0 to length(users) - 1 do
+  begin
+    FormatUtf8('user%', [u + 1], users[u]);
+    FormatUtf8('%pwd%', [u + 1, Random32], pwds[u]);
+  end;
+  realm := RandomUri(10);
+  fn := WorkDir + '.htdigest';
+  for a := daMD5 to high(a) do
+  begin
+    // initialize a new .htdigest file for each algorithm
+    fn := WorkDir + '.htdigest';
+    DeleteFile(fn);
+    fpwd := '';
+    if a = daMD5_Sess then
+      fpwd := 'encryptsecret';
+    dig := TDigestAuthServerFile.Create(realm, fn, fpwd, a);
+    try
+      Check(dig.Encrypted = (fpwd <> ''));
+      CheckEqual(dig.Count, 0);
+      Check(not dig.Modified);
+      for u := 0 to high(users) do
+        dig.SetCredential(users[u], pwds[u]);
+      Check(dig.Modified);
+      CheckEqual(dig.Count, length(users));
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]), 'check1');
+    finally
+      dig.Free;
+    end;
+    // reload the file from scratch
+    dig := TDigestAuthServerFile.Create(realm, fn, fpwd, a);
+    try
+      // ensure everything was properly persisted
+      Check(dig.Encrypted = (fpwd <> ''));
+      CheckEqual(dig.Count, length(users), 'reload1');
+      Check(not dig.Modified);
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]), 'check2');
+      Check(not dig.Modified);
+      // remove some entries
+      for u := 0 to length(users) shr 3 do
+        dig.SetCredential(users[u * 8], '');
+      Check(dig.Modified);
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]) = ((u and 7) <> 0), 'check3');
+      Check(dig.Modified);
+      dig.SaveToFile;
+      bak := StringFromFile(fn);
+      // add missing entries
+      Check(not dig.Modified);
+      for u := length(users) shr 3 downto 0 do
+        dig.SetCredential(users[u * 8], pwds[u * 8]);
+      Check(dig.Modified);
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]), 'check4');
+      Check(dig.Modified);
+      // update some entries
+      for u := length(users) shr 3 downto 0 do
+      begin
+        pwds[u * 8] := pwds[u * 8] + 'new';
+        dig.SetCredential(users[u * 8], pwds[u * 8]);
+      end;
+      Check(dig.Modified);
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]), 'check6');
+    finally
+      dig.Free;
+    end;
+    // reload after modifications, and validate authentication and file refresh
+    dig := TDigestAuthServerFile.Create(realm, fn, fpwd, a);
+    try
+      Check(dig.Encrypted = (fpwd <> ''));
+      Check(not dig.Modified);
+      CheckEqual(dig.Count, length(users), 'reload2');
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]), 'check7');
+      // test actual client/server authentication of all users
+      for u := 0 to high(users) do
+      begin
+        opaque := Random64;
+        s := dig.ServerInit(opaque, '');
+        Check(s <> '');
+        c := DigestClient(a, s, url, users[u], pwds[u]);
+        Check(c <> '');
+        Check(dig.ServerAlgoMatch(c));
+        Check(dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        CheckEqual(authuser, users[u]);
+        CheckEqual(authurl, url);
+        inc(opaque);
+        Check(not dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        dec(opaque);
+        Check(dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        CheckEqual(authuser, users[u]);
+        CheckEqual(authurl, url);
+        c := DigestClient(a, s, url, users[u], pwds[u] + 'wrong');
+        Check(c <> '');
+        Check(dig.ServerAlgoMatch(c));
+        Check(not dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        CheckEqual(authuser, '');
+        CheckEqual(authurl, '');
+      end;
+      // force file refresh (from previously bak state)
+      Check(not dig.RefreshFile);
+      FileFromString(bak, fn, false, Now - 1); // as previous day to refresh
+      Check(dig.RefreshFile);
+      Check(not dig.Modified);
+      for u := 0 to high(users) do
+        Check(dig.CheckCredential(users[u], pwds[u]) = ((u and 7) <> 0), 'check8');
+      Check(length(users) <> dig.Count);
+      // validate GetUsers method
+      users2 := dig.GetUsers;
+      CheckEqual(length(users2), dig.Count);
+      h32 := 0;
+      for u := 0 to high(users2) do
+      begin
+        Check(IdemPChar(pointer(users2[u]), 'USER'));
+        h32 := crc32c(h32, pointer(users2[u]), length(users2[u]));
+      end;
+      CheckEqual(h32, 2570601015);
+    finally
+      dig.Free;
+    end;
   end;
 end;
 
