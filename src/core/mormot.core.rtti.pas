@@ -1720,7 +1720,7 @@ var
 
 /// fill all sensitive fields of this class or record with zeros
 // - RawByteString/TBytes with refcount=1 will be zeroed before freed
-procedure FillZero(Info: PRttiInfo; var Value); overload;
+procedure FillZeroRtti(Info: PRttiInfo; var Value);
 
 
 
@@ -6227,7 +6227,7 @@ end;
 
 { RTTI-based FillZero() }
 
-procedure FillZero(Info: PRttiInfo; var Value);
+procedure FillZeroRtti(Info: PRttiInfo; var Value);
 var
   nfo: TRttiCustom;
   fin: TRttiFinalizer;
@@ -6236,7 +6236,9 @@ var
   v: PAnsiChar;
   p: PRttiCustomProp;
 begin
-  nfo := nil;
+  if Info = nil then
+    exit;
+  nfo := nil; // is set below for rkClass/rkRecord
   case Info^.Kind of
     {$ifdef FPC}
     rkObject,
@@ -6272,7 +6274,7 @@ begin
             if Info <> nil then
               for i := 1 to da^.length do
               begin
-                FillZero(Info, v^); // process nested items
+                FillZeroRtti(Info, v^); // process nested items
                 inc(v, siz);
               end
             else
@@ -6297,7 +6299,7 @@ begin
          (p^.Value <> nil) and
          (p^.Value.Info <> nil) and
          not (rcfIsNumber in p^.Value.Cache.Flags) then
-        FillZero(p^.Value.Info, v[p^.OffsetSet]); // process nested fields
+        FillZeroRtti(p^.Value.Info, v[p^.OffsetSet]); // process nested fields
       inc(p);
     end;
   end;

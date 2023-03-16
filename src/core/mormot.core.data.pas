@@ -1564,6 +1564,9 @@ type
     procedure FastDeleteSorted(Index: PtrInt);
     /// will reverse all array items, in place
     procedure Reverse;
+    /// will call FillZero() on all items, mainly binaries and strings
+    // - could be used on a dynamic array to avoid memory forensic after release
+    procedure FillZero;
     /// sort the dynamic array items using a lookup array of indexes
     // - in comparison to the Sort method, this CreateOrderedIndex won't change
     // the dynamic array content, but only create (or update) the supplied
@@ -7504,6 +7507,18 @@ begin
       end;
     end;
   end;
+end;
+
+procedure TDynArray.FillZero;
+var
+  n: integer;
+begin
+  n := GetCount;
+  if n <> 0 then
+    if not (rcfArrayItemManaged in fInfo.Flags) then
+      FillCharFast(fValue^^, n * fInfo.Cache.ItemSize, 0) // e.g. THash256
+    else
+      FillZeroRtti(fInfo.Cache.ItemInfo, fValue^^);
 end;
 
 procedure TDynArray.SaveTo(W: TBufferWriter);

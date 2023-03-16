@@ -2247,10 +2247,10 @@ var
   lic: TLicenseData;
 begin
   CheckEqual(lic.CustomerName, '');
-  FillZero(TypeInfo(TLicenseData), lic);
+  FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
   lic.CustomerName := '1234';
-  FillZero(TypeInfo(TLicenseData), lic);
+  FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
   FillCharFast(A, SizeOf(A), 0);
   FillCharFast(B, SizeOf(B), 0);
