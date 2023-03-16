@@ -851,7 +851,7 @@ const
 // - Opaque could be e.g. an obfuscated HTTP connection ID to avoid MiM attacks
 // - Prefix is typically 'WWW-Authenticate: Digest ' to construct a HTTP header
 function DigestServerInit(Algo: TDigestAlgo; const QuotedRealm, Prefix: RawUtf8;
-  Opaque: Int64): RawUtf8;
+  Opaque: Int64; Tix64: Int64 = 0): RawUtf8;
 
 type
   /// callback event able to return the HA0 binary from a username
@@ -864,8 +864,9 @@ type
 /// validate a Digest access authentication on server side
 // - returns true and the user/uri from a valid input token, or false on error
 function DigestServerAuth(Algo: TDigestAlgo; const Realm: RawUtf8;
-  FromClient: PUtf8Char; Opaque: Int64; const OnSearchUser: TOnDigestServerAuthGetUserHash;
-  out User, Url: RawUtf8): boolean;
+  FromClient: PUtf8Char; Opaque: Int64;
+  const OnSearchUser: TOnDigestServerAuthGetUserHash;
+  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword = 0): boolean;
 
 type
   /// abstract Digest access authentication on server side
@@ -874,12 +875,14 @@ type
   // time so these classes should be used for authentication not authorization;
   // a typical usage is with our TRestServer sessions or to generate a JWT bearer
   // - the RFC expects in-memory sessions, especially for nonce counters but we
-  // store a THttpServerConnectionID to the Opaque parameter to compensate
+  // store a THttpServerConnectionID to the Opaque parameter to compensate, and
+  // we implement an expiration delay with each ServerInit request
   TDigestAuthServer = class(TSynPersistent)
   protected
     fRealm, fQuotedRealm: RawUtf8;
     fAlgo: TDigestAlgo;
     fAlgoSize: byte;
+    fRequestExpSec: integer;
     fOpaqueObfuscate: Int64;
     function GetUserHash(const aUser, aRealm: RawUtf8;
       out aDigest: THash512Rec): integer; virtual; abstract;
@@ -888,7 +891,7 @@ type
     constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce;
     /// compute a server authentication request (as HTTP header by default)
     // - Opaque is a 64-bit number, typically the THttpServerConnectionID
-    function ServerInit(Opaque: Int64;
+    function ServerInit(Opaque, Tix64: Int64;
       const Prefix: RawUtf8 = 'WWW-Authenticate: Digest '): RawUtf8;
     /// quickly check if the supplied client response is likely to be compatible
     // - FromClient is typically a HTTP header
@@ -897,8 +900,9 @@ type
     /// validate a client authentication response
     // - FromClient typically follow 'Authorization: Digest ' header text
     // - Opaque should match the value supplied on previous ServerInit() call
-    function ServerAuth(FromClient: PUtf8Char; Opaque: Int64;
+    function ServerAuth(FromClient: PUtf8Char; Opaque, Tix64: Int64;
       out ClientUser, ClientUrl: RawUtf8): boolean;
+  published
     /// the Digest realm associated with this instance
     // - a good practice is to use the server host name or UUID as realm
     property Realm: RawUtf8
@@ -906,6 +910,10 @@ type
     /// the Digest algorithm used with this instance
     property Algo: TDigestAlgo
       read fAlgo;
+    /// how many seconds a ServerInit() request is valid for ServerAuth()
+    // - default is 60 seconds
+    property RequestExpSec: integer
+      read fRequestExpSec write fRequestExpSec;
   end;
 
   /// Digest access authentication on server side using a .htdigest file
@@ -3294,16 +3302,21 @@ begin
 end;
 
 function DigestServerInit(Algo: TDigestAlgo;
-  const QuotedRealm, Prefix: RawUtf8; Opaque: Int64): RawUtf8;
+  const QuotedRealm, Prefix: RawUtf8; Opaque, Tix64: Int64): RawUtf8;
 var
-  h: THash128;
+  h: THash128Rec;
   noncehex, opaquehex: string[32];
 begin
   result := '';
   if (Algo = daUndefined) or
      (QuotedRealm = '') then
     exit; // missing some mandatory context
-  RandomBytes(@h, SizeOf(h));
+  if Tix64 = 0 then
+    Tix64 := GetTickCount64; // ms resolution, update period of 4..16 ms
+  h.L := Tix64;
+  h.w[3] := Opaque xor 7777; // upper 16-bit of the nonce map lowest Opaque bits
+  h.H := Random64;
+  h.L := h.L xor bswap64(h.H); // 48-bit ms would overflow after 8900 years
   noncehex[0] := #32;
   BinToHexLower(@h, @noncehex[1], SizeOf(h));
   DefaultHasher128(@h, @Opaque, SizeOf(Opaque)); // likely to be AesNiHash128()
@@ -3316,11 +3329,12 @@ end;
 function DigestServerAuth(Algo: TDigestAlgo; const Realm: RawUtf8;
   FromClient: PUtf8Char; Opaque: Int64;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
-  out User, Url: RawUtf8): boolean;
+  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword): boolean;
 var
   resp: RawUtf8;
   dp: TDigestProcess;
-  nonce128, opaque128: THash128;
+  created: QWord;
+  nonce128, opaque128: THash128Rec;
 begin
   result := false;
   if (FromClient = nil) or
@@ -3348,11 +3362,22 @@ begin
      not mormot.core.text.HexToBin(
        pointer(dp.Opaque), @opaque128, SizeOf(opaque128)) then
     exit;
+  // verify the nonce is not deprecated, and matches lowest 16-bit of Opaque
+  created := nonce128.L xor bswap64(nonce128.H);
+  if ((created shr 48) xor 7777) and $ffff <> Opaque and $ffff then
+    exit;
+  if NonceExpSec = 0 then
+    NonceExpSec := 1;
+  if Tix64 = 0 then
+    Tix64 := GetTickCount64;
+  created := created and pred(QWord(1) shl 48);
+  if Tix64 - created > NonceExpSec shl 10 then
+    exit;
   // fast challenge against the 64-bit Opaque value (typically a connection ID)
   DefaultHasher128(@nonce128, @Opaque, SizeOf(Opaque)); // see DigestServerInit
-  if not IsEqual(nonce128, opaque128) or
+  if not IsEqual(nonce128.b, opaque128.b) or
      (OnSearchUser(dp.UserName, dp.Realm, dp.HA0) <> dp.HashLen) then
-    exit; // avoid most simple fuzzing/replay attacks
+    exit;
   // validate the cryptographic challenge
   resp := dp.Response;
   dp.DigestResponse;
@@ -3386,14 +3411,15 @@ begin
   if fAlgoSize > SizeOf(TDigestAuthHash) then // paranoid
     raise EDigest.CreateUtf8('%.Create: % %-bit digest is too big',
       [self, fAlgoSize shl 3, DIGEST_NAME[aAlgo]]);
+  fRequestExpSec := 60;
   fOpaqueObfuscate := Random64; // changes at each server restart
 end;
 
-function TDigestAuthServer.ServerInit(Opaque: Int64;
+function TDigestAuthServer.ServerInit(Opaque, Tix64: Int64;
   const Prefix: RawUtf8): RawUtf8;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
-  result := DigestServerInit(fAlgo, fQuotedRealm, Prefix, Opaque);
+  result := DigestServerInit(fAlgo, fQuotedRealm, Prefix, Opaque, Tix64);
 end;
 
 function TDigestAuthServer.ServerAlgoMatch(const FromClient: RawUtf8): boolean;
@@ -3401,12 +3427,12 @@ begin
   result := PosEx(DIGEST_NAME_RESP[fAlgo], FromClient) <> 0;
 end;
 
-function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char; Opaque: Int64;
-  out ClientUser, ClientUrl: RawUtf8): boolean;
+function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char;
+  Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
   result := DigestServerAuth(fAlgo, fRealm, Fromclient, Opaque, GetUserHash,
-    ClientUser, ClientUrl);
+    ClientUser, ClientUrl, fRequestExpSec, Tix64);
 end;
 
 
@@ -3634,9 +3660,7 @@ begin
     exit;
   fUsers.Safe.Lock; // within write lock
   try
-    if fUsers.Count = 0 then
-      exit;
-    FillCharFast(fUsers.Values.Value^^, fUsers.Count * fAlgoSize, 0);
+    fUsers.Values.FillZero; // TDigestAuthHash anti-forensic
     fUsers.DeleteAll;
   finally
     fUsers.Safe.UnLock;

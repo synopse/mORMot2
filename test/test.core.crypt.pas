@@ -2281,14 +2281,14 @@ begin
       CheckEqual(DigestRealm(c), realm, 'realm client');
       fDigestAlgo := a;
       Check(DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
-        authuser, authurl), 'auth ok');
+        authuser, authurl, 100), 'auth ok');
       dec(opaque);
       Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
-        authuser, authurl), 'connection change detection');
+        authuser, authurl, 100), 'connection change detection');
       inc(opaque);
       fDigestAlgo := daUndefined;
       Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
-        authuser, authurl), 'wrong algo');
+        authuser, authurl, 100), 'wrong algo');
     end;
   end;
   Check(DigestServerInit(daUndefined, realm, '', opaque) = '');
@@ -2375,24 +2375,24 @@ begin
       for u := 0 to high(users) do
       begin
         opaque := Random64;
-        s := dig.ServerInit(opaque, '');
+        s := dig.ServerInit(opaque, 0, '');
         Check(s <> '');
         c := DigestClient(a, s, url, users[u], pwds[u]);
         Check(c <> '');
-        Check(dig.ServerAlgoMatch(c));
-        Check(dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        Check(dig.ServerAlgoMatch(c), 'algo');
+        Check(dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth1');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         inc(opaque);
-        Check(not dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        Check(not dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth2');
         dec(opaque);
-        Check(dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        Check(dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), '3');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         c := DigestClient(a, s, url, users[u], pwds[u] + 'wrong');
         Check(c <> '');
         Check(dig.ServerAlgoMatch(c));
-        Check(not dig.ServerAuth(pointer(c), opaque, authuser, authurl));
+        Check(not dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth3');
         CheckEqual(authuser, '');
         CheckEqual(authurl, '');
       end;
