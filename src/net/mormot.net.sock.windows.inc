@@ -650,20 +650,24 @@ begin
   n := 0;
   for i := 0 to Table.dwNumEntries-1 do
     with Table.ip[i] do
-    if (dwAddr <> $0100007f) and
-       (dwAddr <> 0) then
-    begin
-      case Kind of
-        tiaIPv4Public:
-          if not IsPublicIP(dwAddr) then
-            continue;
-        tiaIPv4Private:
-          if IsPublicIP(dwAddr) then
-            continue;
+      if (dwAddr <> $0100007f) and
+         (dwAddr <> 0) then
+      begin
+        case Kind of
+          tiaIPv4Public:
+            if not IsPublicIP(dwAddr) then
+              continue;
+          tiaIPv4Private:
+            if IsPublicIP(dwAddr) then
+              continue;
+          tiaIPv4DhcpPublic:
+            if IsApipaIP(dwAddr) or
+               not IsPublicIP(dwAddr) then
+              continue;
+        end;
+        IP4Text(@dwAddr, result[n]);
+        inc(n);
       end;
-      IP4Text(@dwAddr, result[n]);
-      inc(n);
-    end;
   if n <> Table.dwNumEntries then
     SetLength(result, n);
 end;

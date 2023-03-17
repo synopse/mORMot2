@@ -680,6 +680,10 @@ begin
                     tiaIPv4Private:
                       if not IsPublicIP(integer(sin_addr)) then
                         IP4Text(@sin_addr, s);
+                    tiaIPv4DhcpPublic:
+                      if IsPublicIP(integer(sin_addr)) and
+                         not IsApipaIP(integer(sin_addr)) then
+                        IP4Text(@sin_addr, s);
                   end;
           AF_INET6:
             if kind in [tiaAny, tiaIPv6] then

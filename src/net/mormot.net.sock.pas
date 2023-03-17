@@ -338,15 +338,31 @@ function ToText(res: TNetResult): PShortString; overload;
 { ******************** Mac and IP Addresses Support }
 
 type
+  /// the filter used by IsPublicIP()
+  // - tiaAny always return true, for any IPv4 or IPv6 address
+  // - tiaIPv4 identify any IPv4 address
+  // - tiaIPv6 identify any IPv6 address
+  // - tiaIPv4Public identify any IPv4 address excluding  ranges, i.e. IANA private IPv4 address space
+  // - tiaIPv4Private identify IPv4 address only within this IANA address space
+  // - tiaIPv4DhcpPublic identify any IPv4 address exclusing IANA private IPv4
+  // address space and APIPA Windows Range
   TIPAddress = (
     tiaAny,
     tiaIPv4,
+    tiaIPv6,
     tiaIPv4Public,
     tiaIPv4Private,
-    tiaIPv6);
+    tiaIPv4DhcpPublic);
 
 /// detect IANA private IPv4 address space from its 32-bit raw value
+// - i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses
 function IsPublicIP(ip4: cardinal): boolean;
+
+/// detect APIPA private IPv4 address space from its 32-bit raw value
+// - Automatic Private IP Addressing (APIPA) is used by Windows clients to
+// setup some IP in case of local DHCP failure
+// - it covers the 169.254.0.1 - 169.254.254.255 range
+function IsApipaIP(ip4: cardinal): boolean;
 
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
@@ -2224,13 +2240,19 @@ begin
     10:
       exit;
     172:
-      if ((ip4 shr 8) and 255) in [16..31] then
+      if ToByte(ip4 shr 8) in [16..31] then
         exit;
     192:
-      if (ip4 shr 8) and 255 = 168 then
+      if ToByte(ip4 shr 8) = 168 then
         exit;
   end;
   result := true;
+end;
+
+function IsApipaIP(ip4: cardinal): boolean;
+begin
+  result := (ip4 and $ffff = ord(169) + ord(254) shl 8) and
+            (ToByte(ip4 shr 16) < 255);
 end;
 
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
