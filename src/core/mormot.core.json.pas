@@ -842,7 +842,8 @@ type
     // - escapes chars according to the JSON RFC
     // - very fast (avoid most temporary storage)
     procedure AddJsonEscape(const V: TVarRec); overload;
-    /// append a UTF-8 JSON String, between double quotes and with JSON escaping
+    /// append a UTF-8 JSON string, JSON escaped between double quotes
+    // - "" will always be added, before calling AddJsonEscape()
     procedure AddJsonString(const Text: RawUtf8);
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
@@ -10171,11 +10172,13 @@ begin
       begin
         fJsonSave := @_JS_Char;
         fJsonLoad := @_JL_Char;
+        include(fFlags, rcfJsonString);
       end;
     rkWChar {$ifdef FPC}, rkUChar {$endif}:
       begin
         fJsonSave := @_JS_WideChar;
         fJsonLoad := @_JL_WideChar;
+        include(fFlags, rcfJsonString);
       end;
   else
     begin

@@ -137,7 +137,6 @@ type
     ArgTypeName: PShortString;
     /// the low-level RTTI information of this argument
     // - use ArgRtti.Info to retrieve the TypeInfo() of this argument
-    // - ArgRtti.Size
     ArgRtti: TRttiJson;
     /// we do not handle all kind of object pascal variables
     ValueType: TInterfaceMethodValueType;
@@ -170,7 +169,7 @@ type
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
     /// serialize the argument into the TServiceContainer.Contract JSON format
-    // - non standard types (e.g. clas, enumerate, dynamic array or record)
+    // - non standard types (e.g. class, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TJsonWriter);
