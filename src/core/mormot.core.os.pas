@@ -408,7 +408,7 @@ type
   /// define a set of well-known SID
   TWellKnownSids = set of TWellKnownSid;
 
-  /// custom binary buffer type which can be used to manage a Windows SID instance
+  /// custom binary buffer type used as convenient Windows SID storage
   RawSid = type RawByteString;
 
 
@@ -423,14 +423,14 @@ function SidLength(sid: PSid): PtrInt;
 /// allocate a RawSid instance from a PSid raw handler
 procedure ToRawSid(sid: PSid; out result: RawSid);
 
+/// check if a RawSid binary buffer has the expected length of a valid SID
+function IsValidSid(const sid: RawSid): boolean;
+
 /// convert a Security IDentifier as text, following the standard representation
 procedure SidToTextShort(sid: PSid; var result: shortstring);
 
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
-
-/// check if a RawSid binary buffer has the expected length of a valid SID
-function IsValidSid(const sid: RawSid): boolean;
 
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(const sid: RawSid): RawUtf8; overload;

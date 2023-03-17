@@ -1526,6 +1526,9 @@ function GetCaptionFromClass(C: TClass): string;
 /// defined here to avoid circular dependency in mormot.core.os.pas
 function ToText(cmd: TParseCommands): ShortString; overload;
 
+/// defined here to avoid circular dependency in mormot.core.os.pas
+function ToText(w: TWellKnownSid): PShortString; overload;
+
 
 { ***************** IInvokable Interface RTTI }
 
@@ -4753,6 +4756,11 @@ end;
 function ToText(t: TRttiParserType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRttiParserType), ord(t));
+end;
+
+function ToText(w: TWellKnownSid): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TWellKnownSid), ord(w));
 end;
 
 

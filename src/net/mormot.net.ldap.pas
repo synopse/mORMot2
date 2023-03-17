@@ -716,20 +716,6 @@ implementation
 
 {****** Support procedures and functions }
 
-function IsBinaryString(const Value: RawByteString): boolean;
-var
-  n: PtrInt;
-begin
-  result := true;
-  for n := 1 to length(Value) do
-    if ord(Value[n]) in [0..8, 10..31] then
-      // consider null-terminated strings as non-binary
-      if (n <> length(value)) or
-         (Value[n] = #0) then
-        exit;
-  result := false;
-end;
-
 function SeparateLeft(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
 var
   x: PtrInt;
@@ -1324,6 +1310,20 @@ begin
     else
       Append(result, [' +#$', BinToHexDisplayLowerShort(@x, 1)]);
   end;
+end;
+
+function IsBinaryString(const Value: RawByteString): boolean;
+var
+  n: PtrInt;
+begin
+  result := true;
+  for n := 1 to length(Value) do
+    if ord(Value[n]) in [0..8, 10..31] then
+      // consider null-terminated strings as non-binary
+      if (n <> length(value)) or
+         (Value[n] = #0) then
+        exit;
+  result := false;
 end;
 
 function AsnDump(const Value: TAsnObject): RawUtf8;
