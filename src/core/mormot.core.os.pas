@@ -772,7 +772,7 @@ var
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOS(OSVersionInt32)
-  // - contains e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
+  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0'
   OSVersionShort: RawUtf8;
 
   /// some textual information about the current CPU
@@ -5570,6 +5570,10 @@ begin
     result := OS_NAME[osv.os];
 end;
 
+const
+  LINUX_TEXT: array[boolean] of string[7] = (
+    '', 'Linux ');
+
 function ToTextOS(osint32: integer): RawUtf8;
 var
   osv: TOperatingSystemVersion absolute osint32;
@@ -5587,8 +5591,8 @@ begin
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
     // include kernel number to the distribution name, e.g. 'Ubuntu Linux 5.4.0'
-    result := _fmt('%s Linux %d.%d.%d', [result, osv.utsrelease[2],
-      osv.utsrelease[1], osv.utsrelease[0]]);
+    result := _fmt('%s %s%d.%d.%d', [result, LINUX_TEXT[osv.os in OS_LINUX],
+      osv.utsrelease[2], osv.utsrelease[1], osv.utsrelease[0]]);
 end;
 
 function MatchOS(os: TOperatingSystem): boolean;
