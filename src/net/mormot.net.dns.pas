@@ -543,6 +543,7 @@ var
   sock: TNetSocket;
   len: PtrInt;
   start, stop: Int64;
+  res: TNetResult;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -554,12 +555,13 @@ begin
   if sock <> nil then
     try
       sock.SetReceiveTimeout(TimeOutMS);
-      if sock.SendTo(pointer(Request), length(Request), addr) <> nrOk then
+      res := sock.SendTo(pointer(Request), length(Request), addr);
+      if res <> nrOk then
         exit;
       len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
       with PDnsHeader(@tmp)^ do
         if (len <= length(Request)) or
-           not addr.IsEqual(resp) or
+           not addr.IPEqual(resp) or
            (Xid <> PDnsHeader(Request)^.Xid) or
            not IsResponse or
            Truncation or

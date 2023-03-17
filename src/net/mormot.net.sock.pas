@@ -143,13 +143,16 @@ type
   private
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
-    function IsEqualAfter64(const another: TNetAddr): boolean;
   public
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - wrap the proper getaddrinfo/gethostbyname API
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     /// returns the network family of this address
     function Family: TNetFamily;
+    /// compare two IPv4/IPv6  network addresses
+    // - only compare the IP part of the address, not the port, nor any nlUnix
+    function IPEqual(const another: TNetAddr): boolean;
+      {$ifdef FPC}inline;{$endif}
     /// convert this address into its IPv4/IPv6 textual representation
     procedure IP(var res: RawUtf8; localasvoid: boolean = false); overload;
     /// convert this address into its IPv4/IPv6 textual representation
@@ -171,9 +174,6 @@ type
     function SetPort(p: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
-      {$ifdef FPC}inline;{$endif}
-    /// compare two network addresses
-    function IsEqual(const another: TNetAddr): boolean;
       {$ifdef FPC}inline;{$endif}
     /// create a new TNetSocket instance on this network address
     // - returns nil on API error
@@ -1281,7 +1281,7 @@ type
     function TrySndLow(P: pointer; Len: integer): boolean;
     /// returns the low-level error number
     // - i.e. returns WSAGetLastError
-    function LastLowSocketError: integer;
+    class function LastLowSocketError: integer;
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
@@ -1632,24 +1632,20 @@ begin
   end;
 end;
 
-function TNetAddr.IsEqualAfter64(const another: TNetAddr): boolean;
+function TNetAddr.IPEqual(const another: TNetAddr): boolean;
 begin
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      result := true; // SizeOf(sockaddr_in) = SizeOf(Int64) = 8
+      result := cardinal(PSockAddr(@Addr)^.sin_addr) =
+                cardinal(PSockAddr(@another)^.sin_addr);
     AF_INET6:
-      result := CompareMemFixed(@Addr[8], @another.Addr[8], SizeOf(sockaddr_in6) - 8)
+      result := (PHash128Rec(@PSockAddr6(@Addr)^.sin6_addr).Lo =
+                 PHash128Rec(@PSockAddr6(@another)^.sin6_addr).Lo) and
+                (PHash128Rec(@PSockAddr6(@Addr)^.sin6_addr).Hi =
+                 PHash128Rec(@PSockAddr6(@another)^.sin6_addr).Hi);
   else
-    result := false;
+    result := false; // nlUnix has no IP
   end;
-end;
-
-function TNetAddr.IsEqual(const another: TNetAddr): boolean;
-begin
-  if PInt64(@Addr)^ = PInt64(@another)^ then
-    result := IsEqualAfter64(another)
-  else
-    result := false;
 end;
 
 function TNetAddr.NewSocket(layer: TNetLayer): TNetSocket;
@@ -2084,13 +2080,15 @@ function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
 begin
   if @self = nil then
     result := nrNoSocket
-  else if mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, SizeOf(addr)) < 0 then
+  else if mormot.net.sock.sendto(
+            TSocket(@self), Buf, len, 0, @addr, addr.Size) < 0 then
     result := NetLastError
   else
     result := nrOk;
 end;
 
-function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
+function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
+  out addr: TNetAddr): integer;
 var
   addrlen: integer;
 begin
@@ -4677,7 +4675,7 @@ begin
   result := true;
 end;
 
-function TCrtSocket.LastLowSocketError: integer;
+class function TCrtSocket.LastLowSocketError: integer;
 begin
   result := sockerrno;
 end;
