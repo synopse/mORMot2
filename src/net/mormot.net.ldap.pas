@@ -268,6 +268,16 @@ const
   LDAP_ASN1_EXT_RESPONSE      = $78;
   LDAP_ASN1_CONTROLS          = $a0;
 
+  LDAP_ASN1_RESPONSES = [
+    LDAP_ASN1_BIND_RESPONSE,
+    LDAP_ASN1_SEARCH_DONE,
+    LDAP_ASN1_MODIFY_RESPONSE,
+    LDAP_ASN1_ADD_RESPONSE,
+    LDAP_ASN1_DEL_RESPONSE,
+    LDAP_ASN1_MODIFYDN_RESPONSE,
+    LDAP_ASN1_COMPARE_RESPONSE,
+    LDAP_ASN1_EXT_RESPONSE];
+
 
 { **************** LDAP Response Storage }
 
@@ -275,10 +285,9 @@ type
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
   private
-    fList: TRawUtf8DynArray;
+    fList: TRawByteStringDynArray;
     fAttributeName: RawUtf8;
     fCount: integer;
-    fIsBinary: boolean;
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8);
@@ -288,16 +297,17 @@ type
     /// retrieve a value as human-readable text
     function GetReadable(index: PtrInt = 0): RawUtf8;
     /// retrieve a value as its inital value stored with Add()
+    // - return '' if the index is out of range, or the attribute is void
     function GetRaw(index: PtrInt = 0): RawByteString;
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
+    /// access to the individual rwas
+    property List: TRawByteStringDynArray
+      read fList;
     /// name of this LDAP attribute
     property AttributeName: RawUtf8
       read fAttributeName;
-    /// true if the attribute contains binary data
-    property IsBinary: boolean
-      read fIsBinary;
   end;
   /// dynamic array of LDAP attribute, as stored in TLdapAttributeList
   TLdapAttributeDynArray = array of TLdapAttribute;
@@ -431,6 +441,7 @@ type
     Users: RawUtf8;
     ManagedServiceAccounts: RawUtf8;
   end;
+  PLdapKnownCommonNames = ^TLdapKnownCommonNames;
 
   /// store the authentication and connection settings of a TLdapClient instance
   TLdapClientSettings = class(TSynPersistent)
@@ -526,6 +537,8 @@ type
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
+    fWellKnownObjects: array[boolean] of TLdapKnownCommonNames;
+    fWellKnownObjectsCached: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     function GetNetbiosDomainName: RawUtf8;
     function GetRootDN: RawUtf8;
@@ -535,6 +548,8 @@ type
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
     function ReceiveString(Size: integer): RawByteString;
+    procedure RetrieveWellKnownObjects;
+    function RetrieveRootDN: RawUtf8;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -608,9 +623,6 @@ type
     /// call any LDAP v3 extended operations
     // - e.g. StartTLS, cancel, transactions
     function Extended(const Oid, Value: RawUtf8): boolean;
-    /// try to discover the root DN of the AD
-    // - Return an empty string if not found
-    function DiscoverRootDN: RawUtf8;
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
@@ -623,7 +635,8 @@ type
     function GetWellKnownObject(const ObjectGUID: RawUtf8;
       AsCN: boolean = false): RawUtf8;
     /// retrieve al well known object DN or CN as a single convenient record
-    function GetWellKnownObjects(AsCN: boolean = true): TLdapKnownCommonNames;
+    // - use an internal cache for fast retrieval
+    function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -1392,13 +1405,12 @@ constructor TLdapAttribute.Create(const AttrName: RawUtf8);
 begin
   inherited Create;
   fAttributeName := AttrName;
-  fIsBinary := StrPosI(';BINARY', pointer(AttrName)) <> nil;
   SetLength(fList, 1); // optimized for a single value (most used case)
 end;
 
 procedure TLdapAttribute.Add(const aValue: RawByteString);
 begin
-  AddRawUtf8(fList, fCount, aValue);
+  AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
 end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
@@ -1409,10 +1421,14 @@ begin
   else
   begin
     result := fList[index];
-    if fIsBinary then
-      result := BinToBase64(result)
-    else if IsBinaryString(result) then
-      result := LogEscapeFull(result);
+    if EndWith(fAttributeName, 'SID') and
+       IsValidSid(result) then
+      result := SidToText(pointer(result))
+    else if EndWith(fAttributeName, 'GUID') and
+            (length(result) = SizeOf(TGuid)) then
+      result := ToUtf8(PGuid(result)^)
+    else if not IsValidUtf8(result) then
+      result := BinToHexLower(result);
     EnsureRawUtf8(result);
   end;
 end;
@@ -1420,7 +1436,7 @@ end;
 function TLdapAttribute.GetRaw(index: PtrInt): RawByteString;
 begin
   if (self = nil) or
-     (index >= fCount) then
+     (PtrUInt(index) >= PtrUInt(fCount)) then
     result := ''
   else
     result := fList[index];
@@ -1576,20 +1592,38 @@ var
   i, j, k: PtrInt;
   res: TLdapResult;
   attr: TLdapAttribute;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  result := 'results: ' + ToUtf8(Count) + CRLF + CRLF;
-  for i := 0 to Count - 1 do
-  begin
-    result := result + ToUtf8(i) + ':' + CRLF;
-    res := Items[i];
-    result := result + '  Object: ' + res.ObjectName + CRLF;
-    for j := 0 to res.Attributes.Count - 1 do
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    w.AddShort('results: ');
+    w.Add(count);
+    w.AddCR;
+    for i := 0 to Count - 1 do
     begin
-      attr := res.Attributes.Items[j];
-      result := result + '  Attribute: ' + attr.AttributeName + CRLF;
-      for k := 0 to attr.Count - 1 do
-        result := result + '    ' + attr.GetReadable(k) + CRLF;
+      res := Items[i];
+      w.Add('%: %'#10, [i, DNToCN(res.ObjectName)]);
+      w.Add('  objectName : %'#10, [res.ObjectName]);
+      for j := 0 to res.Attributes.Count - 1 do
+      begin
+        attr := res.Attributes.Items[j];
+        w.Add('  % : ', [attr.AttributeName]);
+        if attr.Count <> 1 then
+          w.AddCR;
+        for k := 0 to attr.Count - 1 do
+        begin
+          if attr.Count <> 1 then
+            w.AddShorter('    - ');
+          w.AddString(attr.GetReadable(k));
+          w.AddCR;
+        end;
+      end;
+      w.AddCR;
     end;
+    w.SetText(result);
+  finally
+    w.Free;
   end;
 end;
 
@@ -1845,7 +1879,7 @@ function TLdapClient.GetRootDN: RawUtf8;
 begin
   if (fRootDN = '') and
      fSock.SockConnected then
-    fRootDN := DiscoverRootDN;
+    fRootDN := RetrieveRootDN;
   result := fRootDN;
 end;
 
@@ -1912,10 +1946,7 @@ begin
      (numseq <> fSeq) then
     exit;
   AsnNext(i, Asn1Response, fResponseCode);
-  if fResponseCode in [LDAP_ASN1_BIND_RESPONSE, LDAP_ASN1_SEARCH_DONE,
-    LDAP_ASN1_MODIFY_RESPONSE, LDAP_ASN1_ADD_RESPONSE, LDAP_ASN1_DEL_RESPONSE,
-    LDAP_ASN1_MODIFYDN_RESPONSE, LDAP_ASN1_COMPARE_RESPONSE,
-    LDAP_ASN1_EXT_RESPONSE] then
+  if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
     fResultCode := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), -1);
     fResponseDN := AsnNext(i, Asn1Response, asntype);   // matchedDN
@@ -2243,6 +2274,7 @@ begin
   result := true;
   fBound := false;
   fRootDN := '';
+  fWellKnownObjectsCached := false;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
@@ -2254,7 +2286,7 @@ var
   i: integer;
 begin
   for i := 0 to Value.Count -1 do
-    AsnAdd(query, Asn(Value.GetRaw(i)));
+    AsnAdd(query, Asn(Value.List[i]));
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
                    Asn(obj),
                    Asn(ASN1_SEQ, [
@@ -2282,7 +2314,7 @@ begin
     attr := Value.Items[i];
     sub := '';
     for j := 0 to attr.Count - 1 do
-      AsnAdd(sub, Asn(attr.GetRaw(j)));
+      AsnAdd(sub, Asn(attr.List[j]));
     Append(query,
       Asn(ASN1_SEQ, [
         Asn(attr.AttributeName),
@@ -2536,7 +2568,7 @@ begin
   end;
 end;
 
-function TLdapClient.DiscoverRootDN: RawUtf8;
+function TLdapClient.RetrieveRootDN: RawUtf8;
 var
   prev: TLdapSearchScope;
   root: TLdapResult;
@@ -2600,12 +2632,13 @@ begin
   end;
 end;
 
-function TLdapClient.GetWellKnownObjects(AsCN: boolean): TLdapKnownCommonNames;
+procedure TLdapClient.RetrieveWellKnownObjects;
 var
   root: TLdapResult;
   attr: TLdapAttribute;
   tmp: TRawUtf8DynArray;
   i: PtrInt;
+  r: TLdapKnownCommonNames;
 
   function One(const guid: RawUtf8): RawUtf8;
   var
@@ -2618,8 +2651,6 @@ var
          NetStartWith(pointer(tmp[i]), pointer(sn)) then
       begin
         result := copy(tmp[i], Length(sn) + 2, MaxInt);
-        if AsCN then
-          result := DNToCN(result);
         tmp[i] := ''; // no need to search this one any more
         exit;
       end;
@@ -2627,7 +2658,6 @@ var
   end;
 
 begin
-  Finalize(result);
   if not Connected or
      (RootDN = '') then
     exit;
@@ -2640,18 +2670,42 @@ begin
   SetLength(tmp, attr.Count);
   for i := 0 to attr.Count - 1 do
     tmp[i] := attr.GetReadable(i);
-  result.Computers                 := One(GUID_COMPUTERS_CONTAINER_W);
-  result.DeletedObjects            := One(GUID_DELETED_OBJECTS_CONTAINER_W);
-  result.DomainControllers         := One(GUID_DOMAIN_CONTROLLERS_CONTAINER_W);
-  result.ForeignSecurityPrincipals := One(GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W);
-  result.Infrastructure            := One(GUID_INFRASTRUCTURE_CONTAINER_W);
-  result.LostAndFound              := One(GUID_LOSTANDFOUND_CONTAINER_W);
-  result.MicrosoftProgramData      := One(GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W);
-  result.NtdsQuotas                := One(GUID_NTDS_QUOTAS_CONTAINER_W);
-  result.ProgramData               := One(GUID_PROGRAM_DATA_CONTAINER_W);
-  result.Systems                   := One(GUID_SYSTEMS_CONTAINER_W);
-  result.Users                     := One(GUID_USERS_CONTAINER_W);
-  result.ManagedServiceAccounts    := One(GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W);
+  fWellKnownObjectsCached := true;
+  r.Computers                 := One(GUID_COMPUTERS_CONTAINER_W);
+  r.DeletedObjects            := One(GUID_DELETED_OBJECTS_CONTAINER_W);
+  r.DomainControllers         := One(GUID_DOMAIN_CONTROLLERS_CONTAINER_W);
+  r.ForeignSecurityPrincipals := One(GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W);
+  r.Infrastructure            := One(GUID_INFRASTRUCTURE_CONTAINER_W);
+  r.LostAndFound              := One(GUID_LOSTANDFOUND_CONTAINER_W);
+  r.MicrosoftProgramData      := One(GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W);
+  r.NtdsQuotas                := One(GUID_NTDS_QUOTAS_CONTAINER_W);
+  r.ProgramData               := One(GUID_PROGRAM_DATA_CONTAINER_W);
+  r.Systems                   := One(GUID_SYSTEMS_CONTAINER_W);
+  r.Users                     := One(GUID_USERS_CONTAINER_W);
+  r.ManagedServiceAccounts    := One(GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W);
+  fWellKnownObjects[{asCN=}false] := r;
+  with fWellKnownObjects[{asCN=}true] do
+  begin
+    Computers                 := DNToCn(r.Computers);
+    DeletedObjects            := DNToCn(r.DeletedObjects);
+    DomainControllers         := DNToCn(r.DomainControllers);
+    ForeignSecurityPrincipals := DNToCn(r.ForeignSecurityPrincipals);
+    Infrastructure            := DNToCn(r.Infrastructure);
+    LostAndFound              := DNToCn(r.LostAndFound);
+    MicrosoftProgramData      := DNToCn(r.MicrosoftProgramData);
+    NtdsQuotas                := DNToCn(r.NtdsQuotas);
+    ProgramData               := DNToCn(r.ProgramData);
+    Systems                   := DNToCn(r.Systems);
+    Users                     := DNToCn(r.Users);
+    ManagedServiceAccounts    := DNToCn(r.ManagedServiceAccounts);
+  end;
+end;
+
+function TLdapClient.WellKnownObjects(AsCN: boolean): PLdapKnownCommonNames;
+begin
+  if not fWellKnownObjectsCached then
+    RetrieveWellKnownObjects;
+  result := @fWellKnownObjects[AsCN];
 end;
 
 
