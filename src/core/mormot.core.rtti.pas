@@ -2124,7 +2124,7 @@ type
     /// case-insensitive compare the supplied name/len with the Name property
     function NameMatch(P: PUtf8Char; Len: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// very fast retrieval of any field value into a TVarData-like
+    /// very fast retrieval of any field value into a TVarData-like mapping
     // - works if Prop is defined or not, calling any getter method if needed
     // - complex TRttiVarData with varAny pointer will be properly handled by
     // TJsonWriter.AddVariant/AddRttiVarData (e.g. rkEnumeration or rkDynArray)
@@ -2138,6 +2138,10 @@ type
     // - not implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
     procedure SetValue(Data: pointer; var RVD: TRttiVarData;
       andclear: boolean = true);
+    /// retrieve any field vlaue as a variant instance
+    // - will generate a stand-alone variant value, not an internal TRttiVarData
+    procedure GetValueVariant(Data: pointer; out Dest: TVarData;
+      Options: pointer{PDocVariantOptions} = nil);
     /// set a field value from its UTF-8 text
     // - will convert the Text into proper ordinal or float if needed
     // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
@@ -6723,6 +6727,21 @@ begin
     GetValueGetter(Data, RVD);
 end;
 
+procedure TRttiCustomProp.GetValueVariant(Data: pointer; out Dest: TVarData;
+  Options: pointer{PDocVariantOptions});
+begin
+  if (Prop = nil) or
+     (OffsetGet >= 0) then
+    Value.ValueToVariant(PAnsiChar(Data) + OffsetGet, Dest, Options)
+  else if Value.Cache.RttiVarDataVType <> varAny then
+    GetValueGetter(Data, TRttiVarData(Dest)) // not TRttiVarData specific
+  else if Value.Cache.VarDataVType = varInt64 then // rkEnumeration, rkSet
+  begin
+    Dest.VType := varInt64;
+    Dest.VInt64 := Prop^.GetInt64Value(Data);
+  end;
+end;
+
 procedure TRttiCustomProp.SetValue(Data: pointer; var RVD: TRttiVarData;
   andclear: boolean);
 begin
@@ -9014,7 +9033,7 @@ var
 begin
   result := GetInstanceByPath(Instance, Path, p);
   if result then
-    p^.GetValue(Instance, TRttiVarData(Value));
+    p^.GetValueVariant(Instance, TVarData(Value));
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
