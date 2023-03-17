@@ -816,16 +816,12 @@ end;
 
 {$endif USE_IFADDRS}
 
-const
-  RESOLV_NAME: array[boolean] of RawUtf8 = (
-    'NAMESERVER ',
-    'SEARCH ');
-
-function _GetDnsAddresses(usePosixEnv, usePosixSearch: boolean): TRawUtf8DynArray;
+function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
   p, n: PUtf8Char;
   l, c: PtrInt;
+  ok: boolean;
 begin
   result := nil;
   if usePosixEnv then
@@ -839,9 +835,14 @@ begin
   while p <> nil do
   begin
     n := GotoNextLine(p);
-    if NetStartWith(p, pointer(RESOLV_NAME[usePosixSearch])) then
+    if getAD then
+      ok := NetStartWith(p, 'SEARCH ') or
+            NetStartWith(p, 'DOMAIN ')  // "domain" is used e.g. on MacOS
+    else
+      ok := NetStartWith(p, 'NAMESERVER ');
+    if ok then
     begin
-      inc(p, length(RESOLV_NAME[usePosixSearch]));
+      p := PosChar(p, ' ') + 1;
       if n = nil then
         l := StrLen(p)
       else

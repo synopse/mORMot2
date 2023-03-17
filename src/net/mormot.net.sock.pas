@@ -2633,7 +2633,7 @@ begin
     result[0] := ForcedDomainName;
   end
   else
-    result := _GetDnsAddresses(usePosixEnv, true); // no cache for the AD
+    result := _GetDnsAddresses(usePosixEnv, {getAD=}true); // no cache for the AD
 end;
 
 

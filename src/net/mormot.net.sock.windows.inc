@@ -780,7 +780,7 @@ var
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
 
-function _GetDnsAddresses(usePosixEnv, usePosixSearch: boolean): TRawUtf8DynArray;
+function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   n, l: PtrInt;
   siz: ULONG;
@@ -796,7 +796,7 @@ begin
   SetLength(tmp, siz);
   if GetNetworkParams(pointer(tmp), @siz) <> ERROR_SUCCESS then
     exit;
-  if usePosixSearch then
+  if getAD then
   begin
     l := StrLen(@PFIXED_INFO(tmp)^.DomainName);
     if l <> 0 then
