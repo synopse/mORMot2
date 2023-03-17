@@ -3462,7 +3462,7 @@ begin
     SaveToFile;
   ClearCredentials; // safely fill in memory against forensic
   fUsers.Free;
-  FillZero(fKey);
+  FillZero(fKey);   // anti-forensic
   inherited Destroy;
 end;
 

@@ -5056,6 +5056,22 @@ begin
   Ctxt.W.Add('"');
 end;
 
+procedure _JS_Char(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add('"');
+  if Data^ <> #0 then // #0 will be serialized as ""
+    Ctxt.W.Add(Data^);
+  Ctxt.W.Add('"');
+end;
+
+procedure _JS_WideChar(Data: PWord; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add('"');
+  if Data^ <> 0 then
+    Ctxt.W.AddJsonEscapeW(Data, 1);
+  Ctxt.W.Add('"');
+end;
+
 procedure _JS_DateTime(Data: PDateTime; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.AddDateTime(Data, {withms=}false);
@@ -5959,7 +5975,7 @@ begin
       twNone:
         AddNoJsonEscapeW(P, Len);
       twJsonEscape:
-        AddJsonEScapeW(P, Len);
+        AddJsonEscapeW(P, Len);
       twOnSameLine:
         AddOnSameLineW(P, Len);
     end;
@@ -7546,6 +7562,27 @@ procedure _JL_SynUnicode(Data: PSynUnicode; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     Utf8ToSynUnicode(Ctxt.Value, Ctxt.ValueLen, Data^);
+end;
+
+procedure _JL_Char(Data: PByte; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.WasString then
+      if Ctxt.ValueLen <> 0 then
+        Data^ := ord(Ctxt.Value[0]) // get the first char of the input string
+      else
+        Data^ := 0 // _JS_Char serializes #0 as ""
+    else
+      Data^ := GetCardinal(Ctxt.Value); // allow serialization as integer
+end;
+
+procedure _JL_WideChar(Data: PWord; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.WasString then
+      Data^ := GetUtf8WideChar(Ctxt.Value)
+    else
+      Data^ := GetCardinal(Ctxt.Value);
 end;
 
 procedure _JL_DateTime(Data: PDateTime; var Ctxt: TJsonParserContext);
@@ -10129,19 +10166,32 @@ begin
     fJsonLoad := @_JL_Binary;
   end
   else
-  begin
-    // default well-known serialization
-    fJsonSave := PTC_JSONSAVE[aParserComplex];
-    if not Assigned(fJsonSave) then
-      fJsonSave := PT_JSONSAVE[aParser];
-    fJsonLoad := PT_JSONLOAD[aParser];
-    // rkRecordTypes serialization with proper fields RTTI
-    if (not Assigned(fJsonSave)) and
-       (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
-      fJsonSave := @_JS_RttiCustom;
-   if (not Assigned(fJsonLoad)) and
-      (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
-    fJsonLoad := @_JL_RttiCustom
+  case Kind of
+    rkChar:
+      begin
+        fJsonSave := @_JS_Char;
+        fJsonLoad := @_JL_Char;
+      end;
+    rkWChar {$ifdef FPC}, rkUChar {$endif}:
+      begin
+        fJsonSave := @_JS_WideChar;
+        fJsonLoad := @_JL_WideChar;
+      end;
+  else
+    begin
+      // default well-known serialization
+      fJsonSave := PTC_JSONSAVE[aParserComplex];
+      if not Assigned(fJsonSave) then
+        fJsonSave := PT_JSONSAVE[aParser];
+      fJsonLoad := PT_JSONLOAD[aParser];
+      // rkRecordTypes serialization with proper fields RTTI
+      if (not Assigned(fJsonSave)) and
+         (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
+        fJsonSave := @_JS_RttiCustom;
+     if (not Assigned(fJsonLoad)) and
+        (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
+      fJsonLoad := @_JL_RttiCustom
+    end;
   end;
   // TRttiJson.RegisterCustomSerializer() custom callbacks have priority
   if Assigned(fJsonWriter.Code) then
