@@ -3236,9 +3236,11 @@ end;
 function TDigestProcess.ClientResponse(const UriName: RawUtf8): RawUtf8;
 begin
   FormatUtf8('username="%",realm=%,nonce="%",cnonce="%",nc=%,qop=%,' +
-    '%%="%",response="%",opaque="%"',
+    '%%="%",response="%"',
     [UserName, QuotedStr(Realm, '"'), Nonce, CNonce, NC, Qop,
-     AlgResp, UriName, Url, Response, Opaque], result);
+     AlgResp, UriName, Url, Response], result);
+  if Opaque <> '' then
+    Append(result, [',opaque="', Opaque, '"']);
 end;
 
 
@@ -3423,8 +3425,17 @@ begin
 end;
 
 function TDigestAuthServer.ServerAlgoMatch(const FromClient: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+  alg: ShortString;
 begin
-  result := PosEx(DIGEST_NAME_RESP[fAlgo], FromClient) <> 0;
+  result := false;
+  p := StrPosI('ALGORITHM=', pointer(FromClient));
+  if p = nil then
+    exit;
+  inc(p, 10);
+  GetNextItemShortString(p, @alg);
+  result := IdemPropNameU(DIGEST_NAME[fAlgo], @alg[1], ord(alg[0]));
 end;
 
 function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char;
