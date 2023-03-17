@@ -816,11 +816,27 @@ end;
 
 {$endif USE_IFADDRS}
 
+function GetNextSpaced(var P: PAnsiChar): RawUtf8;
+var
+  S: PAnsiChar;
+begin
+  result := '';
+  while P^ = ' ' do
+    inc(P);
+  if P^ < ' ' then
+    exit; // end of line or end of file
+  S := P;
+  repeat
+    inc(P);
+  until P^ <= ' ';
+  FastSetString(result, S, P - S);
+end;
+
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
-  p, n: PUtf8Char;
-  l, c: PtrInt;
+  p: PUtf8Char;
+  n: PtrInt;
   ok: boolean;
 begin
   result := nil;
@@ -830,11 +846,10 @@ begin
     // all systems are likely to have or generate this file
     // - the libc seems to read it for its gethostname()
     resolv := StringFromFile('/etc/resolv.conf');
-  c := 0;
+  n := 0;
   p := pointer(resolv);
   while p <> nil do
   begin
-    n := GotoNextLine(p);
     if getAD then
       ok := NetStartWith(p, 'SEARCH ') or
             NetStartWith(p, 'DOMAIN ')  // "domain" is used e.g. on MacOS
@@ -842,21 +857,17 @@ begin
       ok := NetStartWith(p, 'NAMESERVER ');
     if ok then
     begin
-      p := PosChar(p, ' ') + 1;
-      if n = nil then
-        l := StrLen(p)
-      else
-        l := n - p - 1;
-      FastSetString(one, p, l);
-      TrimSelf(one);
-      if one <> '' then
-      begin
-        SetLength(result, c + 1);
-        result[c] := one;
-        inc(c);
-      end;
+      p := PosChar(p, ' '); // search ad.mycomp.tld mycom.tld
+      repeat
+        one := GetNextSpaced(p);
+        if one = '' then
+          break;
+        SetLength(result, n + 1);
+        result[n] := one;
+        inc(n);
+      until false;
     end;
-    p := n;
+    p := GotoNextLine(p);
   end;
 end;
 
