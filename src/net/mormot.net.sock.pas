@@ -1639,10 +1639,10 @@ begin
       result := cardinal(PSockAddr(@Addr)^.sin_addr) =
                 cardinal(PSockAddr(@another)^.sin_addr);
     AF_INET6:
-      result := (PHash128Rec(@PSockAddr6(@Addr)^.sin6_addr).Lo =
-                 PHash128Rec(@PSockAddr6(@another)^.sin6_addr).Lo) and
-                (PHash128Rec(@PSockAddr6(@Addr)^.sin6_addr).Hi =
-                 PHash128Rec(@PSockAddr6(@another)^.sin6_addr).Hi);
+      result := (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Lo =
+                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Lo) and
+                (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Hi =
+                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Hi);
   else
     result := false; // nlUnix has no IP
   end;

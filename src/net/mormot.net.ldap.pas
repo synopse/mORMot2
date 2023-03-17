@@ -474,6 +474,8 @@ type
     /// if protocol needs user authorization, then fill here user name
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
+    // - with BindSaslKerberos, on Linux or Windows it should be 'username'
+    // but on MacOS it should be 'username@ad.mycompany.tld'
     property UserName: RawUtf8
       read fUserName Write fUserName;
     /// if protocol needs user authorization, then fill here its password
@@ -546,17 +548,17 @@ type
     // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
     // - do nothing if was already connected
     function Login: boolean;
-    /// authenticate a client to the directory server with Username/Password
+    /// authenticate a client to the directory server with Settings.Username/Password
     // - if these are empty strings, then it does annonymous binding
     // - warning: uses plaintext transport of password - consider using TLS
     function Bind: boolean;
-    /// authenticate a client to the directory server with Username/Password
+    /// authenticate a client to the directory server with Settings.Username/Password
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
     // - you can specify a stronger algorithm if DIGEST-MD5 is not strong enough
     // - seems not implemented by OpenLdap
     function BindSaslDigest(Algo: TDigestAlgo = daMD5_Sess): boolean;
     /// authenticate a client to the directory server using Kerberos
-    // - if no UserName/Password has been set, will try current logged user
+    // - if no Settings.UserName/Password has been set, will try current logged user
     // - uses GSSAPI and mormot.lib.gssapi/sspi to perform a safe authentication
     // - if no SPN is supplied, derivate one from Login's DnsLdapControlers()
     // - can optionally return the KerberosUser which made the authentication
