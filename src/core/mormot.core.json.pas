@@ -5061,7 +5061,7 @@ procedure _JS_Char(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   if Data^ <> #0 then // #0 will be serialized as ""
-    Ctxt.W.Add(Data^);
+    Ctxt.W.AddJsonEscape(Data, 1);
   Ctxt.W.Add('"');
 end;
 
