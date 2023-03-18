@@ -1373,7 +1373,7 @@ begin
               begin
                 repeat
                   inc(P);
-                until P^ <= ' ';
+                until P^ <> ' ';
                 if PCardinal(P)^ or $20202020 =
                   ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24 then
                   // 'CONNECTION: KEEP-ALIVE, UPGRADE'
