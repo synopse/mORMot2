@@ -3441,6 +3441,8 @@ const
 
   /// those TVarData.VType values are meant to be direct values
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
+  /// bitmask used by our inlined VarClear() to avoid unneeded VarClearProc()
+  VTYPE_STATIC = $BFE8;
 
   /// a slightly faster alternative to Variants.Null function with TVarData
   NullVarData:  TVarData = (VType: varNull{%H-});
@@ -3945,9 +3947,6 @@ uses
 
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
-
-const
-  VTYPE_STATIC = $BFE8; // bitmask to avoid unneeded VarClearProc call
 
 procedure VarClearAndSetType(var v: variant; vtype: integer);
 var
