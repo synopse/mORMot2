@@ -540,6 +540,7 @@ type
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
+    fMechanisms: TRawUtf8DynArray;
     fWellKnownObjects: array[boolean] of TLdapKnownCommonNames;
     fWellKnownObjectsCached: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
@@ -552,7 +553,7 @@ type
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
     function ReceiveString(Size: integer): RawByteString;
     procedure RetrieveWellKnownObjects;
-    function RetrieveRootDN: RawUtf8;
+    function RetrieveRootObject(const Name: RawUtf8): TLdapAttribute;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -566,6 +567,12 @@ type
     // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
     // - do nothing if was already connected
     function Login: boolean;
+    /// the authentication mechanisms supported on this LDAP server
+    // - returns e.g. ['GSSAPI','GSS-SPNEGO','EXTERNAL','DIGEST-MD5']
+    function Mechanisms: TRawUtf8DynArray;
+    /// search if the server supports a given authentication mechanism by name
+    // - a typical value to search is e.g. 'GSSAPI' or 'DIGEST-MD5'
+    function Supports(const MechanismName: RawUtf8): boolean;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - if these are empty strings, then it does annonymous binding
     // - warning: uses plaintext transport of password - consider using TLS
@@ -689,10 +696,10 @@ type
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
-    /// Root DN, retrieved using DiscoverRootDN if possible
+    /// the Root DN of this LDAP server
     property RootDN: RawUtf8
       read GetRootDN write fRootDN;
-    /// domain NETBIOS name, Empty string if not found 
+    /// domain NETBIOS name, empty string if not found
     property NetbiosDomainName: RawUtf8
       read GetNetbiosDomainName;
   published
@@ -1895,8 +1902,28 @@ function TLdapClient.GetRootDN: RawUtf8;
 begin
   if (fRootDN = '') and
      fSock.SockConnected then
-    fRootDN := RetrieveRootDN;
+    fRootDN := RetrieveRootObject('rootDomainNamingContext').GetReadable;
   result := fRootDN;
+end;
+
+function TLdapClient.Mechanisms: TRawUtf8DynArray;
+begin
+  if (fRootDN = '') and
+     fSock.SockConnected then
+    fMechanisms := RetrieveRootObject('supportedSASLMechanisms').GetAllReadable;
+  result := fMechanisms;
+end;
+
+function TLdapClient.Supports(const MechanismName: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  result := Mechanisms <> nil;
+  if result then
+    for i := 0 to high(fMechanisms) do
+      if IdemPropNameU(fMechanisms[i], MechanismName) then
+        exit;
+  result := false;
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
@@ -2584,25 +2611,21 @@ begin
   end;
 end;
 
-function TLdapClient.RetrieveRootDN: RawUtf8;
+function TLdapClient.RetrieveRootObject(const Name: RawUtf8): TLdapAttribute;
 var
   prev: TLdapSearchScope;
   root: TLdapResult;
-  attr: TLdapAttribute;
 begin
-  result := '';
+  result := nil;
   if not fSock.SockConnected then
     exit;
   prev := SearchScope;
   try
     SearchScope := lssBaseObject;
-    root := SearchFirst('', '*', ['rootDomainNamingContext']);
+    // Name = 'rootDomainNamingContext' or 'supportedSASLMechanisms'
+    root := SearchFirst('', '*', [Name]);
     if Assigned(root) then
-    begin
-      attr := root.Attributes.Find('rootDomainNamingContext');
-      if Assigned(attr) then
-        result := attr.GetReadable;
-    end;
+      result := root.Attributes.Find(Name);
   finally
     SearchScope := prev;
   end;
