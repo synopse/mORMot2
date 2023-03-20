@@ -525,7 +525,7 @@ var
   P: PUtf8Char;
   T: TDotClearTable;
 begin
-  result := TRawUtf8List.Create(true);
+  result := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive]);
   P := pointer(aFlatExport);
   repeat
     while (P <> nil) and
@@ -725,7 +725,7 @@ begin
   end;
   auto1 := TAutoFree.Several([
     @data,    TDotClearTable.Parse(aFlatFile),
-    @urls,    TRawUtf8ListHashed.Create,
+    @urls,    TRawUtf8List.Create([fNoDuplicate]),
     @batch,   TRestBatch.Create(Rest, TOrmTag, 5000)]);
   auto2 := TOrm.AutoFree([ // avoid several try..finally
     @info,    TOrmBlogInfo,

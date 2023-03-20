@@ -209,7 +209,7 @@ begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
-  fPendingGet := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive]);
+  fPendingGet := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fThreadSafe]);
   inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http',
     aLog, aOptions, aThreadPoolCount);
 end;

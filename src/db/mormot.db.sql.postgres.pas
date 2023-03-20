@@ -250,8 +250,7 @@ function TSqlDBPostgresConnection.PrepareCached(
 begin
   if fPrepared = nil then
   begin
-    fPrepared := TRawUtf8List.CreateEx(
-      [fCaseSensitive, fNoDuplicate, fNoThreadLock]);
+    fPrepared := TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate]);
     result := -1;
   end
   else

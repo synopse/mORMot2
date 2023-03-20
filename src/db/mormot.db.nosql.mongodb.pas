@@ -3423,7 +3423,8 @@ begin
         FormatUtf8('%,%:%', [fConnectionString, secHost[i], Port]);
     end;
   end;
-  fDatabases := TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+  fDatabases := TRawUtf8List.CreateEx(
+    [fObjectsOwned, fNoDuplicate, fCaseSensitive, fThreadSafe]);
 end;
 
 destructor TMongoClient.Destroy;
@@ -3880,7 +3881,7 @@ begin
   fClient := aClient;
   fName := aDatabaseName;
   fCollections := TRawUtf8List.CreateEx(
-    [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
+    [fObjectsOwned, fNoDuplicate, fCaseSensitive, fThreadSafe]);
   {$ifdef MONGO_OLDPROTOCOL}
   if fClient.ServerBuildInfoNumber < 03000000 then
   begin

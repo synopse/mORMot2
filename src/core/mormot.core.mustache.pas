@@ -1228,7 +1228,7 @@ end;
 
 constructor TSynMustachePartials.Create;
 begin
-  fList := TRawUtf8List.CreateEx([fNoDuplicate, fCaseSensitive]);
+  fList := TRawUtf8List.CreateEx([fNoDuplicate, fCaseSensitive, fThreadSafe]);
 end;
 
 constructor TSynMustachePartials.CreateOwned(

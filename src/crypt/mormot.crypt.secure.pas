@@ -963,7 +963,7 @@ type
     /// check the credentials stored for a given user
     function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
     /// safely delete all stored credentials
-    // - also fill allocated memory with zeros, against forensic
+    // - also fill TDigestAuthHash stored memory with zeros, against forensic
     procedure ClearCredentials;
   published
     /// the .htdigest file name associated with this instance
@@ -6032,7 +6032,7 @@ begin
     if GlobalCryptAlgo <> nil then
       exit;
     GlobalCryptAlgo := RegisterGlobalShutdownRelease(
-      TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate]));
+      TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fThreadSafe]));
     // register mormot.crypt.core engines into our factories
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');

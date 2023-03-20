@@ -7373,7 +7373,7 @@ var
           try
             if fCache = nil then
               fCache := TRawUtf8List.CreateEx(
-                [fObjectsOwned, fNoDuplicate, fCaseSensitive, fNoThreadLock]);
+                [fObjectsOwned, fNoDuplicate, fCaseSensitive]);
             ndx := fCache.AddObject(cachedsql, stmt);
             if ndx >= 0 then
             begin
@@ -7425,12 +7425,12 @@ begin
     stmt := nil;
     if fCache <> nil then
     begin
-      // most common case: we have just used this statement
+      // fast lookup of the requested SQL in cache
       if (fCacheLast = cachedsql) and
          (fCache.Strings[fCacheLastIndex] = cachedsql) then
         ndx := fCacheLastIndex // no need to use the hash lookup
       else
-        ndx := fCache.IndexOf(cachedsql);
+        ndx := fCache.IndexOf(cachedsql); // O(1) hash lookup from fNoDuplicate
       if ndx >= 0 then
       begin
         stmt := fCache.Objects[ndx];
