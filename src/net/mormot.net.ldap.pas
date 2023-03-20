@@ -296,6 +296,8 @@ type
     procedure Add(const aValue: RawByteString);
     /// retrieve a value as human-readable text
     function GetReadable(index: PtrInt = 0): RawUtf8;
+    /// retrieve all values as human-readable text
+    function GetAllReadable: TRawUtf8DynArray;
     /// retrieve a value as its inital value stored with Add()
     // - return '' if the index is out of range, or the attribute is void
     function GetRaw(index: PtrInt = 0): RawByteString;
@@ -360,7 +362,8 @@ type
     property ObjectName: RawUtf8
       read fObjectName write fObjectName;
     /// Here is list of object attributes
-    property Attributes: TLdapAttributeList read fAttributes;
+    property Attributes: TLdapAttributeList
+      read fAttributes;
     /// Copy the 'objectSid' attribute if present
     // - Return true on success
     function CopyObjectSid(out objectSid: RawUtf8): boolean;
@@ -1347,7 +1350,7 @@ begin
       end;
     end;
     s := AsnNext(i, Value, at);
-    Append(result, [indent, '$', IntToHex(at, 2)]);
+    Append(result, [indent, '$', ToHexShort(@at, 1)]);
     if (at and $20) > 0 then
     begin
       x := length(s);
@@ -1431,6 +1434,19 @@ begin
       result := BinToHexLower(result);
     EnsureRawUtf8(result);
   end;
+end;
+
+function TLdapAttribute.GetAllReadable: TRawUtf8DynArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  SetLength(result, fCount);
+  for i := 0 to fCount - 1 do
+    result[i] := GetReadable(i);
 end;
 
 function TLdapAttribute.GetRaw(index: PtrInt): RawByteString;
@@ -1940,7 +1956,7 @@ begin
   fResponseDN := '';
   fReferals.Clear;
   i := 1;
-  AsnNext(i, Asn1Response, asntype); // initial ANS1_SEQ
+  AsnNext(i, Asn1Response, asntype); // initial ASN1_SEQ
   numseq := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), 0);
   if (asntype <> ASN1_INT) or
      (numseq <> fSeq) then
