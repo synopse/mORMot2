@@ -5466,7 +5466,7 @@ begin
     FindNameValue(Ctxt.Call.InHead, pointer(SECPKGNAMEHTTPAUTHORIZATION), indataenc);
     if indataenc = '' then
     begin
-      // no auth data sent, reply with supported auth methods
+      // no auth data sent, reply with supported auth method(s)
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
       StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
@@ -5480,7 +5480,7 @@ begin
   fSafe.Lock;
   try
     // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
-    ticks := Ctxt.TickCount64 - 30000;
+    ticks := Ctxt.TickCount64 - 30000; // tokens last for 30 seconds
     for i := fSspiAuthContextCount - 1  downto 0 do
       if ticks > fSspiAuthContext[i].CreatedTick64 then
       begin
@@ -5495,7 +5495,7 @@ begin
       // 1st call: create SecCtxId
       if fSspiAuthContextCount >= MAXSSPIAUTHCONTEXTS then
       begin
-        fServer.InternalLog('Too many Windows Authenticated session in  pending' +
+        fServer.InternalLog('Too many Windows Authenticated session in pending' +
           ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
         exit;
       end;
