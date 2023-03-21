@@ -163,7 +163,7 @@ function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 /// parse the next ASN.1 value as text
 // - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  Value: PRawByteString = nil): integer;
+  Value: PRawByteString = nil; ValueSize: PInteger = nil): integer;
 
 /// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as integer
 function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
@@ -298,6 +298,7 @@ const
   LDAP_ASN1_EXT_REQUEST       = $77;
   LDAP_ASN1_EXT_RESPONSE      = $78;
   LDAP_ASN1_CONTROLS          = $a0;
+  LDAP_ASN1_ERROR             = -1;
 
   LDAP_ASN1_RESPONSES = [
     LDAP_ASN1_BIND_RESPONSE,
@@ -582,10 +583,9 @@ type
     function GetRootDN: RawUtf8;
     procedure SendPacket(const Asn1Data: TAsnObject);
     function ReceiveResponse: TAsnObject;
-    function DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
+    function DecodeResponse(var Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     function TranslateFilter(const Filter: RawUtf8): TAsnObject;
-    function ReceiveString(Size: integer): RawByteString;
     procedure RetrieveWellKnownObjects;
     function RetrieveRootObject(const Name: RawUtf8): TLdapAttribute;
     procedure UnBound;
@@ -1216,7 +1216,7 @@ begin
 end;
 
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  Value: PRawByteString = nil): integer;
+  Value: PRawByteString; ValueSize: PInteger): integer;
 var
   asnsize: integer;
   y: int64;
@@ -1226,6 +1226,8 @@ begin
   result := ASN1_NULL;
   if not AsnDecHeader(Pos, Buffer, result, asnsize) then
     exit;
+  if ValueSize <> nil then
+    ValueSize^ := asnsize;
   if Value = nil then
   begin
     // no need to allocate and return the whole Value^: just compute position
@@ -1925,17 +1927,6 @@ begin
   end;
 end;
 
-function TLdapClient.ReceiveString(Size: integer): RawByteString;
-begin
-  if fSock = nil then
-    result := ''
-  else
-  begin
-    FastSetRawByteString(result, nil, Size);
-    fSock.SockInRead(pointer(result), Size);
-  end;
-end;
-
 function TLdapClient.Login: boolean;
 var
   dc: TRawUtf8DynArray;
@@ -2001,8 +1992,11 @@ begin
   result := Asn(ASN1_SEQ, [
     Asn(fSeq),
     Asn1Data]);
-  if fSecContextEncrypt then
-    result := SecEncrypt(fSecContext, result);
+  if not fSecContextEncrypt then
+    exit;
+  result := SecEncrypt(fSecContext, result);
+  insert('0000', result, 1);
+  PCardinal(result)^ := bswap32(length(result) - 4); // SASL Buffer Length
 end;
 
 function TLdapClient.GetNetbiosDomainName: RawUtf8;
@@ -2048,7 +2042,8 @@ end;
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
 begin
   {$ifdef ASNDEBUG}
-  {I-}writeln('------'#10'Sending = ');
+  {$I-} write('------'#10'Sending ');
+  if fSecContextEncrypt then writeln('(encrypted) =') else writeln('=');
   writeln(AsnDump(Asn1Data));
   {$endif ASNDEBUG}
   if fSock <> nil then
@@ -2068,27 +2063,30 @@ begin
     if fSecContextEncrypt then
     begin
       // we need to use the Kerberos encryption
-      result := fSock.SockReceiveString;
-      result := SecDecrypt(fSecContext, result);
+      len := 0;
+      fSock.SockInRead(pointer(@len), 4); // SASL Buffer length
+      len := bswap32(len);
+      result := fSock.SockInRead(len);
+      result := SecDecrypt(fSecContext, result); // decrypt
+      // note: several SEQ messages may be returned
     end
     else
     begin
-      // receive ASN type
-      fSock.SockInRead(pointer(@b), 1);
+      // we need to decode the ASN.1 plain input to return a single SEQ message
+      fSock.SockInRead(pointer(@b), 1); // ASN type
       if b <> ASN1_SEQ then
         exit;
       result := AnsiChar(b);
-      // receive length
-      fSock.SockInRead(pointer(@b), 1);
+      fSock.SockInRead(pointer(@b), 1); // ASN length
       Append(result, @b, 1);
       if b >= $80 then // $8x means x bytes of length
-        AsnAdd(result, ReceiveString(b and $7f));
+        AsnAdd(result, fSock.SockInRead(b and $7f));
       // decode length of LDAP packet
       pos := 2;
       len := AsnDecLen(pos, result);
       // retrieve body of LDAP packet
       if len > 0 then
-        AsnAdd(result, ReceiveString(len));
+        AsnAdd(result, fSock.SockInRead(len));
     end;
   except
     on Exception do
@@ -2098,23 +2096,24 @@ begin
     end;
   end;
   fFullResult := result;
+  {$ifdef ASNDEBUG}
+  {$I-} write('------'#10'Received ');
+  if fSecContextEncrypt then writeln('(encrypted) =') else writeln('=');
+  writeln(AsnDump(result));
+  {$endif ASNDEBUG}
 end;
 
 // see https://ldap.com/ldapv3-wire-protocol-reference-ldap-result
 
-function TLdapClient.DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
+function TLdapClient.DecodeResponse(var Asn1Response: TAsnObject): TAsnObject;
 var
-  i, x, numseq, asntype: integer;
+  i, x, numseq, asntype, seqsize: integer;
   s, t: TAsnObject;
 begin
-  {$ifdef ASNDEBUG}
-  {$I-} writeln('------'#10'Received= ');
-  writeln(AsnDump(Asn1Response));
-  {$endif ASNDEBUG}
   result := '';
   fResultCode := -1;
   fResultString := '';
-  fResponseCode := -1;
+  fResponseCode := LDAP_ASN1_ERROR;
   fResponseDN := '';
   fReferals.Clear;
   i := 1;
@@ -2124,9 +2123,10 @@ begin
   if (asntype <> ASN1_INT) or
      (numseq <> fSeq) then
     exit;
-  fResponseCode := AsnNext(i, Asn1Response);
+  fResponseCode := AsnNext(i, Asn1Response, nil, @seqsize);
   if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
+    // final response
     fResultCode := AsnNextInteger(i, Asn1Response, asntype);
     AsnNext(i, Asn1Response, @fResponseDN);   // matchedDN
     AsnNext(i, Asn1Response, @fResultString); // diagnosticMessage
@@ -2143,14 +2143,24 @@ begin
           fReferals.Add(t);
         end;
     end;
+    result := copy(Asn1Response, i, length(Asn1Response) - i + 1); // body
+    Asn1Response := '';
+  end
+  else
+  begin
+    // partial response (e.g. LDAP_ASN1_SEARCH_ENTRY)
+    result := copy(Asn1Response, i, seqsize);
+    system.delete(Asn1Response, 1, i + seqsize - 1);
   end;
-  result := copy(Asn1Response, i, length(Asn1Response) - i + 1); // body
 end;
 
 function TLdapClient.SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
+var
+  resp: RawByteString;
 begin
   SendPacket(Asn1Data);
-  result := DecodeResponse(ReceiveResponse);
+  resp := ReceiveResponse;
+  result := DecodeResponse(resp);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
@@ -2454,7 +2464,7 @@ begin
                   Asn('GSSAPI'),
                   Asn(dataout)])]);
       t := SendAndReceive(req2);
-    until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
+    until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
     result := fResultCode = LDAP_RES_SUCCESS;
     if result then
     begin
@@ -2639,7 +2649,7 @@ end;
 function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
   Filter: RawUtf8; const Attributes: array of RawByteString): boolean;
 var
-  s, filt, attr, resp: TAsnObject;
+  s, filt, attr, resp, packet: TAsnObject;
   u: RawUtf8;
   n, i: integer;
   r: TLdapResult;
@@ -2677,41 +2687,49 @@ begin
              Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));
   SendPacket(s);
   repeat
-    resp := DecodeResponse(ReceiveResponse);
-    if fResponseCode = LDAP_ASN1_SEARCH_ENTRY then
-    begin
-      r := fSearchResult.Add;
-      n := 1;
-      AsnNext(n, resp, @r.ObjectName);
-      if AsnNext(n, resp) = ASN1_SEQ then
-      begin
-        while n < length(resp) do
+    if packet = '' then
+      packet := ReceiveResponse;
+    resp := DecodeResponse(packet);
+    case fResponseCode of
+      LDAP_ASN1_SEARCH_DONE:
+        break;
+      LDAP_ASN1_SEARCH_ENTRY:
         begin
-          if AsnNext(n, resp, @s) = ASN1_SEQ then
+          r := fSearchResult.Add;
+          n := 1;
+          AsnNext(n, resp, @r.ObjectName);
+          if AsnNext(n, resp) = ASN1_SEQ then
           begin
-            i := n + length(s);
-            AsnNext(n, resp, @u);
-            a := r.Attributes.Add(u);
-            if AsnNext(n, resp)  = ASN1_SETOF then
-              while n < i do
+            while n < length(resp) do
+            begin
+              if AsnNext(n, resp, @s) = ASN1_SEQ then
               begin
+                i := n + length(s);
                 AsnNext(n, resp, @u);
-                a.Add(u);
+                a := r.Attributes.Add(u);
+                if AsnNext(n, resp)  = ASN1_SETOF then
+                  while n < i do
+                  begin
+                    AsnNext(n, resp, @u);
+                    a.Add(u);
+                  end;
               end;
+            end;
           end;
         end;
-      end;
+      LDAP_ASN1_SEARCH_REFERENCE:
+        begin
+          n := 1;
+          while n < length(resp) do
+          begin
+            AsnNext(n, resp, @u);
+            fReferals.Add(u);
+          end;
+        end;
+    else
+      exit; // unexpected block
     end;
-    if fResponseCode = LDAP_ASN1_SEARCH_REFERENCE then
-    begin
-      n := 1;
-      while n < length(resp) do
-      begin
-        AsnNext(n, resp, @u);
-        fReferals.Add(u);
-      end;
-    end;
-  until fResponseCode = LDAP_ASN1_SEARCH_DONE;
+  until false;
   n := 1;
   if AsnNext(n, resp) = LDAP_ASN1_CONTROLS then
   begin
