@@ -5743,7 +5743,8 @@ procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
 var
   n: PtrInt;
 begin
-  repeat
+  while aCount > 0 do
+  begin
     n := BEnd - B;
     if n <= aCount then
     begin
@@ -5755,7 +5756,7 @@ begin
     FillCharFast(B[1], n, ord(aChar));
     inc(B, n);
     dec(aCount, n);
-  until aCount <= 0;
+  end;
 end;
 
 procedure TTextWriter.Add2(Value: PtrUInt);

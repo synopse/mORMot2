@@ -66,6 +66,7 @@ const
   ASN1_COUNTER64   = $46;
 
   // class type masks
+  ASN1_CL_CTR   = $20;
   ASN1_CL_APP   = $40;
   ASN1_CL_CTX   = $80;
   ASN1_CL_PRI   = $c0;
@@ -1146,8 +1147,8 @@ begin
   asnsize := AsnDecLen(Pos, Buffer);
   if (Pos + asnsize - 1) > l then
     exit;
-  if (asntype and $20) <> 0 then
-    result := copy(Buffer, Pos, asnsize)
+  if (asntype and ASN1_CL_CTR) <> 0 then
+    result := copy(Buffer, Pos, asnsize) // constructed
   else
     case asntype of
       ASN1_INT,
@@ -1240,8 +1241,114 @@ begin
   result := DC + OU + CN;
 end;
 
-{$ifdef ASNDEBUG} // not used nor fully tested
+{.$define ASNDEBUG}
+// enable low-level debugging of the LDAP transmitted frames
 
+{$ifdef ASNDEBUG}
+
+function IsBinaryString(const Value: RawByteString): boolean;
+var
+  n: PtrInt;
+begin
+  result := true;
+  for n := 1 to length(Value) do
+    if ord(Value[n]) in [0..8, 10..31] then
+      // consider null-terminated strings as non-binary
+      if (n <> length(value)) or
+         (Value[n] = #0) then
+        exit;
+  result := false;
+end;
+
+function AsnDump(const Value: TAsnObject): RawUtf8;
+var
+  i, at, x, n, indent: integer;
+  s: RawUtf8;
+  il: TIntegerDynArray;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    i := 1;
+    indent := 0;
+    while i < length(Value) do
+    begin
+      for n := length(il) - 1 downto 0 do
+      begin
+        x := il[n];
+        if x <= i then
+        begin
+          DeleteInteger(il, n);
+          dec(indent, 2);
+        end;
+      end;
+      s := AsnNext(i, Value, at);
+      w.AddChars(' ', indent);
+      w.Add('$');
+      w.AddByteToHex(at);
+      if (at and ASN1_CL_CTR) <> 0 then
+      begin
+        case at of
+          ASN1_SEQ:
+            w.AddShorter(' SEQ');
+          ASN1_SETOF:
+            w.AddShorter(' SETOF');
+        end;
+        x := length(s);
+        w.Add(' constructed: length %', [x]);
+        inc(indent, 2);
+        AddInteger(il, x + i - 1);
+      end
+      else
+      begin
+        w.Add(' ');
+        case at of
+          ASN1_BOOL:
+            w.AddShorter('BOOL');
+          ASN1_INT:
+            w.AddShorter('INT');
+          ASN1_ENUM:
+            w.AddShorter('ENUM');
+          ASN1_COUNTER:
+            w.AddShorter('COUNTER');
+          ASN1_GAUGE:
+            w.AddShorter('GAUGE');
+          ASN1_TIMETICKS:
+            w.AddShorter('TIMETICK');
+          ASN1_OCTSTR:
+            w.AddShorter('OCTSTR');
+          ASN1_OPAQUE:
+            w.AddShorter('OPAQUE');
+          ASN1_OBJID:
+            w.AddShorter('OBJID');
+          ASN1_IPADDR:
+            w.AddShorter('IPADDR');
+          ASN1_NULL:
+            w.AddShorter('NULL');
+          ASN1_COUNTER64:
+            w.AddShorter('CNTR64');
+        else // other
+          w.AddShorter('unknown');
+        end;
+        w.Add(':', ' ');
+        if IsBinaryString(s) then
+        begin
+          w.Add('binary len=% ', [length(s)]);
+          w.AddShort(EscapeToShort(s));
+        end
+        else
+          w.AddQuotedStr(pointer(s), length(s), '"');
+      end;
+      w.AddCR;
+    end;
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+// not used nor fully tested
 function IntMibToStr(const Value: RawByteString): RawUtf8;
 var
   i, y: integer;
@@ -1298,110 +1405,12 @@ begin
     x := x and $7FFFFFFF;
   result := '';
   repeat
-    y := x mod 256;
-    x := x div 256;
+    y := x and $ff;
+    x := x shr 8;
     Prepend(result, [AnsiChar(y)]);
   until x = 0;
   if neg then
     result[1] := AnsiChar(ord(result[1]) or $80);
-end;
-
-function DumpExStr(const Buffer: RawByteString): RawUtf8;
-var
-  n: integer;
-  x: byte;
-begin
-  result := '';
-  for n := 1 to length(Buffer) do
-  begin
-    x := ord(Buffer[n]);
-    if x in [65..90, 97..122] then
-      Append(result, [' +''', AnsiChar(x), ''''])
-    else
-      Append(result, [' +#$', BinToHexDisplayLowerShort(@x, 1)]);
-  end;
-end;
-
-function IsBinaryString(const Value: RawByteString): boolean;
-var
-  n: PtrInt;
-begin
-  result := true;
-  for n := 1 to length(Value) do
-    if ord(Value[n]) in [0..8, 10..31] then
-      // consider null-terminated strings as non-binary
-      if (n <> length(value)) or
-         (Value[n] = #0) then
-        exit;
-  result := false;
-end;
-
-function AsnDump(const Value: TAsnObject): RawUtf8;
-var
-  i, at, x, n: integer;
-  s, indent: RawUtf8;
-  il: TIntegerDynArray;
-begin
-  result := '';
-  i := 1;
-  indent := '';
-  while i < length(Value) do
-  begin
-    for n := length(il) - 1 downto 0 do
-    begin
-      x := il[n];
-      if x <= i then
-      begin
-        DeleteInteger(il, n);
-        Delete(indent, 1, 2);
-      end;
-    end;
-    s := AsnNext(i, Value, at);
-    Append(result, [indent, '$', ToHexShort(@at, 1)]);
-    if (at and $20) > 0 then
-    begin
-      x := length(s);
-      Append(result, [' constructed: length ', x]);
-      Append(indent, '  ');
-      AddInteger(il, x + i - 1);
-    end
-    else
-    begin
-      case at of
-        ASN1_BOOL:
-          Append(result, ' BOOL: ');
-        ASN1_INT:
-          Append(result, ' INT: ');
-        ASN1_ENUM:
-          Append(result, ' ENUM: ');
-        ASN1_COUNTER:
-          Append(result, ' COUNTER: ');
-        ASN1_GAUGE:
-          Append(result, ' GAUGE: ');
-        ASN1_TIMETICKS:
-          Append(result, ' TIMETICKS: ');
-        ASN1_OCTSTR:
-          Append(result, ' OCTSTR: ');
-        ASN1_OPAQUE:
-          Append(result, ' OPAQUE: ');
-        ASN1_OBJID:
-          Append(result, ' OBJID: ');
-        ASN1_IPADDR:
-          Append(result, ' IPADDR: ');
-        ASN1_NULL:
-          Append(result, ' NULL: ');
-        ASN1_COUNTER64:
-          Append(result, ' COUNTER64: ');
-      else // other
-        Append(result, ' unknown: ');
-      end;
-      if IsBinaryString(s) then
-        s := DumpExStr(s);
-      Append(result, s);
-    end;
-    Append(result, #$0d);
-    Append(result, #$0a);
-  end;
 end;
 
 {$endif ASNDEBUG}
@@ -1976,6 +1985,10 @@ var
   asntype: integer;
   s, t: TAsnObject;
 begin
+  {$ifdef ASNDEBUG}
+  {$I-} writeln('------'#10'Received= ');
+  writeln(AsnDump(Asn1Response));
+  {$endif ASNDEBUG}
   result := '';
   fResultCode := -1;
   fResultString := '';
@@ -2015,6 +2028,10 @@ end;
 
 function TLdapClient.SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
 begin
+  {$ifdef ASNDEBUG}
+  writeln('------'#10'Sending = ');
+  writeln(AsnDump(Asn1Data));
+  {$endif ASNDEBUG}
   SendPacket(Asn1Data);
   result := DecodeResponse(ReceiveResponse);
 end;
