@@ -561,6 +561,7 @@ type
     fReferals: TRawUtf8List;
     fVersion: integer;
     fBound: boolean;
+    fSecContextEncrypt: boolean;
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
     fSearchSizeLimit: integer;
@@ -572,6 +573,8 @@ type
     fExtValue: RawUtf8;
     fRootDN: RawUtf8;
     fMechanisms: TRawUtf8DynArray;
+    fSecContext: TSecContext;
+    fSecContextUser: RawUtf8;
     fWellKnownObjects: array[boolean] of TLdapKnownCommonNames;
     fWellKnownObjectsCached: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
@@ -585,6 +588,7 @@ type
     function ReceiveString(Size: integer): RawByteString;
     procedure RetrieveWellKnownObjects;
     function RetrieveRootObject(const Name: RawUtf8): TLdapAttribute;
+    procedure UnBound;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1828,7 +1832,7 @@ end;
 
 destructor TLdapClient.Destroy;
 begin
-  fSock.Free;
+  UnBound;
   fSearchResult.Free;
   fReferals.Free;
   fSettings.Free;
@@ -1997,6 +2001,8 @@ begin
   result := Asn(ASN1_SEQ, [
     Asn(fSeq),
     Asn1Data]);
+  if fSecContextEncrypt then
+    result := SecEncrypt(fSecContext, result);
 end;
 
 function TLdapClient.GetNetbiosDomainName: RawUtf8;
@@ -2059,24 +2065,33 @@ begin
     exit;
   fFullResult := '';
   try
-    // receive ASN type
-    fSock.SockInRead(pointer(@b), 1);
-    if b <> ASN1_SEQ then
-      exit;
-    result := AnsiChar(b);
-    // receive length
-    fSock.SockInRead(pointer(@b), 1);
-    Append(result, @b, 1);
-    if b >= $80 then // $8x means x bytes of length
-      AsnAdd(result, ReceiveString(b and $7f));
-    // decode length of LDAP packet
-    pos := 2;
-    len := AsnDecLen(pos, result);
-    // retrieve body of LDAP packet
-    if len > 0 then
-      AsnAdd(result, ReceiveString(len));
+    if fSecContextEncrypt then
+    begin
+      // we need to use the Kerberos encryption
+      result := fSock.SockReceiveString;
+      result := SecDecrypt(fSecContext, result);
+    end
+    else
+    begin
+      // receive ASN type
+      fSock.SockInRead(pointer(@b), 1);
+      if b <> ASN1_SEQ then
+        exit;
+      result := AnsiChar(b);
+      // receive length
+      fSock.SockInRead(pointer(@b), 1);
+      Append(result, @b, 1);
+      if b >= $80 then // $8x means x bytes of length
+        AsnAdd(result, ReceiveString(b and $7f));
+      // decode length of LDAP packet
+      pos := 2;
+      len := AsnDecLen(pos, result);
+      // retrieve body of LDAP packet
+      if len > 0 then
+        AsnAdd(result, ReceiveString(len));
+    end;
   except
-    on E: ENetSock do
+    on Exception do
     begin
       result := '';
       exit;
@@ -2316,7 +2331,8 @@ var
   s, t, digreq: TAsnObject;
 begin
   result := false;
-  if not Login then
+  if fBound or
+     not Login then
     exit;
   if DIGEST_ALGONAME[Algo] = '' then
     raise ESynCrypto.CreateUtf8('%.BindSaslDigest(%) requires a *-sess algo',
@@ -2355,9 +2371,9 @@ end;
 function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
   KerberosUser: PRawUtf8): boolean;
 var
-  sc: TSecContext;
   datain, dataout: RawByteString;
   t, req1, req2: TAsnObject;
+  needencrypt: boolean;
 
   procedure ParseInput;
   var
@@ -2367,14 +2383,22 @@ var
     if (AsnNext(pos, t, @datain) = ASN1_CTC7) and  // CTX PRI 07 CTR
        (AsnNext(pos, t) = ASN1_CTC3) and           // CTX PRI 04 CTR
        (AsnNext(pos, t) = ASN1_OCTSTR) then
-      AsnNext(pos, t, @datain); // MS AD seems to encapsulate the binary :(
+    begin
+      // MS AD seems to encapsulate the binary in a non-standard shape
+      AsnNext(pos, t, @datain);
+      // MS AD seems to require frames encryption once bound
+      needencrypt := true;
+    end;
   end;
 
 begin
   result := false;
-  if not Login or
+  if fBound or
+     not Login or
      not InitializeDomainAuth then
      exit;
+  needencrypt := false;
+  fSecContextUser := '';
   if (fSettings.KerberosSpn = '') and
      (fSettings.KerberosDN <> '') then
     fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost +
@@ -2387,27 +2411,32 @@ begin
   t := SendAndReceive(req1);
   if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
     exit;
-  InvalidateSecContext(sc, 0);
+  InvalidateSecContext(fSecContext, 0);
   try
     repeat
       ParseInput;
+      if (datain = '') and
+         (fResultCode = LDAP_RES_SUCCESS) then
+        break;
       try
         if fSettings.UserName <> '' then
-          ClientSspiAuthWithPassword(sc, datain, fSettings.UserName,
+          ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
             fSettings.Password, fSettings.KerberosSpn, dataout)
         else
-          ClientSspiAuth(sc, datain, fSettings.KerberosSpn, dataout);
+          ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
       except
         exit; // catch SSPI/GSSAPI errors and return false
       end;
       if dataout = '' then
       begin
         // last step of SASL handshake - see RFC 4752 section 3.1
+        if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+          break; // perform if only needed (e.g. not on MS AD)
         t := SendAndReceive(req1);
         if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
           exit;
         ParseInput;
-        datain := SecDecrypt(sc, datain);
+        datain := SecDecrypt(fSecContext, datain);
         if (length(datain) <> 4) or
            ((datain[1] = #0) and
             (PCardinal(datain)^ <> 0)) then
@@ -2415,7 +2444,8 @@ begin
         PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
-        dataout := SecEncrypt(sc, datain);
+        dataout := SecEncrypt(fSecContext, datain);
+        needencrypt := false; // noseclayer
       end;
       req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
                 Asn(fVersion),
@@ -2426,26 +2456,42 @@ begin
       t := SendAndReceive(req2);
     until fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS;
     result := fResultCode = LDAP_RES_SUCCESS;
-    if result and
-       (KerberosUser <> nil) then
-      ServerSspiAuthUser(sc, KerberosUser^);
+    if result then
+    begin
+      ServerSspiAuthUser(fSecContext, fSecContextUser);
+      if KerberosUser <> nil then
+        KerberosUser^ := fSecContextUser;
+    end;
     fBound := result;
+    fSecContextEncrypt := needencrypt;
   finally
-    FreeSecContext(sc);
+    if not result then
+    begin
+      fSecContextEncrypt := false;
+      FreeSecContext(fSecContext);
+    end;
   end;
 end;
 
 
 // https://ldap.com/ldapv3-wire-protocol-reference-unbind
 
-function TLdapClient.Logout: boolean;
+procedure TLdapClient.UnBound;
 begin
-  SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
   FreeAndNil(fSock);
-  result := true;
+  if fSecContextEncrypt then
+    FreeSecContext(fSecContext);
+  fSecContextEncrypt := false;
   fBound := false;
   fRootDN := '';
   fWellKnownObjectsCached := false;
+end;
+
+function TLdapClient.Logout: boolean;
+begin
+  SendPacket(Asn('', LDAP_ASN1_UNBIND_REQUEST));
+  UnBound;
+  result := true;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify

@@ -1185,6 +1185,9 @@ begin
   if QueryContextAttributesW(
        @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
+  if (Sizes.cbSecurityTrailer > SizeOf(Token)) or
+     (Sizes.cbBlockSize > SizeOf(Padding)) then
+    raise ESynSspi.Create('SecEncrypt: invalid ATTR_SIZES');
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -1198,13 +1201,11 @@ begin
   // +-------------------------+----------------+--------------------------+
   // | Trailer                 | Data           | Padding                  |
   // +-------------------------+----------------+--------------------------+
-  Assert(Sizes.cbSecurityTrailer <= High(Token)+1);
   {%H-}InBuf[0].Init(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
   // Encoding done in-place, so we copy the data
   SrcLen := Length(aPlain);
   FastSetRawByteString(EncBuffer, pointer(aPlain), SrcLen);
   InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
-  Assert(Sizes.cbBlockSize <= High(Padding)+1);
   InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
   {%H-}InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
