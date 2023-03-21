@@ -1576,7 +1576,9 @@ begin
     InDesc.cBuffers := 1;
     LInCtxPtr := @aSecContext.CtxHandle;
   end;
-  CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY;
+  CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or
+                ISC_REQ_CONFIDENTIALITY or
+                ISC_REQ_INTEGRITY;
   if pszTargetName <> nil then
     CtxReqAttr := CtxReqAttr or ISC_REQ_MUTUAL_AUTH;
   OutBuf.BufferType := SECBUFFER_TOKEN;

@@ -40,11 +40,15 @@ uses
   mormot.net.dns;
 
 
+
 { **************** Basic ASN.1 Support }
 
 type
   /// we defined our own type to hold an ASN object binary
   TAsnObject = RawByteString;
+
+{.$define ASNDEBUG}
+// enable low-level debugging of the LDAP transmitted frames on the console
 
 const
   // base types
@@ -64,6 +68,15 @@ const
   ASN1_TIMETICKS   = $43;
   ASN1_OPAQUE      = $44;
   ASN1_COUNTER64   = $46;
+
+  ASN1_NUMBERS = [
+    ASN1_INT,
+    ASN1_ENUM,
+    ASN1_BOOL,
+    ASN1_COUNTER,
+    ASN1_GAUGE,
+    ASN1_TIMETICKS,
+    ASN1_COUNTER64];
 
   // class type masks
   ASN1_CL_CTR   = $20;
@@ -136,12 +149,29 @@ procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
 /// decode the len of a ASN.1 binary item
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
 
+/// decode the header of a ASN.1 binary item
+function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
+  out AsnType, AsnSize: integer): boolean;
+
+/// decode an ASN1_INT ASN1_ENUM ASN1_BOOL value
+function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
+  AsnSize: integer): Int64;
+
 /// decode an OID ASN.1 value into human-readable text
-function OidToText(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
+function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 
 /// parse the next ASN.1 value as text
+// - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  out ValueType: integer): RawByteString;
+  Value: PRawByteString = nil): integer;
+
+/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as integer
+function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
+  out ValueType: integer): Int64;
+
+/// human-readable display of a ASN.1 value binary
+// - used e.g. by the ASNDEBUG conditional
+function AsnDump(const Value: TAsnObject): RawUtf8;
 
 /// convert a Distinguished Name to a Canonical Name
 // - raise an exception if the supplied DN is not a valid Distinguished Name
@@ -1056,6 +1086,27 @@ begin
   until n = 0;
 end;
 
+function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
+  AsnSize: integer): Int64;
+var
+  x: byte;
+  neg: boolean;
+begin
+  result := 0;
+  neg := ord(Buffer[Start]) > $7f;
+  while asnsize > 0 do
+  begin
+    x := ord(Buffer[Start]);
+    if neg then
+      x := not x;
+    result := (result shl 8) + x;
+    inc(Start);
+    dec(asnsize);
+  end;
+  if neg then
+    result := -(result + 1);
+end;
+
 function Asn(AsnType: integer; const Content: array of TAsnObject): TAsnObject;
 var
   tmp: array[0..7] of byte;
@@ -1110,7 +1161,7 @@ begin
   Append(Data, Asn(AsnType, [Buffer]));
 end;
 
-function OidToText(Pos, EndPos: integer; const Buffer: RawByteString): RawUtf8;
+function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 var
   x, y: integer;
 begin
@@ -1128,77 +1179,95 @@ begin
   end;
 end;
 
-function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  out ValueType: integer): RawByteString;
+function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
+  out AsnType, AsnSize: integer): boolean;
 var
-  asntype, asnsize, n, l: integer;
-  y: int64;
-  x: byte;
-  neg: boolean;
+  l: integer;
 begin
-  result := '';
-  ValueType := ASN1_NULL;
+  result := false;
   l := length(Buffer);
   if Pos > l then
     exit;
-  asntype := ord(Buffer[Pos]);
-  ValueType := asntype;
+  AsnType := ord(Buffer[Pos]);
   inc(Pos);
   asnsize := AsnDecLen(Pos, Buffer);
-  if (Pos + asnsize - 1) > l then
+  if (Pos + AsnSize - 1) > l then
     exit;
-  if (asntype and ASN1_CL_CTR) <> 0 then
-    result := copy(Buffer, Pos, asnsize) // constructed
+  result := true;
+end;
+
+function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
+  out ValueType: integer): Int64;
+var
+  asnsize: integer;
+begin
+  if AsnDecHeader(Pos, Buffer, ValueType, asnsize) and
+     (ValueType in [ASN1_INT, ASN1_ENUM, ASN1_BOOL]) then
+    result := AsnDecInt(Pos, Buffer, asnsize)
   else
-    case asntype of
+  begin
+    ValueType := ASN1_NULL;
+    result := -1;
+  end;
+end;
+
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  Value: PRawByteString = nil): integer;
+var
+  asnsize: integer;
+  y: int64;
+begin
+  if Value <> nil then
+    Value^ := '';
+  result := ASN1_NULL;
+  if not AsnDecHeader(Pos, Buffer, result, asnsize) then
+    exit;
+  if Value = nil then
+  begin
+    // no need to allocate and return the whole Value^: just compute position
+    if (result and ASN1_CL_CTR) = 0 then
+      // constructed (e.g. ASN1_SEQ): keep Pos after header
+      inc(Pos, asnsize);
+    exit;
+  end;
+  // we need to return the Value^
+  if (result and ASN1_CL_CTR) <> 0 then
+    // constructed (e.g. ASN1_SEQ): return whole data, but keep Pos after header
+    Value^ := copy(Buffer, Pos, asnsize)
+  else
+    case result of
       ASN1_INT,
       ASN1_ENUM,
       ASN1_BOOL:
-        begin
-          y := 0;
-          neg := false;
-          for n := 1 to asnsize do
-          begin
-            x := ord(Buffer[Pos]);
-            if (n = 1) and
-               (x > $7F) then
-              neg := true;
-            if neg then
-              x := not x;
-            y := (y shl 8) + x;
-            inc(Pos);
-          end;
-          if neg then
-            y := -(y + 1);
-          result := ToUtf8(y);
-        end;
+        Value^ := ToUtf8(AsnDecInt(Pos, Buffer, asnsize));
       ASN1_COUNTER,
       ASN1_GAUGE,
       ASN1_TIMETICKS,
       ASN1_COUNTER64:
         begin
           y := 0;
-          for n := 1 to asnsize do
+          while asnsize <> 0 do
           begin
             y := (y shl 8) + ord(Buffer[Pos]);
             inc(Pos);
+            dec(asnsize);
           end;
-          result := ToUtf8(y);
+          Value^ := ToUtf8(y);
         end;
       ASN1_OBJID:
         begin
-          result := OidToText(Pos, Pos + asnsize, Buffer);
+          Value^ := AsnDecOid(Pos, Pos + asnsize, Buffer);
           inc(Pos, asnsize);
         end;
       ASN1_IPADDR:
         begin
           case asnsize of
             4:
-              IP4Text(pointer(@Buffer[Pos]), RawUtf8(result));
+              IP4Text(pointer(@Buffer[Pos]), RawUtf8(Value^));
             16:
-              IP6Text(pointer(@Buffer[Pos]), RawUtf8(result));
+              IP6Text(pointer(@Buffer[Pos]), RawUtf8(Value^));
           else
-            BinToHexLower(@Buffer[Pos], asnsize, RawUtf8(result));
+            BinToHexLower(@Buffer[Pos], asnsize, RawUtf8(Value^));
           end;
           inc(Pos, asnsize);
         end;
@@ -1207,8 +1276,11 @@ begin
     else
       // ASN1_UTF8STRING, ASN1_OCTSTR, ASN1_OPAQUE or unknown
       begin
-        result := copy(Buffer, Pos, asnsize); // return as raw binary
+        Value^ := copy(Buffer, Pos, asnsize); // return as raw binary
         inc(Pos, asnsize);
+        if (Value^ <> '') and
+           IsValidUtf8(Value^) then
+          FakeCodePage(Value^, CP_UTF8); // we know this is value UTF-8
       end;
     end;
 end;
@@ -1241,29 +1313,42 @@ begin
   result := DC + OU + CN;
 end;
 
-{.$define ASNDEBUG}
-// enable low-level debugging of the LDAP transmitted frames
-
-{$ifdef ASNDEBUG}
-
-function IsBinaryString(const Value: RawByteString): boolean;
+function IsBinaryString(var Value: RawByteString): boolean;
 var
   n: PtrInt;
 begin
   result := true;
   for n := 1 to length(Value) do
-    if ord(Value[n]) in [0..8, 10..31] then
-      // consider null-terminated strings as non-binary
-      if (n <> length(value)) or
-         (Value[n] = #0) then
+    case ord(Value[n]) of
+      0:
+        if n <> length(value) then
+          exit
+        else // consider null-terminated strings as non-binary, but truncate
+          SetLength(Value, n - 1);
+      1..8, 10..31:
         exit;
+    end;
   result := false;
+end;
+
+procedure DumpClass(at: integer; w: TTextWriter);
+begin
+  if at and ASN1_CL_APP <> 0 then
+    w.AddShorter('APP ');
+  if at and ASN1_CL_CTX <> 0 then
+    w.AddShorter('CTX ');
+  if at and ASN1_CL_PRI <> 0 then
+    w.AddShorter('PRI ');
+  if at < ASN1_CL_APP then
+    w.AddShorter('unknown')
+  else
+    w.AddByteToHex(at and $0f);
 end;
 
 function AsnDump(const Value: TAsnObject): RawUtf8;
 var
   i, at, x, n, indent: integer;
-  s: RawUtf8;
+  s: RawByteString;
   il: TIntegerDynArray;
   w: TTextWriter;
   tmp: TTextWriterStackBuffer;
@@ -1283,20 +1368,23 @@ begin
           dec(indent, 2);
         end;
       end;
-      s := AsnNext(i, Value, at);
+      at := AsnNext(i, Value, @s);
       w.AddChars(' ', indent);
       w.Add('$');
       w.AddByteToHex(at);
       if (at and ASN1_CL_CTR) <> 0 then
       begin
+        w.Add(' ');
         case at of
           ASN1_SEQ:
-            w.AddShorter(' SEQ');
+            w.AddShorter('SEQ');
           ASN1_SETOF:
-            w.AddShorter(' SETOF');
+            w.AddShorter('SETOF');
+        else
+          DumpClass(at, w);
         end;
         x := length(s);
-        w.Add(' constructed: length %', [x]);
+        w.Add(' CTR: length %', [x]);
         inc(indent, 2);
         AddInteger(il, x + i - 1);
       end
@@ -1316,6 +1404,8 @@ begin
             w.AddShorter('GAUGE');
           ASN1_TIMETICKS:
             w.AddShorter('TIMETICK');
+          ASN1_BITSTR:
+            w.AddShorter('BITSTR');
           ASN1_OCTSTR:
             w.AddShorter('OCTSTR');
           ASN1_OPAQUE:
@@ -1328,8 +1418,8 @@ begin
             w.AddShorter('NULL');
           ASN1_COUNTER64:
             w.AddShorter('CNTR64');
-        else // other
-          w.AddShorter('unknown');
+        else
+          DumpClass(at, w);
         end;
         w.Add(':', ' ');
         if IsBinaryString(s) then
@@ -1337,8 +1427,20 @@ begin
           w.Add('binary len=% ', [length(s)]);
           w.AddShort(EscapeToShort(s));
         end
+        else if at in ASN1_NUMBERS then
+          w.AddString(s) // not quoted value
+        else if PosExChar('"', s) = 0 then
+        begin
+          w.Add('"');
+          w.AddString(s);
+          w.Add('"');
+        end
         else
-          w.AddQuotedStr(pointer(s), length(s), '"');
+        begin
+          w.Add('''');
+          w.AddString(s); // alternate output layout for quoted text
+          w.Add('''');
+        end;
       end;
       w.AddCR;
     end;
@@ -1347,6 +1449,8 @@ begin
     w.Free;
   end;
 end;
+
+{$ifdef ASNUNSTABLE}
 
 // not used nor fully tested
 function IntMibToStr(const Value: RawByteString): RawUtf8;
@@ -1413,7 +1517,7 @@ begin
     result[1] := AnsiChar(ord(result[1]) or $80);
 end;
 
-{$endif ASNDEBUG}
+{$endif ASNUNSTABLE}
 
 
 { **************** LDAP Response Storage }
@@ -1937,6 +2041,10 @@ end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
 begin
+  {$ifdef ASNDEBUG}
+  {I-}writeln('------'#10'Sending = ');
+  writeln(AsnDump(Asn1Data));
+  {$endif ASNDEBUG}
   if fSock <> nil then
     fSock.SockSendFlush(BuildPacket(Asn1Data));
 end;
@@ -1981,8 +2089,7 @@ end;
 
 function TLdapClient.DecodeResponse(const Asn1Response: TAsnObject): TAsnObject;
 var
-  i, x, numseq: integer;
-  asntype: integer;
+  i, x, numseq, asntype: integer;
   s, t: TAsnObject;
 begin
   {$ifdef ASNDEBUG}
@@ -1996,31 +2103,30 @@ begin
   fResponseDN := '';
   fReferals.Clear;
   i := 1;
-  AsnNext(i, Asn1Response, asntype); // initial ASN1_SEQ
-  numseq := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), 0);
+  if AsnNext(i, Asn1Response) <> ASN1_SEQ then
+    exit;
+  numseq := AsnNextInteger(i, Asn1Response, asntype);
   if (asntype <> ASN1_INT) or
      (numseq <> fSeq) then
     exit;
-  AsnNext(i, Asn1Response, fResponseCode);
+  fResponseCode := AsnNext(i, Asn1Response);
   if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
-    fResultCode := Utf8ToInteger(AsnNext(i, Asn1Response, asntype), -1);
-    fResponseDN := AsnNext(i, Asn1Response, asntype);   // matchedDN
-    fResultString := AsnNext(i, Asn1Response, asntype); // diagnosticMessage
-    if fResultString = '' then
+    fResultCode := AsnNextInteger(i, Asn1Response, asntype);
+    AsnNext(i, Asn1Response, @fResponseDN);   // matchedDN
+    AsnNext(i, Asn1Response, @fResultString); // diagnosticMessage
+    if (fResultString = '') and
+       (fResultCode <> LDAP_RES_SUCCESS) then
       fResultString := GetErrorString(fResultCode);
     if fResultCode = LDAP_RES_REFERRAL then
-    begin
-      s := AsnNext(i, Asn1Response, asntype);
-      if asntype = ASN1_CTC3 then
+      if AsnNext(i, Asn1Response, @s) = ASN1_CTC3 then
       begin
         x := 1;
         while x < length(s) do
         begin
-          t := AsnNext(x, s, asntype);
+          AsnNext(x, s, @t);
           fReferals.Add(t);
         end;
-      end;
     end;
   end;
   result := copy(Asn1Response, i, length(Asn1Response) - i + 1); // body
@@ -2028,10 +2134,6 @@ end;
 
 function TLdapClient.SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
 begin
-  {$ifdef ASNDEBUG}
-  writeln('------'#10'Sending = ');
-  writeln(AsnDump(Asn1Data));
-  {$endif ASNDEBUG}
   SendPacket(Asn1Data);
   result := DecodeResponse(ReceiveResponse);
 end;
@@ -2209,7 +2311,7 @@ const
 
 function TLdapClient.BindSaslDigest(Algo: TDigestAlgo): boolean;
 var
-  x, xt: integer;
+  x: integer;
   dig: RawUtf8;
   s, t, digreq: TAsnObject;
 begin
@@ -2233,7 +2335,7 @@ begin
     begin
       s := t;
       x := 1;
-      t := AsnNext(x, s, xt);
+      AsnNext(x, s, @t);
       dig := DigestClient(Algo, t, 'ldap/' + LowerCaseU(fSock.Server),
         fSettings.UserName, fSettings.Password, 'digest-uri');
       SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
@@ -2255,8 +2357,19 @@ function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
 var
   sc: TSecContext;
   datain, dataout: RawByteString;
-  x, xt: integer;
   t, req1, req2: TAsnObject;
+
+  procedure ParseInput;
+  var
+    pos: integer;
+  begin
+    pos := 1;
+    if (AsnNext(pos, t, @datain) = ASN1_CTC7) and  // CTX PRI 07 CTR
+       (AsnNext(pos, t) = ASN1_CTC3) and           // CTX PRI 04 CTR
+       (AsnNext(pos, t) = ASN1_OCTSTR) then
+      AsnNext(pos, t, @datain); // MS AD seems to encapsulate the binary :(
+  end;
+
 begin
   result := false;
   if not Login or
@@ -2277,8 +2390,7 @@ begin
   InvalidateSecContext(sc, 0);
   try
     repeat
-      x := 1;
-      datain := AsnNext(x, t, xt);
+      ParseInput;
       try
         if fSettings.UserName <> '' then
           ClientSspiAuthWithPassword(sc, datain, fSettings.UserName,
@@ -2294,13 +2406,12 @@ begin
         t := SendAndReceive(req1);
         if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
           exit;
-        x := 1;
-        datain := AsnNext(x, t, xt);
+        ParseInput;
         datain := SecDecrypt(sc, datain);
         if (length(datain) <> 4) or
            ((datain[1] = #0) and
             (PCardinal(datain)^ <> 0)) then
-          exit; // invalid token
+          exit; // invalid or unsupported token
         PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
@@ -2484,7 +2595,7 @@ function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
 var
   s, filt, attr, resp: TAsnObject;
   u: RawUtf8;
-  n, i, x: integer;
+  n, i: integer;
   r: TLdapResult;
   a: TLdapAttribute;
 begin
@@ -2525,23 +2636,20 @@ begin
     begin
       r := fSearchResult.Add;
       n := 1;
-      r.ObjectName := AsnNext(n, resp, x);
-      AsnNext(n, resp, x);
-      if x = ASN1_SEQ then
+      AsnNext(n, resp, @r.ObjectName);
+      if AsnNext(n, resp) = ASN1_SEQ then
       begin
         while n < length(resp) do
         begin
-          s := AsnNext(n, resp, x);
-          if x = ASN1_SEQ then
+          if AsnNext(n, resp, @s) = ASN1_SEQ then
           begin
             i := n + length(s);
-            u := AsnNext(n, resp, x);
+            AsnNext(n, resp, @u);
             a := r.Attributes.Add(u);
-            AsnNext(n, resp, x);
-            if x = ASN1_SETOF then
+            if AsnNext(n, resp)  = ASN1_SETOF then
               while n < i do
               begin
-                u := AsnNext(n, resp, x);
+                AsnNext(n, resp, @u);
                 a.Add(u);
               end;
           end;
@@ -2552,28 +2660,28 @@ begin
     begin
       n := 1;
       while n < length(resp) do
-        fReferals.Add(AsnNext(n, resp, x));
+      begin
+        AsnNext(n, resp, @u);
+        fReferals.Add(u);
+      end;
     end;
   until fResponseCode = LDAP_ASN1_SEARCH_DONE;
   n := 1;
-  AsnNext(n, resp, x);
-  if x = LDAP_ASN1_CONTROLS then
+  if AsnNext(n, resp) = LDAP_ASN1_CONTROLS then
   begin
-    AsnNext(n, resp, x);
-    if x = ASN1_SEQ then
+    if AsnNext(n, resp) = ASN1_SEQ then
     begin
-      s := AsnNext(n, resp, x);
+      AsnNext(n, resp, @s);
       if s = '1.2.840.113556.1.4.319' then
       begin
-        s := AsnNext(n, resp, x); // searchControlValue
+        AsnNext(n, resp, @s); // searchControlValue
         n := 1;
-        AsnNext(n, s, x);
-        if x = ASN1_SEQ then
+        if AsnNext(n, s) = ASN1_SEQ then
         begin
           // total number of result records, if known, otherwise 0
-          AsnNext(n, s, x);
+          AsnNext(n, s);
           // active search cookie, empty when done
-          fSearchCookie := AsnNext(n, s, x);
+          AsnNext(n, s, @fSearchCookie);
         end;
       end;
     end;
@@ -2610,7 +2718,7 @@ end;
 function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
 var
   query, decoded: TAsnObject;
-  pos, xt: integer;
+  pos: integer;
 begin
   result := false;
   if not Connected then
@@ -2623,8 +2731,8 @@ begin
   if result then
   begin
     pos := 1;
-    fExtName  := AsnNext(pos, decoded, xt);
-    fExtValue := AsnNext(pos, decoded, xt);
+    AsnNext(pos, decoded, @fExtName);
+    AsnNext(pos, decoded, @fExtValue);
   end;
 end;
 
