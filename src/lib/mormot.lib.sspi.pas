@@ -737,8 +737,9 @@ const
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '\';
 
-  // SSPI package names. Client always use Negotiate
-  // Server detect Negotiate or NTLM requests and use appropriate package
+  // SSPI package names.
+  // - Client always use Negotiate, unless SspiForceNtlmClient is set
+  // - Server detects Negotiate or NTLM requests and use appropriate package
   SECPKGNAMENTLM = 'NTLM';
   SECPKGNAMENEGOTIATE = 'Negotiate';
 
@@ -1541,6 +1542,7 @@ end;
 
 var
   ForceSecKerberosSpn: SynUnicode;
+  NtlmName, NegotiateName: SynUnicode;
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
@@ -1549,8 +1551,6 @@ function ClientSspiAuthWorker(var aSecContext: TSecContext;
 var
   InBuf: TSecBuffer;
   InDesc: TSecBufferDesc;
-  InDescPtr: PSecBufferDesc;
-  SecPkgInfo: PSecPkgInfoW;
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
@@ -1561,28 +1561,21 @@ begin
   InBuf.BufferType := SECBUFFER_TOKEN;
   InBuf.cbBuffer := Length(aInData);
   InBuf.pvBuffer := PByte(aInData);
+  InDesc.ulVersion := SECBUFFER_VERSION;
+  InDesc.pBuffers := @InBuf;
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := GetTickCount64;
-    if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
+    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
+    if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
+        nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
       raise ESynSspi.CreateLastOSError(aSecContext);
-    try
-      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND,
-          nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
-        raise ESynSspi.CreateLastOSError(aSecContext);
-    finally
-      FreeContextBuffer(SecPkgInfo);
-    end;
-    InDescPtr := nil;
+    InDesc.cBuffers := 0;
     LInCtxPtr := nil;
   end
   else
   begin
-    InDesc.ulVersion := SECBUFFER_VERSION;
     InDesc.cBuffers := 1;
-    InDesc.pBuffers := @InBuf;
-    InDescPtr := @InDesc;
     LInCtxPtr := @aSecContext.CtxHandle;
   end;
   CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY;
@@ -1595,7 +1588,7 @@ begin
   OutDesc.cBuffers := 1;
   OutDesc.pBuffers := @OutBuf;
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
-    pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, InDescPtr, 0,
+    pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, @InDesc, 0,
     @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
   result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
@@ -1657,6 +1650,7 @@ begin
     User := SynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
   end;
   PassWord := SynUnicode(aPassword);
+  FillCharFast(AuthIdentity, SizeOf(AuthIdentity), 0);
   AuthIdentity.Domain := pointer(Domain);
   AuthIdentity.DomainLength := Length(Domain);
   AuthIdentity.User := pointer(User);
@@ -1664,9 +1658,9 @@ begin
   AuthIdentity.Password := pointer(Password);
   AuthIdentity.PasswordLength := Length(Password);
   AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  result :=  ClientSspiAuthWorker(
+  result := ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
-  FillCharFast(pointer(Password)^, length(Password) * 2, 0); // anti-forensic
+  //FillCharFast(pointer(Password)^, length(Password) * 2, 0); // anti-forensic
 end;
 
 // mormot.core.unicode is overkill here - avoid a conversion with a temp string
@@ -1688,7 +1682,7 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 var
   InBuf: TSecBuffer;
   InDesc: TSecBufferDesc;
-  SecPkgInfo: PSecPkgInfoW;
+  PkgName: PWideChar;
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
@@ -1704,22 +1698,16 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    aSecContext.CreatedTick64 := GetTickCount64;
-    if UpperCaseU(copy(RawUtf8(aInData), 1, 7)) =  'NTLMSSP' then // no IdemPChar()
-    begin
-      if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) <> 0 then
-        raise ESynSspi.CreateLastOSError(aSecContext);
-    end
+    aSecContext.CreatedTick64 := mormot.core.os.GetTickCount64;
+    if (aInData <> '') and
+       (PCardinal(aInData)^ or $20202020 =
+        ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24) then
+      PkgName := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
-      if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-        raise ESynSspi.CreateLastOSError(aSecContext);
-    try
-      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND,
-          nil, nil, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
-        raise ESynSspi.CreateLastOSError(aSecContext);
-    finally
-      FreeContextBuffer(SecPkgInfo);
-    end;
+      PkgName := pointer(NegotiateName);
+    if AcquireCredentialsHandleW(nil, PkgName, SECPKG_CRED_INBOUND,
+        nil, nil, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
+      raise ESynSspi.CreateLastOSError(aSecContext);
     LInCtxPtr := nil;
   end
   else
@@ -1793,10 +1781,27 @@ begin
 end;
 
 function InitializeDomainAuth: boolean;
+var
+  SecPkgInfo: PSecPkgInfoW;
 begin
+  // setup the somain to be used
   if (DomainAuthMode = damUndefined) or
      (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
     SetDomainAuthMode;
+  // resolve security package names once at startup
+  if NtlmName = '' then
+  begin
+    if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) = 0 then
+    begin
+      NtlmName := SecPkgInfo^.Name;
+      FreeContextBuffer(SecPkgInfo);
+    end;
+    if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) = 0 then
+    begin
+      NegotiateName := SecPkgInfo^.Name;
+      FreeContextBuffer(SecPkgInfo);
+    end;
+  end;
   result := true;
 end;
 
