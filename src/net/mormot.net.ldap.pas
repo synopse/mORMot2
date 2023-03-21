@@ -2702,9 +2702,9 @@ begin
           begin
             while n < length(resp) do
             begin
-              if AsnNext(n, resp, @s) = ASN1_SEQ then
+              if AsnNext(n, resp, nil, @i) = ASN1_SEQ then
               begin
-                i := n + length(s);
+                inc(i, n);
                 AsnNext(n, resp, @u);
                 a := r.Attributes.Add(u);
                 if AsnNext(n, resp)  = ASN1_SETOF then
@@ -2865,7 +2865,6 @@ var
   root: TLdapResult;
   attr: TLdapAttribute;
   tmp: TRawUtf8DynArray;
-  i: PtrInt;
   r: TLdapKnownCommonNames;
 
   function One(const guid: RawUtf8): RawUtf8;
@@ -2895,9 +2894,7 @@ begin
   attr := root.Attributes.Find('wellKnownObjects');
   if not Assigned(attr) then
     exit;
-  SetLength(tmp, attr.Count);
-  for i := 0 to attr.Count - 1 do
-    tmp[i] := attr.GetReadable(i);
+  tmp := attr.GetAllReadable;
   fWellKnownObjectsCached := true;
   r.Computers                 := One(GUID_COMPUTERS_CONTAINER_W);
   r.DeletedObjects            := One(GUID_DELETED_OBJECTS_CONTAINER_W);
