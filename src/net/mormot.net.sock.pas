@@ -1204,7 +1204,10 @@ type
     // - can be used also without SockIn: it will call directly SockRecv()
     // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
-      UseOnlySockIn: boolean = false): integer;
+      UseOnlySockIn: boolean = false): integer; overload;
+    /// read Length bytes from SockIn buffer + Sock if necessary into a string
+    // - just allocate a result string and call SockInRead() to fill it
+    function SockInRead(Length: integer): RawByteString; overload;
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - if SockIn is available, it first check from any data in SockIn^.Buffer,
     // then call InputSock to try to receive any pending data if the buffer is void
@@ -4252,6 +4255,17 @@ begin
   end;
 end;
 
+function TCrtSocket.SockInRead(Length: integer): RawByteString;
+begin
+  result := '';
+  if (self = nil) or
+     (Length <= 0) then
+    exit;
+  FastSetRawByteString(result, nil, Length);
+  if SockInRead(pointer(result), Length, {onlysockin=}false) <> Length then
+    result := '';
+end;
+
 function TCrtSocket.SockIsDefined: boolean;
 begin
   result := (self <> nil) and
@@ -4476,11 +4490,13 @@ end;
 function TCrtSocket.SockReceiveString: RawByteString;
 var
   available, resultlen, read: integer;
+  endtix: Int64;
 begin
   result := '';
   if not SockIsDefined then
     exit;
   resultlen := 0;
+  endtix := mormot.core.os.GetTickCount64 + TimeOut;
   repeat
     if fSock.RecvPending(available) <> nrOK then
       exit; // raw socket error
@@ -4489,6 +4505,8 @@ begin
       begin
         // wait till something
         SleepHiRes(1); // some delay in infinite loop
+        if mormot.core.os.GetTickCount64 > endtix then
+          exit;
         continue;
       end
       else
