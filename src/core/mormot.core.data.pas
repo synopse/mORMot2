@@ -2602,6 +2602,8 @@ type
       aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
     /// ensure the supplied RawUtf8 value is interned
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
+    /// return the interned value, if any
+    function Existing(const aText: RawUtf8; aTextHash: cardinal): pointer;
     /// delete all stored RawUtf8 values
     procedure Clear;
     /// reclaim any unique RawUtf8 values
@@ -2631,6 +2633,11 @@ type
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
     function Unique(const aText: RawUtf8): RawUtf8; overload;
+    /// check if a RawUtf8 value is already stored within this class
+    // - if not existing, returns nil and don't add it to the pool
+    // - if existing, returns pointer(fValue[i]) of the unique stored RawUtf8
+    // - use e.g. for very fast per-pointer lookup of interned property names
+    function Existing(const aText: RawUtf8): pointer;
     /// return a RawUtf8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -4658,6 +4665,18 @@ begin
   fSafe.WriteUnLock;
 end;
 
+function TRawUtf8InterningSlot.Existing(const aText: RawUtf8; aTextHash: cardinal): pointer;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  fSafe.ReadLock;
+  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  if i >= 0 then
+    result := pointer(fValue[i]); // return a pointer to unified string instance
+  fSafe.ReadUnLock;
+end;
+
 procedure TRawUtf8InterningSlot.Clear;
 begin
   fSafe.WriteLock;
@@ -4809,6 +4828,17 @@ begin
     hash := InterningHasher(0, pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(result, aText, hash);
   end;
+end;
+
+function TRawUtf8Interning.Existing(const aText: RawUtf8): pointer;
+var
+  hash: cardinal;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  hash := InterningHasher(0, pointer(aText), length(aText));
+  result := fPool[hash and fPoolLast].Existing(aText, hash);
 end;
 
 function TRawUtf8Interning.Unique(aText: PUtf8Char; aTextLen: PtrInt): RawUtf8;
