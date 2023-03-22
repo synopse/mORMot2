@@ -3055,6 +3055,7 @@ begin
         V := ord(P[6]) * 10 + ord(P[7]) - (48 + 480 + 1); // Day 1..31 -> 0..30
         if (V <= 30) and
            ((L = 8) or
+            (L = 14) or
             (P[8] in [#0, ' ', 'T'])) then
           inc(result, V shl 17)
         else
@@ -3064,7 +3065,9 @@ begin
         end;
       end;
     end;
-    if L < 15 then
+    if L = 14 then
+      dec(P) // no 'T' or ' ' separator for YYYYMMDDhhmmss
+    else if L < 14 then
     begin
       // not enough place to retrieve a time
       if ContainsNoTime <> nil then
