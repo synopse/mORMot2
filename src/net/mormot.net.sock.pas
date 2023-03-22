@@ -1207,7 +1207,8 @@ type
       UseOnlySockIn: boolean = false): integer; overload;
     /// read Length bytes from SockIn buffer + Sock if necessary into a string
     // - just allocate a result string and call SockInRead() to fill it
-    function SockInRead(Length: integer): RawByteString; overload;
+    function SockInRead(Length: integer;
+      UseOnlySockIn: boolean = false): RawByteString; overload;
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - if SockIn is available, it first check from any data in SockIn^.Buffer,
     // then call InputSock to try to receive any pending data if the buffer is void
@@ -4255,14 +4256,14 @@ begin
   end;
 end;
 
-function TCrtSocket.SockInRead(Length: integer): RawByteString;
+function TCrtSocket.SockInRead(Length: integer; UseOnlySockIn: boolean): RawByteString;
 begin
   result := '';
   if (self = nil) or
      (Length <= 0) then
     exit;
   FastSetRawByteString(result, nil, Length);
-  if SockInRead(pointer(result), Length, {onlysockin=}false) <> Length then
+  if SockInRead(pointer(result), Length, UseOnlySockIn) <> Length then
     result := '';
 end;
 
