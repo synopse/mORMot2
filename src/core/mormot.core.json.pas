@@ -1874,7 +1874,8 @@ type
     /// compare two stored values of this type
     function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; override;
     /// fill a variant with a stored value of this type
-    // - complex objects are converted into a TDocVariant, after JSON serialization
+    // - complex values can be returned as TDocVariant after JSON conversion,
+    // using e.g. @JSON_[mFast] as optional Options parameter
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; override;
     /// unserialize some JSON input into Data^
@@ -2124,6 +2125,12 @@ function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
 function ObjectToJsonDebug(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
     woHumanReadable, woStoreClassName, woStorePointer]): RawUtf8;
+
+/// get any (potentially nested) object property by path
+// - complex values (e.g. dynamic array properties) will be returned as
+// TDocVariant after JSON conversion
+function GetValueObject(Instance: TObject; const Path: RawUtf8;
+  out Value: variant): boolean;
 
 /// unserialize most kind of content as JSON, using its RTTI, as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -10951,6 +10958,16 @@ function ObjectToJsonDebug(Value: TObject;
 begin
   // our JSON serialization detects and serialize Exception.Message
   result := ObjectToJson(Value, Options);
+end;
+
+function GetValueObject(Instance: TObject; const Path: RawUtf8;
+  out Value: variant): boolean;
+var
+  p: PRttiCustomProp;
+begin
+  result := GetInstanceByPath(Instance, Path, p);
+  if result then
+    p^.GetValueVariant(Instance, TVarData(Value), @JSON_[mFastFloat]);
 end;
 
 function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;

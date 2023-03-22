@@ -1402,12 +1402,9 @@ procedure CopyCollection(Source, Dest: TCollection);
 procedure SetDefaultValuesObject(Instance: TObject);
 
 /// set any (potentially nested) object property by path
+// - see also GetValueObject() from mormot.core.json
 function SetValueObject(Instance: TObject; const Path: RawUtf8;
   const Value: variant): boolean;
-
-/// get any (potentially nested) object property by path
-function GetValueObject(Instance: TObject; const Path: RawUtf8;
-  out Value: variant): boolean;
 
 /// returns TRUE on a nil instance or if all its published properties are default/0
 // - calls internally TPropInfo.IsDefaultOrVoid()
@@ -2143,6 +2140,8 @@ type
       andclear: boolean = true);
     /// retrieve any field vlaue as a variant instance
     // - will generate a stand-alone variant value, not an internal TRttiVarData
+    // - complex values can be returned as TDocVariant after JSON conversion,
+    // using e.g. @JSON_[mFast] as optional Options parameter
     procedure GetValueVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil);
     /// set a field value from its UTF-8 text
@@ -2377,7 +2376,8 @@ type
     /// fill a variant with a stored value of this type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.variants process
-    // - complex objects are converted into a TDocVariant, after JSON serialization
+    // - complex values can be returned as TDocVariant after JSON conversion,
+    // using e.g. @JSON_[mFast] as optional Options parameter
     // - returns the size of the Data in bytes, i.e. Cache.ItemSize
     function ValueToVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil): PtrInt; virtual;
@@ -9032,16 +9032,6 @@ var
 begin
   result := GetInstanceByPath(Instance, Path, p) and
             p^.Prop^.SetValue(Instance, Value);
-end;
-
-function GetValueObject(Instance: TObject; const Path: RawUtf8;
-  out Value: variant): boolean;
-var
-  p: PRttiCustomProp;
-begin
-  result := GetInstanceByPath(Instance, Path, p);
-  if result then
-    p^.GetValueVariant(Instance, TVarData(Value));
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
