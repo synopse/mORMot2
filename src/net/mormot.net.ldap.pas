@@ -473,6 +473,14 @@ type
 
 { **************** LDAP Client Class }
 
+/// allow to discover the local LDAP server using a UDP CLDAP broadcast
+// - will brodcast a 'dnsHostName' UDP search message over the local network,
+// then return the results in receiving order (probably the closest first)
+// - some AD may be configured to drop and timeout so testing via TCP is
+// unreliable: using UDP and CLDAP could be a safer approach
+function GetCldapHostName(TimeOutMS: integer = 1000): TRawUtf8DynArray;
+
+
 type
   /// define possible operations for LDAP MODIFY operations
   TLdapModifyOp = (
@@ -1906,6 +1914,60 @@ end;
 
 
 { **************** LDAP Client Class }
+
+function GetCldapHostName(TimeOutMS: integer): TRawUtf8DynArray;
+var
+  id: cardinal;
+  req, response: RawByteString;
+  addr, resp: TNetAddr;
+  sock: TNetSocket;
+  len: PtrInt;
+  res: TNetResult;
+  endtix: Int64;
+  tmp: array[0..1999] of byte;
+begin
+  result := nil;
+  if addr.SetFrom(cBroadcast, '389', nlUdp) <> nrOk then
+    exit;
+  sock := addr.NewSocket(nlUdp);
+  if sock = nil then
+    exit;
+  try
+    sock.SetBroadcast(true);
+    repeat
+      id := Random32 shr 1; // use a 31-bit random MessageID for UDP
+    until id <> 0;
+    req := Asn(ASN1_SEQ, [
+             Asn(id),
+             Asn(''),
+             Asn(LDAP_ASN1_SEARCH_REQUEST, [
+               Asn(''),
+               Asn(ord(lssBaseObject), ASN1_ENUM),
+               Asn(ord(lsaAlways), ASN1_ENUM),
+               Asn(0),
+               Asn(0),
+               Asn(false),
+               Asn('*', ASN1_CTX7),
+               Asn(ASN1_SEQ, [Asn('dnsHostName')])])]);
+    endtix := GetTickCount64 + TimeOutMS - 100;
+    sock.SetReceiveTimeout(TimeOutMS);
+    res := sock.SendTo(pointer(req), length(req), addr);
+    if res <> nrOK then
+      exit;
+    repeat
+      len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
+      if (len > 5) and
+         (tmp[0] = ASN1_SEQ) then
+      begin
+        FastSetRawByteString(response, @tmp, len);
+        writeln('From ', resp.IPShort);
+        AsnDump(response);
+      end;
+    until GetTickCount64 >= endtix;
+  finally
+    sock.Close;
+  end;
+end;
 
 
 { TLdapClientSettings }
