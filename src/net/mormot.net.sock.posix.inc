@@ -436,6 +436,13 @@ begin
     PCardinal(@addr4.sin_addr)^ := cLocalhost32; // 127.0.0.1
     exit;
   end
+  else if (address = cBroadcast) or
+          (address = c6Broadcast) then
+  begin
+    addr4.sin_family := AF_INET;
+    PCardinal(@addr4.sin_addr)^ := cardinal(-1); // 255.255.255.255
+    exit;
+  end
   else if (address = cAnyHost) or
           (address = c6AnyHost) then
   begin

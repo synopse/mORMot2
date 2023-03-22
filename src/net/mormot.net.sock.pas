@@ -217,6 +217,8 @@ type
     procedure SetNoDelay(nodelay: boolean);
     /// set the TCP_CORK (Linux) or TCP_NOPUSH (BSD) option
     procedure SetCork(cork: boolean);
+    /// set the SO_BROADCAST option for UDP
+    procedure SetBroadcast(broadcast: boolean);
     /// set the SO_REUSEPORT option, to allow several servers to bind on a port
     // - do nothing on Windows
     procedure ReusePort;
@@ -1975,6 +1977,14 @@ begin
   result := GetOptInt(SOL_SOCKET, SO_RCVBUF);
   // typical value on Linux is 131072 bytes for TCP, 212992 for Unix socket
   // - on Windows, default is 8192
+end;
+
+procedure TNetSocketWrap.SetBroadcast(broadcast: boolean);
+var
+  v: integer;
+begin
+  v := ord(broadcast);
+  SetOpt(SOL_SOCKET, SO_BROADCAST, @v, SizeOf(v));
 end;
 
 procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;
