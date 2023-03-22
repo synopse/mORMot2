@@ -2766,11 +2766,10 @@ function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): bo
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 
-/// convert a Windows API File 64-bit TimeStamp into a regular TDateTime
+/// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
 // - i.e. a FILETIME value as returned by GetFileTime() Win32 API
-// - returns 0 if the conversion failed
 // - some binary formats (e.g. ISO 9660) has such FILETIME fields
-function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
+function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -5944,11 +5943,12 @@ begin
 end;
 
 const
-  DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
+  FileTimeDelta = $019DB1DED53E8000; // TFileTime ticks to January 1, 1970
+  FileTimePerMs = 10000; // a tick is 100ns
 
-function WindowsFileTime64ToDateTime(WinTime: QWord): TDateTime;
+function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 begin
-  result := (Int64(WinTime) - DateFileTimeDelta) / 10000;
+  result := (Int64(WinTime) - FileTimeDelta) div FileTimePerMs;
 end;
 
 function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
