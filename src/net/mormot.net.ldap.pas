@@ -376,6 +376,7 @@ type
   TLdapAttributeList = class
   private
     fItems: TLdapAttributeDynArray;
+    fInterning: TRawUtf8Interning; // global hash table of attribute names
   public
     /// finalize the list
     destructor Destroy; override;
@@ -406,7 +407,7 @@ type
       read fItems;
   end;
 
-  /// store one LDAP result, i.e. object name and attributes
+  /// store one LDAP result, i.e. one object name and associated attributes
   TLdapResult = class
   private
     fObjectName: RawUtf8;
@@ -437,7 +438,10 @@ type
     fItems: TLdapResultObjArray;
     fSearchTimeMicroSec: Int64;
     fCount: integer;
+    fInterning: TRawUtf8Interning; // injected to TLdapResult by Add
   public
+    /// initialize the result list
+    constructor Create; reintroduce;
     /// finalize the list
     destructor Destroy; override;
     /// create and add new TLdapResult object to the list
@@ -580,7 +584,8 @@ type
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
-  TLdapClient = class(TSynPersistent)
+  // - is not thread-safe, but you can call Lock/UnLock to share the connection
+  TLdapClient = class(TSynPersistentLock)
   protected
     fSettings: TLdapClientSettings;
     fSock: TCrtSocket;
@@ -633,20 +638,24 @@ type
     // - do nothing if was already connected
     function Connect: boolean;
     /// the Root domain name of this LDAP server
+    // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
     /// the Confirguration domain name of this LDAP server
+    // - use an internal cache for fast retrieval
     function ConfigDN: RawUtf8;
     /// the NETBIOS domain name, empty string if not found
-    function NetbiosDN: RawUtf8;
-    /// retrieve al well known object DN or CN as a single convenient record
     // - use an internal cache for fast retrieval
-    function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
+    function NetbiosDN: RawUtf8;
     /// the authentication mechanisms supported on this LDAP server
     // - returns e.g. ['GSSAPI','GSS-SPNEGO','EXTERNAL','DIGEST-MD5']
+    // - use an internal cache for fast retrieval
     function Mechanisms: TRawUtf8DynArray;
     /// search if the server supports a given authentication mechanism by name
     // - a typical value to search is e.g. 'GSSAPI' or 'DIGEST-MD5'
     function Supports(const MechanismName: RawUtf8): boolean;
+    /// retrieve al well known object DN or CN as a single convenient record
+    // - use an internal cache for fast retrieval
+    function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - if these are empty strings, then it does annonymous binding
     // - warning: uses plaintext transport of password - consider using TLS
@@ -1689,7 +1698,7 @@ end;
 
 destructor TLdapAttributeList.Destroy;
 begin
-  Clear;
+  ObjArrayClear(fItems);
   inherited Destroy;
 end;
 
@@ -1704,11 +1713,27 @@ begin
 end;
 
 function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
+var
+  existing: pointer;
 begin
-  if self <> nil then
-    for result := 0 to length(fItems) - 1 do
-      if IdemPropNameU(fItems[result].AttributeName, AttributeName) then
+  if (self <> nil) and
+     (fItems <> nil) then
+  begin
+    result := length(fItems) - 1;
+    if result = 0 then // very common case for single attribute lookup
+    begin
+      if fItems[0].AttributeName = AttributeName then
         exit;
+    end
+    else
+    begin
+      existing := fInterning.Existing(AttributeName); // fast pointer search
+      if existing <> nil then // no need to search if we know it won't be there
+        for result := 0 to result do
+          if pointer(fItems[result].AttributeName) = existing then
+            exit;
+    end;
+  end;
   result := -1;
 end;
 
@@ -1730,7 +1755,7 @@ end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
 begin
-  result := TLdapAttribute.Create(AttributeName);
+  result := TLdapAttribute.Create(fInterning.Unique(AttributeName));
   ObjArrayAdd(fItems, result);
 end;
 
@@ -1787,10 +1812,16 @@ end;
 
 { TLdapResultList }
 
+constructor TLdapResultList.Create;
+begin
+  fInterning := TRawUtf8Interning.Create;
+end;
+
 destructor TLdapResultList.Destroy;
 begin
   Clear;
   inherited Destroy;
+  fInterning.Free;
 end;
 
 procedure TLdapResultList.Clear;
@@ -1827,6 +1858,7 @@ end;
 function TLdapResultList.Add: TLdapResult;
 begin
   result := TLdapResult.Create;
+  result.fAttributes.fInterning := fInterning;
   ObjArrayAddCount(fItems, result, fCount);
 end;
 
