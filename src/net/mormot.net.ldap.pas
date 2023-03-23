@@ -332,24 +332,32 @@ type
 function RawLdapErrorString(ErrorCode: integer): RawUtf8;
 
 /// encode a LDAP search filter text into an ASN.1 binary
-// - as used by BroadcastCldap() and TLdapClient.Search()
+// - as used by CldapBroadcast() and TLdapClient.Search()
 function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
 
 /// encode the ASN.1 binary for a LDAP_ASN1_SEARCH_REQUEST
-// - as used by BroadcastCldap() and TLdapClient.Search()
+// - as used by CldapBroadcast() and TLdapClient.Search()
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
   Filter: RawUtf8; const Attributes: array of RawByteString;
-  Scop: TLdapSearchScope; Aliases: TLdapSearchAliases;
-  Sizelimit, TimeLimit: integer): TAsnObject;
+  Scope: TLdapSearchScope = lssBaseObject; Aliases: TLdapSearchAliases = lsaAlways;
+  Sizelimit: integer = 0; TimeLimit: integer = 0): TAsnObject;
 
 /// decode the ASN.1 binary of a LDAP_ASN1_SEARCH_ENTRY
 // - and lookup by name the returned attributes as RawUtf8 variables
-// - as used by BroadcastCldap()
+// - as used by CldapBroadcast()
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
   const Attributes: array of RawUtf8; const Values: array of PRawUtf8): boolean;
 
+/// sort some LDAP host names using CLDAP over UDP
+// - expects Hosts in 'host:port' format, as returned by DnsLdapControlers,
+// e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+// - hosts not available over UDP within the TimeoutMS period, are put at the
+// end of the list because they may still be reachable via TCP
+// - used e.g. by TLdapClient.Connect() with the lccUdpFirst option
+procedure CldapSortHosts(var Hosts: TRawUtf8DynArray; TimeoutMS: integer);
+
 type
-  /// define one result for a server identified by BroadcastCldap()
+  /// define one result for a server identified by CldapBroadcast()
   TCldapServer = record
     /// after how many microseconds this response has been received
     TimeMicroSec: Integer;
@@ -368,7 +376,7 @@ type
     // - a typical value is e.g. 'Samba Team (https://www.samba.org)'
     VendorName: RawUtf8;
   end;
-  /// the type of array results returned by BroadcastCldap()
+  /// the type of array results returned by CldapBroadcast()
   TCldapServers = array of TCldapServer;
 
 /// allow to discover the local LDAP server(s) using a CLDAP UDP broadcast
@@ -378,13 +386,13 @@ type
 // - some AD may be configured to drop and timeout so testing via TCP is
 // unreliable: using UDP and CLDAP could be a safer approach
 // - returns the number of results added to the Servers array[] - which will be
-// sorted by time with any previous requests so you can call BroadcastCldap()
+// sorted by time with any previous requests so you can call CldapBroadcast()
 // over several address masks
 // - note: cBroadcast = '255.255.255.255' does not mean "everywhere" in practice:
 // e.g. on Windows, you need to run also the function on cLocalHost, and on
 // POSIX it seems to require a specific broadcast per interface network mask
 // otherwise only a single interface is broadcasted
-function BroadcastCldap(var Servers: TCldapServers; TimeOutMS: integer = 100;
+function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
   const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = '389'): integer;
 
 
@@ -561,6 +569,8 @@ type
 { **************** LDAP Client Class }
 
 type
+  ELdap = class(ESynException);
+
   /// the resultset of TLdapClient.GetWellKnownObjects()
   TLdapKnownCommonNames = record
     Computers: RawUtf8;
@@ -646,6 +656,15 @@ type
       read fKerberosSpn write fKerberosSpn;
   end;
 
+  /// how TLdapClient.Connect try to find the LDAP server if no TargetHost is set
+  // - lccUdpFirst will make a first round over the supplied addresses using
+  // UDP and CLDAP, to find out the closed on - would also circumvent the
+  // issue with some AD configured to drop and timeout for some hosts
+  // - lccTlsFirst will try to connect as TLS on port 636 (if OpenSSL is loaded)
+  TLdapClientConnect = set of (
+    lccUdpFirst,
+    lccTlsFirst);
+
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
   // - Authentication will use Username/Password properties
@@ -698,9 +717,10 @@ type
     destructor Destroy; override;
     /// try to connect to LDAP server
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
-    // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible
+    // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible,
+    // following DiscoverMode options
     // - do nothing if was already connected
-    function Connect: boolean;
+    function Connect(DiscoverMode: TLdapClientConnect = [lccTlsFirst]): boolean;
     /// the Root domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
@@ -1417,7 +1437,7 @@ begin
     GetNextItemTrimed(p, ',', value);
     if (kind = '') or
        (value = '') then
-      raise ENetSock.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
+      raise ELdap.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
     UpperCaseSelf(kind);
     if kind = 'DC' then
     begin
@@ -1885,7 +1905,7 @@ end;
 
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
   Filter: RawUtf8; const Attributes: array of RawByteString;
-  Scop: TLdapSearchScope; Aliases: TLdapSearchAliases;
+  Scope: TLdapSearchScope; Aliases: TLdapSearchAliases;
   Sizelimit, TimeLimit: integer): TAsnObject;
 var
   filt: RawUtf8;
@@ -1897,7 +1917,7 @@ begin
     filt := Asn('', ASN1_NULL);
   result := Asn(LDAP_ASN1_SEARCH_REQUEST, [
               Asn(BaseDN),
-              Asn(ord(Scop),   ASN1_ENUM),
+              Asn(ord(Scope),   ASN1_ENUM),
               Asn(ord(Aliases), ASN1_ENUM),
               Asn(Sizelimit),
               Asn(TimeLimit),
@@ -1942,7 +1962,7 @@ begin
     end;
 end;
 
-function BroadcastCldap(var Servers: TCldapServers; TimeOutMS: integer;
+function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer;
   const Address, Port: RawUtf8): integer;
 var
   id: integer;
@@ -1969,8 +1989,7 @@ begin
              Asn(id),
              //Asn(''), // the RFC 1798 requires user, but MS AD does not :(
              RawLdapSearch('', false, '*', ['dnsHostName',
-               'defaultNamingContext', 'ldapServiceName', 'vendorName'],
-               lssBaseObject, lsaAlways, 0, 0)]);
+               'defaultNamingContext', 'ldapServiceName', 'vendorName'])]);
     sock.SetReceiveTimeout(TimeOutMS);
     QueryPerformanceMicroSeconds(start);
     res := sock.SendTo(pointer(req), length(req), addr);
@@ -2003,6 +2022,85 @@ begin
      (result <> length(Servers)) then
     // ensure results are sorted by TimeMicroSec: integer first field
     DynArray(TypeInfo(TCldapServers), Servers).Sort(SortDynArrayInteger);
+end;
+
+procedure CldapSortHosts(var Hosts: TRawUtf8DynArray; TimeoutMS: integer);
+var
+  sock: TNetSocketDynArray;
+  h, p: RawUtf8;
+  addr, resp: TNetAddr;
+  req: TAsnObject;
+  sorted: TRawUtf8DynArray;
+  tix: Int64;
+  n, i: PtrInt;
+  len, found: integer;
+  poll: TPollSockets;
+  res: TPollSocketResult;
+  tmp: array[0..1999] of byte; // big enough for a UDP frame
+begin
+  n := length(Hosts);
+  if n = 0 then
+    exit;
+  found := 0;
+  poll := TPollSockets.Create(PollFewSocketClass);
+  SetLength(sock, n);
+  try
+    // multi-cast a LDAP request to all UDP requests
+    req := Asn(ASN1_SEQ, [
+             Asn(777),
+             RawLdapSearch('', false, '*', ['dnsHostName'])]);
+    for i := 0 to n - 1 do
+    begin
+      Split(Hosts[i], ':', h, p);
+      if addr.SetFrom(h, p, nlUdp) <> nrOk then
+        continue;
+      sock[i] := addr.NewSocket(nlUdp);
+      if sock[i] = nil then
+        continue;
+      sock[i].SetReceiveTimeout(1);
+      if sock[i].SendTo(pointer(req), length(req), addr) = nrOk then
+        poll.Subscribe(sock[i], [pseRead], i)
+      else
+      begin
+        sock[i].Close;
+        sock[i] := nil;
+      end;
+    end;
+    // wait for all incoming requests
+    tix := GetTickCount64 + TimeoutMS;
+    repeat
+      if poll.GetOne(10, '', res) then
+      begin
+        i := ResToTag(res);
+        if (PtrUInt(i) > PtrUInt(n)) or
+           (sock[i] = nil) then
+          break;
+        len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
+        if (len > 5) and
+           (tmp[0] = ASN1_SEQ) then
+        begin
+          AddRawUtf8(sorted, found, Hosts[i]); // found in UDP
+          poll.Unsubscribe(sock[i], i);
+          sock[i].Close;
+          sock[i] := nil;
+        end;
+     end;
+    until (found = n) or
+          (GetTickCount64 > tix);
+  finally
+    for i := 0 to n - 1 do
+      if sock[i] <> nil then
+      begin
+        sock[i].Close;
+        AddRawUtf8(sorted, found, Hosts[i]); // not via UDP, but maybe on TCP
+      end;
+    poll.Free;
+  end;
+  DynArrayFakeLength(sorted, found);
+  if found <> n then // e.g. if sock[] creation failed
+    for i := 0 to n - 1 do
+      AddRawUtf8(sorted, hosts[i], {nodup=}true);
+  Hosts := sorted;
 end;
 
 
@@ -2407,7 +2505,7 @@ begin
   inherited Destroy;
 end;
 
-function TLdapClient.Connect: boolean;
+function TLdapClient.Connect(DiscoverMode: TLdapClientConnect): boolean;
 var
   dc: TRawUtf8DynArray;
   h, p: RawUtf8;
@@ -2421,6 +2519,8 @@ begin
     if ForcedDomainName = '' then
       ForcedDomainName := fSettings.KerberosDN; // may be pre-set
     dc := DnsLdapControlers('', false, @fSettings.fKerberosDN);  // from OS
+    if lccUdpFirst in DiscoverMode then
+      CldapSortHosts(dc, 100); // 100 ms should be enough to locate local ADs
   end
   else
     AddRawUtf8(dc,  // from instance properties
@@ -2431,11 +2531,12 @@ begin
       Split(dc[i], ':', h, p);
       if fSettings.TargetHost = '' then // not from DnsLdapControlers
       begin
-        if HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
+        if (lccTlsFirst in DiscoverMode) and
+           HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
            (p = '389') and
            not fSettings.Tls then
         try
-          // always first try to connect with TLS on its default port (much safer)
+          // first try to connect with TLS on its default port (much safer)
           fSock := TCrtSocket.Open(
             h, '636', nlTcp, fSettings.TimeOut, {tls=}true, @fTlsContext);
           p := '636';
