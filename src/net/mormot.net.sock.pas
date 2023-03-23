@@ -874,6 +874,8 @@ type
     // low "ulimit -H -n" value, you may add the following line in your
     // /etc/limits.conf or /etc/security/limits.conf file:
     // $ * hard nofile 65535
+    // - you can specify PollFewSocketClass as aPollClass if only a few
+    // sockets are likely to be tracked (to use lighter poll instead of epoll)
     constructor Create(aPollClass: TPollSocketClass = nil);
     /// finalize the sockets polling, and release all used memory
     destructor Destroy; override;
@@ -976,10 +978,15 @@ procedure ResetResEvents(var res: TPollSocketResult);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// class function factory, returning a socket polling class matching
-// at best the current operating system
+// at best the current operating system for a high number of sockets
 // - return a hidden TPollSocketSelect class under Windows, TPollSocketEpoll
 // under Linux, or TPollSocketPoll on BSD
 function PollSocketClass: TPollSocketClass;
+
+/// class function factory, returning polling class for a few sockets
+// - return a TPollSocketSelect under Windows, or TPollSocketPoll on POSIX
+function PollFewSocketClass: TPollSocketClass;
+
 
 function ToText(ev: TPollSocketEvents): TShort8; overload;
 

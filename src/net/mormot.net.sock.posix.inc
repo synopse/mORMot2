@@ -885,8 +885,6 @@ end;
 
 { ******************** Efficient Multiple Sockets Polling }
 
-{$ifdef USEPOLL}
-
 type
   /// socket polling via the POSIX poll API
   // - direct call of the Linux/POSIX poll() API
@@ -1082,9 +1080,17 @@ begin
   result := true;
 end;
 
+function PollFewSocketClass: TPollSocketClass;
+begin
+  result := TPollSocketPoll;
+end;
+
+
+{$ifdef USEPOLL}
+
 function PollSocketClass: TPollSocketClass;
 begin
-  PollSocketClass := TPollSocketPoll;
+  result := TPollSocketPoll;
 end;
 
 {$else}
@@ -1274,7 +1280,7 @@ end;
 
 function PollSocketClass: TPollSocketClass;
 begin
-  PollSocketClass := TPollSocketEpoll;
+  result := TPollSocketEpoll;
 end;
 
 {$endif USEPOLL}

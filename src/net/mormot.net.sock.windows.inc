@@ -1062,6 +1062,12 @@ begin
   result := TPollSocketSelect;
 end;
 
+function PollFewSocketClass: TPollSocketClass;
+begin
+  result := TPollSocketSelect;
+end;
+
+
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
