@@ -717,10 +717,9 @@ type
     destructor Destroy; override;
     /// try to connect to LDAP server
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
-    // DnsLdapControlers() hosts (from mormot.net.dns) over TLS if possible,
-    // following DiscoverMode options
+    // DnsLdapControlers() hosts (from mormot.net.dns) following DiscoverMode
     // - do nothing if was already connected
-    function Connect(DiscoverMode: TLdapClientConnect = [lccTlsFirst]): boolean;
+    function Connect(DiscoverMode: TLdapClientConnect = [lccUdpFirst, lccTlsFirst]): boolean;
     /// the Root domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
@@ -2042,10 +2041,10 @@ begin
   if n = 0 then
     exit;
   found := 0;
-  poll := TPollSockets.Create(PollFewSocketClass);
   SetLength(sock, n);
+  poll := TPollSockets.Create(PollFewSocketClass);
   try
-    // multi-cast a LDAP request to all UDP requests
+    // multi-cast a simple LDAP request over UDP to all servers
     req := Asn(ASN1_SEQ, [
              Asn(777),
              RawLdapSearch('', false, '*', ['dnsHostName'])]);
@@ -2072,7 +2071,7 @@ begin
       if poll.GetOne(10, '', res) then
       begin
         i := ResToTag(res);
-        if (PtrUInt(i) > PtrUInt(n)) or
+        if (PtrUInt(i) >= PtrUInt(n)) or
            (sock[i] = nil) then
           break;
         len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
@@ -2088,13 +2087,13 @@ begin
     until (found = n) or
           (GetTickCount64 > tix);
   finally
+    poll.Free;
     for i := 0 to n - 1 do
       if sock[i] <> nil then
       begin
         sock[i].Close;
         AddRawUtf8(sorted, found, Hosts[i]); // not via UDP, but maybe on TCP
       end;
-    poll.Free;
   end;
   DynArrayFakeLength(sorted, found);
   if found <> n then // e.g. if sock[] creation failed
