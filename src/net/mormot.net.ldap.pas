@@ -136,8 +136,8 @@ function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObj
   overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// create an ASN.1 binary from several raw data - as OCTSTR by default
-function Asn(const Data: array of RawByteString;
-  AsnType: integer = ASN1_OCTSTR): TAsnObject; overload;
+function AsnArr(const Data: array of RawByteString;
+  AsnType: integer = ASN1_OCTSTR): TAsnObject;
 
 /// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
 function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
@@ -1243,13 +1243,13 @@ begin
   result := Asn(AsnType, [Data]);
 end;
 
-function Asn(const Data: array of RawByteString; AsnType: integer): TAsnObject;
+function AsnArr(const Data: array of RawByteString; AsnType: integer): TAsnObject;
 var
   i: PtrInt;
 begin
   result := '';
   for i := 0 to high(Data) do
-    AsnAdd(result, Asn(Data[i], AsnType));
+    Append(result, Asn(AsnType, [Data[i]]));
 end;
 
 function Asn(Value: Int64; AsnType: integer): TAsnObject;
@@ -1745,6 +1745,11 @@ begin
   result := '';
   if Filter = '' then
     exit;
+  if Filter = '*' then
+  begin
+    result := Asn('*', ASN1_CTX7);
+    exit;
+  end;
   s := Filter;
   if Filter[1] = '(' then
     for x := length(Filter) downto 2 do
@@ -1898,7 +1903,7 @@ begin
               Asn(TimeLimit),
               Asn(TypesOnly),
               filt,
-              AsnSeq(Asn(Attributes))]);
+              AsnSeq(AsnArr(Attributes))]);
 end;
 
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;

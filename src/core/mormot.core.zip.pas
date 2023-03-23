@@ -2299,7 +2299,8 @@ begin
       if extraname <> nil then
       begin
         // unicode path stored in file info extra block
-        SetString(tmp, @extraname.utf8Name, extraname.size - 5{version+nameCrc});
+        SetString(tmp, PAnsiChar(@extraname.utf8Name),
+          extraname.size - 5{version+nameCrc});
         Utf8ToFileName(tmp, e^.zipName)
       end
       else if h^.fileInfo.GetUtf8FileNameFlag or
