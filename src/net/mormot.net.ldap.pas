@@ -2765,27 +2765,34 @@ var
   ComputerDN: RawUtf8;
   PwdU16: RawByteString;
   Attributes: TLdapAttributeList;
+  ComputerObject: TLdapResult;
 begin
   result := false;
   if not Connected then
     exit;
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
-  // Search if computer is already present in the domain
-  if not Search(ComputerDN, false, '', []) and
-     (ResultCode <> LDAP_RES_NO_SUCH_OBJECT) then
+  // Search Computer object in the domain
+  ComputerObject := SearchFirst(RootDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['']);
+  // If the search failed, we exit with the error message
+  if (ResultCode <> LDAP_RES_SUCCESS) then
   begin
-    ErrorMessage := GetErrorString(ResultCode);
+    ErrorMessage := FormatUtf8('% (%)', [GetErrorString(ResultCode), ResultCode]);
     exit;
   end;
-  if SearchResult.Count > 0 then
-    if DeleteIfPresent then
-      Delete(ComputerDN)
-    else
+  // Computer with the same sAMAccountName is already existing
+  if Assigned(ComputerObject) then
+  begin
+    Result := True;
+    // We don't want to delete it
+    if not DeleteIfPresent then
     begin
       ErrorMessage := 'Computer is already present';
-      result := true;
       exit;
     end;
+    Delete(ComputerObject.ObjectName);
+  end;
+
+  // Create the new computer object
   Attributes := TLDAPAttributeList.Create;
   try
     Attributes.Add('objectClass', 'computer');
@@ -2800,7 +2807,7 @@ begin
     end;
     result := Add(ComputerDN, Attributes);
     if not result then
-      ErrorMessage := GetErrorString(ResultCode);
+      ErrorMessage := FormatUtf8('% (%)', [GetErrorString(ResultCode), ResultCode]);
   finally
     Attributes.Free;
     FillZero(PwdU8);
