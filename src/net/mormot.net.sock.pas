@@ -1834,7 +1834,8 @@ begin
   end;
   // bind or connect to this Socket
   {$ifdef OSWINDOWS}
-  if not dobind then
+  if (layer <> nlUdp) and
+     not dobind then
   begin // on Windows, default buffers are of 8KB :(
     sock.SetRecvBufferSize(65536);
     sock.SetSendBufferSize(65536);
