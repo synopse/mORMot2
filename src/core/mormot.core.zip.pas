@@ -210,10 +210,19 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  //// extra file information structure header
+  TFileInfoExtra = record
+    /// contains the ID of the block, e.g. ZIP64_EXTRA_ID or UNICODEPATH_EXTRA_ID
+    id: word;
+    /// block size in bytes
+    size: word;
+  end;
+  PFileInfoExtra = ^TFileInfoExtra;
+
   //// extra file information structure, as used in zip64 file format
   // - warning: some fields may be missing on disk - here only if ZIP32_MAXSIZE
   TFileInfoExtra64 = record
-    /// ZIP64_EXTRA_ID = 0x0001
+    /// contains ZIP64_EXTRA_ID = 0x0001
     zip64id: word;
     /// = 16 (2*QWord) after local info, = 24 including offset in directory
     size: word;
@@ -226,6 +235,23 @@ type
     offset: QWord;
   end;
   PFileInfoExtra64 = ^TFileInfoExtra64;
+
+  //// extra file information structure, storing UTF-8 path name
+  // - as generated e.g. by the build-in zip on latest Windows 10 Home
+  // - see 'Unicode Path Extra Field' in Info-ZIP APPNOTE.TXT
+  TFileInfoExtraName = record
+    /// contains UNICODEPATH_EXTRA_ID = $7075
+    id: word;
+    /// block size
+    size: word;
+    /// version of this extra field, currently 1
+    version: byte;
+    /// File Name Field CRC32 Checksum
+    nameCRC32: cardinal;
+    /// UTF-8 version of the entry File Name of size bytes length
+    utf8Name: AnsiChar;
+  end;
+  PFileInfoExtraName = ^TFileInfoExtraName;
 
   /// information returned by RetrieveFileInfo()
   TFileInfoFull = record
@@ -265,6 +291,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize the signature/madeby/fileinfo field information
     procedure SetVersion(NeedZip64: boolean);
+    /// search for a file info extension up to extraLen bytes
+    function LocateExtra(aID: word): pointer;
   end;
   PFileHeader = ^TFileHeader;
 
@@ -338,7 +366,7 @@ type
   end;
   PLastHeader64 = ^TLastHeader64;
 
-  //// locator structure, as used in zip64 file format
+  /// locator structure, as used in zip64 file format
   // - this header ends the file and is used to find the TFileHeader entries
   TLocator64 = record
     /// $07064b50 PK#6#7 = LASTHEADERLOCATOR64_SIGNATURE_INC - 1
@@ -795,11 +823,12 @@ const
   GZHEAD: array[0..2] of cardinal = (
     $088B1F, 0, 0);
 
-  {$ifdef LIBDEFLATESTATIC}
+{$ifdef LIBDEFLATESTATIC}
+var
   // libdeflate + AVX is much faster than zlib, but its API expects only buffers
   // - files up to 64MB will call libdeflate and a temporary memory buffer
-  LIBDEFLATE_MAXSIZE = 64 shl 20;
-  {$endif LIBDEFLATESTATIC}
+  LIBDEFLATE_MAXSIZE: Int64 = 64 shl 20;
+{$endif LIBDEFLATESTATIC}
 
 
 { TSynZipStream }
@@ -1250,11 +1279,12 @@ const
   FLAG_DATADESCRIPTOR = 8;
   SIGNATURE_DATADESCRIPTOR = $08074b50;
 
-  ZIP64_EXTRA_ID = $0001; // Zip64 extended information
-  NTFS_EXTRA_ID = $000a;  // NTFS
-  UNIX_EXTRA_ID = $000d;  // UNIX
-  EXT_TIME_EXTRA_ID = $5455; // Extended timestamp
+  ZIP64_EXTRA_ID       = $0001; // Zip64 extended information
+  NTFS_EXTRA_ID        = $000a; // NTFS
+  UNIX_EXTRA_ID        = $000d; // UNIX
+  EXT_TIME_EXTRA_ID    = $5455; // Extended timestamp
   INFOZIP_UNIX_EXTRAID = $5855; // Info-ZIP Unix extension
+  UNICODEPATH_EXTRA_ID = $7075; // Unicode Path extended information
 
   ZIP_MINSIZE_DEFLATE = 256; // size < 256 bytes -> Z_STORED
 
@@ -1308,6 +1338,28 @@ begin
   madeBy := ZIP_VERSION[NeedZip64];
   extFileAttr := $A0; // archive, normal (ignored by most readers)
   fileInfo.neededVersion := madeBy;
+end;
+
+function TFileHeader.LocateExtra(aID: word): pointer;
+var
+  p: PFileInfoExtra;
+  remaining, len: PtrInt;
+begin
+  result := nil;
+  remaining := fileInfo.extraLen;
+  if remaining = 0 then
+    exit;
+  p := pointer(PAnsiChar(@self) + sizeof(self) + fileInfo.NameLen);
+  repeat
+    if p^.id = aID then
+    begin
+      result := p; // we found it
+      exit;
+    end;
+    len := p^.size + SizeOf(p^);
+    inc(PByte(p), len);
+    dec(remaining, len);
+  until remaining <= 0;
 end;
 
 
@@ -1547,7 +1599,11 @@ begin
             else
             begin
               // zip64 input
-              assert(d^.h32.fileInfo.extraLen = SizeOf(d^.h64));
+              if d^.h32.fileInfo.extraLen <> SizeOf(d^.h64) then
+                // e.g. TFileInfoExtra64 with TFileInfoExtraName extension
+                raise ESynZip.CreateUtf8(
+                  '%.CreateFrom unsupported fileinfo.extralen for % in %',
+                  [self, s^.zipName, aFileName]);
               d^.h32.localHeadOff := ZIP32_MAXSIZE;
               dec(d^.h32.fileInfo.extraLen, SizeOf(d^.h64.offset));
               dec(d^.h64.size, SizeOf(d^.h64.offset));
@@ -1788,10 +1844,11 @@ begin
   f := FileOpen(aFileName, fmOpenReadDenyNone);
   if ValidHandle(f) then
     try
+      // retrieve file size and date
       todo := FileSeek64(f, 0, soFromEnd);
       FileSeek64(f, 0, soFromBeginning);
       age := FileAgeToWindowsTime(aFileName);
-      // prepare and write initial version of the local file header
+      // check if the file should be stored or use libdeflate
       met := Z_DEFLATED;
       if (CompressLevel < 0) or
          (todo < ZIP_MINSIZE_DEFLATE) then
@@ -1799,7 +1856,7 @@ begin
       {$ifdef LIBDEFLATESTATIC}
       // libdeflate is much faster than zlib, but its API expects only buffers
       if (met = Z_DEFLATED) and
-         (todo <= LIBDEFLATE_MAXSIZE) then
+         (Int64(todo) <= LIBDEFLATE_MAXSIZE) then
       begin
         // files up to 64MB will be loaded into memory and call libdeflate
         Setlength(tmp, todo);
@@ -1809,8 +1866,9 @@ begin
         AddDeflated(ZipName, pointer(tmp), todo, CompressLevel, age);
         exit;
       end;
-      // bigger/stored files will fallback to (zlib and its) streaming methods
+      // bigger/stored files will fallback to zlib streaming methods
       {$endif LIBDEFLATESTATIC}
+      // prepare new entry and write initial version of the local file header
       fOnProgressStep := zwsWriteFile;
       InfoStart(todo, 'Deflate ', ZipName);
       with NewEntry(met, 0, age)^ do
@@ -1822,7 +1880,7 @@ begin
           h64.zzipSize := zlibCompressMax(todo);
         headerpos := fDest.Position;
         WriteHeader(ZipName);
-        // append the stored/deflated data
+        // append the stored/deflated data using TSynZipCompressor stream
         datapos := fDest.Position;
         len := 1 shl 20;
         if todo < len then
@@ -1836,7 +1894,7 @@ begin
           begin
             len := FileRead(f, pointer(tmp)^, length(tmp));
             if integer(len) <= 0 then
-              raise ESynZip.CreateUtf8('%: failed to read % [%]',
+              raise ESynZip.CreateUtf8('%.AddDeflated: failed to read % [%]',
                 [self, aFileName, GetLastError]);
             if deflate = nil then
             begin
@@ -1853,7 +1911,9 @@ begin
           if deflate <> nil then
           begin
             deflate.Flush;
-            assert(deflate.SizeIn = h64.zfullSize);
+            if deflate.SizeIn <> h64.zfullSize then
+              raise ESynZip.CreateUtf8('%.AddDeflated: failed to deflate %',
+                [self, aFileName]);
             h64.zzipSize := deflate.SizeOut;
             h32.fileInfo.zcrc32 := deflate.CRC;
           end;
@@ -2170,6 +2230,7 @@ var
   lh64: PLastHeader64;
   lastheader: TLastHeader64;
   h, hnext: PFileHeader;
+  extraname: PFileInfoExtraName;
   e, prev: PZipReadEntry;
   i: PtrInt;
   isascii7: boolean;
@@ -2232,41 +2293,50 @@ begin
     if isascii7 then
       // plain ASCII file name need no conversion
       e^.zipName := Ansi7ToString(tmp)
-    else if h^.fileInfo.GetUtf8FileNameFlag or
-            IsValidUtf8(tmp) then
-      // flat let decode UTF-8 file name into native string/TFileName type
-      // also detects UTF-8 without the flag (happens from POSIX zippers)
-      Utf8ToFileName(tmp, e^.zipName)
     else
-      // legacy Windows-OEM-CP437 encoding
-      Cp437ToFileName(tmp, e^.zipName);
+    begin
+      extraname := h^.LocateExtra(UNICODEPATH_EXTRA_ID);
+      if extraname <> nil then
+      begin
+        // unicode path stored in file info extra block
+        SetString(tmp, @extraname.utf8Name, extraname.size - 5{version+nameCrc});
+        Utf8ToFileName(tmp, e^.zipName)
+      end
+      else if h^.fileInfo.GetUtf8FileNameFlag or
+              IsValidUtf8(tmp) then
+        // flag let decode UTF-8 file name into native string/TFileName type
+        // also detects UTF-8 without the flag (happens from POSIX zippers)
+        Utf8ToFileName(tmp, e^.zipName)
+      else
+        // legacy Windows-OEM-CP437 encoding
+        Cp437ToFileName(tmp, e^.zipName);
+    end;
     if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
        not IsFolder(e^.zipName) then
       raise ESynZip.CreateUtf8('%.Create: Unsupported zipmethod % for % in %',
         [self, h^.fileInfo.zZipMethod, e^.zipName, fFileName]);
-    if (h^.localHeadOff = ZIP32_MAXSIZE) or
-       (h^.fileInfo.zfullSize = ZIP32_MAXSIZE) or
-       (h^.fileInfo.zzipSize = ZIP32_MAXSIZE) then
-      // zip64 format: retrieve TFileInfoExtra64 position in dir64
-      if h^.fileInfo.IsZip64 then
-      begin
-        e^.dir64 := pointer(h);
-        inc(PByte(e^.dir64), SizeOf(h^) + h^.fileInfo.nameLen);
-        if e^.dir64^.zip64id <> ZIP64_EXTRA_ID then
-          raise ESynZip.CreateUtf8('%.Create: zip64 extra not found for % in %',
-            [self, e^.zipName, fFileName]);
-        e^.fileinfo.zip64id := ZIP64_EXTRA_ID;
-        e^.fileinfo.size := 3 * SizeOf(QWord);
-      end
-      else
-        raise ESynZip.CreateUtf8('%.Create: zip64 version %d error for % in %',
-          [self, ToByte(h^.fileInfo.neededVersion), e^.zipName, fFileName]);
     { TFileInfoExtra64 is the layout of the zip64 extended info "extra" block.
       If one of the size or offset fields in the Local or Central directory
       record is too small to hold the required data, a Zip64 extended information
       record is created. The order of the fields in the zip64 extended information
       record is fixed, but the fields **MUST only appear** if the corresponding
       Local or Central directory record field is set to 0xFFFF or 0xFFFFFFFF. }
+    if (h^.localHeadOff = ZIP32_MAXSIZE) or
+       (h^.fileInfo.zfullSize = ZIP32_MAXSIZE) or
+       (h^.fileInfo.zzipSize = ZIP32_MAXSIZE) then
+      // zip64 format: retrieve TFileInfoExtra64 position in dir64
+      if h^.fileInfo.IsZip64 then
+      begin
+        e^.dir64 := h^.LocateExtra(ZIP64_EXTRA_ID);
+        if e^.dir64 = nil then
+          raise ESynZip.CreateUtf8('%.Create: zip64 extra not found for % in %',
+            [self, e^.zipName, fFileName]);
+        e^.fileinfo.zip64id := ZIP64_EXTRA_ID;
+        e^.fileinfo.size := 3 * SizeOf(QWord);
+      end
+      else
+        raise ESynZip.CreateUtf8('%.Create: zip64 version % error for % in %',
+          [self, ToByte(h^.fileInfo.neededVersion), e^.zipName, fFileName]);
     p64 := @e^.dir64^.zfullSize; // where 64-bit field(s) may appear
     if e^.dir^.fileInfo.zfullSize = ZIP32_MAXSIZE then
     begin
