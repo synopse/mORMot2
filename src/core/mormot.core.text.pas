@@ -550,10 +550,12 @@ function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar = ',';
   CaseSensitive: boolean = true; TrimValue: boolean = false): integer;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
+// - warning: will add the strings, so List := nil may be needed before call
 procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
   Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
+// - warning: will add the strings, so List := nil may be needed before call
 procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
   var List: TRawUtf8DynArray); overload;
 

@@ -5179,6 +5179,27 @@ type
   TSetMyEnum = set of TMyEnum;
   TSetMyEnumPart = set of TMyEnumPart; // validate partial sets
 
+  TComplexClass = class(TSynPersistent)
+  private
+    csv: RawUtf8;
+    function GetArray: TRawUtf8DynArray;
+    procedure SetArray(const AValue: TRawUtf8DynArray);
+  published
+    property arr: TRawUtf8DynArray
+      read GetArray write SetArray;
+  end;
+
+function TComplexClass.GetArray: TRawUtf8DynArray;
+begin
+  result := nil;
+  CsvToRawUtf8DynArray(pointer(csv), result);
+end;
+
+procedure TComplexClass.SetArray(const AValue: TRawUtf8DynArray);
+begin
+  csv := RawUtf8ArrayToCsv(AValue);
+end;
+
 procedure TTestCoreProcess._RTTI;
 var
   i: Integer;
@@ -5190,7 +5211,21 @@ var
   eoo: AnsiChar;
   e: TEmoji;
   ep: TSetMyEnumPart;
+  cc: TComplexClass;
+  v: variant;
 begin
+  cc := TComplexClass.Create;
+  try
+    CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');
+    Check(GetValueObject(cc, 'arr', v));
+    CheckEqual(_Safe(v)^.ToJson, '[]');
+    cc.arr := TRawUtf8DynArrayFrom(['win32', 'win64']);
+    CheckEqual(RawUtf8ArrayToCsv(cc.arr), 'win32,win64');
+    Check(GetValueObject(cc, 'arr', v));
+    CheckEqual(_Safe(v)^.ToJson, '["win32","win64"]');
+  finally
+    cc.Free;
+  end;
   ep := [enTwo];
   CheckEqual(byte(ep), 2);
   tmp := '["enTwo"]';

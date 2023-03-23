@@ -937,6 +937,10 @@ type
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
     /// raw retrieval of rkClass
     function GetObjProp(Instance: TObject): TObject;
+    /// raw retrieval of rkDynArray getter as a pointer
+    // - caller should then release the instance using e.g. FastDynArrayClear()
+    // - do nothing if the property is a field with no getter
+    function GetDynArrayPropGetter(Instance: TObject): pointer;
     /// raw retrieval of rkInt64, rkQWord
     // - rather call GetInt64Value
     function GetInt64Prop(Instance: TObject): Int64;
@@ -2141,7 +2145,7 @@ type
     /// retrieve any field vlaue as a variant instance
     // - will generate a stand-alone variant value, not an internal TRttiVarData
     // - complex values can be returned as TDocVariant after JSON conversion,
-    // using e.g. @JSON_[mFast] as optional Options parameter
+    // using e.g. @JSON_[mFastFloat] as optional Options parameter
     procedure GetValueVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil);
     /// set a field value from its UTF-8 text
@@ -2163,6 +2167,8 @@ type
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TTextWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions; K: TTextWriterKind = twNone);
+    /// a wrapper calling AddValueJson()
+    procedure GetValueJson(Data: pointer; out Result: RawUtf8);
   end;
 
   /// store information about the properties/fields of a given TypeInfo/PRttiInfo
@@ -4089,6 +4095,24 @@ begin
   else
     result := nil;
   end;
+end;
+
+function TRttiProp.GetDynArrayPropGetter(Instance: TObject): pointer;
+type
+  TGetProc = function: TBytes of object;
+  TGetIndexed = function(Index: integer): TBytes of object;
+var
+  call: TMethod;
+  tmp: TBytes; // we use TBytes but any dynamic array will do
+begin
+  case Getter(Instance, @call) of
+    rpcMethod:
+      tmp := TGetProc(call);
+    rpcIndexed:
+      tmp := TGetIndexed(call)(Index);
+  end;
+  result := pointer(tmp); // weak copy
+  pointer(tmp) := nil;    // no dec(refcnt)
 end;
 
 function TRttiProp.GetInt64Prop(Instance: TObject): Int64;
@@ -6737,6 +6761,8 @@ end;
 
 procedure TRttiCustomProp.GetValueVariant(Data: pointer; out Dest: TVarData;
   Options: pointer{PDocVariantOptions});
+var
+  a: pointer;
 begin
   if (Prop = nil) or
      (OffsetGet >= 0) then
@@ -6747,6 +6773,16 @@ begin
   begin
     Dest.VType := varInt64;
     Dest.VInt64 := Prop^.GetInt64Value(Data);
+  end
+  else if Value.Kind = rkDynArray then
+  begin
+    a := nil;
+    try
+      a := Prop^.GetDynArrayPropGetter(Data);
+      Value.ValueToVariant(@a, Dest, Options); // will create a TDocVariant
+    finally
+      FastDynArrayClear(@a, Value.ArrayRtti.Info);
+    end;
   end;
 end;
 
@@ -6787,6 +6823,20 @@ begin
   W.AddVariant(variant(rvd), K, Options);
   if rvd.NeedsClear then
     VarClearProc(rvd.Data);
+end;
+
+procedure TRttiCustomProp.GetValueJson(Data: pointer; out Result: RawUtf8);
+var
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  w := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    AddValueJson(w, Data, []);
+    w.SetText(Result);
+  finally
+    w.Free;
+  end;
 end;
 
 function TRttiCustomProp.ValueIsDefault(Data: pointer): boolean;
