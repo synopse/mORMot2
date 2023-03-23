@@ -1803,9 +1803,8 @@ begin
       begin
         // files up to 64MB will be loaded into memory and call libdeflate
         Setlength(tmp, todo);
-        len := FileRead(f, pointer(tmp)^, todo);
-        if len <> todo then
-          raise ESynZip.CreateUtf8('%: failed to read % [%]',
+        if not FileReadAll(f, pointer(tmp), todo) then
+          raise ESynZip.CreateUtf8('%.AddDeflated: failed to read % [%]',
             [self, aFileName, GetLastError]);
         AddDeflated(ZipName, pointer(tmp), todo, CompressLevel, age);
         exit;

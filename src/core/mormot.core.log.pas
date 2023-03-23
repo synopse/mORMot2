@@ -6347,7 +6347,8 @@ var
   L: TSynLogInfo;
 begin
   for L := low(TSynLogInfo) to high(TSynLogInfo) do
-    fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^; // [3] -> e.g. 'UST4'
+    // LOG_LEVEL_TEXT[L][3] -> test e.g. 'UST4' chars
+    fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^;
 end;
 
 function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;

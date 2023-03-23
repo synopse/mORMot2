@@ -653,7 +653,7 @@ function ChangeSqlEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUtf8): boolean;
 var
   F: THandle;
-  bufsize, page, pagesize, pagecount, n, p, read: cardinal;
+  bufsize, page, pagesize, pagecount, n, p, max: cardinal;
   head: THash256Rec;
   buf: PUtf8Char;
   temp: RawByteString;
@@ -671,8 +671,7 @@ begin
     if NewPassword <> '' then
       CodecGenerateKey(new, pointer(NewPassword), length(NewPassword));
     size := FileSize(F);
-    read := FileRead(F, head, SizeOf(head));
-    if read <> SizeOf(head) then
+    if FileRead(F, head, SizeOf(head)) <> SizeOf(head) then
       exit;
     if size > 4 shl 20 then // use up to 4MB of R/W buffer
       bufsize := 4 shl 20
@@ -694,12 +693,11 @@ begin
     while page <= pagecount do
     begin
       n := bufsize div pagesize;
-      read := pagecount - page + 1;
-      if read < n then
-        n := read;
+      max := pagecount - page + 1;
+      if n > max then
+        n := max;
       buf := pointer(temp);
-      read := FileRead(F, buf^, pagesize * n);
-      if read <> pagesize * n then
+      if not FileReadAll(F, buf, pagesize * n) then
         exit; // stop on any read error
       for p := 0 to n - 1 do
       begin

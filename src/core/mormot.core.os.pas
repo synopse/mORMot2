@@ -2929,13 +2929,16 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+/// a wrapper around FileRead() to ensure a whole memory buffer is retrieved
+// - on Windows, will read by 16MB chunks to avoid ERROR_NO_SYSTEM_RESOURCES
+// - will call FileRead() and retry up to Size bytes are filled in the buffer
+// - return true if all memory buffer has been read, or false on error
+function FileReadAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
 
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
-// - on Windows, to avoid ERROR_NO_SYSTEM_RESOURCES problems when calling
-// FileRead() for chunks bigger than 32MB on files opened with this flag, so you
-// should better FileRead() over e.g. 16MB chunks max (as StringFromFile does)
+// - call FileReadAll() instead of FileRead() to retrieve a whole data buffer
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() or HashFile() functions
 function FileOpenSequentialRead(const FileName: TFileName): integer;
@@ -6144,11 +6147,31 @@ begin
     until false;
 end;
 
+function FileReadAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
+var
+  chunk, read: PtrInt;
+begin
+  result := false;
+  repeat
+    chunk := Size;
+    {$ifdef OSWINDOWS}
+    if chunk > 16 shl 20 then
+      chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
+    {$endif OSWINDOWS}
+    read := FileRead(F, Buffer^, chunk);
+    if read <= 0 then
+      exit; // error reading Size bytes
+    inc(PByte(Buffer), read);
+    dec(Size, read);
+  until Size = 0;
+  result := true;
+end;
+
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var
   F: THandle;
-  read, size, chunk: integer;
-  P: PUtf8Char;
+  size: Int64;
+  read, pos: integer;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
@@ -6159,38 +6182,25 @@ begin
   begin
     if HasNoSize then
     begin
-      size := 0;
+      pos := 0;
       repeat
-        read := FileRead(F, tmp, SizeOf(tmp));
+        read := FileRead(F, tmp, SizeOf(tmp)); // fill per 32KB local buffer
         if read <= 0 then
           break;
-        SetLength(result, size + read); // in-place resize
-        MoveFast(tmp, PByteArray(result)^[size], read);
-        inc(size, read);
+        SetLength(result, pos + read); // in-place resize
+        MoveFast(tmp, PByteArray(result)^[pos], read);
+        inc(pos, read);
       until false;
     end
     else
     begin
       size := FileSize(F);
-      if size > 0 then
+      if (size < MaxInt) and // 2GB seems big enough for a RawByteString
+         (size > 0) then
       begin
         SetLength(result, size);
-        P := pointer(result);
-        repeat
-          chunk := size;
-          {$ifdef OSWINDOWS}
-          if chunk > 16 shl 20 then
-            chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
-          {$endif OSWINDOWS}
-          read := FileRead(F, P^, chunk);
-          if read <= 0 then
-          begin
-            result := '';
-            break;
-          end;
-          inc(P, read);
-          dec(size, read);
-        until size = 0;
+        if not FileReadAll(F, pointer(result), size) then
+          result := ''; // error reading
       end;
     end;
     FileClose(F);
@@ -6675,8 +6685,9 @@ begin
     // mapping is not worth it for size < 1MB which can be just read at once
     GetMem(fBuf, fBufSize);
     FileSeek64(fFile, aCustomOffset, soFromBeginning);
-    result := PtrUInt(FileRead(fFile, fBuf^, fBufSize)) = fBufSize;
-    if not result then
+    if FileReadAll(fFile, fBuf, fBufSize) then
+      result := true
+    else
     begin
       Freemem(fBuf);
       fBuf := nil;

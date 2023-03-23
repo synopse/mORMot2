@@ -1789,10 +1789,8 @@ begin
   begin
     len := FileSize(F) - SizeOf(head);
     SetLength(tmp, len);
-    if FileRead(F, pointer(tmp)^, len) <> len then
-      result := false
-    else
-      result := FileFromString(tmp, rawencryptedfile);
+    result := FileReadAll(F, pointer(tmp), len) and
+              FileFromString(tmp, rawencryptedfile);
   end;
   FileClose(F);
 end;
