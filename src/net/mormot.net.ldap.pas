@@ -173,7 +173,7 @@ function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 /// parse the next ASN.1 value as text
 // - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  Value: PRawByteString = nil; ValueSize: PInteger = nil): integer;
+  Value: PRawByteString = nil; CtrEndPos: PInteger = nil): integer;
 
 /// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as integer
 function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
@@ -1328,7 +1328,7 @@ begin
 end;
 
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  Value: PRawByteString; ValueSize: PInteger): integer;
+  Value: PRawByteString; CtrEndPos: PInteger): integer;
 var
   asnsize: integer;
   y: int64;
@@ -1338,8 +1338,8 @@ begin
   result := ASN1_NULL;
   if not AsnDecHeader(Pos, Buffer, result, asnsize) then
     exit;
-  if ValueSize <> nil then
-    ValueSize^ := asnsize;
+  if CtrEndPos <> nil then
+    CtrEndPos^ := Pos + asnsize;
   if Value = nil then
   begin
     // no need to allocate and return the whole Value^: just compute position
@@ -1904,7 +1904,7 @@ end;
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
   const Attributes: array of RawUtf8; const Values: array of PRawUtf8): boolean;
 var
-  i, a, seqsize, asntype, setsize: integer;
+  i, a, asntype, seqend, setend: integer;
   name, value: RawUtf8;
 begin
   result := false;
@@ -1917,15 +1917,12 @@ begin
      (asntype = ASN1_INT) and
      (AsnNext(i, Response) = LDAP_ASN1_SEARCH_ENTRY) and
      (AsnNext(i, Response) = ASN1_OCTSTR) and
-     (AsnNext(i, Response, nil, @seqsize) = ASN1_SEQ) then
-  begin
-    inc(seqsize, i);
-    while (i < seqsize) and
+     (AsnNext(i, Response, nil, @seqend) = ASN1_SEQ) then
+    while (i < seqend) and
           (AsnNext(i, Response) = ASN1_SEQ) and
           (AsnNext(i, Response, @name) = ASN1_OCTSTR) and
-          (AsnNext(i, Response, nil, @setsize) = ASN1_SETOF) do
+          (AsnNext(i, Response, nil, @setend) = ASN1_SETOF) do
     begin
-      inc(setsize, i{%H-});
       if AsnNext(i, Response, @value) = ASN1_OCTSTR then
       begin
         a := FindPropName(Attributes, name);
@@ -1936,9 +1933,8 @@ begin
           result := true; // at least one attribute = success
         end;
       end;
-      i := setsize; // if several ASN1_OCTSTR are stored - but return first
+      i := {%H-}setend; // if several ASN1_OCTSTR are stored - but return first
     end;
-  end;
 end;
 
 function BroadcastCldap(var Servers: TCldapServers; TimeOutMS: integer;
@@ -2593,7 +2589,7 @@ end;
 function TLdapClient.DecodeResponse(
   var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
 var
-  x, asntype, seqsize: integer;
+  x, asntype, seqend: integer;
   s, t: TAsnObject;
 begin
   result := '';
@@ -2605,7 +2601,7 @@ begin
      (AsnNextInteger(pos, Asn1Response, asntype) <> fSeq) or
      (asntype <> ASN1_INT) then
     exit;
-  fResponseCode := AsnNext(pos, Asn1Response, nil, @seqsize);
+  fResponseCode := AsnNext(pos, Asn1Response, nil, @seqend);
   if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
     // final response
@@ -2631,8 +2627,8 @@ begin
   else
   begin
     // partial response (e.g. LDAP_ASN1_SEARCH_ENTRY)
-    result := copy(Asn1Response, pos, seqsize);
-    inc(pos, seqsize);
+    result := copy(Asn1Response, pos, seqend - pos);
+    pos := seqend;
   end;
 end;
 
@@ -3003,7 +2999,7 @@ var
   s, resp, packet: TAsnObject;
   start, stop: Int64;
   u: RawUtf8;
-  x, n, i: integer;
+  x, n, seqend: integer;
   r: TLdapResult;
   a: TLdapAttribute;
 begin
@@ -3045,13 +3041,12 @@ begin
           begin
             while n < length(resp) do
             begin
-              if AsnNext(n, resp, nil, @i) = ASN1_SEQ then
+              if AsnNext(n, resp, nil, @seqend) = ASN1_SEQ then
               begin
-                inc(i, n);
                 AsnNext(n, resp, @u);
                 a := r.Attributes.Add(u);
-                if AsnNext(n, resp)  = ASN1_SETOF then
-                  while n < i do
+                if AsnNext(n, resp) = ASN1_SETOF then
+                  while n < seqend do
                   begin
                     AsnNext(n, resp, @u);
                     a.Add(u);
