@@ -2813,7 +2813,7 @@ begin
     if not SafeFileName(LocalZipName) then
       raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists(DestDir + ExtractFilePath(LocalZipName));
+    Dest := EnsureDirectoryExists(EnsureDirectoryExists(DestDir) + ExtractFilePath(LocalZipName));
     if Dest = '' then
       exit;
     Dest := Dest + ExtractFileName(LocalZipName);
