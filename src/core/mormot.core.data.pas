@@ -11241,13 +11241,13 @@ begin
     else // regular <param>
       while (P^ <> #0) and (P^ <> '?') and (P^ <> '/') do
         inc(P);
-    if not LookupParam(Ctxt, c, P - c) then
+    if (Ctxt <> nil) and not LookupParam(Ctxt, c, P - c) then
       exit; // the parameter is not in the expected format for Ctxt
   end;
   // if we reached here, the URI do match up to now
   if (P^ = #0) or (P^ = '?') then
   begin
-    if P^ = '?' then
+    if (P^ = '?') and (Ctxt <> nil) then
       LookupParam(Ctxt, P, -1); // store the inlined parameters position in Ctxt
     result := self; // exact match found for this entry (excluding URI params)
     exit;

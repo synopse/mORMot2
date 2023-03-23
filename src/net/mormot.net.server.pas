@@ -206,7 +206,12 @@ type
     /// perform URI parsing and rewrite/execution within HTTP server Ctxt members
     // - should return 0 to continue the process, on a HTTP status code to abort
     // if the request has been handled by a TOnHttpServerRequest callback
+    // - this method is thread-safe
     function Process(Ctxt: THttpServerRequestAbstract): integer;
+    /// search for a given URI match
+    // - could be used e.g. in OnBeforeBody() to quickly reject an invalid URI
+    // - this method is thread-safe
+    function Lookup(const aUri, aUriMethod: RawUtf8): TUriTreeNode;
     /// erase all previous registrations, optionally for a given HTTP method
     // - currently, there is no way to delete a route once registered, to
     // optimize the process thread-safety: use Clear then re-register
@@ -2010,10 +2015,13 @@ begin
     fSafe.ReadUnLock;
   end;
   if found <> nil then
+    // there is something to react on
     if Assigned(found.Data.Execute) then
+      // request is implemented via a method
       result := found.Data.Execute(Ctxt)
     else if found.Data.ToUri <> '' then
     begin
+      // request is not implemented here, but the Url should be rewritten
       if m <> found.Data.ToUriMethod then
         Ctxt.Method := URIROUTERMETHOD[found.Data.ToUriMethod];
       if found.Data.ToUriErrorStatus <> 0 then
@@ -2023,6 +2031,33 @@ begin
       else
         found.RewriteUri(Ctxt);         // compute new URI with injected values
     end;
+end;
+
+function TUriRouter.Lookup(const aUri, aUriMethod: RawUtf8): TUriTreeNode;
+var
+  m: TUriRouterMethod;
+  t: TUriTree;
+begin
+  result := nil;
+  if (self = nil) or
+     (aUri = '') or
+     not UriMethod(aUriMethod, m) then
+    exit;
+  t := fTree[m];
+  if t = nil then
+    exit; // this method has no registration yet
+  fSafe.ReadLock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    result := pointer(TUriTreeNode(t.fRoot).Lookup(pointer(aUri), nil));
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.ReadUnLock;
+  end;
 end;
 
 
