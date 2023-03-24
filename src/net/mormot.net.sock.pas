@@ -787,7 +787,7 @@ type
     fOwner: TPollSockets;
   public
     /// initialize the polling
-    constructor Create(aOwner: TPollSockets); virtual;
+    constructor Create(aOwner: TPollSockets = nil); reintroduce; virtual;
     /// stop status modifications tracking on one specified TSocket
     // - the socket should have been monitored by a previous call to Subscribe()
     // - on success, returns true and fill tag with the associated opaque value
@@ -803,8 +803,7 @@ type
     /// if this poll has no size limit, and subscription/wait is thread safe
     // with edge detection
     // - false for select/poll, but true for epoll
-    // - follow POLLSOCKETEPOLL conditional within this unit
-    class function FollowEpoll: boolean;
+    class function FollowEpoll: boolean; virtual;
   published
     /// how many TSocket instances could be tracked, at most, in a single instance
     // - depends on the API used
@@ -970,7 +969,8 @@ function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a TPollSocketResult opaque 64-bit from its corresponding information
-procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+procedure SetRes(var res: TPollSocketResult;
+  tag: TPollSocketTag; ev: TPollSocketEvents);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// set the TPollSocketEvents set as [] from TPollSocketResult opaque 64-bit
@@ -981,11 +981,14 @@ procedure ResetResEvents(var res: TPollSocketResult);
 // at best the current operating system for a high number of sockets
 // - return a hidden TPollSocketSelect class under Windows, TPollSocketEpoll
 // under Linux, or TPollSocketPoll on BSD
+// - not to be used directly, but within TPollSockets.Create
 function PollSocketClass: TPollSocketClass;
 
-/// class function factory, returning polling class for a few sockets
-// - return a TPollSocketSelect under Windows, or TPollSocketPoll on POSIX
-function PollFewSocketClass: TPollSocketClass;
+/// return a class instance able to poll the state of a few sockets
+// - allow to track some sockets via Subscribe/WaitForModified/Unsubscribe
+// - return a TPollSocketSelect under Windows, or TPollSocketPoll on POSIX, so
+// up to 512 sockets on Windows (via select), 20000 on POSIX (via poll)
+function PollFewSockets: TPollSocketAbstract;
 
 
 function ToText(ev: TPollSocketEvents): TShort8; overload;
@@ -2783,11 +2786,7 @@ end;
 
 class function TPollSocketAbstract.FollowEpoll: boolean;
 begin
-  {$ifdef POLLSOCKETEPOLL}
-  result := true; // TPollSocketEpoll is thread-safe and has no size limit
-  {$else}
   result := false; // select/poll API are not thread safe
-  {$endif POLLSOCKETEPOLL}
 end;
 
 constructor TPollSocketAbstract.Create(aOwner: TPollSockets);

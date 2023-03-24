@@ -1062,9 +1062,9 @@ begin
   result := TPollSocketSelect;
 end;
 
-function PollFewSocketClass: TPollSocketClass;
+function PollFewSockets: TPollSocketAbstract;
 begin
-  result := TPollSocketSelect;
+  result := TPollSocketSelect.Create(nil);
 end;
 
 

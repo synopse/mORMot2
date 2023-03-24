@@ -932,27 +932,28 @@ begin
   s := PtrUInt(socket);
   new := -1;
   p := pointer(fFD);
-  if fFDCount = fCount then
-  begin
-    // no void entry
-    for i := 1 to fFDCount do
-      if p^.fd = s then
-        // already subscribed
-        exit
-      else
-        inc(p);
-  end
-  else
-    for i := 0 to fFDCount - 1 do
+  if p <> nil then
+    if fFDCount = fCount then
     begin
-      fd := p^.fd;
-      if fd = s then
-        // already subscribed
-        exit
-      else if fd < 0 then
-        // found a void entry
-        new := i;
-    end;
+      // no void entry
+      for i := 1 to fFDCount do
+        if p^.fd = s then
+          // already subscribed
+          exit
+        else
+          inc(p);
+    end
+    else
+      for i := 0 to fFDCount - 1 do
+      begin
+        fd := p^.fd;
+        if fd = s then
+          // already subscribed
+          exit
+        else if fd < 0 then
+          // found a void entry
+          new := i;
+      end;
   if new < 0 then
   begin
     if fFDCount = length(fFD) then
@@ -1080,9 +1081,9 @@ begin
   result := true;
 end;
 
-function PollFewSocketClass: TPollSocketClass;
+function PollFewSockets: TPollSocketAbstract;
 begin
-  result := TPollSocketPoll;
+  result := TPollSocketPoll.Create(nil);
 end;
 
 
@@ -1116,6 +1117,8 @@ type
       timeoutMS: integer): boolean; override;
     // stop epolling
     procedure Terminate; override;
+    // return true for epoll
+    class function FollowEpoll: boolean; override;
     // read-only access to the low-level epoll_create file descriptor
     property EPFD: integer
       read fEPFD;
@@ -1142,6 +1145,11 @@ begin
     exit;
   fpClose(fEPFD);
   fEPFD := -1;
+end;
+
+class function TPollSocketEpoll.FollowEpoll: boolean;
+begin
+  result := true; // TPollSocketEpoll is thread-safe and has no size limit
 end;
 
 const
