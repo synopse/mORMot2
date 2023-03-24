@@ -3027,7 +3027,7 @@ begin
   // If the search failed, we exit with the error message
   if ResultCode <> LDAP_RES_SUCCESS then
   begin
-    ErrorMessage := RawLdapErrorString(ResultCode);
+    ErrorMessage := FormatUtf8('Search failed: %', [RawLdapErrorString(ResultCode)]);
     exit;
   end;
   // Computer with the same sAMAccountName is already existing
@@ -3040,7 +3040,13 @@ begin
       ErrorMessage := 'Computer is already present';
       exit;
     end;
-    Delete(ComputerObject.ObjectName);
+    result := Delete(ComputerObject.ObjectName);
+    // Unable to delete the computer (probably insufficient access rights)
+    if not result then
+    begin
+      ErrorMessage := FormatUtf8('Delete failed: %', [RawLdapErrorString(ResultCode)]);
+      exit;
+    end;
   end;
   // Create the new computer object
   Attributes := TLDAPAttributeList.Create;
@@ -3059,7 +3065,7 @@ begin
     end;
     result := Add(ComputerDN, Attributes);
     if not result then
-      ErrorMessage := RawLdapErrorString(ResultCode);
+      ErrorMessage := FormatUtf8('Add failed: %', [RawLdapErrorString(ResultCode)]);
   finally
     Attributes.Free;
     FillZero(PwdU8);
