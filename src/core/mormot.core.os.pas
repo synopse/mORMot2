@@ -1739,6 +1739,31 @@ function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
 type
+  /// encapsulate a PROPVARIANT Windows type into an opaque binary buffer
+  // - some kind of enhanced variant, on which VariantToInt64, VariantToUtf8 and
+  // VariantToDateTime do work at least for the varOle* extended types
+  TPropVariant = object
+    /// map the stored value
+    Value: TVarData;
+    /// fill the instance with zeros
+    procedure Init;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// finalize an instance - i.e. free any BSTR stored
+    procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
+    function ToInt: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+const
+  // map varOleInt/varOleUInt/varOlePAnsiChar/varOlePWideChar/varOleFileTime
+  VT_INT      = 22;
+  VT_UINT     = 23;
+  VT_LPSTR    = 30;
+  VT_LPWSTR   = 31;
+  VT_FILETIME = 64;
+
+type
   HCRYPTPROV = pointer;
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;

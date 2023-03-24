@@ -2107,7 +2107,7 @@ begin
         AddRawUtf8(sorted, found, Hosts[i]); // not via UDP, but maybe on TCP
       end;
   end;
-  DynArrayFakeLength(sorted, found);
+  SetLength(sorted, found);
   if found <> n then // e.g. if sock[] creation failed
     for i := 0 to n - 1 do
       AddRawUtf8(sorted, hosts[i], {nodup=}true); // ensure eventually exist
