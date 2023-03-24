@@ -1723,7 +1723,9 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvArray);
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItem(const aValue: variant; aIndex: integer = -1): integer;
+    function AddItem(const aValue: variant; aIndex: integer = -1): integer; overload;
+    /// add a TDocVariant value to this document, handled as array
+    function AddItem(const aValue: TDocVariantData; aIndex: integer = -1): integer; overload;
     /// add a value to this document, handled as array, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
@@ -6096,6 +6098,12 @@ function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): intege
 begin
   result := InternalAdd('', aIndex);
   InternalSetValue(result, aValue);
+end;
+
+function TDocVariantData.AddItem(const aValue: TDocVariantData; aIndex: integer): integer;
+begin
+  result := InternalAdd('', aIndex);
+  InternalSetValue(result, variant(aValue));
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
