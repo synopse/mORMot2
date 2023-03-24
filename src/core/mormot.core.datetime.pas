@@ -1451,6 +1451,10 @@ begin
         Value := TVarData(V).VSingle;
       varCurrency:
         Value := TVarData(V).VCurrency;
+      {$ifdef OSWINDOWS}
+      varOleFileTime:
+        Value := FileTimeToDateTime(PFileTime(@TVarData(V).VInt64)^);
+      {$endif OSWINDOWS}
     else
       if SetVariantUnRefSimpleValue(V, vd{%H-}) then
         result := VariantToDateTime(variant(vd), Value)

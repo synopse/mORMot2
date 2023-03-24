@@ -3413,6 +3413,21 @@ const
   // - currently called varUInt64 in Delphi (not defined in older versions),
   // and varQWord in FPC
   varWord64 = 21;
+  /// map the Windows VT_INT extended VARENUM, i.e. a 32-bit signed integer
+  // - also detected and handled by VariantToInteger/VariantToInt64
+  varOleInt = 22;
+  /// map the Windows VT_UINT extended VARENUM, i.e. a 32-bit unsigned integer
+  // - also detected and handled by VariantToInteger/VariantToInt64
+  varOleUInt = 23;
+  /// map the Windows VT_LPSTR extended VARENUM, i.e. a PAnsiChar
+  // - also detected and handled by VariantToUtf8
+  varOlePAnsiChar = 30;
+  /// map the Windows VT_LPWSTR extended VARENUM, i.e. a PWideChar
+  // - also detected and handled by VariantToUtf8
+  varOlePWideChar = 31;
+  /// map the Windows VT_LPWSTR extended VARENUM, i.e. a 64-bit TFileTime
+  // - also detected and handled by VariantToDateTime
+  varOleFileTime = 64;
 
   varVariantByRef = varVariant or varByRef;
   varStringByRef = varString or varByRef;
@@ -3440,7 +3455,9 @@ const
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
+  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64,
+    {$ifdef OSWINDOWS} varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
+      varOleFileTime, {$endif OSWINDOWS} varUnknown];
   /// bitmask used by our inlined VarClear() to avoid unneeded VarClearProc()
   VTYPE_STATIC = $BFE8;
 
@@ -10952,14 +10969,16 @@ begin
         Value := vd^.VShortInt;
       varWord:
         Value := vd^.VWord;
-      varLongWord:
+      varLongWord,
+      varOleUInt:
         if vd^.VLongWord <= cardinal(High(integer)) then
           Value := vd^.VLongWord
         else
           exit;
       varByte:
         Value := vd^.VByte;
-      varInteger:
+      varInteger,
+      varOleInt:
         Value := vd^.VInteger;
       varWord64:
         if (vd^.VInt64 >= 0) and
@@ -11128,11 +11147,13 @@ begin
         Value := vd^.VShortInt;
       varWord:
         Value := vd^.VWord;
-      varLongWord:
+      varLongWord,
+      varOleUInt:
         Value := vd^.VLongWord;
       varByte:
         Value := vd^.VByte;
-      varInteger:
+      varInteger,
+      varOleInt:
         Value := vd^.VInteger;
       varWord64:
         if vd^.VInt64 >= 0 then

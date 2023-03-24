@@ -4107,7 +4107,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcMethod:
-      tmp := TGetProc(call);
+      tmp := TGetProc({%H-}call);
     rpcIndexed:
       tmp := TGetIndexed(call)(Index);
   end;

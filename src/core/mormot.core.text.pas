@@ -9410,6 +9410,16 @@ begin
           wasString := true;
           RawUnicodeToUtf8(VAny, length(WideString(VAny)), result);
         end;
+      varOlePAnsiChar: // = VT_LPSTR
+        begin
+          wasString := true;
+          CurrentAnsiConvert.AnsiBufferToRawUtf8(VString, StrLen(VString), result);
+        end;
+      varOlePWideChar: // = VT_LPWSTR
+        begin
+          wasString := true;
+          RawUnicodeToUtf8(VAny, StrLenW(VAny), result);
+        end;
     else
       if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
         // simple varByRef

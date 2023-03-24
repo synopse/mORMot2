@@ -254,9 +254,6 @@ begin
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
 end;
 
-const
-  UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
-
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
   I64 := I64 * 10000000;
@@ -1624,6 +1621,20 @@ begin
   end;
   result := pointer(api) <> pointer(1);
 end;
+
+
+{ TPropVariant }
+
+procedure TPropVariant.Init;
+begin
+
+end;
+
+procedure TPropVariant.Clear;
+begin
+
+end;
+
 
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var

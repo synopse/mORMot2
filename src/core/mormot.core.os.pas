@@ -1451,6 +1451,8 @@ type
   HWND          = Windows.HWND;
   BOOL          = Windows.BOOL;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
+  TFileTime     = Windows.FILETIME;
+  PFileTime     = ^TFileTime;
 
   /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
@@ -2643,6 +2645,8 @@ function UnixMSTimeUtcFast: TUnixMSTime;
 const
   /// number of days offset between the Unix Epoch (1970) and TDateTime origin
   UnixDelta = 25569;
+  /// number of Windows TFileTime ticks (100ns) from year 1601 to 1970
+  UnixFileTimeDelta = 116444736000000000;
 
 /// the number of minutes bias in respect to UTC/GMT date/time
 // - as retrieved via -GetLocalTimeOffset() at startup
@@ -5946,12 +5950,11 @@ begin
 end;
 
 const
-  FileTimeDelta = $019DB1DED53E8000; // TFileTime ticks to January 1, 1970
   FileTimePerMs = 10000; // a tick is 100ns
 
 function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 begin
-  result := (Int64(WinTime) - FileTimeDelta) div FileTimePerMs;
+  result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
 end;
 
 function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
