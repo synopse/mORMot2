@@ -305,6 +305,12 @@ const
     LDAP_ASN1_COMPARE_RESPONSE,
     LDAP_ASN1_EXT_RESPONSE];
 
+const
+  /// the TCP/UDP port usually published by a LDAP server
+  LDAP_PORT = '389';
+  /// the TCP port usually published by a LDAP server over TLS
+  LDAP_TLS_PORT = '636';
+
 type
   /// define possible operations for LDAP MODIFY operations
   TLdapModifyOp = (
@@ -393,7 +399,7 @@ type
 // POSIX it seems to require a specific broadcast per interface network mask
 // otherwise only a single interface is broadcasted
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
-  const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = '389'): integer;
+  const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = LDAP_PORT): integer;
 
 
 
@@ -618,7 +624,8 @@ type
     property TargetHost: RawUtf8
       read fTargetHost Write fTargetHost;
     /// target server port (or symbolic name)
-    // - is '389' by default but could be '636' (or '3269') on TLS
+    // - is '389' (LDAP_PORT) by default but could be '636' (LDAP_TLS_PORT or
+    // sometimes '3269') on TLS
     property TargetPort: RawUtf8
       read fTargetPort Write fTargetPort;
     /// milliseconds timeout for socket operations
@@ -658,8 +665,8 @@ type
 
   /// how TLdapClient.Connect try to find the LDAP server if no TargetHost is set
   // - lccUdpFirst will make a first round over the supplied addresses using
-  // UDP and CLDAP, to find out the closed on - would also circumvent the
-  // issue with some AD configured to drop and timeout for some hosts
+  // UDP and CLDAP, to find out the closest alive instances - also circumvent
+  // if some AD were configured to drop and timeout more distant hosts
   // - lccTlsFirst will try to connect as TLS on port 636 (if OpenSSL is loaded)
   TLdapClientConnect = set of (
     lccUdpFirst,
@@ -2026,15 +2033,15 @@ end;
 procedure CldapSortHosts(var Hosts: TRawUtf8DynArray; TimeoutMS: integer);
 var
   sock: TNetSocketDynArray;
-  h, p: RawUtf8;
+  h, p, v: RawUtf8;
   addr, resp: TNetAddr;
   req: TAsnObject;
   sorted: TRawUtf8DynArray;
   tix: Int64;
-  n, i: PtrInt;
+  n, i, r: PtrInt;
   len, found: integer;
-  poll: TPollSockets;
-  res: TPollSocketResult;
+  poll: TPollSocketAbstract;
+  res: TPollSocketResults;
   tmp: array[0..1999] of byte; // big enough for a UDP frame
 begin
   n := length(Hosts);
@@ -2042,21 +2049,23 @@ begin
     exit;
   found := 0;
   SetLength(sock, n);
-  poll := TPollSockets.Create(PollFewSocketClass);
+  poll := PollFewSockets;
   try
     // multi-cast a simple LDAP request over UDP to all servers
-    req := Asn(ASN1_SEQ, [
-             Asn(777),
-             RawLdapSearch('', false, '*', ['dnsHostName'])]);
     for i := 0 to n - 1 do
     begin
       Split(Hosts[i], ':', h, p);
+      if p = '' then
+        p := LDAP_PORT;
       if addr.SetFrom(h, p, nlUdp) <> nrOk then
         continue;
       sock[i] := addr.NewSocket(nlUdp);
       if sock[i] = nil then
         continue;
       sock[i].SetReceiveTimeout(1);
+      req := Asn(ASN1_SEQ, [
+               Asn(777 + i),
+               RawLdapSearch('', false, '*', ['dnsHostName'])]);
       if sock[i].SendTo(pointer(req), length(req), addr) = nrOk then
         poll.Subscribe(sock[i], [pseRead], i)
       else
@@ -2068,22 +2077,25 @@ begin
     // wait for all incoming requests
     tix := GetTickCount64 + TimeoutMS;
     repeat
-      if poll.GetOne(10, '', res) then
-      begin
-        i := ResToTag(res);
-        if (PtrUInt(i) >= PtrUInt(n)) or
-           (sock[i] = nil) then
-          break;
-        len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
-        if (len > 5) and
-           (tmp[0] = ASN1_SEQ) then
+      if poll.WaitForModified(res, 10) then
+        for r := 0 to res.Count - 1 do
         begin
-          AddRawUtf8(sorted, found, Hosts[i]); // found in UDP
-          poll.Unsubscribe(sock[i], i);
-          sock[i].Close;
-          sock[i] := nil;
-        end;
-     end;
+          i := ResToTag(res.Events[r]);
+          if (PtrUInt(i) >= PtrUInt(n)) or
+             (sock[i] = nil) then
+            break;
+          len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
+          if (len > 5) and
+             (tmp[0] = ASN1_SEQ) then
+          begin
+            FastSetRawByteString(req, @tmp, len);
+            if RawLdapSearchParse(req, 777 + i, ['dnsHostName'], [@v]) then
+              AddRawUtf8(sorted, found, Hosts[i]); // found a true LDAP server
+            poll.Unsubscribe(sock[i]); // some kind of server
+            sock[i].Close;
+            sock[i] := nil;
+          end;
+       end;
     until (found = n) or
           (GetTickCount64 > tix);
   finally
@@ -2098,7 +2110,7 @@ begin
   DynArrayFakeLength(sorted, found);
   if found <> n then // e.g. if sock[] creation failed
     for i := 0 to n - 1 do
-      AddRawUtf8(sorted, hosts[i], {nodup=}true);
+      AddRawUtf8(sorted, hosts[i], {nodup=}true); // ensure eventually exist
   Hosts := sorted;
 end;
 
@@ -2441,7 +2453,7 @@ end;
 constructor TLdapClientSettings.Create;
 begin
   inherited Create;
-  fTargetPort := '389';
+  fTargetPort := LDAP_PORT;
   fTimeout := 5000;
 end;
 
@@ -2532,20 +2544,20 @@ begin
       begin
         if (lccTlsFirst in DiscoverMode) and
            HasOpenSsl and // SChannel seems to have troubles with LDAP TLS
-           (p = '389') and
+           (p = LDAP_PORT) and
            not fSettings.Tls then
         try
           // first try to connect with TLS on its default port (much safer)
           fSock := TCrtSocket.Open(
-            h, '636', nlTcp, fSettings.TimeOut, {tls=}true, @fTlsContext);
-          p := '636';
+            h, LDAP_TLS_PORT, nlTcp, fSettings.TimeOut, {tls=}true, @fTlsContext);
+          p := LDAP_TLS_PORT;
         except
           on E: ENetSock do
             FreeAndNil(fSock); // no TLS support on this port
         end;
       end
       else
-        fSettings.Tls := (p = '636') or // this port is likely to be over TLS
+        fSettings.Tls := (p = LDAP_TLS_PORT) or // likely to be over TLS
                          (p = '3269');
       if fSock = nil then
         // try connection to the server
