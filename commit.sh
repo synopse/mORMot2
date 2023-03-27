@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERS=$(python - `git rev-list --count master` <<<'import sys; print int(sys.argv[1])+1')
+VERS=$(python3 - `git rev-list --count master` <<<'import sys; print(int(sys.argv[1])+1)')
 #echo VERS=$VERS
 
 echo -e "'2.1.$VERS'\r">src/mormot.commit.inc
