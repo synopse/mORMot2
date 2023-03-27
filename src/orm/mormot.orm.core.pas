@@ -793,6 +793,7 @@ type
     // - implements REST PUT collection
     // - return true on success
     // - is an overloaded method to Update(Value,FieldBitsFromCsv())
+    // - note that by design 'ID' should not be included within CustomCsvFields
     function Update(Value: TOrm; const CustomCsvFields: RawUtf8;
       DoNotAutoComputeFields: boolean = false): boolean; overload;
     /// update a member from a supplied list of simple field values
@@ -4517,6 +4518,7 @@ type
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - is an overloaded method to Update(Value,FieldBitsFromCsv())
+    // - note that by design 'ID' should not be included within CustomCsvFields
     function Update(Value: TOrm; const CustomCsvFields: RawUtf8;
       DoNotAutoComputeFields: boolean = false): integer; overload;
     /// delete a member in current BATCH sequence
