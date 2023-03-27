@@ -1848,6 +1848,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THmacSha256
   // - see TSynHasher if you expect to support more than one algorithm at runtime
+  // - can use several asm versions with HW opcodes support on x86_64 and aarch64
   TSha256 = object
   private
     Context: packed array[1..SHA_CONTEXT_SIZE] of byte;
@@ -7977,7 +7978,10 @@ procedure RawSha256Compress(var Hash; Data: pointer);
 begin
   {$ifdef ASMX64}
   if K256Aligned <> nil then
-    Sha256Sse4(Data^, Hash, 1) // from optimized Intel's Sha256Sse4.asm
+    if cfSHA in CpuFeatures then
+      Sha256ni(Data^, Hash, 1)   // Intel SHA HW opcodes
+    else
+      Sha256Sse4(Data^, Hash, 1) // Intel SSE4.2 asm
   else
   {$endif ASMX64}
   {$ifdef USEARMCRYPTO}
@@ -8019,8 +8023,11 @@ begin
      (Data.Index = 0) and
      (Len >= 64) then
   begin
-    // use optimized Intel's Sha256Sse4.asm for whole blocks
-    Sha256Sse4(Buffer^, Data.Hash, Len shr 6);
+    // use optimized Intel x86_64 asm for whole blocks
+    if cfSHA in CpuFeatures then
+      Sha256ni(Buffer^, Data.Hash, Len shr 6)     // Intel SHA HW opcodes
+    else
+      Sha256Sse4(Buffer^, Data.Hash, Len shr 6);  // Intel SSE4.2 asm
     inc(PByte(Buffer), Len);
     Len := Len and 63;
     dec(PByte(Buffer), Len);
@@ -11152,6 +11159,10 @@ var
   shablock: array[0..63] of byte;
   i: PtrInt;
 {$endif USEARMCRYPTO}
+{$ifdef ASMX64}
+var
+  dummy: THash256;
+{$endif ASMX64}
 begin
   ComputeAesStaticTables;
   {$ifdef ASMX64}
@@ -11170,7 +11181,7 @@ begin
   if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
      (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
-    // optimized Intel's Sha256Sse4.asm
+    // optimized Intel's .asm using SSE4 or SHA HW opcodes
     K256Aligned := @K256;
     if PtrUInt(K256Aligned) and 15 <> 0 then
     begin
@@ -11179,6 +11190,13 @@ begin
       if PtrUInt(K256Aligned) and 15 <> 0 then
         K256Aligned := nil; // paranoid
     end;
+    if cfSHA in CpuFeatures then // detect cpuid with SSE4.1 + SHA opcodes
+      try
+        Sha256ni(dummy, dummy, 1);
+      except
+        // Intel SHA256 HW opcodes seem not available
+        exclude(CpuFeatures, cfSHA);
+      end;
   end;
   {$endif ASMX64}
   {$ifdef USEAESNIHASH}

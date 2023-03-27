@@ -1152,6 +1152,316 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         dq      $0B0A090803020100
 end;
 
+// optimized unrolled asm using Intel SHA HW opcodes
+// - those are not available in FPC/Delphi asm, so are encoded as plain db
+
+procedure Sha256ni(var input_data; var digest; num_blks: cardinal);
+{$ifdef WIN64ABI}
+var
+  bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
+asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
+        movups  dqword ptr [bak6], xmm6
+        movups  dqword ptr [bak7], xmm7
+        movups  dqword ptr [bak8], xmm8
+        movups  dqword ptr [bak9], xmm9
+        movups  dqword ptr [bak10], xmm10
+        movups  dqword ptr [bak11], xmm11
+        movups  dqword ptr [bak12], xmm12
+        movups  dqword ptr [bak13], xmm13
+        movups  dqword ptr [bak14], xmm14
+        movups  dqword ptr [bak15], xmm15
+{$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$endif WIN64ABI}
+        test    num_blks, num_blks
+        jz      @0
+        movdqu  xmm7, dqword ptr [digest]
+        pshufd  xmm0, xmm7, 0B1H
+        movdqu  xmm7, dqword ptr [digest + 16]
+        movdqa  xmm6, xmm0
+        pshufd  xmm7, xmm7, 1BH
+        palignr xmm6, xmm7, 08H
+        pblendw xmm7, xmm0, 0F0H
+        movdqa  xmm8,  dqword ptr [rip + @c0]
+        movdqa  xmm13, dqword ptr [rip + @c1]
+        movdqa  xmm12, dqword ptr [rip + @c2]
+        movdqa  xmm11, dqword ptr [rip + @c3]
+        movdqa  xmm10, dqword ptr [rip + @c4]
+        movdqa  xmm9,  dqword ptr [rip + @c5]
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@1:     movdqu  xmm5, dqword ptr [input_data]
+        movdqa  xmm1, xmm7
+        movdqa  xmm2, xmm6
+        add     input_data, 64
+        movdqa  xmm0, xmm13
+        movdqu  xmm14, dqword ptr [input_data - 48]
+        movdqu  xmm3,  dqword ptr [input_data - 16]
+        pshufb  xmm5, xmm8
+        movdqu  xmm4,  dqword ptr [input_data - 32]
+        paddd   xmm0, xmm5
+        pshufb  xmm14, xmm8
+        pshufb  xmm3, xmm8
+        db $0f, $38, $cb, $ce // the sha256* opcodes are encoded by hand
+        // sha256rnds2 xmm1, xmm6, xmm0
+        pshufd  xmm0, xmm0, $0e
+        pshufb  xmm4, xmm8
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm12
+        movdqa  xmm15, xmm3
+        paddd   xmm0, xmm14
+        palignr xmm15, xmm4, $04
+        db $41, $0f, $38, $cc, $ee
+        // sha256msg1 xmm5, xmm14
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        pshufd  xmm0, xmm0, $0e
+        paddd   xmm5, xmm15
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm11
+        db $0f, $38, $cd, $eb
+        // sha256msg2 xmm5, xmm3
+        paddd   xmm0, xmm4
+        movdqa  xmm15, xmm5
+        db $44, $0f, $38, $cc, $f4
+        // sha256msg1 xmm14, xmm4
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cc, $e3
+        // sha256msg1 xmm4, xmm3
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm10
+        paddd   xmm0, xmm3
+        palignr xmm15, xmm3, $04
+        db $0f, $38, $cc, $dd
+        // sha256msg1 xmm3, xmm5
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        pshufd  xmm0, xmm0, $0e
+        paddd   xmm14, xmm15
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm5
+        db $44, $0f, $38, $cd, $f5
+        // sha256msg2 xmm14, xmm5
+        paddd   xmm0, xmm9
+        movdqa  xmm15, xmm14
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm5, $04
+        movdqa  xmm0, dqword ptr [rip + @c6]
+        db $41, $0f, $38, $cc, $ee
+        // sha256msg1 xmm5, xmm14
+        paddd   xmm4, xmm15
+        db $41, $0f, $38, $cd, $e6
+        // sha256msg2 xmm4, xmm14
+        paddd   xmm0, xmm14
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm4
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm14, $04
+        movdqa  xmm0, dqword ptr [rip + @c7]
+        db $44, $0f, $38, $cc, $f4
+        // sha256msg1 xmm14, xmm4
+        paddd   xmm3, xmm15
+        db $0f, $38, $cd, $dc
+        // sha256msg2 xmm3, xmm4
+        paddd   xmm0, xmm4
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm3
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm4, $04
+        movdqa  xmm0, dqword ptr [rip + @c8]
+        db $0f, $38, $cc, $e3
+        // sha256msg1 xmm4, xmm3
+        paddd   xmm5, xmm15
+        db $0f, $38, $cd, $eb
+        // sha256msg2 xmm5, xmm3
+        paddd   xmm0, xmm3
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm5
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm3, $04
+        movdqa  xmm0, dqword ptr [rip + @c9]
+        db $0f, $38, $cc, $dd
+        // sha256msg1 xmm3, xmm5
+        paddd   xmm14, xmm15
+        db $44, $0f, $38, $cd, $f5
+        // sha256msg2 xmm14, xmm5
+        paddd   xmm0, xmm5
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm14
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm5, $04
+        movdqa  xmm0, dqword ptr [rip + @c10]
+        db $41, $0f, $38, $cc, $ee
+        // sha256msg1 xmm5, xmm14
+        paddd   xmm4, xmm15
+        db $41, $0f, $38, $cd, $e6
+        // sha256msg2 xmm4, xmm14
+        paddd   xmm0, xmm14
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm4
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm14, $04
+        movdqa  xmm0, dqword ptr [rip + @c11]
+        db $44, $0f, $38, $cc, $f4
+        // sha256msg1 xmm14, xmm4
+        paddd   xmm3, xmm15
+        db $0f, $38, $cd, $dc
+        // sha256msg2 xmm3, xmm4
+        paddd   xmm0, xmm4
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm3
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm4, $04
+        movdqa  xmm0, dqword ptr [rip + @c12]
+        db $0f, $38, $cc, $e3
+        // sha256msg1 xmm4, xmm3
+        paddd   xmm5, xmm15
+        db $0f, $38, $cd, $eb
+        // sha256msg2 xmm5, xmm3
+        paddd   xmm0, xmm3
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm5
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm3, $04
+        movdqa  xmm0, dqword ptr [rip + @c13]
+        db $0f, $38, $cc, $dd
+        // sha256msg1 xmm3, xmm5
+        paddd   xmm14, xmm15
+        db $44, $0f, $38, $cd, $f5
+        // sha256msg2 xmm14, xmm5
+        paddd   xmm0, xmm5
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm15, xmm14
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        palignr xmm15, xmm5, $04
+        movdqa  xmm0, dqword ptr [rip + @c14]
+        movdqa  xmm5, dqword ptr [rip + @c15]
+        paddd   xmm4, xmm15
+        db $41, $0f, $38, $cd, $e6
+        // sha256msg2 xmm4, xmm14
+        paddd   xmm0, xmm14
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        paddd   xmm5, xmm4
+        pshufd  xmm0, xmm0, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm5
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        movdqa  xmm0, xmm4
+        palignr xmm0, xmm14, $04
+        paddd   xmm3, xmm0
+        pshufd  xmm0, xmm5, $0e
+        db $0f, $38, $cd, $dc
+        // sha256msg2 xmm3, xmm4
+        paddd   xmm3, dqword ptr [rip + @c16]
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        movdqa  xmm0, xmm3
+        db $0f, $38, $cb, $ca
+        // sha256rnds2 xmm1, xmm2, xmm0
+        pshufd  xmm0, xmm3, $0e
+        db $0f, $38, $cb, $d1
+        // sha256rnds2 xmm2, xmm1, xmm0
+        paddd   xmm7, xmm1
+        paddd   xmm6, xmm2
+        sub     num_blks, 1
+        jne     @1
+@2:     pshufd  xmm6, xmm6, $1b
+        pshufd  xmm7, xmm7, $b1
+        movdqa  xmm0, xmm6
+        pblendw xmm0, xmm7, $f0
+        palignr xmm7, xmm6, $08
+        movups  dqword ptr [digest], xmm0
+        movups  dqword ptr [digest + 16], xmm7
+@0:     {$ifdef WIN64ABI}
+        movups  xmm6, dqword ptr [bak6]
+        movups  xmm7, dqword ptr [bak7]
+        movups  xmm8, dqword ptr [bak8]
+        movups  xmm9, dqword ptr [bak9]
+        movups  xmm10, dqword ptr [bak10]
+        movups  xmm11, dqword ptr [bak11]
+        movups  xmm12, dqword ptr [bak12]
+        movups  xmm13, dqword ptr [bak13]
+        movups  xmm14, dqword ptr [bak14]
+        movups  xmm15, dqword ptr [bak15]
+        jmp     @end
+        {$else}
+        ret
+        {$endif WIN64ABI}
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@c0:    dq $0405060700010203
+        dq $0C0D0E0F08090A0B
+@c1:    dq $71374491428A2F98
+        dq $E9B5DBA5B5C0FBCF
+@c2:    dq $59F111F13956C25B
+        dq $AB1C5ED5923F82A4
+@c3:    dq $12835B01D807AA98
+        dq $550C7DC3243185BE
+@c4:    dq $80DEB1FE72BE5D74
+        dq $C19BF1749BDC06A7
+@c5:    dq $EFBE4786E49B69C1
+        dq $240CA1CC0FC19DC6
+@c6:    dq $4A7484AA2DE92C6F
+        dq $76F988DA5CB0A9DC
+@c7:    dq $A831C66D983E5152
+        dq $BF597FC7B00327C8
+@c8:    dq $D5A79147C6E00BF3
+        dq $1429296706CA6351
+@c9:    dq $2E1B213827B70A85
+        dq $53380D134D2C6DFC
+@c10:   dq $766A0ABB650A7354
+        dq $92722C8581C2C92E
+@c11:   dq $A81A664BA2BFE8A1
+        dq $C76C51A3C24B8B70
+@c12:   dq $D6990624D192E819
+        dq $106AA070F40E3585
+@c13:   dq $1E376C0819A4C116
+        dq $34B0BCB52748774C
+@c14:   dq $4ED8AA4A391C0CB3
+        dq $682E6FF35B9CCA4F
+@c15:   dq $78A5636F748F82EE
+        dq $8CC7020884C87814
+@c16:   dd $90BEFFFA, $A4506CEB
+        dd $BEF9A3F7, $C67178F2
+{$ifdef WIN64ABI}
+@end:
+{$endif WIN64ABI}
+end;
+
 // Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
