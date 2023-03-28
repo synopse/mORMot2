@@ -428,30 +428,11 @@ begin
   if (addr4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
-  // handle simple cases
+  // check most simple IPv4 resolution (maybe using mormot.net.dns)
   result := nrOk;
-  if (address = cLocalhost) or
-     (address = c6Localhost) or
-     PropNameEquals(address, 'localhost') then
-  begin
-    addr4.sin_family := AF_INET;
-    PCardinal(@addr4.sin_addr)^ := cLocalhost32; // 127.0.0.1
+  if SetFromIP4(address) then
     exit;
-  end
-  else if (address = cBroadcast) or
-          (address = c6Broadcast) then
-  begin
-    addr4.sin_family := AF_INET;
-    PCardinal(@addr4.sin_addr)^ := cardinal(-1); // 255.255.255.255
-    exit;
-  end
-  else if (address = cAnyHost) or
-          (address = c6AnyHost) then
-  begin
-    addr4.sin_family := AF_INET; // 0.0.0.0
-    exit;
-  end;
-  // resolve name or IP (getaddrinfo is more recent, but addrinfo is not fixed)
+  // use OS API (getaddrinfo is more recent, but addrinfo is not cross-platform)
   _gethostbynamesafe.Lock;
   try
     h := gethostbyname(pointer(address));
@@ -847,7 +828,9 @@ begin
   p := pointer(resolv);
   while p <> nil do
   begin
-    if getAD then
+    if p^ in [#1..' ', '#'] then
+      ok := false
+    else if getAD then
       ok := NetStartWith(p, 'SEARCH ') or
             NetStartWith(p, 'DOMAIN ')  // "domain" is used e.g. on MacOS
     else
@@ -856,7 +839,7 @@ begin
     begin
       p := PosChar(p, ' '); // search ad.mycomp.tld mycom.tld
       repeat
-        one := GetNextSpaced(p);
+        one := NetGetNextSpaced(p);
         if one = '' then
           break;
         SetLength(result, n + 1);

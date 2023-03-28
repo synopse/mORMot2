@@ -143,6 +143,8 @@ type
   private
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
+    // internal host resolution from IPv4 or NewSocketIP4Lookup (mormot.net.dns)
+    function SetFromIP4(const address: RawUtf8): boolean;
   public
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - wrap the proper getaddrinfo/gethostbyname API
@@ -311,7 +313,17 @@ var
   /// contains the raw Socket API version, as returned by the Operating System
   SocketApiVersion: RawUtf8;
 
-  /// used by NewSocket() to cache the host names
+  /// callback used by NewSocket() to resolve the host name
+  // - not assigned by default, to use the OS default API, i.e. getaddrinfo()
+  // on Windows, and gethostbyname() on POSIX
+  // - if you include mormot.net.dns, its own IPv4 DNS resolution function will
+  // be registered here
+  NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: cardinal): boolean;
+
+  /// the DNS resolver address to be used by NewSocketIP4Lookup callback
+  NewSocketIP4LookupServer: RawUtf8;
+
+  /// interface used by NewSocket() to cache the host names
   // - avoiding DNS resolution is a always a good idea
   // - implemented by mormot.net.client unit using a TSynDictionary
   // - you may call its SetTimeOut or Flush methods to tune the caching
@@ -1651,6 +1663,50 @@ end;
 
 { TNetAddr }
 
+var
+  NetAddrCache: TNetHostCache; // small internal cache valid for 8 seconds only
+
+function TNetAddr.SetFromIP4(const address: RawUtf8): boolean;
+begin
+  result := false;
+  // caller did set addr4.sin_port and other fields to 0
+  with PSockAddr(@Addr)^ do
+    if (address = cLocalhost) or
+       (address = c6Localhost) or
+       PropNameEquals(address, 'localhost') then
+      PCardinal(@sin_addr)^ := cLocalhost32 // 127.0.0.1
+    else if (address = cBroadcast) or
+            (address = c6Broadcast) then
+      PCardinal(@sin_addr)^ := cardinal(-1) // 255.255.255.255
+    else if (address = cAnyHost) or
+            (address = c6AnyHost) then
+      // keep 0.0.0.0
+    else if NetIsIP4(pointer(address), @sin_addr) or
+            GetKnownHost(address, PCardinal(@sin_addr)^) or
+            NetAddrCache.SafeFind(address, PCardinal(@sin_addr)^) then
+      // numerical IPv4, /etc/hosts, or cached entry
+    else if (Assigned(NewSocketIP4Lookup) and
+             NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
+    with NetAddrCache do
+    begin
+      // up to 8 seconds cache from mormot.net.dns resolution
+      Safe.Lock;
+      try
+        if TixDeprecated then // flush any previous entry if needed
+          Count := 0;
+        Add(address, PCardinal(@sin_addr)^);
+      finally
+        Safe.UnLock;
+      end;
+    end
+    else
+      // return result=false if unknown
+      exit;
+  // we found the IPv4 matching this address
+  PSockAddr(@Addr)^.sin_family := AF_INET;
+  result := true;
+end;
+
 function TNetAddr.Family: TNetFamily;
 begin
   case PSockAddr(@Addr)^.sa_family of
@@ -1822,9 +1878,15 @@ begin
        (address = cLocalhost) or
        (address = cAnyHost) then // for client: '0.0.0.0'->'127.0.0.1'
       result := addr.SetFrom(cLocalhost, port, layer)
-    else if (layer = nlUnix) or
-            NetIsIP4(pointer(address)) then
+    else if layer = nlUnix then
        result := addr.SetFrom(address, port, layer)
+    else if NetIsIP4(pointer(address), @PSockAddr(@addr)^.sin_addr) then
+      with PSockAddr(@addr)^ do
+      begin
+        sin_family := AF_INET;
+        sin_port := htons(p);
+        result := nrOK;
+      end
     else if NewSocketAddressCache.Search(address, addr) then
     begin
       fromcache := true;

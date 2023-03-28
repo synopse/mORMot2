@@ -439,36 +439,21 @@ end;
 
 { TNetAddr }
 
-function SetAddr(const ip, port: RawUtf8; var h: TAddrInfo; var a: TSockAddr): boolean;
+function SetWinAddr(const ip, port: RawUtf8; family: cardinal; layer: TNetLayer;
+  out addr): boolean;
 var
+  h: TAddrInfo;
   res: PAddrInfo;
 begin
+  // use regular OS resolution for known addresses or host names
+  FillCharFast(h, SizeOf(h), 0);
+  h.ai_family := family;
+  h.ai_socktype := _ST[layer];
+  h.ai_protocol := _IP[layer];
   res := nil;
-  FillCharFast(a, SizeOf(a), 0);
-  if h.ai_socktype = SOCK_RAW then
-  begin
-    h.ai_socktype := 0;
-    h.ai_protocol := 0;
-    result := getaddrinfo(pointer(ip), nil, @h, res) = NO_ERROR;
-  end
-  else if (ip = cAnyHost) or
-          (ip = c6AnyHost) then
-  begin
-    // 0.0.0.0
-    h.ai_flags := AI_PASSIVE;
-    result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR;
-  end
-  else if (ip = '') or
-          (ip = cLocalhost) or
-          (ip = c6Localhost) or
-          (PropNameEquals(ip, 'localhost')) then
-    // 127.0.0.1
-    result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR
-  else
-    // ip or hostname
-    result := getaddrinfo(pointer(ip), pointer(port), @h, res) = NO_ERROR;
+  result := getaddrinfo(pointer(ip), pointer(port), @h, res) = NO_ERROR;
   if result then
-    MoveFast(res^.ai_addr^, a, res^.ai_addrlen);
+    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // only return the first result
   if res <> nil then
     freeaddrinfo(res);
 end;
@@ -476,23 +461,29 @@ end;
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
-  h4, h6: TAddrInfo;
+  p: cardinal;
 begin
   if layer = nlUnix then
     result := nrNotImplemented
   else
   begin
-    // first try IP4, then IP6
-    FillCharFast(h4, SizeOf(h4), 0);
-    h4.ai_family := AF_INET;
-    h4.ai_socktype := _ST[layer];
-    h4.ai_protocol := _IP[layer];
-    h6 := h4;
-    h6.ai_family := AF_INET6;
-    if SetAddr(address, addrport, h4, PSockAddr(@Addr)^) or
-       SetAddr(address, addrport, h6, PSockAddr(@Addr)^) then
-      result := nrOK
-    else
+    FillCharFast(Addr, SizeOf(Addr), 0);
+    result := nrNotFound;
+    if address = '' then
+      exit;
+    // check supplied port
+    p := GetCardinal(pointer(addrport));
+    if (p = 0) and
+       (addrport <> '0') then // explicit '0' to get ephemeral port
+      exit;
+    PSockAddr(@Addr)^.sin_port := htons(p);
+    // check most simple IPv4 resolution (maybe using mormot.net.dns)
+    result := nrOk;
+    if SetFromIP4(address) then
+      exit;
+    // use the OS resolution, first try as IP4, then IP6
+    if not SetWinAddr(address, addrport, AF_INET, layer, Addr) and
+       not SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
       result := nrNotFound;
   end;
 end;
