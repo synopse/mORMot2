@@ -827,22 +827,6 @@ end;
 
 {$endif USE_IFADDRS}
 
-function GetNextSpaced(var P: PAnsiChar): RawUtf8;
-var
-  S: PAnsiChar;
-begin
-  result := '';
-  while P^ = ' ' do
-    inc(P);
-  if P^ < ' ' then
-    exit; // end of line or end of file
-  S := P;
-  repeat
-    inc(P);
-  until P^ <= ' ';
-  FastSetString(result, S, P - S);
-end;
-
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;

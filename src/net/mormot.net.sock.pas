@@ -1065,7 +1065,11 @@ function NetStartWith(p, up: PUtf8Char): boolean;
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
+// - end text parsing at ending #0 or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
+
+/// parse a text input buffer until the end space or EOL
+function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -3468,7 +3472,7 @@ begin
   n := 0;
   while true do
     case text^ of
-      #0:
+      #0 .. ' ':
         if (b > 255) or
            (b < 0) or
            (n <> 3) then
@@ -3505,6 +3509,22 @@ begin
   if value <> nil then
     value^ := b;
   result := true; // 1.2.3.4
+end;
+
+function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
+var
+  S: PUtf8Char;
+begin
+  result := '';
+  while P^ = ' ' do
+    inc(P);
+  if P^ < ' ' then
+    exit; // end of line or end of file
+  S := P;
+  repeat
+    inc(P);
+  until P^ <= ' ';
+  FastSetString(result, S, P - S);
 end;
 
 procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
