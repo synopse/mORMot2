@@ -277,6 +277,8 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
 // - for aliases, the CNAME is ignored and only the first A is returned, e.g.
 // DnsLookup('blog.synopse.info') would simply return '62.210.254.173'
 // - will also recognize obvious values like 'localhost' or an IPv4 address
+// - this unit will register this function to mormot.net.sock's NewSocketIP4Lookup
+// - warning: executes a raw DNS query, so hosts system file is not used
 function DnsLookup(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): RawUtf8;
 
@@ -757,6 +759,14 @@ begin
   end;
 end;
 
+function _NewSocketIP4Lookup(const HostName: RawUtf8; out IP4: cardinal): boolean;
+var
+  ip: RawUtf8;
+begin
+  ip := DnsLookup(HostName, NewSocketIP4LookupServer);
+  result := NetIsIP4(pointer(ip), @ip4);
+end;
+
 
 initialization
   assert(ord(drrHTTPS) = 65);
@@ -764,6 +774,7 @@ initialization
   assert(ord(drrEUI64) = 109);
   assert(ord(drrTKEY) = 249);
   assert(ord(drrAMTRELAY) = 260);
+  NewSocketIP4Lookup := _NewSocketIP4Lookup;
 
 end.
 
