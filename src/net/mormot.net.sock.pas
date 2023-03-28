@@ -465,6 +465,16 @@ var
 // to the domain controller
 function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
+/// resolve a host name from the OS hosts file content
+// - i.e. use a cache of /etc/hosts or c:\windows\system32\drivers\etc\hosts
+// - returns true and the IPv4 address of the stored host found
+// - if the file is modified on disk, the internal cache will be flushed
+function GetKnownHost(const HostName: RawUtf8; out ip4: cardinal): boolean;
+
+/// append a custom host/ipv4 pair in addition to the OS hosts file
+// - to be appended to GetKnownHost() internal cache
+procedure RegisterKnownHost(const HostName, Ip4: RawUtf8);
+
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
@@ -1538,6 +1548,106 @@ end;
 
 
 { ******** TNetAddr Cross-Platform Wrapper }
+
+{ TNetHostCache }
+
+type
+  // implement a thread-safe cache of IPv4 for hostnames
+  // - used by TNetAddr.SetFromIP4 and
+  TNetHostCache = object
+    Host: TRawUtf8DynArray;
+    Safe: TLightLock;
+    Tix: cardinal;
+    Count, Capacity: integer;
+    IP: TCardinalDynArray;
+    function TixDeprecated: boolean;
+    procedure Add(const hostname: RawUtf8; ip4: cardinal);
+    procedure SafeAdd(const hostname: RawUtf8; ip4: cardinal);
+    procedure AddFrom(const other: TNetHostCache);
+    function Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
+    function SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
+  end;
+
+function TNetHostCache.TixDeprecated: boolean;
+var
+  tix32: cardinal;
+begin
+  tix32 := mormot.core.os.GetTickCount64 shr 13 + 1; // refresh every 8192 ms
+  result := tix32 <> Tix;
+  if result then
+    Tix := tix32;
+end;
+
+procedure TNetHostCache.Add(const hostname: RawUtf8; ip4: cardinal);
+begin
+  if hostname = '' then
+    exit;
+  if Capacity = Count then
+  begin
+    Capacity := NextGrow(Capacity);
+    SetLength(Host, Capacity);
+    SetLength(IP, Capacity);
+  end;
+  Host[Count] := hostname;
+  IP[Count] := ip4;
+  inc(Count);
+end;
+
+procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4: cardinal);
+begin
+  Safe.Lock;
+  Add(hostname, ip4);
+  Safe.UnLock;
+end;
+
+procedure TNetHostCache.AddFrom(const other: TNetHostCache);
+var
+  i: PtrInt;
+begin
+  for i := 0 to other.Count - 1 do
+    Add(other.Host[i], other.IP[i]);
+end;
+
+function FastHostCacheFind(h: PRawUtf8; const hostname: RawUtf8;
+  hostnamelen: TStrLen; n: PtrInt): PtrInt;
+begin
+  if hostnamelen <> 0 then
+    for result := 0 to n - 1 do
+      if (PStrLen(PPAnsiChar(h)^ - _STRLEN)^ = hostnamelen) and
+         PropNameEquals(hostname, h^) then // case insensitive search
+        exit
+      else
+        inc(h);
+  result := -1;
+end;
+
+function TNetHostCache.Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if Count = 0 then
+    exit;
+  i := FastHostCacheFind(pointer(Host), hostname, length(hostname), Count);
+  if i < 0 then
+    exit;
+  ip4 := IP[i];
+  result := true;
+end;
+
+function TNetHostCache.SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
+begin
+  result := false;
+  if Count = 0 then
+    exit;
+  Safe.Lock;
+  if TixDeprecated then
+    Count := 0
+  else
+    result := Find(hostname, ip4);
+  Safe.UnLock;
+end;
+
 
 { TNetAddr }
 
@@ -2683,6 +2793,75 @@ begin
   end
   else
     result := _GetDnsAddresses(usePosixEnv, {getAD=}true); // no cache for the AD
+end;
+
+var
+  HostCache: TNetHostCache;
+  HostCacheFileTime: TUnixTime;
+  RegHostCache: TNetHostCache;
+
+procedure HostCacheReload;
+var
+  p: PUtf8Char;
+  ip4: cardinal;
+  h: RawUtf8;
+begin
+  HostCache.Count := 0;
+  HostCache.AddFrom(RegHostCache);
+  p := pointer(StringFromFile(host_file));
+  while p <> nil do
+  begin
+    if (p^ in ['1'..'9']) and
+       NetIsIP4(p, @ip4) and
+       ({%H-}ip4 <> 0) then
+    begin
+      p := PosChar(p, ' ');
+      repeat
+        h := NetGetNextSpaced(p);
+        if h = '' then
+          break;
+        HostCache.Add(h, ip4);
+      until false;
+    end;
+    p := GotoNextLine(p);
+  end;
+end;
+
+function GetKnownHost(const HostName: RawUtf8; out ip4: cardinal): boolean;
+var
+  tixfile: TUnixTime;
+begin
+  result := false;
+  if HostName = '' then
+    exit;
+  HostCache.Safe.Lock;
+  try
+    if HostCache.TixDeprecated then
+    begin
+      // check at least every 8 seconds if the file actually changed on disk
+      tixfile := FileAgeToUnixTimeUtc(host_file);
+      if tixfile = 0 then
+        exit; // no hosts file
+      if tixfile <> HostCacheFileTime then
+      begin
+        // hosts file content changed: reload it
+        HostCacheFileTime := tixfile;
+        HostCacheReload;
+      end;
+    end;
+    result := HostCache.Find(HostName, ip4);
+  finally
+    HostCache.Safe.UnLock;
+  end;
+end;
+
+procedure RegisterKnownHost(const HostName, Ip4: RawUtf8);
+var
+  ip32: cardinal;
+begin
+  if (HostName <> '') and
+     NetIsIP4(pointer(ip4), @ip32) then
+    RegHostCache.SafeAdd(HostName, ip32);
 end;
 
 

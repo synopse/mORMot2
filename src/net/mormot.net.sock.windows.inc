@@ -16,6 +16,7 @@ uses
 
 const
   ws2 = 'ws2_32.dll';
+  host_file = 'c:\windows\system32\drivers\etc\hosts';
 
 const
   // default on Windows is 64, but we grow it to 512 for TPollSocketSelect

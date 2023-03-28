@@ -29,6 +29,8 @@ uses
 { ******** Sockets Type Definitions }
 
 const
+  host_file = '/etc/hosts';
+
   NI_MAXHOST = 1025;
   NI_MAXSERV = 32;
 
