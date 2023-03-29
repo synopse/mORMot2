@@ -1586,6 +1586,7 @@ type
       const CAFolder: RawUtf8 = ''): boolean;
     // returns 0 on success, or an error code (optionally in errstr^/errcert^)
     // - allow partial chain verification if MaxDepth<>0
+    // - if errcert^ is set, caller should call errcert^.Free
     function Verify(x509: PX509; chain: Pstack_st_X509 = nil;
       errstr: PPUtf8Char = nil; errcert: PPX509 = nil;
       callback: X509_STORE_CTX_verify_cb = nil; MaxDepth: integer = 0): integer;
@@ -8571,10 +8572,11 @@ begin
         result := 0; // success!
     end;
     if result <> 0 then
+    result := c.CurrentError(errstr);
+    if errcert <> nil then
     begin
-      result := c.CurrentError(errstr);
-      if errcert <> nil then
-        errcert^ := c.CurrentCert;
+      errcert^ := c.CurrentCert;
+      X509_up_ref(errcert^);
     end;
   finally
     c.Free;
