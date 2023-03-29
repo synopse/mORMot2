@@ -418,7 +418,7 @@ begin
     inc(Pos);
     if len = 0 then
       break;
-    while (len and DNS_RELATIVE) =  DNS_RELATIVE do
+    while (len and DNS_RELATIVE) = DNS_RELATIVE do
     begin
       if nextpos = 0 then
         nextpos := Pos + 1; // if compressed, return end of 16-bit offset

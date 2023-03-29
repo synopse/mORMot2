@@ -2847,7 +2847,7 @@ const
   // - kslConfidentiality maps our SecEncrypt() wrapper scheme, i.e. conf_flag=1
   // (sign and seal), and not kslIntegrity (sign only)
   // - also matches Samba expectations in its "strong auth = yes" default mode
-  KLS_EXPECTED = [kslConfidentiality];
+  KLS_EXPECTED: TKerbSecLayer = [kslConfidentiality];
 
 function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
   KerberosUser: PRawUtf8): boolean;
