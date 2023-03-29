@@ -2124,7 +2124,8 @@ function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
 // since our JSON serialization detects and serialize Exception.Message
 function ObjectToJsonDebug(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
-    woHumanReadable, woStoreClassName, woStorePointer]): RawUtf8;
+    woHumanReadable, woStoreClassName, woStorePointer,
+    woHideSensitivePersonalInformation]): RawUtf8;
 
 /// get any (potentially nested) object property by path
 // - complex values (e.g. dynamic array properties) will be returned as
