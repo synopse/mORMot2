@@ -1276,11 +1276,11 @@ begin
   // set output content
   result := call.OutStatus;
   Ctxt.OutContent := call.OutBody;
-  Ctxt.OutContentType := call.OutBodyType;
   P := pointer(call.OutHead);
   if IdemPChar(P, 'CONTENT-TYPE: ') then
   begin
-    // change mime type if modified in HTTP header (e.g. GET blob fields)
+    // TRestServer.Uri is expected to customize the content-type
+    // as FIRST header (e.g. when returning GET blob fields)
     Ctxt.OutContentType := GetNextLine(P + 14, P);
     FastSetString(call.OutHead, P, StrLen(P));
   end
