@@ -342,7 +342,7 @@ procedure InvalidateSecContext(var aSecContext: TSecContext;
 /// Free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
 
-/// Encrypts a message
+/// Encrypts a message using 'sign and seal' (i.e. integrity and encryption)
 // - aSecContext must be set e.g. from previous success call to ServerSspiAuth
 // or ClientSspiAuth
 // - aPlain contains data that must be encrypted
@@ -676,6 +676,8 @@ begin
   if aSecContext.CredHandle <> nil then
     GssApi.gss_release_cred(MinStatus, aSecContext.CredHandle);
 end;
+
+// see https://learn.microsoft.com/en-us/windows/win32/secauthn/sspi-kerberos-interoperability-with-gssapi
 
 function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;

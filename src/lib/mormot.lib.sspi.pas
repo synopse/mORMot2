@@ -521,7 +521,7 @@ procedure InvalidateSecContext(var aSecContext: TSecContext;
 /// free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
 
-/// encrypt a message
+/// Encrypts a message using 'sign and seal' (i.e. integrity and encryption)
 // - aSecContext must be set e.g. from previous success call to ServerSspiAuth
 // or ClientSspiAuth
 // - aPlain contains data that must be encrypted
@@ -1192,6 +1192,7 @@ begin
   //
   // SSPI/Kerberos Interoperability with GSSAPI
   // https://msdn.microsoft.com/library/windows/desktop/aa380496.aspx
+  // https://learn.microsoft.com/en-us/windows/win32/secauthn/sspi-kerberos-interoperability-with-gssapi
   //
   // GSS-API wrapper for Microsoft's Kerberos SSPI in Windows 2000
   // http://www.kerberos.org/software/samples/gsskrb5/gsskrb5/krb5/krb5msg.c

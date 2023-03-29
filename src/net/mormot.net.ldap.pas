@@ -621,6 +621,9 @@ type
     // from mormot.net.dns to retrieve the current value from the system
     // - after connect, will contain the actual server name
     // - typical value is 'dc-one.mycorp.com'
+    // - the Kerberos protocol expects the FQN to be specified, not the raw IP
+    // address: you could use RegisterKnownHost() to pre-register a FQN instead
+    // of adding it to the /etc/hosts file of the system
     property TargetHost: RawUtf8
       read fTargetHost Write fTargetHost;
     /// target server port (or symbolic name)
@@ -2832,12 +2835,28 @@ begin
   end;
 end;
 
+type
+  // see https://www.rfc-editor.org/rfc/rfc4752#section-3.3
+  TKerbSecLayer = set of (
+    kslNone,
+    kslIntegrity,
+    kslConfidentiality);
+
+const
+  /// the bit-mask of the security layer to be used (if any wanted by the server)
+  // - kslConfidentiality maps our SecEncrypt() wrapper scheme, i.e. conf_flag=1
+  // (sign and seal), and not kslIntegrity (sign only)
+  // - also matches Samba expectations in its "strong auth = yes" default mode
+  KLS_EXPECTED = [kslConfidentiality];
+
 function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
   KerberosUser: PRawUtf8): boolean;
 var
   datain, dataout: RawByteString;
   t, req1, req2: TAsnObject;
   needencrypt: boolean;
+  seclayers: TKerbSecLayer;
+  secmaxsize: integer;
 
   procedure ParseInput;
   var
@@ -2901,15 +2920,35 @@ begin
           exit;
         ParseInput;
         datain := SecDecrypt(fSecContext, datain);
-        if (length(datain) <> 4) or
-           ((datain[1] = #0) and
-            (PCardinal(datain)^ <> 0)) then
-          exit; // invalid or unsupported token
-        PCardinal(datain)^ := 0; // #0: noseclayer, #1#2#3: maxmsgsize=0
+        if length(datain) <> 4 then
+          exit; // expected format is #0=SecLayer #1#2#3=MaxMsgSizeInNetOrder
+        seclayers := TKerbSecLayer(datain[1]);
+        secmaxsize := bswap32(PCardinal(datain)^) and $00ffffff;
+        if seclayers = [] then
+          // the server requires no additional security layer
+          if secmaxsize <> 0 then
+            // invalid answer (as stated by RFC 4752)
+            exit
+          else
+          begin
+            // #0: noseclayer, #1#2#3: maxmsgsize=0
+            PCardinal(datain)^ := 0;
+            needencrypt := false; // fSecContextEncrypt = false by default
+          end
+        else if seclayers * KLS_EXPECTED = [] then
+          // we only support signing sealing
+          exit
+        else
+        begin
+          // return the supported algorithm, with a 64KB maximum message size
+          if secmaxsize > 64 shl 10 then
+            secmaxsize := 64 shl 10; // evolution: call gss_wrap_size_limit?
+          PCardinal(datain)^ := bswap32(secmaxsize) + byte(KLS_EXPECTED);
+          needencrypt := true; // fSecContextEncrypt = true = sign and seal
+        end;
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
         dataout := SecEncrypt(fSecContext, datain);
-        needencrypt := false; // noseclayer
       end;
       req2 := Asn(LDAP_ASN1_BIND_REQUEST, [
                 Asn(fVersion),
