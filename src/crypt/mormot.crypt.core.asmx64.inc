@@ -1152,8 +1152,266 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         dq      $0B0A090803020100
 end;
 
-// optimized unrolled asm using Intel SHA HW opcodes
-// - those are not available in FPC/Delphi asm, so are encoded as plain db
+// optimized SHA-1 and SHA-256 unrolled asm using Intel SHA HW opcodes
+// - those opcodes are not available in FPC/Delphi asm, so are manually encoded
+
+procedure Sha1ni(var input_data; var digest; num_bytes: cardinal);
+{$ifdef WIN64ABI}
+var
+  bak6, bak7, bak8, bak9: THash128;
+asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
+        movups  dqword ptr [bak6], xmm6
+        movups  dqword ptr [bak7], xmm7
+        movups  dqword ptr [bak8], xmm8
+        movups  dqword ptr [bak9], xmm9
+{$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+{$endif WIN64ABI}
+        test    num_bytes, num_bytes
+        jz      @0
+        movdqu  xmm5, dqword ptr [digest]
+        pxor    xmm1, xmm1
+        pinsrd  xmm1, dword ptr [digest + 16], 3
+        pshufd  xmm0, xmm5, $1B
+        movdqa  xmm6, xmm1
+        movdqa  xmm4, xmm0
+        cmp     num_bytes, 63
+        jbe     @2
+        lea     eax, qword ptr [num_bytes - 64]
+        movdqa  xmm5, dqword ptr [rip + @3]
+        shr     eax, 6
+        add     eax, 1
+        shl     rax, 6
+        add     rax, input_data
+@1:     movdqu  xmm1, dqword ptr [input_data]
+        movdqa  xmm0, xmm6
+        movdqa  xmm2, xmm4
+        movdqa  xmm3, xmm4
+        add     input_data, 64
+        pshufb  xmm1, xmm5
+        paddd   xmm0, xmm1
+        // sha1rnds4 xmm2, xmm0, 0
+        db $0f, $3a, $cc, $d0, $00 // the sha1* opcodes are encoded by hand
+        movdqu  xmm0, dqword ptr [input_data - 48]
+        movdqa  xmm8, xmm2
+        pshufb  xmm0, xmm5
+        // sha1nexte xmm3, xmm0
+        db $0f, $38, $c8, $d8
+        // sha1msg1 xmm1, xmm0
+        db $0f, $38, $c9, $c8
+        // sha1rnds4 xmm8, xmm3, 0
+        db $44, $0f, $3a, $cc, $c3, $00
+        movdqu  xmm3, dqword ptr [input_data - 32]
+        movdqa  xmm7, xmm8
+        movdqa  xmm9, xmm8
+        pshufb  xmm3, xmm5
+        // sha1nexte xmm2, xmm3
+        db $0f, $38, $c8, $d3
+        pxor    xmm1, xmm3
+        // sha1msg1 xmm0, xmm3
+        db $0f, $38, $c9, $c3
+        // sha1rnds4 xmm7, xmm2, 0
+        db $0f, $3a, $cc, $fa, $00
+        movdqu  xmm2, dqword ptr [input_data - 16]
+        movdqa  xmm8, xmm7
+        pshufb  xmm2, xmm5
+        // sha1msg2 xmm1, xmm2
+        db $0f, $38, $ca, $ca
+        // sha1nexte xmm9, xmm2
+        db $44, $0f, $38, $c8, $ca
+        // sha1msg1 xmm3, xmm2
+        db $0f, $38, $c9, $da
+        // sha1rnds4 xmm8, xmm9, 0
+        db $45, $0f, $3a, $cc, $c1, $00
+        // sha1nexte xmm7, xmm1
+        db $0f, $38, $c8, $f9
+        pxor    xmm0, xmm2
+        movdqa  xmm9, xmm7
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm0, xmm1
+        db $0f, $38, $ca, $c1
+        // sha1rnds4 xmm7, xmm9, 0
+        db $41, $0f, $3a, $cc, $f9, $00
+        pxor    xmm3, xmm1
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm3, xmm0
+        db $0f, $38, $ca, $d8
+        // sha1nexte xmm9, xmm0
+        db $44, $0f, $38, $c8, $c8
+        movdqa  xmm8, xmm7
+        // sha1rnds4 xmm8, xmm9, 1
+        db $45, $0f, $3a, $cc, $c1, $01
+        // sha1nexte xmm7, xmm3
+        db $0f, $38, $c8, $fb
+        // sha1msg1 xmm2, xmm1
+        db $0f, $38, $c9, $d1
+        movdqa  xmm9, xmm7
+        // sha1msg1 xmm1, xmm0
+        db $0f, $38, $c9, $c8
+        pxor    xmm2, xmm0
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm2, xmm3
+        db $0f, $38, $ca, $d3
+        pxor    xmm1, xmm3
+        // sha1rnds4 xmm7, xmm9, 1
+        db $41, $0f, $3a, $cc, $f9, $01
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm1, xmm2
+        db $0f, $38, $ca, $ca
+        // sha1nexte xmm9, xmm2
+        db $44, $0f, $38, $c8, $ca
+        movdqa  xmm8, xmm7
+        // sha1msg1 xmm0, xmm3
+        db $0f, $38, $c9, $c3
+        // sha1rnds4 xmm8, xmm9, 1
+        db $45, $0f, $3a, $cc, $c1, $01
+        // sha1nexte xmm7, xmm1
+        db $0f, $38, $c8, $f9
+        // sha1msg1 xmm3, xmm2
+        db $0f, $38, $c9, $da
+        movdqa  xmm9, xmm7
+        pxor    xmm0, xmm2
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm0, xmm1
+        db $0f, $38, $ca, $c1
+        // sha1rnds4 xmm7, xmm9, 1
+        db $41, $0f, $3a, $cc, $f9, $01
+        pxor    xmm3, xmm1
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm3, xmm0
+        db $0f, $38, $ca, $d8
+        movdqa  xmm8, xmm7
+        // sha1nexte xmm9, xmm0
+        db $44, $0f, $38, $c8, $c8
+        // sha1nexte xmm7, xmm3
+        db $0f, $38, $c8, $fb
+        // sha1msg1 xmm2, xmm1
+        db $0f, $38, $c9, $d1
+        // sha1rnds4 xmm8, xmm9, 1
+        db $45, $0f, $3a, $cc, $c1, $01
+        // sha1msg1 xmm1, xmm0
+        db $0f, $38, $c9, $c8
+        movdqa  xmm9, xmm7
+        pxor    xmm2, xmm0
+        movdqa  xmm7, xmm8
+        pxor    xmm1, xmm3
+        // sha1msg2 xmm2, xmm3
+        db $0f, $38, $ca, $d3
+        // sha1rnds4 xmm7, xmm9, 2
+        db $41, $0f, $3a, $cc, $f9, $02
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm1, xmm2
+        db $0f, $38, $ca, $ca
+        // sha1nexte xmm9, xmm2
+        db $44, $0f, $38, $c8, $ca
+        movdqa  xmm8, xmm7
+        // sha1rnds4 xmm8, xmm9, 2
+        db $45, $0f, $3a, $cc, $c1, $02
+        // sha1nexte xmm7, xmm1
+        db $0f, $38, $c8, $f9
+        // sha1msg1 xmm0, xmm3
+        db $0f, $38, $c9, $c3
+        movdqa  xmm9, xmm7
+        // sha1msg1 xmm3, xmm2
+        db $0f, $38, $c9, $da
+        pxor    xmm0, xmm2
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm0, xmm1
+        db $0f, $38, $ca, $c1
+        pxor    xmm3, xmm1
+        // sha1rnds4 xmm7, xmm9, 2
+        db $41, $0f, $3a, $cc, $f9, $02
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm3, xmm0
+        db $0f, $38, $ca, $d8
+        // sha1nexte xmm9, xmm0
+        db $44, $0f, $38, $c8, $c8
+        movdqa  xmm8, xmm7
+        // sha1msg1 xmm2, xmm1
+        db $0f, $38, $c9, $d1
+        // sha1rnds4 xmm8, xmm9, 2
+        db $45, $0f, $3a, $cc, $c1, $02
+        // sha1nexte xmm7, xmm3
+        db $0f, $38, $c8, $fb
+        // sha1msg1 xmm1, xmm0
+        db $0f, $38, $c9, $c8
+        movdqa  xmm9, xmm7
+        pxor    xmm2, xmm0
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm2, xmm3
+        db $0f, $38, $ca, $d3
+        // sha1rnds4 xmm7, xmm9, 2
+        db $41, $0f, $3a, $cc, $f9, $02
+        pxor    xmm1, xmm3
+        movdqa  xmm9, xmm8
+        // sha1msg2 xmm1, xmm2
+        db $0f, $38, $ca, $ca
+        movdqa  xmm8, xmm7
+        // sha1nexte xmm9, xmm2
+        db $44, $0f, $38, $c8, $ca
+        // sha1nexte xmm7, xmm1
+        db $0f, $38, $c8, $f9
+        // sha1msg1 xmm0, xmm3
+        db $0f, $38, $c9, $c3
+        // sha1rnds4 xmm8, xmm9, 3
+        db $45, $0f, $3a, $cc, $c1, $03
+        pxor    xmm0, xmm2
+        movdqa  xmm9, xmm7
+        movdqa  xmm7, xmm8
+        // sha1msg2 xmm0, xmm1
+        db $0f, $38, $ca, $c1
+        // sha1msg1 xmm3, xmm2
+        db $0f, $38, $c9, $da
+        // sha1rnds4 xmm7, xmm9, 3
+        db $41, $0f, $3a, $cc, $f9, $03
+        // sha1msg1 xmm2, xmm1
+        db $0f, $38, $c9, $d1
+        // sha1nexte xmm8, xmm0
+        db $44, $0f, $38, $c8, $c0
+        pxor    xmm1, xmm3
+        movdqa  xmm3, xmm7
+        // sha1msg2 xmm1, xmm0
+        db $0f, $38, $ca, $c8
+        // sha1rnds4 xmm3, xmm8, 3
+        db $41, $0f, $3a, $cc, $d8, $03
+        pxor    xmm0, xmm2
+        // sha1msg2 xmm0, xmm1
+        db $0f, $38, $ca, $c1
+        // sha1nexte xmm7, xmm1
+        db $0f, $38, $c8, $f9
+        movdqa  xmm1, xmm3
+        // sha1rnds4 xmm1, xmm7, 3
+        db $0f, $3a, $cc, $cf, $03
+        // sha1nexte xmm3, xmm0
+        db $0f, $38, $c8, $d8
+        movdqa  xmm0, xmm1
+        // sha1nexte xmm1, xmm6
+        db $0f, $38, $c8, $ce
+        // sha1rnds4 xmm0, xmm3, 3
+        db $0f, $3a, $cc, $c3, $03
+        movdqa  xmm6, xmm1
+        paddd   xmm0, xmm4
+        movdqa  xmm4, xmm0
+        cmp     input_data, rax
+        jne     @1
+@2:     pshufd  xmm0, xmm0, 1bh
+        pextrd  dword ptr [digest + 16], xmm1, 3
+        movups  dqword ptr [digest], xmm0
+@0:     {$ifdef WIN64ABI}
+        movups  xmm6, dqword ptr [bak6]
+        movups  xmm7, dqword ptr [bak7]
+        movups  xmm8, dqword ptr [bak8]
+        movups  xmm9, dqword ptr [bak9]
+        jmp     @end
+        {$else}
+        ret
+        {$endif WIN64ABI}
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@3:     dq $08090a0b0c0d0e0f
+        dq $0001020304050607
+{$ifdef WIN64ABI}
+@end:
+{$endif WIN64ABI}
+end;
 
 procedure Sha256ni(var input_data; var digest; num_blks: cardinal);
 {$ifdef WIN64ABI}
