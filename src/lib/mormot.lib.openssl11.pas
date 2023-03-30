@@ -8572,7 +8572,7 @@ begin
         result := 0; // success!
     end;
     if result <> 0 then
-    result := c.CurrentError(errstr);
+      result := c.CurrentError(errstr);
     if errcert <> nil then
     begin
       errcert^ := c.CurrentCert;

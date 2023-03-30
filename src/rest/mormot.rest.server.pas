@@ -6060,46 +6060,45 @@ constructor TRestServer.Create(aModel: TOrmModel; aHandleUserAuthentication: boo
 begin
   if aModel = nil then
     raise EOrmException.CreateUtf8('%.Create(Model=nil)', [self]);
+  // setup the associated ORM model
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
-  // fSessions is needed by AuthenticationRegister() below
-  fSessions := TSynObjectListSorted.Create(AuthSessionCompare);
   fAuthUserClass := TAuthUser;
   fAuthGroupClass := TAuthGroup;
   fModel := aModel; // we need this property ASAP
+  // setup Sessions - as needed by AuthenticationRegister() below
+  fSessions := TSynObjectListSorted.Create(AuthSessionCompare);
   fSessionClass := TAuthSession;
+  // (+ 10 to avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 or 1)
+  fSessionCounterMin := Random32(1 shl 20) + 10; // positive 20-bit integer
+  fSessionCounter := fSessionCounterMin;
+  // setup method-based services list - needed for /auth
+  fPublishedMethods.InitSpecific(
+    TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUtf8, nil, true);
+  fPublishedMethodAuthIndex := -1;
+  fPublishedMethodBatchIndex := -1;
+  // setup default mORMot authentication schemes (if specified)
   if aHandleUserAuthentication then
-    // default mORMot authentication schemes
     AuthenticationRegister([
       TRestServerAuthenticationDefault
       {$ifdef DOMAINRESTAUTH},
       TRestServerAuthenticationSspi
       {$endif DOMAINRESTAUTH}]);
+  // initialize TRestServer
+  fRootRedirectForbiddenToAuth := Model.Root + '/auth';
   if fModel.TablesMax < 0 then
     fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   fServicesRouting := TRestServerRoutingRest;
+  UriPagingParameters := PAGINGPARAMETERS_YAHOO;
+  fStats := TRestServerMonitor.Create(self);
+  // initialize TRest
   inherited Create(aModel);
   fAfterCreation := true;
-  fStats := TRestServerMonitor.Create(self);
-  UriPagingParameters := PAGINGPARAMETERS_YAHOO;
-  // + 10 to avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 or 1
-  fSessionCounterMin := Random32(1 shl 20) + 10; // positive 31-bit integer
-  fSessionCounter := fSessionCounterMin;
-  fRootRedirectForbiddenToAuth := Model.Root + '/auth';
-  fPublishedMethods.InitSpecific(
-    TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUtf8, nil, true);
+  // setup method-based services (manually adding the default)
   ServiceMethodRegisterPublishedMethods('', self);
-  // manually add default method-based services
   fPublishedMethodTimestampIndex := ServiceMethodRegister(
     'timestamp', Timestamp, true, [mGET]);
-  if aHandleUserAuthentication then
-    fPublishedMethodAuthIndex := ServiceMethodRegister(
-      'auth', Auth, {bypassauth=}true, [mGET])
-  else
-    fPublishedMethodAuthIndex := -1;
-  if rsoNoTableURI in fOptions then
-    fPublishedMethodBatchIndex := -1
-  else
+  if not (rsoNoTableURI in fOptions) then
     fPublishedMethodBatchIndex := ServiceMethodRegister(
       'batch', Batch, false, [mPUT, mPOST]);
   ServiceMethodRegister(
@@ -6278,7 +6277,11 @@ begin
     // create and initialize new authentication instance
     result := aMethod.Create(self);
     ObjArrayAdd(fSessionAuthentication, result); // will be owned by this array
+    // ensure authentication is enabled
     fHandleAuthentication := true;
+    if fPublishedMethodAuthIndex < 0 then
+      fPublishedMethodAuthIndex := ServiceMethodRegister(
+        'auth', Auth, {bypassauth=}true, [mGET]);
     // we need both AuthUser+AuthGroup tables for authentication -> create now
     fAuthGroupClass := Model.AddTableInherited(TAuthGroup);
     fAuthUserClass := Model.AddTableInherited(TAuthUser);

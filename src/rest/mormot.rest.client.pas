@@ -170,8 +170,8 @@ type
   // - default suaCRC32 format of session_signature is
   // !Hexa8(SessionID)+
   // !Hexa8(Timestamp)+
-  // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
-  // !            Hexa8(Timestamp)+url))
+  // !Hexa8(crc32(SessionID + HexaSessionPrivateKey +
+  // !            Sha256('salt' + PassWord) + Hexa8(Timestamp) + url))
   TRestClientAuthenticationSignedUri = class(TRestClientAuthenticationUri)
   protected
     // class functions implementing TRestAuthenticationSignedUriAlgo
@@ -1312,19 +1312,23 @@ end;
 
 { TRestClientAuthenticationSignedUri }
 
-{ Some Numbers - Indicative only!
-  - Client side REST sign with crc32: 794,759 assertions passed  730.86ms
-  - Client side REST sign with crc32c: 794,753 assertions passed  718.26ms
-  - Client side REST sign with xxhash: 794,753 assertions passed  717.63ms
-  - Client side REST sign with md5: 794,753 assertions passed  741.87ms
-  - Client side REST sign with sha256: 794,753 assertions passed  767.58ms
-  - Client side REST sign with sha512: 794,753 assertions passed  800.34ms
+{ Some Numbers on Linux x86_64 with HW CRC32 + SHA256 opcodes - Indicative only!
+  - Client side REST sign with crc32: 1,853,135 assertions passed  176.03ms
+  - Client side REST sign with crc32c: 1,853,129 assertions passed  171.55ms
+  - Client side REST sign with xxhash: 1,853,129 assertions passed  172.18ms
+  - Client side REST sign with md5: 1,853,129 assertions passed  183.11ms
+  - Client side REST sign with sha-1: 1,853,129 assertions passed  177.91ms
+  - Client side REST sign with sha-256: 1,853,129 assertions passed  178.25ms
+  - Client side REST sign with sha-512: 1,853,129 assertions passed  200.60ms
+  - Client side REST sign with sha3-256: 1,853,129 assertions passed  221.02ms
+  - Client side REST weak authentication: 1,853,129 assertions passed  165.02ms
+  - Client side REST basic authentication: 1,853,129 assertions passed  222.01ms
 }
 
 class function TRestClientAuthenticationSignedUri.ComputeSignatureCrc32(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
-  // historical algorithm, from zlib crc32 polynom
+  // historical algorithm, from zlib polynom - HW accelerated with libdeflate
   result := crc32(crc32(privatesalt, timestamp, 8), url, urllen);
 end;
 
@@ -1364,7 +1368,7 @@ class function TRestClientAuthenticationSignedUri.ComputeSignatureSha1(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: array[0..(SizeOf(TSha1Digest) div 4) - 1] of cardinal;
-  SHA1: TSha1;
+  SHA1: TSha1; // use Intel/AMD SHA-1 HW opcodes if available
   i: PtrInt;
 begin
   SHA1.Init;
@@ -1382,7 +1386,7 @@ class function TRestClientAuthenticationSignedUri.ComputeSignatureSha256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash256Rec;
-  SHA256: TSha256;
+  SHA256: TSha256; // use Intel/AMD SHA-1 HW opcodes if available
   i: PtrInt;
 begin
   SHA256.Init;
