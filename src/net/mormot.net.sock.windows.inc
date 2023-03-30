@@ -453,7 +453,7 @@ begin
   res := nil;
   result := getaddrinfo(pointer(ip), pointer(port), @h, res) = NO_ERROR;
   if result then
-    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // only return the first result
+    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // return the first result
   if res <> nil then
     freeaddrinfo(res);
 end;

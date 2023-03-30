@@ -147,7 +147,10 @@ type
     function SetFromIP4(const address: RawUtf8): boolean;
   public
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
-    // - wrap the proper getaddrinfo/gethostbyname API
+    // - calls NewSocketIP4Lookup if available from mormot.net.dns (with a 32
+    // seconds cache) or the proper getaddrinfo/gethostbyname OS API
+    // - see also NewSocket() overload or GetSocketAddressFromCache() if you
+    // want to use the global NewSocketAddressCache
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     /// returns the network family of this address
     function Family: TNetFamily;
@@ -174,11 +177,14 @@ type
     function Port: TNetPort;
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
+    /// set a given 32-bit IPv4 address and its network port (0..65535)
+    function SetIP4Port(ip4: cardinal; port: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
     /// create a new TNetSocket instance on this network address
     // - returns nil on API error
+    // - SetFrom() should have been called before running this method
     function NewSocket(layer: TNetLayer): TNetSocket;
   end;
 
@@ -295,11 +301,14 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
   out netsocket: TNetSocket; netaddr: PNetAddr = nil; bindReusePort: boolean = false): TNetResult;
 
-/// resolve the TNetAddr of the address:port layer - maybe from cache
+/// delete a hostname from TNetAddr.SetFrom internal short-living cache
+procedure NetAddrFlush(const hostname: RawUtf8);
+
+/// resolve the TNetAddr of the address:port layer - maybe from NewSocketAddressCache
 function GetSocketAddressFromCache(const address, port: RawUtf8;
   layer: TNetLayer; out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 
-/// check if an address is known from the current DNS
+/// check if an address is known from the current NewSocketAddressCache
 // - calls GetSocketAddressFromCache() so would use the internal cache, if any
 function ExistSocketAddressFromCache(const host: RawUtf8): boolean;
 
@@ -443,7 +452,7 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 
 /// returns all IP addresses of the current computer as a single CSV text
 // - may be used to enumerate all adapters
-// - an internal cache of the result with Sep=' ' is refreshed every 32 seconds
+// - an internal cache of the result is refreshed every 32 seconds
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
@@ -1586,7 +1595,8 @@ end;
 
 type
   // implement a thread-safe cache of IPv4 for hostnames
-  // - used by TNetAddr.SetFromIP4 and
+  // - used e.g. by TNetAddr.SetFromIP4 and GetKnownHost
+  // - avoid the overhead of TSynDictionary for a few short-living items
   TNetHostCache = object
     Host: TRawUtf8DynArray;
     Safe: TLightLock;
@@ -1599,6 +1609,7 @@ type
     function Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
     procedure SafeAdd(const hostname: RawUtf8; ip4, deprec: cardinal);
     function SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
+    procedure SafeFlush(const hostname: RawUtf8);
   end;
 
 function TNetHostCache.TixDeprecated: boolean;
@@ -1689,11 +1700,46 @@ begin
   Safe.UnLock;
 end;
 
+procedure TNetHostCache.SafeFlush(const hostname: RawUtf8);
+var
+  i, n: PtrInt;
+begin
+  if (Count = 0) or
+     (hostname = '') then
+    exit;
+  Safe.Lock;
+  try
+    if TixDeprecated then
+      Count := 0
+    else
+    begin
+      i := FastHostCacheFind(pointer(Host), hostname, length(hostname), Count);
+      if i < 0 then
+        exit;
+      n := Count - 1;
+      Count := n;
+      Host[i] := '';
+      dec(n, i);
+      if n <= 0 then
+        exit;
+      MoveFast(pointer(Host[i + 1]), pointer(Host[i]), n * SizeOf(pointer));
+      MoveFast(IP[i + 1], IP[i], n * SizeOf(cardinal));
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
 
 { TNetAddr }
 
 var
   NetAddrCache: TNetHostCache; // small internal cache valid for 32 seconds only
+
+procedure NetAddrFlush(const hostname: RawUtf8);
+begin
+  NetAddrCache.SafeFlush(hostname);
+end;
 
 function TNetAddr.SetFromIP4(const address: RawUtf8): boolean;
 begin
@@ -1716,7 +1762,7 @@ begin
       // numerical IPv4, /etc/hosts, or cached entry
     else if (Assigned(NewSocketIP4Lookup) and
              NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
-      // cache value found from mormot.net.dns resolution for 32 seconds
+      // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
       NetAddrCache.SafeAdd(address, PCardinal(@sin_addr)^, {tixshr=}15)
     else
       // return result=false if unknown
@@ -1777,7 +1823,7 @@ begin
     if sa_family = AF_INET then
       result := cardinal(sin_addr) // may return cLocalhost32 = 127.0.0.1
     else
-      result := 0; // AF_INET6 or AF_UNIX returns 0
+      result := 0; // AF_INET6 or AF_UNIX return 0
 end;
 
 function TNetAddr.IPShort(withport: boolean): ShortString;
@@ -1832,13 +1878,21 @@ function TNetAddr.SetPort(p: TNetPort): TNetResult;
 begin
   with PSockAddr(@Addr)^ do
     if (sa_family in [AF_INET, AF_INET6]) and
-       (p <= 65535) then
+       (p <= 65535) then // p may equal 0 to set ephemeral port
     begin
       sin_port := htons(p);
       result := nrOk;
     end
     else
       result := nrNotFound;
+end;
+
+function TNetAddr.SetIP4Port(ip4: cardinal; port: TNetPort): TNetResult;
+begin
+  PSockAddr(@Addr)^.sin_family := AF_INET;
+  PCardinal(@PSockAddr(@Addr)^.sin_addr)^ := ip4;
+  PInt64(@PSockAddr(@Addr)^.sin_zero)^ := 0;
+  result := SetPort(port);
 end;
 
 function TNetAddr.Size: integer;
@@ -1886,38 +1940,39 @@ end;
 function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLayer;
   out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 var
-  p: cardinal;
+  p, ip4: cardinal;
 begin
   fromcache := false;
   tobecached := false;
-  if (layer in nlIP) and
-     Assigned(NewSocketAddressCache) and
-     ToCardinal(port, p, 1) then
-    if (address = '') or
-       (address = cLocalhost) or
-       (address = cAnyHost) then // for client: '0.0.0.0'->'127.0.0.1'
-      result := addr.SetFrom(cLocalhost, port, layer)
-    else if layer = nlUnix then
-       result := addr.SetFrom(address, port, layer)
-    else if NetIsIP4(pointer(address), @PSockAddr(@addr)^.sin_addr) then
-      with PSockAddr(@addr)^ do
+  if layer in nlIP then
+    if not ToCardinal(port, p, {minimal=}1) then
+    begin
+      result := nrNotFound;
+      exit;
+    end
+    else if (address = '') or
+            (address = cLocalhost) or
+            PropNameEquals(address, 'localhost') or
+            (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
+    begin
+      result := addr.SetIP4Port(cLocalhost32, p);
+      exit;
+    end
+    else if NetIsIP4(pointer(address), @ip4) then
+    begin
+      result := addr.SetIP4Port(ip4, p);
+      exit;
+    end
+    else if Assigned(NewSocketAddressCache) then
+      if NewSocketAddressCache.Search(address, addr) then
       begin
-        sin_family := AF_INET;
-        sin_port := htons(p);
-        result := nrOK;
+        fromcache := true;
+        result := addr.SetPort(p);
+        exit;
       end
-    else if NewSocketAddressCache.Search(address, addr) then
-    begin
-      fromcache := true;
-      result := addr.SetPort(p);
-    end
-    else
-    begin
-      tobecached := true;
-      result := addr.SetFrom(address, port, layer);
-    end
-  else
-    result := addr.SetFrom(address, port, layer);
+      else
+        tobecached := true;
+  result := addr.SetFrom(address, port, layer);
 end;
 
 function ExistSocketAddressFromCache(const host: RawUtf8): boolean;
@@ -2033,8 +2088,11 @@ begin
   begin
     result := NetLastError(WSAEADDRNOTAVAIL);
     if fromcache then
+    begin
       // force call the DNS resolver again, perhaps load-balacing is needed
       NewSocketAddressCache.Flush(address);
+      NetAddrCache.SafeFlush(address);
+    end;
     exit;
   end;
   // bind or connect to this Socket
@@ -2901,18 +2959,18 @@ begin
 end;
 
 var
-  HostCache: TNetHostCache;
-  HostCacheFileTime: TUnixTime;
-  RegHostCache: TNetHostCache;
+  KnownHostCache: TNetHostCache;
+  KnownHostCacheFileTime: TUnixTime;
+  RegKnownHostCache: TNetHostCache;
 
-procedure HostCacheReload;
+procedure KnownHostCacheReload;
 var
   p: PUtf8Char;
   ip4: cardinal;
   h: RawUtf8;
 begin
-  HostCache.Count := 0;
-  HostCache.AddFrom(RegHostCache);
+  KnownHostCache.Count := 0;
+  KnownHostCache.AddFrom(RegKnownHostCache);
   p := pointer(StringFromFile(host_file));
   while p <> nil do
   begin
@@ -2925,7 +2983,7 @@ begin
         h := NetGetNextSpaced(p);
         if h = '' then
           break;
-        HostCache.Add(h, ip4);
+        KnownHostCache.Add(h, ip4);
       until false;
     end;
     p := GotoNextLine(p);
@@ -2939,24 +2997,24 @@ begin
   result := false;
   if HostName = '' then
     exit;
-  HostCache.Safe.Lock;
+  KnownHostCache.Safe.Lock;
   try
-    if HostCache.TixDeprecated then
+    if KnownHostCache.TixDeprecated then
     begin
       // check at least every 8 seconds if the file actually changed on disk
       tixfile := FileAgeToUnixTimeUtc(host_file);
       if tixfile = 0 then
         exit; // no hosts file
-      if tixfile <> HostCacheFileTime then
+      if tixfile <> KnownHostCacheFileTime then
       begin
         // hosts file content changed: reload it
-        HostCacheFileTime := tixfile;
-        HostCacheReload;
+        KnownHostCacheFileTime := tixfile;
+        KnownHostCacheReload;
       end;
     end;
-    result := HostCache.Find(HostName, ip4);
+    result := KnownHostCache.Find(HostName, ip4);
   finally
-    HostCache.Safe.UnLock;
+    KnownHostCache.Safe.UnLock;
   end;
 end;
 
@@ -2966,7 +3024,10 @@ var
 begin
   if (HostName <> '') and
      NetIsIP4(pointer(ip4), @ip32) then
-    RegHostCache.SafeAdd(HostName, ip32, {tixshr=}0);
+  begin
+    RegKnownHostCache.SafeAdd(HostName, ip32, {tixshr=}0);
+    KnownHostCache.SafeAdd(HostName, ip32, 0); // for immediate GetKnownHost()
+  end;
 end;
 
 
