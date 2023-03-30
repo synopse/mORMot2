@@ -178,7 +178,7 @@ type
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
     /// set a given 32-bit IPv4 address and its network port (0..65535)
-    function SetIP4Port(ip4: cardinal; port: TNetPort): TNetResult;
+    function SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
@@ -1887,12 +1887,12 @@ begin
       result := nrNotFound;
 end;
 
-function TNetAddr.SetIP4Port(ip4: cardinal; port: TNetPort): TNetResult;
+function TNetAddr.SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
 begin
   PSockAddr(@Addr)^.sin_family := AF_INET;
-  PCardinal(@PSockAddr(@Addr)^.sin_addr)^ := ip4;
+  PCardinal(@PSockAddr(@Addr)^.sin_addr)^ := ipv4;
   PInt64(@PSockAddr(@Addr)^.sin_zero)^ := 0;
-  result := SetPort(port);
+  result := SetPort(netport);
 end;
 
 function TNetAddr.Size: integer;
