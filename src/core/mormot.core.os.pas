@@ -1754,6 +1754,7 @@ type
     function ToInt: Int64;
       {$ifdef HASINLINE}inline;{$endif}
   end;
+  PPropVariant = ^TPropVariant;
 
 const
   // map varOleInt/varOleUInt/varOlePAnsiChar/varOlePWideChar/varOleFileTime
@@ -1762,6 +1763,7 @@ const
   VT_LPSTR    = 30;
   VT_LPWSTR   = 31;
   VT_FILETIME = 64;
+  VT_CLSID    = 72;
 
 type
   HCRYPTPROV = pointer;

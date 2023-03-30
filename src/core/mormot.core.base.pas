@@ -3408,6 +3408,9 @@ procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: Ptr
 
 { ************ Efficient Variant Values Conversion }
 
+type
+  PVarType = ^TVarType;
+
 const
   /// unsigned 64bit integer variant type
   // - currently called varUInt64 in Delphi (not defined in older versions),
