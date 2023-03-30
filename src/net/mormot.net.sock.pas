@@ -359,21 +359,28 @@ function ToText(res: TNetResult): PShortString; overload;
 { ******************** Mac and IP Addresses Support }
 
 type
-  /// the filter used by IsPublicIP()
+  /// the filter used by GetIPAddresses() and IP4Filter()
+  // - the "Public"/"Private" suffix maps IsPublicIP() IANA ranges of IPv4
+  // address space, i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses
+  // - the "Dhcp" suffix excludes IsApipaIP() 169.254.0.1 - 169.254.254.255
+  // range, i.e. ensure the address actually came from a real DHCP server
   // - tiaAny always return true, for any IPv4 or IPv6 address
   // - tiaIPv4 identify any IPv4 address
   // - tiaIPv6 identify any IPv6 address
-  // - tiaIPv4Public identify any IPv4 address excluding  ranges, i.e. IANA private IPv4 address space
-  // - tiaIPv4Private identify IPv4 address only within this IANA address space
-  // - tiaIPv4DhcpPublic identify any IPv4 address exclusing IANA private IPv4
-  // address space and APIPA Windows Range
+  // - tiaIPv4Public identify any IPv4 public address
+  // - tiaIPv4Private identify any IPv4 private address
+  // - tiaIPv4Dhcp identify any IPv4 address excluding APIPA range
+  // - tiaIPv4DhcpPublic identify any IPv4 public address excluding APIPA range
+  // - tiaIPv4DhcpPrivate identify any IPv4 private address excluding APIPA range
   TIPAddress = (
     tiaAny,
     tiaIPv4,
     tiaIPv6,
     tiaIPv4Public,
     tiaIPv4Private,
-    tiaIPv4DhcpPublic);
+    tiaIPv4Dhcp,
+    tiaIPv4DhcpPublic,
+    tiaIPv4DhcpPrivate);
 
 /// detect IANA private IPv4 address space from its 32-bit raw value
 // - i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses
@@ -383,7 +390,13 @@ function IsPublicIP(ip4: cardinal): boolean;
 // - Automatic Private IP Addressing (APIPA) is used by Windows clients to
 // setup some IP in case of local DHCP failure
 // - it covers the 169.254.0.1 - 169.254.254.255 range
+// - see tiaIPv4Dhcp, tiaIPv4DhcpPublic and tiaIPv4DhcpPrivate filters
 function IsApipaIP(ip4: cardinal): boolean;
+
+/// filter an IPv4 address to a given TIPAddress kind
+// - return true if the supplied address does match the filter
+// - by design, both 0.0.0.0 and 127.0.0.1 always return false
+function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
@@ -425,6 +438,7 @@ function MacToHex(mac: PByteArray; maclen: PtrInt = 6): RawUtf8;
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
 // - no cache is used for this function - consider GetIPAddressesText instead
+// - by design, 127.0.0.1 is excluded from the list
 function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 
 /// returns all IP addresses of the current computer as a single CSV text
@@ -2459,6 +2473,30 @@ function IsApipaIP(ip4: cardinal): boolean;
 begin
   result := (ip4 and $ffff = ord(169) + ord(254) shl 8) and
             (ToByte(ip4 shr 16) < 255);
+end;
+
+function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
+begin
+  result := false; // e.g. tiaIPv6 or 0.0.0.0 or 127.0.0.1
+  if (ip4 <> $0100007f) and
+     (ip4 <> 0) then
+    case filter of
+      tiaAny,
+      tiaIPv4:
+        result := true;
+      tiaIPv4Public:
+        result := IsPublicIP(ip4);
+      tiaIPv4Private:
+        result := not IsPublicIP(ip4);
+      tiaIPv4Dhcp:
+        result := not IsApipaIP(ip4);
+      tiaIPv4DhcpPublic:
+        result := IsPublicIP(ip4) and
+                  not IsApipaIP(ip4);
+      tiaIPv4DhcpPrivate:
+        result := not IsPublicIP(ip4) and
+                  not IsApipaIP(ip4);
+    end;
 end;
 
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);

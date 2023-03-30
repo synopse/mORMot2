@@ -656,25 +656,8 @@ begin
         s := '';
         case info^.ifa_addr^.sa_family of
           AF_INET:
-            if kind <> tiaIPv6 then
-              with info^.ifa_addr^ do
-                if (integer(sin_addr) <> $0100007f) and
-                   (integer(sin_addr) <> 0) then
-                  case Kind of
-                    tiaIpv4,
-                    tiaAny:
-                      IP4Text(@sin_addr,s);
-                    tiaIPv4Public:
-                      if IsPublicIP(integer(sin_addr)) then
-                        IP4Text(@sin_addr, s);
-                    tiaIPv4Private:
-                      if not IsPublicIP(integer(sin_addr)) then
-                        IP4Text(@sin_addr, s);
-                    tiaIPv4DhcpPublic:
-                      if IsPublicIP(integer(sin_addr)) and
-                         not IsApipaIP(integer(sin_addr)) then
-                        IP4Text(@sin_addr, s);
-                  end;
+            if IP4Filter(integer(info^.ifa_addr^.sin_addr), Kind) then
+              IP4Text(@info^.ifa_addr^.sin_addr,s);
           AF_INET6:
             if kind in [tiaAny, tiaIPv6] then
               with PSockAddrIn6(info^.ifa_addr)^ do
