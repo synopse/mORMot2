@@ -291,11 +291,13 @@ type
     procedure ClientSideRESTSignWithXxhash;
     /// test the client-side implementation with MD5 URI signature
     procedure ClientSideRESTSignWithMd5;
-    /// test the client-side implementation with SHA256 URI signature
+    /// test the client-side implementation with SHA-1 URI signature
+    procedure ClientSideRESTSignWithSha1;
+    /// test the client-side implementation with SHA-256 URI signature
     procedure ClientSideRESTSignWithSha256;
-    /// test the client-side implementation with SHA512 URI signature
+    /// test the client-side implementation with SHA-512 URI signature
     procedure ClientSideRESTSignWithSha512;
-    /// test the client-side implementation with SHA3 URI signature
+    /// test the client-side implementation with SHA3-256 URI signature
     procedure ClientSideRESTSignWithSha3;
     /// test the client-side implementation using TRestServerAuthenticationNone
     procedure ClientSideRESTWeakAuthentication;
@@ -1785,6 +1787,11 @@ begin
   ClientAlgo(suaMD5);
 end;
 
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA1;
+begin
+  ClientAlgo(suaSHA1);
+end;
+
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256;
 begin
   ClientAlgo(suaSHA256);
@@ -2252,6 +2259,8 @@ begin
   Check(I.Multiply(2, 35) = 70);
   Check(I.Subtract(2.3, 1.2) = 0, 'Default result');
   Check(I.ToTextFunc(2.3) = 'default');
+  CheckEqual(Stub.LogAsText, 'Add(10,30)=[30],Multiply(10,30)=[60],' +
+    'Multiply(2,35)=[70],Subtract(2.3,1.2)=[0],ToTextFunc(2.3)=["default"]');
   Check(Stub.LogHash = $34FA7AAF);
   I := nil; // release Stub -> will check all expectations
   TInterfaceMock.Create(TypeInfo(ICalculator), I, self).
