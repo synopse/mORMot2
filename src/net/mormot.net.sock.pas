@@ -279,6 +279,7 @@ type
     /// called by NewSocket() if connection failed, and force DNS resolution
     procedure Flush(const Host: RawUtf8);
     /// you can call this method to change the default timeout of 10 minutes
+    // - is likely to flush the cache
     procedure SetTimeOut(aSeconds: integer);
   end;
 
@@ -313,19 +314,25 @@ var
   /// contains the raw Socket API version, as returned by the Operating System
   SocketApiVersion: RawUtf8;
 
-  /// callback used by NewSocket() to resolve the host name
+  /// callback used by NewSocket() to resolve the host name as IPv4
   // - not assigned by default, to use the OS default API, i.e. getaddrinfo()
   // on Windows, and gethostbyname() on POSIX
   // - if you include mormot.net.dns, its own IPv4 DNS resolution function will
   // be registered here
+  // - this level or DNS resolution has a simple in-memory cache of 32 seconds
+  // - NewSocketAddressCache from mormot.net.client will implement a more
+  // tunable cache, for both IPv4 and IPv6 resolutions
   NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: cardinal): boolean;
 
-  /// the DNS resolver address to be used by NewSocketIP4Lookup callback
+  /// the DNS resolver address to be used by NewSocketIP4Lookup() callback
+  // - to override default mormot.net.dns behavior which is to query all DNS
+  // servers known by the OS
   NewSocketIP4LookupServer: RawUtf8;
 
   /// interface used by NewSocket() to cache the host names
   // - avoiding DNS resolution is a always a good idea
-  // - implemented by mormot.net.client unit using a TSynDictionary
+  // - if you include mormot.net.client, will register its own implementation
+  // class using a TSynDictionary over a 10 minutes default timeout
   // - you may call its SetTimeOut or Flush methods to tune the caching
   NewSocketAddressCache: INewSocketAddressCache;
 
@@ -1569,14 +1576,14 @@ type
   TNetHostCache = object
     Host: TRawUtf8DynArray;
     Safe: TLightLock;
-    Tix: cardinal;
+    Tix, TixShr: cardinal;
     Count, Capacity: integer;
     IP: TCardinalDynArray;
     function TixDeprecated: boolean;
     procedure Add(const hostname: RawUtf8; ip4: cardinal);
-    procedure SafeAdd(const hostname: RawUtf8; ip4: cardinal);
     procedure AddFrom(const other: TNetHostCache);
     function Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
+    procedure SafeAdd(const hostname: RawUtf8; ip4, deprec: cardinal);
     function SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
   end;
 
@@ -1584,7 +1591,9 @@ function TNetHostCache.TixDeprecated: boolean;
 var
   tix32: cardinal;
 begin
-  tix32 := mormot.core.os.GetTickCount64 shr 13 + 1; // refresh every 8192 ms
+  if TixShr = 0 then
+    TixShr := 13; // refresh every 8192 ms by default
+  tix32 := mormot.core.os.GetTickCount64 shr TixShr;
   result := tix32 <> Tix;
   if result then
     Tix := tix32;
@@ -1603,13 +1612,6 @@ begin
   Host[Count] := hostname;
   IP[Count] := ip4;
   inc(Count);
-end;
-
-procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4: cardinal);
-begin
-  Safe.Lock;
-  Add(hostname, ip4);
-  Safe.UnLock;
 end;
 
 procedure TNetHostCache.AddFrom(const other: TNetHostCache);
@@ -1647,6 +1649,19 @@ begin
   result := true;
 end;
 
+procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4, deprec: cardinal);
+begin
+  Safe.Lock;
+  if deprec <> 0 then
+  begin
+    TixShr := deprec; // may override e.g. to 15, i.e. 32768 ms cache
+    if TixDeprecated then // flush any previous entry if needed
+      Count := 0;
+  end;
+  Add(hostname, ip4);
+  Safe.UnLock;
+end;
+
 function TNetHostCache.SafeFind(const hostname: RawUtf8; out ip4: cardinal): boolean;
 begin
   result := false;
@@ -1664,7 +1679,7 @@ end;
 { TNetAddr }
 
 var
-  NetAddrCache: TNetHostCache; // small internal cache valid for 8 seconds only
+  NetAddrCache: TNetHostCache; // small internal cache valid for 32 seconds only
 
 function TNetAddr.SetFromIP4(const address: RawUtf8): boolean;
 begin
@@ -1687,18 +1702,8 @@ begin
       // numerical IPv4, /etc/hosts, or cached entry
     else if (Assigned(NewSocketIP4Lookup) and
              NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
-    with NetAddrCache do
-    begin
-      // up to 8 seconds cache from mormot.net.dns resolution
-      Safe.Lock;
-      try
-        if TixDeprecated then // flush any previous entry if needed
-          Count := 0;
-        Add(address, PCardinal(@sin_addr)^);
-      finally
-        Safe.UnLock;
-      end;
-    end
+      // cache value found from mormot.net.dns resolution for 32 seconds
+      NetAddrCache.SafeAdd(address, PCardinal(@sin_addr)^, {tixshr=}15)
     else
       // return result=false if unknown
       exit;
@@ -2923,7 +2928,7 @@ var
 begin
   if (HostName <> '') and
      NetIsIP4(pointer(ip4), @ip32) then
-    RegHostCache.SafeAdd(HostName, ip32);
+    RegHostCache.SafeAdd(HostName, ip32, {tixshr=}0);
 end;
 
 

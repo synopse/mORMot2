@@ -423,7 +423,7 @@ begin
       end;
     exit;
   end;
-  // check supplied port
+  // check supplied IP port
   addr4.sin_port := htons(GetCardinal(pointer(addrport)));
   if (addr4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port

@@ -471,7 +471,7 @@ begin
     result := nrNotFound;
     if address = '' then
       exit;
-    // check supplied port
+    // check supplied IP port
     p := GetCardinal(pointer(addrport));
     if (p = 0) and
        (addrport <> '0') then // explicit '0' to get ephemeral port

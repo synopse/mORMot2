@@ -3595,7 +3595,7 @@ end;
 
 
 initialization
-  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10min timeout
+  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10 min timeout
 
 finalization
   NewSocketAddressCache := nil;
