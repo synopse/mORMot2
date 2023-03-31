@@ -8551,7 +8551,7 @@ begin
     delete(ext, 1, 1);
     if length(ext) = 1 then // IdemPPChar() supports 2 chars len minimum
       case ext[1] of
-        'x':
+        'x', 'X':
           result := mtXcomp;
       end
     else

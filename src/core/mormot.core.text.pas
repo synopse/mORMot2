@@ -49,6 +49,18 @@ type
   TOnStringTranslate = procedure(var English: string) of object;
 
 
+/// check case-sensitive matching starting of text in start
+// - returns true if the item matched
+// - see StartWith() from mormot.core.unicode for a case-insensitive version
+function StartWithExact(const text, textStart: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check case-sensitive matching ending of text in ending
+// - returns true if the item matched
+// - see EndWith() from mormot.core.unicode for a case-insensitive version
+function EndWithExact(const text, textEnd: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// extract a line from source array of chars
 // - next will contain the beginning of next line, or nil if source has ended
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char;
@@ -2736,6 +2748,25 @@ implementation
 
  
 { ************ UTF-8 String Manipulation Functions }
+
+function StartWithExact(const text, textStart: RawUtf8): boolean;
+var
+  l: PtrInt;
+begin
+  l := length(textStart);
+  result := (length(text) >= l) and
+            CompareMem(pointer(text), pointer(textStart), l);
+end;
+
+function EndWithExact(const text, textEnd: RawUtf8): boolean;
+var
+  l, o: PtrInt;
+begin
+  l := length(textEnd);
+  o := length(text) - l;
+  result := (o >= 0) and
+            CompareMem(PUtf8Char(pointer(text)) + o, pointer(textEnd), l);
+end;
 
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char; andtrim: boolean): RawUtf8;
 var

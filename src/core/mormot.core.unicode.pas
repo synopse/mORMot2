@@ -1244,7 +1244,7 @@ function IdemPCharWithoutWhiteSpace(p: PUtf8Char; up: PAnsiChar): boolean;
 /// returns the index of a matching beginning of p^ in upArray[]
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
-// - chars are compared as 7-bit Ansi only (no accentuated characters)
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
 // CHARS (it will use a fast 16-bit comparison of initial 2 bytes)
 // - consider IdemPPChar() which is faster but a bit more verbose
@@ -1253,7 +1253,7 @@ function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): intege
 /// returns the index of a matching beginning of p^ in nil-terminated up^ array
 // - returns -1 if no item matched
 // - ignore case - each up^ must be already Upper
-// - chars are compared as 7-bit Ansi only (no accentuated characters)
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 // - warning: this function expects up^ items to have AT LEAST TWO CHARS
 // (it will use a fast 16-bit comparison of initial 2 bytes)
 function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
@@ -1261,7 +1261,7 @@ function IdemPPChar(p: PUtf8Char; up: PPAnsiChar): PtrInt;
 /// returns the index of a matching beginning of p^ in upArray two characters
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
-// - chars are compared as 7-bit Ansi only (no accentuated characters)
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 function IdemPCharArrayBy2(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1278,27 +1278,35 @@ function IdemPCharU(p, up: PUtf8Char): boolean;
 // - this version expects p^ to point to an Unicode char array
 function IdemPCharW(p: PWideChar; up: PUtf8Char): boolean;
 
-/// check matching ending of p^ in upText
+/// check case-insensitive matching starting of text in upTextStart
 // - returns true if the item matched
-// - ignore case - upText^ must be already Upper
-// - chars are compared as 7-bit Ansi only (no accentuated characters)
-function EndWith(const text, upText: RawUtf8): boolean;
+// - ignore case - upTextStart must be already in upper case
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
+// - see StartWithExact() from mormot.core.text for a case-sensitive version
+function StartWith(const text, upTextStart: RawUtf8): boolean;
 
-/// returns the index of a matching ending of p^ in upArray[]
+/// check case-insensitive matching ending of text in upTextEnd
+// - returns true if the item matched
+// - ignore case - upTextEnd must be already in upper case
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
+// - see EndWithExact() from mormot.core.text for a case-sensitive version
+function EndWith(const text, upTextEnd: RawUtf8): boolean;
+
+/// returns the index of a case-insensitive matching ending of p^ in upArray[]
 // - returns -1 if no item matched
-// - ignore case - upArray^ must be already Upper
-// - chars are compared as 7-bit Ansi only (no accentuated characters)
+// - ignore case - upArray[] items must be already in upper case
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 function EndWithArray(const text: RawUtf8; const upArray: array of RawUtf8): integer;
 
 /// returns true if the file name extension contained in p^ is the same same as extup^
 // - ignore case - extup^ must be already Upper
-// - chars are compared as WinAnsi (codepage 1252), not as UTF-8
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 // - could be used e.g. like IdemFileExt(aFileName,'.JP');
 function IdemFileExt(p: PUtf8Char; extup: PAnsiChar; sepChar: AnsiChar = '.'): boolean;
 
 /// returns matching file name extension index as extup^
 // - ignore case - extup[] must be already Upper
-// - chars are compared as WinAnsi (codepage 1252), not as UTF-8
+// - chars are compared as 7-bit Ansi only (no accentuated chars, nor UTF-8)
 // - could be used e.g. like IdemFileExts(aFileName,['.PAS','.INC']);
 function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
   sepChar: AnsiChar = '.'): integer;
@@ -5034,13 +5042,19 @@ begin
   result := true;
 end;
 
-function EndWith(const text, upText: RawUtf8): boolean;
+function StartWith(const text, upTextStart: RawUtf8): boolean;
+begin
+  result := (length(text) >= length(upTextStart)) and
+            IdemPChar(pointer(text), pointer(upTextStart));
+end;
+
+function EndWith(const text, upTextEnd: RawUtf8): boolean;
 var
   o: PtrInt;
 begin
-  o := length(text) - length(upText);
+  o := length(text) - length(upTextEnd);
   result := (o >= 0) and
-            IdemPChar(PUtf8Char(pointer(text)) + o, pointer(upText));
+            IdemPChar(PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
 end;
 
 function EndWithArray(const text: RawUtf8; const upArray: array of RawUtf8): integer;
