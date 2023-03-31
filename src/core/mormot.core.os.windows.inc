@@ -1623,25 +1623,6 @@ begin
 end;
 
 
-{ TPropVariant }
-
-procedure TPropVariant.Init;
-begin
-  FillCharFast(self, SizeOf(self), 0);
-end;
-
-procedure TPropVariant.Clear;
-begin
-  VarClearProc(Value);
-end;
-
-function TPropVariant.ToInt: Int64;
-begin
-  if not VariantToInt64(variant(Value), result) then
-    result := 0;
-end;
-
-
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
   S: PAnsiChar;

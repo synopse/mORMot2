@@ -1739,33 +1739,6 @@ function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
 type
-  /// encapsulate a PROPVARIANT Windows type into an opaque binary buffer
-  // - some kind of enhanced variant, on which VariantToInt64, VariantToUtf8 and
-  // VariantToDateTime do work at least for the varOle* extended types
-  TPropVariant = object
-    /// map the stored value
-    Value: TVarData;
-    /// fill the instance with zeros
-    procedure Init;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// finalize an instance - i.e. free any BSTR stored
-    procedure Clear;
-      {$ifdef HASINLINE}inline;{$endif}
-    function ToInt: Int64;
-      {$ifdef HASINLINE}inline;{$endif}
-  end;
-  PPropVariant = ^TPropVariant;
-
-const
-  // map varOleInt/varOleUInt/varOlePAnsiChar/varOlePWideChar/varOleFileTime
-  VT_INT      = 22;
-  VT_UINT     = 23;
-  VT_LPSTR    = 30;
-  VT_LPWSTR   = 31;
-  VT_FILETIME = 64;
-  VT_CLSID    = 72;
-
-type
   HCRYPTPROV = pointer;
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
@@ -1959,6 +1932,7 @@ const
   ERROR_CONNECTION_INVALID = Windows.ERROR_CONNECTION_INVALID;
   ERROR_OLD_WIN_VERSION = Windows.ERROR_OLD_WIN_VERSION;
   ERROR_IO_PENDING = Windows.ERROR_IO_PENDING;
+  ERROR_OPERATION_ABORTED = Windows.ERROR_OPERATION_ABORTED;
 
   INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE; // = HANDLE(-1)
   ENGLISH_LANGID = $0409;
