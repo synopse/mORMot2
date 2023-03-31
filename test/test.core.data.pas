@@ -91,6 +91,9 @@ uses
   mormot.core.test,
   mormot.lib.z,
   mormot.lib.lizard,
+  {$ifdef OSWINDOWS}
+  mormot.lib.win7zip,
+  {$endif OSWINDOWS}
   mormot.net.sock,
   mormot.db.core,
   mormot.db.nosql.bson,
@@ -144,6 +147,11 @@ type
     DataFile: TFileName; // (may be truncated) mormot2tests executable copy
     M: TMemoryStream;
     crc0, crc1: cardinal; // crc0=plain crc1=deflated
+    ZipFile: TFileName;
+    {$ifdef OSWINDOWS}
+    Tot7z: Int64;
+    function Callback7z(sender: TInterfacedObject; current, total: Int64): HRESULT;
+    {$endif OSWINDOWS}
   public
     procedure Setup; override;
     procedure CleanUp; override;
@@ -154,6 +162,10 @@ type
     procedure GZIPFormat;
     /// .zip archive handling
     procedure ZIPFormat;
+    {$ifdef OSWINDOWS}
+    /// validate the 7z.dll wrapper in mormot.lib.win7zip
+    procedure _7Zip;
+    {$endif OSWINDOWS}
     /// SynLZ internal format
     procedure _SynLZ;
     /// TAlgoCompress classes
@@ -6065,7 +6077,17 @@ begin
       json[i] := WorkDir + json[i];
     ZipAppendFiles(DataFile, FN2, TFileNameDynArray(json), false, 1);
     Check(ZipTest(FN2), 'zipjson2');
-    DeleteFile(FN);
+    {$ifdef OSWINDOWS}
+    if ZipFile = '' then
+    begin
+      // to be used by TTestCoreCompression._7Zip below
+      ZipFile := WorkDir + 'test1.zip';
+      DeleteFile(ZipFile);
+      RenameFile(FN, ZipFile);
+    end
+    else
+    {$endif OSWINDOWS}
+      DeleteFile(FN);
     DeleteFile(FN2);
   end;
 end;
@@ -6229,25 +6251,81 @@ begin
   Check(AlgoDeflateFast.AlgoName = 'deflatefast');
 end;
 
-{ FPC Linux x86-64 (in VM) with static linked library for a 53MB log file:
-     TAlgoSynLz 53 MB->5 MB: comp 650:62MB/s decomp 90:945MB/s
-     TAlgoLizard 53 MB->3.9 MB: comp 55:4MB/s decomp 139:1881MB/s
-     TAlgoLizardFast 53 MB->6.8 MB: comp 695:89MB/s decomp 196:1522MB/s
-     TAlgoDeflate 53 MB->4.8 MB: comp 71:6MB/s decomp 48:540MB/s
-     TAlgoDeflateFast 53 MB->7 MB: comp 142:18MB/s decomp 56:428MB/s
-  Delphi Win64 with external lizard1-64.dll:
-     TAlgoSynLz 53 MB->5 MB: comp 667:63MB/s decomp 103:1087MB/s
-     TAlgoLizard 53 MB->3.9 MB: comp 61:4MB/s decomp 169:2290MB/s
-     TAlgoLizardFast 53 MB->6.8 MB: comp 690:89MB/s decomp 263:2039MB/s
-     TAlgoLizardHuffman 53 MB->2 MB: comp 658:25MB/s decomp 86:2200MB/s
-     TAlgoDeflate 53 MB->4.8 MB: comp 25:2MB/s decomp 19:214MB/s
-     TAlgoDeflateFast 53 MB->7 MB: comp 52:6MB/s decomp 23:176MB/s
-  speed difference may come from the FPC/Delphi heap manager, and/or the Linux VM
+{$ifdef OSWINDOWS}
 
-  From realistic tests, SynLZ may focus on small buffers, or very compressible
-  log files like above. But Lizard/LizardFast seem a better candidate for
-  fast decompression of any kind of data, especially large JSON/binary buffers.
-}
+procedure TTestCoreCompression._7Zip;
+var
+  s: RawByteString;
+  lib, folder: TFileName;
+  i: PtrInt;
+  tot1, tot2: Int64;
+  zin: I7zReader;
+  zout: I7zWriter;
+  files: TFindFilesDynArray;
+begin
+  ZipFile := WorkDir + 'test1.zip';
+  CheckEqual(ToUtf8(T7zLib.FormatGuid(fhGZip)),
+    '23170F69-40C1-278A-1000-000110EF0000');
+  Check(T7zLib.FormatDetect(Zipfile, {onlyext=}true) = fhZip);
+  Check(T7zLib.FormatDetect(Zipfile, false) = fhZip);
+  Check(T7zLib.FormatDetect(Executable.ProgramFileName, true) = fhPe);
+  Check(T7zLib.FormatDetect(Executable.ProgramFileName, false) = fhPe);
+  lib := Executable.ProgramFilePath + '7z.dll';
+  if FileExists(lib) then
+    begin
+      zin := New7zReader(ZipFile, lib);
+      CheckEqual(zin.Count, 5, 'count');
+      tot1 := 0;
+      for i := 0 to zin.Count - 1 do
+        inc(tot1, zin.ItemSize[i]);
+      {for i := 0 to zin.Count - 1 do
+         writeln('name=',zin.ItemName[i], ' path=',zin.ItemPath[i],
+        ' size=',zin.ITemSize[i], ' packsize=',zin.ITempacksize[i],
+        ' date=', DateTimeToIso8601text(zin.ItemModDate[i]));}
+      zin.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      s := zin.Extract('REP1\ONE.exe');
+      Check(s = Data, 'one');
+      CheckEqual(length(s), Tot7z, 'callbacksizeone');
+      Tot7z := 0;
+      s := zin.Extract('exe.1mb');
+      Check(s = Data, 'exe');
+      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+      Tot7z := 0;
+      zin.ExtractAll;
+      CheckEqual(tot1, Tot7z, 'callbacksize1');
+      folder := WorkDir + '7zipout';
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
+      Tot7z := 0;
+      zin.ExtractAll(folder, {nosubfolder=}true);
+      CheckEqual(tot1, Tot7z, 'callbacksize2');
+      files := FindFiles(folder);
+      CheckEqual(length(files), zin.Count, 'extractto');
+      tot2 := 0;
+      for i := 0 to high(files) do
+        inc(tot2, files[i].Size);
+      CheckEqual(tot1, tot2, 'extractsize');
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
+    end;
+  zin := nil; // so that we could delete the file
+  Check(DeleteFile(ZipFile));
+end;
+
+function TTestCoreCompression.Callback7z(sender: TInterfacedObject;
+  current, total: Int64): HRESULT;
+begin
+  Check(Sender.GetInterfaceEntry(I7zReader) <> nil);
+  Check(current <= total);
+  if Tot7z = 0 then
+    Tot7z := total
+  else
+    CheckEqual(Tot7z, total);
+  result := S_OK;
+end;
+
+{$endif OSWINDOWS}
 
 
 end.
