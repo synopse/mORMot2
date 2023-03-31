@@ -1431,9 +1431,17 @@ begin
   result := Dest;
 end;
 
+function VariantToDateTime2(const V: Variant; var Value: TDateTime): boolean;
+var
+  tmp: RawUtf8; // sub-procedure to void hidden try..finally
+begin
+  VariantToUtf8(V, tmp);
+  Iso8601ToDateTimePUtf8CharVar(pointer(tmp), length(tmp), Value);
+  result := Value <> 0;
+end;
+
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 var
-  tmp: RawUtf8;
   vd: TVarData;
   vt: cardinal;
 begin
@@ -1444,6 +1452,9 @@ begin
   begin
     result := true;
     case vt of
+      varEmpty,
+      varNull:
+        Value := 0;
       varDouble,
       varDate:
         Value := TVarData(V).VDouble;
@@ -1455,15 +1466,17 @@ begin
       varOleFileTime:
         Value := FileTimeToDateTime(PFileTime(@TVarData(V).VInt64)^);
       {$endif OSWINDOWS}
+      varString:
+        with TVarData(V) do
+        begin
+          Iso8601ToDateTimePUtf8CharVar(VString, length(RawUtf8(VString)), Value);
+          result := Value <> 0;
+        end;
     else
       if SetVariantUnRefSimpleValue(V, vd{%H-}) then
         result := VariantToDateTime(variant(vd), Value)
       else
-      begin
-        VariantToUtf8(V, tmp);
-        Iso8601ToDateTimePUtf8CharVar(pointer(tmp), length(tmp), Value);
-        result := Value <> 0;
-      end;
+        result := VariantToDateTime2(V, Value);
     end;
   end;
 end;
