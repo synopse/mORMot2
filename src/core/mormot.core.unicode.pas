@@ -6524,7 +6524,7 @@ procedure CaseCopy(Text: PUtf8Char; Len: PtrInt; Table: PNormTable;
   var Dest: RawUtf8);
 var
   i: PtrInt;
-  tmp: PUtf8Char;
+  tmp: PAnsiChar;
 begin
   tmp := FastNewString(Len, CP_UTF8);
   for i := 0 to Len - 1 do
