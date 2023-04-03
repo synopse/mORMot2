@@ -116,11 +116,13 @@ Access to the 7-Zip Compression/Decompression DLL on Windows
 - Low-Level 7-Zip API Definitions
 - `I7zReader`/`I7zWriter` High-Level Wrappers
 
-Can I use the EXE or DLL files from 7-Zip in a commercial application?
+*Can I use the EXE or DLL files from 7-Zip in a commercial application?*
+
 Yes, but you are required to specify in documentation for your application:
 - that you used parts of the 7-Zip program,
 - that 7-Zip is licensed under the GNU LGPL license and
 - you must give a link to www.7-zip.org, where the source code can be found.
 
-Can I become insane because of directly calling the 7-Zip public dll API?
-Yes, Igor's API is just bloated: the LCL unit has 10,000 lines just for basic archive work. So don't become insane and use our unit. Better safe than sorry.
+*Can I become insane because of directly calling the 7-Zip public dll API?*
+
+Yes, Igor's API is just bloated and crazy complex: the LCL unit has 10,000 lines just for basic archive work. So don't become insane and use our unit. Better be safe than sorry.

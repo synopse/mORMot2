@@ -927,7 +927,7 @@ begin
      (Value[1] = PairBegin) and
      (Value[2] = PairEnd) then
   begin
-    result := '';//nothing between
+    result := ''; //nothing in-between
     exit;
   end;
   if n < 2 then

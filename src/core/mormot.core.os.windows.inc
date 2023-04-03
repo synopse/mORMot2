@@ -505,13 +505,13 @@ end;
 
 function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 var
-  err: integer;
+  bak: integer;
   flags, len: PtrUInt;
   src: pointer;
   cod: PUtf8Char;
   tmp: array[0..511] of WideChar;
 begin
-  err := GetLastError;
+  bak := GetLastError;
   flags := FORMAT_MESSAGE_FROM_SYSTEM;
   if ModuleName = nil then
   begin
@@ -541,7 +541,7 @@ begin
      (src <> nil) then
   begin
     // fallback to the system error message if this module as no such code
-    SetLastError(err);
+    SetLastError(bak);
     result := WinErrorText(Code, nil);
     exit;
   end;
@@ -549,7 +549,7 @@ begin
         (ord(tmp[len - 1]) in [0..32, ord('.')]) do
     dec(len); // trim right
   Win32PWideCharToUtf8(@tmp, len, result);
-  SetLastError(err);
+  SetLastError(bak);
 end;
 
 function GetErrorText(error: integer): RawUtf8;

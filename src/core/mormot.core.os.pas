@@ -2350,7 +2350,7 @@ procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
   {$ifdef FPC} inline; {$endif}
 
-/// convert a Win32 64-bit FILETIME value into an TDateTime
+/// convert a Win32 64-bit FILETIME value into a TDateTime
 function FileTimeToDateTime(const FT: TFileTime): TDateTime;
 
 /// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
