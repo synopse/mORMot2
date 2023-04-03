@@ -815,12 +815,15 @@ type
     kEncoderIsAssigned
   );
 
+  T7zArchive = class;
+
   T7zStream = class(TInterfacedObject,
     ISequentialInStream, IInStream, IStreamGetSize,
     ISequentialOutStream, IOutStream, IOutStreamFlush)
   private
     fStream: TStream;
-    fOwnerShip: TStreamOwnership;
+    fIndex: integer;
+    fOwner: T7zArchive;
   protected
     // ISequentialInStream method
     function Read(data: pointer; size: cardinal;
@@ -838,8 +841,10 @@ type
     // IOutStreamFlush method
     function Flush: HRESULT; stdcall;
   public
-    constructor Create(Stream: TStream; Ownership: TStreamOwnership);
-    constructor CreateFromFile(const Name: TFileName; Mode: cardinal);
+    constructor Create(Stream: TStream; Owner: T7zArchive;
+      ArchiveIndex: integer = -1);
+    constructor CreateFromFile(const Name: TFileName; Mode: cardinal;
+      Owner: T7zArchive; ArchiveIndex: integer = -1);
     destructor Destroy; override;
   end;
 
@@ -914,12 +919,12 @@ type
     fPasswordCallback: T7zPasswordCallback;
     fStream: TStream;
     fPasswordIsDefined: boolean;
-    fPassword: SynUnicode;
     fSubArchiveMode: boolean;
+    fExtractPathNoSubFolder: boolean;
+    fPassword: SynUnicode;
     fSubArchiveName: RawUtf8;
     fExtractCallback: T7zGetStreamCallBack;
     fExtractPath: TFileName;
-    fExtractPathNoSubFolder: boolean;
     function GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
     function GetItemPropDateTime(item: cardinal; prop: TPropID): TDateTime;
     function GetItemPropFileTime(item: cardinal; prop: TPropID;
@@ -1652,12 +1657,43 @@ begin
   E7zip.CheckOK(self, 'GetItemProp',
     fInArchive.GetProperty(Item, prop, result));
   with TVarData(result) do
-    if (VType <> varEmpty) and
-       (prop >= low(KPID_VTYPE)) and
-       (prop <= high(KPID_VTYPE)) and
-       (VType <> KPID_VTYPE[prop]) then
+    if VType = VT_FILETIME then
+      raise E7Zip.Create('GetProperty: VT_FILETIME is unsupported - ' +
+        'use GetItemPropDateTime instead')
+    else if (VType <> varEmpty) and
+            (prop >= low(KPID_VTYPE)) and
+            (prop <= high(KPID_VTYPE)) and
+            (VType <> KPID_VTYPE[prop]) then
       raise E7Zip.CreateFmt('GetProperty(%): expected %, returned %',
-        [prop, KPID_VTYPE[prop], VType]);
+        [prop, KPID_VTYPE[prop], VType])
+end;
+
+function T7zReader.GetItemPropDateTime(item: cardinal;
+  prop: TPropID): TDateTime;
+var
+  v: TVarData; // VT_FILETIME/varOleFileTime is not handled by the RTL
+begin
+  v.VType := 0;
+  E7zip.CheckOK(self, 'GetItemPropDateTime',
+    fInArchive.GetProperty(Item, prop, variant(v)));
+  if not (v.VType in [varEmpty, VT_FILETIME]) then
+    raise E7zip.CreateFmt('T7zReader.GetItemPropDateTime=%d', [v.VType]);
+  VariantToDateTime(variant(v), result);
+end;
+
+function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID;
+  var placeholder: Int64): pointer;
+var
+  v: TVarData; // not handled by the RTL
+begin
+  v.VType := 0;
+  E7zip.CheckOK(self, 'GetItemPropFileTime',
+    fInArchive.GetProperty(Item, prop, variant(v)));
+  result := nil;
+  if v.VType <> VT_FILETIME then
+    exit;
+  placeholder := v.VInt64;
+  result := @placeholder;
 end;
 
 function T7zReader.GetItemIsFolder(index: integer): boolean;
@@ -1735,7 +1771,7 @@ procedure T7zReader.OpenFile(const filename: TFileName);
 var
   strm: IInStream;
 begin
-  strm := T7zStream.CreateFromFile(filename, fmOpenReadDenyNone);
+  strm := T7zStream.CreateFromFile(filename, fmOpenReadDenyNone, self);
   try
     E7zip.CheckOk(self, 'OpenFile',
       InArchive.Open(strm, @MAXCHECK, self as IArchiveOpenCallBack));
@@ -1748,34 +1784,6 @@ procedure T7zReader.OpenStream(stream: IInStream);
 begin
   E7zip.CheckOk(self, 'OpenStream',
     InArchive.Open(stream, @MAXCHECK, self as IArchiveOpenCallBack));
-end;
-
-function T7zReader.GetItemPropDateTime(item: cardinal;
-  prop: TPropID): TDateTime;
-var
-  v: TVarData; // VT_FILETIME/varOleFileTime is not handled by the RTL
-begin
-  v.VType := 0;
-  E7zip.CheckOK(self, 'GetItemPropDateTime',
-    fInArchive.GetProperty(Item, prop, variant(v)));
-  if not (v.VType in [varEmpty, VT_FILETIME]) then
-    raise E7zip.CreateFmt('T7zReader.GetItemPropDateTime=%d', [v.VType]);
-  VariantToDateTime(variant(v), result);
-end;
-
-function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID;
-  var placeholder: Int64): pointer;
-var
-  v: TVarData; // VT_FILETIME/varOleFileTime is not handled by the RTL
-begin
-  v.VType := 0;
-  E7zip.CheckOK(self, 'GetItemPropFileTime',
-    fInArchive.GetProperty(Item, prop, variant(v)));
-  result := nil;
-  if v.VType <>  VT_FILETIME then
-    exit;
-  placeholder := v.VInt64;
-  result := @placeholder;
 end;
 
 procedure T7zReader.Extract(item: cardinal; Stream: TStream);
@@ -1820,33 +1828,36 @@ begin
   end;
 end;
 
-function T7zReader.GetStream(index: cardinal;
-  var outStream: ISequentialOutStream; askExtractMode: T7zExtractAskMode): HRESULT;
+function T7zReader.GetStream(index: cardinal; var outStream: ISequentialOutStream;
+  askExtractMode: T7zExtractAskMode): HRESULT;
 var
   path: TFileName;
 begin
-  if askExtractMode = eamExtract then
-    if fStream <> nil then
-      outStream := T7zStream.Create(fStream, soReference) as ISequentialOutStream
-    else if assigned(fExtractCallback) then
-    begin
-      result := fExtractCallback(self, index, outStream);
-      exit;
-    end
-    else if fExtractPath <> '' then
-      if not GetItemIsFolder(index) then
+  case askExtractMode of
+    eamExtract:
+      if fStream <> nil then
+        outStream := T7zStream.Create(fStream, nil, index)
+      else if assigned(fExtractCallback) then
       begin
-        path := Utf8ToString(GetItemPath(index));
-        if fExtractPathNoSubFolder then
-          path := ExtractFileName(path);
-        path := fExtractPath + path;
-        ForceDirectories(ExtractFilePath(path));
-        outStream := T7zStream.CreateFromFile(path, fmCreate);
-      end;
+        result := fExtractCallback(self, index, outStream);
+        exit;
+      end
+      else if fExtractPath <> '' then
+        if not GetItemIsFolder(index) then
+        begin
+          path := Utf8ToString(GetItemPath(index));
+          if fExtractPathNoSubFolder then
+            path := ExtractFileName(path);
+          path := fExtractPath + path;
+          ForceDirectories(ExtractFilePath(path));
+          outStream := T7zStream.CreateFromFile(path, fmCreate, self, index);
+        end;
+  end;
   result := S_OK;
 end;
 
-function T7zReader.PrepareOperation(askExtractMode: T7zExtractAskMode): HRESULT;
+function T7zReader.PrepareOperation(
+  askExtractMode: T7zExtractAskMode): HRESULT;
 begin
   result := S_OK;
 end;
@@ -1914,16 +1925,6 @@ begin
   result := S_OK;
 end;
 
-function T7zReader.GetItemName(index: integer): RawUtf8;
-begin
-  VariantToUtf8(GetItemProp(index, kpidName), result);
-end;
-
-function T7zReader.GetItemSize(index: integer): Int64;
-begin
-  result := VariantToInt64Def(GetItemProp(index, kpidSize), -1);
-end;
-
 procedure T7zReader.Extract(const items: array of integer;
   const callback: T7zGetStreamCallBack);
 begin
@@ -1955,7 +1956,7 @@ procedure T7zReader.ExtractAll(const path: TFileName; nosubfolder: boolean);
 begin
   EnsureOpened;
   fExtractPath := IncludeTrailingPathDelimiter(path);
-  fExtractPathNoSubFolder := nosubfolder; 
+  fExtractPathNoSubFolder := nosubfolder;
   try
     E7zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
       nil, $FFFFFFFF, 0, self as IArchiveExtractCallback));
@@ -1974,23 +1975,40 @@ end;
 
 { T7zStream }
 
-constructor T7zStream.Create(Stream: TStream; Ownership: TStreamOwnership);
+constructor T7zStream.Create(Stream: TStream; Owner: T7zArchive;
+  ArchiveIndex: integer);
 begin
   inherited Create;
   fStream := Stream;
-  fOwnerShip := Ownership;
+  fOwner := Owner;
+  fIndex := ArchiveIndex;
 end;
 
-constructor T7zStream.CreateFromFile(const Name: TFileName; Mode: cardinal);
+constructor T7zStream.CreateFromFile(const Name: TFileName; Mode: cardinal;
+  Owner: T7zArchive; ArchiveIndex: integer);
 begin
-  Create(TFileStreamEx.Create(Name, Mode), soOwned);
+  Create(TFileStreamEx.Create(Name, Mode), Owner, ArchiveIndex);
 end;
 
 destructor T7zStream.Destroy;
+var
+  ct, at, wt: Int64; // some temporary place holders
 begin
   inherited;
-  if fOwnerShip = soOwned then
-    fStream.Free;
+  if fOwner <> nil then
+  begin
+    ct := 0;
+    at := 0;
+    wt := 0;
+    if (fOwner is T7zReader) and
+       (cardinal(fIndex) < cardinal(T7zReader(fOwner).Count)) and
+       fStream.InheritsFrom(THandleStream) then
+      SetFileTime((fStream as THandleStream).Handle,
+        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidCreationTime, ct),
+        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastAccessTime, at),
+        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastWriteTime, wt));
+    FreeAndNil(fStream);
+  end;
 end;
 
 function T7zStream.Flush: HRESULT;
@@ -2044,6 +2062,9 @@ begin
   result := S_OK;
 end;
 
+
+{ T7zItem }
+
 destructor T7zItem.Destroy;
 begin
   if Ownership = soOwned then
@@ -2053,12 +2074,6 @@ end;
 
 
 { T7zWriter }
-
-function GetFileTime(hFile: THandle;
-  lpCreationTime, lpLastAccessTime, lpLastWriteTime: PFileTime): LongBool;
-    external 'kernel32' name 'GetFileTime';
-function GetFileAttributes(lpFileName: PChar): cardinal;
-    external 'kernel32' name 'GetFileAttributes' + _AW;
 
 procedure T7zWriter.AddFile(const Filename: TFileName; const Path: RawUtf8);
 var
@@ -2255,11 +2270,11 @@ begin
   case item.SourceMode of
     smFile:
       inStream := T7zStream.CreateFromFile(
-        item.FileName, fmOpenReadDenyNone);
+        item.FileName, fmOpenReadDenyNone, self, index);
     smStream:
       begin
         item.Stream.Seek(0, soFromBeginning);
-        inStream := T7zStream.Create(item.Stream, soReference);
+        inStream := T7zStream.Create(item.Stream, self, index);
       end;
   end;
   result := S_OK;
@@ -2295,7 +2310,7 @@ procedure T7zWriter.SaveToStream(stream: TStream);
 var
   strm: ISequentialOutStream;
 begin
-  strm := T7zStream.Create(stream, soReference);
+  strm := T7zStream.Create(stream, self);
   try
     E7zip.CheckOk(self, 'SaveToStream',
       OutArchive.UpdateItems(strm, length(fEntries), self as IArchiveUpdateCallback));
