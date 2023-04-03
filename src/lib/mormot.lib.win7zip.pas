@@ -930,8 +930,7 @@ type
     fExtractPath: TFileName;
     function GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
     function GetItemPropDateTime(item: cardinal; prop: TPropID): TDateTime;
-    function GetItemPropFileTime(item: cardinal; prop: TPropID;
-      var placeholder: Int64): pointer;
+    function GetItemPropFileTime(item: cardinal; prop: TPropID): Int64;
     procedure EnsureOpened;
   protected
     // I7zReader methods
@@ -1688,19 +1687,16 @@ begin
   VariantToDateTime(variant(v), result);
 end;
 
-function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID;
-  var placeholder: Int64): pointer;
+function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID): Int64;
 var
   v: TVarData; // not handled by the RTL
 begin
   v.VType := 0;
   E7zip.CheckOK(self, 'GetItemPropFileTime',
     fInArchive.GetProperty(Item, prop, variant(v)));
-  result := nil;
-  if v.VType <> VT_FILETIME then
-    exit;
-  placeholder := v.VInt64;
-  result := @placeholder;
+  result := 0;
+  if v.VType = VT_FILETIME then
+    result := v.VInt64;
 end;
 
 function T7zReader.GetItemIsFolder(index: integer): boolean;
@@ -2032,20 +2028,45 @@ end;
 destructor T7zStream.Destroy;
 var
   ct, at, wt: Int64; // some temporary place holders
+  pct, pat, pwt: pointer;
 begin
   inherited;
   if fOwner <> nil then
   begin
-    ct := 0;
-    at := 0;
-    wt := 0;
     if (fOwner is T7zReader) and
        (cardinal(fIndex) < cardinal(T7zReader(fOwner).Count)) and
        fStream.InheritsFrom(THandleStream) then
-      SetFileTime((fStream as THandleStream).Handle,
-        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidCreationTime, ct),
-        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastAccessTime, at),
-        T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastWriteTime, wt));
+    begin
+      ct := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidCreationTime);
+      at := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastAccessTime);
+      wt := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastWriteTime);
+      // some archive formats may not set all properties: use what we got
+      if ct <> 0 then
+        pct := @ct
+      else if wt <> 0 then
+        pct := @wt
+      else if at <> 0 then
+        pct := @at
+      else
+        pct := nil;
+      if at <> 0 then
+        pat := @at
+      else if wt <> 0 then
+        pat := @wt
+      else if ct <> 0 then
+        pat := @ct
+      else
+        pat := nil;
+      if wt <> 0 then
+        pwt := @wt
+      else if ct <> 0 then
+        pwt := @ct
+      else if at <> 0 then
+        pwt := @at
+      else
+        pwt := nil;
+      SetFileTime((fStream as THandleStream).Handle, pct, pat, pwt);
+    end;
     FreeAndNil(fStream);
   end;
 end;
