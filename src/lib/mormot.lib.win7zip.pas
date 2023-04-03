@@ -577,6 +577,9 @@ type
     function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
     /// uncompress a file by name from this archive into a RawByteString
     function Extract(const name: RawUtf8): RawByteString; overload;
+    /// uncompress a file by name from this archive into a local folder
+    function Extract(const name: RawUtf8; const path: TFileName;
+      nosubfolder: boolean = false): boolean; overload;
     /// uncompress several files from this archive using a callback per file
     // - if no Callback is specified (as default), will test for the output
     procedure Extract(const items: array of integer;
@@ -944,8 +947,12 @@ type
     function GetItemSize(index: integer): Int64;
     function GetItemIsFolder(index: integer): boolean;
     procedure Extract(item: cardinal; Stream: TStream); overload;
+    function Extract(item: cardinal; const path: TFileName;
+      nosubfolder: boolean): boolean; overload;
     function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
     function Extract(const name: RawUtf8): RawByteString; overload;
+    function Extract(const name: RawUtf8; const path: TFileName;
+      nosubfolder: boolean): boolean; overload;
     procedure Extract(const items: array of integer;
       const callback: T7zGetStreamCallBack); overload;
     procedure SetPasswordCallback(const callback: T7zPasswordCallback);
@@ -1799,6 +1806,21 @@ begin
   end;
 end;
 
+function T7zReader.Extract(item: cardinal; const path: TFileName;
+  nosubfolder: boolean): boolean;
+begin
+  EnsureOpened;
+  fExtractPath := EnsureDirectoryExists(path);
+  fExtractPathNoSubFolder := nosubfolder;
+  try
+    E7zip.CheckOk(self, 'Extract',
+      fInArchive.Extract(
+        @item, 1, {test=}0, self as IArchiveExtractCallback));
+  finally
+    fExtractPath := '';
+  end;
+end;
+
 function T7zReader.Extract(const name: RawUtf8; Stream: TStream): boolean;
 var
   i: integer;
@@ -1828,7 +1850,24 @@ begin
   end;
 end;
 
-function T7zReader.GetStream(index: cardinal; var outStream: ISequentialOutStream;
+function T7zReader.Extract(const name: RawUtf8; const path: TFileName;
+  nosubfolder: boolean): boolean;
+var
+  i: integer;
+begin
+  result := false;
+  i := NameToIndex(name);
+  if i >= 0 then
+    try
+      Extract(i, path, nosubfolder);
+      result := true;
+    except
+      result := false;
+    end;
+end;
+
+function T7zReader.GetStream(index: cardinal;
+  var outStream: ISequentialOutStream;
   askExtractMode: T7zExtractAskMode): HRESULT;
 var
   path: TFileName;
@@ -1955,7 +1994,7 @@ end;
 procedure T7zReader.ExtractAll(const path: TFileName; nosubfolder: boolean);
 begin
   EnsureOpened;
-  fExtractPath := IncludeTrailingPathDelimiter(path);
+  fExtractPath := EnsureDirectoryExists(path);
   fExtractPathNoSubFolder := nosubfolder;
   try
     E7zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
