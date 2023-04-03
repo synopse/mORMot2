@@ -33,10 +33,11 @@ implementation
 {$else}
 
 uses
+  Windows,
+  ActiveX,
   sysutils,
   classes,
   types,
-  ActiveX,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -137,8 +138,8 @@ type
 
 const
   kpidNoProperty       = 0;
-
   kpidHandlerItemIndex = 2;
+
   kpidPath             = 3;  // VT_BSTR
   kpidName             = 4;  // VT_BSTR
   kpidExtension        = 5;  // VT_BSTR
@@ -544,14 +545,15 @@ type
   I7zReader = interface
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D53A}']
     // -- some internal methods used as property getters / setters
-    function GetItemCRC(index: integer): cardinal;
+    function GetItemSize(index: integer): Int64;
     function GetItemPackSize(index: integer): Int64;
+    function GetItemCRC(index: integer): cardinal;
     function GetItemComment(index: integer): RawUtf8;
     function GetItemModDate(index: integer): TDateTime;
     function GetItemDate(index: integer): TDateTime;
     function GetItemPath(index: integer): RawUtf8;
     function GetItemName(index: integer): RawUtf8;
-    function GetItemSize(index: integer): Int64;
+    function GetItemMethod(index: integer): RawUtf8;
     function GetItemIsFolder(index: integer): boolean;
     // -- main high-level methods
     /// open a given archive file
@@ -608,25 +610,28 @@ type
     /// the kpidSize property value of an archived file
     property ItemSize[index: integer]: Int64
       read GetItemSize;
+    /// the kpidPackedSize property value
+    property ItemPackSize[index: integer]: Int64
+      read GetItemPackSize;
     /// the kpidIsFolder property value of an archived file
     property ItemIsFolder[index: integer]: boolean
       read GetItemIsFolder;
+    /// the kpidMethod property value of an archived file
+    property ItemMethod[index: integer]: RawUtf8
+      read GetItemMethod;
     /// the kpidComment property value of an archived file
     property ItemComment[index: integer]: RawUtf8
       read GetItemComment;
     /// the kpidCRC property value of an archived file
     property ItemCRC[index: integer]: cardinal
       read GetItemCRC;
-    /// the kpidCreationTime property value
-    // - may be 0 for some packers
-    property ItemDate[index: integer]: TDateTime
-      read GetItemDate;
     /// the kpidLastWriteTime property value - i.e. the "usual" date
     property ItemModDate[index: integer]: TDateTime
       read GetItemModDate;
-    /// the kpidPackedSize property value
-    property ItemPackSize[index: integer]: Int64
-      read GetItemPackSize;
+    /// the kpidCreationTime property value
+    // - may be 0 for some packers (e.g. zip)
+    property ItemDate[index: integer]: TDateTime
+      read GetItemDate;
   end;
 
   TZipCompressionMethod = (
@@ -746,7 +751,7 @@ type
 
 /// global factory of the main I7zReader high-level archive file decompressor
 // - will guess the file format from its existing content
-// - will own its own TZlib instance to access the 7z.dll library 
+// - will own its own TZlib instance to access the 7z.dll library
 function New7zReader(const name: TFileName; const lib: TFileName = ''): I7zReader;
 
 /// global factory of the main I7zWriter high-level archive compressor
@@ -917,6 +922,8 @@ type
     fExtractPathNoSubFolder: boolean;
     function GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
     function GetItemPropDateTime(item: cardinal; prop: TPropID): TDateTime;
+    function GetItemPropFileTime(item: cardinal; prop: TPropID;
+      var placeholder: Int64): pointer;
     procedure EnsureOpened;
   protected
     // I7zReader methods
@@ -928,6 +935,7 @@ type
     function NameToIndex(const name: RawUtf8): integer;
     function GetItemPath(index: integer): RawUtf8;
     function GetItemName(index: integer): RawUtf8;
+    function GetItemMethod(index: integer): RawUtf8;
     function GetItemSize(index: integer): Int64;
     function GetItemIsFolder(index: integer): boolean;
     procedure Extract(item: cardinal; Stream: TStream); overload;
@@ -1588,6 +1596,75 @@ begin
       [ClassNameShort(self)^]); 
 end;
 
+const
+  KPID_VTYPE: array[kpidPath .. kpidVa] of word = (
+    VT_BSTR,        // kpidPath
+    VT_BSTR,        // kpidName
+    VT_BSTR,        // kpidExtension
+    VT_BOOL,        // kpidIsFolder
+    VT_UI8,         // kpidSize
+    VT_UI8,         // kpidPackedSize
+    VT_UI4,         // kpidAttributes
+    varEmpty,       // kpidCreationTime - VT_FILETIME is not RTL compatible
+    varEmpty,       // kpidLastAccessTime
+    varEmpty,       // kpidLastWriteTime
+    VT_BOOL,        // kpidSolid
+    VT_BOOL,        // kpidCommented
+    VT_BOOL,        // kpidEncrypted
+    VT_BOOL,        // kpidSplitBefore
+    VT_BOOL,        // kpidSplitAfter
+    VT_UI4,         // kpidDictionarySize
+    VT_UI4,         // kpidCRC
+    VT_BSTR,        // kpidType
+    VT_BOOL,        // kpidIsAnti
+    VT_BSTR,        // kpidMethod
+    VT_BSTR,        // kpidHostOS
+    VT_BSTR,        // kpidFileSystem
+    VT_BSTR,        // kpidUser
+    VT_BSTR,        // kpidGroup
+    VT_UI4,         // kpidBlock
+    VT_BSTR,        // kpidComment
+    VT_UI4,         // kpidPosition
+    VT_BSTR,        // kpidPrefix
+    VT_UI4,         // kpidNumSubDirs
+    VT_UI4,         // kpidNumSubFiles
+    VT_UI1,         // kpidUnpackVer
+    VT_UI4,         // kpidVolume
+    VT_BOOL,        // kpidIsVolume
+    VT_UI8,         // kpidOffset
+    VT_UI4,         // kpidLinks
+    VT_UI4,         // kpidNumBlocks
+    VT_UI4,         // kpidNumVolumes
+    VT_UI4,         // kpidTimeType
+    VT_BOOL,        // kpidBit64
+    VT_BOOL,        // kpidBigEndian
+    VT_BSTR,        // kpidCpu
+    VT_UI8,         // kpidPhySize
+    VT_UI8,         // kpidHeadersSize
+    VT_UI4,         // kpidChecksum
+    VT_BSTR,        // kpidCharacts
+    VT_UI8);        // kpidVa
+
+function T7zReader.GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
+begin
+  EnsureOpened;
+  VarClear(result);
+  E7zip.CheckOK(self, 'GetItemProp',
+    fInArchive.GetProperty(Item, prop, result));
+  with TVarData(result) do
+    if (VType <> varEmpty) and
+       (prop >= low(KPID_VTYPE)) and
+       (prop <= high(KPID_VTYPE)) and
+       (VType <> KPID_VTYPE[prop]) then
+      raise E7Zip.CreateFmt('GetProperty(%): expected %, returned %',
+        [prop, KPID_VTYPE[prop], VType]);
+end;
+
+function T7zReader.GetItemIsFolder(index: integer): boolean;
+begin
+  result := boolean(GetItemProp(index, kpidIsFolder));
+end;
+
 function T7zReader.GetItemPath(index: integer): RawUtf8;
 begin
   VariantToUtf8(GetItemProp(index, kpidPath), result);
@@ -1616,6 +1693,21 @@ end;
 function T7zReader.GetItemCRC(index: integer): cardinal;
 begin
   result := VariantToInt64Def(GetItemProp(index, kpidCRC), -1);
+end;
+
+function T7zReader.GetItemName(index: integer): RawUtf8;
+begin
+  VariantToUtf8(GetItemProp(index, kpidName), result);
+end;
+
+function T7zReader.GetItemMethod(index: integer): RawUtf8;
+begin
+  VariantToUtf8(GetItemProp(index, kpidMethod), result);
+end;
+
+function T7zReader.GetItemSize(index: integer): Int64;
+begin
+  result := VariantToInt64Def(GetItemProp(index, kpidSize), -1);
 end;
 
 function T7zReader.Count: integer;
@@ -1658,20 +1750,6 @@ begin
     InArchive.Open(stream, @MAXCHECK, self as IArchiveOpenCallBack));
 end;
 
-function T7zReader.GetItemIsFolder(index: integer): boolean;
-begin
-  result := boolean(GetItemProp(index, kpidIsFolder));
-end;
-
-function T7zReader.GetItemProp(Item: cardinal;
-  prop: TPropID): T7zVariant;
-begin
-  EnsureOpened;
-  VarClear(result);
-  E7zip.CheckOK(self, 'GetItemProp',
-    fInArchive.GetProperty(Item, prop, result));
-end;
-
 function T7zReader.GetItemPropDateTime(item: cardinal;
   prop: TPropID): TDateTime;
 var
@@ -1683,6 +1761,21 @@ begin
   if not (v.VType in [varEmpty, VT_FILETIME]) then
     raise E7zip.CreateFmt('T7zReader.GetItemPropDateTime=%d', [v.VType]);
   VariantToDateTime(variant(v), result);
+end;
+
+function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID;
+  var placeholder: Int64): pointer;
+var
+  v: TVarData; // VT_FILETIME/varOleFileTime is not handled by the RTL
+begin
+  v.VType := 0;
+  E7zip.CheckOK(self, 'GetItemPropFileTime',
+    fInArchive.GetProperty(Item, prop, variant(v)));
+  result := nil;
+  if v.VType <>  VT_FILETIME then
+    exit;
+  placeholder := v.VInt64;
+  result := @placeholder;
 end;
 
 procedure T7zReader.Extract(item: cardinal; Stream: TStream);
