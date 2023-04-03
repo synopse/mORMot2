@@ -8,15 +8,21 @@ unit mormot.lib.win7zip;
 
    Access to the 7-Zip Compression/Decompression DLL on Windows 
    - Low-Level 7-Zip API Definitions
-   - I7zReadArchive/I7zWriter High-Level Wrappers
+   - I7zReader/I7zWriter High-Level Wrappers
 
   *****************************************************************************
+
+  Two meaningful questions:
 
   Can I use the EXE or DLL files from 7-Zip in a commercial application?
   Yes, but you are required to specify in documentation for your application:
     (1) that you used parts of the 7-Zip program,
     (2) that 7-Zip is licensed under the GNU LGPL license and
     (3) you must give a link to www.7-zip.org, where the source code can be found.
+
+  Can I become insane because of directly calling the 7-Zip public dll API?
+  Yes, Igor's API is just bloated: the LCL unit has 10,000 lines just for basic
+  archive work. So don't become insane and use our unit. Better safe than sorry.
 
 }
 
@@ -436,7 +442,7 @@ type
   end;
 
 
-{ ****************** I7zReadArchive/I7zWriter High-Level Wrappers }
+{ ****************** I7zReader/I7zWriter High-Level Wrappers }
 
 type
   /// kind of exceptions raised by this unit
@@ -526,17 +532,17 @@ type
     fhTar,
     fhGZip);
 
-  // note: the sender of following events is a I7zReadArchive or I7zWriter
+  // note: the sender of following events is a I7zReader or I7zWriter
   
-  /// event as used by I7zReadArchive.SetPasswordCallback
+  /// event as used by I7zReader.SetPasswordCallback
   // - should return S_OK to continue the execution, or something else to abort
   T7zPasswordCallback = function(sender: TInterfacedObject;
     var password: SynUnicode): HRESULT of object;
-  /// event as used by I7zReadArchive.Extract/ExtractAll methods
+  /// event as used by I7zReader.Extract/ExtractAll methods
   // - should return S_OK to continue the execution, or something else to abort
   T7zGetStreamCallBack = function(sender: TInterfacedObject; index: cardinal;
     var outStream: ISequentialOutStream): HRESULT of object;
-  /// event as used by I7zReadArchive/I7zWriter.SetProgressCallback method
+  /// event as used by I7zReader/I7zWriter.SetProgressCallback method
   // - should return S_OK to continue the execution, or something else to abort,
   // e.g. ERROR_OPERATION_ABORTED
   T7zProgressCallback = function(sender: TInterfacedObject;
