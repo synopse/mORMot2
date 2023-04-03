@@ -561,6 +561,7 @@ type
     function GetItemName(index: integer): RawUtf8;
     function GetItemMethod(index: integer): RawUtf8;
     function GetItemIsFolder(index: integer): boolean;
+    function GetItemAttributes(index: integer): cardinal;
     // -- main high-level methods
     /// open a given archive file
     procedure OpenFile(const filename: TFileName);
@@ -578,8 +579,11 @@ type
     /// uncompress a file by index from this archive into a stream
     // - if no Stream is specified, will test for the output
     procedure Extract(item: cardinal; Stream: TStream); overload;
+    /// uncompress a file by index from this archive into a local folder
+    procedure Extract(item: cardinal; const path: TFileName;
+      nosubfolder: boolean); overload;
     /// uncompress a file by name from this archive into a stream
-    // - if no Stream is specified, will test for the output
+    // - if no Stream (i.e. nil) is specified, will test for the output
     function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
     /// uncompress a file by name from this archive into a RawByteString
     function Extract(const name: RawUtf8): RawByteString; overload;
@@ -641,6 +645,10 @@ type
     // - may be 0 for some packers (e.g. zip)
     property ItemDate[index: integer]: TDateTime
       read GetItemDate;
+    /// the kpidAttributes property value
+    // - may be 0 for some packers (e.g. zip)
+    property ItemAttributes[index: integer]: cardinal
+      read GetItemAttributes;
   end;
 
   TZipCompressionMethod = (
@@ -669,10 +677,11 @@ type
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D53B}']
     // main high-level methods
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
-      Attributes: cardinal; CreationTime, LastWriteTime: TFileTime;
+      Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
       const Path: RawUtf8; IsFolder, IsAnti: boolean);
-    procedure AddFile(const Filename: TFileName; const Path: RawUtf8);
+    function AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
     procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    procedure AddFileFromMem(const ZipName: RawUtf8; const Data: RawByteString);
     procedure SaveToFile(const FileName: TFileName);
     procedure SaveToStream(stream: TStream);
     procedure SetProgressCallback(const callback: T7zProgressCallback);
@@ -764,8 +773,13 @@ type
 function New7zReader(const name: TFileName; const lib: TFileName = ''): I7zReader;
 
 /// global factory of the main I7zWriter high-level archive compressor
-// - will own its own TZlib instance to access the 7z.dll library 
-function New7zWriter(fmt: T7zFormatHandler; const lib: TFileName = ''): I7zWriter;
+// - will own its own TZlib instance to access the 7z.dll library
+function New7zWriter(fmt: T7zFormatHandler; const lib: TFileName = ''): I7zWriter; overload;
+
+/// global factory of the main I7zWriter to update an existing archive file
+// - will guess the file format from its existing content
+// - will own its own TZlib instance to access the 7z.dll library
+function New7zWriter(const name: TFileName; const lib: TFileName = ''): I7zWriter; overload;
 
 
 implementation
@@ -952,8 +966,8 @@ type
     function GetItemSize(index: integer): Int64;
     function GetItemIsFolder(index: integer): boolean;
     procedure Extract(item: cardinal; Stream: TStream); overload;
-    function Extract(item: cardinal; const path: TFileName;
-      nosubfolder: boolean): boolean; overload;
+    procedure Extract(item: cardinal; const path: TFileName;
+      nosubfolder: boolean); overload;
     function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
     function Extract(const name: RawUtf8): RawByteString; overload;
     function Extract(const name: RawUtf8; const path: TFileName;
@@ -969,6 +983,7 @@ type
     function GetItemComment(index: integer): RawUtf8;
     function GetItemModDate(index: integer): TDateTime;
     function GetItemDate(index: integer): TDateTime;
+    function GetItemAttributes(index: integer): cardinal;
     // IArchiveOpenCallback
     function SetTotal(files, bytes: PInt64): HRESULT; overload; stdcall;
     function SetCompleted(files, bytes: PInt64): HRESULT; overload; stdcall;
@@ -991,7 +1006,8 @@ type
 
   T7zItemSourceMode = (
     smStream,
-    smFile);
+    smFile,
+    smUpdate);
 
   T7zItem = class
   public
@@ -1000,8 +1016,9 @@ type
     SourceMode: T7zItemSourceMode;
     Ownership: TStreamOwnership;
     IsFolder, IsAnti: boolean;
+    UpdateItemIndex: integer;
     CreationTime, LastWriteTime: TFileTime;
-    Path: RawUtf8;
+    ZipName: RawUtf8;
     FileName: TFileName;
     Size: Int64;
     destructor Destroy; override;
@@ -1012,16 +1029,20 @@ type
   private
     fOutArchive: IOutArchive;
     fEntries: array of T7zItem;
+    fCurrentItem: T7zItem;
     fPassword: SynUnicode;
+    fUpdateReader: I7zReader; 
   protected
     procedure SetCardinalProperty(const name: RawUtf8; card: cardinal);
     procedure SetTextProperty(const name, text: RawUtf8);
+    procedure AddFromUpdateReader(const rd: I7zReader);
     // I7zWriter methods
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
-      Attributes: cardinal; CreationTime, LastWriteTime: TFileTime;
-      const Path: RawUtf8; IsFolder, IsAnti: boolean);
-    procedure AddFile(const Filename: TFileName; const Path: RawUtf8);
+      Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
+      const ZipName: RawUtf8; IsFolder, IsAnti: boolean);
+    function AddFile(const FileName: TFileName; const ZipName: RawUtf8): boolean;
     procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    procedure AddFileFromMem(const ZipName: RawUtf8; const Data: RawByteString);
     procedure SaveToFile(const FileName: TFileName);
     procedure SaveToStream(stream: TStream);
     procedure ClearBatch;
@@ -1446,6 +1467,17 @@ begin
   result := T7zWriter.Create(T7zLib.Create(lib), fmt, {libowned=}true);
 end;
 
+function New7zWriter(const name: TFileName; const lib: TFileName = ''): I7zWriter;
+var
+  rd: I7zReader;
+  wr: T7zWriter;
+begin
+  rd := New7zReader(name, lib);
+  wr := T7zWriter.Create(T7zLib.Create(lib), rd.Format, {libowned=}true);
+  wr.AddFromUpdateReader(rd);
+  result := wr;
+end;
+
 
 // --- here below are the actual classes implementing I7zReader/I7zWriter
 
@@ -1589,6 +1621,7 @@ begin
 end;
 
 
+
 { T7zReader }
 
 procedure T7zReader.Close;
@@ -1725,6 +1758,11 @@ begin
   result := GetItemPropDateTime(index, kpidCreationTime);
 end;
 
+function T7zReader.GetItemAttributes(index: integer): cardinal;
+begin
+  result := VariantToInt64Def(GetItemProp(index, kpidAttributes), 0);
+end;
+
 function T7zReader.GetItemPackSize(index: integer): Int64;
 begin
   result := VariantToInt64Def(GetItemProp(index, kpidPackedSize), -1);
@@ -1808,8 +1846,8 @@ begin
   end;
 end;
 
-function T7zReader.Extract(item: cardinal; const path: TFileName;
-  nosubfolder: boolean): boolean;
+procedure T7zReader.Extract(item: cardinal; const path: TFileName;
+  nosubfolder: boolean);
 begin
   EnsureOpened;
   fExtractPath := EnsureDirectoryExists(path);
@@ -2141,19 +2179,38 @@ end;
 
 { T7zWriter }
 
-procedure T7zWriter.AddFile(const Filename: TFileName; const Path: RawUtf8);
+procedure T7zWriter.AddFromUpdateReader(const rd: I7zReader);
+var
+  i: PtrInt;
+  item: T7zItem;
+begin
+  fUpdateReader := rd;
+  for i := 0 to fUpdateReader.Count - 1 do
+  begin
+    item := T7zItem.Create;
+    item.SourceMode := smUpdate;
+    item.ZipName := rd.ItemPath[i];
+    item.Size := rd.ItemSize[i];
+    item.Attributes := rd.ItemAttributes[i];
+    item.IsFolder := rd.ItemIsFolder[i];
+    item.UpdateItemIndex := i;
+    ObjArrayAdd(fEntries, item);
+  end;
+end;
+
+function T7zWriter.AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
 var
   item: T7zItem;
   Handle: THandle;
 begin
-  if not FileExists(Filename) then
+  Handle := FileOpen(Filename, fmOpenReadDenyNone);
+  result := ValidHandle(Handle);
+  if not result then
     exit;
   item := T7zItem.Create;
-  Item.SourceMode := smFile;
-  item.Stream := nil;
+  item.SourceMode := smFile;
   item.FileName := Filename;
-  item.Path := Path;
-  Handle := FileOpen(Filename, fmOpenReadDenyNone);
+  item.ZipName := ZipName;
   GetFileTime(Handle, @item.CreationTime, nil, @item.LastWriteTime);
   item.Size := FileSize(Handle);
   CloseHandle(Handle);
@@ -2161,6 +2218,7 @@ begin
   item.IsFolder := false;
   item.IsAnti := false;
   item.Ownership := soOwned;
+  item.UpdateItemIndex := -1;
   ObjArrayAdd(fEntries, item);
 end;
 
@@ -2198,7 +2256,7 @@ var
         fn := copy(item.FileName, lencut, length(item.FileName) - lencut + 1);
         if path <> '' then
           fn := IncludeTrailingPathDelimiter(path) + p;
-        StringToUtf8(fn, item.Path);
+        StringToUtf8(fn, item.ZipName);
         item.CreationTime := f.FindData.ftCreationTime;
         item.LastWriteTime := f.FindData.ftLastWriteTime;
         item.Attributes := f.FindData.dwFileAttributes;
@@ -2206,6 +2264,7 @@ var
         item.IsFolder := false;
         item.IsAnti := false;
         item.Ownership := soOwned;
+        item.UpdateItemIndex := -1;
         ObjArrayAdd(fEntries, item);
       until FindNext(f) <> 0;
       SysUtils.FindClose(f);
@@ -2225,23 +2284,33 @@ begin
   end;
 end;
 
+procedure T7zWriter.AddFileFromMem(const ZipName: RawUtf8;
+  const Data: RawByteString);
+begin
+  AddStream(TRawByteStringStream.Create(Data), soReference,
+    faArchive, 0, 0, ZipName, false, false);
+end;
+
 procedure T7zWriter.AddStream(Stream: TStream; Ownership: TStreamOwnership;
-  Attributes: cardinal; CreationTime, LastWriteTime: TFileTime;
-  const Path: RawUtf8; IsFolder, IsAnti: boolean);
+  Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
+  const ZipName: RawUtf8; IsFolder, IsAnti: boolean);
 var
   item: T7zItem;
 begin
   item := T7zItem.Create;
   Item.SourceMode := smStream;
   item.Attributes := Attributes;
-  item.CreationTime := CreationTime;
-  item.LastWriteTime := LastWriteTime;
-  item.Path := Path;
+  if CreationTime <> 0 then
+    UnixTimeToFileTime(CreationTime, item.CreationTime);
+  if LastWriteTime <> 0 then
+    UnixTimeToFileTime(LastWriteTime, item.LastWriteTime);
+  item.ZipName := ZipName;
   item.IsFolder := IsFolder;
   item.IsAnti := IsAnti;
   item.Stream := Stream;
   item.Size := Stream.Size;
   item.Ownership := Ownership;
+  item.UpdateItemIndex := -1;
   ObjArrayAdd(fEntries, item);
 end;
 
@@ -2291,72 +2360,100 @@ begin
   item := fEntries[index];
   with TVarData(Value) do
     case propID of
+      kpidNoProperty:
+        VType := varNull;
       kpidAttributes:
         begin
           VType := VT_UI4; // = varLongWord
           VLongWord := item.Attributes;
         end;
       kpidLastWriteTime:
+        if Int64(item.LastWriteTime) <> 0 then
         begin
           VType := VT_FILETIME; // = varOleFileTime
           VInt64 := Int64(item.LastWriteTime);
         end;
+      kpidCreationTime:
+        if Int64(item.CreationTime) <> 0 then
+        begin
+          VType := VT_FILETIME;
+          VInt64 := Int64(item.CreationTime);
+        end;
+      kpidTimeType:
+        begin
+          VType := VT_UI4;
+          VLongWord := ord(fttWindows);
+        end;
       kpidPath:
-        if item.Path <> '' then
-          value := Utf8ToWideString(item.Path);
+        if item.ZipName <> '' then
+          value := Utf8ToWideString(item.ZipName);
       kpidIsFolder:
         Value := item.IsFolder;
+      kpidIsAnti:
+        value := item.IsAnti;
       kpidSize:
         begin
           VType := VT_UI8; // = varWord64
           VInt64 := item.Size;
         end;
-      kpidCreationTime:
-        begin
-          VType := VT_FILETIME;
-          VInt64 := Int64(item.CreationTime);
-        end;
-      kpidIsAnti:
-        value := item.IsAnti;
     end;
   result := S_OK;
 end;
 
 function T7zWriter.GetStream(index: cardinal;
   var inStream: ISequentialInStream): HRESULT;
-var
-  item: T7zItem;
 begin
   if index >= cardinal(length(fEntries)) then
   begin
     result := ERROR_INVALID_PARAMETER;
     exit;
-  end;
-  item := fEntries[index];
-  case item.SourceMode of
-    smFile:
-      inStream := T7zStream.CreateFromFile(
-        item.FileName, fmOpenReadDenyNone, self, index);
-    smStream:
-      begin
-        item.Stream.Seek(0, soFromBeginning);
-        inStream := T7zStream.Create(item.Stream, self, index);
-      end;
   end;
   result := S_OK;
+  fCurrentItem := fEntries[index];
+  case fCurrentItem.SourceMode of
+    smFile:
+      inStream := T7zStream.CreateFromFile(
+        fCurrentItem.FileName, fmOpenReadDenyNone, self, index);
+    smStream:
+      begin
+        fCurrentItem.Stream.Seek(0, soFromBeginning);
+        inStream := T7zStream.Create(fCurrentItem.Stream, self, index);
+      end;
+  else
+    result := ERROR_INVALID_PARAMETER;
+  end;
 end;
 
-function T7zWriter.GetUpdateItemInfo(index: cardinal; newData,
-  newProperties: PInteger; indexInArchive: PCardinal): HRESULT;
+function T7zWriter.GetUpdateItemInfo(index: cardinal;
+  newData, newProperties: PInteger; indexInArchive: PCardinal): HRESULT;
+var
+  d, p, a: integer;
 begin
   if index >= cardinal(length(fEntries)) then
   begin
     result := ERROR_INVALID_PARAMETER;
     exit;
   end;
-  newData^ := 1;
-  newProperties^ := 1;
-  indexInArchive^ := cardinal(-1);
+  {
+   newData^ newProperties^
+   0        0      Copy data and properties from archive
+   0        1      Copy data from archive, request new properties
+   1        0      that combination is unused now
+   1        1      Request new data and new properties. Can be a folder.
+  indexInArchive=-1 if there is no item in archive, or if it doesn't matter
+  }
+  with fEntries[index] do
+  begin
+    a := UpdateItemIndex;
+    p := ord(a < 0);
+    d := ord(a < 0);
+  end;
+  if newData <> nil then
+    newData^ := d;
+  if newProperties <> nil then
+    newProperties^ := p;
+  if indexInArchive <> nil then
+    indexInArchive^ := a;
   result := S_OK;
 end;
 
@@ -2376,17 +2473,19 @@ procedure T7zWriter.SaveToStream(stream: TStream);
 var
   strm: ISequentialOutStream;
 begin
-  strm := T7zStream.Create(stream, self);
+  strm := T7zStream.Create(stream, nil);
   try
     E7zip.CheckOk(self, 'SaveToStream',
       OutArchive.UpdateItems(strm, length(fEntries), self as IArchiveUpdateCallback));
   finally
     strm := nil;
   end;
+  fUpdateReader := nil; // release ASAP
 end;
 
 function T7zWriter.SetOperationResult(operationResult: integer): HRESULT;
 begin
+  fCurrentItem := nil;
   result := S_OK;
 end;
 
