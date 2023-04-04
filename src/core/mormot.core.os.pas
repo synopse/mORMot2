@@ -2108,6 +2108,11 @@ function DeleteFile(const aFileName: TFileName): boolean;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function RenameFile(const OldName, NewName: TFileName): boolean;
 
+/// redirection to Windows SetFileTime() of a file name from Int64(TFileTime)
+// - if any Int64 is 0, the proper value will be guess from the non-0 values
+function FileSetTime(const FileName: TFileName;
+  const Created, Accessed, Written: Int64): boolean;
+
 {$else}
 
 /// returns how many files could be opened at once on this POSIX system
