@@ -4300,11 +4300,24 @@ begin
   KBU(r, res);
 end;
 
-function GetHandleIndex(const a: TWordDynArray; h: cardinal): PtrInt;
+function GetCacheIndex(const a: TWordDynArray; h, max: integer): PtrInt;
+begin
+  if h < 0 then
+    result := -1
+  else
+  begin
+    result := WordScanIndex(pointer(a), length(a), h);
+    if result >= max then
+      result := -1;
+  end;
+end;
+
+function GetMemoryIndex(const a: TWordDynArray; h, max: integer): PtrInt;
 begin
   result := WordScanIndex(pointer(a), length(a), h);
-  if result < 0 then
-    result := 0; // add to the first item if handle is incorrect
+  if (result < 0) or
+     (result >= max) then
+    result := 0; // put in first item if not found
 end;
 
 function DecodeSmbiosInfo(const raw: TRawSmbiosInfo; out info: TSmbiosInfo;
@@ -4314,13 +4327,13 @@ var
   cur: PPRawUtf8;
   n, cap: cardinal;
   q: QWord;
-  len, trimright, i: PtrInt;
+  len, trimright, i, c: PtrInt;
   lines: array[byte] of PRawUtf8; // efficient string decoding
   // linked in 2nd pass:
   cache: array of TSmbiosCache;
   mem: array of TSmbiosMemory;
   cacheh, memh, arrh: TWordDynArray;
-  proc: array of record l1, l2, l3: word; end;
+  proc: array of record l1, l2, l3: integer; end;
 begin
   Finalize(info);
   FillCharFast(info, SizeOf(info), 0);
@@ -4479,7 +4492,14 @@ begin
                   end;
                 end;
               end;
-            end;
+            end
+            else
+              with proc[high(proc)] do
+              begin
+                l1 := -1;
+                l2 := -1;
+                l3 := -1;
+              end;
           end;
         end;
       // type 5 and 6 are obsolete
@@ -4708,19 +4728,26 @@ begin
     inc(PByte(s)); // go to next structure
   until false;
   // 2nd pass will link all cache/mem to info.Processor/Memory
-  for i := 0 to high(info.Processor) do
-    with info.Processor[i], proc[i] do
-    begin
-      L1Cache := cache[GetHandleIndex(cacheh, l1)];
-      L2Cache := cache[GetHandleIndex(cacheh, l2)];
-      L3Cache := cache[GetHandleIndex(cacheh, l3)];
-    end;
+  if cache <> nil then
+    for i := 0 to high(info.Processor) do
+      with info.Processor[i], proc[i] do
+      begin
+        c := GetCacheIndex(cacheh, l1, length(cache));
+        if c >= 0 then
+          L1Cache := cache[c];
+        c := GetCacheIndex(cacheh, l2, length(cache));
+        if c >= 0 then
+          L2Cache := cache[c];
+        c := GetCacheIndex(cacheh, l3, length(cache));
+        if c >= 0 then
+          L3Cache := cache[c];
+      end;
   if mem <> nil then
   begin
     if info.Memory = nil then
-      SetLength(info.Memory, 1); // at least once Memory Array
+      SetLength(info.Memory, 1); // at least one Memory Array
     for i := 0 to high(mem) do
-      with info.Memory[GetHandleIndex(arrh, memh[i])] do
+      with info.Memory[GetMemoryIndex(arrh, memh[i], length(info.Memory))] do
       begin
         SetLength(Device, length(Device) + 1);
         Device[high(Device)] := mem[i];
