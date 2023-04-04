@@ -150,7 +150,7 @@ type
     ZipFile: TFileName;
     {$ifdef OSWINDOWS}
     Tot7z: Int64;
-    function Callback7z(sender: TInterfacedObject; current, total: Int64): HRESULT;
+    function Callback7z(const sender: I7zArchive; current, total: Int64): HRESULT;
     {$endif OSWINDOWS}
   public
     procedure Setup; override;
@@ -6253,10 +6253,13 @@ end;
 
 {$ifdef OSWINDOWS}
 
+const
+  ZIP_EXTS = '*.zip;*.jar;*.docx;*.pptx;*.xlsx;*.xpi;*.odt;*.ods';
+  
 procedure TTestCoreCompression._7Zip;
 var
   s: RawByteString;
-  lib, folder: TFileName;
+  lib, folder, newfile1, newfile2: TFileName;
   i: PtrInt;
   tot1, tot2: Int64;
   zin: I7zReader;
@@ -6270,10 +6273,16 @@ begin
   Check(T7zLib.FormatDetect(Zipfile, false) = fhZip);
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, true) = fhPe);
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, false) = fhPe);
+  Check(T7zLib.FormatFileExtension(fhZip) = 'zip');
+  Check(T7zLib.FormatFileExtensions(fhZip) = ZIP_EXTS);
   lib := Executable.ProgramFilePath + '7z.dll';
   if FileExists(lib) then
     begin
+      // validate I7zReader
       zin := New7zReader(ZipFile, lib);
+      Check(zin.Format = fhZip);
+      Check(zin.FormatExt = 'zip');
+      Check(zin.FormatExts = ZIP_EXTS);
       CheckEqual(zin.Count, 5, 'count');
       tot1 := 0;
       for i := 0 to zin.Count - 1 do
@@ -6281,6 +6290,7 @@ begin
       {for i := 0 to zin.Count - 1 do
          writeln('name=',zin.ItemName[i], ' path=',zin.ItemPath[i],
         ' size=',zin.ITemSize[i], ' packsize=',zin.ITempacksize[i],
+        ' method=',zin.ItemMethod[i],
         ' date=', DateTimeToIso8601text(zin.ItemModDate[i]));}
       zin.SetProgressCallback(Callback7z);
       Tot7z := 0;
@@ -6308,21 +6318,64 @@ begin
       CheckEqual(tot1, tot2, 'extractsize');
       DirectoryDelete(folder);
       Check(FindFiles(folder) = nil);
+      Tot7z := 0;
+      zin.Extract('exe.1mb', folder);
+      CheckEqual(length(Data), Tot7z, 'extractfileto');
+      Check(length(FindFiles(folder)) = 1);
+      // validate I7zWriter
+      newfile1 := WorkDir + 'from7zadd.zip';
+      newfile2 := WorkDir + 'from7zupd.zip';
+      zout := New7ZWriter(fhZip, lib);
+      zout.AddFile(folder + '\exe.1mb', 'A.1mb');
+      zout.AddFileFromMem('B.1mb', data);
+      zout.SaveToFile(newfile1);
+      zin := New7zReader(newfile1, lib);
+      CheckEqual(zin.Count, 2);
+      zin.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      s := zin.Extract('A.1mb');
+      Check(s = Data, 'a');
+      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+      s := zin.Extract('B.1mb');
+      Check(s = Data, 'b');
+      s := zin.Extract('C.1mb');
+      Check(s = '', 'c');
+      zin := nil; // so that we could change the file
+      zout := New7zWriter(newfile1, lib);
+      zout.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      zout.AddFile(folder + '\exe.1mb', 'C.1mb');
+      CheckEqual(Tot7z, 0);
+      Tot7z := 0;
+      zout.SaveToFile(newfile2);
+      Check(Tot7z <> 0);
+      zout := nil; // so that we could read the file
+      zin := New7zReader(newfile2, lib);
+      CheckEqual(zin.Count, 3);
+      s := zin.Extract('A.1mb');
+      Check(s = Data, 'ua');
+      s := zin.Extract('B.1mb');
+      Check(s = Data, 'ub');
+      s := zin.Extract('C.1mb');
+      Check(s = Data, 'uc');
+      zin := nil; // so that we could delete the file
+      Check(DeleteFile(newfile1));
+      Check(DeleteFile(newfile2));
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
     end;
-  zin := nil; // so that we could delete the file
   Check(DeleteFile(ZipFile));
 end;
 
-function TTestCoreCompression.Callback7z(sender: TInterfacedObject;
+function TTestCoreCompression.Callback7z(const sender: I7zArchive;
   current, total: Int64): HRESULT;
 begin
-  Check(Sender.GetInterfaceEntry(I7zReader) <> nil);
+  result := S_OK;
   Check(current <= total);
   if Tot7z = 0 then
     Tot7z := total
   else
     CheckEqual(Tot7z, total);
-  result := S_OK;
 end;
 
 {$endif OSWINDOWS}
