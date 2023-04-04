@@ -6286,12 +6286,12 @@ begin
       CheckEqual(zin.Count, 5, 'count');
       tot1 := 0;
       for i := 0 to zin.Count - 1 do
-        inc(tot1, zin.ItemSize[i]);
-      {for i := 0 to zin.Count - 1 do
-         writeln('name=',zin.ItemName[i], ' path=',zin.ItemPath[i],
-        ' size=',zin.ITemSize[i], ' packsize=',zin.ITempacksize[i],
-        ' method=',zin.ItemMethod[i],
-        ' date=', DateTimeToIso8601text(zin.ItemModDate[i]));}
+        inc(tot1, zin.Size[i]);
+      {with zin do
+        for i := 0 to Count - 1 do
+           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+          ' date=', DateTimeToIso8601text(ModDate[i]));}
       zin.SetProgressCallback(Callback7z);
       Tot7z := 0;
       s := zin.Extract('REP1\ONE.exe');
@@ -6327,7 +6327,7 @@ begin
       newfile2 := WorkDir + 'from7zupd.zip';
       zout := New7ZWriter(fhZip, lib);
       zout.AddFile(folder + '\exe.1mb', 'A.1mb');
-      zout.AddFileFromMem('B.1mb', data);
+      zout.AddBuffer('B.1mb', data);
       zout.SaveToFile(newfile1);
       zin := New7zReader(newfile1, lib);
       CheckEqual(zin.Count, 2);
@@ -6345,6 +6345,12 @@ begin
       zout.SetProgressCallback(Callback7z);
       Tot7z := 0;
       zout.AddFile(folder + '\exe.1mb', 'C.1mb');
+      zout.AddBuffer('A.1mb', copy(Data, 1, 200));
+      {with zout do
+        for i := 0 to Count - 1 do
+           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+          ' date=', DateTimeToIso8601text(ModDate[i]));}
       CheckEqual(Tot7z, 0);
       Tot7z := 0;
       zout.SaveToFile(newfile2);
@@ -6353,7 +6359,8 @@ begin
       zin := New7zReader(newfile2, lib);
       CheckEqual(zin.Count, 3);
       s := zin.Extract('A.1mb');
-      Check(s = Data, 'ua');
+      Check(length(s) = 200, 'ua1');
+      Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
       s := zin.Extract('B.1mb');
       Check(s = Data, 'ub');
       s := zin.Extract('C.1mb');

@@ -273,7 +273,7 @@ type
     function PrepareOperation(
       askExtractMode: T7zExtractAskMode): HRESULT; stdcall;
     function SetOperationResult(
-      resultEOperationResult: T7zExtractOperationResult): HRESULT; stdcall;
+      opResult: T7zExtractOperationResult): HRESULT; stdcall;
   end;
 
   IArchiveOpenVolumeCallback = interface
@@ -446,7 +446,7 @@ type
 
 type
   /// kind of exceptions raised by this unit
-  E7zip = class(ESynException)
+  E7Zip = class(ESynException)
   protected
     class procedure RaiseAfterCheck(Caller: TObject; const Context: shortstring;
       Res: HResult);
@@ -532,9 +532,42 @@ type
     fhTar,
     fhGZip);
 
+  I7zArchive = interface;
+
+  // note: the sender of following events is a I7zReader or I7zWriter
+
+  /// event as used by I7zReader.SetPasswordCallback
+  // - should return true to continue the execution, or false to abort
+  T7zPasswordCallback = function(const sender: I7zArchive;
+    var password: RawUtf8): boolean of object;
+
+  /// event as used by I7zReader.Extract/ExtractAll methods
+  // - should return S_OK to continue the execution, or something else to abort
+  T7zGetStreamCallBack = function(const sender: I7zArchive; index: cardinal;
+    var outStream: ISequentialOutStream): HRESULT of object;
+
+  /// event as used by I7zReader/I7zWriter.SetProgressCallback method
+  // - should return S_OK to continue the execution, or something else to abort,
+  // e.g. ERROR_OPERATION_ABORTED
+  T7zProgressCallback = function(const sender: I7zArchive;
+    current, total: Int64): HRESULT of object;
+
   /// the parent interface of both I7zRead and I7zWriter
   I7zArchive = interface
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D530}']
+    // -- some internal methods used as property getters
+    function GetSize(index: integer): Int64;
+    function GetPackSize(index: integer): Int64;
+    function GetCrc(index: integer): cardinal;
+    function GetComment(index: integer): RawUtf8;
+    function GetModDate(index: integer): TDateTime;
+    function GetCreateDate(index: integer): TDateTime;
+    function GetZipName(index: integer): RawUtf8;
+    function GetName(index: integer): RawUtf8;
+    function GetMethod(index: integer): RawUtf8;
+    function GetIsFolder(index: integer): boolean;
+    function GetAttributes(index: integer): cardinal;
+    function GetInstance: TObject;
     /// the file name specified to OpenFile() or SaveToFile()
     function FileName: TFileName;
     /// the high-level identifier of this archive format
@@ -545,39 +578,63 @@ type
     function FormatExts: string;
     /// the 7-zip internal CSLID of this archive format
     function ClassId: TGuid;
+    /// let an event be called during file process
+    procedure SetProgressCallback(const callback: T7zProgressCallback);
+    /// let an event be called to let the user supply a password
+    procedure SetPasswordCallback(const callback: T7zPasswordCallback);
+    /// supply a password
+    procedure SetPassword(const password: RawUtf8);
+    /// the number of files in this archive
+    // - used as index in Item*[0..Count-1] properties and
+    // I7zReader.Extract or I7zWriter.SaveToFile methods
+    function Count: integer;
+    /// search for a given file name in this archive
+    // - case-insensitive search within ItemZipName[] items
+    // - returns -1 if not found, or the index in Item*[] properties
+    function NameToIndex(const zipname: RawUtf8): integer;
+    /// the kpidPath property value of an archived file
+    // - i.e. its usual file name, potentially with a relative path
+    // - e.g. 'toto.txt' or 'rep\toto.bmp'
+    property ZipName[index: integer]: RawUtf8
+      read GetZipName;
+    /// the kpidName property value of an archived file
+    // - is likely to be '' for most packers
+    property FullName[index: integer]: RawUtf8
+      read GetName;
+    /// the kpidSize property value of an archived file
+    property Size[index: integer]: Int64
+      read GetSize;
+    /// the kpidPackedSize property value
+    property PackSize[index: integer]: Int64
+      read GetPackSize;
+    /// the kpidIsFolder property value of an archived file
+    property IsFolder[index: integer]: boolean
+      read GetIsFolder;
+    /// the kpidMethod property value of an archived file
+    property Method[index: integer]: RawUtf8
+      read GetMethod;
+    /// the kpidComment property value of an archived file
+    property Comment[index: integer]: RawUtf8
+      read GetComment;
+    /// the kpidCRC property value of an archived file
+    property Crc[index: integer]: cardinal
+      read GetCrc;
+    /// the kpidLastWriteTime property value - i.e. the "usual" date
+    property ModDate[index: integer]: TDateTime
+      read GetModDate;
+    /// the kpidCreationTime property value
+    // - may be 0 for some packers (e.g. zip)
+    property CreateDate[index: integer]: TDateTime
+      read GetCreateDate;
+    /// the kpidAttributes property value
+    // - may be 0 for some packers (e.g. zip)
+    property Attributes[index: integer]: cardinal
+      read GetAttributes;
   end;
-
-  // note: the sender of following events is a I7zReader or I7zWriter
-
-  /// event as used by I7zReader.SetPasswordCallback
-  // - should return S_OK to continue the execution, or something else to abort
-  T7zPasswordCallback = function(const sender: I7zArchive;
-    var password: SynUnicode): HRESULT of object;
-  /// event as used by I7zReader.Extract/ExtractAll methods
-  // - should return S_OK to continue the execution, or something else to abort
-  T7zGetStreamCallBack = function(const sender: I7zArchive; index: cardinal;
-    var outStream: ISequentialOutStream): HRESULT of object;
-  /// event as used by I7zReader/I7zWriter.SetProgressCallback method
-  // - should return S_OK to continue the execution, or something else to abort,
-  // e.g. ERROR_OPERATION_ABORTED
-  T7zProgressCallback = function(const sender: I7zArchive;
-    current, total: Int64): HRESULT of object;
 
   /// reading acccess to an archive content using the 7z.dll
   I7zReader = interface(I7zArchive)
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D53A}']
-    // -- some internal methods used as property getters / setters
-    function GetItemSize(index: integer): Int64;
-    function GetItemPackSize(index: integer): Int64;
-    function GetItemCRC(index: integer): cardinal;
-    function GetItemComment(index: integer): RawUtf8;
-    function GetItemModDate(index: integer): TDateTime;
-    function GetItemDate(index: integer): TDateTime;
-    function GetItemPath(index: integer): RawUtf8;
-    function GetItemName(index: integer): RawUtf8;
-    function GetItemMethod(index: integer): RawUtf8;
-    function GetItemIsFolder(index: integer): boolean;
-    function GetItemAttributes(index: integer): cardinal;
     // -- main high-level methods
     /// open a given archive file
     procedure OpenFile(const name: TFileName);
@@ -585,13 +642,8 @@ type
     procedure OpenStream(stream: IInStream);
     /// close the archive
     procedure Close;
-    /// the number of files in this archive
-    // - used as index in Extract method and Item*[0..Count-1] properties
-    function Count: integer;
-    /// search for a given file name in this archive
-    // - case-insensitive search within ItemPath[] item
-    // - returns -1 if not found, or the index in Item*[] properties
-    function NameToIndex(const name: RawUtf8): integer;
+    /// retrieve the raw value of one property
+    function GetProp(item: cardinal; prop: TPropID): T7zVariant;
     /// uncompress a file by index from this archive into a stream
     // - if no Stream is specified, will test for the output
     procedure Extract(item: cardinal; Stream: TStream); overload;
@@ -600,11 +652,11 @@ type
       nosubfolder: boolean); overload;
     /// uncompress a file by name from this archive into a stream
     // - if no Stream (i.e. nil) is specified, will test for the output
-    function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
+    function Extract(const zipname: RawUtf8; Stream: TStream): boolean; overload;
     /// uncompress a file by name from this archive into a RawByteString
-    function Extract(const name: RawUtf8): RawByteString; overload;
+    function Extract(const zipname: RawUtf8): RawByteString; overload;
     /// uncompress a file by name from this archive into a local folder
-    function Extract(const name: RawUtf8; const path: TFileName;
+    function Extract(const zipname: RawUtf8; const path: TFileName;
       nosubfolder: boolean = false): boolean; overload;
     /// uncompress several files from this archive using a callback per file
     // - if no Callback is specified (as default), will test for the output
@@ -615,52 +667,8 @@ type
     procedure ExtractAll(const callback: T7zGetStreamCallBack = nil); overload;
     /// uncompress all files from this archive into a given local folder
     procedure ExtractAll(const path: TFileName; nosubfolder: boolean = false); overload;
-    /// let an event be called to let the user supply a password 
-    procedure SetPasswordCallback(const callback: T7zPasswordCallback);
-    /// supply a password  
-    procedure SetPassword(const password: SynUnicode);
-    /// let an event be called during file decompression
-    procedure SetProgressCallback(const callback: T7zProgressCallback);
-    /// access to the 7-zip internal API raw object
+    /// access to the 7-zip internal API reading raw object
     function InArchive: IInArchive;
-    /// the kpidPath property value of an archived file
-    // - i.e. its usual file name, potentially with a relative path
-    // - e.g. 'toto.txt' or 'rep\toto.bmp'
-    property ItemPath[index: integer]: RawUtf8
-      read GetItemPath;
-    /// the kpidName property value of an archived file
-    // - is likely to be '' for most packers
-    property ItemName[index: integer]: RawUtf8
-      read GetItemName;
-    /// the kpidSize property value of an archived file
-    property ItemSize[index: integer]: Int64
-      read GetItemSize;
-    /// the kpidPackedSize property value
-    property ItemPackSize[index: integer]: Int64
-      read GetItemPackSize;
-    /// the kpidIsFolder property value of an archived file
-    property ItemIsFolder[index: integer]: boolean
-      read GetItemIsFolder;
-    /// the kpidMethod property value of an archived file
-    property ItemMethod[index: integer]: RawUtf8
-      read GetItemMethod;
-    /// the kpidComment property value of an archived file
-    property ItemComment[index: integer]: RawUtf8
-      read GetItemComment;
-    /// the kpidCRC property value of an archived file
-    property ItemCRC[index: integer]: cardinal
-      read GetItemCRC;
-    /// the kpidLastWriteTime property value - i.e. the "usual" date
-    property ItemModDate[index: integer]: TDateTime
-      read GetItemModDate;
-    /// the kpidCreationTime property value
-    // - may be 0 for some packers (e.g. zip)
-    property ItemDate[index: integer]: TDateTime
-      read GetItemDate;
-    /// the kpidAttributes property value
-    // - may be 0 for some packers (e.g. zip)
-    property ItemAttributes[index: integer]: cardinal
-      read GetItemAttributes;
   end;
 
   TZipCompressionMethod = (
@@ -686,24 +694,40 @@ type
     m7Deflate64);
 
   /// writing acccess to an archive content using the 7z.dll
-  I7zWriter = interface
+  // - main pattern is to call AddFile/AddFiles/AddBuffer then SaveToFile() to
+  // generate a new archive
+  I7zWriter = interface(I7zArchive)
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D53B}']
-    // main high-level methods
+    // -- main high-level methods
+    /// add (or replace if ZipName already exists) a file within the archive
+    function AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
+    /// add (or replace) some files from a folder within the archive
+    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    /// add (or replace) a file from a memory buffer within the archive
+    procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
+    /// add (or replace) a file from a stream within the archive
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
       Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
       const Path: RawUtf8; IsFolder, IsAnti: boolean);
-    function AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
-    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
-    procedure AddFileFromMem(const ZipName: RawUtf8; const Data: RawByteString);
+    /// remove a file within the archive, from its index
+    function Delete(index: integer): boolean; overload;
+    /// remove a file within the archive, from its zipname
+    function Delete(const ZipName: RawUtf8): boolean; overload;
+    /// create a new archive file from the previously set AddFile/Delete
     procedure SaveToFile(const DestName: TFileName);
+    /// create a new archive stream from the previously set AddFile/Delete
     procedure SaveToStream(stream: TStream);
-    procedure SetProgressCallback(const callback: T7zProgressCallback);
-    procedure ClearBatch;
-    procedure SetPassword(const password: SynUnicode);
-    procedure SetProperty(const name: RawUtf8; const value: T7zVariant);
+    /// remove all previously set AddFile/Delete
+    procedure Clear;
+    /// modify a property of a file within the archive
+    procedure SetProperty(const zipname: RawUtf8; const value: T7zVariant);
+    /// modify the compression level to be used during process
     procedure SetCompressionLevel(level: cardinal);
+    /// modify the threading level to be used during process
     procedure SetMultiThreading(threadCount: cardinal);
+    /// modify the compression method to be used during process
     procedure SetCompressionMethod(method: TZipCompressionMethod);
+    /// modify the encryption method to be used during process
     procedure SetEncryptionMethod(method: TZipEncryptionMethod);
     procedure SetDictionnarySize(size: cardinal);
     procedure SetMemorySize(size: cardinal);
@@ -719,6 +743,7 @@ type
     procedure CompressHeadersFull7z(compress: boolean);
     procedure EncryptHeaders7z(encrypt: boolean);
     procedure VolumeMode7z(mode: boolean);
+    /// access to the 7-zip internal API writing raw object
     function OutArchive: IOutArchive;
   end;
 
@@ -776,7 +801,8 @@ type
     function FileName: TFileName;
     function NewReader(fmt: T7zFormatHandler): I7zReader; overload;
     function NewReader(const name: TFileName): I7zReader; overload;
-    function NewWriter(fmt: T7zFormatHandler): I7zWriter;
+    function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
+    function NewWriter(const name: TFileName): I7zWriter; overload;
   end;
 
 
@@ -813,23 +839,23 @@ end;
 
 { ****************** I7zReader/I7zWriter High-Level Wrappers }
 
-{ E7zip }
+{ E7Zip }
 
-class procedure E7zip.RaiseAfterCheck(Caller: TObject;
+class procedure E7Zip.RaiseAfterCheck(Caller: TObject;
   const Context: shortstring; Res: HResult);
 begin
   raise CreateFmt('%s.%s error %x (%s)',
     [ClassNameShort(Caller)^, Context, Res, string(WinErrorText(Res, nil))])
 end;
 
-class procedure E7zip.Check(Caller: TObject; const Context: shortstring;
+class procedure E7Zip.Check(Caller: TObject; const Context: shortstring;
   Res: HResult);
 begin
   if Res and $80000000 <> 0 then
     RaiseAfterCheck(Caller, Context, Res);
 end;
 
-class procedure E7zip.CheckOk(Caller: TObject; const Context: shortstring;
+class procedure E7Zip.CheckOk(Caller: TObject; const Context: shortstring;
   Res: HResult);
 begin
   if Res <> S_OK then
@@ -859,7 +885,7 @@ type
   private
     fStream: TStream;
     fIndex: integer;
-    fOwner: T7zArchive;
+    fOwnedStream: boolean;
   protected
     // ISequentialInStream method
     function Read(data: pointer; size: cardinal;
@@ -877,10 +903,10 @@ type
     // IOutStreamFlush method
     function Flush: HRESULT; stdcall;
   public
-    constructor Create(Stream: TStream; Owner: T7zArchive;
+    constructor Create(Stream: TStream; OwnedStream: boolean;
       ArchiveIndex: integer = -1);
     constructor CreateFromFile(const Name: TFileName; Mode: cardinal;
-      Owner: T7zArchive; ArchiveIndex: integer = -1);
+      ArchiveIndex: integer = -1);
     destructor Destroy; override;
   end;
 
@@ -917,7 +943,7 @@ type
   end;
 
   T7zArchive = class(T7zParent,
-    I7zArchive)
+    I7zArchive, IProgress, ICryptoGetTextPassword, ICryptoGetTextPassword2)
   protected
     fFileName: TFileName;
     // the raw function from 7z.dll
@@ -930,18 +956,42 @@ type
     fProgressCallback: T7zProgressCallback;
     fProgressCurrent: Int64;
     fProgressTotal: Int64;
+    fPasswordCallback: T7zPasswordCallback;
+    fPasswordIsDefined: boolean;
+    fPasswordUtf16: SynUnicode;
     function GetLibStringProperty(index: T7zHandlerPropID): string;
     function GetLibGUIDProperty(index: T7zHandlerPropID): TGuid;
-    procedure SetProgressCallback(const callback: T7zProgressCallback);
+    function GetInstance: TObject;
     // I7zArchive methods
     function FileName: TFileName;
     function Format: T7zFormatHandler;
     function FormatExt: string;
     function FormatExts: string;
     function ClassId: TGuid;
+    procedure SetProgressCallback(const callback: T7zProgressCallback);
+    procedure SetPasswordCallback(const callback: T7zPasswordCallback);
+    procedure SetPassword(const password: RawUtf8);
+    function Count: integer; virtual; abstract;
+    function NameToIndex(const zipname: RawUtf8): integer; virtual; abstract;
+    function GetZipName(index: integer): RawUtf8; virtual; abstract;
+    function GetName(index: integer): RawUtf8; virtual; abstract;
+    function GetMethod(index: integer): RawUtf8; virtual; abstract;
+    function GetSize(index: integer): Int64; virtual; abstract;
+    function GetIsFolder(index: integer): boolean; virtual; abstract;
+    function GetPackSize(index: integer): Int64; virtual; abstract;
+    function GetCrc(index: integer): cardinal; virtual; abstract;
+    function GetComment(index: integer): RawUtf8; virtual; abstract;
+    function GetModDate(index: integer): TDateTime; virtual; abstract;
+    function GetCreateDate(index: integer): TDateTime; virtual; abstract;
+    function GetAttributes(index: integer): cardinal; virtual; abstract;
     // IProgress methods
     function SetTotal(total: Int64): HRESULT; overload; stdcall;
     function SetCompleted(completeValue: PInt64): HRESULT; overload; stdcall;
+    // ICryptoGetTextPassword
+    function CryptoGetTextPassword(var password: TBStr): HRESULT; stdcall;
+    // ICryptoGetTextPassword2 methods
+    function CryptoGetTextPassword2(passwordIsDefined: PInteger;
+      var password: TBStr): HRESULT;  stdcall;
   public
     constructor Create(lib: T7zLib; fmt: T7zFormatHandler;
       libowned: boolean); reintroduce; overload;
@@ -953,56 +1003,57 @@ type
   end;
 
   T7zReader = class(T7zArchive,
-    I7zReader, IProgress, IArchiveOpenCallback,
-    IArchiveExtractCallback, ICryptoGetTextPassword,
-    IArchiveOpenVolumeCallback, IArchiveOpenSetSubArchiveName)
+    I7zReader, IArchiveOpenCallback,
+    IArchiveExtractCallback, IArchiveOpenVolumeCallback,
+    IArchiveOpenSetSubArchiveName)
   private
     fInArchive: IInArchive;
-    fPasswordCallback: T7zPasswordCallback;
     fStream: TStream;
-    fPasswordIsDefined: boolean;
     fSubArchiveMode: boolean;
     fExtractPathNoSubFolder: boolean;
-    fPassword: SynUnicode;
     fSubArchiveName: RawUtf8;
     fExtractCallback: T7zGetStreamCallBack;
     fExtractPath: TFileName;
-    function GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
-    function GetItemPropDateTime(item: cardinal; prop: TPropID): TDateTime;
-    function GetItemPropFileTime(item: cardinal; prop: TPropID): Int64;
+    fExtractCurrent: record
+      FileName: TFileName;
+      Created, Accessed, Written: Int64;
+    end;
+    function GetProp(item: cardinal; prop: TPropID): T7zVariant;
+    procedure GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
+    function GetPropDateTime(item: cardinal; prop: TPropID): TDateTime;
+    function GetPropFileTime(item: cardinal; prop: TPropID): Int64;
     procedure EnsureOpened;
   protected
+    // I7zArchive methods
+    function Count: integer; override;
+    function NameToIndex(const zipname: RawUtf8): integer; override;
+    function GetZipName(index: integer): RawUtf8; override;
+    function GetName(index: integer): RawUtf8; override;
+    function GetMethod(index: integer): RawUtf8; override;
+    function GetSize(index: integer): Int64; override;
+    function GetIsFolder(index: integer): boolean; override;
+    function GetPackSize(index: integer): Int64; override;
+    function GetCrc(index: integer): cardinal; override;
+    function GetComment(index: integer): RawUtf8; override;
+    function GetModDate(index: integer): TDateTime; override;
+    function GetCreateDate(index: integer): TDateTime; override;
+    function GetAttributes(index: integer): cardinal; override;
     // I7zReader methods
     procedure OpenFile(const name: TFileName);
     procedure OpenStream(stream: IInStream);
     procedure Close;
     function InArchive: IInArchive;
-    function Count: integer;
-    function NameToIndex(const name: RawUtf8): integer;
-    function GetItemPath(index: integer): RawUtf8;
-    function GetItemName(index: integer): RawUtf8;
-    function GetItemMethod(index: integer): RawUtf8;
-    function GetItemSize(index: integer): Int64;
-    function GetItemIsFolder(index: integer): boolean;
     procedure Extract(item: cardinal; Stream: TStream); overload;
     procedure Extract(item: cardinal; const path: TFileName;
       nosubfolder: boolean); overload;
-    function Extract(const name: RawUtf8; Stream: TStream): boolean; overload;
-    function Extract(const name: RawUtf8): RawByteString; overload;
-    function Extract(const name: RawUtf8; const path: TFileName;
+    function Extract(const zipname: RawUtf8; Stream: TStream): boolean; overload;
+    function Extract(const zipname: RawUtf8): RawByteString; overload;
+    function Extract(const zipname: RawUtf8; const path: TFileName;
       nosubfolder: boolean): boolean; overload;
     procedure Extract(const items: array of integer;
       const callback: T7zGetStreamCallBack); overload;
-    procedure SetPasswordCallback(const callback: T7zPasswordCallback);
     procedure ExtractAll(const callback: T7zGetStreamCallBack); overload;
     procedure ExtractAll(const path: TFileName; nosubfolder: boolean); overload;
-    procedure SetPassword(const password: SynUnicode);
-    function GetItemPackSize(index: integer): Int64;
-    function GetItemCRC(index: integer): cardinal;
-    function GetItemComment(index: integer): RawUtf8;
-    function GetItemModDate(index: integer): TDateTime;
-    function GetItemDate(index: integer): TDateTime;
-    function GetItemAttributes(index: integer): cardinal;
     // IArchiveOpenCallback
     function SetTotal(files, bytes: PInt64): HRESULT; overload; stdcall;
     function SetCompleted(files, bytes: PInt64): HRESULT; overload; stdcall;
@@ -1011,9 +1062,7 @@ type
       askExtractMode: T7zExtractAskMode): HRESULT; overload; stdcall;
     function PrepareOperation(askExtractMode: T7zExtractAskMode): HRESULT; stdcall;
     function SetOperationResult(
-      resultEOperationResult: T7zExtractOperationResult): HRESULT; overload; stdcall;
-    // ICryptoGetTextPassword
-    function CryptoGetTextPassword(var password: TBStr): HRESULT; stdcall;
+      opResult: T7zExtractOperationResult): HRESULT; overload; stdcall;
     // IArchiveOpenVolumeCallback
     function GetProperty(propID: TPropID;
       var value: T7zVariant): HRESULT; overload; stdcall;
@@ -1030,6 +1079,7 @@ type
 
   T7zItem = class
   public
+    ZipName: RawUtf8;
     Stream: TStream;
     Attributes: cardinal;
     SourceMode: T7zItemSourceMode;
@@ -1037,36 +1087,50 @@ type
     IsFolder, IsAnti: boolean;
     UpdateItemIndex: integer;
     CreationTime, LastWriteTime: TFileTime;
-    ZipName: RawUtf8;
     FileName: TFileName;
     Size: Int64;
     destructor Destroy; override;
   end;
 
   T7zWriter = class(T7zArchive,
-    I7zWriter, IProgress,
-    IArchiveUpdateCallback, IArchiveUpdateCallback2, ICryptoGetTextPassword2)
+    I7zWriter, IArchiveUpdateCallback, IArchiveUpdateCallback2)
   private
     fOutArchive: IOutArchive;
     fEntries: array of T7zItem;
     fCurrentItem: T7zItem;
-    fPassword: SynUnicode;
-    fUpdateReader: I7zReader; 
+    fUpdateReader: I7zReader;
   protected
-    procedure SetCardinalProperty(const name: RawUtf8; card: cardinal);
-    procedure SetTextProperty(const name, text: RawUtf8);
+    procedure SetCardinalProperty(const zipname: RawUtf8; card: cardinal);
+    procedure SetTextProperty(const zipname, text: RawUtf8);
+    procedure AddOrReplace(item: T7zItem);
+    function Get(index: PtrUInt): T7zItem;
+    // I7zArchive methods
+    function Count: integer; override;
+    function NameToIndex(const zipname: RawUtf8): integer; override;
+    function GetZipName(index: integer): RawUtf8; override;
+    function GetName(index: integer): RawUtf8; override;
+    function GetMethod(index: integer): RawUtf8; override;
+    function GetSize(index: integer): Int64; override;
+    function GetIsFolder(index: integer): boolean; override;
+    function GetPackSize(index: integer): Int64; override;
+    function GetCrc(index: integer): cardinal; override;
+    function GetComment(index: integer): RawUtf8; override;
+    function GetModDate(index: integer): TDateTime; override;
+    function GetCreateDate(index: integer): TDateTime; override;
+    function GetAttributes(index: integer): cardinal; override;
     // I7zWriter methods
+    function AddFile(const FileName: TFileName; const ZipName: RawUtf8): boolean;
+    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
       Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
       const ZipName: RawUtf8; IsFolder, IsAnti: boolean);
-    function AddFile(const FileName: TFileName; const ZipName: RawUtf8): boolean;
-    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
-    procedure AddFileFromMem(const ZipName: RawUtf8; const Data: RawByteString);
+    function Delete(index: integer): boolean; overload;
+    function Delete(const ZipName: RawUtf8): boolean; overload;
     procedure SaveToFile(const DestName: TFileName);
     procedure SaveToStream(stream: TStream);
-    procedure ClearBatch;
-    procedure SetPassword(const password: SynUnicode);
-    procedure SetProperty(const name: RawUtf8; const value: T7zVariant);
+    procedure Clear;
+    procedure SetProperty(const zipname: RawUtf8; const value: T7zVariant);
     procedure SetCompressionLevel(level: cardinal);
     procedure SetMultiThreading(threadCount: cardinal);
     procedure SetCompressionMethod(method: TZipCompressionMethod);
@@ -1098,9 +1162,6 @@ type
     function GetVolumeSize(index: cardinal; size: PInt64): HRESULT; stdcall;
     function GetVolumeStream(index: cardinal;
       var volumeStream: ISequentialOutStream): HRESULT; stdcall;
-    // ICryptoGetTextPassword2 methods
-    function CryptoGetTextPassword2(passwordIsDefined: PInteger;
-      var password: TBStr): HRESULT;  stdcall;
   public
     constructor Create(lib: T7zLib; const rd: I7zReader;
       libowned: boolean); reintroduce; overload;
@@ -1423,15 +1484,20 @@ end;
 
 function T7zLib.TryLoad(const libname: TFileName): boolean;
 begin
+  result := false;
   if libname = '' then
-  begin
-    result := false;
     exit;
-  end;
   fHandle := LibraryOpen(libname);
-  result := ValidHandle(fHandle);
-  if result then
+  if not ValidHandle(fHandle) then
+    exit;
+  fCreateObject := LibraryResolve(fHandle, 'CreateObject');
+  if Assigned(fCreateObject) then
+  begin
     fFileName := libname;
+    result := true;
+  end
+  else
+    LibraryClose(fHandle);
 end;
 
 var
@@ -1443,31 +1509,23 @@ begin
     TryLoad(lib)
   else
     // search in exe and 7-Zip folder, trying any possible .dll file name
-    if not TryLoad(LastFoundDll) or
-       not TryLoad(Executable.ProgramFilePath + '7z.dll') or
-       not TryLoad(Executable.ProgramFilePath + '7-zip.dll') or
+    if TryLoad(LastFoundDll) or
+       TryLoad(Executable.ProgramFilePath + '7z.dll') or
+       TryLoad(Executable.ProgramFilePath + '7za.dll') or
+       TryLoad(Executable.ProgramFilePath + '7zxa.dll') or
+       TryLoad('c:\Program Files\7-Zip\7z.dll') or
        {$ifdef CPU32}
-       not TryLoad(Executable.ProgramFilePath + '7-zip32.dll') or
+       TryLoad('c:\Program Files (x86)\7-Zip\7z.dll') or
        {$endif CPU32}
-       not TryLoad(Executable.ProgramFilePath + '7za.dll') or
-       not TryLoad(Executable.ProgramFilePath + '7zxa.dll') or
-       not TryLoad('c:\Program Files\7-Zip\7z.dll') or
-       {$ifdef CPU32}
-       not TryLoad('c:\Program Files (x86)\7-Zip\7z.dll') or
-       {$endif CPU32}
-       not TryLoad('7z.dll') then
-      lib := '7z.dll'
+       TryLoad('7z.dll') then
+      LastFoundDll := fFileName
     else
-      LastFoundDll := fFileName;
-  if fFileName = '' then
-    raise E7zip.CreateUtf8('Error loading % library', [lib]);
-  fCreateObject := LibraryResolve(fHandle, 'CreateObject');
-  if not Assigned(fCreateObject) then
-  begin
-    fFileName := '';
-    LastFoundDll := '';
-    raise E7zip.CreateUtf8('% is not a 7zip library', [lib]);
-  end;
+      lib := '7z.dll';
+  if Assigned(fCreateObject) then
+    exit;
+  LastFoundDll := '';
+  raise E7Zip.CreateUtf8('% is not a Win' +
+    {$ifdef CPU32} '32' {$else} '64'  {$endif CPU32} + ' 7-Zip library', [lib]);
 end;
 
 destructor T7zLib.Destroy;
@@ -1484,7 +1542,7 @@ end;
 
 procedure T7zLib.CreateObject(const clsid, iid: TGuid; var obj);
 begin
-  E7zip.Check(self, 'CreateObject', fCreateObject(clsid, iid, obj));
+  E7Zip.Check(self, 'CreateObject', fCreateObject(clsid, iid, obj));
 end;
 
 function T7zLib.NewReader(fmt: T7zFormatHandler): I7zReader;
@@ -1503,6 +1561,10 @@ begin
   result := T7zWriter.Create(self, fmt, {libowned=}false);
 end;
 
+function T7zLib.NewWriter(const name: TFileName): I7zWriter;
+begin
+  result := T7zWriter.Create(self, NewReader(name), {libowned=}false);
+end;
 
 function New7zReader(const name: TFileName; const lib: TFileName): I7zReader;
 begin
@@ -1552,7 +1614,7 @@ begin
   fGetNumberOfMethods := LibraryResolve(lib.fHandle, 'GetNumberOfMethods');
   if not (Assigned(fGetMethodProperty) and
           Assigned(fGetNumberOfMethods)) then
-    raise E7zip.CreateUtf8('% is not a codec library', [lib]);
+    raise E7Zip.CreateUtf8('% is not a codec library', [lib]);
 end;
 
 function T7zCodec.GetDecoder(index: integer): ICompressCoder;
@@ -1574,7 +1636,7 @@ end;
 function T7zCodec.GetMethodProperty(index: cardinal;
   propID: T7zMethodPropID): T7zVariant;
 begin
-  E7zip.Check(self, 'GetMethodProperty',
+  E7Zip.Check(self, 'GetMethodProperty',
     fGetMethodProperty(index, propID, result));
 end;
 
@@ -1585,7 +1647,7 @@ end;
 
 function T7zCodec.GetNumberOfMethods: cardinal;
 begin
-  E7zip.Check(self, 'GetNumberOfMethods', fGetNumberOfMethods(@result));
+  E7Zip.Check(self, 'GetNumberOfMethods', fGetNumberOfMethods(@result));
 end;
 
 function T7zCodec.SetRatioInfo(inSize, outSize: PInt64): HRESULT;
@@ -1604,12 +1666,12 @@ begin
     fLibOwned := lib; // to be released eventually
   inherited Create(lib);
   if fmt = fhUndefined then
-    raise E7zip.CreateUtF8('%.Create(fhUndefined)', [self]);
+    raise E7Zip.CreateUtF8('%.Create(fhUndefined)', [self]);
   fClassId := lib.FormatGuid(fmt);
   fFormat := fmt;
   fGetHandlerProperty := LibraryResolve(lib.fHandle, 'GetHandlerProperty');
   if not Assigned(fGetHandlerProperty) then
-    raise E7zip.CreateUtf8('% is not an archive library', [lib]);
+    raise E7Zip.CreateUtf8('% is not an archive library', [lib]);
 end;
 
 function T7zArchive.ClassId: TGuid;
@@ -1634,7 +1696,7 @@ end;
 
 function T7zArchive.HandlerProperty(propID: T7zHandlerPropID): T7zVariant;
 begin
-  E7zip.Check(self, 'HandlerProperty',
+  E7Zip.Check(self, 'HandlerProperty',
     fGetHandlerProperty(propID, result));
 end;
 
@@ -1648,6 +1710,43 @@ begin
   fProgressCallback := callback;
   fProgressCurrent := 0;
   fProgressTotal := 0;
+end;
+
+procedure T7zArchive.SetPasswordCallback(const callback: T7zPasswordCallback);
+begin
+  fPasswordCallback := callback;
+  fPasswordIsDefined := false;
+end;
+
+procedure T7zArchive.SetPassword(const password: RawUtf8);
+begin
+  Utf8ToSynUnicode(password, fPasswordUtf16);
+  fPasswordIsDefined := true;
+end;
+
+function T7zArchive.CryptoGetTextPassword(var password: TBStr): HRESULT;
+var
+  fromuser: RawUtf8;
+begin
+  if not fPasswordIsDefined then
+    if Assigned(fPasswordCallback) then
+      if fPasswordCallback(self, fromuser) then
+        SetPassword(fromuser);
+  if fPasswordIsDefined then
+  begin
+    password := SysAllocString(pointer(fPasswordUtf16));
+    result := S_OK;
+  end
+  else
+    result := S_FALSE;
+end;
+
+function T7zArchive.CryptoGetTextPassword2(passwordIsDefined: PInteger;
+  var password: TBStr): HRESULT;
+begin
+  result := CryptoGetTextPassword(password);
+  passwordIsDefined^ := ord(result = S_OK);
+  result := S_OK;
 end;
 
 function T7zArchive.SetTotal(total: Int64): HRESULT;
@@ -1677,13 +1776,18 @@ begin
   result := fFileName;
 end;
 
+function T7zArchive.GetInstance: TObject;
+begin
+  result := self;
+end;
+
 
 
 { T7zReader }
 
 procedure T7zReader.Close;
 begin
-  fPasswordIsDefined := false;
+  SetPasswordCallback(nil);
   fSubArchiveMode := false;
   fInArchive.Close;
   fInArchive := nil;
@@ -1699,7 +1803,7 @@ end;
 procedure T7zReader.EnsureOpened;
 begin
   if fInArchive = nil then
-    raise E7zip.CreateUtf8('% missing OpenFile/OpenStream', [self]);
+    raise E7Zip.CreateUtf8('% missing OpenFile/OpenStream', [self]);
 end;
 
 const
@@ -1751,16 +1855,16 @@ const
     VT_BSTR,        // kpidCharacts
     VT_UI8);        // kpidVa
 
-function T7zReader.GetItemProp(item: cardinal; prop: TPropID): T7zVariant;
+function T7zReader.GetProp(item: cardinal; prop: TPropID): T7zVariant;
 begin
   EnsureOpened;
   VarClear(result);
-  E7zip.CheckOK(self, 'GetItemProp',
+  E7Zip.CheckOK(self, 'GetProp',
     fInArchive.GetProperty(Item, prop, result));
   with TVarData(result) do
     if VType = VT_FILETIME then
       raise E7Zip.Create('GetProperty: VT_FILETIME is unsupported - ' +
-        'use GetItemPropDateTime instead')
+        'use GetPropDateTime instead')
     else if (VType <> varEmpty) and
             (prop >= low(KPID_VTYPE)) and
             (prop <= high(KPID_VTYPE)) and
@@ -1769,84 +1873,93 @@ begin
         [prop, KPID_VTYPE[prop], VType])
 end;
 
-function T7zReader.GetItemPropDateTime(item: cardinal;
+procedure T7zReader.GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
+var
+  v: T7zVariant;
+begin
+  v := GetProp(item, prop);
+  if not VarIsEmptyOrNull(v) then
+    VariantToUtf8(v, dest);
+end;
+
+function T7zReader.GetPropDateTime(item: cardinal;
   prop: TPropID): TDateTime;
 var
   v: TVarData; // VT_FILETIME/varOleFileTime is not handled by the RTL
 begin
   v.VType := 0;
-  E7zip.CheckOK(self, 'GetItemPropDateTime',
+  E7Zip.CheckOK(self, 'GetPropDateTime',
     fInArchive.GetProperty(Item, prop, variant(v)));
   if not (v.VType in [varEmpty, VT_FILETIME]) then
-    raise E7zip.CreateUtf8('T7zReader.GetItemPropDateTime=%', [v.VType]);
+    raise E7Zip.CreateUtf8('T7zReader.GetPropDateTime=%', [v.VType]);
   VariantToDateTime(variant(v), result);
 end;
 
-function T7zReader.GetItemPropFileTime(item: cardinal; prop: TPropID): Int64;
+function T7zReader.GetPropFileTime(item: cardinal; prop: TPropID): Int64;
 var
   v: TVarData; // not handled by the RTL
 begin
   v.VType := 0;
-  E7zip.CheckOK(self, 'GetItemPropFileTime',
+  E7Zip.CheckOK(self, 'GetPropFileTime',
     fInArchive.GetProperty(Item, prop, variant(v)));
   result := 0;
   if v.VType = VT_FILETIME then
     result := v.VInt64;
 end;
 
-function T7zReader.GetItemIsFolder(index: integer): boolean;
+function T7zReader.GetIsFolder(index: integer): boolean;
 begin
-  result := boolean(GetItemProp(index, kpidIsFolder));
+  result := boolean(GetProp(index, kpidIsFolder));
 end;
 
-function T7zReader.GetItemPath(index: integer): RawUtf8;
+function T7zReader.GetZipName(index: integer): RawUtf8;
 begin
-  VariantToUtf8(GetItemProp(index, kpidPath), result);
+  GetPropUtf8(index, kpidPath, result);
 end;
 
-function T7zReader.GetItemModDate(index: integer): TDateTime;
+function T7zReader.GetModDate(index: integer): TDateTime;
 begin
-  result := GetItemPropDateTime(index, kpidLastWriteTime);
+  result := GetPropDateTime(index, kpidLastWriteTime);
 end;
 
-function T7zReader.GetItemDate(index: integer): TDateTime;
+function T7zReader.GetCreateDate(index: integer): TDateTime;
 begin
-  result := GetItemPropDateTime(index, kpidCreationTime);
+  result := GetPropDateTime(index, kpidCreationTime);
 end;
 
-function T7zReader.GetItemAttributes(index: integer): cardinal;
+function T7zReader.GetAttributes(index: integer): cardinal;
 begin
-  result := VariantToInt64Def(GetItemProp(index, kpidAttributes), 0);
+  result := VariantToInt64Def(GetProp(index, kpidAttributes), 0);
 end;
 
-function T7zReader.GetItemPackSize(index: integer): Int64;
+function T7zReader.GetPackSize(index: integer): Int64;
 begin
-  result := VariantToInt64Def(GetItemProp(index, kpidPackedSize), -1);
+  result := VariantToInt64Def(GetProp(index, kpidPackedSize), -1);
 end;
 
-function T7zReader.GetItemComment(index: integer): RawUtf8;
+function T7zReader.GetComment(index: integer): RawUtf8;
 begin
-  VariantToUtf8(GetItemProp(index, kpidComment), result);
+  GetPropUtf8(index, kpidComment, result);
 end;
 
-function T7zReader.GetItemCRC(index: integer): cardinal;
+function T7zReader.GetCrc(index: integer): cardinal;
 begin
-  result := VariantToInt64Def(GetItemProp(index, kpidCRC), -1);
+  result := VariantToInt64Def(GetProp(index, kpidCRC), -1);
 end;
 
-function T7zReader.GetItemName(index: integer): RawUtf8;
+function T7zReader.GetName(index: integer): RawUtf8;
 begin
-  VariantToUtf8(GetItemProp(index, kpidName), result);
+  GetPropUtf8(index, kpidName, result);
 end;
 
-function T7zReader.GetItemMethod(index: integer): RawUtf8;
+function T7zReader.GetMethod(index: integer): RawUtf8;
 begin
-  VariantToUtf8(GetItemProp(index, kpidMethod), result);
+  GetPropUtf8(index, kpidMethod, result);
 end;
 
-function T7zReader.GetItemSize(index: integer): Int64;
+function T7zReader.GetSize(index: integer): Int64;
 begin
-  result := VariantToInt64Def(GetItemProp(index, kpidSize), -1);
+  result := VariantToInt64Def(GetProp(index, kpidSize), -1);
 end;
 
 function T7zReader.Count: integer;
@@ -1854,15 +1967,15 @@ begin
   if fInArchive = nil then
     result := 0
   else
-    E7zip.CheckOk(self, 'GetNumberOfItems',
+    E7Zip.CheckOk(self, 'GetNumberOfItems',
       fInArchive.GetNumberOfItems(PCardinal(@result)^));
 end;
 
-function T7zReader.NameToIndex(const name: RawUtf8): integer;
+function T7zReader.NameToIndex(const zipname: RawUtf8): integer;
 begin
   if fInArchive <> nil then
     for result := 0 to Count - 1 do
-      if IdemPropNameU(name, GetItemPath(result)) then
+      if IdemPropNameU(zipname, GetZipName(result)) then
         exit;
   result := -1;
 end;
@@ -1874,19 +1987,15 @@ procedure T7zReader.OpenFile(const name: TFileName);
 var
   strm: IInStream;
 begin
-  strm := T7zStream.CreateFromFile(name, fmOpenReadDenyNone, self);
-  try
-    E7zip.CheckOk(self, 'OpenFile',
-      InArchive.Open(strm, @MAXCHECK, self as IArchiveOpenCallBack));
-    fFileName := name;
-  finally
-    strm := nil;
-  end;
+  strm := T7zStream.CreateFromFile(name, fmOpenReadDenyNone);
+  E7Zip.CheckOk(self, 'OpenFile',
+    InArchive.Open(strm, @MAXCHECK, self as IArchiveOpenCallBack));
+  fFileName := name;
 end;
 
 procedure T7zReader.OpenStream(stream: IInStream);
 begin
-  E7zip.CheckOk(self, 'OpenStream',
+  E7Zip.CheckOk(self, 'OpenStream',
     InArchive.Open(stream, @MAXCHECK, self as IArchiveOpenCallBack));
 end;
 
@@ -1895,7 +2004,7 @@ begin
   EnsureOpened;
   fStream := Stream;
   try
-    E7zip.CheckOk(self, 'Extract',
+    E7Zip.CheckOk(self, 'Extract',
       fInArchive.Extract(
         @item, 1, ord(Stream = nil), self as IArchiveExtractCallback));
   finally
@@ -1910,7 +2019,7 @@ begin
   fExtractPath := EnsureDirectoryExists(path);
   fExtractPathNoSubFolder := nosubfolder;
   try
-    E7zip.CheckOk(self, 'Extract',
+    E7Zip.CheckOk(self, 'Extract',
       fInArchive.Extract(
         @item, 1, {test=}0, self as IArchiveExtractCallback));
   finally
@@ -1918,12 +2027,12 @@ begin
   end;
 end;
 
-function T7zReader.Extract(const name: RawUtf8; Stream: TStream): boolean;
+function T7zReader.Extract(const zipname: RawUtf8; Stream: TStream): boolean;
 var
   i: integer;
 begin
   result := false;
-  i := NameToIndex(name);
+  i := NameToIndex(zipname);
   if i >= 0 then
     try
       Extract(i, Stream);
@@ -1933,27 +2042,27 @@ begin
     end;
 end;
 
-function T7zReader.Extract(const name: RawUtf8): RawByteString;
+function T7zReader.Extract(const zipname: RawUtf8): RawByteString;
 var
   s: TRawByteStringStream;
 begin
   result := '';
   s := TRawByteStringStream.Create;
   try
-    if Extract(name, s) then
+    if Extract(zipname, s) then
       result := s.DataString
   finally
     s.Free;
   end;
 end;
 
-function T7zReader.Extract(const name: RawUtf8; const path: TFileName;
+function T7zReader.Extract(const zipname: RawUtf8; const path: TFileName;
   nosubfolder: boolean): boolean;
 var
   i: integer;
 begin
   result := false;
-  i := NameToIndex(name);
+  i := NameToIndex(zipname);
   if i >= 0 then
     try
       Extract(i, path, nosubfolder);
@@ -1972,21 +2081,28 @@ begin
   case askExtractMode of
     eamExtract:
       if fStream <> nil then
-        outStream := T7zStream.Create(fStream, nil, index)
+        outStream := T7zStream.Create(fStream, false, index)
       else if assigned(fExtractCallback) then
       begin
         result := fExtractCallback(self, index, outStream);
         exit;
       end
       else if fExtractPath <> '' then
-        if not GetItemIsFolder(index) then
+        if not GetIsFolder(index) then
         begin
-          path := Utf8ToString(GetItemPath(index));
+          path := Utf8ToString(GetZipName(index));
           if fExtractPathNoSubFolder then
             path := ExtractFileName(path);
           path := fExtractPath + path;
           ForceDirectories(ExtractFilePath(path));
-          outStream := T7zStream.CreateFromFile(path, fmCreate, self, index);
+          outStream := T7zStream.CreateFromFile(path, fmCreate, index);
+          with fExtractCurrent do
+          begin
+            FileName := path;
+            Created := GetPropFileTime(index, kpidCreationTime);
+            Accessed := GetPropFileTime(index, kpidLastAccessTime);
+            Written := GetPropFileTime(index, kpidLastWriteTime);
+          end;
         end;
   end;
   result := S_OK; // S_FALSE would skip this file
@@ -2004,37 +2120,22 @@ begin
 end;
 
 function T7zReader.SetOperationResult(
-  resultEOperationResult: T7zExtractOperationResult): HRESULT;
+  opResult: T7zExtractOperationResult): HRESULT;
 begin
+  case opResult of
+    eorOK:
+      with fExtractCurrent do
+        if (FileName <> '') and
+           ((Written or Created or Accessed) <> 0) then
+          FileSetTime(FileName, Created, Accessed, Written);
+  end;
+  fExtractCurrent.FileName := '';
   result := S_OK;
 end;
 
 function T7zReader.SetTotal(files, bytes: PInt64): HRESULT;
 begin
   result := S_OK;
-end;
-
-function T7zReader.CryptoGetTextPassword(var password: TBStr): HRESULT;
-var
-  wpass: SynUnicode;
-begin
-  if fPasswordIsDefined then
-  begin
-    password := SysAllocString(PWideChar(fPassword));
-    result := S_OK;
-  end
-  else if Assigned(fPasswordCallback) then
-  begin
-    result := fPasswordCallback(self, wpass);
-    if result = S_OK then
-    begin
-      password := SysAllocString(PWideChar(wpass));
-      fPasswordIsDefined := true;
-      fPassword := wpass;
-    end;
-  end
-  else
-    result := S_FALSE;
 end;
 
 function T7zReader.GetProperty(propID: TPropID;
@@ -2047,11 +2148,6 @@ function T7zReader.GetStream(const name: PWideChar;
   var inStream: IInStream): HRESULT;
 begin
   result := S_OK;
-end;
-
-procedure T7zReader.SetPasswordCallback(const callback: T7zPasswordCallback);
-begin
-  fPasswordCallback := callback;
 end;
 
 function T7zReader.SetSubArchiveName(name: PWideChar): HRESULT;
@@ -2076,7 +2172,7 @@ begin
   QuickSortInteger(sorted); // indexes should be sorted
   fExtractCallback := callback;
   try
-    E7zip.CheckOk(self, 'Extract', fInArchive.Extract(pointer(sorted), n,
+    E7Zip.CheckOk(self, 'Extract', fInArchive.Extract(pointer(sorted), n,
       ord(Assigned(callback)), self as IArchiveExtractCallback));
   finally
     fExtractCallback := nil;
@@ -2088,7 +2184,7 @@ begin
   EnsureOpened;
   fExtractCallback := callback;
   try
-    E7zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
+    E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
       nil, $FFFFFFFF, ord(Assigned(callback)), self as IArchiveExtractCallback));
   finally
     fExtractCallback := nil;
@@ -2101,82 +2197,36 @@ begin
   fExtractPath := EnsureDirectoryExists(path);
   fExtractPathNoSubFolder := nosubfolder;
   try
-    E7zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
+    E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
       nil, $FFFFFFFF, 0, self as IArchiveExtractCallback));
   finally
     fExtractPath := '';
   end;
 end;
 
-procedure T7zReader.SetPassword(const password: SynUnicode);
-begin
-  fPassword := password;
-  fPasswordIsDefined :=  fPassword <> '';
-end;
-
-
 
 { T7zStream }
 
-constructor T7zStream.Create(Stream: TStream; Owner: T7zArchive;
+constructor T7zStream.Create(Stream: TStream; OwnedStream: boolean;
   ArchiveIndex: integer);
 begin
   inherited Create;
   fStream := Stream;
-  fOwner := Owner;
+  fOwnedStream := OwnedStream;
   fIndex := ArchiveIndex;
 end;
 
 constructor T7zStream.CreateFromFile(const Name: TFileName; Mode: cardinal;
-  Owner: T7zArchive; ArchiveIndex: integer);
+  ArchiveIndex: integer);
 begin
-  Create(TFileStreamEx.Create(Name, Mode), Owner, ArchiveIndex);
+  Create(TFileStreamEx.Create(Name, Mode), {owned=}true, ArchiveIndex);
 end;
 
 destructor T7zStream.Destroy;
-var
-  ct, at, wt: Int64; // some temporary place holders
-  pct, pat, pwt: pointer;
 begin
   inherited;
-  if fOwner <> nil then
-  begin
-    if (fOwner is T7zReader) and
-       (cardinal(fIndex) < cardinal(T7zReader(fOwner).Count)) and
-       fStream.InheritsFrom(THandleStream) then
-    begin
-      ct := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidCreationTime);
-      at := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastAccessTime);
-      wt := T7zReader(fOwner).GetItemPropFileTime(fIndex, kpidLastWriteTime);
-      // some archive formats may not set all properties: use what we got
-      if ct <> 0 then
-        pct := @ct
-      else if wt <> 0 then
-        pct := @wt
-      else if at <> 0 then
-        pct := @at
-      else
-        pct := nil;
-      if at <> 0 then
-        pat := @at
-      else if wt <> 0 then
-        pat := @wt
-      else if ct <> 0 then
-        pat := @ct
-      else
-        pat := nil;
-      if wt <> 0 then
-        pwt := @wt
-      else if ct <> 0 then
-        pwt := @ct
-      else if at <> 0 then
-        pwt := @at
-      else
-        pwt := nil;
-      SetFileTime((fStream as THandleStream).Handle, pct, pat, pwt);
-    end;
+  if fOwnedStream then
     FreeAndNil(fStream);
-  end;
 end;
 
 function T7zStream.Flush: HRESULT;
@@ -2255,13 +2305,28 @@ begin
   begin
     item := T7zItem.Create;
     item.SourceMode := smUpdate;
-    item.ZipName := rd.ItemPath[i];
-    item.Size := rd.ItemSize[i];
-    item.Attributes := rd.ItemAttributes[i];
-    item.IsFolder := rd.ItemIsFolder[i];
+    item.ZipName := rd.ZipName[i];
+    item.Size := rd.Size[i];
+    item.Attributes := rd.Attributes[i];
+    item.IsFolder := rd.IsFolder[i];
     item.UpdateItemIndex := i;
+    GetSystemTimeAsFileTime(item.LastWriteTime);
     ObjArrayAdd(fEntries, item);
   end;
+end;
+
+procedure T7zWriter.AddOrReplace(item: T7zItem);
+var
+  i: PtrInt;
+begin
+  i := NameToIndex(item.ZipName);
+  if i >= 0 then
+  begin
+    fEntries[i].Free; // replace
+    fEntries[i] := item;
+  end
+  else
+    ObjArrayAdd(fEntries, item);
 end;
 
 function T7zWriter.AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
@@ -2285,7 +2350,7 @@ begin
   item.IsAnti := false;
   item.Ownership := soOwned;
   item.UpdateItemIndex := -1;
-  ObjArrayAdd(fEntries, item);
+  AddOrReplace(item);
 end;
 
 procedure T7zWriter.AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
@@ -2308,7 +2373,7 @@ var
         if (f.Name[1] <> '.') then
           Traverse(IncludeTrailingPathDelimiter(p + f.Name));
       until FindNext(f) <> 0;
-      SysUtils.FindClose(f);
+      FindClose(f);
     end;
     for i := 0 to files.Count - 1 do
     begin
@@ -2331,9 +2396,9 @@ var
         item.IsAnti := false;
         item.Ownership := soOwned;
         item.UpdateItemIndex := -1;
-        ObjArrayAdd(fEntries, item);
+        AddOrReplace(item);
       until FindNext(f) <> 0;
-      SysUtils.FindClose(f);
+      FindClose(f);
     end;
   end;
 
@@ -2350,7 +2415,7 @@ begin
   end;
 end;
 
-procedure T7zWriter.AddFileFromMem(const ZipName: RawUtf8;
+procedure T7zWriter.AddBuffer(const ZipName: RawUtf8;
   const Data: RawByteString);
 begin
   AddStream(TRawByteStringStream.Create(Data), soReference,
@@ -2369,7 +2434,9 @@ begin
   if CreationTime <> 0 then
     UnixTimeToFileTime(CreationTime, item.CreationTime);
   if LastWriteTime <> 0 then
-    UnixTimeToFileTime(LastWriteTime, item.LastWriteTime);
+    UnixTimeToFileTime(LastWriteTime, item.LastWriteTime)
+  else
+    GetSystemTimeAsFileTime(item.LastWriteTime);
   item.ZipName := ZipName;
   item.IsFolder := IsFolder;
   item.IsAnti := IsAnti;
@@ -2377,32 +2444,36 @@ begin
   item.Size := Stream.Size;
   item.Ownership := Ownership;
   item.UpdateItemIndex := -1;
-  ObjArrayAdd(fEntries, item);
+  AddOrReplace(item);
 end;
 
-procedure T7zWriter.ClearBatch;
+function T7zWriter.Delete(index: integer): boolean;
 begin
-  ObjArrayClear(fEntries);
-end;
-
-function T7zWriter.CryptoGetTextPassword2(passwordIsDefined: PInteger;
-  var password: TBStr): HRESULT;
-begin
-  if fPassword <> '' then
+  if cardinal(index) < cardinal(length(fEntries)) then
   begin
-   passwordIsDefined^ := 1;
-   password := SysAllocString(PWideChar(fPassword));
+    ObjArrayDelete(fEntries, index);
+    result := true;
   end
   else
-    passwordIsDefined^ := 0;
-  result := S_OK;
+    result := false;
+end;
+
+function T7zWriter.Delete(const ZipName: RawUtf8): boolean;
+begin
+  result := Delete(NameToIndex(ZipName));
+end;
+
+procedure T7zWriter.Clear;
+begin
+  ObjArrayClear(fEntries);
+  SetPasswordCallback(nil);
 end;
 
 destructor T7zWriter.Destroy;
 begin
+  Clear;
   fUpdateReader := nil;
   fOutArchive := nil;
-  ClearBatch;
   inherited;
 end;
 
@@ -2412,7 +2483,7 @@ begin
     if not Assigned(fUpdateReader) then
       fOwner.CreateObject(fClassID, IOutArchive, fOutArchive)
     else if not Supports(fUpdateReader.InArchive, IOutArchive, fOutArchive) then
-      raise E7zip.CreateUtf8('%.OutArchive: % format can not be updated',
+      raise E7Zip.CreateUtf8('%.OutArchive: % format can not be updated',
         [self, fUpdateReader.FormatExt]);
   result := fOutArchive;
 end;
@@ -2484,11 +2555,11 @@ begin
   case fCurrentItem.SourceMode of
     smFile:
       inStream := T7zStream.CreateFromFile(
-        fCurrentItem.FileName, fmOpenReadDenyNone, self, index);
+        fCurrentItem.FileName, fmOpenReadDenyNone, index);
     smStream:
       begin
         fCurrentItem.Stream.Seek(0, soFromBeginning);
-        inStream := T7zStream.Create(fCurrentItem.Stream, self, index);
+        inStream := T7zStream.Create(fCurrentItem.Stream, {owned=}true, index);
       end;
   else
     result := ERROR_INVALID_PARAMETER;
@@ -2545,14 +2616,13 @@ procedure T7zWriter.SaveToStream(stream: TStream);
 var
   strm: ISequentialOutStream;
 begin
-  strm := T7zStream.Create(stream, nil);
+  strm := T7zStream.Create(stream, {owned=}false);
   try
-    E7zip.CheckOk(self, 'SaveToStream',
+    E7Zip.CheckOk(self, 'SaveToStream',
       OutArchive.UpdateItems(strm, length(fEntries), self as IArchiveUpdateCallback));
   finally
     strm := nil;
   end;
-  fUpdateReader := nil; // release ASAP
 end;
 
 function T7zWriter.SetOperationResult(operationResult: integer): HRESULT;
@@ -2572,37 +2642,139 @@ begin
   result := S_FALSE;
 end;
 
-procedure T7zWriter.SetPassword(const password: SynUnicode);
-begin
-  fPassword := password;
-end;
-
-procedure T7zWriter.SetProperty(const name: RawUtf8;
+procedure T7zWriter.SetProperty(const zipname: RawUtf8;
   const value: T7zVariant);
 var
   intf: ISetProperties;
   p: PWideChar;
 begin
-  intf := OutArchive as ISetProperties;
-  p := pointer(Utf8DecodeToUnicodeRawByteString(name));
-  E7zip.CheckOk(self, 'SetProperty', intf.SetProperties(@p, @value, 1));
+  p := pointer(Utf8DecodeToUnicodeRawByteString(zipname));
+  if Supports(OutArchive, ISetProperties, intf) then
+    E7Zip.CheckOk(self, 'SetProperty', intf.SetProperties(@p, @value, 1));
 end;
 
-procedure T7zWriter.SetCardinalProperty(const name: RawUtf8; card: cardinal);
+procedure T7zWriter.SetCardinalProperty(const zipname: RawUtf8; card: cardinal);
 var
   v: TVarData;
 begin
   v.VType := VT_UI4;
   v.VLongWord := card;
-  SetProperty(name, T7zVariant(v));
+  SetProperty(zipname, T7zVariant(v));
 end;
 
-procedure T7zWriter.SetTextProperty(const name, text: RawUtf8);
+procedure T7zWriter.SetTextProperty(const zipname, text: RawUtf8);
 var
   v: T7zVariant;
 begin
   v := Utf8ToWideString(text);
-  SetProperty(name, v);
+  SetProperty(zipname, v);
+end;
+
+function T7zWriter.Count: integer;
+begin
+  result := length(fEntries);
+end;
+
+function T7zWriter.NameToIndex(const zipname: RawUtf8): integer;
+begin
+  for result := 0 to length(fEntries) - 1 do
+    if IdemPropNameU(fEntries[result].ZipName, zipname) then
+      exit;
+  result := -1;
+end;
+
+function T7zWriter.Get(index: PtrUInt): T7zItem;
+begin
+  if index < PtrUInt(length(fEntries)) then
+    result := fEntries[index]
+  else
+    raise E7Zip.CreateUtf8('Out of range %.Get(%)', [self, index]);
+end;
+
+function T7zWriter.GetZipName(index: integer): RawUtf8;
+begin
+  result := Get(index).ZipName;
+end;
+
+function T7zWriter.GetName(index: integer): RawUtf8;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := ''
+  else
+    result := fUpdateReader.GetName(index);
+end;
+
+function T7zWriter.GetMethod(index: integer): RawUtf8;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := ''
+  else
+    result := fUpdateReader.GetMethod(index);
+end;
+
+function T7zWriter.GetSize(index: integer): Int64;
+begin
+  result := Get(index).Size;
+end;
+
+function T7zWriter.GetIsFolder(index: integer): boolean;
+begin
+  result := Get(index).IsFolder;
+end;
+
+function T7zWriter.GetPackSize(index: integer): Int64;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := -1
+  else
+    result := fUpdateReader.GetPackSize(index);
+end;
+
+function T7zWriter.GetCrc(index: integer): cardinal;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := 0
+  else
+    result := fUpdateReader.GetCrc(index);
+end;
+
+function T7zWriter.GetComment(index: integer): RawUtf8;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := ''
+  else
+    result := fUpdateReader.GetComment(index);
+end;
+
+function T7zWriter.GetModDate(index: integer): TDateTime;
+var
+  item: T7zItem;
+begin
+  item := Get(index);
+  index := item.UpdateItemIndex;
+  if index < 0 then
+    result := FileTimeToDateTime(item.LastWriteTime)
+  else
+    result := fUpdateReader.GetModDate(index);
+end;
+
+function T7zWriter.GetCreateDate(index: integer): TDateTime;
+begin
+  index := Get(index).UpdateItemIndex;
+  if index < 0 then
+    result := 0
+  else
+    result := fUpdateReader.GetCreateDate(index);
+end;
+
+function T7zWriter.GetAttributes(index: integer): cardinal;
+begin
+  result := Get(index).Attributes;
 end;
 
 const
@@ -2706,9 +2878,6 @@ begin
 end;
 
 
-
-initialization
-  assert(HANDLER_GUID.D4[5] = $ff);
 
 {$endif OSPOSIX}
 
