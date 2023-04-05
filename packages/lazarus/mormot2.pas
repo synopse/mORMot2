@@ -39,7 +39,7 @@ uses
   mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server,
   mormot.lib.gdiplus, mormot.db.rad.ui.cds, mormot.core.os.mac,
   mormot.misc.pecoff, mormot.lib.pkcs11, mormot.net.ldap, mormot.core.fpclibcmm,
-  mormot.net.dns;
+  mormot.net.dns, mormot.lib.win7zip;
 
 implementation
 
