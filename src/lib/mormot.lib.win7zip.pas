@@ -658,6 +658,10 @@ type
     /// uncompress a file by name from this archive into a local folder
     function Extract(const zipname: RawUtf8; const path: TFileName;
       nosubfolder: boolean = false): boolean; overload;
+    /// uncompress some files by name from this archive into a local folder
+    // - returns nil on success, or the list of invalid zipnames
+    function Extract(const zipnames: array of RawUtf8; const path: TFileName;
+      nosubfolder: boolean = false): TRawUtf8DynArray; overload;
     /// uncompress several files from this archive using a callback per file
     // - if no Callback is specified (as default), will test for the output
     procedure Extract(const items: array of integer;
@@ -1050,6 +1054,8 @@ type
     function Extract(const zipname: RawUtf8): RawByteString; overload;
     function Extract(const zipname: RawUtf8; const path: TFileName;
       nosubfolder: boolean): boolean; overload;
+    function Extract(const zipnames: array of RawUtf8; const path: TFileName;
+      nosubfolder: boolean): TRawUtf8DynArray; overload;
     procedure Extract(const items: array of integer;
       const callback: T7zGetStreamCallBack); overload;
     procedure ExtractAll(const callback: T7zGetStreamCallBack); overload;
@@ -2070,6 +2076,17 @@ begin
     except
       result := false;
     end;
+end;
+
+function T7zReader.Extract(const zipnames: array of RawUtf8;
+  const path: TFileName; nosubfolder: boolean): TRawUtf8DynArray;
+var
+  i: integer;
+begin
+  result := nil;
+  for i := 0 to high(zipnames) do
+    if not Extract(zipnames[i], path, nosubfolder) then
+      AddRawUtf8(result, zipnames[i]);
 end;
 
 function T7zReader.GetStream(index: cardinal;
