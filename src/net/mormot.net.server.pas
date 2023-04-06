@@ -2133,10 +2133,14 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
     StatusCodeToReason(fRespStatus, fRespReason);
-    FormatUtf8('<body style="font-family:verdana">'#10 +
-      '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>' + XPOWEREDVALUE,
-      [fServer.ServerName, fRespStatus, fRespStatus, fRespReason,
-       HtmlEscapeString(fErrorMessage)], RawUtf8(fOutContent));
+    FormatUtf8(
+      '<html><body style="font-family:verdana">' +
+      '<h1>% Server Error %</h1><hr><p>HTTP % %</p><p>%</p><small>%</small></body></html>',
+      [
+        fServer.ServerName, fRespStatus, fRespStatus,
+        fRespReason, HtmlEscapeString(fErrorMessage), XPOWEREDVALUE
+      ],
+      RawUtf8(fOutContent));
   end;
 
 var
