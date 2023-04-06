@@ -1182,7 +1182,7 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
   const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false): boolean; overload;
 
-/// send an email using the SMTP protocol
+/// send an email using the SMTP protocol via a TSmtpConnection definition
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
@@ -1190,6 +1190,7 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
 // - you can optionally set another encoding charset or force TextCharSet='' to
 // expect the 'Content-Type:' to be set in Headers and Text to be the raw body
 // (e.g. a multi-part encoded message)
+// - TLS will be forced if the port is either 465 or 587
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
   const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
@@ -3456,15 +3457,19 @@ var
         raise ESendEmail.CreateUtf8('read error for %', [Res]);
     until (Length(Res) < 4) or
           (Res[4] <> '-'); // - indicates there are other headers following
-    if not IdemPChar(pointer(Res), pointer(Answer)) then
-      raise ESendEmail.CreateU(Res);
+    if IdemPChar(pointer(Res), pointer(Answer)) then
+      exit;
+    if Res = '' then
+      Res := 'Undefined Error';
+    raise ESendEmail.CreateUtf8('Command failed for % at %:% [%]',
+      [User, Server, Port, Res]);
   end;
 
   procedure Exec(const Command, Answer: RawUtf8);
   begin
     TCP.SockSendFlush(Command + #13#10);
     if ioresult <> 0 then
-      raise ESendEmail.CreateUtf8('write error for %', [Command]);
+      raise ESendEmail.CreateUtf8('Write error for %', [Command]);
     Expect(Answer)
   end;
 
@@ -3492,6 +3497,7 @@ begin
     else
       Exec('HELO ' + Server, '25');
     TCP.SockSend(['MAIL FROM:<', From, '>']);
+    TCP.SockSendFlush;
     Expect('250');
     repeat
       GetNextItem(P, ',', rec);
