@@ -708,10 +708,15 @@ type
     fMechanisms: TRawUtf8DynArray;
     fSecContext: TSecContext;
     fSecContextUser: RawUtf8;
+    fSockBuffer: RawByteString;
+    fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNamesDual;
     fWellKnownObjectsCached: boolean;
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     procedure SendPacket(const Asn1Data: TAsnObject);
+    procedure ReceivePacket(Dest: pointer; DestLen: integer); overload;
+    function ReceivePacket(DestLen: integer): RawByteString; overload;
+    procedure ReceivePacketFillSockBuffer;
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
@@ -2566,7 +2571,6 @@ begin
         // try connection to the server
         fSock := TCrtSocket.Open(
           h, p, nlTcp, fSettings.TimeOut, fSettings.Tls, @fTlsContext);
-      fSock.CreateSockIn;
       result := fSock.SockConnected;
       if result then
       begin
@@ -2651,6 +2655,56 @@ begin
     fSock.SockSendFlush(BuildPacket(Asn1Data));
 end;
 
+procedure TLdapClient.ReceivePacketFillSockBuffer;
+var
+  saslLen: integer;
+  ciphered: RawByteString;
+begin
+  fSockBufferPos := 0;
+  if fSecContextEncrypt then
+  begin
+    // through Kerberos encryption
+    saslLen := 0;
+    fSock.SockRecv(@saslLen, 4);
+    ciphered := fSock.SockRecv(bswap32(saslLen));
+    fSockBuffer := SecDecrypt(fSecContext, ciphered);
+  end
+  else
+    // get as much as possible unciphered data from socket
+    fSockBuffer := fSock.SockReceiveString;
+end;
+
+procedure TLdapClient.ReceivePacket(Dest: pointer; DestLen: integer);
+var
+  len: integer;
+begin
+  while DestLen > 0 do
+  begin
+    len := length(fSockBuffer) - fSockBufferPos;
+    if len > 0 then
+    begin
+      // return what we can from fSockBuffer
+      if len > DestLen then
+        len := DestLen;
+      MoveFast(PByteArray(fSockBuffer)[fSockBufferPos], Dest^, len);
+      inc(fSockBufferPos, len);
+      inc(PByte(Dest), len);
+      dec(DestLen, len);
+      if DestLen = 0 then
+        exit;
+    end;
+    // fill fSockBuffer from fSock pending data
+    ReceivePacketFillSockBuffer;
+  end;
+  // note: several SEQ messages may be returned
+end;
+
+function TLdapClient.ReceivePacket(DestLen: integer): RawByteString;
+begin
+  FastSetRawByteString(result, nil, DestLen);
+  ReceivePacket(pointer(result), DestLen);
+end;
+
 function TLdapClient.ReceiveResponse: TAsnObject;
 var
   b: byte;
@@ -2661,34 +2715,21 @@ begin
     exit;
   fFullResult := '';
   try
-    if fSecContextEncrypt then
-    begin
-      // we need to use the Kerberos encryption
-      len := 0;
-      fSock.SockInRead(pointer(@len), 4); // SASL Buffer length
-      len := bswap32(len);
-      result := fSock.SockInRead(len);
-      result := SecDecrypt(fSecContext, result); // decrypt
-      // note: several SEQ messages may be returned
-    end
-    else
-    begin
-      // we need to decode the ASN.1 plain input to return a single SEQ message
-      fSock.SockInRead(pointer(@b), 1, true); // ASN type
-      if b <> ASN1_SEQ then
-        exit;
-      result := AnsiChar(b);
-      fSock.SockInRead(pointer(@b), 1, true); // ASN length
-      Append(result, @b, 1);
-      if b >= $80 then // $8x means x bytes of length
-        AsnAdd(result, fSock.SockInRead(b and $7f, true));
-      // decode length of LDAP packet
-      pos := 2;
-      len := AsnDecLen(pos, result);
-      // retrieve body of LDAP packet
-      if len > 0 then
-        AsnAdd(result, fSock.SockInRead(len, true));
-    end;
+    // we need to decode the ASN.1 plain input to return a single SEQ message
+    ReceivePacket(@b, 1); // ASN type
+    if b <> ASN1_SEQ then
+      exit;
+    FastSetRawByteString(result, @b, 1);
+    ReceivePacket(@b, 1); // first byte of ASN length
+    Append(result, @b, 1);
+    if b >= $80 then // $8x means x bytes of length
+      AsnAdd(result, ReceivePacket(b and $7f));
+    // decode length of LDAP packet
+    pos := 2;
+    len := AsnDecLen(pos, result);
+    // retrieve body of LDAP packet
+    if len > 0 then
+      AsnAdd(result, ReceivePacket(len));
   except
     on Exception do
     begin
