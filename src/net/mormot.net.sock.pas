@@ -1323,13 +1323,19 @@ type
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
     // - raise ENetSock exception on socket error
-    procedure SockRecv(Buffer: pointer; Length: integer);
+    procedure SockRecv(Buffer: pointer; Length: integer); overload;
+    /// fill a RawByteString Buffer with Length bytes
+    // - use TimeOut milliseconds wait for incoming data
+    // - bypass the SockIn^ buffers
+    // - raise ENetSock exception on socket error
+    function SockRecv(Length: integer): RawByteString; overload;
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError if the connection is broken or closed
     // - warning: on Windows, may wait a little less than TimeOutMS (select bug)
     function SockReceivePending(TimeOutMS: integer;
       loerr: system.PInteger = nil): TCrtSocketPending;
     /// returns the socket input stream as a string
+    // - returns as many bytes as possible from the OS buffers within TimeOut
     function SockReceiveString: RawByteString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
@@ -4849,6 +4855,12 @@ begin
      (Length <> read) then
     raise ENetSock.Create('%s.SockRecv(%d) read=%d',
       [ClassNameShort(self)^, Length, read], NetLastError);
+end;
+
+function TCrtSocket.SockRecv(Length: integer): RawByteString;
+begin
+  FastSetRawByteString(result, nil, Length);
+  SockRecv(pointer(result), Length);
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer;

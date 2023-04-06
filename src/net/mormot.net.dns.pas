@@ -513,7 +513,7 @@ var
   n: PUtf8Char;
   one: shortstring;
 begin
-  w := TBufferWriter.Create(tmp);
+  w := TBufferWriter.Create(tmp{%H-});
   try
     FillCharFast(h, SizeOf(h), 0);
     h.Xid := Random32; // truncated to 16-bit
