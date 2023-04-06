@@ -810,17 +810,18 @@ type
     function FileName: TFileName;
     function NewReader(fmt: T7zFormatHandler): I7zReader; overload;
     function NewReader(const name: TFileName;
-      fmt: T7zFormatHandler): I7zReader; overload;
+      fmt: T7zFormatHandler = fhUndefined): I7zReader; overload;
     function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
     function NewWriter(const name: TFileName;
-      fmt: T7zFormatHandler): I7zWriter; overload;
+      fmt: T7zFormatHandler = fhUndefined): I7zWriter; overload;
   end;
 
 
 /// global factory of the main I7zReader high-level archive file decompressor
 // - will guess the file format from its existing content
 // - will own its own TZlib instance to access the 7z.dll library
-function New7zReader(const name: TFileName; const lib: TFileName = ''): I7zReader;
+function New7zReader(const name: TFileName; fmt: T7zFormatHandler = fhUndefined;
+  const lib: TFileName = ''): I7zReader;
 
 /// global factory of the main I7zWriter high-level archive compressor
 // - will own its own TZlib instance to access the 7z.dll library
@@ -829,7 +830,8 @@ function New7zWriter(fmt: T7zFormatHandler; const lib: TFileName = ''): I7zWrite
 /// global factory of the main I7zWriter to update an existing archive file
 // - will guess the file format from its existing content
 // - will own its own TZlib instance to access the 7z.dll library
-function New7zWriter(const name: TFileName; const lib: TFileName = ''): I7zWriter; overload;
+function New7zWriter(const name: TFileName; fmt: T7zFormatHandler = fhUndefined;
+  const lib: TFileName = ''): I7zWriter; overload;
 
 
 implementation
@@ -1582,10 +1584,12 @@ begin
   result := T7zWriter.Create(self, NewReader(name, fmt), {libowned=}false);
 end;
 
-function New7zReader(const name: TFileName; const lib: TFileName): I7zReader;
+function New7zReader(const name: TFileName; fmt: T7zFormatHandler;
+  const lib: TFileName): I7zReader;
 begin
-  result := T7zReader.Create(
-    T7zLib.Create(lib), T7zLib.FormatDetect(name), {libowned=}true);
+  if fmt = fhUndefined then
+    fmt := T7zLib.FormatDetect(name);
+  result := T7zReader.Create(T7zLib.Create(lib), fmt, {libowned=}true);
   result.OpenFile(name);
 end;
 
@@ -1594,10 +1598,11 @@ begin
   result := T7zWriter.Create(T7zLib.Create(lib), fmt, {libowned=}true);
 end;
 
-function New7zWriter(const name: TFileName; const lib: TFileName): I7zWriter;
+function New7zWriter(const name: TFileName; fmt: T7zFormatHandler;
+  const lib: TFileName): I7zWriter;
 begin
   result := T7zWriter.Create(
-    T7zLib.Create(lib), New7zReader(name, lib), {libowned=}true);
+    T7zLib.Create(lib), New7zReader(name, fmt, lib), {libowned=}true);
 end;
 
 
