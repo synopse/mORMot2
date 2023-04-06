@@ -4682,7 +4682,7 @@ end;
 const
   COL_DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
   COL_NUMERIC = COL_DECIMAL + 1;
-  COL_NAMES: array[0..56] of PAnsiChar = (
+  COL_NAMES: array[0..57] of PAnsiChar = (
     'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
     'TEXT',
     'CHAR',
@@ -4716,6 +4716,7 @@ const
     'YEAR',
     'TINYTEXT',
     'MEDIUMTEXT',
+    'LONGTEXT',
     'NTEXT',
     'XML',
     'ENUM',
@@ -4775,6 +4776,7 @@ const
     ftInt64,     // 'YEAR'
     ftUtf8,      // 'TINYTEXT'
     ftUtf8,      // 'MEDIUMTEXT'
+    ftUtf8,      // 'LONGTEXT'
     ftUtf8,      // 'NTEXT'
     ftUtf8,      // 'XML'
     ftUtf8,      // 'ENUM'

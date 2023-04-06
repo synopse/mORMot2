@@ -336,6 +336,15 @@ type
   end;
   {$endif USELOCALPOSTGRESQL}
 
+  {$ifdef USELOCALMYSQL}
+  TTestmysql = class(TTestDatabaseExternalAbstract)
+  published
+    {$ifdef USEZEOS}
+    procedure Zeosmysql;
+    {$endif USEZEOS}
+  end;
+  {$endif USELOCALMYSQL}
+
   {$ifdef USEFIREBIRDEMB}
 
   { TTestFirebird }
@@ -929,6 +938,21 @@ end;
 
 {$endif USELOCALPOSTGRESQL}
 
+{$ifdef USELOCALMYSQL}
+
+{ TTestmysql }
+
+{$ifdef USEZEOS}
+procedure TTestmysql.Zeosmysql;
+begin
+  RunExternal(TSQLDBZEOSConnectionProperties.Create(
+    TSQLDBZEOSConnectionProperties.URI(dMySQL, 'localhost', 'libmariadb.dll', false),
+    'mormot', 'anon', 'nona'));
+end;
+{$endif USEZEOS}
+
+{$endif USELOCALMYSQL}
+
 
 { TTestDatabaseBenchmark }
 
@@ -1215,6 +1239,9 @@ begin
   {$ifdef USELOCALPOSTGRESQL}
   AddCase(TTestPostgresql);
   {$endif USELOCALPOSTGRESQL}
+  {$ifdef USELOCALMYSQL}
+  AddCase(TTestmysql);
+  {$endif USELOCALMYSQL}
   {$ifdef USEFIREBIRDEMB}
   AddCase(TTestFirebird);
   {$endif USEFIREBIRDEMB}
