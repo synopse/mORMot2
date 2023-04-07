@@ -114,9 +114,10 @@ const
   ASN1_CTC8  = $a8;
   ASN1_CTC9  = $a9;
 
-  ASN1_BOOLEAN: array[boolean] of byte = (
-    $00,
-    $ff);
+  /// encode a boolean value into ASN.1 binary
+  ASN1_BOOLEAN: array[boolean] of TAsnObject = (
+    RawByteString(#$01#$01#$00),
+    RawByteString(#$01#$01#$ff));
 
 /// encode a 64-bit signed integer value into ASN.1 binary
 function AsnEncInt(Value: Int64): TAsnObject;
@@ -141,9 +142,6 @@ function AsnArr(const Data: array of RawByteString;
 
 /// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
 function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
-
-/// create an ASN.1 binary from a boolean value
-function Asn(Value: boolean): TAsnObject; overload;
 
 /// create an ASN.1 SEQuence from some raw data
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
@@ -1291,11 +1289,6 @@ begin
   result := Asn(AsnType, [AsnEncInt(Value)]);
 end;
 
-function Asn(Value: boolean): TAsnObject;
-begin
-  result := Asn(ASN1_BOOL, [AsnEncInt(ASN1_BOOLEAN[Value])]);
-end;
-
 function AsnSeq(const Data: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [Data]);
@@ -1772,8 +1765,9 @@ end;
 
 function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
 var
-  x, dn: integer;
+  x: integer;
   c: Ansichar;
+  dn: boolean;
   s, t, l, r, attr, rule: RawUtf8;
 begin
   result := '';
@@ -1836,12 +1830,12 @@ begin
               // Extensible match
               begin
                 System.Delete(l, length(l), 1);
-                dn := ASN1_BOOLEAN[false];
                 attr := '';
                 rule := '';
+                dn := false;
                 if mormot.core.base.PosEx(':dn', l) > 0 then
                 begin
-                  dn := ASN1_BOOLEAN[true];
+                  dn := true;
                   l := StringReplaceAll(l, ':dn', '');
                 end;
                 attr := TrimU(SeparateLeft(l, ':'));
@@ -1853,7 +1847,7 @@ begin
                 if attr <> '' then
                   AsnAdd(result, attr, ASN1_CTX2);
                 AsnAdd(result, DecodeTriplet(r, '\'), ASN1_CTX3);
-                AsnAdd(result, AsnEncInt(dn), ASN1_CTX4);
+                AsnAdd(result, ASN1_BOOLEAN[dn], ASN1_CTX4);
                 result := Asn(result, ASN1_CTC9);
               end;
             '~':
@@ -1935,7 +1929,7 @@ begin
               Asn(ord(Aliases), ASN1_ENUM),
               Asn(Sizelimit),
               Asn(TimeLimit),
-              Asn(TypesOnly),
+              ASN1_BOOLEAN[TypesOnly],
               filt,
               AsnSeq(AsnArr(Attributes))]);
 end;
@@ -3175,7 +3169,7 @@ begin
   if not Connected then
     exit;
   query := Asn(obj);
-  Append(query, [Asn(newRdn), Asn(DeleteOldRdn)]);
+  Append(query, [Asn(newRdn), ASN1_BOOLEAN[DeleteOldRdn]]);
   if newSuperior <> '' then
     AsnAdd(query, Asn(newSuperior, ASN1_CTX0));
   SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
@@ -3219,7 +3213,7 @@ begin
     Append(s, Asn(
         Asn(ASN1_SEQ, [
            Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
-           Asn(false), // criticality: false
+           ASN1_BOOLEAN[false], // criticality: false
            Asn(Asn(ASN1_SEQ, [
              Asn(fSearchPageSize),
              Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));
