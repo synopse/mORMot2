@@ -6262,6 +6262,7 @@ var
   lib, folder, newfile1, newfile2: TFileName;
   i: PtrInt;
   tot1, tot2: Int64;
+  zlib: I7zLib;
   zin: I7zReader;
   zout: I7zWriter;
   files: TFindFilesDynArray;
@@ -6279,7 +6280,7 @@ begin
   if FileExists(lib) then
     begin
       // validate I7zReader
-      zin := New7zReader(ZipFile, lib);
+      zin := New7zReader(ZipFile, fhUndefined, lib);
       Check(zin.Format = fhZip);
       Check(zin.FormatExt = 'zip');
       Check(zin.FormatExts = ZIP_EXTS);
@@ -6329,7 +6330,7 @@ begin
       zout.AddFile(folder + '\exe.1mb', 'A.1mb');
       zout.AddBuffer('B.1mb', data);
       zout.SaveToFile(newfile1);
-      zin := New7zReader(newfile1, lib);
+      zin := New7zReader(newfile1, fhUndefined, lib);
       CheckEqual(zin.Count, 2);
       zin.SetProgressCallback(Callback7z);
       Tot7z := 0;
@@ -6341,7 +6342,7 @@ begin
       s := zin.Extract('C.1mb');
       Check(s = '', 'c');
       zin := nil; // so that we could change the file
-      zout := New7zWriter(newfile1, lib);
+      zout := New7zWriter(newfile1, fhUndefined, lib);
       zout.SetProgressCallback(Callback7z);
       Tot7z := 0;
       zout.AddFile(folder + '\exe.1mb', 'C.1mb');
@@ -6356,7 +6357,8 @@ begin
       zout.SaveToFile(newfile2);
       Check(Tot7z <> 0);
       zout := nil; // so that we could read the file
-      zin := New7zReader(newfile2, lib);
+      zlib := T7zLib.Create(lib);
+      zin := zlib.NewReader(newfile2);
       CheckEqual(zin.Count, 3);
       s := zin.Extract('A.1mb');
       Check(length(s) = 200, 'ua1');
