@@ -1583,7 +1583,7 @@ begin
     exit;
   if not (hfConnectionClose in HeaderFlags) then
     if not (hfConnectionKeepAlive in HeaderFlags) and
-       (P[8] <> '1') then
+       (P[8] <> '1') then // HTTP/1.1 is keep-alive by default
       include(HeaderFlags, hfConnectionClose);
   result := true;
 end;
@@ -1844,7 +1844,7 @@ begin
       result^.Append(CompressAcceptEncoding);
       result^.AppendCRLF;
     end;
-    result^.AppendShort('Connection: Keep-Alive'#13#10#13#10);
+    result^.AppendCRLF; // 'Connection: Keep-Alive' is implicit with HTTP/1.1
   end;
   Process.Reset;
   if ContentStream = nil then

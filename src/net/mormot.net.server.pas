@@ -4682,8 +4682,8 @@ begin
   end;
 end;
 
-procedure THttpApiServer.SetAuthenticationSchemes(schemes:
-  THttpApiRequestAuthentications; const DomainName, Realm: SynUnicode);
+procedure THttpApiServer.SetAuthenticationSchemes(
+  schemes: THttpApiRequestAuthentications; const DomainName, Realm: SynUnicode);
 var
   auth: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
