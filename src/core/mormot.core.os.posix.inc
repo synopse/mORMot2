@@ -2320,14 +2320,15 @@ end;
 {$else} // pure Linux
 
 const
-  // note: reading /sys/class/dmi/id/* is likely to require root access
-  _KNOWN: array[0..14] of record
+  // note: reading some of the /sys/class/dmi/id/* files may require root access
+  _KNOWN: array[0..15] of record
     id: TSmbiosBasicInfo;
     fn: string;
   end = (
     (id: sbiBiosVendor;        fn: 'bios_vendor'),
     (id: sbiBiosVersion;       fn: 'bios_version'),
     (id: sbiBiosDate;          fn: 'bios_date'),
+    (id: sbiBiosRelease;       fn: 'bios_release'),
     (id: sbiManufacturer;      fn: 'sys_vendor'),
     (id: sbiProductName;       fn: 'product_name'),
     (id: sbiVersion;           fn: 'product_version'),
@@ -2360,7 +2361,9 @@ end;
 
 {$endif OSBSDDARWIN}
 
-{$ifndef OSDARWIN} // on POSIX systems, /dev/mem may be available from root
+{$ifndef OSDARWIN}
+// on POSIX systems, /dev/mem may be available from root
+// but sometimes even root can't access it on hardened systems
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   mem: cInt;

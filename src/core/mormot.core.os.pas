@@ -7535,21 +7535,37 @@ function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
 var
   mem: RawByteString;
   addr: QWord;
+  {$ifdef OSLINUX}
+  fromsysfs: boolean;
+  {$endif OSLINUX}
 begin
   result := false;
   Finalize(info.Data);
   FillCharFast(info, SizeOf(info), 0);
-  // first try to read system EFI entries
-  mem := GetSmbEfiMem;
+  {$ifdef OSLINUX}
+  // on Linux, first try from sysfs tables
+  fromsysfs := false;
+  mem := StringFromFile('/sys/firmware/dmi/tables/smbios_entry_point', true);
+  if mem <> '' then
+    fromsysfs := true
+  else
+  {$endif OSLINUX}
+    // then try to read system EFI entries
+    mem := GetSmbEfiMem;
   if mem = '' then
-    // fallback to raw memory reading (won't work on modern/EFI systems)
+    // last fallback to raw memory reading (won't work on modern/EFI systems)
     mem := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);
   if mem = '' then
     exit;
   addr := SearchSmbios(mem, info);
   if addr = 0 then
     exit;
-  info.data := ReadSystemMemory(addr, info.Length);
+  {$ifdef OSLINUX}
+  if fromsysfs then
+    info.data := StringFromFile('/sys/firmware/dmi/tables/DMI', {nosize=}true)
+  else
+  {$endif OSLINUX}
+    info.data := ReadSystemMemory(addr, info.Length);
   result := info.data <> '';
 end;
 
