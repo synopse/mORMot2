@@ -1293,7 +1293,8 @@ end;
 
 function Asn(Value: boolean): TAsnObject;
 begin
-  result := Asn(ASN1_BOOL, [AsnEncInt(ASN1_BOOLEAN[Value])]);
+  FastSetRawByteString(Result, @ASN1_BOOLEAN[Value], 1);
+  result := Asn(Result, ASN1_BOOL);
 end;
 
 function AsnSeq(const Data: TAsnObject): TAsnObject;
