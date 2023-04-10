@@ -495,6 +495,8 @@ type
     Items: TAsyncConnectionDynArray;
   end;
 
+  TAsyncConnectionsThreads = array of TAsyncConnectionsThread;
+
   /// implements an abstract thread-pooled high-performance TCP clients or server
   // - internal TAsyncConnectionsSockets will handle high-performance process
   // of a high number of long-living simultaneous connections
@@ -509,7 +511,7 @@ type
     fConnectionClass: TAsyncConnectionClass;
     fConnection: TAsyncConnectionDynArray; // sorted by TAsyncConnection.Handle
     fClients: TAsyncConnectionsSockets;
-    fThreads: array of TAsyncConnectionsThread;
+    fThreads: TAsyncConnectionsThreads;
     fThreadReadPoll: TAsyncConnectionsThread;
     fConnectionCount: integer; // only subscribed - not just after accept()
     fConnectionHigh: integer;
@@ -650,6 +652,8 @@ type
     // - will WriteLock/block only on connection add/remove
     property ConnectionLock: TRWLock
       read fConnectionLock;
+    /// direct access to the internal AsyncConnectionsThread`s
+    property Threads: TAsyncConnectionsThreads read fThreads;
   published
     /// how many read threads there are in this thread pool
     property ThreadPoolCount: integer
