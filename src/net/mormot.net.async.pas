@@ -495,6 +495,7 @@ type
     Items: TAsyncConnectionDynArray;
   end;
 
+  /// dynamic array of TAsyncConnectionsThread instances
   TAsyncConnectionsThreads = array of TAsyncConnectionsThread;
 
   /// implements an abstract thread-pooled high-performance TCP clients or server
@@ -653,7 +654,8 @@ type
     property ConnectionLock: TRWLock
       read fConnectionLock;
     /// direct access to the internal AsyncConnectionsThread`s
-    property Threads: TAsyncConnectionsThreads read fThreads;
+    property Threads: TAsyncConnectionsThreads
+      read fThreads;
   published
     /// how many read threads there are in this thread pool
     property ThreadPoolCount: integer
