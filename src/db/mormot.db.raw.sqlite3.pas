@@ -6867,8 +6867,8 @@ begin
     result := R.ExecuteNoException(DB, aSql);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % % = %', [Timer.Stop, FileNameWithoutPath, aSql,
-      BOOL_STR[result]], self);
+    fLog.Add.Log(sllSQL, '% % % = %',
+      [Timer.Stop, FileNameWithoutPath, aSql, BOOL_STR[result]], self);
   end;
 end;
 

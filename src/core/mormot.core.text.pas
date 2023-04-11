@@ -9751,7 +9751,7 @@ begin
         end
         else
         begin
-          Res.Text := @BOOL_STR[false][0];
+          Res.Text := @BOOL_STR[false][1];
           Res.Len := 5;
         end;
       varInteger:
