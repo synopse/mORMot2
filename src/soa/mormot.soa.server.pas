@@ -1654,7 +1654,8 @@ begin
     exit;
   end;
   if not Assigned(fServer.OnNotifyCallback) then
-    raise EServiceException.CreateUtf8('%(%) does not support callbacks for I%',
+    raise EServiceException.CreateUtf8(
+      '%(%) does not support callbacks for I%',
       [fServer, fServer.Model.Root, aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then
   begin

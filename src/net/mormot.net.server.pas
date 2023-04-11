@@ -4700,22 +4700,20 @@ begin
   auth.AuthSchemes := byte(schemes);
   auth.ReceiveMutualAuth := true;
   if haBasic in schemes then
-    with auth.BasicParams do
-    begin
-      RealmLength := Length(Realm);
-      Realm := pointer(Realm);
-    end;
+  begin
+    auth.BasicParams.RealmLength := Length(Realm);
+    auth.BasicParams.Realm := pointer(Realm);
+  end;
   if haDigest in schemes then
-    with auth.DigestParams do
-    begin
-      DomainNameLength := Length(DomainName);
-      DomainName := pointer(DomainName);
-      RealmLength := Length(Realm);
-      Realm := pointer(Realm);
-    end;
+  begin
+    auth.DigestParams.DomainNameLength := Length(DomainName);
+    auth.DigestParams.DomainName := pointer(DomainName);
+    auth.DigestParams.RealmLength := Length(Realm);
+    auth.DigestParams.Realm := pointer(Realm);
+  end;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerAuthenticationProperty,
-      @auth, SizeOf(auth)));
+    Http.SetUrlGroupProperty(
+      fUrlGroupID, HttpServerAuthenticationProperty, @auth, SizeOf(auth)));
 end;
 
 procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
@@ -4737,8 +4735,8 @@ begin
   timeout.HeaderWait := aHeaderWait;
   timeout.MinSendRate := aMinSendRate;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
-    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerTimeoutsProperty,
-      @timeout, SizeOf(timeout)));
+    Http.SetUrlGroupProperty(
+      fUrlGroupID, HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
 end;
 
 
