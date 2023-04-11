@@ -41,9 +41,6 @@ uses
 /// retrieve extended error information text after a WinINet API call
 function SysErrorMessageWinInet(error: integer): RawUtf8;
 
-/// low-level retrieval of a Domain User from a transmitted Token
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
-
 
 { ************  http.sys / HTTP Server API low-level direct access }
 
@@ -2262,34 +2259,6 @@ begin
     exit;
   InternetGetLastResponseInfoW(dwError, @tmp, tmpLen);
   result := FormatUtf8('% [%]', [result, PWideChar(@tmp)]);
-end;
-
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
-var
-  Buffer: array[0..511] of byte;
-  BufferSize, UserSize, DomainSize: DWORD;
-  UserInfo: PSIDAndAttributes;
-  NameUse: {$ifdef FPC}SID_NAME_USE{$else}cardinal{$endif};
-  tmp: SynUnicode;
-  P: PWideChar;
-begin
-  if not GetTokenInformation(UserToken, TokenUser,
-           @Buffer, SizeOf(Buffer), BufferSize) then
-    exit;
-  UserInfo := @Buffer;
-  UserSize := 0;
-  DomainSize := 0;
-  LookupAccountSidW(nil, UserInfo^.Sid, nil, UserSize, nil, DomainSize, NameUse);
-  if (UserSize = 0) or
-     (DomainSize = 0) then
-    exit;
-  SetLength(tmp, UserSize + DomainSize - 1);
-  P := pointer(tmp);
-  if not LookupAccountSidW(
-     nil, UserInfo^.Sid, P + DomainSize, UserSize, P, DomainSize, NameUse) then
-    exit;
-  P[DomainSize] := '\';
-  result := SynUnicodeToUtf8(tmp);
 end;
 
 

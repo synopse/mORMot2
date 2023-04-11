@@ -1720,6 +1720,12 @@ function LookupSid(sid: PSid; out name, domain: RawUtf8;
 function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8;
   const server: RawUtf8 = ''): TSidType; overload;
 
+/// retrieve the name and domain of a given Token
+function LookupToken(tok: THandle; out name, domain: RawUtf8;
+  const server: RawUtf8 = ''): boolean; overload;
+
+/// retrieve the 'domain\name' combined value of a given Token
+function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
 
 /// retrieve low-level process information, from the Windows API
 procedure GetProcessInfo(aPid: cardinal;

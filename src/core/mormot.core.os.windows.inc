@@ -2922,6 +2922,25 @@ begin
     result := stUndefined;
 end;
 
+function LookupToken(tok: THandle; out name, domain: RawUtf8;
+  const server: RawUtf8): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := LookupSid(RawTokenSid(tok, tmp) ,name, domain, server) <> stUndefined;
+  tmp.Done;
+end;
+
+function LookupToken(tok: THandle; const server: RawUtf8): RawUtf8;
+var
+  name, domain: RawUtf8;
+begin
+  if LookupToken(tok, name, domain, server) then
+    result := domain + '\' + name
+  else
+    result := '';
+end;
+
 
 { TSynWindowsPrivileges }
 
