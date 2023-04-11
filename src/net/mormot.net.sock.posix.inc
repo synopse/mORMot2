@@ -811,7 +811,9 @@ begin
   p := pointer(resolv);
   while p <> nil do
   begin
-    if p^ in [#1..' ', '#'] then
+    while p^ in [#8, ' '] do
+      inc(p);
+    if p^ in [#0, '#'] then
       ok := false
     else if getAD then
       ok := NetStartWith(p, 'SEARCH ') or
@@ -820,7 +822,9 @@ begin
       ok := NetStartWith(p, 'NAMESERVER ');
     if ok then
     begin
-      p := PosChar(p, ' '); // search ad.mycomp.tld mycom.tld
+      repeat
+        inc(p);
+      until p^ <= ' '; // go after search/domain/nameserver keyword
       repeat
         one := NetGetNextSpaced(p);
         if one = '' then

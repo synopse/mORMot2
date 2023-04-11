@@ -2980,11 +2980,15 @@ begin
   p := pointer(StringFromFile(host_file));
   while p <> nil do
   begin
+    while p^ in [#8, ' '] do
+      inc(p);
     if (p^ in ['1'..'9']) and
        NetIsIP4(p, @ip4) and
        ({%H-}ip4 <> 0) then
     begin
-      p := PosChar(p, ' ');
+      repeat
+        inc(p);
+      until p^ <= ' '; // go to end of IP text
       repeat
         h := NetGetNextSpaced(p);
         if h = '' then
@@ -3867,7 +3871,7 @@ var
   S: PUtf8Char;
 begin
   result := '';
-  while P^ = ' ' do
+  while P^ in [#8, ' '] do
     inc(P);
   if P^ < ' ' then
     exit; // end of line or end of file
