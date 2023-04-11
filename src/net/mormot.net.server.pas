@@ -4134,13 +4134,6 @@ begin
       // release input/output body buffers ASAP
       ctxt.fInContent := '';
       ctxt.fOutContent := '';
-      ctxt.fOutContentType := '';
-      ctxt.fOutCustomHeaders := '';
-      // reset authentication status & user between requests
-      ctxt.fAuthenticationStatus := hraNone;
-      ctxt.fAuthenticatedUser := '';
-      ctxt.fAuthBearer := '';
-      byte(ctxt.fConnectionFlags) := 0;
       // retrieve next pending request, and read its headers
       FillcharFast(req^, SizeOf(HTTP_REQUEST), 0);
       err := Http.ReceiveHttpRequest(fReqQueue, reqid, 0,
@@ -4152,6 +4145,11 @@ begin
           try
             // parse method and main headers as ctxt.Prepare() does
             ctxt.fHttpApiRequest := req;
+            ctxt.Recycle(req^.ConnectionID, self,
+              // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
+              HTTP_TLS_FLAGS[req^.pSslInfo <> nil],
+              // ctxt.fConnectionOpaque is not supported by http.sys
+              nil);
             FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
             if req^.Verb in [low(global_verbs)..high(global_verbs)] then
               ctxt.fMethod := global_verbs[req^.Verb]
@@ -4168,10 +4166,6 @@ begin
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
-            ctxt.ConnectionFlags := HTTP_TLS_FLAGS[req^.pSslInfo <> nil];
-            // no HTTP_UPG_FLAGS[]: plain THttpApiServer doesn't support upgrade
-            ctxt.fConnectionID := req^.ConnectionID;
-            // ctxt.fConnectionOpaque is not supported by http.sys
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
               req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
               {out} ctxt.fRemoteIP, PQword(@ctxt.fConnectionID)^);
