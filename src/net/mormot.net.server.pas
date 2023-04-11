@@ -297,7 +297,8 @@ type
       aConnectionOpaque: PHttpServerConnectionOpaque); virtual;
     /// could be called before Prepare() to reuse an existing instance
     procedure Recycle(aConnectionID: THttpServerConnectionID;
-      aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags);
+      aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+      aConnectionOpaque: PHttpServerConnectionOpaque);
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -386,7 +387,6 @@ type
     fCompressAcceptEncoding: RawUtf8;
     fServerName: RawUtf8;
     fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
-    fCurrentRequestID: integer;
     fCallbackSendDelay: PCardinal;
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
@@ -2065,39 +2065,41 @@ end;
 
 { THttpServerRequest }
 
-var
-  // global request counter if no THttpServer is defined
-  GlobalRequestID: integer;
-
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
   aConnectionFlags: THttpServerRequestFlags;
   aConnectionOpaque: PHttpServerConnectionOpaque);
-var
-  id: PInteger;
 begin
   inherited Create;
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
-  fConnectionOpaque := aConnectionOpaque;
   fConnectionFlags := aConnectionFlags;
-  if fServer = nil then
-    id := @GlobalRequestID
-  else
-    id := @fServer.fCurrentRequestID;
-  fRequestID := InterLockedIncrement(id^);
-  if fRequestID = maxInt - 2048 then
-    id^ := 0; // ensure no overflow (31-bit range)
+  fConnectionOpaque := aConnectionOpaque;
 end;
 
 procedure THttpServerRequest.Recycle(aConnectionID: THttpServerConnectionID;
-  aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags);
+  aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
+  aConnectionOpaque: PHttpServerConnectionOpaque);
 begin
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
   fConnectionFlags := aConnectionFlags;
+  fConnectionOpaque := aConnectionOpaque;
+  // reset fields as Create() does
+  fHost := '';
+  fAuthBearer := '';
+  fUserAgent := '';
+  fRespStatus := 0;
+  fOutContent := '';
+  fOutContentType := '';
+  fOutCustomHeaders := '';
+  fAuthenticationStatus := hraNone;
+  fAuthenticatedUser := '';
   fErrorMessage := '';
+  fRouteName := nil; // no fRouteValuePosLen := nil (safe to reuse)
+  fUrlParamPos := nil;
+  // Prepare() will set the other fields
 end;
 
 const
@@ -2308,6 +2310,13 @@ begin
   end;
 end;
 
+function THttpServerGeneric.NextConnectionID: integer;
+begin
+  result := InterlockedIncrement(fCurrentConnectionID);
+  if result = maxInt - 2048 then
+    fCurrentConnectionID := 0; // paranoid keep ID in positive 31-bit range
+end;
+
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
   aCompressMinSize: integer);
 begin
@@ -2453,13 +2462,6 @@ procedure THttpServerGeneric.SetRemoteConnIDHeader(const aHeader: RawUtf8);
 begin
   fRemoteConnIDHeader := aHeader;
   fRemoteConnIDHeaderUpper := UpperCase(aHeader);
-end;
-
-function THttpServerGeneric.NextConnectionID: integer;
-begin
-  result := InterlockedIncrement(fCurrentConnectionID);
-  if result = maxInt - 2048 then // paranoid 31-bit counter reset to ensure >0
-    fCurrentConnectionID := 0;
 end;
 
 

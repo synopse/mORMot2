@@ -3366,7 +3366,7 @@ begin
     fRequest := THttpServerRequest.Create(
       fServer, fConnectionID, fReadThread, flags, @fConnectionOpaque)
   else
-    fRequest.Recycle(fConnectionID, fReadThread, flags);
+    fRequest.Recycle(fConnectionID, fReadThread, flags, @fConnectionOpaque);
   fRequest.Prepare(fHttp, fRemoteIP);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then

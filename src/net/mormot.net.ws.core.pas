@@ -764,8 +764,9 @@ type
     function ProcessLoopStepSend: boolean;
     // blocking process, for one thread handling all WebSocket connection process
     procedure ProcessLoop;
-    function ComputeContext(out RequestProcess: TOnHttpServerRequest
-        ): THttpServerRequestAbstract; virtual; abstract;
+    function ComputeContext(
+      out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
+        virtual; abstract;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;

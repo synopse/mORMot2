@@ -577,7 +577,6 @@ type
     fRespReason: RawUtf8;
     fInContent,
     fOutContent: RawByteString;
-    fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
     fConnectionFlags: THttpServerRequestFlags;
     fAuthenticationStatus: THttpServerRequestAuthentication;
@@ -593,7 +592,8 @@ type
   public
     /// prepare an incoming request from a parsed THttpRequestContext
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
-    // - will reset output parameters
+    // - won't reset other parameters: should come after a plain Create or
+    // an explicit THttpServerRequest.Recycle()
     procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
     /// prepare an incoming request from explicit values
     // - could be used for non-HTTP execution, e.g. from a WebSockets link
@@ -693,9 +693,6 @@ type
     /// the "User-Agent" HTTP header token, as specified to Prepare()
     property UserAgent: RawUtf8
       read fUserAgent write fUserAgent;
-    /// a 31-bit sequential number identifying this instance on the server
-    property RequestID: integer
-      read fRequestID;
     /// the ID of the connection which called this execution context
     // - e.g. mormot.net.websocket's TWebSocketProcess.NotifyCallback method
     // would use this property to specify the client connection to be notified
@@ -2258,37 +2255,27 @@ procedure THttpServerRequestAbstract.Prepare(
   const aUrl, aMethod, aInHeaders: RawUtf8; const aInContent: RawByteString;
   const aInContentType, aRemoteIP: RawUtf8);
 begin
+  // Create or Recycle() would have zeroed other fields
+  fRemoteIP := aRemoteIP;
   fUrl := aUrl;
   fMethod := aMethod;
-  fRemoteIP := aRemoteIP;
   fInHeaders := aInHeaders;
-  fHost := '';
-  fAuthBearer := '';
-  fUserAgent := '';
-  fInContent := aInContent;
   fInContentType := aInContentType;
-  fOutContent := '';
-  fOutContentType := '';
-  fOutCustomHeaders := '';
-  fRouteName := nil; // no fRouteValuePosLen := nil (safe to reuse)
+  fInContent := aInContent;
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
   const aRemoteIP: RawUtf8);
 begin
+  fRemoteIP := aRemoteIP;
   fUrl := aHttp.CommandUri;
   fMethod := aHttp.CommandMethod;
-  fRemoteIP := aRemoteIP;
   fInHeaders := aHttp.Headers;
+  fInContentType := aHttp.ContentType;
   fHost := aHttp.Host;
   fAuthBearer := aHttp.BearerToken;
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
-  fInContentType := aHttp.ContentType;
-  fOutContent := '';
-  fOutContentType := '';
-  fOutCustomHeaders := '';
-  fRouteName := nil;
 end;
 
 procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);

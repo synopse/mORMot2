@@ -470,10 +470,10 @@ begin
             begin
               p := pointer(fOwner.fRestFrame);
               for i := 1 to fOwner.fRestFrameCount do
-                if p^.RequestID = connection then
+                if p^.ConnectionID = connection then
                 begin
-                  log.Log(sllTrace, 'ProcessIncomingFrame received #%.% % [%]',
-                    [p^.ConnectionID, p^.RequestID, p^.method, rest.Status], self);
+                  log.Log(sllTrace, 'ProcessIncomingFrame received #% % [%]',
+                    [p^.ConnectionID, p^.method, rest.Status], self);
                   if rest.status = 0 then
                     break;
                   p^.OutContent := rest.content;
@@ -998,9 +998,9 @@ var
   log: ISynLog;
 begin
   result := 504; // HTTP_GATEWAYTIMEOUT
-  log := fLog.Enter('OnClientsRequest #%.% % % %',  [Ctxt.ConnectionID,
-    Ctxt.RequestID, Ctxt.RemoteIP, Ctxt.Method, Ctxt.Url], self);
-  if Ctxt.RequestID = 0 then
+  log := fLog.Enter('OnClientsRequest #% % % %',  [Ctxt.ConnectionID,
+    Ctxt.RemoteIP, Ctxt.Method, Ctxt.Url], self);
+  if Ctxt.ConnectionID = 0 then
     raise ERelayProtocol.CreateUtf8('%.OnClientsRequest: RequestID=0', [self]);
   SetRestFrame(frame, 0,
     Ctxt.Url, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent, Ctxt.InContentType);
@@ -1010,7 +1010,7 @@ begin
       raise ERelayProtocol.CreateUtf8(
         '%.OnClientsRequest: No server to relay to', [self]);
     if not EncapsulateAndSend(
-        fServerConnected, Ctxt.RemoteIP, frame, Ctxt.RequestID) then
+        fServerConnected, Ctxt.RemoteIP, frame, Ctxt.ConnectionID) then
       raise ERelayProtocol.CreateUtf8(
         '%.OnClientsRequest: Error relaying from #% % to server',
         [Ctxt.ConnectionID, Ctxt.RemoteIP]);
