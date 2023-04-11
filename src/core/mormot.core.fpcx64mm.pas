@@ -2773,10 +2773,9 @@ end;
 
 function _FreeMemSize(P: pointer; size: PtrUInt): PtrInt;
 begin
-  // should return the chunk size - only used by heaptrc AFAIK
-  if (P <> nil) and
-     (size <> 0) then
-    result := _FreeMem(P)
+  // size = 0 needs to call _FreeMem() because GetMem(P,0) returned something
+  if P <> nil then
+    result := _FreeMem(P) // returns the chunk size - only used by heaptrc AFAIK
   else
     result := 0;
 end;
