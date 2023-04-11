@@ -388,12 +388,10 @@ type
 function FastFindConnection(c: PWebSocketProcessServer; n: integer;
   id: THttpServerConnectionID): TWebSocketProcessServer;
 begin
-  // speedup brute force check in case of high number of connections
-  // - since we have one thread per connection, number won't be so high ;)
   if n > 0 then
     repeat
       result := c^;
-      if result.Protocol.ConnectionID = id then
+      if result.fConnectionID = id then // brute force search
         exit;
       inc(c);
       dec(n);

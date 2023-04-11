@@ -278,8 +278,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsebin
   TWebSocketProtocol = class(TSynPersistent)
   protected
-    fName: RawUtf8;
-    fUri: RawUtf8;
+    fConnectionID: THttpServerConnectionID;
     fFramesInCount: integer;
     fFramesOutCount: integer;
     fFramesInBytes: QWord;
@@ -287,11 +286,12 @@ type
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fRemoteLocalhost: boolean;
     fConnectionFlags: THttpServerRequestFlags;
-    fConnectionID: THttpServerConnectionID;
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fRemoteIP: RawUtf8;
     fUpgradeUri: RawUtf8;
     fUpgradeBearerToken: RawUtf8;
+    fName: RawUtf8;
+    fUri: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
@@ -733,21 +733,22 @@ type
   // updated from the actual processing thread (e.g. as in TWebCrtSocketProcess)
   TWebSocketProcess = class(TSynPersistent)
   protected
-    fProcessName: RawUtf8;
+    fProtocol: TWebSocketProtocol;
+    fConnectionID: THttpServerConnectionID;
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
-    fProtocol: TWebSocketProtocol;
     fState: TWebSocketProcessState;
     fMaskSentFrames: byte;
     fProcessEnded: boolean;
     fConnectionCloseWasSent: boolean;
     fNoLastSocketTicks: boolean;
     fProcessCount: integer;
+    fInvalidPingSendCount: cardinal;
     fSettings: PWebSocketProcessSettings;
     fSafeIn, fSafeOut: TRTLCriticalSection;
-    fInvalidPingSendCount: cardinal;
     fLastSocketTicks: Int64;
+    fProcessName: RawUtf8;
     procedure MarkAsInvalid;
     function LastPingDelay: Int64;
     procedure SetLastPingTicks;
@@ -820,6 +821,7 @@ type
     procedure Shutdown(waitForPong: boolean);
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the associated 'Remote-IP' HTTP header value
     // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
     function RemoteIP: RawUtf8;
@@ -1485,8 +1487,8 @@ begin
         Ctxt.AddInHeader(info);  // include JUMBO_INFO[] custom header
       // compute the HTTP answer from the main HTTP server
       status := onRequest(Ctxt);
-      if (Ctxt.OutContentType = NORESPONSE_CONTENT_TYPE) or
-         noAnswer then
+      if noAnswer or
+         (Ctxt.OutContentType = NORESPONSE_CONTENT_TYPE) then
         exit; // custom non-blocking process expects no answer
       // there is a response frame to send back
       OutputToFrame(Ctxt, status, head, answer);
@@ -2495,6 +2497,7 @@ begin
   inherited Create; // may have been overriden
   fProcessName := aProcessName;
   fProtocol := aProtocol;
+  fConnectionID := aProtocol.ConnectionID;
   fOwnerThread := aOwnerThread;
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create(30 * 60);
