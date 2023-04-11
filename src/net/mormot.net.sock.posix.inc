@@ -811,7 +811,7 @@ begin
   p := pointer(resolv);
   while p <> nil do
   begin
-    while p^ in [#8, ' '] do
+    while p^ in [#9, ' '] do
       inc(p);
     if p^ in [#0, '#'] then
       ok := false
