@@ -422,7 +422,7 @@ implementation
   - Lock-less free lists reduce tiny/small Getmem/Freemem thread contention;
   - Lock-less free lists reduce medium Freemem thread contention;
   - Medium and Large blocks have one giant lock over their own pool;
-  - Medium blocks have a unlocked prefetched memory chunk to reduce contention;
+  - Medium blocks have an unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
   - SwitchToThread/FpNanoSleep OS call is done after initial spinning;
   - FPCMM_DEBUG / WriteHeapStatus helps identifying the lock contention(s).
@@ -2233,7 +2233,7 @@ asm
         mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLODLESS marker
         {$endif FPCMM_REPORTMEMORYLEAKS}
         test    P, P
-        jz      @Quit  // void pointer
+        jz      @Void
         {$ifdef FPCMM_REPORTMEMORYLEAKS}
         mov     [P], rax // overwrite TObject VMT or string/dynarray header
         {$endif FPCMM_REPORTMEMORYLEAKS}
@@ -2285,8 +2285,12 @@ asm
         {$ifdef NOSFRAME}
         pop     rbx
         ret
+@Void:  xor     eax, eax
+        ret
         {$else}
         jmp     @Done // on Win64, a stack frame is required
+@Void:  xor     eax, eax
+        jmp     @Quit
         {$endif NOSFRAME}
 @PoolIsNowEmpty:
         // FirstFreeBlock=nil means it is the sequential feed pool with a single block
@@ -2774,10 +2778,8 @@ end;
 function _FreeMemSize(P: pointer; size: PtrUInt): PtrInt;
 begin
   // size = 0 needs to call _FreeMem() because GetMem(P,0) returned something
-  if P <> nil then
-    result := _FreeMem(P) // returns the chunk size - only used by heaptrc AFAIK
-  else
-    result := 0;
+  result := _FreeMem(P); // P=nil will return 0
+  // returns the chunk size - only used by heaptrc AFAIK
 end;
 
 
@@ -2814,7 +2816,7 @@ end;
 
 function _GetHeapStatus: THeapStatus;
 begin
-  // use this deprecated 32-bit structure to return
+  // use this deprecated 32-bit structure to return hidden information
   FillChar(result, sizeof(result), 0);
   PShortString(@result.TotalAddrSpace)^ := 'fpcx64mm'; // magic
   PPointer(@result.Unused)^ := @_GetHeapInfo;
