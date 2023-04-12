@@ -2259,7 +2259,7 @@ var
   bak: RawByteString;
 begin
   // validate raw client-server Digest access authentication
-  Check(DigestServerInit(daUndefined, '', '', 0) = '');
+  Check(DigestServerInit(daUndefined, '', '', '', 0) = '');
   Check(DigestClient(daUndefined, '', '', '', '') = '');
   for n := 1 to 10 do
   begin
@@ -2271,8 +2271,8 @@ begin
     // pwd and realm have a quote within
     for a := daMD5 to high(a) do
     begin
-      Check(DigestServerInit(a, '', '', opaque) = '');
-      s := DigestServerInit(a, QuotedStr(realm, '"'), '', opaque);
+      Check(DigestServerInit(a, '', '', '', opaque) = '');
+      s := DigestServerInit(a, QuotedStr(realm, '"'), '', '', opaque);
       Check(s <> '');
       CheckEqual(DigestRealm(s), realm, 'realm server');
       Check(DigestClient(daUndefined, s, url, user, pwd) = '');
@@ -2291,7 +2291,7 @@ begin
         authuser, authurl, 100), 'wrong algo');
     end;
   end;
-  Check(DigestServerInit(daUndefined, realm, '', opaque) = '');
+  Check(DigestServerInit(daUndefined, realm, '', '', opaque) = '');
   // validate TDigestAuthServerFile
   SetLength(users, 100);
   SetLength(pwds, length(users));
@@ -2375,7 +2375,7 @@ begin
       for u := 0 to high(users) do
       begin
         opaque := Random64;
-        s := dig.ServerInit(opaque, 0, '');
+        s := dig.ServerInit(opaque, 0, '', '');
         Check(s <> '');
         c := DigestClient(a, s, url, users[u], pwds[u]);
         Check(c <> '');
