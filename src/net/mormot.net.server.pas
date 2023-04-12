@@ -4182,7 +4182,7 @@ begin
                           byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
                           if AccessToken <> 0 then
                           begin
-                            GetDomainUserNameFromToken(AccessToken, ctxt.fAuthenticatedUser);
+                            ctxt.fAuthenticatedUser := LookupToken(AccessToken);
                             // AccessToken lifecycle is application responsability
                             CloseHandle(AccessToken);
                           end;
