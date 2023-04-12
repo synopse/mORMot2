@@ -52,7 +52,8 @@ begin
         OrmSample.Free;
       end;
     end;
-  mPOST, mPUT:
+  mPOST,
+  mPUT:
     begin
       InBody := Ctxt.Call.InBody;
       OrmSample := TOrmSample.Create;

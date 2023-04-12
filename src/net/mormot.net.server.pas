@@ -2097,7 +2097,7 @@ begin
   fAuthenticationStatus := hraNone;
   fAuthenticatedUser := '';
   fErrorMessage := '';
-  fRouteName := nil; // no fRouteValuePosLen := nil (safe to reuse)
+  fRouteName := nil; // no fRouteValuePosLen := nil (to reuse allocated array)
   fUrlParamPos := nil;
   // Prepare() will set the other fields
 end;
@@ -4185,6 +4185,8 @@ begin
                             ctxt.fAuthenticatedUser := LookupToken(AccessToken);
                             // AccessToken lifecycle is application responsability
                             CloseHandle(AccessToken);
+                            ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
+                            include(ctxt.fConnectionFlags, hsrAuthorized);
                           end;
                         end;
                       HttpAuthStatusFailure:
