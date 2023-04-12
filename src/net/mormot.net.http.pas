@@ -745,7 +745,7 @@ type
     /// fast check if this IP4 is to be rejected
     // - no RW lock is needed, since is done in the main socket accept() thread
     function IsBanned(const addr: TNetAddr): boolean;
-    /// register an IP4 if status in >= 400 (but not 401/403)
+    /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
     function ShouldBan(status, ip4: cardinal): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// to be called every second to remove deprecated bans from the list
@@ -2544,8 +2544,8 @@ end;
 function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
 begin
   result := (self <> nil) and
-            ((status = HTTP_BADREQUEST) or  // naive heuristic
-             (status > HTTP_FORBIDDEN)) and // allow 401/403 retry
+            ((status = HTTP_BADREQUEST) or  // disallow 400,402..xxx
+             (status > HTTP_UNAUTHORIZED)) and // allow 401 response
             BanIP(ip4)
 end;
 
