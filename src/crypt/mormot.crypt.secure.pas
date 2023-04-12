@@ -849,9 +849,10 @@ const
 
 /// initiate a Digest access authentication from server side for a given algorithm
 // - Opaque could be e.g. an obfuscated HTTP connection ID to avoid MiM attacks
-// - Prefix is typically 'WWW-Authenticate: Digest ' to construct a HTTP header
-function DigestServerInit(Algo: TDigestAlgo; const QuotedRealm, Prefix: RawUtf8;
-  Opaque: Int64; Tix64: Int64 = 0): RawUtf8;
+// - Prefix/Suffix are typically 'WWW-Authenticate: Digest ' and #13#10 to
+// construct a HTTP header
+function DigestServerInit(Algo: TDigestAlgo;
+  const QuotedRealm, Prefix, Suffix: RawUtf8; Opaque: Int64; Tix64: Int64 = 0): RawUtf8;
 
 type
   /// callback event able to return the HA0 binary from a username
@@ -889,10 +890,12 @@ type
   public
     /// initialize the Digest access authentication engine
     constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce;
-    /// compute a server authentication request (as HTTP header by default)
+    /// compute a server authentication request
+    // - returns the standard HTTP header with the default Prefix/Suffix
     // - Opaque is a 64-bit number, typically the THttpServerConnectionID
     function ServerInit(Opaque, Tix64: Int64;
-      const Prefix: RawUtf8 = 'WWW-Authenticate: Digest '): RawUtf8;
+      const Prefix: RawUtf8 = 'WWW-Authenticate: Digest ';
+      const Suffix: RawUtf8 = #13#10): RawUtf8;
     /// quickly check if the supplied client response is likely to be compatible
     // - FromClient is typically a HTTP header
     // - will just search for the 'algorithm=xxx,' text pattern
@@ -915,6 +918,9 @@ type
     property RequestExpSec: integer
       read fRequestExpSec write fRequestExpSec;
   end;
+
+  /// meta-class of server side Digest access authentication
+  TDigestAuthServerClass = class of TDigestAuthServer;
 
   /// Digest access authentication on server side using a .htdigest file
   // - can also add, delete or update credentials
@@ -2512,9 +2518,14 @@ end;
 
 const
   HASH_SIZE: array[THashAlgo] of integer = (
-    SizeOf(TMd5Digest), SizeOf(TSHA1Digest), SizeOf(TSHA256Digest),
-    SizeOf(TSHA384Digest), SizeOf(TSHA512Digest), SizeOf(THash256),
-    SizeOf(THash256), SizeOf(THash512));
+    SizeOf(TMd5Digest),    // hfMD5
+    SizeOf(TSHA1Digest),   // hfSHA1
+    SizeOf(TSHA256Digest), // hfSHA256
+    SizeOf(TSHA384Digest), // hfSHA384
+    SizeOf(TSHA512Digest), // hfSHA512
+    SizeOf(THash256),      // hfSHA512_256
+    SizeOf(THash256),      // hfSHA3_256
+    SizeOf(THash512));     // hfSHA3_512
 
 function TSynHasher.HashSize: integer;
 begin
@@ -2595,14 +2606,14 @@ end;
 
 const
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5',
-    '.sha1',
-    '.sha256',
-    '.sha384',
-    '.sha512',
-    '.sha512-256',
-    '.sha3-256',
-    '.sha3-512');
+    '.md5',        // hfMD5
+    '.sha1',       // hfSHA1
+    '.sha256',     // hfSHA256
+    '.sha384',     // hfSHA384
+    '.sha512',     // hfSHA512
+    '.sha512-256', // hfSHA512_256
+    '.sha3-256',   // hfSHA3_256
+    '.sha3-512');  // hfSHA3_512
 
 class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
 begin
@@ -2765,14 +2776,14 @@ end;
 
 const
   ALGO_EXT: array[THashAlgo] of string[10] = (
-    'md5',
-    'sha1',
-    'sha256',
-    'sha384',
-    'sha512',
-    'sha512_256',
-    'sha3_256',
-    'sha3_512');
+    'md5',          // hfMD5
+    'sha1',         // hfSHA1
+    'sha256',       // hfSHA256
+    'sha384',       // hfSHA384
+    'sha512',       // hfSHA512
+    'sha512_256',   // hfSHA512_256
+    'sha3_256',     // hfSHA3_256
+    'sha3_512');    // hfSHA3_512
 
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
 var
@@ -3304,7 +3315,7 @@ begin
 end;
 
 function DigestServerInit(Algo: TDigestAlgo;
-  const QuotedRealm, Prefix: RawUtf8; Opaque, Tix64: Int64): RawUtf8;
+  const QuotedRealm, Prefix, Suffix: RawUtf8; Opaque, Tix64: Int64): RawUtf8;
 var
   h: THash128Rec;
   noncehex, opaquehex: string[32];
@@ -3324,8 +3335,9 @@ begin
   DefaultHasher128(@h, @Opaque, SizeOf(Opaque)); // likely to be AesNiHash128()
   opaquehex[0] := #32;
   BinToHexLower(@h, @opaquehex[1], SizeOf(h));
-  FormatUtf8('%realm=%,qop="auth",%nonce="%",opaque="%"',
-    [Prefix, QuotedRealm, DIGEST_NAME_RESP[Algo], noncehex, opaquehex], result);
+  FormatUtf8('%realm=%,qop="auth",%nonce="%",opaque="%"%',
+    [Prefix, QuotedRealm, DIGEST_NAME_RESP[Algo], noncehex, opaquehex, Suffix],
+    result);
 end;
 
 function DigestServerAuth(Algo: TDigestAlgo; const Realm: RawUtf8;
@@ -3418,10 +3430,10 @@ begin
 end;
 
 function TDigestAuthServer.ServerInit(Opaque, Tix64: Int64;
-  const Prefix: RawUtf8): RawUtf8;
+  const Prefix, Suffix: RawUtf8): RawUtf8;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
-  result := DigestServerInit(fAlgo, fQuotedRealm, Prefix, Opaque, Tix64);
+  result := DigestServerInit(fAlgo, fQuotedRealm, Prefix, Suffix, Opaque, Tix64);
 end;
 
 function TDigestAuthServer.ServerAlgoMatch(const FromClient: RawUtf8): boolean;

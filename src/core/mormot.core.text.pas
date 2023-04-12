@@ -271,8 +271,8 @@ function IdemPCharAndGetNextLine(var source: PUtf8Char; searchUp: PAnsiChar): bo
 // - i.e. iterate IdemPChar(source,UpperName) over every line of the source
 // - returns the text just after UpperName if it has been found at line beginning
 // - returns nil if UpperName was not found at any line beginning
-// - could be used as alternative to FindIniNameValue() and FindIniNameValueInteger()
-// if there is no section, i.e. if search should not stop at '[' but at source end
+// - could be used e.g. to efficently extract a value from HTTP headers, whereas
+// FindIniNameValue() is tuned for [section]-oriented INI files
 function FindNameValue(P: PUtf8Char; UpperName: PAnsiChar): PUtf8Char; overload;
 
 /// search and returns a value from its uppercased named entry

@@ -1755,6 +1755,7 @@ procedure SetDomainAuthMode;
 var
   SecPkgInfo: PSecPkgInfoW;
 begin
+  // set the global variables to the requested authentication mode
   if SspiForceNtlmClient then
   begin
     SECPKGNAMEHTTP := 'NTLM';
