@@ -350,6 +350,9 @@ type
     // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
+    /// search if a value exists from the internal parsed Headers
+    function HeaderHasValue(const aUpperName: RawUtf8): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// initialize ContentStream/ContentLength from a given file name
     // - if CompressGz is set, would also try for a cached local FileName+'.gz'
     function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
@@ -518,19 +521,21 @@ type
     hraKerberos);
 
   /// available THttpServerRequest connection attributes
-  // - hsrHttps will indicates that the communication was made over HTTPS
-  // - hsrSecured is set if the transmission is encrypted or in-process, using
+  // - hsrHttps is set if the communication was made over HTTPS
+  // - hsrSecured if the transmission is encrypted or in-process, using
   // e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithm over WebSockets
-  // - hsrWebsockets communication was made using WebSockets
-  // - hsrInProcess is done when run from the same process, i.e. on server side
-  // - hsrConnectionUpgrade is set when "connection: upgrade" is within headers
+  // - hsrWebsockets if communication was made using WebSockets
+  // - hsrInProcess when run from the same process, i.e. on server side
+  // - hsrConnectionUpgrade when "connection: upgrade" is within headers
+  // - hsrAuthorized when a valid "authorization:" header is set
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,
     hsrSecured,
     hsrWebsockets,
     hsrInProcess,
-    hsrConnectionUpgrade);
+    hsrConnectionUpgrade,
+    hsrAuthorized);
 
   /// the THttpServerRequest connection attributes
   THttpServerRequestFlags = set of THttpServerRequestFlag;
@@ -539,9 +544,13 @@ type
   // - if defined, is called just before the body is retrieved from the client
   // - supplied parameters reflect the current input state, and could be
   // modified on the fly to adapt to the expected behavior
+  // - aBearerToken is either the "Authorization: Bearer xxxx" token, or
+  // the authenticated user name if the hsrAuthorized flag is set
   // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
+  // - returning HTTP_UNAUTHORIZED triggers the internal authentication process
+  // available on some servers (e.g. THttpApiServer or THttpAsyncServer)
   TOnHttpServerBeforeBody = function(var aUrl, aMethod, aInHeaders,
     aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
     aFlags: THttpServerRequestFlags): cardinal of object;
@@ -706,14 +715,14 @@ type
     /// contains the THttpServer-side authentication status
     // - e.g. when using http.sys authentication with HTTP API 2.0
     property AuthenticationStatus: THttpServerRequestAuthentication
-      read fAuthenticationStatus;
+      read fAuthenticationStatus write fAuthenticationStatus;
     /// contains the THttpServer-side authenticated user name, UTF-8 encoded
     // - e.g. when using http.sys authentication with HTTP API 2.0, the
     // domain user name is retrieved from the supplied AccessToken
     // - could also be set by the THttpServerGeneric.Request() method, after
     // proper authentication, so that it would be logged as expected
     property AuthenticatedUser: RawUtf8
-      read fAuthenticatedUser;
+      read fAuthenticatedUser write fAuthenticatedUser;
   end;
   {$M-}
 
@@ -1505,6 +1514,11 @@ end;
 function THttpRequestContext.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
 begin
   FindNameValue(Headers, pointer(aUpperName), result{%H-}, false, ':');
+end;
+
+function THttpRequestContext.HeaderHasValue(const aUpperName: RawUtf8): boolean;
+begin
+  result := FindNameValue(pointer(Headers), pointer(aUpperName)) <> nil;
 end;
 
 procedure THttpRequestContext.ParseHeaderFinalize;
@@ -2402,7 +2416,8 @@ end;
 
 { THttpAcceptBan }
 
-constructor THttpAcceptBan.Create(banseconds, maxpersecond, banwhiteip: cardinal);
+constructor THttpAcceptBan.Create(
+  banseconds, maxpersecond, banwhiteip: cardinal);
 begin
   fMax := maxpersecond;
   SetSeconds(banseconds);

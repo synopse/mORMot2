@@ -1101,19 +1101,21 @@ type
   PRestServerConnectionOpaque = ^TRestServerConnectionOpaque;
 
   /// flags which may be set by the caller to notify low-level context
-  // - llfHttps will indicates that the communication was made over HTTPS
-  // - llfSecured is set if the transmission is encrypted or in-process,
+  // - llfHttps is set if the communication was made over HTTPS
+  // - llfSecured if the transmission is encrypted or in-process
   // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
-  // - llfWebsockets communication was made using WebSockets
-  // - llfInProcess is done when run from the same process, i.e. on server side
-  // - llfConnectionUpgrade is set when "connection: upgrade" is within headers
+  // - llfWebsockets if communication was made using WebSockets
+  // - llfInProcess when run from the same process, i.e. on server side
+  // - llfConnectionUpgrade when "connection: upgrade" is within headers
+  // - llfAuthorized when a valid "authorization:" header is set
   // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
     llfWebsockets,
     llfInProcess,
-    llfConnectionUpgrade);
+    llfConnectionUpgrade,
+    llfAuthorized);
 
   /// some flags set by the caller to notify low-level context
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
