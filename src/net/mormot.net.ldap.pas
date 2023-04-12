@@ -1433,31 +1433,31 @@ end;
 function DNToCN(const DN: RawUtf8): RawUtf8;
 var
   p: PUtf8Char;
-  DC, OU, CN, kind, value: RawUtf8;
+  dc, ou, cn, kind, value: RawUtf8;
 begin
   result := '';
   p := pointer(DN);
-  if P = nil then
+  if p = nil then
     exit;
   repeat
     GetNextItemTrimed(p, '=', kind);
     GetNextItemTrimed(p, ',', value);
     if (kind = '') or
        (value = '') then
-      raise ELdap.CreateFmt('DNToCN(%s): invalid Distinguished Name', [DN]);
-    UpperCaseSelf(kind);
-    if kind = 'DC' then
+      raise ELdap.CreateUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
+    LowerCaseSelf(kind);
+    if kind = 'dc' then
     begin
-      if DC <> '' then
-        DC := DC + '.';
-      DC := DC + value;
+      if dc <> '' then
+        dc := dc + '.';
+      dc := dc + value;
     end
-    else if kind = 'OU' then
-      Prepend(OU, ['/', value])
-    else if kind = 'CN' then
-      Prepend(CN, ['/', value]);
-  until P = nil;
-  result := DC + OU + CN;
+    else if kind = 'ou' then
+      Prepend(ou, ['/', value])
+    else if kind = 'cn' then
+      Prepend(cn, ['/', value]);
+  until p = nil;
+  result := dc + ou + cn;
 end;
 
 function IsBinaryString(var Value: RawByteString): boolean;
