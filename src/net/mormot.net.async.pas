@@ -831,6 +831,7 @@ type
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); override;
     /// access to the internal two PtrUInt tags of this connection
+    // - may return nil e.g. behind a nginx proxy
     function GetConnectionOpaque: PHttpServerConnectionOpaque;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -3084,8 +3085,6 @@ end;
 procedure THttpAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   inherited Recycle(aRemoteIP);
-  fConnectionOpaque.ValueInternal := 0;
-  fConnectionOpaque.ValueExternal := 0;
   if fServer <> nil then
   begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
@@ -3096,7 +3095,10 @@ end;
 
 function THttpAsyncConnection.GetConnectionOpaque: PHttpServerConnectionOpaque;
 begin
-  result := @fConnectionOpaque;
+  if fConnectionID = fHandle then
+    result := @fConnectionOpaque
+  else
+    result := nil; // local fConnectionOpaque is clearly invalid
 end;
 
 procedure THttpAsyncConnection.BeforeDestroy;
@@ -3420,9 +3422,9 @@ begin
   result := soClose;
   if fRequest = nil then // created once, if not rejected by OnBeforeBody
     fRequest := THttpServerRequest.Create(
-      fServer, fConnectionID, fReadThread, fRequestFlags, @fConnectionOpaque)
+      fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque)
   else
-    fRequest.Recycle(fConnectionID, fReadThread, fRequestFlags, @fConnectionOpaque);
+    fRequest.Recycle(fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
   fRequest.Prepare(fHttp, fRemoteIP);
   // reflect the current valid "authorization:" header
   if fAuthorized <> hraNone then

@@ -294,7 +294,7 @@ function TWebSocketAsyncConnection.DecodeHeaders: integer;
     // similar to TWebSocketServer.WebSocketProcessUpgrade
     serv := fServer as TWebSocketAsyncServer;
     result := serv.fProtocols.
-      ServerUpgrade(fHttp, fRemoteIP, fHandle, @fConnectionOpaque,
+      ServerUpgrade(fHttp, fRemoteIP, fHandle, GetConnectionOpaque,
       {out:} proto, {out:} resp);
     if result <> HTTP_SUCCESS then
       exit;

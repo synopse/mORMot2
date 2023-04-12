@@ -699,6 +699,7 @@ type
     function GetRequest(withBody: boolean;
       headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
     /// access to the internal two PtrUInt tags of this connection
+    // - may be nil behind a reverse proxy (i.e. Server.RemoteConnIDHeader<>'')
     function GetConnectionOpaque: PHttpServerConnectionOpaque;
       {$ifdef HASINLINE} inline; {$endif}
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
@@ -715,8 +716,8 @@ type
     property KeepAliveClient: boolean
       read fKeepAliveClient write fKeepAliveClient;
     /// the recognized connection ID, after a call to GetRequest()
-    // - identifies either the raw connection on the current server, or is
-    // a custom header value set by a local proxy, e.g.
+    // - identifies either the raw connection on the current server, or
+    // the custom header value as set by a local proxy, e.g.
     // THttpServerGeneric.RemoteConnIDHeader='X-Conn-ID' for nginx
     property RemoteConnectionID: THttpServerConnectionID
       read fRemoteConnectionID;
@@ -3123,7 +3124,7 @@ begin
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
     HTTP_TLS_FLAGS[ClientSock.TLS.Enabled] +
     HTTP_UPG_FLAGS[hfConnectionUpgrade in ClientSock.Http.HeaderFlags],
-    @ClientSock.fConnectionOpaque);
+    ClientSock.GetConnectionOpaque);
   try
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
     DoRequest(req);
@@ -3228,7 +3229,7 @@ begin
             fServer.IncStat(grBodyReceived);
           end;
           // multi-connection -> process now
-          fServer.Process(self, RemoteConnectionID, aCaller);
+          fServer.Process(self, fRemoteConnectionID, aCaller);
           fServer.OnDisconnect;
           // no Shutdown here: will be done client-side
         end;
@@ -3381,7 +3382,11 @@ end;
 
 function THttpServerSocket.GetConnectionOpaque: PHttpServerConnectionOpaque;
 begin
-  result := @fConnectionOpaque;
+  if (fServer = nil) or
+     (fServer.fRemoteConnIDHeaderUpper = '') then
+    result := @fConnectionOpaque
+  else
+    result := nil // "opaque" is clearly unsupported behind a proxy
 end;
 
 
