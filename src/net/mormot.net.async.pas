@@ -567,6 +567,12 @@ type
     procedure Shutdown;
     /// shut down and finalize the instance, calling Shutdown
     destructor Destroy; override;
+    /// ensure all threads of the pool is bound to a given CPU core
+    // - may lower performance, but reduce global consumption
+    procedure SetCpuAffinity(CpuIndex: integer);
+    /// ensure all threads of the pool is bound to a given CPU HW socket
+    // - may enhance performance on multi-socket systems
+    procedure SetSocketAffinity(SocketIndex: integer);
     /// high-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search
     // - could be executed e.g. from a TAsyncConnection.OnRead method
@@ -2141,6 +2147,24 @@ begin
       ObjArrayClear(fConnection, {continueonexception=}true, @fConnectionCount);
     end;
   end;
+end;
+
+procedure TAsyncConnections.SetCpuAffinity(CpuIndex: integer);
+var
+  i: PtrInt;
+begin
+  SetThreadCpuAffinity(self, CpuIndex);
+  for i := 0 to high(Threads) do
+    SetThreadCpuAffinity(Threads[i], CpuIndex);
+end;
+
+procedure TAsyncConnections.SetSocketAffinity(SocketIndex: integer);
+var
+  i: PtrInt;
+begin
+  SetThreadSocketAffinity(self, SocketIndex);
+  for i := 0 to high(Threads) do
+    SetThreadSocketAffinity(Threads[i], SocketIndex);
 end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
