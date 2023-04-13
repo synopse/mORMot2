@@ -2508,7 +2508,8 @@ begin
     if (Call.OutStatus = HTTP_TIMEOUT) and
        RetryOnceOnTimeout then
     begin
-      InternalLog('% % returned "408 Request Timeout" -> RETRY', [method, url], sllError);
+      InternalLog('% % returned "408 Request Timeout" -> RETRY',
+        [method, url], sllError);
       CallInternalUri;
     end
     else if (Call.OutStatus = HTTP_FORBIDDEN) and

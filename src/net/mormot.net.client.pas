@@ -436,7 +436,7 @@ function DefaultUserAgent(Instance: TObject): RawUtf8;
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
   aLayer: TNetLayer = nlTcp; const aUrlForProxy: RawUtf8 = '';
-  aTimeout: integer = 0): THttpClientSocket; overload;
+  aTimeout: integer = 0; aTLSContext: PNetTlsContext = nil): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
@@ -1680,6 +1680,9 @@ var
   newuri: TUri;
 begin
   ctxt.url := url;
+  if (url = '') or
+     (url[1] <> '/') then
+    insert('/', ctxt.Url, 1); // normalize URI as in RFC (e.g. for Digest auth)
   ctxt.method := method;
   ctxt.KeepAlive := KeepAlive;
   ctxt.header := TrimU(header);
@@ -2084,13 +2087,13 @@ end;
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
   aLayer: TNetLayer; const aUrlForProxy: RawUtf8;
-  aTimeout: integer): THttpClientSocket;
+  aTimeout: integer; aTLSContext: PNetTlsContext): THttpClientSocket;
 var
   temp: TUri;
 begin
   try
     result := THttpClientSocket.Open(aServer, aPort, aLayer, aTimeout,
-      aTLS, nil, GetSystemProxyUri(aUrlForProxy, '', temp));
+      aTLS, aTLSContext, GetSystemProxyUri(aUrlForProxy, '', temp));
   except
     on ENetSock do
       result := nil;
