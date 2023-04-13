@@ -2260,7 +2260,7 @@ var
 begin
   // validate raw client-server Digest access authentication
   Check(DigestServerInit(daUndefined, '', '', '', 0) = '');
-  Check(DigestClient(daUndefined, '', '', '', '') = '');
+  Check(DigestClient(daUndefined, '', '', '', '', '') = '');
   for n := 1 to 10 do
   begin
     realm := RandomAnsi7(10) + '"';
@@ -2275,19 +2275,19 @@ begin
       s := DigestServerInit(a, QuotedStr(realm, '"'), '', '', opaque);
       Check(s <> '');
       CheckEqual(DigestRealm(s), realm, 'realm server');
-      Check(DigestClient(daUndefined, s, url, user, pwd) = '');
-      c := DigestClient(a, s, url, user, pwd);
+      Check(DigestClient(daUndefined, s, 'GET', url, user, pwd) = '');
+      c := DigestClient(a, s, 'GET', url, user, pwd);
       Check(c <> '');
       CheckEqual(DigestRealm(c), realm, 'realm client');
       fDigestAlgo := a;
-      Check(DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+      Check(DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
         authuser, authurl, 100), 'auth ok');
       dec(opaque);
-      Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+      Check(not DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
         authuser, authurl, 100), 'connection change detection');
       inc(opaque);
       fDigestAlgo := daUndefined;
-      Check(not DigestServerAuth(a, realm, pointer(c), opaque, DigestUser,
+      Check(not DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
         authuser, authurl, 100), 'wrong algo');
     end;
   end;
@@ -2377,24 +2377,35 @@ begin
         opaque := Random64;
         s := dig.ServerInit(opaque, 0, '', '');
         Check(s <> '');
-        c := DigestClient(a, s, url, users[u], pwds[u]);
+        c := DigestClient(a, s, 'GET', url, users[u], pwds[u]);
         Check(c <> '');
         Check(dig.ServerAlgoMatch(c), 'algo');
-        Check(dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth1');
+        Check(dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth1');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         inc(opaque);
-        Check(not dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth2');
+        Check(not dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth2');
         dec(opaque);
-        Check(dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), '3');
+        Check(dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), '3');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
-        c := DigestClient(a, s, url, users[u], pwds[u] + 'wrong');
+        c := DigestClient(a, s, 'GET', url, users[u], pwds[u] + 'wrong');
         Check(c <> '');
         Check(dig.ServerAlgoMatch(c));
-        Check(not dig.ServerAuth(pointer(c), opaque, 0, authuser, authurl), 'auth3');
+        Check(not dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth3');
         CheckEqual(authuser, '');
         CheckEqual(authurl, '');
+        s := dig.BasicInit;
+        Check(IdemPChar(pointer(s), 'WWW-AUTHENTICATE: BASIC '));
+        CheckEqual(BasicRealm(copy(s, 25, 100)), dig.Realm);
+        c := BasicClient(users[u], pwds[u]);
+        Check(c <> '');
+        Check(dig.BasicAuth(pointer(c), authuser));
+        CheckEqual(authuser, users[u]);
+        c := BasicClient(users[u], pwds[u] + 'wrong');
+        Check(c <> '');
+        Check(not dig.BasicAuth(pointer(c), authuser));
+        CheckEqual(authuser, '');
       end;
       // force file refresh (from previously bak state)
       Check(not dig.RefreshFile);
