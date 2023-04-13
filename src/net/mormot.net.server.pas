@@ -829,6 +829,7 @@ type
     fExecuteMessage: RawUtf8;
     fNginxSendFileFrom: array of TFileName;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
+    function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean;
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
@@ -2137,7 +2138,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     OutContentType := 'text/html; charset=utf-8'; // create message to display
     StatusCodeToReason(fRespStatus, fRespReason);
     FormatUtf8(
-      '<html><body style="font-family:verdana">' +
+      '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1><hr><p>HTTP % %</p><p>%</p><small>%</small></body></html>',
       [
         fServer.ServerName, fRespStatus, fRespStatus,
@@ -2739,7 +2740,7 @@ procedure THttpServerSocketGeneric.WaitStarted(
 var
   tix: Int64;
 begin
-  tix := GetTickCount64 + Seconds * 1000; // never wait forever
+  tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
     if Terminated then
       exit;
@@ -2751,7 +2752,7 @@ begin
           [self, fExecuteMessage]);
     end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
-    if GetTickCount64 > tix then
+    if mormot.core.os.GetTickCount64 > tix then
       raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
@@ -2785,6 +2786,13 @@ procedure THttpServerSocketGeneric.IncStat(
 begin
   if not (hsoNoStats in fOptions) then
     LockedInc32(@fStats[one]);
+end;
+
+function THttpServerSocketGeneric.HeaderRetrieveAbortTix: Int64;
+begin
+  result := fHeaderRetrieveAbortDelay;
+  if result <> 0 then
+    inc(result, mormot.core.os.GetTickCount64);
 end;
 
 function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;
@@ -2951,7 +2959,7 @@ begin
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;
-  endtix := GetTickCount64 + 20000;
+  endtix := mormot.core.os.GetTickCount64 + 20000;
   try
     if fInternalHttpServerRespList <> nil then // HTTP/1.1 long running threads
     begin
@@ -2970,7 +2978,7 @@ begin
           fInternalHttpServerRespList.Safe.ReadOnlyUnLock;
         end;
         SleepHiRes(10);
-      until GetTickCount64 > endtix;
+      until mormot.core.os.GetTickCount64 > endtix;
       FreeAndNilSafe(fInternalHttpServerRespList);
     end;
   finally
@@ -3001,7 +3009,6 @@ var
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  endtix: Int64;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -3049,10 +3056,7 @@ begin
             cltservsock.AcceptRequest(cltsock, @cltaddr);
             if hsoEnableTls in fOptions then
               cltservsock.DoTlsAfter(cstaAccept);
-            endtix := fHeaderRetrieveAbortDelay;
-            if endtix > 0 then
-              inc(endtix, GetTickCount64);
-            case cltservsock.GetRequest({withbody=}true, endtix) of
+            case cltservsock.GetRequest({withbody=}true, HeaderRetrieveAbortTix) of
               grBodyReceived,
               grHeaderReceived:
                 begin
@@ -3176,17 +3180,14 @@ end;
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
-  headertix: Int64;
 begin
   // process this THttpServerSocket in the thread pool
   freeme := true;
   try
     if hsoEnableTls in fServer.Options then
       DoTlsAfter(cstaAccept); // slow TLS handshake done in this sub-thread
-    headertix := fServer.HeaderRetrieveAbortDelay;
-    if headertix > 0 then
-      headertix := headertix + GetTickCount64;
-    freeme := TaskProcessBody(aCaller, GetRequest({withbody=}false, headertix));
+    freeme := TaskProcessBody(aCaller,
+      GetRequest({withbody=}false, fServer.HeaderRetrieveAbortTix));
   finally
     if freeme then
       Free;
@@ -3309,7 +3310,7 @@ begin
         IsGet(Http.CommandMethod)) then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
-       (GetTickCount64 > headerMaxTix) then
+       (mormot.core.os.GetTickCount64 > headerMaxTix) then
     begin
       result := grTimeout;
       exit; // allow 10 sec for header -> DOS/TCPSYN Flood
@@ -3323,7 +3324,7 @@ begin
         result := grRejected; // the callback made its own SockSend() response
         exit;
       end;
-      // validate allowed PayLoad size and OnBeforeBody callback
+      // validate allowed PayLoad size
       if (Http.ContentLength > 0) and
          (fServer.MaximumAllowedContentLength > 0) and
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
@@ -3438,7 +3439,7 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
     try
       repeat
-        beforetix := GetTickCount64;
+        beforetix := mormot.core.os.GetTickCount64;
         keepaliveendtix := beforetix + fServer.ServerKeepAliveTimeOut;
         repeat
           // within this loop, break=wait for next command, exit=quit
@@ -3466,7 +3467,7 @@ procedure THttpServerResp.Execute;
               end;
             cspNoData:
               begin
-                tix := GetTickCount64;
+                tix := mormot.core.os.GetTickCount64;
                 if tix >= keepaliveendtix then
                 begin
                   if Assigned(fServer.Sock.OnLog) then
@@ -5091,7 +5092,7 @@ begin
   if (fLastReceiveTickCount > 0) and
      (fProtocol.fServer.fPingTimeout > 0) then
   begin
-    elapsed := GetTickCount64 - fLastReceiveTickCount;
+    elapsed := mormot.core.os.GetTickCount64 - fLastReceiveTickCount;
     if elapsed > 2 * fProtocol.fServer.PingTimeout * 1000 then
     begin
       fProtocol.RemoveConnection(fIndex);
@@ -5213,7 +5214,7 @@ begin
         end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
         begin
-          fLastReceiveTickCount := GetTickCount64;
+          fLastReceiveTickCount := mormot.core.os.GetTickCount64;
           if buftyp = WEB_SOCKET_CLOSE_BUFFER_TYPE then
           begin
             if fState = wsOpen then
@@ -5549,7 +5550,7 @@ begin
   if conn.fState = wsConnecting then
   begin
     conn.fState := wsOpen;
-    conn.fLastReceiveTickCount := GetTickCount64;
+    conn.fLastReceiveTickCount := mormot.core.os.GetTickCount64;
     conn.DoOnConnect();
   end;
   if conn.fState in [wsOpen, wsClosing] then
