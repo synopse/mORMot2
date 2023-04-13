@@ -21,7 +21,6 @@ uses
   {$I mormot.uses.inc} // include mormot.core.fpcx64mm or mormot.core.fpclibcmm
   sysutils,
   classes,
-  initc, // sched_getaffinity
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
@@ -121,6 +120,8 @@ type
     function rawupdates(ctxt: THttpServerRequest): cardinal;
   end;
 
+{$I-}
+
 const
   HELLO_WORLD: RawUtf8 = 'Hello, World!';
   TEXT_CONTENT_TYPE_NO_ENCODING: RawUtf8 = 'text/plain';
@@ -167,8 +168,6 @@ end;
 
 constructor TRawAsyncServer.Create(
   threadCount: integer; flags: THttpServerOptions; pin2Core: integer);
-var
-  i: cardinal;
 begin
   inherited Create;
   // setup the DB connection
@@ -221,12 +220,10 @@ begin
      {$endif WITH_LOGS}
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ] + flags);
-
   if pin2Core <> -1 then
   begin
-    SetThreadCpuAffinity(fHttpServer.Async, pin2Core);
-    for i := 0 to length(fHttpServer.Async.threads) - 1 do
-      SetThreadCpuAffinity(fHttpServer.Async.threads[i], pin2Core);
+    writeln('Pin server to #', pin2Core, ' CPU');
+    fHttpServer.Async.SetCpuAffinity(pin2Core);
   end;
   fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.ServerName := 'M';
@@ -699,9 +696,6 @@ begin
   end;
 end;
 
-function sched_getaffinity(pid: integer; cpusetsize: SizeUInt;
-  cpuset: pointer): integer; cdecl external clib name 'sched_getaffinity';
-
 begin
   if FindCmdLineSwitch('?') or FindCmdLineSwitch('h') or FindCmdLineSwitch('-help', ['-'], false) then
   begin
@@ -734,9 +728,7 @@ begin
     TypeInfo(TFortune),    'id:integer message:RawUtf8']);
 
   // setup execution context
-  ResetCpuSet(cpuMask);
-  sched_getaffinity(0, SizeOf(cpuMask), @cpuMask);
-  accessibleCPUCount := GetBitsCount(cpuMask, SizeOf(cpuMask) * sizeof(byte));
+  accessibleCPUCount := CurrentCpuSet(cpuMask);
 
   if ParamCount > 0 then
     ComputeExecutionContextFromParams(accessibleCPUCount)
@@ -760,14 +752,12 @@ begin
         if GetBit(cpuMask, cpuIdx) then
           dec(k);
       until k = -1;
-      writeln('Pin ', i, '''s server to ', cpuIdx, ' CPU');
     end;
     rawServers[i] := TRawAsyncServer.Create(threads, flags, cpuIdx)
   end;
 
   try
     // display some information and wait for SIGTERM
-    {$I-}
     writeln;
     writeln(rawServers[0].fHttpServer.ClassName,
      ' running on localhost:', rawServers[0].fHttpServer.SockPort);
@@ -782,9 +772,9 @@ begin
     writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
-    for i := 0 to servers - 1 do
+    {for i := 0 to servers - 1 do
       writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
-        [woDontStoreVoid, woHumanReadable]));
+        [woDontStoreVoid, woHumanReadable]));}
   finally
     // clear all server instance(s)
     ObjArrayClear(rawServers);
@@ -793,4 +783,5 @@ begin
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
 end.
+
 
