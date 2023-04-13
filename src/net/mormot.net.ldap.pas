@@ -2824,7 +2824,7 @@ const
     '',                     // daSHA512_256
     'DIGEST-SHA-512-256',   // daSHA512_256_Sess
     '',                     // daSHA3_256
-    'DIGEST-SHA3-256');     // daSHA3_256_Sess
+    '');                    // daSHA3_256_Sess (not part of Digest RFC yet)
 
 function TLdapClient.BindSaslDigest(Algo: TDigestAlgo): boolean;
 var

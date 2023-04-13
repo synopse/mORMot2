@@ -94,6 +94,7 @@ type
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
+    fRawCache: TOrmWorlds;
   protected
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
@@ -115,6 +116,7 @@ type
     function updates(ctxt: THttpServerRequest): cardinal;
     function rawdb(ctxt: THttpServerRequest): cardinal;
     function rawqueries(ctxt: THttpServerRequest): cardinal;
+    function rawcached(ctxt: THttpServerRequest): cardinal;
     function rawfortunes(ctxt: THttpServerRequest): cardinal;
     function rawupdates(ctxt: THttpServerRequest): cardinal;
   end;
@@ -202,6 +204,7 @@ begin
   // pre-fill the ORM
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
+  fStore.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
   // setup the HTTP server
@@ -239,6 +242,7 @@ begin
   fStore.Free;
   fModel.Free;
   fDBPool.free;
+  ObjArrayClear(fRawCache);
   inherited Destroy;
 end;
 
@@ -491,6 +495,18 @@ begin
   if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res) then
     exit(HTTP_SERVERERROR);
   ctxt.SetOutJson(@res, TypeInfo(TWorlds));
+  result := HTTP_SUCCESS;
+end;
+
+function TRawAsyncServer.rawcached(ctxt: THttpServerRequest): cardinal;
+var
+  i: PtrInt;
+  res: TOrmWorlds;
+begin
+  SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
+  for i := 0 to length(res) - 1 do
+    res[i] := fRawCache[ComputeRandomWorld - 1];
+  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;
 

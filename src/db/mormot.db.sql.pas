@@ -1686,6 +1686,8 @@ type
     // - this default implementation will use protected SqlGetTableNames virtual
     // method to retrieve the table names
     procedure GetTableNames(out Tables: TRawUtf8DynArray); virtual;
+    /// wrapper to call GetTableNames() then check if TableName is part of it
+    function TableExists(const TableName: RawUtf8): boolean;
     /// get all view names
     // - this default implementation will use protected SqlGetViewNames virtual
     // method to retrieve the view names
@@ -2003,6 +2005,10 @@ type
     // - will raise an Exception in case of error
     function NewTableFromRows(const TableName: RawUtf8; Rows: TSqlDBStatement;
       WithinTransaction: boolean; ColumnForcedTypes: TSqlDBFieldTypeDynArray = nil): integer;
+    /// create a new table in this database from an existing table on another DB
+    // - could be called instead of NewTableFromRows() if no Rows are available
+    function NewTableFrom(const NewTableName, SourceTableName: RawUtf8;
+      Source: TSqlDBConnectionProperties): boolean;
 
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
@@ -4277,6 +4283,14 @@ begin
     on Exception do
       SetLength(Tables, 0); // if the supplied sql query is wrong, just ignore
   end;
+end;
+
+function TSqlDBConnectionProperties.TableExists(const TableName: RawUtf8): boolean;
+var
+  tables: TRawUtf8DynArray;
+begin
+  GetTableNames(tables);
+  result := FindRawUtf8(tables, TableName, {casesensitive=}false) >= 0;
 end;
 
 procedure TSqlDBConnectionProperties.GetViewNames(out Views: TRawUtf8DynArray);
@@ -7624,6 +7638,43 @@ begin
   end;
 end;
 
+function TSqlDBConnection.NewTableFrom(
+  const NewTableName, SourceTableName: RawUtf8;
+  Source: TSqlDBConnectionProperties): boolean;
+var
+  src: TSqlDBColumnDefineDynArray;
+  dst: TSqlDBColumnCreateDynArray;
+  f, n: PtrInt;
+begin
+  result := false;
+  if (self = nil) or
+     (Source = nil) or
+     (NewTableName = '') or
+     (SourceTableName = '') or
+     Properties.TableExists(NewTableName) then
+    exit;
+  Source.GetFields(SourceTableName, src);
+  if src = nil then
+    exit;
+  SetLength(dst, length(src));
+  n := 0;
+  for f := 0 to high(src) do
+  with src[f] do
+    if not (ColumnType in [ftUnknown, ftNull]) then
+    begin
+      dst[n].Name := ColumnName;
+      dst[n].DBType := ColumnType;
+      if ColumnType = ftUtf8 then
+        dst[n].Width := ColumnLength;
+      inc(n);
+    end;
+  if n = 0 then
+    exit;
+  DynArrayFakeLength(dst, n);
+  Properties.ExecuteNoResult(Properties.SqlCreate(
+    Properties.SqlTableName(NewTableName), dst, false), []);
+  result := true;
+end;
 
 
 { ************ Parent Classes for Thread-Safe and Parametrized Connections }
