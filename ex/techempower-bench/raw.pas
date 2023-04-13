@@ -21,6 +21,7 @@ uses
   {$I mormot.uses.inc} // include mormot.core.fpcx64mm or mormot.core.fpclibcmm
   sysutils,
   classes,
+  initc, // sched_getaffinity
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
@@ -93,7 +94,6 @@ type
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
-    fRawCache: TOrmWorlds;
   protected
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
@@ -101,7 +101,8 @@ type
     // as used by /rawqueries and /rawupdates
     function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
   public
-    constructor Create(threadCount: integer; flags: THttpServerOptions); reintroduce;
+    constructor Create(threadCount: integer; flags: THttpServerOptions;
+      pin2Core: integer = -1); reintroduce;
     destructor Destroy; override;
   published
     // all service URI are implemented by these published methods using RTTI
@@ -114,7 +115,6 @@ type
     function updates(ctxt: THttpServerRequest): cardinal;
     function rawdb(ctxt: THttpServerRequest): cardinal;
     function rawqueries(ctxt: THttpServerRequest): cardinal;
-    function rawcached(ctxt: THttpServerRequest): cardinal;
     function rawfortunes(ctxt: THttpServerRequest): cardinal;
     function rawupdates(ctxt: THttpServerRequest): cardinal;
   end;
@@ -164,7 +164,9 @@ end;
 { TRawAsyncServer }
 
 constructor TRawAsyncServer.Create(
-  threadCount: integer; flags: THttpServerOptions);
+  threadCount: integer; flags: THttpServerOptions; pin2Core: integer);
+var
+  i: cardinal;
 begin
   inherited Create;
   // setup the DB connection
@@ -197,10 +199,9 @@ begin
   {$else}
   fStore.Server.CreateMissingTables; // create SQlite3 virtual tables
   {$endif USE_SQLITE3}
-  // pre-fill the ORM and raw caches
+  // pre-fill the ORM
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
-  fStore.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
   // setup the HTTP server
@@ -217,7 +218,15 @@ begin
      {$endif WITH_LOGS}
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ] + flags);
+
+  if pin2Core <> -1 then
+  begin
+    SetThreadCpuAffinity(fHttpServer.Async, pin2Core);
+    for i := 0 to length(fHttpServer.Async.threads) - 1 do
+      SetThreadCpuAffinity(fHttpServer.Async.threads[i], pin2Core);
+  end;
   fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
+  fHttpServer.ServerName := 'M';
   // use default routing using RTTI on the TRawAsyncServer published methods
   fHttpServer.Route.RunMethods([urmGet], self);
   // wait for the server to be ready and raise exception e.g. on binding issue
@@ -230,7 +239,6 @@ begin
   fStore.Free;
   fModel.Free;
   fDBPool.free;
-  ObjArrayClear(fRawCache);
   inherited Destroy;
 end;
 
@@ -325,6 +333,7 @@ begin
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync;
   end;
+  pConn.Flush; // in case we use modified libpq what not flush inside PQPipelineSync - flush manually
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
@@ -485,18 +494,6 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-function TRawAsyncServer.rawcached(ctxt: THttpServerRequest): cardinal;
-var
-  i: PtrInt;
-  res: TOrmWorlds;
-begin
-  SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
-  for i := 0 to length(res) - 1 do
-    res[i] := fRawCache[ComputeRandomWorld - 1];
-  ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
-  result := HTTP_SUCCESS;
-end;
-
 function FortuneCompareByMessage(const A, B): integer;
 begin
   result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
@@ -544,24 +541,18 @@ begin
   LastComputeUpdateSqlSafe.Lock;
   if cnt <> LastComputeUpdateSqlCnt then
   begin
-    // update table set randomNumber = CASE id when ? then ? when ? then ? ...
-    // when ? then ? else randomNumber end where id in (?,?,?,?,?)
-    // - this weird syntax gives best number for TFB /rawupdates?queries=20 but
-    // seems not good for smaller or higher count - we won't include it in the
-    // ORM but only for our RAW results - as other frameworks (e.g. ntex) do
+    // update table set .. from values (), (), ... where id = id
+    // we won't include it in the ORM but only for our RAW results
     LastComputeUpdateSqlCnt := cnt;
-    W := TTextWriter.CreateOwnedStream(tmp);
+    W := TTextWriter.CreateOwnedStream(tmp{%H-});
     try
-      W.AddShort('update world set randomnumber = case id');
-      for i := 1 to cnt do
-        W.AddShort(' when ? then ?');
-      W.AddShort(' else randomNumber end where id in (');
-      repeat
-        W.Add('?', ',');
-        dec(cnt);
-      until cnt = 0;
+      W.AddShort('UPDATE world SET randomNumber = v.randomNumber FROM (VALUES');
+      for i := 1 to cnt do begin
+        W.AddShort('(?::integer, ?::integer)');
+        W.Add(',');
+      end;
       W.CancelLastComma;
-      W.Add(')');
+      W.AddShort(' order by 1) AS v (id, randomNumber) WHERE world.id = v.id');
       W.SetText(LastComputeUpdateSql);
     finally
       W.Free;
@@ -603,13 +594,12 @@ begin
   end
   else
   begin
-    // fill parameters for update up to 20 items as CASE .. WHEN .. THEN ..
+    // fill parameters for update up to 20 items as VALUES(?,?),(?,?),...
     stmt := conn.NewStatementPrepared(ComputeUpdateSql(cnt), false, true);
     for i := 0 to cnt - 1 do
     begin
       stmt.Bind(i * 2 + 1, res[i].id);
       stmt.Bind(i * 2 + 2, res[i].randomNumber);
-      stmt.Bind(cnt * 2 + i + 1, res[i].id);
     end;
   end;
   stmt.ExecutePrepared;
@@ -621,55 +611,93 @@ end;
 
 var
   rawServers: array of TRawAsyncServer;
-  threads, servers, i: integer;
+  threads, servers, i, k, cpuIdx: integer;
+  pinServers2Cores: boolean;
+  cpuMask: TCpuSet;
+  accessibleCPUCount: PtrInt;
   flags: THttpServerOptions;
 
-procedure ComputeExecutionContextFromParams;
+function FindCmdLineSwitchVal(const Switch: string; out Value: string): Boolean;
 var
-  cores: integer;
+  I, L: integer;
+  S, T: string;
 begin
-  // user specified some values at command line: raw [threads] [cores] [servers]
-  // in practice, [cores] is just ignored
-  if not TryStrToInt(ParamStr(1), threads) then
-    threads := SystemInfo.dwNumberOfProcessors * 4;
-  if not TryStrToInt(ParamStr(2), cores) then
-    cores := 16;
-  if not TryStrToInt(ParamStr(3), servers) then
-    servers := 1;
-  if threads < 2 then
-    threads := 2
+  Result := False;
+  S := Switch;
+  Value := '';
+  S := UpperCase(S);
+  I := ParamCount;
+  while (Not Result) and (I>0) do
+  begin
+    L := Length(Paramstr(I));
+    if (L>0) and (ParamStr(I)[1] in SwitchChars) then
+    begin
+      T := Copy(ParamStr(I),2,L-1);
+      T := UpperCase(T);
+      Result := S=T;
+      if Result and (I <> ParamCount) then
+        Value := ParamStr(I+1)
+    end;
+    Dec(i);
+  end;
+end;
+
+procedure ComputeExecutionContextFromParams(cpusAccesible: PtrInt);
+var
+  sw: string;
+begin
+  // user specified some values at command line: raw [-s serversCount] [-t threadsPerServer] [-p]
+  if not FindCmdLineSwitchVal('t', sw) or not TryStrToInt(sw, threads) then
+    threads := cpusAccesible * 4;
+  if not FindCmdLineSwitchVal('s', sw) or not TryStrToInt(sw, servers) then
+     servers := 1;
+  pinServers2Cores := FindCmdLineSwitch('p', true) or FindCmdLineSwitch('-pin', true);
+  if threads < 1 then
+    threads := 1
   else if threads > 256 then
     threads := 256; // max. threads for THttpAsyncServer
-  {if SystemInfo.dwNumberOfProcessors > cores then
-    SystemInfo.dwNumberOfProcessors := cores; // for hsoThreadCpuAffinity}
+
   if servers < 1 then
     servers := 1
   else if servers > 256 then
     servers := 256;
 end;
 
-procedure ComputeExecutionContextFromNumberOfProcessors;
-var
-  logicalcores: integer;
+procedure ComputeExecutionContextFromNumberOfProcessors(cpusAccessible: PtrInt);
 begin
   // automatically guess best parameters depending on available CPU cores
-  logicalcores := SystemInfo.dwNumberOfProcessors;
-  if logicalcores >= 12 then
+  if cpusAccessible >= 6 then
   begin
-    // high-end CPU - scale using several listeners (one per core)
+    // scale using several listeners (one per core)
     // see https://synopse.info/forum/viewtopic.php?pid=39263#p39263
-    servers := logicalcores;
+    servers := cpusAccessible;
     threads := 8;
+    pinServers2Cores := true;
   end
   else
   begin
-    // regular CPU - a single instance and a few threads per core
+    // low-level CPU - a single instance and a few threads per core
     servers := 1;
-    threads := logicalcores * 4;
+    threads := cpusAccessible * 4;
+    pinServers2Cores := false;
   end;
 end;
 
+function sched_getaffinity(pid: integer; cpusetsize: SizeUInt;
+  cpuset: pointer): integer; cdecl external clib name 'sched_getaffinity';
+
 begin
+  if FindCmdLineSwitch('?') or FindCmdLineSwitch('h') or FindCmdLineSwitch('-help', ['-'], false) then
+  begin
+    writeln('Usage: ' + UTF8ToString(ExeVersion.ProgramName) + ' [-s serversCount] [-t threadsPerServer] [-p]');
+    writeln('Options:');
+    writeln('  -?, --help            displays this message');
+    writeln('  -s  serversCount      count of servers (listener sockets)');
+    writeln('  -t, threadsPerServer  per-server thread poll size');
+    writeln('  -p, --pin             pin each server to CPU starting from 0');
+    exit;
+  end;
+
   // setup logs
   {$ifdef WITH_LOGS}
   TSynLog.Family.Level := LOG_VERBOSE; // disable logs for benchmarking
@@ -690,17 +718,37 @@ begin
     TypeInfo(TFortune),    'id:integer message:RawUtf8']);
 
   // setup execution context
-  if ParamCount > 1 then
-    ComputeExecutionContextFromParams
+  ResetCpuSet(cpuMask);
+  sched_getaffinity(0, SizeOf(cpuMask), @cpuMask);
+  accessibleCPUCount := GetBitsCount(cpuMask, SizeOf(cpuMask) * sizeof(byte));
+
+  if ParamCount > 0 then
+    ComputeExecutionContextFromParams(accessibleCPUCount)
   else
-    ComputeExecutionContextFromNumberOfProcessors;
+    ComputeExecutionContextFromNumberOfProcessors(accessibleCPUCount);
+  flags := [];
   if servers > 1 then
     include(flags, hsoReusePort); // allow several bindings on the same port
 
   // start the server instance(s), in hsoReusePort mode if needed
-  SetLength(rawServers, servers);
-  for i := 0 to servers - 1 do
-    rawServers[i] := TRawAsyncServer.Create(threads, flags);
+  SetLength(rawServers{%H-}, servers);
+  cpuIdx := -1; // do not pin to CPU by default
+  for i := 0 to servers - 1 do begin
+    if pinServers2Cores then
+    begin
+      k := i mod accessibleCPUCount;
+      cpuIdx := -1;
+      // find real CPU index according to the cpuMask
+      repeat
+        inc(cpuIdx);
+        if GetBit(cpuMask, cpuIdx) then
+          dec(k);
+      until k = -1;
+      writeln('Pin ', i, '''s server to ', cpuIdx, ' CPU');
+    end;
+    rawServers[i] := TRawAsyncServer.Create(threads, flags, cpuIdx)
+  end;
+
   try
     // display some information and wait for SIGTERM
     {$I-}
@@ -708,8 +756,10 @@ begin
     writeln(rawServers[0].fHttpServer.ClassName,
      ' running on localhost:', rawServers[0].fHttpServer.SockPort);
     writeln(' num thread=', threads,
-            ', num CPU=', SystemInfo.dwNumberOfProcessors,
+            ', total CPU=', SystemInfo.dwNumberOfProcessors,
+            ', accessible CPU=', accessibleCPUCount,
             ', num servers=', servers,
+            ', pinned=', pinServers2Cores,
             ', total workers=', threads * servers,
             ', db=', rawServers[0].fDbPool.DbmsEngineName);
     writeln(' options=', GetSetName(TypeInfo(THttpServerOptions), flags));

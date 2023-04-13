@@ -37,15 +37,28 @@ Those two `.sql` scripts are located in this folder for convenience.
 
 ## Command line  parameters
 
-Working threads (per server), used CPU cores, and servers count can be specified in command line as such:
+Working threads (per server), servers count and CPU pinning can be specified in command line as such:
 ```
-$ raw threads cores servers
+$ raw [-s serversCount] [-t threadsPerServer] [-p] 
 ```
-Default values are computed at startup depending on the available CPU cores on the running system - trying to leverage the framework potential.
+Default values are computed at startup depending on the accessible (can be limited using `taskset`) CPU cores
+on the running system - trying to leverage the framework potential.
 
-Note that currently, the `cores` number is ignored.
+Example (consider total CPU count > 12):
+```shell
+# use all CPUs and default parameters
+./raw
 
-Depending on the hardware you have, you may consider using our [x86_64 Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpcx64mm.pas) if your CPU has less than 8/16 cores, but would rather switch to [the libc Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpclibcmm.pas) for high-end harware. On the TFB hardware, we enable the libc heap, which has lower performance with a few cores, but scales better when allocating small blocks with a high number of cores.
+# limit to first 6 CPUs and use default parameters
+taskset -c 0-5 ./raw
+
+# limit to first 6 CPUs, launch 6 servers with 4 threads for each without pinning servers to CPUs
+taskset -c 0-5 ./raw -s 6 -t 4
+```
+Depending on the hardware you have, you may consider using our [x86_64 Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpcx64mm.pas)
+if your CPU has less than 8/16 cores, but would rather switch to [the libc Memory Manager](https://github.com/synopse/mORMot2/blob/master/src/core/mormot.core.fpclibcmm.pas)
+for high-end harware. On the TFB hardware, we enable the libc heap, which has lower performance with a few cores,
+but scales better when allocating small blocks with a high number of cores.
 
 ## Some Numbers
 
