@@ -816,6 +816,15 @@ function DigestClient(Algo: TDigestAlgo;
 // - could be proposed to the user interation UI to specify the auth context
 function DigestRealm(const FromServer: RawUtf8): RawUtf8;
 
+/// compute the Basic access authentication client code
+// - as defined in https://en.wikipedia.org/wiki/Basic_access_authentication
+function BasicClient(const UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+
+/// extract the Basic access authentication realm on client side
+// - FromServer is the 'xxx' encoded value from 'WWW-Authenticate: Basic xxx'
+// - could be proposed to the user interation UI to specify the auth context
+function BasicRealm(const FromServer: RawUtf8): RawUtf8;
+
 /// compute the HA0 for a given set of Digest access credentials
 function DigestHA0(Algo: TDigestAlgo; const UserName, Realm: RawUtf8;
   const Password: SpiUtf8; out HA0: THash512Rec): integer;
@@ -871,6 +880,11 @@ function DigestServerAuth(Algo: TDigestAlgo; const Realm, Method: RawUtf8;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
   out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword = 0): boolean;
 
+/// parse a Basic access authentication on server side
+// - returns true and the user/password from a valid input, or false on error
+function BasicServerAuth(FromClient: PUtf8Char;
+  out User, Password: RawUtf8): boolean;
+
 type
   /// abstract Digest access authentication on server side
   // - should be inherited with proper persistence of users credentials
@@ -880,9 +894,11 @@ type
   // - the RFC expects in-memory sessions, especially for nonce counters but we
   // store a THttpServerConnectionID to the Opaque parameter to compensate, and
   // we implement an expiration delay with each ServerInit request
+  // - BasicInit and BasicAuth methods could be used to implement Basic access
+  // authentication calling the very same GetUserHash() virtual method
   TDigestAuthServer = class(TSynPersistent)
   protected
-    fRealm, fQuotedRealm: RawUtf8;
+    fRealm, fQuotedRealm, fBasicInit: RawUtf8;
     fAlgo: TDigestAlgo;
     fAlgoSize: byte;
     fRequestExpSec: integer;
@@ -902,11 +918,19 @@ type
     // - FromClient is typically a HTTP header
     // - will just search for the 'algorithm=xxx,' text pattern
     function ServerAlgoMatch(const FromClient: RawUtf8): boolean;
-    /// validate a client authentication response
+    /// validate a Digest client authentication response
     // - FromClient typically follow 'Authorization: Digest ' header text
     // - Opaque should match the value supplied on previous ServerInit() call
-    function ServerAuth(FromClient: PUtf8Char; Opaque, Tix64: Int64;
-      out ClientUser, ClientUrl: RawUtf8): boolean;
+    function ServerAuth(FromClient: PUtf8Char; const Method: RawUtf8;
+      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
+    /// compute a Basic server authentication request header
+    // - allow to reuse the inherited GetUserHash storage for BASIC authentication
+    // - return e.g. 'WWW-Authenticate: Basic realm="Realm"'#13#10
+    property BasicInit: RawUtf8
+      read fBasicInit;
+    /// validate a Basic client authentication response
+    // - FromClient typically follow 'Authorization: Basic ' header text
+    function BasicAuth(FromClient: PUtf8Char; out ClientUser: RawUtf8): boolean;
   published
     /// the Digest realm associated with this instance
     // - a good practice is to use the server host name or UUID as realm
@@ -3324,6 +3348,25 @@ begin
   result := dp.ClientResponse(DigestUriName);
 end;
 
+function BasicClient(const UserName: RawUtf8; const Password: SpiUtf8): RawUtf8;
+var
+  ha: RawUtf8;
+begin
+  FormatUtf8('%:%', [UserName, Password], ha);
+  result := BinToBase64(ha);
+  FillZero(ha);
+end;
+
+function BasicRealm(const FromServer: RawUtf8): RawUtf8;
+var
+  p: PUtf8Char;
+begin
+  result := '';
+  p := pointer(FromServer);
+  if IdemPChar(p, 'REALM="') then
+    UnQuoteSqlStringVar(p + 6, result);
+end;
+
 function DigestServerInit(Algo: TDigestAlgo;
   const QuotedRealm, Prefix, Suffix: RawUtf8; Opaque, Tix64: Int64): RawUtf8;
 var
@@ -3414,6 +3457,27 @@ begin
   result := true;
 end;
 
+function BasicServerAuth(FromClient: PUtf8Char;
+  out User, Password: RawUtf8): boolean;
+var
+  l: PtrInt;
+begin
+  result := false;
+  if FromClient = nil then
+    exit;
+  while FromClient^ = ' ' do
+    inc(FromClient);
+  l := 0;
+  while FromClient[l] > ' ' do
+    inc(l);
+  if l < 4 then
+    exit;
+  Split(Base64ToBin(PAnsiChar(FromClient), l), ':', User, Password);
+  result := (User <> '') and
+            (Password <> '') and
+            (PosExChar(':', User) = 0);
+end;
+
 
 { TDigestAuthServer }
 
@@ -3430,6 +3494,7 @@ begin
     raise EDigest.CreateUtf8('%.Create: undefined Algo', [self]);
   fRealm := aRealm;
   QuotedStr(fRealm, '"', fQuotedRealm);
+  FormatUtf8('WWW-Authenticate: Basic realm="%"'#13#10, [fRealm], fBasicInit);
   fAlgo := aAlgo;
   fAlgoSize := HASH_SIZE[DIGEST_ALGO[aAlgo]];
   if fAlgoSize > SizeOf(TDigestAuthHash) then // paranoid
@@ -3437,6 +3502,16 @@ begin
       [self, fAlgoSize shl 3, DIGEST_NAME[aAlgo]]);
   fRequestExpSec := 60;
   fOpaqueObfuscate := Random64; // changes at each server restart
+end;
+
+procedure TDigestAuthServer.ComputeDigest(const aUser: RawUtf8;
+  const aPassword: SpiUtf8; out Digest: THash512Rec);
+begin
+  if PosExChar(':', aUser) <> 0 then
+    raise EDigest.CreateUtf8(
+      '%.ComputeDigest: unexpected '':'' in user=%', [self, aUser]);
+  if DigestHA0(fAlgo, aUser, fRealm, aPassword, Digest) <> fAlgoSize then
+    raise EDigest.CreateUtf8('%.ComputeDigest: DigestHA0?', [self]);
 end;
 
 function TDigestAuthServer.ServerInit(Opaque, Tix64: Int64;
@@ -3465,8 +3540,124 @@ function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char;
   out ClientUser, ClientUrl: RawUtf8): boolean;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
-  result := DigestServerAuth(fAlgo, fRealm, Method, Fromclient, Opaque, GetUserHash,
-    ClientUser, ClientUrl, fRequestExpSec, Tix64);
+  result := DigestServerAuth(fAlgo, fRealm, Method, FromClient, Opaque,
+    GetUserHash, ClientUser, ClientUrl, fRequestExpSec, Tix64);
+end;
+
+function TDigestAuthServer.BasicAuth(FromClient: PUtf8Char;
+  out ClientUser: RawUtf8): boolean;
+var
+  user, pass: RawUtf8;
+begin
+  result := BasicServerAuth(FromClient, user, pass) and
+            CheckCredential(user, pass);
+  if not result then
+    exit;
+  ClientUser := user;
+  FillZero(pass);
+end;
+
+function TDigestAuthServer.CheckCredential(const aUser: RawUtf8;
+  const aPassword: SpiUtf8): boolean;
+var
+  dig, stored: THash512Rec;
+begin
+  result := (self <> nil) and
+            (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
+            (GetUserHash(aUser, fRealm, stored) = fAlgoSize) and
+            CompareMem(@dig, @stored, fAlgoSize);
+  FillZero(dig.b);
+  FillZero(stored.b);
+end;
+
+function TDigestAuthServer.OnCheckCredential(aSender: TObject;
+  const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+begin
+  result := CheckCredential(aUser, aPassword);
+end;
+
+{ TDigestAuthServerMem }
+
+constructor TDigestAuthServerMem.Create(const aRealm: RawUtf8;
+  aAlgo: TDigestAlgo);
+begin
+  inherited Create(aRealm, aAlgo);
+  fUsers := TSynDictionary.Create(
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TDigestAuthHashs));
+  fUsers.Safe.RWUse := uRWLock; // multi-read / single-write thread-safe access
+end;
+
+destructor TDigestAuthServerMem.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fUsers);
+end;
+
+function TDigestAuthServerMem.GetUserHash(const aUser, aRealm: RawUtf8;
+  out aDigest: THash512Rec): integer;
+begin
+  // no need to validate aRealm: DigestServerAuth caller already dit it
+  if fUsers.FindAndCopy(aUser, aDigest, false) then // within read lock
+    result := fAlgoSize
+  else
+    result := 0; // not found
+end;
+
+function TDigestAuthServerMem.GetCount: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := fUsers.Count;
+end;
+
+function TDigestAuthServerMem.GetUsers: TRawUtf8DynArray;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  fUsers.Safe.ReadLock;
+  try
+    fUsers.Keys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}CopyTo(result);
+  finally
+    fUsers.Safe.ReadUnLock;
+  end;
+end;
+
+procedure TDigestAuthServerMem.SetCredential(const aUser: RawUtf8;
+  const aPassword: SpiUtf8);
+var
+  dig: THash512Rec;
+begin
+  if (aUser = '') or
+     (self = nil) then
+    exit;
+  if aPassword = '' then
+  begin
+    if fUsers.Delete(aUser) >= 0 then
+      fModified := true;
+  end
+  else
+  begin
+    ComputeDigest(aUser, aPassword, dig);
+    fUsers.AddOrUpdate(aUser, dig);
+    fModified := true;
+  end;
+  FillZero(dig.b);
+end;
+
+procedure TDigestAuthServerMem.ClearCredentials;
+begin
+  if (self = nil) or
+     (fUsers = nil) then
+    exit;
+  fUsers.Safe.Lock; // within write lock
+  try
+    fUsers.Values.FillZero; // TDigestAuthHash anti-forensic
+    fUsers.DeleteAll;
+  finally
+    fUsers.Safe.UnLock;
+  end;
 end;
 
 
