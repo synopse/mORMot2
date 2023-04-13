@@ -7569,19 +7569,43 @@ end;
 function TSqlDBConnection.NewTableFromRows(const TableName: RawUtf8;
   Rows: TSqlDBStatement; WithinTransaction: boolean;
   ColumnForcedTypes: TSqlDBFieldTypeDynArray): integer;
+
+  function CreateDestTableAndComputeSql: RawUtf8;
+  var
+    i, n: PtrInt;
+    tableu: RawUtf8;
+    fields: TSqlDBColumnCreateDynArray;
+  begin
+    tableu := Properties.SqlTableName(TableName);
+    result := Rows.ColumnsToSqlInsert(tableu, fields);
+    n := length(fields);
+    if Length(ColumnForcedTypes) <> n then
+    begin
+      SetLength(ColumnForcedTypes, n);
+      for i := 0 to n - 1 do
+        case fields[i].DBType of
+          ftUnknown:
+            ColumnForcedTypes[i] := ftInt64;
+          ftNull:
+            ColumnForcedTypes[i] := ftBlob; // assume NULL is a BLOB
+        else
+          ColumnForcedTypes[i] := fields[i].DBType;
+        end;
+    end;
+    if not Properties.TableExists(TableName) then
+      Properties.ExecuteNoResult(
+        Properties.SqlCreate(tableu, fields, false), []);
+  end;
+
 var
-  fields: TSqlDBColumnCreateDynArray;
-  tableu, sql: RawUtf8;
-  tables: TRawUtf8DynArray;
+  sql: RawUtf8;
   stmt: TSqlDBStatement;
-  i, n: PtrInt;
 begin
   result := 0;
   if (self = nil) or
      (Rows = nil) or
      (Rows.ColumnCount = 0) then
     exit;
-  tableu := Properties.SqlTableName(TableName);
   if WithinTransaction then
     StartTransaction; // MUCH faster within a transaction
   try
@@ -7593,25 +7617,7 @@ begin
         // init when first row of data is available
         if stmt = nil then
         begin
-          sql := Rows.ColumnsToSqlInsert(tableu, fields);
-          n := length(fields);
-          if Length(ColumnForcedTypes) <> n then
-          begin
-            SetLength(ColumnForcedTypes, n);
-            for i := 0 to n - 1 do
-              case fields[i].DBType of
-                ftUnknown:
-                  ColumnForcedTypes[i] := ftInt64;
-                ftNull:
-                  ColumnForcedTypes[i] := ftBlob; // assume NULL is a BLOB
-              else
-                ColumnForcedTypes[i] := fields[i].DBType;
-              end;
-          end;
-          Properties.GetTableNames(tables);
-          if FindRawUtf8(tables, TableName, false) < 0 then
-            with Properties do
-              ExecuteNoResult(SqlCreate(tableu, fields, false), []);
+          sql := CreateDestTableAndComputeSql;
           stmt := NewStatement;
           stmt.Prepare(sql, false);
         end;
@@ -7621,6 +7627,10 @@ begin
         stmt.Reset;
         inc(result);
       end;
+      if (stmt = nil) and
+         not Properties.TableExists(TableName) then
+        // no data was retrieved: but generate the void table anyway
+        CreateDestTableAndComputeSql;
       if WithinTransaction then
         Commit;
     finally
