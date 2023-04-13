@@ -500,7 +500,6 @@ begin
       CheckEqual(cli.Content, '{"url":"3"}');
       CheckEqual(cli.Get('/root/testauth/4', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"4"}');
-      ConsoleWaitForEnterKey;
       SetAuthorizeDigest(nil);
     end;
   finally
