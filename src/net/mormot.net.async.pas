@@ -807,9 +807,8 @@ type
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
     fPipelinedWrite: boolean;
-    fAuthorized: THttpServerRequestAuthentication;
     fRequestFlags: THttpServerRequestFlags;
-    fDigestAuth: integer;
+    fAuthSec: word;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fConnectionID: THttpServerConnectionID; // may not be fHandle behind nginx
@@ -866,15 +865,11 @@ type
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
     fHttpDateNowUtc: string[39]; // consume 37 chars
-    fDigestAuth: TDigestAuthServer;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
     procedure IdleEverySecond; virtual;
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
-    /// run TDigestAuthServer.ServerAuth on the supplied authorization header
-    function SetupDigest(Digest: PUtf8Char; Opaque: Int64;
-      var AuthenticatedUser: RawUtf8): THttpServerRequestAuthentication;
     // the main thread will Send output packets in the background
     procedure Execute; override;
   public
@@ -885,12 +880,6 @@ type
       ProcessOptions: THttpServerOptions = []); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
-    /// allow optional Digest authentication for some URIs
-    // - if OnBeforeBody returns 401, DigestAuth.ServerInit and ServerAuth will
-    // be called to negotiate Digest authentication with the client
-    // - any TDigestAuthServer instance assigned will be owned by this server
-    property DigestAuth: TDigestAuthServer
-      read fDigestAuth write fDigestAuth;
   published
     /// initial capacity of internal per-connection Headers buffer
     // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
@@ -3115,7 +3104,6 @@ begin
     include(fHttp.Options, hroHeadersUnfiltered);
   fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // 2KB by default
   fHeadersSec := 0;
-  fAuthorized := hraNone;
 end;
 
 function THttpAsyncConnection.FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
@@ -3188,7 +3176,7 @@ begin
          if FlushPipelinedWrite <> soContinue then
            result := soClose;
       if (result <> soContinue) or
-         (fHttp.State = hrsUpgraded) then
+         (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
         break; // rejected or upgraded
     end;
     if fPipelinedWrite then
@@ -3281,27 +3269,26 @@ begin
 end;
 
 function THttpAsyncConnection.DecodeHeaders: integer;
-var
-  auth: PUtf8Char;
-  opaque: Int64;
 begin
   // compute the flags corresponding to this request
   fRequestFlags := HTTP_TLS_FLAGS[Assigned(fSecure)] +
                    HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
-  // support optional Digest authentication
-  if fDigestAuth <> 0 then
+  // support optional Basic/Digest authentication
+  if (hfHasAuthorization in fHttp.HeaderFlags) and
+     (fServer.Authorize <> hraNone) then
   begin
-    auth := FindNameValue(pointer(fHttp.Headers), 'AUTHORIZATION: DIGEST ');
-    opaque := (Int64(fHandle) shl 32) or Int64(fDigestAuth);
-    fDigestAuth := 0; // challenge is available only once
-    fAuthorized := fServer.SetupDigest(auth, opaque, fHttp.BearerToken);
-    if fAuthorized <> hraDigest then
+    if fServer.Authorization(fHttp, fConnectionID) then
+      include(fRequestFlags, hsrAuthorized)
+    else if fAuthSec = (fServer.Async.fLastOperationSec shr 2) and $ffff then
     begin
-      // 403 HTTP error if not authorized (and close connection)
+      // 403 HTTP error (and close connection) on wrong attemps within 4 seconds
       result := HTTP_FORBIDDEN;
       exit;
-    end;
-    include(fRequestFlags, hsrAuthorized);
+    end
+    else
+      // 401 HTTP_UNAUTHORIZED to ask for credentials and renew after 4 seconds
+      // (ConnectionID may have changed in-between)
+      fAuthSec := fServer.Async.fLastOperationSec shr 2;
   end;
   // by default, continue the request process
   result := HTTP_SUCCESS;
@@ -3323,39 +3310,29 @@ function THttpAsyncConnection.DoReject(
   status: integer): TPollAsyncSocketOnReadWrite;
 var
   len: integer;
-  reason, auth, body, resp: RawUtf8;
 begin
-  result := soClose;
-  StatusCodeToReason(status, reason);
-  FormatUtf8('% Server rejected % request as % %',
-    [fHttp.Host, fHttp.CommandUri, status, reason], body);
-  if (status = HTTP_UNAUTHORIZED) and
-     Assigned(fServer.DigestAuth) then
-  begin
-    repeat
-      fDigestAuth := Random32;
-    until fDigestAuth <> 0; // <> 0 to indicate a pending authentication
-    auth := fServer.DigestAuth.ServerInit(
-      {opaque=}(Int64(fHandle) shl 32) or Int64(fDigestAuth), {tix=}0);
-    result := soContinue;
-  end;
-  FormatUtf8('HTTP/1.% % %'#13#10'%' + TEXT_CONTENT_TYPE_HEADER +
-    #13#10'Content-Length: %'#13#10#13#10'%',
-    [ord(result = soContinue), status, reason, auth, length(body), body], resp);
-  len := length(resp);
-  Send(pointer(resp), len); // no polling nor ProcessWrite
-  fServer.IncStat(grRejected);
+  if fServer.SetRejectInCommandUri(fHttp, fConnectionID, status) then
+    result := soContinue
+  else
+    result := soClose;
+  len := length(fHttp.CommandUri);
+  Send(pointer(fHttp.CommandUri), len); // no polling nor ProcessWrite
   if result = soContinue then
-    fHttp.State := hrsResponseDone
+  begin
+    fServer.IncStat(grWwwAuthenticate);
+    fHttp.State := hrsResponseDone;
+    result := AfterWrite;
+  end
   else
   begin
+    fServer.IncStat(grRejected);
     fHttp.State := hrsErrorRejected;
     if (fServer.Async.Banned <> nil) and
        not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
        fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
     begin
-      fOwner.DoLog(sllTrace, 'DoReject(% %): BanIP(%) %',
-        [status, reason, fRemoteIP, fServer.Async.Banned], self);
+      fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
+        [status, fRemoteIP, fServer.Async.Banned], self);
       fServer.IncStat(grBanned);
     end;
   end;
@@ -3378,7 +3355,7 @@ begin
   if status <> HTTP_SUCCESS then
   begin
     // on fatal error (e.g. OnBeforeBody) direct reject and close the connection
-    DoReject(status);
+    result := DoReject(status);
     exit;
   end;
   // now THttpAsyncConnection.OnRead can get the body
@@ -3412,7 +3389,7 @@ begin
       // content-length was 0, so hrsGetBody* and DoHeaders() were not called
       result := DoHeaders;
       if (result <> soContinue) or
-         (fHttp.State = hrsUpgraded) then
+         (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
         exit; // rejected or upgraded to WebSockets
     end;
   // optionaly uncompress content
@@ -3425,14 +3402,7 @@ begin
       fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque)
   else
     fRequest.Recycle(fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
-  fRequest.Prepare(fHttp, fRemoteIP);
-  // reflect the current valid "authorization:" header
-  if fAuthorized <> hraNone then
-  begin
-    fRequest.AuthenticationStatus := fAuthorized;
-    fRequest.AuthenticatedUser := fHttp.BearerToken; // as set by DecodeHeaders
-    fHttp.BearerToken := '';
-  end;
+  fRequest.Prepare(fHttp, fRemoteIP, fServer.fAuthorize);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then
     result := soContinue;
@@ -3535,9 +3505,9 @@ end;
 
 { THttpAsyncServer }
 
-constructor THttpAsyncServer.Create(const aPort: RawUtf8;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
-  ServerThreadPoolCount, KeepAliveTimeOut: integer;
+constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
+  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 var
   aco: TAsyncConnectionsOptions;
@@ -3605,7 +3575,6 @@ begin
     Dispose(fInterning);
     fInterning := nil;
   end;
-  FreeAndNil(fDigestAuth);
 end;
 
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
@@ -3644,20 +3613,6 @@ begin
       fInterningTix := tix;
     end;
   end;
-end;
-
-function THttpAsyncServer.SetupDigest(Digest: PUtf8Char; Opaque: Int64;
-  var AuthenticatedUser: RawUtf8): THttpServerRequestAuthentication;
-var
-  user, url: RawUtf8;
-begin
-  result := hraFailed;
-  if (Digest = nil) or
-     (fDigestAuth = nil) or
-     not fDigestAuth.ServerAuth(Digest, Opaque, 0, user, url) then
-    exit;
-  AuthenticatedUser := user;
-  result := hraDigest;
 end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
