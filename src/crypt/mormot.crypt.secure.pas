@@ -905,10 +905,18 @@ type
     fOpaqueObfuscate: Int64;
     function GetUserHash(const aUser, aRealm: RawUtf8;
       out aDigest: THash512Rec): integer; virtual; abstract;
+    procedure ComputeDigest(const aUser: RawUtf8; const aPassword: SpiUtf8;
+      out Digest: THash512Rec);
   public
     /// initialize the Digest access authentication engine
-    constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce;
-    /// compute a server authentication request
+    constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce; virtual;
+    /// check the credentials stored for a given user
+    // - returns true if supplied aUser/aPassword are correct, false otherwise
+    function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+    /// check the stored credentials as TOnHttpServerBasicAuth callback
+    function OnCheckCredential(aSender: TObject;
+      const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+    /// compute a Digest server authentication request
     // - returns the standard HTTP header with the default Prefix/Suffix
     // - Opaque is a 64-bit number, typically the THttpServerConnectionID
     function ServerInit(Opaque, Tix64: Int64;
@@ -948,23 +956,51 @@ type
   /// meta-class of server side Digest access authentication
   TDigestAuthServerClass = class of TDigestAuthServer;
 
+  /// Digest access authentication on server side using in-memory storage
+  TDigestAuthServerMem = class(TDigestAuthServer)
+  protected
+    fUsers: TSynDictionary; // UserName:RawUtf8 / HA0:TDigestAuthHash
+    fModified: boolean;
+    function GetUserHash(const aUser, aRealm: RawUtf8;
+      out aDigest: THash512Rec): integer; override;
+    function GetCount: integer;
+  public
+    /// initialize the Digest access authentication engine
+    constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); override;
+    /// finalize the Digest access authentication engine
+    destructor Destroy; override;
+    /// retrieve all user names as a single array
+    // - could be used e.g. to display a user list in the UI
+    function GetUsers: TRawUtf8DynArray;
+    /// change the credentials of a given user
+    // - if aUser does not exist, the credential will be added
+    // - if aUser does exist, the credential will be modified
+    // - if aPassword is '', the credential will be deleted
+    procedure SetCredential(const aUser: RawUtf8; const aPassword: SpiUtf8);
+    /// safely delete all stored credentials
+    // - also fill TDigestAuthHash stored memory with zeros, against forensic
+    procedure ClearCredentials;
+  published
+    /// how many items are currently stored in memory
+    property Count: integer
+      read GetCount;
+    /// flag set if SetCredential() was called but not persisted yet
+    property Modified: boolean
+      read fModified;
+  end;
+
   /// Digest access authentication on server side using a .htdigest file
   // - can also add, delete or update credentials
   // - file content is refreshed from disk when it has been modified
   // - only a single Realm is allowed per .htdigest file
   // - this class is thread-safe, with an efficient R/W lock
   // - file can be AES256-GCM encrypted on disk (non-standard but much safer)
-  TDigestAuthServerFile = class(TDigestAuthServer)
+  TDigestAuthServerFile = class(TDigestAuthServerMem)
   protected
-    fUsers: TSynDictionary; // UserName:RawUtf8 / HA0:TDigestAuthHash
     fFileName: TFileName;
     fFileLastTime: TUnixTime;
-    fModified: boolean;
-    fKey: TSha256Digest;
+    fAesKey: TSha256Digest;
     function GetAes: TAesAbstract;
-    function GetUserHash(const aUser, aRealm: RawUtf8;
-      out aDigest: THash512Rec): integer; override;
-    function GetCount: integer;
     function GetEncrypted: boolean;
   public
     /// initialize the Digest access authentication engine from a .htdigest file
@@ -974,9 +1010,9 @@ type
       const aFilePassword: SpiUtf8 = ''; aAlgo: TDigestAlgo = daMD5_Sess); reintroduce;
     /// finalize the Digest access authentication engine
     destructor Destroy; override;
-    /// force reading the .htdigest file content
+    /// force (re)reading the .htdigest file content
     procedure LoadFromFile;
-    // save the any SetCredential() pending modification to the .htdigest file
+    // save any SetCredential() pending modification to the .htdigest file
     procedure SaveToFile;
     /// update or refresh file if needed
     // - typically called every few seconds in a background thread
@@ -984,29 +1020,10 @@ type
     // - reload the file if it has been modified on disk - on-disk modifications
     // will be ignored if SetCredential() has been called in-between
     function RefreshFile: boolean;
-    /// retrieve all user names as a single array
-    // - could be used e.g. to display a user list in the UI
-    function GetUsers: TRawUtf8DynArray;
-    /// change the credentials of a given user
-    // - if aUser does not exist, the credential will be added
-    // - if aUser does exist, the credential will be modified
-    // - if aPassword is '', the credential will be deleted
-    procedure SetCredential(const aUser: RawUtf8; const aPassword: SpiUtf8);
-    /// check the credentials stored for a given user
-    function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
-    /// safely delete all stored credentials
-    // - also fill TDigestAuthHash stored memory with zeros, against forensic
-    procedure ClearCredentials;
   published
     /// the .htdigest file name associated with this instance
     property FileName: TFileName
       read fFileName;
-    /// how many items are currently stored in memory
-    property Count: integer
-      read GetCount;
-    /// flag if SetCredential() was called but not persisted yet
-    property Modified: boolean
-      read fModified;
     /// flag if aFilePassword was specified at create, i.e. AES256-GCM is used
     property Encrypted: boolean
       read GetEncrypted;
@@ -3673,11 +3690,8 @@ begin
   if aFileName = '' then
     raise EDigest.CreateUtf8('%.Create: void filename', [self]);
   fFileName := ExpandFileName(aFileName);
-  fUsers := TSynDictionary.Create(
-    TypeInfo(TRawUtf8DynArray), TypeInfo(TDigestAuthHashs));
-  fUsers.Safe.RWUse := uRWLock; // multi-read / single-write thread-safe access
   if aFilePassword <> '' then
-    Pbkdf2HmacSha256(aFilePassword, aRealm, 1000, fKey);
+    Pbkdf2HmacSha256(aFilePassword, aRealm, 1000, fAesKey);
   LoadFromFile;
 end;
 
@@ -3686,37 +3700,21 @@ begin
   if fModified then // persist any pending changes
     SaveToFile;
   ClearCredentials; // safely fill in memory against forensic
-  fUsers.Free;
-  FillZero(fKey);   // anti-forensic
+  FillZero(fAesKey);   // anti-forensic
   inherited Destroy;
-end;
-
-function TDigestAuthServerFile.GetCount: integer;
-begin
-  result := fUsers.Count;
 end;
 
 function TDigestAuthServerFile.GetEncrypted: boolean;
 begin
-  result := not IsZero(fKey);
+  result := not IsZero(fAesKey);
 end;
 
 function TDigestAuthServerFile.GetAes: TAesAbstract;
 begin
-  if IsZero(fKey) then
+  if IsZero(fAesKey) then
     result := nil
   else
-    result := TAesFast[mGCM].Create(fKey);
-end;
-
-function TDigestAuthServerFile.GetUserHash(const aUser, aRealm: RawUtf8;
-  out aDigest: THash512Rec): integer;
-begin
-  // no need to validate aRealm: DigestServerAuth caller already dit it
-  if fUsers.FindAndCopy(aUser, aDigest, false) then // within read lock
-    result := fAlgoSize
-  else
-    result := 0; // not found
+    result := TAesFast[mGCM].Create(fAesKey);
 end;
 
 procedure TDigestAuthServerFile.LoadFromFile;
@@ -3830,68 +3828,6 @@ begin
   LoadFromFile;
   result := true;
 end;
-
-function TDigestAuthServerFile.GetUsers: TRawUtf8DynArray;
-begin
-  result := nil;
-  fUsers.Safe.ReadLock;
-  try
-    fUsers.Keys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}CopyTo(result);
-  finally
-    fUsers.Safe.ReadUnLock;
-  end;
-end;
-
-procedure TDigestAuthServerFile.SetCredential(const aUser: RawUtf8;
-  const aPassword: SpiUtf8);
-var
-  dig: THash512Rec;
-begin
-  if aUser = '' then
-    exit;
-  if aPassword = '' then
-  begin
-    if fUsers.Delete(aUser) >= 0 then
-      fModified := true;
-  end
-  else
-  begin
-    if PosExChar(':', aUser) <> 0 then
-      raise EDigest.CreateUtf8(
-        '%.SetCredential: unexpected '':'' in user=%', [self, aUser]);
-    if DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) <> fAlgoSize then
-      raise EDigest.CreateUtf8('%.SetCredential: DigestHA0?', [self]);
-    fUsers.AddOrUpdate(aUser, dig);
-    fModified := true;
-  end;
-  FillZero(dig.b);
-end;
-
-function TDigestAuthServerFile.CheckCredential(const aUser: RawUtf8;
-  const aPassword: SpiUtf8): boolean;
-var
-  dig, stored: THash512Rec;
-begin
-  result := (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
-            fUsers.FindAndCopy(aUser, stored, false) and
-            CompareMem(@dig, @stored, fAlgoSize);
-  FillZero(dig.b);
-  FillZero(stored.b);
-end;
-
-procedure TDigestAuthServerFile.ClearCredentials;
-begin
-  if fUsers = nil then
-    exit;
-  fUsers.Safe.Lock; // within write lock
-  try
-    fUsers.Values.FillZero; // TDigestAuthHash anti-forensic
-    fUsers.DeleteAll;
-  finally
-    fUsers.Safe.UnLock;
-  end;
-end;
-
 
 
 { ***************** TSyn***Password and TSynConnectionDefinition Classes }
