@@ -277,9 +277,11 @@ type
 
 /// direct export of a DB statement rows into a SQLite3 database
 // - the corresponding table will be created within the specified DB file
-// - is a wrapper around TSqlDBConnection.NewTableFromRows()
+// - is a wrapper around TSqlDBConnection.NewTableFromRows() with fallback to
+// NewTableFrom() if SourceTableNameIfNoRows is set
 function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
-  Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
+  Rows: TSqlDBStatement; UseMormotCollations: boolean;
+  const SourceTableNameIfNoRows: RawUtf8 = ''): integer;
 
 
 implementation
@@ -802,15 +804,15 @@ end;
 
 
 function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
-  Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
+  Rows: TSqlDBStatement; UseMormotCollations: boolean;
+  const SourceTableNameIfNoRows: RawUtf8): integer;
 var
   DB: TSqlDBSQLite3ConnectionProperties;
   Conn: TSqlDBSQLite3Connection;
 begin
   result := 0;
   if (Dest = '') or
-     (Rows = nil) or
-     (Rows.ColumnCount = 0) then
+     (Rows = nil) then
     exit;
   // we do not call DeleteFile(Dest) since DB may be completed on purpose
   DB := TSqlDBSQLite3ConnectionProperties.Create(StringToUtf8(Dest), '', '', '');
@@ -818,7 +820,13 @@ begin
     DB.UseMormotCollations := UseMormotCollations;
     Conn := DB.MainConnection as TSqlDBSQLite3Connection;
     Conn.Connect;
-    result := Conn.NewTableFromRows(TableName, Rows, true);
+    result := Conn.NewTableFromRows(TableName, Rows, {withintransaction=}true);
+    if (result = 0) and
+       (SourceTableNameIfNoRows <> '') and
+       not Conn.Properties.TableExists(TableName) then
+      // no rows: just copy the table structure from supplied name
+      Conn.NewTableFrom(
+        TableName, SourceTableNameIfNoRows, Rows.Connection.Properties);
     Conn.Disconnect;
   finally
     DB.Free;
