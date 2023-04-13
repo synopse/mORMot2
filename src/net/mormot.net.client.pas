@@ -52,7 +52,8 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json, // TSynDictionary for THttpRequestCached
-  mormot.core.perf;
+  mormot.core.perf,
+  mormot.crypt.secure;
 
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
@@ -264,6 +265,9 @@ type
     fRedirected: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
+    fDigestAuthUserName: RawUtf8;
+    fDigestAuthPassword: SpiUtf8;
+    fDigestAuthAlgo: TDigestAlgo;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
@@ -273,6 +277,9 @@ type
     {$endif DOMAINRESTAUTH}
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
+    function OnAuthorizeDigest(Sender: THttpClientSocket;
+      var Context: TTHttpClientSocketRequestParams;
+      const Authenticate: RawUtf8): boolean;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -280,6 +287,8 @@ type
     // aTimeout parameters (in ms) if you left the 0 default parameters,
     // it would use global HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(aTimeOut: PtrInt = 0); override;
+    /// finalize this instance
+    destructor Destroy; override;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -332,6 +341,9 @@ type
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer;
+    /// setup web authentication using the Digest access algorithm
+    procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
+      Algo: TDigestAlgo = daMD5_Sess);
     {$ifdef DOMAINRESTAUTH}
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
@@ -1467,6 +1479,12 @@ begin
   fAccept := '*/*';
 end;
 
+destructor THttpClientSocket.Destroy;
+begin
+  FillZero(fDigestAuthPassword);
+  inherited Destroy;
+end;
+
 procedure THttpClientSocket.RequestInternal(
   var ctxt: TTHttpClientSocketRequestParams);
 
@@ -2021,6 +2039,43 @@ begin
   result := Request(url, 'DELETE', KeepAlive, header);
 end;
 
+procedure THttpClientSocket.AuthorizeDigest(const UserName: RawUtf8;
+  const Password: SpiUtf8; Algo: TDigestAlgo);
+begin
+  fDigestAuthUserName := UserName;
+  fDigestAuthPassword := Password;
+  fDigestAuthAlgo := Algo;
+  if (UserName = '') or
+     (Algo = daUndefined) then
+    OnAuthorize := nil
+  else
+    OnAuthorize := OnAuthorizeDigest;
+end;
+
+function THttpClientSocket.OnAuthorizeDigest(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams;
+  const Authenticate: RawUtf8): boolean;
+var
+  auth: RawUtf8;
+  p: PUtf8Char;
+begin
+  p := pointer(Authenticate);
+  if IdemPChar(p, 'DIGEST ') then
+  begin
+    auth := DigestClient(fDigestAuthAlgo, p + 7, Context.method, Context.url,
+      fDigestAuthUserName, fDigestAuthPassword);
+    if auth <> '' then
+    begin
+      auth := 'Authorization: Digest ' + auth;
+      if Context.header <> '' then
+        Context.header := auth + #13#10 + Context.header
+      else
+        Context.header := auth;
+    end;
+  end;
+  result := true;
+end;
+
 {$ifdef DOMAINRESTAUTH}
 
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
@@ -2037,7 +2092,7 @@ begin
   if (Sender = nil) or
      not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
     exit;
-  unauthstatus := Context.status;
+  unauthstatus := Context.status; // either 401 or 407
   bak := Context.header;
   InvalidateSecContext(sc, 0);
   try
