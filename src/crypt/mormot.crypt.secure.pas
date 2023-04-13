@@ -3229,16 +3229,15 @@ end;
 
 procedure TDigestProcess.DigestResponse;
 begin
+  BinToHexLower(@HA0, HashLen, HA1); // into lowercase hexadecimal
   if Algo in DIGEST_SESS then
   begin
     Hasher.Init(Hash);
-    Hasher.Update(@HA0, HashLen); // hashed as binary, not hexa
-    Hasher.Update([':', Nonce, ':', CNonce]);
+    Hasher.Update([HA1, ':', Nonce, ':', CNonce]);
     if AuthzID <> '' then
       Hasher.Update([':', AuthzID]);
-    Hasher.Final(HA0);
+    Hasher.Final(HA1);
   end;
-  BinToHexLower(@HA0, HashLen, HA1); // into lowercase hexadecimal
   Hasher.Full(Hash, ['AUTHENTICATE:', Url], HA2);
   hasher.Full(Hash,
     [HA1, ':', nonce, ':', nc, ':', cnonce, ':', qop, ':', HA2], Response);
