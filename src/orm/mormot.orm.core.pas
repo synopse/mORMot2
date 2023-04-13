@@ -9924,24 +9924,22 @@ begin
 end;
 
 function TOrmModel.UriMatch(const Uri: RawUtf8; CheckCase: boolean): TRestModelMatch;
+var
+  u: PUtf8Char;
 begin
+  u := pointer(Uri);
   result := rmNoMatch;
-  if (self = nil) or
-     (fRoot = '') or
-     (PtrUInt(Uri) = 0) or
-     ({%H-}PStrLen(PtrUInt(Uri) - _STRLEN)^ < TStrLen(fRootLen)) then
-    exit;
-  if CheckCase then
-  begin
-    if not CompareMemFixed(pointer(Uri), pointer(fRoot), fRootLen) then
-      exit;
-  end
-  else if not IdemPropNameUSameLenNotNull(pointer(fRoot), pointer(Uri), fRootLen) then
-    exit;
-  if Uri[fRootLen + 1] in [#0, '/', '?'] then
+  if (self <> nil) and
+     (fRoot <> '') and
+     (u <> nil) and
+     (PStrLen(u - _STRLEN)^ >= TStrLen(fRootLen)) and
+     (u[fRootLen] in [#0, '/', '?']) then
     if CheckCase then
-      result := rmMatchExact
-    else
+    begin
+      if CompareMemFixed(u, pointer(fRoot), fRootLen) then
+        result := rmMatchExact;
+    end
+    else if IdemPropNameUSameLenNotNull(u, pointer(fRoot), fRootLen) then
       result := rmMatchWithCaseChange;
 end;
 
@@ -9949,7 +9947,7 @@ function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
   const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
 var
   i: PtrInt;
-  aProps: array[0..31] of TOrmModelProperties;
+  p: array[0..31] of TOrmModelProperties;
 begin
   if self = nil then
     raise EOrmException.CreateUtf8(
@@ -9961,27 +9959,27 @@ begin
     exit;
   end;
   // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
-  if cardinal(high(Tables)) > high(aProps) then
+  if cardinal(high(Tables)) > high(p) then
     raise EModelException.CreateUtf8(
       '%.SqlFromSelectWhere(%) up to % Tables[]',
-      [self, SqlSelect, Length(aProps)]);
+      [self, SqlSelect, Length(p)]);
   for i := 0 to high(Tables) do
-    aProps[i] := Props[Tables[i]]; // raise EModelException if not found
+    p[i] := Props[Tables[i]]; // raise EModelException if not found
   if SqlSelect = '*' then
      // don't send BLOB values to query: retrieve all other fields
     if high(Tables) = 0 then
-      result := 'SELECT ' + {%H-}aProps[0].SQL.TableSimpleFields[true, false]
+      result := 'SELECT ' + {%H-}p[0].SQL.TableSimpleFields[true, false]
     else
     begin
-      result := 'SELECT ' + aProps[0].SQL.TableSimpleFields[true, true];
+      result := 'SELECT ' + p[0].SQL.TableSimpleFields[true, true];
       for i := 1 to high(Tables) do
-        result := result + ',' + aProps[i].SQL.TableSimpleFields[true, true];
+        result := result + ',' + p[i].SQL.TableSimpleFields[true, true];
     end
   else
     result := 'SELECT ' + SqlSelect;
-  result := result + ' FROM ' + aProps[0].Props.SqlTableName;
+  result := result + ' FROM ' + p[0].Props.SqlTableName;
   for i := 1 to high(Tables) do
-    result := result + ',' + aProps[i].Props.SqlTableName;
+    result := result + ',' + p[i].Props.SqlTableName;
   result := result + SqlFromWhere(SqlWhere);
 end;
 
