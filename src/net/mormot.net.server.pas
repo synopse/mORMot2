@@ -658,6 +658,7 @@ type
   // - grTimeout is returned when HeaderRetrieveAbortDelay is reached
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
+  // - grWwwAuthenticate is returned if GetRequest() did send a 401 response
   // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
   // - grBanned is triggered by the hsoBan40xIP option
   THttpServerSocketGetRequestResult = (
@@ -668,6 +669,7 @@ type
     grTimeout,
     grHeaderReceived,
     grBodyReceived,
+    grWwwAuthenticate,
     grUpgraded,
     grBanned);
 
@@ -681,6 +683,9 @@ type
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
+    fAuthorized: THttpServerRequestAuthentication;
+    fRequestFlags: THttpServerRequestFlags;
+    fAuthSec: cardinal;
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
@@ -809,6 +814,11 @@ type
   // - used to override THttpServerSocket.GetRequest for instance
   THttpServerSocketClass = class of THttpServerSocket;
 
+  /// callback used by THttpServerSocketGeneric.SetAuthorizeBasic
+  // - should return true if supplied aUser/aPassword pair is valid
+  TOnHttpServerBasicAuth = function(Sender: TObject;
+    const aUser: RawUtf8; const aPassword: SpiUtf8): boolean of object;
+
   /// THttpServerSocketGeneric current state
   THttpServerExecuteState = (
     esNotStarted,
@@ -828,6 +838,10 @@ type
     fSafe: TLightLock;
     fExecuteMessage: RawUtf8;
     fNginxSendFileFrom: array of TFileName;
+    fAuthorize: THttpServerRequestAuthentication;
+    fAuthorizeDigest: TDigestAuthServer;
+    fAuthorizeBasic: TOnHttpServerBasicAuth;
+    fAuthorizeBasicRealm: RawUtf8;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean;
@@ -842,6 +856,11 @@ type
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
+    procedure ResetAuthorize;
+    function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
+    function SetRejectInCommandUri(var Http: THttpRequestContext;
+      Opaque: Int64; Status: integer): boolean;
+    function Authorization(var Http: THttpRequestContext; Opaque: Int64): boolean;
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -864,6 +883,8 @@ type
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
       ProcessOptions: THttpServerOptions = []); reintroduce; virtual;
+    /// finalize this Server instance
+    destructor Destroy; override;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -898,8 +919,35 @@ type
     procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
       overload;
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
-    // - use Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
+    // - validate Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
+    // - otherwise TLS is initialized at first incoming connection, which
+    // could be too late in case of invalid Sock.TLS parameters
     procedure InitializeTlsAfterBind;
+    /// allow optional Digest authentication for some URIs
+    // - if OnBeforeBody returns 401, Digester.ServerInit and ServerAuth will
+    // be called to negotiate Digest authentication with the client
+    // - the supplied Digester will be owned by this instance - typical
+    // use is with a TDigestAuthServerFile
+    procedure SetAuthorizeDigest(Digester: TDigestAuthServer);
+    /// allow optional Basic authentication for some URIs
+    // - if OnBeforeBody returns 401, OnBasicAuth callback will be executed
+    // to negotiate Basic authentication with the client
+    procedure SetAuthorizeBasic(const BasicRealm: RawUtf8;
+      const OnBasicAuth: TOnHttpServerBasicAuth); overload;
+    /// allow optional Basic authentication for some URIs
+    // - if OnBeforeBody returns 401, Digester.OnCheckCredential will
+    // be called to negotiate Basic authentication with the client
+    // - the supplied Digester will be owned by this instance: it could be
+    // either a TDigestAuthServerFile with its own storage, or a
+    // TDigestAuthServerMem instance expecting manual SetCredential() calls
+    procedure SetAuthorizeBasic(Digester: TDigestAuthServer); overload;
+    /// set after a call to SetAuthDigest/SetAuthBasic
+    property Authorize: THttpServerRequestAuthentication
+      read fAuthorize;
+    /// set after a call to SetAuthDigest/SetAuthBasic
+    // - return nil if no such call was made, or not with a TDigestAuthServerMem
+    // - return a TDigestAuthServerMem so that SetCredential/GetUsers are available
+    function AuthorizeDigest: TDigestAuthServerMem;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -963,6 +1011,9 @@ type
     /// how many HTTP bodies have been processed
     property StatBodyProcessed: integer
       index grBodyReceived read GetStat;
+    /// how many HTTP 401 "WWW-Authenticate:" responses have been returned
+    property StatWwwAuthenticate: integer
+      index grWwwAuthenticate read GetStat;
     /// how many HTTP connections were upgraded e.g. to WebSockets
     property StatUpgraded: integer
       index grUpgraded read GetStat;
@@ -2698,6 +2749,12 @@ begin
   inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
 end;
 
+destructor THttpServerSocketGeneric.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fAuthorizeDigest);
+end;
+
 function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
 begin
   result := SocketApiVersion;
@@ -2905,6 +2962,127 @@ begin
     fSafe.UnLock;
   end;
 end;
+
+procedure THttpServerSocketGeneric.ResetAuthorize;
+begin
+  fAuthorize := hraNone;
+  FreeAndNil(fAuthorizeDigest);
+  fAuthorizeBasic := nil;
+  fAuthorizeBasicRealm := '';
+end;
+
+procedure THttpServerSocketGeneric.SetAuthorizeDigest(Digester: TDigestAuthServer);
+begin
+  ResetAuthorize;
+  if Digester = nil then
+    exit;
+  fAuthorizeDigest := Digester;
+  fAuthorize := hraDigest;
+end;
+
+procedure THttpServerSocketGeneric.SetAuthorizeBasic(Digester: TDigestAuthServer);
+begin
+  ResetAuthorize;
+  if Digester = nil then
+    exit;
+  SetAuthorizeBasic(Digester.Realm, Digester.OnCheckCredential);
+  fAuthorizeDigest := Digester;
+end;
+
+procedure THttpServerSocketGeneric.SetAuthorizeBasic(const BasicRealm: RawUtf8;
+  const OnBasicAuth: TOnHttpServerBasicAuth);
+begin
+  ResetAuthorize;
+  if not Assigned(OnBasicAuth) then
+    exit;
+  fAuthorize := hraBasic;
+  fAuthorizeBasic := OnBasicAuth;
+  FormatUtf8('WWW-Authenticate: Basic realm="%"'#13#10, [BasicRealm],
+    fAuthorizeBasicRealm);
+end;
+
+function THttpServerSocketGeneric.AuthorizeDigest: TDigestAuthServerMem;
+begin
+  if (self = nil) or
+     (fAuthorizeDigest = nil) or
+     not fAuthorizeDigest.InheritsFrom(TDigestAuthServerMem) then
+    result := nil
+  else
+    result := TDigestAuthServerMem(fAuthorizeDigest);
+end;
+
+function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
+begin
+  result := '';
+  case fAuthorize of
+    hraBasic:
+      if Assigned(fAuthorizeBasic) then
+        result := fAuthorizeBasicRealm;
+    hraDigest:
+      if fAuthorizeDigest <> nil then
+        result := fAuthorizeDigest.ServerInit(Opaque, 0);
+  end;
+end;
+
+function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
+  Opaque: Int64): boolean;
+var
+  auth: PUtf8Char;
+  user, pass, url: RawUtf8;
+begin
+  result := false;
+  auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
+  if auth = nil then
+    exit;
+  case fAuthorize of
+    hraBasic:
+      if Assigned(fAuthorizeBasic) and
+         IdemPChar(auth, 'BASIC ') then
+        try
+          if not BasicServerAuth(auth + 6, user, pass) or
+             not fAuthorizeBasic(self, user, pass) then
+            exit;
+        finally
+          FillZero(pass);
+        end
+      else
+        exit;
+    hraDigest:
+      if (fAuthorizeDigest = nil) or
+         not IdemPChar(auth, 'DIGEST ') or
+         not fAuthorizeDigest.ServerAuth(
+           auth + 7, Http.CommandMethod, Opaque, 0, user, url) or
+         (url <> http.CommandUri) then
+        exit;
+  else
+    exit; // unsupported algorithm (yet)
+  end;
+  result := true;
+  Http.BearerToken := user;
+end;
+
+function THttpServerSocketGeneric.SetRejectInCommandUri(
+  var Http: THttpRequestContext; Opaque: Int64; Status: integer): boolean;
+var
+  reason, auth, body: RawUtf8;
+begin
+  result := false;
+  StatusCodeToReason(status, reason);
+  FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
+             '<body style="font-family:verdana"><h1>%</h1>' +
+             '<p>Server rejected % request as % %.</body></html>',
+    [reason, reason, Http.CommandUri, status, reason], body);
+  if (status = HTTP_UNAUTHORIZED) and
+     (fAuthorize <> hraNone) then
+  begin
+    auth := ComputeWwwAuthenticate(Opaque);
+    result := true; // don't close the connection
+  end;
+  FormatUtf8('HTTP/1.% % %'#13#10'%' + HTML_CONTENT_TYPE_HEADER +
+    #13#10'Content-Length: %'#13#10#13#10'%',
+    [ord(result), status, reason, auth, length(body), body], Http.CommandUri);
+end;
+
 
 
 { THttpServer }
@@ -3199,46 +3377,56 @@ function THttpServerSocket.TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
 var
   pool: TSynThreadPoolTHttpServer;
 begin
-  result := true;
+  result := true; // freeme = true by default
   if (fServer = nil) or
      fServer.Terminated  then
     exit;
   // properly get the incoming body and process the request
-  fServer.IncStat(aHeaderResult);
-  case aHeaderResult of
-    grHeaderReceived:
-      begin
-        pool := TSynThreadPoolTHttpServer(aCaller.Owner);
-        // connection and header seem valid -> process request further
-        if (fServer.ServerKeepAliveTimeOut > 0) and
-           (fServer.fInternalHttpServerRespList.Count < pool.MaxBodyThreadCount) and
-           (KeepAliveClient or
-            (Http.ContentLength > pool.BigBodySize)) then
+  repeat
+    fServer.IncStat(aHeaderResult);
+    case aHeaderResult of
+      grHeaderReceived:
         begin
-          // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
-          // -> process in dedicated background thread
-          fServer.fThreadRespClass.Create(self, fServer);
-          result := false; // THttpServerResp will own and free srvsock
-        end
-        else
-        begin
-          // no Keep Alive = multi-connection -> process in the Thread Pool
-          if not (hfConnectionUpgrade in Http.HeaderFlags) and
-             not HttpMethodWithNoBody(Method) then
+          pool := TSynThreadPoolTHttpServer(aCaller.Owner);
+          // connection and header seem valid -> process request further
+          if (fServer.ServerKeepAliveTimeOut > 0) and
+             (fServer.fInternalHttpServerRespList.Count < pool.MaxBodyThreadCount) and
+             (KeepAliveClient or
+              (Http.ContentLength > pool.BigBodySize)) then
           begin
-            GetBody; // we need to get it now
-            fServer.IncStat(grBodyReceived);
+            // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
+            // -> process in dedicated background thread
+            fServer.fThreadRespClass.Create(self, fServer);
+            result := false; // THttpServerResp will own and free srvsock
+          end
+          else
+          begin
+            // no Keep Alive = multi-connection -> process in the Thread Pool
+            if not (hfConnectionUpgrade in Http.HeaderFlags) and
+               not HttpMethodWithNoBody(Method) then
+            begin
+              GetBody; // we need to get it now
+              fServer.IncStat(grBodyReceived);
+            end;
+            // multi-connection -> process now
+            fServer.Process(self, fRemoteConnectionID, aCaller);
+            fServer.OnDisconnect;
+            // no Shutdown here: will be done client-side
           end;
-          // multi-connection -> process now
-          fServer.Process(self, fRemoteConnectionID, aCaller);
-          fServer.OnDisconnect;
-          // no Shutdown here: will be done client-side
+          break;
         end;
+      grWwwAuthenticate:
+        // return 401 and wait for the "Authorize:" answer in the thread pool
+        aHeaderResult := GetRequest(false, fServer.HeaderRetrieveAbortTix);
+    else
+      begin
+        if Assigned(fServer.Sock.OnLog) then
+          fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
+              [ToText(aHeaderResult)^, RemoteIP], self);
+        break;
       end;
-  else if Assigned(fServer.Sock.OnLog) then
-    fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
-        [ToText(aHeaderResult)^, RemoteIP], self);
-  end;
+    end;
+  until false;
 end;
 
 constructor THttpServerSocket.Create(aServer: THttpServer);
@@ -3264,7 +3452,7 @@ function THttpServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var
   P: PUtf8Char;
-  status: cardinal;
+  status, tix32: cardinal;
   pending: integer;
   noheaderfilter: boolean;
 begin
@@ -3517,6 +3705,11 @@ procedure THttpServerResp.Execute;
                       else
                         exit;
                     end;
+                  grWwwAuthenticate:
+                    if fServerSock.KeepAliveClient then
+                      break
+                    else
+                      exit;
                 else
                   begin
                     if Assigned(fServer.Sock.OnLog) then
