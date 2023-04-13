@@ -804,13 +804,15 @@ type
 
 /// compute the Digest access authentication client code for a given algorithm
 // - as defined in https://en.wikipedia.org/wiki/Digest_access_authentication
+// - FromServer is the 'xxx' encoded value from 'WWW-Authenticate: Digest xxx'
 // - may return '' if Algo does not match algorithm=... value (MD5 or SHA-256)
 // - DigestUriName is customized as "digest-uri" e.g. for LDAP digest auth
 function DigestClient(Algo: TDigestAlgo;
-  const FromServer, DigestUri, UserName: RawUtf8; const Password: SpiUtf8;
-  const DigestUriName: RawUtf8 = 'uri'): RawUtf8;
+  const FromServer, DigestMethod, DigestUri, UserName: RawUtf8;
+  const Password: SpiUtf8; const DigestUriName: RawUtf8 = 'uri'): RawUtf8;
 
 /// extract the Digest access authentication realm on client side
+// - FromServer is the 'xxx' encoded value from 'WWW-Authenticate: Digest xxx'
 // - could be proposed to the user interation UI to specify the auth context
 function DigestRealm(const FromServer: RawUtf8): RawUtf8;
 
@@ -864,7 +866,7 @@ type
 
 /// validate a Digest access authentication on server side
 // - returns true and the user/uri from a valid input token, or false on error
-function DigestServerAuth(Algo: TDigestAlgo; const Realm: RawUtf8;
+function DigestServerAuth(Algo: TDigestAlgo; const Realm, Method: RawUtf8;
   FromClient: PUtf8Char; Opaque: Int64;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
   out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword = 0): boolean;
@@ -3141,7 +3143,7 @@ type
     procedure Init(DigestAlgo: TDigestAlgo); {$ifdef HASINLINE} inline; {$endif}
     function Parse(var p: PUtf8Char): boolean;
     procedure DigestHa0;
-    procedure DigestResponse;
+    procedure DigestResponse(const Method: RawUtf8);
     function ClientResponse(const UriName: RawUtf8): RawUtf8;
   end;
 
@@ -3217,6 +3219,9 @@ begin
     10: // authzid="xxx"
       FastAssignUtf8(AuthzID, tmp);
   end;
+  if (p <> nil) and
+     (p^ in [#10, #13]) then
+    p := nil; // also end at line feed (e.g. if input is from HTTP headers)
   result := true;
 end;
 
@@ -3227,7 +3232,7 @@ begin
   Hasher.Final(HA0);
 end;
 
-procedure TDigestProcess.DigestResponse;
+procedure TDigestProcess.DigestResponse(const Method: RawUtf8);
 begin
   BinToHexLower(@HA0, HashLen, HA1); // into lowercase hexadecimal
   if Algo in DIGEST_SESS then
@@ -3238,7 +3243,13 @@ begin
       Hasher.Update([':', AuthzID]);
     Hasher.Final(HA1);
   end;
-  Hasher.Full(Hash, ['AUTHENTICATE:', Url], HA2);
+  Hasher.Init(Hash);
+  if Method = '' then
+    Hasher.Update('AUTHENTICATE')
+  else
+    Hasher.Update(Method);
+  Hasher.Update([':', Url]);
+  Hasher.Final(HA2);
   hasher.Full(Hash,
     [HA1, ':', nonce, ':', nc, ':', cnonce, ':', qop, ':', HA2], Response);
 end;
@@ -3283,8 +3294,8 @@ begin
 end;
 
 function DigestClient(Algo: TDigestAlgo;
-  const FromServer, DigestUri, UserName: RawUtf8; const Password: SpiUtf8;
-  const DigestUriName: RawUtf8): RawUtf8;
+  const FromServer, DigestMethod, DigestUri, UserName: RawUtf8;
+  const Password: SpiUtf8; const DigestUriName: RawUtf8): RawUtf8;
 var
   p: PUtf8Char;
   dp: TDigestProcess;
@@ -3309,7 +3320,7 @@ begin
   dp.NC := '00000001';
   dp.Qop := 'auth';
   dp.DigestHa0;
-  dp.DigestResponse;
+  dp.DigestResponse(DigestMethod);
   result := dp.ClientResponse(DigestUriName);
 end;
 
@@ -3339,7 +3350,7 @@ begin
     result);
 end;
 
-function DigestServerAuth(Algo: TDigestAlgo; const Realm: RawUtf8;
+function DigestServerAuth(Algo: TDigestAlgo; const Realm, Method: RawUtf8;
   FromClient: PUtf8Char; Opaque: Int64;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
   out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword): boolean;
@@ -3393,7 +3404,7 @@ begin
     exit;
   // validate the cryptographic challenge
   resp := dp.Response;
-  dp.DigestResponse;
+  dp.DigestResponse(Method);
   FillZero(dp.HA0.b);
   if not IdemPropNameU(dp.Response, resp) then
     exit;
@@ -3450,10 +3461,11 @@ begin
 end;
 
 function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char;
-  Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
+  const Method: RawUtf8; Opaque, Tix64: Int64;
+  out ClientUser, ClientUrl: RawUtf8): boolean;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
-  result := DigestServerAuth(fAlgo, fRealm, Fromclient, Opaque, GetUserHash,
+  result := DigestServerAuth(fAlgo, fRealm, Method, Fromclient, Opaque, GetUserHash,
     ClientUser, ClientUrl, fRequestExpSec, Tix64);
 end;
 
