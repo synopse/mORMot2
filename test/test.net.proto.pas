@@ -39,6 +39,7 @@ type
     three: boolean;
     request: integer;
     four: Int64;
+    // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;

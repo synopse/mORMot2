@@ -30,6 +30,8 @@ uses
   mormot.core.interfaces,
   mormot.crypt.secure,
   mormot.crypt.jwt,
+  mormot.net.sock,
+  mormot.net.http,
   mormot.net.client,
   mormot.net.server,
   mormot.net.async,
@@ -76,6 +78,10 @@ type
     Server: TRestHttpServer;
     Client: TRestClientURI;
     fHttps: boolean;
+    procedure TestAuth(Ctxt: TRestServerUriContext);
+    function TestAuthBeforeBody(var aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+      aFlags: THttpServerRequestFlags): cardinal;
     /// perform the tests of the current Client instance
     procedure ClientTest;
     /// release used instances (e.g. http server) and memory
@@ -436,11 +442,70 @@ begin
 end;
 {$endif HASRESTCUSTOMENCRYPTION}
 
+procedure TTestClientServerAccess.TestAuth(Ctxt: TRestServerUriContext);
+begin
+  Check(llfAuthorized in Ctxt.Call^.LowLevelConnectionFlags);
+  Ctxt.Returns(['url', Ctxt.UriMethodPath]);
+end;
+
+function TTestClientServerAccess.TestAuthBeforeBody(var aUrl, aMethod,
+  aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
+  aContentLength: Int64; aFlags: THttpServerRequestFlags): cardinal;
+begin
+  result := HTTP_SUCCESS;
+  if IdemPChar(pointer(aUrl), '/ROOT/TESTAUTH') then
+    if not (hsrAuthorized in aFlags) then
+      result := HTTP_UNAUTHORIZED; // trigger server authentication
+  Check(aMethod <> '');
+end;
+
 procedure TTestClientServerAccess._TRestHttpsServer;
+var
+  tls: TNetTlsContext;
+  cli: THttpClientSocket;
 begin
   CleanUp;
   fHttps := true;
   _TRestHttpServer;
+  DataBase.ServiceMethodRegister('testauth', TestAuth);
+  InitNetTlsContext(tls, true);
+  cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 30000, @tls);
+  try
+    with Server.HttpServer as THttpServerSocketGeneric do
+    begin
+      OnBeforeBody := TestAuthBeforeBody;
+      CheckEqual(cli.Get('/root/timestamp', 10000), HTTP_SUCCESS);
+      // validate BASIC auth
+      SetAuthorizeBasic(TDigestAuthServerMem.Create('basic', daSHA3_256));
+      AuthorizeDigest.SetCredential('usr', 'pwd');
+      CheckEqual(cli.Get('root/testauth/1', 10000), HTTP_UNAUTHORIZED);
+      Check(cli.Content <> '{"url":"1"}');
+      cli.Free; // HTTP_UNAUTHORIZED would close the connection
+      cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 0, @tls);
+      cli.BasicAuthUserPassword := 'usr:pwd';
+      CheckEqual(cli.Get('root/testauth/1', 10000), HTTP_SUCCESS);
+      CheckEqual(cli.Content, '{"url":"1"}');
+      CheckEqual(cli.Get('/root/testauth/2', 10000), HTTP_SUCCESS);
+      CheckEqual(cli.Content, '{"url":"2"}');
+      SetAuthorizeBasic(nil);
+      cli.Free;
+      // validate DIGEST auth
+      cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 0, @tls);
+      CheckEqual(cli.Get('/root/timestamp', 10000), HTTP_SUCCESS);
+      SetAuthorizeDigest(TDigestAuthServerMem.Create('digest', daSHA256_Sess));
+      AuthorizeDigest.SetCredential('usr', 'pwd');
+      cli.AuthorizeDigest('usr', 'pwd', AuthorizeDigest.Algo);
+      CheckEqual(cli.Get('root/timestamp', 10000), HTTP_SUCCESS);
+      CheckEqual(cli.Get('root/testauth/3', 10000), HTTP_SUCCESS);
+      CheckEqual(cli.Content, '{"url":"3"}');
+      CheckEqual(cli.Get('/root/testauth/4', 10000), HTTP_SUCCESS);
+      CheckEqual(cli.Content, '{"url":"4"}');
+      ConsoleWaitForEnterKey;
+      SetAuthorizeDigest(nil);
+    end;
+  finally
+    cli.Free;
+  end;
 end;
 
 procedure TTestClientServerAccess._TRestHttpsClient;
