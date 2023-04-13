@@ -427,7 +427,8 @@ begin
   { TODO : get FOREIGN KEYS from UniDAC metadata ? }
 end;
 
-procedure TSqlDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
+procedure TSqlDBUniDACConnectionProperties.GetTableNames(
+  out Tables: TRawUtf8DynArray);
 var
   List: TStringList;
 begin

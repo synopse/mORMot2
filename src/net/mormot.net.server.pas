@@ -2849,7 +2849,7 @@ function THttpServerSocketGeneric.HeaderRetrieveAbortTix: Int64;
 begin
   result := fHeaderRetrieveAbortDelay;
   if result <> 0 then
-    inc(result, mormot.core.os.GetTickCount64());
+    inc(result, mormot.core.os.GetTickCount64()); // FPC requires () on Windows
 end;
 
 function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;

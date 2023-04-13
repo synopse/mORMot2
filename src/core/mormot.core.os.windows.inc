@@ -1210,6 +1210,19 @@ begin
             (Windows.SetThreadAffinityMask(Thread.Handle, Mask) <> 0);
 end;
 
+function GetProcessAffinityMask(hProcess: THandle;
+  var lpProcessAffinityMask, lpSystemAffinityMask: TCpuSet): BOOL;
+    stdcall; external kernel32; // redefined for Delphi 7 compatibility
+
+function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
+var
+  process, thread: TCpuSet;
+begin
+  result := Windows.GetProcessAffinityMask(GetCurrentProcess, process, thread);
+  if result then
+    CpuSet := process;
+end;
+
 type
   // avoid linking of ComObj.pas just for EOleSysError
   EOleSysError = class(Exception)

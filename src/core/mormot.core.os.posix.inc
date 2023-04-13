@@ -1020,6 +1020,15 @@ begin
   {$endif HAS_PTHREADSETAFFINITY}
 end;
 
+function sched_getaffinity(pid: integer;
+  cpusetsize: SizeUInt; cpuset: pointer): integer;
+    cdecl external clib name 'sched_getaffinity';
+
+function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
+begin
+  result := sched_getaffinity(0, SizeOf(CpuSet), @CpuSet) = 0;
+end;
+
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 

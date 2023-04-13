@@ -4212,6 +4212,13 @@ procedure ResetCpuSet(out CpuSet: TCpuSet);
 /// set a particular bit in a mask of CPU cores
 function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
 
+/// retrieve the current CPU cores masks available of the system
+// - the current process may have been tuned to use only a sub-set of the cores
+// e.g. via "taskset -c" on Linux
+// - return the number of accessible CPU cores - i.e. GetBitCount(CpuSet) or
+// 0 if the function failed
+function CurrentCpuSet(out CpuSet: TCpuSet): integer;
+
 /// try to assign a given thread to a specific set of logical CPU core(s)
 // - on Windows, calls the SetThreadAffinityMask() API
 // - under Linux/FPC, calls pthread_setaffinity_np() API
@@ -8769,6 +8776,15 @@ begin
     exit;
   SetBitPtr(@CpuSet, CpuIndex);
   result := true;
+end;
+
+function CurrentCpuSet(out CpuSet: TCpuSet): integer;
+begin
+  ResetCpuSet(CpuSet);
+  if GetMaskAffinity(CpuSet) then
+    result := GetBitsCount(CpuSet, SizeOf(CpuSet) shl 3)
+  else
+    result := 0;
 end;
 
 function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
