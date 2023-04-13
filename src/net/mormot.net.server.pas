@@ -3304,11 +3304,9 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   // compute the response
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
-    HTTP_TLS_FLAGS[ClientSock.TLS.Enabled] +
-    HTTP_UPG_FLAGS[hfConnectionUpgrade in ClientSock.Http.HeaderFlags],
-    ClientSock.GetConnectionOpaque);
+    ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
-    req.Prepare(ClientSock.Http, ClientSock.fRemoteIP);
+    req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
@@ -3517,9 +3515,39 @@ begin
          (fServer.MaximumAllowedContentLength > 0) and
          (Http.ContentLength > fServer.MaximumAllowedContentLength) then
       begin
-        SockSendFlush('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
+        // 413 HTTP error (and close connection)
+        fServer.SetRejectInCommandUri(Http, 0, HTTP_PAYLOADTOOLARGE);
+        SockSendFlush(Http.CommandUri);
         result := grOversizedPayload;
         exit;
+      end;
+      // support optional Basic/Digest authentication
+      fRequestFlags := HTTP_TLS_FLAGS[TLS.Enabled] +
+                       HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags];
+      if (hfHasAuthorization in Http.HeaderFlags) and
+         (fServer.fAuthorize <> hraNone) then
+      begin
+        if fServer.Authorization(Http, fRemoteConnectionID) then
+        begin
+          fAuthorized := fServer.fAuthorize;
+          include(fRequestFlags, hsrAuthorized);
+        end
+        else
+        begin
+          tix32 := mormot.core.os.GetTickCount64 shr 12;
+          if fAuthSec = tix32 then
+          begin
+            // 403 HTTP error if not authorized (and close connection)
+            fServer.SetRejectInCommandUri(Http, 0, HTTP_FORBIDDEN);
+            SockSendFlush(Http.CommandUri);
+            result := grRejected;
+            exit;
+          end
+          else
+            // 401 HTTP error to ask for credentials and renew after 4 seconds
+            // (ConnectionID may have changed in-between)
+            fAuthSec := tix32;
+        end;
       end;
       // allow OnBeforeBody callback for quick response
       if Assigned(fServer.OnBeforeBody) then
@@ -3527,8 +3555,7 @@ begin
         HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
         status := fServer.OnBeforeBody(Http.CommandUri, Http.CommandMethod,
           Http.Headers, Http.ContentType, fRemoteIP, Http.BearerToken,
-          Http.ContentLength, HTTP_TLS_FLAGS[TLS.Enabled] +
-          HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags]);
+          Http.ContentLength, fRequestFlags);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -3536,14 +3563,11 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          StatusCodeToReason(status, Http.CommandResp);
-          if Assigned(OnLog) then
-            OnLog(sllTrace, 'GetRequest: rejected by OnBeforeBody=% %',
-              [status, Http.CommandResp], self);
-          SockSend(['HTTP/1.0 ', status, ' ', Http.CommandResp, #13#10#13#10,
-            Http.CommandResp, ' ', status]);
-          SockSendFlush('');
-          result := grRejected;
+          if fServer.SetRejectInCommandUri(Http, fRemoteConnectionID, status) then
+            result := grWwwAuthenticate
+          else
+            result := grRejected;
+          SockSendFlush(Http.CommandUri);
           exit;
         end;
       end;
