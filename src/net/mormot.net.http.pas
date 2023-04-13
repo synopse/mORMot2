@@ -213,7 +213,8 @@ type
     hfConnectionUpgrade,
     hfConnectionKeepAlive,
     hfExpect100,
-    hfHasRemoteIP);
+    hfHasRemoteIP,
+    hfHasAuthorization);
 
   /// map the output state for THttpRequestContext.ResponseFlags
   // - separated from THttpRequestHeaderFlags so that they would both be stored
@@ -546,9 +547,8 @@ type
   // modified on the fly to adapt to the expected behavior
   // - aBearerToken is either the "Authorization: Bearer xxxx" token, or
   // the authenticated user name if the hsrAuthorized flag is set
-  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
-  // the request
+  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP error
+  // code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject the request
   // - returning HTTP_UNAUTHORIZED triggers the internal authentication process
   // available on some servers (e.g. THttpApiServer or THttpAsyncServer)
   TOnHttpServerBeforeBody = function(var aUrl, aMethod, aInHeaders,
@@ -603,7 +603,8 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - won't reset other parameters: should come after a plain Create or
     // an explicit THttpServerRequest.Recycle()
-    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8); overload;
+    procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8;
+      aAuthorize: THttpServerRequestAuthentication); overload;
     /// prepare an incoming request from explicit values
     // - could be used for non-HTTP execution, e.g. from a WebSockets link
     procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
@@ -1446,15 +1447,18 @@ begin
       if (PCardinal(P + 4)^ or $20202020 =
         ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
          (PCardinal(P + 8)^ or $20202020 =
-        ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) and
-         (PCardinal(P + 12)^ or $20202020 =
-        ord('n') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
-         (PCardinal(P + 16)^ or $20202020 =
-        ord('e') + ord('a') shl 8 + ord('r') shl 16 + ord('e') shl 24) and
-         (PWord(P + 20)^ or $2020 = ord('r') + ord(' ') shl 8) then
-        // 'AUTHORIZATION: BEARER '
-        GetTrimmed(P + 22, BearerToken, {nointern=}true);
+        ord('a') + ord('t') shl 8 + ord('i') shl 16 + ord('o') shl 24) then
+      begin
+        include(HeaderFlags, hfHasAuthorization);
+        if (PCardinal(P + 12)^ or $20202020 =
+          ord('n') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
+           (PCardinal(P + 16)^ or $20202020 =
+          ord('e') + ord('a') shl 8 + ord('r') shl 16 + ord('e') shl 24) and
+           (PWord(P + 20)^ or $2020 = ord('r') + ord(' ') shl 8) then
+          // 'AUTHORIZATION: BEARER '
+          GetTrimmed(P + 22, BearerToken, {nointern=}true);
         // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+      end;
     ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('e') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
@@ -2279,7 +2283,7 @@ begin
 end;
 
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
-  const aRemoteIP: RawUtf8);
+  const aRemoteIP: RawUtf8; aAuthorize: THttpServerRequestAuthentication);
 begin
   fRemoteIP := aRemoteIP;
   fUrl := aHttp.CommandUri;
@@ -2287,7 +2291,14 @@ begin
   fInHeaders := aHttp.Headers;
   fInContentType := aHttp.ContentType;
   fHost := aHttp.Host;
-  fAuthBearer := aHttp.BearerToken;
+  if hsrAuthorized in fConnectionFlags then
+  begin
+    // reflect the current valid "authorization:" header
+    fAuthenticationStatus := aAuthorize;
+    fAuthenticatedUser := aHttp.BearerToken; // set by fServer.Authorization()
+  end
+  else
+    fAuthBearer := aHttp.BearerToken;
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
 end;

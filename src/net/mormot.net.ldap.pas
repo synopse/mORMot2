@@ -2854,7 +2854,7 @@ begin
       s := t;
       x := 1;
       AsnNext(x, s, @t);
-      dig := DigestClient(Algo, t, 'ldap/' + LowerCaseU(fSock.Server),
+      dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
         fSettings.UserName, fSettings.Password, 'digest-uri');
       SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                        Asn(fVersion),
