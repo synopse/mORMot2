@@ -1218,7 +1218,7 @@ function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
 var
   process, thread: TCpuSet;
 begin
-  result := Windows.GetProcessAffinityMask(GetCurrentProcess, process, thread);
+  result := GetProcessAffinityMask(GetCurrentProcess, process, thread);
   if result then
     CpuSet := process;
 end;
