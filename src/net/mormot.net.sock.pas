@@ -143,8 +143,6 @@ type
   private
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
-    // internal host resolution from IPv4 or NewSocketIP4Lookup (mormot.net.dns)
-    function SetFromIP4(const address: RawUtf8): boolean;
   public
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - calls NewSocketIP4Lookup if available from mormot.net.dns (with a 32
@@ -152,6 +150,10 @@ type
     // - see also NewSocket() overload or GetSocketAddressFromCache() if you
     // want to use the global NewSocketAddressCache
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
+    /// internal host resolution from IPv4, known hosts, NetAddrCache or
+    // NewSocketIP4Lookup (mormot.net.dns)
+    // - as called by SetFrom() high-level method
+    function SetFromIP4(const address: RawUtf8; noNewSocketIP4Lookup: boolean): boolean;
     /// returns the network family of this address
     function Family: TNetFamily;
     /// compare two IPv4/IPv6  network addresses
@@ -186,6 +188,11 @@ type
     // - returns nil on API error
     // - SetFrom() should have been called before running this method
     function NewSocket(layer: TNetLayer): TNetSocket;
+    /// connect a TNetSocket instance to this network address
+    // - by default, blocking connect() timeout is not customizable: this method
+    // will call MakeAsync/MakeBlocking and wait for the actual connection
+    // - as called by NewSocket() high-level wrapper function
+    function SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
   end;
 
   /// pointer to a socket address mapping
@@ -235,9 +242,9 @@ type
       async: boolean): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
-    //// change the socket state to non-blocking
+    /// change the socket state to non-blocking
     function MakeAsync: TNetResult;
-    //// change the socket state to blocking
+    /// change the socket state to blocking
     function MakeBlocking: TNetResult;
     /// low-level sending of some data via this socket
     function Send(Buf: pointer; var len: integer): TNetResult;
@@ -1755,7 +1762,8 @@ begin
   NetAddrCache.SafeFlush(hostname);
 end;
 
-function TNetAddr.SetFromIP4(const address: RawUtf8): boolean;
+function TNetAddr.SetFromIP4(const address: RawUtf8;
+  noNewSocketIP4Lookup: boolean): boolean;
 begin
   result := false;
   // caller did set addr4.sin_port and other fields to 0
@@ -1775,7 +1783,8 @@ begin
             NetAddrCache.SafeFind(address, PCardinal(@sin_addr)^) then
       // numerical IPv4, /etc/hosts, or cached entry
     else if (Assigned(NewSocketIP4Lookup) and
-             NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
+            not noNewSocketIP4Lookup and
+            NewSocketIP4Lookup(address, PCardinal(@sin_addr)^)) then
       // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
       NetAddrCache.SafeAdd(address, PCardinal(@sin_addr)^, {tixshr=}15)
     else
@@ -1948,6 +1957,29 @@ begin
     result := TNetSocket(s);
 end;
 
+function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
+var
+  tix: Int64;
+begin
+  if ms < 20 then
+    tix := 0
+  else
+    tix := mormot.core.os.GetTickCount64 + ms;
+  result := socket.MakeAsync;
+  if result <> nrOK then
+    exit;
+  connect(socket.Socket, @Addr, Size); // non-blocking connect() once
+  socket.MakeBlocking;
+  repeat
+    if socket.WaitFor(20, [neWrite]) = [neWrite] then
+      exit;
+    SleepHiRes(1);
+  until (tix = 0) or
+        (mormot.core.os.GetTickCount64 > tix);
+  result := nrConnectTimeout;
+end;
+
+
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
@@ -2083,7 +2115,6 @@ var
   addr: TNetAddr;
   sock: TNetSocket;
   fromcache, tobecached: boolean;
-  connectendtix: Int64;
 begin
   netsocket := nil;
   // resolve the TNetAddr of the address:port layer - maybe from cache
@@ -2121,26 +2152,8 @@ begin
   // open non-blocking Client connection if a timeout was specified
   if (connecttimeout > 0) and
      not dobind then
-  begin
     // SetReceiveTimeout/SetSendTimeout don't apply to connect() -> async
-    if connecttimeout < 100 then
-      connectendtix := 0
-    else
-      connectendtix := mormot.core.os.GetTickCount64 + connecttimeout;
-    sock.MakeAsync;
-    connect(sock.Socket, @addr, addr.Size); // non-blocking connect() once
-    sock.MakeBlocking;
-    result := nrConnectTimeout;
-    repeat
-      if sock.WaitFor(1, [neWrite]) = [neWrite] then
-      begin
-        result := nrOK;
-        break;
-      end;
-      SleepHiRes(1); // wait for actual connection
-    until (connectendtix = 0) or
-          (mormot.core.os.GetTickCount64 > connectendtix);
-  end
+    result := addr.SocketConnect(sock, connecttimeout)
   else
   repeat
     if dobind then
