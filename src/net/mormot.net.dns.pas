@@ -555,6 +555,10 @@ begin
   end;
 end;
 
+var
+  NoTcpSafe: TLightLock;
+  NoTcpServers: TRawUtf8DynArray;
+
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
@@ -563,9 +567,8 @@ var
   tcponly: boolean;
   addr, resp: TNetAddr;
   sock: TNetSocket;
-  len: PtrInt;
+  len, notcp: PtrInt;
   start, stop: Int64;
-  res: TNetResult;
   lenw: word;
   tmp: TSynTempBuffer;
   hdr: PDnsHeader;
@@ -580,13 +583,13 @@ begin
     delete(server, 1, 4)
   else
     tcponly := DnsSendOverTcp; // global setting
-  if not NetIsIP4(pointer(server)) then
-    exit; // by definition, we won't self-resolve
+  FillCharFast(addr, SizeOf(addr), 0);
+  if not addr.SetFromIP4(server, {nolookup=}true) or
+     (addr.SetPort(GetCardinalDef(pointer(Port), 389)) <> nrOk) then
+    exit;
   if not tcponly then
   begin
     // send the DNS query over UDP
-    if addr.SetFrom(server, Port, nlUdp) <> nrOk then
-      exit;
     sock := addr.NewSocket(nlUdp);
     if sock = nil then
       exit;
@@ -597,56 +600,69 @@ begin
         exit;
       // get the response and ensure it is valid
       len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
-      hdr := @tmp;
-      if (len <= length(Request)) or
-         not addr.IPEqual(resp) or
-         (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
-         not hdr^.IsResponse or
-         not hdr^.RecursionAvailable or
-         (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-         (hdr^.AnswerCount + hdr^.NameServerCount + hdr^.AdditionalCount = 0) then
-        exit;
-      tcponly := hdr^.Truncation;
-      if not tcponly then
-        FastSetRawByteString(answer, @tmp, len);
     finally
       sock.Close;
     end;
+    hdr := @tmp;
+    if (len <= length(Request)) or
+       not addr.IPEqual(resp) or
+       (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
+       not hdr^.IsResponse or
+       not hdr^.RecursionAvailable or
+       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
+       (hdr^.AnswerCount = 0) then
+       // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough
+      exit;
+    tcponly := hdr^.Truncation;
+    if not tcponly then
+      FastSetRawByteString(answer, @tmp, len);
   end;
   if tcponly then
-  try
+  begin
     // UDP frame was too small: try with a TCP connection
-    if NewSocket(server, Port, nlTcp, {bind=}false, TimeOutMS,
-        TimeOutMS, TimeOutMS, {retry=}0, sock) <> nrOk then
+    NoTcpSafe.Lock;
+    notcp := FindPropName(pointer(NoTcpServers), server, length(NoTcpServers));
+    NoTcpSafe.UnLock;
+    if notcp >= 0 then
       exit;
-    // send the DNS query over TCP
-    len := length(Request);
-    if len > SizeOf(tmp) - 2 then
-      exit; // paranoid
-    PWordArray(@tmp)[0] := swap(word(len)); // not found in RFCs, but mandatory
-    MoveFast(pointer(Request)^, PWordArray(@tmp)[1], len);
-    if sock.SendAll(@tmp, len + 2) <> nrOk then
-      exit;
-    // get the response and ensure it is valid
-    lenw := 0;
-    res := sock.RecvAll(TimeOutMS, @lenw, 2);
+    sock := addr.NewSocket(nlTcp);
+    try
+      if addr.SocketConnect(sock, TimeOutMS) <> nrOk then
+        exit;
+      sock.SetSendTimeout(TimeOutMS);
+      // send the DNS query over TCP
+      len := length(Request);
+      if len > SizeOf(tmp) - 2 then
+        exit; // paranoid
+      PWordArray(@tmp)[0] := swap(word(len)); // not found in RFCs, but mandatory
+      MoveFast(pointer(Request)^, PWordArray(@tmp)[1], len);
+      if sock.SendAll(@tmp, len + 2) <> nrOk then
+        exit;
+      // get the response and ensure it is valid
+      lenw := 0;
+      if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then
+      begin
+        NoTcpSafe.Lock;
+        AddRawUtf8(NoTcpServers, server); // won't try again
+        NoTcpSafe.UnLock;
+        exit;
+      end;
+    finally
+      sock.Close;
+    end;
     len := swap(lenw);
-    if (res <> nrOk) or
-       (len <= length(Request)) then
+    if len <= length(Request) then
       exit;
     FastSetRawByteString(answer, nil, len);
-    res := sock.RecvAll(TimeOutMS, pointer(answer), len);
     hdr := pointer(answer);
-    if (res <> nrOk) or
+    if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
        (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
        not hdr^.IsResponse or
        hdr^.Truncation or
        not hdr^.RecursionAvailable or
        (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-       (hdr^.AnswerCount + hdr^.NameServerCount + hdr^.AdditionalCount = 0) then
+       (hdr^.AnswerCount = 0) then
       exit;
-  finally
-    sock.Close;
   end;
   // we got a valid answer
   QueryPerformanceMicroSeconds(stop);
