@@ -2606,7 +2606,7 @@ function TLdapClient.RootDN: RawUtf8;
 begin
   if (fRootDN = '') and
      fSock.SockConnected then
-    fRootDN := SearchObject('', '*', 'rootDomainNamingContext').GetReadable;
+    fRootDN := SearchObject('', '*', 'defaultNamingContext').GetReadable;
   result := fRootDN;
 end;
 
