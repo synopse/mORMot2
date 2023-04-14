@@ -8181,7 +8181,7 @@ begin
     dec(L,start);
     if count < L then
       L := count;
-    while L>0 do
+    while L > 0 do
       if S[start + L] <= ' ' then
         dec(L)
       else

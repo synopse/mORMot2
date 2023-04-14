@@ -1020,13 +1020,19 @@ begin
   {$endif HAS_PTHREADSETAFFINITY}
 end;
 
+{$ifdef HAS_PTHREADSETAFFINITY}
 function sched_getaffinity(pid: integer;
   cpusetsize: SizeUInt; cpuset: pointer): integer;
     cdecl external clib name 'sched_getaffinity';
+{$endif HAS_PTHREADSETAFFINITY}
 
 function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
 begin
+  {$ifdef HAS_PTHREADSETAFFINITY}
   result := sched_getaffinity(0, SizeOf(CpuSet), @CpuSet) = 0;
+  {$else}
+  result := false; // unsupported by now
+  {$endif HAS_PTHREADSETAFFINITY}
 end;
 
 
