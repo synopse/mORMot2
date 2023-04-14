@@ -219,6 +219,11 @@ function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer = 2000): boolean;
 
+var
+  /// global setting to force DNS resolution over TCP instead of UDP
+  // - if 'tcp@1.2.3.4' is not enough, you can set TRUE to this global variable
+  // to force TCP for all DnsSendQuestion/DnsLookup/DnsServices calls
+  DnsSendOverTcp: boolean;
 
 
 { **************** High-Level DNS Query }
@@ -573,7 +578,9 @@ begin
   server := Address;
   tcponly := IdemPChar(pointer(server), 'TCP@');
   if tcponly then
-    delete(server, 1, 4);
+    delete(server, 1, 4)
+  else
+    tcponly := DnsSendOverTcp; // global setting
   if not NetIsIP4(pointer(server)) then
     exit; // by definition, we won't self-resolve
   if not tcponly then

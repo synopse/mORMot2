@@ -2504,7 +2504,6 @@ begin
     end;
     if result <> nrRetry then
       exit;
-    SleepHiRes(1);
   until Assigned(terminated) and
         terminated^;
   result := nrClosed;
