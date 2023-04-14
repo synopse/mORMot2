@@ -1733,6 +1733,7 @@ begin
         exit;
       MoveFast(pointer(Host[i + 1]), pointer(Host[i]), n * SizeOf(pointer));
       MoveFast(IP[i + 1], IP[i], n * SizeOf(cardinal));
+      PtrUInt(Host[Count]) := 0; // avoid GPF
     end;
   finally
     Safe.UnLock;
@@ -2502,7 +2503,7 @@ begin
       if len = 0 then
         exit;
     end;
-    if result <> nrRetry then
+    if result > nrRetry then
       exit;
   until Assigned(terminated) and
         terminated^;
