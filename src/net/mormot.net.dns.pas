@@ -213,6 +213,8 @@ function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal = QC_INET): RawByteString;
 
 /// raw sending and receiving of DNS query message over UDP
+// - Address is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4'
+// to force use TCP connection instead of UDP
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer = 2000): boolean;
@@ -264,7 +266,8 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
   var Dest: TDnsAnswer; QClass: cardinal): boolean;
 
 /// send a DNS query and parse the answer
-// - if no NameServer[] is supplied, will use GetDnsAddresses list from OS
+// - if no NameServer is supplied, will use GetDnsAddresses list from OS
+// - NameServer is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4'
 // - the TDnsResult output gives access to all returned DNS records
 // - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
@@ -278,6 +281,8 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
 // DnsLookup('blog.synopse.info') would simply return '62.210.254.173'
 // - will also recognize obvious values like 'localhost' or an IPv4 address
 // - this unit will register this function to mormot.net.sock's NewSocketIP4Lookup
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - warning: executes a raw DNS query, so hosts system file is not used,
 // and no cache is involved: use TNetAddr.SetFrom() instead if you can
 function DnsLookup(const HostName: RawUtf8;
@@ -287,6 +292,8 @@ function DnsLookup(const HostName: RawUtf8;
 // - e.g. DnsLookups('synopse.info') currently returns ['62.210.254.173'] but
 // DnsLookups('yahoo.com') returns an array of several IPv4 addresses
 // - will also recognize obvious values like 'localhost' or an IPv4 address
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsLookups(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
 
@@ -294,6 +301,8 @@ function DnsLookups(const HostName: RawUtf8;
 // - note that the reversed host name is the one from the hosting company, and
 // unlikely the usual name: e.g. DnsReverseLookup(DnsLookup('synopse.info'))
 // returns the horsey '62-210-254-173.rev.poneytelecom.eu' from online.net
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsReverseLookup(const IP4: RawUtf8;
   const NameServer: RawUtf8 = ''): RawUtf8;
 
@@ -301,12 +310,16 @@ function DnsReverseLookup(const IP4: RawUtf8;
 // - services addresses are returned with their port, e.g.
 // DnsServices('_ldap._tcp.ad.mycorp.com') returns
 // ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsServices(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
 
 /// retrieve the LDAP controlers from the current AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
 // - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsLdapControlers(const NameServer: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
@@ -542,45 +555,97 @@ function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
 var
+  server: RawUtf8;
+  tcponly: boolean;
   addr, resp: TNetAddr;
   sock: TNetSocket;
   len: PtrInt;
   start, stop: Int64;
   res: TNetResult;
+  lenw: word;
   tmp: TSynTempBuffer;
+  hdr: PDnsHeader;
 begin
   result := false;
   TimeElapsed := 0;
   QueryPerformanceMicroSeconds(start);
-  // send the DNS query
-  if addr.SetFrom(Address, Port, nlUdp) <> nrOk then
-    exit;
-  sock := addr.NewSocket(nlUdp);
-  if sock <> nil then
+  // validate input parameters
+  server := Address;
+  tcponly := IdemPChar(pointer(server), 'TCP@');
+  if tcponly then
+    delete(server, 1, 4);
+  if not NetIsIP4(pointer(server)) then
+    exit; // by definition, we won't self-resolve
+  if not tcponly then
+  begin
+    // send the DNS query over UDP
+    if addr.SetFrom(server, Port, nlUdp) <> nrOk then
+      exit;
+    sock := addr.NewSocket(nlUdp);
+    if sock = nil then
+      exit;
     try
       sock.SetReceiveTimeout(TimeOutMS);
-      res := sock.SendTo(pointer(Request), length(Request), addr);
-      if res <> nrOk then
+      len := length(Request);
+      if sock.SendTo(pointer(Request), len, addr) <> nrOk then
         exit;
       // get the response and ensure it is valid
       len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
-      with PDnsHeader(@tmp)^ do
-        if (len <= length(Request)) or
-           not addr.IPEqual(resp) or
-           (Xid <> PDnsHeader(Request)^.Xid) or
-           not IsResponse or
-           Truncation or
-           not RecursionAvailable or
-           (ResponseCode <> DNS_RESP_SUCCESS) or
-           (AnswerCount + NameServerCount + AdditionalCount = 0) then
-          exit;
-      QueryPerformanceMicroSeconds(stop);
-      TimeElapsed := stop - start;
-      FastSetRawByteString(answer, @tmp, len);
-      result := true;
+      hdr := @tmp;
+      if (len <= length(Request)) or
+         not addr.IPEqual(resp) or
+         (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
+         not hdr^.IsResponse or
+         not hdr^.RecursionAvailable or
+         (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
+         (hdr^.AnswerCount + hdr^.NameServerCount + hdr^.AdditionalCount = 0) then
+        exit;
+      tcponly := hdr^.Truncation;
+      if not tcponly then
+        FastSetRawByteString(answer, @tmp, len);
     finally
       sock.Close;
     end;
+  end;
+  if tcponly then
+  try
+    // UDP frame was too small: try with a TCP connection
+    if NewSocket(server, Port, nlTcp, {bind=}false, TimeOutMS,
+        TimeOutMS, TimeOutMS, {retry=}0, sock) <> nrOk then
+      exit;
+    // send the DNS query over TCP
+    len := length(Request);
+    if len > SizeOf(tmp) - 2 then
+      exit; // paranoid
+    PWordArray(@tmp)[0] := swap(word(len)); // not found in RFCs, but mandatory
+    MoveFast(pointer(Request)^, PWordArray(@tmp)[1], len);
+    if sock.SendAll(@tmp, len + 2) <> nrOk then
+      exit;
+    // get the response and ensure it is valid
+    lenw := 0;
+    res := sock.RecvAll(TimeOutMS, @lenw, 2);
+    len := swap(lenw);
+    if (res <> nrOk) or
+       (len <= length(Request)) then
+      exit;
+    FastSetRawByteString(answer, nil, len);
+    res := sock.RecvAll(TimeOutMS, pointer(answer), len);
+    hdr := pointer(answer);
+    if (res <> nrOk) or
+       (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
+       not hdr^.IsResponse or
+       hdr^.Truncation or
+       not hdr^.RecursionAvailable or
+       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
+       (hdr^.AnswerCount + hdr^.NameServerCount + hdr^.AdditionalCount = 0) then
+      exit;
+  finally
+    sock.Close;
+  end;
+  // we got a valid answer
+  QueryPerformanceMicroSeconds(stop);
+  TimeElapsed := stop - start;
+  result := true;
 end;
 
 
