@@ -255,6 +255,9 @@ type
     /// wrapper around WaitFor / RecvPending / Recv methods for a given time
     function RecvWait(ms: integer; out data: RawByteString;
       terminated: PTerminated = nil): TNetResult;
+    /// low-level receiving of some data of known length from this socket
+    function RecvAll(ms: integer; Buf: PByte; len: integer;
+      terminated: PTerminated = nil): TNetResult;
     /// call send in loop until the whole data buffer is sent
     function SendAll(Buf: PByte; len: integer;
       terminated: PTerminated = nil): TNetResult;
@@ -2458,7 +2461,7 @@ var
 begin
   repeat
     sent := len;
-    result := Send(Buf, len);
+    result := Send(Buf, sent);
     if Assigned(terminated) and
        terminated^ then
       break;
@@ -2466,6 +2469,36 @@ begin
     begin
       inc(Buf, sent);
       dec(len, sent);
+      if len = 0 then
+        exit;
+    end;
+    if result <> nrRetry then
+      exit;
+    SleepHiRes(1);
+  until Assigned(terminated) and
+        terminated^;
+  result := nrClosed;
+end;
+
+function TNetSocketWrap.RecvAll(ms: integer; Buf: PByte; len: integer;
+  terminated: PTerminated): TNetResult;
+var
+  received: integer;
+begin
+  repeat
+    if (WaitFor(ms, [neRead]) <> [neRead]) or
+       (Assigned(terminated) and
+        terminated^) then
+      break;
+    received := len;
+    result := Recv(Buf, received);
+    if Assigned(terminated) and
+       terminated^ then
+      break;
+    if received > 0 then
+    begin
+      inc(Buf, received);
+      dec(len, received);
       if len = 0 then
         exit;
     end;
@@ -3847,7 +3880,9 @@ begin
           end;
           b := -1;
           inc(n);
-          inc(text);
+          repeat
+            inc(text);
+          until text^ <> ' '; // allow space between numbers
         end;
       '0' .. '9':
         begin
