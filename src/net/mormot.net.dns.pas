@@ -338,7 +338,7 @@ const
   QF_QR     = $80;
   QF_OPCODE = $78;
   QF_AA     = $04;
-  QF_TC     = $02;  // Truncated.
+  QF_TC     = $02;  // Truncated
   QF_RD     = $01;
 
   // Flags 2
@@ -346,8 +346,9 @@ const
   QF_Z      = $70;
   QF_RCODE  = $0F;
 
-  DNS_RELATIVE = $c0;
   DNS_RESP_SUCCESS = $00;
+
+  DNS_RELATIVE = $c0; // two high bits set = pointer within the response message
 
 
 { TDnsHeader }
@@ -457,8 +458,6 @@ begin
     AppendShortChar('.', tmp);
     inc(Pos, len);
   until false;
-  if tmp[0] = #0 then
-    exit;
   if tmp[ord(tmp[0])] = '.' then
     dec(tmp[0]);
   FastSetString(Text, @tmp[1], ord(tmp[0]));
