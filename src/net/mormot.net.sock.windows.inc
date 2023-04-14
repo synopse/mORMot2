@@ -479,7 +479,7 @@ begin
     PSockAddr(@Addr)^.sin_port := htons(p);
     // check most simple IPv4 resolution (maybe using mormot.net.dns)
     result := nrOk;
-    if SetFromIP4(address) then
+    if SetFromIP4(address, false) then
       exit;
     // use the OS resolution, first try as IP4, then IP6
     if not SetWinAddr(address, addrport, AF_INET, layer, Addr) and

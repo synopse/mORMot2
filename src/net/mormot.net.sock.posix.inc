@@ -430,7 +430,7 @@ begin
     exit;
   // check most simple IPv4 resolution (maybe using mormot.net.dns)
   result := nrOk;
-  if SetFromIP4(address) then
+  if SetFromIP4(address, false) then
     exit;
   // use OS API (getaddrinfo is more recent, but addrinfo is not cross-platform)
   _gethostbynamesafe.Lock;
