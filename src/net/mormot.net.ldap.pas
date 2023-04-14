@@ -2644,7 +2644,7 @@ end;
 
 function TLdapClient.Mechanisms: TRawUtf8DynArray;
 begin
-  if (fRootDN = '') and
+  if (fMechanisms = nil) and
      fSock.SockConnected then
     fMechanisms := SearchObject('', '*', 'supportedSASLMechanisms').GetAllReadable;
   result := fMechanisms;
