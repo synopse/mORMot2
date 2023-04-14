@@ -355,10 +355,19 @@ function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
 /// sort some LDAP host names using CLDAP over UDP
 // - expects Hosts in 'host:port' format, as returned by DnsLdapControlers,
 // e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
-// - hosts not available over UDP within the TimeoutMS period, are put at the
-// end of the list because they may still be reachable via TCP
+// - hosts not available over UDP within MinimalUdpCount or the TimeoutMS period,
+// are put at the end of the list because they may still be reachable via TCP
 // - used e.g. by TLdapClient.Connect() with the lccUdpFirst option
-procedure CldapSortHosts(var Hosts: TRawUtf8DynArray; TimeoutMS: integer);
+procedure CldapSortHosts(var Hosts: TRawUtf8DynArray;
+  TimeoutMS, MinimalUdpCount: integer);
+
+/// retrieve the LDAP controlers sorted by UDP response time
+// - just a wrapper around DnsLdapControlers() and CldapSortHosts()
+// - won't sort by UDP response time if UdpFirstDelayMS = 0
+// - as used e.g. by TLdapClient.Connect
+function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
+  const NameServer: RawUtf8 = ''; UsePosixEnv: boolean = false;
+  DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
 type
   /// define one result for a server identified by CldapBroadcast()
@@ -732,7 +741,8 @@ type
     // - if no TargetHost/TargetPort/FullTls has been set, will try the OS
     // DnsLdapControlers() hosts (from mormot.net.dns) following DiscoverMode
     // - do nothing if was already connected
-    function Connect(DiscoverMode: TLdapClientConnect = [lccUdpFirst, lccTlsFirst]): boolean;
+    function Connect(DiscoverMode: TLdapClientConnect = [lccUdpFirst, lccTlsFirst];
+      UdpFirstDelayMS: integer = 500): boolean;
     /// the Root domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
@@ -2032,7 +2042,8 @@ begin
     DynArray(TypeInfo(TCldapServers), Servers).Sort(SortDynArrayInteger);
 end;
 
-procedure CldapSortHosts(var Hosts: TRawUtf8DynArray; TimeoutMS: integer);
+procedure CldapSortHosts(var Hosts: TRawUtf8DynArray;
+  TimeoutMS, MinimalUdpCount: integer);
 var
   sock: TNetSocketDynArray;
   h, p, v: RawUtf8;
@@ -2076,7 +2087,7 @@ begin
         sock[i] := nil;
       end;
     end;
-    // wait for all incoming requests
+    // wait for the first incoming response(s)
     tix := GetTickCount64 + TimeoutMS;
     repeat
       if poll.WaitForModified(res, 10) then
@@ -2085,7 +2096,7 @@ begin
           i := ResToTag(res.Events[r]);
           if (PtrUInt(i) >= PtrUInt(n)) or
              (sock[i] = nil) then
-            break;
+            continue; // paranoid
           len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
           if (len > 5) and
              (tmp[0] = ASN1_SEQ) then
@@ -2098,8 +2109,9 @@ begin
             sock[i] := nil;
           end;
        end;
-    until (found = n) or
-          (GetTickCount64 > tix);
+    until (found > MinimalUdpCount) or // stop as soon as we got enough host(s)
+          (found = n) or               // or we got all hosts
+          (GetTickCount64 > tix);      // or we timeout
   finally
     poll.Free;
     for i := 0 to n - 1 do
@@ -2114,6 +2126,15 @@ begin
     for i := 0 to n - 1 do
       AddRawUtf8(sorted, hosts[i], {nodup=}true); // ensure eventually exist
   Hosts := sorted;
+end;
+
+function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
+  const NameServer: RawUtf8; UsePosixEnv: boolean;
+  DomainName: PRawUtf8): TRawUtf8DynArray;
+begin
+  result := DnsLdapControlers(NameServer, UsePosixEnv, DomainName);
+  if UdpFirstDelayMS > 0 then
+    CldapSortHosts(result, UdpFirstDelayMS, MinimalUdpCount);
 end;
 
 
@@ -2518,7 +2539,8 @@ begin
   inherited Destroy;
 end;
 
-function TLdapClient.Connect(DiscoverMode: TLdapClientConnect): boolean;
+function TLdapClient.Connect(DiscoverMode: TLdapClientConnect;
+  UdpFirstDelayMS: integer): boolean;
 var
   dc: TRawUtf8DynArray;
   h, p: RawUtf8;
@@ -2529,15 +2551,17 @@ begin
     exit; // socket was already connected
   if fSettings.TargetHost = '' then
   begin
+    // try all LDAP servers from OS list
     if ForcedDomainName = '' then
       ForcedDomainName := fSettings.KerberosDN; // may be pre-set
-    dc := DnsLdapControlers('', false, @fSettings.fKerberosDN);  // from OS
-    if lccUdpFirst in DiscoverMode then
-      CldapSortHosts(dc, 100); // 100 ms should be enough to locate local ADs
+    if not (lccUdpFirst in DiscoverMode) then
+      UdpFirstDelayMS := 0; // disable CldapSortHosts()
+    dc := DnsLdapControlersSorted(
+      UdpFirstDelayMS, {MinimalUdpCount=}0, '', false, @fSettings.fKerberosDN);
   end
   else
-    AddRawUtf8(dc,  // from instance properties
-      fSettings.TargetHost + ':' + fSettings.TargetPort);
+    // try the LDAP server as specified in TLdapClient settings
+    AddRawUtf8(dc, fSettings.TargetHost + ':' + fSettings.TargetPort);
   fSeq := 0;
   for i := 0 to high(dc) do
     try

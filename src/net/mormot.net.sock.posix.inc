@@ -1026,12 +1026,11 @@ begin
   if n <= 0 then
     exit;
   if results.Events = nil then
-    SetLength(results.Events, n + 4)
+    SetLength(results.Events, n + 4) // optimized for a few items
   else if n > length(results.Events) then
-  if length(results.Events) < n then
   begin
     results.Events := nil;
-    SetLength(results.Events, fMaxSockets);
+    SetLength(results.Events, NextGrow(n + 64)); // more generous allocation
   end;
   PollConvert(pointer(fFD), pointer(results.Events), fFDCount, pointer(fTags));
   result := true;
