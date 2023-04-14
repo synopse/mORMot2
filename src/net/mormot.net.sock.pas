@@ -496,6 +496,10 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 // - an internal cache of the result will be refreshed every 8 seconds
 function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
+/// append a custom resolver address for GetDnsAddresses() in addition to the OS
+procedure RegisterDnsAddress(const DnsResolver: RawUtf8);
+
+
 var
   /// if manually set, GetDomainNames() will return this value
   // - e.g. 'ad.mycompany.com'
@@ -2962,12 +2966,22 @@ var
   DnsCache: record
     Safe: TLightLock;
     Tix: cardinal;
-    Value: TRawUtf8DynArray;
+    Value, Custom: TRawUtf8DynArray;
   end;
+
+procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+var
+  n: PtrInt;
+begin
+  n := length(Values);
+  SetLength(Values, n + 1);
+  Values[n] := Value;
+end;
 
 function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   tix32: cardinal;
+  i: PtrInt;
 begin
   tix32 := mormot.core.os.GetTickCount64 shr 13 + 1; // refresh every 8192 ms
   with DnsCache do
@@ -2977,9 +2991,25 @@ begin
       if tix32 <> Tix then
       begin
         Value := _GetDnsAddresses(usePosixEnv, false);
+        for i := 0 to length(Custom) - 1 do
+          AddRawUtf8(Value, Custom[i]);
         Tix := tix32;
       end;
       result := Value;
+    finally
+      Safe.UnLock;
+    end;
+  end;
+end;
+
+procedure RegisterDnsAddress(const DnsResolver: RawUtf8);
+begin
+  with DnsCache do
+  begin
+    Safe.Lock;
+    try
+      AddRawUtf8(Custom, DnsResolver);
+      Tix := 0; // flush cache
     finally
       Safe.UnLock;
     end;
