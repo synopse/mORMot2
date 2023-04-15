@@ -809,7 +809,7 @@ function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
   const SourceTableNameIfNoRows: RawUtf8;
   SourcePropertiesIfNoRows: TSqlDBConnectionProperties): integer;
 var
-  DB: TSqlDBSQLite3ConnectionProperties;
+  DB, srcDB: TSqlDBSQLite3ConnectionProperties;
   Conn: TSqlDBSQLite3Connection;
 begin
   result := 0;
@@ -826,16 +826,28 @@ begin
     if (result = 0) and
        (SourceTableNameIfNoRows <> '') then
     begin
-      // there are no data to copy: initialize a void table
-      if (SourcePropertiesIfNoRows = nil) and
-         (Rows.Connection <> nil) then
-        SourcePropertiesIfNoRows := Rows.Connection.Properties;
-      // we need a SourcePropertiesIfNoRows because Rows.Connection may be nil
-      if (SourcePropertiesIfNoRows <> nil) and
-         not DB.TableExists(TableName) then
-        // no rows: just copy the table structure from supplied name
-        Conn.NewTableFrom(
-          TableName, SourceTableNameIfNoRows, SourcePropertiesIfNoRows);
+      srcDB := nil;
+      try
+        // there are no data to copy: initialize a void table
+        // circumvent when Rows.Connection is nil
+        if (SourcePropertiesIfNoRows = nil) and
+           (Rows.Connection <> nil) then
+          SourcePropertiesIfNoRows := Rows.Connection.Properties;
+        if (SourcePropertiesIfNoRows = nil) and
+           Rows.InheritsFrom(TSqlDBSQLite3Statement) then
+        begin
+          srcDB := TSqlDBSQLite3ConnectionProperties.Create(
+            TSqlDBSQLite3Statement(Rows).fDB);
+          SourcePropertiesIfNoRows := srcDB;
+        end;
+        if (SourcePropertiesIfNoRows <> nil) and
+           not DB.TableExists(TableName) then
+          // no rows: just copy the table structure from supplied name
+          Conn.NewTableFrom(
+            TableName, SourceTableNameIfNoRows, SourcePropertiesIfNoRows);
+      finally
+        srcDB.Free;
+      end;
     end;
     Conn.Disconnect;
   finally
