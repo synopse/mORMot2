@@ -663,7 +663,7 @@ begin
   if not FindCmdLineSwitchVal('t', sw) or not TryStrToInt(sw, threads) then
     threads := cpusAccesible * 4;
   if not FindCmdLineSwitchVal('s', sw) or not TryStrToInt(sw, servers) then
-     servers := 1;
+    servers := 1;
   pinServers2Cores := FindCmdLineSwitch('p', true) or FindCmdLineSwitch('-pin', true);
   if threads < 1 then
     threads := 1
@@ -703,7 +703,7 @@ begin
     writeln('Options:');
     writeln('  -?, --help            displays this message');
     writeln('  -s  serversCount      count of servers (listener sockets)');
-    writeln('  -t, threadsPerServer  per-server thread poll size');
+    writeln('  -t  threadsPerServer  per-server thread poll size');
     writeln('  -p, --pin             pin each server to CPU starting from 0');
     exit;
   end;
@@ -772,9 +772,10 @@ begin
     writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
-    {for i := 0 to servers - 1 do
-      writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
-        [woDontStoreVoid, woHumanReadable]));}
+    if servers = 1 then
+      for i := 0 to servers - 1 do
+        writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
+          [woDontStoreVoid, woHumanReadable]));
   finally
     // clear all server instance(s)
     ObjArrayClear(rawServers);
