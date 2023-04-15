@@ -127,7 +127,10 @@ Automatic Certificate Management Environment (ACME v2) Client
 ### mormot.net.ldap
 
 Simple LDAP Protocol Client
+- Basic ASN.1 Support
+- LDAP Protocol Definitions
 - LDAP Response Storage
+- CLDAP Client Functions
 - LDAP Client Class
 
 ### mormot.net.dns

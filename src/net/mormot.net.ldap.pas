@@ -927,7 +927,7 @@ var
   x: PtrInt;
 begin
   x := mormot.core.base.PosEx(Delimiter, Value);
-  TrimCopy(Value, x + length(Delimiter), MaxInt, result);
+  result := copy(Value, x + length(Delimiter), MaxInt); // no TrimCopy()
 end;
 
 function GetBetween(PairBegin, PairEnd: AnsiChar; const Value: RawUtf8): RawUtf8;
@@ -1831,7 +1831,7 @@ begin
     else
       begin
         l := TrimU(SeparateLeft(s, '='));
-        r := TrimU(SeparateRight(s, '='));
+        r := SeparateRight(s, '=');
         if l <> '' then
         begin
           c := l[length(l)];

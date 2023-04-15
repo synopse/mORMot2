@@ -325,6 +325,7 @@ function DnsServices(const HostName: RawUtf8;
 // - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
 // - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
 // is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - see also CldapMyController() from mormot.net.ldap for a safer client approach
 function DnsLdapControlers(const NameServer: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
