@@ -4131,9 +4131,10 @@ const
 
 
   /// SQL statement to get all tables names in the current database file
-  // (taken from official SQLite3 documentation)
+  // - taken from official SQLite3 documentation
   SQL_GET_TABLE_NAMES =
-    'SELECT name FROM sqlite_master WHERE type=''table'' AND name NOT LIKE ''sqlite_%'';';
+    'SELECT name FROM sqlite_master' +
+    ' WHERE type=''table'' AND name NOT LIKE ''sqlite_%'';';
 
 type
   /// the main possible return codes, including error codes

@@ -2653,6 +2653,8 @@ type
     property TotalRowsRetrieved: integer
       read fTotalRowsRetrieved;
     /// the associated database connection
+    // - warning: some constructors may left nil here, e.g. after
+    // TSqlDBSQLite3Statement.CreateFrom
     property Connection: TSqlDBConnection
       read fConnection;
     /// strip last semicolon in query

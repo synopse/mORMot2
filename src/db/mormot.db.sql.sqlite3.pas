@@ -824,13 +824,19 @@ begin
     Conn.Connect;
     result := Conn.NewTableFromRows(TableName, Rows, {withintransaction=}true);
     if (result = 0) and
-       (SourceTableNameIfNoRows <> '') and
-       (SourcePropertiesIfNoRows <> nil) and
-       not Conn.Properties.TableExists(TableName) then
-      // no rows: just copy the table structure from supplied name
-      Conn.NewTableFrom(
-        TableName, SourceTableNameIfNoRows, SourcePropertiesIfNoRows);
+       (SourceTableNameIfNoRows <> '') then
+    begin
+      // there are no data to copy: initialize a void table
+      if (SourcePropertiesIfNoRows = nil) and
+         (Rows.Connection <> nil) then
+        SourcePropertiesIfNoRows := Rows.Connection.Properties;
       // we need a SourcePropertiesIfNoRows because Rows.Connection may be nil
+      if (SourcePropertiesIfNoRows <> nil) and
+         not DB.TableExists(TableName) then
+        // no rows: just copy the table structure from supplied name
+        Conn.NewTableFrom(
+          TableName, SourceTableNameIfNoRows, SourcePropertiesIfNoRows);
+    end;
     Conn.Disconnect;
   finally
     DB.Free;
