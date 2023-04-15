@@ -281,7 +281,8 @@ type
 // NewTableFrom() if SourceTableNameIfNoRows is set
 function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
   Rows: TSqlDBStatement; UseMormotCollations: boolean;
-  const SourceTableNameIfNoRows: RawUtf8 = ''): integer;
+  const SourceTableNameIfNoRows: RawUtf8 = '';
+  SourcePropertiesIfNoRows: TSqlDBConnectionProperties = nil): integer;
 
 
 implementation
@@ -805,7 +806,8 @@ end;
 
 function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
   Rows: TSqlDBStatement; UseMormotCollations: boolean;
-  const SourceTableNameIfNoRows: RawUtf8): integer;
+  const SourceTableNameIfNoRows: RawUtf8;
+  SourcePropertiesIfNoRows: TSqlDBConnectionProperties): integer;
 var
   DB: TSqlDBSQLite3ConnectionProperties;
   Conn: TSqlDBSQLite3Connection;
@@ -823,10 +825,12 @@ begin
     result := Conn.NewTableFromRows(TableName, Rows, {withintransaction=}true);
     if (result = 0) and
        (SourceTableNameIfNoRows <> '') and
+       (SourcePropertiesIfNoRows <> nil) and
        not Conn.Properties.TableExists(TableName) then
       // no rows: just copy the table structure from supplied name
       Conn.NewTableFrom(
-        TableName, SourceTableNameIfNoRows, Rows.Connection.Properties);
+        TableName, SourceTableNameIfNoRows, SourcePropertiesIfNoRows);
+      // we need a SourcePropertiesIfNoRows because Rows.Connection may be nil
     Conn.Disconnect;
   finally
     DB.Free;
