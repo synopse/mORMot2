@@ -223,6 +223,9 @@ var
   /// global setting to force DNS resolution over TCP instead of UDP
   // - if 'tcp@1.2.3.4' is not enough, you can set TRUE to this global variable
   // to force TCP for all DnsSendQuestion/DnsLookup/DnsServices calls
+  // - some DNS servers (e.g. most Internet provider boxes) won't support TCP
+  // - a 1 minute internal cache will avoid sending requests on DNS servers
+  // for which DnsSendQuestion() did previously block
   DnsSendOverTcp: boolean;
 
 
@@ -559,6 +562,7 @@ end;
 var
   NoTcpSafe: TLightLock;
   NoTcpServers: TRawUtf8DynArray;
+  NoTcpTix16: cardinal; // cache flushed after 65,536 seconds
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
@@ -570,6 +574,7 @@ var
   sock: TNetSocket;
   len, notcp: PtrInt;
   start, stop: Int64;
+  tix16: cardinal;
   lenw: word;
   tmp: TSynTempBuffer;
   hdr: PDnsHeader;
@@ -621,7 +626,11 @@ begin
   if tcponly then
   begin
     // UDP frame was too small: try with a TCP connection
+    tix16 := GetTickCount64 shr 16;
     NoTcpSafe.Lock;
+    if NoTcpTix16 <> tix16 then
+      NoTcpServers := nil; // flush after 1 minute
+    NoTcpTix16 := tix16;
     notcp := FindPropName(pointer(NoTcpServers), server, length(NoTcpServers));
     NoTcpSafe.UnLock;
     if notcp >= 0 then
@@ -644,7 +653,7 @@ begin
       if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then
       begin
         NoTcpSafe.Lock;
-        AddRawUtf8(NoTcpServers, server); // won't try again
+        AddRawUtf8(NoTcpServers, server); // won't try again in the next minute
         NoTcpSafe.UnLock;
         exit;
       end;
