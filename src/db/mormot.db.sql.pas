@@ -2560,6 +2560,8 @@ type
     // $ insert into TableName (Col1,Col2) values (?,N)
     // - used e.g. to convert some data on the fly from one database to another,
     // via the TSqlDBConnection.NewTableFromRows method
+    // - returns '' and Fields= nil if there is not enough column information
+    // to compute the SQL
     function ColumnsToSqlInsert(const TableName: RawUtf8;
       var Fields: TSqlDBColumnCreateDynArray): RawUtf8; virtual;
     // append all rows content as a JSON stream
@@ -7125,9 +7127,11 @@ begin
       ftNull:
         Fields[F].DBType := ftBlob; // if not identified, assume it is a BLOB
       ftUnknown:
-        raise ESqlDBException.CreateUtf8(
-          '%.ColumnsToSqlInsert: Invalid column %',
-          [self, Fields[F].Name]);
+        begin
+          Fields := nil;
+          result := ''; // not enough information
+          exit;
+        end;
     end;
     result := result + Fields[F].Name + ',';
   end;
@@ -7581,6 +7585,9 @@ function TSqlDBConnection.NewTableFromRows(const TableName: RawUtf8;
     tableu := Properties.SqlTableName(TableName);
     result := Rows.ColumnsToSqlInsert(tableu, fields);
     n := length(fields);
+    if (result = '') or
+       (n = 0) then
+      exit;
     if Length(ColumnForcedTypes) <> n then
     begin
       SetLength(ColumnForcedTypes, n);
