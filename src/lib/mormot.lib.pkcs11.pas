@@ -3929,7 +3929,7 @@ begin
     result := pointer(fTokens);
     for i := 0 to length(fTokens) - 1 do
       if (CaseInsensitive and
-          IdemPropNameU(TokenName, result^.Name)) or
+          PropNameEquals(TokenName, result^.Name)) or
          ((not CaseInsensitive) and
           (TokenName = result^.Name)) then
           exit

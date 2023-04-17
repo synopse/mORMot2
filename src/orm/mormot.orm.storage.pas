@@ -2034,11 +2034,11 @@ begin
     result := false
   else
   begin
-    result := IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL);
+    result := PropNameEquals(fStoredClassProps.Sql.SelectAllWithRowID, SQL);
     if result then
       SQL := fStoredClassProps.SQL.SelectAllWithID
     else
-      result := IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL);
+      result := PropNameEquals(fStoredClassProps.Sql.SelectAllWithID, SQL);
   end;
 end;
 
@@ -2593,9 +2593,9 @@ begin
   if result then
     // 'select * from table'
     exit;
-  if IdemPropNameU(fBasicSqlCount, SQL) or
-     IdemPropNameU(fBasicSqlHasRows[false], SQL) or
-     IdemPropNameU(fBasicSqlHasRows[true], SQL) then
+  if PropNameEquals(fBasicSqlCount, SQL) or
+     PropNameEquals(fBasicSqlHasRows[false], SQL) or
+     PropNameEquals(fBasicSqlHasRows[true], SQL) then
   begin
     // 'select count(*) from table' will be handled as static
     result := true;
@@ -3263,10 +3263,10 @@ var
 begin
   result := '';
   ResCount := 0;
-  if IdemPropNameU(fBasicSqlCount, SQL) then
+  if PropNameEquals(fBasicSqlCount, SQL) then
     SetCount(TableRowCount(fStoredClass))
-  else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
-          IdemPropNameU(fBasicSqlHasRows[true], SQL) then
+  else if PropNameEquals(fBasicSqlHasRows[false], SQL) or
+          PropNameEquals(fBasicSqlHasRows[true], SQL) then
     if TableHasRows(fStoredClass) then
     begin
       // return one expanded row with fake ID=1 - enough for the ORM usecase
@@ -3288,7 +3288,7 @@ begin
     try
       if (Stmt.SqlStatement = '') or // parsing failed
          (length(Stmt.Where) > 1) or // only a SINGLE expression is allowed yet
-         not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
+         not PropNameEquals(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
         // invalid request -> return ''
         exit;
       if Stmt.SelectFunctionCount = 0 then
@@ -3588,7 +3588,7 @@ begin
       // check header: expect same exact RTTI
       R.VarUtf8(s);
       if (s <> '') and // 0='' in recent mORMot format
-         not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
+         not PropNameEquals(s, 'TSqlRecordProperties') then // old buggy format
         exit;
       if not fStoredClassRecordProps.CheckBinaryHeader(R) then
         exit;
@@ -5161,13 +5161,13 @@ begin
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ShardList' {$endif});
   try
     ResCount := 0;
-    if IdemPropNameU(fBasicSqlCount, SQL) then
+    if PropNameEquals(fBasicSqlCount, SQL) then
     begin
       FormatUtf8('[{"Count(*)":%}]'#$A, [TableRowCount(fStoredClass)], result);
       ResCount := 1;
     end
-    else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
-            IdemPropNameU(fBasicSqlHasRows[true], SQL) then
+    else if PropNameEquals(fBasicSqlHasRows[false], SQL) or
+            PropNameEquals(fBasicSqlHasRows[true], SQL) then
       if fShards <> nil then
       begin
         // return one row with fake ID=1

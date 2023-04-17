@@ -3476,7 +3476,7 @@ begin
   if (fCurrentWord = '') or
      (fCurrentWord = ')') then
     exit;
-  if IdemPropNameU(fCurrentWord, fAndWord) then
+  if PropNameEquals(fCurrentWord, fAndWord) then
   begin
     // w1 & w2 = w1 AND w2
     ParseNextCurrentWord;
@@ -3484,7 +3484,7 @@ begin
       result.Append(TExprNode.Create(entAnd));
     exit;
   end
-  else if IdemPropNameU(fCurrentWord, fOrWord) then
+  else if PropNameEquals(fCurrentWord, fOrWord) then
   begin
     // w1 + w2 = w1 OR w2
     ParseNextCurrentWord;
@@ -3501,7 +3501,7 @@ function TParserAbstract.ParseFactor: TExprNode;
 begin
   if fCurrentError <> eprSuccess then
     result := nil
-  else if IdemPropNameU(fCurrentWord, fNotWord) then
+  else if PropNameEquals(fCurrentWord, fNotWord) then
   begin
     ParseNextCurrentWord;
     result := ParseFactor;

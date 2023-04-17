@@ -5378,7 +5378,7 @@ begin
   CurrentMethod := @Definition.Methods[MethodCount];
   ShortStringToAnsi7String(aMethodName, CurrentMethod^.Name);
   for i := 0 to MethodCount - 1 do
-    if IdemPropNameU(Definition.Methods[i].Name, CurrentMethod^.Name) then
+    if PropNameEquals(Definition.Methods[i].Name, CurrentMethod^.Name) then
       RaiseError('duplicated method name', []);
   CurrentMethod^.HierarchyLevel := Level;
   if aKind = mkFunction then
@@ -8164,7 +8164,7 @@ begin
         ptNone:
           // unknown type name -> try from TArray<*>/T*DynArray/T*s patterns
           begin
-            if IdemPropNameU(typname, 'TArray') and
+            if PropNameEquals(typname, 'TArray') and
                (P^ = '<') then
             begin
               // try generic syntax TArray<##>

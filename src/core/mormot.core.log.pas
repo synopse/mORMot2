@@ -3546,7 +3546,7 @@ begin
   if (self <> nil) and
      (aUnitName <> '') then
     for result := 0 to high(fUnit) do
-      if IdemPropNameU(fUnit[result].Symbol.Name, aUnitName) then
+      if IdemPropNameU(fUnit[result].Symbol.Name, aUnitName) then // inlined
         exit;
   result := -1;
 end;

@@ -4781,7 +4781,8 @@ begin
   if err <> 0 then
     // we allow a value stated as text
     if fOrmFieldType = oftBoolean then
-      i := Ord(IdemPropNameU(Value, 'TRUE') or IdemPropNameU(Value, 'YES'))
+      i := ord(PropNameEquals(Value, 'TRUE') or
+               PropNameEquals(Value, 'YES'))
     else
       i := fEnumType^.GetEnumNameValue(pointer(Value), length(Value))
   else if fOrmFieldType = oftBoolean then // normalize boolean values range to 0,1
@@ -7310,7 +7311,7 @@ begin
         [self, fTable, aItem.Name]);
   // check that this property name is not already defined
   for f := 0 to fCount - 1 do
-    if IdemPropNameU(fList[f].Name, aItem.Name) then
+    if PropNameEquals(fList[f].Name, aItem.Name) then
       raise EOrmException.CreateUtf8(
         '%.Add: % has duplicated name [%]', [self, fTable, aItem.Name]);
   // add to the internal list
@@ -7556,7 +7557,7 @@ begin
   begin
     // O(n) iteration over unflattened field names
     for result := 0 to Count - 1 do
-      if IdemPropNameU(List[result].NameUnflattened, aName) then
+      if IdemPropNameU(List[result].NameUnflattened, aName) then // inlined
         exit;
   end
   else
@@ -10882,7 +10883,7 @@ begin
   if (self <> nil) and
      (PropName <> '') then
     for i := 0 to high(BlobFields) do
-      if IdemPropNameU(BlobFields[i].Name, PropName) then
+      if IdemPropNameU(BlobFields[i].Name, PropName) then // inlined
       begin
         result := BlobFields[i].PropInfo;
         exit;
@@ -10931,9 +10932,9 @@ begin
     with Fields.List[FieldIndex] do
     begin
       Attributes := Attributes - [aBinaryCollation, aUnicodeNoCaseCollation];
-      if IdemPropNameU(aCollationName, 'BINARY') then
+      if PropNameEquals(aCollationName, 'BINARY') then
         Attributes := Attributes + [aBinaryCollation]
-      else if IdemPropNameU(aCollationName, 'UNICODENOCASE') then
+      else if PropNameEquals(aCollationName, 'UNICODENOCASE') then
         Attributes := Attributes + [aUnicodeNoCaseCollation];
     end;
   end;

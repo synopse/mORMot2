@@ -366,7 +366,7 @@ end;
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
   const interfaceName: RawUtf8);
 begin
-  if IdemPropNameU(interfaceName, 'ITunnelTransmit') then
+  if PropNameEquals(interfaceName, 'ITunnelTransmit') then
     ClosePort;
 end;
 

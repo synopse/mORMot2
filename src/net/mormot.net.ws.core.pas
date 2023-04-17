@@ -1263,7 +1263,7 @@ begin
   if ExtIn <> nil then
   begin
     for i := 0 to length(ExtIn) - 1 do
-      if IdemPropNameU(ExtIn[i], 'synhk') then
+      if PropNameEquals(ExtIn[i], 'synhk') then
         synhk := true
       else if synhk and
               IdemPChar(pointer(ExtIn[i]), 'HK=') then
@@ -1338,7 +1338,7 @@ end;
 
 function TWebSocketProtocol.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
 begin
-  result := IdemPropNameU(aProtocolName, fName);
+  result := PropNameEquals(aProtocolName, fName);
 end;
 
 function TWebSocketProtocol.GetRemoteIP: RawUtf8;
@@ -1519,11 +1519,11 @@ var
   seq: integer;
 begin
   // by convention, defaults are POST and JSON, to reduce frame size for SOA
-  if not IdemPropNameU(Ctxt.Method, 'POST') then
+  if not PropNameEquals(Ctxt.Method, 'POST') then
     Method := Ctxt.Method;
   if (Ctxt.InContent <> '') and
      (Ctxt.InContentType <> '') and
-     not IdemPropNameU(Ctxt.InContentType, JSON_CONTENT_TYPE) then
+     not PropNameEquals(Ctxt.InContentType, JSON_CONTENT_TYPE) then
     InContentType := Ctxt.InContentType;
   // compute the WebSockets frame and corresponding response header
   if fSequencing then
@@ -1572,7 +1572,7 @@ var
   OutContentType: RawByteString;
 begin
   if (Ctxt.OutContent <> '') and
-     not IdemPropNameU(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
+     not PropNameEquals(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
     OutContentType := Ctxt.OutContentType;
   if NormToUpperAnsi7[outhead[3]] = 'Q' then
     // 'request' -> 'answer'
@@ -1644,7 +1644,7 @@ begin
     if Content = '' then
       WR.Add('"', '"')
     else if (ContentType = '') or
-            IdemPropNameU(ContentType, JSON_CONTENT_TYPE) then
+            PropNameEquals(ContentType, JSON_CONTENT_TYPE) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
     else if IdemPChar(pointer(ContentType), 'TEXT/') then
       WR.AddJsonString(Content)
@@ -1729,7 +1729,7 @@ begin
   if info.Json = nil then
     exit;
   if (contentType = '') or
-     IdemPropNameU(contentType, JSON_CONTENT_TYPE) then
+     PropNameEquals(contentType, JSON_CONTENT_TYPE) then
     GetJsonItemAsRawJson(info.Json, RawJson(content))
   else if IdemPChar(pointer(contentType), 'TEXT/') then
     info.GetJsonValue(content)
@@ -2225,7 +2225,7 @@ begin
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
         if ((fUri = '') or
-            IdemPropNameU(fUri, aClientUri)) and
+            PropNameEquals(fUri, aClientUri)) and
            SetSubprotocol(aProtocolName) then
         begin
           result := fProtocols[i].Clone(aClientUri);
@@ -2249,7 +2249,7 @@ begin
   fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      if IdemPropNameU(fProtocols[i].fUri, aClientUri) then
+      if PropNameEquals(fProtocols[i].fUri, aClientUri) then
       begin
         result := fProtocols[i].Clone(aClientUri);
         exit;
@@ -2278,9 +2278,9 @@ begin
   if aName <> '' then
     for result := 0 to length(fProtocols) - 1 do
       with fProtocols[result] do
-        if IdemPropNameU(fName, aName) and
+        if PropNameEquals(fName, aName) and
            ((fUri = '') or
-            IdemPropNameU(fUri, aUri)) then
+            PropNameEquals(fUri, aUri)) then
           exit;
   result := -1;
 end;
@@ -2359,8 +2359,8 @@ var
 begin
   // validate WebSockets protocol upgrade request
   result := HTTP_BADREQUEST;
-  if not IdemPropNameU(Http.CommandMethod, 'GET') or
-     not IdemPropNameU(Http.Upgrade, 'websocket') then
+  if not IsGet(Http.CommandMethod) or
+     not PropNameEquals(Http.Upgrade, 'websocket') then
     exit;
   version := Http.HeaderGetValue('SEC-WEBSOCKET-VERSION');
   if GetInteger(pointer(version)) < 13 then

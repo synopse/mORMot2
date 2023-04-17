@@ -417,7 +417,7 @@ begin
     if fProcess <> nil then
     begin
       result := 'Already upgraded to WebSockets';
-      if IdemPropNameU(fProcess.Protocol.Uri, aWebSocketsURI) then
+      if PropNameEquals(fProcess.Protocol.Uri, aWebSocketsURI) then
         result := result + ' on this URI'
       else
         result := FormatUtf8('% with URI=[%] but requested [%]',
@@ -464,7 +464,7 @@ begin
       result := 'Invalid HTTP Upgrade Header';
       if not (hfConnectionUpgrade in Http.HeaderFlags) or
          (Http.ContentLength > 0) or
-         not IdemPropNameU(Http.Upgrade, 'websocket') or
+         not PropNameEquals(Http.Upgrade, 'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.Name := prot;

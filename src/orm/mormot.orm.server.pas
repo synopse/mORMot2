@@ -2393,7 +2393,7 @@ begin
     tablename := GetJsonPropName(fParse.Json);
     if (tablename = '') or
        (fParse.Json = nil) or
-       not IdemPropNameU(tablename,
+       not PropNameEquals(tablename,
          fOrm.Model.TableProps[fMainTableIndex].Props.SqlTableName) then
       raise EOrmBatchException.CreateUtf8(
         '%.EngineBatchSend(%): Wrong "Table":"%"', [self, fTable, tablename]);

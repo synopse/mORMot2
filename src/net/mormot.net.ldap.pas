@@ -2870,7 +2870,7 @@ begin
   result := Mechanisms <> nil;
   if result then
     for i := 0 to high(fMechanisms) do
-      if IdemPropNameU(fMechanisms[i], MechanismName) then
+      if PropNameEquals(fMechanisms[i], MechanismName) then
         exit;
   result := false;
 end;

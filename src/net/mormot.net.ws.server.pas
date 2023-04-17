@@ -353,7 +353,7 @@ begin
   if (hfConnectionUpgrade in ClientSock.Http.HeaderFlags) and
      ClientSock.KeepAliveClient and
      IsGet(ClientSock.Method) and
-     IdemPropNameU(ClientSock.Http.Upgrade, 'websocket') then
+     PropNameEquals(ClientSock.Http.Upgrade, 'websocket') then
   begin
     // upgrade and run fProcess.ProcessLoop
     err := WebSocketProcessUpgrade(ClientSock);

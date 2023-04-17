@@ -267,7 +267,7 @@ type
     // - could be used to quickly check if a token is likely to be a JWT
     class function ExtractAlgo(const Token: RawUtf8): RawUtf8;
     /// in-place check of the JWT header algorithm
-    // - just a wrapper around IdemPropNameU(MatchAlgo(Token), Algo);
+    // - just a wrapper around PropNameEquals(MatchAlgo(Token), Algo);
     class function MatchAlgo(const Token, Algo: RawUtf8): boolean;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
@@ -1089,7 +1089,7 @@ end;
 
 class function TJwtAbstract.MatchAlgo(const Token, Algo: RawUtf8): boolean;
 begin
-  result := IdemPropNameU(ExtractAlgo(Token), Algo);
+  result := PropNameEquals(ExtractAlgo(Token), Algo);
 end;
 
 class function TJwtAbstract.VerifyPayload(const Token,

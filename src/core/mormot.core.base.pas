@@ -878,8 +878,8 @@ type
     function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
 const
   /// raw internal methods for case sensitive (or not) search for a RawUtf8
-  // - expects non-void RawUtf8 values, with ASCII-7 encoding (e.g. as with
-  // TDocVariantData.GetValueIndex() property names)
+  // - expects non-void RawUtf8 values, with ASCII-7 encoding, e.g. as with
+  // TDocVariantData.GetValueIndex() property names
   FindNonVoid: array[{casesensitive:}boolean] of TFindNonVoid = (
     FindNonVoidRawUtf8I,
     FindNonVoidRawUtf8);

@@ -2121,7 +2121,7 @@ begin
           Column := TrimU(ColumnUtf8('COLUMN_NAME'));
           for i := 0 to high(Fields) do
             with Fields[i] do
-              if IdemPropNameU(ColumnName, Column) then
+              if PropNameEquals(ColumnName, Column) then
               begin
                 ColumnIndexed := true;
                 break;

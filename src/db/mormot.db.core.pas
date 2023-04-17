@@ -3029,7 +3029,7 @@ var
       P := GotoNextNotSpace(P + 1);
       select.FunctionName := prop;
       inc(fSelectFunctionCount);
-      if IdemPropNameU(prop, 'COUNT') and
+      if PropNameEquals(prop, 'COUNT') and
          (P^ = '*') then
       begin
         select.Field := 0; // count( * ) -> count(ID)
@@ -3038,9 +3038,9 @@ var
       end
       else
       begin
-        if IdemPropNameU(prop, 'DISTINCT') then
+        if PropNameEquals(prop, 'DISTINCT') then
           select.FunctionKnown := funcDistinct
-        else if IdemPropNameU(prop, 'MAX') then
+        else if PropNameEquals(prop, 'MAX') then
           select.FunctionKnown := funcMax;
         select.Field := GetPropIndex;
         if select.Field < 0 then
@@ -3334,7 +3334,7 @@ begin
         inc(P); // trim left
     until not GetNextSelectField; // add other CSV field names
   // 2. get FROM clause
-  if not IdemPropNameU(prop, 'FROM') then
+  if not PropNameEquals(prop, 'FROM') then
     exit; // incorrect SQL statement
   GetNextFieldProp(P, prop);
   fTableName := prop;
@@ -3344,7 +3344,7 @@ begin
   whereNotClause := false;
   whereBefore := '';
   GetNextFieldProp(P, prop);
-  if IdemPropNameU(prop, 'WHERE') then
+  if PropNameEquals(prop, 'WHERE') then
   begin
     repeat
       B := P;
@@ -3362,7 +3362,7 @@ begin
       ndx := GetPropIndex;
       if ndx < 0 then
       begin
-        if IdemPropNameU(prop, 'NOT') then
+        if PropNameEquals(prop, 'NOT') then
         begin
           whereNotClause := true;
           continue;
@@ -3411,9 +3411,9 @@ begin
         exit; // invalid SQL statement
       inc(whereCount);
       GetNextFieldProp(P, prop);
-      if IdemPropNameU(prop, 'OR') then
+      if PropNameEquals(prop, 'OR') then
         whereWithOR := true
-      else if IdemPropNameU(prop, 'AND') then
+      else if PropNameEquals(prop, 'AND') then
         whereWithOR := false
       else
         goto lim2;
@@ -3437,7 +3437,7 @@ lim2: case IdemPPChar(pointer(prop), @ENDCLAUSE) of
           begin
             // ORDER BY
             GetNextFieldProp(P, prop);
-            if IdemPropNameU(prop, 'BY') or
+            if PropNameEquals(prop, 'BY') or
                (fOrderByField <> nil) then
             begin
               repeat
@@ -3449,9 +3449,9 @@ lim2: case IdemPPChar(pointer(prop), @ENDCLAUSE) of
                 begin
                   // check ORDER BY ... ASC/DESC
                   if GetNextFieldProp(P, prop) then
-                    if IdemPropNameU(prop, 'DESC') then
+                    if PropNameEquals(prop, 'DESC') then
                       include(fOrderByFieldDesc, order)
-                    else if not IdemPropNameU(prop, 'ASC') then
+                    else if not PropNameEquals(prop, 'ASC') then
                       goto lim2; // parse LIMIT OFFSET clauses after ORDER
                   if P^ <> ',' then
                     break; // no more fields in this ORDER BY clause
@@ -3466,7 +3466,7 @@ lim2: case IdemPPChar(pointer(prop), @ENDCLAUSE) of
           begin
             // GROUP BY
             GetNextFieldProp(P, prop);
-            if IdemPropNameU(prop, 'BY') then
+            if PropNameEquals(prop, 'BY') then
             begin
               repeat
                 ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
@@ -3832,7 +3832,7 @@ begin
   result := false;
   if length(Fields) <> FieldCount then
     exit;
-  for i := 0 to FieldCount - 1 do
+  for i := 0 to FieldCount - 1 do // FPC will use aggressive inlining
     if not IdemPropNameU(Fields[i], FieldNames[i], FieldNamesL[i]) then
       exit;
   result := true;

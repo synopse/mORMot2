@@ -2402,7 +2402,7 @@ begin
   Split(interfmethod, '.', interf, method);
   methodIndex := callback.Factory.FindMethodIndex(method);
   if (methodIndex >= 0) and
-     IdemPropNameU(interfmethod,
+     PropNameEquals(interfmethod,
       callback.Factory.Methods[methodIndex].InterfaceDotMethodName) then
   try
     // execute the method using JSON as data representation

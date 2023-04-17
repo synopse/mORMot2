@@ -396,7 +396,7 @@ begin
   rest.method := method;
   rest.headers := PurgeHeaders(headers);
   if (contenttype <> '') and
-     not IdemPropNameU(contenttype, JSON_CONTENT_TYPE_VAR) then
+     not PropNameEquals(contenttype, JSON_CONTENT_TYPE_VAR) then
     rest.contenttype := contenttype;
   rest.content := content;
   FrameInit(focRestPayload, rest.content, rest.contenttype, frame);

@@ -1667,27 +1667,15 @@ begin
     Add(other.Host[i], other.IP[i]);
 end;
 
-function FastHostCacheFind(h: PRawUtf8; const hostname: RawUtf8;
-  hostnamelen: TStrLen; n: PtrInt): PtrInt;
-begin
-  if hostnamelen <> 0 then
-    for result := 0 to n - 1 do
-      if (PStrLen(PPAnsiChar(h)^ - _STRLEN)^ = hostnamelen) and
-         PropNameEquals(hostname, h^) then // case insensitive search
-        exit
-      else
-        inc(h);
-  result := -1;
-end;
-
 function TNetHostCache.Find(const hostname: RawUtf8; out ip4: cardinal): boolean;
 var
   i: PtrInt;
 begin
   result := false;
-  if Count = 0 then
+  if (Count = 0) or
+     (hostname = '') then
     exit;
-  i := FastHostCacheFind(pointer(Host), hostname, length(hostname), Count);
+  i := FindPropName(pointer(Host), hostname, Count);
   if i < 0 then
     exit;
   ip4 := IP[i];
@@ -1733,7 +1721,7 @@ begin
       Count := 0
     else
     begin
-      i := FastHostCacheFind(pointer(Host), hostname, length(hostname), Count);
+      i := FindPropName(pointer(Host), hostname, Count);
       if i < 0 then
         exit;
       n := Count - 1;

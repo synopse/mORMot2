@@ -731,10 +731,10 @@ begin
     end;
   end;
   if (typ = wRecord) and
-     IdemPropNameU(typName, 'TGUID') then
+     PropNameEquals(typName, 'TGUID') then
     typ := wGUID
   else if (typ = wRecord) and
-          IdemPropNameU(typName, 'TServiceCustomAnswer') then
+          PropNameEquals(typName, 'TServiceCustomAnswer') then
     typ := wCustomAnswer;
   // set typName/typAsName
   if typName = '' then
@@ -1347,7 +1347,7 @@ begin
     if port = 0 then
       port := 80;
     _ObjAddProp('port', port, context);
-    if IdemPropNameU(Ctxt.UriMethodPath, 'context') then
+    if PropNameEquals(Ctxt.UriMethodPath, 'context') then
     begin
       Ctxt.ReturnsJson(context, 200, {304=}true, twNone, {humanreadable=}true);
       exit;
@@ -1392,7 +1392,7 @@ begin
   if PosExChar('.', templateExt) > 0 then
   begin
     // see as text
-    if IdemPropNameU(Split(templateExt, '.', templateExt), 'mustache') then
+    if PropNameEquals(Split(templateExt, '.', templateExt), 'mustache') then
       // force return .mustache
       unitName := '';
     head := TEXT_CONTENT_TYPE_HEADER;
@@ -1679,8 +1679,8 @@ begin
           end;
         end
         else if {%H-}interfaceName <> '' then
-          if IdemPropNameU(typeName, 'function') or
-             IdemPropNameU(typeName, 'procedure') then
+          if PropNameEquals(typeName, 'function') or
+             PropNameEquals(typeName, 'procedure') then
             if GetNextFieldProp(P, typeName) then
               Descriptions.AddValue(interfaceName + '.' + typeName,
                 RawUtf8ToVariant(desc));
@@ -1873,7 +1873,7 @@ var
   s: PtrInt;
 begin
   for s := 0 to high(fServices) do
-    if IdemPropNameU(fServices[s].InterfaceUri, name) then
+    if IdemPropNameU(fServices[s].InterfaceUri, name) then // good FPC inlining
     begin
       service := fServices[s];
       result := true;
@@ -2142,7 +2142,7 @@ begin
       m := s.FindMethod(p[1]);
       if m = nil then
         ShowService(s)
-      else if IdemPropNameU(p[2], 'help') or
+      else if PropNameEquals(p[2], 'help') or
               ((m^.ArgsInputValuesCount <> 0) and
                (PosExChar('=', p[2]) = 0)) then
         ShowMethod(s, m)

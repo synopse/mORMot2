@@ -1909,7 +1909,7 @@ var
 begin
   if (Ctxt.InContent = '') or
      not IsPost(Ctxt.Method) or
-     not IdemPropNameU(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
+     not PropNameEquals(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;
     exit;

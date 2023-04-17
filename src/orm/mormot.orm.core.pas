@@ -5265,7 +5265,7 @@ begin
     if (fQueryTables <> nil) and
        (QueryTableNameFromSql <> '') then
       for i := 0 to length(fQueryTables) - 1 do
-        if IdemPropNameU(
+        if PropNameEquals(
              fQueryTables[i].OrmProps.SqlTableName, fQueryTableNameFromSql) then
         begin
           fQueryTableIndexFromSql := i;
@@ -6581,7 +6581,7 @@ begin
       for f := 0 to Count - 1 do
         with List[f] do
           if (FieldName = '') or
-             IdemPropNameU(FieldName, Name) then
+             PropNameEquals(FieldName, Name) then
             if ((aIsUnique in Attributes) and
                 not (itoNoIndex4UniqueField in Options)) or
                ((OrmFieldType = oftRecord) and
@@ -7784,11 +7784,11 @@ var
       inc(P); // go to end of field name
     FastSetString(result, B, P - B);
     if (result = '') or
-       IdemPropNameU(result, 'AND') or
-       IdemPropNameU(result, 'OR')  or
-       IdemPropNameU(result, 'LIKE') or
-       IdemPropNameU(result, 'NOT') or
-       IdemPropNameU(result, 'NULL') then
+       PropNameEquals(result, 'AND') or
+       PropNameEquals(result, 'OR')  or
+       PropNameEquals(result, 'LIKE') or
+       PropNameEquals(result, 'NOT') or
+       PropNameEquals(result, 'NULL') then
       exit;
     if not IsRowID(pointer(result)) then
     begin
@@ -7895,8 +7895,8 @@ begin
         with SimpleFields[i] do
         begin
           if (f and 1 = 0) {self/dest}  or
-             not (IdemPropNameU(Name, 'SOURCE') or
-             IdemPropNameU(Name, 'DEST')) {many} then
+             not (PropNameEquals(Name, 'SOURCE') or
+             PropNameEquals(Name, 'DEST')) {many} then
           begin
             PWord(@aField[2])^ := TwoDigitLookupW[i];
             if not AddField(SimpleFields[i]) then
@@ -8563,7 +8563,7 @@ begin
   with Orm do
     for f := 0 to length(DynArrayFields) - 1 do
       with DynArrayFields[f] do
-        if IdemPropNameU(Name, DynArrayFieldName) then
+        if PropNameEquals(Name, DynArrayFieldName) then
         begin
           GetDynArray(self, result);
           exit;
@@ -8912,8 +8912,8 @@ end;
 function TOrmMany.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
 begin
   // returns TRUE for object serialization, FALSE for integer value
-  if IdemPropNameU(Prop^.Name, 'source') or
-     IdemPropNameU(Prop^.Name, 'dest') then
+  if PropNameEquals(Prop^.Name, 'source') or
+     PropNameEquals(Prop^.Name, 'dest') then
     result := false // source/dest fields are not class instances
   else
     result := fFill.JoinedFields;
@@ -9238,8 +9238,8 @@ begin
         end;
       oftID: // = TOrm(aID)
         if isTOrmMany and
-           (IdemPropNameU(F.Name, 'Source') or
-            IdemPropNameU(F.Name, 'Dest')) then
+           (PropNameEquals(F.Name, 'Source') or
+            PropNameEquals(F.Name, 'Dest')) then
           goto Small
         else
         begin
@@ -10498,7 +10498,7 @@ begin
     if f < 0 then
     begin
       fRowIDFieldName := InternalExternalPairs[i * 2 + 1];
-      if IdemPropNameU(fRowIDFieldName, 'ID') then
+      if PropNameEquals(fRowIDFieldName, 'ID') then
         FieldBitSet(fFieldNamesMatchInternal, 0)
       else     // [0]=ID
         exclude(fFieldNamesMatchInternal, 0);
@@ -10507,7 +10507,7 @@ begin
     begin
       fExtFieldNames[f] := InternalExternalPairs[i * 2 + 1];
       fExtFieldNamesUnQuotedSql[f] := UnQuotedSQLSymbolName(fExtFieldNames[f]);
-      if IdemPropNameU(fExtFieldNames[f], fProps.Fields.List[f].Name) then
+      if PropNameEquals(fExtFieldNames[f], fProps.Fields.List[f].Name) then
         FieldBitSet(fFieldNamesMatchInternal, f + 1)
       else // [0]=ID  [1..n]=fields[i-1]
         exclude(fFieldNamesMatchInternal, f + 1);
@@ -10666,14 +10666,14 @@ end;
 function TOrmMapping.ExternalToInternalIndex(
   const ExtFieldName: RawUtf8): integer;
 begin
-  if IdemPropNameU(ExtFieldName, RowIDFieldName) then
+  if PropNameEquals(ExtFieldName, RowIDFieldName) then
     result := -1
   else
   begin
     // search for customized field mapping
     for result := 0 to length(fExtFieldNamesUnQuotedSql) - 1 do
       if IdemPropNameU(ExtFieldName, fExtFieldNamesUnQuotedSql[result]) then
-        exit;
+        exit; // properly inlined
     result := -2; // indicates not found
   end;
 end;

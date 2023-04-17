@@ -1941,7 +1941,7 @@ begin
     GetNextItem(p, '?', rawFormat);
   // 2. implement mvc-info endpoint
   if (publishMvcInfo in fPublishOptions) and
-     IdemPropNameU(rawMethodName, MVCINFO_URI) then
+     PropNameEquals(rawMethodName, MVCINFO_URI) then
   begin
     if fMvcInfoCache = '' then
     begin
@@ -1954,7 +1954,7 @@ begin
   else
   // 3. serve static resources, with proper caching
   if (publishStatic in fPublishOptions) and
-     IdemPropNameU(rawMethodName, STATIC_URI) then
+     PropNameEquals(rawMethodName, STATIC_URI) then
   begin
     // code below will use a local in-memory cache, but would do the same as:
     // Ctxt.ReturnFileFromFolder(fViews.ViewStaticFolder);
@@ -2002,7 +2002,7 @@ begin
   begin
     // 4. render regular page using proper viewer
     timer.Start;
-    if IdemPropNameU(rawFormat, 'json') then
+    if PropNameEquals(rawFormat, 'json') then
       rendererClass := TMvcRendererJson
     else
       rendererClass := TMvcRendererFromViews;

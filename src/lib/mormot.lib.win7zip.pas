@@ -1996,7 +1996,7 @@ function T7zReader.NameToIndex(const zipname: RawUtf8): integer;
 begin
   if fInArchive <> nil then
     for result := 0 to Count - 1 do
-      if IdemPropNameU(zipname, GetZipName(result)) then
+      if PropNameEquals(zipname, GetZipName(result)) then
         exit;
   result := -1;
 end;
@@ -2710,7 +2710,7 @@ end;
 function T7zWriter.NameToIndex(const zipname: RawUtf8): integer;
 begin
   for result := 0 to length(fEntries) - 1 do
-    if IdemPropNameU(fEntries[result].ZipName, zipname) then
+    if PropNameEquals(fEntries[result].ZipName, zipname) then
       exit;
   result := -1;
 end;

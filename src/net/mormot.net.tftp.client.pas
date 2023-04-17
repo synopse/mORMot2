@@ -444,7 +444,7 @@ begin
   FileName := Parsed;
   if OpCode <> toOck then
     if not GetNext or
-       not IdemPropNameU(Parsed, 'octet') then // supports only 8-bit transfer
+       not PropNameEquals(Parsed, 'octet') then // supports only 8-bit transfer
       exit;
   result := teNoError;
   // caller should now set the FileStream field, and call ParseRequestOptions

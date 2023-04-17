@@ -3380,8 +3380,8 @@ begin
   end;
   if TServiceFactoryServer(Service).ResultAsXMLObjectIfAcceptOnlyXML and
      FindNameValue(Call^.InHead, 'ACCEPT:', fTemp) and
-     (IdemPropNameU(fTemp, 'application/xml') or
-      IdemPropNameU(fTemp, 'text/xml')) then
+     (PropNameEquals(fTemp, 'application/xml') or
+      PropNameEquals(fTemp, 'text/xml')) then
     fForceServiceResultAsXMLObject := true;
   try
     InternalExecuteSoaByInterfaceComputeResult;
@@ -4139,7 +4139,7 @@ begin
     FillInput;
   P := pointer(fInput);
   for result := 0 to (length(fInput) shr 1) - 1 do
-    if IdemPropNameU(ParamName, P^) then
+    if IdemPropNameU(ParamName, P^) then // efficiently inlined on FPC
       exit
     else
       inc(P, 2);
@@ -5245,10 +5245,10 @@ var
 begin
   salt := aClientNonce + User.LogonName + User.PasswordHashHexa;
   result := IsHex(aPassWord, SizeOf(THash256)) and
-    (IdemPropNameU(aPassWord,
+    (PropNameEquals(aPassWord,
       Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}false) + salt)) or
      // if current nonce failed, tries with previous 5 minutes' nonce
-     IdemPropNameU(aPassWord,
+     PropNameEquals(aPassWord,
        Sha256(fServer.Model.Root + CurrentNonce(Ctxt, {prev=}true)  + salt)));
 end;
 
@@ -5352,7 +5352,7 @@ var
 begin
   expected := User.PasswordHashHexa;
   User.PasswordPlain := aPassWord; // override with SHA-256 hash from HTTP header
-  result := IdemPropNameU(User.PasswordHashHexa, expected);
+  result := PropNameEquals(User.PasswordHashHexa, expected);
 end;
 
 function TRestServerAuthenticationHttpBasic.Auth(Ctxt: TRestServerUriContext): boolean;
@@ -7671,9 +7671,9 @@ begin
       AssociatedServices.FindServiceAll(name, W);
     W.SetText(json);
     if Ctxt.InputExists['format'] or
-       IdemPropNameU(Ctxt.fUriMethodPath, 'json') then
+       PropNameEquals(Ctxt.fUriMethodPath, 'json') then
       json := JsonReformat(json)
-    else if IdemPropNameU(Ctxt.fUriMethodPath, 'xml') then
+    else if PropNameEquals(Ctxt.fUriMethodPath, 'xml') then
     begin
       JsonBufferToXML(pointer(json), XMLUTF8_HEADER, '<' + name + '>', xml);
       Ctxt.Returns(xml, 200, XML_CONTENT_TYPE_HEADER);
@@ -7707,7 +7707,7 @@ var
   info: TDocVariantData;
   tix: cardinal;
 begin
-  if IdemPropNameU(Ctxt.fUriMethodPath, 'info') and
+  if PropNameEquals(Ctxt.fUriMethodPath, 'info') and
      not (rsoTimestampInfoUriDisable in fOptions) then
   begin
     tix := Ctxt.TickCount64 shr 12; // cache refreshed every 4.096 seconds

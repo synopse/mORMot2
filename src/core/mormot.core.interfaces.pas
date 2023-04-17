@@ -3930,13 +3930,13 @@ begin
       case ArgsInputValuesCount of
         1:
           if Args[1].ValueType = imvBoolean then
-            if IdemPropNameU(URI, 'CurrentFrame') then
+            if PropNameEquals(URI, 'CurrentFrame') then
               fMethodIndexCurrentFrameCallback := m;
         2:
           if (Args[1].ValueType = imvInterface) and
              (Args[1].ArgRtti.Info = TypeInfo(IInvokable)) and
              (Args[2].ValueType = imvRawUtf8) and
-             IdemPropNameU(URI, 'CallbackReleased') then
+             PropNameEquals(URI, 'CallbackReleased') then
             fMethodIndexCallbackReleased := m;
       end;
     if ArgsResultIndex >= 0 then
@@ -4217,7 +4217,7 @@ begin
     if MethodsCount < 10 then
     begin
       for result := 0 to MethodsCount - 1 do
-        if IdemPropNameU(fMethods[result].Uri, aMethodName) then
+        if IdemPropNameU(fMethods[result].Uri, aMethodName) then // inlined
           exit;
       result := -1;
     end

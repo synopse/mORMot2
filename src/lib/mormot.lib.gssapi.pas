@@ -889,7 +889,7 @@ begin
   // caller made ServerDomainMapSafe.WriteLock
   for result := 0 to length(ServerDomainMap) - 1 do
     with ServerDomainMap[result] do
-      if IdemPropNameU(Old, aOld) then
+      if PropNameEquals(Old, aOld) then
         exit;
   result := -1;
 end;

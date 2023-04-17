@@ -771,7 +771,7 @@ end;
 function DnsLookupKnown(const HostName: RawUtf8; out Ip: RawUtf8): boolean;
 begin
   result := true;
-  if IdemPropNameU(HostName, 'localhost') or
+  if PropNameEquals(HostName, 'localhost') or
      (HostName = c6Localhost) then
     Ip := IP4local
   else if NetIsIP4(pointer(HostName)) then

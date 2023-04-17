@@ -3102,7 +3102,7 @@ begin
     for i := 0 to n - 1 do
       if fTracked[i].Instance = Instance then
         exit
-      else if IdemPropNameU(fTracked[i].Name, instanceName) then
+      else if PropNameEquals(fTracked[i].Name, instanceName) then
         raise ESynException.CreateUtf8('%.Track("%") name already exists',
           [self, instanceName]);
     SetLength(fTracked, n + 1);

@@ -1556,8 +1556,8 @@ begin
          (length(BoundsSqlWhere) = 1) and
          VarRecToInt64(BoundsSqlWhere[0], Int64(ID)) and
          FieldBitsFromCsv(CustomFieldsCsv, bits) and
-         (IdemPropNameU('RowID=?', FormatSqlWhere) or
-          IdemPropNameU('ID=?', FormatSqlWhere)) then
+         (PropNameEquals('RowID=?', FormatSqlWhere) or
+          PropNameEquals('ID=?', FormatSqlWhere)) then
       begin
         if IsZero(bits) then
           // get all simple fields if none supplied, like MultiFieldValues()

@@ -1904,7 +1904,7 @@ begin
      (params.Hash <> '') then
     // check if we already got the file from its md5/sha* hash
     if FileExists(destfile) and
-       IdemPropNameU(params.Hasher.HashFile(result), params.Hash) then
+       PropNameEquals(params.Hasher.HashFile(result), params.Hash) then
     begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: % already available', [url, result], self);
@@ -1913,7 +1913,7 @@ begin
     else if cached <> '' then
     begin
       // check from local cache folder
-      if IdemPropNameU(params.Hasher.HashFile(cached), params.Hash) then
+      if PropNameEquals(params.Hasher.HashFile(cached), params.Hash) then
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
@@ -1971,7 +1971,7 @@ begin
     begin
       // check the hash
       if resumed and
-         not IdemPropNameU(parthash, params.Hash) then
+         not PropNameEquals(parthash, params.Hash) then
       begin
         if Assigned(OnLog) then
           OnLog(sllDebug,
@@ -1980,7 +1980,7 @@ begin
         requrl := url; // try again including initial redirection steps
         DoRequestAndFreePartStream;
       end;
-      if not IdemPropNameU(parthash, params.Hash) then
+      if not PropNameEquals(parthash, params.Hash) then
       begin
         DeleteFile(part); // this .part was clearly incorrect
         raise EHttpSocket.CreateUtf8('%.WGet: %:%/% hash failure (% vs %)',
@@ -2569,8 +2569,8 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
     Bytes, Current, Max, BytesWritten: cardinal;
   begin
     if Assigned(fOnUpload) and
-       (IdemPropNameU(aMethod, 'POST') or
-        IdemPropNameU(aMethod, 'PUT')) then
+       (IsPost(aMethod) or
+        IsPut(aMethod)) then
     begin
       result := WinHttpApi.SendRequest(
         fRequest, nil, 0, nil, 0, L, 0);

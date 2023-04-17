@@ -807,7 +807,7 @@ begin
               // ensure objects are consistent
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
-                   IdemPropNameU(Names[ndx], col^.Name) and
+                   PropNameEquals(Names[ndx], col^.Name) and
                    (VariantTypeToSqlDBFieldType(Values[ndx]) in
                      [mormot.db.core.ftNull,
                       mormot.db.core.ftDouble,
@@ -851,7 +851,7 @@ begin
   if not _SafeObject(fValues[RowIndex], dv) or
      (dv^.Count = 0) then
     exit;
-  if IdemPropNameU(col^.Name, dv^.Names[f]) then
+  if PropNameEquals(col^.Name, dv^.Names[f]) then
     ndx := f // optimistic match when fields are in-order (most common case)
   else
   begin
@@ -935,7 +935,7 @@ begin
        (v^.Count > 0) then
     begin
       if (cardinal(f) >= cardinal(v^.Count)) or
-         not IdemPropNameU(aLookupFieldName, v^.Names[f]) then
+         not PropNameEquals(aLookupFieldName, v^.Names[f]) then
         f := v^.GetValueIndex(aLookupFieldName);
       if (f >= 0) and
          (SortDynArrayVariantComp(

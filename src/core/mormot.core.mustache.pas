@@ -1941,7 +1941,7 @@ var
 begin
   n := length(Helpers);
   for i := 0 to n - 1 do
-    if IdemPropNameU(Helpers[i].Name, aName) then
+    if PropNameEquals(Helpers[i].Name, aName) then
     begin
       Helpers[i].Event := aEvent;
       exit;
@@ -1970,7 +1970,7 @@ var
 begin
   n := length(Helpers);
   for i := 0 to n - 1 do
-    if IdemPropNameU(Helpers[i].Name, aName) then
+    if PropNameEquals(Helpers[i].Name, aName) then
     begin
       for j := i to n - 2 do
         Helpers[j] := Helpers[j + 1];

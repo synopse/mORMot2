@@ -3241,7 +3241,7 @@ begin
     2: // uri="/dir/index.html"
       FastAssignUtf8(Url, tmp);
     3: // algorithm=MD5
-      if IdemPropNameU(DIGEST_NAME[Algo], tmp) then
+      if PropNameEquals(DIGEST_NAME[Algo], tmp) then
         AlgResp := DIGEST_NAME_RESP[Algo]
       else
         exit;
@@ -3466,7 +3466,7 @@ begin
   resp := dp.Response;
   dp.DigestResponse(Method);
   FillZero(dp.HA0.b);
-  if not IdemPropNameU(dp.Response, resp) then
+  if not PropNameEquals(dp.Response, resp) then
     exit;
   // successfully authenticated
   User := dp.UserName;
@@ -4857,7 +4857,7 @@ begin
   end;
   result := Last; // simple but efficient cache
   if (result <> nil) and
-     IdemPropNameU(TCryptAlgo(result).fName, name) then
+     PropNameEquals(TCryptAlgo(result).fName, name) then
     exit;
   result := GlobalCryptAlgo.GetObjectFrom(name); // thread-safe lookup
   if result <> nil then

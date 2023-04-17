@@ -181,7 +181,7 @@ function VariantCompareI(const V1, V2: variant): PtrInt;
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
-// - if CaseSensitive is false, will use IdemPropNameU() for comparison
+// - if CaseSensitive is false, will use PropNameEquals() for comparison
 function VariantEquals(const V: Variant; const Str: RawUtf8;
   CaseSensitive: boolean = true): boolean; overload;
 
@@ -3313,7 +3313,7 @@ function VariantEquals(const V: Variant; const Str: RawUtf8;
     if CaseSensitive then
       result := (tmp = Str)
     else
-      result := IdemPropNameU(tmp, Str);
+      result := PropNameEquals(tmp, Str);
   end;
 
 var
@@ -3332,7 +3332,7 @@ begin
         if CaseSensitive then
           result := RawUtf8(VString) = Str
         else
-          result := IdemPropNameU(RawUtf8(VString), Str);
+          result := PropNameEquals(RawUtf8(VString), Str);
     else
       if VariantToInt64(V, v1) then
       begin
@@ -7711,7 +7711,7 @@ begin
           'ToNonExpandedJson: Value[%] not expected object', [r]);
       for f := 0 to fieldCount - 1 do
         if (r > 0) and
-           not IdemPropNameU(row^.VName[f], field[f]) then
+           not PropNameEquals(row^.VName[f], field[f]) then
           raise EDocVariant.CreateUtf8(
             'ToNonExpandedJson: Value[%] field=% expected=%',
             [r, row^.VName[f], field[f]])

@@ -7623,7 +7623,7 @@ var
   tmp: RawUtf8;
 begin
   tmp := ExecuteNoExceptionUtf8('PRAGMA locking_mode');
-  if IdemPropNameU(tmp, 'EXCLUSIVE') then
+  if PropNameEquals(tmp, 'EXCLUSIVE') then
     result := lmExclusive
   else
     result := lmNormal;
@@ -7639,7 +7639,7 @@ end;
 
 function TSqlDataBase.GetWALMode: boolean;
 begin
-  result := IdemPropNameU(ExecuteNoExceptionUtf8('PRAGMA journal_mode'), 'wal');
+  result := PropNameEquals(ExecuteNoExceptionUtf8('PRAGMA journal_mode'), 'wal');
 end;
 
 procedure TSqlDataBase.SetBusyTimeout(const ms: integer);
@@ -7689,7 +7689,7 @@ begin
   for i := 0 to fSqlFunctions.Count - 1 do
     with TSqlDataBaseSQLFunction(fSqlFunctions.List[i]) do
       if (FunctionParametersCount = aFunction.FunctionParametersCount) and
-        IdemPropNameU(FunctionName, aFunction.FunctionName) then
+        PropNameEquals(FunctionName, aFunction.FunctionName) then
       begin
         aFunction.Free;
         exit; // already registered with the same name and parameters count

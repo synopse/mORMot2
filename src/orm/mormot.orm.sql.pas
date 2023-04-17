@@ -603,7 +603,7 @@ begin
         exit;
   end
   else
-    for result := 0 to high(fFieldsExternal) do
+    for result := 0 to high(fFieldsExternal) do // with proper inlining
       if IdemPropNameU(fFieldsExternal[result].ColumnName, ColName) then
         exit;
   result := -1;
@@ -769,8 +769,8 @@ function TRestStorageExternal.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 begin
   if SQL = '' then
     result := false
-  else if IdemPropNameU(fStoredClassProps.Sql.SelectAllWithRowID, SQL) or
-          IdemPropNameU(fStoredClassProps.Sql.SelectAllWithID, SQL) then
+  else if PropNameEquals(fStoredClassProps.Sql.SelectAllWithRowID, SQL) or
+          PropNameEquals(fStoredClassProps.Sql.SelectAllWithID, SQL) then
   begin
     SQL := fSelectAllWithID; // pre-computed for this common statement
     result := true;
@@ -795,7 +795,7 @@ begin
     fStoredClassRecordProps.SimpleFieldSelect);
   try
     if (stmt.SqlStatement = '') or // parsing failed
-      not IdemPropNameU(stmt.TableName, fStoredClassRecordProps.SqlTableName) then
+      not PropNameEquals(stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
       {$ifdef DEBUGSQLVIRTUALTABLE}
       InternalLog('AdaptSqlForEngineList: complex statement -> switch to ' +

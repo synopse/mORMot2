@@ -7556,7 +7556,7 @@ begin
             part.ContentType := TEXT_CONTENT_TYPE;
           FakeCodePage(part.Content, CP_UTF8); // ensure value is UTF-8
         end;
-        if IdemPropNameU(part.Encoding, 'base64') then
+        if PropNameEquals(part.Encoding, 'base64') then
           part.Content := Base64ToBin(part.Content);
         // note: "quoted-printable" not yet handled here
         n := length(MultiPart);

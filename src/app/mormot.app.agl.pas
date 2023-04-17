@@ -1049,7 +1049,7 @@ var
 begin
   if ServiceName <> '' then
     for i := 0 to high(fService) do
-      if IdemPropNameU(fService[i].Name, ServiceName) then
+      if PropNameEquals(fService[i].Name, ServiceName) then
       begin
         result := fService[i];
         exit;

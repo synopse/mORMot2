@@ -4840,7 +4840,7 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
   begin
     if PosEx('CHAR', aNativeType) > 0 then
       result := ftUtf8
-    else if IdemPropNameU(aNativeType, 'NUMBER') then
+    else if PropNameEquals(aNativeType, 'NUMBER') then
       case aScale of
         0:
           result := ftInt64;
@@ -4850,13 +4850,13 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(
         result := ftDouble;
       end
     else if (PosEx('RAW', aNativeType) > 0) or
-            IdemPropNameU(aNativeType, 'BLOB') or
-            IdemPropNameU(aNativeType, 'BFILE') then
+            PropNameEquals(aNativeType, 'BLOB') or
+            PropNameEquals(aNativeType, 'BFILE') then
       result := ftBlob
     else if IdemPChar(pointer(aNativeType), 'BINARY_') or
-            IdemPropNameU(aNativeType, 'FLOAT') then
+            PropNameEquals(aNativeType, 'FLOAT') then
       result := ftDouble
-    else if IdemPropNameU(aNativeType, 'DATE') or
+    else if PropNameEquals(aNativeType, 'DATE') or
             IdemPChar(pointer(aNativeType), 'TIMESTAMP') then
       result := ftDate
     else    // all other types will be converted to text
@@ -5141,7 +5141,7 @@ begin
     colname := TrimU(GetCsvItem(pointer(indexes[i].KeyColumns), 0));
     if colname <> '' then
       for j := 0 to high(Fields) do
-        if IdemPropNameU(Fields[j].ColumnName, colname) then
+        if PropNameEquals(Fields[j].ColumnName, colname) then
         begin
           Fields[j].ColumnIndexed := true;
           break;
