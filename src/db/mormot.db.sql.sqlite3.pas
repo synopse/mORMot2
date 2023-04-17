@@ -61,8 +61,8 @@ type
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
       overload; override;
     /// initialize access to an existing SQLite3 engine
-    // - this overloaded constructor allows to access via SynDB methods to an
-    // existing SQLite3 database, e.g. TRestServerDB.DB (from mormot.orm.sqlite3.pas)
+    // - overloaded constructor to access via mormot.db.sql methods an existing
+    // SQLite3 database, e.g. TRestServerDB.DB (from mormot.orm.sqlite3.pas)
     constructor Create(aDB: TSqlDatabase); reintroduce; overload;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
@@ -836,9 +836,10 @@ begin
         if (SourcePropertiesIfNoRows = nil) and
            Rows.InheritsFrom(TSqlDBSQLite3Statement) then
         begin
+          // is likely to come from TSqlDBSQLite3Statement.CreateFrom
           srcDB := TSqlDBSQLite3ConnectionProperties.Create(
             TSqlDBSQLite3Statement(Rows).fDB);
-          SourcePropertiesIfNoRows := srcDB;
+          SourcePropertiesIfNoRows := srcDB; // use a temporary props instance
         end;
         if (SourcePropertiesIfNoRows <> nil) and
            not DB.TableExists(TableName) then

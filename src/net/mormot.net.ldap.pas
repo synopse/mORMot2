@@ -1516,7 +1516,7 @@ begin
         inc(Pos, asnsize);
         if (Value^ <> '') and
            IsValidUtf8(Value^) then
-          FakeCodePage(Value^, CP_UTF8); // we know this is value UTF-8
+          FakeCodePage(Value^, CP_UTF8); // we know this is a UTF-8 value
       end;
     end;
 end;

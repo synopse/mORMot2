@@ -3174,7 +3174,7 @@ begin
     while fHttp.ProcessRead(st) do
     begin
       // detect pipelined input
-      if (st.Len <> 0) and
+      if (st.Len <> 0) and // there are still data in the input read buffer
          (fKeepAliveSec > 0) and
          not (hfConnectionClose in fHttp.HeaderFlags) then
         fPipelinedWrite := true; // DoRequest will gather output in fWR

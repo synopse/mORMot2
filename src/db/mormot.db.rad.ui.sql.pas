@@ -68,7 +68,7 @@ type
     procedure From(const BinaryData: RawByteString;
       DataRowPosition: PCardinalDynArray = nil;
       IgnoreColumnDataSize: boolean = false); overload; virtual;
-    /// initialize the virtual TDataSet from a SynDB TSqlDBStatement result set
+    /// initialize the virtual TDataSet from a mORMot TSqlDBStatement result set
     // - the supplied ISqlDBRows instance can safely be freed by the caller,
     // since a private binary copy will be owned by this instance (in Data)
     // - by default, ColumnDataSize would be computed from the supplied data,
@@ -83,7 +83,7 @@ type
     /// read-only access to the internal binary buffer
     property Data: RawByteString
       read fData;
-    /// read-only access to the internal SynDB data
+    /// read-only access to the internal proxy data
     property DataAccess: TSqlDBProxyStatementRandomAccess
       read fDataAccess;
   end;
@@ -95,10 +95,10 @@ type
   /// exceptions raised by the TSqlDataSet class
   ESqlDataSet = class(EVirtualDataSet);
 
-  /// TDataSet able to execute any Sql as SynDB's TSqlStatement result set
+  /// TDataSet able to execute any Sql as mORMot TSqlDbStatement result set
   // - this class is not meant to be used by itself, but via TSynDBDataSet,
   // defined in SynDBMidasVCL.pas, as a data provider able to apply updates to
-  // the remote SynDB connection
+  // the remote mmormot.db.sql connection
   // - typical usage may be for instance over a SynDBRemote connection:
   // ! props := TSqlDBWinHTTPConnectionProperties.Create(....);
   // ! ds := TSqlDataSet.Create(MainForm);
@@ -132,7 +132,7 @@ type
       AParams: TParams; ResultSet: pointer): integer; overload; override;
     {$endif ISDELPHIXE3}
   public
-    /// initialize the internal TDataSet from a SynDB TSqlDBStatement result set
+    /// initialize the internal TDataSet from a mORMot TSqlDBStatement result set
     // - the supplied TSqlDBStatement can then be freed by the caller, since
     // a private binary copy will be owned by this instance (in fDataSet.Data)
     // - by default, ColumnDataSize would be computed from the supplied data,
@@ -154,7 +154,7 @@ type
   end;
 
 
-/// fetch a SynDB's TSqlDBStatement result into a VCL DataSet
+/// fetch a mORMot's TSqlDBStatement result into a VCL DataSet
 // - just a wrapper around TSynSqlStatementDataSet.Create + Open
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will return a TSynSqlStatementDataSet instance, using
@@ -164,14 +164,14 @@ type
 function ToDataSet(aOwner: TComponent; aStatement: TSqlDBStatement;
   aMaxRowCount: integer = 0): TBinaryDataSet; overload;
 
-/// fetch a SynDB ISqlDBRows result set into a VCL DataSet
+/// fetch a mORMot ISqlDBRows result set into a VCL DataSet
 // - this overloaded function can use directly a result of the
 // TSqlDBConnectionProperties.Execute() method, as such:
 // ! ds1.DataSet := ToDataSet(self,props.Execute('select * from table',[]));
 function ToDataSet(aOwner: TComponent; const aStatement: ISqlDBRows;
   aMaxRowCount: integer = 0): TBinaryDataSet; overload;
 
-/// fetch a SynDB's TSqlDBStatement.FetchAllToBinary buffer into a VCL DataSet
+/// fetch a mORMot's TSqlDBStatement.FetchAllToBinary buffer into a VCL DataSet
 // - just a wrapper around TBinaryDataSet.Create + Open
 // - if you need a writable TDataSet, you can use the slower ToClientDataSet()
 // function as defined in SynDBMidasVCL.pas
@@ -398,7 +398,7 @@ begin // only execute writes in current implementation
     stmt.ExecutePrepared;
     result := stmt.UpdateCount;
     if result = 0 then
-      result := 1; // optimistic result, even if SynDB returned 0
+      result := 1; // optimistic result, even if stmt returned 0
   except
     result := 0;
   end
