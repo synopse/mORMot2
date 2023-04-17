@@ -221,10 +221,7 @@ begin
      hsoIncludeDateHeader  // required by TPW General Test Requirements #5
     ] + flags);
   if pin2Core <> -1 then
-  begin
-    writeln('Pin server to #', pin2Core, ' CPU');
     fHttpServer.Async.SetCpuAffinity(pin2Core);
-  end;
   fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.ServerName := 'M';
   // use default routing using RTTI on the TRawAsyncServer published methods
@@ -655,13 +652,13 @@ begin
   end;
 end;
 
-procedure ComputeExecutionContextFromParams(cpusAccesible: PtrInt);
+procedure ComputeExecutionContextFromParams(cpusAccessible: PtrInt);
 var
   sw: string;
 begin
   // user specified some values at command line: raw [-s serversCount] [-t threadsPerServer] [-p]
   if not FindCmdLineSwitchVal('t', sw) or not TryStrToInt(sw, threads) then
-    threads := cpusAccesible * 4;
+    threads := cpusAccessible * 4;
   if not FindCmdLineSwitchVal('s', sw) or not TryStrToInt(sw, servers) then
     servers := 1;
   pinServers2Cores := FindCmdLineSwitch('p', true) or FindCmdLineSwitch('-pin', true);
@@ -752,6 +749,7 @@ begin
         if GetBit(cpuMask, cpuIdx) then
           dec(k);
       until k = -1;
+      writeln('Pin server #', i, ' to #', cpuIdx, ' CPU');
     end;
     rawServers[i] := TRawAsyncServer.Create(threads, flags, cpuIdx)
   end;
@@ -773,9 +771,15 @@ begin
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
     if servers = 1 then
+      writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
+        [woDontStoreVoid, woHumanReadable]))
+    else
+    begin
+      writeln('Per-server accepted connections:');
       for i := 0 to servers - 1 do
-        writeln(ObjectToJsonDebug(rawServers[i].fHttpServer,
-          [woDontStoreVoid, woHumanReadable]));
+        write(rawServers[i].fHttpServer.Async.Accepted, ' ');
+      writeln;
+    end;
   finally
     // clear all server instance(s)
     ObjArrayClear(rawServers);
@@ -784,5 +788,3 @@ begin
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
 end.
-
-
