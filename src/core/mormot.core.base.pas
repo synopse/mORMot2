@@ -1234,7 +1234,7 @@ function Utf8ToInt64(const text: RawUtf8; const default: Int64 = 0): Int64;
 /// get and check range of a signed 32-bit integer stored in a RawUtf8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function Utf8ToInteger(const value: RawUtf8; min,max: PtrInt;
+function Utf8ToInteger(const value: RawUtf8; min, max: PtrInt;
   default: PtrInt = 0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

@@ -1186,6 +1186,7 @@ function UserAgentParse(const UserAgent: RawUtf8;
 
 type
   /// stores some global information about the current executable and computer
+  // - as set at unit initialization into the Executable global variable
   TExecutable = record
     /// the main executable name, without any path nor extension
     // - e.g. 'Test' for 'c:\pathto\Test.exe'
@@ -1221,6 +1222,62 @@ type
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
+    /// the ParamStr(1..ParamCount) arguments as RawUtf8, excluding Options[]
+    // switches and Params[]/Values[] parameters
+    Args: TRawUtf8DynArray;
+    /// the "-optionname" boolean switches as stored in ParamStr()
+    Options: TRawUtf8DynArray;
+    /// the names of "-parametername parametervalue" as stored in ParamStr()
+    // - mapping the Values[] associated array
+    Names: TRawUtf8DynArray;
+    /// the values of "-parametername parametervalue" as stored in ParamStr()
+    // - mapping the Names[] associated array
+    Values: TRawUtf8DynArray;
+    /// if search within Args[] Options[] or Names[] should be case-sensitive
+    CaseSensitiveNames: boolean;
+    /// search for "arg" value in Args[]
+    function HasArg(const name: RawUtf8): boolean; overload;
+    /// search for "arg" value in Args[]
+    function HasArg(const name: array of RawUtf8): boolean; overload;
+    /// search for "-optionname" switches in Options[]
+    function HasOption(const name: RawUtf8): boolean; overload;
+    /// search for "-optionname" switches in Options[]
+    function HasOption(const name: array of RawUtf8): boolean; overload;
+    /// search for "-parametername" parameter in Names[]
+    function Has(const name: RawUtf8): boolean; overload;
+    /// search for "-parametername" parameter in Names[]
+    function Has(const name: array of RawUtf8): boolean; overload;
+    /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    function Has(const name: RawUtf8; out value: RawUtf8): boolean; overload;
+    /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    function Has(const name: array of RawUtf8; out value: RawUtf8): boolean; overload;
+    /// search for "-parametername" and return all RawUtf8 "parametervalue" occurences
+    function Has(const name: array of RawUtf8; out value: TRawUtf8DynArray): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Has(const name: RawUtf8; out value: integer): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Has(const name: array of RawUtf8; out value: integer): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Has(const name: RawUtf8; min, max: integer;
+      out value: integer): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Has(const name: array of RawUtf8; min, max: integer;
+      out value: integer): boolean; overload;
+    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
+    function Param(const name: RawUtf8; const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
+    function Param(const name: array of RawUtf8; const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return its integer "parametervalue" or default
+    function Param(const name: RawUtf8; default: integer): integer; overload;
+    /// search for "-parametername" and return its integer "parametervalue" or default
+    function Param(const name: array of RawUtf8; default: integer): integer; overload;
+    /// is called at unit inialization to store the global Executable variable
+    // - you can execute it again e.g. for switch characters customization
+    // - RawStr[] may be used e.g. for regression tests instead of ParamStr()
+    procedure CommandLineParse(
+      const ShortSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '-' {$endif};
+      const LongSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '--' {$endif};
+      RawStr: TRawUtf8DynArray = nil);
   end;
 
 var
@@ -7334,6 +7391,7 @@ begin
     if User = '' then
       User := 'unknown';
     Version := TFileVersion.Create(ProgramFileName); // with versions=0
+    //CommandLineParse;
   end;
   ComputeExecutableHash;
 end;
@@ -7343,6 +7401,202 @@ begin
   Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
   ComputeExecutableHash;
 end;
+
+
+{ TExecutable }
+
+procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+var
+  n: PtrInt;
+begin
+  n := length(Values);
+  SetLength(Values, n + 1);
+  Values[n] := Value;
+end;
+
+function ExecutableFind(const e: TExecutable; const a: TRawUtf8DynArray;
+  const v: array of RawUtf8; f: PtrInt = 0): PtrInt; overload;
+var
+  i: PtrInt;
+begin
+  if (a <> nil) and
+     (high(v) >= 0) then
+    for i := 0 to high(v) do
+    begin
+      result := FindNonVoid[e.CaseSensitiveNames](
+        @a[f], pointer(v[i]), length(v[i]), length(a) - f);
+      if result >= 0 then
+        exit;
+    end;
+  result := -1
+end;
+
+function TExecutable.HasArg(const name: RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Args, [name]) >= 0;
+end;
+
+function TExecutable.HasArg(const name: array of RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Args, name) >= 0;
+end;
+
+function TExecutable.HasOption(const name: RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Options, [name]) >= 0;
+end;
+
+function TExecutable.HasOption(const name: array of RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Options, name) >= 0;
+end;
+
+function TExecutable.Has(const name: RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Names, [name]) >= 0;
+end;
+
+function TExecutable.Has(const name: array of RawUtf8): boolean;
+begin
+  result := ExecutableFind(self, Names, name) >= 0;
+end;
+
+function TExecutable.Has(const name: RawUtf8; out value: RawUtf8): boolean;
+begin
+  result := Has([name], value);
+end;
+
+function TExecutable.Has(const name: array of RawUtf8; out value: TRawUtf8DynArray): boolean;
+var
+  first, i: PtrInt;
+begin
+  result := false;
+  first := 0;
+  repeat
+    i := ExecutableFind(self, Names, name, first);
+    if i < 0 then
+      break;
+    AddRawUtf8(value, Values[i]);
+    result := true;
+    first := i + 1;
+  until first >= length(Names);
+end;
+
+function TExecutable.Has(const name: array of RawUtf8; out value: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  i := ExecutableFind(self, Names, name);
+  if i >= 0 then
+  begin
+    value := Values[i];
+    result := true;
+  end
+  else
+    result := false;
+end;
+
+function TExecutable.Has(const name: RawUtf8; out value: integer): boolean;
+begin
+  result := Has([name], value);
+end;
+
+function TExecutable.Has(const name: array of RawUtf8; out value: integer): boolean;
+var
+  i: PtrInt;
+begin
+  i := ExecutableFind(self, Names, name);
+  result := (i >= 0) and
+            ToInteger(Values[i], value);
+end;
+
+function TExecutable.Has(const name: RawUtf8; min, max: integer;
+  out value: integer): boolean;
+begin
+  result := Has([name], min, max, value);
+end;
+
+function TExecutable.Has(const name: array of RawUtf8; min, max: integer;
+  out value: integer): boolean;
+begin
+  result := Has(name, value) and
+            (value >= min) and
+            (value <= max);
+end;
+
+function TExecutable.Param(const name, default: RawUtf8): RawUtf8;
+begin
+  if not Has([name], result) then
+    result := default;
+end;
+
+function TExecutable.Param(const name: array of RawUtf8; const default: RawUtf8): RawUtf8;
+begin
+  if not Has(name, result) then
+    result := default;
+end;
+
+function TExecutable.Param(const name: RawUtf8; default: integer): integer;
+begin
+  if not Has([name], result) then
+    result := default;
+end;
+
+function TExecutable.Param(const name: array of RawUtf8; default: integer): integer;
+begin
+  if not Has(name, result) then
+    result := default;
+end;
+
+procedure TExecutable.CommandLineParse(const ShortSwitch: RawUtf8;
+  const LongSwitch: RawUtf8; RawStr: TRawUtf8DynArray);
+var
+  i, n: PtrInt;
+  swlen: TByteDynArray;
+  s: RawUtf8;
+begin
+  Finalize(Args);
+  Finalize(Options);
+  Finalize(Names);
+  Finalize(Values);
+  if (ShortSwitch = '') or
+     (LongSwitch = '') then
+    exit;
+  if RawStr = nil then
+  begin
+    SetLength(RawStr, ParamCount);
+    for i := 1 to length(RawStr) do
+      RawStr[i - 1] := RawUtf8(ParamStr(i));
+  end;
+  n := length(RawStr);
+  SetLength(swlen, n);
+  for i := 0 to n - 1 do
+    if CompareMemSmall(pointer(RawStr[i]), pointer(ShortSwitch), length(ShortSwitch)) then
+      swlen[i] := length(ShortSwitch)
+    else if CompareMemSmall(pointer(RawStr[i]), pointer(LongSwitch), length(LongSwitch)) then
+      swlen[i] := length(LongSwitch);
+  i := 0;
+  repeat
+    s := RawStr[i];
+    if swlen[i] <> 0 then
+    begin
+      delete(s, 1, swlen[i]);
+      if (i + 1 = n) or
+         (swlen[i + 1] <> 0) then
+        AddRawUtf8(Options, s)
+      else
+      begin
+        AddRawUtf8(Names, s);
+        inc(i);
+        AddRawUtf8(Values, RawStr[i]);
+      end
+    end
+    else
+      AddRawUtf8(Args, s);
+    inc(i);
+  until i = n;
+end;
+
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 var
