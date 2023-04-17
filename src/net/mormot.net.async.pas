@@ -3195,13 +3195,18 @@ begin
           result := soClose;
         end;
       end;
-      if fPipelinedWrite and
-         (fWR.Len > 128 shl 10) then // flush more than 128KB of pending output
-         if FlushPipelinedWrite <> soContinue then
-           result := soClose;
-      if (result <> soContinue) or
-         (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
-        break; // rejected or upgraded
+      if fPipelinedWrite then
+      begin
+        if fWR.Len > 128 shl 10 then // flush more than 128KB of pending output
+          if FlushPipelinedWrite <> soContinue then
+            result := soClose;
+        if (result <> soContinue) or
+           (fHttp.State in [hrsUpgraded]) then
+          break; // rejected or upgraded
+      end
+      else if (result <> soContinue) or
+              (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
+        break; // authenticated, rejected or upgraded
     end;
     if fPipelinedWrite then
        if FlushPipelinedWrite <> soContinue then
