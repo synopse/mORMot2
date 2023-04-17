@@ -4808,22 +4808,25 @@ function FindPropName(Values: PRawUtf8; const Value: RawUtf8; ValuesCount: integ
 var
   ValueLen: TStrLen;
 begin
-  dec(ValuesCount);
-  ValueLen := length(Value);
-  if ValueLen = 0 then
-    for result := 0 to ValuesCount do
-      if Values^ = '' then
-        exit
-      else
-        inc(Values)
-  else
-    for result := 0 to ValuesCount do
-      if (PtrUInt(Values^) <> 0) and
-         ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
-         IdemPropNameUSameLenNotNull(pointer(Values^), pointer(Value), ValueLen) then
-        exit
-      else
-        inc(Values);
+  if Values <> nil then
+  begin
+    dec(ValuesCount);
+    ValueLen := length(Value);
+    if ValueLen = 0 then
+      for result := 0 to ValuesCount do
+        if Values^ = '' then
+          exit
+        else
+          inc(Values)
+    else
+      for result := 0 to ValuesCount do
+        if (PtrUInt(Values^) <> 0) and
+           ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
+           IdemPropNameUSameLenNotNull(pointer(Values^), pointer(Value), ValueLen) then
+          exit
+        else
+          inc(Values);
+  end;
   result := -1;
 end;
 
