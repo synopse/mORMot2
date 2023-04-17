@@ -10,7 +10,7 @@ unit mormot.core.base;
     - Framework Version and Information
     - Common Types Used for Compatibility Between Compilers and CPU
     - Numbers (floats and integers) Low-level Definitions
-    - integer Arrays Manipulation
+    - Integer Arrays Manipulation
     - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
     - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
@@ -864,6 +864,33 @@ function PropNameEquals(P1, P2: PShortString): boolean; overload;
 // - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
 // comparison with other kind of input variables
 function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
+
+/// raw internal method as published by FindNonVoid[false]
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+
+/// raw internal method as published by FindNonVoid[true]
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+
+type
+  TFindNonVoid =
+    function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
+const
+  /// raw internal methods for case sensitive (or not) search for a RawUtf8
+  // - expects non-void RawUtf8 values, with ASCII-7 encoding (e.g. as with
+  // TDocVariantData.GetValueIndex() property names)
+  FindNonVoid: array[{casesensitive:}boolean] of TFindNonVoid = (
+    FindNonVoidRawUtf8I,
+    FindNonVoidRawUtf8);
+
+/// return the case-insensitive ASCII 7-bit index of Value in non-void Values[]
+// - typical use with a TRawUtf8DynArray is like this:
+// ! index := FindPropName(pointer(aDynArray), aValue, length(aDynArray));
+// - by design, this function expects Values[] to not contain any void ''
+function FindPropName(Values: PRawUtf8Array; const Value: RawUtf8;
+  ValuesCount: PtrInt): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// use the RTL to return a date/time as ISO-8601 text
 // - slow function, here to avoid linking mormot.core.datetime
@@ -4667,6 +4694,74 @@ begin
   exit;
 zero:
   result := false;
+end;
+
+function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
+begin
+  // FPC does proper inlining in this loop
+  result := 0;
+  repeat
+    p := n[result]; // all VName[]<>'' so p=n^<>nil
+    if (PStrLen(p - _STRLEN)^ = len) and
+       CompareMemFixed(p, name, len) then
+      exit;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
+  count: PtrInt): PtrInt;
+var
+  p1, p2, l: PUtf8Char;
+label
+  no;
+begin
+  result := 0;
+  p2 := name;
+  repeat
+    // inlined IdemPropNameUSameLenNotNull(p, name, len)
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if PStrLen(p1 - _STRLEN)^ = len then
+    begin
+      l := @p1[len - SizeOf(cardinal)];
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do
+        // compare 4 Bytes per loop
+        if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
+          goto no
+        else
+          inc(PCardinal(p1));
+      inc(PCardinal(l));
+      while PtrUInt(p1) < PtrUInt(l) do
+        // remaining bytes
+        if (ord(p1^) xor ord(p2[PtrUInt(p1)])) and $df <> 0 then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
+    inc(result);
+    dec(count);
+  until count = 0;
+  result := -1;
+end;
+
+function FindPropName(Values: PRawUtf8Array; const Value: RawUtf8;
+  ValuesCount: PtrInt): PtrInt; overload;
+begin
+  if (Values <> nil) and
+     (ValuesCount > 0) and
+     (Value <> '') then
+    result := FindNonVoidRawUtf8I(pointer(Values), pointer(Value),
+      PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^, ValuesCount)
+  else
+    result := -1;
 end;
 
 function DateTimeToIsoString(dt: TDateTime): string;
