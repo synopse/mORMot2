@@ -571,6 +571,10 @@ procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
 procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
   var List: TRawUtf8DynArray); overload;
 
+/// convert the strings in the specified CSV text into a dynamic array of UTF-8 strings
+function CsvToRawUtf8DynArray(const Csv: RawUtf8; const Sep: RawUtf8 = ',';
+  const SepEnd: RawUtf8 = ''): TRawUtf8DynArray; overload;
+
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
   const Sep: RawUtf8 = ','; HighValues: integer = -1): RawUtf8;
@@ -1986,6 +1990,9 @@ procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
 // - only handle varChar and varWideChar kind of arguments
 function VarRecAsChar(const V: TVarRec): integer;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a supplied "array of const" argument is an instance of a given class
+function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
 
 /// fast Format() function replacement, optimized for RawUtf8
 // - only supported token is %, which will be written in the resulting string
@@ -4799,6 +4806,12 @@ begin
   end;
   if List <> nil then
     DynArrayFakeLength(List, n);
+end;
+
+function CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8): TRawUtf8DynArray;
+begin
+  result := nil;
+  CsvToRawUtf8DynArray(Csv, Sep, SepEnd, result);
 end;
 
 function AddPrefixToCsv(Csv: PUtf8Char; const Prefix: RawUtf8; Sep: AnsiChar): RawUtf8;
@@ -9485,6 +9498,16 @@ begin
   else
     result := 0;
   end;
+end;
+
+function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
+begin
+  if (aArg.VType = vtObject) and
+     (aArg.VObject <> nil) and
+     aArg.VObject.InheritsFrom(aClass) then
+    result := aArg.VObject
+  else
+    result := nil;
 end;
 
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
