@@ -269,17 +269,17 @@ type
 // - note that the CsvPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer; overload;
+  out Match: TMatchDynArray; CsvSep: AnsiChar = ','): integer; overload;
 
 /// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
 // - note that the CsvPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(CsvPattern: PUtf8Char; CaseInsensitive: boolean;
-  Match: PMatch; MatchMax: integer): integer; overload;
+  Match: PMatch; MatchMax: integer; CsvSep: AnsiChar = ','): integer; overload;
 
 /// fill a TMatch instance with the next glob pattern supplied as CSV
 function SetNextMatch(P: PUtf8Char; var Dest: TMatch;
-  CaseInsensitive, Reuse: boolean): PUtf8Char;
+  CaseInsensitive, Reuse: boolean; CsvSep: AnsiChar): PUtf8Char;
 
 /// search if one TMach is already registered in the Several[] dynamic array
 function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
@@ -294,13 +294,13 @@ function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 // - any text not matching the pattern will be deleted from the array
 // - the patterns are specified as CSV, separated by ','
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  var Values: TRawUtf8DynArray); overload;
+  var Values: TRawUtf8DynArray; CsvSep: AnsiChar = ','); overload;
 
 /// apply the CSV-supplied glob patterns to an array of string
 // - any text not matching the pattern will be deleted from the array
 // - the patterns are specified as CSV, separated by ','
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  var Values: TStringDynArray); overload;
+  var Values: TStringDynArray; CsvSep: AnsiChar = ','); overload;
 
 /// return TRUE if the supplied content matches a glob pattern
 // - ?  Matches any single character
@@ -325,12 +325,12 @@ function IsMatchString(const Pattern, Text: string;
 /// return TRUE if the supplied content matches one or several glob patterns
 // - the patterns are specified as CSV, separated by ','
 function IsMatchs(const CsvPattern, Text: RawUtf8;
-  CaseInsensitive: boolean = false): boolean; overload;
+  CaseInsensitive: boolean = false; CsvSep: AnsiChar = ','): boolean; overload;
 
 /// return TRUE if the supplied content matches one or several glob patterns
 // - the patterns are specified as CSV, separated by ','
 function IsMatchs(CsvPattern, Text: PUtf8Char; TextLen: PtrInt;
-  CaseInsensitive: boolean = false): boolean; overload;
+  CaseInsensitive: boolean = false; CsvSep: AnsiChar = ','): boolean; overload;
 
 type
   /// available pronunciations for our fast Soundex implementation
@@ -2813,16 +2813,16 @@ begin
 end;
 
 function SetNextMatch(P: PUtf8Char; var Dest: TMatch;
-  CaseInsensitive, Reuse: boolean): PUtf8Char;
+  CaseInsensitive, Reuse: boolean; CsvSep: AnsiChar): PUtf8Char;
 begin
   result := P;
   repeat
-    while not (result^ in [#0, ',']) do
+    while not (result^ in [#0, CsvSep]) do
       inc(result);
     if result <> P then
     begin
       Dest.Prepare(P, result - P, CaseInsensitive, Reuse);
-      if result^ = ',' then
+      if result^ = CsvSep then
         inc(result); // go to next CSV
       exit;
     end;
@@ -2831,7 +2831,7 @@ begin
 end;
 
 function IsMatchs(CsvPattern, Text: PUtf8Char; TextLen: PtrInt;
-  CaseInsensitive: boolean): boolean;
+  CaseInsensitive: boolean; CsvSep: AnsiChar): boolean;
 var
   match: TMatch;
 begin
@@ -2839,7 +2839,8 @@ begin
   if not result then
     exit;
   repeat
-    CsvPattern := SetNextMatch(CsvPattern, match, CaseInsensitive, {reuse=}false);
+    CsvPattern := SetNextMatch(
+      CsvPattern, match, CaseInsensitive, {reuse=}false, CsvSep);
     if CsvPattern = nil then
       break;
     if match.Search(@match, Text, TextLen) then
@@ -2848,13 +2849,15 @@ begin
   result := false;
 end;
 
-function IsMatchs(const CsvPattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
+function IsMatchs(const CsvPattern, Text: RawUtf8; CaseInsensitive: boolean;
+  CsvSep: AnsiChar): boolean;
 begin
-  result := IsMatchs(pointer(CsvPattern), pointer(Text), length(Text), CaseInsensitive);
+  result := IsMatchs(pointer(CsvPattern), pointer(Text), length(Text),
+    CaseInsensitive, CsvSep);
 end;
 
 function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer;
+  out Match: TMatchDynArray; CsvSep: AnsiChar): integer;
 var
   P, S: PUtf8Char;
 begin
@@ -2863,7 +2866,7 @@ begin
   if P <> nil then
     repeat
       S := P;
-      while not (P^ in [#0, ',']) do
+      while not (P^ in [#0, CsvSep]) do
         inc(P);
       if P <> S then
       begin
@@ -2878,7 +2881,7 @@ begin
 end;
 
 function SetMatchs(CsvPattern: PUtf8Char; CaseInsensitive: boolean;
-  Match: PMatch; MatchMax: integer): integer;
+  Match: PMatch; MatchMax: integer; CsvSep: AnsiChar): integer;
 var
   S: PUtf8Char;
 begin
@@ -2887,7 +2890,7 @@ begin
      (MatchMax >= 0) then
     repeat
       S := CsvPattern;
-      while not (CsvPattern^ in [#0, ',']) do
+      while not (CsvPattern^ in [#0, CsvSep]) do
         inc(CsvPattern);
       if CsvPattern <> S then
       begin
@@ -2945,12 +2948,12 @@ begin
 end;
 
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  var Values: TRawUtf8DynArray);
+  var Values: TRawUtf8DynArray; CsvSep: AnsiChar);
 var
   match: TMatchDynArray;
   m, n, i: PtrInt;
 begin
-  if SetMatchs(CsvPattern, CaseInsensitive, match) = 0 then
+  if SetMatchs(CsvPattern, CaseInsensitive, match, CsvSep) = 0 then
     exit;
   n := 0;
   for i := 0 to high(Values) do
@@ -2967,12 +2970,12 @@ begin
 end;
 
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
-  var Values: TStringDynArray);
+  var Values: TStringDynArray; CsvSep: AnsiChar);
 var
   match: TMatchDynArray;
   m, n, i: PtrInt;
 begin
-  if SetMatchs(CsvPattern, CaseInsensitive, match) = 0 then
+  if SetMatchs(CsvPattern, CaseInsensitive, match, CsvSep) = 0 then
     exit;
   n := 0;
   for i := 0 to high(Values) do

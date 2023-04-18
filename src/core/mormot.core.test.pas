@@ -784,6 +784,7 @@ var
   crc: cardinal;
 begin
   crc := Hash32(data);
+  //if crc <> expectedhash32 then ConsoleWrite(data);
   CheckUtf8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
