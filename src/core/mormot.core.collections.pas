@@ -303,6 +303,7 @@ type
     function DoRemove(const value): boolean;
     function DoAdd(const value; var added: boolean): PtrInt;
     function DoAddSorted(const value; wasadded: PBoolean): integer;
+    procedure DoAddFrom(Another: PDynArray; Offset, Limit: PtrInt);
     procedure DoInsert(ndx: PtrInt; const value);
     function DoFind(const value; customcompare: TDynArraySortCompare): PtrInt;
     procedure RaiseGetItem(ndx: PtrInt);
@@ -961,10 +962,40 @@ end;
 
 function TIListParent.DoAddSorted(const value; wasadded: PBoolean): integer;
 begin
-  if fHasher <> nil then
+  if fHasher = nil then
     raise EIList.CreateUtf8('%.AddSorted() is not allowed  with ' +
       'loCreateUniqueIndex: use Add()', [self]);
   result := fDynArray.FastLocateOrAddSorted(value, wasadded);
+end;
+
+procedure TIListParent.DoAddFrom(Another: PDynArray; Offset, Limit: PtrInt);
+var
+  max, i: PtrInt;
+  p: PByte;
+  added: boolean;
+begin
+  if fHasher = nil then
+    // efficient adding of whole bunch
+    fDynArray.AddDynArray(Another, Offset, Limit)
+  else
+  begin
+    // if loCreateUniqueIndex is set, add item by item
+    if Offset < 0 then
+      Offset := 0;
+    max := Another^.Count - Offset;
+    if max <= 0 then
+      exit;
+    if PtrUInt(Limit) > PtrUInt(max) then
+      Limit := max; // Limit=-1 or out of range
+    p := Another^.ItemPtr(Offset);
+    repeat
+      i := DoAdd(p^, added); // to ignore duplicated items
+      if added then
+        fDynArray.ItemCopy(p, fDynArray.ItemPtr(i));
+      inc(p, Another^.Info.Cache.ItemSize);
+      dec(Limit);
+    until Limit = 0;
+  end;
 end;
 
 procedure TIListParent.DoInsert(ndx: PtrInt; const value);
@@ -1236,7 +1267,7 @@ end;
 procedure TIList<T>.AddFrom(const Another: IList<T>; Offset, Limit: PtrInt);
 begin
   if Assigned(Another) then
-    fDynArray.AddDynArray(Another.Data, Offset, Limit);
+    DoAddFrom(Another.Data, Offset, Limit);
 end;
 
 
