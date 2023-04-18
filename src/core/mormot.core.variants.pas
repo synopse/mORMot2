@@ -1191,7 +1191,8 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - will copy Count and Names[] by reference, but Values[] only if CloneValues
     // - returns the first item in Values[]
-    function InitFrom(const CloneFrom: TDocVariantData; CloneValues: boolean): PVariant;
+    function InitFrom(const CloneFrom: TDocVariantData; CloneValues: boolean;
+      MakeUnique: boolean = false): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
     // from a supplied CSV UTF-8 encoded text
@@ -4796,16 +4797,22 @@ begin
   VCount := 0;
 end;
 
-function TDocVariantData.InitFrom(
-  const CloneFrom: TDocVariantData; CloneValues: boolean): PVariant;
+function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
+  CloneValues, MakeUnique: boolean): PVariant;
 begin
   TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
-  VName := CloneFrom.VName;    // byref copy
   VCount := CloneFrom.VCount;
-  if CloneValues then
-    VValue := CloneFrom.VValue // byref copy
+  if MakeUnique then
+    VName := copy(CloneFrom.VName) // new array, but byref names
   else
-    SetLength(VValue, VCount); // setup void values
+    VName := CloneFrom.VName;      // byref copy of the whole array
+  if CloneValues then
+    if MakeUnique then
+      VValue := copy(CloneFrom.VValue) // new array, but byref values
+    else
+      VValue := CloneFrom.VValue       // byref copy of the whole array
+  else
+    SetLength(VValue, VCount);         // setup void values
   result := pointer(VValue);
 end;
 
