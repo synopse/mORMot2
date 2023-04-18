@@ -277,6 +277,10 @@ function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
 function SetMatchs(CsvPattern: PUtf8Char; CaseInsensitive: boolean;
   Match: PMatch; MatchMax: integer): integer; overload;
 
+/// fill a TMatch instance with the next glob pattern supplied as CSV
+function SetNextMatch(P: PUtf8Char; var Dest: TMatch;
+  CaseInsensitive, Reuse: boolean): PUtf8Char;
+
 /// search if one TMach is already registered in the Several[] dynamic array
 function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 
@@ -288,11 +292,13 @@ function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 
 /// apply the CSV-supplied glob patterns to an array of RawUtf8
 // - any text not matching the pattern will be deleted from the array
+// - the patterns are specified as CSV, separated by ','
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TRawUtf8DynArray); overload;
 
 /// apply the CSV-supplied glob patterns to an array of string
 // - any text not matching the pattern will be deleted from the array
+// - the patterns are specified as CSV, separated by ','
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TStringDynArray); overload;
 
@@ -316,6 +322,15 @@ function IsMatch(const Pattern, Text: RawUtf8;
 function IsMatchString(const Pattern, Text: string;
   CaseInsensitive: boolean = false): boolean;
 
+/// return TRUE if the supplied content matches one or several glob patterns
+// - the patterns are specified as CSV, separated by ','
+function IsMatchs(const CsvPattern, Text: RawUtf8;
+  CaseInsensitive: boolean = false): boolean; overload;
+
+/// return TRUE if the supplied content matches one or several glob patterns
+// - the patterns are specified as CSV, separated by ','
+function IsMatchs(CsvPattern, Text: PUtf8Char; TextLen: PtrInt;
+  CaseInsensitive: boolean = false): boolean; overload;
 
 type
   /// available pronunciations for our fast Soundex implementation
@@ -2795,6 +2810,47 @@ begin
   StringToUtf8(Text, txt);
   match.Prepare(pat, CaseInsensitive, {reuse=}false);
   result := match.Match(txt);
+end;
+
+function SetNextMatch(P: PUtf8Char; var Dest: TMatch;
+  CaseInsensitive, Reuse: boolean): PUtf8Char;
+begin
+  result := P;
+  repeat
+    while not (result^ in [#0, ',']) do
+      inc(result);
+    if result <> P then
+    begin
+      Dest.Prepare(P, result - P, CaseInsensitive, Reuse);
+      if result^ = ',' then
+        inc(result); // go to next CSV
+      exit;
+    end;
+  until result^ = #0;
+  result := nil; // indicates Dest.Prepare() was not called
+end;
+
+function IsMatchs(CsvPattern, Text: PUtf8Char; TextLen: PtrInt;
+  CaseInsensitive: boolean): boolean;
+var
+  match: TMatch;
+begin
+  result := (CsvPattern <> nil) and (TextLen > 0);
+  if not result then
+    exit;
+  repeat
+    CsvPattern := SetNextMatch(CsvPattern, match, CaseInsensitive, {reuse=}false);
+    if CsvPattern = nil then
+      break;
+    if match.Search(@match, Text, TextLen) then
+      exit;
+  until CsvPattern^ = #0;
+  result := false;
+end;
+
+function IsMatchs(const CsvPattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
+begin
+  result := IsMatchs(pointer(CsvPattern), pointer(Text), length(Text), CaseInsensitive);
 end;
 
 function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
