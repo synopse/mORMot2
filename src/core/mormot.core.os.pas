@@ -7524,10 +7524,9 @@ begin
   begin
     if high(v) < 0 then
       exit;
-    if length(v[0]) = 1 then
-      desc := Full(v[0])
-    else
-      desc := '    ' + Full(v[0]);
+    desc := Full(v[0]);
+    if length(v[0]) <> 1 then
+      desc := '    ' + desc; // right align --#
     for i := 1 to high(v) do
       desc := desc + ', ' + Full(v[i]);
   end;
@@ -7557,12 +7556,11 @@ begin
   if def <> '' then
     def := ' (default ' + def + ')';
   pnames := _fmt('  %0:-20s', [desc + def]);
-  if length(pnames) > 22 then
-    fDescDetail[k] := fDescDetail[k]
-      + pnames + fLineFeed + StringOfChar(' ', 22) + d + fLineFeed
+  if length(pnames) > 22 then // write description on next line
+    fDescDetail[k] := fDescDetail[k] + pnames + fLineFeed +
+            '                      ' + d + fLineFeed
   else
-    fDescDetail[k] := fDescDetail[k]
-      + pnames + d + fLineFeed;
+    fDescDetail[k] := fDescDetail[k] + pnames + d + fLineFeed;
 end;
 
 function TExecutableCommandLine.Find(const v: array of RawUtf8;
@@ -7774,12 +7772,10 @@ begin
     result := result + Executable.ProgramName
   else
     result := result + exename;
-
   result := result + fDesc[clkArg];
   for clk := low(CLK_TXT) to high(CLK_TXT) do
     if fDesc[clk] <> '' then
       result := result + CLK_TXT[clk];
-
   result := result + fLineFeed;
   for clk := low(fDescDetail) to high(fDescDetail) do
     if fDescDetail[clk] <> '' then
