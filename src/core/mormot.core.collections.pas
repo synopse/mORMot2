@@ -255,6 +255,9 @@ type
     // ! a := list.AsArray(10, 20); // items 10..29 - truncated if Count<30
     // ! a := list.AsArray(-10);    // last Count-10..Count-1 items
     function AsArray(Offset: PtrInt = 0; Limit: PtrInt = 0): TArray<T>;
+    /// add some items from another IList<T> instance
+    procedure AddFrom(const Another: IList<T>; Offset: PtrInt = 0;
+      Limit: PtrInt = -1);
     /// high-level access to the stored values from their associated indexes
     // - raise EIList if the supplied index is out of range
     // - SetItem() will raise EIList if loCreateUniqueIndex is defined
@@ -403,6 +406,9 @@ type
     function GetEnumerator: TIListEnumerator<T>;
     /// IList<T> method to iterate over some range of the generic collection
     function Range(Offset: PtrInt = 0; Limit: PtrInt = 0): TIListEnumerator<T>;
+    /// IList<T> method to add items from another IList<T> method
+    procedure AddFrom(const Another: IList<T>; Offset: PtrInt = 0;
+      Limit: PtrInt = -1);
   end;
 
 
@@ -1227,6 +1233,11 @@ begin
   fDynArray.SliceAsDynArray(@result, Offset, Limit);
 end;
 
+procedure TIList<T>.AddFrom(const Another: IList<T>; Offset, Limit: PtrInt);
+begin
+  if Assigned(Another) then
+    fDynArray.AddDynArray(Another.Data, Offset, Limit);
+end;
 
 
 { ************** JSON-aware IKeyValue<> Dictionary Storage }
