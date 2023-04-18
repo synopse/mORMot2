@@ -518,77 +518,76 @@ type
   // - used to reduce the $ifdef when implementing interfaces in Delphi and FPC
   TIntQry = {$ifdef FPC} longint {$else} HRESULT {$endif};
 
-  type
-    {$ifdef FPC}
+  {$ifdef FPC}
 
-    TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
-    case integer of
-      0: (
-          {$ifdef HASCODEPAGE}
-          codePage: TSystemCodePage; // =Word
-          elemSize: Word;
-          {$ifndef STRCNT32}
-          {$ifdef CPU64}
-          _PaddingToQWord: DWord;
-          {$endif CPU64}
-          {$endif STRCNT32}
-          {$endif HASCODEPAGE}
-          refCnt: TStrCnt; // =SizeInt on older FPC, =longint since FPC 3.4
-          length: TStrLen;
-        );
-      {$ifdef HASCODEPAGE}
-      1: (
-          codePageElemSize: cardinal;
-        );
-      {$endif HASCODEPAGE}
-    end;
-
-    TDynArrayRec = record
-      refCnt: TDACnt; // =SizeInt
-      high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
-      function GetLength: TDALen; inline;
-      procedure SetLength(len: TDALen); inline;
-      property length: TDALen // Delphi compatibility wrapper
-        read GetLength write SetLength;
-    end;
-
-    {$else not FPC}
-
-    /// map the Delphi/FPC string header (stored before each instance)
-    TStrRec = packed record
+  TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  case integer of
+    0: (
+        {$ifdef HASCODEPAGE}
+        codePage: TSystemCodePage; // =Word
+        elemSize: Word;
+        {$ifndef STRCNT32}
+        {$ifdef CPU64}
+        _PaddingToQWord: DWord;
+        {$endif CPU64}
+        {$endif STRCNT32}
+        {$endif HASCODEPAGE}
+        refCnt: TStrCnt; // =SizeInt on older FPC, =longint since FPC 3.4
+        length: TStrLen;
+      );
     {$ifdef HASCODEPAGE}
-      {$ifdef CPU64}
-      /// padding bytes for 16 byte alignment of the header
-      _Padding: cardinal;
-      {$endif CPU64}
-      /// the string code page - e.g. CP_UTF8 for RawUtf8
-      codePage: Word;
-      /// 1 for AnsiString/RawByteString/RawUtf8, 2 for UnicodeString
-      elemSize: Word;
+    1: (
+        codePageElemSize: cardinal;
+      );
     {$endif HASCODEPAGE}
-      /// string reference count (basic garbage memory mechanism)
-      refCnt: TStrCnt; // 32-bit longint with Delphi
-      /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
-      length: TStrLen; // 32-bit longint with Delphi
-    end;
+  end;
 
-    /// map the Delphi/FPC dynamic array header (stored before each instance)
-    TDynArrayRec = packed record
-      {$ifdef CPUX64}
-      /// padding bytes for 16 byte alignment of the header
-      _Padding: cardinal;
-      {$endif}
-      /// dynamic array reference count (basic garbage memory mechanism)
-      refCnt: TDACnt; // 32-bit longint with Delphi
-      /// length in element count
-      // - size in bytes = length*ElemSize
-      length: TDALen; // PtrInt/NativeInt
-    end;
+  TDynArrayRec = record
+    refCnt: TDACnt; // =SizeInt
+    high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
+    function GetLength: TDALen; inline;
+    procedure SetLength(len: TDALen); inline;
+    property length: TDALen // Delphi compatibility wrapper
+      read GetLength write SetLength;
+  end;
 
-    {$endif FPC}
+  {$else not FPC}
 
-    PStrRec = ^TStrRec;
-    PDynArrayRec = ^TDynArrayRec;
+  /// map the Delphi/FPC string header (stored before each instance)
+  TStrRec = packed record
+  {$ifdef HASCODEPAGE}
+    {$ifdef CPU64}
+    /// padding bytes for 16 byte alignment of the header
+    _Padding: cardinal;
+    {$endif CPU64}
+    /// the string code page - e.g. CP_UTF8 for RawUtf8
+    codePage: Word;
+    /// 1 for AnsiString/RawByteString/RawUtf8, 2 for UnicodeString
+    elemSize: Word;
+  {$endif HASCODEPAGE}
+    /// string reference count (basic garbage memory mechanism)
+    refCnt: TStrCnt; // 32-bit longint with Delphi
+    /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
+    length: TStrLen; // 32-bit longint with Delphi
+  end;
+
+  /// map the Delphi/FPC dynamic array header (stored before each instance)
+  TDynArrayRec = packed record
+    {$ifdef CPUX64}
+    /// padding bytes for 16 byte alignment of the header
+    _Padding: cardinal;
+    {$endif}
+    /// dynamic array reference count (basic garbage memory mechanism)
+    refCnt: TDACnt; // 32-bit longint with Delphi
+    /// length in element count
+    // - size in bytes = length*ElemSize
+    length: TDALen; // PtrInt/NativeInt
+  end;
+
+  {$endif FPC}
+
+  PStrRec = ^TStrRec;
+  PDynArrayRec = ^TDynArrayRec;
 
 const
   /// codePage offset = string header size
@@ -754,8 +753,8 @@ procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// internal function which assign src to dest, calling FakeCodePage(CP_UTF8)
-// - warning: src is set to '' once assigned to dest
+/// internal function which assign src to dest, force CP_UTF8 and set src to ''
+// - warning: calls FakeCodePage(CP_UTF8) so requires src to have a RefCnt of 1
 procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -11696,18 +11695,21 @@ procedure TRawByteStringStream.GetAsText(StartPos, Len: PtrInt; var Text: RawUtf
 var
   L: PtrInt;
 begin
+  if StartPos < 0 then
+    StartPos := 0;
   L := length(fDataString);
-  if (StartPos = 0) and
-     (Len = L) then
-  begin
-    Text := fDataString;
-    fDataString := ''; // release it ASAP to avoid multi-threading reuse bug
-    EnsureRawUtf8(Text);
-  end
+  if (L = 0) or
+     (StartPos >= L) then
+    FastAssignNew(Text) // nothing to return
+  else if (StartPos = 0) and
+          (Len = L) and
+          (PStrCnt(PAnsiChar(pointer(fDataString)) - _STRCNT)^ = 1) then
+    FastAssignUtf8(Text, fDataString) // fast return fDataString instance
   else
   begin
-    if Len - StartPos > L then
-      Len := L - StartPos; // avoid any buffer overflow
+    dec(L, StartPos);
+    if Len > L then
+      Len := L; // avoid any buffer overflow
     FastSetString(Text, @PByteArray(fDataString)[StartPos], Len);
   end;
 end;
