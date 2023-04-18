@@ -44,6 +44,29 @@ uses
 { ****************** Some Cross-System Type and Constant Definitions }
 
 const
+  {$ifdef OSWINDOWS}
+  /// operating-system dependent Line Feed characters
+  CRLF = #13#10;
+  /// operating-system dependent wildchar to match all files in a folder
+  FILES_ALL = '*.*';
+  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
+  InvertedPathDelim = '/';
+  /// operating-system dependent boolean if paths are case-insensitive
+  PathCaseInsensitive = true;
+  {$else}
+  /// operating-system dependent Line Feed characters
+  CRLF = #10;
+  /// operating-system dependent wildchar to match all files in a folder
+  FILES_ALL = '*';
+  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
+  InvertedPathDelim = '\';
+  /// operating-system dependent boolean if paths are case-insensitive
+  PathCaseInsensitive = false;
+  {$endif OSWINDOWS}
+  /// a convenient shortened constant to open a file for reading
+  fmOpenReadDenyNone = fmOpenRead or fmShareDenyNone;
+
+const
   /// void HTTP Status Code (not a standard value, for internal use only)
   HTTP_NONE = 0;
   /// HTTP Status Code for "Continue"
@@ -1185,6 +1208,160 @@ function UserAgentParse(const UserAgent: RawUtf8;
   out OS: TOperatingSystem): boolean;
 
 type
+  /// the command line switches supported by TExecutableCommandLine
+  // - clkArg is for "exename arg1 arg2 arg3" main indexed arguments
+  // - clkOption is for "exename -o --opt1" boolean flags
+  // - clkParam is for "exename -n value --name value --name2=value2" pairs
+  TExecutableCommandLineKind = (
+    clkUndefined,
+    clkArg,
+    clkOption,
+    clkParam);
+
+  /// implements command-line arguments parsing e.g. for TExecutable.Command
+  // - call Arg() Options() and Get/Param() to define and retrieve the flags
+  // from their names and supply some description text, then call
+  // DetectUnknown and/or FullDescription to interact with the user
+  // - by default, will use -/-- switches on POSIX, and / on Windows
+  TExecutableCommandLine = class
+  protected
+    fNames: array[clkArg .. clkParam] of TRawUtf8DynArray;
+    fRawParams, fValues: TRawUtf8DynArray; // for clkParam
+    fDesc, fDescDetail: array[clkArg .. clkParam] of RawUtf8;
+    fRetrieved: array[clkArg .. clkParam] of TBooleanDynArray;
+    fCaseSensitiveNames: boolean;
+    fSwitch: array[{long=}boolean] of RawUtf8;
+    fLineFeed, fExeDescription: RawUtf8;
+    function Full(const v: RawUtf8): RawUtf8;
+    procedure Describe(const v: array of RawUtf8;
+      k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
+    function Find(const v: array of RawUtf8;
+      k: TExecutableCommandLineKind = clkUndefined; const d: RawUtf8 = '';
+      const def: RawUtf8 = ''; f: PtrInt = 0): PtrInt;
+  public
+    /// return the "arg" value by 0-based index in Args[]
+    function Arg(index: integer;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "arg" value in Args[]
+    function Arg(const name: RawUtf8;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "arg" value in Args[]
+    function Arg(const name: array of RawUtf8;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-optionname" switches in Options[]
+    function Option(const name: RawUtf8;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-optionname" switches in Options[]
+    function Option(const name: array of RawUtf8;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    function Get(const name: RawUtf8; out value: RawUtf8;
+      const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    function Get(const name: array of RawUtf8; out value: RawUtf8;
+      const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return all RawUtf8 "parametervalue" occurences
+    function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Get(const name: RawUtf8; out value: integer;
+      const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Get(const name: array of RawUtf8; out value: integer;
+      const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Get(const name: RawUtf8; min, max: integer; out value: integer;
+      const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
+    /// search for "-parametername" and return its integer "parametervalue"
+    function Get(const name: array of RawUtf8; min, max: integer;
+      out value: integer; const description: RawUtf8 = '';
+      default: integer = -1): boolean; overload;
+    /// search for "-parametername" parameter in Names[]
+    function Has(const name: RawUtf8): boolean; overload;
+    /// search for "-parametername" parameter in Names[]
+    function Has(const name: array of RawUtf8): boolean; overload;
+    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
+    function Param(const name: RawUtf8; const description: RawUtf8 = '';
+      const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
+    function Param(const name: array of RawUtf8; const description: RawUtf8 = '';
+      const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return its integer "parametervalue" or default
+    function Param(const name: RawUtf8; default: integer;
+      const description: RawUtf8 = ''): integer; overload;
+    /// search for "-parametername" and return its integer "parametervalue" or default
+    function Param(const name: array of RawUtf8; default: integer;
+      const description: RawUtf8 = ''): integer; overload;
+    /// generate the text from all Arg() Options() and Get/Param() descriptions
+    // and the supplied high-level description of the program
+    // - the parameter <name> would be extracted from any #word in the
+    // description text,
+    // - for instance:
+    // ! with Executable.Command do
+    // ! begin
+    // !   ExeDescription := 'An executable to test mORMot Execute.Command';
+    // !   verbose := Option(['v', 'verbose'], 'generate verbose output');
+    // !   Get(['t', 'threads'], threads, '#number of threads to run', 5);
+    // !   ConsoleWrite(FullDescription);
+    // ! end;
+    // will fill "verbose" and "threads" local variables, and output on Linux:
+    // $ mormot2tests [options] [params]
+    // $   An executable to test mORMot Execute.Command
+    // $
+    // $  [options]
+    // $ -v --verbose:
+    // $      generate verbose output
+    // $
+    // $  [params]
+    // $ -t --threads <number> (default 5):
+    // $      number of threads to run
+    function FullDescription(const customexedescription: RawUtf8 = '';
+      const exename: RawUtf8 = ''): RawUtf8;
+    /// check if the supplied parameters were all registered from previous
+    // Arg() Options() and Get/Param() calls
+    // - return '' if no unexpected flag has been supplied
+    // - return an error message like 'Unexpected --name option' otherwise
+    function DetectUnknown: RawUtf8;
+    /// call DetectUnknown and output any error message to the console
+    // - return false if the parameters are valid
+    // - otherwise, return true and caller should exit the process
+    function ConsoleWriteUnknown(const exedescription: RawUtf8 = ''): boolean;
+    /// fill the stored arguments and options from executable parameters
+    // - called e.g. at unit inialization to set Executable.CommandLine variable
+    // - you can execute it again e.g. to customize the switches characters
+    function Parse(const DescriptionLineFeed: RawUtf8 = CRLF;
+      const ShortSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '-' {$endif};
+      const LongSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '--' {$endif}): boolean;
+    /// remove all recognized arguments and switches
+    procedure Clear;
+    /// the ParamStr(1..ParamCount) arguments as RawUtf8, excluding Options[]
+    // switches and Params[]/Values[] parameters
+    property Args: TRawUtf8DynArray
+      read fNames[clkArg];
+    /// the "-optionname" boolean switches as stored in ParamStr()
+    property Options: TRawUtf8DynArray
+      read fNames[clkOption];
+    /// the names of "-parametername parametervalue" as stored in ParamStr()
+    // - mapping the Values[] associated array
+    property Names: TRawUtf8DynArray
+      read fNames[clkParam];
+    /// the values of "-parametername parametervalue" as stored in ParamStr()
+    // - mapping the Names[] associated array
+    property Values: TRawUtf8DynArray
+      read fValues;
+    /// if search within Args[] Options[] or Names[] should be case-sensitive
+    property CaseSensitiveNames: boolean
+      read fCaseSensitiveNames write fCaseSensitiveNames;
+    /// set a text which describes the executable
+    // - as used by default by FullDescription() and ConsoleWriteUnknown()
+    property ExeDescription: RawUtf8
+      read fExeDescription write fExeDescription;
+    /// map ParamStr(1 .. ParamCount) values, encoded as RawUtf8
+    // - may be used e.g. for regression tests instead of ParamStr()
+    property RawParams: TRawUtf8DynArray
+      read fRawParams write fRawParams;
+  end;
+
   /// stores some global information about the current executable and computer
   // - as set at unit initialization into the Executable global variable
   TExecutable = record
@@ -1222,62 +1399,8 @@ type
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
-    /// the ParamStr(1..ParamCount) arguments as RawUtf8, excluding Options[]
-    // switches and Params[]/Values[] parameters
-    Args: TRawUtf8DynArray;
-    /// the "-optionname" boolean switches as stored in ParamStr()
-    Options: TRawUtf8DynArray;
-    /// the names of "-parametername parametervalue" as stored in ParamStr()
-    // - mapping the Values[] associated array
-    Names: TRawUtf8DynArray;
-    /// the values of "-parametername parametervalue" as stored in ParamStr()
-    // - mapping the Names[] associated array
-    Values: TRawUtf8DynArray;
-    /// if search within Args[] Options[] or Names[] should be case-sensitive
-    CaseSensitiveNames: boolean;
-    /// search for "arg" value in Args[]
-    function HasArg(const name: RawUtf8): boolean; overload;
-    /// search for "arg" value in Args[]
-    function HasArg(const name: array of RawUtf8): boolean; overload;
-    /// search for "-optionname" switches in Options[]
-    function HasOption(const name: RawUtf8): boolean; overload;
-    /// search for "-optionname" switches in Options[]
-    function HasOption(const name: array of RawUtf8): boolean; overload;
-    /// search for "-parametername" parameter in Names[]
-    function Has(const name: RawUtf8): boolean; overload;
-    /// search for "-parametername" parameter in Names[]
-    function Has(const name: array of RawUtf8): boolean; overload;
-    /// search for "-parametername" and return its RawUtf8 "parametervalue"
-    function Has(const name: RawUtf8; out value: RawUtf8): boolean; overload;
-    /// search for "-parametername" and return its RawUtf8 "parametervalue"
-    function Has(const name: array of RawUtf8; out value: RawUtf8): boolean; overload;
-    /// search for "-parametername" and return all RawUtf8 "parametervalue" occurences
-    function Has(const name: array of RawUtf8; out value: TRawUtf8DynArray): boolean; overload;
-    /// search for "-parametername" and return its integer "parametervalue"
-    function Has(const name: RawUtf8; out value: integer): boolean; overload;
-    /// search for "-parametername" and return its integer "parametervalue"
-    function Has(const name: array of RawUtf8; out value: integer): boolean; overload;
-    /// search for "-parametername" and return its integer "parametervalue"
-    function Has(const name: RawUtf8; min, max: integer;
-      out value: integer): boolean; overload;
-    /// search for "-parametername" and return its integer "parametervalue"
-    function Has(const name: array of RawUtf8; min, max: integer;
-      out value: integer): boolean; overload;
-    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
-    function Param(const name: RawUtf8; const default: RawUtf8 = ''): RawUtf8; overload;
-    /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
-    function Param(const name: array of RawUtf8; const default: RawUtf8 = ''): RawUtf8; overload;
-    /// search for "-parametername" and return its integer "parametervalue" or default
-    function Param(const name: RawUtf8; default: integer): integer; overload;
-    /// search for "-parametername" and return its integer "parametervalue" or default
-    function Param(const name: array of RawUtf8; default: integer): integer; overload;
-    /// is called at unit inialization to store the global Executable variable
-    // - you can execute it again e.g. for switch characters customization
-    // - RawStr[] may be used e.g. for regression tests instead of ParamStr()
-    procedure CommandLineParse(
-      const ShortSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '-' {$endif};
-      const LongSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '--' {$endif};
-      RawStr: TRawUtf8DynArray = nil);
+    /// the Command Line arguments, parsed during unit initialization
+    Command: TExecutableCommandLine;
   end;
 
 var
@@ -2920,29 +3043,6 @@ procedure DisplayFatalError(const title, msg: RawUtf8);
 // - redirect to DisplayFatalError() without any title
 // - expects the regular Format() layout with %s %d - not the FormatUtf8() %
 procedure DisplayError(const fmt: string; const args: array of const);
-
-const
-  {$ifdef OSWINDOWS}
-  /// operating-system dependent Line Feed characters
-  CRLF = #13#10;
-  /// operating-system dependent wildchar to match all files in a folder
-  FILES_ALL = '*.*';
-  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
-  InvertedPathDelim = '/';
-  /// operating-system dependent boolean if paths are case-insensitive
-  PathCaseInsensitive = true;
-  {$else}
-  /// operating-system dependent Line Feed characters
-  CRLF = #10;
-  /// operating-system dependent wildchar to match all files in a folder
-  FILES_ALL = '*';
-  /// operating-system dependent "inverted" delimiter for NormalizeFileName()
-  InvertedPathDelim = '\';
-  /// operating-system dependent boolean if paths are case-insensitive
-  PathCaseInsensitive = false;
-  {$endif OSWINDOWS}
-  /// a convenient shortened constant to open a file for reading
-  fmOpenReadDenyNone = fmOpenRead or fmShareDenyNone;
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
@@ -7391,7 +7491,8 @@ begin
     if User = '' then
       User := 'unknown';
     Version := TFileVersion.Create(ProgramFileName); // with versions=0
-    //CommandLineParse;
+    Command := TExecutableCommandLine.Create;
+    Command.Parse;
   end;
   ComputeExecutableHash;
 end;
@@ -7403,7 +7504,120 @@ begin
 end;
 
 
-{ TExecutable }
+{ TExecutableCommandLine }
+
+function TExecutableCommandLine.Full(const v: RawUtf8): RawUtf8;
+begin
+  result := fSwitch[length(v) > 1] + v;
+end;
+
+procedure TExecutableCommandLine.Describe(const v: array of RawUtf8;
+  k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
+var
+  i, j: PtrInt;
+  desc, param: RawUtf8;
+begin
+  if (self = nil) or
+     (d = '') then
+    exit;
+  if k <> clkArg then
+  begin
+    if high(v) < 0 then
+      exit;
+    desc := Full(v[0]);
+    for i := 1 to high(v) do
+      desc := desc + ' ' + Full(v[i]);
+  end;
+  if k <> clkOption then
+  begin
+    i := PosExChar('#', d);
+    if i > 0 then
+    begin
+      j := 1;
+      while d[i + j] > ' ' do
+        inc(j);
+      delete(d, i, 1); // remove #
+      param := copy(d, i, j - 1); // extract parameter value name
+    end
+    else if k = clkArg then
+      if high(v) = 0 then
+        param := v[0]
+      else if argindex > 0 then
+        param := _fmt('arg%d', [argindex])
+      else
+        param := 'arg'
+    else
+      param := 'value';
+    desc := desc + ' <' + param + '>';
+  end;
+  fDesc[k] := fDesc[k] + ' ' + desc;
+  if def <> '' then
+    def := ' (default ' + def + ')';
+  fDescDetail[k] := fDescDetail[k] +
+    desc + def + (':' + fLineFeed + '     ') + d + fLineFeed;
+end;
+
+function TExecutableCommandLine.Find(const v: array of RawUtf8;
+  k: TExecutableCommandLineKind; const d, def: RawUtf8; f: PtrInt): PtrInt;
+var
+  i: PtrInt;
+begin
+  if self <> nil then
+  begin
+    if k <> clkUndefined then
+      Describe(v, k, d, def, -1);
+    if (high(v) >= 0) and
+       (fNames[k] <> nil) then
+      for i := 0 to high(v) do
+      begin
+        result := FindNonVoid[fCaseSensitiveNames](
+          @fNames[k][f], pointer(v[i]), length(v[i]), length(fNames[k]) - f);
+        if result >= 0 then
+        begin
+          fRetrieved[k][result] := true;
+          exit;
+        end;
+      end;
+  end;
+  result := -1
+end;
+
+function TExecutableCommandLine.Arg(index: integer; const description: RawUtf8): boolean;
+begin
+  result := (self <> nil) and
+            (PtrUInt(index) < PtrUInt(length(fNames[clkArg])));
+  if result then
+    fRetrieved[clkArg][index] := true;
+  Describe([], clkArg, description, '', index + 1);
+end;
+
+function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
+begin
+  result := Find([name], clkArg, description) >= 0;
+end;
+
+function TExecutableCommandLine.Arg(const name: array of RawUtf8;
+  const description: RawUtf8): boolean;
+begin
+  result := Find(name, clkArg, description) >= 0;
+end;
+
+function TExecutableCommandLine.Option(const name, description: RawUtf8): boolean;
+begin
+  result := Find([name], clkOption, description) >= 0;
+end;
+
+function TExecutableCommandLine.Option(const name: array of RawUtf8;
+  const description: RawUtf8): boolean;
+begin
+  result := Find(name, clkOption, description) >= 0;
+end;
+
+function TExecutableCommandLine.Get(const name: RawUtf8; out value: RawUtf8;
+  const description, default: RawUtf8): boolean;
+begin
+  result := Get([name], value, description, default);
+end;
 
 procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
 var
@@ -7414,187 +7628,258 @@ begin
   Values[n] := Value;
 end;
 
-function ExecutableFind(const e: TExecutable; const a: TRawUtf8DynArray;
-  const v: array of RawUtf8; f: PtrInt = 0): PtrInt; overload;
-var
-  i: PtrInt;
-begin
-  if (a <> nil) and
-     (high(v) >= 0) then
-    for i := 0 to high(v) do
-    begin
-      result := FindNonVoid[e.CaseSensitiveNames](
-        @a[f], pointer(v[i]), length(v[i]), length(a) - f);
-      if result >= 0 then
-        exit;
-    end;
-  result := -1
-end;
-
-function TExecutable.HasArg(const name: RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Args, [name]) >= 0;
-end;
-
-function TExecutable.HasArg(const name: array of RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Args, name) >= 0;
-end;
-
-function TExecutable.HasOption(const name: RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Options, [name]) >= 0;
-end;
-
-function TExecutable.HasOption(const name: array of RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Options, name) >= 0;
-end;
-
-function TExecutable.Has(const name: RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Names, [name]) >= 0;
-end;
-
-function TExecutable.Has(const name: array of RawUtf8): boolean;
-begin
-  result := ExecutableFind(self, Names, name) >= 0;
-end;
-
-function TExecutable.Has(const name: RawUtf8; out value: RawUtf8): boolean;
-begin
-  result := Has([name], value);
-end;
-
-function TExecutable.Has(const name: array of RawUtf8; out value: TRawUtf8DynArray): boolean;
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  out value: TRawUtf8DynArray; const description: RawUtf8): boolean;
 var
   first, i: PtrInt;
 begin
   result := false;
+  if self = nil then
+    exit;
+  Describe(name, clkParam, description, '', -1);
   first := 0;
   repeat
-    i := ExecutableFind(self, Names, name, first);
+    i := Find(name, clkParam, '', '', first);
     if i < 0 then
       break;
-    AddRawUtf8(value, Values[i]);
+    AddRawUtf8(value, fValues[i]);
     result := true;
     first := i + 1;
-  until first >= length(Names);
+  until first >= length(fValues);
 end;
 
-function TExecutable.Has(const name: array of RawUtf8; out value: RawUtf8): boolean;
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  out value: RawUtf8; const description, default: RawUtf8): boolean;
 var
   i: PtrInt;
 begin
-  i := ExecutableFind(self, Names, name);
+  if self = nil then
+    i := -1
+  else
+    i := Find(name, clkParam, description, default);
   if i >= 0 then
   begin
     value := Values[i];
     result := true;
   end
   else
+  begin
+    value := default;
     result := false;
+  end;
 end;
 
-function TExecutable.Has(const name: RawUtf8; out value: integer): boolean;
+function TExecutableCommandLine.Get(const name: RawUtf8;
+  out value: integer; const description: RawUtf8; default: integer): boolean;
 begin
-  result := Has([name], value);
+  result := Get([name], value, description, default);
 end;
 
-function TExecutable.Has(const name: array of RawUtf8; out value: integer): boolean;
+function defI(default: integer): RawUtf8;
+begin
+  if default = maxInt then
+    result := ''
+  else
+    result := RawUtf8(IntToStr(default));
+end;
+
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  out value: integer; const description: RawUtf8; default: integer): boolean;
 var
   i: PtrInt;
 begin
-  i := ExecutableFind(self, Names, name);
+  if self = nil then
+    i := -1
+  else
+    i := Find(name, clkParam, description, defI(default));
   result := (i >= 0) and
             ToInteger(Values[i], value);
+  if not result and
+     (default <> maxInt) then
+    value := default;
 end;
 
-function TExecutable.Has(const name: RawUtf8; min, max: integer;
-  out value: integer): boolean;
+function TExecutableCommandLine.Get(const name: RawUtf8; min, max: integer;
+  out value: integer; const description: RawUtf8; default: integer): boolean;
 begin
-  result := Has([name], min, max, value);
+  result := Get([name], min, max, value, description, default);
 end;
 
-function TExecutable.Has(const name: array of RawUtf8; min, max: integer;
-  out value: integer): boolean;
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  min, max: integer; out value: integer; const description: RawUtf8;
+  default: integer): boolean;
 begin
-  result := Has(name, value) and
+  result := Get(name, value, description, default) and
             (value >= min) and
             (value <= max);
 end;
 
-function TExecutable.Param(const name, default: RawUtf8): RawUtf8;
+function TExecutableCommandLine.Has(const name: RawUtf8): boolean;
 begin
-  if not Has([name], result) then
-    result := default;
+  result := Find([name], clkParam) >= 0;
 end;
 
-function TExecutable.Param(const name: array of RawUtf8; const default: RawUtf8): RawUtf8;
+function TExecutableCommandLine.Has(const name: array of RawUtf8): boolean;
 begin
-  if not Has(name, result) then
-    result := default;
+  result := Find(name, clkParam) >= 0;
 end;
 
-function TExecutable.Param(const name: RawUtf8; default: integer): integer;
+function TExecutableCommandLine.Param(
+  const name, description, default: RawUtf8): RawUtf8;
 begin
-  if not Has([name], result) then
-    result := default;
+  Get([name], result, description, default);
 end;
 
-function TExecutable.Param(const name: array of RawUtf8; default: integer): integer;
+function TExecutableCommandLine.Param(const name: array of RawUtf8;
+  const description, default: RawUtf8): RawUtf8;
 begin
-  if not Has(name, result) then
-    result := default;
+  Get(name, result, description, default);
 end;
 
-procedure TExecutable.CommandLineParse(const ShortSwitch: RawUtf8;
-  const LongSwitch: RawUtf8; RawStr: TRawUtf8DynArray);
+function TExecutableCommandLine.Param(const name: RawUtf8;
+  default: integer; const description: RawUtf8): integer;
+begin
+  Get([name], result, description, default);
+end;
+
+function TExecutableCommandLine.Param(const name: array of RawUtf8;
+  default: integer;const description: RawUtf8): integer;
+begin
+  Get(name, result, description, default);
+end;
+
+const
+  CLK_TXT: array[clkOption .. clkParam] of RawUtf8 = (
+    ' [options]', ' [params]');
+
+function TExecutableCommandLine.FullDescription(
+  const customexedescription, exename: RawUtf8): RawUtf8;
 var
-  i, n: PtrInt;
+  clk: TExecutableCommandLineKind;
+begin
+  if exename = '' then
+    result := Executable.ProgramName
+  else
+    result := exename;
+  result := result + fDesc[clkArg];
+  for clk := low(CLK_TXT) to high(CLK_TXT) do
+    if fDesc[clk] <> '' then
+      result := result + CLK_TXT[clk];
+  if customexedescription <> '' then
+    fExeDescription := customexedescription;
+  result := result + fLineFeed + '  ' + fExeDescription + fLineFeed;
+  for clk := low(fDescDetail) to high(fDescDetail) do
+    if fDescDetail[clk] <> '' then
+    begin
+      if clk in [low(CLK_TXT) .. high(CLK_TXT)] then
+        result := result + fLineFeed + CLK_TXT[clk];
+      result := result + fLineFeed + fDescDetail[clk];
+    end;
+end;
+
+function TExecutableCommandLine.DetectUnknown: RawUtf8;
+var
+  clk: TExecutableCommandLineKind;
+  i: PtrInt;
+begin
+  result := '';
+  for clk := low(fRetrieved) to high(fRetrieved) do
+    for i := 0 to length(fRetrieved[clk]) - 1 do
+      if not fRetrieved[clk][i] then
+      begin
+        result := result + 'Unexpected ' + Full(fNames[clk][i]) + ' ';
+        case clk of
+          clkArg:
+            result := result + 'argument';
+          clkOption:
+            result := result + 'option';
+          clkParam:
+            result := result + fValues[i] + ' parameter';
+        end;
+        result := result + fLineFeed;
+      end;
+end;
+
+function TExecutableCommandLine.ConsoleWriteUnknown(
+  const exedescription: RawUtf8): boolean;
+var
+  err: RawUtf8;
+begin
+  err := DetectUnknown;
+  result := err <> '';
+  if not result then
+    exit;
+  ConsoleWrite(err, ccLightRed);
+  ConsoleWrite(FullDescription(exedescription));
+end;
+
+procedure TExecutableCommandLine.Clear;
+begin
+  CleanupInstance; // finalize all TRawUtf8DynArray fields
+end;
+
+function TExecutableCommandLine.Parse(
+  const DescriptionLineFeed, ShortSwitch, LongSwitch: RawUtf8): boolean;
+var
+  i, j, n: PtrInt;
   swlen: TByteDynArray;
   s: RawUtf8;
 begin
-  Finalize(Args);
-  Finalize(Options);
-  Finalize(Names);
-  Finalize(Values);
+  result := false;
+  fLineFeed := DescriptionLineFeed;
   if (ShortSwitch = '') or
      (LongSwitch = '') then
     exit;
-  if RawStr = nil then
+  fSwitch[false] := ShortSwitch;
+  fSwitch[true] := LongSwitch;
+  if fRawParams = nil then
   begin
-    SetLength(RawStr, ParamCount);
-    for i := 1 to length(RawStr) do
-      RawStr[i - 1] := RawUtf8(ParamStr(i));
+    SetLength(fRawParams, ParamCount);
+    for i := 1 to length(fRawParams) do
+      fRawParams[i - 1] := RawUtf8(ParamStr(i));
   end;
-  n := length(RawStr);
+  n := length(fRawParams);
+  if n = 0 then
+    exit;
   SetLength(swlen, n);
   for i := 0 to n - 1 do
-    if CompareMemSmall(pointer(RawStr[i]), pointer(ShortSwitch), length(ShortSwitch)) then
+  begin
+    s := fRawParams[i];
+    if CompareMemSmall(pointer(s), pointer(LongSwitch), length(LongSwitch)) then
+      swlen[i] := length(LongSwitch)
+    else if CompareMemSmall(pointer(s), pointer(ShortSwitch), length(ShortSwitch)) then
       swlen[i] := length(ShortSwitch)
-    else if CompareMemSmall(pointer(RawStr[i]), pointer(LongSwitch), length(LongSwitch)) then
-      swlen[i] := length(LongSwitch);
+  end;
   i := 0;
   repeat
-    s := RawStr[i];
+    s := fRawParams[i];
     if swlen[i] <> 0 then
     begin
       delete(s, 1, swlen[i]);
-      if (i + 1 = n) or
-         (swlen[i + 1] <> 0) then
-        AddRawUtf8(Options, s)
+      j := PosExChar('=', s);
+      if j <> 0 then
+      begin
+        AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
+        AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+      end
+      else if (i + 1 = n) or
+              (swlen[i + 1] <> 0) then
+        AddRawUtf8(fNames[clkOption], s)
       else
       begin
-        AddRawUtf8(Names, s);
+        AddRawUtf8(fNames[clkParam], s);
         inc(i);
-        AddRawUtf8(Values, RawStr[i]);
+        AddRawUtf8(fValues, fRawParams[i]);
       end
     end
     else
-      AddRawUtf8(Args, s);
+      AddRawUtf8(fNames[clkArg], s);
     inc(i);
   until i = n;
+  SetLength(fRetrieved[clkArg], length(fNames[clkArg]));
+  SetLength(fRetrieved[clkOption], length(fNames[clkOption]));
+  SetLength(fRetrieved[clkParam], length(fNames[clkParam]));
+  result := true;
 end;
 
 
@@ -9377,6 +9662,7 @@ begin
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
   Executable.Version.Free;
+  Executable.Command.Free;
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   ConsoleCriticalSection.Done;
   GlobalCriticalSection.Done;
