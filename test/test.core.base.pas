@@ -2758,6 +2758,33 @@ begin
   Check(not IsMatch(V, 'this is a zest', false));
   Check(not IsMatch(V, 'this as a test', false));
   Check(not IsMatch(V, 'this as a rest', false));
+  Check(IsMatchs('test*', 'test', false));
+  Check(IsMatchs('test*', 'test', true));
+  Check(IsMatchs('test*', 'teste', false));
+  Check(IsMatchs('test*', 'teste', true));
+  Check(IsMatchs('test*', 'tester', false));
+  Check(IsMatchs('test*', 'tester', true));
+  Check(IsMatchs('a*', 'anything', true));
+  Check(IsMatchs('a*', 'a', true));
+  Check(IsMatchs('*', 'anything', true));
+  Check(IsMatchs('*.pas', 'Bidule.pas', true));
+  Check(IsMatchs('*.pas', 'Bidule.pas', false));
+  Check(IsMatchs('*.PAS', 'Bidule.pas', true));
+  Check(not IsMatchs('*.PAS', 'Bidule.pas', false));
+  Check(IsMatchs('toto,test*', 'test', false));
+  Check(IsMatchs('test*,toto', 'test', true));
+  Check(IsMatchs('toto,titi,test*', 'teste', false));
+  Check(IsMatchs('test*,titi,toto', 'teste', true));
+  Check(IsMatchs('toto,test*,titi', 'tester', false));
+  Check(IsMatchs('tata,test*', 'tester', true));
+  Check(IsMatchs('a*,toto', 'anything', true));
+  Check(IsMatchs('toto,a*', 'a', true));
+  Check(IsMatchs('*,titi', 'anything', true));
+  Check(IsMatchs('*.pas,*.txt', 'Bidule.pas', true));
+  Check(IsMatchs('*.txt,*.pas', 'Bidule.pas', false));
+  Check(IsMatchs('*.PAS,*.pas', 'Bidule.pas', false));
+  Check(IsMatchs('*.txt,*.PAS', 'Bidule.pas', true));
+  Check(not IsMatchs('*.PAS,*.pAs,*.PAs', 'Bidule.pas', false));
   for reuse := false to true do
   begin  // ensure very same behavior
     match.Prepare(V, false, reuse);
