@@ -210,6 +210,8 @@ type
     procedure _GUID;
     /// test ParseCommandArguments() function
     procedure _ParseCommandArguments;
+    /// test TExecutableCommandLine class
+    procedure _TExecutableCommandLine;
     /// test IsMatch() function
     procedure _IsMatch;
     /// test TExprParserMatch class
@@ -2623,6 +2625,68 @@ begin
   Test('one " two"', ['one', ' two'], [], false);
   Test('" one" two', [' one', 'two'], [], false);
   Test('"one one" two', ['one one', 'two'], [], false);
+end;
+
+procedure TTestCoreBase._TExecutableCommandLine;
+var
+  c: TExecutableCommandLine;
+  f: RawUtf8;
+  t: integer;
+begin
+  c := TExecutableCommandLine.Create;
+  try
+    c.RawParams := CsvToRawUtf8DynArray('one two three', ' ');
+    c.Parse(#10, '-', '--');
+    CheckEqual(length(c.Args), 3);
+    CheckEqual(length(c.Options), 0);
+    CheckEqual(length(c.Names), 0);
+    CheckEqual(length(c.Values), length(c.Names));
+    Check(c.Arg('one', 'this is 1'));
+    Check(c.Arg('two', 'this is 2'));
+    Check(c.Arg('three', 'this is 3'));
+    CheckEqual(c.DetectUnknown, '');
+    CheckHash(c.FullDescription('this is test #1 executable', 'exename'), $9D567431);
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('one two three', ' ');
+    c.Parse(#10, '-', '--');
+    CheckEqual(length(c.Args), 3);
+    CheckEqual(length(c.Options), 0);
+    CheckEqual(length(c.Names), 0);
+    CheckEqual(length(c.Values), length(c.Names));
+    Check(c.Arg(0, 'this is the main verb'));
+    Check(c.Arg(1, 'the #directory name to process'));
+    Check(c.Arg(2, 'some #comment text to add'));
+    CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $736C6C68);
+    Check(not c.Option(['v', 'verbose'], 'generate verbose output'));
+    CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $2BE67E09);
+    Check(not c.Get('logfolder', f, 'optional log #folder to write to'));
+    Check(not c.Option('log', 'log the process to a local file'));
+    Check(not c.Get(['t', 'threads'], t, '#number of threads to run'));
+    CheckEqual(c.DetectUnknown, '');
+    CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $135B5278);
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('-t=10 --dest toto -v --wrong -p=4', ' ');
+    c.Parse(#10, '-', '--');
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Options), 2);
+    CheckEqual(length(c.Names), 3);
+    CheckEqual(length(c.Values), length(c.Names));
+    Check(c.Option(['v', 'verbose'], 'generate verbose output'));
+    Check(not c.Option('log', 'log the process to a local file'));
+    t := 0;
+    Check(c.Get(['t', 'threads'], t, '#number of threads to run', 5));
+    CheckEqual(t, 10);
+    f := c.Param('dest', 'destination #folder', 'c:\');
+    CheckEqual(f, 'toto');
+    Check(not c.Get('logdest', f, 'optional log #folder'));
+    CheckEqual(f, '');
+    CheckHash(c.DetectUnknown, $5EA096A5);
+    CheckHash(c.FullDescription('this is test #3 executable', 'exename'), $CFAE6131);
+//writeln(c.FullDescription('this is test #3 executable', 'exename'));
+  finally
+    c.Free;
+  end;
+//ConsoleWaitForEnterKey;
 end;
 
 procedure TTestCoreBase._IsMatch;
@@ -7350,7 +7414,6 @@ begin
   result := StrIComp(
     pointer(TOrmPeople(A).FirstName), pointer(TOrmPeople(B).FirstName));
 end;
-
 
 
 initialization
