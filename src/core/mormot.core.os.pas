@@ -7515,7 +7515,7 @@ procedure TExecutableCommandLine.Describe(const v: array of RawUtf8;
   k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
 var
   i, j: PtrInt;
-  desc, param: RawUtf8;
+  desc, param, pnames: RawUtf8;
 begin
   if (self = nil) or
      (d = '') then
@@ -7524,9 +7524,12 @@ begin
   begin
     if high(v) < 0 then
       exit;
-    desc := Full(v[0]);
+    if length(v[0]) = 1 then
+      desc := Full(v[0])
+    else
+      desc := '    ' + Full(v[0]);
     for i := 1 to high(v) do
-      desc := desc + ' ' + Full(v[i]);
+      desc := desc + ', ' + Full(v[i]);
   end;
   if k <> clkOption then
   begin
@@ -7553,8 +7556,13 @@ begin
   fDesc[k] := fDesc[k] + ' ' + desc;
   if def <> '' then
     def := ' (default ' + def + ')';
-  fDescDetail[k] := fDescDetail[k] +
-    desc + def + (':' + fLineFeed + '     ') + d + fLineFeed;
+  pnames := _fmt('  %0:-20s', [desc + def]);
+  if length(pnames) > 22 then
+    fDescDetail[k] := fDescDetail[k]
+      + pnames + fLineFeed + StringOfChar(' ', 22) + d + fLineFeed
+  else
+    fDescDetail[k] := fDescDetail[k]
+      + pnames + d + fLineFeed;
 end;
 
 function TExecutableCommandLine.Find(const v: array of RawUtf8;
@@ -7751,28 +7759,33 @@ end;
 const
   CLK_TXT: array[clkOption .. clkParam] of RawUtf8 = (
     ' [options]', ' [params]');
+  CLK_DESCR: array[clkOption .. clkParam] of RawUtf8 = (
+    'Options:', 'Params:');
 
 function TExecutableCommandLine.FullDescription(
   const customexedescription, exename: RawUtf8): RawUtf8;
 var
   clk: TExecutableCommandLineKind;
 begin
+  if customexedescription <> '' then
+    fExeDescription := customexedescription;
+  result := fExeDescription + fLineFeed + fLineFeed + 'Usage: ';
   if exename = '' then
-    result := Executable.ProgramName
+    result := result + Executable.ProgramName
   else
-    result := exename;
+    result := result + exename;
+
   result := result + fDesc[clkArg];
   for clk := low(CLK_TXT) to high(CLK_TXT) do
     if fDesc[clk] <> '' then
       result := result + CLK_TXT[clk];
-  if customexedescription <> '' then
-    fExeDescription := customexedescription;
-  result := result + fLineFeed + '  ' + fExeDescription + fLineFeed;
+
+  result := result + fLineFeed;
   for clk := low(fDescDetail) to high(fDescDetail) do
     if fDescDetail[clk] <> '' then
     begin
       if clk in [low(CLK_TXT) .. high(CLK_TXT)] then
-        result := result + fLineFeed + CLK_TXT[clk];
+        result := result + fLineFeed + CLK_DESCR[clk];
       result := result + fLineFeed + fDescDetail[clk];
     end;
 end;
