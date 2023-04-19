@@ -1263,6 +1263,18 @@ type
     /// search for "-parametername" and return all RawUtf8 "parametervalue" occurences
     function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
       const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return its plain string "parametervalue"
+    function Get(const name: RawUtf8; out value: string;
+      const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
+    /// search for "-parametername" and return all string "parametervalue" occurences
+    function Get(const name: array of RawUtf8; out value: TStringDynArray;
+      const description: RawUtf8 = ''): boolean; overload;
+    /// search for "-parametername" and return its plain string "parametervalue"
+    function Get(const name: array of RawUtf8; out value: string;
+      const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
+    /// search for "-parametername" and return all string "parametervalue" occurences
+    function Get(const name: RawUtf8; out value: TStringDynArray;
+      const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
     function Get(const name: RawUtf8; out value: integer;
       const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
@@ -7673,6 +7685,39 @@ begin
     value := default;
     result := false;
   end;
+end;
+
+function TExecutableCommandLine.Get(const name: RawUtf8; out value: string;
+  const description: RawUtf8; const default: string): boolean;
+begin
+  result := Get([name], value, description, default);
+end;
+
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  out value: string; const description: RawUtf8; const default: string): boolean;
+var
+  tmp: RawUtf8;
+begin
+  result := Get(name, tmp, description, RawUtf8(default));
+  value := string(tmp);
+end;
+
+function TExecutableCommandLine.Get(const name: RawUtf8;
+  out value: TStringDynarray; const description: RawUtf8): boolean;
+begin
+  result := Get([name], value, description);
+end;
+
+function TExecutableCommandLine.Get(const name: array of RawUtf8;
+  out value: TStringDynarray; const description: RawUtf8): boolean;
+var
+  tmp: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  result := Get(name, tmp, description);
+  SetLength(value, length(tmp));
+  for i := 0 to length(tmp) - 1 do
+    value[i] := string(tmp[i]);
 end;
 
 function TExecutableCommandLine.Get(const name: RawUtf8;
