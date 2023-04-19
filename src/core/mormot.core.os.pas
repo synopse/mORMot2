@@ -1305,16 +1305,16 @@ type
     // !   ConsoleWrite(FullDescription);
     // ! end;
     // will fill "verbose" and "threads" local variables, and output on Linux:
-    // $ mormot2tests [options] [params]
-    // $   An executable to test mORMot Execute.Command
+    // $ An executable to test mORMot Execute.Command
     // $
-    // $  [options]
-    // $ -v --verbose:
-    // $      generate verbose output
+    // $ Usage: mormot2tests [options] [params]
     // $
-    // $  [params]
-    // $ -t --threads <number> (default 5):
-    // $      number of threads to run
+    // $ Options:
+    // $   -v, --verbose       generate verbose output
+    // $
+    // $ Params:
+    // $   -t, --threads <number> (default 5)
+    // $                       number of threads to run
     function FullDescription(const customexedescription: RawUtf8 = '';
       const exename: RawUtf8 = ''): RawUtf8;
     /// check if the supplied parameters were all registered from previous
