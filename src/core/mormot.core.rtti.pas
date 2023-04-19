@@ -123,8 +123,8 @@ const
   /// potentially managed types in TRttiKind enumerates
   rkManagedTypes = [rkLStringOld,
                     rkLString,
-                    rkWstring,
-                    rkUstring,
+                    rkWString,
+                    rkUString,
                     rkArray,
                     rkObject,
                     rkRecord,
@@ -161,7 +161,8 @@ type
     dkUString,
     dkClassRef,
     dkPointer,
-    dkProcedure);
+    dkProcedure,
+    dkMRecord);
 
 const
   /// convert our TRttiKind to Delphi's TTypeKind enumerate
@@ -200,28 +201,29 @@ const
 
   /// convert Delphi's TTypeKind to our TRttiKind enumerate
   DELPHITOFPC: array[TDelphiType] of TRttiKind = (
-    rkUnknown,
-    rkInteger,
-    rkChar,
-    rkEnumeration,
-    rkFloat,
-    rkSString,
-    rkSet,
-    rkClass,
-    rkMethod,
-    rkWChar,
-    rkLString,
-    rkWString,
-    rkVariant,
-    rkArray,
-    rkRecord,
-    rkInterface,
-    rkInt64,
-    rkDynArray,
-    rkUString,
-    rkClassRef,
-    rkPointer,
-    rkProcVar);
+    rkUnknown,     //  dkUnknown
+    rkInteger,     //  dkInteger
+    rkChar,        //  dkChar
+    rkEnumeration, //  dkEnumeration
+    rkFloat,       //  dkFloat
+    rkSString,     //  dkString
+    rkSet,         //  dkSet
+    rkClass,       //  dkClass
+    rkMethod,      //  dkMethod
+    rkWChar,       //  dkWChar
+    rkLString,     //  dkLString
+    rkWString,     //  dkWString
+    rkVariant,     //  dkVariant
+    rkArray,       //  dkArray
+    rkRecord,      //  dkRecord
+    rkInterface,   //  dkInterface
+    rkInt64,       //  dkInt64
+    rkDynArray,    //  dkDynArray
+    rkUString,     //  dkUString
+    rkClassRef,    //  dkClassRef
+    rkPointer,     //  dkPointer
+    rkProcVar,     //  dkProcedure
+    rkRecord);     //  dkMRecord
 
 {$else}
 
@@ -250,7 +252,8 @@ const
     rkUString,
     rkClassRef,
     rkPointer,
-    rkProcedure
+    rkProcedure,
+    rkMRecord // managed records from newest Delphi are partially supported
     {$endif UNICODE});
 
 const
@@ -259,6 +262,7 @@ const
                     rkWstring,
                     {$ifdef UNICODE}
                     rkUstring,
+                    rkMRecord,
                     {$endif UNICODE}
                     rkArray,
                     rkRecord,
@@ -267,7 +271,10 @@ const
                     rkVariant
                    ];
   /// maps record or object in TTypeKind RTTI enumerates
-  rkRecordTypes = [rkRecord];
+  rkRecordTypes = [rkRecord
+                   {$ifdef UNICODE},
+                   rkMRecord
+                   {$endif UNICODE}];
 
 {$endif FPC}
 
@@ -3535,9 +3542,7 @@ begin
       result := SizeOf(variant);
     rkArray:
       result := ArraySize;
-    {$ifdef FPC}
-    rkObject,
-    {$endif FPC}
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       result := RecordSize;
     rkSString:
@@ -5586,9 +5591,7 @@ var
 begin
   // caller ensured ElemTypeInfo<>nil and Count>0
   case ElemTypeInfo^.Kind of
-    {$ifdef FPC}
-    rkObject,
-    {$endif FPC}
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       // retrieve ElemTypeInfo.RecordManagedFields once
       RecordClearSeveral(pointer(Value), ElemTypeInfo, Count);
@@ -6276,9 +6279,7 @@ begin
     exit;
   nfo := nil; // is set below for rkClass/rkRecord
   case Info^.Kind of
-    {$ifdef FPC}
-    rkObject,
-    {$endif FPC}
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       nfo := Rtti.RegisterType(Info);
     {$ifdef FPC}
@@ -6479,9 +6480,7 @@ begin
       result := ptArray;
     rkDynArray:
       result := ptDynArray;
-  {$ifdef FPC}
-    rkObject,
-  {$endif FPC}
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       result := ptRecord;
     rkChar:
@@ -7635,6 +7634,7 @@ begin
   case fCache.Kind of
     rkClass:
       SetValueClass(aInfo.RttiClass.RttiClass, aInfo);
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
     rkLString:
@@ -9297,6 +9297,12 @@ begin
   RTTI_TO_VARTYPE[rkObject]      := varAny;
   RTTI_MANAGEDCOPY[rkLStringOld] := @_LStringCopy;
   RTTI_MANAGEDCOPY[rkObject]     := @_RecordCopy;
+  {$else}
+  {$ifdef UNICODE}
+  RTTI_FINALIZE[rkMRecord]       := @FastRecordClear;
+  RTTI_TO_VARTYPE[rkMRecord]     := varAny;
+  RTTI_MANAGEDCOPY[rkMRecord]    := @_RecordCopy;
+  {$endif UNICODE}
   {$endif FPC}
   for k := low(k) to high(k) do
   begin
@@ -9312,6 +9318,7 @@ begin
       rkDynArray,
       rkClass,
       rkInterface,
+      {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
       rkRecord,
       rkArray:
         RTTI_TO_VARTYPE[k] := varAny; // TVarData.VAny pointing to the value

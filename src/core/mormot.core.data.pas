@@ -11400,7 +11400,7 @@ begin
           RTTI_COMPARE[false, k] := @_BC_WString;
           RTTI_COMPARE[true,  k] := @_BCI_WString;
         end;
-      {$ifdef FPC} rkObject, {$endif}
+      {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
       rkRecord:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Record;

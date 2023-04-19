@@ -7767,7 +7767,8 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
     {$ifdef PUBLISHRECORD}
-    rkRecord {$ifdef FPC}, rkObject{$endif}:
+    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+    rkRecord:
       begin
         result := oftUtf8Custom;
         exit;

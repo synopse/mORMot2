@@ -719,8 +719,8 @@ begin
       typ := TYPES_SIMPLE[rtti.Parser];
       if typ = wUnknown then
         case rtti.Kind of
-          rkRecord
-          {$ifdef FPC}, rkObject{$endif}:
+          {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+          rkRecord:
             typ := wRecord;
           rkInterface:
             typ := wInterface;
