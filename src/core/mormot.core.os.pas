@@ -7858,6 +7858,10 @@ begin
       swlen[i] := length(LongSwitch)
     else if CompareMemSmall(pointer(s), pointer(ShortSwitch), length(ShortSwitch)) then
       swlen[i] := length(ShortSwitch)
+    {$ifdef OSWINDOWS}
+    else while s[swlen[i] + 1] = '-' do
+      inc(swlen[i]); // allow -v --verbose on Windows for cross-platform run
+    {$endif OSWINDOWS}
   end;
   i := 0;
   repeat
