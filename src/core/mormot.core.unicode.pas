@@ -4661,7 +4661,11 @@ function Utf8DecodeToUnicode(Text: PUtf8Char; Len: PtrInt; var temp: TSynTempBuf
 begin
   if (Text = nil) or
      (Len <= 0) then
-    result := 0
+  begin
+    temp.buf := nil;
+    temp.len := 0;
+    result := 0;
+  end
   else
   begin
     temp.Init(Len * 3); // maximum posible unicode size (if all <#128)
