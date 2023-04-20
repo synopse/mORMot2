@@ -1175,8 +1175,7 @@ type
     fServer: RawUtf8;
     fPort: RawUtf8;
     fProxyUrl: RawUtf8;
-    // set by AcceptRequest() from TVarSin
-    fRemoteIP: RawUtf8;
+    fRemoteIP: RawUtf8; // set by OpenBind() or AcceptRequest() from TNetAddr
     fSockIn: PTextFile;
     {$ifndef PUREMORMOT2}
     fSockOut: PTextFile;
@@ -1397,8 +1396,10 @@ type
     // specify e.g. THttpServerSocket if you expect incoming HTTP requests
     function AcceptIncoming(ResultClass: TCrtSocketClass = nil;
       Async: boolean = false): TCrtSocket;
-    /// remote IP address after AcceptRequest() call over TCP
-    // - is either the raw connection IP to the current server socket, or
+    /// remote IP address after OpenBind() or AcceptRequest() call over TCP
+    // - after OpenBind() is the TNetAddr.IP as returned by NewSocket(), i.e.
+    // the IP of the server
+    // - after AcceptRequest(), is either the raw IP of the client socket, or
     // a custom header value set by a local proxy as retrieved by inherited
     // THttpServerSocket.GetRequest, searching the header named in
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
@@ -4314,6 +4315,7 @@ var
   retry: integer;
   head: RawUtf8;
   res: TNetResult;
+  addr: TNetAddr;
 begin
   TLS.Enabled := false; // reset this flag which is set at output if aTLS=true
   fSocketLayer := aLayer;
@@ -4341,9 +4343,10 @@ begin
           'TLS layers', [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
-          fTimeout, fTimeout, fTimeout, {retry=}2, fSock);
+          fTimeout, fTimeout, fTimeout, {retry=}2, fSock, @addr);
         if res = nrOK then
         begin
+          addr.IP(fRemoteIP, true);
           res := nrRefused;
           SockSend(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
@@ -4377,12 +4380,13 @@ begin
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'Before NewSocket', [], self);
     res := NewSocket(fServer, fPort, aLayer, doBind,
-      fTimeout, fTimeout, fTimeout, retry, fSock, nil, aReusePort);
+      fTimeout, fTimeout, fTimeout, retry, fSock, @addr, aReusePort);
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
+    addr.IP(fRemoteIP, true);
     if res <> nrOK then
-      raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
-        [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort], res);
+      raise ENetSock.Create('%s %s.OpenBind(%s:%s) [remoteip=%s]',
+        [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort, fRemoteIP], res);
   end
   else
   begin
