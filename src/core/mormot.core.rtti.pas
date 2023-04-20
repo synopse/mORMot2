@@ -671,12 +671,12 @@ type
     rcfGetOrdProp,
     rcfGetInt64Prop,
     rcfIsRawBlob,
-    rcfIsCurrency,
     rcfIsNumber);
 
   /// as used by TRttiCache.Flags
   // - rcfQWord/rcfBoolean map Info^.IsQWord/IsBoolean
-  // - rcfIsRawBlob/rcfIsCurrency map Info^.IsRawBlob/IsCurrency
+  // - rcfIsRawBlob maps Info^.IsRawBlob
+  // - rcfIsNumber is set if Info^.Kind is in rkNumberTypes
   // - set rcfHasRttiOrd/rcfGetOrdProp/rcfGetInt64Prop to access the value
   TRttiCacheFlags = set of TRttiCacheFlag;
 
@@ -705,7 +705,8 @@ type
     /// type-specific information
     case TRttiKind of
       rkFloat: (
-        RttiFloat: TRttiFloat);
+        RttiFloat: TRttiFloat;
+        IsDateTime: boolean);
       rkLString: ( // from TypeInfo() on older Delphi with no CP RTTI
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
@@ -777,6 +778,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is a currency field
     function IsCurrency: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the property is a TDateTime/TDateTimeMS/TDate
+    function IsDate: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// return true if this property is a BLOB (RawBlob)
     function IsRawBlob: boolean;
@@ -2163,6 +2167,7 @@ type
     // - caller should have checked that PropDefault <> NO_DEFAULT
     function ValueIsDefault(Data: pointer): boolean;
     /// check if the Value is void (0 / '' / null)
+    // - less restrictive function than VarIsVoid() from mormot.core.variants
     function ValueIsVoid(Data: pointer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// compare two properties values with proper getter method call
@@ -2379,6 +2384,7 @@ type
     procedure ValueCopy(Dest, Source: pointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the Value is 0 / nil / '' / null
+    // - less restrictive function than VarIsVoid() from mormot.core.variants
     function ValueIsVoid(Data: PAnsiChar): boolean;
      // {$ifdef HASINLINE}inline;{$endif}
     /// compare two stored values of this type
@@ -3478,6 +3484,13 @@ begin
   result := TRttiFloat(GetTypeData(@self)^.FloatType) = rfCurr;
 end;
 
+function TRttiInfo.IsDate: boolean;
+begin
+  result := (@self = TypeInfo(TDate)) or
+            (@self = TypeInfo(TDateTime)) or
+            (@self = TypeInfo(TDateTimeMS));
+end;
+
 function TRttiInfo.IsRawBlob: boolean;
 begin
   result := @self = TypeInfo(RawBlob);
@@ -3614,10 +3627,10 @@ var
   enum: PRttiEnumType;
   siz, cnt: PtrInt;
 begin
+  // caller ensured Cache is filled with zeros (e.g. TRttiCustom.fCache prop)
   Cache.Info := @self;
   Cache.Size := RttiSize;
   Cache.Kind := Kind;
-  Cache.Flags := [];
   if Kind in rkOrdinalTypes then
   begin
     if Kind in rkHasRttiOrdTypes then
@@ -3645,10 +3658,21 @@ begin
     rkFloat:
       begin
         Cache.RttiFloat := RttiFloat;
-        if Cache.RttiFloat = rfCurr then
+        if IsCurrency then
         begin
           Cache.RttiVarDataVType := varCurrency;
-          include(Cache.Flags, rcfIsCurrency);
+          Cache.VarDataVType := varCurrency;
+        end
+        else if IsDate then
+        begin
+          Cache.RttiVarDataVType := varDate;
+          Cache.VarDataVType := varDate;
+          Cache.IsDateTime := true;
+        end
+        else if Cache.RttiFloat = rfSingle then
+        begin
+          Cache.RttiVarDataVType := varSingle;
+          Cache.VarDataVType := varSingle;
         end;
       end;
     rkEnumeration,
@@ -6888,8 +6912,13 @@ begin
       varOleStr
       {$ifdef HASVARUSTRING}, varUString {$endif}:
         result := rvd.Data.VAny = nil;
+      varSingle,
+      varInteger,
+      varLongWord:
+        result := rvd.Data.VInteger = 0;
       varInt64,
       varWord64,
+      varDate,
       varDouble,
       varCurrency,
       varBoolean:
@@ -6921,6 +6950,10 @@ begin
         RVD.VType := varInt64;
       RVD.Data.VInt64 := PInt64(Data)^;
     end;
+  varSingle:
+    // copy this 32-bit type at binary level
+    RVD.Data.VInteger := PInteger(Data)^;
+  varDate,
   varDouble,
   varCurrency:
     // copy those 64-bit types at binary level
@@ -6970,6 +7003,9 @@ begin
     end;
   varCurrency:
     Prop.GetCurrencyProp(Instance, RVD.Data.VCurrency);
+  varSingle:
+    RVD.Data.VSingle := Prop.GetFloatProp(Instance);
+  varDate,
   varDouble:
     RVD.Data.VDouble := Prop.GetFloatProp(Instance);
   varAny:

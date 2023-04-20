@@ -10256,6 +10256,9 @@ begin
           TRttiVarData(Dest).VType := varInt64; // fix VType
         Dest.VInt64 := PInt64(Data)^;
       end;
+    varSingle:
+      Dest.VInteger := PInteger(Data)^;
+    varDate,
     varDouble,
     varCurrency:
       Dest.VInt64 := PInt64(Data)^;

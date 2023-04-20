@@ -51,7 +51,7 @@ const
 // - varEmpty, varNull or a '' string would be considered as void
 // - varBoolean=false or varDate=0 would be considered as void
 // - a TDocVariantData with Count=0 would be considered as void
-// - any other value (e.g. integer) would be considered as not void
+// - any other value (e.g. floats or integer) would be considered as not void
 function VarIsVoid(const V: Variant): boolean;
 
 /// returns a supplied string as variant, or null if v is void ('')
@@ -2800,6 +2800,7 @@ begin
         result := VAny = nil;
       varDate:
         result := VInt64 = 0;
+      // note: 0 as integer or float is considered as non-void
     else
       if vt = varVariantByRef then
         result := VarIsVoid(PVariant(VPointer)^)
