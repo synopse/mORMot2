@@ -839,7 +839,8 @@ type
     fExecuteMessage: RawUtf8;
     fNginxSendFileFrom: array of TFileName;
     fAuthorize: THttpServerRequestAuthentication;
-    fAuthorizeDigest: TDigestAuthServer;
+    fAuthorizerBasic: IBasicAuthServer;
+    fAuthorizerDigest: IDigestAuthServer;
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
@@ -856,7 +857,6 @@ type
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
     function GetRegisterCompressGzStatic: boolean;
     procedure SetRegisterCompressGzStatic(Value: boolean);
-    procedure ResetAuthorize;
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function SetRejectInCommandUri(var Http: THttpRequestContext;
       Opaque: Int64; Status: integer): boolean;
@@ -883,8 +883,6 @@ type
       const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
       ServerThreadPoolCount: integer = 32; KeepAliveTimeOut: integer = 30000;
       ProcessOptions: THttpServerOptions = []); reintroduce; virtual;
-    /// finalize this Server instance
-    destructor Destroy; override;
     /// defines the WebSockets protocols to be used for this Server
     // - this default implementation will raise an exception
     // - returns the associated PWebSocketProcessSettings reference on success
@@ -923,31 +921,33 @@ type
     // - otherwise TLS is initialized at first incoming connection, which
     // could be too late in case of invalid Sock.TLS parameters
     procedure InitializeTlsAfterBind;
-    /// allow optional Digest authentication for some URIs
-    // - if OnBeforeBody returns 401, Digester.ServerInit and ServerAuth will
-    // be called to negotiate Digest authentication with the client
-    // - the supplied Digester will be owned by this instance - typical
-    // use is with a TDigestAuthServerFile
-    procedure SetAuthorizeDigest(Digester: TDigestAuthServer);
-    /// allow optional Basic authentication for some URIs
-    // - if OnBeforeBody returns 401, OnBasicAuth callback will be executed
+    /// remove any previous SetAuthorizeBasic/SetAuthorizeDigest registration
+    procedure SetAuthorizeNone;
+    /// allow optional BASIC authentication for some URIs via a callback
+    // - if OnBeforeBody returns 401, the OnBasicAuth callback will be executed
     // to negotiate Basic authentication with the client
     procedure SetAuthorizeBasic(const BasicRealm: RawUtf8;
       const OnBasicAuth: TOnHttpServerBasicAuth); overload;
-    /// allow optional Basic authentication for some URIs
+    /// allow optional BASIC authentication for some URIs via IBasicAuthServer
     // - if OnBeforeBody returns 401, Digester.OnCheckCredential will
     // be called to negotiate Basic authentication with the client
     // - the supplied Digester will be owned by this instance: it could be
     // either a TDigestAuthServerFile with its own storage, or a
     // TDigestAuthServerMem instance expecting manual SetCredential() calls
-    procedure SetAuthorizeBasic(Digester: TDigestAuthServer); overload;
+    procedure SetAuthorizeBasic(const Basic: IBasicAuthServer); overload;
+    /// allow optional DIGEST authentication for some URIs
+    // - if OnBeforeBody returns 401, Digester.ServerInit and ServerAuth will
+    // be called to negotiate Digest authentication with the client
+    // - the supplied Digester will be owned by this instance - typical
+    // use is with a TDigestAuthServerFile
+    procedure SetAuthorizeDigest(const Digest: IDigestAuthServer);
     /// set after a call to SetAuthDigest/SetAuthBasic
     property Authorize: THttpServerRequestAuthentication
       read fAuthorize;
     /// set after a call to SetAuthDigest/SetAuthBasic
     // - return nil if no such call was made, or not with a TDigestAuthServerMem
     // - return a TDigestAuthServerMem so that SetCredential/GetUsers are available
-    function AuthorizeDigest: TDigestAuthServerMem;
+    function AuthorizeServerMem: TDigestAuthServerMem;
     /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
     // - will define internally a matching OnSendFile event handler
     // - generating "X-Accel-Redirect: " header, trimming any supplied left
@@ -2749,12 +2749,6 @@ begin
   inherited Create(OnStart, OnStop, ProcessName, ProcessOptions);
 end;
 
-destructor THttpServerSocketGeneric.Destroy;
-begin
-  inherited Destroy;
-  FreeAndNil(fAuthorizeDigest);
-end;
-
 function THttpServerSocketGeneric.GetApiVersion: RawUtf8;
 begin
   result := SocketApiVersion;
@@ -2963,36 +2957,39 @@ begin
   end;
 end;
 
-procedure THttpServerSocketGeneric.ResetAuthorize;
+procedure THttpServerSocketGeneric.SetAuthorizeNone;
 begin
   fAuthorize := hraNone;
-  FreeAndNil(fAuthorizeDigest);
+  fAuthorizerBasic := nil;
+  fAuthorizerDigest := nil;
   fAuthorizeBasic := nil;
   fAuthorizeBasicRealm := '';
 end;
 
-procedure THttpServerSocketGeneric.SetAuthorizeDigest(Digester: TDigestAuthServer);
+procedure THttpServerSocketGeneric.SetAuthorizeDigest(
+  const Digest: IDigestAuthServer);
 begin
-  ResetAuthorize;
-  if Digester = nil then
+  SetAuthorizeNone;
+  if Digest = nil then
     exit;
-  fAuthorizeDigest := Digester;
+  fAuthorizerDigest := Digest;
   fAuthorize := hraDigest;
 end;
 
-procedure THttpServerSocketGeneric.SetAuthorizeBasic(Digester: TDigestAuthServer);
+procedure THttpServerSocketGeneric.SetAuthorizeBasic(
+  const Basic: IBasicAuthServer);
 begin
-  ResetAuthorize;
-  if Digester = nil then
+  SetAuthorizeNone;
+  if Basic = nil then
     exit;
-  SetAuthorizeBasic(Digester.Realm, Digester.OnCheckCredential);
-  fAuthorizeDigest := Digester;
+  SetAuthorizeBasic(Basic.Realm, Basic.OnBasicAuth);
+  fAuthorizerBasic := Basic; // should be set after SetAuthorizeBasic()
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeBasic(const BasicRealm: RawUtf8;
   const OnBasicAuth: TOnHttpServerBasicAuth);
 begin
-  ResetAuthorize;
+  SetAuthorizeNone;
   if not Assigned(OnBasicAuth) then
     exit;
   fAuthorize := hraBasic;
@@ -3001,14 +2998,17 @@ begin
     fAuthorizeBasicRealm);
 end;
 
-function THttpServerSocketGeneric.AuthorizeDigest: TDigestAuthServerMem;
+function THttpServerSocketGeneric.AuthorizeServerMem: TDigestAuthServerMem;
 begin
-  if (self = nil) or
-     (fAuthorizeDigest = nil) or
-     not fAuthorizeDigest.InheritsFrom(TDigestAuthServerMem) then
-    result := nil
-  else
-    result := TDigestAuthServerMem(fAuthorizeDigest);
+  result := nil;
+  if self = nil then
+    exit;
+  if (fAuthorizerDigest <> nil) and
+     fAuthorizerDigest.Instance.InheritsFrom(TDigestAuthServerMem) then
+    result := TDigestAuthServerMem(fAuthorizerDigest.Instance)
+  else if (fAuthorizerBasic <> nil) and
+           fAuthorizerBasic.Instance.InheritsFrom(TDigestAuthServerMem) then
+    result := TDigestAuthServerMem(fAuthorizerBasic.Instance)
 end;
 
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
@@ -3019,8 +3019,8 @@ begin
       if Assigned(fAuthorizeBasic) then
         result := fAuthorizeBasicRealm;
     hraDigest:
-      if fAuthorizeDigest <> nil then
-        result := fAuthorizeDigest.ServerInit(Opaque, 0);
+      if fAuthorizerDigest <> nil then
+        result := fAuthorizerDigest.DigestInit(Opaque, 0);
   end;
 end;
 
@@ -3048,9 +3048,9 @@ begin
       else
         exit;
     hraDigest:
-      if (fAuthorizeDigest = nil) or
+      if (fAuthorizerDigest= nil) or
          not IdemPChar(auth, 'DIGEST ') or
-         not fAuthorizeDigest.ServerAuth(
+         not fAuthorizerDigest.DigestAuth(
            auth + 7, Http.CommandMethod, Opaque, 0, user, url) or
          (url <> http.CommandUri) then
         exit;

@@ -886,7 +886,88 @@ function BasicServerAuth(FromClient: PUtf8Char;
   out User, Password: RawUtf8): boolean;
 
 type
-  /// abstract Digest access authentication on server side
+  /// parent abstract HTTP access authentication on server side
+  // - as used e.g. by THttpServerSocketGeneric for its optional authentication
+  IHttpAuthServer = interface
+    ['{036B2802-56BE-422F-9146-773702C86387}']
+    /// the realm associated with this access authentication
+    function Realm: RawUtf8;
+    /// retrieve the implementation class instance
+    function Instance: TObject;
+  end;
+
+  /// HTTP BASIC access authentication on server side
+  // - as used e.g. by THttpServerSocketGeneric for its BASIC authentication
+  IBasicAuthServer = interface(IHttpAuthServer)
+    ['{5C301470-39BB-4CBB-8366-01A7F23032F2}']
+    /// compute a Basic server authentication request header
+    // - return e.g. 'WWW-Authenticate: Basic realm="Realm"'#13#10
+    function BasicInit: RawUtf8;
+    /// validate a Basic client authentication response
+    // - FromClient typically follow 'Authorization: Basic ' header text
+    function BasicAuth(FromClient: PUtf8Char; out ClientUser: RawUtf8): boolean;
+    /// check the stored credentials as for the TOnHttpServerBasicAuth callback
+    // - used for the BASIC authentication scheme in THttpServerSocketGeneric
+    function OnBasicAuth(aSender: TObject;
+      const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+  end;
+
+  /// HTTP DIGEST access authentication on server side
+  // - as used e.g. by THttpServerSocketGeneric for its DIGEST authentication
+  IDigestAuthServer = interface(IHttpAuthServer)
+    ['{75B1B7B8-4981-4C09-BD8C-E938A2802ED1}']
+    /// compute a Digest server authentication request
+    // - used for the DIGEST authentication scheme in THttpServerSocketGeneric
+    // - returns the standard HTTP header with the default Prefix/Suffix
+    // - Opaque is a 64-bit number, typically the THttpServerConnectionID
+    // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
+    function DigestInit(Opaque, Tix64: Int64;
+      const Prefix: RawUtf8 = 'WWW-Authenticate: Digest ';
+      const Suffix: RawUtf8 = #13#10): RawUtf8; virtual;
+    /// validate a Digest client authentication response
+    // - used for the DIGEST authentication scheme in THttpServerSocketGeneric
+    // - FromClient typically follow 'Authorization: Digest ' header text
+    // - Opaque should match the value supplied on previous ServerInit() call
+    // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
+    function DigestAuth(FromClient: PUtf8Char; const Method: RawUtf8;
+      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean; virtual;
+    /// quickly check if the supplied client response is likely to be compatible
+    // - FromClient is typically a HTTP header
+    // - will just search for the 'algorithm=xxx,' text pattern
+    function DigestAlgoMatch(const FromClient: RawUtf8): boolean;
+  end;
+
+  /// abstract BASIC access authentication on server side
+  // - don't use this class but e.g. TDigestAuthServerMem or TDigestAuthServerFile
+  // - will implement the IBasicAuthServer process in an abstract way
+  TBasicAuthServer = class(TInterfacedObject, IBasicAuthServer)
+  protected
+    fRealm, fQuotedRealm, fBasicInit: RawUtf8;
+  public
+    /// initialize the HTTP access authentication engine
+    constructor Create(const aRealm: RawUtf8); reintroduce;
+    /// check the credentials stored for a given user
+    // - this is the main abstract virtual method to override for BASIC auth
+    // - returns true if supplied aUser/aPassword are correct, false otherwise
+    function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+      virtual; abstract;
+    { -- IHttpAuthServer and IBasicAuthServer methods }
+    /// retrieve the realm associated with this access authentication
+    // - a good practice is to use the server host name or UUID as realm
+    function Realm: RawUtf8;
+    /// retrieve the implementation class instance
+    function Instance: TObject;
+    /// compute a Basic server authentication request header
+    // - return e.g. 'WWW-Authenticate: Basic realm="Realm"'#13#10
+    function BasicInit: RawUtf8;
+    /// validate a Basic client authentication response
+    function BasicAuth(FromClient: PUtf8Char; out ClientUser: RawUtf8): boolean;
+    /// check the stored credentials as for the TOnHttpServerBasicAuth callback
+    function OnBasicAuth(aSender: TObject;
+      const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+  end;
+
+  /// abstract DIGEST and BASIC access authentication on server side
   // - should be inherited with proper persistence of users credentials
   // - notice: won't maintain sessions in memory, just check the credentials each
   // time so these classes should be used for authentication not authorization;
@@ -896,13 +977,13 @@ type
   // we implement an expiration delay with each ServerInit request
   // - BasicInit and BasicAuth methods could be used to implement Basic access
   // authentication calling the very same GetUserHash() virtual method
-  TDigestAuthServer = class(TSynPersistent)
+  TDigestAuthServer = class(TBasicAuthServer, IDigestAuthServer)
   protected
-    fRealm, fQuotedRealm, fBasicInit: RawUtf8;
     fAlgo: TDigestAlgo;
     fAlgoSize: byte;
     fRequestExpSec: integer;
     fOpaqueObfuscate: Int64;
+    // this is the main abstract virtual method to override for DIGEST auth
     function GetUserHash(const aUser, aRealm: RawUtf8;
       out aDigest: THash512Rec): integer; virtual; abstract;
     procedure ComputeDigest(const aUser: RawUtf8; const aPassword: SpiUtf8;
@@ -911,39 +992,18 @@ type
     /// initialize the Digest access authentication engine
     constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce; virtual;
     /// check the credentials stored for a given user
-    // - returns true if supplied aUser/aPassword are correct, false otherwise
-    function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
-    /// check the stored credentials as TOnHttpServerBasicAuth callback
-    function OnCheckCredential(aSender: TObject;
-      const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+    function CheckCredential(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): boolean; override;
+    { -- IDigestAuthServer methods }
     /// compute a Digest server authentication request
-    // - returns the standard HTTP header with the default Prefix/Suffix
-    // - Opaque is a 64-bit number, typically the THttpServerConnectionID
-    function ServerInit(Opaque, Tix64: Int64;
-      const Prefix: RawUtf8 = 'WWW-Authenticate: Digest ';
-      const Suffix: RawUtf8 = #13#10): RawUtf8;
-    /// quickly check if the supplied client response is likely to be compatible
-    // - FromClient is typically a HTTP header
-    // - will just search for the 'algorithm=xxx,' text pattern
-    function ServerAlgoMatch(const FromClient: RawUtf8): boolean;
+    function DigestInit(Opaque, Tix64: Int64;
+      const Prefix, Suffix: RawUtf8): RawUtf8;
     /// validate a Digest client authentication response
-    // - FromClient typically follow 'Authorization: Digest ' header text
-    // - Opaque should match the value supplied on previous ServerInit() call
-    function ServerAuth(FromClient: PUtf8Char; const Method: RawUtf8;
+    function DigestAuth(FromClient: PUtf8Char; const Method: RawUtf8;
       Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
-    /// compute a Basic server authentication request header
-    // - allow to reuse the inherited GetUserHash storage for BASIC authentication
-    // - return e.g. 'WWW-Authenticate: Basic realm="Realm"'#13#10
-    property BasicInit: RawUtf8
-      read fBasicInit;
-    /// validate a Basic client authentication response
-    // - FromClient typically follow 'Authorization: Basic ' header text
-    function BasicAuth(FromClient: PUtf8Char; out ClientUser: RawUtf8): boolean;
+    /// quickly check if the supplied client response is likely to be compatible
+    function DigestAlgoMatch(const FromClient: RawUtf8): boolean;
   published
-    /// the Digest realm associated with this instance
-    // - a good practice is to use the server host name or UUID as realm
-    property Realm: RawUtf8
-      read fRealm;
     /// the Digest algorithm used with this instance
     property Algo: TDigestAlgo
       read fAlgo;
@@ -3496,6 +3556,52 @@ begin
 end;
 
 
+{ TBasicAuthServer }
+
+constructor TBasicAuthServer.Create(const aRealm: RawUtf8);
+begin
+  if aRealm = '' then
+    raise EDigest.CreateUtf8('%.Create: void Realm', [self]);
+  fRealm := aRealm;
+  QuotedStr(fRealm, '"', fQuotedRealm);
+  FormatUtf8('WWW-Authenticate: Basic realm="%"'#13#10, [fRealm], fBasicInit);
+end;
+
+function TBasicAuthServer.Realm: RawUtf8;
+begin
+  result := fRealm;
+end;
+
+function TBasicAuthServer.Instance: TObject;
+begin
+  result := self;
+end;
+
+function TBasicAuthServer.BasicInit: RawUtf8;
+begin
+  result := fBasicInit;
+end;
+
+function TBasicAuthServer.BasicAuth(FromClient: PUtf8Char;
+  out ClientUser: RawUtf8): boolean;
+var
+  user, pass: RawUtf8;
+begin
+  result := BasicServerAuth(FromClient, user, pass) and
+            CheckCredential(user, pass);
+  if not result then
+    exit;
+  ClientUser := user;
+  FillZero(pass);
+end;
+
+function TBasicAuthServer.OnBasicAuth(aSender: TObject;
+  const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+begin
+  result := CheckCredential(aUser, aPassword);
+end;
+
+
 { TDigestAuthServer }
 
 type
@@ -3505,13 +3611,9 @@ type
 
 constructor TDigestAuthServer.Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo);
 begin
-  if aRealm = '' then
-    raise EDigest.CreateUtf8('%.Create: void Realm', [self]);
   if aAlgo = daUndefined then
     raise EDigest.CreateUtf8('%.Create: undefined Algo', [self]);
-  fRealm := aRealm;
-  QuotedStr(fRealm, '"', fQuotedRealm);
-  FormatUtf8('WWW-Authenticate: Basic realm="%"'#13#10, [fRealm], fBasicInit);
+  inherited Create(aRealm);
   fAlgo := aAlgo;
   fAlgoSize := HASH_SIZE[DIGEST_ALGO[aAlgo]];
   if fAlgoSize > SizeOf(TDigestAuthHash) then // paranoid
@@ -3531,14 +3633,14 @@ begin
     raise EDigest.CreateUtf8('%.ComputeDigest: DigestHA0?', [self]);
 end;
 
-function TDigestAuthServer.ServerInit(Opaque, Tix64: Int64;
+function TDigestAuthServer.DigestInit(Opaque, Tix64: Int64;
   const Prefix, Suffix: RawUtf8): RawUtf8;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
   result := DigestServerInit(fAlgo, fQuotedRealm, Prefix, Suffix, Opaque, Tix64);
 end;
 
-function TDigestAuthServer.ServerAlgoMatch(const FromClient: RawUtf8): boolean;
+function TDigestAuthServer.DigestAlgoMatch(const FromClient: RawUtf8): boolean;
 var
   p: PUtf8Char;
   alg: ShortString;
@@ -3552,26 +3654,13 @@ begin
   result := IdemPropNameU(DIGEST_NAME[fAlgo], @alg[1], ord(alg[0]));
 end;
 
-function TDigestAuthServer.ServerAuth(FromClient: PUtf8Char;
+function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;
   const Method: RawUtf8; Opaque, Tix64: Int64;
   out ClientUser, ClientUrl: RawUtf8): boolean;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
   result := DigestServerAuth(fAlgo, fRealm, Method, FromClient, Opaque,
     GetUserHash, ClientUser, ClientUrl, fRequestExpSec, Tix64);
-end;
-
-function TDigestAuthServer.BasicAuth(FromClient: PUtf8Char;
-  out ClientUser: RawUtf8): boolean;
-var
-  user, pass: RawUtf8;
-begin
-  result := BasicServerAuth(FromClient, user, pass) and
-            CheckCredential(user, pass);
-  if not result then
-    exit;
-  ClientUser := user;
-  FillZero(pass);
 end;
 
 function TDigestAuthServer.CheckCredential(const aUser: RawUtf8;
@@ -3587,11 +3676,6 @@ begin
   FillZero(stored.b);
 end;
 
-function TDigestAuthServer.OnCheckCredential(aSender: TObject;
-  const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
-begin
-  result := CheckCredential(aUser, aPassword);
-end;
 
 { TDigestAuthServerMem }
 
