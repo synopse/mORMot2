@@ -309,6 +309,14 @@ const
   LDAP_PORT = '389';
   /// the TCP port usually published by a LDAP server over TLS
   LDAP_TLS_PORT = '636';
+  /// the TCP port usually published by a LDAP server over plain or TLS
+  LDAP_DEFAULT_PORT: array[{tls=}boolean] of RawUtf8 = (
+    LDAP_PORT,
+    LDAP_TLS_PORT);
+  /// the URI scheme for a LDAP server over plain or TLS
+  LDAP_DEFAULT_SCHEME: array[{tls=}boolean] of RawUtf8 = (
+    'ldap://',
+    'ldaps://');
 
 type
   /// define possible operations for LDAP MODIFY operations
@@ -679,6 +687,19 @@ type
   PLdapKnownCommonNames = ^TLdapKnownCommonNames;
   TLdapKnownCommonNamesDual = array[boolean] of TLdapKnownCommonNames;
 
+  /// how TLdapClient.Connect try to find the LDAP server if no TargetHost is set
+  // - default lccCldap will call CldapMyLdapController() to retrieve the
+  // best possible LDAP server for this client
+  // - lccClosest will make a round over the supplied addresses with a CLDAP
+  // query over UDP, to find out the closest alive instances - also circumvent
+  // if some AD were configured to drop and timeout more distant hosts
+  // - default lccTlsFirst will try to connect as TLS on port 636 (if OpenSSL
+  // is loaded)
+  TLdapClientConnect = set of (
+    lccCldap,
+    lccClosest,
+    lccTlsFirst);
+
   /// store the authentication and connection settings of a TLdapClient instance
   TLdapClientSettings = class(TSynPersistent)
   protected
@@ -690,6 +711,8 @@ type
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
     fTls: boolean;
+    function GetTargetUri: RawUtf8;
+    procedure SetTargetUri(const uri: RawUtf8);
   public
     /// initialize this instance
     constructor Create; override;
@@ -698,7 +721,14 @@ type
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
     // - any existing KerberosDN and KerberosSpn will be used during discovery
-    function LoadDefaultFromSystem(TryKerberos: boolean): boolean;
+    function LoadDefaultFromSystem(TryKerberos: boolean;
+      DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
+      DelayMS: integer = 500): boolean;
+    /// the 'ldap[s]://TargetHost:TargetPort' human-readable URI
+    // - reflecting the TargetHost, TargetPort and TLS properties
+    // - for safety, won't include the UserName/Password content
+    property TargetUri: RawUtf8
+      read GetTargetUri write SetTargetUri;
   published
     /// target server IP (or symbolic name)
     // - default is '' but if not set, Connect will call DnsLdapControlers()
@@ -715,13 +745,13 @@ type
     // sometimes '3269') on TLS
     property TargetPort: RawUtf8
       read fTargetPort Write fTargetPort;
+    /// if connection to the LDAP server is secured via TLS
+    property Tls: boolean
+      read fTls Write fTls;
     /// milliseconds timeout for socket operations
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
       read fTimeout Write fTimeout;
-    /// if connection to the LDAP server is secured via TLS
-    property Tls: boolean
-      read fTls Write fTls;
     /// if protocol needs user authorization, then fill here user name
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
@@ -749,19 +779,6 @@ type
     property KerberosSpn: RawUtf8
       read fKerberosSpn write fKerberosSpn;
   end;
-
-  /// how TLdapClient.Connect try to find the LDAP server if no TargetHost is set
-  // - default lccCldap will call CldapMyLdapController() to retrieve the
-  // best possible LDAP server for this client
-  // - lccClosest will make a round over the supplied addresses with a CLDAP
-  // query over UDP, to find out the closest alive instances - also circumvent
-  // if some AD were configured to drop and timeout more distant hosts
-  // - default lccTlsFirst will try to connect as TLS on port 636 (if OpenSSL
-  // is loaded)
-  TLdapClientConnect = set of (
-    lccCldap,
-    lccClosest,
-    lccTlsFirst);
 
   /// implementation of LDAP client version 2 and 3
   // - will default setup a TLS connection on the OS-designed LDAP server
@@ -2687,7 +2704,8 @@ begin
   FillZero(fPassword);
 end;
 
-function TLdapClientSettings.LoadDefaultFromSystem(TryKerberos: boolean): boolean;
+function TLdapClientSettings.LoadDefaultFromSystem(TryKerberos: boolean;
+  DiscoverMode: TLdapClientConnect; DelayMS: integer): boolean;
 var
   test: TLdapClient;
 begin
@@ -2695,7 +2713,7 @@ begin
   test := TLdapClient.Create;
   try
     test.Settings.KerberosDN := fKerberosDN; // allow customization
-    if not test.Connect then
+    if not test.Connect(DiscoverMode, DelayMS) then
       exit;
     if TryKerberos then
     begin
@@ -2708,6 +2726,42 @@ begin
     test.Free;
   end;
   result := true;
+end;
+
+function TLdapClientSettings.GetTargetUri: RawUtf8;
+begin
+  result := '';
+  if (self = nil) or
+     (fTargetHost = '') then
+    exit;
+  result := LDAP_DEFAULT_SCHEME[fTls] + fTargetHost;
+  if fTargetPort <> LDAP_DEFAULT_PORT[fTls] then
+    result := result + ':' + fTargetPort;
+end;
+
+procedure TLdapClientSettings.SetTargetUri(const uri: RawUtf8);
+var
+  u: TUri;
+begin
+  fTargetHost := '';
+  fTargetPort := LDAP_PORT;
+  fTls := false;
+  if not u.From(uri, LDAP_PORT) then
+    exit;
+  if u.Scheme <> '' then
+    if IdemPChar(pointer(u.Scheme), 'LDAP') then
+      case u.Scheme[5] of
+        #0:
+          fTls := false;
+        's', 'S':
+          fTls := true;
+      else
+        exit;
+      end
+    else
+      exit;
+  fTargetHost := u.Server;
+  fTargetPort := u.Port;
 end;
 
 
@@ -3086,7 +3140,7 @@ begin
      not Connect then
     exit;
   if DIGEST_ALGONAME[Algo] = '' then
-    raise ESynCrypto.CreateUtf8('%.BindSaslDigest(%) requires a *-sess algo',
+    raise ESynCrypto.CreateUtf8('Unsupported %.BindSaslDigest(%) algorithm',
       [self, DIGEST_NAME[Algo]]);
   if fSettings.Password = '' then
     result := Bind
