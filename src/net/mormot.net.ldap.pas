@@ -12,6 +12,7 @@ unit mormot.net.ldap;
     - LDAP Response Storage
     - CLDAP Client Functions
     - LDAP Client Class
+    - HTTP BASIC Authentication via LDAP or Kerberos
 
   *****************************************************************************
   Code below was inspired by Synapse Library code:
@@ -34,6 +35,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.data,
+  mormot.core.log,
   mormot.lib.sspi, // do-nothing units on non compliant OS
   mormot.lib.gssapi,
   mormot.crypt.core,
@@ -708,6 +710,12 @@ type
     lccClosest,
     lccTlsFirst);
 
+  /// how a TLdapClient connect to its associated LDAP Server
+  TLdapClientTransmission = (
+    lctNone,
+    lctPlain,
+    lctEncrypted);
+
   /// store the authentication and connection settings of a TLdapClient instance
   TLdapClientSettings = class(TSynPersistent)
   protected
@@ -727,15 +735,16 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
-    function CheckTargetHost: boolean;
+    function CheckTargetHost: TLdapClientTransmission;
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
     // - any existing KerberosDN and KerberosSpn will be used during discovery
     function LoadDefaultFromSystem(TryKerberos: boolean;
       DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
-      DelayMS: integer = 500): boolean;
+      DelayMS: integer = 500): TLdapClientTransmission;
     /// raise ELdap if neither CheckTargetHost nor LoadDefaultFromSystem succeeded
-    procedure ValidateTargetHostOrLoadDefault(TryKerberos: boolean = false);
+    procedure ValidateTargetHostOrLoadDefault(TryKerberos: boolean = true;
+      EnsureEncrypted: boolean = false);
     /// the 'ldap[s]://TargetHost:TargetPort[/KerberosDN]' human-readable URI
     // - reflecting the TargetHost, TargetPort, TLS and KerberosDN properties
     // - for safety, won't include the UserName/Password content
@@ -944,6 +953,9 @@ type
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
+    /// test whether the client is connected with TLS or Kerberos Signing-Sealing
+    // - it is unsafe to Bind with a plain Password if lctEncrypted is not returned
+    function Transmission: TLdapClientTransmission;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -1010,6 +1022,93 @@ type
       read fResultString;
   end;
 
+
+{ **************** HTTP BASIC Authentication via LDAP or Kerberos }
+
+type
+  /// abstract BASIC access via an external authentication service
+  // - properly implemented by TBasicAuthServerKerberos and TBasicAuthServerLdap
+  // - will maintain an internal in-memory cache of the latest valid credentials
+  // as secured SHA3-256 hashes
+  TBasicAuthServerExternal = class(TDigestAuthServerMem)
+  protected
+    fLog: TSynLogClass;
+    function ExternalServerAsk(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): boolean; virtual; abstract;
+  public
+    /// will ask the external server if some credentials are not already in cache
+    // - as called from OnBasicAuth() callback
+    // - you can also register manually some credentials for IDigestAuthServer
+    function CheckCredential(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): TAuthServerResult; override;
+    /// can add some logs to the LDAP client process
+    property Log: TSynLogClass
+      read fLog write fLog;
+  end;
+
+  /// BASIC access authentication engine via SSPI/GSSAPI Kerberos API
+  // - allows Kerberos authentication from a HTTP client outside of the domain
+  // - maintain an internal in-memory cache of the latest valid credentials
+  // - could also be used outside of the HTTP BASIC authentication usecase to
+  // check for user/name credential pairs over Kerberos, with a cache
+  TBasicAuthServerKerberos = class(TBasicAuthServerExternal)
+  protected
+    fKerberosSpn: RawUtf8;
+    function ExternalServerAsk(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): boolean; override;
+  public
+    /// initialize the BASIC access authentication engine via Kerberos
+    // - you could use as SPN e.g. 'LDAP/ad.domain.com@DOMAIN.COM'
+    // - if no SPN is supplied, will try with CldapGetDefaultLdapController()
+    // - if aRealm is not set, will extract the Kerberos realm from the SPN
+    // - the valid credentials will be cached by default for 5 minutes
+    constructor Create(const aKerberosSpn: RawUtf8 = ''; const aRealm: RawUtf8 = '';
+      aCacheTimeoutSec: integer = 5 * 60); reintroduce;
+    /// low-level Kerberos authentication method via SSPI/GSSAPI (without cache)
+    // - can optionally return the full Netbios user name
+    // - as called by CheckCredential() if no match was found in cache
+    function KerberosAsk(const aUser: RawUtf8; const aPassword: SpiUtf8;
+      aFullUserName: PRawUtf8 = nil): boolean;
+    /// the Kerberos Service Principal Name, as registered in domain
+    // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+    property KerberosSpn: RawUtf8
+      read fKerberosSpn;
+  end;
+
+  /// BASIC access authentication engine via a LDAP client
+  // - allows for remote HTTP authentication to a server outside of the domain
+  // - if the server is inside a domain, consider safer TBasicAuthServerKerberos
+  // - will maintain an internal in-memory cache of the latest valid credentials
+  // as secured SHA3-256 hashes
+  // - IDigestAuthServer methods won't work as expected unless SetCredential()
+  // or CheckCredential() have been explicitly called before, because LDAP's
+  // digest fields are not compatible with HTTP's
+  // - could also be used outside of HTTP BASIC authentication usecase to check
+  // for user/name credential pairs on a LDAP server, with a cache
+  TBasicAuthServerLdap = class(TBasicAuthServerExternal)
+  protected
+    fLdapSettings: TLdapClientSettings;
+    function ExternalServerAsk(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): boolean; override;
+  public
+    /// initialize the BASIC access authentication engine via a LDAP client
+    // - will try to connect to aLdapUri or the default LDAP server if none set
+    // - if aRealm is not set, will use the Kerberos realm (e.g. 'ad.mycorp.com')
+    // - the valid credentials will be cached by default for 5 minutes
+    constructor Create(const aLdapUri: RawUtf8 = ''; const aRealm: RawUtf8 = '';
+      aCacheTimeoutSec: integer = 5 * 60); reintroduce; overload;
+    /// initialize the BASIC access authentication engine via a LDAP client
+    // - will try to connect via aLdapSettings or the default LDAP server if none set
+    // - supplied aLdapSettings will be owned by this instance
+    constructor Create(const aRealm: RawUtf8; aLdapSettings: TLdapClientSettings;
+      aCacheTimeoutSec: integer = 60 * 60); reintroduce; overload;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// access to the reference settings to access the LDAP server
+    // - as set by Create from aLdapUri
+    property LdapSettings: TLdapClientSettings
+      read fLdapSettings;
+  end;
 
 
 implementation
@@ -2735,31 +2834,32 @@ begin
   FillZero(fPassword);
 end;
 
-function TLdapClientSettings.CheckTargetHost: boolean;
+function TLdapClientSettings.CheckTargetHost: TLdapClientTransmission;
 var
   test: TLdapClient;
 begin
-  result := false;
+  result := lctNone;
   if (fTargetHost <> '') and
      (fTargetPort <> '') then
     try
       test := TLdapClient.Create;
       try
-        result := test.Bind; // connect and anonymous binding
+        if test.Bind then // connect and anonymous binding
+          result := test.Transmission;
       finally
         test.Free;
       end;
     except
-      result := false;
+      result := lctNone;
     end;
 end;
 
 function TLdapClientSettings.LoadDefaultFromSystem(TryKerberos: boolean;
-  DiscoverMode: TLdapClientConnect; DelayMS: integer): boolean;
+  DiscoverMode: TLdapClientConnect; DelayMS: integer): TLdapClientTransmission;
 var
   test: TLdapClient;
 begin
-  result := false;
+  result := lctNone;
   try
     test := TLdapClient.Create;
     try
@@ -2768,30 +2868,41 @@ begin
         exit;
       if TryKerberos then
       begin
-        test.Settings.KerberosSpn := fKerberosSpn;
-        if not test.BindSaslKerberos then
-          exit;
+        if test.Settings.KerberosSpn = '' then
+          test.Settings.KerberosSpn := fKerberosSpn;
+        if test.BindSaslKerberos then
+          fKerberosSpn := test.Settings.KerberosSpn;
+          // if Kerberos failed, continue anyway (may work with credentials)
       end;
+      result := test.Transmission;
       CopyObject(test.Settings, self);
     finally
       test.Free;
     end;
-    result := true;
   except
-    result := false;
+    result := lctNone;
   end;
 end;
 
 procedure TLdapClientSettings.ValidateTargetHostOrLoadDefault(
-  TryKerberos: boolean);
+  TryKerberos, EnsureEncrypted: boolean);
+var
+  trans: TLdapClientTransmission;
 begin
   if fTargetHost <> '' then
   begin
-    if not CheckTargetHost then
+    trans := CheckTargetHost;
+    if trans = lctNone then
       raise ELdap.CreateUtf8('%: invalid %', [self, GetTargetUri]);
   end
-  else if not LoadDefaultFromSystem(TryKerberos) then
-     raise ELdap.CreateUtf8('%: no default LDAP server', [self]);
+  else begin
+    trans := LoadDefaultFromSystem(TryKerberos);
+    if trans = lctNone then
+      raise ELdap.CreateUtf8('%: no default LDAP server', [self]);
+  end;
+  if EnsureEncrypted and
+     (trans <> lctEncrypted) then
+    raise ELdap.CreateUtf8('%: no encryption on the wire', [self]);
 end;
 
 function TLdapClientSettings.GetTargetUri: RawUtf8;
@@ -3344,14 +3455,17 @@ begin
         else if seclayers * KLS_EXPECTED = [] then
           // we only support signing sealing
           exit
-        else
+        else if needencrypt or // MS AD requires signing/sealing
+                not fSock.TLS.Enabled then   // or a plain OpenLDAP TCP
         begin
           // return the supported algorithm, with a 64KB maximum message size
           if secmaxsize > 64 shl 10 then
             secmaxsize := 64 shl 10; // evolution: call gss_wrap_size_limit?
           PCardinal(datain)^ := bswap32(secmaxsize) + byte(KLS_EXPECTED);
           needencrypt := true; // fSecContextEncrypt = true = sign and seal
-        end;
+        end
+        else
+          PCardinal(datain)^ := 0; // OpenLDAP over TLS needs no sealing
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
         dataout := SecEncrypt(fSecContext, datain);
@@ -3729,6 +3843,18 @@ begin
     result := fBound;
 end;
 
+function TLdapClient.Transmission: TLdapClientTransmission;
+begin
+  if (self = nil) or
+     not fSock.SockConnected then
+    result := lctNone
+  else if fSettings.Tls or
+          fSecContextEncrypt then
+    result := lctEncrypted
+  else
+    result := lctPlain;
+end;
+
 function TLdapClient.RetrieveWellKnownObjects(const DN: RawUtf8;
   out Dual: TLdapKnownCommonNamesDual): boolean;
 var
@@ -3805,6 +3931,147 @@ begin
         fWellKnownObjectsCached := true;
   result := @fWellKnownObjects[AsCN];
 end;
+
+
+{ **************** HTTP BASIC Authentication via LDAP or Kerberos }
+
+{ TBasicAuthServerExternal }
+
+function TBasicAuthServerExternal.CheckCredential(const aUser: RawUtf8;
+  const aPassword: SpiUtf8): TAuthServerResult;
+var
+  start, stop: Int64;
+begin
+  result := asrUnknownUser;
+  if (aUser = '') or
+     (aPassword = '') then
+    exit;
+  result := inherited CheckCredential(aUser, aPassword);
+  if result <> asrUnknownUser then
+    exit;
+  // first time we encounter this user
+  QueryPerformanceMicroSeconds(start);
+  if ExternalServerAsk(aUser, aPassword) then
+  begin
+    SetCredential(aUser, aPassword); // add valid credentials to internal cache
+    result := asrMatch;
+  end;
+  if fLog = nil then
+    exit;
+  QueryPerformanceMicroSeconds(stop);
+  fLog.Add.Log(sllTrace, 'CheckCredential(%)=% in %',
+    [aUser, GetEnumName(TypeInfo(TAuthServerResult), ord(result)),
+     MicroSecToString(stop - start)], self);
+end;
+
+
+{ TBasicAuthServerKerberos }
+
+constructor TBasicAuthServerKerberos.Create(const aKerberosSpn: RawUtf8;
+  const aRealm: RawUtf8; aCacheTimeoutSec: integer);
+var
+  r: RawUtf8;
+begin
+  fKerberosSpn := aKerberosSpn;
+  if fKerberosSpn = '' then
+    CldapGetDefaultLdapController(@r, @fKerberosSpn);
+  if aRealm <> '' then
+    r := aRealm
+  else if r = '' then
+    r := mormot.core.unicode.LowerCase(SplitRight(fKerberosSpn, '@'));
+  inherited Create(r, daSHA3_256);
+  if not InitializeDomainAuth then
+    raise ELdap.CreateUtf8('%.Create: no SSPI/GSSAPI available', [self]);
+end;
+
+function TBasicAuthServerKerberos.ExternalServerAsk(const aUser: RawUtf8;
+  const aPassword: SpiUtf8): boolean;
+begin
+  result := KerberosAsk(aUser, aPassword, nil);
+end;
+
+function TBasicAuthServerKerberos.KerberosAsk(const aUser: RawUtf8;
+  const aPassword: SpiUtf8; aFullUserName: PRawUtf8): boolean;
+var
+  client, server: TSecContext;
+  datain, dataout: RawByteString;
+begin
+  result := false;
+  InvalidateSecContext(client, 0);
+  InvalidateSecContext(server, 0);
+  try
+    try
+      while ClientSspiAuthWithPassword(
+              client, datain, aUser, aPassword, fKerberosSpn, dataout) and
+            ServerSspiAuth(server, dataout, datain) do;
+      if aFullUserName <> nil then
+        ServerSspiAuthUser(server, aFullUserName^);
+    except
+      result := false;
+    end;
+  finally
+    FreeSecContext(server);
+    FreeSecContext(client);
+  end;
+end;
+
+
+{ TBasicAuthServerLdap }
+
+constructor TBasicAuthServerLdap.Create(const aRealm: RawUtf8;
+  aLdapSettings: TLdapClientSettings; aCacheTimeoutSec: integer);
+var
+  r: RawUtf8;
+begin
+  // validate we have some LDAP server to safely connect to
+  fLdapSettings := aLdapSettings;
+  fLdapSettings.ValidateTargetHostOrLoadDefault({trykerberos=}false);
+  r := aRealm;
+  if r = '' then
+    r := fLdapSettings.KerberosDN; // e.g. 'ad.mycorp.com'
+  if not fLdapSettings.Tls then
+    raise ELdap.CreateUtf8('%.Create(%): TLS is mandatory', [self, r]);
+  // setup the internal in-memory cache
+  inherited Create(r, daSHA3_256);
+  fUsers.TimeOutSeconds := aCacheTimeoutSec;
+end;
+
+constructor TBasicAuthServerLdap.Create(const aLdapUri, aRealm: RawUtf8;
+  aCacheTimeoutSec: integer);
+begin
+  Create(aRealm, TLdapClientSettings.Create(aLdapUri), aCacheTimeoutSec);
+end;
+
+destructor TBasicAuthServerLdap.Destroy;
+begin
+  inherited Destroy;
+  fLdapSettings.Free;
+end;
+
+function TBasicAuthServerLdap.ExternalServerAsk(const aUser: RawUtf8;
+  const aPassword: SpiUtf8): boolean;
+var
+  u: RawUtf8;
+  client: TLdapClient;
+begin
+  // the AD expects the username in form 'user@full.kerberos.realm'
+  u := aUser;
+  if PosExChar('@', u) = 0 then
+    if fLdapSettings.KerberosDN = '' then
+      u := u + '@' + fRealm
+    else
+      u := u + '@' + fLdapSettings.KerberosDN;
+  // try to use those credentials to bind to the LDAP server
+  client := TLdapClient.Create(fLdapSettings);
+  try
+    client.Settings.UserName := u;
+    client.Settings.Password := aPassword;
+    result := client.Bind;
+  finally
+    client.Free;
+  end;
+end;
+
 
 
 end.
