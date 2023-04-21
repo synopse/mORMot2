@@ -1314,6 +1314,15 @@ type
     // - so this method is thread-safe
     // - returns FALSE if no match exists
     function FindAndExtract(const aKey; var aValue): boolean;
+    /// search of a stored value, and return seconds since its timeout was set
+    // - returns -1 if aKey was not found
+    // - this method is thread-safe
+    function FindAndGetElapsedSeconds(const aKey): integer;
+    /// search of a stored value, and delete it if its timeout was set too long ago
+    // - returns true if aKey was found and deleted
+    // - returns false if aKey was not found or the entry not deprecated
+    // - this method is thread-safe
+    function FindAndDeleteDeprecated(const aKey; aSeconds: integer): boolean;
     /// search for a primary key presence
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - this method is thread-safe
@@ -9601,6 +9610,50 @@ begin
   finally
   {$endif HASFASTTRYFINALLY}
     fSafe.ReadUnLock;
+  end;
+end;
+
+function TSynDictionary.FindAndGetElapsedSeconds(const aKey): integer;
+var
+  tim: cardinal;
+  ndx: PtrInt;
+begin
+  result := -1;
+  if self = nil then
+    exit;
+  tim := ComputeNextTimeOut;
+  if tim = 0 then
+    exit;
+  fSafe.ReadLock;
+  try
+    ndx := Find(aKey, {aUpdateTimeOut=}false);
+    if ndx >= 0 then
+      result := tim - fTimeOut[ndx];
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TSynDictionary.FindAndDeleteDeprecated(const aKey; aSeconds: integer): boolean;
+var
+  tim: cardinal;
+  ndx: PtrInt;
+begin
+  result := false;
+  if (self = nil) or
+     (aSeconds <= 0) then
+    exit;
+  tim := ComputeNextTimeOut;
+  if tim = 0 then
+    exit;
+  fSafe.ReadWriteLock;
+  try
+    ndx := Find(aKey, {aUpdateTimeOut=}false);
+    if (ndx >= 0) and
+       (tim - fTimeOut[ndx] > cardinal(aSeconds)) then
+      result := DeleteAt(ndx);
+  finally
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
