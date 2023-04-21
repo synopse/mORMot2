@@ -427,6 +427,14 @@ function CldapMyLdapController(const NameServer: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil;
   TimeOutMS: integer = 500): RawUtf8;
 
+/// retrieve the default LDAP 'server:port'
+// - if ForcedDomainName global variable is set, calls CldapGetLdapController()
+// - otherwise, calls CldapMyLdapController()
+// - can optionally return the associated Domain Name and Service Principal Name
+// - as used by TLdapClient.Connect in lccCldap discover mode
+function CldapGetDefaultLdapController(
+  DN: PRawUtf8 = nil; SPN: PRawUtf8 = nil): RawUtf8;
+
 /// pickup the preferred LDAP 'server:port' of a set of LDAP servers
 // - will send CLDAP NetLogon messages to the LdapServers to retrieve
 // TCldapDomainInfo.ClientSite then request the DNS for the LDAP of this site
@@ -1256,7 +1264,7 @@ var
   n: PtrInt;
   tmp: array[0..7] of byte;
 begin
-  if Len < $80 then
+  if Len <= $7f then
   begin
     dest^ := Len;
     result := 1;
@@ -1283,9 +1291,9 @@ var
 begin
   result := ord(Buffer[Start]);
   inc(Start);
-  if result < $80 then
+  if result <= $7f then
     exit;
-  n := result and $7f;
+  n := result and $7f; // first byte is number of following bytes + $80
   result := 0;
   repeat
     result := (result shl 8) + cardinal(Buffer[Start]);
@@ -2206,6 +2214,25 @@ begin
     DomainName^ := dn;
 end;
 
+function CldapGetDefaultLdapController(DN, Spn: PRawUtf8): RawUtF8;
+var
+  domain: RawUtf8;
+begin
+  if ForcedDomainName <> '' then
+  begin
+    domain := ForcedDomainName;
+    result := CldapGetLdapController(ForcedDomainName, '', 500);
+  end
+  else
+    result := CldapMyLdapController('', false, DN);
+  if result = '' then
+    exit;
+  if DN <> nil then
+    DN^ := domain;
+  if Spn <> nil then
+    Spn^ := 'LDAP/' + Split(result, ':') + '@' + UpperCase(domain)
+end;
+
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer;
   const Address, Port: RawUtf8): integer;
 var
@@ -2858,14 +2885,8 @@ begin
       ForcedDomainName := fSettings.KerberosDN; // may be pre-set
     if lccCldap in DiscoverMode then
     begin
-      if ForcedDomainName <> '' then
-      begin
-        h := CldapGetLdapController(ForcedDomainName, '', DelayMS);
-        if h <> '' then
-          fSettings.KerberosDN := ForcedDomainName;
-      end
-      else
-        h := CldapMyLdapController('', false, @fSettings.fKerberosDN);
+      h := CldapGetDefaultLdapController(
+        @fSettings.fKerberosDN, @fSettings.fKerberosSpn);
       if h <> '' then
         AddRawUtf8(dc, h);
     end;
@@ -3269,7 +3290,7 @@ begin
   fSecContextUser := '';
   if (fSettings.KerberosSpn = '') and
      (fSettings.KerberosDN <> '') then
-    fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost +
+    fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost + {noport}
                              '@' + UpperCase(fSettings.KerberosDN);
   req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
             Asn(fVersion),

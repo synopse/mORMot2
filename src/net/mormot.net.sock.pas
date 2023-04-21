@@ -1078,8 +1078,8 @@ type
     Https: boolean;
     /// either nlTcp for HTTP/HTTPS or nlUnix for Unix socket URI
     Layer: TNetLayer;
-    /// if the server is accessible via something else than http:// or https://
-    // - e.g. 'ws' or 'wss' for ws:// or wss://
+    /// the protocol defined for this URI
+    // - e.g. 'http'/'https' for http:// https:// or 'ws'/'wss' for ws:// wss://
     Scheme: RawUtf8;
     /// the server name
     // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
