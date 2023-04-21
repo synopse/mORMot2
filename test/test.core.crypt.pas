@@ -2375,24 +2375,28 @@ begin
       for u := 0 to high(users) do
       begin
         opaque := Random64;
-        s := dig.ServerInit(opaque, 0, '', '');
+        s := dig.DigestInit(opaque, 0, '', '');
         Check(s <> '');
         c := DigestClient(a, s, 'GET', url, users[u], pwds[u]);
         Check(c <> '');
-        Check(dig.ServerAlgoMatch(c), 'algo');
-        Check(dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth1');
+        Check(dig.DigestAlgoMatch(c), 'algo');
+        Check(dig.DigestAuth(
+          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth1');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         inc(opaque);
-        Check(not dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth2');
+        Check(not dig.DigestAuth(
+          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth2');
         dec(opaque);
-        Check(dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), '3');
+        Check(dig.DigestAuth(
+          pointer(c), 'GET', opaque, 0, authuser, authurl), '3');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         c := DigestClient(a, s, 'GET', url, users[u], pwds[u] + 'wrong');
         Check(c <> '');
-        Check(dig.ServerAlgoMatch(c));
-        Check(not dig.ServerAuth(pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth3');
+        Check(dig.DigestAlgoMatch(c));
+        Check(not dig.DigestAuth(
+          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth3');
         CheckEqual(authuser, '');
         CheckEqual(authurl, '');
         s := dig.BasicInit;

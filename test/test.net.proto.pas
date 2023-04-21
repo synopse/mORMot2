@@ -566,8 +566,9 @@ end;
 
 procedure TNetworkProtocols.IpDnsLdap;
 var
-  ip: RawUtf8;
+  ip, u: RawUtf8;
   c: cardinal;
+  l: TLdapClientSettings;
 begin
   // validate some IP releated process
   Check(not NetIsIP4(nil));
@@ -608,6 +609,40 @@ begin
   CheckEqual(DNToCN(
     'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
     'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
+  // validate LDAP settings
+  l := TLdapClientSettings.Create;
+  try
+    CheckEqual(l.TargetUri, '');
+    l.TargetHost := 'ad.synopse.info';
+    CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
+    l.Tls := true;
+    CheckEqual(l.TargetUri, 'ldaps://ad.synopse.info:389');
+    l.TargetPort := LDAP_TLS_PORT;
+    CheckEqual(l.TargetUri, 'ldaps://ad.synopse.info');
+    l.TargetPort := '1234';
+    u := l.TargetUri;
+    CheckEqual(u, 'ldaps://ad.synopse.info:1234');
+    l.TargetUri := 'http://ad.synopse.com';
+    CheckEqual(l.TargetUri, '');
+    l.TargetUri := 'ldap2://ad.synopse.com';
+    CheckEqual(l.TargetUri, '');
+    l.TargetUri := 'ldap://ad.synopse.com';
+    CheckEqual(l.TargetUri, 'ldap://ad.synopse.com');
+    l.TargetUri := 'ad.synopse.info';
+    CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
+  finally
+    l.Free;
+  end;
+  l := TLdapClientSettings.Create;
+  try
+    CheckEqual(l.TargetUri, '');
+    l.TargetHost := 'ad.synopse.com';
+    CheckEqual(l.TargetUri, 'ldap://ad.synopse.com');
+    l.TargetUri := u;
+    CheckEqual(l.TargetUri, 'ldaps://ad.synopse.info:1234');
+  finally
+    l.Free;
+  end;
 end;
 
 

@@ -477,31 +477,31 @@ begin
       CheckEqual(cli.Get('/root/timestamp', 10000), HTTP_SUCCESS);
       // validate BASIC auth
       SetAuthorizeBasic(TDigestAuthServerMem.Create('basic', daSHA3_256));
-      AuthorizeDigest.SetCredential('usr', 'pwd');
+      AuthorizeServerMem.SetCredential('usr', 'pwd');
       CheckEqual(cli.Get('root/testauth/1', 10000), HTTP_UNAUTHORIZED);
       Check(cli.Content <> '{"url":"1"}');
-      cli.Free; // HTTP_UNAUTHORIZED would close the connection
+      cli.Free; // HTTP_UNAUTHORIZED did close the connection
       cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 0, @tls);
       cli.BasicAuthUserPassword := 'usr:pwd';
       CheckEqual(cli.Get('root/testauth/1', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"1"}');
       CheckEqual(cli.Get('/root/testauth/2', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"2"}');
-      SetAuthorizeBasic(nil);
+      SetAuthorizeNone;
       cli.Free;
       // validate DIGEST auth
       cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 0, @tls);
       CheckEqual(cli.Get('/root/timestamp', 10000), HTTP_SUCCESS);
       SetAuthorizeDigest(TDigestAuthServerMem.Create('digest', daSHA256_Sess));
-      AuthorizeDigest.SetCredential('usr', 'pwd');
-      cli.AuthorizeDigest('usr', 'pwd', AuthorizeDigest.Algo);
+      AuthorizeServerMem.SetCredential('usr', 'pwd');
+      cli.AuthorizeDigest('usr', 'pwd', AuthorizeServerMem.Algo);
       CheckEqual(cli.Get('root/timestamp', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Get('root/testauth/3', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"3"}');
       CheckEqual(cli.Get('/root/testauth/4', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"4"}');
       //writeln('try localhost:8888/root/testauth/7'); ConsoleWaitForEnterKey;
-      SetAuthorizeDigest(nil);
+      SetAuthorizeNone;
     end;
   finally
     cli.Free;
