@@ -10,7 +10,7 @@ unit mormot.crypt.secure;
     - TSyn***Password and TSynConnectionDefinition Classes
     - Reusable Authentication Classes
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
-    - Client and Server Digest Access Authentication
+    - Client and Server HTTP Access Authentication
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
     - TBinaryCookieGenerator Simple Cookie Generator
@@ -18,7 +18,7 @@ unit mormot.crypt.secure;
     - Minimal PEM/DER Encoding/Decoding
     - Windows Executable Digital Signature Stuffing
 
-   Uses optimized mormot.crypt.core.pas for its actual process.
+   Uses optimized mormot.crypt.core.pas for its actual cryptographic process.
 
   *****************************************************************************
 }
@@ -782,7 +782,7 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 
-{ **************** Client and Server Digest Access Authentication }
+{ **************** Client and Server HTTP Access Authentication }
 
 type
   /// the exception class raised during Digest access authentication
@@ -888,6 +888,7 @@ function BasicServerAuth(FromClient: PUtf8Char;
 type
   /// parent abstract HTTP access authentication on server side
   // - as used e.g. by THttpServerSocketGeneric for its optional authentication
+  // - you should use inherited IBasicAuthServer or IDigestAuthServer interfaces
   IHttpAuthServer = interface
     ['{036B2802-56BE-422F-9146-773702C86387}']
     /// the realm associated with this access authentication
@@ -937,6 +938,12 @@ type
     function DigestAlgoMatch(const FromClient: RawUtf8): boolean;
   end;
 
+  /// the result of TBasicAuthServer.CreckCredential() internal method
+  TAuthServerResult = (
+    asrUnknownUser,
+    asrIncorrectPassword,
+    asrMatch);
+
   /// abstract BASIC access authentication on server side
   // - don't use this class but e.g. TDigestAuthServerMem or TDigestAuthServerFile
   // - will implement the IBasicAuthServer process in an abstract way
@@ -949,8 +956,8 @@ type
     /// check the credentials stored for a given user
     // - this is the main abstract virtual method to override for BASIC auth
     // - returns true if supplied aUser/aPassword are correct, false otherwise
-    function CheckCredential(const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
-      virtual; abstract;
+    function CheckCredential(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): TAuthServerResult; virtual; abstract;
     { -- IHttpAuthServer and IBasicAuthServer methods }
     /// retrieve the realm associated with this access authentication
     // - a good practice is to use the server host name or UUID as realm
@@ -993,7 +1000,7 @@ type
     constructor Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo); reintroduce; virtual;
     /// check the credentials stored for a given user
     function CheckCredential(const aUser: RawUtf8;
-      const aPassword: SpiUtf8): boolean; override;
+      const aPassword: SpiUtf8): TAuthServerResult; override;
     { -- IDigestAuthServer methods }
     /// compute a Digest server authentication request
     function DigestInit(Opaque, Tix64: Int64;
@@ -1040,6 +1047,11 @@ type
     /// safely delete all stored credentials
     // - also fill TDigestAuthHash stored memory with zeros, against forensic
     procedure ClearCredentials;
+    /// low-level access to the internal TSynDictionary storage
+    // - to set e.g. Users.TimeOutSeconds or call Users.DeleteAll if this class
+    // is used as cache
+    property Users: TSynDictionary
+      read fUsers;
   published
     /// how many items are currently stored in memory
     property Count: integer
@@ -2543,7 +2555,7 @@ function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
 implementation
 
 uses
-  mormot.lib.sspi; // TODO: mormot.crypt.sspi?
+  mormot.lib.sspi; // for WinCertDecode() - void unit on non-Windows
 
 
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }
@@ -3211,7 +3223,7 @@ end;
 
 
 
-{ **************** Client and Server Digest Access Authentication }
+{ **************** Client and Server HTTP Access Authentication }
 
 type
   // reusable state machine for DIGEST on both client and server sides
@@ -3588,7 +3600,7 @@ var
   user, pass: RawUtf8;
 begin
   result := BasicServerAuth(FromClient, user, pass) and
-            CheckCredential(user, pass);
+            (CheckCredential(user, pass) = asrMatch);
   if not result then
     exit;
   ClientUser := user;
@@ -3598,7 +3610,7 @@ end;
 function TBasicAuthServer.OnBasicAuth(aSender: TObject;
   const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
 begin
-  result := CheckCredential(aUser, aPassword);
+  result := CheckCredential(aUser, aPassword) = asrMatch;
 end;
 
 
@@ -3664,14 +3676,19 @@ begin
 end;
 
 function TDigestAuthServer.CheckCredential(const aUser: RawUtf8;
-  const aPassword: SpiUtf8): boolean;
+  const aPassword: SpiUtf8): TAuthServerResult;
 var
   dig, stored: THash512Rec;
 begin
-  result := (self <> nil) and
-            (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
-            (GetUserHash(aUser, fRealm, stored) = fAlgoSize) and
-            CompareMem(@dig, @stored, fAlgoSize);
+  result := asrUnknownUser;
+  if (self = nil) or
+     (GetUserHash(aUser, fRealm, stored) <> fAlgoSize) then
+    exit;
+  if (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
+     CompareMem(@dig, @stored, fAlgoSize) then
+    result := asrMatch
+  else
+    result := asrIncorrectPassword;
   FillZero(dig.b);
   FillZero(stored.b);
 end;
@@ -3698,7 +3715,7 @@ function TDigestAuthServerMem.GetUserHash(const aUser, aRealm: RawUtf8;
   out aDigest: THash512Rec): integer;
 begin
   // no need to validate aRealm: DigestServerAuth caller already dit it
-  if fUsers.FindAndCopy(aUser, aDigest, false) then // within read lock
+  if fUsers.FindAndCopy(aUser, aDigest, {updtimeout=}false) then
     result := fAlgoSize
   else
     result := 0; // not found
@@ -6987,7 +7004,7 @@ begin
   end;
 end;
 
-{$ifdef OSWINDOWS} // TODO: mormot.crypt.sspi?
+{$ifdef OSWINDOWS}
 
 procedure WinInfoToParse(const c: TWinCertInfo; out Info: TX509Parsed);
 begin
