@@ -334,7 +334,7 @@ type
     // - default is '.service'
     property Ext: TFileName
       read fExt write fExt;
-    /// timeout in seconds for "http://....." local HTTP requests
+    /// timeout in milliseconds for "http://....." local HTTP requests
     // - default is 200
     property HttpTimeoutMS: integer
       read fHttpTimeoutMS write fHttpTimeoutMS;
