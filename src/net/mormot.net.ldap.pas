@@ -791,7 +791,7 @@ type
     fSearchResult: TLdapResultList;
     fExtName: RawUtf8;
     fExtValue: RawUtf8;
-    fRootDN, fConfigDN: RawUtf8;
+    fDefaultDN, fRootDN, fConfigDN: RawUtf8;
     fNetbiosDN: RawUtf8;
     fMechanisms: TRawUtf8DynArray;
     fSecContext: TSecContext;
@@ -827,6 +827,10 @@ type
     /// the Root domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
+    /// the Default domain name of this LDAP server
+    // - is the same as RootDN when domain isn't a subdomain
+    // - use an internal cache for fast retrieval
+    function DefaultDN: RawUtf8;
     /// the Confirguration domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function ConfigDN: RawUtf8;
@@ -2834,8 +2838,8 @@ begin
   if (fNetbiosDN = '') and
      fBound and
      fSock.SockConnected then
-    fNetbiosDN := SearchObject('CN=Partitions,CN=Configuration,' + RootDN,
-      '(nETBIOSName=*)', 'nETBIOSName', lssWholeSubtree).GetReadable;
+    fNetbiosDN := SearchObject('CN=Partitions,' + ConfigDN,
+      FormatUtf8('(&(nETBIOSName=*)(nCName=%))', [DefaultDN]), 'nETBIOSName', lssWholeSubtree).GetReadable;
   result := fNetbiosDN;
 end;
 
@@ -2843,8 +2847,16 @@ function TLdapClient.RootDN: RawUtf8;
 begin
   if (fRootDN = '') and
      fSock.SockConnected then
-    fRootDN := SearchObject('', '*', 'defaultNamingContext').GetReadable;
+    fRootDN := SearchObject('', '*', 'rootDomainNamingContext').GetReadable;
   result := fRootDN;
+end;
+
+function TLdapClient.DefaultDN: RawUtf8;
+begin
+  if (fDefaultDN = '') and
+     fSock.SockConnected then
+    fDefaultDN := SearchObject('', '*', 'defaultNamingContext').GetReadable;
+  result := fDefaultDN;
 end;
 
 function TLdapClient.ConfigDN: RawUtf8;
@@ -3266,6 +3278,8 @@ begin
   fSecContextEncrypt := false;
   fBound := false;
   fRootDN := '';
+  fDefaultDN := '';
+  fConfigDN := '';
   fWellKnownObjectsCached := false;
 end;
 
@@ -3333,7 +3347,7 @@ begin
   ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
   ComputerSam := UpperCase(ComputerName) + '$';
   // Search Computer object in the domain
-  ComputerObject := SearchFirst(RootDN,
+  ComputerObject := SearchFirst(DefaultDN,
     FormatUtf8('(sAMAccountName=%)', [ComputerSam]), ['']);
   // If the search failed, we exit with the error message
   if ResultCode <> LDAP_RES_SUCCESS then
@@ -3665,7 +3679,7 @@ end;
 function TLdapClient.WellKnownObjects(AsCN: boolean): PLdapKnownCommonNames;
 begin
   if not fWellKnownObjectsCached then
-    if RetrieveWellKnownObjects(RootDN, fWellKnownObjects) then
+    if RetrieveWellKnownObjects(DefaultDN, fWellKnownObjects) then
         fWellKnownObjectsCached := true;
   result := @fWellKnownObjects[AsCN];
 end;
