@@ -2982,8 +2982,9 @@ begin
   SetAuthorizeNone;
   if Basic = nil then
     exit;
-  SetAuthorizeBasic(Basic.Realm, Basic.OnBasicAuth);
-  fAuthorizerBasic := Basic; // should be set after SetAuthorizeBasic()
+  fAuthorizerBasic := Basic;
+  fAuthorize := hraBasic;
+  fAuthorizeBasicRealm := Basic.BasicInit;
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeBasic(const BasicRealm: RawUtf8;
@@ -3016,8 +3017,7 @@ begin
   result := '';
   case fAuthorize of
     hraBasic:
-      if Assigned(fAuthorizeBasic) then
-        result := fAuthorizeBasicRealm;
+      result := fAuthorizeBasicRealm;
     hraDigest:
       if fAuthorizerDigest <> nil then
         result := fAuthorizerDigest.DigestInit(Opaque, 0);
@@ -3036,12 +3036,17 @@ begin
     exit;
   case fAuthorize of
     hraBasic:
-      if Assigned(fAuthorizeBasic) and
-         IdemPChar(auth, 'BASIC ') then
+      if IdemPChar(auth, 'BASIC ') and
+         BasicServerAuth(auth + 6, user, pass) then
         try
-          if not BasicServerAuth(auth + 6, user, pass) or
-             not fAuthorizeBasic(self, user, pass) then
-            exit;
+          if Assigned(fAuthorizeBasic) then
+          begin
+            if not fAuthorizeBasic(self, user, pass) then
+              exit;
+          end
+          else if Assigned(fAuthorizerBasic) then
+            if fAuthorizerBasic.CheckCredential(user, pass) <> asrMatch then
+              exit;
         finally
           FillZero(pass);
         end

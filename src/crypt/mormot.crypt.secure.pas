@@ -886,6 +886,12 @@ function BasicServerAuth(FromClient: PUtf8Char;
   out User, Password: RawUtf8): boolean;
 
 type
+  /// the result of IBasicAuthServer.CreckCredential() internal method
+  TAuthServerResult = (
+    asrUnknownUser,
+    asrIncorrectPassword,
+    asrMatch);
+
   /// parent abstract HTTP access authentication on server side
   // - as used e.g. by THttpServerSocketGeneric for its optional authentication
   // - you should use inherited IBasicAuthServer or IDigestAuthServer interfaces
@@ -911,6 +917,10 @@ type
     // - used for the BASIC authentication scheme in THttpServerSocketGeneric
     function OnBasicAuth(aSender: TObject;
       const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+    /// check the credentials stored for a given user
+    // - returns true if supplied aUser/aPassword are correct, false otherwise
+    function CheckCredential(const aUser: RawUtf8;
+      const aPassword: SpiUtf8): TAuthServerResult;
   end;
 
   /// HTTP DIGEST access authentication on server side
@@ -924,30 +934,24 @@ type
     // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
     function DigestInit(Opaque, Tix64: Int64;
       const Prefix: RawUtf8 = 'WWW-Authenticate: Digest ';
-      const Suffix: RawUtf8 = #13#10): RawUtf8; virtual;
+      const Suffix: RawUtf8 = #13#10): RawUtf8;
     /// validate a Digest client authentication response
     // - used for the DIGEST authentication scheme in THttpServerSocketGeneric
     // - FromClient typically follow 'Authorization: Digest ' header text
     // - Opaque should match the value supplied on previous ServerInit() call
     // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
     function DigestAuth(FromClient: PUtf8Char; const Method: RawUtf8;
-      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean; virtual;
+      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
     /// quickly check if the supplied client response is likely to be compatible
     // - FromClient is typically a HTTP header
     // - will just search for the 'algorithm=xxx,' text pattern
     function DigestAlgoMatch(const FromClient: RawUtf8): boolean;
   end;
 
-  /// the result of TBasicAuthServer.CreckCredential() internal method
-  TAuthServerResult = (
-    asrUnknownUser,
-    asrIncorrectPassword,
-    asrMatch);
-
   /// abstract BASIC access authentication on server side
   // - don't use this class but e.g. TDigestAuthServerMem or TDigestAuthServerFile
   // - will implement the IBasicAuthServer process in an abstract way
-  TBasicAuthServer = class(TInterfacedObject, IBasicAuthServer)
+  TBasicAuthServer = class(TInterfacedObjectWithCustomCreate, IBasicAuthServer)
   protected
     fRealm, fQuotedRealm, fBasicInit: RawUtf8;
   public
