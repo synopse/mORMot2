@@ -2320,7 +2320,7 @@ begin
       Check(dig.Modified);
       CheckEqual(dig.Count, length(users));
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]), 'check1');
+        Check(dig.CheckCredential(users[u], pwds[u]) = asrMatch, 'check1');
     finally
       dig.Free;
     end;
@@ -2332,14 +2332,15 @@ begin
       CheckEqual(dig.Count, length(users), 'reload1');
       Check(not dig.Modified);
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]), 'check2');
+        Check(dig.CheckCredential(users[u], pwds[u]) = asrMatch, 'check2');
       Check(not dig.Modified);
       // remove some entries
       for u := 0 to length(users) shr 3 do
         dig.SetCredential(users[u * 8], '');
       Check(dig.Modified);
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]) = ((u and 7) <> 0), 'check3');
+        Check((dig.CheckCredential(users[u], pwds[u]) = asrMatch) =
+              ((u and 7) <> 0), 'check3');
       Check(dig.Modified);
       dig.SaveToFile;
       bak := StringFromFile(fn);
@@ -2349,7 +2350,7 @@ begin
         dig.SetCredential(users[u * 8], pwds[u * 8]);
       Check(dig.Modified);
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]), 'check4');
+        Check(dig.CheckCredential(users[u], pwds[u]) = asrMatch, 'check4');
       Check(dig.Modified);
       // update some entries
       for u := length(users) shr 3 downto 0 do
@@ -2359,7 +2360,7 @@ begin
       end;
       Check(dig.Modified);
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]), 'check6');
+        Check(dig.CheckCredential(users[u], pwds[u]) = asrMatch, 'check6');
     finally
       dig.Free;
     end;
@@ -2370,7 +2371,7 @@ begin
       Check(not dig.Modified);
       CheckEqual(dig.Count, length(users), 'reload2');
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]), 'check7');
+        Check(dig.CheckCredential(users[u], pwds[u]) = asrMatch, 'check7');
       // test actual client/server authentication of all users
       for u := 0 to high(users) do
       begin
@@ -2417,7 +2418,8 @@ begin
       Check(dig.RefreshFile);
       Check(not dig.Modified);
       for u := 0 to high(users) do
-        Check(dig.CheckCredential(users[u], pwds[u]) = ((u and 7) <> 0), 'check8');
+        Check((dig.CheckCredential(users[u], pwds[u])  = asrMatch) =
+              ((u and 7) <> 0), 'check8');
       Check(length(users) <> dig.Count);
       // validate GetUsers method
       users2 := dig.GetUsers;
