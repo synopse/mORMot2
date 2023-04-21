@@ -391,12 +391,12 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
 // - aUserName is the domain and user name, in form of 'username' or
-// 'username@MYDOMAIN.TLD' if aSecKerberosSpn is not set
+// 'username@MYDOMAIN.TLD' if aSecKerberosSpn is not set or if
+// ClientForceSpn() has not been called ahead
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
-// - you must use ClientForceSpn to specify server SPN before call
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;

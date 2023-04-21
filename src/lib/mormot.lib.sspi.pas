@@ -1648,6 +1648,7 @@ begin
   end
   else
   begin
+    // extract from 'domain\user'
     Domain := SynUnicode(Copy(aUserName, 1, UserPos - 1));
     User := SynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
   end;
