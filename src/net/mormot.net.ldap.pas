@@ -715,17 +715,21 @@ type
     procedure SetTargetUri(const uri: RawUtf8);
   public
     /// initialize this instance
-    constructor Create; override;
+    constructor Create(const aUri: RawUtf8 = ''); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
+    function CheckTargetHost: boolean;
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
     // - any existing KerberosDN and KerberosSpn will be used during discovery
     function LoadDefaultFromSystem(TryKerberos: boolean;
       DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
       DelayMS: integer = 500): boolean;
-    /// the 'ldap[s]://TargetHost:TargetPort' human-readable URI
-    // - reflecting the TargetHost, TargetPort and TLS properties
+    /// raise ELdap if neither CheckTargetHost nor LoadDefaultFromSystem succeeded
+    procedure ValidateTargetHostOrLoadDefault(TryKerberos: boolean = false);
+    /// the 'ldap[s]://TargetHost:TargetPort[/KerberosDN]' human-readable URI
+    // - reflecting the TargetHost, TargetPort, TLS and KerberosDN properties
     // - for safety, won't include the UserName/Password content
     property TargetUri: RawUtf8
       read GetTargetUri write SetTargetUri;
@@ -2691,11 +2695,11 @@ end;
 
 { TLdapClientSettings }
 
-constructor TLdapClientSettings.Create;
+constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
   inherited Create;
-  fTargetPort := LDAP_PORT;
   fTimeout := 5000;
+  SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
 end;
 
 destructor TLdapClientSettings.Destroy;
@@ -2704,28 +2708,63 @@ begin
   FillZero(fPassword);
 end;
 
+function TLdapClientSettings.CheckTargetHost: boolean;
+var
+  test: TLdapClient;
+begin
+  result := false;
+  if (fTargetHost <> '') and
+     (fTargetPort <> '') then
+    try
+      test := TLdapClient.Create;
+      try
+        result := test.Bind; // connect and anonymous binding
+      finally
+        test.Free;
+      end;
+    except
+      result := false;
+    end;
+end;
+
 function TLdapClientSettings.LoadDefaultFromSystem(TryKerberos: boolean;
   DiscoverMode: TLdapClientConnect; DelayMS: integer): boolean;
 var
   test: TLdapClient;
 begin
   result := false;
-  test := TLdapClient.Create;
   try
-    test.Settings.KerberosDN := fKerberosDN; // allow customization
-    if not test.Connect(DiscoverMode, DelayMS) then
-      exit;
-    if TryKerberos then
-    begin
-      test.Settings.KerberosSpn := fKerberosSpn;
-      if not test.BindSaslKerberos then
+    test := TLdapClient.Create;
+    try
+      test.Settings.KerberosDN := fKerberosDN; // allow customization
+      if not test.Connect(DiscoverMode, DelayMS) then
         exit;
+      if TryKerberos then
+      begin
+        test.Settings.KerberosSpn := fKerberosSpn;
+        if not test.BindSaslKerberos then
+          exit;
+      end;
+      CopyObject(test.Settings, self);
+    finally
+      test.Free;
     end;
-    CopyObject(test.Settings, self);
-  finally
-    test.Free;
+    result := true;
+  except
+    result := false;
   end;
-  result := true;
+end;
+
+procedure TLdapClientSettings.ValidateTargetHostOrLoadDefault(
+  TryKerberos: boolean);
+begin
+  if fTargetHost <> '' then
+  begin
+    if not CheckTargetHost then
+      raise ELdap.CreateUtf8('%: invalid %', [self, GetTargetUri]);
+  end
+  else if not LoadDefaultFromSystem(TryKerberos) then
+     raise ELdap.CreateUtf8('%: no default LDAP server', [self]);
 end;
 
 function TLdapClientSettings.GetTargetUri: RawUtf8;
@@ -2737,6 +2776,8 @@ begin
   result := LDAP_DEFAULT_SCHEME[fTls] + fTargetHost;
   if fTargetPort <> LDAP_DEFAULT_PORT[fTls] then
     result := result + ':' + fTargetPort;
+  if fKerberosDN <> '' then
+    result := result + '/' + fKerberosDN;
 end;
 
 procedure TLdapClientSettings.SetTargetUri(const uri: RawUtf8);
@@ -2745,10 +2786,11 @@ var
 begin
   fTargetHost := '';
   fTargetPort := LDAP_PORT;
+  fKerberosDN := '';
   fTls := false;
   if not u.From(uri, LDAP_PORT) then
     exit;
-  if u.Scheme <> '' then
+  if u.Scheme <> '' then // no scheme:// means LDAP
     if IdemPChar(pointer(u.Scheme), 'LDAP') then
       case u.Scheme[5] of
         #0:
@@ -2759,9 +2801,14 @@ begin
         exit;
       end
     else
-      exit;
+      exit; // not the ldap[s]:// scheme
   fTargetHost := u.Server;
   fTargetPort := u.Port;
+  if u.Address = '' then
+    exit;
+  if u.Address[1] = '/' then
+    delete(u.Address, 1, 1);
+  fKerberosDN := u.Address;
 end;
 
 

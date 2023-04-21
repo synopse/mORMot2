@@ -566,7 +566,7 @@ end;
 
 procedure TNetworkProtocols.IpDnsLdap;
 var
-  ip, u: RawUtf8;
+  ip, u, v: RawUtf8;
   c: cardinal;
   l: TLdapClientSettings;
 begin
@@ -613,6 +613,7 @@ begin
   l := TLdapClientSettings.Create;
   try
     CheckEqual(l.TargetUri, '');
+    CheckEqual(l.KerberosDN, '');
     l.TargetHost := 'ad.synopse.info';
     CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
     l.Tls := true;
@@ -630,16 +631,27 @@ begin
     CheckEqual(l.TargetUri, 'ldap://ad.synopse.com');
     l.TargetUri := 'ad.synopse.info';
     CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
+    CheckEqual(l.KerberosDN, '');
   finally
     l.Free;
   end;
   l := TLdapClientSettings.Create;
   try
     CheckEqual(l.TargetUri, '');
-    l.TargetHost := 'ad.synopse.com';
-    CheckEqual(l.TargetUri, 'ldap://ad.synopse.com');
+    CheckEqual(l.KerberosDN, '');
+    l.TargetHost := 'dc.synopse.com';
+    CheckEqual(l.TargetUri, 'ldap://dc.synopse.com');
+    CheckEqual(l.KerberosDN, '');
+    l.KerberosDN := 'ad.synopse.com';
+    v := l.TargetUri;
+    CheckEqual(v, 'ldap://dc.synopse.com/ad.synopse.com');
     l.TargetUri := u;
+    CheckEqual(l.TargetUri, u);
     CheckEqual(l.TargetUri, 'ldaps://ad.synopse.info:1234');
+    CheckEqual(l.KerberosDN, '');
+    l.TargetUri := v;
+    CheckEqual(l.TargetUri, v);
+    CheckEqual(l.KerberosDN, 'ad.synopse.com');
   finally
     l.Free;
   end;
