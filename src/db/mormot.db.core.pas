@@ -1194,7 +1194,8 @@ type
     dNexusDB,
     dPostgreSQL,
     dDB2,
-    dInformix);
+    dInformix,
+    dMariaDB);
 
   /// set of the available database definitions
   TSqlDBDefinitions = set of TSqlDBDefinition;
@@ -4164,7 +4165,7 @@ procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
 begin
   if boInsertOrIgnore in BatchOptions then
     case DB of
-      dMySQL:
+      dMySQL,dMariaDB:
         W.AddShort('insert ignore into ')
     else
       W.AddShort('insert or ignore into '); // SQlite3
@@ -4174,7 +4175,7 @@ begin
       dFirebird:
         W.AddShort('update or insert into ');
     else
-      W.AddShort('replace into '); // SQlite3 and MySQL
+      W.AddShort('replace into '); // SQlite3 and MySQL+MariaDB
     end
   else
     W.AddShort('insert into ');

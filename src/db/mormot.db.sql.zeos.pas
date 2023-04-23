@@ -366,12 +366,12 @@ implementation
 constructor TSqlDBZeosConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 const
-  PCHARS: array[0 .. 9] of PAnsiChar = (
+  PCHARS: array[0 .. 10] of PAnsiChar = (
     'ORACLE', 'FREETDS_MSSQL', 'MSSQL', 'INTERBASE', 'FIREBIRD', 'MYSQL',
-    'SQLITE', 'POSTGRESQL', 'JET', nil);
+    'SQLITE', 'POSTGRESQL', 'JET', 'MARIADB', nil);
   TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dMSSQL, dFirebird, dFirebird, dMySQL,
-    dSQLite, dPostgreSQL, dJet {e.g. ADO[JET]} );
+    dSQLite, dPostgreSQL, dJet, dMariaDB {e.g. ADO[JET]} );
     // expecting Sybase + ASA support in TSqlDBDefinition
 var
   BrakedPos: integer;
@@ -515,7 +515,7 @@ begin
         fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true; // caching rocks with Firebird ZDBC provider :)
       end;
-    dOracle, dPostgreSQL, dMySQL:
+    dOracle, dPostgreSQL, dMySQL, dMariaDB:
       begin
         fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true;
@@ -544,7 +544,7 @@ begin
         //fStatementParams.Add('BindDoubleDateTimeValues=True');
         {$endif ZEOS72UP}
       end;
-    dMySQL:
+    dMySQL, dMariaDB:
       begin
         // use mysql real-prepared api instead of string based once
         // actually it's not realy faster.. just a hint:
@@ -577,7 +577,7 @@ begin
         StoreVoidStringAsNull := False;
       end;
   end;
-  if fDbms in [dOracle, dPostgreSQL, dMySQL, dMSSQL] then
+  if fDbms in [dOracle, dPostgreSQL, dMySQL, dMariaDB, dMSSQL] then
   begin
     // let's set 1024KB / chunk for synopse  or more?
     // retrieving/submitting lob's in chunks. Default is 4096Bytes / Chunk
@@ -805,7 +805,7 @@ class function TSqlDBZeosConnectionProperties.URI(aServer: TSqlDBDefinition;
 const
   /// ZDBC provider names corresponding to mormot.db.sql recognized SQL engines
   ZEOS_PROVIDER: array[TSqlDBDefinition] of RawUtf8 = ('', '', 'oracle:',
-    'mssql:', '', 'mysql:', 'sqlite:', 'firebird:', '', 'postgresql:', '', '');
+    'mssql:', '', 'mysql:', 'sqlite:', 'firebird:', '', 'postgresql:', '', '','mariadb:');
 begin
   result := URI(ZEOS_PROVIDER[aServer], aServerName, aLibraryLocation,
     aLibraryLocationAppendExePath);
@@ -1392,7 +1392,7 @@ begin
         ftNull:
           WR.AddNull;
         ftInt64:
-          if fDbms in [dMySQL, dPostgreSQL] then
+          if fDbms in [dMySQL, dMariaDB, dPostgreSQL] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.AddNoJsonEscape(P, Len);
@@ -1400,7 +1400,7 @@ begin
           else
             WR.Add(fResultSet.GetLong(col + FirstDbcIndex));
         ftDouble:
-          if fDbms in [dMySQL, dPostgreSQL] then
+          if fDbms in [dMySQL, dMariaDB, dPostgreSQL] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.AddNoJsonEscape(P, Len);
@@ -1439,7 +1439,7 @@ begin
         ftBlob:
           if fForceBlobAsNull then
             WR.AddNull
-          else if fDbms in [dMySQL, dSQLite] then
+          else if fDbms in [dMySQL, dMariaDB, dSQLite] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.WrBase64(P, Len, true); // withMagic=true
