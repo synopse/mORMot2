@@ -443,7 +443,17 @@ const
      ' decimal(19,4)',                  // ftCurrency
      ' datetime year to fraction(3)',   // ftDate
      ' clob',                           // ftUtf8
-     ' blob'));                         // ftBlob
+     ' blob'),                          // ftBlob
+
+  // dMariaDB
+    (' int',                             // ftUnknown = int32
+     ' varchar(%) character set utf8',   // ftNull    = UTF-8
+     ' bigint',                          // ftInt64
+     ' double',                          // ftDouble
+     ' decimal(19,4)',                   // ftCurrency
+     ' datetime',                        // ftDate
+     ' mediumtext character set utf8',   // ftUtf8
+     ' mediumblob'));                    // ftBlob
 
   /// the known column data types corresponding to our TSqlDBFieldType types
   // - will be used e.g. for TSqlDBConnectionProperties.SqlFieldCreate()
@@ -460,7 +470,8 @@ const
     32767,  // dNexusDB
     0,      // dPostgreSQL
     32700,  // dDB2
-    32700); // dInformix
+    32700,  // dInformix
+    4000);  // dMariaDB
 
   /// the maximum number of bound parameters to a SQL statement
   // - will be used e.g. for Batch process multi-insert
@@ -479,8 +490,8 @@ const
     100,            // dNexusDB      empirical limit (above is slower)
     500,            // dPostgreSQL   theoritical=34000
     500,            // dDB2          empirical value (from ODBC)
-    0);             // dInformix
-
+    0,              // dInformix
+    500);           //MariaDB
   /// the known SQL statement to retrieve the server date and time
   // - contains '' for the engines with local time
   DB_SERVERTIME: array[TSqlDBDefinition] of RawUtf8 = (
@@ -496,7 +507,8 @@ const
     'SELECT LOCALTIMESTAMP',                           // dPostgreSQL
     'select current timestamp from sysibm.sysdummy1',  // dDB2
     'select CURRENT YEAR TO FRACTION(3) ' +            // dInformix
-       'from SYSTABLES where tabid = 1');
+       'from SYSTABLES where tabid = 1',
+    'select NOW()');                                // dMariaDB
 
 const
   /// the known SQL syntax to limit the number of returned rows in a SELECT
@@ -552,10 +564,14 @@ const
     ( // dInformix
     Position: posAfter;
     InsertFmt: ' first % '
+  ),
+    ( // dMariaDB
+    Position: posAfter;
+    InsertFmt: ' limit %'
   ));
 
   /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
-  DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite, dPostgreSQL];
+  DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite, dPostgreSQL, dMariaDB];
 
   /// the known database engines handling CREATE INDEX on BLOB columns
   // - SQLite3 does not have any issue about indexing any column
@@ -577,7 +593,8 @@ const
      posWithColumn,   // dNexusDB
      posWithColumn,   // dPostgreSQL
      posWithColumn,   // dDB2
-     posWithColumn);  // dInformix
+     posWithColumn,   // dInformix
+     posWithColumn);  // dMariaDB
 
   /// the SQL text corresponding to the identified WHERE operators for a SELECT
   DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUtf8 = (
@@ -3449,6 +3466,7 @@ begin
     case db of
       dSQlite,
       dMySQL,
+      dMariaDB,
       dPostgreSQL,
       dNexusDB,
       dMSSQL,
@@ -3746,7 +3764,7 @@ procedure TSqlDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUtf8);
 begin
   if fForcedSchemaName = '' then
     case fDbms of
-      dMySql:
+      dMySql,dMariaDB:
         Owner := DatabaseName;
       dInformix:
         Owner := '';
@@ -3833,6 +3851,7 @@ begin
     dPostgreSQL,
     dMSSQL,
     dMySQL,
+    dMariaDB,
     dOracle,
     dNexusDB:
       // most DB create an implicit index on their primary key,
@@ -4040,7 +4059,25 @@ const
     'volatiledefaults,volumesdefinition,whendelete,wheneverdense_rank,wheredenserank,' +
     'whiledescribe,withdescriptor,withoutdeter',
   // dInformix specific keywords (in addition to dDefault)
-    '');
+    '',
+  // dMariaDB specific keywords (in addition to dDefault)
+    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
+    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
+    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
+    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
+    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
+    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
+    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
+    'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
+    'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
+    'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
+    'read_only,read_only,read_write,read_write,reads,regexp,release,rename,repeat,replace,' +
+    'require,resignal signal,return,rlike,schemas,second_microsecond,sensitive,' +
+    'separator,show,slow,spatial,specific,sql_big_result,sql_calc_found_rows,' +
+    'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,' +
+    'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
+    'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible'
+    );
 
 class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
   aWord: RawUtf8): boolean;
@@ -4341,7 +4378,7 @@ begin
         Table := Owner;
         if fForcedSchemaName = '' then
           case fDbms of
-            dMySql:
+            dMySql,dMariaDB:
               Owner := DatabaseName;
           else
             Owner := UserID;
@@ -4433,6 +4470,7 @@ begin
         ' where c.owner like ''%'' and c.table_name like ''%'';';
     dMSSQL,
     dMySQL,
+    dMariaDB,
     dPostgreSQL:
       fmt :=
         'select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,' +
@@ -4545,6 +4583,7 @@ begin
         '  and  a.object_name like ''%''' + ' order by position';
     dMSSQL,
     dMySQL,
+    dMariaDB,
     dPostgreSQL:
       fmt :=
         'select PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, PARAMETER_MODE ' +
@@ -4601,6 +4640,7 @@ begin
         'where P.owner = ''%'' and P.SUBPROGRAM_ID > 0 ' + 'order by NAME_ROUTINE';
     dMSSQL,
     dMySQL,
+    dMariaDB,
     dPostgreSQL:
       fmt := 'select R.SPECIFIC_NAME NAME_ROUTINE ' +
         'from INFORMATION_SCHEMA.ROUTINES R ' +
@@ -4632,7 +4672,7 @@ begin
     dMSSQL:
       result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
-    dMySQL:
+    dMySQL,dMariaDB:
       result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dPostgreSQL:
@@ -4660,7 +4700,7 @@ begin
     dMSSQL:
       result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
-    dMySQL:
+    dMySQL,dMariaDB:
       result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dPostgreSQL:
@@ -5027,7 +5067,7 @@ begin
       dInformix:
         result := result + ' PRIMARY KEY';
       dDB2,
-      dMySQL:
+      dMySQL,dMariaDB:
         aAddPrimaryKey := aField.Name;
     end;
   result := aField.Name + result;
@@ -5062,7 +5102,7 @@ begin
   begin
     SqlSplitTableName(aTableName, owner, table);
     if (owner <> '') and
-       not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dFirebird, dDB2, dInformix]) then
+       not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dMariaDB, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
       indexname := owner + '.';
     fieldscsv := RawUtf8ArrayToCsv(aFieldNames, '');
@@ -5101,7 +5141,7 @@ begin
     dPostgresql:
       if PosExChar('.', aTableName) = 0 then
         needquote := true; // quote if not schema.identifier format
-    dMySQL:
+    dMySQL, dMariaDB:
       begin
         beginquote := '`';  // backtick/grave accent
         endquote := '`';
@@ -5183,7 +5223,7 @@ begin
       // multiple error codes in the error message
       result := IdemPCharArray(PosErrorNumber(aMessage, '['),
         ['08001', '08S01', '08007', '28000', '42000']) >= 0;
-    dMySQL:
+    dMySQL,dMariaDB:
       result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or
                 (PosEx('MySQL server has gone away', aMessage) > 0);
   else
