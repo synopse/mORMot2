@@ -244,7 +244,8 @@ begin
         fSpecificOptions.Values['Direct'] := 'true';
         fSpecificOptions.Values['HOMENAME'] := '';
       end;
-    dMySQL:
+    dMySQL,
+    dMariaDB:
       begin
         {$ifdef FPC}
         fSpecificOptions.Values['UseUnicode'] := 'true'; // FPC strings do like UTF8
@@ -508,14 +509,14 @@ begin
   fDatabase.LoginPrompt := false;
   fDatabase.ProviderName := Utf8ToString(fProperties.ServerName);
   case aProperties.Dbms of
-    dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
+    dSQLite, dFirebird, dPostgreSQL, dMySQL, dMariaDB, dDB2, dMSSQL:
       fDatabase.Database := Utf8ToString(fProperties.DatabaseName);
   else
     fDatabase.Server := Utf8ToString(fProperties.DatabaseName);
   end;
   fDatabase.Username := Utf8ToString(fProperties.UserID);
   fDatabase.Password := Utf8ToString(fProperties.PassWord);
-  if aProperties.Dbms = dMySQL then
+  if aProperties.Dbms in [dMySQL, dMariaDB] then
     // s.d. 30.11.19 Damit der Connect schneller geht
     fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
   if aProperties.Dbms = dMSSQL then

@@ -368,10 +368,10 @@ constructor TSqlDBZeosConnectionProperties.Create(const aServerName,
 const
   PCHARS: array[0 .. 10] of PAnsiChar = (
     'ORACLE', 'FREETDS_MSSQL', 'MSSQL', 'INTERBASE', 'FIREBIRD', 'MYSQL',
-    'SQLITE', 'POSTGRESQL', 'JET', 'MARIADB', nil);
+    'MARIADB', 'SQLITE', 'POSTGRESQL', 'JET', nil);
   TYPES: array[-1 .. high(PCHARS) - 1] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dMSSQL, dFirebird, dFirebird, dMySQL,
-    dSQLite, dPostgreSQL, dJet, dMariaDB {e.g. ADO[JET]} );
+    dMariaDB, dSQLite, dPostgreSQL, dJet {e.g. ADO[JET]} );
     // expecting Sybase + ASA support in TSqlDBDefinition
 var
   BrakedPos: integer;
@@ -515,7 +515,10 @@ begin
         fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true; // caching rocks with Firebird ZDBC provider :)
       end;
-    dOracle, dPostgreSQL, dMySQL, dMariaDB:
+    dOracle,
+    dPostgreSQL,
+    dMySQL,
+    dMariaDB:
       begin
         fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true;
@@ -544,7 +547,8 @@ begin
         //fStatementParams.Add('BindDoubleDateTimeValues=True');
         {$endif ZEOS72UP}
       end;
-    dMySQL, dMariaDB:
+    dMySQL,
+    dMariaDB:
       begin
         // use mysql real-prepared api instead of string based once
         // actually it's not realy faster.. just a hint:

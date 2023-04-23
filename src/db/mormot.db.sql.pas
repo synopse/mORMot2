@@ -491,7 +491,7 @@ const
     500,            // dPostgreSQL   theoritical=34000
     500,            // dDB2          empirical value (from ODBC)
     0,              // dInformix
-    500);           //MariaDB
+    500);           // dMariaDB
   /// the known SQL statement to retrieve the server date and time
   // - contains '' for the engines with local time
   DB_SERVERTIME: array[TSqlDBDefinition] of RawUtf8 = (
@@ -508,7 +508,7 @@ const
     'select current timestamp from sysibm.sysdummy1',  // dDB2
     'select CURRENT YEAR TO FRACTION(3) ' +            // dInformix
        'from SYSTABLES where tabid = 1',
-    'select NOW()');                                // dMariaDB
+    'select NOW()');                                   // dMariaDB
 
 const
   /// the known SQL syntax to limit the number of returned rows in a SELECT
@@ -3764,7 +3764,8 @@ procedure TSqlDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUtf8);
 begin
   if fForcedSchemaName = '' then
     case fDbms of
-      dMySql,dMariaDB:
+      dMySql,
+      dMariaDB:
         Owner := DatabaseName;
       dInformix:
         Owner := '';
@@ -3904,9 +3905,28 @@ var
   DB_KEYWORDS: array[TSqlDBDefinition] of TRawUtf8DynArray;
 
 const
+  // reused for MySQL and MariaDB
+  MYSQL_KEYWORDS_CSV = 
+    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
+    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
+    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
+    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
+    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
+    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
+    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
+    'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
+    'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
+    'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
+    'read_only,read_only,read_write,read_write,reads,regexp,release,rename,repeat,replace,' +
+    'require,resignal signal,return,rlike,schemas,second_microsecond,sensitive,' +
+    'separator,show,slow,spatial,specific,sql_big_result,sql_calc_found_rows,' +
+    'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,' +
+    'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
+    'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible';
   /// CSV of the known reserved keywords per database engine, in alphabetic order
   DB_KEYWORDS_CSV: array[TSqlDBDefinition] of PUtf8Char = (
-    '',  // dUnknown
+    // dUnknown
+    '',
     // dDefault = ODBC / SQL-92 keywords (always checked first)
     'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,' +
     'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,' +
@@ -3968,22 +3988,7 @@ const
     'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,' +
     'varbinary,varp,yesno',
   // dMySQL specific keywords (in addition to dDefault)
-    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
-    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
-    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
-    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
-    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
-    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
-    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
-    'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
-    'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
-    'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
-    'read_only,read_only,read_write,read_write,reads,regexp,release,rename,repeat,replace,' +
-    'require,resignal signal,return,rlike,schemas,second_microsecond,sensitive,' +
-    'separator,show,slow,spatial,specific,sql_big_result,sql_calc_found_rows,' +
-    'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,' +
-    'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
-    'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
+     MYSQL_KEYWORDS_CSV,
   // dSQLite keywords (dDefault is not added to this list)
     'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,' +
     'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,' +
@@ -4061,22 +4066,7 @@ const
   // dInformix specific keywords (in addition to dDefault)
     '',
   // dMariaDB specific keywords (in addition to dDefault)
-    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
-    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
-    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
-    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
-    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
-    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
-    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
-    'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
-    'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
-    'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
-    'read_only,read_only,read_write,read_write,reads,regexp,release,rename,repeat,replace,' +
-    'require,resignal signal,return,rlike,schemas,second_microsecond,sensitive,' +
-    'separator,show,slow,spatial,specific,sql_big_result,sql_calc_found_rows,' +
-    'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,' +
-    'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
-    'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible'
+    MYSQL_KEYWORDS_CSV
     );
 
 class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
@@ -4378,7 +4368,8 @@ begin
         Table := Owner;
         if fForcedSchemaName = '' then
           case fDbms of
-            dMySql,dMariaDB:
+            dMySql,
+            dMariaDB:
               Owner := DatabaseName;
           else
             Owner := UserID;
@@ -4672,7 +4663,8 @@ begin
     dMSSQL:
       result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
-    dMySQL,dMariaDB:
+    dMySQL,
+    dMariaDB:
       result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
     dPostgreSQL:
@@ -4700,7 +4692,8 @@ begin
     dMSSQL:
       result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
-    dMySQL,dMariaDB:
+    dMySQL,
+    dMariaDB:
       result := 'select concat(TABLE_SCHEMA,''.'',TABLE_NAME) as name ' +
         'from INFORMATION_SCHEMA.VIEWS order by name';
     dPostgreSQL:
@@ -5067,7 +5060,8 @@ begin
       dInformix:
         result := result + ' PRIMARY KEY';
       dDB2,
-      dMySQL,dMariaDB:
+      dMySQL,
+      dMariaDB:
         aAddPrimaryKey := aField.Name;
     end;
   result := aField.Name + result;
@@ -5141,7 +5135,8 @@ begin
     dPostgresql:
       if PosExChar('.', aTableName) = 0 then
         needquote := true; // quote if not schema.identifier format
-    dMySQL, dMariaDB:
+    dMySQL,
+    dMariaDB:
       begin
         beginquote := '`';  // backtick/grave accent
         endquote := '`';
@@ -5223,9 +5218,10 @@ begin
       // multiple error codes in the error message
       result := IdemPCharArray(PosErrorNumber(aMessage, '['),
         ['08001', '08S01', '08007', '28000', '42000']) >= 0;
-    dMySQL,dMariaDB:
-      result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or
-                (PosEx('MySQL server has gone away', aMessage) > 0);
+    dMySQL,
+    dMariaDB:
+      result := (PosEx('Lost connection to', aMessage) > 0) or
+                (PosEx('server has gone away', aMessage) > 0);
   else
     result := PosI(' CONNE', aMessage) > 0;
   end;

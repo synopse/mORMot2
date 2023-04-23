@@ -4165,7 +4165,8 @@ procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
 begin
   if boInsertOrIgnore in BatchOptions then
     case DB of
-      dMySQL,dMariaDB:
+      dMySQL,
+      dMariaDB:
         W.AddShort('insert ignore into ')
     else
       W.AddShort('insert or ignore into '); // SQlite3

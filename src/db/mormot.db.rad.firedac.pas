@@ -286,7 +286,7 @@ begin
         // SQLite3 INTEGER = 32bit for FireDAC
         fSQLCreateField[ftInt64] := ' BIGINT';
       end;
-    dFirebird, dMySQL, dPostgreSQL, dDB2:
+    dFirebird, dMySQL, dMariaDB, dPostgreSQL, dDB2:
       begin
         if fFireDacOptions.Values['CharacterSet'] = '' then
           // force UTF-8 for mormot.db.sql

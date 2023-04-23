@@ -281,11 +281,12 @@ uses
 { TSqlDBOdbcConnection }
 
 const
-  DBMS_NAMES: array[0..9] of PAnsiChar = (
+  DBMS_NAMES: array[0..10] of PAnsiChar = (
     'ORACLE',
     'MICROSOFT SQL',
     'ACCESS',
     'MYSQL',
+    'MARIA',
     'SQLITE',
     'FIREBIRD',
     'INTERBASE',
@@ -298,13 +299,14 @@ const
     dMSSQL,      // 'MICROSOFT SQL'
     dJet,        // 'ACCESS'
     dMySQL,      // 'MYSQL'
+    dMariaDB,    // 'MARIA'
     dSQLite,     // 'SQLITE'
     dFirebird,   // 'FIREBIRD'
     dFirebird,   // 'INTERBASE'
     dPostgreSql, // 'POSTGRE'
     dInformix);  // 'INFORMIX'
 
-  DRIVER_NAMES: array[0..22] of PAnsiChar = (
+  DRIVER_NAMES: array[0..23] of PAnsiChar = (
     'SQLSRV',
     'LIBTDSODBC',
     'IVSS',
@@ -317,6 +319,7 @@ const
     'MSDB2',
     'CWBODBC',
     'MYODBC',
+    'MARIA',
     'SQORA',
     'MSORCL',
     'PBOR',
@@ -342,6 +345,7 @@ const
     dDB2,        // 'MSDB2'
     dDB2,        // 'CWBODBC'
     dMySQL,      // 'MYODBC'
+    dMariaDB,    // 'MARIA'
     dOracle,     // 'SQORA'
     dOracle,     // 'MSORCL'
     dOracle,     // 'PBOR'
