@@ -1159,7 +1159,7 @@ begin
      (Value[1] = PairBegin) and
      (Value[2] = PairEnd) then
   begin
-    result := ''; //nothing in-between
+    result := ''; // nothing in-between
     exit;
   end;
   if n < 2 then
@@ -1175,10 +1175,7 @@ begin
   end;
   n := PosExChar(PairEnd, s);
   if n = 0 then
-  begin
-    result := Value;
-    exit;
-  end;
+    raise ELdap.CreateUtf8('Missing ending parenthesis in %', [Value]);
   len := length(s);
   x := 1;
   for n := 1 to len do
@@ -2058,7 +2055,7 @@ begin
             ':':
               // Extensible match
               begin
-                System.Delete(l, length(l), 1);
+                SetLength(l, length(l) - 1);
                 attr := '';
                 rule := '';
                 dn := false;
