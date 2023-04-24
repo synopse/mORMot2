@@ -3465,8 +3465,7 @@ begin
         else if seclayers * KLS_EXPECTED = [] then
           // we only support signing sealing
           exit
-        else if needencrypt or // MS AD requires signing/sealing
-                not fSock.TLS.Enabled then   // or a plain OpenLDAP TCP
+        else if needencrypt then // MS AD requires signing/sealing
         begin
           // return the supported algorithm, with a 64KB maximum message size
           if secmaxsize > 64 shl 10 then
@@ -3475,7 +3474,8 @@ begin
           needencrypt := true; // fSecContextEncrypt = true = sign and seal
         end
         else
-          PCardinal(datain)^ := 0; // OpenLDAP over TLS needs no sealing
+          // non MS-AD return LDAP_RES_UNWILLING_TO_PERFORM for KLS_EXPECTED :(
+          PCardinal(datain)^ := 0;
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
         dataout := SecEncrypt(fSecContext, datain);
