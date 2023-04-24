@@ -177,15 +177,23 @@ procedure FillZero(var secret: UnicodeString); overload;
 /// actual replacement function called by StringReplaceAll() on first match
 // - not to be called as such, but defined globally for proper inlining
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;
-  found: integer): RawUtf8;
+  found: integer; Lookup: PNormTable): RawUtf8;
 
-/// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8): RawUtf8; overload;
+/// fast version of StringReplace(S, OldPattern, NewPattern, [rfReplaceAll]);
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
+  Lookup: PNormTable = nil): RawUtf8; overload;
+
+/// case-sensitive (or not) StringReplace(S, OldPattern, NewPattern,[rfReplaceAll])
+// - calls plain StringReplaceAll() version for CaseInsensitive = false
+// - calls StringReplaceAll(.., NormToUpperAnsi7) if CaseInsensitive = true
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
+  CaseInsensitive: boolean): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast version of several cascaded StringReplaceAll()
 function StringReplaceAll(const S: RawUtf8;
-  const OldNewPatternPairs: array of RawUtf8): RawUtf8; overload;
+  const OldNewPatternPairs: array of RawUtf8;
+  CaseInsensitive: boolean = false): RawUtf8; overload;
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUtf8; OldChar, NewChar: AnsiChar): RawUtf8;
@@ -3150,7 +3158,7 @@ begin
 end;
 
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;
-  found: integer): RawUtf8;
+  found: integer; Lookup: PNormTable): RawUtf8;
 var
   i, last, oldlen, newlen, sharedlen: PtrInt;
   posCount: integer;
@@ -3163,7 +3171,7 @@ begin
   pos[0] := found;
   posCount := 1;
   repeat
-    found := PosEx(OldPattern, S, found + oldlen);
+    found := PosExI(OldPattern, S, found + oldlen, Lookup);
     if found = 0 then
       break;
     AddInteger(pos, posCount, found);
@@ -3188,7 +3196,8 @@ begin
   MoveFast(src^, dst^, length(S) - last + 1);
 end;
 
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8): RawUtf8;
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
+  Lookup: PNormTable): RawUtf8;
 var
   found: integer;
 begin
@@ -3198,30 +3207,40 @@ begin
     result := S
   else
   begin
-    if length(OldPattern) = 1 then
+    if (Lookup = nil) and
+       (length(OldPattern) = 1) then
       found := ByteScanIndex(pointer(S), PStrLen(PtrUInt(S) - _STRLEN)^,
         byte(OldPattern[1])) + 1
     else
-      found := PosEx(OldPattern, S, 1); // our PosEx() is faster than RTL Pos()
+      found := PosExI(OldPattern, S, 1, Lookup); // handle Lookup=nil
     if found = 0 then
       result := S
     else
-      result := StringReplaceAllProcess(S, OldPattern, NewPattern, found);
+      result := StringReplaceAllProcess(S, OldPattern, NewPattern, found, Lookup);
   end;
 end;
 
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
+  CaseInsensitive: boolean): RawUtf8;
+begin
+  result := StringReplaceAll(S, OldPattern, NewPattern, NORM2CASE[CaseInsensitive]);
+end;
+
 function StringReplaceAll(const S: RawUtf8;
-  const OldNewPatternPairs: array of RawUtf8): RawUtf8;
+  const OldNewPatternPairs: array of RawUtf8; CaseInsensitive: boolean): RawUtf8;
 var
   n, i: PtrInt;
+  tab: PNormTable;
 begin
   result := S;
   n := high(OldNewPatternPairs);
-  if (n > 0) and
-     (n and 1 = 1) then
-    for i := 0 to n shr 1 do
-      result := StringReplaceAll(result,
-        OldNewPatternPairs[i * 2], OldNewPatternPairs[i * 2 + 1]);
+  if (n <= 0) or
+     (n and 1 <> 1) then
+    exit;
+  tab := NORM2CASE[CaseInsensitive];
+  for i := 0 to n shr 1 do
+    result := StringReplaceAll(result,
+      OldNewPatternPairs[i * 2], OldNewPatternPairs[i * 2 + 1], tab);
 end;
 
 function StringReplaceChars(const Source: RawUtf8; OldChar, NewChar: AnsiChar): RawUtf8;

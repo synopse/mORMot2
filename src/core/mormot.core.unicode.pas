@@ -1117,6 +1117,9 @@ var
   NormToNorm: TNormTable;
   NormToNormByte: TNormTableByte absolute NormToNorm;
 
+const
+  NORM2CASE: array[boolean] of PNormTable = (nil, @NormToUpperAnsi7);
+
 type
   /// character categories for text linefeed/word/identifier/uri parsing
   // - using such a set compiles into TEST [MEM], IMM so is more efficient

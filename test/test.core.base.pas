@@ -5228,19 +5228,43 @@ begin
   Check(UpperCaseUnicode('abcdefABCD') = 'ABCDEFABCD');
   Check(LowerCaseUnicode('abcdefABCD') = 'abcdefabcd');
   {$endif OSWINDOWS}
-  Check(StringReplaceAll('abcabcabc', 'toto', 'toto') = 'abcabcabc');
-  Check(StringReplaceAll('abcabcabc', 'toto', 'titi') = 'abcabcabc');
-  Check(StringReplaceAll('abcabcabc', 'ab', 'AB') = 'ABcABcABc');
-  Check(StringReplaceAll('abcabcabc', 'bc', '') = 'aaa');
-  Check(StringReplaceAll('abcabcabc', 'bc', 'B') = 'aBaBaB');
-  Check(StringReplaceAll('abcabcabc', 'bc', 'bcd') = 'abcdabcdabcd');
-  Check(StringReplaceAll('abcabcabc', 'c', 'C') = 'abCabCabC');
-  Check(StringReplaceAll('abcabcabc', []) = 'abcabcabc');
-  Check(StringReplaceAll('abcabcabc', ['c']) = 'abcabcabc');
-  Check(StringReplaceAll('abcabcabc', ['c', 'C']) = 'abCabCabC');
-  Check(StringReplaceAll('abcabcabc', ['c', 'C', 'a']) = 'abcabcabc');
-  Check(StringReplaceAll('abcabcabc', ['c', 'C', 'toto', 'titi', 'ab', 'AB']) =
-    'ABCABCABC');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'toto'), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'titi'), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'ab', 'AB'), 'ABcABcABc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'AB', 'toto'), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'Bc', 'titi'), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', ''), 'aaa');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'B'), 'aBaBaB');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'bcd'), 'abcdabcdabcd');
+  CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C'), 'abCabCabC');
+  CheckEqual(StringReplaceAll('abcabcabc', []), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', ['c']), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', ['c', 'C']), 'abCabCabC');
+  CheckEqual(StringReplaceAll('abcabcabc', ['c', 'C', 'a']), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc',
+    ['c', 'C', 'toto', 'titi', 'ab', 'AB']), 'ABCABCABC');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'toto', false), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'titi', false), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'ab', 'AB', false), 'ABcABcABc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'AB', 'toto', false), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'Bc', 'titi', false), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', '', false), 'aaa');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'B', false), 'aBaBaB');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'bcd', false), 'abcdabcdabcd');
+  CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C', false), 'abCabCabC');
+  CheckEqual(StringReplaceAll('abcabcabc', 'c', '', false), 'ababab');
+  CheckEqual(StringReplaceAll('abcabcabc', 'C', '', false), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'toto', true), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'toto', 'titi', true), 'abcabcabc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'ab', 'AB', true), 'ABcABcABc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'AB', 'toto', true), 'totoctotoctotoc');
+  CheckEqual(StringReplaceAll('abcabcabc', 'Bc', 't', true), 'atatat');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bC', '', true), 'aaa');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'B', true), 'aBaBaB');
+  CheckEqual(StringReplaceAll('abcabcabc', 'bc', 'bcd', true), 'abcdabcdabcd');
+  CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C', true), 'abCabCabC');
+  CheckEqual(StringReplaceAll('abcabcabc', 'c', '', true), 'ababab');
+  CheckEqual(StringReplaceAll('abcabcabc', 'C', '', true), 'ababab');
   for i := -10 to 50 do
     for j := -10 to 50 do
     begin
