@@ -2073,7 +2073,8 @@ begin
                 if attr <> '' then
                   AsnAdd(result, attr, ASN1_CTX2);
                 AsnAdd(result, DecodeTriplet(r, '\'), ASN1_CTX3);
-                AsnAdd(result, ASN1_BOOLEAN[dn], ASN1_CTX4);
+                if dn then // default is FALSE
+                  AsnAdd(result, #$01#$ff, ASN1_CTX4);
                 result := Asn(result, ASN1_CTC9);
               end;
             '~':
