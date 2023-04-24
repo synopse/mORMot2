@@ -1637,6 +1637,21 @@ function LowerCaseSynUnicode(const S: SynUnicode): SynUnicode;
 function AnsiIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal function used when inlining PosExI()
+function PosExIPas(pSub, p: PUtf8Char; Offset: PtrUInt;
+  Lookup: PNormTable): PtrInt;
+
+/// a ASCII-7 case-insensitive version of PosEx()
+// - will use the NormToUpperAnsi7 lookup table for character conversion
+function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a case-insensitive version of PosEx() with a specified lookup table
+// - redirect to mormot.core.base PosEx() if Lookup = nil
+function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt;
+  Lookup: PNormTable): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************** Operating-System Independent Unicode Process }
 
@@ -6553,6 +6568,107 @@ procedure LowerCaseSelf(var S: RawUtf8);
 begin
   CaseSelf(S, @NormToLowerAnsi7);
 end;
+
+function PosExIPas(pSub, p: PUtf8Char; Offset: PtrUInt;
+  Lookup: PNormTable): PtrInt;
+var
+  len, lenSub: PtrInt;
+  ch: AnsiChar;
+  pStart, pStop: PUtf8Char;
+label
+  s2, s6, tt, t0, t1, t2, t3, t4, s0, s1, fnd, quit;
+begin
+  result := 0;
+  if (p = nil) or
+     (pSub = nil) or
+     (PtrInt(Offset) <= 0) or
+     (Lookup = nil) then
+    goto quit;
+  len := PStrLen(p - _STRLEN)^;
+  lenSub := PStrLen(pSub - _STRLEN)^ - 1;
+  if (len < lenSub + PtrInt(Offset)) or
+     (lenSub < 0) then
+    goto quit;
+  pStop := p + len;
+  inc(p, lenSub);
+  inc(pSub, lenSub);
+  pStart := p;
+  p := @p[Offset + 3];
+  ch := Lookup[pSub[0]];
+  lenSub := -lenSub;
+  if p < pStop then
+    goto s6;
+  dec(p, 4);
+  goto s2;
+s6: // check 6 chars per loop iteration with O(1) case comparison
+  if ch = Lookup[p[-4]] then
+    goto t4;
+  if ch = Lookup[p[-3]] then
+    goto t3;
+  if ch = Lookup[p[-2]] then
+    goto t2;
+  if ch = Lookup[p[-1]] then
+    goto t1;
+s2:if ch = Lookup[p[0]] then
+    goto t0;
+s1:if ch = Lookup[p[1]] then
+    goto tt;
+s0:inc(p, 6);
+  if p < pStop then
+    goto s6;
+  dec(p, 4);
+  if p >= pStop then
+    goto quit;
+  goto s2;
+t4:dec(p, 2);
+t2:dec(p, 2);
+  goto t0;
+t3:dec(p, 2);
+t1:dec(p, 2);
+tt:len := lenSub;
+  if lenSub <> 0 then
+    repeat
+      if (Lookup[pSub[len]] <> Lookup[p[len + 1]]) or
+         (Lookup[pSub[len + 1]] <> Lookup[p[len + 2]]) then
+        goto s0;
+      inc(len, 2);
+    until len >= 0;
+  inc(p, 2);
+  if p <= pStop then
+    goto fnd;
+  goto quit;
+t0:len := lenSub;
+  if lenSub <> 0 then
+    repeat
+      if (Lookup[pSub[len]] <> Lookup[p[len]]) or
+         (Lookup[pSub[len + 1]] <> Lookup[p[len + 1]]) then
+        goto s1;
+      inc(len, 2);
+    until len >= 0;
+  inc(p);
+fnd:
+  result := p - pStart;
+quit:
+end;
+
+function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt;
+begin
+  result := PosExIPas(pointer(SubStr), pointer(S), Offset, @NormToUpperAnsi7);
+end;
+
+function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt;
+  Lookup: PNormTable): PtrInt;
+begin
+  if Lookup = nil then
+    {$ifdef CPUX86}
+    result := PosEx(SubStr, S, Offset)
+    {$else}
+    result := PosExPas(pointer(SubStr), pointer(S), Offset)
+    {$endif CPUX86}
+  else
+    result := PosExIPas(pointer(SubStr), pointer(S), Offset, Lookup);
+end;
+
 
 
 { ************** Operating-System Independent Unicode Process }
