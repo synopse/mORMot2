@@ -5515,7 +5515,9 @@ var
   tmp: TSid; // maximum size possible on stack (1032 bytes)
 begin
   if TextToSid(pointer(text), tmp) then
-    ToRawSid(@tmp, result);
+    ToRawSid(@tmp, result)
+  else
+    result := '';
 end;
 
 var
