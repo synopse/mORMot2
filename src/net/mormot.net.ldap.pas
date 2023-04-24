@@ -1996,14 +1996,14 @@ var
   dn: boolean;
   s, t, l, r, attr, rule: RawUtf8;
 begin
-  result := '';
-  if Filter = '' then
-    exit;
   if Filter = '*' then
   begin
     result := Asn('*', ASN1_CTX7);
     exit;
   end;
+  result := '';
+  if Filter = '' then
+    exit;
   s := Filter;
   if Filter[1] = '(' then
     for x := length(Filter) downto 2 do
@@ -2074,7 +2074,7 @@ begin
                   AsnAdd(result, attr, ASN1_CTX2);
                 AsnAdd(result, DecodeTriplet(r, '\'), ASN1_CTX3);
                 if dn then // default is FALSE
-                  AsnAdd(result, #$01#$ff, ASN1_CTX4);
+                  AsnAdd(result, RawByteString(#$01#$ff), ASN1_CTX4);
                 result := Asn(result, ASN1_CTC9);
               end;
             '~':
@@ -3374,7 +3374,7 @@ const
   /// the bit-mask of the security layer to be used (if any wanted by the server)
   // - kslConfidentiality maps our SecEncrypt() wrapper scheme, i.e. conf_flag=1
   // (sign and seal), and not kslIntegrity (sign only)
-  // - also matches Samba expectations in its "strong auth = yes" default mode
+  // - should match Samba expectations in its "strong auth = yes" default mode
   KLS_EXPECTED: TKerbSecLayer = [kslConfidentiality];
 
 function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
@@ -3626,7 +3626,7 @@ begin
     Attributes.Add('objectClass', 'computer');
     Attributes.Add('cn', ComputerName);
     Attributes.Add('sAMAccountName', ComputerSam);
-    Attributes.Add('userAccountControl', '4096');
+    Attributes.Add('userAccountControl', '4096'); // WORKSTATION_TRUST_ACCOUNT
     if Password <> '' then
     begin
       PwdU8 := '"' + Password + '"';
