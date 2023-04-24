@@ -635,6 +635,16 @@ begin
   finally
     l.Free;
   end;
+  Check(LdapSafe(''));
+  Check(LdapSafe('abc'));
+  Check(LdapSafe('ab cd'));
+  Check(LdapSafe('@abc'));
+  Check(not LdapSafe('\abc'));
+  Check(not LdapSafe('abc*'));
+  Check(not LdapSafe('a(bc'));
+  Check(not LdapSafe('abc)'));
+  Check(not LdapSafe('*'));
+  Check(not LdapSafe('()'));
   l := TLdapClientSettings.Create;
   try
     CheckEqual(l.TargetUri, '');

@@ -363,6 +363,12 @@ function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
   const Attributes: array of RawUtf8; const Values: array of PRawUtf8): boolean;
 
+/// returns true when no * ( ) \ character is part of Text
+// - to avoid LDAP filter injection, e.g. from user-entered names
+// - note that MS AD does escape with \## hexadecimal, whereas other servers
+// are likely to use simple \ escape: it is easier to reject than escaping
+function LdapSafe(const Text: RawUtf8): boolean;
+
 
 { **************** CLDAP Client Functions }
 
@@ -2192,6 +2198,13 @@ begin
       i := {%H-}setend; // if several ASN1_OCTSTR are stored - but return first
     end;
 end;
+
+function LdapSafe(const Text: RawUtf8): boolean;
+begin
+  result := (Text = '') or
+            (PosCharAny(pointer(Text), '*()\') = nil);
+end;
+
 
 
 { **************** CLDAP Client Functions }
