@@ -1207,14 +1207,22 @@ type
   TBasicAuthServerExternal = class(TDigestAuthServerMem)
   protected
     fLog: TSynLogClass;
+    fCheckMember: TLdapCheckMember;
     function ExternalServerAsk(const aUser: RawUtf8;
       const aPassword: SpiUtf8): boolean; virtual; abstract;
+    procedure SetCheckMember(Value: TLdapCheckMember);
   public
+    /// finalize this instance
+    destructor Destroy; override;
     /// will ask the external server if some credentials are not already in cache
     // - as called from OnBasicAuth() callback
     // - you can also register manually some credentials for IDigestAuthServer
     function CheckCredential(const aUser: RawUtf8;
       const aPassword: SpiUtf8): TAuthServerResult; override;
+    /// optionally implement the "search and bind" pattern
+    // - supplied instance will be owned by this TBasicAuthServerExternal
+    property CheckMember: TLdapCheckMember
+      read fCheckMember write SetCheckMember;
     /// can add some logs to the LDAP client process
     property Log: TSynLogClass
       read fLog write fLog;
@@ -4468,6 +4476,22 @@ end;
 
 { TBasicAuthServerExternal }
 
+procedure TBasicAuthServerExternal.SetCheckMember(Value: TLdapCheckMember);
+begin
+  FreeAndNil(fCheckMember);
+  if Value = nil then
+    fOnBeforeAuth := nil
+  else
+    fOnBeforeAuth := Value.BeforeAuth;
+  fCheckMember := Value;
+end;
+
+destructor TBasicAuthServerExternal.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fCheckMember);
+end;
+
 function TBasicAuthServerExternal.CheckCredential(const aUser: RawUtf8;
   const aPassword: SpiUtf8): TAuthServerResult;
 var
@@ -4477,16 +4501,22 @@ begin
   if (aUser = '') or
      (aPassword = '') then
     exit;
+  // quick check from the internal in-memory cache
+  fOnAfterAuthDelayed := true; // OnAfterAuth() callback is triggered below
   result := inherited CheckCredential(aUser, aPassword);
   if result <> asrUnknownUser then
     exit;
   // first time we encounter this user
   QueryPerformanceMicroSeconds(start);
   if ExternalServerAsk(aUser, aPassword) then
-  begin
-    SetCredential(aUser, aPassword); // add valid credentials to internal cache
-    result := asrMatch;
-  end;
+    if Assigned(fOnAfterAuth) and
+       not fOnAfterAuth(self, aUser) then
+      result := asrRejected
+    else
+    begin
+      SetCredential(aUser, aPassword); // add valid credentials to the cache
+      result := asrMatch;
+    end;
   if fLog = nil then
     exit;
   QueryPerformanceMicroSeconds(stop);
