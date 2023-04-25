@@ -739,15 +739,16 @@ type
   /// high-level information of a User in the LDAP database
   // - "member" set is not included, because it would not include nested groups
   TLdapGroup = object
-    sAMAccountName, distinguishedName, name, CN, description: RawUtf8;
-    objectSid: RawUtf8;
-    objectGUID: TGuid;
+    sAMAccountName, distinguishedName, canonicalName: RawUtf8;
+    name, CN, description: RawUtf8;
+    objectSid, objectGUID: RawUtf8;
     whenCreated, whenChanged: TDateTime;
   end;
   PLdapGroup = ^TLdapGroup;
 
   /// high-level information of a User in the LDAP database
   // - inherit from TLdapGroup to share some common fields
+  // - some of the fields are only populated if the User matches the logged one
   // - "memberof" set is not included, because it would not include nested groups
   TLdapUser = object(TLdapGroup)
     userPrincipalName, displayName, mail: RawUtf8;
@@ -807,6 +808,7 @@ type
     /// the 'ldap[s]://TargetHost:TargetPort[/KerberosDN]' human-readable URI
     // - reflecting the TargetHost, TargetPort, TLS and KerberosDN properties
     // - for safety, won't include the UserName/Password content
+    // - a typical value is 'ldaps://dc-sitename.ad.company.it/ad.company.it'
     property TargetUri: RawUtf8
       read GetTargetUri write SetTargetUri;
   published
@@ -927,7 +929,7 @@ type
     /// the Default domain name of this LDAP server
     // - is the same as RootDN when domain isn't a subdomain
     // - use an internal cache for fast retrieval
-    function DefaultDN: RawUtf8;
+    function DefaultDN(const BaseDN: RawUtf8 = ''): RawUtf8;
     /// the Confirguration domain name of this LDAP server
     // - use an internal cache for fast retrieval
     function ConfigDN: RawUtf8;
@@ -1016,25 +1018,31 @@ type
     function Extended(const Oid, Value: RawUtf8): boolean;
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
-    function GetGroupInfo(const AN, DN: RawUtf8; out Info: TLdapGroup): boolean;
+    function GetGroupInfo(const AN, DN: RawUtf8; out Info: TLdapGroup;
+      const BaseDN: RawUtf8 = ''): boolean;
     /// retrieve the distinguishedName of a Group from its sAMAccountName
-    function GetGroupDN(const AN: RawUtf8): RawUtf8;
+    function GetGroupDN(const AN: RawUtf8; const BaseDN: RawUtf8 = ''): RawUtf8;
     /// retrieve the basic information of a LDAP User
     // - could lookup by sAMAccountName, distinguishedName or userPrincipalName
-    function GetUserInfo(const AN, DN, UPN: RawUtf8; out Info: TLdapUser): boolean;
+    function GetUserInfo(const AN, DN, UPN: RawUtf8; out Info: TLdapUser;
+      const BaseDN: RawUtf8 = ''): boolean;
     /// retrieve the distinguishedName of a User from its sAMAccountName
     // or userPrincipalName
-    function GetUserDN(const AN, UPN: RawUtf8): RawUtf8;
+    function GetUserDN(const AN, UPN: RawUtf8;
+      const BaseDN: RawUtf8 = ''): RawUtf8;
     /// check if a User is registered as part of a group or its nested groups
-    // - will check for the "member" field with the 1.2.840.113556.1.4.1941 flag
+    // - the UserDN could be retrieved from a GetUserDN() call
     // - the group is identified by sAMAccountName or distinguishedName
+    // - Nested checks for the "member" field with the 1.2.840.113556.1.4.1941 flag
     function GetIsMemberOf(const UserDN, GroupAN, GroupDN: RawUtf8;
-      const CustomFilter: RawUtf8 = ''; Nested: boolean = true): boolean; overload;
+      const CustomFilter: RawUtf8 = ''; Nested: boolean = true;
+      const BaseDN: RawUtf8 = ''): boolean; overload;
     /// check if a User is registered as part of some groups and their nested groups
-    // - will check for the "member" field with the 1.2.840.113556.1.4.1941 flag
     // - groups are identified by sAMAccountName or distinguishedName
+    // - Nested checks for the "member" field with the 1.2.840.113556.1.4.1941 flag
     function GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
-      const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true): boolean; overload;
+      const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true;
+      const BaseDN: RawUtf8 = ''): boolean; overload;
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
@@ -3174,12 +3182,17 @@ begin
   result := fRootDN;
 end;
 
-function TLdapClient.DefaultDN: RawUtf8;
+function TLdapClient.DefaultDN(const BaseDN: RawUtf8): RawUtf8;
 begin
-  if (fDefaultDN = '') and
-     fSock.SockConnected then
-    fDefaultDN := SearchObject('', '*', 'defaultNamingContext').GetReadable;
-  result := fDefaultDN;
+  if BaseDN <> '' then
+    result := BaseDN
+  else
+  begin
+    if (fDefaultDN = '') and
+       fSock.SockConnected then
+      fDefaultDN := SearchObject('', '*', 'defaultNamingContext').GetReadable;
+    result := fDefaultDN;
+  end;
 end;
 
 function TLdapClient.ConfigDN: RawUtf8;
@@ -3960,20 +3973,21 @@ procedure LdapGroupInfo(Attributes: TLdapAttributeList; out Info: TLdapGroup);
 begin
   info.sAMAccountName := Attributes.Get('sAMAccountName');
   info.distinguishedName := Attributes.Get('distinguishedName');
+  info.canonicalName := DNToCN(info.distinguishedName);
   info.name := Attributes.Get('name');
   info.CN := Attributes.Get('cn');
   info.description := Attributes.Get('description');
   info.objectSid := Attributes.Get('objectSid');
-  TextToGuid(pointer(Attributes.Get('objectGUID')), @info.objectGUID);
+  info.objectGUID := Attributes.Get('objectGUID');
   info.whenCreated := LdapToDate(Attributes.Get('whenCreated'));
   info.whenChanged := LdapToDate(Attributes.Get('whenChanged'));
 end;
 
 function TLdapClient.GetGroupInfo(const AN, DN: RawUtf8;
-  out Info: TLdapGroup): boolean;
+  out Info: TLdapGroup; const BaseDN: RawUtf8): boolean;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapGroup));
-  result := Search(DefaultDN, false, InfoFilter(AT_GROUP, AN, DN, ''),
+  result := Search(DefaultDN(BaseDN), false, InfoFilter(AT_GROUP, AN, DN, ''),
         ['sAMAccountName', 'distinguishedName', 'name', 'cn', 'description',
          'objectSid', 'objectGUID', 'whenCreated', 'whenChanged']) and
      (SearchResult.Count = 1);
@@ -3981,9 +3995,9 @@ begin
     LdapGroupInfo(SearchResult.Items[0].Attributes, Info);
 end;
 
-function TLdapClient.GetGroupDN(const AN: RawUtf8): RawUtf8;
+function TLdapClient.GetGroupDN(const AN, BaseDN: RawUtf8): RawUtf8;
 begin
-  if Search(DefaultDN, false, InfoFilter(AT_GROUP, AN, '', ''),
+  if Search(DefaultDN(BaseDN), false, InfoFilter(AT_GROUP, AN, '', ''),
        ['distinguishedName']) and
      (SearchResult.Count = 1) then
     result := SearchResult.Items[0].Attributes.Get('distinguishedName')
@@ -3992,12 +4006,12 @@ begin
 end;
 
 function TLdapClient.GetUserInfo(const AN, DN, UPN: RawUtf8;
-  out Info: TLdapUser): boolean;
+  out Info: TLdapUser; const BaseDN: RawUtf8): boolean;
 var
   uac: cardinal;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapUser));
-  result := Search(DefaultDN, false, InfoFilter(AT_USER, AN, DN, ''),
+  result := Search(DefaultDN(BaseDN), false, InfoFilter(AT_USER, AN, DN, ''),
     [// TLdapGroup attributes
      'sAMAccountName', 'distinguishedName', 'name', 'cn', 'description',
      'objectSid', 'objectGUID', 'whenCreated', 'whenChanged',
@@ -4020,9 +4034,9 @@ begin
     end;
 end;
 
-function TLdapClient.GetUserDN(const AN, UPN: RawUtf8): RawUtf8;
+function TLdapClient.GetUserDN(const AN, UPN, BaseDN: RawUtf8): RawUtf8;
 begin
-  if Search(DefaultDN, false, InfoFilter(AT_USER, AN, '', UPN),
+  if Search(DefaultDN(BaseDN), false, InfoFilter(AT_USER, AN, '', UPN),
        ['distinguishedName']) and
      (SearchResult.Count = 1) then
     result := SearchResult.Items[0].Attributes.Get('distinguishedName')
@@ -4032,17 +4046,18 @@ end;
 
 function TLdapClient.GetIsMemberOf(
   const UserDN, GroupAN, GroupDN, CustomFilter: RawUtf8;
-  Nested: boolean): boolean;
+  Nested: boolean; const BaseDN: RawUtf8): boolean;
 begin
   result := GetIsMemberOf(UserDN, CustomFilter, [GroupAN], [GroupDN], Nested);
 end;
 
 function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
-  const GroupAN, GroupDN: array of RawUtf8; Nested: boolean): boolean;
+  const GroupAN, GroupDN: array of RawUtf8; Nested: boolean;
+  const BaseDN: RawUtf8): boolean;
 const
   NESTED_FMT: array[boolean] of RawUtf8 = (
     '(&(sAMAccountType=%)(|%)%)',
-    '(&(sAMAccountType=%)(|%)(member:1.2.840.113556.1.4.1941:=%)%)');
+    '(&(sAMAccountType=%)(|%)%(member:1.2.840.113556.1.4.1941:=%))');
 var
   filter: RawUtf8;
   i: PtrInt;
@@ -4066,8 +4081,9 @@ begin
         exit;
   if filter = '' then
     exit; // we need at least one valid name to compare to
-  filter := FormatUtf8(NESTED_FMT[Nested], [AT_GROUP, filter, UserDN, CustomFilter]);
-  if Search(DefaultDN, false, filter, ['name']) then
+  filter := FormatUtf8(NESTED_FMT[Nested],
+    [AT_GROUP, filter, CustomFilter, UserDN]);
+  if Search(DefaultDN(BaseDN), false, filter, ['name']) then
     result := SearchResult.Count <> 0;
 end;
 
