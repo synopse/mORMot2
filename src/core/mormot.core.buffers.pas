@@ -8974,6 +8974,7 @@ var
   P: PAnsiChar;
   tmp: array[0..23] of AnsiChar;
 begin
+  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
@@ -8981,6 +8982,7 @@ begin
     MoveByOne(P, Buffer, L);
   end
   else
+  {$endif ASMINTEL}
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
@@ -10828,9 +10830,11 @@ var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;
 begin
+  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then
     Append(SmallUInt32Utf8[Value])
   else
+  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Append(P, @tmp[23] - P);

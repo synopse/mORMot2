@@ -5574,12 +5574,14 @@ var
 begin
   if BEnd - B <= 23 then
     FlushToStream;
+  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if PtrUInt(Value) <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
     Len := PStrLen(P - _STRLEN)^;
   end
   else
+  {$endif ASMINTEL}
   begin
     P := StrInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -5603,11 +5605,13 @@ begin
     P^ := '-';
     Len := @tmp[23] - P;
   end
+  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
   else if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
     Len := PStrLen(P - _STRLEN)^;
   end
+  {$endif ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   else
   begin
     P := StrUInt64(@tmp[23], Value);
@@ -5657,12 +5661,14 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
+  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
     Len := PStrLen(P - _STRLEN)^;
   end
   else
+  {$endif ASMINTEL}
   begin
     P := StrUInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -5679,12 +5685,14 @@ var
 begin
   if BEnd - B <= 32 then
     FlushToStream;
+  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if Value <= high(SmallUInt32Utf8) then
   begin
     P := pointer(SmallUInt32Utf8[Value]);
     Len := PStrLen(P - _STRLEN)^;
   end
   else
+  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -9630,12 +9638,14 @@ end;
 procedure PtrIntToTempUtf8(V: PtrInt; var Res: TTempUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 begin
+  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if PtrUInt(V) <= high(SmallUInt32Utf8) then
   begin
     Res.Text := pointer(SmallUInt32Utf8[V]);
     Res.Len := PStrLen(Res.Text - _STRLEN)^;
   end
   else
+  {$endif ASMINTEL}
   begin
     Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], V));
     Res.Len := @Res.Temp[23] - Res.Text;
@@ -9665,12 +9675,14 @@ end;
 procedure QWordToTempUtf8(V: PQWord; var Res: TTempUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 begin
+  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
   if V^ <= high(SmallUInt32Utf8) then
   begin
     Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
     Res.Len := PStrLen(Res.Text - _STRLEN)^;
   end
   else
+  {$endif ASMINTEL}
   begin
     Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V^));
     Res.Len := @Res.Temp[23] - Res.Text;
