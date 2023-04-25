@@ -1134,6 +1134,68 @@ type
       read fResultString;
   end;
 
+  /// a LDAP client instance dedicated to validate user group membership
+  // - will maintain a connection to the LDAP server, e.g. to efficiently
+  // implement a "search and bind" pattern for TBasicAuthServerExternal
+  // - is able to automatically re-connect to the LDAP server if needed
+  // - features an internal cache to avoid too recurrent LDAP server calls
+  // - assume groups and users are on the same domain - i.e. connected to a LDAP
+  // server on port 389, not on Global Catalog port (3268)
+  // - is made thread-safe by using TLdapClient.Safe.Lock/UnLock
+  // - mainly used e.g. by TBasicAuthServerExternal.CheckMember
+  TLdapCheckMember = class(TLdapClient)
+  protected
+    fGroupAN, fGroupDN: TRawUtf8DynArray;
+    fGroupID: TIntegerDynArray;
+    fUserBaseDN, fGroupBaseDN, fUserCustomFilter, fGroupCustomFilter: RawUtf8;
+    fGroupNested: boolean;
+    fLastConnectedTix32: cardinal;
+    // naive but efficient O(n) cache of valid and invalid Users
+    fCacheTimeoutSeconds: integer;
+    fCacheOK, fCacheKO: TRawUtf8DynArray;
+    fCacheOKCount, fCacheKOCount: integer;
+    fCacheTimeoutTix: Int64;
+    procedure CacheClear(tix: Int64);
+  public
+    /// initialize this inherited LDAP client instance
+    constructor Create; overload; override;
+    /// main TOnAuthServer callback to check if a user is allowed to login
+    // - will first ask the internal in-memory cache of previous requests
+    // - ensure the LDAP is still connected, and re-connect if necessary
+    // - call GetUserDN() to retrieve the user's distinguishedName and
+    // primaryGroupID attributes from User sAMAccountName or userPrincipalName
+    // - will check if primaryGroupID matches any registered groups SID
+    // - call GetIsMemberOf() to search for registered groups
+    function BeforeAuth(Sender: TObject; const User: RawUtf8): boolean;
+    /// remove any previously allowed groups
+    procedure AllowGroupClear;
+    /// register the sAMAccountName of the allowed group(s)
+    procedure AllowGroupAN(const GroupAN: TRawUtf8DynArray); overload;
+    /// register the sAMAccountName of the allowed group(s) as CSV
+    procedure AllowGroupAN(const GroupANCsv: RawUtf8); overload;
+    /// register the distinguishedName of the allowed group(s)
+    procedure AllowGroupDN(const GroupDN: TRawUtf8DynArray);
+    /// allow to customize the BaseDN parameter used for GetUserDN()
+    property UserBaseDN: RawUtf8
+      read fUserBaseDN write fUserBaseDN;
+    /// allow to customize the BaseDN parameter used for GetIsMemberOf()
+    property GroupBaseDN: RawUtf8
+      read fGroupBaseDN write fGroupBaseDN;
+    /// allow to customize the custom filter parameter used for GetUserDN()
+    property UserCustomFilter: RawUtf8
+      read fUserCustomFilter write fUserCustomFilter;
+    /// allow to customize the custom filter parameter used for GetIsMemberOf()
+    property GroupCustomFilter: RawUtf8
+      read fGroupCustomFilter write fGroupCustomFilter;
+    /// allow to enable the 1.2.840.113556.1.4.1941 recursive search flag
+    property GroupNested: boolean
+      read fGroupNested write fGroupNested;
+    /// after how many seconds the internal cache should be flushed
+    // - default valucache timeout is 300 seconds, i.e. 5 minutes
+    property CacheTimeoutSeconds: integer
+      read fCacheTimeoutSeconds write fCacheTimeoutSeconds;
+  end;
+
 
 { **************** HTTP BASIC Authentication via LDAP or Kerberos }
 
@@ -4236,6 +4298,169 @@ begin
     if RetrieveWellKnownObjects(DefaultDN, fWellKnownObjects) then
         fWellKnownObjectsCached := true;
   result := @fWellKnownObjects[AsCN];
+end;
+
+
+{ TLdapCheckMember }
+
+// checking group membership on a LDAP server is really a complex task
+// - so a dedicated TLdapCheckMember class is worth the effort :)
+// - we follow the pattern as implemented in the best reference code we found:
+// https://www.gabescode.com/active-directory/2018/09/13/one-user-is-member-of-a-group.html
+// - since we are likely to connect to a LDAP over port 389, we won't access the
+// Global Catalog on port 3268, so we assume that the group and the user are
+// part of the very same domain: we can skip the "Foreign Security Principals"
+// part of the article, and can quickly check for primaryGroupId membership
+// by comparing the last SID block/integer only
+
+constructor TLdapCheckMember.Create;
+begin
+  inherited Create;
+  fGroupNested := true;
+  fCacheTimeoutSeconds := 300; // 5 minutes
+end;
+
+procedure TLdapCheckMember.CacheClear(tix: Int64);
+begin
+  fCacheOK := nil;
+  fCacheOKCount := 0;
+  fCacheKO := nil;
+  fCacheKOCount := 0;
+  fCacheTimeoutTix := tix + fCacheTimeoutSeconds * 1000;
+end;
+
+function TLdapCheckMember.BeforeAuth(Sender: TObject;
+  const User: RawUtf8): boolean;
+var
+  tix: Int64;
+  userpid: cardinal;
+  userdn: RawUtf8;
+begin
+  result := false;
+  if (User = '') or
+     ((fGroupAN = nil) and
+      (fGroupDN = nil) and
+      (fGroupID = nil)) or
+     not LdapSafe(User) then
+    exit;
+  tix := GetTickCount64;
+  if not fBound and
+     (fLastConnectedTix32 = tix shr 12) then
+    exit; // too soon to retry re-connect (quick exit outside of the lock)
+  try
+    fSafe.Lock;
+    try
+      // first check from cache
+      if fCacheTimeoutSeconds <> 0 then
+        if (tix > fCacheTimeoutTix) or
+           (fCacheOKCount > 1000) or
+           (fCacheKOCount > 1000) then
+          CacheClear(tix)
+        else
+        begin
+          result := FindPropName(pointer(fCacheOK), User, fCacheOKCount) >= 0;
+          if result or
+             (FindPropName(pointer(fCacheKO), User, fCacheKOCount) >= 0) then
+            exit;
+        end;
+      // re-create the connection to the LDAP server if needed
+      if not Connected({andbound=}true) then
+        if fLastConnectedTix32 <> tix shr 12 then
+        begin
+          fLastConnectedTix32 := tix shr 12; // retry every 4 seconds only
+          if fSettings.KerberosSpn <> '' then
+            BindSaslKerberos
+          else if fSettings.Password = '' then
+            exit // anonymous binding would fail the search for sure
+          else
+            Bind;
+        end
+        else
+          exit; // too soon to retry
+      // call the LDAP server to actually check user membership
+      userdn := GetUserDN(User, User, fUserBaseDN, fUserCustomFilter, @userpid);
+      result := (userdn <> '') and
+         (((userpid <> 0) and
+           IntegerScanExists(pointer(fGroupID), length(fGroupID), userpid)) or
+          GetIsMemberOf(userdn, fGroupCustomFilter,
+            fGroupAN, fGroupDN, fGroupNested, fGroupBaseDN));
+      // actualize the internal cache
+      if result then
+        AddRawUtf8(fCacheOK, fCacheOKCount, User)
+      else
+        AddRawUtf8(fCacheKO, fCacheKOCount, User)
+    finally
+      fSafe.UnLock;
+    end;
+  except
+    on Exception do
+      begin
+        // there was an error connecting with the LDAP server
+        result := false; // assume failed
+        Close;  // but will try to reconnect
+      end;
+  end;
+end;
+
+procedure TLdapCheckMember.AllowGroupClear;
+begin
+  fSafe.Lock;
+  try
+    fGroupAN := nil;
+    fGroupDN := nil;
+    fGroupID := nil;
+    CacheClear(GetTickCount64);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TLdapCheckMember.AllowGroupAN(const GroupAN: TRawUtf8DynArray);
+var
+  i: PtrInt;
+  pid: cardinal;
+begin
+  fSafe.Lock;
+  try
+    for i := 0 to high(GroupAN) do
+      if LdapSafe(GroupAN[i]) then
+      begin
+        if GetGroupPrimaryID(
+             GroupAN[i], '', pid, fGroupBaseDN, fGroupCustomFilter) then
+          AddInteger(fGroupID, pid, {nodup=}true);
+        AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TLdapCheckMember.AllowGroupAN(const GroupANCsv: RawUtf8);
+var
+  g: TRawUtf8DynArray;
+begin
+  CsvToRawUtf8DynArray(pointer(GroupANCsv), g, ',', {trim=}true);
+  AllowGroupAN(g);
+end;
+
+procedure TLdapCheckMember.AllowGroupDN(const GroupDN: TRawUtf8DynArray);
+var
+  i: PtrInt;
+  pid: cardinal;
+begin
+  fSafe.Lock;
+  try
+    for i := 0 to high(GroupDN) do
+      if LdapSafe(GroupDN[i]) then
+      begin
+        if GetGroupPrimaryID(
+             '', GroupDN[i], pid, fGroupBaseDN, fGroupCustomFilter) then
+          AddInteger(fGroupID, pid, {nodup=}true);
+        AddRawUtf8(fGroupDN, GroupDN[i], {nodup=}true, {casesens=}true);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
