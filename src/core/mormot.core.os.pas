@@ -434,6 +434,9 @@ type
   /// custom binary buffer type used as convenient Windows SID storage
   RawSid = type RawByteString;
 
+  /// a dynamic array of binary SID storage buffers
+  RawSidDynArray = array of RawSid;
+
 
 /// a wrapper around MemCmp() on two Security IDentifier binary buffers
 // - will first compare by length, then by content
@@ -448,6 +451,15 @@ procedure ToRawSid(sid: PSid; out result: RawSid);
 
 /// check if a RawSid binary buffer has the expected length of a valid SID
 function IsValidSid(const sid: RawSid): boolean;
+
+/// search within SID dynamic array for a given SID
+function HasSid(const sids: PSids; sid: PSid): boolean;
+
+/// search within SID dynamic array for a given dynamic array of SID buffers
+function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
+
+/// append a SID buffer pointer to a dynamic array of SID buffers
+procedure AddSid(var sids: RawSidDynArray; sid: PSid);
 
 /// convert a Security IDentifier as text, following the standard representation
 procedure SidToTextShort(sid: PSid; var result: shortstring);
@@ -5458,6 +5470,40 @@ begin
   l := length(sid);
   result := (l >= SizeOf(TSidAuth) + 2) and
             (SidLength(pointer(sid)) = l)
+end;
+
+function HasSid(const sids: PSids; sid: PSid): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  if sid <> nil then
+    for i := 0 to length(sids) - 1 do
+      if SidCompare(sid, sids[i]) = 0 then
+        exit;
+  result := false;
+end;
+
+function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to length(sid) - 1 do
+    if HasSid(sids, pointer(sid[i])) then
+      exit;
+  result := false;
+end;
+
+procedure AddSid(var sids: RawSidDynArray; sid: PSid);
+var
+  n: PtrInt;
+begin
+  if sid = nil then
+    exit;
+  n := length(sids);
+  SetLength(sids, n + 1);
+  ToRawSid(sid, sids[n]);
 end;
 
 function SidToText(const sid: RawSid): RawUtf8;
