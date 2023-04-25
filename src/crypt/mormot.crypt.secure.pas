@@ -866,19 +866,26 @@ function DigestServerInit(Algo: TDigestAlgo;
   const QuotedRealm, Prefix, Suffix: RawUtf8; Opaque: Int64; Tix64: Int64 = 0): RawUtf8;
 
 type
+  /// the result of IBasicAuthServer.CreckCredential() internal method
+  TAuthServerResult = (
+    asrUnknownUser,
+    asrIncorrectPassword,
+    asrRejected,
+    asrMatch);
+
   /// callback event able to return the HA0 binary from a username
   // - called by DigestServerAuth() e.g. to lookup from a local .htdigest file
   // - should return the hash size in bytes, or 0 if User is unknown
   // - is typically implemented via DigestHA0() wrapper function
   TOnDigestServerAuthGetUserHash = function(
-    const User, Realm: RawUtf8; out HA0: THash512Rec): integer of object;
+    const User, Realm: RawUtf8; out HA0: THash512Rec): TAuthServerResult of object;
 
 /// validate a Digest access authentication on server side
 // - returns true and the user/uri from a valid input token, or false on error
 function DigestServerAuth(Algo: TDigestAlgo; const Realm, Method: RawUtf8;
   FromClient: PUtf8Char; Opaque: Int64;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
-  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword = 0): boolean;
+  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword = 0): TAuthServerResult;
 
 /// parse a Basic access authentication on server side
 // - returns true and the user/password from a valid input, or false on error
@@ -886,11 +893,11 @@ function BasicServerAuth(FromClient: PUtf8Char;
   out User, Password: RawUtf8): boolean;
 
 type
-  /// the result of IBasicAuthServer.CreckCredential() internal method
-  TAuthServerResult = (
-    asrUnknownUser,
-    asrIncorrectPassword,
-    asrMatch);
+  /// callback event used by TBasicAuthServer.OnBeforeAuth/OnAfterAuth
+  // - allow to reject an user before or after its credentials are checked
+  // - should return true to continue, or false to abort the authentication
+  // and let TBasicAuthServer.CheckCredential return asrRejected
+  TOnAuthServer = function(Sender: TObject; const User: RawUtf8): boolean of object;
 
   /// parent abstract HTTP access authentication on server side
   // - as used e.g. by THttpServerSocketGeneric for its optional authentication
@@ -941,7 +948,7 @@ type
     // - Opaque should match the value supplied on previous ServerInit() call
     // - properly implemented in TDigestAuthServer: THttpAuthServer raise EDigest
     function DigestAuth(FromClient: PUtf8Char; const Method: RawUtf8;
-      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
+      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): TAuthServerResult;
     /// quickly check if the supplied client response is likely to be compatible
     // - FromClient is typically a HTTP header
     // - will just search for the 'algorithm=xxx,' text pattern
@@ -954,11 +961,18 @@ type
   TBasicAuthServer = class(TInterfacedObjectWithCustomCreate, IBasicAuthServer)
   protected
     fRealm, fQuotedRealm, fBasicInit: RawUtf8;
+    fOnBeforeAuth, fOnAfterAuth: TOnAuthServer;
+    fOnAfterAuthDelayed: boolean;
+    function BeforeAuth(Sender: TObject; const User: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    function AfterAuth(Sender: TObject; const User: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the HTTP access authentication engine
     constructor Create(const aRealm: RawUtf8); reintroduce;
     /// check the credentials stored for a given user
     // - this is the main abstract virtual method to override for BASIC auth
+    // - will also trigger OnBeforeAuth/OnAfterAuth callbacks
     // - returns true if supplied aUser/aPassword are correct, false otherwise
     function CheckCredential(const aUser: RawUtf8;
       const aPassword: SpiUtf8): TAuthServerResult; virtual; abstract;
@@ -976,6 +990,13 @@ type
     /// check the stored credentials as for the TOnHttpServerBasicAuth callback
     function OnBasicAuth(aSender: TObject;
       const aUser: RawUtf8; const aPassword: SpiUtf8): boolean;
+    /// allow to reject an user before its credentials are checked
+    // - can implement e.g. the "search and bind" pattern on a slow LDAP server
+    property OnBeforeAuth: TOnAuthServer
+      read fOnBeforeAuth write fOnBeforeAuth;
+    /// allow to reject an user after its credentials are checked
+    property OnAfterAuth: TOnAuthServer
+      read fOnAfterAuth write fOnAfterAuth;
   end;
 
   /// abstract DIGEST and BASIC access authentication on server side
@@ -996,7 +1017,9 @@ type
     fOpaqueObfuscate: Int64;
     // this is the main abstract virtual method to override for DIGEST auth
     function GetUserHash(const aUser, aRealm: RawUtf8;
-      out aDigest: THash512Rec): integer; virtual; abstract;
+      out aDigest: THash512Rec): TAuthServerResult; virtual; abstract;
+    function GetUserHashWithCallback(const aUser, aRealm: RawUtf8;
+      out aDigest: THash512Rec): TAuthServerResult;
     procedure ComputeDigest(const aUser: RawUtf8; const aPassword: SpiUtf8;
       out Digest: THash512Rec);
   public
@@ -1011,7 +1034,7 @@ type
       const Prefix, Suffix: RawUtf8): RawUtf8;
     /// validate a Digest client authentication response
     function DigestAuth(FromClient: PUtf8Char; const Method: RawUtf8;
-      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): boolean;
+      Opaque, Tix64: Int64; out ClientUser, ClientUrl: RawUtf8): TAuthServerResult;
     /// quickly check if the supplied client response is likely to be compatible
     function DigestAlgoMatch(const FromClient: RawUtf8): boolean;
   published
@@ -1033,7 +1056,7 @@ type
     fUsers: TSynDictionary; // UserName:RawUtf8 / HA0:TDigestAuthHash
     fModified: boolean;
     function GetUserHash(const aUser, aRealm: RawUtf8;
-      out aDigest: THash512Rec): integer; override;
+      out aDigest: THash512Rec): TAuthServerResult; override;
     function GetCount: integer;
   public
     /// initialize the Digest access authentication engine
@@ -1104,6 +1127,8 @@ type
     property Encrypted: boolean
       read GetEncrypted;
   end;
+
+function ToText(res: TAuthServerResult): PShortString; overload;
 
 
 { ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
@@ -3226,8 +3251,12 @@ begin
 end;
 
 
-
 { **************** Client and Server HTTP Access Authentication }
+
+function ToText(res: TAuthServerResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAuthServerResult), ord(res));
+end;
 
 type
   // reusable state machine for DIGEST on both client and server sides
@@ -3489,14 +3518,14 @@ end;
 function DigestServerAuth(Algo: TDigestAlgo; const Realm, Method: RawUtf8;
   FromClient: PUtf8Char; Opaque: Int64;
   const OnSearchUser: TOnDigestServerAuthGetUserHash;
-  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword): boolean;
+  out User, Url: RawUtf8; NonceExpSec: PtrUInt; Tix64: Qword): TAuthServerResult;
 var
   resp: RawUtf8;
   dp: TDigestProcess;
   created: QWord;
   nonce128, opaque128: THash128Rec;
 begin
-  result := false;
+  result := asrRejected;
   if (FromClient = nil) or
      (Algo = daUndefined) or
      (Realm = '') or
@@ -3535,19 +3564,22 @@ begin
     exit;
   // fast challenge against the 64-bit Opaque value (typically a connection ID)
   DefaultHasher128(@nonce128, @Opaque, SizeOf(Opaque)); // see DigestServerInit
-  if not IsEqual(nonce128.b, opaque128.b) or
-     (OnSearchUser(dp.UserName, dp.Realm, dp.HA0) <> dp.HashLen) then
+  if not IsEqual(nonce128.b, opaque128.b) then
+    exit;
+  result := OnSearchUser(dp.UserName, dp.Realm, dp.HA0);
+  if result <> asrMatch then
     exit;
   // validate the cryptographic challenge
   resp := dp.Response;
   dp.DigestResponse(Method);
   FillZero(dp.HA0.b);
+  result := asrIncorrectPassword;
   if not PropNameEquals(dp.Response, resp) then
     exit;
   // successfully authenticated
   User := dp.UserName;
   Url := dp.Url;
-  result := true;
+  result := asrMatch;
 end;
 
 function BasicServerAuth(FromClient: PUtf8Char;
@@ -3573,6 +3605,21 @@ end;
 
 
 { TBasicAuthServer }
+
+function TBasicAuthServer.BeforeAuth(
+  Sender: TObject; const User: RawUtf8): boolean;
+begin
+  result := not Assigned(fOnBeforeAuth) or
+            fOnBeforeAuth(Sender, User);
+end;
+
+function TBasicAuthServer.AfterAuth(
+  Sender: TObject; const User: RawUtf8): boolean;
+begin
+  result := not Assigned(fOnAfterAuth) or
+            fOnAfterAuthDelayed or
+            fOnAfterAuth(Sender, User);
+end;
 
 constructor TBasicAuthServer.Create(const aRealm: RawUtf8);
 begin
@@ -3604,7 +3651,7 @@ var
   user, pass: RawUtf8;
 begin
   result := BasicServerAuth(FromClient, user, pass) and
-            (CheckCredential(user, pass) = asrMatch);
+            OnBasicAuth(self, user, pass);
   if not result then
     exit;
   ClientUser := user;
@@ -3637,6 +3684,16 @@ begin
       [self, fAlgoSize shl 3, DIGEST_NAME[aAlgo]]);
   fRequestExpSec := 60;
   fOpaqueObfuscate := Random64; // changes at each server restart
+end;
+
+function TDigestAuthServer.GetUserHashWithCallback(const aUser,
+  aRealm: RawUtf8; out aDigest: THash512Rec): TAuthServerResult;
+begin
+  if (self <> nil) and
+     BeforeAuth(self, aUser) then
+    result := GetUserHash(aUser, aRealm, aDigest)
+  else
+    result := asrRejected;
 end;
 
 procedure TDigestAuthServer.ComputeDigest(const aUser: RawUtf8;
@@ -3672,11 +3729,11 @@ end;
 
 function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;
   const Method: RawUtf8; Opaque, Tix64: Int64;
-  out ClientUser, ClientUrl: RawUtf8): boolean;
+  out ClientUser, ClientUrl: RawUtf8): TAuthServerResult;
 begin
   Opaque := Opaque xor fOpaqueObfuscate;
   result := DigestServerAuth(fAlgo, fRealm, Method, FromClient, Opaque,
-    GetUserHash, ClientUser, ClientUrl, fRequestExpSec, Tix64);
+    GetUserHashWithCallback, ClientUser, ClientUrl, fRequestExpSec, Tix64);
 end;
 
 function TDigestAuthServer.CheckCredential(const aUser: RawUtf8;
@@ -3684,13 +3741,15 @@ function TDigestAuthServer.CheckCredential(const aUser: RawUtf8;
 var
   dig, stored: THash512Rec;
 begin
-  result := asrUnknownUser;
-  if (self = nil) or
-     (GetUserHash(aUser, fRealm, stored) <> fAlgoSize) then
+  result := GetUserHashWithCallback(aUser, fRealm, stored);
+  if result <> asrMatch then
     exit;
   if (DigestHA0(fAlgo, aUser, fRealm, aPassword, dig) = fAlgoSize) and
      CompareMem(@dig, @stored, fAlgoSize) then
-    result := asrMatch
+    if AfterAuth(self, aUser) then
+      result := asrMatch
+    else
+      result := asrRejected
   else
     result := asrIncorrectPassword;
   FillZero(dig.b);
@@ -3716,13 +3775,13 @@ begin
 end;
 
 function TDigestAuthServerMem.GetUserHash(const aUser, aRealm: RawUtf8;
-  out aDigest: THash512Rec): integer;
+  out aDigest: THash512Rec): TAuthServerResult;
 begin
   // no need to validate aRealm: DigestServerAuth caller already dit it
   if fUsers.FindAndCopy(aUser, aDigest, {updtimeout=}false) then
-    result := fAlgoSize
+    result := asrMatch
   else
-    result := 0; // not found
+    result := asrUnknownUser;
 end;
 
 function TDigestAuthServerMem.GetCount: integer;

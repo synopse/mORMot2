@@ -3306,7 +3306,7 @@ begin
   if (hfHasAuthorization in fHttp.HeaderFlags) and
      (fServer.Authorize <> hraNone) then
   begin
-    if fServer.Authorization(fHttp, fConnectionID) then
+    if fServer.Authorization(fHttp, fConnectionID) = asrMatch then
       include(fRequestFlags, hsrAuthorized)
     else if fAuthSec = (fServer.Async.fLastOperationSec shr 2) and $ffff then
     begin

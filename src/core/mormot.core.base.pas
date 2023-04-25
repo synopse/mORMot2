@@ -4749,7 +4749,7 @@ no:   p2 := name;
 end;
 
 function FindPropName(Values: PRawUtf8Array; const Value: RawUtf8;
-  ValuesCount: PtrInt): PtrInt; overload;
+  ValuesCount: PtrInt): PtrInt;
 begin
   if (Values <> nil) and
      (ValuesCount > 0) and

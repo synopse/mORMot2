@@ -860,7 +860,8 @@ type
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function SetRejectInCommandUri(var Http: THttpRequestContext;
       Opaque: Int64; Status: integer): boolean;
-    function Authorization(var Http: THttpRequestContext; Opaque: Int64): boolean;
+    function Authorization(
+      var Http: THttpRequestContext; Opaque: Int64): TAuthServerResult;
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -3025,12 +3026,12 @@ begin
 end;
 
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
-  Opaque: Int64): boolean;
+  Opaque: Int64): TAuthServerResult;
 var
   auth: PUtf8Char;
   user, pass, url: RawUtf8;
 begin
-  result := false;
+  result := asrRejected;
   auth := FindNameValue(pointer(Http.Headers), 'AUTHORIZATION: ');
   if auth = nil then
     exit;
@@ -3040,30 +3041,28 @@ begin
          BasicServerAuth(auth + 6, user, pass) then
         try
           if Assigned(fAuthorizeBasic) then
-          begin
-            if not fAuthorizeBasic(self, user, pass) then
-              exit;
-          end
+            if fAuthorizeBasic(self, user, pass) then
+              result := asrMatch
+            else
+              result := asrIncorrectPassword
           else if Assigned(fAuthorizerBasic) then
-            if fAuthorizerBasic.CheckCredential(user, pass) <> asrMatch then
-              exit;
+            result := fAuthorizerBasic.CheckCredential(user, pass);
         finally
           FillZero(pass);
-        end
-      else
-        exit;
+        end;
     hraDigest:
-      if (fAuthorizerDigest= nil) or
-         not IdemPChar(auth, 'DIGEST ') or
-         not fAuthorizerDigest.DigestAuth(
-           auth + 7, Http.CommandMethod, Opaque, 0, user, url) or
-         (url <> http.CommandUri) then
-        exit;
-  else
-    exit; // unsupported algorithm (yet)
+      if (fAuthorizerDigest <> nil) and
+         IdemPChar(auth, 'DIGEST ') then
+      begin
+        result := fAuthorizerDigest.DigestAuth(
+           auth + 7, Http.CommandMethod, Opaque, 0, user, url);
+        if (result = asrMatch) and
+           (url <> http.CommandUri) then
+          result := asrRejected;
+      end;
   end;
-  result := true;
-  Http.BearerToken := user;
+  if result = asrMatch then
+    Http.BearerToken := user;
 end;
 
 function THttpServerSocketGeneric.SetRejectInCommandUri(
@@ -3532,7 +3531,7 @@ begin
       if (hfHasAuthorization in Http.HeaderFlags) and
          (fServer.fAuthorize <> hraNone) then
       begin
-        if fServer.Authorization(Http, fRemoteConnectionID) then
+        if fServer.Authorization(Http, fRemoteConnectionID) = asrMatch then
         begin
           fAuthorized := fServer.fAuthorize;
           include(fRequestFlags, hsrAuthorized);

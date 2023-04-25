@@ -32,7 +32,8 @@ type
     fDigestAlgo: TDigestAlgo;
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
-    function DigestUser(const User, Realm: RawUtf8; out HA0: THash512Rec): integer;
+    function DigestUser(const User, Realm: RawUtf8;
+      out HA0: THash512Rec): TAuthServerResult;
   published
     /// MD5 hashing functions
     procedure _MD5;
@@ -2241,9 +2242,12 @@ begin
 end;
 
 function TTestCoreCrypto.DigestUser(const User, Realm: RawUtf8;
-  out HA0: THash512Rec): integer;
+  out HA0: THash512Rec): TAuthServerResult;
 begin
-  result := DigestHA0(fDigestAlgo, User, Realm, User + '"pass', HA0);
+  if DigestHA0(fDigestAlgo, User, Realm, User + '"pass', HA0) <> 0 then
+    result := asrMatch
+  else
+    result := asrUnknownUser;
 end;
 
 procedure TTestCoreCrypto.Digest;
@@ -2281,14 +2285,14 @@ begin
       CheckEqual(DigestRealm(c), realm, 'realm client');
       fDigestAlgo := a;
       Check(DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
-        authuser, authurl, 100), 'auth ok');
+        authuser, authurl, 100) = asrMatch, 'auth ok');
       dec(opaque);
-      Check(not DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
-        authuser, authurl, 100), 'connection change detection');
+      Check(DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
+        authuser, authurl, 100) = asrRejected, 'connection change detection');
       inc(opaque);
       fDigestAlgo := daUndefined;
-      Check(not DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
-        authuser, authurl, 100), 'wrong algo');
+      Check(DigestServerAuth(a, realm, 'GET', pointer(c), opaque, DigestUser,
+        authuser, authurl, 100) = asrUnknownUser, 'wrong algo');
     end;
   end;
   Check(DigestServerInit(daUndefined, realm, '', '', opaque) = '');
@@ -2382,22 +2386,22 @@ begin
         Check(c <> '');
         Check(dig.DigestAlgoMatch(c), 'algo');
         Check(dig.DigestAuth(
-          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth1');
+          pointer(c), 'GET', opaque, 0, authuser, authurl) = asrMatch, 'auth1');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         inc(opaque);
-        Check(not dig.DigestAuth(
-          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth2');
+        Check(dig.DigestAuth(
+          pointer(c), 'GET', opaque, 0, authuser, authurl) = asrRejected, 'auth2');
         dec(opaque);
         Check(dig.DigestAuth(
-          pointer(c), 'GET', opaque, 0, authuser, authurl), '3');
+          pointer(c), 'GET', opaque, 0, authuser, authurl) = asrMatch, '3');
         CheckEqual(authuser, users[u]);
         CheckEqual(authurl, url);
         c := DigestClient(a, s, 'GET', url, users[u], pwds[u] + 'wrong');
         Check(c <> '');
         Check(dig.DigestAlgoMatch(c));
-        Check(not dig.DigestAuth(
-          pointer(c), 'GET', opaque, 0, authuser, authurl), 'auth3');
+        Check(dig.DigestAuth(pointer(c), 'GET', opaque, 0,
+          authuser, authurl) = asrIncorrectPassword, 'auth3');
         CheckEqual(authuser, '');
         CheckEqual(authurl, '');
         s := dig.BasicInit;
