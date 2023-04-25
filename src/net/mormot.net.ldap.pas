@@ -3948,6 +3948,8 @@ end;
 const
   AT_GROUP = $10000000; // 268435456
   AT_USER  = $30000000; // 805306368
+  // https://theitbros.com/ldap-query-examples-active-directory/
+  // https://social.technet.microsoft.com/wiki/contents/articles/5392.active-directory-ldap-syntax-filters.aspx
 
 function InfoFilter(AT: cardinal; const AN, DN, UPN: RawUtf8): RawUtf8;
 begin
@@ -4051,13 +4053,14 @@ begin
   result := GetIsMemberOf(UserDN, CustomFilter, [GroupAN], [GroupDN], Nested);
 end;
 
+const
+  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
+  NESTED_FLAG: array[boolean] of RawUtf8 = (
+    '', ':1.2.840.113556.1.4.1941:');
+
 function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
   const GroupAN, GroupDN: array of RawUtf8; Nested: boolean;
   const BaseDN: RawUtf8): boolean;
-const
-  NESTED_FMT: array[boolean] of RawUtf8 = (
-    '(&(sAMAccountType=%)(|%)%)',
-    '(&(sAMAccountType=%)(|%)%(member:1.2.840.113556.1.4.1941:=%))');
 var
   filter: RawUtf8;
   i: PtrInt;
@@ -4081,8 +4084,8 @@ begin
         exit;
   if filter = '' then
     exit; // we need at least one valid name to compare to
-  filter := FormatUtf8(NESTED_FMT[Nested],
-    [AT_GROUP, filter, CustomFilter, UserDN]);
+  filter := FormatUtf8('(&(sAMAccountType=%)(|%)%(member%=%))',
+    [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], UserDN]);
   if Search(DefaultDN(BaseDN), false, filter, ['name']) then
     result := SearchResult.Count <> 0;
 end;
