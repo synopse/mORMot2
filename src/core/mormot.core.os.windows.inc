@@ -2810,6 +2810,22 @@ begin
   end;
 end;
 
+function TokenHasGroup(tok: THandle; sid: PSid): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := HasSid(RawTokenGroups(tok, tmp), sid);
+  tmp.Done;
+end;
+
+function TokenHasAnyGroup(tok: THandle; const sid: RawSidDynArray): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := HasAnySid(RawTokenGroups(tok, tmp), sid);
+  tmp.Done;
+end;
+
 function CurrentGroups(wtt: TWinTokenType; var tmp: TSynTempBuffer): PSids;
 var
   h: THandle;
@@ -2860,18 +2876,21 @@ end;
 
 function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
 var
-  i: PtrInt;
   sids: PSids;
   tmp: TSynTempBuffer;
 begin
-  result := false;
   sids := CurrentGroups(wtt, tmp);
-  for i := 0 to length(sids) - 1 do
-    if SidCompare(sid, sids[i]) = 0 then
-    begin
-      result := true;
-      break;
-    end;
+  result := HasSid(sids, sid);
+  tmp.Done;
+end;
+
+function CurrentUserHasAnyGroup(const sid: RawSidDynArray; wtt: TWinTokenType): boolean;
+var
+  sids: PSids;
+  tmp: TSynTempBuffer;
+begin
+  sids := CurrentGroups(wtt, tmp);
+  result := HasAnySid(sids, sid);
   tmp.Done;
 end;
 

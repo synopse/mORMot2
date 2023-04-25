@@ -1875,6 +1875,12 @@ function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
 // - so caller should call buf.Done once this PSid value is not needed any more
 function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
 
+/// check if a group SID is part of a given token
+function TokenHasGroup(tok: THandle; sid: PSid): boolean;
+
+/// check if any group SID is part of a given token
+function TokenHasAnyGroup(tok: THandle; const sid: RawSidDynArray): boolean;
+
 /// return the SID of the current user, from process or thread, as text
 // - e.g. 'S-1-5-21-823746769-1624905683-418753922-1000'
 // - optionally returning the name and domain via LookupSid()
@@ -1906,6 +1912,10 @@ function CurrentUserHasGroup(const sid: RawUtf8;
 /// fast check if the current user, from process or thread, has a given group SID
 function CurrentUserHasGroup(sid: PSid;
   wtt: TWinTokenType = wttProcess): boolean; overload;
+
+/// fast check if the current user, from process or thread, has any given group SID
+function CurrentUserHasAnyGroup(const sid: RawSidDynArray;
+  wtt: TWinTokenType = wttProcess): boolean;
 
 /// fast check if the current user, from process or thread, match a group by name
 // - calls LookupSid() on each group SID of this user, and filter with name/domain

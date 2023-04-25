@@ -945,7 +945,8 @@ var
   Domain, User: RawUtf8;
 begin
   // Ensure GSSAPI buffer is null-terminated
-  Assert(P[Len] = #0);
+  if P[Len] <> #0 then
+    exit;
   // Change user name from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
   DomainStart := PosChar(P, '@');
   if DomainStart <> nil then
