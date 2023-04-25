@@ -821,31 +821,31 @@ type
     // address: you could use RegisterKnownHost() to pre-register a FQN instead
     // of adding it to the /etc/hosts file of the system
     property TargetHost: RawUtf8
-      read fTargetHost Write fTargetHost;
+      read fTargetHost write fTargetHost;
     /// target server port (or symbolic name)
     // - is '389' (LDAP_PORT) by default but could be '636' (LDAP_TLS_PORT or
     // sometimes '3269') on TLS
     property TargetPort: RawUtf8
-      read fTargetPort Write fTargetPort;
+      read fTargetPort write fTargetPort;
     /// if connection to the LDAP server is secured via TLS
     property Tls: boolean
-      read fTls Write fTls;
+      read fTls write fTls;
     /// milliseconds timeout for socket operations
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
-      read fTimeout Write fTimeout;
+      read fTimeout write fTimeout;
     /// if protocol needs user authorization, then fill here user name
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
     // - with BindSaslKerberos, on Linux or Windows it should be 'username'
     // but on MacOS it should be 'username@ad.mycompany.tld'
     property UserName: RawUtf8
-      read fUserName Write fUserName;
+      read fUserName write fUserName;
     /// if protocol needs user authorization, then fill here its password
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
     property Password: SpiUtf8
-      read fPassword Write fPassword;
+      read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
     // - as set by Connect when TargetHost is empty
     // - can be pre-set before Connect if the system is not part of the domain
@@ -1063,26 +1063,29 @@ type
       read fSeq;
     /// the search scope used in search command
     property SearchScope: TLdapSearchScope
-      read fSearchScope Write fSearchScope;
+      read fSearchScope write fSearchScope;
     /// how to handle aliases in search command
     property SearchAliases: TLdapSearchAliases
-      read fSearchAliases Write fSearchAliases;
+      read fSearchAliases write fSearchAliases;
     /// result size limit in search command (bytes)
     // - 0 means without size limit
     property SearchSizeLimit: integer
-      read fSearchSizeLimit Write fSearchSizeLimit;
+      read fSearchSizeLimit write fSearchSizeLimit;
     /// search time limit in search command (seconds)
     // - 0 means without time limit
     property SearchTimeLimit: integer
-      read fSearchTimeLimit Write fSearchTimeLimit;
+      read fSearchTimeLimit write fSearchTimeLimit;
     /// number of results to return per search request
     // - 0 means no paging
+    // - note: if you expect a single result row, settting 1 won't necessary
+    // reduce the data stream, because it would include an additional block with
+    // a SearchCookie, and is likely to use more server resource for paging
     property SearchPageSize: integer
-      read fSearchPageSize Write fSearchPageSize;
+      read fSearchPageSize write fSearchPageSize;
     /// cookie returned by paged search results
     // - use an empty string for the first search request
     property SearchCookie: RawUtf8
-      read fSearchCookie Write fSearchCookie;
+      read fSearchCookie write fSearchCookie;
     /// result of the search command
     property SearchResult: TLdapResultList
       read fSearchResult;
@@ -3953,14 +3956,21 @@ const
 
 function InfoFilter(AT: cardinal; const AN, DN, UPN: RawUtf8): RawUtf8;
 begin
-  FormatUtf8('(&(sAMAccountType=%)', [AT], result);
+  result := '';
   if AN <> '' then
-    result := FormatUtf8('%(sAMAccountName=%)', [result, AN]);
+    FormatUtf8('(sAMAccountName=%)', [AN], result);
   if DN <> '' then
     result := FormatUtf8('%(distinguishedName=%)', [result, AN]);
   if UPN <> '' then
     result := FormatUtf8('%(userPrincipalName=%)', [result, UPN]);
-  result := result + ')';
+  if result = '' then
+  begin
+    result := '(cn=)'; // return no answer whatsoever
+    exit;
+  end;
+  if ord(AN <> '') + ord(DN <> '')+ ord(UPN <> '') > 1 then
+    result := FormatUtf8('(|%)', [result]);
+  result := FormatUtf8('(&(sAMAccountType=%)%)', [AT, result]);
 end;
 
 function LdapToDate(const Text: RawUtf8): TDateTime;
@@ -4086,7 +4096,7 @@ begin
     exit; // we need at least one valid name to compare to
   filter := FormatUtf8('(&(sAMAccountType=%)(|%)%(member%=%))',
     [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], UserDN]);
-  if Search(DefaultDN(BaseDN), false, filter, ['name']) then
+  if Search(DefaultDN(BaseDN), false, filter, ['cn']) then
     result := SearchResult.Count <> 0;
 end;
 
