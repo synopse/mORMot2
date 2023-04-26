@@ -1055,9 +1055,10 @@ type
     // - groups are identified by sAMAccountName or distinguishedName
     // - Nested checks for the "member" field with the 1.2.840.113556.1.4.1941 flag
     // - won't check the user primaryGroupID which should be searched before
+    // - can optionally return the sAMAccountName of matching groups of this user
     function GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
       const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true;
-      const BaseDN: RawUtf8 = ''): boolean; overload;
+      const BaseDN: RawUtf8 = ''; GroupsAN: PRawUtf8DynArray = nil): boolean; overload;
     /// test whether the client is connected to the server
     // - if AndBound is set, it also checks that a successfull bind request has been made
     function Connected(AndBound: boolean = true): boolean;
@@ -1147,7 +1148,7 @@ type
   // - mainly used e.g. by TBasicAuthServerExternal.CheckMember
   TLdapCheckMember = class(TLdapClient)
   protected
-    fGroupAN, fGroupDN: TRawUtf8DynArray;
+    fGroupAN, fGroupDN, fGroupIDAN: TRawUtf8DynArray;
     fGroupID: TIntegerDynArray;
     fUserBaseDN, fGroupBaseDN, fUserCustomFilter, fGroupCustomFilter: RawUtf8;
     fGroupNested: boolean;
@@ -1155,19 +1156,24 @@ type
     // naive but efficient O(n) cache of valid and invalid Users
     fCacheTimeoutSeconds: integer;
     fCacheOK, fCacheKO: TRawUtf8DynArray;
+    fCacheOKGroupsAN: TRawUtf8DynArrayDynArray;
     fCacheOKCount, fCacheKOCount: integer;
     fCacheTimeoutTix: Int64;
     procedure CacheClear(tix: Int64);
   public
     /// initialize this inherited LDAP client instance
     constructor Create; overload; override;
-    /// main TOnAuthServer callback to check if a user is allowed to login
+    /// main entry point to check for a user membership
     // - will first ask the internal in-memory cache of previous requests
     // - ensure the LDAP is still connected, and re-connect if necessary
     // - call GetUserDN() to retrieve the user's distinguishedName and
     // primaryGroupID attributes from User sAMAccountName or userPrincipalName
     // - will check if primaryGroupID matches any registered groups SID
     // - call GetIsMemberOf() to search for registered groups
+    // - optionally return the matching sAMAccountName in GroupsAN[]
+    function Authorize(const User: RawUtf8;
+      GroupsAN: PRawUtf8DynArray = nil): boolean;
+    /// main TOnAuthServer callback to check if a user is allowed to login
     function BeforeAuth(Sender: TObject; const User: RawUtf8): boolean;
     /// remove any previously allowed groups
     procedure AllowGroupClear;
@@ -1212,7 +1218,7 @@ type
     fCheckMember: TLdapCheckMember;
     function ExternalServerAsk(const aUser: RawUtf8;
       const aPassword: SpiUtf8): boolean; virtual; abstract;
-    procedure SetCheckMember(Value: TLdapCheckMember);
+    procedure SetCheckMember(Value: TLdapCheckMember); virtual;
   public
     /// finalize this instance
     destructor Destroy; override;
@@ -4220,7 +4226,7 @@ const
 
 function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
   const GroupAN, GroupDN: array of RawUtf8; Nested: boolean;
-  const BaseDN: RawUtf8): boolean;
+  const BaseDN: RawUtf8; GroupsAN: PRawUtf8DynArray): boolean;
 var
   filter: RawUtf8;
   i: PtrInt;
@@ -4246,8 +4252,13 @@ begin
     exit; // we need at least one valid name to compare to
   filter := FormatUtf8('(&(sAMAccountType=%)(|%)%(member%=%))',
     [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], UserDN]);
-  if Search(DefaultDN(BaseDN), false, filter, ['cn']) then
-    result := SearchResult.Count <> 0;
+  if Search(DefaultDN(BaseDN), false, filter, ['sAMAccountName']) and
+     (SearchResult.Count > 0) then
+  begin
+    if GroupsAN <> nil then
+      GroupsAN^ := SearchResult.ObjectAttributes('sAMAccountName');
+    result := true;
+  end;
 end;
 
 function TLdapClient.Connected(AndBound: boolean): boolean;
@@ -4378,10 +4389,18 @@ end;
 
 function TLdapCheckMember.BeforeAuth(Sender: TObject;
   const User: RawUtf8): boolean;
+begin
+  result := Authorize(User);
+end;
+
+function TLdapCheckMember.Authorize(const User: RawUtf8;
+  GroupsAN: PRawUtf8DynArray): boolean;
 var
   tix: Int64;
   userpid: cardinal;
+  fromcachendx, primaryidndx: PtrInt;
   userdn: RawUtf8;
+  groups: TRawUtf8DynArray;
 begin
   result := false;
   if (User = '') or
@@ -4398,6 +4417,7 @@ begin
     fSafe.Lock;
     try
       // first check from cache
+      fromcachendx := -1;
       if fCacheTimeoutSeconds <> 0 then
         if (tix > fCacheTimeoutTix) or
            (fCacheOKCount > 1000) or
@@ -4405,9 +4425,17 @@ begin
           CacheClear(tix)
         else
         begin
-          result := FindPropName(pointer(fCacheOK), User, fCacheOKCount) >= 0;
-          if result or
-             (FindPropName(pointer(fCacheKO), User, fCacheKOCount) >= 0) then
+          fromcachendx := FindPropName(pointer(fCacheOK), User, fCacheOKCount);
+          if fromcachendx >= 0 then
+          begin
+            result := true;
+            if GroupsAN = nil then
+              exit;
+            GroupsAN^ := fCacheOKGroupsAN[fromcachendx];
+            if GroupsAN^ <> nil then
+              exit; // we did get the groups in a previous call
+          end
+          else if FindPropName(pointer(fCacheKO), User, fCacheKOCount) >= 0 then
             exit;
         end;
       // re-create the connection to the LDAP server if needed
@@ -4426,14 +4454,38 @@ begin
           exit; // too soon to retry
       // call the LDAP server to actually check user membership
       userdn := GetUserDN(User, User, fUserBaseDN, fUserCustomFilter, @userpid);
-      result := (userdn <> '') and
-         (((userpid <> 0) and
-           IntegerScanExists(pointer(fGroupID), length(fGroupID), userpid)) or
-          GetIsMemberOf(userdn, fGroupCustomFilter,
-            fGroupAN, fGroupDN, fGroupNested, fGroupBaseDN));
+      if userdn <> '' then
+      begin
+        if userpid = 0 then
+          primaryidndx := -1
+        else
+          primaryidndx := IntegerScanIndex(pointer(fGroupID), length(fGroupID), userpid);
+        if primaryidndx >= 0 then
+          result := true;
+        if (fromcachendx >= 0) or
+           (GroupsAN <> nil) or
+           not result then
+        begin
+          if GetIsMemberOf(userdn, fGroupCustomFilter,
+              fGroupAN, fGroupDN, fGroupNested, fGroupBaseDN, @groups) then
+            result := true;
+          if primaryidndx >= 0 then
+            AddRawUtf8(groups, fGroupIDAN[primaryidndx]);
+        end;
+      end;
       // actualize the internal cache
       if result then
-        AddRawUtf8(fCacheOK, fCacheOKCount, User)
+      begin
+        if fromcachendx < 0 then
+        begin
+          fromcachendx := AddRawUtf8(fCacheOK, fCacheOKCount, User);
+          if length(fCacheOKGroupsAN) <> length(fCacheOK) then
+            SetLength(fCacheOKGroupsAN, length(fCacheOK)); // grow capacity
+        end;
+        fCacheOKGroupsAN[fromcachendx] := groups;
+        if GroupsAN <> nil then
+          GroupsAN^ := groups;
+      end
       else
         AddRawUtf8(fCacheKO, fCacheKOCount, User)
     finally
@@ -4456,6 +4508,7 @@ begin
     fGroupAN := nil;
     fGroupDN := nil;
     fGroupID := nil;
+    fGroupIDAN := nil;
     CacheClear(GetTickCount64);
   finally
     fSafe.UnLock;
@@ -4474,7 +4527,8 @@ begin
       begin
         if GetGroupPrimaryID(
              GroupAN[i], '', pid, fGroupBaseDN, fGroupCustomFilter) then
-          AddInteger(fGroupID, pid, {nodup=}true);
+          if AddInteger(fGroupID, pid, {nodup=}true) then
+            AddRawUtf8(fGroupIDAN, GroupAN[i]);
         AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
       end;
   finally
