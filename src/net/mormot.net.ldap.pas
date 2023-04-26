@@ -662,6 +662,8 @@ type
     procedure Clear;
     /// return all Items[].ObjectName as a sorted array
     function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
+    /// return all Items[].Attributes.Get(AttributeName)
+    function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump: RawUtf8;
@@ -2714,7 +2716,7 @@ var
 begin
   case lat of
     latObjectSid:
-      if IsValidSid(s) then
+      if IsValidRawSid(s) then
         s := SidToText(pointer(s));
     latObjectGuid:
       if length(s) = SizeOf(TGuid) then
@@ -2887,7 +2889,7 @@ end;
 
 function TLdapResult.CopyObjectSid(out objectSid: RawUtf8): boolean;
 begin
-  objectSid := SidToText(Attributes.Find('objectSid').GetRaw);
+  objectSid := RawSidToText(Attributes.Find('objectSid').GetRaw);
   result := objectSid <> '';
 end;
 
@@ -2946,6 +2948,30 @@ begin
       result[i] := DNToCN(result[i]);
   end;
   QuickSortRawUtf8(result, fCount);
+end;
+
+function TLdapResultList.ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
+var
+  i, n: PtrInt;
+  a: RawUtf8;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) or
+     (AttributeName = '') then
+    exit;
+  n := 0;
+  SetLength(result, fCount);
+  for i := 0 to fCount - 1 do
+  begin
+    a := fItems[i].Attributes.Get(AttributeName);
+    if a = '' then
+      continue;
+    result[n] := a;
+    inc(n);
+  end;
+  if n <> fCount then
+    SetLength(result, n);
 end;
 
 procedure TLdapResultList.AfterAdd;
