@@ -772,6 +772,7 @@ type
     pwdLastSet, lastLogon: TDateTime;
     memberof: TRawUtf8DynArray;
     userAccountControl: TUserAccountControls;
+    primaryGroupID: cardinal;
   end;
   PLdapUser = ^TLdapUser;
 
@@ -1042,18 +1043,18 @@ type
     // - you can refine your query via CustomFilter or TGroupTypes
     // - Match allow to search as a (AttributeName=Match) filter
     // - returns the sAMAccountName by default, but could be 'distinguishedName'
-    function GetGroups(const BaseDN: RawUtf8 = '';
-      const CustomFilter: RawUtf8 = ''; const Match: RawUtf8 = '';
-      FilterUac: TGroupTypes = []; UnFilterUac: TGroupTypes = [];
+    function GetGroups(FilterUac: TGroupTypes = [];
+      UnFilterUac: TGroupTypes = []; const Match: RawUtf8 = '';
+      const CustomFilter: RawUtf8 = ''; const BaseDN: RawUtf8 = '';
       const AttributeName: RawUtf8 = 'sAMAccountName'): TRawUtf8DynArray;
     /// retrieve all User names in the LDAP Server
     // - you can refine your query via CustomFilter or TUserAccountControls
     // - Match allow to search as a (AttributeName=Match) filter
     // - returns the sAMAccountName by default, but could be 'distinguishedName'
-    function GetUsers(const BaseDN: RawUtf8 = '';
-      const CustomFilter: RawUtf8 = ''; const Match: RawUtf8 = '';
-      FilterUac: TUserAccountControls = [];
+    function GetUsers(FilterUac: TUserAccountControls = [];
       UnFilterUac: TUserAccountControls = [uacAccountDisable];
+      const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
+      const BaseDN: RawUtf8 = '';
       const AttributeName: RawUtf8 = 'sAMAccountName'): TRawUtf8DynArray;
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
@@ -3196,7 +3197,7 @@ begin
   fTargetPort := LDAP_PORT;
   fKerberosDN := '';
   fTls := false;
-  if not u.From(uri, LDAP_PORT) then
+  if not u.From(uri, '0') then
     exit;
   if u.Scheme <> '' then // no scheme:// means LDAP
     if IdemPChar(pointer(u.Scheme), 'LDAP') then
@@ -3211,6 +3212,8 @@ begin
     else
       exit; // not the ldap[s]:// scheme
   fTargetHost := u.Server;
+  if u.Port = '0' then
+    u.Port := LDAP_DEFAULT_PORT[fTls];
   fTargetPort := u.Port;
   if u.Address = '' then
     exit;
@@ -3303,8 +3306,9 @@ begin
         end;
       end
       else
-        fSettings.Tls := (p = LDAP_TLS_PORT) or // likely to be over TLS
-                         (p = '3269');
+        if (p = LDAP_TLS_PORT) or // likely to be over TLS
+           (p = '3269') then
+          fSettings.Tls := true;
       if fSock = nil then
         // try connection to the server
         fSock := TCrtSocket.Open(
@@ -4188,9 +4192,9 @@ begin
   unUac := unUac and (not Uac); // FilterUac has precedence over UnFilterUac
   f := CustomFilter;
   if Uac <> 0 then
-    f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Int64(Uac), f]);
+    f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Uac, f]);
   if unUac <> 0 then
-    f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, Int64(unUac), f]);
+    f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, unUac, f]);
   if Match <> '' then
     f := FormatUtf8('%(%=%)', [f, AttributeName, Match]);
   FormatUtf8('(sAMAccountType=%)', [AT], filter);
@@ -4201,15 +4205,15 @@ begin
     Res := SearchResult.ObjectAttributes(AttributeName);
 end;
 
-function TLdapClient.GetGroups(const BaseDN, CustomFilter, Match: RawUtf8;
-  FilterUac, UnFilterUac: TGroupTypes; const AttributeName: RawUtf8): TRawUtf8DynArray;
+function TLdapClient.GetGroups(FilterUac, UnFilterUac: TGroupTypes;
+  const Match, CustomFilter, BaseDN, AttributeName: RawUtf8): TRawUtf8DynArray;
 begin
   GetByAccountType(AT_GROUP, integer(FilterUac), integer(UnFilterUac),
     BaseDN, CustomFilter, Match, AttributeName, result);
 end;
 
-function TLdapClient.GetUsers(const BaseDN, CustomFilter, Match: RawUtf8;
-  FilterUac, UnFilterUac: TUserAccountControls; const AttributeName: RawUtf8): TRawUtf8DynArray;
+function TLdapClient.GetUsers(FilterUac, UnFilterUac: TUserAccountControls;
+  const Match, CustomFilter, BaseDN, AttributeName: RawUtf8): TRawUtf8DynArray;
 begin
   GetByAccountType(AT_USER, integer(FilterUac), integer(UnFilterUac),
     BaseDN, CustomFilter, Match, AttributeName, result);
@@ -4217,9 +4221,8 @@ end;
 
 const
   // TLdapObject attributes
-  LDAPOBJECT_ATTR =
-   'sAMAccountName,distinguishedName,name,cn,description,' +
-   'objectSid,objectGUID,whenCreated,whenChanged';
+  LDAPOBJECT_ATTR = 'sAMAccountName,distinguishedName,name,cn,description,' +
+    'objectSid,objectGUID,whenCreated,whenChanged';
 
 function TLdapClient.GetGroupInfo(const AN, DN: RawUtf8;
   out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean): boolean;
@@ -4280,9 +4283,8 @@ var
   attr: TRawUtf8DynArray;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapUser));
-  attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR +
-   // TLdapUser attributes
-   'userPrincipalName,displayName,mail,pwdLastSet,lastLogon,userAccountControl');
+  attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR + 'userPrincipalName,' +
+    'displayName,mail,pwdLastSet,lastLogon,userAccountControl,primaryGroupID');
   if WithMemberOf then
     AddRawUtf8(attr, 'memberOf');
   result :=
@@ -4298,6 +4300,7 @@ begin
       info.userPrincipalName := Attributes.Get('userPrincipalName');
       info.pwdLastSet := LdapToDate(Attributes.Get('pwdLastSet'));
       info.lastLogon := LdapToDate(Attributes.Get('lastLogon'));
+      ToCardinal(Attributes.Get('primaryGroupID'), info.primaryGroupID);
       if WithMemberOf then
         info.memberOf := Attributes.Find('memberOf').GetAllReadable;
       if ToInteger(Attributes.Get('userAccountControl'), uac) then
@@ -4336,28 +4339,37 @@ function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
   const BaseDN: RawUtf8; GroupsAN: PRawUtf8DynArray): boolean;
 var
   filter: RawUtf8;
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   result := false;
   if (UserDN = '') or
      not LdapSafe(UserDN) or
      (length(GroupAN) + length(GroupDN) = 0) then
     exit;
+  n := 0;
   for i := 0 to high(GroupAN) do
     if GroupAN[i] <> '' then
       if LdapSafe(GroupAN[i]) then
-        filter := FormatUtf8('%(sAMAccountName=%)', [filter, GroupAN[i]])
+      begin
+        filter := FormatUtf8('%(sAMAccountName=%)', [filter, GroupAN[i]]);
+        inc(n);
+      end
       else
         exit;
   for i := 0 to high(GroupDN) do
     if GroupDN[i] <> '' then
       if LdapSafe(GroupDN[i]) then
-        filter := FormatUtf8('%(distinguishedName=%)', [filter, GroupDN[i]])
+      begin
+        filter := FormatUtf8('%(distinguishedName=%)', [filter, GroupDN[i]]);
+        inc(n);
+      end
       else
         exit;
-  if filter = '' then
+  if n = 0 then
     exit; // we need at least one valid name to compare to
-  filter := FormatUtf8('(&(sAMAccountType=%)(|%)%(member%=%))',
+  if n > 1 then
+    filter := FormatUtf8('(|%)', [filter]);
+  filter := FormatUtf8('(&(sAMAccountType=%)%%(member%=%))',
     [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], UserDN]);
   if Search(DefaultDN(BaseDN), false, filter, ['sAMAccountName']) and
      (SearchResult.Count > 0) then
@@ -4631,13 +4643,13 @@ begin
   try
     for i := 0 to high(GroupAN) do
       if LdapSafe(GroupAN[i]) then
-      begin
         if GetGroupPrimaryID(
              GroupAN[i], '', pid, fGroupBaseDN, fGroupCustomFilter) then
+        begin
           if AddInteger(fGroupID, pid, {nodup=}true) then
             AddRawUtf8(fGroupIDAN, GroupAN[i]);
-        AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
-      end;
+          AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
+        end;
   finally
     fSafe.UnLock;
   end;
