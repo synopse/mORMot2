@@ -5810,21 +5810,21 @@ begin
   CheckEqual(SizeOf(TSid), 1032, 'TSid');
   for k := low(k) to high(k) do
   begin
-    s1 := KnownSid(k);
+    s1 := KnownRawSid(k);
     Check(SidToKnown(pointer(s1)) = k);
     Check(SidCompare(pointer(s1), pointer(s1)) = 0);
-    s := SidToText(s1);
+    s := RawSidToText(s1);
     CheckEqual(s, RawUtf8(KnownSidToText(k)^));
     CheckUtf8(SidToKnown(s) = k, s);
-    s2 := TextToSid(s);
-    CheckEqual(s, SidToText(s2));
+    s2 := TextToRawSid(s);
+    CheckEqual(s, RawSidToText(s2));
     CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
   end;
   {$ifdef OSWINDOWS}
-  CurrentSid(s1, wttProcess);
-  CurrentSid(s2, wttThread);
+  CurrentRawSid(s1, wttProcess);
+  CurrentRawSid(s2, wttThread);
   Check(SidCompare(pointer(s1), pointer(s2)) = 0);
-  s := SidToText(s1);
+  s := RawSidToText(s1);
   CheckUtf8(IdemPChar(pointer(s), 'S-1-5-21-'), s);
   sids := CurrentGroupsSid;
   Check(sids <> nil);
@@ -5832,7 +5832,7 @@ begin
   Check(known <> []);
   for k := low(k) to high(k) do
   begin
-    s := SidToText(KnownSid(k));
+    s := RawSidToText(KnownRawSid(k));
     if k in known then
     begin
       Check(FindRawUtf8(sids, s) >= 0);
