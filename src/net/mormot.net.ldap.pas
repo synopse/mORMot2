@@ -140,7 +140,7 @@ function Asn(const Data: RawByteString; AsnType: integer = ASN1_OCTSTR): TAsnObj
   overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// create an ASN.1 binary from several raw data - as OCTSTR by default
-function AsnArr(const Data: array of RawByteString;
+function AsnArr(const Data: array of RawUtf8;
   AsnType: integer = ASN1_OCTSTR): TAsnObject;
 
 /// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
@@ -353,7 +353,7 @@ function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
 /// encode the ASN.1 binary for a LDAP_ASN1_SEARCH_REQUEST
 // - as used by CldapBroadcast() and TLdapClient.Search()
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
-  Filter: RawUtf8; const Attributes: array of RawByteString;
+  Filter: RawUtf8; const Attributes: array of RawUtf8;
   Scope: TLdapSearchScope = lssBaseObject; Aliases: TLdapSearchAliases = lsaAlways;
   Sizelimit: integer = 0; TimeLimit: integer = 0): TAsnObject;
 
@@ -989,23 +989,23 @@ type
     // - will generate as many requests/responses as needed to retrieve all
     // the information into the SearchResult property
     function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
-      const Filter: RawUtf8; const Attributes: array of RawByteString): boolean;
+      const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
     /// retrieve all entries that match a given set of criteria
     // - here the filter is generated using FormatUtf8()
     function SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
       const FilterFmt: RawUtf8; const FilterArgs: array of const;
-      const Attributes: array of RawByteString): boolean;
+      const Attributes: array of RawUtf8): boolean;
     /// retrieve all entries that match a given set of criteria and return the
     // first result
     // - Will call Search method, therefore SearchResult will contains all the results
     // - Returns nil if no result is found or if the search failed
     function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
-      const Attributes: array of RawByteString): TLdapResult;
+      const Attributes: array of RawUtf8): TLdapResult;
     /// retrieve the entry matching the given ObjectDN
     // - Will call Search method, therefore SearchResult will contains all the results
     // - Returns nil if the object is not found or if the search failed
     function SearchObject(const ObjectDN, Filter: RawUtf8;
-      const Attributes: array of RawByteString;
+      const Attributes: array of RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapResult; overload;
     /// retrieve the entry matching the given ObjectDN and Attribute
     // - Returns nil if the object is not found or if the search failed
@@ -1734,7 +1734,7 @@ begin
   result := Asn(AsnType, [Data]);
 end;
 
-function AsnArr(const Data: array of RawByteString; AsnType: integer): TAsnObject;
+function AsnArr(const Data: array of RawUtf8; AsnType: integer): TAsnObject;
 var
   i: PtrInt;
 begin
@@ -2372,7 +2372,7 @@ begin
 end;
 
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
-  Filter: RawUtf8; const Attributes: array of RawByteString;
+  Filter: RawUtf8; const Attributes: array of RawUtf8;
   Scope: TLdapSearchScope; Aliases: TLdapSearchAliases;
   Sizelimit, TimeLimit: integer): TAsnObject;
 var
@@ -3952,7 +3952,7 @@ end;
 // https://ldap.com/ldapv3-wire-protocol-reference-search
 
 function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
-  const Filter: RawUtf8; const Attributes: array of RawByteString): boolean;
+  const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
 var
   s, resp, packet: TAsnObject;
   start, stop: Int64;
@@ -4054,13 +4054,13 @@ end;
 
 function TLdapClient.SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
   const FilterFmt: RawUtf8; const FilterArgs: array of const;
-  const Attributes: array of RawByteString): boolean;
+  const Attributes: array of RawUtf8): boolean;
 begin
   result := Search(BaseDN, TypesOnly, FormatUtf8(FilterFmt, FilterArgs), Attributes);
 end;
 
 function TLdapClient.SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
-  const Attributes: array of RawByteString): TLdapResult;
+  const Attributes: array of RawUtf8): TLdapResult;
 begin
   result := nil;
   if Search(BaseDN, false, Filter, Attributes) and
@@ -4069,7 +4069,7 @@ begin
 end;
 
 function TLdapClient.SearchObject(const ObjectDN, Filter: RawUtf8;
-  const Attributes: array of RawByteString; Scope: TLdapSearchScope): TLdapResult;
+  const Attributes: array of RawUtf8; Scope: TLdapSearchScope): TLdapResult;
 var
   prev: TLdapSearchScope;
 begin
