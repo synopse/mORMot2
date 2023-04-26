@@ -214,6 +214,11 @@ type
   /// pointer to SSPI Authority Identify
   PSecWinntAuthIdentityW = ^TSecWinntAuthIdentityW;
 
+  /// SSPI SECPKG_ATTR_C_ACCESS_TOKEN / SECPKG_ATTR_C_FULL_ACCESS_TOKEN result
+  SecPkgContext_AccessToken = record
+    AccessToken: pointer;
+  end;
+
 const
   SECBUFFER_VERSION = 0;
 
@@ -234,9 +239,12 @@ const
   SECPKG_ATTR_NAMES               = 1;
   SECPKG_ATTR_STREAM_SIZES        = 4;
   SECPKG_ATTR_NEGOTIATION_INFO    = 12;
+  SECPKG_ATTR_ACCESS_TOKEN        = 13;
   SECPKG_ATTR_REMOTE_CERT_CONTEXT = $53;
   SECPKG_ATTR_CONNECTION_INFO     = $5a;
   SECPKG_ATTR_CIPHER_INFO         = $64; // Vista+ new API
+  SECPKG_ATTR_C_ACCESS_TOKEN      = $80000012;
+  SECPKG_ATTR_C_FULL_ACCESS_TOKEN = $80000082;
 
   SECPKGCONTEXT_CIPHERINFO_V1 = 1;
 
@@ -715,6 +723,17 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 // - aUserName contains authenticated user name
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
+
+/// Server-side function that return the security token of an authenticated user
+// - returns INVALID_HANDLE_VALUE if QuerySecurityContextToken() failed
+// - otherwise, you can use RawTokenGetInfo/TokenGroupsText/TokenHasGroup()
+// - caller should always make a CloseHandle(result) once done with it
+function ServerSspiAuthToken(var aSecContext: TSecContext): THandle;
+
+/// Server-side function that check if an authenticated user is member of
+// some supplied group SIDs
+function ServerSspiAuthGroup(var aSecContext: TSecContext;
+  const aGroup: RawSidDynArray): boolean;
 
 /// return the name of the security package that has been used
 // during the negotiation process
@@ -1731,6 +1750,24 @@ begin
     raise ESynSspi.CreateLastOSError(aSecContext);
   Win32PWideCharToUtf8(Names.sUserName, aUserName);
   FreeContextBuffer(Names.sUserName);
+end;
+
+function ServerSspiAuthToken(var aSecContext: TSecContext): THandle;
+begin
+  if QuerySecurityContextToken(@aSecContext.CtxHandle, result) <> 0 then
+    result := INVALID_HANDLE_VALUE;
+end;
+
+function ServerSspiAuthGroup(var aSecContext: TSecContext;
+  const aGroup: RawSidDynArray): boolean;
+var
+  token: THandle;
+begin
+  result := false;
+  if QuerySecurityContextToken(@aSecContext.CtxHandle, token) <> 0 then
+    exit;
+  result := TokenHasAnyGroup(token, aGroup);
+  CloseHandle(token);
 end;
 
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;

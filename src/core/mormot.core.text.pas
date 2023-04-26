@@ -1454,8 +1454,8 @@ function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
   NoDuplicates: boolean = false; CaseSensitive: boolean = true): boolean; overload;
 
 /// add the Value to Values[], with an external count variable, for performance
-procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
-  const Value: RawUtf8); overload;
+function AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
+  const Value: RawUtf8): PtrInt; overload;
 
 /// add Value[] items to Values[], with an external count variable, for performance
 procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
@@ -7033,15 +7033,13 @@ begin
   result := true;
 end;
 
-procedure AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
-  const Value: RawUtf8);
-var
-  capacity: integer;
+function AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
+  const Value: RawUtf8): PtrInt;
 begin
-  capacity := Length(Values);
-  if ValuesCount = capacity then
-    SetLength(Values, NextGrow(capacity));
-  Values[ValuesCount] := Value;
+  result := ValuesCount;
+  if result = Length(Values) then
+    SetLength(Values, NextGrow(result));
+  Values[result] := Value;
   inc(ValuesCount);
 end;
 
