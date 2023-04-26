@@ -927,6 +927,9 @@ type
     function SendAndReceive(const Asn1Data: TAsnObject): TAsnObject;
     function RetrieveWellKnownObjects(const DN: RawUtf8;
       out Dual: TLdapKnownCommonNamesDual): boolean;
+    procedure GetByAccountType(AT, Uac, unUac: integer;
+      const BaseDN, CustomFilter, Match, AttributeName: RawUtf8;
+      out Res: TRawUtf8DynArray);
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1034,6 +1037,23 @@ type
     /// call any LDAP v3 extended operations
     // - e.g. StartTLS, cancel, transactions
     function Extended(const Oid, Value: RawUtf8): boolean;
+    /// retrieve all Group names in the LDAP Server
+    // - you can refine your query via CustomFilter or TGroupTypes
+    // - Match allow to search as a (AttributeName=Match) filter
+    // - returns the sAMAccountName by default, but could be 'distinguishedName'
+    function GetGroups(const BaseDN: RawUtf8 = '';
+      const CustomFilter: RawUtf8 = ''; const Match: RawUtf8 = '';
+      FilterUac: TGroupTypes = []; UnFilterUac: TGroupTypes = [];
+      const AttributeName: RawUtf8 = 'sAMAccountName'): TRawUtf8DynArray;
+    /// retrieve all User names in the LDAP Server
+    // - you can refine your query via CustomFilter or TUserAccountControls
+    // - Match allow to search as a (AttributeName=Match) filter
+    // - returns the sAMAccountName by default, but could be 'distinguishedName'
+    function GetUsers(const BaseDN: RawUtf8 = '';
+      const CustomFilter: RawUtf8 = ''; const Match: RawUtf8 = '';
+      FilterUac: TUserAccountControls = [];
+      UnFilterUac: TUserAccountControls = [uacAccountDisable];
+      const AttributeName: RawUtf8 = 'sAMAccountName'): TRawUtf8DynArray;
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
     function GetGroupInfo(const AN, DN: RawUtf8; out Info: TLdapGroup;
@@ -4144,6 +4164,52 @@ begin
 end;
 
 const
+  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
+  AND_FLAG = ':1.2.840.113556.1.4.803:';
+  NESTED_FLAG: array[boolean] of RawUtf8 = (
+    '', ':1.2.840.113556.1.4.1941:');
+
+procedure TLdapClient.GetByAccountType(AT, Uac, unUac: integer;
+  const BaseDN, CustomFilter, Match, AttributeName: RawUtf8;
+  out Res: TRawUtf8DynArray);
+var
+  f, filter, uacname: RawUtf8;
+begin
+  if AT = AT_USER then
+    uacname := 'userAccountControl'
+  else
+    uacname := 'groupType';
+  unUac := unUac and (not Uac); // FilterUac has precedence over UnFilterUac
+  f := CustomFilter;
+  if Uac <> 0 then
+    f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Int64(Uac), f]);
+  if unUac <> 0 then
+    f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, Int64(unUac), f]);
+  if Match <> '' then
+    f := FormatUtf8('%(%=%)', [f, AttributeName, Match]);
+  FormatUtf8('(sAMAccountType=%)', [AT], filter);
+  if f <> '' then
+    filter := FormatUtf8('(&%%)', [filter, f]);
+  if Search(DefaultDN(BaseDN), false, filter, [AttributeName]) and
+     (SearchResult.Count > 0) then
+    Res := SearchResult.ObjectAttributes(AttributeName);
+end;
+
+function TLdapClient.GetGroups(const BaseDN, CustomFilter, Match: RawUtf8;
+  FilterUac, UnFilterUac: TGroupTypes; const AttributeName: RawUtf8): TRawUtf8DynArray;
+begin
+  GetByAccountType(AT_GROUP, integer(FilterUac), integer(UnFilterUac),
+    BaseDN, CustomFilter, Match, AttributeName, result);
+end;
+
+function TLdapClient.GetUsers(const BaseDN, CustomFilter, Match: RawUtf8;
+  FilterUac, UnFilterUac: TUserAccountControls; const AttributeName: RawUtf8): TRawUtf8DynArray;
+begin
+  GetByAccountType(AT_USER, integer(FilterUac), integer(UnFilterUac),
+    BaseDN, CustomFilter, Match, AttributeName, result);
+end;
+
+const
   // TLdapObject attributes
   LDAPOBJECT_ATTR =
    'sAMAccountName,distinguishedName,name,cn,description,' +
@@ -4258,11 +4324,6 @@ function TLdapClient.GetIsMemberOf(
 begin
   result := GetIsMemberOf(UserDN, CustomFilter, [GroupAN], [GroupDN], Nested);
 end;
-
-const
-  // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
-  NESTED_FLAG: array[boolean] of RawUtf8 = (
-    '', ':1.2.840.113556.1.4.1941:');
 
 function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
   const GroupAN, GroupDN: array of RawUtf8; Nested: boolean;
