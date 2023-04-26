@@ -1235,9 +1235,14 @@ type
   // - maintain an internal in-memory cache of the latest valid credentials
   // - could also be used outside of the HTTP BASIC authentication usecase to
   // check for user/name credential pairs over Kerberos, with a cache
+  // - on Windows, it could use the Kerberos token to check for allowed groups
+  // of the domain, without any TLdapCheckMember instance involved
   TBasicAuthServerKerberos = class(TBasicAuthServerExternal)
   protected
     fKerberosSpn: RawUtf8;
+    {$ifdef OSWINDOWS}
+    fGroupSid: RawSidDynArray;
+    {$endif OSWINDOWS}
     function ExternalServerAsk(const aUser: RawUtf8;
       const aPassword: SpiUtf8): boolean; override;
   public
@@ -1253,6 +1258,14 @@ type
     // - as called by CheckCredential() if no match was found in cache
     function KerberosAsk(const aUser: RawUtf8; const aPassword: SpiUtf8;
       aFullUserName: PRawUtf8 = nil): boolean;
+    {$ifdef OSWINDOWS}
+    /// remove any previously allowed groups
+    procedure AllowGroupClear;
+    /// register the objectSid text of the allowed group(s)
+    procedure AllowGroupBySid(const GroupSid: TRawUtf8DynArray); overload;
+    /// register the objectSid text of the allowed group(s) as CSV
+    procedure AllowGroupBySid(const GroupSidCsv: RawUtf8); overload;
+    {$endif OSWINDOWS}
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
     property KerberosSpn: RawUtf8
@@ -4590,9 +4603,14 @@ begin
     try
       while ClientSspiAuthWithPassword(
               client, datain, aUser, aPassword, fKerberosSpn, dataout) and
-            ServerSspiAuth(server, dataout, datain) do;
+            ServerSspiAuth(server, dataout, datain) do ;
       if aFullUserName <> nil then
         ServerSspiAuthUser(server, aFullUserName^);
+      {$ifdef OSWINDOWS}
+      if (fGroupSid = nil) or
+         ServerSspiAuthGroup(server, fGroupSid) then
+      {$endif OSWINDOWS}
+        result := true;
     except
       result := false;
     end;
@@ -4601,6 +4619,33 @@ begin
     FreeSecContext(client);
   end;
 end;
+
+{$ifdef OSWINDOWS}
+
+procedure TBasicAuthServerKerberos.AllowGroupClear;
+begin
+  fGroupSid := nil;
+end;
+
+procedure TBasicAuthServerKerberos.AllowGroupBySid(const GroupSid: TRawUtf8DynArray);
+var
+  i: PtrInt;
+  sid: TSid;
+begin
+  for i := 0 to high(GroupSid) do
+    if TextToSid(pointer(GroupSid[i]), sid) then
+      AddRawSid(fGroupSid, @sid);
+end;
+
+procedure TBasicAuthServerKerberos.AllowGroupBySid(const GroupSidCsv: RawUtf8);
+var
+  g: TRawUtf8DynArray;
+begin
+  CsvToRawUtf8DynArray(pointer(GroupSidCsv), g, ',', {trim=}true);
+  AllowGroupBySid(g);
+end;
+
+{$endif OSWINDOWS}
 
 
 { TBasicAuthServerLdap }
