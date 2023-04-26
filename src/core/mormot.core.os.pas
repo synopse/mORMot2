@@ -450,7 +450,7 @@ function SidLength(sid: PSid): PtrInt;
 procedure ToRawSid(sid: PSid; out result: RawSid);
 
 /// check if a RawSid binary buffer has the expected length of a valid SID
-function IsValidSid(const sid: RawSid): boolean;
+function IsValidRawSid(const sid: RawSid): boolean;
 
 /// search within SID dynamic array for a given SID
 function HasSid(const sids: PSids; sid: PSid): boolean;
@@ -459,28 +459,34 @@ function HasSid(const sids: PSids; sid: PSid): boolean;
 function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
 
 /// append a SID buffer pointer to a dynamic array of SID buffers
-procedure AddSid(var sids: RawSidDynArray; sid: PSid);
+procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 
 /// convert a Security IDentifier as text, following the standard representation
 procedure SidToTextShort(sid: PSid; var result: shortstring);
 
 /// convert a Security IDentifier as text, following the standard representation
-function SidToText(sid: PSid): RawUtf8; overload;
+function SidToText(sid: PSid): RawUtf8;
+
+/// convert several Security IDentifier as text dynamic array
+function SidsToText(sids: PSids): TRawUtf8DynArray;
 
 /// convert a Security IDentifier as text, following the standard representation
-function SidToText(const sid: RawSid): RawUtf8; overload;
+function RawSidToText(const sid: RawSid): RawUtf8;
 
 /// parse a Security IDentifier text, following the standard representation
 // - won't support hexadecimal IdentifierAuthority, i.e. S-1-0x######-....
-function TextToSid(P: PUtf8Char; out sid: TSid): boolean; overload;
+function TextToSid(P: PUtf8Char; out sid: TSid): boolean;
 
 /// parse a Security IDentifier text, following the standard representation
-function TextToSid(const text: RawUtf8): RawSid; overload;
+function TextToRawSid(const text: RawUtf8): RawSid; overload;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// parse a Security IDentifier text, following the standard representation
+function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
 
 /// returns a Security IDentifier of a well-known SID as binary
 // - is using an internal cache for the returned RawSid instances
-function KnownSid(wks: TWellKnownSid): RawSid;
+function KnownRawSid(wks: TWellKnownSid): RawSid;
 
 /// returns a Security IDentifier of a well-known SID as standard text
 // - e.g. wksBuiltinAdministrators as 'S-1-5-32-544'
@@ -1875,6 +1881,9 @@ function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
 // - so caller should call buf.Done once this PSid value is not needed any more
 function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
 
+/// return the group SIDs of a given token as text dynamic array
+function TokenGroupsText(tok: THandle): TRawUtf8DynArray;
+
 /// check if a group SID is part of a given token
 function TokenHasGroup(tok: THandle; sid: PSid): boolean;
 
@@ -1888,7 +1897,7 @@ function CurrentSid(wtt: TWinTokenType = wttProcess;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8; overload;
 
 /// return the SID of the current user, from process or thread, as raw binary
-procedure CurrentSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
+procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil); overload;
 
 /// return the SID of the current user groups, from process or thread, as text
@@ -5473,7 +5482,16 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function IsValidSid(const sid: RawSid): boolean;
+function SidsToText(sids: PSids): TRawUtf8DynArray;
+var
+  i: PtrInt;
+begin
+  SetLength(result, length(sids));
+  for i := 0 to length(sids) - 1 do
+    result[i] := SidToText(sids[i]);
+end;
+
+function IsValidRawSid(const sid: RawSid): boolean;
 var
   l: PtrInt;
 begin
@@ -5505,7 +5523,7 @@ begin
   result := false;
 end;
 
-procedure AddSid(var sids: RawSidDynArray; sid: PSid);
+procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 var
   n: PtrInt;
 begin
@@ -5516,9 +5534,9 @@ begin
   ToRawSid(sid, sids[n]);
 end;
 
-function SidToText(const sid: RawSid): RawUtf8;
+function RawSidToText(const sid: RawSid): RawUtf8;
 begin
-  if IsValidSid(sid) then
+  if IsValidRawSid(sid) then
     result := SidToText(pointer(sid))
   else
     result := '';
@@ -5566,14 +5584,18 @@ begin
   result := P^ = #0
 end;
 
-function TextToSid(const text: RawUtf8): RawSid;
+function TextToRawSid(const text: RawUtf8): RawSid;
+begin
+  TextToRawSid(text, result);
+end;
+
+function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean;
 var
   tmp: TSid; // maximum size possible on stack (1032 bytes)
 begin
-  if TextToSid(pointer(text), tmp) then
-    ToRawSid(@tmp, result)
-  else
-    result := '';
+  result := TextToSid(pointer(text), tmp);
+  if result then
+    ToRawSid(@tmp, sid)
 end;
 
 var
@@ -5672,7 +5694,7 @@ begin
   GlobalUnLock;
 end;
 
-function KnownSid(wks: TWellKnownSid): RawSid;
+function KnownRawSid(wks: TWellKnownSid): RawSid;
 begin
   if (wks <> wksNull) and
      (KNOWN_SID[wks] = '') then

@@ -2756,11 +2756,11 @@ function CurrentSid(wtt: TWinTokenType; name, domain: PRawUtf8): RawUtf8;
 var
   sid: RawSid;
 begin
-  CurrentSid(sid, wtt, name, domain);
-  result := SidToText(sid);
+  CurrentRawSid(sid, wtt, name, domain);
+  result := RawSidToText(sid);
 end;
 
-procedure CurrentSid(out sid: RawSid; wtt: TWinTokenType;
+procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType;
   name, domain: PRawUtf8);
 var
   h: THandle;
@@ -2810,6 +2810,14 @@ begin
   end;
 end;
 
+function TokenGroupsText(tok: THandle): TRawUtf8DynArray;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := SidsToText(RawTokenGroups(tok, tmp));
+  tmp.Done;
+end;
+
 function TokenHasGroup(tok: THandle; sid: PSid): boolean;
 var
   tmp: TSynTempBuffer;
@@ -2837,18 +2845,9 @@ end;
 
 function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
 var
-  i: PtrInt;
-  sids: PSids;
   tmp: TSynTempBuffer;
 begin
-  result := nil;
-  sids := CurrentGroups(wtt, tmp);
-  if sids <> nil then
-  begin
-    SetLength(result, length(sids));
-    for i := 0 to length(sids) - 1 do
-      result[i] := SidToText(sids[i]);
-  end;
+  result := SidsToText(CurrentGroups(wtt, tmp));
   tmp.Done;
 end;
 
@@ -2876,21 +2875,17 @@ end;
 
 function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
 var
-  sids: PSids;
   tmp: TSynTempBuffer;
 begin
-  sids := CurrentGroups(wtt, tmp);
-  result := HasSid(sids, sid);
+  result := HasSid(CurrentGroups(wtt, tmp), sid);
   tmp.Done;
 end;
 
 function CurrentUserHasAnyGroup(const sid: RawSidDynArray; wtt: TWinTokenType): boolean;
 var
-  sids: PSids;
   tmp: TSynTempBuffer;
 begin
-  sids := CurrentGroups(wtt, tmp);
-  result := HasAnySid(sids, sid);
+  result := HasAnySid(CurrentGroups(wtt, tmp), sid);
   tmp.Done;
 end;
 
