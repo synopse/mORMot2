@@ -969,8 +969,9 @@ type
     function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - if these are empty strings, then it does annonymous binding
-    // - warning: uses plaintext transport of password - consider using TLS
-    function Bind: boolean;
+    // - warning: uses plaintext transport of password and will raise ELdap
+    // wihtout a secure TLS connection (unless AllowUnsafePasswordSending is set)
+    function Bind(AllowUnsafePasswordSending: boolean = false): boolean;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
     // - you can specify a stronger algorithm if DIGEST-MD5 is not strong enough
@@ -3557,11 +3558,16 @@ end;
 
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
-function TLdapClient.Bind: boolean;
+function TLdapClient.Bind(AllowUnsafePasswordSending: boolean): boolean;
 begin
   result := false;
   if not Connect then
     exit;
+  if (fSettings.Password <> '') and
+     not fSettings.Tls and
+     not AllowUnsafePasswordSending then
+    raise ELdap.CreateUtf8(
+      '%.Bind with a password requires a TLS connection', [self]);
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
                    Asn(fSettings.UserName),
