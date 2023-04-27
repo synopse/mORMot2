@@ -6,7 +6,7 @@ program raw;
    in modern pascal and the mORMot 2 framework
  ----------------------------------------------------
  https://github.com/TechEmpower/FrameworkBenchmarks/wiki
- command line optional syntax: raw [threads] [cores] [servers]
+ command line optional syntax: run "raw -?"
 }
 
 {$I mormot.defines.inc}
@@ -87,19 +87,23 @@ type
 
   // main server class
   TRawAsyncServer = class(TSynPersistent)
-  private
+  protected
     fHttpServer: THttpAsyncServer;
     fDbPool: TSqlDBConnectionProperties;
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
     fRawCache: TOrmWorlds;
-  protected
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
+    {$else}
+    fAsyncWorldRead, fAsyncFortunesRead: TSqlDBPostgresAsyncStatement;
+    procedure OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+    procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     {$endif USE_SQLITE3}
-    // as used by /rawqueries and /rawupdates
+    // pipelined reading as used by /rawqueries and /rawupdates
     function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
+    function ComputeRawFortunes(stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions;
       pin2Core: integer = -1); reintroduce;
@@ -118,6 +122,10 @@ type
     function rawcached(ctxt: THttpServerRequest): cardinal;
     function rawfortunes(ctxt: THttpServerRequest): cardinal;
     function rawupdates(ctxt: THttpServerRequest): cardinal;
+    {$ifndef USE_SQLITE3} // asynchronous PostgreSQL pipelined DB access
+    function asyncdb(ctxt: THttpServerRequest): cardinal;
+    function asyncfortunes(ctxt: THttpServerRequest): cardinal;
+    {$endif USE_SQLITE3}
   end;
 
 {$I-}
@@ -199,6 +207,13 @@ begin
   GenerateDB;
   {$else}
   fStore.Server.CreateMissingTables; // create SQlite3 virtual tables
+  with fDBPool as TSqlDBPostgresConnectionProperties do
+  begin
+    fAsyncWorldRead := NewAsyncStatementPrepared(
+      WORLD_READ_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
+    fAsyncFortunesRead := NewAsyncStatementPrepared(
+      FORTUNES_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
+  end;
   {$endif USE_SQLITE3}
   // pre-fill the ORM
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
@@ -224,6 +239,9 @@ begin
     fHttpServer.Async.SetCpuAffinity(pin2Core);
   fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.ServerName := 'M';
+  {$ifndef USE_SQLITE3}
+  fHttpServer.Async.SetOnIdle(fAsyncWorldRead.Owner.FlushIfNeeded);
+  {$endif USE_SQLITE3}
   // use default routing using RTTI on the TRawAsyncServer published methods
   fHttpServer.Route.RunMethods([urmGet], self);
   // wait for the server to be ready and raise exception e.g. on binding issue
@@ -235,7 +253,7 @@ begin
   fHttpServer.Free;
   fStore.Free;
   fModel.Free;
-  fDBPool.free;
+  fDBPool.Free;
   ObjArrayClear(fRawCache);
   inherited Destroy;
 end;
@@ -297,7 +315,7 @@ end;
 function TRawAsyncServer.GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
 var
   conn: TSqlDBConnection;
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
   {$ifndef USE_SQLITE3}
   pConn: TSqlDBPostgresConnection absolute conn;
   pStmt: TSqlDBPostgresStatement;
@@ -331,7 +349,7 @@ begin
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync;
   end;
-  pConn.Flush; // in case we use modified libpq what not flush inside PQPipelineSync - flush manually
+  pConn.Flush; // forced for a modified libpq with no flush in pConn.PipelineSync
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
@@ -345,6 +363,38 @@ begin
   pConn.ExitPipelineMode;
   {$endif USE_SQLITE3}
   result := true;
+end;
+
+function FortuneCompareByMessage(const A, B): integer;
+begin
+  result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
+end;
+
+function TRawAsyncServer.ComputeRawFortunes(
+  stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
+var
+  list: TFortunes;
+  arr: TDynArray;
+  n: integer;
+  f: ^TFortune;
+begin
+  result := HTTP_BADREQUEST;
+  if stmt = nil then
+    exit;
+  arr.Init(TypeInfo(TFortunes), list, @n);
+  while stmt.Step do
+  begin
+    f := arr.NewPtr;
+    f.id := stmt.ColumnInt(0);
+    f.message := stmt.ColumnUtf8(1);
+  end;
+  f := arr.NewPtr;
+  f.id := 0;
+  f.message := FORTUNES_MESSAGE;
+  arr.Sort(FortuneCompareByMessage);
+  ctxt.OutContent := fTemplate.RenderDataArray(arr);
+  ctxt.OutContentType := HTML_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
 end;
 
 // following methods implement the server endpoints
@@ -465,7 +515,7 @@ end;
 function TRawAsyncServer.rawdb(ctxt: THttpServerRequest): cardinal;
 var
   conn: TSqlDBConnection;
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
@@ -504,37 +554,15 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-function FortuneCompareByMessage(const A, B): integer;
-begin
-  result := StrComp(pointer(TFortune(A).message), pointer(TFortune(B).message));
-end;
-
 function TRawAsyncServer.rawfortunes(ctxt: THttpServerRequest): cardinal;
 var
   conn: TSqlDBConnection;
-  stmt: ISQLDBStatement;
-  list: TFortunes;
-  arr: TDynArray;
-  n: integer;
-  f: ^TFortune;
+  stmt: ISqlDBStatement;
 begin
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(FORTUNES_SQL, true, true);
   stmt.ExecutePrepared;
-  arr.Init(TypeInfo(TFortunes), list, @n);
-  while stmt.Step do
-  begin
-    f := arr.NewPtr;
-    f.id := stmt.ColumnInt(0);
-    f.message := stmt.ColumnUtf8(1);
-  end;
-  f := arr.NewPtr;
-  f.id := 0;
-  f.message := FORTUNES_MESSAGE;
-  arr.Sort(FortuneCompareByMessage);
-  ctxt.OutContent := fTemplate.RenderDataArray(arr);
-  ctxt.OutContentType := HTML_CONTENT_TYPE;
-  result := HTTP_SUCCESS;
+  result := ComputeRawFortunes(stmt.Instance, ctxt);
 end;
 
 var
@@ -578,7 +606,7 @@ var
   res: TWorlds;
   ids, nums: TInt64DynArray;
   conn: TSqlDBConnection;
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
@@ -617,6 +645,49 @@ begin
   result := HTTP_SUCCESS;
 end;
 
+{$ifndef USE_SQLITE3} // asynchronous PostgreSQL pipelined DB access
+
+function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
+begin
+  fAsyncWorldRead.Lock;
+  try
+    fAsyncWorldRead.ExecuteAsyncFlush;
+    fAsyncWorldRead.Bind(1, ComputeRandomWorld);
+    fAsyncWorldRead.ExecuteAsync(ctxt, OnAsyncDb);
+  finally
+    fAsyncWorldRead.UnLock;
+  end;
+  result := ctxt.SetAsyncResponse;
+end;
+
+procedure TRawAsyncServer.OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement;
+  Context: TObject);
+var
+  ctxt: THttpServerRequest absolute Context;
+begin
+  if Statement = nil then
+    ctxt.ErrorMessage := 'asyncdb failed'
+  else
+    ctxt.SetOutJson('{"id":%,"randomNumber":%}',
+      [Statement.ColumnInt(0), Statement.ColumnInt(1)]);
+  ctxt.OnAsyncResponse(ctxt);
+end;
+
+function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
+begin
+  fAsyncFortunesRead.ExecuteAsyncNoParam(ctxt, OnAsyncFortunes);
+  result := ctxt.SetAsyncResponse;
+end;
+
+procedure TRawAsyncServer.OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement;
+  Context: TObject);
+var
+  ctxt: THttpServerRequest absolute Context;
+begin
+  ctxt.OnAsyncResponse(ctxt, ComputeRawFortunes(Statement, ctxt));
+end;
+
+{$endif USE_SQLITE3}
 
 
 var
