@@ -806,6 +806,7 @@ type
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
     fTls: boolean;
+    fAllowUnsafePasswordBind: boolean;
     function GetTargetUri: RawUtf8;
     procedure SetTargetUri(const uri: RawUtf8);
   public
@@ -814,6 +815,7 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
+    // - don't validate the password, just TargetHost/TargetPort
     function CheckTargetHost: TLdapClientTransmission;
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
@@ -849,6 +851,12 @@ type
     /// if connection to the LDAP server is secured via TLS
     property Tls: boolean
       read fTls write fTls;
+    /// by default, plain Bind with a password would require TLS
+    // - you can set this property to TRUE to allow sending the password over
+    // the wire, which is an unsafe pattern for sure
+    // - won't affect BindSaslKerberos which hides the password during handshake
+    property AllowUnsafePasswordBind: boolean
+      read fAllowUnsafePasswordBind write fAllowUnsafePasswordBind;
     /// milliseconds timeout for socket operations
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
@@ -970,9 +978,9 @@ type
     function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - if these are empty strings, then it does annonymous binding
-    // - warning: uses plaintext transport of password and will raise ELdap
-    // wihtout a secure TLS connection (unless AllowUnsafePasswordSending is set)
-    function Bind(AllowUnsafePasswordSending: boolean = false): boolean;
+    // - warning: raise ELdap on plaintext transport of the password without a
+    // safe TLS connection (unless Settings.AllowUnsafePasswordBind is set)
+    function Bind: boolean;
     /// authenticate a client to the directory server with Settings.Username/Password
     // - uses DIGEST-MD5 as password obfuscation challenge - consider using TLS
     // - you can specify a stronger algorithm if DIGEST-MD5 is not strong enough
@@ -3562,14 +3570,14 @@ end;
 
 // see https://ldap.com/ldapv3-wire-protocol-reference-bind
 
-function TLdapClient.Bind(AllowUnsafePasswordSending: boolean): boolean;
+function TLdapClient.Bind: boolean;
 begin
   result := false;
   if not Connect then
     exit;
   if (fSettings.Password <> '') and
      not fSettings.Tls and
-     not AllowUnsafePasswordSending then
+     not fSettings.AllowUnsafePasswordBind then
     raise ELdap.CreateUtf8(
       '%.Bind with a password requires a TLS connection', [self]);
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
