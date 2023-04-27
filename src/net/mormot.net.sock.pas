@@ -2413,11 +2413,9 @@ end;
 
 function TNetSocketWrap.RecvPending(out pending: integer): TNetResult;
 begin
+  pending := 0;
   if @self = nil then
-  begin
-    pending := 0;
-    result := nrNoSocket;
-  end
+    result := nrNoSocket
   else
     result := NetCheck(ioctlsocket(TSocket(@self), FIONREAD, @pending));
 end;

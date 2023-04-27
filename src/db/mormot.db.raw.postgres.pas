@@ -204,6 +204,7 @@ type
       paramValues: PPchar; paramLengths, paramFormats: PInteger;
       resultFormat: integer): integer; cdecl;
     getResult: function(conn: PPGconn): PPGresult; cdecl;
+    socket: function(conn: PPGconn): integer; cdecl;
   public
     /// try to dynamically load the libpq library
     // - raise ESqlDBPostgres if the expected library is not found
@@ -242,7 +243,7 @@ implementation
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..35] of RawUtf8 = (
+  PQ_ENTRIES: array[0..36] of RawUtf8 = (
     'libVersion',
     'isthreadsafe',
     'setdbLogin',
@@ -279,7 +280,8 @@ const
     'sendQueryParams',
     'sendPrepare',
     'sendQueryPrepared',
-    'getResult'
+    'getResult',
+    'socket'
     );
 
 

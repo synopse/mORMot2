@@ -32,6 +32,7 @@ uses
   mormot.core.json,
   mormot.core.log,
   mormot.core.threads,
+  mormot.net.sock,
   mormot.db.core,
   mormot.db.sql;
 
@@ -92,7 +93,8 @@ type
     // - the returned instance will be owned by the main TSqlDBPostgresAsync
     // - to be used as reference within actual asynchronous database process
     function NewAsyncStatementPrepared(const Sql: RawUtf8;
-      Options: TSqlDBPostgresAsyncStatementOptions = []): TSqlDBPostgresAsyncStatement;
+      Options: TSqlDBPostgresAsyncStatementOptions = [];
+      FlushCount: integer = 100; FlushTimeShr: integer = 0): TSqlDBPostgresAsyncStatement;
     /// add or replace mapping of OID into TSqlDBFieldType
     // - in case mapping for OID is not defined, returns ftUtf8
     function Oid2FieldType(cOID: cardinal): TSqlDBFieldType;
@@ -164,6 +166,10 @@ type
       read fPGConn;
     /// how many prepared statements are currently cached for this connection
     function PreparedCount: integer;
+    /// access to the raw socket of this connection
+    function Socket: TNetSocket;
+    /// check if there is some pending input at the raw socket of this connection
+    function SocketHasData: boolean;
   end;
 
   /// implements a statement via a Postgres database connection
@@ -290,6 +296,19 @@ type
     /// flush any pending tasks in this statement
     // - following AsyncFlushCount and AsyncFlushTimeShr properties
     // - to be called within Lock/UnLock, before Bind() and ExecuteAsync()
+    // - typical usecase is e.g. from ex/techempower-bench/raw.pas
+    // ! function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
+    // ! begin
+    // !   fAsyncWorldRead.Lock;
+    // !   try
+    // !     fAsyncWorldRead.ExecuteAsyncFlush;
+    // !     fAsyncWorldRead.Bind(1, ComputeRandomWorld);
+    // !     fAsyncWorldRead.ExecuteAsync(ctxt, OnAsyncDb);
+    // !   finally
+    // !     fAsyncWorldRead.UnLock;
+    // !   end;
+    // !   result := ctxt.SetAsyncResponse;
+    // ! end;
     procedure ExecuteAsyncFlush;
     /// ExecutePrepared-like method for asynchronous process
     // - to be called within Lock/UnLock, after ExecuteAsyncFlush() and Bind()
@@ -297,6 +316,12 @@ type
       const OnFinished: TOnSqlDBPostgresAsyncEvent);
     /// ExecutePrepared-like method for asynchronous process without Bind()
     // - will do Lock, ExecuteAsyncFlush, ExecuteAsync, then Unlock
+    // - typical usecase is e.g. from ex/techempower-bench/raw.pas
+    // ! function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
+    // ! begin
+    // !   fAsyncFortunesRead.ExecuteAsyncNoParam(ctxt, OnAsyncFortunes);
+    // !   result := ctxt.SetAsyncResponse;
+    // ! end;
     procedure ExecuteAsyncNoParam(Context: TObject;
       const OnFinished: TOnSqlDBPostgresAsyncEvent);
     /// could be used as a short-cut to Owner.Safe.Lock
@@ -627,6 +652,25 @@ begin
     result := fPrepared.Count;
 end;
 
+function TSqlDBPostgresConnection.Socket: TNetSocket;
+begin
+  if (self = nil) or
+     not Assigned(PQ.socket) then
+    result := nil
+  else
+    result := pointer(PtrUInt(PQ.socket(fPGConn)));
+end;
+
+function TSqlDBPostgresConnection.SocketHasData: boolean;
+var
+  pending: integer;
+begin
+  result := (self <> nil) and
+            Assigned(PQ.socket) and
+            (TNetSocket(PtrUInt(PQ.socket(fPGConn))).RecvPending(pending) = nrOK) and
+            (pending > 0);
+end;
+
 
 { TSqlDBPostgresConnectionProperties }
 
@@ -716,7 +760,8 @@ begin
 end;
 
 function TSqlDBPostgresConnectionProperties.NewAsyncStatementPrepared(
-  const Sql: RawUtf8; Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
+  const Sql: RawUtf8; Options: TSqlDBPostgresAsyncStatementOptions;
+  FlushCount, FlushTimeShr: integer): TSqlDBPostgresAsyncStatement;
 var
   async: TSqlDBPostgresAsync;
 begin
@@ -725,6 +770,8 @@ begin
     result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
     result.fOwner := async;
     result.fAsyncOptions := Options;
+    result.fAsyncFlushCount := FlushCount;
+    result.fAsyncFlushTimeShr := FlushTimeShr;
     result.Prepare(Sql, not (asoExpectNoResult in Options));
   finally
     async.Unlock;
@@ -1294,7 +1341,8 @@ begin
     exit;
   n := fTasks.Count;
   if (n > fAsyncFlushCount) or
-     (GetTickCount64 shr fAsyncFlushTimeShr <> fLastFlushTix) then
+     (GetTickCount64 shr fAsyncFlushTimeShr <> fLastFlushTix) or
+     fOwner.Connection.SocketHasData then
     DoExecuteAsyncFlush(n);
 end;
 
@@ -1309,7 +1357,6 @@ begin
     log := SynDBLog.Enter('ExecuteAsyncFlush pending=% [%]', [n, fSql], self);
     if asoForceConnectionFlush in fAsyncOptions then
       fOwner.Connection.Flush;
-    // TODO: check the PG socket if there is something worth reading?
     while fTasks.Pop(task) do
     begin
       GetPipelineResult;
@@ -1322,6 +1369,8 @@ begin
       task.OnFinished := nil;
       ReleaseRows;
       fOwner.Connection.CheckPipelineSync;
+      {if not fOwner.Connection.SocketHasData then
+        break; // not worth waiting}
     end;
   except
     // on fatal error don't go any further and notify the callbacks
@@ -1379,6 +1428,7 @@ begin
   fProperties := Owner;
   fStatements := TSynObjectListLightLocked.Create;
   fConnection := fProperties.NewConnection as TSqlDBPostgresConnection;
+  fConnection.Connect;
   fConnection.EnterPipelineMode;
 end;
 
