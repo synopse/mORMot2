@@ -789,7 +789,7 @@ type
     lccClosest,
     lccTlsFirst);
 
-  /// how a TLdapClient connect to its associated LDAP Server
+  /// how a TLdapClient is connected to its associated LDAP Server
   TLdapClientTransmission = (
     lctNone,
     lctPlain,
@@ -820,6 +820,7 @@ type
     /// try to setup the LDAP server information from the system
     // - use a temporary TLdapClient.Connect then optionally call BindSaslKerberos
     // - any existing KerberosDN and KerberosSpn will be used during discovery
+    // - by default, will try CLDAP recognition, and favor a TLS connection
     function LoadDefaultFromSystem(TryKerberos: boolean;
       DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
       DelayMS: integer = 500): TLdapClientTransmission;
@@ -3121,10 +3122,16 @@ begin
   if (fTargetHost <> '') and
      (fTargetPort <> '') then
     try
-      test := TLdapClient.Create;
+      test := TLdapClient.Create(self);
       try
         if test.Bind then // connect and anonymous binding
-          result := test.Transmission;
+        begin
+          fTls := test.Sock.TLS.Enabled; // may have changed during Connect
+          if fTls then
+            result := lctEncrypted
+          else
+            result := lctPlain;
+        end;
       finally
         test.Free;
       end;
@@ -3170,11 +3177,13 @@ var
 begin
   if fTargetHost <> '' then
   begin
+    // there are some known LDAP server parameters
     trans := CheckTargetHost;
     if trans = lctNone then
       raise ELdap.CreateUtf8('%: invalid %', [self, GetTargetUri]);
   end
   else begin
+    // guess the LDAP server from system information and CLDAP
     trans := LoadDefaultFromSystem(TryKerberos);
     if trans = lctNone then
       raise ELdap.CreateUtf8('%: no default LDAP server', [self]);
@@ -4242,20 +4251,19 @@ begin
   attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR + ',groupType');
   if WithMember then
     AddRawUtf8(attr, 'member');
-   // TLdapUser attributes
-  result :=
-    Search(DefaultDN(BaseDN), false, InfoFilter(AT_GROUP, AN, DN, '', ''), attr) and
-    (SearchResult.Count = 1);
+  result := Search(DefaultDN(BaseDN), false,
+              InfoFilter(AT_GROUP, AN, DN, '', ''), attr) and
+            (SearchResult.Count = 1);
   if result then
-  with SearchResult.Items[0] do
-  begin
-    LdapObjectInfo(Attributes, Info);
-    ToCardinal(SplitRight(Info.objectSID, '-'), Info.PrimaryGroupID);
-    if ToInteger(Attributes.Get('groupType'), uac) then
-      info.groupType := TGroupTypes(uac);
-    if WithMember then
-      Info.member := Attributes.Find('member').GetAllReadable;
-  end;
+    with SearchResult.Items[0] do
+    begin
+      LdapObjectInfo(Attributes, Info);
+      ToCardinal(SplitRight(Info.objectSID, '-'), Info.PrimaryGroupID);
+      if ToInteger(Attributes.Get('groupType'), uac) then
+        info.groupType := TGroupTypes(uac);
+      if WithMember then
+        Info.member := Attributes.Find('member').GetAllReadable;
+    end;
 end;
 
 function TLdapClient.GetGroupDN(const AN, BaseDN, CustomFilter: RawUtf8): RawUtf8;
@@ -4295,9 +4303,9 @@ begin
     'displayName,mail,pwdLastSet,lastLogon,userAccountControl,primaryGroupID');
   if WithMemberOf then
     AddRawUtf8(attr, 'memberOf');
-  result :=
-    Search(DefaultDN(BaseDN), false, InfoFilter(AT_USER, AN, DN, '', ''), attr) and
-    (SearchResult.Count = 1);
+  result := Search(DefaultDN(BaseDN), false,
+              InfoFilter(AT_USER, AN, DN, '', ''), attr) and
+            (SearchResult.Count = 1);
   if result then
     with SearchResult.Items[0] do
     begin
@@ -4320,8 +4328,8 @@ function TLdapClient.GetUserDN(const AN, UPN, BaseDN, CustomFilter: RawUtf8;
   PrimaryGroupID: PCardinal; ObjectSid: PRawUtf8): RawUtf8;
 begin
   if Search(DefaultDN(BaseDN), false,
-      InfoFilter(AT_USER, AN, '', UPN, CustomFilter),
-      ['distinguishedName', 'primaryGroupID', 'objectSid']) and
+       InfoFilter(AT_USER, AN, '', UPN, CustomFilter),
+       ['distinguishedName', 'primaryGroupID', 'objectSid']) and
      (SearchResult.Count = 1) then
     with SearchResult.Items[0].Attributes do
     begin
@@ -4351,8 +4359,7 @@ var
 begin
   result := false;
   if (UserDN = '') or
-     not LdapSafe(UserDN) or
-     (length(GroupAN) + length(GroupDN) = 0) then
+     not LdapSafe(UserDN) then
     exit;
   n := 0;
   for i := 0 to high(GroupAN) do
