@@ -278,6 +278,11 @@ type
   THttpServerGeneric = class;
   {$M-}
 
+  /// event signature for THttpServerRequest.AsyncResponse callback
+  TOnHttpServerRequestAsyncResponse =
+    procedure(Sender: THttpServerRequestAbstract;
+      RespStatus: integer = HTTP_SUCCESS) of object;
+
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -285,6 +290,7 @@ type
   protected
     fServer: THttpServerGeneric;
     fErrorMessage: string;
+    fOnAsyncResponse: TOnHttpServerRequestAsyncResponse;
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
     function GetFullURL: SynUnicode;
@@ -310,6 +316,15 @@ type
     /// serialize a given TObject as JSON into OutContent and OutContentType fields
     procedure SetOutJson(Value: TObject); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// notify the server that it should wait for the AsyncResponse callback
+    // - would raise an EHttpServer exception if AsyncResponse is not set
+    // - returns HTTP_ASYNCRESPONSE (777) internal code as recognized e.g. by
+    // THttpAsyncServer
+    function SetAsyncResponse: integer;
+    /// a callback used for asynchronous response to the client
+    // - only implemented by the THttpAsyncServer by now
+    property OnAsyncResponse: TOnHttpServerRequestAsyncResponse
+      read fOnAsyncResponse write fOnAsyncResponse;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -2291,6 +2306,14 @@ begin
   fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
+function THttpServerRequest.SetAsyncResponse: integer;
+begin
+  if not Assigned(fOnAsyncResponse) then
+    raise EHttpServer.CreateUtf8(
+      '%.SetAsyncResponse with no OnAsyncResponse callback', [self]);
+  result := HTTP_ASYNCRESPONSE;
+end;
+
 {$ifdef USEWININET}
 
 function THttpServerRequest.GetFullURL: SynUnicode;
@@ -2859,6 +2882,7 @@ begin
       if Ctxt.RespStatus <> 0 then
       begin
         if (Ctxt.OutContent = '') and
+           (Ctxt.RespStatus <> HTTP_ASYNCRESPONSE) and
            not StatusCodeIsSuccess(Ctxt.RespStatus) then
         begin
           Ctxt.fErrorMessage := 'Wrong route';

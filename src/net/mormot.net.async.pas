@@ -538,6 +538,7 @@ type
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingAwakeCount: integer;
     fGC: array[1..2] of TAsyncConnectionsGC;
+    fOnIdle: array of TOnPollSocketsIdle;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection);
     procedure DoGC;
@@ -573,6 +574,9 @@ type
     /// ensure all threads of the pool is bound to a given CPU HW socket
     // - may enhance performance on multi-socket systems
     procedure SetSocketAffinity(SocketIndex: integer);
+    /// add or remove a callback run from ProcessIdleTix() internal method
+    // - all callbacks will be triggered once with Sender=nil at shutdown
+    procedure SetOnIdle(const aOnIdle: TOnPollSocketsIdle; Remove: boolean = false);
     /// high-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search
     // - could be executed e.g. from a TAsyncConnection.OnRead method
@@ -832,6 +836,9 @@ type
     function DecodeHeaders: integer; virtual;
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
+    function DoResponse(res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
+    procedure AsyncResponse(Sender: THttpServerRequestAbstract;
+      RespStatus: integer);
   public
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); override;
@@ -1429,8 +1436,7 @@ end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
 begin
-  if connection.IsDangling then
-    exit;
+  if not connection.IsDangling then
   try
     if not (fClosed in connection.fFlags) then
       // if not already done in UnlockAndCloseConnection
@@ -2096,13 +2102,17 @@ begin
          WriteCount, KB(WriteBytes), fConnectionCount, fConnectionHigh]);
     fClients.Terminate(5000);
   end;
+  // notify the SetOnIdle() registered events
+  endtix := mormot.core.os.GetTickCount64;
+  for i := 0 to high(fOnIdle) do
+    fOnIdle[i]({Sender=}nil, endtix);
   // terminate and unlock background ProcessRead/ProcessWrite polling threads
   if fThreads <> nil then
   begin
     for i := 0 to high(fThreads) do
       fThreads[i].Terminate; // set the Terminated flag
     p := 0;
-    endtix := mormot.core.os.GetTickCount64 + 10000; // wait up to 10 seconds
+    endtix := endtix + 10000; // wait up to 10 seconds
     repeat
       n := 0;
       for i := 0 to high(fThreads) do
@@ -2721,12 +2731,16 @@ end;
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 var
   sec: TAsyncConnectionSec;
+  i: PtrInt;
 begin
   // called from fClients.fWrite.OnGetOneIdle callback
   if Terminated then
     exit;
   fLastOperationMS := NowTix;
   DoGC;
+  if fOnIdle <> nil then
+    for i := 0 to length(fOnIdle) - 1 do
+      fOnIdle[i](Sender, NowTix);
   sec := Qword(NowTix) div 1000; // 32-bit second resolution is fine
   if sec = fLastOperationSec then
     exit; // not a new second tick yet
@@ -2734,7 +2748,15 @@ begin
   IdleEverySecond;
   // note: this method should be non-blocking and return quickly
   // e.g. overriden in TWebSocketAsyncConnections to send pending frames
- end;
+end;
+
+procedure TAsyncConnections.SetOnIdle(const aOnIdle: TOnPollSocketsIdle; Remove: boolean);
+begin
+  if Remove then
+    MultiEventRemove(fOnIdle, TMethod(aOnIdle))
+  else
+    MultiEventAdd(fOnIdle, TMethod(aOnIdle));
+end;
 
 function TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection): boolean;
 begin
@@ -3201,12 +3223,12 @@ begin
           if FlushPipelinedWrite <> soContinue then
             result := soClose;
         if (result <> soContinue) or
-           (fHttp.State in [hrsUpgraded]) then
-          break; // rejected or upgraded
+           (fHttp.State in [hrsWaitAsyncProcessing, hrsUpgraded]) then
+          break; // rejected, async or upgraded
       end
       else if (result <> soContinue) or
-              (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
-        break; // authenticated, rejected or upgraded
+              (fHttp.State in [hrsGetCommand, hrsWaitAsyncProcessing, hrsUpgraded]) then
+        break; // rejected, authenticated, async or upgraded
     end;
     if fPipelinedWrite then
        if FlushPipelinedWrite <> soContinue then
@@ -3389,7 +3411,7 @@ begin
   end;
   // now THttpAsyncConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
-  if not (fHttp.State in [hrsWaitProcessing, hrsUpgraded]) and
+  if not (fHttp.State in [hrsWaitProcessing, hrsWaitAsyncProcessing, hrsUpgraded]) and
      // HEAD and OPTIONS are requests with Content-Length header but no body
      HttpMethodWithNoBody(fHttp.CommandMethod) then
   begin
@@ -3404,11 +3426,33 @@ begin
     result := soContinue;
 end;
 
-function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
+procedure THttpAsyncConnection.AsyncResponse(
+  Sender: THttpServerRequestAbstract; RespStatus: integer);
 var
-  output: PRawByteStringBuffer;
-  sent: integer;
-  p: PByte;
+  res: TPollAsyncSocketOnReadWrite;
+  c: TPollAsyncConnection;
+begin
+  // verify if not in unexpected state, to avoid
+  if IsDangling or
+     (Sender <> fRequest) or
+     (fClosed in fFlags) or
+     (fHttp.State <> hrsWaitAsyncProcessing) or
+     not (rfAsynchronous in fHttp.ResponseFlags)  then
+    exit;
+  // finalize and send the response back to the client
+  if hfConnectionClose in fHttp.HeaderFlags then
+    res := soClose
+  else
+    res := soContinue;
+  fRequest.RespStatus := RespStatus;
+  if DoResponse(res) = soClose then
+  begin
+    c := self;
+    fServer.fAsync.fClients.CloseConnection(c);
+  end;
+end;
+
+function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -3426,15 +3470,28 @@ begin
     fHttp.UncompressData;
   // prepare the HTTP/REST process reusing the THttpServerRequest instance
   result := soClose;
-  if fRequest = nil then // created once, if not rejected by OnBeforeBody
+  if fRequest = nil then
+  begin
+    // created once, if not rejected by OnBeforeBody
     fRequest := THttpServerRequest.Create(
-      fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque)
+      fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
+    fRequest.OnAsyncResponse := AsyncResponse;
+  end
   else
     fRequest.Recycle(fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
   fRequest.Prepare(fHttp, fRemoteIP, fServer.fAuthorize);
   // let the associated THttpAsyncServer execute the request
   if fServer.DoRequest(fRequest) then
+  begin
     result := soContinue;
+    if fRequest.RespStatus = HTTP_ASYNCRESPONSE then
+    begin
+      // delayed response using fRequest.OnAsyncResponse callback
+      include(fHttp.ResponseFlags, rfAsynchronous);
+      fHttp.State := hrsWaitAsyncProcessing;
+      exit; // self.AsyncResponse will be called later
+    end
+  end;
   // handle HTTP/1.1 keep alive timeout
   if (fKeepAliveSec > 0) and
      not (hfConnectionClose in fHttp.HeaderFlags) and
@@ -3452,10 +3509,22 @@ begin
     fServer.IncStat(grBanned);
     include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
   end;
+  // finalize the response and send it back to the client
+  result := DoResponse(result);
+end;
+
+function THttpAsyncConnection.DoResponse(
+  res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
+var
+  output: PRawByteStringBuffer;
+  sent: integer;
+  p: PByte;
+begin
+  result := res;
   // compute the response for the HTTP state machine
   output := fRequest.SetupResponse(fHttp, fServer.fCompressGz,
     fServer.fAsync.fClients.fSendBufferSize);
-  // now fHttp.State is final as hrsSendBody or hrsResponseDone
+  // SetupResponse() set fHttp.State as hrsSendBody or hrsResponseDone
   fRespStatus := fRequest.RespStatus;
   // release memory of all COW fields ASAP if HTTP header was interned
   if fHttp.Interning = nil then

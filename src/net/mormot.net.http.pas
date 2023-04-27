@@ -187,6 +187,7 @@ type
     hrsGetBodyChunkedDataLastLine,
     hrsGetBodyContentLength,
     hrsWaitProcessing,
+    hrsWaitAsyncProcessing,
     hrsSendBody,
     hrsResponseDone,
     hrsUpgraded,
@@ -222,7 +223,8 @@ type
   THttpRequestReponseFlags = set of (
     rfAcceptRange,
     rfRange,
-    rfContentStreamNeedFree);
+    rfContentStreamNeedFree,
+    rfAsynchronous);
 
   PHttpRequestContext = ^THttpRequestContext;
 
