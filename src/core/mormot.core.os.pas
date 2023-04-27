@@ -138,6 +138,10 @@ const
   /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
+  /// clearly wrong response code, used by THttpServerRequest.SetAsyncResponse
+  // - for internal THttpAsyncServer asynchronous process
+  HTTP_ASYNCRESPONSE = 777;
+
 /// retrieve the HTTP reason text from its integer code
 // - e.g. StatusCodeToReason(200)='OK'
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -4031,9 +4035,10 @@ type
   protected
     fSection: TRTLCriticalSection;
     fRW: TRWLock;
-    fLockCount: integer;
+    fPaddingUsedCount: byte;
     fInitialized: boolean;
     fRWUse: TSynLockerUse;
+    fLockCount: integer;
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
@@ -4056,18 +4061,13 @@ type
     procedure RWUnLock(context: TRWLockContext);
       {$ifdef HASINLINE} inline; {$endif}
   public
-    /// number of values stored in the internal Padding[] array
-    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
-    // - you should not have to use this field, but for optimized low-level
-    // direct access to Padding[] values, within a Lock/UnLock safe block
-    PaddingUsedCount: integer;
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
     // - you should not use this field directly, but rather the Locked[],
     // LockedInt64[], LockedUtf8[] or LockedPointer[] methods
     // - if you want to access those array values, ensure you protect them
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
-    // and maintain the PaddingUsedCount field accurately
+    // and maintain the PaddingUsedCount property accurately
     Padding: array[0..6] of TVarData;
     /// initialize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
@@ -4156,6 +4156,12 @@ type
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
     function ProtectMethod: IUnknown;
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    property PaddingUsedCount: byte
+      read fPaddingUsedCount write fPaddingUsedCount;
     /// returns true if the mutex is currently locked by another thread
     // - with RWUse=uRWLock, any lock (even ReadOnlyLock) would return true
     property IsLocked: boolean
@@ -8897,16 +8903,16 @@ procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
   fLockCount := 0;
+  fPaddingUsedCount := 0;
   fInitialized := true;
   fRW.Init;
-  PaddingUsedCount := 0;
 end;
 
 procedure TSynLocker.Done;
 var
   i: PtrInt;
 begin
-  for i := 0 to PaddingUsedCount - 1 do
+  for i := 0 to fPaddingUsedCount - 1 do
     if not (integer(Padding[i].VType) in VTYPE_SIMPLE) then
       VarClearProc(Padding[i]);
   DeleteCriticalSection(fSection);
@@ -9025,7 +9031,7 @@ end;
 
 function TSynLocker.GetVariant(Index: integer): Variant;
 begin
-  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9047,8 +9053,8 @@ begin
   if cardinal(Index) <= high(Padding) then
   try
     RWLock(cWrite);
-    if Index >= PaddingUsedCount then
-      PaddingUsedCount := Index + 1;
+    if Index >= fPaddingUsedCount then
+      fPaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Value;
   finally
     RWUnLock(cWrite);
@@ -9057,7 +9063,7 @@ end;
 
 function TSynLocker.GetInt64(Index: integer): Int64;
 begin
-  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9082,7 +9088,7 @@ end;
 
 function TSynLocker.GetBool(Index: integer): boolean;
 begin
-  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9107,7 +9113,7 @@ end;
 
 function TSynLocker.GetUnlockedInt64(Index: integer): Int64;
 begin
-  if (cardinal(Index) >= cardinal(PaddingUsedCount)) or
+  if (cardinal(Index) >= cardinal(fPaddingUsedCount)) or
      not VariantToInt64(variant(Padding[Index]), result) then
     result := 0;
 end;
@@ -9116,15 +9122,15 @@ procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
 begin
   if cardinal(Index) <= high(Padding) then
   begin
-    if Index >= PaddingUsedCount then
-      PaddingUsedCount := Index + 1;
+    if Index >= fPaddingUsedCount then
+      fPaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Value;
   end;
 end;
 
 function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
-  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9150,8 +9156,8 @@ begin
   if cardinal(Index) <= high(Padding) then
   try
     RWLock(cWrite);
-    if Index >= PaddingUsedCount then
-      PaddingUsedCount := Index + 1;
+    if Index >= fPaddingUsedCount then
+      fPaddingUsedCount := Index + 1;
     with Padding[Index] do
     begin
       VarClearAndSetType(PVariant(@VType)^, varUnknown);
@@ -9164,7 +9170,7 @@ end;
 
 function TSynLocker.GetUtf8(Index: integer): RawUtf8;
 begin
-  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -9186,8 +9192,8 @@ begin
   if cardinal(Index) <= high(Padding) then
   try
     RWLock(cWrite);
-    if Index >= PaddingUsedCount then
-      PaddingUsedCount := Index + 1;
+    if Index >= fPaddingUsedCount then
+      fPaddingUsedCount := Index + 1;
     RawUtf8ToVariant(Value, variant(Padding[Index]));
   finally
     RWUnLock(cWrite);
@@ -9200,10 +9206,10 @@ begin
   try
     RWLock(cWrite);
     result := 0;
-    if Index < PaddingUsedCount then
+    if Index < fPaddingUsedCount then
       VariantToInt64(variant(Padding[Index]), result)
     else
-      PaddingUsedCount := Index + 1;
+      fPaddingUsedCount := Index + 1;
     variant(Padding[Index]) := Int64(result + Increment);
   finally
     RWUnLock(cWrite);
@@ -9220,10 +9226,10 @@ begin
     RWLock(cWrite);
     with Padding[Index] do
     begin
-      if Index < PaddingUsedCount then
+      if Index < fPaddingUsedCount then
         result := PVariant(@VType)^
       else
-        PaddingUsedCount := Index + 1;
+        fPaddingUsedCount := Index + 1;
       PVariant(@VType)^ := Value;
     end;
   finally
@@ -9238,7 +9244,7 @@ begin
     RWLock(cWrite);
     with Padding[Index] do
     begin
-      if Index < PaddingUsedCount then
+      if Index < fPaddingUsedCount then
         if VType = varUnknown then
           result := VUnknown
         else
@@ -9248,7 +9254,7 @@ begin
         end
       else
       begin
-        PaddingUsedCount := Index + 1;
+        fPaddingUsedCount := Index + 1;
         result := nil;
       end;
       VType := varUnknown;

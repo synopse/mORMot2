@@ -2953,7 +2953,7 @@ procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 // ! end;
 // then callbacks are then executed as such:
 // ! if fEchos<>nil then
-// !   for i := 0 to length(fEchos)-1 do
+// !   for i := 0 to length(fEchos) - 1 do
 // !     fEchos[i](self,fEchoBuf);
 // - use MultiEventRemove() to un-register a callback from the list
 function MultiEventAdd(var EventList; const Event: TMethod): boolean;

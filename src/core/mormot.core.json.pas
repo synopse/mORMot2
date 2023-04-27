@@ -9188,7 +9188,7 @@ begin
   fSafe.Padding[DIC_TIMECOUNT].VType  := varInteger;  // Timeouts.Count
   fSafe.Padding[DIC_TIMESEC].VType    := varInteger;  // Timeouts Seconds
   fSafe.Padding[DIC_TIMETIX].VType    := varInteger;  // GetTickCount64 shr 10
-  fSafe.PaddingUsedCount := DIC_TIMETIX + 1;
+  fSafe.PaddingUsedCount := DIC_TIMETIX + 1;          // manual registration
   fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, aHasher,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
   fValues.Init(aValueTypeInfo, fSafe.Padding[DIC_VALUE].VAny,
