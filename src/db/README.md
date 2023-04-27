@@ -32,7 +32,7 @@ For cross-databases support, `mormot.db.sql.zeos.pas` is the preferred way. But 
 
 For instance, `mormot.db.raw.postgres.pas` defines the low-level PostgreSQL client to the `libpq` provider, whereas `mormot.db.sql.postgres.pas` will use it to implement `mormot.db.sql.pas` compatible SQL requests.
 
-The `mormot.db.core.pas` unit is shared against all those units and by `mormot.orm.core`.
+The abstract `mormot.db.core.pas` unit is shared against all those units and by `mormot.orm.core`.
 
 
 ## Units Presentation

@@ -1272,8 +1272,8 @@ type
     fOnProcess: TOnSqlDBProcess;
     fOnStatementInfo: TOnSqlDBInfo;
     fStatementCacheReplicates: integer;
-    fSqlCreateField: TSqlDBFieldTypeDefinition;
     fSqlCreateFieldMax: cardinal;
+    fSqlCreateField: TSqlDBFieldTypeDefinition;
     fSharedTransactionsSafe: TLightLock;
     fSharedTransactions: array of TSqlDBConnectionTransaction;
     fExecuteWhenConnected: TRawUtf8DynArray;
@@ -1738,8 +1738,11 @@ type
     class function EngineName: RawUtf8;
 
     /// return a shared connection, corresponding to the given database
-    // - call the ThreadSafeConnection method instead e.g. for multi-thread
-    // access, or NewThreadSafeStatement for direct retrieval of a new statement
+    // - the returned instance is shared among calls, so not thread-safe
+    // - for multi-thread access, call the ThreadSafeConnection method instead
+    // or NewThreadSafeStatement for direct retrieval of a new statement
+    // - is mainly used internally by TSqlDBConnectionProperties for reading the
+    // database metadata
     property MainConnection: TSqlDBConnection
       read GetMainConnection;
     /// the associated User Password, as specified at creation
