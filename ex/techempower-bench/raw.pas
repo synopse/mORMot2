@@ -665,7 +665,8 @@ procedure TRawAsyncServer.OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement;
 var
   ctxt: THttpServerRequest absolute Context;
 begin
-  if Statement = nil then
+  if (Statement = nil) or
+     not Statement.Step then
     ctxt.ErrorMessage := 'asyncdb failed'
   else
     ctxt.SetOutJson('{"id":%,"randomNumber":%}',
