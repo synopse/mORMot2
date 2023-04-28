@@ -7981,44 +7981,49 @@ begin
   end;
   n := length(fRawParams);
   if n = 0 then
+  begin
+    result := true;
     exit;
+  end;
   SetLength(swlen, n);
   for i := 0 to n - 1 do
   begin
     s := fRawParams[i];
-    if CompareMemSmall(pointer(s), pointer(LongSwitch), length(LongSwitch)) then
-      swlen[i] := length(LongSwitch)
-    else if CompareMemSmall(pointer(s), pointer(ShortSwitch), length(ShortSwitch)) then
-      swlen[i] := length(ShortSwitch)
-    {$ifdef OSWINDOWS}
-    else while s[swlen[i] + 1] = '-' do
-      inc(swlen[i]); // allow -v --verbose on Windows for cross-platform run
-    {$endif OSWINDOWS}
+    if s <> '' then
+      if CompareMemSmall(pointer(s), pointer(LongSwitch), length(LongSwitch)) then
+        swlen[i] := length(LongSwitch)
+      else if CompareMemSmall(pointer(s), pointer(ShortSwitch), length(ShortSwitch)) then
+        swlen[i] := length(ShortSwitch)
+      {$ifdef OSWINDOWS}
+      else while s[swlen[i] + 1] = '-' do
+        inc(swlen[i]); // allow -v --verbose on Windows for cross-platform run
+      {$endif OSWINDOWS}
   end;
   i := 0;
   repeat
     s := fRawParams[i];
-    if swlen[i] <> 0 then
-    begin
-      delete(s, 1, swlen[i]);
-      j := PosExChar('=', s);
-      if j <> 0 then
+    if s <> '' then
+      if swlen[i] <> 0 then
       begin
-        AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
-        AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+        delete(s, 1, swlen[i]);
+        j := PosExChar('=', s);
+        if j <> 0 then
+        begin
+          AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
+          AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+        end
+        else if (i + 1 = n) or
+                (swlen[i + 1] <> 0) then
+          AddRawUtf8(fNames[clkOption], s)
+        else
+        begin
+          AddRawUtf8(fNames[clkParam], s);
+          inc(i);
+          AddRawUtf8(fValues, fRawParams[i]);
+        end
       end
-      else if (i + 1 = n) or
-              (swlen[i + 1] <> 0) then
-        AddRawUtf8(fNames[clkOption], s)
       else
-      begin
-        AddRawUtf8(fNames[clkParam], s);
-        inc(i);
-        AddRawUtf8(fValues, fRawParams[i]);
-      end
-    end
-    else
-      AddRawUtf8(fNames[clkArg], s);
+        AddRawUtf8(fNames[clkArg], s);
     inc(i);
   until i = n;
   SetLength(fRetrieved[clkArg], length(fNames[clkArg]));
