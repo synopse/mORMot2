@@ -93,8 +93,7 @@ type
     // - the returned instance will be owned by the main TSqlDBPostgresAsync
     // - to be used as reference within actual asynchronous database process
     function NewAsyncStatementPrepared(const Sql: RawUtf8;
-      Options: TSqlDBPostgresAsyncStatementOptions = [];
-      FlushCount: integer = 10; FlushTimeShr: integer = 0): TSqlDBPostgresAsyncStatement;
+      Options: TSqlDBPostgresAsyncStatementOptions = []): TSqlDBPostgresAsyncStatement;
     /// add or replace mapping of OID into TSqlDBFieldType
     // - in case mapping for OID is not defined, returns ftUtf8
     function Oid2FieldType(cOID: cardinal): TSqlDBFieldType;
@@ -271,6 +270,7 @@ type
     procedure(Statement: TSqlDBPostgresAsyncStatement; Context: TObject) of object;
 
   TSqlDBPostgresAsyncTask = record
+    Statement: TSqlDBPostgresAsyncStatement;
     Context: TObject;
     OnFinished: TOnSqlDBPostgresAsyncEvent;
   end;
@@ -282,27 +282,17 @@ type
   TSqlDBPostgresAsyncStatement = class(TSqlDBPostgresStatement)
   protected
     fOwner: TSqlDBPostgresAsync;
-    fTasks: TSynQueue;
     fAsyncOptions: TSqlDBPostgresAsyncStatementOptions;
-    fAsyncFlushCount, fAsyncFlushTimeShr: integer;
-    fLastFlushTix: cardinal;
-    procedure DoExecuteAsyncFlush(n: PtrInt; onlyifsocketready: boolean;
-      const caller: shortstring);
-    procedure DoExecuteAsyncError;
   public
-    /// create an asynchronous statement instance
-    constructor Create(aConnection: TSqlDBConnection); override;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// flush any pending tasks in this statement
-    // - following AsyncFlushCount and AsyncFlushTimeShr properties
-    // - to be called within Lock/UnLock, before Bind() and ExecuteAsync()
+    /// ExecutePrepared-like method for asynchronous process
+    // - to be called within Lock/UnLock, after Bind() if neded:
+    procedure ExecuteAsync(Context: TObject;
+      const OnFinished: TOnSqlDBPostgresAsyncEvent);
     // - typical usecase is e.g. from ex/techempower-bench/raw.pas
     // ! function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
     // ! begin
     // !   fAsyncWorldRead.Lock;
     // !   try
-    // !     fAsyncWorldRead.ExecuteAsyncFlush;
     // !     fAsyncWorldRead.Bind(1, ComputeRandomWorld);
     // !     fAsyncWorldRead.ExecuteAsync(ctxt, OnAsyncDb);
     // !   finally
@@ -310,11 +300,6 @@ type
     // !   end;
     // !   result := ctxt.SetAsyncResponse;
     // ! end;
-    procedure ExecuteAsyncFlush;
-    /// ExecutePrepared-like method for asynchronous process
-    // - to be called within Lock/UnLock, after ExecuteAsyncFlush() and Bind()
-    procedure ExecuteAsync(Context: TObject;
-      const OnFinished: TOnSqlDBPostgresAsyncEvent);
     /// ExecutePrepared-like method for asynchronous process without Bind()
     // - will do Lock, ExecuteAsyncFlush, ExecuteAsync, then Unlock
     // - typical usecase is e.g. from ex/techempower-bench/raw.pas
@@ -337,17 +322,22 @@ type
     /// how this statement should behave in asynchronous mode
     property AsyncOptions: TSqlDBPostgresAsyncStatementOptions
       read fAsyncOptions;
-    /// check if there are some tasks currently in this statement queue
-    function AsyncPending: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// after how many ExecuteAsync should call ExecuteAsyncFlush
-    // - default is to sync after 10 requests or AsyncFlushTimeShr period
-    property AsyncFlushCount: integer
-      read fAsyncFlushCount write fAsyncFlushCount;
-    /// the right-bit-shift applied over GetTickCount64 to call ExecuteAsyncFlush
-    // - default is 0, i.e. use the OS resolution (16ms on Windows, 4ms on POSIX)
-    property AsyncFlushTimeShr: integer
-      read fAsyncFlushTimeShr write fAsyncFlushTimeShr;
+  end;
+
+  /// background thread in which all TSqlDBPostgresAsync results are processed
+  TSqlDBPostgresAsyncThread = class(TSynThread)
+  protected
+    fOwner: TSqlDBPostgresAsync;
+    fName: RawUtf8;
+    fOnThreadStart: TOnNotifyThread;
+    fProcessing: boolean;
+    procedure Execute; override;
+  public
+    /// initialize the thread
+    constructor Create(aOwner: TSqlDBPostgresAsync); reintroduce;
+    /// some event which will be called then nil in the main Execute loop
+    property OnThreadStart: TOnNotifyThread
+      read fOnThreadStart write fOnThreadStart;
   end;
 
   /// asynchronous execution engine owned by a TSqlDBPostgresConnectionProperties
@@ -358,19 +348,14 @@ type
     fProperties: TSqlDBPostgresConnectionProperties;
     fConnection: TSqlDBPostgresConnection;
     fStatements: TSynObjectListLightLocked; // of TSqlDBPostgresAsyncStatement
-    fPendingTask: integer;
-    fLastFlushIfNeededTix: cardinal;
+    fThread: TSqlDBPostgresAsyncThread;
+    fTasks: TSynQueue;
+    procedure DoExecuteAsyncError;
   public
     /// initialize the execution engine
     constructor Create(Owner: TSqlDBPostgresConnectionProperties); reintroduce;
     /// finalize the execution engine
     destructor Destroy; override;
-    /// TOnPollSocketsIdle callback to purge any pending pipelined statement
-    // - check after 64ms for TSqlDBPostgresAsyncStatement.ExecuteAsyncFlush
-    procedure FlushIfNeeded(Sender: TObject; NowTix: Int64);
-    /// how many pipeleined statement tasks are currently pending
-    property PendingTask: integer
-      read fPendingTask;
     /// the TSqlDBPostgresConnectionProperties owner
     property Properties: TSqlDBPostgresConnectionProperties
       read fProperties;
@@ -378,6 +363,9 @@ type
     // - a single dedicated connection will be used for all async statements
     property Connection: TSqlDBPostgresConnection
       read fConnection;
+    /// raw level to the background thread processing the results
+    property Thread: TSqlDBPostgresAsyncThread
+      read fThread;
   end;
 
 
@@ -761,8 +749,8 @@ begin
 end;
 
 function TSqlDBPostgresConnectionProperties.NewAsyncStatementPrepared(
-  const Sql: RawUtf8; Options: TSqlDBPostgresAsyncStatementOptions;
-  FlushCount, FlushTimeShr: integer): TSqlDBPostgresAsyncStatement;
+  const Sql: RawUtf8;
+  Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
 var
   async: TSqlDBPostgresAsync;
 begin
@@ -771,8 +759,6 @@ begin
     result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
     result.fOwner := async;
     result.fAsyncOptions := Options;
-    result.fAsyncFlushCount := FlushCount;
-    result.fAsyncFlushTimeShr := FlushTimeShr;
     result.Prepare(Sql, not (asoExpectNoResult in Options));
   finally
     async.Unlock;
@@ -1280,26 +1266,6 @@ end;
 
 { TSqlDBPostgresAsyncStatement }
 
-constructor TSqlDBPostgresAsyncStatement.Create(aConnection: TSqlDBConnection);
-begin
-  inherited Create(aConnection);
-  fTasks := TSynQueue.Create(TypeInfo(TSqlDBPostgresAsyncTasks));
-  fAsyncFlushCount := 10;
-end;
-
-destructor TSqlDBPostgresAsyncStatement.Destroy;
-begin
-  inherited Destroy;
-  if fTasks.Pending then
-  begin
-    // notify shutdown (paranoid)
-    SynDBLog.Add.Log(sllWarning,
-      'Destroy: tasks queue not void - missing FlushIfNeeded call?', self);
-    DoExecuteAsyncError;
-  end;
-  FreeAndNil(fTasks);
-end;
-
 procedure TSqlDBPostgresAsyncStatement.Lock;
 begin
   fOwner.Safe^.Lock;
@@ -1308,80 +1274,6 @@ end;
 procedure TSqlDBPostgresAsyncStatement.Unlock;
 begin
   fOwner.Safe^.UnLock;
-end;
-
-function TSqlDBPostgresAsyncStatement.AsyncPending: boolean;
-begin
-  result := (self <> nil) and
-            fTasks.Pending;
-end;
-
-procedure TSqlDBPostgresAsyncStatement.DoExecuteAsyncError;
-var
-  task: TSqlDBPostgresAsyncTask;
-  n: PtrInt;
-begin
-  // caller did protect this method with Lock/UnLock
-  n := fTasks.Count;
-  if n <> 0 then
-    with SynDBLog.Enter('ExecuteAsyncError aborted=% [%]', [n, fSql], self) do
-      while fTasks.Pop(task) do
-        try
-          LockedDec32(@fOwner.fPendingTask);
-          task.OnFinished({statement=}nil, task.Context); // notify error
-        except
-        end;
-end;
-
-procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncFlush;
-var
-  n: PtrInt;
-begin
-  // check if actually need to send the previous requests to the server socket
-  if not fTasks.Pending then
-    exit;
-  n := fTasks.Count;
-  if (n > fAsyncFlushCount) or
-     (GetTickCount64 shr fAsyncFlushTimeShr <> fLastFlushTix) or
-     fOwner.Connection.SocketHasData then
-    DoExecuteAsyncFlush(n, true, '');
-  // prepare for a new Bind() then SendPipelinePrepared()
-  Reset;
-end;
-
-procedure TSqlDBPostgresAsyncStatement.DoExecuteAsyncFlush(
-  n: PtrInt; onlyifsocketready: boolean; const caller: shortstring);
-var
-  task: TSqlDBPostgresAsyncTask;
-  {%H-}log: ISynLog;
-begin
-  // caller did protect this method with Lock/UnLock
-  if n <> 0 then
-  try
-    log := SynDBLog.Enter(
-      'ExecuteAsyncFlush %pending=% [%]', [caller, n, fSql], self);
-    while fTasks.Pop(task) do
-    begin
-      GetPipelineResult;
-      LockedDec32(@fOwner.fPendingTask);
-      try
-        task.OnFinished(self, task.Context);
-      except
-        // continue anyway on error in the end-user callback
-      end;
-      task.OnFinished := nil;
-      ReleaseRows;
-      fOwner.Connection.CheckPipelineSync;
-      if onlyifsocketready and
-         not fOwner.Connection.SocketHasData then
-        break; // not worth waiting
-    end;
-  except
-    // on fatal error don't go any further and notify the callbacks
-    if Assigned(task.OnFinished) then
-      fTasks.Push(task); // task.OnFinished() was never called
-    DoExecuteAsyncError;
-  end;
 end;
 
 procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: TObject;
@@ -1394,12 +1286,10 @@ begin
     raise ESqlDBPostgresAsync.CreateFmt(
       '%.ExecuteAsync with OnFinished=nil [%]', [self, fSql]);
   // create a new task
-  if not fTasks.Pending then
-    fLastFlushTix := GetTickCount64 shr fAsyncFlushTimeShr;
+  task.Statement := self;
   task.Context := Context;
   task.OnFinished := OnFinished;
-  fTasks.Push(task);
-  LockedInc32(@fOwner.fPendingTask);
+  fOwner.fTasks.Push(task);
   try
     // pipeline the SQL request to the server
     SendPipelinePrepared;
@@ -1408,8 +1298,8 @@ begin
     if asoForceConnectionFlush in fAsyncOptions then
       fOwner.Connection.Flush; // on modified libpq
   except
-    // on fatal error don't go any further and notify the callbacks
-    DoExecuteAsyncError;
+    // on fatal error don't go any further and notify the pending callbacks
+    fOwner.DoExecuteAsyncError;
   end;
 end;
 
@@ -1418,11 +1308,107 @@ procedure TSqlDBPostgresAsyncStatement.ExecuteAsyncNoParam(Context: TObject;
 begin
   Lock;
   try
-    ExecuteAsyncFlush;
     ExecuteAsync(Context, OnFinished);
   finally
     UnLock;
   end;
+end;
+
+
+{ TSqlDBPostgresAsyncThread }
+
+constructor TSqlDBPostgresAsyncThread.Create(aOwner: TSqlDBPostgresAsync);
+begin
+  fOwner := aOwner;
+  inherited Create({suspended=}false);
+end;
+
+var
+  asyncdbcount: integer; // for TSqlDBPostgresAsyncThread.Name
+
+procedure TSqlDBPostgresAsyncThread.Execute;
+var
+  res: TNetEvents;
+  task: TSqlDBPostgresAsyncTask;
+  {%H-}log: ISynLog;
+begin
+  fProcessing := true;
+  FormatUtf8('asyncdb %', [InterlockedIncrement(asyncdbcount)], fName);
+  SetCurrentThreadName(fName);
+  log := SynDBLog.Enter(self, 'Execute');
+  try
+    repeat
+      // notify if needed
+      if Assigned(fOnThreadStart) then
+        try
+          fOnThreadStart(self);
+          fOnThreadStart := nil;
+        except
+          fOnThreadStart := nil;
+        end;
+      // wait to have some data pending on the input socket
+      repeat
+        res := fOwner.fConnection.Socket.WaitFor(5000, [neRead]);
+      until Terminated or
+            (res = [neRead]) or
+            ((res <> []) and
+             SleepOrTerminated(100)); // sleep(100) on broken connection
+      if Terminated then
+        break;
+      // handle incoming responses from PostgreSQL
+      task.OnFinished := nil;
+      try
+        if not fOwner.fTasks.Pending then // paranoid check
+        begin
+          if Assigned(log) then
+            log.Log(sllWarning, 'Execute: data on socket but no task', self);
+          repeat
+            SleepHiRes(1);
+          until Terminated or
+                fOwner.fTasks.Pending;
+        end;
+        fOwner.Lock;
+        try
+          while not Terminated and
+                fOwner.fTasks.Pop(task) do
+          begin
+              task.Statement.GetPipelineResult;
+              if Terminated then
+                break;
+              try
+                task.OnFinished(task.Statement, task.Context);
+              except
+                // continue anyway on error in the end-user callback
+              end;
+              task.OnFinished := nil; // was notified
+              task.Statement.ReleaseRows;
+              fOwner.fConnection.CheckPipelineSync;
+            // if not fOwner.Connection.SocketHasData then break; is slower
+          end;
+        finally
+          fOwner.Unlock;
+        end;
+      except
+        on E: Exception do
+        begin
+          // on fatal DB error don't go any further and notify the callbacks
+          if Assigned(log) then
+            log.Log(sllWarning, 'Execute: % during %',
+              [E.ClassType, task.Statement.Sql], self);
+          if Assigned(task.OnFinished) then
+            fOwner.fTasks.Push(task); // task.OnFinished() was never called
+          fOwner.DoExecuteAsyncError;
+        end;
+      end;
+    until Terminated;
+  except
+    on E: Exception do
+      SynDBLog.Add.Log(sllWarning, 'Execute raised a % -> terminate thread %',
+          [E.ClassType, fName], self);
+  end;
+  fProcessing := false;
+  log := nil;
+  TSynLog.Add.NotifyThreadEnded;
 end;
 
 
@@ -1433,56 +1419,55 @@ begin
   inherited Create;
   fProperties := Owner;
   fStatements := TSynObjectListLightLocked.Create;
+  fTasks := TSynQueue.Create(TypeInfo(TSqlDBPostgresAsyncTasks));
   fConnection := fProperties.NewConnection as TSqlDBPostgresConnection;
   fConnection.Connect;
   fConnection.EnterPipelineMode;
+  fThread := TSqlDBPostgresAsyncThread.Create(self);
 end;
 
 destructor TSqlDBPostgresAsync.Destroy;
 begin
+  if Assigned(fThread) then
+    fThread.Terminate;
+  if fTasks.Pending then
+  begin
+    // notify shutdown (paranoid)
+    SynDBLog.Add.Log(sllWarning,
+      'Destroy: tasks queue not void - missing FlushIfNeeded call?', self);
+    DoExecuteAsyncError;
+  end;
   inherited Destroy;
   FreeAndNil(fStatements);
-  if fPendingTask <> 0 then // should never happen
-    SynDBLog.Add.Log(sllWarning, 'Destroy: PendingTask=%', [fPendingTask], self);
+  if fTasks.Pending then // should never happen
+    SynDBLog.Add.Log(sllWarning, 'Destroy: tasks=%', [fTasks.Count], self);
   if Assigned(fConnection) then
   begin
     fConnection.ExitPipelineMode;
-    FreeAndNil(fConnection);
+    FreeAndNil(fConnection); // will break PQ.socket and release fThread.Execute
   end;
+  if Assigned(fThread) then
+  begin
+    SleepHiRes(5500, fThread.fProcessing, false);
+    fThread.Free;
+  end;
+  FreeAndNil(fTasks);
 end;
 
-procedure TSqlDBPostgresAsync.FlushIfNeeded(Sender: TObject; NowTix: Int64);
+procedure TSqlDBPostgresAsync.DoExecuteAsyncError;
 var
-  i: PtrInt;
-  tix: cardinal;
-  stmt: TSqlDBPostgresAsyncStatement;
+  task: TSqlDBPostgresAsyncTask;
+  n: PtrInt;
 begin
-  if fPendingTask = 0 then
-    exit; // nothing to flush for sure
-  tix := NowTix;
-  if tix = 0 then
-    tix := GetTickCount64;
-  if fLastFlushIfNeededTix shr 6 = tix then
-    exit; // only re-check after 64 ms
-  fLastFlushIfNeededTix := tix shr 6;
-  fStatements.Safe.ReadLock;
-  try
-    for i := 0 to fStatements.Count - 1 do
-    begin
-      stmt := fStatements.List[i];
-      if stmt.AsyncPending and
-         (stmt.fLastFlushTix <> tix shr stmt.fAsyncFlushTimeShr) and
-         Safe^.TryLock then
+  // caller did protect this method with Lock/UnLock
+  n := fTasks.Count;
+  if n <> 0 then
+    with SynDBLog.Enter('ExecuteAsyncError aborted=%', [n], self) do
+      while fTasks.Pop(task) do
         try
-          stmt.DoExecuteAsyncFlush(stmt.fTasks.Count, false, 'FlushIfNeeded ');
-        finally
-          Safe^.UnLock;
+          task.OnFinished({statement=}nil, task.Context); // notify error
+        except
         end;
-    end;
-  except
-    // just ignore any (unlikely) exception within the loop
-  end;
-  fStatements.Safe.ReadUnLock;
 end;
 
 

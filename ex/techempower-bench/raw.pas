@@ -213,6 +213,7 @@ begin
       WORLD_READ_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
     fAsyncFortunesRead := NewAsyncStatementPrepared(
       FORTUNES_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
+    // no SetThreadCpuAffinity(fAsyncWorldRead.Owner.Thread, pin2Core) needed
   end;
   {$endif USE_SQLITE3}
   // pre-fill the ORM
@@ -239,9 +240,6 @@ begin
     fHttpServer.Async.SetCpuAffinity(pin2Core);
   fHttpServer.HttpQueueLength := 10000; // needed e.g. from wrk/ab benchmarks
   fHttpServer.ServerName := 'M';
-  {$ifndef USE_SQLITE3}
-  fHttpServer.Async.SetOnIdle(fAsyncWorldRead.Owner.FlushIfNeeded);
-  {$endif USE_SQLITE3}
   // use default routing using RTTI on the TRawAsyncServer published methods
   fHttpServer.Route.RunMethods([urmGet], self);
   // wait for the server to be ready and raise exception e.g. on binding issue
@@ -651,7 +649,6 @@ function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
 begin
   fAsyncWorldRead.Lock;
   try
-    fAsyncWorldRead.ExecuteAsyncFlush;
     fAsyncWorldRead.Bind(1, ComputeRandomWorld);
     fAsyncWorldRead.ExecuteAsync(ctxt, OnAsyncDb);
   finally
