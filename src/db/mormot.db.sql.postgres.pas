@@ -51,6 +51,7 @@ type
     asoExpectNoResult,
     asoForcePipelineSync,
     asoForceConnectionFlush);
+  PSqlDBPostgresAsyncStatementOptions = ^TSqlDBPostgresAsyncStatementOptions;
 
   /// connection properties which will implement an internal Thread-Safe
   // connection pool
@@ -266,13 +267,14 @@ type
   // - implementation should retrieve the data from Statement.Column*(), then
   // process it using the opaque Context
   // - is called with Statement = nil on any DB fatal error
-  TOnSqlDBPostgresAsyncEvent =
-    procedure(Statement: TSqlDBPostgresAsyncStatement; Context: TObject) of object;
+  TOnSqlDBPostgresAsyncEvent = procedure(
+    Statement: TSqlDBPostgresAsyncStatement; Context: TObject) of object;
 
   TSqlDBPostgresAsyncTask = record
     Statement: TSqlDBPostgresAsyncStatement;
     Context: TObject;
     OnFinished: TOnSqlDBPostgresAsyncEvent;
+    Options: TSqlDBPostgresAsyncStatementOptions;
   end;
   TSqlDBPostgresAsyncTasks = array of TSqlDBPostgresAsyncTask;
 
@@ -287,7 +289,8 @@ type
     /// ExecutePrepared-like method for asynchronous process
     // - to be called within Lock/UnLock, after Bind() if neded:
     procedure ExecuteAsync(Context: TObject;
-      const OnFinished: TOnSqlDBPostgresAsyncEvent);
+      const OnFinished: TOnSqlDBPostgresAsyncEvent;
+      ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     // - typical usecase is e.g. from ex/techempower-bench/raw.pas
     // ! function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
     // ! begin
@@ -756,7 +759,7 @@ var
 begin
   async := AsyncLocked;
   try
-    async.Connection.ExitPipelineMode; // needed for caching
+    async.Connection.ExitPipelineMode; // needed for statement cache API
     try
       result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
       result.fOwner := async;
@@ -1087,7 +1090,7 @@ begin
       PQ.Clear(fRes);
       fRes := nil;
       raise ESqlDBPostgres.CreateUtf8('%.GetPipelineResult: result expected ' +
-        'but statement did not return tuples', [self]);
+        'but statement did not return tuples (status=%)', [self, fResStatus]);
     end;
     fTotalRowsRetrieved := PQ.ntuples(fRes);
     fCurrentRow := -1;
@@ -1284,7 +1287,8 @@ begin
 end;
 
 procedure TSqlDBPostgresAsyncStatement.ExecuteAsync(Context: TObject;
-  const OnFinished: TOnSqlDBPostgresAsyncEvent);
+  const OnFinished: TOnSqlDBPostgresAsyncEvent;
+  ForcedOptions: PSqlDBPostgresAsyncStatementOptions);
 var
   task: TSqlDBPostgresAsyncTask;
 begin
@@ -1296,14 +1300,18 @@ begin
   task.Statement := self;
   task.Context := Context;
   task.OnFinished := OnFinished;
+  if ForcedOptions <> nil then
+    task.Options := ForcedOptions^
+  else
+    task.Options := fAsyncOptions;
   fOwner.fTasks.Push(task);
   try
     // pipeline the SQL request to the server
     SendPipelinePrepared;
-    if asoForcePipelineSync in fAsyncOptions then
+    if asoForcePipelineSync in task.Options then
       fOwner.Connection.PipelineSync; // required e.g. for TFB benchmarks
-    if asoForceConnectionFlush in fAsyncOptions then
-      fOwner.Connection.Flush; // on modified libpq
+    if asoForceConnectionFlush in task.Options then
+      fOwner.Connection.Flush; // may be needed on modified libpq
   except
     // on fatal error don't go any further and notify the pending callbacks
     fOwner.DoExecuteAsyncError;
@@ -1337,6 +1345,7 @@ procedure TSqlDBPostgresAsyncThread.Execute;
 var
   res: TNetEvents;
   task: TSqlDBPostgresAsyncTask;
+  before, after: integer;
   {%H-}log: ISynLog;
 begin
   fProcessing := true;
@@ -1362,34 +1371,44 @@ begin
              SleepOrTerminated(100)); // sleep(100) on broken connection
       if Terminated then
         break;
+      if not fOwner.fTasks.Pending then // happens e.g. during statement parsing
+        if SleepOrTerminated(10) then
+          break
+        else
+          continue;
       // handle incoming responses from PostgreSQL
       task.OnFinished := nil;
       try
-        if not fOwner.fTasks.Pending then // paranoid check
-        begin
-          if Assigned(log) then
-            log.Log(sllWarning, 'Execute: data on socket but no task', self);
-          repeat
-            SleepHiRes(1);
-          until Terminated or
-                fOwner.fTasks.Pending;
-        end;
         fOwner.Lock; // faster to maintain the lock over the whole loop
         try
+          if not fOwner.fTasks.Pending then // paranoid check
+          begin
+            if Assigned(log) then
+              log.Log(sllWarning, 'Execute: data on socket but no task', self);
+            repeat
+              SleepHiRes(1);
+            until Terminated or
+                  fOwner.fTasks.Pending;
+          end;
           while not Terminated and
                 fOwner.fTasks.Pop(task) do
           begin
-              task.Statement.GetPipelineResult;
-              if Terminated then
-                break;
-              try
-                task.OnFinished(task.Statement, task.Context);
-              except
-                // continue anyway on error in the end-user callback
-              end;
-              task.OnFinished := nil; // was notified
-              task.Statement.ReleaseRows;
+            task.Statement.GetPipelineResult;
+            if Terminated then
+              break;
+            try
+              before := fOwner.fTasks.Count;
+              task.OnFinished(task.Statement, task.Context);
+            except
+              // continue anyway on error in the end-user callback
+            end;
+            after := fOwner.fTasks.Count;
+            task.OnFinished := nil; // was notified
+            task.Statement.ReleaseRows;
+            if asoForcePipelineSync in task.Options then
               fOwner.fConnection.CheckPipelineSync;
+            if after <> before then
+              break; // OnFinished() did call ExecuteAsync()
             // if not fOwner.Connection.SocketHasData then break; is slower
           end;
         finally
