@@ -98,6 +98,7 @@ type
     procedure GenerateDB;
     {$else}
     fAsyncWorldRead, fAsyncFortunesRead: TSqlDBPostgresAsyncStatement;
+    fAsyncWorldUpdate: TSqlDBPostgresAsyncStatement;
     procedure OnAsyncDb(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     {$endif USE_SQLITE3}
@@ -124,6 +125,8 @@ type
     function rawupdates(ctxt: THttpServerRequest): cardinal;
     {$ifndef USE_SQLITE3} // asynchronous PostgreSQL pipelined DB access
     function asyncdb(ctxt: THttpServerRequest): cardinal;
+    function asyncqueries(ctxt: THttpServerRequest): cardinal;
+    function asyncupdates(ctxt: THttpServerRequest): cardinal;
     function asyncfortunes(ctxt: THttpServerRequest): cardinal;
     {$endif USE_SQLITE3}
   end;
@@ -136,7 +139,7 @@ const
 
   WORLD_COUNT       = 10000;
   WORLD_READ_SQL    = 'select id,randomNumber from World where id=?';
-  WORLD_UPDATE_SQLN ='update World as t set randomNumber = v.r from ' +
+  WORLD_UPDATE_SQLN = 'update World as t set randomNumber = v.r from ' +
     '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
   FORTUNES_SQL      = 'select id,message from Fortune';
@@ -210,9 +213,14 @@ begin
   with fDBPool as TSqlDBPostgresConnectionProperties do
   begin
     fAsyncWorldRead := NewAsyncStatementPrepared(
-      WORLD_READ_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
+      WORLD_READ_SQL,
+      [asoForceConnectionFlush, asoForcePipelineSync]);
     fAsyncFortunesRead := NewAsyncStatementPrepared(
-      FORTUNES_SQL, [asoForceConnectionFlush, asoForcePipelineSync]);
+      FORTUNES_SQL,
+      [asoForceConnectionFlush, asoForcePipelineSync]);
+    fAsyncWorldUpdate := NewAsyncStatementPrepared(
+      WORLD_UPDATE_SQLN,
+      [asoForceConnectionFlush, asoForcePipelineSync, asoExpectNoResult]);
     // no SetThreadCpuAffinity(fAsyncWorldRead.Owner.Thread, pin2Core) needed
   end;
   {$endif USE_SQLITE3}
@@ -669,6 +677,107 @@ begin
     ctxt.SetOutJson('{"id":%,"randomNumber":%}',
       [Statement.ColumnInt(0), Statement.ColumnInt(1)]);
   ctxt.OnAsyncResponse(ctxt);
+end;
+
+type
+  // simple state machine used for /asyncqueries and /asyncupdates
+  TAsyncWorld = class
+  public
+    server: TRawAsyncServer;
+    request: THttpServerRequest;
+    res: TWorlds;
+    count: PtrInt;
+    fromupdates: boolean;
+    procedure Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest);
+    procedure Updates(owner: TRawAsyncServer; ctxt: THttpServerRequest);
+    procedure DoUpdates;
+    procedure OnQueries(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+    procedure OnRes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+  end;
+
+procedure TAsyncWorld.Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest);
+var
+  n: PtrInt;
+begin
+  server := owner;
+  request := ctxt;
+  n := getQueriesParamValue(ctxt);
+  SetLength(res, n); // n is > 0
+  server.fAsyncWorldRead.Lock;
+  try
+    repeat
+      server.fAsyncWorldRead.Bind(1, ComputeRandomWorld);
+      server.fAsyncWorldRead.ExecuteAsync(ctxt, OnQueries);
+      dec(n);
+    until n = 0;
+  finally
+    server.fAsyncWorldRead.UnLock;
+  end;
+end;
+
+procedure TAsyncWorld.Updates(owner: TRawAsyncServer;
+  ctxt: THttpServerRequest);
+begin
+  fromupdates := true;
+  Queries(owner, ctxt);
+end;
+
+procedure TAsyncWorld.OnQueries(Statement: TSqlDBPostgresAsyncStatement;
+  Context: TObject);
+begin
+  if (Statement <> nil) and
+     Statement.Step then
+    with res[count] do
+    begin
+      id := Statement.ColumnInt(0);
+      randomNumber := Statement.ColumnInt(1);
+    end;
+  inc(count);
+  if count = length(res) then // we retrieved all SELECT
+    if fromupdates then
+      DoUpdates
+    else
+      OnRes(Statement, Context);
+end;
+
+procedure TAsyncWorld.DoUpdates;
+var
+  i: PtrInt;
+  ids, nums: TInt64DynArray;
+begin
+  setLength(ids{%H-}, count);
+  setLength(nums{%H-}, count);
+  for i := 0 to count - 1 do
+  with res[i] do
+  begin
+    randomNumber := ComputeRandomWorld;
+    ids[i] := id;
+    nums[i] := randomNumber;
+  end;
+  // note: no need of server.fAsyncWorldUpdate.Lock/UnLock inside the callbacks
+  server.fAsyncWorldUpdate.BindArray(1, ids);
+  server.fAsyncWorldUpdate.BindArray(2, nums);
+  server.fAsyncWorldUpdate.ExecuteAsync(request, OnRes);
+end;
+
+procedure TAsyncWorld.OnRes(Statement: TSqlDBPostgresAsyncStatement;
+  Context: TObject);
+begin
+  request.SetOutJson(@res, TypeInfo(TWorlds));
+  request.OnAsyncResponse(Context as THttpServerRequest);
+  Free; // we don't need this state machine any more
+end;
+
+function TRawAsyncServer.asyncqueries(ctxt: THttpServerRequest): cardinal;
+begin
+  TAsyncWorld.Create.Queries(self, ctxt);
+  result := ctxt.SetAsyncResponse;
+end;
+
+function TRawAsyncServer.asyncupdates(ctxt: THttpServerRequest): cardinal;
+begin
+  TAsyncWorld.Create.Updates(self, ctxt);
+  result := ctxt.SetAsyncResponse;
 end;
 
 function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
