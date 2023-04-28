@@ -355,7 +355,6 @@ begin
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync;
   end;
-  pConn.Flush; // forced for a modified libpq with no flush in pConn.PipelineSync
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
@@ -725,6 +724,7 @@ end;
 function TAsyncWorld.Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 var
   n: PtrInt;
+  opt: TSqlDBPostgresAsyncStatementOptions;
 begin
   server := owner;
   request := ctxt;
@@ -732,10 +732,13 @@ begin
   SetLength(res, n); // n is > 0
   server.fAsyncWorldRead.Lock;
   try
+    opt := server.fAsyncWorldRead.AsyncOptions - [asoForceConnectionFlush];
     repeat
-      server.fAsyncWorldRead.Bind(1, ComputeRandomWorld);
-      server.fAsyncWorldRead.ExecuteAsync(ctxt, OnQueries);
       dec(n);
+      server.fAsyncWorldRead.Bind(1, ComputeRandomWorld);
+      if n = 0 then // last item
+        opt := opt + [asoForceConnectionFlush]; // for modified libpq
+      server.fAsyncWorldRead.ExecuteAsync(ctxt, OnQueries, @opt);
     until n = 0;
   finally
     server.fAsyncWorldRead.UnLock;
