@@ -126,8 +126,8 @@ type
     {$ifndef USE_SQLITE3} // asynchronous PostgreSQL pipelined DB access
     function asyncdb(ctxt: THttpServerRequest): cardinal;
     function asyncqueries(ctxt: THttpServerRequest): cardinal;
-    function asyncupdates(ctxt: THttpServerRequest): cardinal;
     function asyncfortunes(ctxt: THttpServerRequest): cardinal;
+    function asyncupdates(ctxt: THttpServerRequest): cardinal;
     {$endif USE_SQLITE3}
   end;
 
@@ -679,6 +679,20 @@ begin
   ctxt.OnAsyncResponse(ctxt);
 end;
 
+function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
+begin
+  fAsyncFortunesRead.ExecuteAsyncNoParam(ctxt, OnAsyncFortunes);
+  result := ctxt.SetAsyncResponse;
+end;
+
+procedure TRawAsyncServer.OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement;
+  Context: TObject);
+var
+  ctxt: THttpServerRequest absolute Context;
+begin
+  ctxt.OnAsyncResponse(ctxt, ComputeRawFortunes(Statement, ctxt));
+end;
+
 type
   // simple state machine used for /asyncqueries and /asyncupdates
   TAsyncWorld = class
@@ -688,14 +702,27 @@ type
     res: TWorlds;
     count: PtrInt;
     fromupdates: boolean;
-    procedure Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest);
-    procedure Updates(owner: TRawAsyncServer; ctxt: THttpServerRequest);
+    function Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
+    function Updates(owner: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
     procedure DoUpdates;
     procedure OnQueries(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
-    procedure OnRes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
+    procedure OnRes({%H-}Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
   end;
 
-procedure TAsyncWorld.Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest);
+function TRawAsyncServer.asyncqueries(ctxt: THttpServerRequest): cardinal;
+begin
+  result := TAsyncWorld.Create.Queries(self, ctxt);
+end;
+
+function TRawAsyncServer.asyncupdates(ctxt: THttpServerRequest): cardinal;
+begin
+  result := TAsyncWorld.Create.Updates(self, ctxt);
+end;
+
+
+{ TAsyncWorld }
+
+function TAsyncWorld.Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 var
   n: PtrInt;
 begin
@@ -713,13 +740,14 @@ begin
   finally
     server.fAsyncWorldRead.UnLock;
   end;
+  result := ctxt.SetAsyncResponse;
 end;
 
-procedure TAsyncWorld.Updates(owner: TRawAsyncServer;
-  ctxt: THttpServerRequest);
+function TAsyncWorld.Updates(owner: TRawAsyncServer;
+  ctxt: THttpServerRequest): cardinal;
 begin
   fromupdates := true;
-  Queries(owner, ctxt);
+  result := Queries(owner, ctxt);
 end;
 
 procedure TAsyncWorld.OnQueries(Statement: TSqlDBPostgresAsyncStatement;
@@ -766,32 +794,6 @@ begin
   request.SetOutJson(@res, TypeInfo(TWorlds));
   request.OnAsyncResponse(Context as THttpServerRequest);
   Free; // we don't need this state machine any more
-end;
-
-function TRawAsyncServer.asyncqueries(ctxt: THttpServerRequest): cardinal;
-begin
-  TAsyncWorld.Create.Queries(self, ctxt);
-  result := ctxt.SetAsyncResponse;
-end;
-
-function TRawAsyncServer.asyncupdates(ctxt: THttpServerRequest): cardinal;
-begin
-  TAsyncWorld.Create.Updates(self, ctxt);
-  result := ctxt.SetAsyncResponse;
-end;
-
-function TRawAsyncServer.asyncfortunes(ctxt: THttpServerRequest): cardinal;
-begin
-  fAsyncFortunesRead.ExecuteAsyncNoParam(ctxt, OnAsyncFortunes);
-  result := ctxt.SetAsyncResponse;
-end;
-
-procedure TRawAsyncServer.OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement;
-  Context: TObject);
-var
-  ctxt: THttpServerRequest absolute Context;
-begin
-  ctxt.OnAsyncResponse(ctxt, ComputeRawFortunes(Statement, ctxt));
 end;
 
 {$endif USE_SQLITE3}
