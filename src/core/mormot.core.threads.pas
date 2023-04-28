@@ -825,13 +825,13 @@ type
     procedure ResetInternal; virtual; // override to reset associated params
   public
     /// initialize the semaphore instance
-    // - specify a time out millliseconds period after which blocking execution
+    // - specify a time out milliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
     // - an associated mutex shall be supplied
     constructor Create(aTimeOutMs: integer; aSafe: PSynLocker);
       reintroduce; overload; virtual;
     /// initialize the semaphore instance
-    // - specify a time out millliseconds period after which blocking execution
+    // - specify a time out milliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
     // - an associated mutex would be created and owned by this instance
     constructor Create(aTimeOutMs: integer); reintroduce; overload; virtual;
@@ -1112,7 +1112,7 @@ type
 
   TSynThreadPoolWorkThreads = array of TSynThreadPoolWorkThread;
 
-  /// a simple Thread Pool, used e.g. for fast handling HTTP requests
+  /// a simple Thread Pool, used e.g. for fast handling HTTP/1.0 requests
   // - implemented over I/O Completion Ports under Windows, or a classical
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
@@ -1307,7 +1307,7 @@ end;
 
 function TSynQueue.Pending: boolean;
 begin
-  // allow some false positive in heavily multi-threaded context
+  // some false positive are by design allowed in heavily multi-threaded context
   result := (self <> nil) and
             (fFirst >= 0);
 end;

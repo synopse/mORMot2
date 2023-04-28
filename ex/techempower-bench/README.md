@@ -17,7 +17,7 @@ The tests were run with:
 * [FreePascal 3.2.2](https://www.freepascal.org/)
 
 ## Contributor tips
-For debugging purpose run Postges using Docker
+For debugging purpose run PostgreSQL using Docker:
 ```shell
 sudo docker run --name postgres -e POSTGRES_PASSWORD=postgres -d -p 5432:5432 postgres:12
 ```
@@ -27,13 +27,20 @@ echo '127.0.0.1	 tfb-database' | sudo tee -a /etc/hosts
 ```
 
 Database can be initialized using the supplied scripts from [TFBDatabases repo](https://github.com/TechEmpower/TFBDatabases)
-
 ```shell
 psql postgres://postgres:postgres@tfb-database:5432 < create-postgres-database.sql
 psql postgres://benchmarkdbuser:benchmarkdbpass@tfb-database:5432/hello_world < create-postgres.sql
 ```
-
 Those two `.sql` scripts are located in this folder for convenience.
+
+On high-end hardware, you may need to change the configuration, to increase `max_connection`:
+```shell
+sudo docker cp postgres:/var/lib/postgresql/data/postgresql.conf .
+sudo nano postgresql.conf
+sudo docker cp postgresql.conf postgres:/var/lib/postgresql/data
+```
+Otherwise, you may encounter some "too many connections" errors during testing.
+
 
 ## Command line  parameters
 

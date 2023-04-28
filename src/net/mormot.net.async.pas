@@ -3301,9 +3301,7 @@ begin
       on E: Exception do
       begin
         include(fHttp.HeaderFlags, hfConnectionClose);
-        if acoVerboseLog in fOwner.fOptions then
-          fOwner.DoLog(sllTrace, 'AfterWrite OnAfterResponse raised %',
-            [E], self);
+        fOwner.DoLog(sllTrace, 'AfterWrite OnAfterResponse raised %', [E], self);
       end;
     end;
   fHttp.ProcessDone;   // ContentStream.Free
@@ -3382,8 +3380,9 @@ begin
        not IsUrlFavIcon(pointer(fHttp.CommandUri)) and
        fServer.Async.Banned.ShouldBan(status, fRemoteIP4) then
     begin
-      fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
-        [status, fRemoteIP, fServer.Async.Banned], self);
+      if acoVerboseLog in fOwner.fOptions then
+        fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
+          [status, fRemoteIP, fServer.Async.Banned], self);
       fServer.IncStat(grBanned);
     end;
   end;
@@ -3453,7 +3452,8 @@ begin
     fRequest.RespStatus := RespStatus;
     if DoResponse(res) = soClose then
     begin
-      fOwner.DoLog(sllTrace, 'AsyncResponse close locked=%', [locked], self);
+      if acoVerboseLog in fOwner.fOptions then
+        fOwner.DoLog(sllTrace, 'AsyncResponse close locked=%', [locked], self);
       if locked then
         UnLockFinal({wr=}false);
       locked := false;
@@ -3511,8 +3511,9 @@ begin
      not (hfConnectionClose in fHttp.HeaderFlags) and
      (fServer.Async.fLastOperationSec > fKeepAliveSec) then
   begin
-    fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
-      [fKeepAliveSec], self);
+    if acoVerboseLog in fOwner.fOptions then
+      fOwner.DoLog(sllTrace, 'DoRequest KeepAlive=% timeout: close connnection',
+        [fKeepAliveSec], self);
     include(fHttp.HeaderFlags, hfConnectionClose); // before SetupResponse
   end
   // trigger optional hsoBan40xIP temporary IP4 bans on unexpected request

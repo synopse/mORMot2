@@ -4258,12 +4258,12 @@ type
     destructor Destroy; override;
   end;
 
-  /// our light cross-platform TEvent-like component
+  /// our lightweight cross-platform TEvent-like component
   // - on Linux, will use eventfd() in blocking and non-semaphore mode
   // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
   // - only limitation is that we don't know if WaitFor is signaled or timeout,
-  // but this is not a real one in practice since most code don't need it
-  // or has already its own flag in its implementation logic
+  // but this is not a real one in practice since most code don't need this
+  // information or has already its own flag in its implementation logic
   TSynEvent = class
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
