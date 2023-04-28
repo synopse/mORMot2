@@ -93,6 +93,7 @@ type
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
+    fCachedWorldsTable: POrmCacheTable;
     fRawCache: TOrmWorlds;
     {$ifdef USE_SQLITE3}
     procedure GenerateDB;
@@ -227,6 +228,7 @@ begin
   // pre-fill the ORM
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
+  fCachedWorldsTable := fStore.Orm.Cache.Table(TOrmCachedWorld);
   fStore.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
@@ -355,7 +357,6 @@ begin
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync;
   end;
-  pConn.Flush; // forced for a modified libpq with no flush in pConn.PipelineSync
   for i := 0 to cnt - 1 do
   begin
     pStmt.GetPipelineResult;
@@ -451,12 +452,10 @@ function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
-  cache: POrmCacheTable;
 begin
-  cache := fStore.Orm.Cache.Table(TOrmCachedWorld);
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
   for i := 0 to length(res) - 1 do
-    res[i] := cache.Get(ComputeRandomWorld);
+    res[i] := fCachedWorldsTable.Get(ComputeRandomWorld);
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;
@@ -904,7 +903,12 @@ begin
       writeln(ObjectToJsonDebug(rawServers[0].fHttpServer,
         [woDontStoreVoid, woHumanReadable]))
     else
-      writeln('Please wait: Shutdown ', servers, ' servers');
+    begin
+      writeln('Per-server accepted connections:');
+      for i := 0 to servers - 1 do
+        write(rawServers[i].fHttpServer.Async.Accepted, ' ');
+      writeln(#10'Please wait: Shutdown ', servers, ' servers');
+    end;
   finally
     // clear all server instance(s)
     ObjArrayClear(rawServers);
@@ -914,5 +918,3 @@ begin
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
 end.
-
-
