@@ -756,10 +756,17 @@ var
 begin
   async := AsyncLocked;
   try
-    result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
-    result.fOwner := async;
-    result.fAsyncOptions := Options;
-    result.Prepare(Sql, not (asoExpectNoResult in Options));
+    async.Connection.ExitPipelineMode; // needed for caching
+    try
+      result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
+      result.fOwner := async;
+      result.fAsyncOptions := Options;
+      if IsCachable(pointer(Sql)) then
+        include(result.fCache, scPossible);
+      result.Prepare(Sql, not (asoExpectNoResult in Options));
+    finally
+      async.Connection.EnterPipelineMode;
+    end;
   finally
     async.Unlock;
   end;
@@ -1367,7 +1374,7 @@ begin
           until Terminated or
                 fOwner.fTasks.Pending;
         end;
-        fOwner.Lock;
+        fOwner.Lock; // faster to maintain the lock over the whole loop
         try
           while not Terminated and
                 fOwner.fTasks.Pop(task) do
