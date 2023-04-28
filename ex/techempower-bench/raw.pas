@@ -755,6 +755,7 @@ begin
   end;
 
   // start the server instance(s), in hsoReusePort mode if needed
+  flags := [];
   if servers > 1 then
     include(flags, hsoReusePort) // allow several bindings on the same port
   else
@@ -790,7 +791,7 @@ begin
             ', pinned=', pinServers2Cores,
             ', db=', rawServers[0].fDbPool.DbmsEngineName);
     writeln(' options=', GetSetName(TypeInfo(THttpServerOptions), flags));
-    writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate'#10);
+    writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate');
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
     if servers = 1 then
@@ -802,6 +803,7 @@ begin
     // clear all server instance(s)
     ObjArrayClear(rawServers);
   end;
+  write('Shutdown complete'#10);
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

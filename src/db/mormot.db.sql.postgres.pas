@@ -94,7 +94,7 @@ type
     // - to be used as reference within actual asynchronous database process
     function NewAsyncStatementPrepared(const Sql: RawUtf8;
       Options: TSqlDBPostgresAsyncStatementOptions = [];
-      FlushCount: integer = 100; FlushTimeShr: integer = 0): TSqlDBPostgresAsyncStatement;
+      FlushCount: integer = 10; FlushTimeShr: integer = 0): TSqlDBPostgresAsyncStatement;
     /// add or replace mapping of OID into TSqlDBFieldType
     // - in case mapping for OID is not defined, returns ftUtf8
     function Oid2FieldType(cOID: cardinal): TSqlDBFieldType;
@@ -286,7 +286,8 @@ type
     fAsyncOptions: TSqlDBPostgresAsyncStatementOptions;
     fAsyncFlushCount, fAsyncFlushTimeShr: integer;
     fLastFlushTix: cardinal;
-    procedure DoExecuteAsyncFlush(n: PtrInt);
+    procedure DoExecuteAsyncFlush(n: PtrInt; onlyifsocketready: boolean;
+      const caller: shortstring);
     procedure DoExecuteAsyncError;
   public
     /// create an asynchronous statement instance
@@ -340,7 +341,7 @@ type
     function AsyncPending: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// after how many ExecuteAsync should call ExecuteAsyncFlush
-    // - default is to sync after 100 requests or AsyncFlushTimeShr period
+    // - default is to sync after 10 requests or AsyncFlushTimeShr period
     property AsyncFlushCount: integer
       read fAsyncFlushCount write fAsyncFlushCount;
     /// the right-bit-shift applied over GetTickCount64 to call ExecuteAsyncFlush
@@ -1283,7 +1284,7 @@ constructor TSqlDBPostgresAsyncStatement.Create(aConnection: TSqlDBConnection);
 begin
   inherited Create(aConnection);
   fTasks := TSynQueue.Create(TypeInfo(TSqlDBPostgresAsyncTasks));
-  fAsyncFlushCount := 100;
+  fAsyncFlushCount := 10;
 end;
 
 destructor TSqlDBPostgresAsyncStatement.Destroy;
@@ -1343,10 +1344,13 @@ begin
   if (n > fAsyncFlushCount) or
      (GetTickCount64 shr fAsyncFlushTimeShr <> fLastFlushTix) or
      fOwner.Connection.SocketHasData then
-    DoExecuteAsyncFlush(n);
+    DoExecuteAsyncFlush(n, true, '');
+  // prepare for a new Bind() then SendPipelinePrepared()
+  Reset;
 end;
 
-procedure TSqlDBPostgresAsyncStatement.DoExecuteAsyncFlush(n: PtrInt);
+procedure TSqlDBPostgresAsyncStatement.DoExecuteAsyncFlush(
+  n: PtrInt; onlyifsocketready: boolean; const caller: shortstring);
 var
   task: TSqlDBPostgresAsyncTask;
   {%H-}log: ISynLog;
@@ -1354,9 +1358,8 @@ begin
   // caller did protect this method with Lock/UnLock
   if n <> 0 then
   try
-    log := SynDBLog.Enter('ExecuteAsyncFlush pending=% [%]', [n, fSql], self);
-    if asoForceConnectionFlush in fAsyncOptions then
-      fOwner.Connection.Flush;
+    log := SynDBLog.Enter(
+      'ExecuteAsyncFlush %pending=% [%]', [caller, n, fSql], self);
     while fTasks.Pop(task) do
     begin
       GetPipelineResult;
@@ -1369,8 +1372,9 @@ begin
       task.OnFinished := nil;
       ReleaseRows;
       fOwner.Connection.CheckPipelineSync;
-      {if not fOwner.Connection.SocketHasData then
-        break; // not worth waiting}
+      if onlyifsocketready and
+         not fOwner.Connection.SocketHasData then
+        break; // not worth waiting
     end;
   except
     // on fatal error don't go any further and notify the callbacks
@@ -1401,6 +1405,8 @@ begin
     SendPipelinePrepared;
     if asoForcePipelineSync in fAsyncOptions then
       fOwner.Connection.PipelineSync; // required e.g. for TFB benchmarks
+    if asoForceConnectionFlush in fAsyncOptions then
+      fOwner.Connection.Flush; // on modified libpq
   except
     // on fatal error don't go any further and notify the callbacks
     DoExecuteAsyncError;
@@ -1465,15 +1471,13 @@ begin
     begin
       stmt := fStatements.List[i];
       if stmt.AsyncPending and
-         (stmt.fLastFlushTix <> tix shr stmt.fAsyncFlushTimeShr) then
-      begin
-        Safe^.Lock;
+         (stmt.fLastFlushTix <> tix shr stmt.fAsyncFlushTimeShr) and
+         Safe^.TryLock then
         try
-          stmt.ExecuteAsyncFlush;
+          stmt.DoExecuteAsyncFlush(stmt.fTasks.Count, false, 'FlushIfNeeded ');
         finally
           Safe^.UnLock;
         end;
-      end;
     end;
   except
     // just ignore any (unlikely) exception within the loop

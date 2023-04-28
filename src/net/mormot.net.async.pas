@@ -3431,24 +3431,38 @@ procedure THttpAsyncConnection.AsyncResponse(
 var
   res: TPollAsyncSocketOnReadWrite;
   c: TPollAsyncConnection;
+  locked: boolean;
 begin
   // verify if not in unexpected state, to avoid
   if IsDangling or
      (Sender <> fRequest) or
      (fClosed in fFlags) or
      (fHttp.State <> hrsWaitAsyncProcessing) or
-     not (rfAsynchronous in fHttp.ResponseFlags)  then
+     not (rfAsynchronous in fHttp.ResponseFlags) then
     exit;
-  // finalize and send the response back to the client
-  if hfConnectionClose in fHttp.HeaderFlags then
-    res := soClose
-  else
-    res := soContinue;
-  fRequest.RespStatus := RespStatus;
-  if DoResponse(res) = soClose then
-  begin
-    c := self;
-    fServer.fAsync.fClients.CloseConnection(c);
+  // respond within a lock, since may be interrupted before final state is set
+  locked := WaitLock({wr=}false, 10);
+  try
+    if not locked then // read lock should always be available
+      fOwner.DoLog(sllWarning, 'AsyncResponse read lock failed', [], self);
+    // finalize and send the response back to the client
+    if hfConnectionClose in fHttp.HeaderFlags then
+      res := soClose
+    else
+      res := soContinue;
+    fRequest.RespStatus := RespStatus;
+    if DoResponse(res) = soClose then
+    begin
+      fOwner.DoLog(sllTrace, 'AsyncResponse close locked=%', [locked], self);
+      if locked then
+        UnLockFinal({wr=}false);
+      locked := false;
+      c := self;
+      fServer.fAsync.fClients.CloseConnection(c);
+    end
+  finally
+    if locked then
+      UnLock({wr=}false);
   end;
 end;
 
