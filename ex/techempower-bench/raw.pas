@@ -211,16 +211,13 @@ begin
   GenerateDB;
   {$else}
   fStore.Server.CreateMissingTables; // create SQlite3 virtual tables
-  with fDBPool as TSqlDBPostgresConnectionProperties do
+  with (fDBPool as TSqlDBPostgresConnectionProperties).Async do
   begin
-    fAsyncWorldRead := NewAsyncStatementPrepared(
-      WORLD_READ_SQL,
+    fAsyncWorldRead := NewStatement(WORLD_READ_SQL,
       [asoForceConnectionFlush, asoForcePipelineSync]);
-    fAsyncFortunesRead := NewAsyncStatementPrepared(
-      FORTUNES_SQL,
+    fAsyncFortunesRead := NewStatement(FORTUNES_SQL,
       [asoForceConnectionFlush, asoForcePipelineSync]);
-    fAsyncWorldUpdate := NewAsyncStatementPrepared(
-      WORLD_UPDATE_SQLN,
+    fAsyncWorldUpdate := NewStatement(WORLD_UPDATE_SQLN,
       [asoForceConnectionFlush, asoForcePipelineSync, asoExpectNoResult]);
     // no SetThreadCpuAffinity(fAsyncWorldRead.Owner.Thread, pin2Core) needed
   end;
@@ -724,7 +721,7 @@ end;
 function TAsyncWorld.Queries(owner: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 var
   n: PtrInt;
-  opt: TSqlDBPostgresAsyncStatementOptions;
+  opt: TSqlDBPostgresAsyncStatementOptions; // for modified libpq
 begin
   server := owner;
   request := ctxt;
@@ -737,7 +734,7 @@ begin
       dec(n);
       server.fAsyncWorldRead.Bind(1, ComputeRandomWorld);
       if n = 0 then // last item
-        opt := opt + [asoForceConnectionFlush]; // for modified libpq
+        opt := server.fAsyncWorldRead.AsyncOptions;
       server.fAsyncWorldRead.ExecuteAsync(ctxt, OnQueries, @opt);
     until n = 0;
   finally
@@ -912,7 +909,7 @@ begin
     begin
       writeln('Per-server accepted connections:');
       for i := 0 to servers - 1 do
-        write(rawServers[i].fHttpServer.Async.Accepted, ' ');
+        write(' ', rawServers[i].fHttpServer.Async.Accepted);
       writeln(#10'Please wait: Shutdown ', servers, ' servers');
     end;
   finally
@@ -924,3 +921,5 @@ begin
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
 end.
+
+
