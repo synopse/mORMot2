@@ -1145,7 +1145,7 @@ type
     function GetEvent: TBlockingEvent;
   public
     /// initialize the callback instance
-    // - specify a time out millliseconds period after which blocking execution
+    // - specify a time out milliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 will be used)
     // - you can optionally set a REST and callback interface for automatic
     // notification when this TInterfacedCallback will be released

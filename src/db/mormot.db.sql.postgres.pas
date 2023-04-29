@@ -87,14 +87,9 @@ type
     // - this overridden method will create an TSqlDBPostgresConnection instance
     function NewConnection: TSqlDBConnection; override;
     /// returns the associated asynchronous execution engine
-    // - once done with the returned instance, caller should call UnLock
+    // - caller should call Lock then UnLock
     // - not to be used directly, but rather within NewAsyncStatementPrepared()
-    function AsyncLocked: TSqlDBPostgresAsync;
-    /// create a pipelined statement to be reused within result.Owner.Lock/UnLock
-    // - the returned instance will be owned by the main TSqlDBPostgresAsync
-    // - to be used as reference within actual asynchronous database process
-    function NewAsyncStatementPrepared(const Sql: RawUtf8;
-      Options: TSqlDBPostgresAsyncStatementOptions = []): TSqlDBPostgresAsyncStatement;
+    function Async: TSqlDBPostgresAsync;
     /// add or replace mapping of OID into TSqlDBFieldType
     // - in case mapping for OID is not defined, returns ftUtf8
     function Oid2FieldType(cOID: cardinal): TSqlDBFieldType;
@@ -343,9 +338,9 @@ type
       read fOnThreadStart write fOnThreadStart;
   end;
 
-  /// asynchronous execution engine owned by a TSqlDBPostgresConnectionProperties
+  /// asynchronous execution engine
   // - allow to execute several statements within an PostgreSQL pipeline, and
-  // return the results using asynchronous callbacks
+  // return the results using asynchronous callbacks from a background thread
   TSqlDBPostgresAsync = class(TSynPersistentLock)
   protected
     fProperties: TSqlDBPostgresConnectionProperties;
@@ -359,10 +354,15 @@ type
     constructor Create(Owner: TSqlDBPostgresConnectionProperties); reintroduce;
     /// finalize the execution engine
     destructor Destroy; override;
+    /// create a new TSqlDBPostgresAsyncStatement instance tied to this engine
+    // - the returned instance will be owned by this TSqlDBPostgresAsync
+    // - to be used as reference within actual asynchronous database process
+    function NewStatement(const Sql: RawUtf8;
+      Options: TSqlDBPostgresAsyncStatementOptions = []): TSqlDBPostgresAsyncStatement;
     /// the TSqlDBPostgresConnectionProperties owner
     property Properties: TSqlDBPostgresConnectionProperties
       read fProperties;
-    /// the TSqlDBPostgresConnection instance owned by this engine
+    /// the TSqlDBPostgresConnection in pipelined mode owned by this engine
     // - a single dedicated connection will be used for all async statements
     property Connection: TSqlDBPostgresConnection
       read fConnection;
@@ -735,8 +735,9 @@ begin
   TSqlDBPostgresConnection(result).InternalProcess(speCreated);
 end;
 
-function TSqlDBPostgresConnectionProperties.AsyncLocked: TSqlDBPostgresAsync;
+function TSqlDBPostgresConnectionProperties.Async: TSqlDBPostgresAsync;
 begin
+  // TODO: one TSqlDBPostgresAsync per thread/TSqlDBPostgresConnection ?
   if fAsync = nil then
   begin
     GlobalLock; // thread-safe creation only if needed
@@ -747,33 +748,7 @@ begin
       GlobalUnLock;
     end;
   end;
-  fAsync.Lock;
   result := fAsync;
-end;
-
-function TSqlDBPostgresConnectionProperties.NewAsyncStatementPrepared(
-  const Sql: RawUtf8;
-  Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
-var
-  async: TSqlDBPostgresAsync;
-begin
-  async := AsyncLocked;
-  try
-    async.Connection.ExitPipelineMode; // needed for statement cache API
-    try
-      result := TSqlDBPostgresAsyncStatement.Create(async.Connection);
-      result.fOwner := async;
-      result.fAsyncOptions := Options;
-      if IsCachable(pointer(Sql)) then
-        include(result.fCache, scPossible);
-      result.Prepare(Sql, not (asoExpectNoResult in Options));
-    finally
-      async.Connection.EnterPipelineMode;
-    end;
-  finally
-    async.Unlock;
-  end;
-  async.fStatements.Add(result);
 end;
 
 function TSqlDBPostgresConnectionProperties.Oid2FieldType(
@@ -1478,6 +1453,28 @@ begin
     fThread.Free;
   end;
   FreeAndNil(fTasks);
+end;
+
+function TSqlDBPostgresAsync.NewStatement(const Sql: RawUtf8;
+  Options: TSqlDBPostgresAsyncStatementOptions): TSqlDBPostgresAsyncStatement;
+begin
+  Lock;
+  try
+    fConnection.ExitPipelineMode; // needed for statement cache API
+    try
+      result := TSqlDBPostgresAsyncStatement.Create(fConnection);
+      result.fOwner := self;
+      result.fAsyncOptions := Options;
+      if fProperties.IsCachable(pointer(Sql)) then
+        include(result.fCache, scPossible);
+      result.Prepare(Sql, not (asoExpectNoResult in Options));
+    finally
+      fConnection.EnterPipelineMode;
+    end;
+  finally
+    Unlock;
+  end;
+  fStatements.Add(result); // statements are owned by this class
 end;
 
 procedure TSqlDBPostgresAsync.DoExecuteAsyncError;
