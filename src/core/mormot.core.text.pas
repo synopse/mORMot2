@@ -1626,38 +1626,38 @@ procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 // - fast conversion, using only integer operations
 // - if NoDecimal is defined, will be set to TRUE if there is no decimal, AND
 // the returned value will be an Int64 (not a PInt64(@Curr)^)
-function StrToCurr64(P: PUtf8Char; NoDecimal: PBoolean = nil): Int64;
+function StrToCurr64(P: PUtf8Char; NoDecimal: PBoolean = nil; const DecimalSeparator:Utf8Char='.'): Int64;
 
 /// convert a string into its currency representation
 // - will call StrToCurr64()
-function StrToCurrency(P: PUtf8Char): currency;
+function StrToCurrency(P: PUtf8Char; const DecimalSeparator:Utf8Char='.'): currency;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a currency value into a string
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
-function CurrencyToStr(const Value: currency): RawUtf8;
+function CurrencyToStr(const Value: currency; const DecimalSeparator:Utf8Char='.'): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
 // - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
-function Curr64ToStr(const Value: Int64): RawUtf8; overload;
+function Curr64ToStr(const Value: Int64; const DecimalSeparator:Utf8Char='.'): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
 // - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
-procedure Curr64ToStr(const Value: Int64; var result: RawUtf8); overload;
+procedure Curr64ToStr(const Value: Int64; var result: RawUtf8; const DecimalSeparator:Utf8Char='.'); overload;
 
 /// convert an INTEGER Curr64 (value*10000) into a string
 // - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 // - return the number of chars written to Dest^
-function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
+function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char; const DecimalSeparator:Utf8Char='.'): PtrInt;
 
 /// internal fast INTEGER Curr64 (value*10000) value to text conversion
 // - expect the last available temporary char position in P
@@ -1665,7 +1665,7 @@ function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
 // - will return 0 for Value=0, or a string representation with always 4 decimals
 //   (e.g. 1->'0.0001' 500->'0.0500' 25000->'2.5000' 30000->'3.0000')
 // - is called by Curr64ToPChar() and Curr64ToStr() functions
-function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+function StrCurr64(P: PAnsiChar; const Value: Int64; const DecimalSeparator:Utf8Char='.'): PAnsiChar;
 
 /// faster than default SysUtils.IntToStr implementation
 function IntToString(Value: integer): string; overload;
@@ -7628,7 +7628,7 @@ begin
   UInt32ToUtf8(Value, result);
 end;
 
-function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
+function StrCurr64(P: PAnsiChar; const Value: Int64; const DecimalSeparator:Utf8Char): PAnsiChar;
 var
   c: QWord;
   d: cardinal;
@@ -7646,7 +7646,7 @@ begin
   if c < 10000 then
   begin
     result := P - 6; // only decimals -> append '0.xxxx'
-    PWord(result)^ := ord('0') + ord('.') shl 8;
+    PWord(result)^ := ord('0') + ord(DecimalSeparator) shl 8;
     YearToPChar(c, PUtf8Char(P) - 4);
   end
   else
@@ -7654,7 +7654,7 @@ begin
     result := StrUInt64(P - 1, c);
     d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
     PCardinal(P - 4)^ := d;
-    P[-5] := '.'; // insert '.' just before last 4 decimals
+    P[-5] := DecimalSeparator; // insert '.' just before last 4 decimals
   end;
   if Value < 0 then
   begin
@@ -7663,7 +7663,7 @@ begin
   end;
 end;
 
-procedure Curr64ToStr(const Value: Int64; var result: RawUtf8);
+procedure Curr64ToStr(const Value: Int64; var result: RawUtf8; const DecimalSeparator:Utf8Char);
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
@@ -7673,7 +7673,7 @@ begin
     result := SmallUInt32Utf8[0]
   else
   begin
-    P := StrCurr64(@tmp[31], Value);
+    P := StrCurr64(@tmp[31], Value, DecimalSeparator);
     L := @tmp[31] - P;
     if L > 4 then
     begin
@@ -7688,23 +7688,23 @@ begin
   end;
 end;
 
-function Curr64ToStr(const Value: Int64): RawUtf8;
+function Curr64ToStr(const Value: Int64; const DecimalSeparator:Utf8Char): RawUtf8;
 begin
-  Curr64ToStr(Value, result);
+  Curr64ToStr(Value, result, DecimalSeparator);
 end;
 
-function CurrencyToStr(const Value: currency): RawUtf8;
+function CurrencyToStr(const Value: currency; const DecimalSeparator:Utf8Char): RawUtf8;
 begin
-  result := Curr64ToStr(PInt64(@Value)^);
+  result := Curr64ToStr(PInt64(@Value)^, DecimalSeparator);
 end;
 
-function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
+function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char; const DecimalSeparator:Utf8Char): PtrInt;
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
   Decim: cardinal;
 begin
-  P := StrCurr64(@tmp[31], Value);
+  P := StrCurr64(@tmp[31], Value, DecimalSeparator);
   result := @tmp[31] - P;
   if result > 4 then
   begin
@@ -7720,7 +7720,7 @@ begin
   MoveFast(P^, Dest^, result);
 end;
 
-function StrToCurr64(P: PUtf8Char; NoDecimal: PBoolean): Int64;
+function StrToCurr64(P: PUtf8Char; NoDecimal: PBoolean; const DecimalSeparator:Utf8Char): Int64;
 var
   c: cardinal;
   minus: boolean;
@@ -7746,7 +7746,7 @@ begin
         inc(P)
       until P^ <> ' ';
   end;
-  if P^ = '.' then
+  if P^ = DecimalSeparator then
   begin
     // '.5' -> 500
     Dec := 2;
@@ -7760,7 +7760,7 @@ begin
   PCardinal(@result)^ := c;
   inc(P);
   repeat
-    if P^ <> '.' then
+    if P^ <> DecimalSeparator then
     begin
       c := byte(P^) - 48;
       if c > 9 then
@@ -7822,9 +7822,9 @@ begin
     result := -result;
 end;
 
-function StrToCurrency(P: PUtf8Char): currency;
+function StrToCurrency(P: PUtf8Char; const DecimalSeparator:Utf8Char): currency;
 begin
-  PInt64(@result)^ := StrToCurr64(P, nil);
+  PInt64(@result)^ := StrToCurr64(P, nil, DecimalSeparator);
 end;
 
 {$ifdef UNICODE}
