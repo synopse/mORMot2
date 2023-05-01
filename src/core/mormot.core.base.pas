@@ -4701,7 +4701,7 @@ begin
   result := 0;
   repeat
     p := n[result]; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
+    if (p <> nil) and (PStrLen(p - _STRLEN)^ = len) and
        CompareMemFixed(p, name, len) then
       exit;
     inc(result);
@@ -4722,7 +4722,7 @@ begin
   repeat
     // inlined IdemPropNameUSameLenNotNull(p, name, len)
     p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = len then
+    if (p1 <> nil) and (PStrLen(p1 - _STRLEN)^ = len) then
     begin
       l := @p1[len - SizeOf(cardinal)];
       dec(p2, PtrUInt(p1));
