@@ -43,7 +43,7 @@ type
   TSqlDBPostgresAsync = class;
 
   /// connection properties which will implement an internal Thread-Safe
-  // connection pool
+  // connection pool for PostgreSQL using the official libpq API
   TSqlDBPostgresConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     fOids: TWordDynArray; // O(n) search in L1 cache - use SSE2 on FPC x86_64
@@ -77,15 +77,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// add new (or override existed) OID to FieldType mapping
     procedure MapOid(cOid: cardinal; fieldType: TSqlDBFieldType);
-    /// return the asynchronous/pipelined engine for the current thread
+    /// get the asynchronous/pipelined engine associated with the current thread
+    // - to be used as Async.Prepare/PrepareLocked factory
     function Async: TSqlDBPostgresAsync;
   end;
 
-  /// the meta-class of TSqlDBPostgresStatement instances
-  TSqlDBPostgresStatementClass = class of TSqlDBPostgresStatement;
-
   /// implements a connection via the libpq access layer
-  // - is accessible from
+  // - is accessible from TSqlDBPostgresConnectionProperties
+  // - some additional PostgreSQL-specific pipelining methods are included
   TSqlDBPostgresConnection = class(TSqlDBConnectionThreadSafe)
   protected
     // SQL of server-side prepared statements - name is index as hexadecimal
@@ -93,7 +92,6 @@ type
     fPrepared: TRawUtf8List;
     fPGConn: pointer; // the associated low-level provider connection
     fAsync: TSqlDBPostgresAsync;
-    fStatementClass: TSqlDBPostgresStatementClass;
     // return statement index in fPrepared cache array
     function PrepareCached(const aSql: RawUtf8; aParamCount: integer;
       out aName: RawUtf8): integer;
@@ -781,7 +779,7 @@ var
 begin
   main := pointer(ThreadSafeConnection);
   if main.fAsync = nil then // no lock needed since it is a per-thread instance
-    main.fAsync := TSqlDBPostgresAsync.Create(main);
+    main.fAsync := TSqlDBPostgresAsync.Create(main); // it is time to setup
   result := main.fAsync;
 end;
 
