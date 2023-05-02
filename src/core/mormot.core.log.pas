@@ -6167,7 +6167,7 @@ begin
     ]));
   n[0] := #0;
   for i := 1 to length(name) do
-    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.'
+    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.', ':'
       {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
     begin
       inc(n[0]);
