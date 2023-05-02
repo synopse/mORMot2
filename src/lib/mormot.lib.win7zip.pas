@@ -709,6 +709,8 @@ type
     procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
     /// add (or replace) a file from a memory buffer within the archive
     procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
+    /// add (or replace) a void folder within the archive
+    procedure AddDirectory(const ZipName: RawUtf8);
     /// add (or replace) a file from a stream within the archive
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
       Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
@@ -1137,6 +1139,7 @@ type
     function AddFile(const FileName: TFileName; const ZipName: RawUtf8): boolean;
     procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
     procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
+    procedure AddDirectory(const ZipName: RawUtf8);
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
       Attributes: cardinal; CreationTime, LastWriteTime: TUnixTime;
       const ZipName: RawUtf8; IsFolder, IsAnti: boolean);
@@ -2378,7 +2381,7 @@ begin
   item.Size := FileSize(Handle);
   CloseHandle(Handle);
   item.Attributes := GetFileAttributes(pointer(Filename));
-  item.IsFolder := false;
+  item.IsFolder := item.Attributes and faDirectory <> 0;
   item.IsAnti := false;
   item.Ownership := soOwned;
   item.UpdateItemIndex := -1;
@@ -2450,8 +2453,14 @@ end;
 procedure T7zWriter.AddBuffer(const ZipName: RawUtf8;
   const Data: RawByteString);
 begin
-  AddStream(TRawByteStringStream.Create(Data), soReference,
-    faArchive, 0, 0, ZipName, false, false);
+  AddStream(TRawByteStringStream.Create(Data), soOwned,
+    faArchive, 0, 0, ZipName, {isfolder=}false, {isanti=}false);
+end;
+
+procedure T7zWriter.AddDirectory(const ZipName: RawUtf8);
+begin
+  AddStream(nil, soReference,
+    faDirectory, 0, 0, ZipName, {isfolder=}true, {isanti=}false);
 end;
 
 procedure T7zWriter.AddStream(Stream: TStream; Ownership: TStreamOwnership;
@@ -2473,7 +2482,8 @@ begin
   item.IsFolder := IsFolder;
   item.IsAnti := IsAnti;
   item.Stream := Stream;
-  item.Size := Stream.Size;
+  if Stream <> nil then
+    item.Size := Stream.Size;
   item.Ownership := Ownership;
   item.UpdateItemIndex := -1;
   AddOrReplace(item);
@@ -2586,9 +2596,11 @@ begin
   fCurrentItem := fEntries[index];
   case fCurrentItem.SourceMode of
     smFile:
-      inStream := T7zStream.CreateFromFile(
-        fCurrentItem.FileName, fmOpenReadDenyNone, index);
+      if not fCurrentItem.IsFolder then
+        inStream := T7zStream.CreateFromFile(
+          fCurrentItem.FileName, fmOpenReadDenyNone, index);
     smStream:
+      if not fCurrentItem.IsFolder then
       begin
         fCurrentItem.Stream.Seek(0, soFromBeginning);
         inStream := T7zStream.Create(fCurrentItem.Stream, {owned=}true, index);

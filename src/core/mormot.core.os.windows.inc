@@ -749,8 +749,7 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   if GetFileAttributesInternal(FileName, FA) and
-     (AllowDir or
-      ({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY = 0)) then
+     (AllowDir or ({%H-}FA.dwFileAttributes and faDirectory = 0)) then
     result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
   else
     result := 0;
@@ -763,7 +762,7 @@ var
 begin
   result := 0;
   if GetFileAttributesInternal(FileName, FA) and
-     ({%H-}FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY = 0) and
+     ({%H-}FA.dwFileAttributes and faDirectory = 0) and
      FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) then
     if not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
       result := 0;
@@ -824,7 +823,7 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   result := GetFileAttributesInternal(FileName, FA, FollowLink) and
-    ((FA.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY <> 0) = CheckAsDir);
+            ((FA.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
 end;
 
 function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
