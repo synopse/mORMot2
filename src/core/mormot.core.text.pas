@@ -2100,6 +2100,9 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
   Delim: AnsiChar = PathDelim): TFileName;
 
+/// MakePath() variant which can handle the file extension specifically
+function MakeFileName(const Part: array of const; LastIsExt: boolean = true): TFileName;
+
 /// create a CSV text from some values
 function MakeCsv(const Value: array of const; EndWithComma: boolean = false;
   Comma: AnsiChar = ','): RawUtf8;
@@ -10065,8 +10068,9 @@ type
     L, argN: PtrInt;
     blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
     procedure Parse(const Format: RawUtf8; const Args: array of const);
+    procedure Add(const SomeText: RawUtf8);
     procedure DoDelim(const Part: array of const; EndWithDelim: boolean;
-      Delim: AnsiChar);
+      Delim: AnsiChar; HiPart: integer);
     procedure DoAppendLine(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer;
       const Separator: shortstring);
     procedure DoPrepend(var Text: RawUtf8; Arg: PVarRec; ArgCount: integer);
@@ -10132,21 +10136,21 @@ begin
 end;
 
 procedure TFormatUtf8.DoDelim(const Part: array of const; EndWithDelim: boolean;
-  Delim: AnsiChar);
+  Delim: AnsiChar; HiPart: integer);
 var
   c: PTempUtf8;
   p: PtrInt;
 begin
   L := 0;
   c := @blocks;
-  for p := 0 to high(Part) do
+  for p := 0 to HiPart do
   begin
     if PtrUInt(c) > PtrUInt(@blocks[high(blocks)]) then
       raise ESynException.Create('Too many args');
     inc(L, VarRecToTempUtf8(Part[p], c^));
     if (EndWithDelim and
-        (p = high(Part))) or
-       ((p <> high(Part)) and
+        (p = HiPart)) or
+       ((p <> HiPart) and
         (c^.Len <> 0) and
         (c^.Text[c^.Len - 1] <> Delim)) then
     begin
@@ -10162,6 +10166,20 @@ begin
     inc(c);
   end;
   last := c;
+end;
+
+procedure TFormatUtf8.Add(const SomeText: RawUtf8);
+begin
+  if PtrUInt(last) > PtrUInt(@blocks[high(blocks)]) then
+    raise ESynException.Create('Too many args');
+  with last^ do
+  begin
+    Len := length(SomeText);
+    inc(L, Len);
+    Text := pointer(SomeText);
+    TempRawUtf8 := nil;
+  end;
+  inc(last);
 end;
 
 procedure TFormatUtf8.DoAppendLine(var Text: RawUtf8;
@@ -10495,7 +10513,31 @@ function MakePath(const Part: array of const; EndWithDelim: boolean;
 var
   process: TFormatUtf8;
 begin
-  process.DoDelim(Part, EndWithDelim, Delim);
+  process.DoDelim(Part, EndWithDelim, Delim, high(Part));
+  process.WriteString(string(result));
+end;
+
+function MakeFileName(const Part: array of const; LastIsExt: boolean): TFileName;
+var
+  process: TFormatUtf8;
+  ext: RawUtf8;
+  hipart: integer;
+begin
+  hipart := High(Part);
+  if LastIsExt then
+    if (hipart > 0) and
+       VarRecToUtf8IsString(Part[hipart], ext) then
+      dec(hipart)
+    else
+      LastIsExt := false;
+  process.DoDelim(Part, false, PathDelim, hipart);
+  if LastIsExt and
+     (ext <> '') then
+  begin
+    if ext[1] <> '.' then
+      process.Add('.');
+    process.Add(ext);
+  end;
   process.WriteString(string(result));
 end;
 
@@ -10505,7 +10547,7 @@ var
   process: TFormatUtf8;
 begin
   result := '';
-  process.DoDelim(Value, EndWithComma, Comma);
+  process.DoDelim(Value, EndWithComma, Comma, high(Value));
   process.WriteUtf8(result);
 end;
 
