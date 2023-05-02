@@ -179,12 +179,15 @@ implementation
 
 constructor TCommandLine.Create;
 var
-  i: integer;
+  n, i: integer;
   p, sw: RawUtf8;
 begin
   inherited Create;
-  fValues.InitFast(ParamCount shr 1, dvObject);
-  for i := 1 to ParamCount do
+  n := ParamCount;
+  if n < 0 then
+    n := 0; // may equal -1 e.g. from a .so on MacOS
+  fValues.InitFast(n shr 1, dvObject);
+  for i := 1 to n do
   begin
     p := StringToUtf8(ParamStr(i));
     if p <> '' then
@@ -229,11 +232,14 @@ end;
 
 constructor TCommandLine.CreateAsArray(firstParam: integer);
 var
-  i: integer;
+  n, i: integer;
 begin
   inherited Create;
-  fValues.InitFast(ParamCount, dvArray);
-  for i := firstParam to ParamCount do
+  n := ParamCount;
+  if n < 0 then
+    n := 0; // may equal -1 e.g. from a .so on MacOS
+  fValues.InitFast(n, dvArray);
+  for i := firstParam to n do
     fValues.AddItem(ParamStr(i));
 end;
 

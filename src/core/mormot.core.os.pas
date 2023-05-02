@@ -7975,9 +7975,12 @@ begin
   fSwitch[true] := LongSwitch;
   if fRawParams = nil then
   begin
-    SetLength(fRawParams, ParamCount);
-    for i := 1 to length(fRawParams) do
-      fRawParams[i - 1] := RawUtf8(ParamStr(i));
+    n := ParamCount;
+    if n <= 0 then
+      exit; // may equal -1 e.g. from a .so on MacOS
+    SetLength(fRawParams, n);
+    for i := 0 to n - 1 do
+      fRawParams[i] := RawUtf8(ParamStr(i + 1));
   end;
   n := length(fRawParams);
   if n = 0 then

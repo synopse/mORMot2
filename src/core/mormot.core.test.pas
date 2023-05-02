@@ -1387,7 +1387,7 @@ begin
     if workdir <> '' then
       tests.WorkDir := workdir;
     tests.Options := options;
-    if ParamCount <> 0 then
+    if ParamCount > 0 then
     begin
       tests.SaveToFile(paramstr(1)); // export to file if named on command line
       {$I-} // minimal console output during blind regression tests

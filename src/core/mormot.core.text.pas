@@ -10278,7 +10278,7 @@ begin
           repeat
             if d^.TempRawUtf8 <> nil then
               {$ifdef FPC}
-              FastAssignNew(d^.TempRawUtf8);
+              FastAssignNew(d^.TempRawUtf8); // release temp RawUtf8
               {$else}
               RawUtf8(d^.TempRawUtf8) := '';
               {$endif FPC}
