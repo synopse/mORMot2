@@ -4865,6 +4865,11 @@ begin
   Check(MakePath([1], true, '/') = '1/');
   Check(MakePath([1, 2, '3'], false, '/') = '1/2/3');
   Check(MakePath([1, 2, 3], true, '/') = '1/2/3/');
+  Check(MakeFileName([]) = '');
+  Check(MakeFileName(['toto', 'doc']) = 'toto.doc');
+  Check(MakeFileName([1, 2, 'doc'], false) = '1/2/doc');
+  Check(MakeFileName([1, 2, 'doc'], true) = '1/2.doc');
+  Check(MakeFileName([1, 2, '.doc'], true) = '1/2.doc');
   Check(MakeCsv([]) = '');
   Check(MakeCsv([], true) = '');
   Check(MakeCsv([1]) = '1');
