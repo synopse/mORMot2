@@ -207,18 +207,18 @@ type
     socket: function(conn: PPGconn): integer; cdecl;
   public
     /// try to dynamically load the libpq library
-    // - raise ESqlDBPostgres if the expected library is not found
+    // - raise an ESqlDBPostgres if the expected library is not found
     constructor Create;
     /// just a wrapper around FastSetString + GetValue/GetLength
     procedure GetRawUtf8(res: PPGresult; tup_num, field_num: integer;
       var result: RawUtf8);
-    /// raise an exception on error and clean result
+    /// raise an ESqlDBPostgres on error and clean result
     // - will set pRes to nil if passed
     // - if andClear is true - will call always PQ.Clear(res)
     procedure Check(conn: PPGconn; const ctxt: ShortString; res: PPGresult;
       pRes: PPPGresult = nil; andClear: boolean = true); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// raise an exception and clean result
+    /// raise an ESqlDBPostgres and clean result
     procedure RaiseError(conn: PPGconn; const ctxt: ShortString;
       res: PPGresult = nil);
   end;
