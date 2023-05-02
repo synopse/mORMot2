@@ -8009,21 +8009,24 @@ begin
       if swlen[i] <> 0 then
       begin
         delete(s, 1, swlen[i]);
-        j := PosExChar('=', s);
-        if j <> 0 then
+        if s <> '' then
         begin
-          AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
-          AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
-        end
-        else if (i + 1 = n) or
-                (swlen[i + 1] <> 0) then
-          AddRawUtf8(fNames[clkOption], s)
-        else
-        begin
-          AddRawUtf8(fNames[clkParam], s);
-          inc(i);
-          AddRawUtf8(fValues, fRawParams[i]);
-        end
+          j := PosExChar('=', s);
+          if j <> 0 then
+          begin
+            AddRawUtf8(fNames[clkParam], copy(s, 1, j - 1));
+            AddRawUtf8(fValues, copy(s, j + 1, MaxInt));
+          end
+          else if (i + 1 = n) or
+                  (swlen[i + 1] <> 0) then
+            AddRawUtf8(fNames[clkOption], s)
+          else
+          begin
+            AddRawUtf8(fNames[clkParam], s);
+            inc(i);
+            AddRawUtf8(fValues, fRawParams[i]);
+          end;
+        end;
       end
       else
         AddRawUtf8(fNames[clkArg], s);
