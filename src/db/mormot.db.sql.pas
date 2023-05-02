@@ -1943,7 +1943,6 @@ type
     fErrorMessage: RawUtf8;
     fTransactionCount: integer;
     fServerTimestampOffset: TDateTime;
-    fServerTimestampAtConnection: TDateTime;
     fCacheSafe: TOSLightLock; // protect fCache - warning: not reentrant!
     fCache: TRawUtf8List; // statements cache
     fCacheLast: RawUtf8;
@@ -2053,9 +2052,6 @@ type
     /// returns TRUE if the connection was set
     property Connected: boolean
       read IsConnected;
-    /// the time returned by the server when the connection occurred
-    property ServerTimestampAtConnection: TDateTime
-      read fServerTimestampAtConnection;
     /// number of sucessfull connections for this instance
     // - can be greater than 1 in case of re-connection via Disconnect/Connect
     property TotalConnectionCount: integer
@@ -7285,12 +7281,6 @@ begin
   InternalProcess(speConnected);
   if fTotalConnectionCount > 1 then
     InternalProcess(speReconnected);
-  if fServerTimestampAtConnection = 0 then
-  try
-    fServerTimestampAtConnection := ServerDateTime;
-  except
-    fServerTimestampAtConnection := Now;
-  end;
   for i := 0 to length(fProperties.ExecuteWhenConnected) - 1 do
     with NewStatement do
     try
