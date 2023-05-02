@@ -1806,7 +1806,7 @@ var
   start: Int64;
   notif: TPollSocketResult;
 begin
-  FormatUtf8('R% %', [fIndex, fOwner.fProcessName], fName);
+  FormatUtf8('R%:%', [fIndex, fOwner.fProcessName], fName);
   SetCurrentThreadName(fName);
   fOwner.NotifyThreadStart(self);
   try
@@ -2924,7 +2924,7 @@ const
 begin
   // Accept() incoming connections
   // and Send() output packets in the background if fExecuteAcceptOnly=false
-  SetCurrentThreadName('A% %', [AW[fExecuteAcceptOnly], fProcessName]);
+  SetCurrentThreadName('A%:%', [AW[fExecuteAcceptOnly], fProcessName]);
   NotifyThreadStart(self);
   try
     // create and bind fServer to the expected TCP port
@@ -3078,7 +3078,7 @@ procedure TAsyncClient.Execute;
 var
   notif: TPollSocketResult;
 begin
-  SetCurrentThreadName('C % %', [fProcessName, self]);
+  SetCurrentThreadName('C:% %', [fProcessName, self]);
   NotifyThreadStart(self);
   try
     if fThreadClients.Count > 0 then
@@ -3751,7 +3751,7 @@ var
   ms, msidle: integer;
 begin
   // Send() output packets in the background
-  SetCurrentThreadName('W %', [fAsync.fProcessName]);
+  SetCurrentThreadName('W:%', [fAsync.fProcessName]);
   NotifyThreadStart(self);
   WaitStarted(10); // wait for fAsync.Execute to bind and start
   if fAsync <> nil then
