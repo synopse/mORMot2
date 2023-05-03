@@ -188,10 +188,10 @@ const
   /// FireDAC DriverID values corresponding to mormot.db.sql recognized SQL engines
   {$ifdef ISDELPHIXE5}
   FIREDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUtf8 = (
-    'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'FB', '', 'PG', 'DB2', 'Infx');
+    'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'FB', '', 'PG', 'DB2', 'Infx', 'MySQL');
   {$else}
   FIREDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUtf8 = (
-    'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'IB', '', 'PG', 'DB2', 'Infx');
+    'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'IB', '', 'PG', 'DB2', 'Infx', 'MySQL');
   {$endif ISDELPHIXE5}
 
 implementation
