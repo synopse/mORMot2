@@ -256,7 +256,9 @@ type
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
     /// wait for the socket to a given set of receiving/sending state
     // - using poll() on POSIX (as required), and select() on Windows
-    function WaitFor(ms: integer; scope: TNetEvents; loerr: system.PInteger = nil): TNetEvents;
+    // - ms < 0 means an infinite timeout (blocking until events happen)
+    function WaitFor(ms: integer; scope: TNetEvents;
+      loerr: system.PInteger = nil): TNetEvents;
     /// compute how many bytes are actually pending in the receiving queue
     function RecvPending(out pending: integer): TNetResult;
     /// wrapper around WaitFor / RecvPending / Recv methods for a given time

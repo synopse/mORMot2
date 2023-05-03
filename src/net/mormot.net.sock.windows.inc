@@ -546,6 +546,7 @@ var
   end;
   rdp, wrp: PFDSet;
   tv: TTimeVal;
+  ptv: pointer;
   res: integer;
   pending: cardinal;
 begin
@@ -570,8 +571,14 @@ begin
     rd.fd_count := 1;
     rdp := @rd;
   end;
-  SetTimeVal(ms, tv);
-  res := select(sock + 1, rdp, wrp, nil, @tv);
+  if ms >= 0 then
+  begin
+    SetTimeVal(ms, tv);
+    ptv := @tv;
+  end
+  else
+    ptv := nil; // infinite timeout
+  res := select(sock + 1, rdp, wrp, nil, ptv);
   if res < 0 then
   begin
     if loerr <> nil then

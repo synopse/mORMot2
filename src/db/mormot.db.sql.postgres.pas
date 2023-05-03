@@ -274,18 +274,18 @@ type
 
   /// one asynchronous SQL statement as owned by TSqlDBPostgresAsync
   // - this is the main entry point for pipelined process on PostgreSQL
-  // - within Owner.Lock/Unlock, should call Bind() then ExecuteAsync()
+  // - within PrepareLocked/Lock and Unlock, should call Bind() then ExecuteAsync()
   TSqlDBPostgresAsyncStatement = class(TSqlDBPostgresStatement)
   protected
     fOwner: TSqlDBPostgresAsync;
     fAsyncOptions: TSqlDBPostgresAsyncStatementOptions;
   public
     /// ExecutePrepared-like method for asynchronous process
-    // - to be called within Lock/UnLock, after Bind() if needed:
+    // - to be called within PrepareLocked/Lock and UnLock, after Bind():
     // - typical usecase is e.g. from ex/techempower-bench/raw.pas
     // ! function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
     // ! begin
-    // !   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL, {expres=}true, ASYNC_OPT) do
+    // !   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL) do
     // !   try
     // !     Bind(1, ComputeRandomWorld);
     // !     ExecuteAsync(ctxt, OnAsyncDb);
@@ -298,7 +298,7 @@ type
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
     /// ExecutePrepared-like method for asynchronous process
-    // - wrap ExecuteAsync + UnLock
+    // - just wrap ExecuteAsync + UnLock
     procedure ExecuteAsyncNoParam(Context: TObject;
       const OnFinished: TOnSqlDBPostgresAsyncEvent;
       ForcedOptions: PSqlDBPostgresAsyncStatementOptions = nil);
@@ -1330,7 +1330,7 @@ begin
         if fOwner.fConnection = nil then
           res := []
         else
-          res := fOwner.fConnection.Socket.WaitFor(5000, [neRead]);
+          res := fOwner.fConnection.Socket.WaitFor(-1, [neRead]);
       until Terminated or
             (res = [neRead]) or
             ((res <> []) and
@@ -1452,11 +1452,10 @@ begin
   for i := 0 to length(fStatements) - 1 do
   begin
     result := fStatements[i];
-    if (scPossible in result.fCache) and
-       (result.Sql = Sql) then
+    if result.Sql = Sql then
       exit;
   end;
-  // ensure we can initialize a new statement now (paranoid)
+  // ensure we can initialize a new statement now in non-pipelined mode
   endtix := 0;
   repeat
     if not fTasks.Pending then
@@ -1473,14 +1472,13 @@ begin
     else if tix > endtix then
       raise ESqlDBPostgresAsync.CreateUtf8('%.NewStatement timeout', [self]);
   until false;
-  // initialize the new statement
+  // initialize the new statement within the acquired lock
   try
     try
       result := TSqlDBPostgresAsyncStatement.Create(fConnection);
       result.fOwner := self;
       result.fAsyncOptions := Options;
-      if fConnection.Properties.IsCachable(pointer(Sql)) then
-        include(result.fCache, scPossible);
+      include(result.fCache, scPossible); // always cached
       result.Prepare(Sql, ExpectResults);
     finally
       fConnection.EnterPipelineMode; // back to async state
@@ -1519,7 +1517,7 @@ end;
 initialization
   TSqlDBPostgresConnectionProperties.RegisterClassNameForDefinition;
   SetLength(_BindArrayJson, 1);
-  _BindArrayJson[0] := 'json'; // impossible SQL value (should be 'json')
+  _BindArrayJson[0] := 'json'; // impossible SQL value (should be '''json''')
 
 end.
 
