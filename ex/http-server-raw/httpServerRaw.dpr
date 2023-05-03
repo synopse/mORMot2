@@ -48,7 +48,7 @@ program httpServerRaw;
 
 {$ifdef OSWINDOWS}
   {$apptype console}
-  {$R mormot.win.default.manifest.res}
+  //{$R mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 uses

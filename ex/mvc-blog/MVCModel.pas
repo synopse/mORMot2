@@ -725,7 +725,7 @@ begin
   end;
   auto1 := TAutoFree.Several([
     @data,    TDotClearTable.Parse(aFlatFile),
-    @urls,    TRawUtf8List.Create([fNoDuplicate]),
+    @urls,    TRawUtf8List.CreateEx([fNoDuplicate]),
     @batch,   TRestBatch.Create(Rest, TOrmTag, 5000)]);
   auto2 := TOrm.AutoFree([ // avoid several try..finally
     @info,    TOrmBlogInfo,
