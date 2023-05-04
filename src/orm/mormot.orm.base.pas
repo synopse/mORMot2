@@ -581,9 +581,9 @@ type
   // OrmMapExternal() from mormot.orm.sql unit
   TOrmVirtualKind = (
     ovkSQLite3,
-    ovkFTS3,
-    ovkFTS4,
-    ovkFTS5,
+    ovkFts3,
+    ovkFts4,
+    ovkFts5,
     ovkRTree,
     ovkRTreeInteger,
     ovkCustomForcedID,
@@ -596,13 +596,13 @@ type
   // hold the TOrmMany instance
   // - jkDestID and jkPivotID will retrieve only DestTable.ID and PivotTable.ID
   // - jkDestFields will retrieve DestTable.* simple fields, or the fields
-  // specified by aCustomFieldsCsv (the Dest table name will be added: e.g.
-  // for aCustomFieldsCsv='One,Two', will retrieve DestTable.One, DestTable.Two)
+  // specified by FieldsCsv (the Dest table name will be added: e.g.
+  // for FieldsCsv='One,Two', will retrieve DestTable.One, DestTable.Two)
   // - jkPivotFields will retrieve PivotTable.* simple fields, or the fields
-  // specified by aCustomFieldsCsv (the Pivot table name will be added: e.g.
-  // for aCustomFieldsCsv='One,Two', will retrieve PivotTable.One, PivotTable.Two)
+  // specified by FieldsCsv (the Pivot table name will be added: e.g.
+  // for FieldsCsv='One,Two', will retrieve PivotTable.One, PivotTable.Two)
   // - jkPivotAndDestAllFields for PivotTable.* and DestTable.* simple fields,
-  // or will retrieve the specified aCustomFieldsCsv fields (with
+  // or will retrieve the specified FieldsCsv fields (with
   // the table name associated: e.g. 'PivotTable.One, DestTable.Two')
   TOrmManyJoinKind = (
     jkDestID,
@@ -676,17 +676,15 @@ type
 
 const
   /// if the TOrmVirtual table kind is a FTS virtual table
-  IS_FTS =
-    [ovkFTS3, ovkFTS4, ovkFTS5];
+  IS_FTS = [ovkFts3, ovkFts4, ovkFts5];
 
   /// if the TOrmVirtual table kind is not an embedded type
   // - can be set for a TOrm after a OrmMapExternal call
-  IS_CUSTOM_VIRTUAL =
-    [ovkCustomForcedID, ovkCustomAutoID];
+  IS_CUSTOM_VIRTUAL = [ovkCustomForcedID, ovkCustomAutoID];
 
   /// if the TOrmVirtual table kind expects the ID to be set on INSERT
   INSERT_WITH_ID =
-    [ovkFTS3, ovkFTS4, ovkFTS5, ovkRTree, ovkRTreeInteger, ovkCustomForcedID];
+    [ovkFts3, ovkFts4, ovkFts5, ovkRTree, ovkRTreeInteger, ovkCustomForcedID];
 
   /// if a TOrmVirtualTablePreparedConstraint.Column is to be ignored
   VIRTUAL_TABLE_IGNORE_COLUMN = -2;

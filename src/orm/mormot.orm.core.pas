@@ -324,8 +324,8 @@ type
     // - if IDToIndex is set, its value will be replaced with the index in
     // Strings.Objects[] where ID=IDToIndex^
     // - using inlined parameters via :(...): in WhereClause is always a good idea
-    function OneFieldValues(Table: TOrmClass; const FieldName, WhereClause:
-      RawUtf8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
+    function OneFieldValues(Table: TOrmClass; const FieldName, WhereClause: RawUtf8;
+      Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
     /// Execute directly a SQL statement, returning a TOrmTable list of resutls
     // - return a TOrmTableJson instance on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
@@ -368,9 +368,9 @@ type
     // - this method works for TOrmFts3, TOrmFts4 and TOrmFts5
     // - this method expects the column/field names to be supplied in the MATCH
     // statement clause
-    // - example of use:  FTSMatch(TOrmMessage,'Body MATCH :("linu*"):',IntResult)
+    // - example of use:  FtsMatch(TOrmMessage,'Body MATCH :("linu*"):',IntResult)
     // (using inlined parameters via :(...): is always a good idea)
-    function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUtf8;
+    function FtsMatch(Table: TOrmFts3Class; const WhereClause: RawUtf8;
       var DocID: TIDDynArray): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs with
     // enhanced ranking information
@@ -378,15 +378,15 @@ type
     // - this method will search in all FTS3 columns, and except some floating-point
     // constants for weigthing each column (there must be the same number of
     // PerFieldWeight parameters as there are columns in the TOrmFts3 table)
-    // - example of use:  FTSMatch(TOrmDocuments,'"linu*"',IntResult,[1,0.5])
+    // - example of use:  FtsMatch(TOrmDocuments,'"linu*"',IntResult,[1,0.5])
     // which will sort the results by the rank obtained with the 1st column/field
     // beeing given twice the weighting of those in the 2nd (and last) column
-    // - FTSMatch(TOrmDocuments,'linu*',IntResult,[1,0.5]) will perform a
+    // - FtsMatch(TOrmDocuments,'linu*',IntResult,[1,0.5]) will perform a
     // SQL query as such, which is the fastest way of ranking according to
     // http://www.sqlite.org/fts3.html#appendix_a
     // $ SELECT RowID FROM Documents WHERE Documents MATCH 'linu*'
     // $ ORDER BY rank(matchinfo(Documents),1.0,0.5) DESC
-    function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
+    function FtsMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
       var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer = 0; offset: integer = 0): boolean; overload;
     /// retrieve the main field (mostly 'Name') value of the specified record
@@ -419,14 +419,14 @@ type
     // - since no record is specified, locking is pointless here
     // - default implementation call ExecuteList(), and fill Value from a
     // temporary TOrmTable
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
     // and TOrmMany fields (use RetrieveBlob method or set
     // TRestClientUri.ForceBlobTransfert)
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - if this default set of simple fields does not fit your need, you could
     // specify your own set
     function Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     /// get a member from a SQL statement
     // - implements REST GET collection
     // - return true on success
@@ -434,11 +434,11 @@ type
     // this overloaded function will call FormatUtf8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     function Retrieve(const WhereClauseFmt: RawUtf8;
       const Args, Bounds: array of const; Value: TOrm;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     /// get a member from its ID
     // - return true on success
     // - Execute 'SELECT * FROM TableName WHERE ID=:(aID): LIMIT 1' SQL Statememt
@@ -522,22 +522,22 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
-    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
-    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
     // - return nil on error
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const CustomFieldsCSV: RawUtf8 = ''): TObjectList; overload;
+      const FieldsCsv: RawUtf8 = ''): TObjectList; overload;
     {$ifdef ORMGENERICS}
     /// get a IList<TOrm> of members from a SQL statement
     // - implements REST GET collection
-    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
-    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
-    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return true and a IList<T> in Result on success (maybe with Count=0)
     // - return false on error
     // - untyped "var IList" and not directly IList<T: TOrm> because neither
@@ -555,7 +555,7 @@ type
     // !      for R in list do
     // !        writeln(R.ID, '=', R.Test);
     function RetrieveIList(T: TOrmClass; var IList;
-      const CustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     /// get a IList<TOrm> of members from a SQL statement
     // - implements REST GET collection with a WHERE clause
     // - for better server speed, the WHERE clause should use bound parameters
@@ -563,16 +563,16 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
-    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
-    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return true and a IList<T> in Result on success (maybe with Count=0)
     // - return false on error
     // - untyped "var IList" and not directly IList<T: TOrm> because neither
     // Delphi nor FPC allow parametrized interface methods
     function RetrieveIList(T: TOrmClass; var IList;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const CustomFieldsCSV: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     {$endif ORMGENERICS}
     /// get a list of members from a SQL statement as RawJson
     // - implements REST GET collection
@@ -581,9 +581,9 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - returns the raw JSON array content with all items on success, with
     // our expanded / not expanded JSON format - so can be used with SOA methods
     // and RawJson results, for direct process from the client side
@@ -594,14 +594,14 @@ type
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJson(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
+      const FieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
     /// get a list of members from a SQL statement as RawJson
     // - implements REST GET collection
     // - this overloaded version expect the SqlWhere clause to be already
     // prepared with inline parameters using a previous FormatUtf8() call
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - returns the raw JSON array content with all items on success, with
     // our expanded / not expanded JSON format - so can be used with SOA methods
     // and RawJson results, for direct process from the client side
@@ -611,7 +611,7 @@ type
     // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJson(Table: TOrmClass;
-      const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8 = '';
+      const SqlWhere: RawUtf8; const FieldsCsv: RawUtf8 = '';
       aForceAjax: boolean = false): RawJson; overload;
     /// get a list of all members from a SQL statement as a TDocVariant
     // - implements REST GET collection
@@ -619,16 +619,16 @@ type
     // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
     // with one property containing the array of values: this returned variant
     // can be pasted e.g. directly as parameter to TSynMustache.Render()
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
     // TOrm layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJson method)
     // - warning: under FPC, we observed that assigning the result of this
     // method to a local variable may circumvent a memory leak FPC bug
     function RetrieveDocVariantArray(Table: TOrmClass;
-      const ObjectName, CustomFieldsCsv: RawUtf8;
+      const ObjectName, FieldsCsv: RawUtf8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
     /// get a list of members from a SQL statement as a TDocVariant
     // - implements REST GET collection over a specified WHERE clause
@@ -641,9 +641,9 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
     // TOrm layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJson method)
@@ -651,7 +651,7 @@ type
     // method to a local variable may circumvent a memory leak FPC bug
     function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8;
-      const BoundsSqlWhere: array of const; const CustomFieldsCsv: RawUtf8;
+      const BoundsSqlWhere: array of const; const FieldsCsv: RawUtf8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
     /// get all values of a SQL statement on a single column as a TDocVariant array
     // - implements REST GET collection on a single field
@@ -673,7 +673,7 @@ type
     // as a true array of values
     function RetrieveDocVariant(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const CustomFieldsCsv: RawUtf8): variant;
+      const FieldsCsv: RawUtf8): variant;
     /// get a list of members from a SQL statement as T*ObjArray
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -681,9 +681,9 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - set the T*ObjArray variable with all items on success - so that it can
     // be used with SOA methods
     // - it is up to the caller to ensure that ObjClear(ObjArray) is called
@@ -691,7 +691,7 @@ type
     // - returns true on success, false on error
     function RetrieveListObjArray(var ObjArray; Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean;
+      const FieldsCsv: RawUtf8 = ''): boolean;
     /// get and append a list of members as an expanded JSON array
     // - implements REST GET collection
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
@@ -701,16 +701,16 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - if OutputFieldName is set, the JSON array will be written as a JSON,
-    // property i.e. surrounded as '"OutputFieldName":[....],' - note ending ','
-    // - CustomFieldsCsv can be the CSV list of field names to be retrieved
-    // - if CustomFieldsCsv is '', will get all simple fields, excluding BLOBs
-    // - if CustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - if OutputFieldName is set, the JSON array will be written as a JSON
+    // property i.e. as '"OutputFieldName":[....],' - note the ending ','
+    // - FieldsCsv can be the CSV list of field names to be retrieved
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - is just a wrapper around TOrm.AppendFillAsJsonArray()
     procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const OutputFieldName: RawUtf8; W: TOrmWriter;
-      const CustomFieldsCsv: RawUtf8 = '');
+      const FieldsCsv: RawUtf8 = '');
     /// dedicated method used to retrieve matching IDs using a fast R-Tree index
     // - a TOrmRTree is associated to a TOrm with a specified BLOB
     // field, and will call TOrmRTree BlobToCoord and ContainedIn virtual
@@ -1354,7 +1354,7 @@ type
     // - is a wrapper around TRestBatch.Update() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     // - this method will call BeforeUpdateEvent before TRestBatch.Update
-    function BatchUpdate(Value: TOrm; const CustomFieldsCsv: RawUtf8;
+    function BatchUpdate(Value: TOrm; const FieldsCsv: RawUtf8;
       DoNotAutoComputeFields: boolean = false): integer; overload;
     /// delete a member in current BATCH sequence
     // - is a wrapper around TRestBatch.Delete() which will be stored in the
@@ -1887,7 +1887,7 @@ type
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestOrm;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): IAutoFree; overload;
+      const FieldsCsv: RawUtf8 = ''): IAutoFree; overload;
     /// FillPrepare and protect one TOrm local variable instance
     // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
     // up to the end-of-method -> you should NOT use TAutoFree for new projects :(
@@ -1900,7 +1900,7 @@ type
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestOrm;
       const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): IAutoFree; overload;
+      const FieldsCsv: RawUtf8 = ''): IAutoFree; overload;
 
     /// called when the associated table is created in the database
     // - if FieldName is '', initialization regarding all fields must be made;
@@ -2082,15 +2082,15 @@ type
     // ! aRec := TOrmMyRec.CreateAndFillPrepare(Client,FormatUtf8('Salary>? AND Salary<?',[],[1000,2000]));
     // or call the overloaded CreateAndFillPrepare() contructor directly with
     // BoundsSqlWhere array of parameters
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - aCustomFieldsCsv can also be set to a CSV field list to retrieve only
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - FieldsCsv can also be set to a CSV field list to retrieve only
     // the needed fields, and save remote bandwidth - note that any later
     // Update() will update all simple fields, so potentially with wrong
     // values; but BatchUpdate() can be safely used since it will
     constructor CreateAndFillPrepare(const aClient: IRestOrm;
-      const aSqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8 = ''); overload;
+      const aSqlWhere: RawUtf8; const FieldsCsv: RawUtf8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
     // - this method creates a TOrmTableJson, retrieves all records corresponding
@@ -2106,18 +2106,18 @@ type
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be ParamsSqlWhere and '%' in the
     // FormatSqlWhere statement, whereas it now expects bound parameters as '?'
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(const aClient: IRestOrm;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''); overload;
+      const FieldsCsv: RawUtf8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
     // - this method creates a TOrmTableJson, retrieves all records corresponding
@@ -2128,18 +2128,18 @@ type
     // - the FormatSqlWhere clause will replace all '%' chars with the supplied
     // ParamsSqlWhere[] supplied values, and bind all '?' chars as parameters
     // with BoundsSqlWhere[] values
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(const aClient: IRestOrm;
       const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''); overload;
+      const FieldsCsv: RawUtf8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a given list of IDs
     // - this method creates a TOrmTableJson, retrieves all records corresponding
@@ -2147,17 +2147,17 @@ type
     // methods retrieve only one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
     // - the TOrmTableJson will be freed by TOrm.Destroy
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(const aClient: IRestOrm;
-      const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8 = ''); overload;
+      const aIDs: array of TID; const FieldsCsv: RawUtf8 = ''); overload;
     /// this constructor initializes the object, and prepares itself to loop
     // through a specified JSON table, which will use a private copy
     // - this method creates a TOrmTableJson, fill it with the supplied JSON buffer,
@@ -2469,17 +2469,17 @@ type
     // ! aRec.FillPrepare(Client, FormatUtf8('Salary>? AND Salary<?', [], [1000, 2000]));
     // or call the overloaded FillPrepare() method directly with  BoundsSqlWhere
     // array of parameters
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(const aClient: IRestOrm;
-      const aSqlWhere: RawUtf8 = ''; const aCustomFieldsCsv: RawUtf8 = '';
+      const aSqlWhere: RawUtf8 = ''; const FieldsCsv: RawUtf8 = '';
       aCheckTableName: TOrmCheckTableName = ctnNoCheck): boolean; overload;
     /// prepare to get values using a specified WHERE clause with '%' parameters
     // - returns true in case of success, false in case of an error during SQL request
@@ -2496,18 +2496,18 @@ type
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be ParamsSqlWhere and '%' in the
     // FormatSqlWhere statement, whereas it now expects bound parameters as '?'
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(const aClient: IRestOrm;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     /// prepare to get values using a specified WHERE clause with '%' and '?' parameters
     // - returns true in case of success, false in case of an error during SQL request
     // - then call FillRow(1..Table.RowCount) to get any row value
@@ -2519,18 +2519,18 @@ type
     // - the FormatSqlWhere clause will replace all '%' chars with the supplied
     // ParamsSqlWhere[] supplied values, and bind all '?' chars as bound
     // parameters with BoundsSqlWhere[] values
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(const aClient: IRestOrm;
       const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     /// prepare to get values from a list of IDs
     // - returns true in case of success, false in case of an error during SQL request
     // - then call FillRow(1..Table.RowCount) to get any row value
@@ -2538,17 +2538,17 @@ type
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
     // - a temporary TOrmTable is created then stored in an internal fTable protected field
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
-    // - default aCustomFieldsCsv='' will retrieve all simple table fields, but
+    // - FieldsCsv can be used to specify which fields must be retrieved
+    // - default FieldsCsv='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
     // bandwidth by specifying the needed fields
-    // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - note that you should not use this aCustomFieldsCsv optional parameter if
+    // - if FieldsCsv='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this FieldsCsv optional parameter if
     // you want to Update the retrieved record content later, since any
     // missing fields will be left with previous values - but BatchUpdate() can be
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(const aClient: IRestOrm; const aIDs: array of TID;
-      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+      const FieldsCsv: RawUtf8 = ''): boolean; overload;
     // / prepare to loop through a JOINed statement including TOrmMany fields
     // - all TOrmMany.Dest published fields will now contain a true TOrm
     // instance, ready to be filled with the JOINed statement results (these
@@ -3249,7 +3249,7 @@ type
     /// create a TOrmTable, containing all specified Fields, after a JOIN
     // associated to the current or specified Source ID
     // - the Table will have the fields specified by the JoinKind parameter
-    // - aCustomFieldsCsv can be used to specify which fields must be retrieved
+    // - FieldsCsv can be used to specify which fields must be retrieved
     // (for jkDestFields, jkPivotFields, jkPivotAndDestFields) - default is all
     // - if aSourceID is 0, the value is taken from current fSourceID field
     // (set by TOrm.Create)
@@ -3259,7 +3259,7 @@ type
     // ! FormatUtf8('Salary>? AND Salary<?', [], [1000, 2000])
     function DestGetJoinedTable(const aClient: IRestOrm;
       const aDestWhereSql: RawUtf8; aSourceID: TID; JoinKind: TOrmManyJoinKind;
-      const aCustomFieldsCsv: RawUtf8 = ''): TOrmTable;
+      const FieldsCsv: RawUtf8 = ''): TOrmTable;
     /// add a Dest record to the Source record list
     // - returns TRUE on success, FALSE on error
     // - if NoDuplicates is TRUE, the existence of this Source/Dest ID pair
@@ -3506,12 +3506,12 @@ type
   // - you can select either the FTS3 engine, or the more efficient (and new)
   // FTS4 engine (available since version 3.7.4), by using the TOrmFts4
   // type, or TOrmFts5 for the latest (and preferred) FTS5 engine
-  // - in order to make FTS queries, use the dedicated TRest.FTSMatch
+  // - in order to make FTS queries, use the dedicated TRest.FtsMatch
   // method, with the MATCH operator (you can use regular queries, but you must
   // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
   // table specificity):
   // ! var IDs: TIDDynArray;
-  // ! if FTSMatch(TOrmMyFTS3Table, 'text MATCH "linu*"', IDs) then
+  // ! if FtsMatch(TOrmMyFTS3Table, 'text MATCH "linu*"', IDs) then
   // !  //  you have all matching IDs in IDs[]
   // - by convention, inherited class name could specify a custom stemming
   // algorithm by starting with "TOrmFts3", and adding the algorithm name as
@@ -3561,7 +3561,7 @@ type
   // suffix, e.g. TOrmFts'Porter will create a "tokenize=porter" virtual table
   TOrmFts4 = class(TOrmFts3)
   public
-    /// this overriden method will create TRIGGERs for FTSWithoutContent()
+    /// this overriden method will create TRIGGERs for FtsWithoutContent()
     class procedure InitializeTable(const Server: IRestOrmServer;
       const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
   end;
@@ -3917,8 +3917,8 @@ type
     fKind: TOrmVirtualKind;
     fModel: TOrmModel;
     fTableIndex: integer;
-    fFTSWithoutContentTableIndex: integer;
-    fFTSWithoutContentFields: RawUtf8;
+    fFtsWithoutContentTableIndex: integer;
+    fFtsWithoutContentFields: RawUtf8;
     procedure SetKind(Value: TOrmVirtualKind);
     function GetProp(const PropName: RawUtf8): TOrmPropInfo;
   public
@@ -3947,7 +3947,7 @@ type
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
     function SqlFromSelectWhere(const SelectFields, Where: RawUtf8): RawUtf8;
-    /// define if a FTS4 virtual table will not store its content, but will
+    /// define if a FTS4/FTS5 virtual table will not store its content, but will
     // be defined as an "external content" FTS4/FTS5 table
     // - see https://www.sqlite.org/fts3.html#section_6_2_2
     // - the virtual table will be created with content="ContentTableName",
@@ -3957,7 +3957,7 @@ type
     // - the indexed text will be assigned to the FTS4/FTS5 table, using
     // triggers generated by TOrmFts4.InitializeTable at table creation
     // - note that FTS3 does not support this feature
-    procedure FTS4WithoutContent(ContentTable: TOrmClass);
+    procedure Fts4WithoutContent(ContentTable: TOrmClass);
 
     /// the table index of this TOrm in the associated Model
     property TableIndex: integer
@@ -6856,7 +6856,7 @@ begin
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm; const aSqlWhere: RawUtf8;
-  const aCustomFieldsCsv: RawUtf8; aCheckTableName: TOrmCheckTableName): boolean;
+  const FieldsCsv: RawUtf8; aCheckTableName: TOrmCheckTableName): boolean;
 var
   T: TOrmTable;
 begin
@@ -6865,7 +6865,7 @@ begin
   if (self = nil) or
      (aClient = nil) then
     exit;
-  T := aClient.MultiFieldValues(RecordClass, aCustomFieldsCsv, aSqlWhere);
+  T := aClient.MultiFieldValues(RecordClass, FieldsCsv, aSqlWhere);
   if T = nil then
     exit;
   T.OwnerMustFree := true;
@@ -6874,32 +6874,31 @@ begin
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): boolean;
+  const BoundsSqlWhere: array of const; const FieldsCsv: RawUtf8): boolean;
 var
   sqlwhere: RawUtf8;
 begin
   sqlwhere := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, aCustomFieldsCsv);
+  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
   const ParamsSqlWhere, BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): boolean;
+  const FieldsCsv: RawUtf8): boolean;
 var
   sqlwhere: RawUtf8;
 begin
   sqlwhere := FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, aCustomFieldsCsv);
+  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm;
-  const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8): boolean;
+  const aIDs: array of TID; const FieldsCsv: RawUtf8): boolean;
 begin
   if high(aIDs) < 0 then
     result := false
   else
-    result := FillPrepare(aClient, SelectInClause('id', aIDs, '', INLINED_MAX),
-      aCustomFieldsCsv);
+    result := FillPrepare(aClient, SelectInClause('id', aIDs, '', INLINED_MAX), FieldsCsv);
 end;
 
 function TOrm.FillRow(aRow: PtrInt; aDest: TOrm): boolean;
@@ -7317,11 +7316,11 @@ begin
     // create a FTS3/FTS4/RTREE virtual table
     result := 'CREATE VIRTUAL TABLE ' + SqlTableName + ' USING ';
     case Props.Kind of
-      ovkFTS3:
+      ovkFts3:
         result := result + 'fts3(';
-      ovkFTS4:
+      ovkFts4:
         result := result + 'fts4(';
-      ovkFTS5:
+      ovkFts5:
         result := result + 'fts5(';
       ovkRTree:
         result := result + 'rtree(RowID,';
@@ -7345,21 +7344,21 @@ begin
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
-      ovkFTS3,
-      ovkFTS4,
-      ovkFTS5:
+      ovkFts3,
+      ovkFts4,
+      ovkFts5:
         begin
-          if (Props.fFTSWithoutContentFields <> '') and
-             (Props.fFTSWithoutContentTableIndex >= 0) then
+          if (Props.fFtsWithoutContentFields <> '') and
+             (Props.fFtsWithoutContentTableIndex >= 0) then
           begin
             result := FormatUtf8('%content="%",', [result,
-              aModel.Tables[Props.fFTSWithoutContentTableIndex].SqlTableName]);
-            if Props.Kind = ovkFTS5 then
+              aModel.Tables[Props.fFtsWithoutContentTableIndex].SqlTableName]);
+            if Props.Kind = ovkFts5 then
               result := FormatUtf8('%content_rowid="ID",', [result]);
           end;
           for i := 0 to fields.Count - 1 do
             result := result + fields.List[i].Name + ',';
-          if Props.Kind = ovkFTS5 then
+          if Props.Kind = ovkFts5 then
             tokenizer := 'ascii'   // FTS5 knows ascii/porter/unicode61
           else
             tokenizer := 'simple'; // FTS3-4 know simple/porter/unicode61
@@ -7376,7 +7375,7 @@ begin
             {$ifndef PUREMORMOT2}
             if IdemPChar(pointer(cname), 'TSQLRECORDFTS') and
                (cname[14] in ['3', '4', '5']) then
-            begin // e.g. TSqlRecordFTS3Porter -> 'tokenize=porter'
+            begin // e.g. TSqlRecordFts3Porter -> 'tokenize=porter'
               if length(cname) > 14 then
                 tokenizer := LowerCase(copy(cname, 15, 100));
               break;
@@ -7648,12 +7647,12 @@ begin
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
-  const aSqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8);
+  const aSqlWhere: RawUtf8; const FieldsCsv: RawUtf8);
 var
   aTable: TOrmTable;
 begin
   InternalCreate;
-  aTable := aClient.MultiFieldValues(RecordClass, aCustomFieldsCsv, aSqlWhere);
+  aTable := aClient.MultiFieldValues(RecordClass, FieldsCsv, aSqlWhere);
   if aTable = nil then
     exit;
   aTable.OwnerMustFree := true;
@@ -7662,29 +7661,29 @@ end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8);
+  const FieldsCsv: RawUtf8);
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
-  CreateAndFillPrepare(aClient, where, aCustomFieldsCsv);
+  CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
   const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8);
+  const FieldsCsv: RawUtf8);
 var
   where: RawUtf8;
 begin
   where := FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
-  CreateAndFillPrepare(aClient, where, aCustomFieldsCsv);
+  CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
-  const aIDs: array of TID; const aCustomFieldsCsv: RawUtf8);
+  const aIDs: array of TID; const FieldsCsv: RawUtf8);
 begin
   InternalCreate;
-  FillPrepare(aClient, aIDs, aCustomFieldsCsv);
+  FillPrepare(aClient, aIDs, FieldsCsv);
 end;
 
 constructor TOrm.CreateAndFillPrepare(const aJson: RawUtf8);
@@ -8458,18 +8457,18 @@ end;
 
 class function TOrm.AutoFree(var localVariable; const Rest: IRestOrm;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): IAutoFree;
+  const FieldsCsv: RawUtf8): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, CreateAndFillPrepare(
-    Rest, FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv));
+    Rest, FormatSqlWhere, BoundsSqlWhere, FieldsCsv));
 end;
 
 class function TOrm.AutoFree(var localVariable; const Rest: IRestOrm;
   const FormatSqlWhere: RawUtf8; const ParamsSqlWhere, BoundsSqlWhere: array of const;
-  const aCustomFieldsCsv: RawUtf8): IAutoFree;
+  const FieldsCsv: RawUtf8): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, CreateAndFillPrepare(
-    Rest, FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, aCustomFieldsCsv));
+    Rest, FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, FieldsCsv));
 end;
 
 class procedure TOrm.AddFilterOrValidate(const aFieldName: RawUtf8;
@@ -8802,7 +8801,7 @@ end;
 
 function TOrmMany.DestGetJoinedTable(const aClient: IRestOrm;
   const aDestWhereSql: RawUtf8; aSourceID: TID; JoinKind: TOrmManyJoinKind;
-  const aCustomFieldsCsv: RawUtf8): TOrmTable;
+  const FieldsCsv: RawUtf8): TOrmTable;
 var
   Select, SQL: RawUtf8;
   SelfProps, DestProps: TOrmModelProperties;
@@ -8843,22 +8842,22 @@ begin
     jkPivotID:
       Select := SelfProps.Props.SqlTableName + '.RowID';
     jkDestFields:
-      if aCustomFieldsCsv = '' then
+      if FieldsCsv = '' then
         SelectFields([DestProps])
       else
-        Select := AddPrefixToCsv(pointer(aCustomFieldsCsv),
+        Select := AddPrefixToCsv(pointer(FieldsCsv),
           DestProps.Props.SqlTableName + '.');
     jkPivotFields:
-      if aCustomFieldsCsv = '' then
+      if FieldsCsv = '' then
         SelectFields([SelfProps])
       else
-        Select := AddPrefixToCsv(pointer(aCustomFieldsCsv),
+        Select := AddPrefixToCsv(pointer(FieldsCsv),
           SelfProps.Props.SqlTableName + '.');
     jkPivotAndDestFields:
-      if aCustomFieldsCsv = '' then
+      if FieldsCsv = '' then
         SelectFields([SelfProps, DestProps])
       else
-        Select := aCustomFieldsCsv;
+        Select := FieldsCsv;
   end;
   if aDestWhereSql = '' then
     // fast inlined prepared statement
@@ -9058,20 +9057,20 @@ begin
   m := Server.Model;
   p := m.Props[self];
   if (p = nil) or
-     (p.fFTSWithoutContentFields = '') then
+     (p.fFtsWithoutContentFields = '') then
     exit;
-  main := m.Tables[p.fFTSWithoutContentTableIndex].SqlTableName;
-  if not Server.IsInternalSQLite3Table(p.fFTSWithoutContentTableIndex) then
+  main := m.Tables[p.fFtsWithoutContentTableIndex].SqlTableName;
+  if not Server.IsInternalSQLite3Table(p.fFtsWithoutContentTableIndex) then
     raise EModelException.CreateUtf8(
       '% is an external content FTS4/5 table but source % is not ' +
       'a local SQLite3 table: FTS search will be unavailable', [self, main]);
   fts := p.Props.SqlTableName;
   ftsfields := p.Props.SqlTableSimpleFieldsNoRowID;
   // see http://www.sqlite.org/fts3.html#*fts4content
-  if p.Kind = ovkFTS5 then
+  if p.Kind = ovkFts5 then
   begin
     // In fts 5 we can't use docid only rowid, also use insert() values('delete',) to delete record
-    oldfields := StringReplaceAll(p.fFTSWithoutContentFields, 'new.', 'old.');
+    oldfields := StringReplaceAll(p.fFtsWithoutContentFields, 'new.', 'old.');
     Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % ' +
       'BEGIN INSERT INTO %(%,rowid,%) VALUES(''delete'',old.rowid%); END;',
       [main, main, fts, fts, ftsfields, oldfields]);
@@ -9080,10 +9079,10 @@ begin
       [main, main, fts, fts, ftsfields, oldfields]);
     Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % ' +
       'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFtsWithoutContentFields]);
     Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % ' +
       'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFtsWithoutContentFields]);
   end
   else
   begin
@@ -9093,10 +9092,10 @@ begin
       'BEGIN DELETE FROM % WHERE docid=old.rowid; END;', [main, main, fts]);
     Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % ' +
       'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFtsWithoutContentFields]);
     Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % ' +
       'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFtsWithoutContentFields]);
   end;
 end;
 
@@ -9528,11 +9527,11 @@ begin
     raise EModelException.CreateU('TOrmModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TOrmFts5) then
-    Kind := ovkFTS5
+    Kind := ovkFts5
   else if Table.InheritsFrom(TOrmFts4) then
-    Kind := ovkFTS4
+    Kind := ovkFts4
   else if Table.InheritsFrom(TOrmFts3) then
-    Kind := ovkFTS3
+    Kind := ovkFts3
   else if Table.InheritsFrom(TOrmVirtualTableForcedID) then
     Kind := ovkCustomForcedID
   else if Table.InheritsFrom(TOrmRTree) then
@@ -10370,8 +10369,8 @@ begin
   inherited Create;
   fModel := aModel;
   fTableIndex := aSource.fTableIndex;
-  fFTSWithoutContentTableIndex := aSource.fFTSWithoutContentTableIndex;
-  fFTSWithoutContentFields := aSource.fFTSWithoutContentFields;
+  fFtsWithoutContentTableIndex := aSource.fFtsWithoutContentTableIndex;
+  fFtsWithoutContentFields := aSource.fFtsWithoutContentFields;
   fProps := aSource.fProps;
   fKind := aSource.Kind;
   SQL := aSource.SQL;
@@ -10414,9 +10413,9 @@ var
   expected: TOrmFieldType;
 begin
   case Value of // validates virtual table fields expectations
-    ovkFTS3,
-    ovkFTS4,
-    ovkFTS5:
+    ovkFts3,
+    ovkFts4,
+    ovkFts5:
       begin
         if Props.Fields.Count = 0 then
           raise EModelException.CreateUtf8(
@@ -10475,25 +10474,25 @@ begin
     SQL.TableSimpleFields[true, false]);
 end;
 
-procedure TOrmModelProperties.FTS4WithoutContent(ContentTable: TOrmClass);
+procedure TOrmModelProperties.Fts4WithoutContent(ContentTable: TOrmClass);
 var
   i: PtrInt;
   field: RawUtf8;
 begin
-  if not (Kind in [ovkFTS4, ovkFTS5]) then
+  if not (Kind in [ovkFts4, ovkFts5]) then
     raise EModelException.CreateUtf8(
-      'FTS4WithoutContent: % is not a FTS4/FTS5 table', [Props.Table]);
-  fFTSWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
+      'Fts4WithoutContent: % is not a FTS4/FTS5 table', [Props.Table]);
+  fFtsWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
   for i := 0 to Props.Fields.Count - 1 do
   begin
     field := Props.Fields.List[i].Name;
     if ContentTable.OrmProps.Fields.IndexByName(field) < 0 then
-      raise EModelException.CreateUtf8('FTS4WithoutContent: %.% is not a % field',
+      raise EModelException.CreateUtf8('Fts4WithoutContent: %.% is not a % field',
         [Props.Table, field, ContentTable]);
-    fFTSWithoutContentFields := fFTSWithoutContentFields + ',new.' + field;
+    fFtsWithoutContentFields := fFtsWithoutContentFields + ',new.' + field;
   end;
-  if fFTSWithoutContentFields = '' then
-    raise EModelException.CreateUtf8('FTS4WithoutContent: % has no field', [Props.Table]);
+  if fFtsWithoutContentFields = '' then
+    raise EModelException.CreateUtf8('Fts4WithoutContent: % has no field', [Props.Table]);
 end;
 
 function TOrmModelProperties.GetProp(const PropName: RawUtf8): TOrmPropInfo;

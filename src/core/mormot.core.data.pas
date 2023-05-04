@@ -1274,7 +1274,7 @@ type
     // !  DA: TDynArray;
     // !  A: TIntegerDynArray;
     // !begin
-    // !  DA.Init(TypeInfo(TIntegerDynArray),A);
+    // !  DA.Init(TypeInfo(TIntegerDynArray), A);
     // ! (...)
     // - a sample usage may be (using a count variable):
     // !var
@@ -1283,7 +1283,7 @@ type
     // !  ACount: integer;
     // !  i: integer;
     // !begin
-    // !  DA.Init(TypeInfo(TIntegerDynArray),A,@ACount);
+    // !  DA.Init(TypeInfo(TIntegerDynArray), A, @ACount);
     // !  for i := 1 to 100000 do
     // !    DA.Add(i); // MUCH faster using the ACount variable
     // ! (...)   // now you should use DA.Count or Count instead of length(A)

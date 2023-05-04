@@ -1266,14 +1266,14 @@ type
   // the database for reading and the cycle repeats.
   TSqlBusyHandler = function(user: pointer; count: integer): integer; cdecl;
 
-  PFTSMatchInfo = ^TFTSMatchInfo;
+  PFtsMatchInfo = ^TFtsMatchInfo;
   /// map the matchinfo function returned BLOB value
   // - i.e. the default 'pcx' layout, for both FTS3 and FTS4
   // - see http://www.sqlite.org/fts3.html#matchinfo
-  // - used for the FTS3/FTS4 ranking of results by TRest.FTSMatch method
+  // - used for the FTS3/FTS4 ranking of results by TRest.FtsMatch method
   // and the internal RANK() function as proposed in
   // http://www.sqlite.org/fts3.html#appendix_a
-  TFTSMatchInfo = packed record
+  TFtsMatchInfo = packed record
     nPhrase: integer;
     nCol: integer;
     hits: array[1 .. 9] of record
@@ -6324,7 +6324,7 @@ procedure InternalRank(Context: TSqlite3FunctionContext; argc: integer;
 // supplies the same "RANK" internal function as proposed in
 // http://www.sqlite.org/fts3.html#appendix_a
 var
-  MI: PFTSMatchInfo;
+  MI: PFtsMatchInfo;
   p, c: integer;
   score: Double;
 begin

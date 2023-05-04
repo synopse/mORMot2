@@ -119,7 +119,7 @@ type
       const CustomFields: TFieldBits = []): integer;
     function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer; overload;
-    function BatchUpdate(Value: TOrm; const CustomFieldsCsv: RawUtf8;
+    function BatchUpdate(Value: TOrm; const FieldsCsv: RawUtf8;
       DoNotAutoComputeFields: boolean = false): integer; overload;
     function BatchDelete(ID: TID): integer; overload;
     function BatchDelete(Table: TOrmClass; ID: TID): integer; overload;
@@ -448,7 +448,7 @@ begin
     result := fBatchCurrent.Update(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRestOrmClient.BatchUpdate(Value: TOrm; const CustomFieldsCsv: RawUtf8;
+function TRestOrmClient.BatchUpdate(Value: TOrm; const FieldsCsv: RawUtf8;
   DoNotAutoComputeFields: boolean): integer;
 var
   bits: TFieldBits;
@@ -458,7 +458,7 @@ begin
      (fBatchCurrent = nil) or
      (Value.IDValue <= 0) or
      not BeforeUpdateEvent(Value) or
-     not Value.Orm.FieldBitsFromCsv(CustomFieldsCsv, bits) then
+     not Value.Orm.FieldBitsFromCsv(FieldsCsv, bits) then
     result := -1
   else
     result := fBatchCurrent.Update(Value, bits, DoNotAutoComputeFields);
