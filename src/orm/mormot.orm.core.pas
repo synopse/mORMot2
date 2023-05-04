@@ -480,29 +480,29 @@ type
     /// get a member from some SQL, calling a callback when the result is ready
     // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    // - raise EOrmAsyncException if the external DB does not support asynch requests
     procedure RetrieveAsync(Context: TObject; Table: TOrmClass; const SqlWhere: RawUtf8;
       const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8 = ''); overload;
     /// get a member from some SQL, calling a callback when the result is ready
     // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
-    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    // - raise EOrmAsyncException if the external DB does not support asynch requests
     procedure RetrieveAsync(Context: TObject; Table: TOrmClass;
       const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
       const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8 = ''); overload;
     /// get a member from its ID, calling a callback when the result is ready
-    // - Execute 'SELECT * FROM TableName WHERE ID=:(aID): LIMIT 1' SQL Statememt
-    // - raise EOrmAsyncException if not over a PostgreSQL external database
-    // - in difference to Retrieve(ID), won't try to use the cache
+    // - Execute 'SELECT * FROM TableName WHERE ID=:(ID): LIMIT 1' SQL Statememt
+    // - in difference to Retrieve(ID), won't try the cache
+    // - raise EOrmAsyncException if the external DB does not support asynch requests
     procedure RetrieveAsync(Context: TObject; Table: TOrmClass; ID: TID;
       const OnResult: TOnRestOrmRetrieveOne); overload;
     /// get some members from some SQL, calling a callback when the JSON is ready
-    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    // - raise EOrmAsyncException if the external DB does not support asynch requests
     procedure RetrieveAsyncListJson(Context: TObject; Table: TOrmClass;
       const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveJson;
       const FieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false); overload;
     /// get some members from some SQL, calling a callback with a TOrm array
-    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    // - raise EOrmAsyncException if the external DB does not support asynch requests
     procedure RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8 = '');
@@ -5430,6 +5430,7 @@ var
 begin // inlined FillPrepare/TOrmFill process
   nmap := 0;
   fields := RecordType.OrmProps.Fields;
+  map := @maps;
   fid := fFieldIndexID;
   for o := 0 to fFieldCount - 1 do
     if o <> fid then
@@ -5437,12 +5438,10 @@ begin // inlined FillPrepare/TOrmFill process
       f := fields.IndexByName(GetResults(o));
       if f < 0 then
         continue;
-      with {%H-}maps[nmap] do
-      begin
-        map := o;
-        ws := byte(o) in fFieldParsedAsString;
-        prop := fields.List[f];
-      end;
+      map^.map := o;
+      map^.ws := byte(o) in fFieldParsedAsString;
+      map^.prop := fields.List[f];
+      inc(map);
       inc(nmap);
     end;
   r := fRowCount;

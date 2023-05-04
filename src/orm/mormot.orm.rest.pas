@@ -74,6 +74,21 @@ type
     dirWriteLock,
     dirWriteNoLock);
 
+  /// abtract state-engine used internally by TRestOrm.NewEngineRetrieveAsync
+  TRestOrmEngineRetrieveAsync = class
+  public
+    Context: TObject;
+    Table: TOrmClass;
+    TableIndex: PtrInt;
+    ID: TID;
+    Sql: RawUtf8;
+    ResultOne: TOnRestOrmRetrieveOne;
+    ResultJson: TOnRestOrmRetrieveJson;
+    ResultArray: TOnRestOrmRetrieveArray;
+    procedure Execute; virtual; abstract; // override calls OnResult then Free
+    procedure OnResult(const Json: RawUtf8);
+  end;
+
   {$M+}
 
   /// implements TRest.ORM process for abstract REST client/server
@@ -126,6 +141,10 @@ type
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; virtual; abstract;
+    /// raw factory from the underlying database engine, using a callback as result
+    // - this default implementation will raise an EOrmAsyncException
+    function NewEngineRetrieveAsync(
+      Context: TObject; Table: TOrmClass): TRestOrmEngineRetrieveAsync; virtual;
     /// create a new member
     // - implements REST POST collection
     // - SentData can contain the JSON object with field values to be added
@@ -1638,11 +1657,24 @@ begin
   end;
 end;
 
-procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
-  const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8);
+function TRestOrm.NewEngineRetrieveAsync(
+  Context: TObject; Table: TOrmClass): TRestOrmEngineRetrieveAsync;
 begin
+  result := nil;
   raise EOrmAsyncException.CreateUtf8(
-    '%.RetrieveAsync unsupported on this DB', [self]);
+    '%.RetrieveAsync(%) unsupported on this DB', [self, Table]);
+end;
+
+procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
+  const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveOne;
+  const FieldsCsv: RawUtf8);
+var
+  async: TRestOrmEngineRetrieveAsync;
+begin
+  async := NewEngineRetrieveAsync(Context, Table);
+  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  async.ResultOne := OnResult;
+  async.Execute;
 end;
 
 procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
@@ -1657,26 +1689,38 @@ end;
 
 procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass; ID: TID;
   const OnResult: TOnRestOrmRetrieveOne);
+var
+  async: TRestOrmEngineRetrieveAsync;
 begin
-  raise EOrmAsyncException.CreateUtf8(
-    '%.RetrieveAsync unsupported on this DB', [self]);
+  async := NewEngineRetrieveAsync(Context, Table);
+  async.ID := ID;
+  async.ResultOne := OnResult;
+  async.Execute;
 end;
 
 procedure TRestOrm.RetrieveAsyncListJson(Context: TObject; Table: TOrmClass;
   const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveJson;
   const FieldsCsv: RawUtf8; aForceAjax: boolean);
+var
+  async: TRestOrmEngineRetrieveAsync;
 begin
-  raise EOrmAsyncException.CreateUtf8(
-    '%.RetrieveAsyncListJson unsupported on this DB', [self]);
+  async := NewEngineRetrieveAsync(Context, Table);
+  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  async.ResultJson := OnResult;
+  async.Execute;
 end;
 
-procedure TRestOrm.RetrieveAsyncListObjArray(Context: TObject;
-  Table: TOrmClass; const FormatSqlWhere: RawUtf8;
-  const BoundsSqlWhere: array of const;
+procedure TRestOrm.RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
   const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8);
+var
+  async: TRestOrmEngineRetrieveAsync;
 begin
-  raise EOrmAsyncException.CreateUtf8(
-    '%.RetrieveAsyncListObjArray unsupported on this DB', [self]);
+  async := NewEngineRetrieveAsync(Context, Table);
+  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv,
+    FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere));
+  async.ResultArray := OnResult;
+  async.Execute;
 end;
 
 function TRestOrm.RTreeMatch(DataTable: TOrmClass;
@@ -2534,6 +2578,54 @@ function TRestOrm.GetCurrentSessionUserID: TID;
 begin
   result := fRest.GetCurrentSessionUserID;
 end;
+
+
+{ TRestOrmEngineRetrieveAsync }
+
+procedure TRestOrmEngineRetrieveAsync.OnResult(const Json: RawUtf8);
+var
+  value: TOrm;
+  arr: TOrmObjArray;
+  t: TOrmTable;
+begin
+  try
+    if Assigned(ResultJson) then
+      ResultJson(Json, Context)
+    else if Assigned(ResultOne) then
+      if Json = '' then
+        ResultOne(nil, Context) // db error
+      else
+      begin
+        Value := Table.Create;
+        try
+          Value.FillFrom(Json);
+          Value.IDValue := ID;
+          ResultOne(value, Context);
+        finally
+          Value.Free;
+        end;
+      end
+    else if Assigned(ResultArray) then
+      if Json = '' then
+        ResultArray(nil, Context) // db error
+      else
+      try
+        t := TOrmTableJson.CreateFromTables([Table], Sql, Json,
+          {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1);
+        try
+          t.ToObjArray(t, Table);
+        finally
+          t.Free;
+        end;
+        ResultArray(@arr, Context);
+      finally
+        ObjArrayClear(arr);
+      end;
+  except
+  end;
+  Free; // we don't need this temporary instance any more
+end;
+
 
 
 { ************ TOrmTableWritable Read/Write TOrmTable }
