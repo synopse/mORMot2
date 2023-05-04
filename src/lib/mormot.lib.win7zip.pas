@@ -2453,7 +2453,7 @@ end;
 procedure T7zWriter.AddBuffer(const ZipName: RawUtf8;
   const Data: RawByteString);
 begin
-  AddStream(TRawByteStringStream.Create(Data), soOwned,
+  AddStream(TRawByteStringStream.Create(Data), soReference,
     faArchive, 0, 0, ZipName, {isfolder=}false, {isanti=}false);
 end;
 

@@ -6342,6 +6342,7 @@ begin
       s := zin.Extract('C.1mb');
       Check(s = '', 'c');
       zin := nil; // so that we could change the file
+      zout := nil;
       zout := New7zWriter(newfile1, fhUndefined, lib);
       zout.SetProgressCallback(Callback7z);
       Tot7z := 0;
