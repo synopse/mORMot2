@@ -104,6 +104,9 @@ type
   // - not used direcly, but as specialized T*ObjArray types
   TOrmObjArray = array of TOrm;
 
+  /// pointer to a dynamic array storing TOrm instances
+  POrmObjArray = ^TOrmObjArray;
+
   /// a dynamic array used to store the TOrm classes in a Database Model
   TOrmClassDynArray = array of TOrmClass;
 
@@ -115,6 +118,9 @@ type
 
   /// exception raised in case of wrong Model definition
   EModelException = class(EOrmException);
+
+  /// exception raised in case of IRestOrm asynchronous methods problem
+  EOrmAsyncException = class(EOrmException);
 
 
   { -------------------- ORM Specific TOrmPropInfoRtti Classes }
@@ -187,6 +193,20 @@ type
 
 
   { -------------------- IRestOrm IRestOrmServer IRestOrmClient Definitions }
+
+  /// event signature for the IRestOrm.RetrieveAsync() callback
+  // - is called with Value = nil on any DB fatal error
+  // - function should call Value.Free when finished with it
+  TOnRestOrmRetrieveOne = procedure(Value: TOrm; Context: TObject) of object;
+
+  /// event signature for the IRestOrm.RetrieveAsyncListJson() callback
+  // - is called with Json = '' on any DB fatal error
+  TOnRestOrmRetrieveJson = procedure(const Json: RawJson; Context: TObject) of object;
+
+  /// event signature for the IRestOrm.RetrieveAsyncListObjArray() callback
+  // - is called with Values = nil on any DB fatal error
+  // - caller will clear Values^[] once the callback returns
+  TOnRestOrmRetrieveArray = procedure(Values: POrmObjArray; Context: TObject) of object;
 
   /// Object-Relational-Mapping calls for CRUD access to a database
   // - as implemented in TRest.ORM
@@ -456,6 +476,37 @@ type
     // - is just a wrapper around Retrieve(aPublishedRecord.ID,aValue)
     // - return true on success
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
+
+    /// get a member from some SQL, calling a callback when the result is ready
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass; const SqlWhere: RawUtf8;
+      const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8 = ''); overload;
+    /// get a member from some SQL, calling a callback when the result is ready
+    // - if FieldsCsv is '', will get all simple fields, excluding BLOBs
+    // - if FieldsCsv is '*', will get ALL fields, including ID and BLOBs
+    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass;
+      const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
+      const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8 = ''); overload;
+    /// get a member from its ID, calling a callback when the result is ready
+    // - Execute 'SELECT * FROM TableName WHERE ID=:(aID): LIMIT 1' SQL Statememt
+    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    // - in difference to Retrieve(ID), won't try to use the cache
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass; ID: TID;
+      const OnResult: TOnRestOrmRetrieveOne); overload;
+    /// get some members from some SQL, calling a callback when the JSON is ready
+    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    procedure RetrieveAsyncListJson(Context: TObject; Table: TOrmClass;
+      const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveJson;
+      const FieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false); overload;
+    /// get some members from some SQL, calling a callback with a TOrm array
+    // - raise EOrmAsyncException if not over a PostgreSQL external database
+    procedure RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8 = '');
+
     /// get a known TOrm instance JSON representation
     // - a slightly faster alternative to Value.GetJsonValues
     procedure GetJsonValue(Value: TOrm; withID: boolean;

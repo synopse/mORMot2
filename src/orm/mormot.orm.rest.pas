@@ -331,6 +331,20 @@ type
     function Retrieve(Reference: TRecordReference;
       ForUpdate: boolean = false): TOrm; overload;
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass; const SqlWhere: RawUtf8;
+      const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8 = ''); overload;
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass; const WhereClauseFmt: RawUtf8;
+      const Args, Bounds: array of const; const OnResult: TOnRestOrmRetrieveOne;
+      const FieldsCsv: RawUtf8 = ''); overload;
+    procedure RetrieveAsync(Context: TObject; Table: TOrmClass; ID: TID;
+      const OnResult: TOnRestOrmRetrieveOne); overload;
+    procedure RetrieveAsyncListJson(Context: TObject; Table: TOrmClass;
+      const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveJson;
+      const FieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false); overload;
+    procedure RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8 = '');
+
     function RetrieveList(Table: TOrmClass;
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const CustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
@@ -1622,6 +1636,47 @@ begin
   finally
     Rec.Free;
   end;
+end;
+
+procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
+  const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8);
+begin
+  raise EOrmAsyncException.CreateUtf8(
+    '%.RetrieveAsync unsupported on this DB', [self]);
+end;
+
+procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
+  const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
+  const OnResult: TOnRestOrmRetrieveOne; const FieldsCsv: RawUtf8);
+var
+  where: RawUtf8;
+begin
+  where := FormatUtf8(WhereClauseFmt, Args, Bounds);
+  RetrieveAsync(Context, Table, where, OnResult, FieldsCsv);
+end;
+
+procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass; ID: TID;
+  const OnResult: TOnRestOrmRetrieveOne);
+begin
+  raise EOrmAsyncException.CreateUtf8(
+    '%.RetrieveAsync unsupported on this DB', [self]);
+end;
+
+procedure TRestOrm.RetrieveAsyncListJson(Context: TObject; Table: TOrmClass;
+  const SqlWhere: RawUtf8; const OnResult: TOnRestOrmRetrieveJson;
+  const FieldsCsv: RawUtf8; aForceAjax: boolean);
+begin
+  raise EOrmAsyncException.CreateUtf8(
+    '%.RetrieveAsyncListJson unsupported on this DB', [self]);
+end;
+
+procedure TRestOrm.RetrieveAsyncListObjArray(Context: TObject;
+  Table: TOrmClass; const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const;
+  const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8);
+begin
+  raise EOrmAsyncException.CreateUtf8(
+    '%.RetrieveAsyncListObjArray unsupported on this DB', [self]);
 end;
 
 function TRestOrm.RTreeMatch(DataTable: TOrmClass;
