@@ -1951,7 +1951,7 @@ begin
   fOrm := aRest;
   fTable := aTable;
   fData := aData;
-  fUriContext := ServiceRunningContext^.Request;
+  fUriContext := ServiceRunningRequest;
   fRunningBatchEncoding := encPost;
   fRunTableIndex := -1;
 end;

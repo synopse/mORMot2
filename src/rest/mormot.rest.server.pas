@@ -2523,6 +2523,11 @@ function ToText(n: TRestNode): PShortString; overload;
 function ServiceRunningContext: PServiceRunningContext;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns the thread-specific REST server execution context
+// - just a wrapper around ServiceRunningContext^.Request
+function ServiceRunningRequest: TRestServerUriContext;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
@@ -2747,6 +2752,13 @@ end;
 function ServiceRunningContext: PServiceRunningContext;
 begin
   result := PerThreadRunningContextAddress; // from mormot.core.interfaces.pas
+end;
+
+function ServiceRunningRequest: TRestServerUriContext;
+begin
+  result := PerThreadRunningContextAddress; // from mormot.core.interfaces.pas
+  if result <> nil then
+    result := PServiceRunningContext(result).Request; // avoid GPF
 end;
 
 function ToText(n: TRestNode): PShortString;
@@ -5126,18 +5138,18 @@ end;
 procedure CurrentNonce(Ctxt: TRestServerUriContext; Previous: boolean;
   Nonce: PRawUtf8; Nonce256: PHash256; Tix64: Int64);
 var
-  ticks: cardinal;
+  tix32: cardinal;
 begin
   if Tix64 = 0 then
     Tix64 := Ctxt.TickCount64;
-  ticks := Tix64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
+  tix32 := Tix64 shr 18; // 4.3 minutes resolution - Ctxt may be nil
   if Previous then
-    dec(ticks);
+    dec(tix32);
   with ServerNonceCache[Previous] do
   begin
     ServerNonceSafe.Lock;
-    if (ticks = tix) and
-       (res <> '') then  // check for res='' since ticks may be 0 at startup
+    if (tix32 = tix) and
+       (res <> '') then  // check for res='' since tix32 may be 0 at startup
     begin
       // fast retrieval from cache as binary or hexadecimal
       if Nonce256 <> nil then
@@ -5149,7 +5161,7 @@ begin
     end;
     ServerNonceSafe.UnLock;
     // we need to (re)compute this value
-    CurrentServerNonceCompute(ticks, Previous, Nonce, Nonce256);
+    CurrentServerNonceCompute(tix32, Previous, Nonce, Nonce256);
   end;
 end;
 
