@@ -633,7 +633,7 @@ procedure TTestExternalDatabase._SynDBRemote;
 var
   Props: TSqlDBConnectionProperties;
 
-  procedure DoTest(proxy: TSqlDBConnectionProperties; msg: PUTF8Char);
+  procedure DoTest(proxy: TSqlDBConnectionProperties; msg: PUtf8Char);
 
     procedure DoTests;
     var

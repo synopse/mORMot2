@@ -2468,10 +2468,10 @@ begin
     else
       dec := content;
     head.Algo := Algo;
-    c := TAesFast[ECIES_AES[Algo]];
     if Algo in ECIES_AEAD then
     begin
       // encrypt e.g. with AES-GCM single pass message authentication
+      c := TAesFast[ECIES_AES[Algo]];
       case ECIES_AESSIZE[Algo] of
         128:
           enc := c.MacEncrypt(dec, aeskey.Lo, {encrypt=}true);
@@ -2486,8 +2486,7 @@ begin
     else
     begin
       // encrypt with PKCS7 padding
-      enc := c.SimpleEncrypt(
-        dec, aeskey, ECIES_AESSIZE[Algo], true, true);
+      enc := AesPkcs7(dec, {encrypt=}true, aeskey, ECIES_AESSIZE[Algo], ECIES_AES[Algo]);
       // HMAC of the encrypted content
       Pbkdf2HmacSha256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
       HmacSha256(mackey.b, enc, head.hmac);
@@ -3106,10 +3105,10 @@ begin
       exit;
     result := ecdInvalidMAC;
     Pbkdf2HmacSha256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
-    c := TAesFast[ECIES_AES[head.Algo]];
     if head.Algo in ECIES_AEAD then
     begin
       // decrypt e.g. with AES-GCM single pass message authentication
+      c := TAesFast[ECIES_AES[head.Algo]];
       case ECIES_AESSIZE[head.Algo] of
         128:
           enc := c.MacEncrypt(dec{%H-}, aeskey.Lo, {encrypt=}false);
@@ -3129,8 +3128,8 @@ begin
         exit;
       // decrypt the content
       FastSetRawByteString(enc, data, datalen);
-      dec := c.SimpleEncrypt(
-        enc, aeskey, ECIES_AESSIZE[head.Algo], false, true);
+      dec := AesPkcs7(enc, {encrypt=}false,
+        aeskey, ECIES_AESSIZE[head.Algo], ECIES_AES[head.Algo]);
     end;
     if head.Algo in ECIES_SYNLZ then
       AlgoSynLZ.Decompress(pointer(dec), length(dec), Decrypted)
