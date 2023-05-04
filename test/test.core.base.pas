@@ -4867,9 +4867,15 @@ begin
   Check(MakePath([1, 2, 3], true, '/') = '1/2/3/');
   Check(MakeFileName([]) = '');
   Check(MakeFileName(['toto', 'doc']) = 'toto.doc');
+  {$ifdef OSWINDOWS}
+  Check(MakeFileName([1, 2, 'doc'], false) = '1\2\doc');
+  Check(MakeFileName([1, 2, 'doc'], true) = '1\2.doc');
+  Check(MakeFileName([1, 2, '.doc'], true) = '1\2.doc');
+  {$else}
   Check(MakeFileName([1, 2, 'doc'], false) = '1/2/doc');
   Check(MakeFileName([1, 2, 'doc'], true) = '1/2.doc');
   Check(MakeFileName([1, 2, '.doc'], true) = '1/2.doc');
+  {$endif OSWINDOWS}
   Check(MakeCsv([]) = '');
   Check(MakeCsv([], true) = '');
   Check(MakeCsv([1]) = '1');
