@@ -5183,7 +5183,7 @@ type
 
 const
   /// CSV text of TAesPrngGetEntropySource items
-  RndAlgosText: PUTF8Char =
+  RndAlgosText: PUtf8Char =
     'rnd-entropy,rnd-entropysys,rnd-entropysysblocking,rnd-entropyuser';
 
 constructor TCryptRandomEntropy.Create(const name: RawUtf8);

@@ -11369,7 +11369,8 @@ function CRYPTO_get_ex_data(ad: PCRYPTO_EX_DATA; idx: integer): pointer; cdecl;
 function CRYPTO_set_mem_debug(flag: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_debug';
 
-procedure CRYPTO_get_mem_functions(m: integer { TODO : Cannot convert original type "void *(**)(size_t, const char *, int)" }; r: integer { TODO : Cannot convert original type "void *(**)(void *, size_t, const char *, int)" }; f: integer { TODO : Cannot convert original type "void (**)(void *, const char *, int)" }); cdecl;
+procedure CRYPTO_get_mem_functions(m: integer; r, f: integer); cdecl;
+  { TODO : Cannot convert original type "void (**)(void *, const char *, int)" }
   external LIB_CRYPTO name _PU + 'CRYPTO_get_mem_functions';
 
 function CRYPTO_zalloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
@@ -11895,10 +11896,12 @@ function BIO_meth_new(typ: integer; name: PUtf8Char): PBIO_METHOD; cdecl;
 procedure BIO_meth_free(biom: PBIO_METHOD); cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_free';
 
-//function BIO_meth_get_write(p1: PBIOp2: PUTF8Charp3: Integerbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, const char *, int)" }; cdecl;
+//function BIO_meth_get_write(p1: PBIO; p2: PUTF8Char; p3: Integer; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *, const char *, int)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_write';
 
-//function BIO_meth_get_write_ex(p1: PBIOp2: PUTF8Charp3: PtrUIntp4: PPtrUIntbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, const char *, size_t, size_t *)" }; cdecl;
+//function BIO_meth_get_write_ex(p1: PBIO; p2: PUTF8Char; p3: PtrUIntp4: PPtrUInt; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *, const char *, size_t, size_t *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_write_ex';
 
 function BIO_meth_set_write(biom: PBIO_METHOD; write: BIO_meth_set_write_write): integer; cdecl;
@@ -11907,10 +11910,12 @@ function BIO_meth_set_write(biom: PBIO_METHOD; write: BIO_meth_set_write_write):
 function BIO_meth_set_write_ex(biom: PBIO_METHOD; bwrite: BIO_meth_set_write_ex_bwrite): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_write_ex';
 
-//function BIO_meth_get_read(p1: PBIOp2: PUTF8Charp3: Integerbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, char *, int)" }; cdecl;
+//function BIO_meth_get_read(p1: PBIO; p2: PUTF8Char; p3: Integer; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *, char *, int)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_read';
 
-//function BIO_meth_get_read_ex(p1: PBIOp2: PUTF8Charp3: PtrUIntp4: PPtrUIntbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, char *, size_t, size_t *)" }; cdecl;
+//function BIO_meth_get_read_ex(p1: PBIO; p2: PUTF8Char; p3: PtrUInt; p4: PPtrUInt; biom: PBIO_METHOD): integer
+{ TODO : Cannot convert original type "int (*)(BIO *, char *, size_t, size_t *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_read_ex';
 
 function BIO_meth_set_read(biom: PBIO_METHOD; read: BIO_meth_set_read_read): integer; cdecl;
@@ -11919,40 +11924,47 @@ function BIO_meth_set_read(biom: PBIO_METHOD; read: BIO_meth_set_read_read): int
 function BIO_meth_set_read_ex(biom: PBIO_METHOD; bread: BIO_meth_set_read_ex_bread): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_read_ex';
 
-//function BIO_meth_get_puts(p1: PBIOp2: PUTF8Charbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, const char *)" }; cdecl;
+//function BIO_meth_get_puts(p1: PBIOp2: PUTF8Char; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *, const char *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_puts';
 
 function BIO_meth_set_puts(biom: PBIO_METHOD; puts: BIO_meth_set_puts_puts): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_puts';
 
-//function BIO_meth_get_gets(p1: PBIOp2: PUTF8Charp3: Integerbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *, char *, int)" }; cdecl;
+//function BIO_meth_get_gets(p1: PBIO; p2: PUTF8Char; p3: Integer; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *, char *, int)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_gets';
 
 function BIO_meth_set_gets(biom: PBIO_METHOD; gets: BIO_meth_set_gets_gets): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_gets';
 
-//function BIO_meth_get_ctrl(p1: PBIOp2: Integerp3: Integerp4: Pointerbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "long (*)(BIO *, int, long, void *)" }; cdecl;
+//function BIO_meth_get_ctrl(p1: PBIOp2: Integer; p3, p4: Pointer; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "long (*)(BIO *, int, long, void *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_ctrl';
 
 function BIO_meth_set_ctrl(biom: PBIO_METHOD; ctrl: BIO_meth_set_ctrl_ctrl): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_ctrl';
 
-//function BIO_meth_get_create(p1: PBIObion: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *)" }; cdecl;
+//function BIO_meth_get_create(p1: PBIO; bion: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_create';
 
 function BIO_meth_set_create(biom: PBIO_METHOD; create: BIO_meth_set_create_create): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_create';
 
-//function BIO_meth_get_destroy(p1: PBIObiom: PBIO_METHOD): integer { TODO : Cannot convert original type "int (*)(BIO *)" }; cdecl;
+//function BIO_meth_get_destroy(p1: PBIO; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "int (*)(BIO *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_destroy';
 
 function BIO_meth_set_destroy(biom: PBIO_METHOD; destroy: BIO_meth_set_destroy_destroy): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_destroy';
 
-//function BIO_meth_get_callback_ctrl(p1: PBIOp2: Integerp3: PBIO_info_cbbiom: PBIO_METHOD): integer { TODO : Cannot convert original type "long (*)(BIO *, int, BIO_info_cb *)" }; cdecl;
+//function BIO_meth_get_callback_ctrl(p1: PBIO; p2: Integer; p3: PBIO_info_cb; biom: PBIO_METHOD): integer;
+{ TODO : Cannot convert original type "long (*)(BIO *, int, BIO_info_cb *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BIO_meth_get_callback_ctrl';
 
-function BIO_meth_set_callback_ctrl(biom: PBIO_METHOD; callback_ctrl: BIO_meth_set_callback_ctrl_callback_ctrl): integer; cdecl;
+function BIO_meth_set_callback_ctrl(biom: PBIO_METHOD;
+    callback_ctrl: BIO_meth_set_callback_ctrl_callback_ctrl): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BIO_meth_set_callback_ctrl';
 
 function ERR_load_ASN1_strings(): integer; cdecl;
@@ -12470,7 +12482,8 @@ function BN_get0_nist_prime_384(): PBIGNUM; cdecl;
 function BN_get0_nist_prime_521(): PBIGNUM; cdecl;
   external LIB_CRYPTO name _PU + 'BN_get0_nist_prime_521';
 
-//function BN_nist_mod_func(r: PBIGNUMa: PBIGNUMfield: PBIGNUMctx: PBN_CTXp: PBIGNUM): integer { TODO : Cannot convert original type "int (*)(BIGNUM *, const BIGNUM *, const BIGNUM *, BN_CTX *)" }; cdecl;
+//function BN_nist_mod_func(r: PBIGNUM; a: PBIGNUM; field: PBIGNUM; ctx: PBN_CTX; p: PBIGNUM): integer;
+{ TODO : Cannot convert original type "int (*)(BIGNUM *, const BIGNUM *, const BIGNUM *, BN_CTX *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'BN_nist_mod_func';
 
 function BN_generate_dsa_nonce(_out: PBIGNUM; range: PBIGNUM; priv: PBIGNUM; _message: PByte; message_len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
@@ -13598,22 +13611,28 @@ function EVP_MD_meth_get_app_datasize(md: PEVP_MD): integer; cdecl;
 function EVP_MD_meth_get_flags(md: PEVP_MD): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_flags';
 
-//function EVP_MD_meth_get_init(ctx: PEVP_MD_CTXmd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *)" }; cdecl;
+//function EVP_MD_meth_get_init(ctx: PEVP_MD_CTXmd: PEVP_MD): integer;
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_init';
 
-//function EVP_MD_meth_get_update(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntmd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
+//function EVP_MD_meth_get_update(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntmd: PEVP_MD): integer;
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_update';
 
-//function EVP_MD_meth_get_final(ctx: PEVP_MD_CTXmd: PBytemd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, unsigned char *)" }; cdecl;
+//function EVP_MD_meth_get_final(ctx: PEVP_MD_CTXmd: PBytemd: PEVP_MD): integer
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, unsigned char *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_final';
 
-//function EVP_MD_meth_get_copy(_to: PEVP_MD_CTXfrom: PEVP_MD_CTXmd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const EVP_MD_CTX *)" }; cdecl;
+//function EVP_MD_meth_get_copy(_to: PEVP_MD_CTXfrom: PEVP_MD_CTXmd: PEVP_MD): integer
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const EVP_MD_CTX *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_copy';
 
-//function EVP_MD_meth_get_cleanup(ctx: PEVP_MD_CTXmd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *)" }; cdecl;
+//function EVP_MD_meth_get_cleanup(ctx: PEVP_MD_CTXmd: PEVP_MD): integer
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_cleanup';
 
-//function EVP_MD_meth_get_ctrl(ctx: PEVP_MD_CTXcmd: Integerp1: Integerp2: Pointermd: PEVP_MD): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, int, int, void *)" }; cdecl;
+//function EVP_MD_meth_get_ctrl(ctx: PEVP_MD_CTXcmd: Integerp1: Integerp2: Pointermd: PEVP_MD): integer
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, int, int, void *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_meth_get_ctrl';
 
 function EVP_CIPHER_meth_new(cipher_type: integer; block_size: integer; key_len: integer): PEVP_CIPHER; cdecl;
@@ -13652,22 +13671,28 @@ function EVP_CIPHER_meth_set_get_asn1_params(cipher: PEVP_CIPHER; get_asn1_param
 function EVP_CIPHER_meth_set_ctrl(cipher: PEVP_CIPHER; ctrl: EVP_CIPHER_meth_set_ctrl_ctrl): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_set_ctrl';
 
-//function EVP_CIPHER_meth_get_init(ctx: PEVP_CIPHER_CTXkey: PByteiv: PByteenc: Integercipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, const unsigned char *, const unsigned char *, int)" }; cdecl;
+//function EVP_CIPHER_meth_get_init(ctx: PEVP_CIPHER_CTXkey: PByteiv: PByteenc: Integercipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, const unsigned char *, const unsigned char *, int)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_init';
 
-//function EVP_CIPHER_meth_get_do_cipher(ctx: PEVP_CIPHER_CTX_out: PByte_in: PByteinl: PtrUIntcipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, unsigned char *, const unsigned char *, size_t)" }; cdecl;
+//function EVP_CIPHER_meth_get_do_cipher(ctx: PEVP_CIPHER_CTX_out: PByte_in: PByteinl: PtrUIntcipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, unsigned char *, const unsigned char *, size_t)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_do_cipher';
 
-//function EVP_CIPHER_meth_get_cleanup(p1: PEVP_CIPHER_CTXcipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *)" }; cdecl;
+//function EVP_CIPHER_meth_get_cleanup(p1: PEVP_CIPHER_CTXcipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_cleanup';
 
-//function EVP_CIPHER_meth_get_set_asn1_params(p1: PEVP_CIPHER_CTXp2: PASN1_TYPEcipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, ASN1_TYPE *)" }; cdecl;
+//function EVP_CIPHER_meth_get_set_asn1_params(p1: PEVP_CIPHER_CTXp2: PASN1_TYPEcipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, ASN1_TYPE *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_set_asn1_params';
 
-//function EVP_CIPHER_meth_get_get_asn1_params(p1: PEVP_CIPHER_CTXp2: PASN1_TYPEcipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, ASN1_TYPE *)" }; cdecl;
+//function EVP_CIPHER_meth_get_get_asn1_params(p1: PEVP_CIPHER_CTXp2: PASN1_TYPEcipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, ASN1_TYPE *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_get_asn1_params';
 
-//function EVP_CIPHER_meth_get_ctrl(p1: PEVP_CIPHER_CTX&type: Integerarg: Integerptr: Pointercipher: PEVP_CIPHER): integer { TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, int, int, void *)" }; cdecl;
+//function EVP_CIPHER_meth_get_ctrl(p1: PEVP_CIPHER_CTX&type: Integerarg: Integerptr: Pointercipher: PEVP_CIPHER): integer
+{ TODO : Cannot convert original type "int (*)(EVP_CIPHER_CTX *, int, int, void *)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_CIPHER_meth_get_ctrl';
 
 function EVP_MD_type(md: PEVP_MD): integer; cdecl;
@@ -13679,7 +13704,8 @@ function EVP_MD_pkey_type(md: PEVP_MD): integer; cdecl;
 function EVP_MD_block_size(md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_block_size';
 
-//function EVP_MD_CTX_update_fn(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntctx: PEVP_MD_CTX): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
+//function EVP_MD_CTX_update_fn(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntctx: PEVP_MD_CTX): integer
+{ TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_update_fn';
 
 procedure EVP_MD_CTX_set_update_fn(ctx: PEVP_MD_CTX; update: EVP_MD_CTX_set_update_fn_update); cdecl;
@@ -14907,31 +14933,44 @@ procedure EVP_PKEY_meth_set_param_check(pmeth: PEVP_PKEY_METHOD; check: EVP_PKEY
 procedure EVP_PKEY_meth_set_digest_custom(pmeth: PEVP_PKEY_METHOD; digest_custom: EVP_PKEY_meth_set_digest_custom_digest_custom); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_set_digest_custom';
 
-procedure EVP_PKEY_meth_get_init(pmeth: PEVP_PKEY_METHOD; pinit: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }); cdecl;
+procedure EVP_PKEY_meth_get_init(pmeth: PEVP_PKEY_METHOD; pinit: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_init';
 
-procedure EVP_PKEY_meth_get_copy(pmeth: PEVP_PKEY_METHOD; pcopy: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY_CTX *)" }); cdecl;
+procedure EVP_PKEY_meth_get_copy(pmeth: PEVP_PKEY_METHOD; pcopy: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY_CTX *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_copy';
 
-procedure EVP_PKEY_meth_get_cleanup(pmeth: PEVP_PKEY_METHOD; pcleanup: integer { TODO : Cannot convert original type "void (**)(EVP_PKEY_CTX *)" }); cdecl;
+procedure EVP_PKEY_meth_get_cleanup(pmeth: PEVP_PKEY_METHOD; pcleanup: integer
+  { TODO : Cannot convert original type "void (**)(EVP_PKEY_CTX *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_cleanup';
 
-procedure EVP_PKEY_meth_get_paramgen(pmeth: PEVP_PKEY_METHOD; pparamgen_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pparamgen: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY *)" }); cdecl;
+procedure EVP_PKEY_meth_get_paramgen(pmeth: PEVP_PKEY_METHOD; pparamgen_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pparamgen: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_paramgen';
 
-procedure EVP_PKEY_meth_get_keygen(pmeth: PEVP_PKEY_METHOD; pkeygen_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pkeygen: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY *)" }); cdecl;
+procedure EVP_PKEY_meth_get_keygen(pmeth: PEVP_PKEY_METHOD; pkeygen_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pkeygen: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_PKEY *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_keygen';
 
-procedure EVP_PKEY_meth_get_sign(pmeth: PEVP_PKEY_METHOD; psign_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; psign: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, const unsigned char *, size_t)" }); cdecl;
+procedure EVP_PKEY_meth_get_sign(pmeth: PEVP_PKEY_METHOD; psign_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; psign: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, const unsigned char *, size_t)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_sign';
 
-procedure EVP_PKEY_meth_get_verify(pmeth: PEVP_PKEY_METHOD; pverify_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pverify: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, const unsigned char *, size_t, const unsigned char *, size_t)" }); cdecl;
+procedure EVP_PKEY_meth_get_verify(pmeth: PEVP_PKEY_METHOD; pverify_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pverify: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, const unsigned char *, size_t, const unsigned char *, size_t)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_verify';
 
-procedure EVP_PKEY_meth_get_verify_recover(pmeth: PEVP_PKEY_METHOD; pverify_recover_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pverify_recover: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, const unsigned char *, size_t)" }); cdecl;
+procedure EVP_PKEY_meth_get_verify_recover(pmeth: PEVP_PKEY_METHOD; pverify_recover_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *)" }; pverify_recover: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, const unsigned char *, size_t)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_verify_recover';
 
-procedure EVP_PKEY_meth_get_signctx(pmeth: PEVP_PKEY_METHOD; psignctx_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_MD_CTX *)" }; psignctx: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, EVP_MD_CTX *)" }); cdecl;
+procedure EVP_PKEY_meth_get_signctx(pmeth: PEVP_PKEY_METHOD; psignctx_init: integer
+  { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_MD_CTX *)" }; psignctx: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, unsigned char *, size_t *, EVP_MD_CTX *)" }); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get_signctx';
 
 procedure EVP_PKEY_meth_get_verifyctx(pmeth: PEVP_PKEY_METHOD; pverifyctx_init: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, EVP_MD_CTX *)" }; pverifyctx: integer { TODO : Cannot convert original type "int (**)(EVP_PKEY_CTX *, const unsigned char *, int, EVP_MD_CTX *)" }); cdecl;
