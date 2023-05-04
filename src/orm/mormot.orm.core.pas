@@ -3864,7 +3864,7 @@ type
     /// pre-computed SQL statements for this external TOrm in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSql was set to true in Init() method
-    property SQL: TOrmModelPropertiesSql
+    property Sql: TOrmModelPropertiesSql
       read fSql;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
@@ -7714,16 +7714,16 @@ var
   props: TOrmModelProperties;
   T: TOrmTable;
   instance: TOrm;
-  SQL: RawUtf8;
+  sql: RawUtf8;
 begin
   InternalCreate;
   props := aClient.Model.Props[POrmClass(self)^];
   if props.props.JoinedFields = nil then
     raise EModelException.CreateUtf8('No nested TOrm to JOIN in %', [self]);
-  SQL := props.SQL.SelectAllJoined;
+  sql := props.Sql.SelectAllJoined;
   if aFormatSQLJoin <> '' then
-    SQL := SQL + FormatUtf8(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
-  T := aClient.ExecuteList(props.props.JoinedFieldsTable, SQL);
+    sql := sql + FormatUtf8(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
+  T := aClient.ExecuteList(props.props.JoinedFieldsTable, sql);
   if T = nil then
     exit;
   fFill := TOrmFill.Create;
@@ -7732,7 +7732,7 @@ begin
   fFill.fTable.OwnerMustFree := true;
   n := 0;
   with props.props do
-  begin // follow SQL.SelectAllJoined columns
+  begin // follow sql.SelectAllJoined columns
     fFill.AddMapSimpleFields(self, SimpleFields, n);
     for i := 1 to length(JoinedFieldsTable) - 1 do
     begin
@@ -8812,7 +8812,7 @@ var
   begin
     for i := 0 to high(Classes) do
     begin
-      Select := Select + Classes[i].SQL.TableSimpleFields[True, True];
+      Select := Select + Classes[i].Sql.TableSimpleFields[True, True];
       if i < high(Classes) then
         Select := Select + ',';
     end;
@@ -9606,7 +9606,7 @@ begin
           W.Add(' LEFT JOIN % AS % ON %.%=%.RowID',
             [SqlTableName, aFieldName, aTableName, aFieldName, aFieldName]);
       end;
-      W.SetText(Props.SQL.SelectAllJoined);
+      W.SetText(Props.Sql.SelectAllJoined);
     finally
       W.Free;
     end;
@@ -10018,12 +10018,12 @@ begin
   if SqlSelect = '*' then
      // don't send BLOB values to query: retrieve all other fields
     if high(Tables) = 0 then
-      result := 'SELECT ' + {%H-}p[0].SQL.TableSimpleFields[true, false]
+      result := 'SELECT ' + {%H-}p[0].Sql.TableSimpleFields[true, false]
     else
     begin
-      result := 'SELECT ' + p[0].SQL.TableSimpleFields[true, true];
+      result := 'SELECT ' + p[0].Sql.TableSimpleFields[true, true];
       for i := 1 to high(Tables) do
-        result := result + ',' + p[i].SQL.TableSimpleFields[true, true];
+        result := result + ',' + p[i].Sql.TableSimpleFields[true, true];
     end
   else
     result := 'SELECT ' + SqlSelect;
@@ -10342,10 +10342,10 @@ begin // similar to TOrmMapping.ComputeSql
         if OrmFieldType in COPIABLE_FIELDS then
         begin // oftMany fields do not exist
           // pre-computation of SQL statements
-          SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
-          SQL.InsertSet := SQL.InsertSet + Name + ',';
+          Sql.UpdateSetAll := Sql.UpdateSetAll + Name + '=?,';
+          Sql.InsertSet := Sql.InsertSet + Name + ',';
           if FieldBitGet(SimpleFieldsBits[ooUpdate], f) then
-            SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
+            Sql.UpdateSetSimple := Sql.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
           if FieldBitGet(IsUniqueFieldsBits, f) then
           begin
@@ -10356,10 +10356,10 @@ begin // similar to TOrmMapping.ComputeSql
             AddFilterOrValidate(f, TSynValidateUniqueField.Create);
           end;
         end;
-  SetLength(SQL.InsertSet, length(SQL.InsertSet) - 1);
-  SetLength(SQL.UpdateSetAll, length(SQL.UpdateSetAll) - 1); // 'COL1=?,COL2=?'
-  if SQL.UpdateSetSimple <> '' then
-    SetLength(SQL.UpdateSetSimple, length(SQL.UpdateSetSimple) - 1); // 'COL1=?,COL2=?'
+  SetLength(Sql.InsertSet, length(Sql.InsertSet) - 1);
+  SetLength(Sql.UpdateSetAll, length(Sql.UpdateSetAll) - 1); // 'COL1=?,COL2=?'
+  if Sql.UpdateSetSimple <> '' then
+    SetLength(Sql.UpdateSetSimple, length(Sql.UpdateSetSimple) - 1); // 'COL1=?,COL2=?'
   Props.InternalRegisterModel(aModel, aModel.GetTableIndexExisting(aTable), self);
 end;
 
@@ -10373,7 +10373,7 @@ begin
   fFtsWithoutContentFields := aSource.fFtsWithoutContentFields;
   fProps := aSource.fProps;
   fKind := aSource.Kind;
-  SQL := aSource.SQL;
+  Sql := aSource.Sql;
   ExternalDB := aSource.ExternalDB;
   Props.InternalRegisterModel(fModel, fModel.GetTableIndexExisting(fProps.Table), self);
 end;
@@ -10452,26 +10452,26 @@ begin
       end;
   end;
   fKind := Value;
-  // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-  SQL.TableSimpleFields[false, false] := ComputeSimpleFields(false, false);
-  SQL.TableSimpleFields[false, true]  := ComputeSimpleFields(false, true);
-  SQL.TableSimpleFields[true, false]  := ComputeSimpleFields(true, false);
-  SQL.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
-  if Props.SqlTableSimpleFieldsNoRowID <> SQL.TableSimpleFields[false, false] then
+  // Sql.TableSimpleFields[withID: boolean; withTableName: boolean]
+  Sql.TableSimpleFields[false, false] := ComputeSimpleFields(false, false);
+  Sql.TableSimpleFields[false, true]  := ComputeSimpleFields(false, true);
+  Sql.TableSimpleFields[true, false]  := ComputeSimpleFields(true, false);
+  Sql.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
+  if Props.SqlTableSimpleFieldsNoRowID <> Sql.TableSimpleFields[false, false] then
     raise EModelException.CreateUtf8('SetKind(%)', [Props.Table]);
-  SQL.SelectAllWithRowID := SqlFromSelectWhere('*', '');
-  SQL.SelectAllWithID := SQL.SelectAllWithRowID;
-  if IdemPChar(PUtf8Char(pointer(SQL.SelectAllWithID)) + 7, 'ROWID') then
-    delete(SQL.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
-  SQL.SelectOneWithID := FormatUtf8('SELECT % FROM % WHERE RowID=?',
-    [SQL.TableSimpleFields[true, false], Props.SqlTableName]);
+  Sql.SelectAllWithRowID := SqlFromSelectWhere('*', '');
+  Sql.SelectAllWithID := Sql.SelectAllWithRowID;
+  if IdemPChar(PUtf8Char(pointer(Sql.SelectAllWithID)) + 7, 'ROWID') then
+    delete(Sql.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
+  Sql.SelectOneWithID := FormatUtf8('SELECT % FROM % WHERE RowID=?',
+    [Sql.TableSimpleFields[true, false], Props.SqlTableName]);
 end;
 
 function TOrmModelProperties.SqlFromSelectWhere(
   const SelectFields, Where: RawUtf8): RawUtf8;
 begin
   result := SqlFromSelect(Props.SqlTableName, SelectFields, Where,
-    SQL.TableSimpleFields[true, false]);
+    Sql.TableSimpleFields[true, false]);
 end;
 
 procedure TOrmModelProperties.Fts4WithoutContent(ContentTable: TOrmClass);
@@ -10591,7 +10591,7 @@ type
   TComputeSqlContent = (
     cTableSimpleFields, cUpdateSimple, cUpdateSetAll, cInsertAll);
 
-  procedure SetSQL(W: TJsonWriter; withID, withTableName: boolean;
+  procedure SetSql(W: TJsonWriter; withID, withTableName: boolean;
     var result: RawUtf8; content: TComputeSqlContent = cTableSimpleFields);
   var
     f: PtrInt;
@@ -10641,18 +10641,18 @@ var
   temp: TTextWriterStackBuffer;
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
-  try // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-    SetSQL(W, false, false, fSql.TableSimpleFields[false, false]);
-    SetSQL(W, false, true, fSql.TableSimpleFields[false, true]);
-    SetSQL(W, true, false, fSql.TableSimpleFields[true, false]);
-    SetSQL(W, true, true, fSql.TableSimpleFields[true, true]);
-    // SQL.SelectAll: array[withRowID: boolean]
+  try // Sql.TableSimpleFields[withID: boolean; withTableName: boolean]
+    SetSql(W, false, false, fSql.TableSimpleFields[false, false]);
+    SetSql(W, false, true, fSql.TableSimpleFields[false, true]);
+    SetSql(W, true, false, fSql.TableSimpleFields[true, false]);
+    SetSql(W, true, true, fSql.TableSimpleFields[true, true]);
+    // Sql.SelectAll: array[withRowID: boolean]
     fSql.SelectAllWithRowID := SqlFromSelect(
       TableName, '*', '', fSql.TableSimpleFields[true, false]);
     fSql.SelectAllWithID := fSql.SelectAllWithRowID;
-    SetSQL(W, false, false, fSql.UpdateSetSimple, cUpdateSimple);
-    SetSQL(W, false, false, fSql.UpdateSetAll, cUpdateSetAll);
-    SetSQL(W, false, false, fSql.InsertSet, cInsertAll);
+    SetSql(W, false, false, fSql.UpdateSetSimple, cUpdateSimple);
+    SetSql(W, false, false, fSql.UpdateSetAll, cUpdateSetAll);
+    SetSql(W, false, false, fSql.InsertSet, cInsertAll);
   finally
     W.Free;
   end;

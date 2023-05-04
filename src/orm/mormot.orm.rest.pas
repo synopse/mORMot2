@@ -87,7 +87,7 @@ type
     fTempJsonWriter: TJsonWriter;
     fTempJsonWriterLock: TLightLock;
     /// compute SELECT ... FROM TABLE WHERE ...
-    function SQLComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+    function SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
       const FieldNames, WhereClause: RawUtf8): RawUtf8;
     /// used by all overloaded Add/Delete methods
     procedure GetJsonValuesForAdd(TableIndex: integer; Value: TOrm;
@@ -609,7 +609,7 @@ begin
   fTempJsonWriter.Free;
 end;
 
-function TRestOrm.SQLComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+function TRestOrm.SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
   const FieldNames, WhereClause: RawUtf8): RawUtf8;
 begin
   result := '';
@@ -1218,7 +1218,7 @@ var
   t: PtrInt;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SQLComputeForSelect(t, Table, FieldNames, WhereClause);
+  sql := SqlComputeForSelect(t, Table, FieldNames, WhereClause);
   result := nil;
   if sql = '' then
     exit;
@@ -1480,7 +1480,7 @@ var
   t: PtrInt;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SQLComputeForSelect(t, Table, FieldsCsv, SqlWhere);
+  sql := SqlComputeForSelect(t, Table, FieldsCsv, SqlWhere);
   if sql = '' then
     result := ''
   else

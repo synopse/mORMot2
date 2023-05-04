@@ -439,7 +439,7 @@ begin
     for i := 0 to n - 1 do
     begin
       fColumnMetaData := fMeta.getColumnMetaData(i);
-      fColumnsMeta[i].SQLType := fColumnMetaData.GetSQLType;
+      fColumnsMeta[i].SqlType := fColumnMetaData.GetSQLType;
       fColumnsMeta[i].CodePage := fColumnMetaData.getCodePage;
       fColumnsMeta[i].Scale := fColumnMetaData.getScale;
       fColumnsMeta[i].Subtype := fColumnMetaData.getSubtype;

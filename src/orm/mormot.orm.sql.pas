@@ -737,7 +737,7 @@ begin
   with fStoredClassMapping^ do
   begin
     FormatUtf8('select % from % where %=?',
-      [SQL.TableSimpleFields[{withid=}true, {withtablename=}false],
+      [Sql.TableSimpleFields[{withid=}true, {withtablename=}false],
        fTableName, RowIDFieldName], fSelectOneDirectSQL); // return ID field
     FormatUtf8('select %,% from %', [sql.InsertSet, RowIDFieldName, fTableName],
       fSelectAllDirectSQL);
@@ -2570,7 +2570,7 @@ begin
      (newRowID > 0) then // don't allow ID change
     with Static as TRestStorageExternal, fStoredClassMapping^ do
       result := ExecuteDirectSqlVar('update % set % where %=?',
-        [fTableName, SQL.UpdateSetAll, RowIDFieldName],
+        [fTableName, Sql.UpdateSetAll, RowIDFieldName],
         Values, oldRowID, true)
   else
     result := false;

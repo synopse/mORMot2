@@ -970,7 +970,7 @@ type
     // generic error message from clas name ('"Validate email" rule failed'
     // for TSynValidateEmail class e.g.)
     // - if the validation passed, will return TRUE
-    function Process(FieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean;
+    function Process(aFieldIndex: integer; const Value: RawUtf8; var ErrorMsg: string): boolean;
       virtual; abstract;
   end;
 

@@ -618,7 +618,7 @@ type
   TOrmModelPropertiesSql = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
-    // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
+    // ! Sql.TableSimpleFields[withID: boolean; withTableName: boolean]
     // - returns '*' if no field is of RawBlob/TOrmMany kind
     // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
     // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true

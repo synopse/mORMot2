@@ -123,7 +123,7 @@ type
   // - set by TSqlDBProxyStatement.ParamsToCommand() protected method
   TSqlDBProxyConnectionCommandExecute = packed record
     /// the associated SQL statement
-    SQL: RawUtf8;
+    Sql: RawUtf8;
     /// input parameters
     // - trunked to the exact number of parameters
     Params: TSqlDBParamDynArray;
@@ -971,7 +971,7 @@ begin
           RecordLoad(exec, P, TypeInfo(TSqlDBProxyConnectionCommandExecute),
             nil, PAnsiChar(pointer(msgin)) + length(msgin));
           execwithres := header.Command <> cExecute;
-          stmt := Connection.NewStatementPrepared(exec.SQL,
+          stmt := Connection.NewStatementPrepared(exec.Sql,
             execwithres, true);
           if fBlobAsNull in exec.Force then
             stmt.ForceBlobAsNull := true;
@@ -1679,7 +1679,7 @@ begin
   if (fColumnCount > 0) or
      (fDataInternalCopy <> '') then
     raise ESqlDBRemote.CreateUtf8('Invalid %.ExecutePrepared* call', [self]);
-  Input.SQL := fSql;
+  Input.Sql := fSql;
   if length(fParams) <> fParamCount then // strip to only needed memory
     SetLength(fParams, fParamCount);
   Input.Params := fParams;

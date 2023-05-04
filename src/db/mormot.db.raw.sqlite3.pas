@@ -4842,7 +4842,7 @@ type
     function GetLimit(Category: TSqlLimitCategory): integer;
     procedure SetLimit(Category: TSqlLimitCategory; Value: integer);
     function GetBackupBackgroundInProcess: boolean;
-    function SQLShouldBeLogged(const aSql: RawUtf8): boolean;
+    function SqlShouldBeLogged(const aSql: RawUtf8): boolean;
     function GetSqlite3Library: TSqlite3Library; // class function = bug in D2005
   public
     /// enter the internal mutex: called before any DB access
@@ -6736,7 +6736,7 @@ begin
   inherited Destroy;
 end;
 
-function TSqlDataBase.SQLShouldBeLogged(const aSql: RawUtf8): boolean;
+function TSqlDataBase.SqlShouldBeLogged(const aSql: RawUtf8): boolean;
 begin
   result := false;
   if (self = nil) or
@@ -6755,7 +6755,7 @@ var
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if SQLShouldBeLogged(aSql) then
+  if SqlShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'ExecuteAll');
     if log <> nil then
@@ -6797,7 +6797,7 @@ begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  if SQLShouldBeLogged(aSql) then
+  if SqlShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'Execute');
     if log <> nil then

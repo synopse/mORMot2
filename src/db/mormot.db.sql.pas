@@ -3391,7 +3391,7 @@ begin
           fStatement.GetSqlWithInlinedParams;
       except
         fMessageUtf8 := fMessageUtf8 + ' - ' +
-          fStatement.SQL; // if parameter access failed -> append with ?
+          fStatement.Sql; // if parameter access failed -> append with ?
       end;
   end;
   {$endif SYNDB_SILENCE}

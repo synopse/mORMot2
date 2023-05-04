@@ -2036,7 +2036,7 @@ begin
   begin
     result := PropNameEquals(fStoredClassProps.Sql.SelectAllWithRowID, SQL);
     if result then
-      SQL := fStoredClassProps.SQL.SelectAllWithID
+      SQL := fStoredClassProps.Sql.SelectAllWithID
     else
       result := PropNameEquals(fStoredClassProps.Sql.SelectAllWithID, SQL);
   end;
