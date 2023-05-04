@@ -2453,7 +2453,7 @@ end;
 procedure T7zWriter.AddBuffer(const ZipName: RawUtf8;
   const Data: RawByteString);
 begin
-  AddStream(TRawByteStringStream.Create(Data), soReference,
+  AddStream(TRawByteStringStream.Create(Data), soOwned,
     faArchive, 0, 0, ZipName, {isfolder=}false, {isanti=}false);
 end;
 
@@ -2603,7 +2603,7 @@ begin
       if not fCurrentItem.IsFolder then
       begin
         fCurrentItem.Stream.Seek(0, soFromBeginning);
-        inStream := T7zStream.Create(fCurrentItem.Stream, {owned=}true, index);
+        inStream := T7zStream.Create(fCurrentItem.Stream, {owned=}false, index);
       end;
   else
     result := ERROR_INVALID_PARAMETER;

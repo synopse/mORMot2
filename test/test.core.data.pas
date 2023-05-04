@@ -6348,6 +6348,7 @@ begin
       Tot7z := 0;
       zout.AddFile(folder + '\exe.1mb', 'C.1mb');
       zout.AddBuffer('A.1mb', copy(Data, 1, 200));
+      zout.AddBuffer('void.txt', '');
       {with zout do
         for i := 0 to Count - 1 do
            writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
@@ -6360,7 +6361,7 @@ begin
       zout := nil; // so that we could read the file
       zlib := T7zLib.Create(lib);
       zin := zlib.NewReader(newfile2);
-      CheckEqual(zin.Count, 3);
+      CheckEqual(zin.Count, 4);
       s := zin.Extract('A.1mb');
       Check(length(s) = 200, 'ua1');
       Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
@@ -6368,6 +6369,8 @@ begin
       Check(s = Data, 'ub');
       s := zin.Extract('C.1mb');
       Check(s = Data, 'uc');
+      s := zin.Extract('void.txt');
+      Check(s = '', 'uv');
       zin := nil; // so that we could delete the file
       Check(DeleteFile(newfile1));
       Check(DeleteFile(newfile2));
