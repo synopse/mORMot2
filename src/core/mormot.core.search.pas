@@ -4425,7 +4425,7 @@ end;
 {$else} // eax = a, edx = b, ecx = len
 function Comp(a, b: PAnsiChar; len: PtrInt): PtrInt;
 asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
-        OR      ecx, ecx
+        or      ecx, ecx
         push    ebx
         push    ecx
         jz      @ok
@@ -4586,7 +4586,7 @@ begin
           with PHash128Rec(OldBuf + ofs)^ do
             // always test 8 bytes at once
             {$ifdef CPU64}
-            if PHash128Rec(NewBuf)^.Lo=Lo then
+            if PHash128Rec(NewBuf)^.Lo = Lo then
             {$else}
             if (PHash128Rec(NewBuf)^.c0 = c0) and
                (PHash128Rec(NewBuf)^.c1 = c1) then
@@ -4779,8 +4779,8 @@ begin
   bigfile := OldSize > BufSize;
   if BufSize > NewSize then
     BufSize := NewSize;
-  if BufSize > $ffffff then
-    BufSize := $ffffff; // we store offsets with 2..3 bytes -> max 16MB chunk
+  if BufSize > HListMask then
+    BufSize := HListMask; // we store offsets with 2..3 bytes -> max 16MB chunk
   Trailing := 0;
   Getmem(workbuf, BufSize); // compression temporary buffers
   Getmem(HList, BufSize * SizeOf({%H-}HList[0]));

@@ -650,7 +650,7 @@ begin
         exit;
       // get the response and ensure it is valid
       lenw := 0;
-      if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then
+      if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then // first 2 bytes are len
       begin
         NoTcpSafe.Lock;
         AddRawUtf8(NoTcpServers, server); // won't try again in the next minute
