@@ -657,22 +657,22 @@ begin
         NoTcpSafe.UnLock;
         exit;
       end;
+      len := swap(lenw);
+      if len <= length(Request) then
+        exit;
+      FastSetRawByteString(answer, nil, len);
+      hdr := pointer(answer);
+      if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
+         (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
+         not hdr^.IsResponse or
+         hdr^.Truncation or
+         not hdr^.RecursionAvailable or
+         (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
+         (hdr^.AnswerCount = 0) then
+        exit;
     finally
       sock.Close;
     end;
-    len := swap(lenw);
-    if len <= length(Request) then
-      exit;
-    FastSetRawByteString(answer, nil, len);
-    hdr := pointer(answer);
-    if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
-       (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
-       not hdr^.IsResponse or
-       hdr^.Truncation or
-       not hdr^.RecursionAvailable or
-       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-       (hdr^.AnswerCount = 0) then
-      exit;
   end;
   // we got a valid answer
   QueryPerformanceMicroSeconds(stop);
