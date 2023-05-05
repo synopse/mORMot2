@@ -2392,52 +2392,51 @@ procedure T7zWriter.AddFiles(const Dir, Path, Wildcard: TFileName; recurse: bool
 var
   lencut: integer;
   files: TStringList;
-  d: TFileName;
+  d, s: TFileName;
 
   procedure Traverse(const p: TFileName);
   var
     f: TSearchRec;
     i: integer;
-    fn: TFileName;
     item: T7zItem;
   begin
     if recurse then
     begin
       if FindFirst(p + '*.*', faDirectory, f) = 0 then
-      repeat
-        if (f.Name[1] <> '.') then
-          Traverse(IncludeTrailingPathDelimiter(p + f.Name));
-      until FindNext(f) <> 0;
+        repeat
+          if f.Name[1] <> '.' then
+            Traverse(IncludeTrailingPathDelimiter(p + f.Name));
+        until FindNext(f) <> 0;
       FindClose(f);
     end;
     for i := 0 to files.Count - 1 do
-    begin
       if FindFirst(p + files[i],
         faReadOnly or faHidden{%H-} or faSysFile{%H-} or faArchive, f) = 0 then
-      repeat
-        item := T7zItem.Create;
-        Item.SourceMode := smFile;
-        item.Stream := nil;
-        item.FileName := p + f.Name;
-        fn := copy(item.FileName, lencut, length(item.FileName) - lencut + 1);
-        if path <> '' then
-          fn := IncludeTrailingPathDelimiter(path) + p;
-        StringToUtf8(fn, item.ZipName);
-        item.CreationTime := f.FindData.ftCreationTime;
-        item.LastWriteTime := f.FindData.ftLastWriteTime;
-        item.Attributes := f.FindData.dwFileAttributes;
-        item.Size := f.Size;
-        item.IsFolder := false;
-        item.IsAnti := false;
-        item.Ownership := soOwned;
-        item.UpdateItemIndex := -1;
-        AddOrReplace(item);
-      until FindNext(f) <> 0;
-      FindClose(f);
-    end;
+      begin
+        repeat
+          item := T7zItem.Create;
+          item.SourceMode := smFile;
+          item.Stream := nil;
+          item.FileName := p + f.Name;
+          StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
+          item.CreationTime := f.FindData.ftCreationTime;
+          item.LastWriteTime := f.FindData.ftLastWriteTime;
+          item.Attributes := f.FindData.dwFileAttributes;
+          item.Size := f.Size;
+          item.IsFolder := false;
+          item.IsAnti := false;
+          item.Ownership := soOwned;
+          item.UpdateItemIndex := -1;
+          AddOrReplace(item);
+        until FindNext(f) <> 0;
+        FindClose(f);
+      end;
   end;
 
 begin
+  s := path;
+  if s <> '' then
+    s := IncludeTrailingPathDelimiter(s);
   files := TStringList.Create;
   try
     files.Delimiter := ';';
