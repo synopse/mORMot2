@@ -537,6 +537,25 @@ begin
   {$endif OSLINUXANDROID}
 end;
 
+{$ifdef OSLINUXANDROID}
+procedure TNetSocketWrap.SetLowPriority;
+var
+  v: integer;
+begin
+  v := 0; // lowest priority
+  SetOpt(SOL_SOCKET, SO_PRIORITY, @v, SizeOf(v));
+end;
+{$else}
+procedure TNetSocketWrap.SetLowPriority;
+begin
+end;
+{$endif OSLINUXANDROID}
+
+function TNetSocketWrap.HasLowPriority: boolean;
+begin
+  result := false;
+end;
+
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: system.PInteger): TNetEvents;
 var

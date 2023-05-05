@@ -522,6 +522,34 @@ begin
   // do nothing on Windows
 end;
 
+const
+  // https://techcommunity.microsoft.com/t5/networking-blog/ledbat-background-data-transfer-for-windows/ba-p/3639278
+  SIO_PRIORITY_HINT = integer($98000018); // _WSAIOW(IOC_VENDOR,$18)
+  SocketPriorityHintVeryLow = 0;
+  SocketPriorityHintLow = 1;
+  SocketPriorityHintNormal = 2;
+  SocketMaximumPriorityHintType = 3;
+
+procedure TNetSocketWrap.SetLowPriority;
+var
+  v: integer;
+begin
+  v := SocketPriorityHintVeryLow;
+  setsockopt(TSocket(@self), SOL_SOCKET, SIO_PRIORITY_HINT, @v, SizeOf(v));
+  // don't call SetOpt() which raise ENetSock on oldest Windows
+end;
+
+function TNetSocketWrap.HasLowPriority: boolean;
+var
+  v, l: integer;
+begin
+  v := -1;
+  l := SizeOf(v);
+  result :=
+    (getsockopt(TSocket(@self), SOL_SOCKET, SIO_PRIORITY_HINT, @v, @l) = NO_ERROR) and
+    (v = SocketPriorityHintVeryLow);
+end;
+
 procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
 begin
   if ms = 0 then
