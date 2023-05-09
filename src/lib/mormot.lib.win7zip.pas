@@ -2645,9 +2645,11 @@ end;
 procedure T7zWriter.SaveToFile(const DestName: TFileName);
 var
   f: TFileStreamEx;
+  existing: boolean;
 begin
   fFileName := DestName;
-  f := TFileStreamEx.Create(DestName, fmCreate);
+  existing := (fUpdateReader <> nil) and (fFileName = DestName);
+  f := TFileStreamEx.Create(DestName, fmCreateOrRewrite[existing]);
   try
     SaveToStream(f);
   finally

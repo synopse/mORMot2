@@ -65,6 +65,10 @@ const
   {$endif OSWINDOWS}
   /// a convenient shortened constant to open a file for reading
   fmOpenReadDenyNone = fmOpenRead or fmShareDenyNone;
+  /// a convenient shortened constant to open a file for writing
+  fmCreateOrRewrite: array[{rewrite=}boolean] of cardinal = (
+   fmCreate,
+   fmOpenWrite or fmShareDenyNone);
 
 const
   /// void HTTP Status Code (not a standard value, for internal use only)
