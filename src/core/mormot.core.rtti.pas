@@ -1150,21 +1150,15 @@ const
 /// retrieve the text name of one TRttiKind enumerate
 function ToText(k: TRttiKind): PShortString; overload;
 
-/// convert an ordinal value from its (signed) pointer-sized integer representation
-function FromRttiOrd(o: TRttiOrd; P: pointer): Int64; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+var
+  /// convert an ordinal value from its (signed) pointer-sized integer representation
+  RTTI_FROM_ORD: array[TRttiOrd] of function(P: pointer): Int64;
 
-/// convert an ordinal value from its (signed) pointer-sized integer representation
-procedure FromRttiOrd(o: TRttiOrd; P: pointer; res: PInt64); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// convert an ordinal value into its RTTI-defined binary buffer
-procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
+  /// convert an ordinal value into its RTTI-defined binary buffer
+  RTTI_TO_ORD: array[TRttiOrd] of procedure(P: pointer; Value: PtrInt);
 
   /// convert a float value into its RTTI-defined binary buffer
-procedure ToRttiFloat(rf: TRttiFloat; P: pointer; Value: TSynExtended);
-  {$ifdef HASINLINE}inline;{$endif}
+  RTTI_TO_FLOAT: array[TRttiFloat] of procedure(P: pointer; Value: TSynExtended);
 
 
 {$ifdef HASINLINE}
@@ -2946,90 +2940,6 @@ implementation
 
 { some inlined definitions which should be declared before $include code }
 
-function FromRttiOrd(o: TRttiOrd; P: pointer): Int64;
-begin
-  case o of
-    roSByte:
-      result := PShortInt(P)^;
-    roSWord:
-      result := PSmallInt(P)^;
-    roSLong:
-      result := PInteger(P)^;
-    roUByte:
-      result := PByte(P)^;
-    roUWord:
-      result := PWord(P)^;
-    roULong:
-      result := PCardinal(P)^;
-    {$ifdef FPC_NEWRTTI}
-    roSQWord,
-    roUQWord:
-      result := PInt64(P)^;
-    {$endif FPC_NEWRTTI}
-  else
-    result := 0; // should never happen
-  end;
-end;
-
-procedure FromRttiOrd(o: TRttiOrd; P: pointer; res: PInt64);
-begin
-  case o of
-    roSByte:
-      res^ := PShortInt(P)^;
-    roSWord:
-      res^ := PSmallInt(P)^;
-    roSLong:
-      res^ := PInteger(P)^;
-    roUByte:
-      res^ := PByte(P)^;
-    roUWord:
-      res^ := PWord(P)^;
-    roULong:
-      res^ := PCardinal(P)^;
-    {$ifdef FPC_NEWRTTI}
-    roSQWord,
-    roUQWord:
-      res^ := PInt64(P)^;
-    {$endif FPC_NEWRTTI}
-  else
-    res^ := 0; // should never happen
-  end;
-end;
-
-procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
-begin
-  case o of
-    roUByte,
-    roSByte:
-      PByte(P)^ := Value;
-    roUWord,
-    roSWord:
-      PWord(P)^ := Value;
-    roULong,
-    roSLong:
-      PCardinal(P)^ := Value;
-    {$ifdef FPC_NEWRTTI}
-    roSQWord,
-    roUQWord:
-      PInt64(P)^ := Value;
-    {$endif FPC_NEWRTTI}
-  end;
-end;
-
-procedure ToRttiFloat(rf: TRttiFloat; P: pointer; Value: TSynExtended);
-begin
-  case rf of
-    rfSingle:
-      PSingle(P)^ := Value;
-    rfDouble:
-      unaligned(PDouble(P)^) := Value;
-    rfExtended:
-      PExtended(P)^ := Value;
-    rfCurr:
-      DoubleToCurrency(Value, PCurrency(P));
-  end;
-end;
-
 type
   // local wrapper to retrieve IInvokable Interface RTTI via GetRttiInterface()
   TGetRttiInterface = class
@@ -3187,12 +3097,12 @@ end;
 
 function TRttiEnumType.GetEnumName(const Value): PShortString;
 begin
-  result := GetEnumNameOrd(FromRttiOrd(RttiOrd, @Value));
+  result := GetEnumNameOrd(RTTI_FROM_ORD[RttiOrd](@Value));
 end;
 
 function TRttiEnumType.GetCaption(const Value): string;
 begin
-  GetCaptionFromTrimmed(GetEnumNameOrd(FromRttiOrd(RttiOrd, @Value)), result);
+  GetCaptionFromTrimmed(GetEnumNameOrd(RTTI_FROM_ORD[RttiOrd](@Value)), result);
 end;
 
 procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
@@ -3436,7 +3346,7 @@ end;
 
 procedure TRttiEnumType.SetEnumFromOrdinal(out Value; Ordinal: PtrUInt);
 begin
-  ToRttiOrd(RttiOrd, @Value, Ordinal);
+  RTTI_TO_ORD[RttiOrd](@Value, Ordinal);
 end;
 
 
@@ -4080,7 +3990,7 @@ begin
        (Kind = rkInterface) then
       result := PtrInt(call.Code)
     else
-      result := FromRttiOrd(RttiOrd, @call.Code);
+      result := RTTI_FROM_ORD[RttiOrd](@call.Code);
 end;
 
 procedure TRttiProp.SetOrdProp(Instance: TObject; Value: PtrInt);
@@ -4099,7 +4009,7 @@ begin
            (Kind = rkInterface) then
           PPtrInt({%H-}call.Data)^ := Value
         else
-          ToRttiOrd(RttiOrd, call.Data, Value);
+          RTTI_TO_ORD[RttiOrd](call.Data, Value);
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -4481,7 +4391,7 @@ begin
   rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:
-      ToRttiFloat(rf, {%H-}call.Data, Value);
+      RTTI_TO_FLOAT[rf]({%H-}call.Data, Value);
     rpcMethod:
       case rf of
         rfSingle:
@@ -5531,6 +5441,18 @@ begin
     end;
     aClass := GetClassParent(aClass);
   end;
+end;
+
+function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
+begin
+  if Info <> nil then
+  begin
+    result := FindType(Info);
+    if result = nil then
+      result := DoRegister(Info);
+  end
+  else
+    result := nil;
 end;
 
 
@@ -6866,8 +6788,8 @@ function TRttiCustomProp.ValueIsDefault(Data: pointer): boolean;
 begin
   if rcfHasRttiOrd in Value.Cache.Flags then
     if OffsetGet >= 0 then
-      result := FromRttiOrd(
-        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet) = OrdinalDefault
+      result := RTTI_FROM_ORD[Value.Cache.RttiOrd](
+                  PAnsiChar(Data) + OffsetGet) = OrdinalDefault
     else
       result := Prop.GetOrdProp(Data) = OrdinalDefault
   else if rcfGetInt64Prop in Value.Cache.Flags then
@@ -6942,7 +6864,7 @@ begin
   varInt64,
   varBoolean:
     // rkInteger, rkBool using VInt64 for proper cardinal support
-    FromRttiOrd(Value.Cache.RttiOrd, Data, @RVD.Data.VInt64);
+    RVD.Data.VInt64 := RTTI_FROM_ORD[Value.Cache.RttiOrd](Data);
   varWord64:
     // rkInt64, rkQWord
     begin
@@ -7061,9 +6983,10 @@ begin
     if (OffsetGet >= 0) and
        (OtherRtti.OffsetGet >= 0) then
     begin
-      FromRttiOrd(Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet, @v1.Data.VInt64);
-      FromRttiOrd(OtherRtti.Value.Cache.RttiOrd, PAnsiChar(Other) + OtherRtti.OffsetGet,
-        @v2.Data.VInt64);
+      v1.Data.VInt64 := RTTI_FROM_ORD[Value.Cache.RttiOrd](
+                          PAnsiChar(Data) + OffsetGet);
+      v2.Data.VInt64 := RTTI_FROM_ORD[OtherRtti.Value.Cache.RttiOrd](
+                          PAnsiChar(Other) + OtherRtti.OffsetGet);
     end
     else
     begin
@@ -7975,7 +7898,7 @@ begin
     {$endif HASVARUSTRING}
     rkFloat:
       if ToDouble(Text, f) then
-        ToRttiFloat(Cache.RttiFloat, Data, f)
+        RTTI_TO_FLOAT[Cache.RttiFloat](Data, f)
       else
         result := false;
     rkVariant:
@@ -7983,7 +7906,7 @@ begin
   else
     if rcfHasRttiOrd in Cache.Flags then
       if ToInt64(Text, v) then
-        ToRttiOrd(Cache.RttiOrd, Data, v)
+        RTTI_TO_ORD[Cache.RttiOrd](Data, v)
       else
         result := false
     else if rcfGetInt64Prop in Cache.Flags then
@@ -8600,18 +8523,6 @@ begin
     dec(n);
   until n = 0;
   k^.Safe.ReadUnLock;
-end;
-
-function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
-begin
-  if Info <> nil then
-  begin
-    result := FindType(Info);
-    if result = nil then
-      result := DoRegister(Info);
-  end
-  else
-    result := nil;
 end;
 
 function TRttiCustomList.DoRegister(Info: PRttiInfo): TRttiCustom;
@@ -9290,12 +9201,113 @@ begin
 end;
 
 
+// ------ some integer conversion wrapper functions
+
+function FromRttiOrdSByte(P: PShortInt): Int64;
+begin
+  result := P^;
+end;
+
+function FromRttiOrdSWord(P: PSmallInt): Int64;
+begin
+  result := P^;
+end;
+
+function FromRttiOrdSLong(P: PInteger): Int64;
+begin
+  result := P^;
+end;
+
+function FromRttiOrdUByte(P: PByte): Int64;
+begin
+  result := P^;
+end;
+
+function FromRttiOrdUWord(P: PWord): Int64;
+begin
+  result := P^;
+end;
+
+function FromRttiOrdULong(P: PCardinal): Int64;
+begin
+  result := P^;
+end;
+
+procedure ToRttiOrd1(P: PByte; Value: PtrUInt);
+begin
+  P^ := Value;
+end;
+
+procedure ToRttiOrd2(P: PWord; Value: PtrUInt);
+begin
+  P^ := Value;
+end;
+
+procedure ToRttiOrd4(P: PCardinal; Value: PtrUInt);
+begin
+  P^ := Value;
+end;
+
+{$ifdef FPC_NEWRTTI}
+function FromRttiOrdInt64(P: PInt64): Int64;
+begin
+  result := P^;
+end;
+
+procedure ToRttiOrd8(P: PInt64; Value: PtrInt);
+begin
+  P^ := Value;
+end;
+{$endif FPC_NEWRTTI}
+
+procedure ToRttiFloat32(P: PSingle; Value: TSynExtended);
+begin
+  P^ := Value;
+end;
+
+procedure ToRttiFloat64(P: PDouble; Value: TSynExtended);
+begin
+  unaligned(P^) := Value;
+end;
+
+procedure ToRttiFloat80(P: PExtended; Value: TSynExtended);
+begin
+  P^ := Value;
+end;
+
+procedure ToRttiFloatCurr(P: PCurrency; Value: TSynExtended);
+begin
+  DoubleToCurrency(Value, P);
+end;
+
 
 procedure InitializeUnit;
 var
   k: TRttiKind;
   t: TRttiParserType;
 begin
+  RTTI_FROM_ORD[roSByte] := @FromRttiOrdSByte;
+  RTTI_FROM_ORD[roSWord] := @FromRttiOrdSWord;
+  RTTI_FROM_ORD[roSLong] := @FromRttiOrdSLong;
+  RTTI_FROM_ORD[roUByte] := @FromRttiOrdUByte;
+  RTTI_FROM_ORD[roUWord] := @FromRttiOrdUWord;
+  RTTI_FROM_ORD[roULong] := @FromRttiOrdULong;
+  RTTI_TO_ORD[roSByte] := @ToRttiOrd1;
+  RTTI_TO_ORD[roSWord] := @ToRttiOrd2;
+  RTTI_TO_ORD[roSLong] := @ToRttiOrd4;
+  RTTI_TO_ORD[roUByte] := @ToRttiOrd1;
+  RTTI_TO_ORD[roUWord] := @ToRttiOrd2;
+  RTTI_TO_ORD[roULong] := @ToRttiOrd4;
+  {$ifdef FPC_NEWRTTI}
+  RTTI_FROM_ORD[roSQWord] := @FromRttiOrdInt64;
+  RTTI_FROM_ORD[roUQWord] := @FromRttiOrdInt64;
+  RTTI_TO_ORD[roSQWord]   := @ToRttiOrd8;
+  RTTI_TO_ORD[roUQWord]   := @ToRttiOrd8;
+  {$endif FPC_NEWRTTI}
+  RTTI_TO_FLOAT[rfSingle]   := @ToRttiFloat32;
+  RTTI_TO_FLOAT[rfDouble]   := @ToRttiFloat64;
+  RTTI_TO_FLOAT[rfExtended] := @ToRttiFloat80;
+  RTTI_TO_FLOAT[rfCurr]     := @ToRttiFloatCurr;
   RTTI_FINALIZE[rkLString]   := @_StringClear;
   RTTI_FINALIZE[rkWString]   := @_WStringClear;
   RTTI_FINALIZE[rkVariant]   := @_VariantClear;

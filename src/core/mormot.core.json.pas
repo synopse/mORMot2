@@ -8857,7 +8857,7 @@ begin
   rtti := aEnumTypeInfo.EnumBaseType;
   if rtti = nil then
     exit;
-  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault); // always set the default value
+  RTTI_TO_ORD[rtti.RttiOrd](@aEnum, aEnumDefault); // always set default value
   v := Value(aName, '');
   TrimSelf(v);
   if v = '' then
@@ -8868,7 +8868,7 @@ begin
     i := rtti.GetEnumNameValue(pointer(v), length(v), {alsotrimleft=}true);
   if i >= 0 then
   begin
-    ToRttiOrd(rtti.RttiOrd, @aEnum, i); // we found a proper value
+    RTTI_TO_ORD[rtti.RttiOrd](@aEnum, i); // we found a proper value
     result := true;
   end;
 end;
@@ -10301,7 +10301,7 @@ begin
     varInt64,
     varBoolean:
       // rkInteger,rkBool,rkEnumeration,rkSet using VInt64 for unsigned 32-bit
-      FromRttiOrd(Cache.RttiOrd, Data, @Dest.VInt64);
+      Dest.VInt64 := RTTI_FROM_ORD[Cache.RttiOrd](Data);
     varWord64:
       // rkInt64, rkQWord
       begin
@@ -10555,7 +10555,7 @@ begin
               if result.Kind = rkEnumeration then
               begin
                 // true = enum name matches the stored enum value
-                result.ValueToVariant(Data, v); // calls FromRttiOrd()
+                result.ValueToVariant(Data, v); // calls RTTI_FROM_ORD[]
                 PBoolean(@Temp)^ := v.VInt64 = i;
               end
               else
