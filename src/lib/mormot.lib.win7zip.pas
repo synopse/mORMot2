@@ -2647,8 +2647,8 @@ var
   f: TFileStreamEx;
   existing: boolean;
 begin
-  fFileName := DestName;
   existing := (fUpdateReader <> nil) and (fFileName = DestName);
+  fFileName := DestName;
   f := TFileStreamEx.Create(DestName, fmCreateOrRewrite[existing]);
   try
     SaveToStream(f);
