@@ -2400,13 +2400,13 @@ var
     i: integer;
     item: T7zItem;
   begin
-    if recurse then
+    if recurse and
+       (FindFirst(p + '*.*', faDirectory, f) = 0) then
     begin
-      if FindFirst(p + '*.*', faDirectory, f) = 0 then
-        repeat
-          if SearchRecValidFolder(f) then
-            Traverse(IncludeTrailingPathDelimiter(p + f.Name));
-        until FindNext(f) <> 0;
+      repeat
+        if SearchRecValidFolder(f) then
+          Traverse(IncludeTrailingPathDelimiter(p + f.Name));
+      until FindNext(f) <> 0;
       FindClose(f);
     end;
     for i := 0 to files.Count - 1 do
