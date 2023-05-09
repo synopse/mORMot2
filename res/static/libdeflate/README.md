@@ -10,6 +10,8 @@ This source code is included as reference. Please don't try to compile the stati
 
 Original `README.md` file follows. Note that some compilation/bulding remarks don't apply to our context.
 
+To cross-compile on Linux x86_64, ensure you run `sudo apt-get update && sudo apt-get install gcc-multilib`
+
 # Overview
 
 libdeflate is a library for fast, whole-buffer DEFLATE-based compression and
