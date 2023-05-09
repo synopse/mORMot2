@@ -1094,14 +1094,16 @@ type
     // - the group is identified by sAMAccountName or distinguishedName
     // - Nested checks for the "member" field with the 1.2.840.113556.1.4.1941 flag
     // - won't check the user primaryGroupID which should be searched before,
-    // as it is not part of the "member" array of the (e.g. domain) groups
+    // as it is not part of the "member" array of the (e.g. domain) groups -
+    // use rather TLdapCheckMember instead if you can
     function GetIsMemberOf(const UserDN, GroupAN, GroupDN: RawUtf8;
       const CustomFilter: RawUtf8 = ''; Nested: boolean = true;
       const BaseDN: RawUtf8 = ''): boolean; overload;
     /// check if a User is registered as part of some groups and their nested groups
     // - groups are identified by sAMAccountName or distinguishedName
     // - Nested checks for the "member" field with the 1.2.840.113556.1.4.1941 flag
-    // - won't check the user primaryGroupID which should be searched before
+    // - won't check the user primaryGroupID which should be searched before -
+    // use rather TLdapCheckMember instead if you can
     // - can optionally return the sAMAccountName of matching groups of this user
     function GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
       const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true;
@@ -1215,8 +1217,8 @@ type
     // - ensure the LDAP is still connected, and re-connect if necessary
     // - call GetUserDN() to retrieve the user's distinguishedName and
     // primaryGroupID attributes from User sAMAccountName or userPrincipalName
-    // - will check if primaryGroupID matches any registered groups SID
-    // - call GetIsMemberOf() to search for registered groups
+    // - will check if primaryGroupID matches any registered groups SID, then
+    // call GetIsMemberOf() to search for registered groups
     // - optionally return the matching sAMAccountName in GroupsAN[]
     function Authorize(const User: RawUtf8;
       GroupsAN: PRawUtf8DynArray = nil): boolean;

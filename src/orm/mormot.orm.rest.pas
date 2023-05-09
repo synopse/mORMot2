@@ -1660,7 +1660,6 @@ end;
 function TRestOrm.NewEngineRetrieveAsync(
   Context: TObject; Table: TOrmClass): TRestOrmEngineRetrieveAsync;
 begin
-  result := nil;
   raise EOrmAsyncException.CreateUtf8(
     '%.RetrieveAsync(%) unsupported on this DB', [self, Table]);
 end;
