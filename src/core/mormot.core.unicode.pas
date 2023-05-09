@@ -317,7 +317,7 @@ type
     procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
       SourceChars: cardinal; out Value: RawUtf8); overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
-    // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - Dest^ buffer must be reserved with at least SourceChars * 3 bytes
     // - will detect and ignore any trailing UTF-16LE BOM marker
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
@@ -329,6 +329,7 @@ type
     /// convert any Unicode-encoded String into Ansi Text
     // - internally calls UnicodeBufferToAnsi virtual method
     function UnicodeStringToAnsi(const Source: SynUnicode): RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
     {$ifndef PUREMORMOT2}
     /// convert any Unicode-encoded String into Ansi Text
     // - internally calls UnicodeBufferToAnsi virtual method
@@ -409,7 +410,7 @@ type
       SourceChars: cardinal): RawUnicode; override;
     {$endif PUREMORMOT2}
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
-    // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - Dest^ buffer must be reserved with at least SourceChars * 3 bytes
     // - will detect and ignore any trailing UTF-16LE BOM marker
     // - this overridden version will use internal lookup tables for fast process
     function UnicodeBufferToAnsi(Dest: PAnsiChar;
@@ -478,7 +479,7 @@ type
     {$endif PUREMORMOT2}
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
     // - will detect and ignore any trailing UTF-16LE BOM marker
-    // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - Dest^ buffer must be reserved with at least SourceChars * 3 bytes
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
       SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an Unicode buffer into an Ansi Text
@@ -531,7 +532,7 @@ type
       SourceChars: cardinal): RawUnicode; override;
     {$endif PUREMORMOT2}
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-16 buffer
-    // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
+    // - Dest^ buffer must be reserved with at least SourceChars * 3 bytes
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
       SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-16 buffer
@@ -2902,7 +2903,7 @@ begin
     // rely on the Operating System for all remaining ASCII characters
     if SourceChars <> 0 then
       inc(Dest,
-        Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
+        Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars * 3, fCodePage));
   end;
   result := Dest;
 end;
@@ -2995,7 +2996,7 @@ begin
     result := ''
   else
   begin
-    tmp.Init((SourceChars + 1) shl fAnsiCharShift);
+    tmp.Init(SourceChars * 3);
     FastSetStringCP(result, tmp.buf, UnicodeBufferToAnsi(
       tmp.buf, Source, SourceChars) - PAnsiChar(tmp.buf), fCodePage);
     tmp.Done;
@@ -3026,23 +3027,20 @@ end;
 function TSynAnsiConvert.AnsiToAnsi(From: TSynAnsiConvert;
   Source: PAnsiChar; SourceChars: cardinal): RawByteString;
 var
-  tmpU: array[byte] of WideChar;
+  tmp: TSynTempBuffer;
   U: PWideChar;
 begin
-  if From = self then
+  if From.fCodePage = fCodePage then
     FastSetStringCP(result, Source, SourceChars, fCodePage)
   else if (Source = nil) or
           (SourceChars = 0) then
     result := ''
-  else if SourceChars < SizeOf(tmpU) shr 1 then
-    result := UnicodeBufferToAnsi(tmpU{%H-}, (PtrUInt(From.AnsiBufferToUnicode(
-      tmpU{%H-}, Source, SourceChars)) - PtrUInt(@tmpU)) shr 1)
   else
   begin
-    GetMem(U, SourceChars * 2 + 2);
-    result := UnicodeBufferToAnsi(U, From.AnsiBufferToUnicode(
-      U, Source, SourceChars) - U);
-    FreeMem(U);
+    U := tmp.Init(SourceChars * 2 + 2);
+    result := UnicodeBufferToAnsi(U,
+      From.AnsiBufferToUnicode(U, Source, SourceChars) - U);
+    tmp.Done;
   end;
 end;
 

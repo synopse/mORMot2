@@ -4648,7 +4648,7 @@ var
   bak: AnsiChar;
   W: WinAnsiString;
   WS: WideString;
-  SU: SynUnicode;
+  SU, SU2: SynUnicode;
   str: string;
   up4: RawUcs4;
   U, U2, res, Up, Up2, json, json1, json2: RawUtf8;
@@ -4667,6 +4667,8 @@ const
     'tes', 'test', 'TeSt', 'teS', 'tesT', 'testE', 'T', 'T', '1', 'teste');
   IDPA: array[0..15] of PAnsiChar = (nil, 'T', '1', 'TE', 'TE', 'TE', 'TES',
     'TEST', 'TEST', 'TES', 'TEST', 'TESTE', 't', 'U', '2', 'TESTe');
+  CHINESE_TEXT: array[0..8] of byte = (
+    $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
 begin
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
@@ -5184,6 +5186,8 @@ begin
     Check(PCardinal(U)^ = $92b3a8f0);
   U := TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsi(pointer(SU), length(SU));
   Check(length(U) = 4);
+  if not CheckFailed(length(U) = 4) then
+    Check(PCardinal(U)^ = $92b3a8f0);
   SetLength(res, 10);
   PB := pointer(res);
   PB := ToVarString(U, PB);
@@ -5194,6 +5198,18 @@ begin
   PB := pointer(res);
   FromVarString(PB, U2);
   check(U2 = U);
+  FastSetString(U, @CHINESE_TEXT, 9);
+  CheckEqual(StrLen(pointer(U)), 9);
+  SU := Utf8ToSynUnicode(U);
+  rb1 := TSynAnsiConvert.Engine(936).UnicodeStringToAnsi(SU); // GB2312_CHARSET
+  CheckEqual(length(rb1), 7);
+  SU2 := TSynAnsiConvert.Engine(936).AnsiToUnicodeString(rb1);
+  Check(SU = SU2);
+  rb1 := '';
+  rb1 := TSynAnsiConvert.Engine(936).Utf8ToAnsi(U);
+  CheckEqual(length(rb1), 7);
+  U2 := TSynAnsiConvert.Engine(936).AnsiToUtf8(rb1);
+  CheckEqual(U, U2);
   Check(UnQuoteSqlStringVar('"one two"', U) <> nil);
   Check(U = 'one two');
   Check(UnQuoteSqlStringVar('one two', U) <> nil);
