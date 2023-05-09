@@ -2404,7 +2404,7 @@ var
     begin
       if FindFirst(p + '*.*', faDirectory, f) = 0 then
         repeat
-          if f.Name[1] <> '.' then
+          if SearchRecValidFolder(f) then
             Traverse(IncludeTrailingPathDelimiter(p + f.Name));
         until FindNext(f) <> 0;
       FindClose(f);
@@ -2414,20 +2414,23 @@ var
         faReadOnly or faHidden{%H-} or faSysFile{%H-} or faArchive, f) = 0 then
       begin
         repeat
-          item := T7zItem.Create;
-          item.SourceMode := smFile;
-          item.Stream := nil;
-          item.FileName := p + f.Name;
-          StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
-          item.CreationTime := f.FindData.ftCreationTime;
-          item.LastWriteTime := f.FindData.ftLastWriteTime;
-          item.Attributes := f.FindData.dwFileAttributes;
-          item.Size := f.Size;
-          item.IsFolder := false;
-          item.IsAnti := false;
-          item.Ownership := soOwned;
-          item.UpdateItemIndex := -1;
-          AddOrReplace(item);
+          if (f.Attr and (faDirectory + faVolumeID{%H-})) = 0 then
+          begin
+            item := T7zItem.Create;
+            item.SourceMode := smFile;
+            item.Stream := nil;
+            item.FileName := p + f.Name;
+            StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
+            item.CreationTime := f.FindData.ftCreationTime;
+            item.LastWriteTime := f.FindData.ftLastWriteTime;
+            item.Attributes := f.FindData.dwFileAttributes;
+            item.Size := f.Size;
+            item.IsFolder := false;
+            item.IsAnti := false;
+            item.Ownership := soOwned;
+            item.UpdateItemIndex := -1;
+            AddOrReplace(item);
+          end;
         until FindNext(f) <> 0;
         FindClose(f);
       end;
