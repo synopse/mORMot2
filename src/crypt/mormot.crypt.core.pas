@@ -2258,13 +2258,13 @@ function Md5Buf(const Buffer; Len: cardinal): TMd5Digest;
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 
+/// direct MD4 hash calculation of some data
+function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
+
 /// compute the PBKDF2 derivation of a password using HMAC over SHA-1
 // - this function expect the resulting key length to match SHA-1 digest size
 procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
   count: integer; out result: TSha1Digest);
-
-/// direct MD4 hash calculation of some data
-function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
 
 
 { ****************** HMAC Authentication over SHA and CRC32C }
@@ -10553,17 +10553,21 @@ var
   mac: THmacSha1;
   first: THmacSha1;
 begin
-  HmacSha1(password, salt + #0#0#0#1, result);
+  first.Init(pointer(password), length(password));
+  mac := first;
+  mac.Update(pointer(salt), length(salt));
+  PInteger(@tmp)^ := $01000000;
+  mac.Update(@tmp, 4);
+  mac.Done(result); // HmacSha1(password, salt + #0#0#0#1, result);
   if count < 2 then
     exit;
   tmp := result;
-  first.Init(pointer(password), length(password));
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemory(@result, @tmp, SizeOf(result));
+    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
   end;
   FillcharFast(mac, SizeOf(mac), 0);
   FillcharFast(first, SizeOf(first), 0);
