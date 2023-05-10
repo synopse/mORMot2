@@ -11187,7 +11187,7 @@ begin
           Value := true // normalize
         else
           Value := false;
-      varInteger: // coming e.g. from GetJsonField()
+      varInteger: // coming e.g. from TGetJsonField
         Value := vd^.VInteger = 1;
       varString:
         Value := GetBoolean(vd^.VAny);

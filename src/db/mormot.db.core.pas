@@ -3633,7 +3633,7 @@ begin
   if (PInteger(P)^ = NULL_LOW) and
      (P[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
   begin
-    /// GetJsonField('null') returns '' -> check here to make a diff with '""'
+    /// TGetJsonField returns '' for 'null' -> code to make a diff with '""'
     FieldType := ftaNull;
     FieldValue := NULL_STR_VAR;
     inc(P, 4);

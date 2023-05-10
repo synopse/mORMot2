@@ -2568,7 +2568,7 @@ function ObjectDefaultToVariant(aClass: TClass;
 
 /// low-level function to set a variant from an unescaped JSON number or string
 // - expect the JSON input buffer to be already unescaped and #0 terminated,
-// e.g. by GetJsonField(), and having set properly the wasString flag
+// e.g. by TGetJsonField, and having set properly the wasString flag
 // - set the varString or call GetVariantFromNotStringJson() if TryCustomVariants=nil
 // - or call GetJsonToAnyVariant() to support TryCustomVariants^ complex input
 procedure GetVariantFromJsonField(Json: PUtf8Char; wasString: boolean;
@@ -2577,7 +2577,7 @@ procedure GetVariantFromJsonField(Json: PUtf8Char; wasString: boolean;
 
 /// low-level function to set a variant from an unescaped JSON non string
 // - expect the JSON input buffer to be already unescaped and #0 terminated,
-// e.g. by GetJsonField(), and having returned wasString=false
+// e.g. by TGetJsonField, and having returned wasString=false
 // - is called e.g. by function GetVariantFromJsonField()
 // - will recognize null, boolean, integer, Int64, currency, double
 // (if AllowDouble is true) input, then set Value and return TRUE

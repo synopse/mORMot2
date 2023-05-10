@@ -216,8 +216,8 @@ function JsonPropNameValid(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  /// internal JSON field parsing structure
-  // - used e.g. by GetJsonField() and GetJsonFieldOrObjectOrArray() wrappers
+  /// efficient JSON value parser / in-place decoder
+  // - as used by JsonDecode() and all internal JSON functions
   TGetJsonField = object
     /// input/output JSON parsing buffer address
     Json: PUtf8Char;
@@ -288,7 +288,7 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
-  NoJsonUnescape: boolean = false): PUtf8Char; overload;
+  NoJsonUnescape: boolean = false): PUtf8Char;
 
 /// decode a JSON field name in an UTF-8 encoded ShortString variable
 // - this function would left the P^ buffer memory untouched, so may be safer
@@ -298,7 +298,7 @@ function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil;
 // - this function won't unescape the property name, as strict JSON (i.e. a "st\"ring")
 // - but it will handle MongoDB syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString); overload;
+procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
 
 /// decode a JSON object or array from an UTF-8 encoded buffer
 // - as called by GetJsonFieldOrObjectOrArray() for HandleValuesAsObjectOrArray
@@ -319,7 +319,7 @@ procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
 // - P buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
-// - just call GetJsonField(), and create a new RawUtf8 from the returned value,
+// - just calls TGetJsonField, and create a new RawUtf8 from the returned value,
 // after proper string unescape (with WasString^=true)
 // - warning: input buffer is modified in-place during output value parsing
 function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
@@ -368,7 +368,7 @@ function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal = 1;
 function GotoNextJsonItem(P: PUtf8Char; var EndOfObject: AnsiChar): PUtf8Char; overload;
   {don't inline to reduce the stack size of the caller function}
 
-/// search the EndOfObject of a JSON buffer, just like GetJsonField() does
+/// search the EndOfObject of a JSON buffer, just like TGetJsonField does
 function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -509,7 +509,7 @@ function GetSetNameValue(Info: PRttiInfo;
 // - returns either ':' for name field, or } , for value field
 // - returns nil on JSON content error
 // - this function won't touch the JSON buffer, so you can call it before
-// using in-place escape process via JsonDecode() or GetJsonField()
+// using in-place escape process via JsonDecode() or TGetJsonField
 function JsonRetrieveStringField(P: PUtf8Char; out Field: PUtf8Char;
   out FieldLen: integer; ExpectNameField: boolean): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1741,11 +1741,11 @@ type
     procedure InitParser(P: PUtf8Char; Rtti: TRttiCustom; O: TJsonParserOptions;
       CV: PDocVariantOptions; ObjectListItemClass: TClass;
       RawUtf8Interning: TRawUtf8Interning);
-    /// call GetJsonField() to retrieve the next JSON value
+    /// call inherited GetJsonField() to retrieve the next JSON value
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// call GetJsonFieldOrObjectOrArray() to retrieve the next JSON value
+    /// call inherited GetJsonFieldOrObjectOrArray() to retrieve the next JSON value
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNextAny: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2776,7 +2776,7 @@ type
     JsonFirst: PJsonTokens;
     Max: PUtf8Char; // checking Max after each comma is good enough
     RootCount: integer;
-    // 500 nested documents seem enough in practice
+    // 500 nested documents seem enough in practice (SQlite3 uses 1000)
     Stack: array[0..500] of TJsonGotoEndParserState;
     procedure Init(Strict: boolean; PMax: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
@@ -3721,7 +3721,7 @@ begin
   result := Name;
 end;
 
-procedure GetJsonPropName(var P: PUtf8Char; out PropName: ShortString);
+procedure GetJsonPropNameShort(var P: PUtf8Char; out PropName: ShortString);
 var
   Name: PAnsiChar;
   c: AnsiChar;
@@ -4109,7 +4109,7 @@ begin
         P := GotoNextNotSpace(P + 1);
       if P^ <> '}' then
         repeat
-          GetJsonPropName(P, name);
+          GetJsonPropNameShort(P, name);
           if (name[0] = #0) or
              (name[0] > #200) then
             break;
