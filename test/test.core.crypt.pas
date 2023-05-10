@@ -35,7 +35,7 @@ type
     function DigestUser(const User, Realm: RawUtf8;
       out HA0: THash512Rec): TAuthServerResult;
   published
-    /// MD5 hashing functions
+    /// MD5 (and MD4) hashing functions
     procedure _MD5;
     /// SHA-1 hashing functions
     procedure _SHA1;
@@ -944,7 +944,7 @@ type
     // non cryptographic hashes
     bCRC32c, bXXHash32, bCRC32, bAdler32, bHash32, bAesniHash,
     // cryptographic hashes
-    bMD5,
+    bMD4, bMD5,
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
     bSHA384, bHMACSHA384, bSHA512, bSHA512_256, bHMACSHA512,
     bSHA3_256, bSHA3_512,
@@ -989,7 +989,7 @@ var
   s, i, size, n: integer;
   data, encrypted: RawByteString;
   dig: THash512Rec;
-  MD5: TMd5;
+  MD: TMd5;
   SHA1: TSha1;
   SHA256: TSha256;
   SHA384: TSha384;
@@ -1055,8 +1055,10 @@ begin
             dig.d0 := adler32(0, pointer(data), SIZ[s]);
           bCRC32:
             dig.d0 := crc32(0, pointer(data), SIZ[s]);
+          bMD4:
+            MD.Full(pointer(data), SIZ[s], dig.h0, {forcemd4=}true);
           bMD5:
-            MD5.Full(pointer(data), SIZ[s], dig.h0);
+            MD.Full(pointer(data), SIZ[s], dig.h0);
           bSHA1:
             SHA1.Full(pointer(data), SIZ[s], dig.b160);
           bHMACSHA1:
@@ -2221,24 +2223,43 @@ var
   md: TMd5;
   dig, dig2: TMd5Digest;
   tmp: TByteDynArray;
+  ismd4: boolean;
 begin
-  check(htdigest('agent007', 'download area', 'secret') =
-    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65');
-  check(Md5('') = 'd41d8cd98f00b204e9800998ecf8427e');
-  check(Md5('a') = '0cc175b9c0f1b6a831c399e269772661');
-  check(Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =
-    'd174ab98d277d9f5a5611c2c9f419d9f');
+  // MD5 validation
+  CheckEqual(htdigest('agent007', 'download area', 'secret'),
+    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65', 'htdigest');
+  CheckEqual(Md5(''), 'd41d8cd98f00b204e9800998ecf8427e', 'MD5ref1');
+  CheckEqual(Md5('a'), '0cc175b9c0f1b6a831c399e269772661', 'MD5ref2');
+  CheckEqual(Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'),
+    'd174ab98d277d9f5a5611c2c9f419d9f', 'MD5ref3');
+  // MD4 validation
+  CheckEqual(Md4(''), '31d6cfe0d16ae931b73c59d7e0c089c0', 'MD4ref1');
+  CheckEqual(Md4('Wikipedia, l''encyclopedie libre et gratuite'),
+    'b94e66e0817dd34dc7858a0c131d4079', 'MD4ref2');
+  CheckEqual(Md4('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'),
+    '043f8582f241db351ce627e153e7f0e4', 'MD4ref3');
+  CheckEqual(Md4(HexToBin('839c7a4d7a92cb5678a5d5b9eea5a7573c8a74deb366c3dc20a08' +
+    '3b69f5d2a3bb3719dc69891e9f95e809fd7e8b23ba6318edd45e51fe39708bf9427e9c3e8b9')),
+    '4d7e6a1defa93d2dde05b45d864c429b', 'colllisionA');
+  CheckEqual(Md4(HexToBin('839c7a4d7a92cbd678a5d529eea5a7573c8a74deb366c3dc20a08' +
+    '3b69f5d2a3bb3719dc69891e9f95e809fd7e8b23ba6318edc45e51fe39708bf9427e9c3e8b9')),
+    '4d7e6a1defa93d2dde05b45d864c429b', 'colllisionB');
+  // MD Context Hashing validation
   SetLength(tmp, 256);
-  for n := 256 - 80 to 256 do
-  begin
-    md.Init;
-    for i := 1 to n do
-      md.Update(tmp[0], 1);
-    md.Final(dig);
-    md.Full(pointer(tmp), n, dig2);
-    check(IsEqual(dig, dig2));
-    check(CompareMem(@dig, @dig2, SizeOf(dig)));
-  end;
+  for ismd4 := false to true do
+    for n := 256 - 80 to 256 do
+    begin
+      if ismd4 then
+        md.InitMD4
+      else
+        md.Init;
+      for i := 1 to n do
+        md.Update(tmp[0], 1);
+      md.Final(dig);
+      md.Full(pointer(tmp), n, dig2, ismd4);
+      check(IsEqual(dig, dig2), 'MDrefA');
+      check(CompareMem(@dig, @dig2, SizeOf(dig)), 'MDrefB');
+    end;
 end;
 
 function TTestCoreCrypto.DigestUser(const User, Realm: RawUtf8;
