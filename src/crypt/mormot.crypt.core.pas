@@ -2130,24 +2130,27 @@ type
   PMd5In = ^TMd5In;
   TMd5Buf = TBlock128;
 
-  /// implements MD5 hashing
-  // - this algorithm has known weaknesses, so should not be considered as
-  // cryptographic secure, but is available for other purposes
+  /// implements MD5 hashing  - and could also implement MD4 if really needed
+  // - those algorithms have known weaknesses, so should not be considered as
+  // cryptographic secure, but are available for compatibility purposes
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  // - even if MD5 is now seldom used, it is still faster than SHA alternatives,
-  // when you need a 128-bit cryptographic hash, but can afford some collisions
-  // - this implementation has optimized x86 and x64 assembly, for processing
-  // around 500MB/s, and a pure-pascal fallback code on other platforms
+  // - this implementation has optimized x86 and x64 assembly, and a pure-pascal
+  // fallback code on other platforms (and for the MD4 algorithm)
   TMd5 = object
   private
     in_: TMd5In;
     bytes: array[0..1] of cardinal;
+    transform: procedure(var mdbuf: TMd5Buf; const mdin: TMd5In);
   public
     buf: TMd5Buf;
     /// initialize MD5 context for hashing
     procedure Init;
+    /// initialize MD4 context for hashing
+    // - will reuse the whole MD5 context but setup the MD4 transform function
+    // - MD4 is clearly deprecated, but available here for compatibility usage
+    procedure InitMD4;
     /// update the MD5 context with some data
     procedure Update(const buffer; Len: cardinal); overload;
     /// update the MD5 context with some data
@@ -2163,8 +2166,9 @@ type
     // affected to Update() method
     function Final: TMd5Digest; overload;
     /// one method to rule them all
-    // - call Init, then Update(), then Final()
-    procedure Full(Buffer: pointer; Len: integer; out Digest: TMd5Digest);
+    // - call Init/InitMD4, Update(), then Final() with a stack-allocated context
+    procedure Full(Buffer: pointer; Len: integer; out Digest: TMd5Digest;
+      ForceMD4: boolean = false);
   end;
   PMd5 = ^TMd5;
 
@@ -2258,6 +2262,9 @@ function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 // - this function expect the resulting key length to match SHA-1 digest size
 procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
   count: integer; out result: TSha1Digest);
+
+/// direct MD4 hash calculation of some data
+function Md4Buf(const Buffer; Len: cardinal): TMd5Digest;
 
 
 { ****************** HMAC Authentication over SHA and CRC32C }
@@ -2627,6 +2634,9 @@ function Md5DigestToString(const D: TMd5Digest): RawUtf8;
 // - just a wrapper around mormot.core.text.HexToBin()
 function Md5StringToDigest(const Source: RawUtf8; out Dest: TMd5Digest): boolean;
 
+/// direct MD4 hash calculation of some data (string-encoded)
+// - result is returned in lowercase hexadecimal format
+function Md4(const s: RawByteString): RawUtf8;
 
 /// direct SHA-1 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -9866,8 +9876,97 @@ end;
 
 {$endif CPUINTEL}
 
+{$ifndef FPC} // this operation is an intrinsic with the FPC compiler
+function RolDWord(value: cardinal; count: integer): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (value shl count) or (value shr (32 - count));
+end;
+{$endif FPC}
+
+procedure MD4Transform(var buf: TBlock128; const in_: TMd5In);
+var
+  a, b, c, d, e: cardinal;
+begin // fast enough unrolled code - especially with FPC RolDWord() intrinsic
+  a := buf[0];
+  b := buf[1];
+  c := buf[2];
+  d := buf[3];
+  a := RolDWord(a + (d xor (b and (c xor d))) + in_[ 0], 3);
+  d := RolDWord(d + (c xor (a and (b xor c))) + in_[ 1], 7);
+  c := RolDWord(c + (b xor (d and (a xor b))) + in_[ 2], 11);
+  b := RolDWord(b + (a xor (c and (d xor a))) + in_[ 3], 19);
+  a := RolDWord(a + (d xor (b and (c xor d))) + in_[ 4], 3);
+  d := RolDWord(d + (c xor (a and (b xor c))) + in_[ 5], 7);
+  c := RolDWord(c + (b xor (d and (a xor b))) + in_[ 6], 11);
+  b := RolDWord(b + (a xor (c and (d xor a))) + in_[ 7], 19);
+  a := RolDWord(a + (d xor (b and (c xor d))) + in_[ 8], 3);
+  d := RolDWord(d + (c xor (a and (b xor c))) + in_[ 9], 7);
+  c := RolDWord(c + (b xor (d and (a xor b))) + in_[10], 11);
+  b := RolDWord(b + (a xor (c and (d xor a))) + in_[11], 19);
+  a := RolDWord(a + (d xor (b and (c xor d))) + in_[12], 3);
+  d := RolDWord(d + (c xor (a and (b xor c))) + in_[13], 7);
+  c := RolDWord(c + (b xor (d and (a xor b))) + in_[14], 11);
+  b := RolDWord(b + (a xor (c and (d xor a))) + in_[15], 19);
+  e := $5a827999;
+  a := RolDWord(a + ((b and c) or (b and d) or (c and d)) + in_[ 0] + e, 3);
+  d := RolDWord(d + ((a and b) or (a and c) or (b and c)) + in_[ 4] + e, 5);
+  c := RolDWord(c + ((d and a) or (d and b) or (a and b)) + in_[ 8] + e, 9);
+  b := RolDWord(b + ((c and d) or (c and a) or (d and a)) + in_[12] + e, 13);
+  a := RolDWord(a + ((b and c) or (b and d) or (c and d)) + in_[ 1] + e, 3);
+  d := RolDWord(d + ((a and b) or (a and c) or (b and c)) + in_[ 5] + e, 5);
+  c := RolDWord(c + ((d and a) or (d and b) or (a and b)) + in_[ 9] + e, 9);
+  b := RolDWord(b + ((c and d) or (c and a) or (d and a)) + in_[13] + e, 13);
+  a := RolDWord(a + ((b and c) or (b and d) or (c and d)) + in_[ 2] + e, 3);
+  d := RolDWord(d + ((a and b) or (a and c) or (b and c)) + in_[ 6] + e, 5);
+  c := RolDWord(c + ((d and a) or (d and b) or (a and b)) + in_[10] + e, 9);
+  b := RolDWord(b + ((c and d) or (c and a) or (d and a)) + in_[14] + e, 13);
+  a := RolDWord(a + ((b and c) or (b and d) or (c and d)) + in_[ 3] + e, 3);
+  d := RolDWord(d + ((a and b) or (a and c) or (b and c)) + in_[ 7] + e, 5);
+  c := RolDWord(c + ((d and a) or (d and b) or (a and b)) + in_[11] + e, 9);
+  b := RolDWord(b + ((c and d) or (c and a) or (d and a)) + in_[15] + e, 13);
+  e := $6ed9eba1;
+  a := RolDWord(a + (b xor c xor d) + in_[ 0] + e, 3);
+  d := RolDWord(d + (a xor b xor c) + in_[ 8] + e, 9);
+  c := RolDWord(c + (d xor a xor b) + in_[ 4] + e, 11);
+  b := RolDWord(b + (c xor d xor a) + in_[12] + e, 15);
+  a := RolDWord(a + (b xor c xor d) + in_[ 2] + e, 3);
+  d := RolDWord(d + (a xor b xor c) + in_[10] + e, 9);
+  c := RolDWord(c + (d xor a xor b) + in_[ 6] + e, 11);
+  b := RolDWord(b + (c xor d xor a) + in_[14] + e, 15);
+  a := RolDWord(a + (b xor c xor d) + in_[ 1] + e, 3);
+  d := RolDWord(d + (a xor b xor c) + in_[ 9] + e, 9);
+  c := RolDWord(c + (d xor a xor b) + in_[ 5] + e, 11);
+  b := RolDWord(b + (c xor d xor a) + in_[13] + e, 15);
+  a := RolDWord(a + (b xor c xor d) + in_[ 3] + e, 3);
+  d := RolDWord(d + (a xor b xor c) + in_[11] + e, 9);
+  c := RolDWord(c + (d xor a xor b) + in_[ 7] + e, 11);
+  b := RolDWord(b + (c xor d xor a) + in_[15] + e, 15);
+  inc(buf[0], a);
+  inc(buf[1], b);
+  inc(buf[2], c);
+  inc(buf[3], d);
+end;
+
 
 { TMd5 }
+
+procedure TMd5.Init;
+begin
+  buf[0] := $67452301;
+  buf[1] := $efcdab89;
+  buf[2] := $98badcfe;
+  buf[3] := $10325476;
+  bytes[0] := 0;
+  bytes[1] := 0;
+  transform := @MD5Transform;
+end;
+
+procedure TMd5.InitMD4;
+begin
+  Init;
+  transform := @MD4Transform;
+end;
 
 function TMd5.Final: TMd5Digest;
 begin
@@ -9898,7 +9997,7 @@ begin
   begin
     // Padding forces an extra block
     FillcharFast(p^, count + 8, 0);
-    MD5Transform(buf, in_);
+    transform(buf, in_);
     p := @in_;
     count := 56;
   end;
@@ -9906,19 +10005,24 @@ begin
   // Append length in bits and transform
   in_[14] := bytes[0] shl 3;
   in_[15] := (bytes[1] shl 3) or (bytes[0] shr 29);
-  MD5Transform(buf, in_);
+  transform(buf, in_);
 end;
 
-procedure TMd5.Full(Buffer: pointer; Len: integer; out Digest: TMd5Digest);
+procedure TMd5.Full(Buffer: pointer; Len: integer; out Digest: TMd5Digest;
+  ForceMD4: boolean);
 begin
   buf[0] := $67452301;
   buf[1] := $efcdab89;
   buf[2] := $98badcfe;
   buf[3] := $10325476;
   bytes[0] := Len;
+  if ForceMD4 Then
+    transform := @MD4Transform
+  else
+    transform := @MD5Transform;
   while Len >= SizeOf(TMd5In) do
   begin
-    MD5Transform(buf, PMd5In(Buffer)^);
+    transform(buf, PMd5In(Buffer)^);
     inc(PMd5In(Buffer));
     dec(Len, SizeOf(TMd5In));
   end;
@@ -9932,24 +10036,14 @@ begin
   else
   begin
     FillcharFast(Buffer^, Len + 8, 0);
-    MD5Transform(buf, in_);
+    transform(buf, in_);
     FillcharFast(in_, 56, 0);
   end;
   Len := bytes[0];
   in_[14] := Len shl 3;
   in_[15] := Len shr 29;
-  MD5Transform(buf, in_);
+  transform(buf, in_);
   Digest := TMd5Digest(buf);
-end;
-
-procedure TMd5.Init;
-begin
-  buf[0] := $67452301;
-  buf[1] := $efcdab89;
-  buf[2] := $98badcfe;
-  buf[3] := $10325476;
-  bytes[0] := 0;
-  bytes[1] := 0;
 end;
 
 procedure TMd5.Update(const buffer; len: cardinal);
@@ -9974,13 +10068,13 @@ begin
   end;
   // First chunk is an odd size
   MoveFast(p^, PAnsiChar(@in_)[64 - t], t);
-  MD5Transform(buf, in_);
+  transform(buf, in_);
   inc(PByte(p), t);
   dec(len, t);
   // Process data in 64-byte chunks
   for i := 1 to len shr 6 do
   begin
-    MD5Transform(buf, p^);
+    transform(buf, p^);
     inc(p);
   end;
   // Handle any remaining bytes of data.
@@ -9995,9 +10089,9 @@ end;
 
 function Md5Buf(const Buffer; Len: cardinal): TMd5Digest;
 var
-  MD5: TMd5;
+  md: TMd5;
 begin
-  MD5.Full(@Buffer, Len, result);
+  md.Full(@Buffer, Len, result);
 end;
 
 function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
@@ -10009,6 +10103,13 @@ var
 begin
   tmp := user + ':' + realm + ':';
   result := tmp + Md5(tmp + pass);
+end;
+
+function Md4Buf(const Buffer; Len: cardinal): THash128;
+var
+  md: TMd5;
+begin
+  md.Full(@Buffer, Len, result, {forcemd4=}true);
 end;
 
 
@@ -10492,10 +10593,10 @@ end;
 
 function Md5(const s: RawByteString): RawUtf8;
 var
-  MD5: TMd5;
+  md: TMd5;
   D: TMd5Digest;
 begin
-  MD5.Full(pointer(s), Length(s), D);
+  md.Full(pointer(s), Length(s), D);
   result := Md5DigestToString(D);
   FillZero(D);
 end;
@@ -10508,6 +10609,16 @@ end;
 function Md5StringToDigest(const Source: RawUtf8; out Dest: TMd5Digest): boolean;
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
+end;
+
+function Md4(const s: RawByteString): RawUtf8;
+var
+  md: TMd5;
+  D: TMd5Digest;
+begin
+  md.Full(pointer(s), Length(s), D, {forcemd4=}true);
+  result := Md5DigestToString(D);
+  FillZero(D);
 end;
 
 
