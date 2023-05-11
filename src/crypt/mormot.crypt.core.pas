@@ -3915,9 +3915,9 @@ procedure aesencryptpas(const ctxt: TAesContext; bi, bo: PWA4);
  2. Altered source versions must be plainly marked as such, and must not be
     misrepresented as being the original software.
  3. This notice may not be removed or altered from any source distribution.
- -> code has been refactored and tuned by AB especially for FPC x86_64 target }
+ -> code has been refactored and tuned by AB especially for FPC non-Intel/AMD }
 var
-  t: PCardinalArray;       // faster on a PIC system
+  t: PCardinalArray;       // faster on a PIC/RISC systems
   sb: PByteArray;
   s0, s1, s2, s3: PtrUInt; // TAesBlock s# as separate variables
   t0, t1, t2: cardinal;    // TAesBlock t# as separate variables
@@ -10567,7 +10567,7 @@ begin
     mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
+    XorMemory(@result, @tmp, SizeOf(result)); // XorMemoryPtrInt not usable here
   end;
   FillcharFast(mac, SizeOf(mac), 0);
   FillcharFast(first, SizeOf(first), 0);
