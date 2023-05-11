@@ -706,7 +706,8 @@ type
     /// add (or replace if ZipName already exists) a file within the archive
     function AddFile(const Filename: TFileName; const ZipName: RawUtf8): boolean;
     /// add (or replace) some files from a folder within the archive
-    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    // - returns the file names which were not readable so were not added
+    function AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean): TFileNameDynArray;
     /// add (or replace) a file from a memory buffer within the archive
     procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
     /// add (or replace) a void folder within the archive
@@ -1137,7 +1138,7 @@ type
     function GetAttributes(index: integer): cardinal; override;
     // I7zWriter methods
     function AddFile(const FileName: TFileName; const ZipName: RawUtf8): boolean;
-    procedure AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+    function AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean): TFileNameDynArray;
     procedure AddBuffer(const ZipName: RawUtf8; const Data: RawByteString);
     procedure AddDirectory(const ZipName: RawUtf8);
     procedure AddStream(Stream: TStream; Ownership: TStreamOwnership;
@@ -2388,7 +2389,8 @@ begin
   AddOrReplace(item);
 end;
 
-procedure T7zWriter.AddFiles(const Dir, Path, Wildcard: TFileName; recurse: boolean);
+function T7zWriter.AddFiles(const Dir, Path, Wildcard: TFileName;
+  recurse: boolean): TFileNameDynArray;
 var
   lencut: integer;
   files: TStringList;
@@ -2399,6 +2401,7 @@ var
     f: TSearchRec;
     i: integer;
     item: T7zItem;
+    fn: TFileName;
   begin
     if recurse and
        (FindFirst(p + '*.*', faDirectory, f) = 0) then
@@ -2416,20 +2419,27 @@ var
         repeat
           if (f.Attr and (faDirectory + faVolumeID{%H-})) = 0 then
           begin
-            item := T7zItem.Create;
-            item.SourceMode := smFile;
-            item.Stream := nil;
-            item.FileName := p + f.Name;
-            StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
-            item.CreationTime := f.FindData.ftCreationTime;
-            item.LastWriteTime := f.FindData.ftLastWriteTime;
-            item.Attributes := f.FindData.dwFileAttributes;
-            item.Size := f.Size;
-            item.IsFolder := false;
-            item.IsAnti := false;
-            item.Ownership := soOwned;
-            item.UpdateItemIndex := -1;
-            AddOrReplace(item);
+            fn := p + f.Name;
+            if IsFileReadable(fn) then
+            begin
+              item := T7zItem.Create;
+              item.SourceMode := smFile;
+              item.Stream := nil;
+              item.FileName := fn;
+              StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
+              item.CreationTime := f.FindData.ftCreationTime;
+              item.LastWriteTime := f.FindData.ftLastWriteTime;
+              item.Attributes := f.FindData.dwFileAttributes;
+              item.Size := f.Size;
+              item.IsFolder := false;
+              item.IsAnti := false;
+              item.Ownership := soOwned;
+              item.UpdateItemIndex := -1;
+              AddOrReplace(item);
+            end
+            else
+              // notify the caller that this file is locked
+              AddString(TStringDynArray(result), fn);
           end;
         until FindNext(f) <> 0;
         FindClose(f);
@@ -2437,6 +2447,7 @@ var
   end;
 
 begin
+  result := nil;
   s := path;
   if s <> '' then
     s := IncludeTrailingPathDelimiter(s);
@@ -2590,25 +2601,28 @@ function T7zWriter.GetStream(index: cardinal;
   var inStream: ISequentialInStream): HRESULT;
 begin
   if index >= cardinal(length(fEntries)) then
-  begin
-    result := ERROR_INVALID_PARAMETER;
-    exit;
-  end;
-  result := S_OK;
-  fCurrentItem := fEntries[index];
-  case fCurrentItem.SourceMode of
-    smFile:
-      if not fCurrentItem.IsFolder then
-        inStream := T7zStream.CreateFromFile(
-          fCurrentItem.FileName, fmOpenReadDenyNone, index);
-    smStream:
-      if not fCurrentItem.IsFolder then
-      begin
-        fCurrentItem.Stream.Seek(0, soFromBeginning);
-        inStream := T7zStream.Create(fCurrentItem.Stream, {owned=}false, index);
-      end;
+    result := ERROR_INVALID_PARAMETER
   else
-    result := ERROR_INVALID_PARAMETER;
+  try
+    fCurrentItem := fEntries[index];
+    case fCurrentItem.SourceMode of
+      smFile:
+        if not fCurrentItem.IsFolder then
+          inStream := T7zStream.CreateFromFile(
+            fCurrentItem.FileName, fmOpenReadDenyNone, index);
+      smStream:
+        if not fCurrentItem.IsFolder then
+        begin
+          fCurrentItem.Stream.Seek(0, soFromBeginning);
+          inStream := T7zStream.Create(
+            fCurrentItem.Stream, {owned=}false, index);
+        end;
+    else
+      result := ERROR_INVALID_PARAMETER;
+    end;
+    result := S_OK;
+  except
+    result := ERROR_ACCESS_DENIED;
   end;
 end;
 
