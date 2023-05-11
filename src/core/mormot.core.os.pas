@@ -2162,6 +2162,7 @@ type
 
 const
   NO_ERROR = Windows.NO_ERROR;
+
   ERROR_ACCESS_DENIED = Windows.ERROR_ACCESS_DENIED;
   ERROR_INVALID_PARAMETER = Windows.ERROR_INVALID_PARAMETER;
   ERROR_HANDLE_EOF = Windows.ERROR_HANDLE_EOF;
@@ -2171,15 +2172,14 @@ const
   ERROR_OLD_WIN_VERSION = Windows.ERROR_OLD_WIN_VERSION;
   ERROR_IO_PENDING = Windows.ERROR_IO_PENDING;
   ERROR_OPERATION_ABORTED = Windows.ERROR_OPERATION_ABORTED;
-
-  INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE; // = HANDLE(-1)
-  ENGLISH_LANGID = $0409;
-
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
   ERROR_WINHTTP_TIMEOUT = 12002;
   ERROR_WINHTTP_CANNOT_CONNECT = 12029;
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
   ERROR_MUI_FILE_NOT_FOUND = 15100;
+
+  INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE; // = HANDLE(-1)
+  ENGLISH_LANGID = $0409;
 
   PROV_RSA_FULL = 1;
   PROV_RSA_AES = 24;
@@ -3163,9 +3163,9 @@ function FileReadAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
-// - call FileReadAll() instead of FileRead() to retrieve a whole data buffer
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() or HashFile() functions
+// - note: you could better use FileReadAll() to retrieve a whole data buffer
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 
 /// returns a TFileStreamFromHandle optimized for one pass file reading
@@ -3173,6 +3173,11 @@ function FileOpenSequentialRead(const FileName: TFileName): integer;
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
+
+/// try to open the file from its name, as fmOpenReadDenyNone
+// - on Windows, calls CreateFileW(aFileName,GENERIC_READ) then CloseHandle
+// - on POSIX, calls fpOpen(pointer(aFileName),O_RDONLY) with no fpFlock() call
+function IsFileReadable(const aFileName: TFileName): boolean;
 
 /// copy all Source content into Dest from current position
 // - on Delphi, Dest.CopyFrom(Source, 0) uses GetSize and ReadBuffer which is

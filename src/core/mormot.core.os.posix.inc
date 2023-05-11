@@ -1271,6 +1271,16 @@ begin
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
 end;
 
+function IsFileReadable(const aFileName: TFileName): boolean;
+var
+  fd: integer;
+begin
+  fd := fpOpen(pointer(aFileName), O_RDONLY); // no fpFlock() call
+  result := ValidHandle(fd);
+  if result then
+    FpClose(fd);
+end;
+
 procedure SetEndOfFile(F: THandle);
 begin
   FpFtruncate(F, FPLseek(F, 0, SEEK_CUR));

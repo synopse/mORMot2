@@ -1047,6 +1047,19 @@ begin
     OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0);
 end;
 
+function IsFileReadable(const aFileName: TFileName): boolean;
+var
+  tmp: TW32Temp;
+  h: THandle;
+begin
+  h := CreateFileW(W32(aFileName, tmp), GENERIC_READ,
+    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
+    OPEN_EXISTING, 0, 0);
+  result := ValidHandle(h);
+  if result then
+    CloseHandle(h);
+end;
+
 threadvar // mandatory: GetTickCount seems per-thread on XP :(
   LastTickXP: TQWordRec;
 
