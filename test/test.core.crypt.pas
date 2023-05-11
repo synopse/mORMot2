@@ -1725,6 +1725,7 @@ var
   mac: TAesMac256;
   mac1, mac2: THash256;
   one, two, encdec: TAesAbstract;
+  cts: TAesCbc;
   noaesni, gcm, aead: boolean;
   Timer: array[boolean] of TPrecisionTimer;
   ValuesCrypted, ValuesOrig: array[0..6] of RawByteString;
@@ -1978,6 +1979,40 @@ begin
   {$ifdef CPUINTEL}
   CpuFeatures := backup;
   {$endif CPUINTEL}
+  // see https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
+  st := HexToBin('636869636b656e207465726979616b69');
+  CheckEqual(length(st), 16);
+  FillZero(iv.b);
+  cts := TAesCbc.Create(PHash128(st)^);
+  try
+    orig := HexToBin('4920776f756c64206c696b652074686520');
+    crypted := cts.EncryptCts(orig);
+    CheckEqual(BinToHex(crypted), 'C6353568F2BF8CB4D8A580362DA7FF7F97');
+    cts.iv := iv.b; // reset IV
+    s2 := cts.DecryptCts(crypted);
+    CheckEqual(s2, orig);
+    cts.iv := iv.b;
+    orig := HexToBin(
+      '4920776f756c64206c696b65207468652047656e6572616c20476175277320');
+    crypted := cts.EncryptCts(orig);
+    CheckEqual(BinToHex(crypted),
+      'FC00783E0EFDB2C1D445D4C8EFF7ED2297687268D6ECCCC0C07B25E25ECFE5');
+    cts.iv := iv.b;
+    s2 := cts.DecryptCts(crypted);
+    CheckEqual(s2, orig);
+    for i := 16 to 100 do
+    begin
+      orig := RandomAnsi7(i);
+      cts.iv := iv.b;
+      crypted := cts.EncryptCts(orig);
+      cts.iv := iv.b;
+      s2 := cts.DecryptCts(crypted);
+      CheckEqual(s2, orig);
+      CheckEqual(cts.DecryptCts(cts.EncryptCts(orig, true), true), orig);
+    end;
+  finally
+    cts.Free;
+  end;
 end;
 
 procedure TTestCoreCrypto._AES_GCM;
