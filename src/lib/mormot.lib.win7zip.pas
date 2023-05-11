@@ -2604,6 +2604,7 @@ begin
     result := ERROR_INVALID_PARAMETER
   else
   try
+    result := S_OK;
     fCurrentItem := fEntries[index];
     case fCurrentItem.SourceMode of
       smFile:
@@ -2620,7 +2621,6 @@ begin
     else
       result := ERROR_INVALID_PARAMETER;
     end;
-    result := S_OK;
   except
     result := ERROR_ACCESS_DENIED;
   end;
