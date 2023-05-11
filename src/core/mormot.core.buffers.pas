@@ -8870,6 +8870,8 @@ procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer = 32);
 var
   P: PUtf8Char;
 begin
+  if fMap.Buffer = nil then
+    exit;
   fLinesMax := fMap.FileSize div AverageLineLength + 8;
   GetMem(fLines, fLinesMax * SizeOf(pointer));
   P := pointer(fMap.Buffer);
