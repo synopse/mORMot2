@@ -2159,6 +2159,7 @@ var
   guid: THash128Rec absolute mem;
   {$endif OSDARWIN}
 begin
+  // this is the very minimal OS entropy we could get for BSD/Darwin
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
   getloadavg(avg, 3);
