@@ -4979,17 +4979,13 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
-type
-  TIntToText = packed record // as TSynTempBuffer = up to 194 integers on stack
-    Len: byte;
-    Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
-  end;
-  PIntToText = ^TIntToText;
+const // first byte is the len, then 20 bytes buffer for the 64-bit integer text
+  I2T_SIZE = 21; // as TSynTempBuffer = up to 194 integers on stack
 
-procedure IntToText(int: PIntToText; len, n: PtrInt; const pref, suf: RawUtf8;
+procedure IntToText(int: PAnsiChar; len, n: PtrInt; const pref, suf: RawUtf8;
   inlin: boolean; sep: AnsiChar; var result: RawUtf8);
 var
-  L: PtrInt;
+  L: PtrUInt;
   P: PAnsiChar;
 begin
   inc(len, (n - 1) + length(pref) + length(suf));
@@ -5005,29 +5001,28 @@ begin
   end;
   if inlin then
     repeat
-      dec(n);
       PWord(P)^ := ord(':') + ord('(') shl 8;
       inc(P, 2);
-      L := int^.len;
-      MoveFast(PAnsiChar(int)[21 - L], P^, L);
-      inc(P, L);
+      MoveFast(int[I2T_SIZE - ord(int^)], P^, ord(int^));
+      inc(P, ord(int^));
       PWord(P)^ := ord(')') + ord(':') shl 8;
       inc(P, 2);
+      dec(n);
       if n = 0 then
         break;
-      inc(int);
+      inc(int, I2T_SIZE);
       P^ := sep;
       inc(P);
     until false
   else
     repeat
-      dec(n);
-      L := int^.len;
-      MoveFast(PAnsiChar(int)[21 - L], P^, L);
+      L := ord(int^);
+      MoveFast(PAnsiChar(int)[I2T_SIZE - L], P^, L);
       inc(P, L);
+      dec(n);
       if n = 0 then
         break;
-      inc(int);
+      inc(int, I2T_SIZE);
       P^ := sep;
       inc(P);
     until false;
@@ -5039,23 +5034,22 @@ function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
   const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 var
   i, L, Len: PtrInt;
-  int: PIntToText;
-  P: PAnsiChar;
+  int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
   result := '';
   if ValuesCount = 0 then
     exit;
-  int := temp.Init(ValuesCount * SizeOf(TIntToText));
+  int := temp.Init(ValuesCount * I2T_SIZE);
   try
     Len := 0;
     for i := 0 to ValuesCount - 1 do
     begin
-      P := StrInt32(PAnsiChar(int) + 21, Values[i]);
-      L := PAnsiChar(int) + 21 - P;
-      int^.Len := L;
+      P := StrInt32(int + I2T_SIZE, Values[i]);
+      L := int + I2T_SIZE - P;
+      int^ := AnsiChar(L);
       inc(Len, L);
-      inc(int);
+      inc(int, I2T_SIZE);
     end;
     IntToText(temp.buf, Len, ValuesCount, Prefix, Suffix, InlinedValue, SepChar, result);
   finally
@@ -5067,23 +5061,22 @@ function Int64DynArrayToCsv(Values: PInt64Array; ValuesCount: integer;
   const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
 var
   i, L, Len: PtrInt;
-  int: PIntToText;
-  P: PAnsiChar;
+  int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
   result := '';
   if ValuesCount = 0 then
     exit;
-  int := temp.Init(ValuesCount * SizeOf(TIntToText));
+  int := temp.Init(ValuesCount * I2T_SIZE);
   try
     Len := 0;
     for i := 0 to ValuesCount - 1 do
     begin
-      P := StrInt64(PAnsiChar(int) + 21, Values[i]);
-      L := PAnsiChar(int) + 21 - P;
-      int^.Len := L;
+      P := StrInt64(int + I2T_SIZE, Values[i]);
+      L := int + I2T_SIZE - P;
+      int^ := AnsiChar(L);
       inc(Len, L);
-      inc(int);
+      inc(int, I2T_SIZE);
     end;
     IntToText(temp.buf, Len, ValuesCount, Prefix, Suffix, InlinedValue, SepChar, result);
   finally
