@@ -200,6 +200,11 @@ type
     procedure SendPipelinePrepared;
     /// retrieve next result for pipelined statement
     procedure GetPipelineResult;
+    /// bind an array of integer values to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - overloaded for direct assignment to the PostgreSQL client as fake JSON
+    procedure BindArray(Param: integer;
+      const Values: array of Int64); overload; override;
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
     // - warning: input JSON should already be in the expected format (ftDate)
@@ -1073,6 +1078,21 @@ begin
     // nil represents end of the result set
     raise ESqlDBPostgres.CreateUtf8(
       '%.GetPipelineResult: returned something extra', [self]);
+end;
+
+procedure TSqlDBPostgresStatement.BindArray(Param: integer;
+  const Values: array of Int64);
+var
+  p: PSqlDBParam;
+begin
+  // PostgreSQL has its own JSON-like syntax, which is '{1,2,3}' for integers
+  if high(Values) < 0 then
+    Param := -1; // to raise exception
+  p := CheckParam(Param, ftInt64, paramIn, 0);
+  p^.VArray := _BindArrayJson; // fake marker
+  p^.VInt64 := length(Values);
+  p^.VData := Int64DynArrayToCsv(@Values[0], p^.VInt64, '{', '}');
+  fParamsArrayCount := p^.VInt64;
 end;
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;

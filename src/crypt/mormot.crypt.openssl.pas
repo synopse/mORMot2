@@ -1372,7 +1372,7 @@ begin
   FillZero(PrivateKey); // may be padded with zeros anyway
   if k = nil then
     exit;
-  priv := EC_KEY_get0_private_key(k);
+  priv := EC_KEY_get0_private_key(k); // use EVP_PKEY_get_bn_param() instead?
   privlen := priv.Size;
   if (privlen <= 0) or
      (privlen > SizeOf(PrivateKey)) then

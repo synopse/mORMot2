@@ -4988,7 +4988,7 @@ var
   tmp: array[0..15] of AnsiChar;
   ints: ^TInts16;
   P: PAnsiChar;
-  tmpbuf: TSynTempBuffer; // faster than a dynamic array
+  tmpbuf: TSynTempBuffer; // faster than a dynamic array - up to 255 on stack
 begin
   result := '';
   if ValuesCount = 0 then
@@ -5056,7 +5056,7 @@ var
   i, L, Len: PtrInt;
   int: ^TInt;
   P: PAnsiChar;
-  tmp: TSynTempBuffer; // faster than a dynamic array
+  tmp: TSynTempBuffer; // faster than a dynamic array - up to 194 Int64 on stack
 begin
   result := '';
   if ValuesCount = 0 then
