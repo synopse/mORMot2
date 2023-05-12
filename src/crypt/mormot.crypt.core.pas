@@ -108,8 +108,9 @@ procedure XorBlock16(A, B: PPtrIntArray);
 procedure XorBlock16(A, B, C: PPtrIntArray);
  {$ifdef HASINLINE}inline;{$endif} overload;
 
+{$ifndef PUREMORMOT2}
 /// simple XOR encryption according to Cod - not Compression or Stream compatible
-// - used in AESFull() for KeySize=32
+// - used in deprecated AESFull() for KeySize=32
 // - Cod is used to derivate some pseudo-random content from internal constant
 // tables, so encryption is weak but fast
 procedure XorBlock(p: PIntegerArray; Count, Cod: integer);
@@ -118,7 +119,7 @@ procedure XorBlock(p: PIntegerArray; Count, Cod: integer);
 // - Compression not compatible with this function: should be applied after
 // compress (e.g. as outStream for TAesWriteStream)
 // - Stream compatible (with updated Index)
-// - used in AES() and TAesWriteStream
+// - used in deprecated AES() and TAesWriteStream
 // - Index is used to derivate some pseudo-random content from internal
 // constant tables, so encryption is weak but fast
 procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
@@ -129,6 +130,7 @@ procedure XorOffset(P: PByteArray; Index, Count: PtrInt);
 // - this encryption is very weak, so should be used only for basic
 // obfuscation, not data protection
 procedure XorConst(p: PIntegerArray; Count: integer);
+{$endif PUREMORMOT2}
 
 // little endian fast conversion
 // - 160 bits = 5 integers
@@ -169,16 +171,16 @@ function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
 
 function Adler32SelfTest: boolean;
 
-/// entry point of the raw MD5 transform function - may be used for low-level use
+/// entry point of the raw MD5 transform function - for low-level use
 procedure RawMd5Compress(var Hash; Data: pointer);
 
-/// entry point of the raw SHA-1 transform function - may be used for low-level use
+/// entry point of the raw SHA-1 transform function - for low-level use
 procedure RawSha1Compress(var Hash; Data: pointer);
 
-/// entry point of the raw SHA-256 transform function - may be used for low-level use
+/// entry point of the raw SHA-256 transform function - for low-level use
 procedure RawSha256Compress(var Hash; Data: pointer);
 
-/// entry point of the raw SHA-512 transform function - may be used for low-level use
+/// entry point of the raw SHA-512 transform function - for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
 var
