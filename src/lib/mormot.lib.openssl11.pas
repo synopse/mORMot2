@@ -232,6 +232,8 @@ const
   OPENSSL1_VERNUM = $10101000;
   /// the minimal 32-bit OpenSslVersion value for Open SSL 3.0.0
   OPENSSL3_VERNUM = $30000000;
+  /// the minimal 32-bit OpenSslVersion value for Open SSL 3.1.0
+  OPENSSL31_VERNUM = $30100000;
 
   {$ifdef NOOPENSSL3}
   LIB_TXT = '1.1.1';

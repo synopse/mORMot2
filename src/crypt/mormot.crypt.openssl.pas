@@ -2865,23 +2865,30 @@ begin
   if HasOpenSsl or
      not OpenSslIsAvailable then
     exit;
-  // set the fastest AES implementation classes according to the actual platform
-  TAesFast[mGcm] := TAesGcmOsl;
-  {$ifdef HASAESNI}
-    // mormot.crypt.core x86_64 asm is faster than OpenSSL - but GCM
-    {$ifndef CPUX64}
-    // our AES-CTR x86_64 asm is faster than OpenSSL's
-    TAesFast[mCtr] := TAesCtrOsl;
-    {$endif CPUX64}
-  {$else}
-  // ARM/Aarch64 would rather use OpenSSL than our purepascal code
-  TAesFast[mEcb] := TAesEcbOsl;
-  TAesFast[mCbc] := TAesCbcOsl;
-  TAesFast[mCfb] := TAesCfbOsl;
-  TAesFast[mOfb] := TAesOfbOsl;
-  TAesFast[mCtr] := TAesCtrOsl;
-  {$endif HASAESNI}
   HasOpenSsl := true; // global mormot.crypt.core flag
+  // set the fastest AES implementation classes according to the actual platform
+  {$ifdef HASAESNI}
+  if (OpenSslVersion < OPENSSL3_VERNUM) or
+     (OpenSslVersion >= OPENSSL31_VERNUM) then
+     // OpenSSL 3.0 has a performance regression (as API overhead)
+  {$endif HASAESNI}
+  begin
+    TAesFast[mGcm] := TAesGcmOsl;
+    {$ifdef HASAESNI}
+      // mormot.crypt.core x86_64 asm is faster than OpenSSL - but GCM
+      {$ifndef CPUX64}
+      // our AES-CTR x86_64 asm is faster than OpenSSL's
+      TAesFast[mCtr] := TAesCtrOsl;
+      {$endif CPUX64}
+    {$else}
+    // ARM/Aarch64 would rather use OpenSSL than our purepascal code
+    TAesFast[mEcb] := TAesEcbOsl;
+    TAesFast[mCbc] := TAesCbcOsl;
+    TAesFast[mCfb] := TAesCfbOsl;
+    TAesFast[mOfb] := TAesOfbOsl;
+    TAesFast[mCtr] := TAesCtrOsl;
+    {$endif HASAESNI}
+  end;
   // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;

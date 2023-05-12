@@ -819,7 +819,7 @@ type
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - on x86_64, our TAesCfb class is really faster than OpenSSL:
+  // - on x86_64, our TAesCfb class is really faster than OpenSSL 1.1:
   // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
   // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
   // $  openssl aes-128-cfb in 10.53ms i.e. 237326/s or 505 MB/s
@@ -844,7 +844,7 @@ type
   /// handle AES cypher/uncypher with Output feedback (OFB)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - on x86_64, our TAesOfb class is faster than OpenSSL:
+  // - on x86_64, our TAesOfb class is faster than OpenSSL 1.1:
   // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
   // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
   // $  openssl aes-128-ofb in 7.82ms i.e. 319693/s or 680.3 MB/s
@@ -901,7 +901,7 @@ type
   // with reference implementations like OpenSSL - see also TAesCtrOsl
   // - WARNING: BREAKING CHANGE mORMot 1.18 SynCrypto's TAESCTR is TAesC64
   // - on x86_64 we use a 8*128-bit interleaved optimized asm which is faster
-  // than OpenSSL 1.1.1 in our benchmarks:
+  // than OpenSSL 1.1 in our benchmarks (and much faster than OpenSSL 3.0):
   // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
   // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
   // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
@@ -1148,7 +1148,8 @@ type
   // - our TAesGcm class is 8x interleaved for both GMAC and AES-CTR
   // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
   // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
-  // - OpenSSL is slightly faster since performs GMAC and AES-CTR as single pass
+  // - OpenSSL 1.1 is slightly faster since performs GMAC + CTR as single pass
+  // but OpenSSL 3.0 is slower due to higher library overhead
   // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   // - on i386, numbers are much lower, since lacks interleaved asm
