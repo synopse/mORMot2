@@ -5003,27 +5003,34 @@ begin
     MoveFast(pointer(pref)^, P^, L);
     inc(P, L);
   end;
-  repeat
-    dec(n);
-    if inlin then
-    begin
+  if inlin then
+    repeat
+      dec(n);
       PWord(P)^ := ord(':') + ord('(') shl 8;
       inc(P, 2);
-    end;
-    L := int^.len;
-    MoveFast(PAnsiChar(int)[21 - L], P^, L);
-    inc(P, L);
-    if inlin then
-    begin
+      L := int^.len;
+      MoveFast(PAnsiChar(int)[21 - L], P^, L);
+      inc(P, L);
       PWord(P)^ := ord(')') + ord(':') shl 8;
       inc(P, 2);
-    end;
-    if n = 0 then
-      break;
-    inc(int);
-    P^ := sep;
-    inc(P);
-  until false;
+      if n = 0 then
+        break;
+      inc(int);
+      P^ := sep;
+      inc(P);
+    until false
+  else
+    repeat
+      dec(n);
+      L := int^.len;
+      MoveFast(PAnsiChar(int)[21 - L], P^, L);
+      inc(P, L);
+      if n = 0 then
+        break;
+      inc(int);
+      P^ := sep;
+      inc(P);
+    until false;
   if suf <> '' then
     MoveFast(pointer(suf)^, P^, length(suf));
 end;

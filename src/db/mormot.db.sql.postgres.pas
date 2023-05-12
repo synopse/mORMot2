@@ -205,7 +205,7 @@ type
     // - overloaded for direct assignment to the PostgreSQL client as fake JSON
     procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
-    /// bind an array of 64-bit integer values to a parameter
+    /// bind an array of 32-bit integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - overloaded for direct assignment to the PostgreSQL client as fake JSON
     procedure BindArrayInt32(Param: integer; const Values: TIntegerDynArray);
