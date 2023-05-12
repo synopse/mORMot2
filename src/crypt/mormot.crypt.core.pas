@@ -5767,8 +5767,6 @@ var
 begin
   if fAesInit <> initEncrypt then
     EncryptInit;
-  FillZero(padded);
-  pad := Count and AesBlockMod;
   if Count < SizeOf(TAesBlock) then
     // RFC 3962 says it would pad the input with random up to 16 bytes
     raise ESynCrypto.CreateUtf8('%.EncryptCts with Count=%', [self, Count])
@@ -5777,20 +5775,22 @@ begin
     fAes.Encrypt(PAesBlock(BufIn)^, PAesBlock(BufOut)^); // RFC says to use ECB
     exit;
   end;
+  pad := Count and AesBlockMod;
   Encrypt(BufIn, BufOut, Count - pad); // up to last block
   prev := fOut;
   dec(prev);
+  FillZero(padded);
   MoveFast(fIn^, padded, pad);
   MoveFast(prev^, fOut^, pad);
   Encrypt(@padded, prev, SizeOf(TAesBlock)); // last block
+  FillZero(padded); // anti-forensic
 end;
 
 procedure TAesCbc.DecryptCts(BufIn, BufOut: pointer; Count: cardinal);
 var
   pad: cardinal;
-  padded: array[0..1] of TAesBlock;
+  tail: array[0..1] of TAesBlock;
 begin
-  FillZero(padded[0]);
   if fAesInit <> initDecrypt then
     DecryptInit;
   if Count < SizeOf(TAesBlock) then
@@ -5801,14 +5801,16 @@ begin
     exit;
   end;
   pad := Count and AesBlockMod;
-  Decrypt(BufIn, BufOut, Count - pad - SizeOf(TAesBlock)); // to second-to-last
-  fAes.Decrypt(fIn^, {%H-}padded[1]);
+  Decrypt(BufIn, BufOut, Count - pad - SizeOf(TAesBlock)); // to second-to-tail
+  fAes.Decrypt(fIn^, {%H-}tail[1]);
   inc(fIn);
-  MoveFast(fIn^, padded[0], pad);
-  XorBlock16(@padded[1], @padded[0]);
-  MoveFast(padded[1][pad], padded[0][pad], SizeOf(TAesBlock) - pad);
-  Decrypt(@padded[0], fOut, SizeOf(TAesBlock));
-  MoveFast(padded[1], fOut^, pad);
+  FillZero(tail[0]);
+  MoveFast(fIn^, tail[0], pad);
+  XorBlock16(@tail[1], @tail[0]);
+  MoveFast(tail[1][pad], tail[0][pad], SizeOf(TAesBlock) - pad);
+  Decrypt(@tail[0], fOut, SizeOf(TAesBlock));
+  MoveFast(tail[1], fOut^, pad);
+  FillZero(THash256(tail));
 end;
 
 function TAesCbc.EncryptCts(const Input: RawByteString;
