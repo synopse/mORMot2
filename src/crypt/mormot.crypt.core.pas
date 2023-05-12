@@ -5779,6 +5779,8 @@ begin
     exit;
   end;
   pad := Count and AesBlockMod;
+  if pad = 0 then
+    pad := SizeOf(TAesBlock); // multiple of AES blocks = just swap the tail
   Encrypt(BufIn, BufOut, Count - pad); // up to last block
   prev := fOut;
   dec(prev);
@@ -5804,6 +5806,8 @@ begin
     exit;
   end;
   pad := Count and AesBlockMod;
+  if pad = 0 then
+    pad := SizeOf(TAesBlock);
   Decrypt(BufIn, BufOut, Count - pad - SizeOf(TAesBlock)); // to second-to-tail
   fAes.Decrypt(fIn^, {%H-}tail[1]);
   inc(fIn);
