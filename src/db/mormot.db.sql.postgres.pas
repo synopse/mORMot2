@@ -49,6 +49,7 @@ type
     fOids: TWordDynArray; // O(n) search in L1 cache - use SSE2 on FPC x86_64
     fOidsFieldTypes: TSqlDBFieldTypeDynArray;
     fOidsCount: integer;
+    fArrayParamsAsBinary: boolean;
     procedure GetForeignKeys; override;
     /// fill mapping of standard OID
     // - at runtime mapping can be defined using Oid2FieldType() method
@@ -80,6 +81,11 @@ type
     /// get the asynchronous/pipelined engine associated with the current thread
     // - to be used as Async.Prepare/PrepareLocked factory
     function Async: TSqlDBPostgresAsync;
+    /// by default, array parameters will be sent as TEXT
+    // - set this property to true so that binary is sent over the wire for
+    // INT4ARRAYOID/INT8ARRAYOID parameters
+    property ArrayParamsAsBinary: boolean
+      read fArrayParamsAsBinary write fArrayParamsAsBinary;
   end;
 
   /// implements a connection via the libpq access layer
@@ -814,8 +820,17 @@ begin
   end;
 end;
 
+var // fake VArray markers
+  _BindArrayJson, _BindArrayBin4, _BindArrayBin8: TRawUtf8DynArray;
+
+function ComputeBinaryArray(p: PSqlDBParam; size: integer): boolean;
 var
-  _BindArrayJson: TRawUtf8DynArray; // fake variable as VArray marker
+  bin: RawByteString;
+begin
+  result := ToArrayOid(pointer(p^.VData), p^.VDBType, p^.VInt64, size, bin);
+  if result then
+    p^.VData := bin;
+end;
 
 procedure TSqlDBPostgresStatement.BindParams;
 var
@@ -830,9 +845,9 @@ begin
   p := pointer(fParams);
   for i := 0 to fParamCount - 1 do 
   begin
-    // convert parameter value as text stored in p^.VData
     if p^.VArray <> nil then
     begin
+      // convert array parameter values into p^.VData text or bin
       if not (p^.VType in [
            ftInt64,
            ftDouble,
@@ -842,11 +857,20 @@ begin
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
           'type % on bound parameter #%', [self, ToText(p^.VType)^, i]);
       if p^.VArray[0] <> _BindArrayJson[0] then
-        // p^.VData was not already set by BindArrayJson() -> convert now
-        BoundArrayToJsonArray(p^.VArray, RawUtf8(p^.VData)); // e.g. '{1,2,3}'
+        // p^.VData is not the array encoded as PostgreSQL pseudo-JSON {....}
+        if (p^.VArray[0] = _BindArrayBin4[0]) and
+           ComputeBinaryArray(p, ord(p^.VArray[1][1]) - ord('0')) then
+        begin
+          // p^.VData is the raw integer/Int64 array as Postgres binary
+          fPGParamFormats[i] := PGFMT_BIN;
+          fPGParamLengths[i] := length(p^.VData);
+        end
+        else
+          // p^.VData was not already set by BindArrayJson() -> convert now
+          BoundArrayToJsonArray(p^.VArray, RawUtf8(p^.VData)); // e.g. '{1,2,3}'
     end
     else
-    begin
+      // single value parameter
       case p^.VType of
         ftNull:
           p^.VData := '';
@@ -896,7 +920,6 @@ begin
         raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: cannot bind ' +
           'parameter #% of type %', [self, i, ToText(p^.VType)^]);
       end;
-    end;
     if fPGParams[i] = nil then
       fPGParams[i] := pointer(p^.VData);
     inc(p);
@@ -1090,13 +1113,22 @@ var
   p: PSqlDBParam;
 begin
   // PostgreSQL has its own JSON-like syntax, which is '{1,2,3}' for integers
-  fParamsArrayCount := length(Values);
-  if fParamsArrayCount = 0 then
+  if high(Values) < 0 then
     raise ESqlDBPostgres.CreateUtf8('%.BindArray([])', [self]);
   p := CheckParam(Param, ftInt64, paramIn, 0);
-  p^.VArray := _BindArrayJson; // fake marker
+  fParamsArrayCount := length(Values);
   p^.VInt64 := fParamsArrayCount;
-  p^.VData := Int64DynArrayToCsv(@Values[0], fParamsArrayCount, '{', '}');
+  if TSqlDBPostgresConnectionProperties(fConnection.Properties).
+       ArrayParamsAsBinary then
+  begin
+    p^.VArray := _BindArrayBin8; // fake marker
+    FastSetRawByteString(p^.VData, @Values[0], fParamsArrayCount * 8);
+  end
+  else
+  begin
+    p^.VArray := _BindArrayJson; // fake marker
+    p^.VData := Int64DynArrayToCsv(@Values[0], fParamsArrayCount, '{', '}');
+  end;
 end;
 
 procedure TSqlDBPostgresStatement.BindArrayInt32(Param: integer;
@@ -1105,15 +1137,23 @@ var
   p: PSqlDBParam;
 begin
   // PostgreSQL has its own JSON-like syntax, which is '{1,2,3}' for integers
-  fParamsArrayCount := length(Values);
-  if fParamsArrayCount = 0 then
+  if Values = nil then
     raise ESqlDBPostgres.CreateUtf8('%.BindArrayInt32([])', [self]);
   p := CheckParam(Param, ftInt64, paramIn, 0);
-  p^.VArray := _BindArrayJson; // fake marker
+  fParamsArrayCount := length(Values);
   p^.VInt64 := fParamsArrayCount;
-  p^.VData := IntegerDynArrayToCsv(pointer(Values), fParamsArrayCount, '{', '}');
+  if TSqlDBPostgresConnectionProperties(fConnection.Properties).
+       ArrayParamsAsBinary then
+  begin
+    p^.VArray := _BindArrayBin4; // fake marker
+    FastSetRawByteString(p^.VData, pointer(Values), fParamsArrayCount * 4);
+  end
+  else
+  begin
+    p^.VArray := _BindArrayJson; // fake marker
+    p^.VData := IntegerDynArrayToCsv(pointer(Values), fParamsArrayCount, '{', '}');
+  end;
 end;
-
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
   ParamType: TSqlDBFieldType; var JsonArray: RawUtf8; ValuesCount: integer);
@@ -1488,7 +1528,7 @@ begin
       UnLock;
     end;
   end;
-  // check if not already prepared
+  // check if not already prepared for this thread (no lock needed)
   for i := 0 to length(fStatements) - 1 do
   begin
     result := fStatements[i];
@@ -1558,6 +1598,12 @@ initialization
   TSqlDBPostgresConnectionProperties.RegisterClassNameForDefinition;
   SetLength(_BindArrayJson, 1);
   _BindArrayJson[0] := 'json'; // impossible SQL value (should be '''json''')
+  SetLength(_BindArrayBin4, 2);
+  _BindArrayBin4[0] := 'bin';
+  _BindArrayBin4[1] := '4'; // item size
+  SetLength(_BindArrayBin8, 2);
+  _BindArrayBin8[0] := 'bin';
+  _BindArrayBin8[1] := '8';
 
 end.
 

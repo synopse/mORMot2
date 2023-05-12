@@ -37,68 +37,66 @@ const
   // see pg_type.h
   BOOLOID = 16;
   BYTEAOID = 17;
+  CHAROID = 18;
+  NAMEOID = 19;
   INT8OID = 20;
   INT2OID = 21;
+  INT2VECTOROID	= 22;
   INT4OID = 23;
   REGPROCOID = 24;
   TEXTOID = 25;
   OIDOID = 26;
-  FLOAT4OID = 700;
-  FLOAT8OID = 701;
-  ABSTIMEOID = 702;
-  CASHOID = 790;
-  DATEOID = 1082;
-  TIMEOID = 1083;
-  TIMESTAMPOID = 1114;
-  TIMESTAMPTZOID = 1184;
-  TIMETZOID = 1266;
-  NUMERICOID = 1700;
-
-  CHAROID = 18;
-  NAMEOID = 19;
-  INT2VECTOROID	= 22;
   TIDOID = 27;
   XIDOID = 28;
   CIDOID = 29;
   OIDVECTOROID	= 30;
+  PGDDLCOMMANDOID = 32;
   JSONOID = 114;
   XMLOID = 142;
   PGNODETREEOID	= 194;
-  PGDDLCOMMANDOID = 32;
   POINTOID= 600;
   LSEGOID = 601;
   PATHOID = 602;
   BOXOID = 603;
   POLYGONOID = 604;
   LINEOID = 628;
+  CIDROID = 650;
+  FLOAT4OID = 700;
+  FLOAT8OID = 701;
+  ABSTIMEOID = 702;
   RELTIMEOID = 703;
   TINTERVALOID = 704;
   UNKNOWNOID = 705;
   CIRCLEOID = 718;
+  CASHOID = 790;
   MACADDROID = 829;
   INETOID = 869;
-  CIDROID = 650;
   INT2ARRAYOID = 1005;
   INT4ARRAYOID = 1007;
+  TEXTARRAYOID = 1009;
   INT8ARRAYOID = 1016;
-  TEXTARRAYOID= 1009;
-  OIDARRAYOID = 1028;
   FLOAT4ARRAYOID = 1021;
+  FLOAT8ARRAYOID = 1022;
+  OIDARRAYOID = 1028;
   ACLITEMOID = 1033;
-  CSTRINGARRAYOID = 1263;
   BPCHAROID = 1042;
   VARCHAROID = 1043;
+  DATEOID = 1082;
+  TIMEOID = 1083;
+  TIMESTAMPOID = 1114;
+  TIMESTAMPTZOID = 1184;
   INTERVALOID = 1186;
+  CSTRINGARRAYOID = 1263;
+  TIMETZOID = 1266;
   BITOID = 1560;
   VARBITOID = 1562;
-  REFCURSOROID= 1790;
+  NUMERICOID = 1700;
+  REFCURSOROID = 1790;
   REGPROCEDUREOID = 2202;
   REGOPEROID = 2203;
   REGOPERATOROID = 2204;
   REGCLASSOID = 2205;
   REGTYPEOID = 2206;
-  REGROLEOID = 4096;
-  REGNAMESPACEOID = 4089;
   REGTYPEARRAYOID = 2211;
   UUIDOID = 2950;
   LSNOID = 3220;
@@ -108,7 +106,9 @@ const
   REGCONFIGOID = 3734;
   REGDICTIONARYOID = 3769;
   JSONBOID = 3802;
-  INT4RANGEOID	  = 3904;
+  INT4RANGEOID = 3904;
+  REGNAMESPACEOID = 4089;
+  REGROLEOID = 4096;
 
 const
   PGRES_EMPTY_QUERY = 0;
@@ -138,6 +138,11 @@ const
 
   PGFMT_TEXT = 0;
   PGFMT_BIN  = 1;
+
+/// compute the PostgreSQL raw binary to encode an array of (integer) parameters
+function ToArrayOid(Values: PByte; ArrayOid, ValueCount, ValueSize: integer;
+  var Bin: RawByteString): boolean;
+
 
 
 { ************ PostgreSQL Client Library Loading }
@@ -239,6 +244,82 @@ procedure PostgresLibraryInitialize;
 
 
 implementation
+
+
+{ ************ Native PostgreSQL Client Library Constants }
+
+// see https://stackoverflow.com/a/66499392/458259
+
+function ToArrayOid(Values: PByte; ArrayOid, ValueCount, ValueSize: integer;
+  var Bin: RawByteString): boolean;
+var
+  len: PtrInt;
+  v: Int64;
+  p: PCardinal;
+begin
+  result := false;
+  if (ValueCount <= 0) or
+     not (ValueSize in [4, 8]) then
+    exit;
+  case ArrayOid of
+    INT4ARRAYOID:
+      begin
+        ArrayOid := INT4OID;
+        len := (5 * 4) + ValueCount * (4 + 4);
+      end;
+    INT8ARRAYOID:
+      begin
+        ArrayOid := INT8OID;
+        len := (5 * 4) + ValueCount * (4 + 8);
+      end;
+  else
+    exit; // unsupported
+  end;
+  FastSetRawByteString(Bin, nil, len);
+  p := pointer(Bin);
+  p^ := $01000000;           // dimensions
+  inc(p);
+  p^ := $00000000;           // has null
+  inc(p);
+  p^ := bswap32(ArrayOid);   // items type
+  inc(p);
+  p^ := bswap32(ValueCount); // items count
+  inc(p);
+  p^ := $01000000;           // offset
+  inc(p);
+  if ArrayOid = INT4OID then
+    repeat
+      p^ := $04000000;        // item length
+      inc(p);
+      p^ := bswap32(PCardinal(Values)^); // item value (maybe truncated)
+      inc(p);
+      inc(Values, ValueSize);
+      dec(ValueCount)
+    until ValueCount = 0
+  else if ValueSize = 4 then
+    repeat
+      p^ := $08000000;          // item length
+      inc(p);
+      v := PInteger(Values)^;   // expand sign to 64-bit
+      PInt64(p)^ := bswap64(v); // item value
+      inc(PInt64(p));
+      inc(PInteger(Values));
+      dec(ValueCount)
+    until ValueCount = 0
+  else // ValueSize = 8
+    repeat
+      p^ := $08000000;
+      inc(p);
+      PInt64(p)^ := bswap64(PInt64(Values)^);
+      inc(PInt64(p));
+      inc(PInt64(Values));
+      dec(ValueCount)
+    until ValueCount = 0;
+  //if PAnsiChar(p) - pointer(Bin) <> length(Bin) then
+  //  raise ESqlDBPostgres.Create('ToIntArrayOid');
+  result := true;
+end;
+
 
 { ************ PostgreSQL Client Library Loading }
 

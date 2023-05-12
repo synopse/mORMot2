@@ -140,7 +140,7 @@ const
   WORLD_COUNT       = 10000;
   WORLD_READ_SQL    = 'select id,randomNumber from World where id=?';
   WORLD_UPDATE_SQLN = 'update World as t set randomNumber = v.r from ' +
-    '(SELECT unnest(?::bigint[]), unnest(?::bigint[]) order by 1) as v(id, r)' +
+    '(SELECT unnest(?::integer[]), unnest(?::integer[]) order by 1) as v(id, r)' +
     ' where t.id = v.id';
   FORTUNES_SQL      = 'select id,message from Fortune';
 
@@ -189,6 +189,7 @@ begin
   {$else}
   fDbPool := TSqlDBPostgresConnectionProperties.Create(
     'tfb-database:5432', 'hello_world', 'benchmarkdbuser', 'benchmarkdbpass');
+  // fDbPool.ArrayParamsAsBinary := true; // seems not really faster
   {$endif USE_SQLITE3}
   // customize JSON serialization for TFB expectations
   TOrmWorld.OrmProps.Fields.JsonRenameProperties([
@@ -593,7 +594,7 @@ function TRawAsyncServer.rawupdates(ctxt: THttpServerRequest): cardinal;
 var
   cnt, i: PtrInt;
   res: TWorlds;
-  ids, nums: TInt64DynArray;
+  params: TInt64DynArray;
   conn: TSqlDBConnection;
   stmt: ISqlDBStatement;
 begin
@@ -608,16 +609,14 @@ begin
   if cnt > 20 then
   begin
     // fill parameters arrays for update with nested select (PostgreSQL only)
-    setLength(ids{%H-}, cnt);
-    setLength(nums{%H-}, cnt);
-    for i := 0 to cnt - 1 do
-    begin
-      ids[i] := res[i].id;
-      nums[i] := res[i].randomNumber;
-    end;
     stmt := conn.NewStatementPrepared(WORLD_UPDATE_SQLN, false, true);
-    stmt.BindArray(1, ids);
-    stmt.BindArray(2, nums);
+    SetLength(params{%H-}, cnt);
+    for i := 0 to cnt - 1 do
+      params[i] := res[i].id;
+    stmt.BindArray(1, params);
+    for i := 0 to cnt - 1 do
+      params[i] := res[i].randomNumber;
+    stmt.BindArray(2, params);
   end
   else
   begin
