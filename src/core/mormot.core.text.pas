@@ -4979,142 +4979,108 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
+type
+  TIntToText = packed record // as TSynTempBuffer = up to 194 integers on stack
+    Len: byte;
+    Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
+  end;
+  PIntToText = ^TIntToText;
+
+procedure IntToText(int: PIntToText; len, n: PtrInt; const pref, suf: RawUtf8;
+  inlin: boolean; sep: AnsiChar; var result: RawUtf8);
+var
+  L: PtrInt;
+  P: PAnsiChar;
+begin
+  inc(len, (n - 1) + length(pref) + length(suf));
+  if inlin then
+    inc(len, n * 4); // :( ): markers
+  FastSetString(result, nil, len);
+  P := pointer(result);
+  if pref <> '' then
+  begin
+    L := length(pref);
+    MoveFast(pointer(pref)^, P^, L);
+    inc(P, L);
+  end;
+  repeat
+    dec(n);
+    if inlin then
+    begin
+      PWord(P)^ := ord(':') + ord('(') shl 8;
+      inc(P, 2);
+    end;
+    L := int^.len;
+    MoveFast(PAnsiChar(int)[21 - L], P^, L);
+    inc(P, L);
+    if inlin then
+    begin
+      PWord(P)^ := ord(')') + ord(':') shl 8;
+      inc(P, 2);
+    end;
+    if n = 0 then
+      break;
+    inc(int);
+    P^ := sep;
+    inc(P);
+  until false;
+  if suf <> '' then
+    MoveFast(pointer(suf)^, P^, length(suf));
+end;
+
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
   const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
-type // shortstrings are faster (no heap allocation)
-  TInts16 = packed array[word] of string[15];
 var
   i, L, Len: PtrInt;
-  tmp: array[0..15] of AnsiChar;
-  ints: ^TInts16;
+  int: PIntToText;
   P: PAnsiChar;
-  tmpbuf: TSynTempBuffer; // faster than a dynamic array - up to 255 on stack
+  temp: TSynTempBuffer; // faster than a dynamic array
 begin
   result := '';
   if ValuesCount = 0 then
     exit;
-  if InlinedValue then
-    Len := 4 * ValuesCount
-  else
-    Len := 0;
-  tmpbuf.Init(ValuesCount * SizeOf({%H-}ints[0]) + Len);
+  int := temp.Init(ValuesCount * SizeOf(TIntToText));
   try
-    ints := tmpbuf.buf;
-     // compute whole result length at once
-    dec(ValuesCount);
-    inc(Len, length(Prefix) + length(Suffix));
-    tmp[15] := SepChar;
-    for i := 0 to ValuesCount do
+    Len := 0;
+    for i := 0 to ValuesCount - 1 do
     begin
-      P := StrInt32(@tmp[15], Values[i]);
-      L := @tmp[15] - P;
-      if i < ValuesCount then
-        inc(L); // append tmp[15]=','
+      P := StrInt32(PAnsiChar(int) + 21, Values[i]);
+      L := PAnsiChar(int) + 21 - P;
+      int^.Len := L;
       inc(Len, L);
-      SetString(ints[i], P, L);
+      inc(int);
     end;
-    // create result
-    FastSetString(result, nil, Len);
-    P := pointer(result);
-    if Prefix <> '' then
-    begin
-      L := length(Prefix);
-      MoveFast(pointer(Prefix)^, P^, L);
-      inc(P, L);
-    end;
-    for i := 0 to ValuesCount do
-    begin
-      if InlinedValue then
-      begin
-        PWord(P)^ := ord(':') + ord('(') shl 8;
-        inc(P, 2);
-      end;
-      L := ord(ints[i][0]);
-      MoveFast(ints[i][1], P^, L);
-      inc(P, L);
-      if InlinedValue then
-      begin
-        PWord(P)^ := ord(')') + ord(':') shl 8;
-        inc(P, 2);
-      end;
-    end;
-    if Suffix <> '' then
-      MoveFast(pointer(Suffix)^, P^, length(Suffix));
+    IntToText(temp.buf, Len, ValuesCount, Prefix, Suffix, InlinedValue, SepChar, result);
   finally
-    tmpbuf.Done;
+    temp.Done;
   end;
 end;
 
 function Int64DynArrayToCsv(Values: PInt64Array; ValuesCount: integer;
   const Prefix, Suffix: RawUtf8; InlinedValue: boolean; SepChar: AnsiChar): RawUtf8;
-type
-  TInt = packed record
-    Len: byte;
-    Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
-  end;
 var
   i, L, Len: PtrInt;
-  int: ^TInt;
+  int: PIntToText;
   P: PAnsiChar;
-  tmp: TSynTempBuffer; // faster than a dynamic array - up to 194 Int64 on stack
+  temp: TSynTempBuffer; // faster than a dynamic array
 begin
   result := '';
   if ValuesCount = 0 then
     exit;
-  if InlinedValue then
-    Len := 4 * ValuesCount
-  else
-    Len := 0;
-  int := tmp.Init(ValuesCount * SizeOf(TInt) + Len);
+  int := temp.Init(ValuesCount * SizeOf(TIntToText));
   try
-     // compute whole result length at once
-    dec(ValuesCount);
-    inc(Len, length(Prefix) + length(Suffix));
-    for i := 0 to ValuesCount do
+    Len := 0;
+    for i := 0 to ValuesCount - 1 do
     begin
       P := StrInt64(PAnsiChar(int) + 21, Values[i]);
       L := PAnsiChar(int) + 21 - P;
       int^.Len := L;
-      if i < ValuesCount then
-        inc(L); // for ,
       inc(Len, L);
       inc(int);
     end;
-    // create result
-    FastSetString(result, nil, Len);
-    P := pointer(result);
-    if Prefix <> '' then
-    begin
-      L := length(Prefix);
-      MoveFast(pointer(Prefix)^, P^, L);
-      inc(P, L);
-    end;
-    int := tmp.buf;
-    repeat
-      if InlinedValue then
-      begin
-        PWord(P)^ := ord(':') + ord('(') shl 8;
-        inc(P, 2);
-      end;
-      L := int^.Len;
-      MoveFast(PAnsiChar(int)[21 - L], P^, L);
-      inc(P, L);
-      if InlinedValue then
-      begin
-        PWord(P)^ := ord(')') + ord(':') shl 8;
-        inc(P, 2);
-      end;
-      if ValuesCount = 0 then
-        break;
-      inc(int);
-      P^ := SepChar;
-      inc(P);
-      dec(ValuesCount);
-    until false;
-    if Suffix <> '' then
-      MoveFast(pointer(Suffix)^, P^, length(Suffix));
+    IntToText(temp.buf, Len, ValuesCount, Prefix, Suffix, InlinedValue, SepChar, result);
   finally
-    tmp.Done;
+    temp.Done;
   end;
 end;
 
