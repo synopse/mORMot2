@@ -200,11 +200,15 @@ type
     procedure SendPipelinePrepared;
     /// retrieve next result for pipelined statement
     procedure GetPipelineResult;
-    /// bind an array of integer values to a parameter
+    /// bind an array of 64-bit integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - overloaded for direct assignment to the PostgreSQL client as fake JSON
     procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
+    /// bind an array of 64-bit integer values to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - overloaded for direct assignment to the PostgreSQL client as fake JSON
+    procedure BindArrayInt32(Param: integer; const Values: TIntegerDynArray);
     /// bind an array of JSON values to a parameter
     // - overloaded for direct assignment to the PostgreSQL client
     // - warning: input JSON should already be in the expected format (ftDate)
@@ -1086,14 +1090,30 @@ var
   p: PSqlDBParam;
 begin
   // PostgreSQL has its own JSON-like syntax, which is '{1,2,3}' for integers
-  if high(Values) < 0 then
-    Param := -1; // to raise exception
+  fParamsArrayCount := length(Values);
+  if fParamsArrayCount = 0 then
+    raise ESqlDBPostgres.CreateUtf8('%.BindArray([])', [self]);
   p := CheckParam(Param, ftInt64, paramIn, 0);
   p^.VArray := _BindArrayJson; // fake marker
-  p^.VInt64 := length(Values);
-  p^.VData := Int64DynArrayToCsv(@Values[0], p^.VInt64, '{', '}');
-  fParamsArrayCount := p^.VInt64;
+  p^.VInt64 := fParamsArrayCount;
+  p^.VData := Int64DynArrayToCsv(@Values[0], fParamsArrayCount, '{', '}');
 end;
+
+procedure TSqlDBPostgresStatement.BindArrayInt32(Param: integer;
+  const Values: TIntegerDynArray);
+var
+  p: PSqlDBParam;
+begin
+  // PostgreSQL has its own JSON-like syntax, which is '{1,2,3}' for integers
+  fParamsArrayCount := length(Values);
+  if fParamsArrayCount = 0 then
+    raise ESqlDBPostgres.CreateUtf8('%.BindArrayInt32([])', [self]);
+  p := CheckParam(Param, ftInt64, paramIn, 0);
+  p^.VArray := _BindArrayJson; // fake marker
+  p^.VInt64 := fParamsArrayCount;
+  p^.VData := IntegerDynArrayToCsv(pointer(Values), fParamsArrayCount, '{', '}');
+end;
+
 
 procedure TSqlDBPostgresStatement.BindArrayJson(Param: integer;
   ParamType: TSqlDBFieldType; var JsonArray: RawUtf8; ValuesCount: integer);

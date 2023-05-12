@@ -738,7 +738,7 @@ end;
 function TAsyncWorld.Updates(async: TSqlDBPostgresAsync; ctxt: THttpServerRequest): cardinal;
 begin
   count := getQueriesParamValue(ctxt);
-  update := async.Prepare(ComputeUpdateSql(count), false, ASYNC_OPT);
+  update := async.Prepare(WORLD_UPDATE_SQLN, false, ASYNC_OPT);
   result := Queries(async, ctxt);
 end;
 
@@ -763,14 +763,17 @@ end;
 procedure TAsyncWorld.DoUpdates;
 var
   i: PtrInt;
+  params: TIntegerDynArray;
 begin
   for i := 0 to count - 1 do
-    with res[i] do
-    begin
-      randomNumber := ComputeRandomWorld;
-      update.Bind(i * 2 + 1, id);
-      update.Bind(i * 2 + 2, randomNumber);
-    end;
+    res[i].randomNumber := ComputeRandomWorld;
+  SetLength(params, count);
+  for i := 0 to count - 1 do
+    params[i] := res[i].id;
+  update.BindArrayInt32(1, params);
+  for i := 0 to count - 1 do
+    params[i] := res[i].randomNumber;
+  update.BindArrayInt32(2, params);
   update.ExecuteAsync(request, OnRes);
 end;
 
