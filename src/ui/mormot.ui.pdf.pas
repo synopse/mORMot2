@@ -4026,15 +4026,17 @@ end;
 
 procedure TPdfTextUtf8.InternalWriteTo(W: TPdfWrite);
 var
-  Len: integer;
+  utf16: RawByteString;
 begin
   // if the value has multibyte character, convert the value to hex unicode.
   // otherwise, escape characters
   if IsWinAnsiU8Bit(pointer(fValue)) then
     W.Add('(').AddEscapeContent(Utf8ToWinAnsi(fValue)).Add(')')
   else
-    W.Add('<FEFF').AddUnicodeHex(pointer(Utf8DecodeToRawUnicodeUI(fValue, @Len)),
-      {%H-}Len shr 1).Add('>');
+  begin
+    utf16 := Utf8DecodeToUnicodeRawByteString(fValue);
+    W.Add('<FEFF').AddUnicodeHex(pointer(utf16), Length(utf16) shr 1).Add('>');
+  end;
 end;
 
 function TPdfTextUtf8.SpaceNotNeeded: boolean;

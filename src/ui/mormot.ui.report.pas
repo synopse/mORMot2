@@ -74,6 +74,7 @@ uses
   system.uitypes,
   {$endif ISDELPHIXE3}
   mormot.core.base,
+  mormot.core.os,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
