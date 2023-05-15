@@ -175,26 +175,26 @@ type
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
     /// ITunnelLocal method: initialize a local forwarding port
-    // - TransmitOptions should match on both sides, and follow SignCert/VerifyCert
+    // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
     // - returns 0 on failure, or an ephemeral port on 127.0.0.1 on success
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort; virtual;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
-    /// optional Certificate used to sign the output handshake frame
-    // - should match toClientSigned/toServerSigned options for BindLocalPort()
+    /// optional Certificate with private key to sign the output handshake frame
+    // - should match other side's VerifyCert public key property
     property SignCert: ICryptCert
       read fSignCert write fSignCert;
-    /// optional Certificate used to verify the input handshake frame
-    // - should match toClientSigned/toServerSigned options for BindLocalPort()
+    /// optional Certificate with public key to verify the input handshake frame
+    // - should match other side's SignCert private key property
     property VerifyCert: ICryptCert
       read fVerifyCert write fVerifyCert;
   published
     /// the ephemeral port on the loopback as returned by BindLocalPort()
     property Port: TNetPort
       read fPort;
-    /// the connection specifications, as supplied to BindLocalPort()
+    /// the connection specifications, as used by BindLocalPort()
     property Options: TTunnelOptions
       read fOptions;
   end;
@@ -463,8 +463,8 @@ begin
   if (fPort <> 0) or
      (not Assigned(Transmit)) then
     raise ETunnel.CreateUtf8('%.BindLocalPort invalid call', [self]);
-  if (TransmitOptions * [toClientSigned, toServerSigned]) - OptionsFromCert <> [] then
-    raise ETunnel.CreateUtf8('%.BindLocalPort: missing certificate', [self]);
+  TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
+  TransmitOptions := TransmitOptions + OptionsFromCert;
   // bind to a local ephemeral port
   ClosePort;
   ENetSock.Check(NewSocket(cLocalhost, {port=}'0', nlTcp, {bind=}true,
