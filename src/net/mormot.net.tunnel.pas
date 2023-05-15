@@ -49,24 +49,28 @@ type
 
   /// each option available for TTunnelLocal process
   // - toEcdhe will compute an ephemeral secret to encrypt the link
+  // - toClientSigned/toServerSigned will ensure authenticated handshake
   TTunnelOption = (
-    toEcdhe);
+    toEcdhe,
+    toClientSigned,
+    toServerSigned);
 
   /// options for TTunnelLocal process
   TTunnelOptions = set of TTunnelOption;
   PTunnelOptions = ^TTunnelOptions;
 
-  /// an opaque value matching e.g. a TBinaryCookieGeneratorSessionID
+  /// a session identifier should match on both sides of the tunnel
+  // - an opaque value matching e.g. a TBinaryCookieGeneratorSessionID
   TTunnelSession = Int64;
   PTunnelSession = ^TTunnelSession;
 
   /// abstract transmission layer with the central relay server
   // - may be implemented as raw sockets or over a mORMot SOA WebSockets link
-  // - if toEcdhe option was set, the frames are encrypted
+  // - if toEcdhe option was set, the frames are already encrypted
   ITunnelTransmit = interface(IInvokable)
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// should send Frame to the relay server
-    // - no result so that the frames could be gathered on the wire
+    // - no result so that the frames could be gathered e.g. over WebSockets
     procedure Send(const Frame: RawByteString);
   end;
 
@@ -75,6 +79,7 @@ type
     ['{201150B4-6E28-47A3-AAE5-1335C82B060A}']
     /// this is the main method binding to a local ephemeral port and tunneling
     // to the Transmit interface
+    // - TransmitOptions should match on both sides
     // - returns the port number to connect to, over the 127.0.0.1 loopback
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort;
@@ -102,12 +107,19 @@ type
     /// release all sockets and encryption state
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
-    procedure OnReceived(Frame: RawByteString);
+    procedure OnReceived(const Frame: RawByteString);
   end;
 
-  /// define the inital frame exchanged between both ends
+  /// identify the TTunnelLocal handshake protocol version
+  TTunnelLocalMagic = (
+    tlmNone,
+    tlmVersion1);
+
+  /// define the inital frame exchanged between both TTunnelLocal ends
   TTunnelLocalHeader = packed record
-    /// define how this link should be done
+    /// protocol version
+    magic: TTunnelLocalMagic;
+    /// define how this link should be setup
     options: TTunnelOptions;
     /// a genuine integer ID
     session: TTunnelSession;
@@ -128,8 +140,8 @@ type
   PTunnelEcdheContext = ^TTunnelEcdheContext;
 
   /// abstract tunneling service implementation
-  // - also implement ITunnelTransmit so that could be used as callback
-  // from the other side
+  // - is properly implemented by TTunnelLocalServer/TTunnelLocalClient classes
+  // - published ITunnelTransmit so that could be used as receival callback
   // - if you release this instance, the tunnel will end
   TTunnelLocal = class(TInterfacedObjectWithCustomCreate,
     ITunnelLocal, ITunnelTransmit)
@@ -139,35 +151,50 @@ type
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
     fContext: TTunnelEcdheContext;
+    fSignCert, fVerifyCert: ICryptCert;
+    // two methods to be overriden according to the client/server side
+    function OptionsFromCert: TTunnelOptions; virtual; abstract;
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
+    // can optionally add a signature to the main handshake frame
+    procedure FrameSign(var frame: RawByteString); virtual;
+    function FrameVerify(const frame: RawByteString;
+      payloadlen: PtrInt): boolean; virtual;
   public
-    /// called e.g. by CallbackReleased
-    procedure ClosePort;
     /// initialize the instance for process
-    // - if no Context value is supplied, will compute an ephemeral random
-    // set of public/private key pair
+    // - if no Context value is supplied, will compute an ephemeral key pair
     constructor Create(SpecificContext: PTunnelEcdheContext); reintroduce;
     /// finalize the server
     destructor Destroy; override;
-    /// Create will initialize this with some random values
-    // - is publicated here to allow putting the public key into some message
-    // before calling BindLocalPort()
+    /// called e.g. by CallbackReleased
+    procedure ClosePort;
+    /// Create will initialize this with some random or specific values
     property Context: TTunnelEcdheContext
       read fContext;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
     /// ITunnelLocal method: initialize a local forwarding port
-    // - returns 0 on failure, an ephemeral port on 127.0.0.1 on success
+    // - TransmitOptions should match on both sides, and follow SignCert/VerifyCert
+    // - returns 0 on failure, or an ephemeral port on 127.0.0.1 on success
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort; virtual;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
+    /// optional Certificate used to sign the output handshake frame
+    // - should match toClientSigned/toServerSigned options for BindLocalPort()
+    property SignCert: ICryptCert
+      read fSignCert write fSignCert;
+    /// optional Certificate used to verify the input handshake frame
+    // - should match toClientSigned/toServerSigned options for BindLocalPort()
+    property VerifyCert: ICryptCert
+      read fVerifyCert write fVerifyCert;
   published
+    /// the ephemeral port on the loopback as returned by BindLocalPort()
     property Port: TNetPort
       read fPort;
+    /// the connection specifications, as supplied to BindLocalPort()
     property Options: TTunnelOptions
       read fOptions;
   end;
@@ -177,9 +204,11 @@ type
 { ******************** Local NAT Client/Server to Tunnel TCP Streams }
 
 type
-  /// implement a server tunneling service
+  /// implements server-side tunneling service
   TTunnelLocalServer = class(TTunnelLocal)
   protected
+    /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
+    function OptionsFromCert: TTunnelOptions; override;
     /// initialize a local forwarding server port
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
@@ -188,9 +217,11 @@ type
 
 
 type
-  /// implement a client tunneling service
+  /// implements client-side tunneling service
   TTunnelLocalClient = class(TTunnelLocal)
   protected
+    /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
+    function OptionsFromCert: TTunnelOptions; override;
     /// initialize a local forwarding client port
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
@@ -273,25 +304,30 @@ begin
   FreeAndNil(fAes[false]);
 end;
 
-procedure TTunnelLocalThread.OnReceived(Frame: RawByteString);
+procedure TTunnelLocalThread.OnReceived(const Frame: RawByteString);
 var
   res: TNetResult;
+  data: RawByteString;
 begin
+  // validate and optionally decrypt the input frame
   if Terminated or
      (fTransmit = nil) or
      (Frame = '') or
      (fClientSock = nil) then
     exit;
-  if fAes[{send:}false] <> nil then
+  if fAes[{send:}false] = nil then
+    data := Frame
+  else
   begin
-    Frame := fAes[false].DecryptPkcs7(Frame, {ivatbeg=}true, {raise=}false);
-    if Frame = '' then
+    data := fAes[false].DecryptPkcs7(Frame, {ivatbeg=}true, {raise=}false);
+    if data = '' then
     begin
       Terminate;
       raise ETunnel.CreateUtf8('%.OnReceived(%): invalid content', [self, fPort]);
     end;
   end;
-  res := fClientSock.SendAll(pointer(Frame), length(Frame), @Terminated);
+  // relay the (decrypted) data to the local loopback
+  res := fClientSock.SendAll(pointer(data), length(data), @Terminated);
   if (res = nrOk) or
      Terminated then
     exit;
@@ -312,6 +348,7 @@ begin
     fState := stProcessing;
     while not Terminated do
     begin
+      // wait for some data on the local loopback
       res := fClientSock.RecvWait(100, tmp, @Terminated);
       if res = nrRetry then
         continue;
@@ -321,6 +358,7 @@ begin
       if (tmp <> '') and
          not Terminated then
       begin
+        // send the data (optionally encrypted) to the other side
         if fAes[{send:}true] <> nil then
           tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}true);
         fTransmit.Send(tmp);
@@ -334,6 +372,28 @@ end;
 
 
 { TTunnelLocal }
+
+constructor TTunnelLocal.Create(SpecificContext: PTunnelEcdheContext);
+begin
+  inherited Create;
+  if SpecificContext <> nil then
+  begin
+    fContext := SpecificContext^;
+    if IsZero(fContext.pub) or
+       IsZero(fContext.priv) then
+      raise ETunnel.CreateUtf8('%.Create: void supplied ECC key', [self]);
+  end
+  else if not Ecc256r1MakeKey(fContext.pub, fContext.priv) then
+    raise ETunnel.CreateUtf8('%.Create: no ECC engine available', [self]);
+  TAesPrng.Main.FillRandom(fContext.rnd); // overwrite any previous random
+end;
+
+destructor TTunnelLocal.Destroy;
+begin
+  if fThread <> nil then
+    ClosePort; // calls Terminate
+  inherited Destroy;
+end;
 
 procedure TTunnelLocal.ClosePort;
 var
@@ -351,34 +411,13 @@ begin
   fPort := 0;
 end;
 
-constructor TTunnelLocal.Create(SpecificContext: PTunnelEcdheContext);
-begin
-  inherited Create;
-  if SpecificContext <> nil then
-  begin
-    fContext := SpecificContext^;
-    if IsZero(fContext.pub) or
-       IsZero(fContext.priv) then
-      raise ETunnel.CreateUtf8('%.Create: invalid supplied ECC key pair', [self]);
-  end
-  else if not Ecc256r1MakeKey(fContext.pub, fContext.priv) then
-    raise ETunnel.CreateUtf8('%.Create: no ECC engine available', [self]);
-  TAesPrng.Main.FillRandom(fContext.rnd); // overwrite any previous random
-end;
-
-destructor TTunnelLocal.Destroy;
-begin
-  if fThread <> nil then
-    ClosePort; // calls Terminate
-  inherited Destroy;
-end;
-
 procedure TTunnelLocal.Send(const Frame: RawByteString);
 begin
+  // ITunnelTransmit method: when a Frame is received from the relay server
   if fHandshake <> nil then
-    fHandshake.Push(Frame)
+    fHandshake.Push(Frame)    // during the handshake phase
   else if fThread <> nil then
-    fThread.OnReceived(Frame)
+    fThread.OnReceived(Frame) // regular tunelling process
   else
     raise ETunnel.CreateUtf8('%.Send: out of context call', [self]);
 end;
@@ -390,10 +429,22 @@ begin
     ClosePort;
 end;
 
+procedure TTunnelLocal.FrameSign(var frame: RawByteString);
+begin
+  if fSignCert <> nil then
+    Append(frame, fSignCert.Sign(frame));
+end;
 
-{ ******************** Local NAT Client/Server to Tunnel TCP Streams }
-
-{ TTunnelLocal }
+function TTunnelLocal.FrameVerify(const frame: RawByteString;
+  payloadlen: PtrInt): boolean;
+var
+  f: PAnsiChar absolute frame;
+begin
+  result := (length(Frame) >= payloadlen) and
+            ((fVerifyCert = nil) or
+             (fVerifyCert.Verify(f + payloadlen, f,
+               length(frame) - payloadlen, payloadlen) in CV_VALIDSIGN));
+end;
 
 function TTunnelLocal.BindLocalPort(Session: TTunnelSession;
   TransmitOptions: TTunnelOptions; TimeOutMS: integer;
@@ -408,9 +459,12 @@ var
   key: THash256Rec;
   sha3: TSha3;
 begin
+  // validate input parameters
   if (fPort <> 0) or
      (not Assigned(Transmit)) then
     raise ETunnel.CreateUtf8('%.BindLocalPort invalid call', [self]);
+  if (TransmitOptions * [toClientSigned, toServerSigned]) - OptionsFromCert <> [] then
+    raise ETunnel.CreateUtf8('%.BindLocalPort: missing certificate', [self]);
   // bind to a local ephemeral port
   ClosePort;
   ENetSock.Check(NewSocket(cLocalhost, {port=}'0', nlTcp, {bind=}true,
@@ -419,14 +473,17 @@ begin
   fOptions := TransmitOptions;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
   try
-    // initial handshake: TTunnelOptions+TTunnelSession
+    // initial handshake: TTunnelOptions + TTunnelSession from both sides
+    header.magic := tlmVersion1;
     header.options := fOptions;
     header.session := Session;
     FastSetRawByteString(frame, @header, SizeOf(header));
+    FrameSign(frame); // optional digital signature
     Transmit.Send(frame);
-    // server will wait until both sides are connected
+    // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-       (remote <> frame) then
+       not FrameVerify(remote, SizeOf(header)) or
+       not CompareMem(pointer(remote), @header, SizeOf(header)) then
       raise ETunnel.CreateUtf8('%.BindLocalPort handshake failed', [self]);
     // optional ECDHE ephemeral encryption
     FillZero(key.b);
@@ -434,7 +491,7 @@ begin
     begin
       if not EcdheHandshake(TimeOutMS, Transmit, ecdhe) or
          not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
-        raise ETunnel.CreateUtf8('%.BindLocalPort ECDHE handshake', [self]);
+        raise ETunnel.CreateUtf8('%.BindLocalPort ECDHE failed', [self]);
       sha3.Init(SHA3_256);
       sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd)); // salt for forward security
       sha3.Update(@header, SizeOf(header));       // avoid cross-session replay
@@ -442,6 +499,7 @@ begin
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR encryption/decryption keys
     end;
     // launch the background processing thread
+    FreeAndNil(fHandshake); // ends the handshaking phase
     fThread := TTunnelLocalThread.Create(self, Transmit, key.Lo, key.Hi, sock);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
@@ -454,7 +512,18 @@ begin
 end;
 
 
+{ ******************** Local NAT Client/Server to Tunnel TCP Streams }
+
 { TTunnelLocalServer }
+
+function TTunnelLocalServer.OptionsFromCert: TTunnelOptions;
+begin
+  result := [];
+  if Assigned(fSignCert) then
+    include(result, toServerSigned);
+  if Assigned(fVerifyCert) then
+    include(result, toClientSigned);
+end;
 
 function TTunnelLocalServer.EcdheHandshake(TimeOutMS: integer;
   const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
@@ -463,11 +532,11 @@ var
 begin
   result := false;
   // EDCHE handshake with perfect forward security - server side
-  ecdhe := fContext; // pre-computed by overriden Create
+  ecdhe := fContext; // pre-computed/specified by overriden Create
   FastSetRawByteString(frame, @ecdhe, SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
   Transmit.Send(frame); // frame = rnd+pub
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-     (length({%H-}remote) <> SizeOf(TEccPublicKey)) then
+     (length(remote) <> SizeOf(TEccPublicKey)) then
     exit;
   ecdhe.pub := PEccPublicKey(remote)^; // remote = pub
   result := true;
@@ -475,6 +544,15 @@ end;
 
 
 { TTunnelLocalClient }
+
+function TTunnelLocalClient.OptionsFromCert: TTunnelOptions;
+begin
+  result := [];
+  if Assigned(fSignCert) then
+    include(result, toClientSigned);
+  if Assigned(fVerifyCert) then
+    include(result, toServerSigned);
+end;
 
 function TTunnelLocalClient.EcdheHandshake(TimeOutMS: integer;
   const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
@@ -484,12 +562,11 @@ begin
   result := false;
   // EDCHE handshake with perfect forward security - client side
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
-     (length({%H-}remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) then
+     (length(remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) then
     exit;
-  FastSetRawByteString(frame, nil, SizeOf(TEccPublicKey));
-  PEccPublicKey(frame)^ := fContext.pub;
-  ecdhe.priv := fContext.priv;
+  FastSetRawByteString(frame, @fContext.pub, SizeOf(TEccPublicKey));
   Transmit.Send(frame); // frame = pub
+  ecdhe.priv := fContext.priv;
   with PTunnelEcdheContext(remote)^ do
   begin
     ecdhe.rnd := rnd;
