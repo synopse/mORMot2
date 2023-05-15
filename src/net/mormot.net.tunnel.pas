@@ -153,7 +153,7 @@ type
     fContext: TTunnelEcdheContext;
     fSignCert, fVerifyCert: ICryptCert;
     // two methods to be overriden according to the client/server side
-    function OptionsFromCert: TTunnelOptions; virtual; abstract;
+    function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
     // can optionally add a signature to the main handshake frame
@@ -208,7 +208,7 @@ type
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
-    function OptionsFromCert: TTunnelOptions; override;
+    function ComputeOptionsFromCert: TTunnelOptions; override;
     /// initialize a local forwarding server port
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
@@ -221,7 +221,7 @@ type
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
-    function OptionsFromCert: TTunnelOptions; override;
+    function ComputeOptionsFromCert: TTunnelOptions; override;
     /// initialize a local forwarding client port
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
@@ -273,7 +273,7 @@ begin
   fTransmit := transmit;
   if toEcdhe in owner.Options then
   begin
-    // ecc256r1 secret has 128-bit resolution -> 128-bit AES-CTR
+    // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
     fAes[{send:}false] := TAesFast[mCtr].Create(enc);
     fAes[{send:}true]  := TAesFast[mCtr].Create(dec);
   end;
@@ -290,17 +290,14 @@ begin
   if fOwner <> nil then
     fOwner.ClosePort;
   fServerSock.ShutdownAndClose({rdwr=}true);
-  fServerSock := nil;
-  fClientSock.ShutdownAndClose({rdwr=}true);
-  fClientSock := nil;
   if fState = stAccepting then
     if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
        {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
-      // Windows TCP/UDP socket may not release Accept() until connected
+      // Windows socket may not release Accept() until connected
       callback.ShutdownAndClose({rdwr=}false);
+  fClientSock.ShutdownAndClose({rdwr=}true);
   inherited Destroy;
-  if fAes[false] <> fAes[true] then // CloneEncryptDecrypt may return self
-    FreeAndNil(fAes[true]);
+  FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
 end;
 
@@ -323,10 +320,12 @@ begin
     if data = '' then
     begin
       Terminate;
-      raise ETunnel.CreateUtf8('%.OnReceived(%): invalid content', [self, fPort]);
+      raise ETunnel.CreateUtf8('%.OnReceived(%): aborted', [self, fPort]);
     end;
   end;
   // relay the (decrypted) data to the local loopback
+  if Terminated then
+    exit;
   res := fClientSock.SendAll(pointer(data), length(data), @Terminated);
   if (res = nrOk) or
      Terminated then
@@ -464,7 +463,7 @@ begin
      (not Assigned(Transmit)) then
     raise ETunnel.CreateUtf8('%.BindLocalPort invalid call', [self]);
   TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
-  TransmitOptions := TransmitOptions + OptionsFromCert;
+  TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
   // bind to a local ephemeral port
   ClosePort;
   ENetSock.Check(NewSocket(cLocalhost, {port=}'0', nlTcp, {bind=}true,
@@ -493,7 +492,7 @@ begin
          not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
         raise ETunnel.CreateUtf8('%.BindLocalPort ECDHE failed', [self]);
       sha3.Init(SHA3_256);
-      sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd)); // salt for forward security
+      sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd)); // random server salt
       sha3.Update(@header, SizeOf(header));       // avoid cross-session replay
       sha3.Update(@secret, SizeOf(secret));       // ephemeral secret
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR encryption/decryption keys
@@ -516,7 +515,7 @@ end;
 
 { TTunnelLocalServer }
 
-function TTunnelLocalServer.OptionsFromCert: TTunnelOptions;
+function TTunnelLocalServer.ComputeOptionsFromCert: TTunnelOptions;
 begin
   result := [];
   if Assigned(fSignCert) then
@@ -545,7 +544,7 @@ end;
 
 { TTunnelLocalClient }
 
-function TTunnelLocalClient.OptionsFromCert: TTunnelOptions;
+function TTunnelLocalClient.ComputeOptionsFromCert: TTunnelOptions;
 begin
   result := [];
   if Assigned(fSignCert) then
