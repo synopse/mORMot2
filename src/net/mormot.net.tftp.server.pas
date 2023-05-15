@@ -57,6 +57,7 @@ type
     fSockAddr: TNetAddr;
     fExecuteMessage: RawUtf8;
     fFrame: PUdpFrame;
+    procedure AfterBind; virtual;
     /// will loop for any pending UDP frame, and execute FrameReceived method
     procedure DoExecute; override;
     // this is the main processing method for all incoming frames
@@ -214,6 +215,7 @@ begin
     // on binding error, raise exception before the thread is actually created
     raise EUdpServer.Create('%s.Create binding error on %s:%s',
       [ClassNameShort(self)^, BindAddress, BindPort], res);
+  AfterBind;
   inherited Create({suspended=}false, LogClass, ident);
 end;
 
@@ -225,6 +227,11 @@ begin
   if fSock <> nil then
     fSock.ShutdownAndClose({rdwr=}true);
   FreeMem(fFrame);
+end;
+
+procedure TUdpServerThread.AfterBind;
+begin
+  // do nothing by default
 end;
 
 procedure TUdpServerThread.DoExecute;
