@@ -227,6 +227,7 @@ type
     /// change if this socket should enable TCP level keep-alive packets
     procedure SetKeepAlive(keepalive: boolean);
     /// change the SO_LINGER option, i.e. let the socket remain open for a while
+    // - on POSIX, will also set the SO_REUSEADDR/SO_REUSEPORT option
     procedure SetLinger(linger: integer);
     /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
@@ -234,6 +235,11 @@ type
     procedure SetCork(cork: boolean);
     /// set the SO_BROADCAST option for UDP
     procedure SetBroadcast(broadcast: boolean);
+    /// set the SO_REUSEADDR/SO_REUSEPORT option for UDP
+    // - this method is already called by SetLinger(true) for TCP on POSIX
+    // - do nothing on Windows, since SO_REUSEADDR does something else than
+    // on Linux, and is set by SetReuseAddrPort
+    procedure SetReuseAddrPort;
     /// set low SIO_SET_PRIORITY_HINT (Windows 10+) or SO_PRIORITY (Linux)
     // - on Windows, try to use LEDBAT algorithm - to be set before accept/connect
     procedure SetLowPriority;
@@ -244,7 +250,7 @@ type
     // - on POSIX, always return false
     function HasLowPriority: boolean;
     /// set the SO_REUSEPORT option, to allow several servers to bind on a port
-    // - do nothing on Windows
+    // - calls SetReuseAddrPort on Windows
     procedure ReusePort;
     /// accept an incoming socket, optionally asynchronous, with accept4() support
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
@@ -2276,6 +2282,10 @@ var
 begin
   v := ord(broadcast);
   SetOpt(SOL_SOCKET, SO_BROADCAST, @v, SizeOf(v));
+end;
+
+procedure TNetSocketWrap.SetReuseAddrPort;
+begin
 end;
 
 procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;

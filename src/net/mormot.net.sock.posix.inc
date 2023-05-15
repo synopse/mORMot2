@@ -502,6 +502,21 @@ begin
   SetOpt(SOL_SOCKET, SO_RCVTIMEO, @tv, SizeOf(tv));
 end;
 
+procedure TNetSocketWrap.SetReuseAddrPort;
+var
+  v: integer;
+begin
+  v := ord(true);
+  {$ifdef OSBSDDARWIN}
+  SetOpt(SOL_SOCKET, SO_REUSEPORT, @v, SizeOf(v));
+  {$ifndef OSOPENBSD}
+  SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @v, SizeOf(v));
+  {$endif OSOPENBSD}
+  {$else}
+  SetOpt(SOL_SOCKET, SO_REUSEADDR, @v, SizeOf(v));
+  {$endif OSBSDDARWIN}
+end;
+
 procedure TNetSocketWrap.SetLinger(linger: integer);
 var
   v: TLinger;
@@ -510,17 +525,7 @@ begin
   v.l_onoff := ord(linger >= 0);
   SetOpt(SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
   if linger > 0 then
-  begin
-    v.l_onoff := ord(true);
-    {$ifdef OSBSDDARWIN}
-    SetOpt(SOL_SOCKET, SO_REUSEPORT, @v.l_onoff, SizeOf(v.l_onoff));
-    {$ifndef OSOPENBSD}
-    SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif OSOPENBSD}
-    {$else}
-    SetOpt(SOL_SOCKET, SO_REUSEADDR, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif OSBSDDARWIN}
-  end;
+    SetReuseAddrPort;
 end;
 
 procedure TNetSocketWrap.SetCork(cork: boolean);

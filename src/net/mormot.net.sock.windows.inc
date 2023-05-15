@@ -503,8 +503,11 @@ begin
 end;
 
 procedure TNetSocketWrap.ReusePort;
+var
+  v: integer;
 begin
-  // unsupported on Windows
+  v := ord(true);
+  SetOpt(SOL_SOCKET, SO_REUSEADDR, @v, SizeOf(v));
 end;
 
 procedure TNetSocketWrap.SetLinger(linger: integer);
