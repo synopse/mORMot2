@@ -502,6 +502,11 @@ begin
   SetOpt(SOL_SOCKET, SO_RCVTIMEO, @ms, SizeOf(ms));
 end;
 
+procedure TNetSocketWrap.SetReuseAddrPort;
+begin
+  // do nothing on Windows
+end;
+
 procedure TNetSocketWrap.ReusePort;
 var
   v: integer;

@@ -2284,10 +2284,6 @@ begin
   SetOpt(SOL_SOCKET, SO_BROADCAST, @v, SizeOf(v));
 end;
 
-procedure TNetSocketWrap.SetReuseAddrPort;
-begin
-end;
-
 procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;
   sendtimeout, recvtimeout: integer);
 begin
@@ -2328,7 +2324,7 @@ begin
       clientsocket.SetRecvBufferSize(65536);
       clientsocket.SetSendBufferSize(65536);
       {$endif OSWINDOWS}
-      if async then
+      if async then // doaccept() may have set async=false with accept4()
         result := clientsocket.MakeAsync
       else
         result := nrOK;
