@@ -79,7 +79,8 @@ type
     nrUnknownError,
     nrTooManyConnections,
     nrRefused,
-    nrConnectTimeout);
+    nrConnectTimeout,
+    nrInvalidParameter);
 
   /// exception class raised by this unit
   ENetSock = class(ExceptionWithProps)
@@ -1541,7 +1542,8 @@ const
     'Unknown Error',
     'Too Many Connections',
     'Refused',
-    'Connect Timeout');
+    'Connect Timeout',
+    'Invalid Parameter');
 
 function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetResult;
 var
@@ -1550,26 +1552,31 @@ begin
   err := sockerrno;
   if Error <> nil then
     Error^ := err;
-  if err = NO_ERROR then
-    result := nrOK
-  else if {$ifdef OSWINDOWS}
-          (err <> WSAETIMEDOUT) and
-          (err <> WSAEWOULDBLOCK) and
-          {$endif OSWINDOWS}
-          (err <> WSATRY_AGAIN) and
-          (err <> AnotherNonFatal) then
-    if err = WSAEMFILE then
-      result := nrTooManyConnections
-    else if err = WSAECONNREFUSED then
-      result := nrRefused
+  case err of
+    NO_ERROR:
+      result := nrOK;
+    {$ifdef OSWINDOWS}
+    WSAETIMEDOUT,
+    WSAEWOULDBLOCK,
+    {$endif OSWINDOWS}
+    WSATRY_AGAIN:
+      result := nrRetry;
+    WSAEINVAL:
+      result := nrInvalidParameter;
+    WSAEMFILE:
+      result := nrTooManyConnections;
+    WSAECONNREFUSED:
+      result := nrRefused;
     {$ifdef OSLINUX}
-    else if err = ESysEPIPE then
-      result := nrClosed
+    ESysEPIPE:
+      result := nrClosed;
     {$endif OSLINUX}
-    else
-      result := nrFatalError
   else
-    result := nrRetry;
+    if err = AnotherNonFatal then
+      result := nrRetry
+    else
+      result := nrFatalError;
+  end;
 end;
 
 function NetLastErrorMsg(AnotherNonFatal: integer): ShortString;
@@ -2205,7 +2212,7 @@ begin
     netsocket := sock;
     netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
     if netaddr <> nil then
-      if (addr.Port <> 0) or
+      if (addr.Port <> 0) or                   // 0 = assigned by the OS
          (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
         MoveFast(addr, netaddr^, addr.Size);
   end;
