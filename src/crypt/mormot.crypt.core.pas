@@ -8530,11 +8530,12 @@ end;
 
 const
   cKeccakPermutationSize = 1600;
-  cKeccakMaximumRate = 1536;
   cKeccakPermutationSizeInByte = cKeccakPermutationSize div 8;
   cKeccakPermutationSizeInQWord = cKeccakPermutationSize div 64;
+  cKeccakMaximumRate = 1536;
   cKeccakMaximumRateInBytes = cKeccakMaximumRate div 8;
   cKeccakNumberOfRounds = 24;
+
   cRoundConstants: array[0..cKeccakNumberOfRounds - 1] of QWord = (
     QWord($0000000000000001), QWord($0000000000008082), QWord($800000000000808A),
     QWord($8000000080008000), QWord($000000000000808B), QWord($0000000080000001),
@@ -8746,7 +8747,7 @@ type
     procedure Absorb(Data: PByteArray; databitlen: integer);
     procedure AbsorbFinal(Data: PByteArray; databitlen: integer);
     procedure PadAndSwitchToSqueezingPhase;
-    procedure Squeeze(output: PByteArray; outputLength: integer);
+    procedure Squeeze(output: PByteArray; outputLength: PtrInt);
     procedure FinalBit_LSB(bits: byte; bitlen: integer; hashval: pointer;
       numbits: integer);
   end;
@@ -8777,50 +8778,50 @@ end;
 
 procedure TSha3Context.Absorb(data: PByteArray; databitlen: integer);
 var
-  i, j, wholeBlocks, partialBlock, partialByte: integer;
-  curData: pointer;
+  written, blocks, available, chunk, tail: integer; // all lengths are in bits
+  p: PByte;
 begin
   if BitsInQueue and 7 <> 0 then
     raise ESynCrypto.Create('TSha3Context.Absorb: only last can be partial');
   if Squeezing then
     raise ESynCrypto.Create('TSha3Context.Absorb: already squeezed');
-  i := 0;
-  while i < databitlen do
+  written := 0;
+  while written < databitlen do
   begin
+    chunk := databitlen - written;
     if (BitsInQueue = 0) and
-       (databitlen >= Rate) and
-       (i <= (databitlen - Rate)) then
+       (chunk >= Rate) then
     begin
-      wholeBlocks := (databitlen - i) div Rate;
-      curData := @data^[i shr 3];
-      for j := 1 to wholeBlocks do
-      begin
-        XorMemoryPtrInt(@State, curData, Rate shr POINTERSHRBITS);
+      blocks := cardinal(chunk) div cardinal(Rate);
+      p := @data^[written shr 3];
+      inc(written, blocks * Rate);
+      repeat
+        XorMemoryPtrInt(@State, pointer(p), Rate shr POINTERSHRBITS);
         KeccakPermutation(@State);
-        inc(PByte(curData), Rate shr 3);
-      end;
-      inc(i, wholeBlocks * Rate);
+        inc(p, Rate shr 3);
+        dec(blocks);
+      until blocks = 0;
     end
     else
     begin
-      partialBlock := databitlen - i;
-      if partialBlock + BitsInQueue > Rate then
-        partialBlock := Rate - BitsInQueue;
-      partialByte := partialBlock and 7;
-      dec(partialBlock, partialByte);
-      MoveFast(data^[i shr 3], DataQueue[BitsInQueue shr 3], partialBlock shr 3);
-      inc(BitsInQueue, partialBlock);
-      inc(i, partialBlock);
+      available := Rate - BitsInQueue;
+      if chunk > available then
+        chunk := available;
+      tail := chunk and 7;
+      dec(chunk, tail);
+      MoveFast(data^[written shr 3], DataQueue[BitsInQueue shr 3], chunk shr 3);
+      inc(BitsInQueue, chunk);
+      inc(written, chunk);
       if BitsInQueue = Rate then
       begin
         AbsorbQueue;
         BitsInQueue := 0;
       end;
-      if partialByte > 0 then
+      if tail > 0 then
       begin
-        DataQueue[BitsInQueue shr 3] := data^[i shr 3] and ((1 shl partialByte) - 1);
-        inc(BitsInQueue, partialByte);
-        inc(i, partialByte);
+        DataQueue[BitsInQueue shr 3] := data^[written shr 3] and ((1 shl tail) - 1);
+        inc(BitsInQueue, tail);
+        inc(written, tail);
       end;
     end;
   end;
@@ -8868,17 +8869,16 @@ begin
   Squeezing := true;
 end;
 
-procedure TSha3Context.Squeeze(output: PByteArray; outputLength: integer);
+procedure TSha3Context.Squeeze(output: PByteArray; outputLength: PtrInt);
 var
-  i: integer;
-  partialBlock: integer;
+  written, needed, chunk: PtrInt; // all lengths are in bits
 begin
   if not Squeezing then
     PadAndSwitchToSqueezingPhase;
   if outputLength and 7 <> 0 then
     raise ESynCrypto.CreateUtf8('TSha3Context.Squeeze(%?)', [outputLength]);
-  i := 0;
-  while i < outputLength do
+  written := 0;
+  while written < outputLength do
   begin
     if BitsAvailableForSqueezing = 0 then
     begin
@@ -8886,13 +8886,14 @@ begin
       MoveFast(State, DataQueue, Rate shr 3);
       BitsAvailableForSqueezing := Rate;
     end;
-    partialBlock := BitsAvailableForSqueezing;
-    if partialBlock > outputLength - i then
-      partialBlock := outputLength - i;
+    chunk := BitsAvailableForSqueezing;
+    needed := outputLength - written;
+    if chunk > needed then
+      chunk := needed;
     MoveFast(DataQueue[(Rate - BitsAvailableForSqueezing) shr 3],
-      output^[i shr 3], partialBlock shr 3);
-    dec(BitsAvailableForSqueezing, partialBlock);
-    inc(i, partialBlock);
+      output^[written shr 3], chunk shr 3);
+    dec(BitsAvailableForSqueezing, chunk);
+    inc(written, chunk);
   end;
 end;
 
@@ -8902,22 +8903,23 @@ var
   ll: integer;
   lw: cardinal;
 begin
+  // compute the masked bits
   bitlen := bitlen and 7;
   if bitlen = 0 then
     lw := 0
   else
     lw := bits and Pred(cardinal(1) shl bitlen);
-  // 'append' (in LSB language) the domain separation bits
+  // append the domain separation bits
   if Algo >= SHAKE_128 then
   begin
-    // SHAKE: append four bits 1111
-    lw := lw or (cardinal($F) shl bitlen);
+    // SHAKE: append four MSB bits 1111
+    lw := lw or (cardinal($0f) shl bitlen);
     ll := bitlen + 4;
   end
   else
   begin
-    // SHA-3: append two bits 01
-    lw := lw or (cardinal($2) shl bitlen);
+    // SHA-3: append two MSB bits 01
+    lw := lw or (cardinal($02) shl bitlen);
     ll := bitlen + 2;
   end;
   // update state with final bits
