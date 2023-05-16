@@ -194,6 +194,8 @@ type
     // will call MakeAsync/MakeBlocking and wait for the actual connection
     // - as called by NewSocket() high-level wrapper function
     function SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
+    /// bind a TNetSocket instance to this network address
+    function SocketBind(socket: TNetSocket): TNetResult;
   end;
 
   /// pointer to a socket address mapping
@@ -1994,6 +1996,13 @@ begin
   result := nrConnectTimeout;
 end;
 
+function TNetAddr.SocketBind(socket: TNetSocket): TNetResult;
+begin
+  if socket = nil then
+    result := nrNoSocket
+  else
+    result := NetCheck(bind(socket.Socket, @Addr, Size));
+end;
 
 
 { ******** TNetSocket Cross-Platform Wrapper }
