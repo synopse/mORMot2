@@ -2239,7 +2239,7 @@ type
     fNotifyDestroy: TOnFakeInstanceDestroy;
     // the JITed asm stubs will redirect to these JSON-oriented process
     procedure FakeCallGetJsonFromStack(
-      var ctxt: TFakeCallContext; var Json: RawUtf8);
+      var ctxt: TFakeCallContext; var Json: RawUtf8); virtual;
     procedure FakeCallSetJsonToStack(var ctxt: TFakeCallContext; R: PUtf8Char);
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); override;
     // should be overriden to support interface parameters (i.e. callbacks)
@@ -2559,7 +2559,8 @@ function PerThreadRunningContextAddress: pointer;
 const
   /// marker used internally to pass ServiceMethod^.ArgsInputIsOctetStream
   // - used by both TRestServerRoutingRest.ExecuteSoaByInterface and
-  // TInterfaceMethodExecute.ExecuteJson
+  // TInterfaceMethodExecute.ExecuteJson, followed by a RawByteString pointer
+  // - is a UTF-8 marker, ending with a #0 so to be identified within JSON
   JSON_BIN_MAGIC_C = $00b2bfef;
 
   /// the TInterfaceMethodOptions which are related to custom thread execution
@@ -2939,6 +2940,11 @@ begin
           P := GotoNextNotSpace(P);
           Value := P;
           P := GotoEndJsonItem(P);
+          if P = nil then
+          begin
+            W.AddNull; // malformatted input (or JSON_BIN_MAGIC_C)
+            break;
+          end;
           if P^ = ',' then
             inc(P); // include ending ','
           W.AddNoJsonEscape(Value, P - Value);
@@ -3388,8 +3394,9 @@ var
   a: PInterfaceMethodArgument;
   V: PPointer;
 begin
+  // fill ctxt.Value[]
   FakeCallGetParamsFromStack(ctxt);
-  // generate the ParamsJson input from c^.Value[]
+  // generate the ParamsJson input from ctxt.Value[]
   if fParamsSafe.TryLock then
   begin
     W := fParams; // reuse a per-callback TJsonWriter instance

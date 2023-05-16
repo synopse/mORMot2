@@ -892,7 +892,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Check(Str2[3] = 'one,two,three');
     Check(Str2[4] = '');
     s := RawUtf8OfChar(#1, 100);
-    check(I.DirectCall(s) = 100);
+    CheckEqual(I.DirectCall(s), 100);
     s := RawUtf8OfChar('-', 600);
     t := length(I.RepeatJsonArray(s, 100));
     checkutf8(t = 1 + 100 * 603, 'RawJson %', [KB(t)]);
@@ -1685,7 +1685,7 @@ var
   Inst: TTestServiceInstances;
   Json: RawUtf8;
   i: integer;
-  URI: TRestServerURIDynArray;
+  URI: TRestServerUriDynArray;
 const
   SERVICES: array[0..4] of RawUtf8 = (
     'Calculator', 'ComplexCalculator',

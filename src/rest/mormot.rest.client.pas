@@ -406,6 +406,9 @@ type
       ctxt: TRestClientSideInvoke;
       const method, params, clientDrivenID: RawUtf8;
       out sent, head: RawUtf8); virtual; abstract;
+    /// could be overriden to notify advances routing features
+    // - default returns [] but TRestClientRoutingRest includes csiAsOctetStream
+    class function Supports: TRestClientSideInvoke; virtual;
   end;
 
   /// class used to define the Client side expected routing
@@ -429,6 +432,8 @@ type
       ctxt: TRestClientSideInvoke;
       const method, params, clientDrivenID: RawUtf8;
       out sent, head: RawUtf8); override;
+    /// overriden to include csiAsOctetStream
+    class function Supports: TRestClientSideInvoke; override;
   end;
 
   /// client calling context using simple REST for interface-based services
@@ -554,6 +559,7 @@ type
     fConnectRetrySeconds: integer; // used by IsOpen
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
+    fServiceRoutingSupports: TRestClientSideInvoke;
     fInternalState: set of (isDestroying, isInAuth, isNotImplemented);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
@@ -783,7 +789,7 @@ type
     // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
     // to guess an associated REST server which may implement a given service
     function ServiceRetrieveAssociated(const aServiceName: RawUtf8;
-      out URI: TRestServerURIDynArray): boolean; overload;
+      out URI: TRestServerUriDynArray): boolean; overload;
     /// return all REST server URI associated to this client, for a given service
     // - here the service is specified as its TGuid, e.g. IMyInterface
     // - this method expects the interface to have been registered previously:
@@ -804,6 +810,9 @@ type
     // - NEVER set the abstract TRestClientRouting class on this property
     property ServicesRouting: TRestClientRoutingClass
       read fServicesRouting write SetRoutingClass;
+    /// direct copy of ServicesRouting.Supports flags
+    property ServiceRoutingSupports: TRestClientSideInvoke
+      read fServiceRoutingSupports;
     // internal methods used by mormot.soa.client
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
@@ -1632,7 +1641,20 @@ end;
 
 { ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
+{ TRestClientRouting }
+
+class function TRestClientRouting.Supports: TRestClientSideInvoke;
+begin
+  result := []; // no advanced process by default
+end;
+
+
 { TRestClientRoutingRest }
+
+class function TRestClientRoutingRest.Supports: TRestClientSideInvoke;
+begin
+  result := [csiAsOctetStream];
+end;
 
 class procedure TRestClientRoutingRest.ClientSideInvoke(var uri: RawUtf8;
   ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
@@ -1643,16 +1665,22 @@ begin
   else
     uri := uri + '.' + method;
   if (csiAsOctetStream in ctxt) and
-     (length(params) > 2) and
-     (params[1] = '"') then
-  begin
-    sent := Base64ToBin(@params[2], length(params) - 2);
-    if sent <> '' then
+     (params <> '') then
+    if PCardinalArray(params)[0] = JSON_BIN_MAGIC_C then
     begin
+      sent := PRawByteString(@PCardinalArray(params)[1])^; // pass by reference
       head := BINARY_CONTENT_TYPE_HEADER;
       exit;
+    end
+    else if params[1] = '"' then // base64-encoded parameter
+    begin
+      sent := Base64ToBin(@params[2], length(params) - 2);
+      if sent <> '' then
+      begin
+        head := BINARY_CONTENT_TYPE_HEADER;
+        exit;
+      end;
     end;
-  end;
   sent := '[' + params + ']'; // we may also encode them within the URI
 end;
 
@@ -1897,7 +1925,10 @@ begin
          raise EServiceException.CreateUtf8('Unexpected %.SetRoutingClass(%)',
            [self, aServicesRouting])
       else
-         fServicesRouting := aServicesRouting;
+      begin
+        fServicesRouting := aServicesRouting;
+        fServiceRoutingSupports := aServicesRouting.Supports;
+      end;
 end;
 
 procedure TRestClientUri.SetSessionHeartbeatSeconds(timeout: integer);
@@ -2741,7 +2772,7 @@ begin
 end;
 
 function TRestClientUri.ServiceRetrieveAssociated(const aServiceName: RawUtf8;
-  out URI: TRestServerURIDynArray): boolean;
+  out URI: TRestServerUriDynArray): boolean;
 var
   json: RawUtf8;
 begin

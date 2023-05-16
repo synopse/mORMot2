@@ -453,6 +453,8 @@ type
   TInterfacedObjectFakeClient = class(TInterfacedObjectFake)
   protected
     fClient: TServiceFactoryClient;
+    procedure FakeCallGetJsonFromStack(
+      var ctxt: TFakeCallContext; var Json: RawUtf8); override;
     procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); override;
   public
@@ -476,6 +478,27 @@ begin
          (Session.User <> nil) then
         opt := [ifoJsonAsExtended, ifoDontStoreVoidJson];
   inherited Create(aClient.fInterface, aClient, opt, aInvoke, aNotifyDestroy);
+end;
+
+procedure TInterfacedObjectFakeClient.FakeCallGetJsonFromStack(
+  var ctxt: TFakeCallContext; var Json: RawUtf8);
+begin
+  if ctxt.Method^.ArgsInputIsOctetStream and
+     not fClient.ParamsAsJsonObject and
+     (fClient.fClient <> nil) and
+     (csiAsOctetStream in
+        TRestClientUri(fClient.fClient).ServiceRoutingSupports) then
+  begin
+    // per-reference RawByteString SOA client process with no Base64 encoding
+    FakeCallGetParamsFromStack(ctxt);
+    FastSetString(Json, nil, SizeOf(cardinal) + SizeOf(pointer));
+    PCardinalArray(Json)[0] := JSON_BIN_MAGIC_C; // marker
+    PPointer(@PCardinalArray(Json)[1])^ :=
+      PPointer(ctxt.Value[ctxt.Method^.ArgsInFirst])^; // set reference
+  end
+  else
+    // default execution via JSON serialization
+    inherited FakeCallGetJsonFromStack(ctxt, Json);
 end;
 
 procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJsonWriter;
