@@ -2467,7 +2467,7 @@ begin
           exit;
         end;
         if pending <> length(data) then
-          SetLength(data, pending);
+          FakeLength(data, pending);
       end
       else
         result := nrRetry;
