@@ -255,6 +255,8 @@ type
     /// accept an incoming socket, optionally asynchronous, with accept4() support
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
       async: boolean): TNetResult;
+    /// retrieve the current address associated on this connected socket
+    function GetName(out addr: TNetAddr): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// change the socket state to non-blocking
@@ -2203,7 +2205,9 @@ begin
     netsocket := sock;
     netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
     if netaddr <> nil then
-      MoveFast(addr, netaddr^, addr.Size);
+      if (addr.Port <> 0) or
+         (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
+        MoveFast(addr, netaddr^, addr.Size);
   end;
 end;
 
@@ -2329,6 +2333,20 @@ begin
       else
         result := nrOK;
     end;
+  end;
+end;
+
+function TNetSocketWrap.GetName(out addr: TNetAddr): TNetResult;
+var
+  len: tsocklen;
+begin
+  FillCharFast(addr, SizeOf(addr), 0);
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    len := SizeOf(addr);
+    result := NetCheck(getsockname(TSocket(@self), @addr, len));
   end;
 end;
 

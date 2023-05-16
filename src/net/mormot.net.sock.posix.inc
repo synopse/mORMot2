@@ -216,6 +216,11 @@ begin
   result := fpbind(s, addr, namelen);
 end;
 
+function getsockname(s: integer; name: PSockAddr; var namelen: tsocklen): integer; inline;
+begin
+  result := fpgetsockname(s, name, @namelen);
+end;
+
 function listen(s: integer; backlog: integer): integer; inline;
 begin
   result := fplisten(s, backlog);
@@ -304,6 +309,9 @@ function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
 
 function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; cdecl;
   external clib name 'bind';
+
+function getsockname(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
+  external clib name 'getsockname';
 
 function listen(s: integer; backlog: integer): integer; cdecl;
   external clib name 'listen';

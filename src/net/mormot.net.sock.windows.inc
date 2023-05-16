@@ -420,6 +420,8 @@ function send(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
 function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
    addrto: PSockAddr; tolen: integer): integer; stdcall;
   external ws2 name 'sendto';
+function getsockname(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
+  external ws2 name 'getsockname';
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getpeername';
 function inet_addr(cp: PAnsiChar): cardinal; stdcall;
