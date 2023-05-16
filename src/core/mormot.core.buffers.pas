@@ -1509,6 +1509,10 @@ function UrlDecode(const s: RawUtf8; i: PtrInt = 1; len: PtrInt = -1): RawUtf8; 
 
 /// decode a string compatible with URI encoding into its original value
 function UrlDecode(U: PUtf8Char): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// decode a string compatible with URI encoding into its original value
+procedure UrlDecode(U: PUtf8Char; var result: RawUtf8); overload;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // textual value
@@ -8009,15 +8013,22 @@ begin
 end;
 
 function UrlDecode(U: PUtf8Char): RawUtf8;
+begin
+  UrlDecode(U, result);
+end;
+
+procedure UrlDecode(U: PUtf8Char; var result: RawUtf8); overload;
 var
   P: PUtf8Char;
   L: integer;
   tmp: TSynTempBuffer;
 begin
-  result := '';
   L := StrLen(U);
   if L = 0 then
+  begin
+    result := '';
     exit;
+  end;
   P := tmp.Init(L);
   repeat
     case U^ of

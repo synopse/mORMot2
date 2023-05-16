@@ -7542,8 +7542,10 @@ begin
       Data^ := ''
     else if not Ctxt.WasString then
       Ctxt.Valid := false
-    else if not Base64MagicTryAndDecode(Ctxt.Value, Ctxt.ValueLen, Data^) then
-      FastSetRawByteString(Data^, Ctxt.Value, Ctxt.ValueLen); // with magic or not
+    else if Base64MagicTryAndDecode(Ctxt.Value, Ctxt.ValueLen, Data^) then
+      exit // base64-encoded, with magic or not
+    else
+      FastSetRawByteString(Data^, Ctxt.Value, Ctxt.ValueLen); // fallback as text
 end;
 
 procedure _JL_RawJson(Data: PRawJson; var Ctxt: TJsonParserContext);
