@@ -6055,13 +6055,7 @@ type
   end;
 
 begin
-  {$ifndef PUREPASCAL}
-  {$ifndef LVCL}
-  {$ifndef FPC}
   Test(TSynFilterTrim, TrimU);
-  {$endif FPC}
-  {$endif LVCL}
-  {$endif PUREPASCAL}
   Test(TSynFilterLowerCase, LowerCase);
   Test(TSynFilterUpperCase, UpperCase);
   Test(TSynFilterLowerCaseU, LowerCaseU);

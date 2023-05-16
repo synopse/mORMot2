@@ -1732,7 +1732,6 @@ begin
         [HTTPClient.SessionUser.LogonName], HTTPClient.SessionUser);
       Inst.ExpectedUserID := HTTPClient.SessionUser.ID;
       Inst.ExpectedGroupID := HTTPClient.SessionUser.GroupRights.ID;
-      //SetOptions(false{$ifndef LVCL},true,[optExecInMainThread]{$endif});
       CheckEqual(
         HTTPClient.CallBackGet('stat', ['findservice', 'toto'], Json),
         HTTP_SUCCESS);
@@ -1752,7 +1751,6 @@ begin
       Check(HTTPClient.ServiceRetrieveAssociated(ITestSession, URI));
       Check(length(URI) = 1);
       Test(Inst, 100);
-      //SetOptions(false{$ifndef LVCL},true,[]{$endif});
     finally
       Finalize(Inst);
       HTTPClient.Free;

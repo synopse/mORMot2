@@ -996,7 +996,6 @@ begin
 end;
 
 type
-  {$M+} // TPersistent has no RTTI for LVCL!
   TPersistentToJson = class(TPersistent)
   protected
     fName: RawUtf8;
@@ -1010,7 +1009,6 @@ type
     property Sets: TSynBackgroundThreadProcessSteps
       read fSets write fSets default[];
   end;
-  {$M-}
 
   TRange = record
     Min, Max: Integer;
