@@ -2557,6 +2557,11 @@ procedure BackgroundExecuteInstanceRelease(instance: TObject;
 function PerThreadRunningContextAddress: pointer;
 
 const
+  /// marker used internally to pass ServiceMethod^.ArgsInputIsOctetStream
+  // - used by both TRestServerRoutingRest.ExecuteSoaByInterface and
+  // TInterfaceMethodExecute.ExecuteJson
+  JSON_BIN_MAGIC_C = $00b2bfef;
+
   /// the TInterfaceMethodOptions which are related to custom thread execution
   INTERFACEMETHOD_THREADOPTIONS = [
     optExecGlobalLocked,
@@ -7492,8 +7497,17 @@ begin
          (optErrorOnMissingParam in Options) then
         exit; // paranoid setting
     end
+    else if fMethod^.ArgsInputIsOctetStream and
+            (P <> nil) and
+            (PCardinal(P)^ = JSON_BIN_MAGIC_C) then
+    begin
+      // passed by reference from TRestServerRoutingRest.ExecuteSoaByInterface
+      inc(PCardinal(P));
+      PRawByteString(fValues[fMethod^.ArgsInFirst])^ := PRawByteString(P)^;
+    end
     else
     begin
+      // parse the JSON input values
       ctxt.InitParser(P, nil, fFactory.JsonParserOptions,
         @fDocVariantOptions, nil, nil);
       for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do

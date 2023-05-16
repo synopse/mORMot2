@@ -4552,6 +4552,11 @@ end;
 procedure TRestServerRoutingRest.ExecuteSoaByInterface;
 var
   par: PUtf8Char;
+  fake: packed record
+    c: AnsiChar;      // [
+    marker: cardinal; // detected by TInterfaceMethodExecute.ExecuteJson
+    bin: pointer;     // RawByteString passed by reference
+  end;
 begin
   // here Ctxt.Service and ServiceMethod(Index) are set
   if (Server.Services = nil) or
@@ -4565,9 +4570,14 @@ begin
     if (ServiceMethod <> nil) and
        ServiceMethod^.ArgsInputIsOctetStream and
        not ContentTypeIsJson then
-      // encode binary as Base64, as expected by InternalExecuteSoaByInterface
-      // may use AVX2 on FPC x86_64 so performance is not an issue here
-      fCall^.InBody := BinToBase64(fCall^.InBody, '["', '"]', false);
+    begin
+      fake.c := '[';                      // starts like a regular JSON array
+      fake.marker := JSON_BIN_MAGIC_C;    // internal identifier
+      fake.bin := pointer(fCall^.InBody); // pass by reference (not base-64)
+      ServiceParameters := @fake;
+      InternalExecuteSoaByInterface;
+      exit;
+    end;
   end
   else
   begin
@@ -4580,7 +4590,7 @@ begin
       if (par^ = '[') or
          IdemPChar(par, '%5B') then
         // as json array (input is e.g. '+%5B...' for ' [...')
-        fCall^.InBody := UrlDecode(par)
+        UrlDecode(par, RawUtf8(fCall^.InBody))
       else
       begin
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
