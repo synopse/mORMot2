@@ -135,6 +135,7 @@ type
     fConnectionTotal: integer;
     fOptions: TTftpThreadOptions;
     fAsNobody: boolean;
+    fRangeLow, fRangeHigh: word;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
     function GetConnectionCount: integer;
     function GetContextOptions: TTftpContextOptions;
@@ -178,6 +179,14 @@ type
     /// the local folder where the files are read or written
     property FileFolder: TFileName
       read fFileFolder write SetFileFolder;
+    /// optional lowest UDP port to be used for the responses
+    // - default 0 will let the OS select an ephemeral port
+    property RangeLow: word
+      read fRangeLow write fRangeLow;
+    /// optional highest UDP port to be used for the responses
+    // - default 0 will let the OS select an ephemeral port
+    property RangeHigh: word
+      read fRangeHigh write fRangeHigh;
   end;
 
 
@@ -594,7 +603,9 @@ var
   op: TTftpOpcode;
   c: TTftpContext;
   res: TTftpError;
+  range, retry: integer;
   nr: TNetResult;
+  local: TNetAddr;
 begin
   // is called from TTftpServerThread.DoExecute context (so fLog is set)
   // with a RRQ/WRQ incoming UDP frame on port 69
@@ -614,13 +625,31 @@ begin
     exit;
   end;
   FillCharFast(c, SizeOf(c), 0);
-  // create new c.Sock on ephemeral port
+  // create new c.Sock
   c.Sock := remote.NewSocket(nlUdp);
   if c.Sock = nil then
   begin
     fLog.Log(sllWarning, 'OnFrameReceived: NewSocket failed as %',
       [NetLastErrorMsg], self);
     exit;
+  end;
+  // fix to a random port in supplied range if OS epĥemeral port is not enough
+  range := integer(fRangeHigh) - integer(fRangeLow);
+  if (range > 100) and
+     (fRangeLow > 1024) then
+  begin
+    local := fSockAddr; // server address
+    retry := 50; // avoid endless loop
+    repeat
+      local.SetPort(fRangeLow + Random32(range));
+      nr := local.SocketBind(c.Sock);
+      if nr = nrOk then
+        break;
+      dec(retry);
+    until retry = 0;
+    if retry = 0 then
+      fLog.Log(sllWarning, 'OnFrameReceived: SocketBind(%..%) failed as %',
+        [fRangeLow, fRangeHigh, NetLastErrorMsg], self);
   end;
   // main request parsing method (if TStream exists)
   c.Remote := remote;
