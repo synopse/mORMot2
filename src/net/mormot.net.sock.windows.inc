@@ -333,21 +333,21 @@ const
 type
   PWSAData = ^TWSAData;
   TWSAData = record
-     wVersion: word;
-     wHighVersion: word;
-     {$ifdef WIN64}
-     iMaxSockets: word;
-     iMaxUdpDg: word;
-     lpVendorInfo: PAnsiChar;
-     szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
-     szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
-     {$else}
-     szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
-     szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
-     iMaxSockets: word;
-     iMaxUdpDg: word;
-     lpVendorInfo: PAnsiChar;
-     {$endif WIN64}
+    wVersion: word;
+    wHighVersion: word;
+    {$ifdef WIN64}
+    iMaxSockets: word;
+    iMaxUdpDg: word;
+    lpVendorInfo: PAnsiChar;
+    szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
+    szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
+    {$else}
+    szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
+    szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
+    iMaxSockets: word;
+    iMaxUdpDg: word;
+    lpVendorInfo: PAnsiChar;
+    {$endif WIN64}
   end;
   WSAData = TWSAData;
 
@@ -372,58 +372,80 @@ end;
 
 function WSAStartup(wVersionRequired: word; var WSData: TWSAData): integer; stdcall;
   external ws2 name 'WSAStartup';
+
 function WSACleanup: integer; stdcall;
   external ws2 name 'WSACleanup';
+
 function sockerrno: integer; stdcall;
   external ws2 name 'WSAGetLastError';
 
 function getaddrinfo(NodeName, ServName: PAnsiChar; Hints: PAddrInfo;
    var Addrinfo: PAddrInfo): integer; stdcall;
   external ws2 name 'getaddrinfo';
+
 procedure freeaddrinfo(ai: PAddrInfo); stdcall;
   external ws2 name 'freeaddrinfo';
+
 function socket(af, struct, protocol: integer): TSocket; stdcall;
   external ws2 name 'socket';
+
 function setsockopt(s: TSocket; level, optname: integer;
    optval: pointer; optlen: integer): integer; stdcall;
   external ws2 name 'setsockopt';
+
 function getsockopt(s: TSocket; level, optname: integer;
    optval: pointer; optlen: PInteger): integer; stdcall;
   external ws2 name 'getsockopt';
+
 function ioctlsocket(s: TSocket; cmd: cardinal; arg: PCardinal): integer; stdcall;
   external ws2 name 'ioctlsocket';
+
 function shutdown(s: TSocket; how: integer): integer; stdcall;
   external ws2 name 'shutdown';
+
 function closesocket(s: TSocket): integer; stdcall;
   external ws2 name 'closesocket';
+
 function getnameinfo(addr: PSockAddr; namelen: integer; host: PAnsiChar;
    hostlen: cardinal; serv: PAnsiChar; servlen: cardinal; flags: integer): integer; stdcall;
   external ws2 name 'getnameinfo';
+
 function bind(s: TSocket; addr: PSockAddr; namelen: integer): integer; stdcall;
   external ws2 name 'bind';
+
 function listen(s: TSocket; backlog: integer): integer; stdcall;
   external ws2 name 'listen';
+
 function accept(s: TSocket; addr: PSockAddr; var addrlen: integer): TSocket; stdcall;
   external ws2 name 'accept';
+
 function connect(s: TSocket; name: PSockAddr; namelen: integer): integer; stdcall;
   external ws2 name 'connect';
+
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; stdcall;
   external ws2 name 'select';
+
 function recv(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
   external ws2 name 'recv';
+
 function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; stdcall;
   external ws2 name 'recvfrom';
+
 function send(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
   external ws2 name 'send';
+
 function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
    addrto: PSockAddr; tolen: integer): integer; stdcall;
   external ws2 name 'sendto';
+
 function getsockname(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getsockname';
+
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getpeername';
+
 function inet_addr(cp: PAnsiChar): cardinal; stdcall;
   external ws2 name 'inet_addr';
 
@@ -715,6 +737,7 @@ const
               GAA_FLAG_SKIP_FRIENDLY_NAME;
               // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
   IfOperStatusUp = 1;
+
   MAX_HOSTNAME_LEN = 128;
   MAX_DOMAIN_NAME_LEN = 128;
   MAX_SCOPE_ID_LEN = 256;
@@ -724,10 +747,12 @@ type
     lpSockaddr: PSOCKADDR;
     iSockaddrLength: Integer;
   end;
+
   PIP_ADAPTER_UNICAST_ADDRESS = pointer;
   PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
   PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
   PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
+
   PIP_ADAPTER_ADDRESSES = ^_IP_ADAPTER_ADDRESSES;
   _IP_ADAPTER_ADDRESSES = record
     Union: record
@@ -772,19 +797,23 @@ type
     TunnelType: DWORD;
     // DHCP v6 Info following (not used by our code)
   end;
+
   IP_ADDRESS_STRING = array [0..15] of AnsiChar;
   IP_ADDR_IP4 = cardinal;
+
   IP_ADDR_STRING = packed record
     IpAddress: IP_ADDRESS_STRING;
     IpMask: IP_ADDRESS_STRING;
     Context: IP_ADDR_IP4;
   end;
   PIP_ADDR_STRING = ^IP_ADDR_STRING;
+
   PIP_ADDR_STRING_LINKED_LIST = ^IP_ADDR_STRING_LINKED_LIST;
   IP_ADDR_STRING_LINKED_LIST = packed record
     Next: PIP_ADDR_STRING_LINKED_LIST;
     Current: IP_ADDR_STRING;
   end;
+
   FIXED_INFO = packed record
     HostName: array[0..MAX_HOSTNAME_LEN + 3] of AnsiChar;
     DomainName: array[0..MAX_DOMAIN_NAME_LEN + 3] of AnsiChar;
@@ -803,8 +832,10 @@ var
   // some iphlpapi.dll late-binded APIs via DelayedProc()
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWORD; Reserved: pointer;
     pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
+
   SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
     PhyAddrLen: Pointer): DWORD; stdcall;
+
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
 
