@@ -634,22 +634,27 @@ begin
     exit;
   end;
   // fix to a random port in supplied range if OS epĥemeral port is not enough
-  range := integer(fRangeHigh) - integer(fRangeLow);
-  if (range > 100) and
-     (fRangeLow > 1024) then
+  if (fRangeLow or fRangeHigh) <> 0 then
   begin
-    local := fSockAddr; // server address
-    retry := 50; // avoid endless loop
-    repeat
-      local.SetPort(fRangeLow + Random32(range));
-      nr := local.SocketBind(c.Sock);
-      if nr = nrOk then
-        break;
-      dec(retry);
-    until retry = 0;
-    if retry = 0 then
-      fLog.Log(sllWarning, 'OnFrameReceived: SocketBind(%..%) failed as %',
-        [fRangeLow, fRangeHigh, NetLastErrorMsg], self);
+    range := integer(fRangeHigh) - integer(fRangeLow);
+    if (range >= 100) and
+       (fRangeLow > 1024) then
+    begin
+      local := fSockAddr; // server address
+      for retry := 1 to 50 do // avoid endless loop
+      begin
+        local.SetPort(fRangeLow + Random32(range));
+        nr := local.SocketBind(c.Sock);
+        if nr in [nrOk, nrInvalidParameter] then
+          break;
+      end;
+      if nr <> nrOk then
+        fLog.Log(sllWarning, 'OnFrameReceived: SocketBind(%..%) failed as %',
+          [fRangeLow, fRangeHigh, NetLastErrorMsg], self);
+    end
+    else
+      fLog.Log(sllWarning, ': invalid specified RangeLow..RangeHigh %..% ports',
+        [fRangeLow, fRangeHigh], self);
   end;
   // main request parsing method (if TStream exists)
   c.Remote := remote;
