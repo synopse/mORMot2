@@ -1967,6 +1967,12 @@ type
   /// pointer to a 192-bit hash value
   PHash192 = ^THash192;
 
+  /// store a 224-bit hash value
+  // - consumes 28 bytes of memory
+  THash224 = array[0..27] of byte;
+  /// pointer to a 224-bit hash value
+  PHash224 = ^THash224;
+
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TEccSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory

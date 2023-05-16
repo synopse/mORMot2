@@ -82,9 +82,9 @@ type
     // - TransmitOptions should match on both sides
     // - returns the port number to connect to, over the 127.0.0.1 loopback
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort;
+      TimeOutMS: integer; const Transmit: ITunnelTransmit;
+      const AppSecret: RawByteString = ''): TNetPort;
   end;
-
 
   TTunnelLocal = class;
 
@@ -123,6 +123,8 @@ type
     options: TTunnelOptions;
     /// a genuine integer ID
     session: TTunnelSession;
+    /// SHA3 checksum/padding of the previous fields with app specific salt
+    crc: THash128;
   end;
   PTunnelLocalHeader = ^TTunnelLocalHeader;
 
@@ -130,7 +132,7 @@ type
   // - all fields are computed at startup by the TTunnelLocal.Create constructor
   // - two first fields are rnd + pub so that they will be sent over the wire
   TTunnelEcdheContext = packed record
-    /// some random salt to ensure ECDHE features perfect forward security
+    /// 128-bit random salt to ensure ECDHE features perfect forward security
     rnd: TAesBlock;
     /// the ECC secp256r1 public key, as transmitted to the other end
     pub: TEccPublicKey;
@@ -178,7 +180,8 @@ type
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
     // - returns 0 on failure, or an ephemeral port on 127.0.0.1 on success
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort; virtual;
+      TimeOutMS: integer; const Transmit: ITunnelTransmit;
+      const AppSecret: RawByteString = ''): TNetPort; virtual;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
@@ -343,7 +346,7 @@ begin
   try
     fState := stAccepting;
     ENetSock.Check(fServerSock.Accept(fClientSock, fClientAddr, {async=}false),
-      'TTunnelLocalThread.Execute');
+      'TTunnelLocalThread.Execute: Accept');
     fState := stProcessing;
     while not Terminated do
     begin
@@ -445,9 +448,12 @@ begin
                length(frame) - payloadlen, payloadlen) in CV_VALIDSIGN));
 end;
 
+const
+  HEADER_DEFAULT_SALT: TGuid = '{AB15C52F-754F-49CB-9B23-CF88735E39C8}';
+
 function TTunnelLocal.BindLocalPort(Session: TTunnelSession;
   TransmitOptions: TTunnelOptions; TimeOutMS: integer;
-  const Transmit: ITunnelTransmit): TNetPort;
+  const Transmit: ITunnelTransmit; const AppSecret: RawByteString): TNetPort;
 var
   sock: TNetSocket;
   addr: TNetAddr;
@@ -472,10 +478,17 @@ begin
   fOptions := TransmitOptions;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
   try
-    // initial handshake: TTunnelOptions + TTunnelSession from both sides
+    // initial handshake: same TTunnelOptions + TTunnelSession from both sides
     header.magic := tlmVersion1;
     header.options := fOptions;
     header.session := Session;
+    sha3.Init(SHA3_224);
+    if AppSecret = '' then
+      sha3.Update(@HEADER_DEFAULT_SALT, SizeOf(HEADER_DEFAULT_SALT))
+    else
+      sha3.Update(AppSecret); // custom symmetric application-specific secret
+    sha3.Update(@header, SizeOf(header) - SizeOf(header.crc));
+    sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
     Transmit.Send(frame);
@@ -492,9 +505,9 @@ begin
          not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
         raise ETunnel.CreateUtf8('%.BindLocalPort ECDHE failed', [self]);
       sha3.Init(SHA3_256);
-      sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd)); // random server salt
-      sha3.Update(@header, SizeOf(header));       // avoid cross-session replay
-      sha3.Update(@secret, SizeOf(secret));       // ephemeral secret
+      sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd));    // random server salt
+      sha3.Update(@header.crc, SizeOf(header.crc));  // avoid session replay
+      sha3.Update(@secret, SizeOf(secret));          // ephemeral secret
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR encryption/decryption keys
     end;
     // launch the background processing thread

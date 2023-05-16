@@ -8923,7 +8923,7 @@ begin
   // update state with final bits
   if ll < 9 then
   begin
-    // 0..8-bit, one call to update
+    // 0..8 bits, one call to update
     lw := lw shl (8 - ll);
     AbsorbFinal(@lw, ll);
     // squeeze the digits from the sponge
