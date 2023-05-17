@@ -327,9 +327,15 @@ begin
   // validate and optionally decrypt the input frame
   if Terminated or
      (fTransmit = nil) or
-     (Frame = '') or
-     (fClientSock = nil) then
+     (Frame = '') then
     exit;
+  if fClientSock = nil then // may occur with direct calls
+  begin
+    SleepHiRes(10); // let the socket be accepted()
+    if Terminated or
+       (fClientSock = nil) then
+      exit;
+  end;
   if fAes[{send:}false] = nil then
     data := Frame
   else
@@ -370,18 +376,23 @@ begin
       begin
         // wait for some data on the local loopback
         res := fClientSock.RecvWait(100, tmp, @Terminated);
-        if res = nrRetry then
-          continue;
-        if res <> nrOK then
+        case res of
+          nrRetry:
+            continue;
+          nrClosed:
+            break;
+          nrOK:
+            if (tmp <> '') and
+               not Terminated then
+            begin
+              // send the data (optionally encrypted) to the other side
+              if fAes[{send:}true] <> nil then
+                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
+              fTransmit.Send(tmp);
+            end;
+        else
           raise ETunnel.CreateUtf8('%.Execute(%): error % at receiving',
             [self, fPort, ToText(res)^]);
-        if (tmp <> '') and
-           not Terminated then
-        begin
-          // send the data (optionally encrypted) to the other side
-          if fAes[{send:}true] <> nil then
-            tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
-          fTransmit.Send(tmp);
         end;
       end;
     end;
