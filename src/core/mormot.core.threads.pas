@@ -3210,6 +3210,7 @@ begin
   fSender := Sender;
   fOnExecute := OnExecute;
   fOnExecuted := OnExecuted;
+  FreeOnTerminate := true;
   inherited Create({suspended=}false, Logger, ProcessName);
 end;
 
