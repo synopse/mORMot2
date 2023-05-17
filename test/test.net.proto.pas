@@ -684,7 +684,7 @@ end;
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
 begin
   // one of the two handshakes should be done in another thread
-  Check((Sender as TTunnelLocal).BindLocalPort(session, options, 100000, appsec) <> 0);
+  Check((Sender as TTunnelLocal).BindLocalPort(session, options, 1000, appsec) <> 0);
 end;
 
 procedure TNetworkProtocols.TunnelExecuted(Sender: TObject);
@@ -697,6 +697,9 @@ var
   instance: TTunnelLocal;
   clientcb, servercb: ITunnelTransmit;
   client, server: ITunnelLocal;
+  i: integer;
+  sent, received, sent2, received2: RawByteString;
+  clientsock, serversock: TNetSocket;
 begin
   instance := TTunnelLocalClient.Create;
   instance.SignCert := clientcert;
@@ -722,17 +725,42 @@ begin
   Check(server.LocalPort <> client.LocalPort, 'ports');
   Check(client.Encrypted = (toEcdhe in options), 'cEncrypted');
   Check(server.Encrypted = (toEcdhe in options), 'sEncrypted');
-
+  Check(NewSocket('127.0.0.1', client.LocalPort, nlTcp, {bind=}false,
+    1000, 1000, 1000, 0, clientsock) = nrOk);
+  Check(NewSocket('127.0.0.1', server.LocalPort, nlTcp, {bind=}false,
+    1000, 1000, 1000, 0, serversock) = nrOk);
+  try
+    for i := 1 to 100 do // validate raw TCP tunnelling
+    begin
+      sent := RandomString(Random32(200) + 1);
+      sent2 := RandomString(Random32(200) + 1);
+      Check(clientsock.SendAll(pointer(sent), length(sent)) = nrOk);
+      Check(serversock.RecvWait(1000, received) = nrOk);
+      CheckEqual(sent, received);
+      Check(clientsock.SendAll(pointer(sent2), length(sent2)) = nrOk);
+      Check(serversock.SendAll(pointer(sent), length(sent)) = nrOk);
+      Check(clientsock.RecvWait(1000, received) = nrOk);
+      Check(serversock.RecvWait(1000, received2) = nrOk);
+      CheckEqual(sent, received);
+      CheckEqual(sent2, received2);
+    end;
+  finally
+    clientsock.ShutdownAndClose(true);
+    serversock.ShutdownAndClose(true);
+  end;
   server.SetTransmit(nil); // to avoid memory leak due to circular references
 end;
 
 procedure TNetworkProtocols._TTunnelLocal;
 begin
+  // plain tunnelling
   TunnelTest(nil, nil);
+  // ECDHE encrypted tunnelling
   options := [toEcdhe];
   TunnelTest(nil, nil);
-  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature, cuKeyAgreement]),
-             Cert('syn-es256').Generate([cuDigitalSignature, cuKeyAgreement]));
+  // ECDHE encrypted tunnelling with mutual authentication
+  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature]),
+             Cert('syn-es256').Generate([cuDigitalSignature]));
 end;
 
 end.
