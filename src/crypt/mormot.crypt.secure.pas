@@ -1257,8 +1257,8 @@ type
   // its content, and with very efficiently binary-based serialization
   // - stores a session ID, cookie name, and encryption and signature keys
   // - can optionally store any associated record as efficient binary
-  // - it is NOT cryptographic secure, because cookies are not, but it is
-  // strong enough to avoid most attacks, and uses less space than a JWT
+  // - it is NOT cryptographic secure, because cookies are not, but it is strong
+  // enough to avoid most attacks, and uses much less space than a JWT
   {$ifdef USERECORDWITHMETHODS}
   TBinaryCookieGenerator = record
   {$else}
@@ -1291,7 +1291,8 @@ type
       SignAlgo: TCrc32Algo = caCrc32c);
     /// will initialize a new Base64Uri-encoded session cookie
     // - with an optional record data
-    // - will return the 32-bit internal session ID and a Base64Uri cookie
+    // - will return the 32-bit internal session ID and a Base64Uri cookie,
+    // ready to be used as HTTP cookie or a temporary URI
     // - you can supply a time period, after which the session will expire -
     // default 0 will use DefaultTimeOutMinutes as supplied to Init()
     function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
@@ -4872,7 +4873,7 @@ begin
       'Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
   CrcAlgo := SignAlgo;
   Padding := 0;
-  // cryptographic randomness
+  // 256 bytes of cryptographic randomness
   MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt));
 end;
 

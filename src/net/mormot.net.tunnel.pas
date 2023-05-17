@@ -60,8 +60,8 @@ type
   TTunnelOptions = set of TTunnelOption;
   PTunnelOptions = ^TTunnelOptions;
 
-  /// a session identifier should match on both sides of the tunnel
-  // - an opaque value matching e.g. a TBinaryCookieGeneratorSessionID
+  /// a session identifier which should match on both sides of the tunnel
+  // - typically a Random64 or a TBinaryCookieGeneratorSessionID value
   TTunnelSession = Int64;
   PTunnelSession = ^TTunnelSession;
 
@@ -199,10 +199,12 @@ type
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
     /// optional Certificate with private key to sign the output handshake frame
+    // - certificate should have [cuDigitalSignature] usage
     // - should match other side's VerifyCert public key property
     property SignCert: ICryptCert
       read fSignCert write fSignCert;
     /// optional Certificate with public key to verify the input handshake frame
+    // - certificate should have [cuDigitalSignature] usage
     // - should match other side's SignCert private key property
     property VerifyCert: ICryptCert
       read fVerifyCert write fVerifyCert;
@@ -221,6 +223,8 @@ type
 
 type
   /// implements server-side tunneling service
+  // - here 'server' or 'client' side does not have any specific meaning - one
+  // should just be at either end of the tunnel
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
@@ -234,6 +238,8 @@ type
 
 type
   /// implements client-side tunneling service
+  // - here 'server' or 'client' side does not have any specific meaning - one
+  // should just be at either end of the tunnel
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
