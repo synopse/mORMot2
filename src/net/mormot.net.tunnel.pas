@@ -353,7 +353,8 @@ begin
   try
     fState := stAccepting;
     res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
-    if res = nrOk then
+    if (res = nrOk) and
+       not Terminated then
     begin
       fState := stProcessing;
       while not Terminated do

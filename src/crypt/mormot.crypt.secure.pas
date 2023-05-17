@@ -2349,6 +2349,7 @@ function Asym(const name: RawUtf8): TCryptAsym;
 function CertAlgo(const name: RawUtf8): TCryptCertAlgo;
 
 /// main factory of the Certificates instances as returned by CertAlgo()
+// - name is typically 'syn-es256' or 'x509-es256'
 function Cert(const name: RawUtf8): ICryptCert;
 
 /// main resolver for Certificates Store engines

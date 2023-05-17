@@ -16,29 +16,41 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
-  mormot.crypt.core,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
   mormot.core.log,
   mormot.core.test,
   mormot.core.perf,
+  mormot.core.threads,
+  mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.server,
   mormot.net.async,
   mormot.net.ldap,
   mormot.net.dns,
-  mormot.net.rtsphttp;
+  mormot.net.rtsphttp,
+  mormot.net.tunnel;
 
 type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
+    // for _TUriTree
     one, two: RawUtf8;
     three: boolean;
     request: integer;
     four: Int64;
+    // for _TTunnelLocal
+    session: Int64;
+    appsec: RawUtf8;
+    options: TTunnelOptions;
+    tunnelexecutedone: boolean;
+    procedure TunnelExecute(Sender: TObject);
+    procedure TunnelExecuted(Sender: TObject);
+    procedure TunnelTest(const clientcert, servercert: ICryptCert);
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -57,6 +69,8 @@ type
     procedure RtspOverHttp;
     /// RTSP over HTTP, with always temporary buffering
     procedure RtspOverHttpBufferedWrite;
+    /// validate mormot.net.tunnel
+    procedure _TTunnelLocal;
   end;
 
 
@@ -667,6 +681,59 @@ begin
   end;
 end;
 
+procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
+begin
+  // one of the two handshakes should be done in another thread
+  Check((Sender as TTunnelLocal).BindLocalPort(session, options, 100000, appsec) <> 0);
+end;
+
+procedure TNetworkProtocols.TunnelExecuted(Sender: TObject);
+begin
+  tunnelexecutedone := true;
+end;
+
+procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
+var
+  instance: TTunnelLocal;
+  clientcb, servercb: ITunnelTransmit;
+  client, server: ITunnelLocal;
+begin
+  instance := TTunnelLocalClient.Create;
+  instance.SignCert := clientcert;
+  instance.VerifyCert := servercert;
+  client := instance;
+  clientcb := instance;
+  instance := TTunnelLocalServer.Create;
+  instance.SignCert := servercert;
+  instance.VerifyCert := clientcert;
+  server := instance;
+  servercb := instance;
+  client.SetTransmit(servercb); // set before BindLocalPort()
+  server.SetTransmit(clientcb);
+  session := Random64;
+  appsec := RandomAnsi7(10);
+  TLoggedWorkThread.Create(TSynLog, 'server', instance, TunnelExecute, TunnelExecuted);
+  Check(client.BindLocalPort(session, options, 1000, appsec) <> 0);
+  SleepHiRes(1000, tunnelexecutedone);
+  Check(tunnelexecutedone, 'TunnelExecuted');
+  tunnelexecutedone := false; // for the next run
+  Check(client.LocalPort <> '');
+  Check(server.LocalPort <> '');
+  Check(server.LocalPort <> client.LocalPort, 'ports');
+  Check(client.Encrypted = (toEcdhe in options), 'cEncrypted');
+  Check(server.Encrypted = (toEcdhe in options), 'sEncrypted');
+
+  server.SetTransmit(nil); // to avoid memory leak due to circular references
+end;
+
+procedure TNetworkProtocols._TTunnelLocal;
+begin
+  TunnelTest(nil, nil);
+  options := [toEcdhe];
+  TunnelTest(nil, nil);
+  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature, cuKeyAgreement]),
+             Cert('syn-es256').Generate([cuDigitalSignature, cuKeyAgreement]));
+end;
 
 end.
 
