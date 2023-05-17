@@ -110,7 +110,7 @@ type
   public
     /// initialize the thread - called from BindLocalPort()
     constructor Create(owner: TTunnelLocal; const transmit: ITunnelTransmit;
-      const enc, dec: THash128; sock: TNetSocket); reintroduce;
+      const key, iv: THash128; sock: TNetSocket); reintroduce;
     /// release all sockets and encryption state
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
@@ -288,7 +288,7 @@ implementation
 { TTunnelLocalThread }
 
 constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
-  const transmit: ITunnelTransmit; const enc, dec: THash128; sock: TNetSocket);
+  const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket);
 begin
   fOwner := owner;
   fPort := owner.Port;
@@ -296,8 +296,11 @@ begin
   if toEcdhe in owner.Options then
   begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
-    fAes[{send:}false] := TAesFast[mCtr].Create(enc);
-    fAes[{send:}true]  := TAesFast[mCtr].Create(dec);
+    fAes[{send:}false] := AesIvUpdatedCreate(mCtr, key, 128);
+    fAes[{send:}true]  := AesIvUpdatedCreate(mCtr, key, 128);
+    // we don't send an IV with each frame, but update it from ecdhe derivation
+    fAes[false].IV := iv;
+    fAes[true].IV := iv;
   end;
   fServerSock := sock;
   FreeOnTerminate := true;
@@ -331,11 +334,11 @@ begin
     data := Frame
   else
   begin
-    data := fAes[false].DecryptPkcs7(Frame, {ivatbeg=}true, {raise=}false);
+    data := fAes[false].DecryptPkcs7(Frame, {ivatbeg=}false, {raise=}false);
     if data = '' then
     begin
       Terminate;
-      raise ETunnel.CreateUtf8('%.OnReceived(%): aborted', [self, fPort]);
+      raise ETunnel.CreateUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
     end;
   end;
   // relay the (decrypted) data to the local loopback
@@ -377,7 +380,7 @@ begin
         begin
           // send the data (optionally encrypted) to the other side
           if fAes[{send:}true] <> nil then
-            tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}true);
+            tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false);
           fTransmit.Send(tmp);
         end;
       end;
@@ -536,7 +539,7 @@ begin
       sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd));    // random server salt
       sha3.Update(@header.crc, SizeOf(header.crc));  // avoid session replay
       sha3.Update(@secret, SizeOf(secret));          // ephemeral secret
-      sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR encryption/decryption keys
+      sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
     end;
     // launch the background processing thread
     FreeAndNil(fHandshake); // ends the handshaking phase
