@@ -49,7 +49,8 @@ type
 
   /// each option available for TTunnelLocal process
   // - toEcdhe will compute an ephemeral secret to encrypt the link
-  // - toClientSigned/toServerSigned will ensure authenticated handshake
+  // - toClientSigned/toServerSigned will be set by BindLocalPort according to
+  // the actual certificates available, to ensure an authenticated handshake
   TTunnelOption = (
     toEcdhe,
     toClientSigned,
@@ -85,6 +86,10 @@ type
     // - returns the port number to connect to, over the 127.0.0.1 loopback
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret: RawByteString = ''): TNetPort;
+    /// the bound 127.0.0.1:LocalPort to be used for the tunnel local process
+    function LocalPort: RawUtf8;
+    /// check if the background processing thread is using encrypted frames
+    function Encrypted: boolean;
   end;
 
   TTunnelLocal = class;
@@ -93,6 +98,7 @@ type
   TTunnelLocalThread = class(TSynThread)
   protected
     fState: (stCreated, stAccepting, stProcessing, stTerminated);
+    fStarted: boolean;
     fOwner: TTunnelLocal;
     fTransmit: ITunnelTransmit;
     fAes: array[{send:}boolean] of TAesAbstract;
@@ -185,6 +191,10 @@ type
     // - returns 0 on failure, or an ephemeral port on 127.0.0.1 on success
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret: RawByteString = ''): TNetPort; virtual;
+    /// ITunnelLocal method: return the localport needed
+    function LocalPort: RawUtf8;
+    /// ITunnelLocal method: check if the background thread uses encrypted frames
+    function Encrypted: boolean;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
@@ -289,18 +299,11 @@ begin
 end;
 
 destructor TTunnelLocalThread.Destroy;
-var
-  callback: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
   Terminate;
   if fOwner <> nil then
     fOwner.ClosePort;
   fServerSock.ShutdownAndClose({rdwr=}true);
-  if fState = stAccepting then
-    if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
-       {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
-      // Windows socket may not release Accept() until connected
-      callback.ShutdownAndClose({rdwr=}false);
   fClientSock.ShutdownAndClose({rdwr=}true);
   inherited Destroy;
   FreeAndNil(fAes[true]);
@@ -346,27 +349,30 @@ var
   tmp: RawByteString;
   res: TNetResult;
 begin
+  fStarted := true;
   try
     fState := stAccepting;
-    ENetSock.Check(fServerSock.Accept(fClientSock, fClientAddr, {async=}false),
-      'TTunnelLocalThread.Execute: Accept');
-    fState := stProcessing;
-    while not Terminated do
+    res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
+    if res = nrOk then
     begin
-      // wait for some data on the local loopback
-      res := fClientSock.RecvWait(100, tmp, @Terminated);
-      if res = nrRetry then
-        continue;
-      if res <> nrOK then
-        raise ETunnel.CreateUtf8('%.Execute(%): error % at receiving',
-          [self, fPort, ToText(res)^]);
-      if (tmp <> '') and
-         not Terminated then
+      fState := stProcessing;
+      while not Terminated do
       begin
-        // send the data (optionally encrypted) to the other side
-        if fAes[{send:}true] <> nil then
-          tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}true);
-        fTransmit.Send(tmp);
+        // wait for some data on the local loopback
+        res := fClientSock.RecvWait(100, tmp, @Terminated);
+        if res = nrRetry then
+          continue;
+        if res <> nrOK then
+          raise ETunnel.CreateUtf8('%.Execute(%): error % at receiving',
+            [self, fPort, ToText(res)^]);
+        if (tmp <> '') and
+           not Terminated then
+        begin
+          // send the data (optionally encrypted) to the other side
+          if fAes[{send:}true] <> nil then
+            tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}true);
+          fTransmit.Send(tmp);
+        end;
       end;
     end;
   except
@@ -405,6 +411,7 @@ end;
 procedure TTunnelLocal.ClosePort;
 var
   thread: TTunnelLocalThread;
+  callback: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
   if self = nil then
     exit;
@@ -414,6 +421,11 @@ begin
     fThread := nil;
     thread.fOwner := nil;
     thread.Terminate;
+    if thread.fState = stAccepting then
+      if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
+         {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
+        // Windows socket may not release Accept() until connected
+        callback.ShutdownAndClose({rdwr=}false);
   end;
   fPort := 0;
 end;
@@ -424,9 +436,7 @@ begin
   if fHandshake <> nil then
     fHandshake.Push(Frame)    // during the handshake phase
   else if fThread <> nil then
-    fThread.OnReceived(Frame) // regular tunelling process
-  else
-    raise ETunnel.CreateUtf8('%.Send: out of context call', [self]);
+    fThread.OnReceived(Frame); // regular tunelling process
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
@@ -456,6 +466,8 @@ end;
 procedure TTunnelLocal.SetTransmit(const Transmit: ITunnelTransmit);
 begin
   fTransmit := Transmit;
+  if fThread <> nil then
+    fThread.fTransmit := Transmit;
 end;
 
 const
@@ -522,6 +534,7 @@ begin
     // launch the background processing thread
     FreeAndNil(fHandshake); // ends the handshaking phase
     fThread := TTunnelLocalThread.Create(self, fTransmit, key.Lo, key.Hi, sock);
+    SleepHiRes(100, fThread.fStarted);
   except
     sock.ShutdownAndClose(true); // any error would abort and return 0
     result := 0;
@@ -530,6 +543,23 @@ begin
   FillZero(ecdhe.priv);
   FillZero(secret);
   FillZero(key.b);
+  fPort := result;
+end;
+
+function TTunnelLocal.LocalPort: RawUtf8;
+begin
+  if (self = nil) or
+     (fPort = 0) then
+    result := ''
+  else
+    UInt32ToUtf8(fPort, result);
+end;
+
+function TTunnelLocal.Encrypted: boolean;
+begin
+  result := (self <> nil) and
+            (fThread <> nil) and
+            (fThread.fAes[false] <> nil);
 end;
 
 
