@@ -582,6 +582,8 @@ type
   TLdapAttributeDynArray = array of TLdapAttribute;
 
   /// list one or several TLdapAttribute
+  // - will use TLdapResultList.fInterning as hashed list of names to minimize
+  // memory allocation, and makes efficient lookup
   TLdapAttributeList = class
   private
     fItems: TLdapAttributeDynArray;
@@ -607,6 +609,9 @@ type
     /// find and return attribute with the requested name
     // - returns nil if not found
     function Find(const AttributeName: RawUtf8): TLdapAttribute;
+    /// add an attribute value to the list, reusing any existing TLdapAttribute
+    function FindAdd(const AttributeName: RawUtf8;
+      const AttributeValue: RawByteString): TLdapAttribute;
     /// Find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
@@ -2932,6 +2937,15 @@ function TLdapAttributeList.Add(const AttributeName: RawUtf8;
   const AttributeValue: RawByteString): TLdapAttribute;
 begin
   result := Add(AttributeName);
+  result.Add(AttributeValue);
+end;
+
+function TLdapAttributeList.FindAdd(const AttributeName: RawUtf8;
+  const AttributeValue: RawByteString): TLdapAttribute;
+begin
+  result := Find(AttributeName);
+  if result = nil then
+    result := Add(AttributeName); // first time this attribute is used
   result.Add(AttributeValue);
 end;
 
