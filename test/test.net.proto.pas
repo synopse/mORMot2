@@ -684,7 +684,7 @@ end;
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
 begin
   // one of the two handshakes should be done in another thread
-  Check((Sender as TTunnelLocal).BindLocalPort(session, options, 1000, appsec) <> 0);
+  Check((Sender as TTunnelLocal).BindPort(session, options, 1000, appsec) <> 0);
 end;
 
 procedure TNetworkProtocols.TunnelExecuted(Sender: TObject);
@@ -694,43 +694,51 @@ end;
 
 procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert);
 var
-  instance: TTunnelLocal;
+  clientinstance, serverinstance: TTunnelLocal;
   clientcb, servercb: ITunnelTransmit;
-  client, server: ITunnelLocal;
+  clienttunnel, servertunnel: ITunnelLocal;
   i: integer;
   sent, received, sent2, received2: RawByteString;
   clientsock, serversock: TNetSocket;
 begin
-  instance := TTunnelLocalClient.Create;
-  instance.SignCert := clientcert;
-  instance.VerifyCert := servercert;
-  client := instance;
-  clientcb := instance;
-  instance := TTunnelLocalServer.Create;
-  instance.SignCert := servercert;
-  instance.VerifyCert := clientcert;
-  server := instance;
-  servercb := instance;
-  client.SetTransmit(servercb); // set before BindLocalPort()
-  server.SetTransmit(clientcb);
+  // setup the two instances with the specified options and certificates
+  clientinstance := TTunnelLocalClient.Create;
+  clientinstance.SignCert := clientcert;
+  clientinstance.VerifyCert := servercert;
+  clienttunnel := clientinstance;
+  clientcb := clientinstance;
+  serverinstance := TTunnelLocalServer.Create;
+  serverinstance.SignCert := servercert;
+  serverinstance.VerifyCert := clientcert;
+  servertunnel := serverinstance;
+  servercb := serverinstance;
+  clienttunnel.SetTransmit(servercb); // set before BindPort()
+  servertunnel.SetTransmit(clientcb);
+  // validate handshaking
   session := Random64;
   appsec := RandomAnsi7(10);
-  TLoggedWorkThread.Create(TSynLog, 'server', instance, TunnelExecute, TunnelExecuted);
-  Check(client.BindLocalPort(session, options, 1000, appsec) <> 0);
+  TLoggedWorkThread.Create(
+    TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
+  Check(clienttunnel.BindPort(session, options, 1000, appsec) <> 0);
   SleepHiRes(1000, tunnelexecutedone);
   Check(tunnelexecutedone, 'TunnelExecuted');
   tunnelexecutedone := false; // for the next run
-  Check(client.LocalPort <> '');
-  Check(server.LocalPort <> '');
-  Check(server.LocalPort <> client.LocalPort, 'ports');
-  Check(client.Encrypted = (toEcdhe in options), 'cEncrypted');
-  Check(server.Encrypted = (toEcdhe in options), 'sEncrypted');
-  Check(NewSocket('127.0.0.1', client.LocalPort, nlTcp, {bind=}false,
+  Check(clienttunnel.LocalPort <> '');
+  Check(servertunnel.LocalPort <> '');
+  Check(servertunnel.LocalPort <> clienttunnel.LocalPort, 'ports');
+  Check(clienttunnel.Encrypted = (toEcdhe in options), 'cEncrypted');
+  Check(servertunnel.Encrypted = (toEcdhe in options), 'sEncrypted');
+  Check(NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, clientsock) = nrOk);
-  Check(NewSocket('127.0.0.1', server.LocalPort, nlTcp, {bind=}false,
+  Check(NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, serversock) = nrOk);
   try
-    for i := 1 to 100 do // validate raw TCP tunnelling
+    // validate raw TCP tunnelling
+    CheckEqual(clientinstance.Thread.Received, 0);
+    CheckEqual(clientinstance.Thread.Sent, 0);
+    CheckEqual(serverinstance.Thread.Received, 0);
+    CheckEqual(serverinstance.Thread.Sent, 0);
+    for i := 1 to 100 do
     begin
       sent := RandomString(Random32(200) + 1);
       sent2 := RandomString(Random32(200) + 1);
@@ -743,12 +751,20 @@ begin
       Check(serversock.RecvWait(1000, received2) = nrOk);
       CheckEqual(sent, received);
       CheckEqual(sent2, received2);
+      CheckEqual(clientinstance.Thread.Received, serverinstance.Thread.Sent);
+      CheckEqual(clientinstance.Thread.Sent, serverinstance.Thread.Received);
+      Check(clientinstance.Thread.Received <> 0);
+      Check(clientinstance.Thread.Sent <> 0);
+      Check(serverinstance.Thread.Received <> 0);
+      Check(serverinstance.Thread.Sent <> 0);
     end;
+    Check(clientinstance.Thread.Received < clientinstance.Thread.Sent, 'smaller');
+    Check(serverinstance.Thread.Received > serverinstance.Thread.Sent, 'bigger');
   finally
     clientsock.ShutdownAndClose(true);
     serversock.ShutdownAndClose(true);
   end;
-  server.SetTransmit(nil); // to avoid memory leak due to circular references
+  servertunnel.SetTransmit(nil); // avoid memory leak due to circular references
 end;
 
 procedure TNetworkProtocols._TTunnelLocal;
@@ -758,7 +774,12 @@ begin
   // ECDHE encrypted tunnelling
   options := [toEcdhe];
   TunnelTest(nil, nil);
+  // tunnelling with mutual authentication
+  options := [];
+  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature]),
+             Cert('syn-es256').Generate([cuDigitalSignature]));
   // ECDHE encrypted tunnelling with mutual authentication
+  options := [toEcdhe];
   TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature]),
              Cert('syn-es256').Generate([cuDigitalSignature]));
 end;
