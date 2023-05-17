@@ -588,6 +588,7 @@ type
   private
     fItems: TLdapAttributeDynArray;
     fInterning: TRawUtf8Interning; // global hash table of attribute names
+    fLastFound: PtrInt;
   public
     /// finalize the list
     destructor Destroy; override;
@@ -2899,6 +2900,12 @@ begin
       if fItems[0].AttributeName = AttributeName then
         exit;
     end
+    else if (fLastFound <= result) and
+            (fItems[fLastFound].AttributeName = AttributeName) then
+    begin
+      result := fLastFound; // match last Find()
+      exit;
+    end
     else
     begin
       existing := fInterning.Existing(AttributeName); // fast pointer search
@@ -2917,7 +2924,10 @@ var
 begin
   i := FindIndex(AttributeName);
   if i >= 0 then
-    result := fItems[i]
+  begin
+    fLastFound := i;
+    result := fItems[i];
+  end
   else
     result := nil;
 end;
