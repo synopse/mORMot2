@@ -1064,12 +1064,16 @@ type
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; Logger: TSynLogClass;
-      const ProcessName: RawUtf8); reintroduce; virtual;
+      const ProcName: RawUtf8); reintroduce; virtual;
     /// notify the thread to be terminated, and wait for DoExecute to finish
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); virtual;
     /// the associated logging class
     property LogClass: TSynLogClass
       read fLogClass;
+  published
+    /// the name of this thread, as supplied to SetCurrentThreadName()
+    property ProcessName: RawUtf8
+      read fProcessName;
   end;
 
   /// a class able to run some process in a background thread
@@ -3142,12 +3146,12 @@ end;
 { TLoggedThread }
 
 constructor TLoggedThread.Create(CreateSuspended: boolean;
-  Logger: TSynLogClass; const ProcessName: RawUtf8);
+  Logger: TSynLogClass; const ProcName: RawUtf8);
 begin
   if Logger = nil then
     Logger := TSynLog;
   fLogClass := Logger;
-  fProcessName := ProcessName;
+  fProcessName := ProcName;
   inherited Create(CreateSuspended);
 end;
 
