@@ -1160,6 +1160,7 @@ type
     function GetCipherName: RawUtf8;
     function GetRawTls: pointer;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
@@ -1524,6 +1525,14 @@ begin
       CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
     inherited Destroy;
   end;
+end;
+
+function TSChannelNetTls.ReceivePending: integer;
+begin
+  if fSessionClosed then
+    result := -1
+  else
+    result := fDataCount;
 end;
 
 function TSChannelNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;

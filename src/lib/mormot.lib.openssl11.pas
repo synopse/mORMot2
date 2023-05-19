@@ -9576,6 +9576,7 @@ type
     function GetCipherName: RawUtf8;
     function GetRawTls: pointer;
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
@@ -9976,6 +9977,11 @@ begin
     Length := read;
     result := nrOK;
   end;
+end;
+
+function TOpenSslNetTls.ReceivePending: integer;
+begin
+  result := SSL_pending(fSsl);
 end;
 
 function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;

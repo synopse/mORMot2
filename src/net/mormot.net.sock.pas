@@ -758,6 +758,13 @@ type
     function GetRawTls: pointer;
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    /// check if there are some input data within the TLS buffers
+    // - may be the case even with no data any more at TCP/socket level
+    // - returns -1 if there is no TLS connection opened
+    // - returns the number of bytes in the internal buffer
+    // - returns 0 if the internal buffer is void - but there may be some
+    // data ready to be unciphered at socket level
+    function ReceivePending: integer;
     /// send some data from the TLS layer
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
@@ -1135,6 +1142,7 @@ type
     // - e.g. '/category/name/10'
     function Root: RawUtf8;
     /// returns BinToBase64(User + ':' + Password) encoded value
+    // - as used for "Authorization: Basic" and "Proxy-Authorization: Basic"
     function UserPasswordBase64: RawUtf8;
   end;
   PUri = ^TUri;
