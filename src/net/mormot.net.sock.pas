@@ -2481,7 +2481,8 @@ function TNetSocketWrap.RecvWait(ms: integer;
   out data: RawByteString; terminated: PTerminated): TNetResult;
 var
   events: TNetEvents;
-  pending: integer;
+  read: integer;
+  tmp: array[word] of byte; // use a buffer to avoid RecvPending() syscall
 begin
   events := WaitFor(ms, [neRead]);
   if (neError in events) or
@@ -2490,27 +2491,16 @@ begin
     result := nrClosed
   else if neRead in events then
   begin
-    result := RecvPending(pending);
+    read := SizeOf(tmp);
+    result := Recv(@tmp, read);
+    if Assigned(terminated) and
+       terminated^ then
+      result := nrClosed;
     if result = nrOK then
-      if pending > 0 then
-      begin
-        SetLength(data, pending);
-        result := Recv(pointer(data), pending);
-        if Assigned(terminated) and
-           terminated^ then
-          result := nrClosed;
-        if result <> nrOK then
-          exit;
-        if pending <= 0 then
-        begin
-          result := nrUnknownError;
-          exit;
-        end;
-        if pending <> length(data) then
-          FakeLength(data, pending);
-      end
+      if read <= 0 then
+        result := nrUnknownError
       else
-        result := nrRetry;
+        FastSetRawByteString(data, @tmp, read);
   end
   else
     result := nrRetry;
