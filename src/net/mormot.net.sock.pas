@@ -1321,16 +1321,13 @@ type
     function SockInRead(Length: integer;
       UseOnlySockIn: boolean = false): RawByteString; overload;
     /// returns the number of bytes in SockIn buffer or pending in Sock
-    // - if SockIn is available, it first check from any data in SockIn^.Buffer,
-    // then call InputSock to try to receive any pending data if the buffer is void
-    // - if aPendingAlsoInSocket is TRUE, returns the bytes available in both the buffer
-    // and the socket (sometimes needed, e.g. to process a whole block at once)
-    // - will wait up to the specified aTimeOutMS value (in milliseconds) for
-    // incoming data - may wait a little less time on Windows due to a select bug
-    // - returns -1 in case of a socket error (e.g. broken/closed connection);
-    // you can raise a ENetSock exception to propagate the error
-    function SockInPending(aTimeOutMS: integer;
-      aPendingAlsoInSocket: boolean = false): integer;
+    // - CreatesSockIn is mandatory
+    // - it first check and quickly return any data pending in SockIn^.Buffer
+    // - if the buffer is void, will call InputSock to fill it
+    // - returns -1 in case of a socket error (e.g. broken/closed connection)
+    // - returns the number of bytes available in input buffers (SockIn or TLS):
+    // there may be more waiting at the socket level
+    function SockInPending(aTimeOutMS: integer): integer;
     /// checks if the low-level socket handle has been assigned
     // - just a wrapper around PtrInt(fSock)>0
     function SockIsDefined: boolean;
@@ -1374,11 +1371,12 @@ type
     function SockRecv(Length: integer): RawByteString; overload;
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError if the connection is broken or closed
+    // - will first check for any INetTls.ReceivePending bytes in the TLS buffers
     // - warning: on Windows, may wait a little less than TimeOutMS (select bug)
     function SockReceivePending(TimeOutMS: integer;
       loerr: system.PInteger = nil): TCrtSocketPending;
     /// returns the socket input stream as a string
-    // - returns as many bytes as possible from the OS buffers within TimeOut
+    // - returns up to 64KB from the OS or TLS buffers within TimeOut
     function SockReceiveString: RawByteString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
@@ -4792,52 +4790,39 @@ begin
             ({%H-}PtrInt(fSock) > 0);
 end;
 
-function TCrtSocket.SockInPending(aTimeOutMS: integer;
-  aPendingAlsoInSocket: boolean): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
 var
   backup: PtrInt;
-  {$ifdef OSWINDOWS}
-  insocket: integer;
-  {$endif OSWINDOWS}
 begin
   if SockIn = nil then
-    raise ENetSock.Create('%s.SockInPending(SockIn=nil)',
-      [ClassNameShort(self)^]);
+    raise ENetSock.Create('%s.SockInPending(nil)', [ClassNameShort(self)^]);
   if aTimeOutMS < 0 then
-    raise ENetSock.Create('%s.SockInPending(aTimeOutMS<0)',
-      [ClassNameShort(self)^]);
+    raise ENetSock.Create('%s.SockInPending(-1)', [ClassNameShort(self)^]);
+  // first try in SockIn^.Buffer
   with PTextRec(SockIn)^ do
     result := BufEnd - BufPos;
-  if result = 0 then
-    // no data in SockIn^.Buffer, so try if some pending at socket level
-    case SockReceivePending(aTimeOutMS) of
-      cspDataAvailable:
-        begin
-          backup := fTimeOut;
-          fTimeOut := 0; // not blocking call to fill SockIn buffer
-          try
-            // call InputSock() to actually retrieve any pending data
-            if InputSock(PTextRec(SockIn)^) = NO_ERROR then
-              with PTextRec(SockIn)^ do
-                result := BufEnd - BufPos
-            else
-              result := -1; // indicates broken socket
-          finally
-            fTimeOut := backup;
-          end;
+  if result <> 0 then
+    exit;
+  // no data in SockIn^.Buffer, so try if some pending at socket/TLS level
+  case SockReceivePending(aTimeOutMS) of // check both TLS and socket levels
+    cspDataAvailable:
+      begin
+        backup := fTimeOut;
+        fTimeOut := 0; // not blocking call to fill SockIn buffer
+        try
+          // call InputSock() to actually retrieve any pending data
+          if InputSock(PTextRec(SockIn)^) = NO_ERROR then
+            with PTextRec(SockIn)^ do
+              result := BufEnd - BufPos
+          else
+            result := -1; // indicates broken socket
+        finally
+          fTimeOut := backup;
         end;
-      cspSocketError:
-        result := -1; // indicates broken/closed socket
-    end; // cspNoData will leave result=0
-  {$ifdef OSWINDOWS}
-  // under Unix SockReceivePending use poll(fSocket) and if data available
-  // ioctl syscall is redundant
-  if aPendingAlsoInSocket then
-    // also includes data in socket bigger than TTextRec's buffer
-    if (sock.RecvPending(insocket) = nrOK) and
-       (insocket > 0) then
-      inc(result, insocket);
-  {$endif OSWINDOWS}
+      end;
+    cspSocketError:
+      result := -1; // indicates broken/closed socket
+  end; // cspNoData will leave result=0
 end;
 
 function TCrtSocket.SockConnected: boolean;
@@ -5002,7 +4987,16 @@ begin
   if loerr <> nil then
     loerr^ := 0;
   if SockIsDefined then
-    events := fSock.WaitFor(TimeOutMS, [neRead], loerr)
+  begin
+    if Assigned(fSecure) and
+       (fSecure.ReceivePending > 0) then
+    begin
+      result := cspDataAvailable; // some data is available in TLS buffers
+      exit;
+    end;
+    // check if something is available at socket level (even for TLS)
+    events := fSock.WaitFor(TimeOutMS, [neRead], loerr);
+  end
   else
     events := [neError];
   if neError in events then
@@ -5015,42 +5009,15 @@ end;
 
 function TCrtSocket.SockReceiveString: RawByteString;
 var
-  available, resultlen, read: integer;
-  endtix: Int64;
+  read: integer;
+  tmp: array[word] of byte; // 64KB is big enough for INetTls or the socket API
 begin
-  result := '';
-  if not SockIsDefined then
-    exit;
-  resultlen := 0;
-  endtix := mormot.core.os.GetTickCount64 + TimeOut;
-  repeat
-    if fSock.RecvPending(available) <> nrOK then
-      exit; // raw socket error
-    if available = 0 then // no data in the allowed timeout
-      if result = '' then
-      begin
-        // wait till something
-        SleepHiRes(1); // some delay in infinite loop
-        if mormot.core.os.GetTickCount64 > endtix then
-          exit;
-        continue;
-      end
-      else
-        break; // return what we have
-    SetLength(result, resultlen + available); // append to result
-    read := available;
-    if not TrySockRecv(@PByteArray(result)[resultlen], read,
-         {StopBeforeLength=}true) then
-    begin
-      Close;
-      SetLength(result, resultlen);
-      exit;
-    end;
-    inc(resultlen, read);
-    if read < available then
-      SetLength(result, resultlen); // e.g. Read=0 may happen
-    SleepHiRes(0); // 10us on POSIX, SwitchToThread on Windows
-  until false;
+  read := SizeOf(tmp);
+  if TrySockRecv(@tmp, read, {StopBeforeLength=}true) and
+     (read <> 0) then
+    FastSetRawByteString(result, @tmp, read)
+  else
+    result := '';
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
@@ -5068,6 +5035,8 @@ begin
     expected := Length;
     Length := 0;
     repeat
+      // first check for any available data
+      // - some may be available at fSecure/TLS level, but not from fSock/TCP
       read := expected - Length;
       if fSecure <> nil then
         res := fSecure.Receive(Buffer, read)
@@ -5086,16 +5055,13 @@ begin
           break;
         Close; // connection broken or socket closed gracefully
         exit;
-      end
-      else
-      begin
-        inc(fBytesIn, read);
-        inc(Length, read);
-        if StopBeforeLength or
-           (Length = expected) then
-          break; // good enough for now
-        inc(PByte(Buffer), read);
       end;
+      inc(fBytesIn, read);
+      inc(Length, read);
+      if StopBeforeLength or
+         (Length = expected) then
+        break; // good enough for now
+      inc(PByte(Buffer), read);
       events := fSock.WaitFor(TimeOut, [neRead]);
       if neError in events then
       begin

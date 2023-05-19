@@ -66,15 +66,15 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aConnection: TWebSocketAsyncConnection;
                        aProtocol: TWebSocketProtocol); reintroduce;
-    /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
-    // - in practice, just call fSocket.SockInPending to check for pending data
+    /// first step of the low level incoming WebSockets framing protocol
+    // - check fConnection buffers for pending data
     function CanGetFrame(TimeOut: cardinal;
                          ErrorWithoutException: PInteger): boolean; override;
-    /// low level receive incoming WebSockets frame data over TCrtSocket
-    // - in practice, just call fSocket.SockInRead to check for pending data
+    /// low level receive incoming WebSockets frame data
+    // - check fConnection buffers for pending data
     function ReceiveBytes(P: PAnsiChar; count: PtrInt): integer; override;
-    /// low level receive incoming WebSockets frame data over TCrtSocket
-    // - in practice, just call fSocket.TrySndLow to send pending data
+    /// low level receive incoming WebSockets frame data
+    // - redirect to fConnection.Owner.Write()
     function SendBytes(P: pointer; Len: PtrInt): boolean; override;
     /// delayed process of outgoing WebSockets framing protocol
     // - will notify TWebSocketAsyncConnections.ProcessIdleTix sending

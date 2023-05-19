@@ -10465,7 +10465,8 @@ procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt);
 var
   t: PtrInt;
 begin
-  if (Added = nil) or (AddedLen <= 0) then
+  if (Added = nil) or
+     (AddedLen <= 0) then
     exit;
   t := length(Text);
   SetLength(Text, t + AddedLen);

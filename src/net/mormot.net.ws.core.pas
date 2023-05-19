@@ -875,14 +875,14 @@ type
       aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
       const aProcessName: RawUtf8); reintroduce; virtual;
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
-    // - in practice, just call fSocket.SockInPending to check for pending data
+    // - call fSocket.SockInPending to check for pending data
     function CanGetFrame(TimeOut: cardinal;
       ErrorWithoutException: PInteger): boolean; override;
     /// low level receive incoming WebSockets frame data over TCrtSocket
-    // - in practice, just call fSocket.SockInRead to check for pending data
+    // - call fSocket.SockInRead to check for pending data
     function ReceiveBytes(P: PAnsiChar; count: PtrInt): integer; override;
-    /// low level receive incoming WebSockets frame data over TCrtSocket
-    // - in practice, just call fSocket.TrySndLow to send pending data
+    /// low-level method to send pending output data over TCrtSocket
+    // - call fSocket.TrySndLow to send pending data
     function SendBytes(P: pointer; Len: PtrInt): boolean; override;
     /// the associated communication socket
     // - on the server side, is a THttpServerSocket
@@ -3044,7 +3044,7 @@ var
 begin
   if ErrorWithoutException <> nil then
     ErrorWithoutException^ := 0;
-  pending := fSocket.SockInPending(TimeOut, {PendingAlsoInSocket=}true);
+  pending := fSocket.SockInPending(TimeOut);
   if pending < 0 then // socket error
     if ErrorWithoutException <> nil then
     begin
@@ -3055,7 +3055,7 @@ begin
     else
       raise EWebSockets.CreateUtf8('SockInPending() Error % on %:% - from %',
         [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
-  result := (pending >= 2);
+  result := (pending > 0); // assume if we got 1 byte, we are likely to have two
 end;
 
 function TWebCrtSocketProcess.ReceiveBytes(P: PAnsiChar; count: PtrInt): integer;

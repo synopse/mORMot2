@@ -2209,11 +2209,6 @@ begin
     Http.UncompressData;
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
-  {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
-    [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,
-    ContentLength, LogEscapeFull(Content)], self);
-  {$endif SYNCRTDEBUGLOW}
   if SockIn <> nil then
   begin
     err := ioresult;

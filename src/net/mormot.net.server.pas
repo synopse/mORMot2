@@ -3479,7 +3479,6 @@ function THttpServerSocket.GetRequest(withBody: boolean;
 var
   P: PUtf8Char;
   status, tix32: cardinal;
-  pending: integer;
   noheaderfilter: boolean;
 begin
   result := grError;
@@ -3489,8 +3488,7 @@ begin
     // abort now with no exception if socket is obviously broken
     if fServer <> nil then
     begin
-      pending := SockInPending(100, {alsosocket=}true);
-      if (pending < 0) or
+      if (SockInPending(100) < 0) or
          (fServer = nil) or
          fServer.Terminated then
         exit;

@@ -157,8 +157,10 @@ type
     /// how many prepared statements are currently cached for this connection
     function PreparedCount: integer;
     /// access to the raw socket of this connection
+    // - warning: over TLS, the socket state may not match the actual data state
     function Socket: TNetSocket;
     /// check if there is some pending input at the raw socket of this connection
+    // - warning: over TLS, the socket state may not match the actual data state
     function SocketHasData: boolean;
   end;
 
@@ -1442,6 +1444,8 @@ begin
             task.Statement.ReleaseRows;
             if asoForcePipelineSync in task.Options then
               fOwner.fConnection.CheckPipelineSync;
+            // warning: won't check for the socket state witin the loop: some
+            // results may be pending at TLS level, but not at socket/TCP level
           end;
         finally
           fOwner.Unlock;
