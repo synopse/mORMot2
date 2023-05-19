@@ -51,7 +51,7 @@ type
   /// we defined our own type to hold an ASN object binary
   TAsnObject = RawByteString;
 
-{.$define ASNDEBUG}
+{ $define ASNDEBUG}
 // enable low-level debugging of the LDAP transmitted frames on the console
 
 const
@@ -3468,7 +3468,7 @@ begin
   fSockBufferPos := 0;
   if fSecContextEncrypt then
   begin
-    // through Kerberos encryption
+    // through Kerberos encryption (sealing)
     saslLen := 0;
     fSock.SockRecv(@saslLen, 4);
     ciphered := fSock.SockRecv(bswap32(saslLen));
@@ -3482,6 +3482,9 @@ begin
       raise ELdap.CreateUtf8('%.ReceivePacket: no response from %:%',
         [self, fSettings.TargetHost, fSettings.TargetPort]);
   end;
+  {$ifdef ASNDEBUG}
+  writeln('Packet received bytes = ', length(fSockBuffer));
+  {$endif ASNDEBUG}
 end;
 
 procedure TLdapClient.ReceivePacket(Dest: pointer; DestLen: integer);
@@ -3493,7 +3496,7 @@ begin
     len := length(fSockBuffer) - fSockBufferPos;
     if len > 0 then
     begin
-      // return what we can from fSockBuffer
+      // return what we need/can from fSockBuffer
       if len > DestLen then
         len := DestLen;
       MoveFast(PByteArray(fSockBuffer)[fSockBufferPos], Dest^, len);
@@ -3532,7 +3535,7 @@ begin
     FastSetRawByteString(result, @b, 1);
     ReceivePacket(@b, 1); // first byte of ASN length
     Append(result, @b, 1);
-    if b >= $80 then // $8x means x bytes of length
+    if b > $7f then // $8x means x bytes of length
       AsnAdd(result, ReceivePacket(b and $7f));
     // decode length of LDAP packet
     pos := 2;

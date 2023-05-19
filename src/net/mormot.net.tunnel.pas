@@ -574,7 +574,6 @@ begin
     sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
-    { TODO: use TTunnelLocalThread for background non-blocking handshake }
     fTransmit.Send(frame);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
