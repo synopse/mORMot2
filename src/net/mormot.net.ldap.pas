@@ -3468,8 +3468,13 @@ begin
     fSockBuffer := SecDecrypt(fSecContext, ciphered);
   end
   else
+  begin
     // get as much as possible unciphered data from socket
     fSockBuffer := fSock.SockReceiveString;
+    if fSockBuffer = '' then
+      raise ELdap.CreateUtf8('%.ReceivePacket: no response from %:%',
+        [self, fSettings.TargetHost, fSettings.TargetPort]);
+  end;
 end;
 
 procedure TLdapClient.ReceivePacket(Dest: pointer; DestLen: integer);
