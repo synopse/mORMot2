@@ -757,6 +757,11 @@ type
     name, CN, description: RawUtf8;
     objectSid, objectGUID: RawUtf8;
     whenCreated, whenChanged: TDateTime;
+    customNames: TRawUtf8DynArray;
+    customValues: TRawUtf8DynArray;
+    function Custom(const Name: RawUtf8): RawUtf8;
+    procedure Fill(Attributes: TLdapAttributeList;
+      const CustomAttributes: TRawUtf8DynArray);
   end;
 
   /// high-level information of a Group in the LDAP database
@@ -1074,7 +1079,8 @@ type
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
     function GetGroupInfo(const AN, DN: RawUtf8; out Info: TLdapGroup;
-      const BaseDN: RawUtf8 = ''; WithMember: boolean = false): boolean;
+      const BaseDN: RawUtf8 = ''; WithMember: boolean = false;
+      const CustomAttributes: TRawUtf8DynArray = nil): boolean;
     /// retrieve the distinguishedName of a Group from its sAMAccountName
     function GetGroupDN(const AN: RawUtf8; const BaseDN: RawUtf8 = '';
       const CustomFilter: RawUtf8 = ''): RawUtf8;
@@ -1087,7 +1093,8 @@ type
     /// retrieve the basic information of a LDAP User
     // - could lookup by sAMAccountName, distinguishedName or userPrincipalName
     function GetUserInfo(const AN, DN, UPN: RawUtf8; out Info: TLdapUser;
-      const BaseDN: RawUtf8 = ''; WithMemberOf: boolean = false): boolean;
+      const BaseDN: RawUtf8 = ''; WithMemberOf: boolean = false;
+      const CustomAttributes: TRawUtf8DynArray = nil): boolean;
     /// retrieve the distinguishedName of a User from its sAMAccountName
     // or userPrincipalName
     // - can optionally return its primaryGroupID attribute, which is
@@ -4207,18 +4214,58 @@ begin
     result := Iso8601ToDateTime(Text);
 end;
 
-procedure LdapObjectInfo(Attributes: TLdapAttributeList; out Info: TLdapObject);
+procedure TLdapObject.Fill(Attributes: TLdapAttributeList;
+  const CustomAttributes: TRawUtf8DynArray);
+var
+  n, c, i: PtrInt;
+  a: TLdapAttribute;
 begin
-  info.sAMAccountName := Attributes.Get('sAMAccountName');
-  info.distinguishedName := Attributes.Get('distinguishedName');
-  info.canonicalName := DNToCN(info.distinguishedName);
-  info.name := Attributes.Get('name');
-  info.CN := Attributes.Get('cn');
-  info.description := Attributes.Get('description');
-  info.objectSid := Attributes.Get('objectSid');
-  info.objectGUID := Attributes.Get('objectGUID');
-  info.whenCreated := LdapToDate(Attributes.Get('whenCreated'));
-  info.whenChanged := LdapToDate(Attributes.Get('whenChanged'));
+  sAMAccountName := Attributes.Get('sAMAccountName');
+  distinguishedName := Attributes.Get('distinguishedName');
+  canonicalName := DNToCN(distinguishedName);
+  name := Attributes.Get('name');
+  CN := Attributes.Get('cn');
+  description := Attributes.Get('description');
+  objectSid := Attributes.Get('objectSid');
+  objectGUID := Attributes.Get('objectGUID');
+  whenCreated := LdapToDate(Attributes.Get('whenCreated'));
+  whenChanged := LdapToDate(Attributes.Get('whenChanged'));
+  n := length(CustomAttributes);
+  if n = 0 then
+    exit;
+  c := 0;
+  for i := 0 to n - 1 do
+  begin
+    a := Attributes.Find(CustomAttributes[i]);
+    if a = nil then
+      continue;
+    if c = 0 then
+    begin
+      dec(n, i);
+      SetLength(customNames, n);
+      SetLength(customValues, n);
+    end;
+    customNames[c] := a.AttributeName; // assign the interned name
+    customValues[c] := a.GetReadable;
+    inc(c);
+  end;
+  if c = 0 then
+    exit;
+  DynArrayFakeLength(customNames, c);
+  DynArrayFakeLength(customValues, c);
+end;
+
+function TLdapObject.Custom(const Name: RawUtf8): RawUtf8;
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(customNames) - 1 do
+    if customNames[i] = Name then
+    begin
+      result := customValues[i];
+      exit;
+    end;
+  result := '';
 end;
 
 const
@@ -4273,7 +4320,8 @@ const
     'objectSid,objectGUID,whenCreated,whenChanged';
 
 function TLdapClient.GetGroupInfo(const AN, DN: RawUtf8;
-  out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean): boolean;
+  out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean;
+  const CustomAttributes: TRawUtf8DynArray): boolean;
 var
   attr: TRawUtf8DynArray;
   uac: integer;
@@ -4282,16 +4330,17 @@ begin
   attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR + ',groupType');
   if WithMember then
     AddRawUtf8(attr, 'member');
+  AddRawUtf8(attr, CustomAttributes);
   result := Search(DefaultDN(BaseDN), false,
               InfoFilter(AT_GROUP, AN, DN, '', ''), attr) and
             (SearchResult.Count = 1);
   if result then
     with SearchResult.Items[0] do
     begin
-      LdapObjectInfo(Attributes, Info);
+      Info.Fill(Attributes, CustomAttributes);
       ToCardinal(SplitRight(Info.objectSID, '-'), Info.PrimaryGroupID);
       if ToInteger(Attributes.Get('groupType'), uac) then
-        info.groupType := TGroupTypes(uac);
+        Info.groupType := TGroupTypes(uac);
       if WithMember then
         Info.member := Attributes.Find('member').GetAllReadable;
     end;
@@ -4324,7 +4373,8 @@ begin
 end;
 
 function TLdapClient.GetUserInfo(const AN, DN, UPN: RawUtf8;
-  out Info: TLdapUser; const BaseDN: RawUtf8; WithMemberOf: boolean): boolean;
+  out Info: TLdapUser; const BaseDN: RawUtf8; WithMemberOf: boolean;
+  const CustomAttributes: TRawUtf8DynArray): boolean;
 var
   uac: integer;
   attr: TRawUtf8DynArray;
@@ -4334,24 +4384,25 @@ begin
     'displayName,mail,pwdLastSet,lastLogon,userAccountControl,primaryGroupID');
   if WithMemberOf then
     AddRawUtf8(attr, 'memberOf');
+  AddRawUtf8(attr, CustomAttributes);
   result := Search(DefaultDN(BaseDN), false,
               InfoFilter(AT_USER, AN, DN, '', ''), attr) and
             (SearchResult.Count = 1);
   if result then
     with SearchResult.Items[0] do
     begin
-      LdapObjectInfo(Attributes, Info);
-      info.userPrincipalName := Attributes.Get('userPrincipalName');
-      info.displayName := Attributes.Get('displayName');
-      info.mail := Attributes.Get('mail');
-      info.userPrincipalName := Attributes.Get('userPrincipalName');
-      info.pwdLastSet := LdapToDate(Attributes.Get('pwdLastSet'));
-      info.lastLogon := LdapToDate(Attributes.Get('lastLogon'));
-      ToCardinal(Attributes.Get('primaryGroupID'), info.primaryGroupID);
+      Info.Fill(Attributes, CustomAttributes);
+      Info.userPrincipalName := Attributes.Get('userPrincipalName');
+      Info.displayName := Attributes.Get('displayName');
+      Info.mail := Attributes.Get('mail');
+      Info.userPrincipalName := Attributes.Get('userPrincipalName');
+      Info.pwdLastSet := LdapToDate(Attributes.Get('pwdLastSet'));
+      Info.lastLogon := LdapToDate(Attributes.Get('lastLogon'));
+      ToCardinal(Attributes.Get('primaryGroupID'), Info.primaryGroupID);
       if WithMemberOf then
-        info.memberOf := Attributes.Find('memberOf').GetAllReadable;
+        Info.memberOf := Attributes.Find('memberOf').GetAllReadable;
       if ToInteger(Attributes.Get('userAccountControl'), uac) then
-        info.userAccountControl := TUserAccountControls(uac);
+        Info.userAccountControl := TUserAccountControls(uac);
     end;
 end;
 
