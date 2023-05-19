@@ -2586,7 +2586,7 @@ begin
     result := CldapGetLdapController(ForcedDomainName, '', 500);
   end
   else
-    result := CldapMyLdapController('', false, DN);
+    result := CldapMyLdapController('', false, @domain);
   if result = '' then
     exit;
   if DN <> nil then
