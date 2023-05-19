@@ -63,7 +63,7 @@ type
 
   gss_OID = ^gss_OID_desc;
   gss_OID_ptr = ^gss_OID;
-  gss_OID_array = array [0..0] of gss_OID_desc;
+  gss_OID_array = array [word] of gss_OID_desc;
   gss_OID_descs = ^gss_OID_array;
 
   gss_OID_set_desc = record
@@ -84,6 +84,7 @@ type
 
 const
   GSS_C_NO_NAME = nil;
+  GSS_C_NO_OID = nil;
 
   GSS_C_GSS_CODE  = 1;
   GSS_C_MECH_CODE = 2;
@@ -118,6 +119,13 @@ const
     length: SizeOf(gss_mech_spnego);
     elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
+
+  gss_mech_krb5: array [0..8] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 2);
+  gss_mech_krb5_desc: gss_OID_desc = (
+    length: SizeOf(gss_mech_krb5);
+    elements: @gss_mech_krb5);
+  GSS_C_MECH_KRB5: gss_OID = @gss_mech_krb5_desc;
 
   // raw 1.2.840.113554.1.2.2.1 OID
   gss_nt_krb5_name: array [0..9] of byte = (
@@ -263,7 +271,7 @@ type
   public
     /// initialize an gssapi library exception with the proper error message
     constructor Create(aMajorStatus, aMinorStatus: cardinal;
-      const aPrefix: string);
+      const aPrefix: RawUtf8);
   published
     /// associated GSS_C_GSS_CODE state value
     property MajorStatus: cardinal
@@ -361,12 +369,13 @@ function SecDecrypt(var aSecContext: TSecContext;
 /// Checks the return value of GSSAPI call and raises ESynGSSAPI exception
 // when it indicates failure
 procedure GccCheck(aMajorStatus, aMinorStatus: cardinal;
-  const aPrefix: string = '');
+  const aPrefix: RawUtf8 = '');
 
 /// Lists supported security mechanisms in form
 // sasl:name:description
 // - not all mechanisms provide human readable name and description
-procedure GssEnlistMechsSupported(MechList: TStringList);
+// - optionally return the corresponding raw OID values, encoded as gss_OID
+function GssEnlistMechsSupported(oid: PBytesDynArray = nil): TRawUtf8DynArray;
 
 
 
@@ -379,11 +388,12 @@ procedure GssEnlistMechsSupported(MechList: TStringList);
 // registered in domain, e.g.
 // 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 // - aOutData contains data that must be sent to server
+// - you can specify an optional Mechanism OID - default is SPNEGO
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
 function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString): boolean;
+  out aOutData: RawByteString; aMech: gss_OID = nil): boolean;
 
 /// Client-side authentication procedure with clear text password
 // - This function must be used when application need to use different
@@ -395,12 +405,13 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // ClientForceSpn() has not been called ahead
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
+// - you can specify an optional Mechanism OID - default is SPNEGO
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString): boolean;
+  out aOutData: RawByteString; aMech: gss_OID = nil): boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -521,7 +532,7 @@ begin
              (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET));
 end;
 
-procedure GccCheck(AMajorStatus, AMinorStatus: cardinal; const APrefix: string);
+procedure GccCheck(AMajorStatus, AMinorStatus: cardinal; const APrefix: RawUtf8);
 begin
   if GSS_ERROR(AMajorStatus) <> 0 then
     raise EGssApi.Create(AMajorStatus, AMinorStatus, APrefix);
@@ -617,10 +628,10 @@ end;
 
 { EGssApi }
 
-procedure GetDisplayStatus(var Msg: string; aErrorStatus: cardinal;
+procedure GetDisplayStatus(var Msg: RawUtf8; aErrorStatus: cardinal;
   StatusType: integer);
 var
-  Str: string;
+  Str: RawUtf8;
   MsgCtx: cardinal;
   MsgBuf: gss_buffer_desc;
   MajSt, MinSt: cardinal;
@@ -631,7 +642,7 @@ begin
   repeat
     MajSt := GssApi.gss_display_status(
       MinSt, aErrorStatus, StatusType, nil, MsgCtx, MsgBuf);
-    SetString(Str, MsgBuf.value, MsgBuf.length);
+    FastSetString(Str, MsgBuf.value, MsgBuf.length);
     GssApi.gss_release_buffer(MinSt, MsgBuf);
     if Msg <> '' then
       Msg := Msg + ' - ' + Str
@@ -642,15 +653,16 @@ begin
 end;
 
 constructor EGssApi.Create(aMajorStatus, aMinorStatus: cardinal;
-  const aPrefix: string);
+  const aPrefix: RawUtf8);
 var
-  Msg: string;
+  Msg: RawUtf8;
 begin
   Msg := aPrefix;
   GetDisplayStatus(Msg, aMajorStatus, GSS_C_GSS_CODE);
-  if aMinorStatus <> 0 then
+  if (aMinorStatus <> 0) and
+     (aMinorStatus <> 100001) then
     GetDisplayStatus(Msg, aMinorStatus, GSS_C_MECH_CODE);
-  inherited Create(Msg);
+  inherited Create(Utf8ToString(Msg));
   fMajorStatus := AMajorStatus;
   fMinorStatus := AMinorStatus;
 end;
@@ -711,32 +723,42 @@ begin
   GssApi.gss_release_buffer(MinStatus, OutBuf);
 end;
 
-procedure GssEnlistMechsSupported(MechList: TStringList);
+function GssEnlistMechsSupported(oid: PBytesDynArray): TRawUtf8DynArray;
 var
   i: PtrInt;
+  o: gss_OID;
   MinSt: cardinal;
   Mechs: gss_OID_set;
   Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
-  Sasl, Name, Desc: string;
+  Sasl, Name, Desc: RawUtf8;
 begin
-  if MechList <> nil then
+  RequireGssApi;
+  GssApi.gss_indicate_mechs(MinSt, Mechs);
+  SetLength(result, Mechs^.count);
+  if oid <> nil then
+    SetLength(oid^, Mechs^.count);
+  for i := 0 to Mechs^.count - 1 do
   begin
-    RequireGssApi;
-    GssApi.gss_indicate_mechs(MinSt, Mechs);
-    for i := 0 to Pred(Mechs^.count) do
-    begin
-      GssApi.gss_inquire_saslname_for_mech(
-        MinSt, @Mechs^.elements[i], @Buf_sasl, @Buf_name, @Buf_desc);
-      SetString(Sasl, Buf_sasl.value, Buf_sasl.length);
-      SetString(Name, Buf_name.value, Buf_name.length);
-      SetString(Desc, Buf_desc.value, Buf_desc.length);
-      MechList.Add(Format('%s:%s:%s', [Sasl, Name, Desc]));
-      GssApi.gss_release_buffer(MinSt, Buf_sasl);
-      GssApi.gss_release_buffer(MinSt, Buf_name);
-      GssApi.gss_release_buffer(MinSt, Buf_desc);
-    end;
-    GssApi.gss_release_oid_set(MinSt, Mechs);
+    if oid <> nil then
+      with Mechs^.elements^[i] do
+      begin // store as gss_OID() binary buffer
+        SetLength(oid^[i], length + SizeOf(gss_OID_desc));
+        o := pointer(oid^[i]);
+        o^.length := length;
+        o^.elements := PAnsiChar(o) + SizeOf(o^);
+        MoveFast(elements^, o^.elements^, length);
+      end;
+    GssApi.gss_inquire_saslname_for_mech(
+      MinSt, @Mechs^.elements^[i], @Buf_sasl, @Buf_name, @Buf_desc);
+    FastSetString(Sasl, Buf_sasl.value, Buf_sasl.length);
+    FastSetString(Name, Buf_name.value, Buf_name.length);
+    FastSetString(Desc, Buf_desc.value, Buf_desc.length);
+    result[i] := Sasl + ':' + Name + ':' + Desc;
+    GssApi.gss_release_buffer(MinSt, Buf_sasl);
+    GssApi.gss_release_buffer(MinSt, Buf_name);
+    GssApi.gss_release_buffer(MinSt, Buf_desc);
   end;
+  GssApi.gss_release_oid_set(MinSt, Mechs);
 end;
 
 
@@ -747,7 +769,7 @@ var
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString): boolean;
+  out aOutData: RawByteString; aMech: gss_OID): boolean;
 var
   TargetName: gss_name_t;
   MajStatus, MinStatus: cardinal;
@@ -774,8 +796,10 @@ begin
     InBuf.value := pointer(aInData);
     OutBuf.length := 0;
     OutBuf.value := nil;
+    if aMech = nil then
+      aMech := GSS_C_MECH_SPNEGO;
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
-      aSecContext.CtxHandle, TargetName, GSS_C_MECH_SPNEGO,
+      aSecContext.CtxHandle, TargetName, aMech,
       CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuthWorker: Failed to initialize security context');
@@ -788,19 +812,33 @@ begin
   end;
 end;
 
+function CredMech(var mech: gss_OID; var tmp: gss_OID_set_desc): gss_OID_set;
+begin
+  if mech = nil then
+    result := nil
+  else
+  begin
+    result := @tmp;
+    tmp.count := 1;
+    tmp.elements := @mech;
+  end;
+end;
+
 function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString): boolean;
+  out aOutData: RawByteString; aMech: gss_OID): boolean;
 var
   MajStatus, MinStatus: cardinal;
   SecKerberosSpn: RawUtf8;
+  tmp: gss_OID_set_desc;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then
   begin
+    // first call: create the needed context for the current user
     aSecContext.CreatedTick64 := GetTickCount64();
-    MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE, nil,
-      GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+    MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
+    CredMech(aMech, tmp), GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
@@ -809,21 +847,24 @@ begin
   else
     SecKerberosSpn := ForceSecKerberosSpn;
   result := ClientSspiAuthWorker(
-    aSecContext, aInData, SecKerberosSpn, aOutData);
+    aSecContext, aInData, SecKerberosSpn, aOutData, aMech);
 end;
 
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8; const aPassword: SpiUtf8;
-  const aSecKerberosSpn: RawUtf8; out aOutData: RawByteString): boolean;
+  const aSecKerberosSpn: RawUtf8; out aOutData: RawByteString;
+  aMech: gss_OID): boolean;
 var
   MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
   SecKerberosSpn: RawUtf8;
+  tmp: gss_OID_set_desc;
 begin
   RequireGssApi;
   if aSecContext.CredHandle = nil then
   begin
+    // first call: create the needed context for those credentials
     aSecContext.CreatedTick64 := GetTickCount64;
     InBuf.length := Length(aUserName);
     InBuf.value := pointer(aUserName);
@@ -833,7 +874,7 @@ begin
     InBuf.length := Length(aPassword);
     InBuf.value := pointer(aPassword);
     MajStatus := GssApi.gss_acquire_cred_with_password(
-      MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, nil,
+      MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, CredMech(aMech, tmp),
       GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
       'Failed to acquire credentials for specified user');
@@ -843,7 +884,7 @@ begin
   else
     SecKerberosSpn := ForceSecKerberosSpn;
   result := ClientSspiAuthWorker(
-    aSecContext, aInData, SecKerberosSpn, aOutData);
+    aSecContext, aInData, SecKerberosSpn, aOutData, aMech);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;

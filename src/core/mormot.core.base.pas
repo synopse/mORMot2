@@ -341,6 +341,8 @@ type
   {$ifndef ISDELPHI2007ANDUP}
   TBytes = array of byte;
   {$endif ISDELPHI2007ANDUP}
+  TBytesDynArray = array of TBytes;
+  PBytesDynArray = ^TBytesDynArray;
   TObjectDynArray = array of TObject;
   PObjectDynArray = ^TObjectDynArray;
   TPersistentDynArray = array of TPersistent;
