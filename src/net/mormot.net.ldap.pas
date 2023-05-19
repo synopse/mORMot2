@@ -759,7 +759,7 @@ type
     whenCreated, whenChanged: TDateTime;
     customNames: TRawUtf8DynArray;
     customValues: TRawUtf8DynArray;
-    function Custom(const Name: RawUtf8): RawUtf8;
+    function Custom(const AttributeName: RawUtf8): RawUtf8;
     procedure Fill(Attributes: TLdapAttributeList;
       const CustomAttributes: TRawUtf8DynArray);
   end;
@@ -4258,12 +4258,12 @@ begin
   DynArrayFakeLength(customValues, c);
 end;
 
-function TLdapObject.Custom(const Name: RawUtf8): RawUtf8;
+function TLdapObject.Custom(const AttributeName: RawUtf8): RawUtf8;
 var
   i: PtrInt;
 begin
   for i := 0 to length(customNames) - 1 do
-    if customNames[i] = Name then
+    if customNames[i] = AttributeName then
     begin
       result := customValues[i];
       exit;
