@@ -4199,7 +4199,7 @@ begin
   if AN <> '' then
     FormatUtf8('(sAMAccountName=%)', [AN], result);
   if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, AN]);
+    result := FormatUtf8('%(distinguishedName=%)', [result, DN]);
   if UPN <> '' then
     result := FormatUtf8('%(userPrincipalName=%)', [result, UPN]);
   if result = '' then
