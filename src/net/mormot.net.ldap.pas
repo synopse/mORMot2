@@ -4009,12 +4009,15 @@ end;
 
 function TLdapClient.Compare(const Obj, AttributeValue: RawUtf8): boolean;
 begin
+result := false;
+  if not Connected(False) then
+    exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),
                    Asn(ASN1_SEQ, [
                      Asn(TrimU(SeparateLeft(AttributeValue, '='))),
                      Asn(TrimU(SeparateRight(AttributeValue, '=')))])]));
-  result := fResultCode = LDAP_RES_SUCCESS;
+  result := fResultCode = LDAP_RES_COMPARE_TRUE;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
@@ -4196,7 +4199,7 @@ begin
   if AN <> '' then
     FormatUtf8('(sAMAccountName=%)', [AN], result);
   if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, AN]);
+    result := FormatUtf8('%(distinguishedName=%)', [result, DN]);
   if UPN <> '' then
     result := FormatUtf8('%(userPrincipalName=%)', [result, UPN]);
   if result = '' then
