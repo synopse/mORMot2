@@ -68,7 +68,7 @@ type
     fValue: variant;
     fInts: TIntegerDynArray;
     fCreateTime: TCreateTime;
-    fData: TSQLRawBlob;
+    fData: RawBlob;
     fFP: double;
   published
     property Name: RawUTF8
@@ -81,7 +81,7 @@ type
       read fValue write fValue;
     property Ints: TIntegerDynArray index 1
       read fInts write fInts;
-    property Data: TSQLRawBlob
+    property Data: RawBlob
       read fData write fData;
     property CreateTime: TCreateTime
       read fCreateTime write fCreateTime;
@@ -976,7 +976,7 @@ procedure TTestORM.Blobs;
 var
   R: TOrmOdm;
   i, n: integer;
-  blob, blobRead: TSQLRawBlob;
+  blob, blobRead: RawBlob;
   bytes, i64: Int64;
 begin
   SetLength(blob, 8);
