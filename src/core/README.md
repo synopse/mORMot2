@@ -64,19 +64,20 @@ Efficient Unicode Conversion Classes shared by all framework units
 - Text File Loading with BOM/Unicode Support
 - Low-Level String Conversion Functions
 - Text Case-(in)sensitive Conversion and Comparison
+- UTF-8 String Manipulation Functions
+- `TRawUtf8DynArray` Processing Functions
 - Operating-System Independent Unicode Process
 
 ### mormot.core.text
 
 Text Processing functions shared by all framework units
-- UTF-8 String Manipulation Functions
-- `TRawUtf8DynArray` Processing Functions
 - CSV-like Iterations over Text Buffers
-- `TBaseWriter` parent class for Text Generation
+- `TTextWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
-- Hexadecimal Text And Binary Conversion
-- Text Formatting functions and `ESynException` class
+- Text Formatting functions
 - Resource and Time Functions
+- `ESynException` class
+- Hexadecimal Text And Binary Conversion
 
 ### mormot.core.datetime
 

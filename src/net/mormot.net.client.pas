@@ -42,12 +42,12 @@ uses
   mormot.lib.curl,
   {$endif USELIBCURL}
   {$ifdef DOMAINRESTAUTH}
-  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.sspi, // do-nothing units on non compliant systems
   mormot.lib.gssapi,
   {$endif DOMAINRESTAUTH}
-  mormot.core.unicode, // for efficient UTF-8 text process within HTTP
-  mormot.core.buffers,
+  mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.datetime,
   mormot.core.rtti,

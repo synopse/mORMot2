@@ -28,6 +28,7 @@ uses
   {$endif PUREMORMOT2}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.buffers,

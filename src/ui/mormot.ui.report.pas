@@ -75,9 +75,9 @@ uses
   {$endif ISDELPHIXE3}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
-  mormot.core.unicode,
   mormot.core.zip,
   types,
   clipbrd,

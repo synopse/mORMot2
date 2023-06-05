@@ -26,7 +26,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.unicode, // for efficient UTF-8 text process within HTTP
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.data,
   mormot.core.log,
