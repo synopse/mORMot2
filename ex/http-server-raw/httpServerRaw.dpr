@@ -80,6 +80,9 @@ type
 
 { TSimpleHttpAsyncServer }
 
+var
+  RequestID: integer;
+
 function TSimpleHttpAsyncServer.DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   if fHttpServer is THttpAsyncServer then
@@ -88,7 +91,7 @@ begin
       Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
   if IsGet(Ctxt.Method) then
     Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
-      [Ctxt.Url, CardinalToHexShort(Ctxt.RequestID),
+      [Ctxt.Url, CardinalToHexShort(InterlockedIncrement(RequestID)),
        CardinalToHexShort(Ctxt.ConnectionID)])
     // we use CardinalToHexShort() to keep the same length (as request by ab)
   else
