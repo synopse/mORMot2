@@ -369,6 +369,20 @@ function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
 // are likely to use simple \ escape: it is easier to reject than escaping
 function LdapSafe(const Text: RawUtf8): boolean;
 
+/// returns true when no * \ character is part of a non-void Text
+// - works like LdapEscaped() so that ( ) could be later escaped
+function LdapValid(const Text: RawUtf8): boolean;
+
+/// escape the ( ) characters as expected by LDAP
+// - in the context of user or group distinguished name, i.e. will return
+// false if Text is void or contains any unexpected * or \ character
+function LdapEscaped(const Text: RawUtf8; var Safe: RawUtf8): boolean;
+
+/// escape the ( ) characters as expected by LDAP
+// - in the context of user or group distinguished name, i.e. will raise an
+// ELdap exception if Text is void or contains any unexpected * or \ character
+function LdapEscape(const Text: RawUtf8): RawUtf8;
+
 
 { **************** CLDAP Client Functions }
 
@@ -2457,9 +2471,37 @@ end;
 function LdapSafe(const Text: RawUtf8): boolean;
 begin
   result := (Text = '') or
-            (PosCharAny(pointer(Text), '*()\') = nil);
+            ((StrLen(pointer(Text)) = length(Text)) and
+             (PosCharAny(pointer(Text), '*()\') = nil));
 end;
 
+function LdapValid(const Text: RawUtf8): boolean;
+begin
+  result := (Text <> '') and
+            (PosExChar('*', Text) = 0) and
+            (PosExChar('\', Text) = 0) and
+            IsValidUtf8(Text);
+end;
+
+function LdapEscaped(const Text: RawUtf8; var Safe: RawUtf8): boolean;
+begin
+  result := LdapValid(Text);
+  if result then
+    Safe := StringReplaceAll(StringReplaceAll(Text, '(', '\28'), ')', '\29');
+end;
+
+function LdapEscape(const Text: RawUtf8): RawUtf8;
+begin
+  if not LdapEscaped(Text, result) then
+    raise ELdap.CreateUtf8('Invalid input in LdapEscape(%)', [Text]);
+end;
+
+function LdapEscapeParenth(const Text: RawUtf8): RawUtf8;
+begin
+  if PosExChar('\', Text) <> 0 then
+    raise ELdap.CreateUtf8('Invalid input in LdapEscapeParenth(%)', [Text]);
+  result := StringReplaceAll(StringReplaceAll(Text, '(', '\28'), ')', '\29');
+end;
 
 
 { **************** CLDAP Client Functions }
@@ -2493,7 +2535,7 @@ begin
   if sock <> nil then
   try
     id := Random31;
-    FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [DomainName, NTVER], filter);
+    FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [LdapEscape(DomainName), NTVER], filter);
     req := Asn(ASN1_SEQ, [
              Asn(id),
              RawLdapSearch('', false, filter, ['NetLogon'])]);
@@ -3394,7 +3436,8 @@ begin
      fBound and
      fSock.SockConnected then
     fNetbiosDN := SearchObject('CN=Partitions,' + ConfigDN,
-      FormatUtf8('(&(nETBIOSName=*)(nCName=%))', [DefaultDN]), 'nETBIOSName', lssWholeSubtree).GetReadable;
+      FormatUtf8('(&(nETBIOSName=*)(nCName=%))',
+        [DefaultDN]), 'nETBIOSName', lssWholeSubtree).GetReadable;
   result := fNetbiosDN;
 end;
 
@@ -3912,16 +3955,18 @@ function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
   out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean): boolean;
 var
   PwdU8: SpiUtf8;
-  ComputerDN, ComputerSam: RawUtf8;
+  ComputerSafe, ParentSafe, ComputerDN, ComputerSam: RawUtf8;
   PwdU16: RawByteString;
   Attributes: TLdapAttributeList;
   ComputerObject: TLdapResult;
 begin
   result := false;
-  if not Connected then
+  if not Connected or
+     not LdapEscaped(ComputerParentDN, ParentSafe) or
+     not LdapEscaped(ComputerName, ComputerSafe) then
     exit;
-  ComputerDN := NetConcat(['CN=', ComputerName, ',', ComputerParentDN]);
-  ComputerSam := NetConcat([UpperCase(ComputerName), '$']);
+  ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ParentSafe]);
+  ComputerSam := NetConcat([UpperCase(ComputerSafe), '$']);
   // Search Computer object in the domain
   ComputerObject := SearchFirst(DefaultDN,
     FormatUtf8('(sAMAccountName=%)', [ComputerSam]), ['']);
@@ -3953,7 +3998,7 @@ begin
   Attributes := TLDAPAttributeList.Create;
   try
     Attributes.Add('objectClass', 'computer');
-    Attributes.Add('cn', ComputerName);
+    Attributes.Add('cn', ComputerSafe);
     Attributes.Add('sAMAccountName', ComputerSam);
     Attributes.Add('userAccountControl', '4096'); // WORKSTATION_TRUST_ACCOUNT
     if Password <> '' then
@@ -4195,11 +4240,11 @@ function InfoFilter(AT: cardinal; const AN, DN, UPN, CustomFilter: RawUtf8): Raw
 begin
   result := '';
   if AN <> '' then
-    FormatUtf8('(sAMAccountName=%)', [AN], result);
+    FormatUtf8('(sAMAccountName=%)', [LdapEscape(AN)], result);
   if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, DN]);
+    result := FormatUtf8('%(distinguishedName=%)', [result, LdapEscape(DN)]);
   if UPN <> '' then
-    result := FormatUtf8('%(userPrincipalName=%)', [result, UPN]);
+    result := FormatUtf8('%(userPrincipalName=%)', [result, LdapEscape(UPN)]);
   if result = '' then
   begin
     result := '(cn=)'; // return no answer whatsoever
@@ -4294,8 +4339,8 @@ begin
     f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Uac, f]);
   if unUac <> 0 then
     f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, unUac, f]);
-  if Match <> '' then
-    f := FormatUtf8('%(%=%)', [f, AttributeName, Match]);
+  if Match <> '' then // allow * wildchar in Match - but escape parenthesis
+    f := FormatUtf8('%(%=%)', [f, AttributeName, LdapEscapeParenth(Match)]);
   FormatUtf8('(sAMAccountType=%)', [AT], filter);
   if f <> '' then
     filter := FormatUtf8('(&%%)', [filter, f]);
@@ -4440,28 +4485,27 @@ function TLdapClient.GetIsMemberOf(const UserDN, CustomFilter: RawUtf8;
   const GroupAN, GroupDN: array of RawUtf8; Nested: boolean;
   const BaseDN: RawUtf8; GroupsAN: PRawUtf8DynArray): boolean;
 var
-  filter: RawUtf8;
+  user, grp, filter: RawUtf8;
   i, n: PtrInt;
 begin
   result := false;
-  if (UserDN = '') or
-     not LdapSafe(UserDN) then
+  if not LdapEscaped(UserDN, user) then
     exit;
   n := 0;
   for i := 0 to high(GroupAN) do
     if GroupAN[i] <> '' then
-      if LdapSafe(GroupAN[i]) then
+      if LdapEscaped(GroupAN[i], grp) then
       begin
-        filter := FormatUtf8('%(sAMAccountName=%)', [filter, GroupAN[i]]);
+        filter := FormatUtf8('%(sAMAccountName=%)', [filter, grp]);
         inc(n);
       end
       else
         exit;
   for i := 0 to high(GroupDN) do
     if GroupDN[i] <> '' then
-      if LdapSafe(GroupDN[i]) then
+      if LdapEscaped(GroupDN[i], grp) then
       begin
-        filter := FormatUtf8('%(distinguishedName=%)', [filter, GroupDN[i]]);
+        filter := FormatUtf8('%(distinguishedName=%)', [filter, grp]);
         inc(n);
       end
       else
@@ -4469,9 +4513,9 @@ begin
   if n = 0 then
     exit; // we need at least one valid name to compare to
   if n > 1 then
-    filter := FormatUtf8('(|%)', [filter]);
+    filter := FormatUtf8('(|%)', [filter]); // OR operator
   filter := FormatUtf8('(&(sAMAccountType=%)%%(member%=%))',
-    [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], UserDN]);
+    [AT_GROUP, filter, CustomFilter, NESTED_FLAG[Nested], user]);
   if Search(DefaultDN(BaseDN), false, filter, ['sAMAccountName']) and
      (SearchResult.Count > 0) then
   begin
@@ -4623,11 +4667,10 @@ var
   groups: TRawUtf8DynArray;
 begin
   result := false;
-  if (User = '') or
-     ((fGroupAN = nil) and
+  if ((fGroupAN = nil) and
       (fGroupDN = nil) and
       (fGroupID = nil)) or
-     not LdapSafe(User) then
+     not LdapValid(User) then
     exit;
   tix := GetTickCount64;
   if not fBound and
@@ -4743,14 +4786,13 @@ begin
   fSafe.Lock;
   try
     for i := 0 to high(GroupAN) do
-      if LdapSafe(GroupAN[i]) then
-        if GetGroupPrimaryID(
-             GroupAN[i], '', pid, fGroupBaseDN, fGroupCustomFilter) then
-        begin
-          if AddInteger(fGroupID, pid, {nodup=}true) then
-            AddRawUtf8(fGroupIDAN, GroupAN[i]);
-          AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
-        end;
+      if GetGroupPrimaryID(
+           GroupAN[i], '', pid, fGroupBaseDN, fGroupCustomFilter) then
+      begin
+        if AddInteger(fGroupID, pid, {nodup=}true) then
+          AddRawUtf8(fGroupIDAN, GroupAN[i]);
+        AddRawUtf8(fGroupAN, GroupAN[i], {nodup=}true, {casesens=}false);
+      end;
   finally
     fSafe.UnLock;
   end;
@@ -4772,13 +4814,12 @@ begin
   fSafe.Lock;
   try
     for i := 0 to high(GroupDN) do
-      if LdapSafe(GroupDN[i]) then
-      begin
-        if GetGroupPrimaryID(
-             '', GroupDN[i], pid, fGroupBaseDN, fGroupCustomFilter) then
-          AddInteger(fGroupID, pid, {nodup=}true);
-        AddRawUtf8(fGroupDN, GroupDN[i], {nodup=}true, {casesens=}true);
-      end;
+    begin
+      if GetGroupPrimaryID(
+           '', GroupDN[i], pid, fGroupBaseDN, fGroupCustomFilter) then
+        AddInteger(fGroupID, pid, {nodup=}true);
+      AddRawUtf8(fGroupDN, GroupDN[i], {nodup=}true, {casesens=}true);
+    end;
   finally
     fSafe.UnLock;
   end;
