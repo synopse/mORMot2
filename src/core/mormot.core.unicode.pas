@@ -5163,13 +5163,11 @@ begin
       c := Str^;
       if c = #0 then
         break;
+      result := Str;
       s := Characters;
       repeat
         if s^ = c then
-        begin
-          result := Str;
           exit;
-        end;
         inc(s);
       until s^ = #0;
       inc(Str);
