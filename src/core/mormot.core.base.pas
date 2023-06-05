@@ -4351,6 +4351,13 @@ begin
   result := PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^.CodePage;
 end;
 
+procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
+begin
+  FakeCodePage(RawByteString(src), CP_UTF8);
+  FastAssignNew(dest, pointer(src));
+  pointer(src) := nil; // was assigned with no ref-counting involved
+end;
+
 {$else} // do nothing on Delphi 7-2007
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
 begin
@@ -4361,14 +4368,12 @@ end;
 procedure EnsureRawUtf8(var s: RawUtf8);
 begin
 end;
-{$endif HASCODEPAGE}
-
 procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
 begin
-  FakeCodePage(RawByteString(src), CP_UTF8);
   FastAssignNew(dest, pointer(src));
   pointer(src) := nil; // was assigned with no ref-counting involved
 end;
+{$endif HASCODEPAGE}
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
 var

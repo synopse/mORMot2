@@ -1908,9 +1908,7 @@ begin
       begin
         Value^ := copy(Buffer, Pos, asnsize); // return as raw binary
         inc(Pos, asnsize);
-        if (Value^ <> '') and
-           IsValidUtf8(Value^) then
-          FakeCodePage(Value^, CP_UTF8); // we know this is a UTF-8 value
+        DetectRawUtf8(Value^); // detect and mark as CP_UTF8 for FPC RTL bug
       end;
     end;
 end;
@@ -2819,10 +2817,10 @@ begin
           s := ts.Text(true); // normalize
       end;
   end;
-  if not IsValidUtf8(s) then
-    s := BinToHexLower(s)
+  if IsValidUtf8(s) then
+    EnsureRawUtf8(s)
   else
-    EnsureRawUtf8(s);
+    s := BinToHexLower(s);
 end;
 
 
@@ -4009,7 +4007,7 @@ end;
 
 function TLdapClient.Compare(const Obj, AttributeValue: RawUtf8): boolean;
 begin
-result := false;
+  result := false;
   if not Connected(False) then
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [

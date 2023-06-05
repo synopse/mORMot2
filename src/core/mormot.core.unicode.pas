@@ -209,6 +209,11 @@ function IsValidUtf8(const source: RawUtf8): boolean; overload;
 function IsValidUtf8(source: PUtf8Char): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// detect UTF-8 content and mark the variable with the CP_UTF8 codepage
+// - to circumvent FPC concatenation bug with CP_UTF8 and CP_RAWBYTESTRING
+procedure DetectRawUtf8(var source: RawByteString);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
 // - supplied input is a pointer to a #0 ended text buffer
@@ -2371,6 +2376,15 @@ end;
 function IsValidUtf8(const source: RawUtf8): boolean;
 begin
   result := IsValidUtf8Buffer(pointer(source), length(source));
+end;
+
+procedure DetectRawUtf8(var source: RawByteString);
+begin
+  {$ifdef HASCODEPAGE} // do nothing on oldest Delphi
+  if (source <> '') and
+     IsValidUtf8(source) then
+    EnsureRawUtf8(source);
+  {$endif HASCODEPAGE}
 end;
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;

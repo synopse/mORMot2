@@ -9310,7 +9310,7 @@ end;
 
 type
   /// a static object is used for smaller recursive stack size and faster code
-  // - these special sort implementation do the comparison first by the
+  // - these special sort implementations do the comparison first by the
   // designed field, and, if the field value is identical, the ID value is
   // used (it will therefore sort by time all identical values)
   // - code generated is very optimized: stack and memory usage, CPU registers

@@ -7990,6 +7990,7 @@ begin
   finally
     FillZero(secret);
   end;
+  DetectRawUtf8(result); // detect and mark as CP_UTF8 to circumvent FPC RTL bug
 end;
 
 
