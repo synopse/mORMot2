@@ -168,7 +168,7 @@ const
   /// UniDAC provider names corresponding to mormot.db.sql recognized SQL engines
   UNIDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUtf8 = (
     'Oracle', 'SQL Server', 'Access', 'MySQL', 'SQLite', 'InterBase', 
-    'NexusDB', 'PostgreSQL', 'DB2', '');
+    'NexusDB', 'PostgreSQL', 'DB2', '', 'MySQL');
 
 
 implementation
