@@ -2599,7 +2599,7 @@ begin
   if DN <> nil then
     DN^ := domain;
   if Spn <> nil then
-    Spn^ := 'LDAP/' + Split(result, ':') + '@' + UpperCase(domain)
+    Spn^ := NetConcat(['LDAP/', Split(result, ':'), '@', UpperCase(domain)]);
 end;
 
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer;
@@ -3232,11 +3232,11 @@ begin
   if (self = nil) or
      (fTargetHost = '') then
     exit;
-  result := LDAP_DEFAULT_SCHEME[fTls] + fTargetHost;
+  result := NetConcat([LDAP_DEFAULT_SCHEME[fTls], fTargetHost]);
   if fTargetPort <> LDAP_DEFAULT_PORT[fTls] then
-    result := result + ':' + fTargetPort;
+    result := NetConcat([result, ':', fTargetPort]);
   if fKerberosDN <> '' then
-    result := result + '/' + fKerberosDN;
+    result := NetConcat([result, '/', fKerberosDN]);
 end;
 
 procedure TLdapClientSettings.SetTargetUri(const uri: RawUtf8);
@@ -3334,7 +3334,7 @@ begin
   end
   else
     // try the LDAP server as specified in TLdapClient settings
-    AddRawUtf8(dc, fSettings.TargetHost + ':' + fSettings.TargetPort);
+    AddRawUtf8(dc, NetConcat([fSettings.TargetHost, ':', fSettings.TargetPort]));
   fSeq := 0;
   for i := 0 to high(dc) do
     try
@@ -3922,8 +3922,8 @@ begin
   result := false;
   if not Connected then
     exit;
-  ComputerDN := 'CN=' + ComputerName + ',' + ComputerParentDN;
-  ComputerSam := UpperCase(ComputerName) + '$';
+  ComputerDN := NetConcat(['CN=', ComputerName, ',', ComputerParentDN]);
+  ComputerSam := NetConcat([UpperCase(ComputerName), '$']);
   // Search Computer object in the domain
   ComputerObject := SearchFirst(DefaultDN,
     FormatUtf8('(sAMAccountName=%)', [ComputerSam]), ['']);
@@ -3960,7 +3960,7 @@ begin
     Attributes.Add('userAccountControl', '4096'); // WORKSTATION_TRUST_ACCOUNT
     if Password <> '' then
     begin
-      PwdU8 := '"' + Password + '"';
+      PwdU8 := NetConcat(['"', Password, '"']);
       PwdU16 := Utf8DecodeToUnicodeRawByteString(PwdU8);
       Attributes.Add('unicodePwd', PwdU16);
       FillZero(PwdU8);
@@ -4966,9 +4966,9 @@ begin
   u := aUser;
   if PosExChar('@', u) = 0 then
     if fLdapSettings.KerberosDN = '' then
-      u := u + '@' + fRealm
+      u := NetConcat([u, '@', fRealm])
     else
-      u := u + '@' + fLdapSettings.KerberosDN;
+      u := NetConcat([u, '@', fLdapSettings.KerberosDN]);
   // try to use those credentials to bind to the LDAP server
   client := TLdapClient.Create(fLdapSettings);
   try

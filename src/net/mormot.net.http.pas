@@ -2221,7 +2221,7 @@ end;
 procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
   if aValue <> '' then
-    Http.Headers := Http.Headers + aValue + #13#10;
+    Http.Headers := NetConcat([Http.Headers, aValue, #13#10]);
 end;
 
 procedure THttpSocket.HeaderSetText(const aText: RawUtf8;
@@ -2235,7 +2235,7 @@ begin
     Http.Headers := aText;
   if (aForcedContentType <> '') and
      (FindNameValue(pointer(aText), 'CONTENT-TYPE:') = nil) then
-    Http.Headers := Http.Headers + 'Content-Type: ' + aForcedContentType + #13#10;
+    Http.Headers := NetConcat([Http.Headers, 'Content-Type: ', aForcedContentType, #13#10]);
 end;
 
 procedure THttpSocket.HeadersPrepare(const aRemoteIP: RawUtf8);
@@ -2244,7 +2244,7 @@ begin
      not (hfHasRemoteIP in Http.HeaderFlags) then
   begin
     // Http.ParseHeaderFinalize did reserve 40 bytes for fast realloc
-    Http.Headers := Http.Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
+    Http.Headers := NetConcat([Http.Headers, 'RemoteIP: ', aRemoteIP, #13#10]);
     include(Http.HeaderFlags, hfHasRemoteIP);
   end;
 end;
@@ -2307,7 +2307,7 @@ begin
     if fInHeaders = '' then
       fInHeaders := AppendedHeader
     else
-      fInHeaders := fInHeaders + #13#10 + AppendedHeader;
+      fInHeaders := NetConcat([fInHeaders, #13#10, AppendedHeader]);
 end;
 
 procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);

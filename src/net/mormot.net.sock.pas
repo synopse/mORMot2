@@ -1167,6 +1167,9 @@ function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
+/// RawUtf8-ready result := v + v + ... concatenation for FPC
+function NetConcat(const v: array of RawUtf8): RawUtf8;
+
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
@@ -2979,8 +2982,8 @@ begin
     for i := 0 to high(addr) do
       with addr[i] do
       begin
-        w := w + Name + '=' + Address + ' ';
-        wo := wo + Address + ' ';
+        w := NetConcat([w, Name, '=', Address, ' ']);
+        wo := NetConcat([wo, Address, ' ']);
       end;
     SetLength(w, length(w) - 1);
     SetLength(wo, length(wo) - 1);
@@ -3994,6 +3997,24 @@ begin
   FastSetString(result, S, P - S);
 end;
 
+function NetConcat(const v: array of RawUtf8): RawUtf8;
+var
+  l, i: PtrInt;
+  p: PUtf8Char;
+begin
+  l := 0;
+  for i := 0 to high(v) do
+    inc(l, length(v[i]));
+  FastSetString(result, nil, l);
+  p := pointer(result);
+  for i := 0 to high(v) do
+  begin
+    l := length(v[i]);
+    MoveFast(pointer(v[i])^, p^, l);
+    inc(p, l);
+  end;
+end;
+
 procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
 const
   b64: array[0..63] of AnsiChar =
@@ -4153,13 +4174,13 @@ const
     'http://', 'https://');
 begin
   if layer = nlUnix then
-    result := 'http://unix:' + Server + ':/' + address
+    result := NetConcat(['http://unix:', Server, ':/', address])
   else if (port = '') or
           (port = '0') or
           (port = DEFAULT_PORT[Https]) then
-    result := Prefix[Https] + Server + '/' + address
+    result := NetConcat([Prefix[Https], Server, '/', address])
   else
-    result := Prefix[Https] + Server + ':' + port + '/' + address;
+    result := NetConcat([Prefix[Https], Server, ':', port, '/', address]);
 end;
 
 function TUri.PortInt: TNetPort;
@@ -4183,7 +4204,7 @@ begin
   if User = '' then
     result := ''
   else
-    result := SockBase64Encode(User + ':' + Password);
+    result := SockBase64Encode(NetConcat([User, ':', Password]));
 end;
 
 

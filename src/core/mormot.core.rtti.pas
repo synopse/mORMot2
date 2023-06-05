@@ -7123,17 +7123,16 @@ end;
 function FromNames(p: PRttiCustomProp; n: integer; out names: RawUtf8): integer;
 begin
   result := 0;
-  if n = 0 then
-    exit;
-  repeat
-    if p^.Name <> '' then
-    begin
-      inc(result);
-      names := {%H-}names + '"' + p^.Name + '",';  // include trailing ,
-    end;
-    inc(p);
-    dec(n);
-  until n = 0;
+  if n <> 0 then
+    repeat
+      if p^.Name <> '' then
+      begin
+        inc(result);
+        names := {%H-}names + '"' + p^.Name + '",';  // include trailing ,
+      end;
+      inc(p);
+      dec(n);
+    until n = 0;
 end;
 
 function TRttiCustomProps.NameChange(const Old, New: RawUtf8): PRttiCustomProp;

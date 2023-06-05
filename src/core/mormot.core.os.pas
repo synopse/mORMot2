@@ -7688,7 +7688,7 @@ begin
           @fNames[k][f], pointer(v[i]), length(v[i]), length(fNames[k]) - f);
         if result >= 0 then
         begin
-          Inc(Result, f);
+          inc(result, f);
           fRetrieved[k][result] := true;
           exit;
         end;
