@@ -7799,12 +7799,12 @@ begin
   if Assigned(aCompare) and
      (n > 0) then
   begin
-    dec(n);
     P := fValue^;
     if (n > 10) and
-       (length(aIndex) >= n) then
+       (length(aIndex) = n) then
     begin
       // fast O(log(n)) binary search over aIndex[]
+      dec(n);
       L := 0;
       repeat
         result := (L + n) shr 1;
