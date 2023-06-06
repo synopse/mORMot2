@@ -13,6 +13,10 @@ program MongoDBTests;
   - sudo docker exec -it mongodb bash
   - sudo docker stop mongodb
   - sudo docker rm mongodb
+  
+  For old CPUs without AVX, you may need to specify an older version:
+  - sudo docker run --name mongodb -d -p 27017:27017 mongo:4.8.11
+  see https://github.com/synopse/mORMot2/issues/190
 
 }
 uses
