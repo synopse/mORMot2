@@ -4156,9 +4156,9 @@ begin
     FastSetString(Port, P, S - P); // Port='' for nlUnix
   end
   else if DefaultPort <> '' then
-    port := DefaultPort
+    Port := DefaultPort
   else
-    port := DEFAULT_PORT[Https];
+    Port := DEFAULT_PORT[Https];
   if S^ <> #0 then // ':' or '/'
   begin
     inc(S);

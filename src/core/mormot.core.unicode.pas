@@ -7670,7 +7670,7 @@ begin
   begin
     if (Lookup = nil) and
        (length(OldPattern) = 1) then
-      found := ByteScanIndex(pointer(S), PStrLen(PtrUInt(S) - _STRLEN)^,
+      found := ByteScanIndex(pointer(S), {%H-}PStrLen(PtrUInt(S) - _STRLEN)^,
         byte(OldPattern[1])) + 1
     else
       found := PosExI(OldPattern, S, 1, Lookup); // handle Lookup=nil
@@ -8577,7 +8577,7 @@ begin
   else if CaseSensitive then
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and
-         (PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
+         ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
          CompareMemFixed(pointer(PtrInt(Values^)), pointer(Value), ValueLen) then
         exit
       else
@@ -8585,7 +8585,7 @@ begin
   else
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and // StrIComp() won't change length
-         (PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
+         ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
          (StrIComp(pointer(Values^), pointer(Value)) = 0) then
         exit
       else
