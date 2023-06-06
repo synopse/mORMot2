@@ -359,11 +359,11 @@ type
     /// convert any UTF-8 encoded String into Ansi Text
     // - internally calls Utf8BufferToAnsi virtual method
     function Utf8ToAnsi(const u: RawUtf8): RawByteString; virtual;
-    /// direct conversion of a UTF-8 encoded string into a WinAnsi buffer
+    /// direct conversion of a UTF-8 encoded string into a WinAnsi <2KB buffer
     // - will truncate the destination string to DestSize bytes (including the
     // trailing #0), with a maximum handled size of 2048 bytes
     // - returns the number of bytes stored in Dest^ (i.e. the position of #0)
-    function Utf8ToAnsiBuffer(const S: RawUtf8;
+    function Utf8ToAnsiBuffer2K(const S: RawUtf8;
       Dest: PAnsiChar; DestSize: integer): integer;
     /// convert any Ansi Text (providing a From converted) into Ansi Text
     function AnsiToAnsi(From: TSynAnsiConvert;
@@ -1865,7 +1865,6 @@ function UnQuoteSqlString(const Value: RawUtf8): RawUtf8;
 // - e.g. '[symbol]' -> 'symbol' or '"symbol"' -> 'symbol'
 function UnQuotedSqlSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
 
-
 /// get the next character after a quoted buffer
 // - the first character in P^ must be either ', either "
 // - it will return the latest quote position, ignoring double quotes within
@@ -2013,13 +2012,13 @@ function UnCamelCase(D, P: PUtf8Char): integer; overload;
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8;
-  const isWord: TSynByteSet = [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+  const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
 
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - as such, it is not the reverse function to UnCamelCase()
 procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
-  const isWord: TSynByteSet = [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+  const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 var
@@ -3500,7 +3499,7 @@ begin
   Utf8BufferToAnsi(pointer(u), length(u), result);
 end;
 
-function TSynAnsiConvert.Utf8ToAnsiBuffer(const S: RawUtf8;
+function TSynAnsiConvert.Utf8ToAnsiBuffer2K(const S: RawUtf8;
   Dest: PAnsiChar; DestSize: integer): integer;
 var
   tmp: array[0..2047] of AnsiChar; // truncated to 2KB as documented

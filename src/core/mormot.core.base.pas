@@ -1710,7 +1710,7 @@ type
   PSortedIntegerArray = ^TSortedIntegerArray;
 
 /// compute GCD of two integers using substraction-based Euclidean algorithm
-function gcd(a, b: cardinal): cardinal;
+function gcd(a, b: PtrUInt): PtrUInt;
 
 
 
@@ -7001,7 +7001,7 @@ begin
     result[i] := Values[i];
 end;
 
-function gcd(a, b: cardinal): cardinal;
+function gcd(a, b: PtrUInt): PtrUInt;
 begin
   while a <> b do
     if a > b then
