@@ -7,7 +7,7 @@ program MVCServer;
 
 {$ifdef OSWINDOWS}
   {$apptype console}
-  {$R mormot.win.default.manifest.res}
+  {$R ..\..\src\mormot.win.default.manifest.res}  // from mORMot 2 /src folder
 {$endif OSWINDOWS}
 
 uses
