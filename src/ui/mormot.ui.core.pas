@@ -741,10 +741,10 @@ procedure DrawTextUtf8(Control: TCustomControl; Canvas: TCanvas;
   const Text: RawUtf8; var Rect: TRect; CalcOnly: boolean);
 var
   tmp: TSynTempBuffer;
+  n: integer;
 begin
-  Utf8DecodeToUnicode(Text, tmp);
-  DrawText(Canvas.Handle, tmp.buf, tmp.len shr 1, Rect,
-    DrawTextFlags(Control, CalcOnly));
+  n := Utf8DecodeToUnicode(Text, tmp);
+  DrawText(Canvas.Handle, tmp.buf, n, Rect, DrawTextFlags(Control, CalcOnly));
   tmp.Done;
 end;
 
