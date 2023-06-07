@@ -50,11 +50,13 @@ type
 
   /// each option available for TTunnelLocal process
   // - toEcdhe will compute an ephemeral secret to encrypt the link
+  // - if toEcdhe is not set, toEncrypt will setup a symmetric encryption
   // - only localhost clients are accepted, unless toAcceptNonLocal is set
   // - toClientSigned/toServerSigned will be set by Open() according to
   // the actual certificates available, to ensure an authenticated handshake
   TTunnelOption = (
     toEcdhe,
+    toEncrypt,
     toAcceptNonLocal,
     toClientSigned,
     toServerSigned);
@@ -70,7 +72,7 @@ type
 
   /// abstract transmission layer with the central relay server
   // - may be implemented as raw sockets or over a mORMot SOA WebSockets link
-  // - if toEcdhe option was set, the frames are already encrypted
+  // - if toEcdhe or toEncrypt option is set, the frames are already encrypted
   ITunnelTransmit = interface(IInvokable)
     ['{F481A93C-1321-49A6-9801-CCCF065F3973}']
     /// should send Frame to the relay server
@@ -89,7 +91,7 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// check if the background processing thread is using encrypted frames
@@ -168,7 +170,7 @@ type
     fPort: TNetPort;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
-    fContext: TEccKeyPair;
+    fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
     fSession: TTunnelSession;
@@ -189,9 +191,6 @@ type
     destructor Destroy; override;
     /// called e.g. by CallbackReleased
     procedure ClosePort;
-    /// Create will initialize those pub/priv fields
-    property Context: TEccKeyPair
-      read fContext;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
@@ -203,7 +202,7 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: check if the background thread uses encrypted frames
@@ -235,6 +234,9 @@ type
     property Thread: TTunnelLocalThread
       read fThread;
   end;
+
+const
+  toEncrypted = [toEcdhe, toEncrypt];
 
 function ToText(opt: TTunnelOptions): shortstring; overload;
 
@@ -307,7 +309,7 @@ begin
   fOwner := owner;
   fPort := owner.Port;
   fTransmit := transmit;
-  if toEcdhe in owner.Options then
+  if not IsZero(key) then
   begin
     // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
     fAes[{send:}false] := AesIvUpdatedCreate(mCtr, key, 128);
@@ -445,14 +447,7 @@ constructor TTunnelLocal.Create(SpecificKey: PEccKeyPair);
 begin
   inherited Create;
   if SpecificKey <> nil then
-  begin
-    fContext := SpecificKey^;
-    if IsZero(fContext.pub) or
-       IsZero(fContext.priv) then
-      raise ETunnel.CreateUtf8('%.Create: void supplied ECC key', [self]);
-  end
-  else if not Ecc256r1MakeKey(fContext.pub, fContext.priv) then
-    raise ETunnel.CreateUtf8('%.Create: no ECC engine available', [self]);
+    fEcdhe := SpecificKey^;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
 end;
 
@@ -461,7 +456,7 @@ begin
   if fThread <> nil then
     ClosePort; // calls Terminate
   inherited Destroy;
-  FillCharFast(fContext, SizeOf(fContext), 0);
+  FillCharFast(fEcdhe, SizeOf(fEcdhe), 0);
   FreeAndNil(fHandshake);
 end;
 
@@ -527,12 +522,9 @@ begin
     fThread.fTransmit := Transmit;
 end;
 
-const
-  HEADER_DEFAULT_SALT: TGuid = '{AB15C52F-754F-49CB-9B23-CF88735E39C8}';
-
 function TTunnelLocal.Open(Sess: TTunnelSession;
   TransmitOptions: TTunnelOptions; TimeOutMS: integer;
-  const AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+  AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
@@ -578,14 +570,13 @@ begin
   fOptions := TransmitOptions;
   try
     // initial handshake: same TTunnelOptions + TTunnelSession from both sides
+    if AppSecret = '' then
+      AppSecret := 'AB15C52F754F49CB9B23CF88735E39C8'; // some default random
     header.magic := tlmVersion1;
     header.options := fOptions;
     header.session := fSession;
     sha3.Init(SHA3_224);
-    if AppSecret = '' then
-      sha3.Update(@HEADER_DEFAULT_SALT, SizeOf(HEADER_DEFAULT_SALT))
-    else
-      sha3.Update(AppSecret); // custom symmetric application-specific secret
+    sha3.Update(AppSecret); // custom symmetric application-specific secret
     sha3.Update(@header, SizeOf(header) - SizeOf(header.crc));
     sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
     FastSetRawByteString(frame, @header, SizeOf(header));
@@ -598,21 +589,29 @@ begin
       raise ETunnel.CreateUtf8('%.Open handshake failed', [self]);
     // optional ECDHE ephemeral encryption
     FillZero(key.b);
-    if toEcdhe in fOptions then
+    if toEncrypted * fOptions <> [] then
     begin
-      FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
-      MainAesPrng.FillRandom(PTunnelEcdhFrame(frame)^.rnd);
-      PTunnelEcdhFrame(frame)^.pub := fContext.pub;
-      fTransmit.Send(frame);
-      if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-         (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
-         not Ecc256r1SharedSecret(
-           PTunnelEcdhFrame(remote)^.pub, fContext.priv, secret) then
-        exit;
       sha3.Init(SHA3_256);
       sha3.Update(@header, SizeOf(header)); // avoid session replay
-      EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
-      sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
+      if toEcdhe in fOptions then
+      begin
+        FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
+        MainAesPrng.FillRandom(PTunnelEcdhFrame(frame)^.rnd);
+        if IsZero(fEcdhe.pub) then // ephemeral key if not specified at Create()
+          if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
+            raise ETunnel.CreateUtf8('%.Open: no ECC engine available', [self]);
+        PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
+        fTransmit.Send(frame);
+        if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
+           (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
+           not Ecc256r1SharedSecret(
+             PTunnelEcdhFrame(remote)^.pub, fEcdhe.priv, secret) then
+          exit;
+        EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
+        sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
+      end
+      else if toEncrypt in fOptions then
+        sha3.Update(AppSecret); // encrypted using symmetric secret
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
     end;
     // launch the background processing thread
