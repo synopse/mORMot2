@@ -83,15 +83,13 @@ type
     ['{201150B4-6E28-47A3-AAE5-1335C82B060A}']
     /// to be called before Open() for proper handshake process
     procedure SetTransmit(const Transmit: ITunnelTransmit);
-    /// this is the main method binding to a local ephemeral port and tunneling
-    // to the Transmit interface
+    /// this is the main method to start tunneling to the Transmit interface
     // - Session, TransmitOptions and AppSecret should match on both sides
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawByteString = '';
-      const Address: RawUtf8 = cLocalhost): TNetPort;
+      TimeOutMS: integer; const AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// check if the background processing thread is using encrypted frames
@@ -150,19 +148,14 @@ type
   end;
   PTunnelLocalHeader = ^TTunnelLocalHeader;
 
-  /// store the cryptographic context for TTunnelLocal optional ECDHE handshake
-  // - all fields are computed at startup by the TTunnelLocal.Create constructor
-  // from mORMot safe random source, unless some context is specified
-  // - two first fields are rnd + pub so that they will be sent over the wire
-  TTunnelEcdheContext = packed record
-    /// 128-bit random salt to ensure ECDHE features perfect forward security
+  /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
+  TTunnelEcdhFrame = packed record
+    /// the 128-bit client or server random
     rnd: TAesBlock;
-    /// the ECC secp256r1 public key, as transmitted to the other end
+    /// the public key of this side
     pub: TEccPublicKey;
-    /// the ECC secp256r1 private key, kept in local memory for safety
-    priv: TEccPrivateKey;
   end;
-  PTunnelEcdheContext = ^TTunnelEcdheContext;
+  PTunnelEcdhFrame = ^TTunnelEcdhFrame;
 
   /// abstract tunneling service implementation
   // - is properly implemented by TTunnelLocalServer/TTunnelLocalClient classes
@@ -175,15 +168,15 @@ type
     fPort: TNetPort;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
-    fContext: TTunnelEcdheContext;
+    fContext: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
     fSession: TTunnelSession;
     fOpenBind: boolean;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
-    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
-      out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
+    procedure EcdheHashRandom(var sha3: TSha3;
+      const local, remote: TTunnelEcdhFrame); virtual; abstract;
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(const frame: RawByteString;
@@ -191,27 +184,26 @@ type
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
-    constructor Create(SpecificContext: PTunnelEcdheContext = nil); reintroduce;
+    constructor Create(SpecificKey: PEccKeyPair = nil); reintroduce;
     /// finalize the server
     destructor Destroy; override;
     /// called e.g. by CallbackReleased
     procedure ClosePort;
-    /// Create will initialize this with some random or specific values
-    property Context: TTunnelEcdheContext
+    /// Create will initialize those pub/priv fields
+    property Context: TEccKeyPair
       read fContext;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
     /// ITunnelLocal method: to be called before Open()
     procedure SetTransmit(const Transmit: ITunnelTransmit);
-    /// ITunnelLocal method: initialize a local forwarding port
+    /// ITunnelLocal method: initialize tunnelling process
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawByteString = '';
-      const Address: RawUtf8 = cLocalhost): TNetPort; virtual;
+      TimeOutMS: integer; const AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: check if the background thread uses encrypted frames
@@ -255,12 +247,9 @@ type
   // should just be at either end of the tunnel
   TTunnelLocalServer = class(TTunnelLocal)
   protected
-    /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    /// initialize a local forwarding server port
-    // - could be overriden to ensure ecdhe.pub matches the expected value
-    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
-      out ecdhe: TTunnelEcdheContext): boolean; override;
+    procedure EcdheHashRandom(var sha3: TSha3;
+      const local, remote: TTunnelEcdhFrame); override;
   end;
 
 
@@ -270,12 +259,9 @@ type
   // should just be at either end of the tunnel
   TTunnelLocalClient = class(TTunnelLocal)
   protected
-    /// returns toClientSigned/toServerSigned from SignCert/VerifyCert
     function ComputeOptionsFromCert: TTunnelOptions; override;
-    /// initialize a local forwarding client port
-    // - could be overriden to ensure ecdhe.pub matches the expected value
-    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
-      out ecdhe: TTunnelEcdheContext): boolean; override;
+    procedure EcdheHashRandom(var sha3: TSha3;
+      const local, remote: TTunnelEcdhFrame); override;
   end;
 
 
@@ -455,19 +441,18 @@ end;
 
 { TTunnelLocal }
 
-constructor TTunnelLocal.Create(SpecificContext: PTunnelEcdheContext);
+constructor TTunnelLocal.Create(SpecificKey: PEccKeyPair);
 begin
   inherited Create;
-  if SpecificContext <> nil then
+  if SpecificKey <> nil then
   begin
-    fContext := SpecificContext^;
+    fContext := SpecificKey^;
     if IsZero(fContext.pub) or
        IsZero(fContext.priv) then
       raise ETunnel.CreateUtf8('%.Create: void supplied ECC key', [self]);
   end
   else if not Ecc256r1MakeKey(fContext.pub, fContext.priv) then
     raise ETunnel.CreateUtf8('%.Create: no ECC engine available', [self]);
-  TAesPrng.Main.FillRandom(fContext.rnd); // overwrite any previous random
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
 end;
 
@@ -555,7 +540,6 @@ var
   frame, remote: RawByteString;
   header: TTunnelLocalHeader;
   secret: TEccSecretKey;
-  ecdhe: TTunnelEcdheContext;
   key: THash256Rec;
   sha3: TSha3;
   log: ISynLog;
@@ -616,13 +600,19 @@ begin
     FillZero(key.b);
     if toEcdhe in fOptions then
     begin
-      if not EcdheHandshake(TimeOutMS, fTransmit, ecdhe) or
-         not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
-        raise ETunnel.CreateUtf8('%.Open ECDHE failed', [self]);
+      FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
+      MainAesPrng.FillRandom(PTunnelEcdhFrame(frame)^.rnd);
+      PTunnelEcdhFrame(frame)^.pub := fContext.pub;
+      fTransmit.Send(frame);
+      if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
+         (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
+         not Ecc256r1SharedSecret(
+           PTunnelEcdhFrame(remote)^.pub, fContext.priv, secret) then
+        exit;
       sha3.Init(SHA3_256);
-      sha3.Update(@ecdhe.rnd, SizeOf(ecdhe.rnd));   // random server salt
-      sha3.Update(@header, SizeOf(header));         // avoid session replay
-      sha3.Update(@secret, SizeOf(secret));         // ephemeral secret
+      sha3.Update(@header, SizeOf(header)); // avoid session replay
+      EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
+      sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
     end;
     // launch the background processing thread
@@ -637,7 +627,6 @@ begin
     result := 0;
   end;
   FreeAndNil(fHandshake);
-  FillZero(ecdhe.priv);
   FillZero(secret);
   FillZero(key.b);
 end;
@@ -678,21 +667,11 @@ begin
     include(result, toClientSigned);
 end;
 
-function TTunnelLocalServer.EcdheHandshake(TimeOutMS: integer;
-  const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
-var
-  frame, remote: RawByteString;
+procedure TTunnelLocalServer.EcdheHashRandom(var sha3: TSha3;
+  const local, remote: TTunnelEcdhFrame);
 begin
-  result := false;
-  // EDCHE handshake with perfect forward security - server side
-  ecdhe := fContext; // pre-computed/specified by overriden Create
-  FastSetRawByteString(frame, @ecdhe, SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
-  Transmit.Send(frame); // frame = rnd+pub
-  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-     (length(remote) <> SizeOf(TEccPublicKey)) then
-    exit;
-  ecdhe.pub := PEccPublicKey(remote)^; // remote = pub
-  result := true;
+  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // client random
+  sha3.Update(@local.rnd, SizeOf(local.rnd));   // server random
 end;
 
 
@@ -707,25 +686,11 @@ begin
     include(result, toServerSigned);
 end;
 
-function TTunnelLocalClient.EcdheHandshake(TimeOutMS: integer;
-  const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
-var
-  frame, remote: RawByteString;
+procedure TTunnelLocalClient.EcdheHashRandom(var sha3: TSha3;
+  const local, remote: TTunnelEcdhFrame);
 begin
-  result := false;
-  // EDCHE handshake with perfect forward security - client side
-  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
-     (length(remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) then
-    exit;
-  FastSetRawByteString(frame, @fContext.pub, SizeOf(TEccPublicKey));
-  Transmit.Send(frame); // frame = pub
-  ecdhe.priv := fContext.priv;
-  with PTunnelEcdheContext(remote)^ do
-  begin
-    ecdhe.rnd := rnd;
-    ecdhe.pub := pub;
-  end;
-  result := true;
+  sha3.Update(@local.rnd, SizeOf(local.rnd));   // client random
+  sha3.Update(@remote.rnd, SizeOf(remote.rnd)); // server random
 end;
 
 
