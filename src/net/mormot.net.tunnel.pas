@@ -86,9 +86,9 @@ type
     /// this is the main method binding to a local ephemeral port and tunneling
     // to the Transmit interface
     // - Session, TransmitOptions and AppSecret should match on both sides
+    // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
-    // - if Address has a port, will connect to this address:port
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret: RawByteString = '';
       const Address: RawUtf8 = cLocalhost): TNetPort;
@@ -109,6 +109,7 @@ type
     fTransmit: ITunnelTransmit;
     fAes: array[{send:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
+    fClientAddr: TNetAddr;
     fPort: TNetPort;
     fReceived, fSent: Int64;
     /// accept/connect the connection, then crypt/redirect to fTransmit
@@ -178,13 +179,11 @@ type
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
     fSession: TTunnelSession;
-    fSock: TNetSocket;
-    fClientAddr: TNetAddr;
+    fOpenBind: boolean;
     // methods to be overriden according to the client/server side
     function ComputeOptionsFromCert: TTunnelOptions; virtual; abstract;
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
-    function StartBackgroundThread: boolean; virtual; abstract;
     // can optionally add a signature to the main handshake frame
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(const frame: RawByteString;
@@ -207,7 +206,9 @@ type
     procedure SetTransmit(const Transmit: ITunnelTransmit);
     /// ITunnelLocal method: initialize a local forwarding port
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
-    // - returns 0 on failure, or an ephemeral port on 127.0.0.1 on success
+    // - if Address has a port, will connect a socket to this address:port
+    // - if Address has no port, will bound its address an an ephemeral port,
+    // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const AppSecret: RawByteString = '';
       const Address: RawUtf8 = cLocalhost): TNetPort; virtual;
@@ -260,8 +261,6 @@ type
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; override;
-    /// server method run by TTunnelLocalThread.DoExecute to accept a connection
-    function StartBackgroundThread: boolean; override;
   end;
 
 
@@ -277,8 +276,6 @@ type
     // - could be overriden to ensure ecdhe.pub matches the expected value
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; override;
-    /// client method run by TTunnelLocalThread.DoExecute to connect locally
-    function StartBackgroundThread: boolean; override;
   end;
 
 
@@ -398,7 +395,29 @@ var
 begin
   fStarted := true;
   try
-    if fOwner.StartBackgroundThread then
+    if fOwner.fOpenBind then
+    begin
+      // newsocket() was done in the main thread: blocking accept() now
+      fState := stAccepting;
+      fLog.Log(sllTrace,
+        'DoExecute: waiting for accept on port %', [fPort], self);
+      res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
+      if (res = nrOk) and
+         not Terminated then
+      begin
+        fLog.Log(sllTrace,
+          'DoExecute: accepted %', [fClientAddr.IPWithPort], self);
+        if (toAcceptNonLocal in fOwner.Options) or
+           (fClientAddr.IP4 = cLocalhost32) then
+         fState := stProcessing // start background process
+        else
+          fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
+      end;
+    end
+    else
+      // newsocket() with connect() was done in the main thread
+      fState := stProcessing;
+    if fState = stProcessing then
       while not Terminated do
       begin
         // wait for some data on the local loopback
@@ -553,7 +572,8 @@ begin
   TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
   // bind to a local ephemeral port
   ClosePort;
-  if uri.PortInt = 0 then
+  result := uri.PortInt;
+  if result = 0 then
   begin
     // bind on port='0' = ephemeral port
     ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}true,
@@ -561,15 +581,15 @@ begin
     result := addr.Port;
     if Assigned(log) then
       log.Log(sllTrace, 'Open: bound to %', [addr.IPWithPort], self);
+    fOpenBind := true;
   end
   else
   begin
     // connect to a local socket on address:port
     ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}false,
       TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'Open');
-    result := addr.Port;
     if Assigned(log) then
-      log.Log(sllTrace, 'Open: connected to %', [addr.IPWithPort], self);
+      log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
   fOptions := TransmitOptions;
   try
@@ -675,29 +695,6 @@ begin
   result := true;
 end;
 
-function TTunnelLocalServer.StartBackgroundThread: boolean;
-var
-  res: TNetResult;
-begin
-  result := false;
-  fThread.fState := stAccepting;
-  fThread.fLog.Log(sllTrace,
-    'StartBackgroundThread: waiting for accept on port %', [fPort], self);
-  res := fThread.fServerSock.Accept(fThread.fClientSock, fClientAddr, {async=}false);
-  if (res <> nrOk) or
-     fThread.Terminated then
-    exit;
-  fThread.fState := stProcessing;
-  fThread.fLog.Log(sllTrace,
-    'StartBackgroundThread: accepted %', [fClientAddr.IPWithPort], self);
-  if (toAcceptNonLocal in Options) or
-     (fClientAddr.IP4 = cLocalhost32) then
-    result := true
-  else
-    fThread.fLog.Log(sllWarning,
-      'StartBackgroundThread: rejected non local client', self);
-end;
-
 
 { TTunnelLocalClient }
 
@@ -729,12 +726,6 @@ begin
     ecdhe.pub := pub;
   end;
   result := true;
-end;
-
-function TTunnelLocalClient.StartBackgroundThread: boolean;
-begin
-  result := true;
-  fThread.fState := stProcessing; // connection was done in the main thread
 end;
 
 
