@@ -3289,7 +3289,7 @@ begin
   fTls := false;
   if not u.From(uri, '0') then
     exit;
-  if u.Scheme <> '' then // no scheme:// means LDAP
+  if u.Scheme <> '' then
     if IdemPChar(pointer(u.Scheme), 'LDAP') then
       case u.Scheme[5] of
         #0:
@@ -3300,7 +3300,9 @@ begin
         exit;
       end
     else
-      exit; // not the ldap[s]:// scheme
+      exit // not the ldap[s]:// scheme
+  else if u.Port = LDAP_TLS_PORT then
+    fTls := true; // no scheme:// means LDAP - force LDAPS on address:636
   fTargetHost := u.Server;
   if u.Port = '0' then
     u.Port := LDAP_DEFAULT_PORT[fTls];
