@@ -6812,7 +6812,7 @@ begin
   begin
     result.Free;
     AesModeIvUpdated[aesMode] := TAesInternal[aesMode]; // our code sets the IV
-    result := TAesInternal[aesMode].Create(key, keySizeBits); // fallback
+    result := TAesInternal[aesMode].Create(key, keySizeBits); // fallback (once)
   end;
 end;
 
