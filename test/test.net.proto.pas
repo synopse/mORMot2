@@ -684,7 +684,7 @@ end;
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
 begin
   // one of the two handshakes should be done in another thread
-  Check((Sender as TTunnelLocal).Open(session, options, 1000, appsec) <> 0);
+  Check((Sender as TTunnelLocal).Open(session, options, 1000, appsec, cLocalhost) <> 0);
 end;
 
 procedure TNetworkProtocols.TunnelExecuted(Sender: TObject);
@@ -701,7 +701,6 @@ var
   sent, received, sent2, received2: RawByteString;
   clientsock, serversock: TNetSocket;
 begin
-  exit; // FIXME
   // setup the two instances with the specified options and certificates
   clientinstance := TTunnelLocalClient.Create;
   clientinstance.SignCert := clientcert;
@@ -720,15 +719,15 @@ begin
   appsec := RandomAnsi7(10);
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
-  Check(clienttunnel.Open(session, options, 1000, appsec) <> 0);
+  Check(clienttunnel.Open(session, options, 1000, appsec, clocalhost) <> 0);
   SleepHiRes(1000, tunnelexecutedone);
   Check(tunnelexecutedone, 'TunnelExecuted');
   tunnelexecutedone := false; // for the next run
   Check(clienttunnel.LocalPort <> '');
   Check(servertunnel.LocalPort <> '');
   Check(servertunnel.LocalPort <> clienttunnel.LocalPort, 'ports');
-  Check(clienttunnel.Encrypted = (toEcdhe in options), 'cEncrypted');
-  Check(servertunnel.Encrypted = (toEcdhe in options), 'sEncrypted');
+  Check(clienttunnel.Encrypted = (toEncrypted * options <> []), 'cEncrypted');
+  Check(servertunnel.Encrypted = (toEncrypted * options <> []), 'cEncrypted');
   Check(NewSocket('127.0.0.1', clienttunnel.LocalPort, nlTcp, {bind=}false,
     1000, 1000, 1000, 0, clientsock) = nrOk);
   Check(NewSocket('127.0.0.1', servertunnel.LocalPort, nlTcp, {bind=}false,
@@ -769,20 +768,28 @@ begin
 end;
 
 procedure TNetworkProtocols._TTunnelLocal;
+var
+  c, s: ICryptCert;
 begin
+  c := Cert('syn-es256').Generate([cuDigitalSignature]);
+  s := Cert('syn-es256').Generate([cuDigitalSignature]);
   // plain tunnelling
+  TunnelTest(nil, nil);
+  // symmetric secret encrypted tunnelling
+  options := [toEncrypt];
   TunnelTest(nil, nil);
   // ECDHE encrypted tunnelling
   options := [toEcdhe];
   TunnelTest(nil, nil);
   // tunnelling with mutual authentication
   options := [];
-  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature]),
-             Cert('syn-es256').Generate([cuDigitalSignature]));
+  TunnelTest(c, s);
+  // symmetric secret encrypted tunnelling with mutual authentication
+  options := [toEncrypt];
+  TunnelTest(c, s);
   // ECDHE encrypted tunnelling with mutual authentication
   options := [toEcdhe];
-  TunnelTest(Cert('syn-es256').Generate([cuDigitalSignature]),
-             Cert('syn-es256').Generate([cuDigitalSignature]));
+  TunnelTest(c, s);
 end;
 
 end.
