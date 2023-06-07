@@ -2119,7 +2119,8 @@ end;
 
 function NullableFloatToValue(const V: TNullableFloat): Double;
 begin
-  VariantToDouble(PVariant(@V)^, result);
+  if not VariantToDouble(PVariant(@V)^, result) then
+    result := 0;
 end;
 
 // TNullableCurrency
@@ -2168,7 +2169,8 @@ end;
 
 function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
 begin
-  VariantToDateTime(PVariant(@V)^, result);
+  if not VariantToDateTime(PVariant(@V)^, result) then
+    result := 0;
 end;
 
 // TNullableTimeLog
