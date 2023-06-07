@@ -3838,18 +3838,22 @@ begin
             needencrypt := false; // fSecContextEncrypt = false by default
           end
         else if seclayers * KLS_EXPECTED = [] then
-          // we only support signing sealing
+          // we only support signing+sealing
           exit
-        else if needencrypt then // MS AD requires signing/sealing
+        else
+        // if we reached here, the server asked for signing+sealing
+        if needencrypt or             // from MS AD
+           not fSock.TLS.Enabled then // ldap_require_strong_auth on OpenLDAP
         begin
           // return the supported algorithm, with a 64KB maximum message size
           if secmaxsize > 64 shl 10 then
-            secmaxsize := 64 shl 10; // evolution: call gss_wrap_size_limit?
+            secmaxsize := 64 shl 10;
+            // note: calling gss_wrap_size_limit is pointless due to 16bit limit
           PCardinal(datain)^ := bswap32(secmaxsize) + byte(KLS_EXPECTED);
           needencrypt := true; // fSecContextEncrypt = true = sign and seal
         end
         else
-          // non MS-AD return LDAP_RES_UNWILLING_TO_PERFORM for KLS_EXPECTED :(
+          // needed for OpenLDAP over TLS to avoid LDAP_RES_UNWILLING_TO_PERFORM
           PCardinal(datain)^ := 0;
         if AuthIdentify <> '' then
           Append(datain, AuthIdentify);
