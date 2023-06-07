@@ -2163,12 +2163,12 @@ function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTim
 begin
   Value := 0;
   result := not VarDataIsEmptyOrNull(@V) and
-            VariantToDouble(PVariant(@V)^, Double(Value));
+            VariantToDateTime(PVariant(@V)^, Value);
 end;
 
 function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
 begin
-  VariantToDouble(PVariant(@V)^, Double(result));
+  VariantToDateTime(PVariant(@V)^, result);
 end;
 
 // TNullableTimeLog
