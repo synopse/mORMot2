@@ -587,7 +587,7 @@ begin
        not FrameVerify(remote, SizeOf(header)) or
        not CompareMem(pointer(remote), @header, SizeOf(header)) then
       raise ETunnel.CreateUtf8('%.Open handshake failed', [self]);
-    // optional ECDHE ephemeral encryption
+    // optional encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
     begin
@@ -595,9 +595,10 @@ begin
       sha3.Update(@header, SizeOf(header)); // avoid session replay
       if toEcdhe in fOptions then
       begin
+        // optional ECDHE ephemeral encryption
         FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
         MainAesPrng.FillRandom(PTunnelEcdhFrame(frame)^.rnd);
-        if IsZero(fEcdhe.pub) then // ephemeral key if not specified at Create()
+        if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
           if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
             raise ETunnel.CreateUtf8('%.Open: no ECC engine available', [self]);
         PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
@@ -610,8 +611,9 @@ begin
         EcdheHashRandom(sha3, PTunnelEcdhFrame(frame)^, PTunnelEcdhFrame(remote)^);
         sha3.Update(@secret, SizeOf(secret)); // ephemeral secret
       end
-      else if toEncrypt in fOptions then
-        sha3.Update(AppSecret); // encrypted using symmetric secret
+      else
+        // optional encryption using symmetric secret
+        sha3.Update(AppSecret);
       sha3.Final(key.b); // key.Lo/Hi = AES-128-CTR key/iv
     end;
     // launch the background processing thread
