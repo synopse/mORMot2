@@ -369,19 +369,30 @@ function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
 // are likely to use simple \ escape: it is easier to reject than escaping
 function LdapSafe(const Text: RawUtf8): boolean;
 
-/// returns true when no * \ character is part of a non-void Text
-// - works like LdapEscaped() so that ( ) could be later escaped
-function LdapValid(const Text: RawUtf8): boolean;
+const
+  /// the chars to escape for LdapEscape()
+  LDAP_ESC: array[{keepwildchar=}boolean] of TSynAnsicharSet = (
+    [#0 .. #31, '(', ')', '&', '|', '=', '!', '>', '<', '~', '/', '\', '*'],
+    [#0 .. #31, '(', ')', '&', '|', '=', '!', '>', '<', '~', '/', '\']);
 
-/// escape the ( ) characters as expected by LDAP
+/// escape the ( ) & | = ! > < ~ * / \ characters as expected by LDAP filters
+// - you can let * untouched if KeepWildChar is set
+function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean = false): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// returns true when no * \ character is part of a non-void name
+// - as called by LdapEscapeName() for sAMAccountName/distinguishedName
+function LdapValidName(const Text: RawUtf8): boolean;
+
+/// calls LdapValidName() then LdapEscape() or return false
 // - in the context of user or group distinguished name, i.e. will return
 // false if Text is void or contains any unexpected * or \ character
-function LdapEscaped(const Text: RawUtf8; var Safe: RawUtf8): boolean;
+function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean; overload;
 
-/// escape the ( ) characters as expected by LDAP
+/// calls LdapValidName() then LdapEscape() or raise an exception
 // - in the context of user or group distinguished name, i.e. will raise an
 // ELdap exception if Text is void or contains any unexpected * or \ character
-function LdapEscape(const Text: RawUtf8): RawUtf8;
+function LdapEscapeName(const Text: RawUtf8): RawUtf8; overload;
 
 
 { **************** CLDAP Client Functions }
@@ -1254,6 +1265,7 @@ type
     function Authorize(const User: RawUtf8;
       GroupsAN: PRawUtf8DynArray = nil): boolean;
     /// main TOnAuthServer callback to check if a user is allowed to login
+    // - just redirect to the Authorize() method
     function BeforeAuth(Sender: TObject; const User: RawUtf8): boolean;
     /// remove any previously allowed groups
     procedure AllowGroupClear;
@@ -2479,7 +2491,7 @@ begin
              (PosCharAny(pointer(Text), '*()\') = nil));
 end;
 
-function LdapValid(const Text: RawUtf8): boolean;
+function LdapValidName(const Text: RawUtf8): boolean;
 begin
   result := (Text <> '') and
             (PosExChar('*', Text) = 0) and
@@ -2487,31 +2499,29 @@ begin
             IsValidUtf8(Text);
 end;
 
-function LdapEscaped(const Text: RawUtf8; var Safe: RawUtf8): boolean;
+function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean): RawUtf8;
 begin
-  result := LdapValid(Text);
+  result := EscapeHex(Text, LDAP_ESC[KeepWildChar], '\');
+end;
+
+function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean;
+begin
+  result := LdapValidName(Text);
   if result then
-    Safe := StringReplaceAll(StringReplaceAll(Text, '(', '\28'), ')', '\29');
+    Safe := LdapEscape(Text);
 end;
 
-function LdapEscape(const Text: RawUtf8): RawUtf8;
+function LdapEscapeName(const Text: RawUtf8): RawUtf8;
 begin
-  if not LdapEscaped(Text, result) then
-    raise ELdap.CreateUtf8('Invalid input in LdapEscape(%)', [Text]);
-end;
-
-function LdapEscapeParenth(const Text: RawUtf8): RawUtf8;
-begin
-  if PosExChar('\', Text) <> 0 then
-    raise ELdap.CreateUtf8('Invalid input in LdapEscapeParenth(%)', [Text]);
-  result := StringReplaceAll(StringReplaceAll(Text, '(', '\28'), ')', '\29');
+  if not LdapEscapeName(Text, result) then
+    raise ELdap.CreateUtf8('Invalid input name: %', [Text]);
 end;
 
 
 { **************** CLDAP Client Functions }
 
 const
-  NTVER: RawByteString = #6#0#0#0;
+  NTVER: RawByteString = #6#0#0#0; // '\00\00\00\06' does NOT work on CLDAP
 
 function Random31: cardinal;
 begin
@@ -2539,7 +2549,7 @@ begin
   if sock <> nil then
   try
     id := Random31;
-    FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [LdapEscape(DomainName), NTVER], filter);
+    FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [LdapEscapeName(DomainName), NTVER], filter);
     req := Asn(ASN1_SEQ, [
              Asn(id),
              RawLdapSearch('', false, filter, ['NetLogon'])]);
@@ -3972,8 +3982,8 @@ var
 begin
   result := false;
   if not Connected or
-     not LdapEscaped(ComputerParentDN, ParentSafe) or
-     not LdapEscaped(ComputerName, ComputerSafe) then
+     not LdapEscapeName(ComputerParentDN, ParentSafe) or
+     not LdapEscapeName(ComputerName, ComputerSafe) then
     exit;
   ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ParentSafe]);
   ComputerSam := NetConcat([UpperCase(ComputerSafe), '$']);
@@ -4250,11 +4260,11 @@ function InfoFilter(AT: cardinal; const AN, DN, UPN, CustomFilter: RawUtf8): Raw
 begin
   result := '';
   if AN <> '' then
-    FormatUtf8('(sAMAccountName=%)', [LdapEscape(AN)], result);
+    FormatUtf8('(sAMAccountName=%)', [LdapEscapeName(AN)], result);
   if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, LdapEscape(DN)]);
+    result := FormatUtf8('%(distinguishedName=%)', [result, LdapEscapeName(DN)]);
   if UPN <> '' then
-    result := FormatUtf8('%(userPrincipalName=%)', [result, LdapEscape(UPN)]);
+    result := FormatUtf8('%(userPrincipalName=%)', [result, LdapEscapeName(UPN)]);
   if result = '' then
   begin
     result := '(cn=)'; // return no answer whatsoever
@@ -4349,8 +4359,8 @@ begin
     f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Uac, f]);
   if unUac <> 0 then
     f := FormatUtf8('(!(%%=%))%', [uacname, AND_FLAG, unUac, f]);
-  if Match <> '' then // allow * wildchar in Match - but escape parenthesis
-    f := FormatUtf8('%(%=%)', [f, AttributeName, LdapEscapeParenth(Match)]);
+  if Match <> '' then // allow * wildchar in Match - but escape others
+    f := FormatUtf8('%(%=%)', [f, AttributeName, LdapEscape(Match, {keep*=}true)]);
   FormatUtf8('(sAMAccountType=%)', [AT], filter);
   if f <> '' then
     filter := FormatUtf8('(&%%)', [filter, f]);
@@ -4499,12 +4509,12 @@ var
   i, n: PtrInt;
 begin
   result := false;
-  if not LdapEscaped(UserDN, user) then
+  if not LdapEscapeName(UserDN, user) then
     exit;
   n := 0;
   for i := 0 to high(GroupAN) do
     if GroupAN[i] <> '' then
-      if LdapEscaped(GroupAN[i], grp) then
+      if LdapEscapeName(GroupAN[i], grp) then
       begin
         filter := FormatUtf8('%(sAMAccountName=%)', [filter, grp]);
         inc(n);
@@ -4513,7 +4523,7 @@ begin
         exit;
   for i := 0 to high(GroupDN) do
     if GroupDN[i] <> '' then
-      if LdapEscaped(GroupDN[i], grp) then
+      if LdapEscapeName(GroupDN[i], grp) then
       begin
         filter := FormatUtf8('%(distinguishedName=%)', [filter, grp]);
         inc(n);
@@ -4680,7 +4690,7 @@ begin
   if ((fGroupAN = nil) and
       (fGroupDN = nil) and
       (fGroupID = nil)) or
-     not LdapValid(User) then
+     not LdapValidName(User) then
     exit;
   tix := GetTickCount64;
   if not fBound and
