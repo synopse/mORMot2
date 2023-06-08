@@ -1179,6 +1179,10 @@ type
       read fSearchPageSize write fSearchPageSize;
     /// cookie returned by paged search results
     // - use an empty string for the first search request
+    // - if not empty, you should call Search() again for the next page until it
+    // is eventually empty
+    // - you can force to an empty string to reset the pagination or for a new
+    // Search()
     property SearchCookie: RawUtf8
       read fSearchCookie write fSearchCookie;
     /// result of the search command
