@@ -1143,8 +1143,8 @@ type
     fFileName: TFileName;
     fBuildDateTime: TDateTime;
     fVersionInfo, fUserAgent: RawUtf8;
-    /// change the version (not to be used in most cases)
-    procedure SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
+    // change the version - returns true if supplied values are actually new
+    function SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
   public
     /// executable major version number
     Major: integer;
@@ -2243,7 +2243,7 @@ function GetModuleHandle(lpModuleName: PChar): HMODULE;
 
 /// post a message to the Windows message queue
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
-function PostMessage(hWnd: HWND; Msg:UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
+function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 
 /// retrieves the current stack trace
 // - only available since Windows XP
@@ -7431,8 +7431,14 @@ begin
     result := Major shl 16 + Minor shl 8 + Release;
 end;
 
-procedure TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
+function TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
 begin
+  result := (Major <> aMajor) or
+            (Minor <> aMinor) or
+            (Release <> aRelease) or
+            (Build <> aBuild);
+  if not result then
+    exit;
   Major := aMajor;
   Minor := aMinor;
   Release := aRelease;
@@ -7607,8 +7613,8 @@ end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
 begin
-  Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
-  ComputeExecutableHash;
+  if Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild) then
+    ComputeExecutableHash; // re-compute if changed
 end;
 
 
