@@ -5311,10 +5311,7 @@ begin
   begin
     // fast in-place set result length without any memory resize
     dec(InputLen, padding);
-    if InputLen = 0 then
-      result := ''
-    else
-      FakeLength(result, InputLen);
+    FakeSetLength(result, InputLen);
   end;
 end;
 

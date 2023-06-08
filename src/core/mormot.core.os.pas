@@ -8546,7 +8546,7 @@ begin
   result := PtrUInt(s) - PtrUInt(raw.Data);
   raw.Length := result;
   if length(raw.Data) <> result then
-    FakeLength(raw.Data, result);
+    FakeSetLength(raw.Data, result);
 end;
 
 

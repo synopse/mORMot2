@@ -954,6 +954,14 @@ function HtmlEscape(const text: RawUtf8;
 function HtmlEscapeString(const text: string;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
+/// escape as \xx hexadecimal some chars from a set into a pre-allocated buffer
+// - dest^ should have at least srclen * 3 bytes, for \## trios
+function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): PUtf8Char;
+
+/// escape as \xx hexadecimal some chars from a set into a new RawUtf8 string
+function EscapeHex(const src: RawUtf8;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
 
 const
   /// TTextWriter JSON serialization options focusing of sets support
@@ -5058,6 +5066,42 @@ begin
     finally
       Free;
     end;
+end;
+
+function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
+  const toescape: TSynAnsicharSet; escape: AnsiChar): PUtf8Char;
+begin
+  result := dest;
+  if srclen > 0 then
+    repeat
+      if src^ in toescape then
+      begin
+        result^ := escape;
+        result := pointer(ByteToHex(pointer(result + 1), ord(src^)));
+      end
+      else
+      begin
+        result^ := src^;
+        inc(result);
+      end;
+      inc(src);
+      dec(srclen);
+    until srclen = 0;
+end;
+
+function EscapeHex(const src: RawUtf8;
+  const toescape: TSynAnsicharSet; escape: AnsiChar): RawUtf8;
+var
+  l: PtrInt;
+begin
+  l := length(src);
+  if l <> 0 then
+  begin
+    FastSetString(result, nil, l * 3); // allocate maximum size
+    l := EscapeHexBuffer(pointer(src), pointer(result), l,
+      toescape, escape) - pointer(result);
+  end;
+  FakeSetLength(result, l); // return in-place with no realloc
 end;
 
 

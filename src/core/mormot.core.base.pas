@@ -748,6 +748,14 @@ procedure FakeLength(var s: RawUtf8; endChar: PUtf8Char); overload;
 procedure FakeLength(var s: RawByteString; len: PtrInt); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+// - FakeLength() don't handle len = 0, whereas this function will
+procedure FakeSetLength(var s: RawUtf8; len: PtrInt); overload;
+
+/// internal function which could be used instead of SetLength() if RefCnt = 1
+// - FakeLength() don't handle len = 0, whereas this function will
+procedure FakeSetLength(var s: RawByteString; len: PtrInt); overload;
+
 /// internal function which could be used instead of SetCodePage() if RefCnt = 1
 // - do nothing if HASCODEPAGE is not defined, e.g. on Delphi 7-2007
 // - warning: s should NOT be read-only (i.e. assigned from a constant), but
@@ -4400,6 +4408,22 @@ begin
   p := pointer(s);
   p[len] := #0;
   PStrLen(p - _STRLEN)^ := len; // in-place SetLength()
+end;
+
+procedure FakeSetLength(var s: RawUtf8; len: PtrInt);
+begin
+  if len <= 0 then
+    FastAssignNew(s)
+  else
+    FakeLength(s, len);
+end;
+
+procedure FakeSetLength(var s: RawByteString; len: PtrInt); overload;
+begin
+  if len <= 0 then
+    FastAssignNew(s)
+  else
+    FakeLength(s, len);
 end;
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);

@@ -5014,11 +5014,7 @@ begin
      (L <> 0) then
   begin
     FastSetRawByteString(result, nil, L * 3);
-    L := Utf8ToWideChar(pointer(result), P, L);
-    if L = 0 then
-      result := ''
-    else
-      FakeLength(result, L);
+    FakeSetLength(result, Utf8ToWideChar(pointer(result), P, L));
   end
   else
     result := '';
