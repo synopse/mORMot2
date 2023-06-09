@@ -5139,16 +5139,15 @@ begin
 end;
 
 function UnescapeHex(const src: RawUtf8; escape: AnsiChar): RawUtf8;
-var
-  l: PtrInt;
 begin
-  l := length(src);
-  if l <> 0 then
+  if PosExChar(escape, src) = 0 then
+    result := src // no unescape needed
+  else
   begin
-    FastSetString(result, nil, l); // allocate maximum size
-    l := UnescapeHexBuffer(pointer(src), pointer(result), escape) - pointer(result);
+    FastSetString(result, nil, length(src)); // allocate maximum size
+    FakeSetLength(result, UnescapeHexBuffer(
+      pointer(src), pointer(result), escape) - pointer(result));
   end;
-  FakeSetLength(result, l); // return in-place with no realloc
 end;
 
 
