@@ -970,6 +970,17 @@ function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar = '\'): PUtf8C
 /// un-escape \xx or \c encoded chars into a new RawUtf8 string
 function UnescapeHex(const src: RawUtf8; escape: AnsiChar = '\'): RawUtf8;
 
+/// escape as \char pair some chars from a set into a pre-allocated buffer
+// - dest^ should have at least srclen * 2 bytes, for \char pairs
+// - by definition, escape should be part of the toescape set
+function EscapeCharBuffer(src, dest: PUtf8Char; srclen: integer;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): PUtf8Char;
+
+/// escape as \char pair some chars from a set into a new RawUtf8 string
+// - by definition, escape should be part of the toescape set
+function EscapeChar(const src: RawUtf8;
+  const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
+
 const
   /// TTextWriter JSON serialization options focusing of sets support
   // - as used e.g. by TJsonWriter.AddRecordJson/AddDynArrayJson and
@@ -5122,7 +5133,7 @@ begin
       if src^ = escape then
       begin
         inc(src);
-        if HexToBin(PAnsiChar(src), PByte(@c), 1) then // \xx
+        if mormot.core.text.HexToBin(PAnsiChar(src), PByte(@c), 1) then // \xx
         begin
           result^ := c;
           inc(src, 2);
@@ -5148,6 +5159,39 @@ begin
     FakeSetLength(result, UnescapeHexBuffer(
       pointer(src), pointer(result), escape) - pointer(result));
   end;
+end;
+
+function EscapeCharBuffer(src, dest: PUtf8Char; srclen: integer;
+  const toescape: TSynAnsicharSet; escape: AnsiChar): PUtf8Char;
+begin
+  result := dest;
+  if srclen > 0 then
+    repeat
+      if src^ in toescape then
+      begin
+        result^ := escape;
+        inc(result);
+      end;
+      result^ := src^;
+      inc(result);
+      inc(src);
+      dec(srclen);
+    until srclen = 0;
+end;
+
+function EscapeChar(const src: RawUtf8;
+  const toescape: TSynAnsicharSet; escape: AnsiChar): RawUtf8;
+var
+  l: PtrInt;
+begin
+  l := length(src);
+  if l <> 0 then
+  begin
+    FastSetString(result, nil, l * 2); // allocate maximum size
+    l := EscapeCharBuffer(pointer(src), pointer(result), l,
+      toescape, escape) - pointer(result);
+  end;
+  FakeSetLength(result, l); // return in-place with no realloc
 end;
 
 
