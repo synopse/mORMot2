@@ -1968,6 +1968,8 @@ begin
     if (kind = '') or
        (value = '') then
       raise ELdap.CreateUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
+    if not PropNameValid(pointer(value)) then // simple alphanum is just fine
+      value := UrlEncode(LdapUnescape(value)); // may need some (un)escape
     LowerCaseSelf(kind);
     if kind = 'dc' then
     begin
