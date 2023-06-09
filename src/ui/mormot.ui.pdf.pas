@@ -2317,7 +2317,7 @@ type
     fTrueTypeFontsIndex: integer;
     /// contains a bit for every WinAnsi encoded char
     // - encoding in TPdfFont, even if used by TPdfFontWinAnsi descendent only
-    fWinAnsiUsed: set of AnsiChar;
+    fWinAnsiUsed: TSynAnsicharSet;
   public
     /// create the PDF font object instance
     constructor Create(AXref: TPdfXref; const AName: PdfString);
@@ -4846,13 +4846,10 @@ end;
 
 const // should be local for better code generation
   HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  ESCAPENAME: TSynAnsicharSet = [
+    #1..#31, '%', '(', ')', '<', '>', '[', ']', '{', '}', '/', '#', #127..#255];
 
 function TPdfWrite.AddEscapeName(Text: PAnsiChar): TPdfWrite;
-const
-  ESCAPENAME: set of AnsiChar = [
-    #1..#31, '%', '(', ')', '<', '>', '[', ']', '{', '}', '/', '#', #127..#255];
-var
-  c: cardinal;
 begin
   if Text <> nil then
     repeat
