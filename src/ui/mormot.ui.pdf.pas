@@ -4850,6 +4850,8 @@ const // should be local for better code generation
     #1..#31, '%', '(', ')', '<', '>', '[', ']', '{', '}', '/', '#', #127..#255];
 
 function TPdfWrite.AddEscapeName(Text: PAnsiChar): TPdfWrite;
+var
+  c: cardinal;
 begin
   if Text <> nil then
     repeat
