@@ -1168,7 +1168,6 @@ var
 // - following classic pascal naming convention, first char must be alphabetical
 // or '_' (i.e. not a digit), following chars can be alphanumerical or '_'
 function PropNameValid(P: PUtf8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the given text buffers contains A..Z,0..9,_ characters
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)

@@ -1968,7 +1968,7 @@ begin
     if (kind = '') or
        (value = '') then
       raise ELdap.CreateUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
-    if not PropNameValid(pointer(value)) then // simple alphanum is just fine
+    if not PropNameValid(pointer(value)) then  // simple alphanum is just fine
       value := UrlEncode(LdapUnescape(value)); // may need some (un)escape
     LowerCaseSelf(kind);
     if kind = 'dc' then
@@ -2513,7 +2513,10 @@ end;
 
 function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean): RawUtf8;
 begin
-  result := EscapeHex(Text, LDAP_ESC[KeepWildChar], '\');
+  if PropNameValid(pointer(Text)) then
+    result := Text // alphanum requires no escape nor memory allocation
+  else
+    result := EscapeHex(Text, LDAP_ESC[KeepWildChar], '\');
 end;
 
 function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean;
