@@ -375,6 +375,10 @@ const
     [#0 .. #31, '(', ')', '&', '|', '=', '!', '>', '<', '~', '/', '\', '*'],
     [#0 .. #31, '(', ')', '&', '|', '=', '!', '>', '<', '~', '/', '\']);
 
+  /// the chars to escape for LdapEscapeCN()
+  LDAP_CN: TSynAnsicharSet = (
+    ['.', '/', '\']);
+
 /// escape the ( ) & | = ! > < ~ * / \ characters as expected by LDAP filters
 // - you can let * untouched if KeepWildChar is set
 function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean = false): RawUtf8;
@@ -400,6 +404,9 @@ function LdapEscapeName(const Text: RawUtf8): RawUtf8; overload;
 // - is also the reverse function of LdapEscape()
 function LdapUnescape(const Text: RawUtf8): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// escape the . / \ characters as expected by LDAP filters
+function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
 
 
 { **************** CLDAP Client Functions }
@@ -1968,8 +1975,8 @@ begin
     if (kind = '') or
        (value = '') then
       raise ELdap.CreateUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
-    if not PropNameValid(pointer(value)) then  // simple alphanum is just fine
-      value := UrlEncode(LdapUnescape(value)); // may need some (un)escape
+    if not PropNameValid(pointer(value)) then // simple alphanum is just fine
+      value := LdapEscapeCN(LdapUnescape(value)); // may need some (un)escape
     LowerCaseSelf(kind);
     if kind = 'dc' then
     begin
@@ -2513,7 +2520,8 @@ end;
 
 function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean): RawUtf8;
 begin
-  if PropNameValid(pointer(Text)) then
+  if (Text = '') or
+     PropNameValid(pointer(Text)) then
     result := Text // alphanum requires no escape nor memory allocation
   else
     result := EscapeHex(Text, LDAP_ESC[KeepWildChar], '\');
@@ -2535,6 +2543,15 @@ end;
 function LdapUnescape(const Text: RawUtf8): RawUtf8;
 begin
   result := UnescapeHex(Text, '\');
+end;
+
+function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
+begin
+  if (Text = '') or
+     PropNameValid(pointer(Text)) then
+    result := Text // alphanum requires no escape nor memory allocation
+  else
+    result := EscapeChar(Text, LDAP_CN, '\');
 end;
 
 
