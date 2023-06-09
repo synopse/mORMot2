@@ -330,6 +330,7 @@ type
   {$else}
   TSynDate = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// the Year value of this Date
     Year: word;
     /// the Month value of this Date (1..12)

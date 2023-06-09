@@ -9890,6 +9890,7 @@ type
     twlCode3);
 
   TTextWriterEscape = object
+  public
     P, B, P2, B2: PUtf8Char;
     W: TTextWriter;
     st: set of TTextWriterEscapeStyle;

@@ -621,6 +621,7 @@ type
 
   /// a wrapper to interface type information, as defined by the the compiler RTTI
   TRttiInterfaceTypeData = object
+  public
     /// ancestor interface type
     function IntfParent: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}

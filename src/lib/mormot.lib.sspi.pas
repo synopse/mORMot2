@@ -164,6 +164,7 @@ type
   {$else}
   TSecPkgConnectionInfo = object
   {$endif USERECORDWITHMETHODS}
+  public
     dwProtocol: cardinal;
     aiCipher: ALG_ID;
     dwCipherStrength: cardinal;

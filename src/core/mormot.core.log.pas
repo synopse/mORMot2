@@ -1989,6 +1989,7 @@ type
   end;
 
   TDwarfMachineState = object
+  public
     address: cardinal;
     line: cardinal;
     fileid: cardinal;
@@ -2004,6 +2005,7 @@ type
   end;
 
   TDwarfReader = object
+  public
     read: TFastReader;
     DebugLineSectionOffset, DebugLineSection_Size, // debug_line section
     DebugInfoSectionOffset, DebugInfoSection_Size, // debug_info section

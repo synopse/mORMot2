@@ -1775,6 +1775,7 @@ type
 
   /// wrapper to the PKCS12 abstract pointer
   PKCS12 = object
+  public
     /// parse and extract the private key, certificate and CAs in this PKCS12 store
     // - use pointers to result structures, nil if one is not needed
     // - caller should call needed privatekey^.Free, cert^.Free and ca^.FreeX509

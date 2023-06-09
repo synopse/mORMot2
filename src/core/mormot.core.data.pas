@@ -8074,6 +8074,7 @@ end;
 type
   // internal structure used to make QuickSort faster & with less stack usage
   TDynArrayQuickSort = object
+  public
     Compare: TDynArraySortCompare;
     CompareEvent: TOnDynArraySortCompare;
     Pivot: pointer;
@@ -9871,6 +9872,7 @@ end;
 
 type
   TFastReHash = object // dedicated object for better register allocation
+  public
     hc: cardinal;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     collisions: integer;

@@ -7745,6 +7745,7 @@ end;
 type
   // 3KB info on stack - only supported token is %, with any const arguments
   TFormatUtf8 = object
+  public
     last: PTempUtf8;
     L, argN: PtrInt;
     blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations

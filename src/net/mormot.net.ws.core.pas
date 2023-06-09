@@ -926,6 +926,7 @@ type
   {$else}
   TWebProcessInFrame = object
   {$endif USERECORDWITHMETHODS}
+  public
     hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
@@ -948,6 +949,7 @@ type
   {$else}
   TWebSocketFrameEncoder = object
   {$endif USERECORDWITHMETHODS}
+  public
     hdr: TFrameHeader;
     hdrlen, len: cardinal;
     function Prepare(const Frame: TWebSocketFrame; MaskSentFrames: cardinal): integer;

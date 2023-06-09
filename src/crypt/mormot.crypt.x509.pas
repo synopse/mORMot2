@@ -105,6 +105,7 @@ type
 
   /// used to store an ASN.1 TAG content
   TAsnTag = object
+  public
     /// mostly acUniversal kind of TAG
     TagClass: TAsnTagClass;
     /// defines this TAG content

@@ -169,6 +169,7 @@ type
   /// generic file information structure, as used in .zip file format
   // - used in any header, contains info about following block
   TFileInfo = object
+  public
     /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
     // - use ToByte() for the format version - high 8-bit may identify the OS
     neededVersion: word;
@@ -268,6 +269,7 @@ type
   //// directory file information structure, as used in .zip file format
   // - used at the end of the zip file to recap all entries
   TFileHeader = object
+  public
     /// $02014b50 PK#1#2 = ENTRY_SIGNATURE_INC - 1
     signature: cardinal;
     /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
@@ -299,6 +301,7 @@ type
   //// internal file information structure, as used in .zip file format
   // - used locally inside the file stream, followed by the name and the data
   TLocalFileHeader = object
+  public
     /// $04034b50 PK#3#4 = FIRSTHEADER_SIGNATURE_INC - 1
     signature: cardinal;
     /// information about the following file

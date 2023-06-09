@@ -442,6 +442,7 @@ type
   {$else}
   SQL_TIMESTAMP_STRUCT = object
   {$endif USERECORDWITHMETHODS}
+  public
     Year:     SqlSmallint;
     Month:    SqlUSmallint;
     Day:      SqlUSmallint;

@@ -751,6 +751,7 @@ type
   {$else}
   TOracleDate = object
   {$endif USERECORDWITHMETHODS}
+  public
     Cent, Year, Month, Day, Hour, Min, Sec: byte;
     /// convert an Oracle date and time into Delphi TDateTime
     // - this method will ignore any date before 30 Dec 1899 (i.e. any

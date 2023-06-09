@@ -2903,6 +2903,7 @@ type
   /// calling context when intercepting exceptions
   // - used e.g. for TSynLogExceptionToStr or RawExceptionIntercept() handlers
   TSynLogExceptionContext = object
+  public
     /// the raised exception class
     EClass: ExceptClass;
     /// the Delphi Exception instance
@@ -4339,6 +4340,7 @@ type
   // - just wrap TLecuyer with a TLighLock
   // - should not be used, unless may be slightly faster than a threadvar
   TLecuyerThreadSafe = object
+  public
     Safe: TLightLock;
     Generator: TLecuyer;
     /// compute the next 32-bit generated value

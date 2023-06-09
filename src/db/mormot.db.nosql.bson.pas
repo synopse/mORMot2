@@ -241,6 +241,7 @@ type
   {$else}
   TBsonObjectID = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// big-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;

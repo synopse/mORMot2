@@ -1264,6 +1264,7 @@ type
   {$else}
   TBinaryCookieGenerator = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// the cookie name, used for storage in the client side HTTP headers
     // - is not part of the Generate/Validate content, but could be used
     // when the cookie is actually stored in HTTP headers

@@ -1656,6 +1656,7 @@ type
   // - used e.g. by TNetAddr.SetFromIP4 and GetKnownHost
   // - avoid the overhead of TSynDictionary for a few short-living items
   TNetHostCache = object
+  public
     Host: TRawUtf8DynArray;
     Safe: TLightLock;
     Tix, TixShr: cardinal;

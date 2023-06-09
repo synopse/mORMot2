@@ -287,6 +287,7 @@ type
   /// Section Table
   // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers
   _IMAGE_SECTION_HEADER = object
+  public
     Name8: array[0..7] of AnsiChar;
     VirtualSize: cardinal;
     VirtualAddress: cardinal;
@@ -392,6 +393,7 @@ type
   // - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#resource-directory-entries
   PImageResourceDataEntry = ^_IMAGE_RESOURCE_DATA_ENTRY;
   _IMAGE_RESOURCE_DIRECTORY_ENTRY = object
+  public
     // Nested record to use a variable part not at the end of the record
     Identifier: record
       case integer of
@@ -442,6 +444,7 @@ type
   /// Fixed file info
   // - https://learn.microsoft.com/en-us/windows/win32/api/VerRsrc/ns-verrsrc-vs_fixedfileinfo
   _VS_FIXEDFILEINFO = object
+  public
     Signature: cardinal;
     StructVersion: cardinal;
     FileVersionMS: cardinal;

@@ -433,6 +433,7 @@ type
   {$else}
   TEccSignatureCertifiedContent = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// the TEccSignatureCertificated format version
     Version: word;
     /// when this signature was generated
@@ -482,6 +483,7 @@ type
   {$else}
   TEccCertificateRevocation = object
   {$endif USERECORDWITHMETHODS}
+  public
     /// contains the 65535 fixed number (ECC_REVOC_MAGIC)
     // - make a clear distinction with TEccCertificateContentV1.Version
     // - will be Base64-encoded as '/w...' so could be recognized from

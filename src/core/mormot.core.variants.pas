@@ -6237,6 +6237,7 @@ end;
 
 type
   TQuickSortDocVariant = object
+  public
     names: PPointerArray;
     values: PVariantArray;
     nameCompare: TUtf8Compare;
@@ -6421,6 +6422,7 @@ type
   {$else}
   TQuickSortDocVariantValuesByField = object
   {$endif USERECORDWITHMETHODS}
+  public
     Lookup: array of TQuickSortByFieldLookup;
     Compare: TVariantCompare;
     CompareField: TVariantCompareField;

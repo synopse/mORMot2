@@ -219,6 +219,7 @@ type
   /// efficient JSON value parser / in-place decoder
   // - as used by JsonDecode() and all internal JSON functions
   TGetJsonField = object
+  public
     /// input/output JSON parsing buffer address
     Json: PUtf8Char;
     /// in-place output parsed JSON value, unescaped and #0 terminated
@@ -2767,6 +2768,7 @@ type
 
   /// state machine for fast (900MB/s) parsing of (extended) JSON input
   TJsonGotoEndParser = object
+  public
     {$ifdef CPUX86}
     JsonSet: PJsonCharSet; // not enough registers in i386 mode
     {$endif CPUX86}

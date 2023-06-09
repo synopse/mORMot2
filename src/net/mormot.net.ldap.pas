@@ -778,6 +778,7 @@ type
 
   /// high-level information of a User or Group object in the LDAP database
   TLdapObject = object
+  public
     sAMAccountName, distinguishedName, canonicalName: RawUtf8;
     name, CN, description: RawUtf8;
     objectSid, objectGUID: RawUtf8;
@@ -793,6 +794,7 @@ type
   // - note that "member" array won't include nested groups - use rather the
   // TLdapClient.GetIsMemberOf() method or TLdapCheckMember class instead
   TLdapGroup = object(TLdapObject)
+  public
     primaryGroupID: cardinal;
     groupType: TGroupTypes;
     member: TRawUtf8DynArray;
@@ -804,6 +806,7 @@ type
   // - note that "memberof" array won't include nested groups - use rather the
   // TLdapClient.GetIsMemberOf() method or TLdapCheckMember class instead
   TLdapUser = object(TLdapObject)
+  public
     userPrincipalName, displayName, mail: RawUtf8;
     pwdLastSet, lastLogon: TDateTime;
     memberof: TRawUtf8DynArray;
