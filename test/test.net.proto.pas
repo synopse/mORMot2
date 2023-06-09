@@ -623,6 +623,30 @@ begin
   CheckEqual(DNToCN(
     'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
     'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
+  // validate LDAP escape/unescape
+  for c := 0 to 200 do
+  begin
+    u := RandomIdentifier(c); // alphanums are never escaped
+    CheckEqual(LdapEscape(u), u);
+    if u <> '' then
+      CheckEqual(LdapEscapeName(u), u);
+    CheckEqual(LdapUnescape(u), u);
+    u := RandomAnsi7(c);
+    CheckEqual(LdapUnescape(LdapEscape(u)), u);
+  end;
+  CheckEqual(LdapUnescape('abc\>'), 'abc>');
+  CheckEqual(LdapUnescape('abc\>e'), 'abc>e');
+  CheckEqual(LdapUnescape('abc\'), 'abc');
+  Check(LdapSafe(''));
+  Check(LdapSafe('abc'));
+  Check(LdapSafe('ab cd'));
+  Check(LdapSafe('@abc'));
+  Check(not LdapSafe('\abc'));
+  Check(not LdapSafe('abc*'));
+  Check(not LdapSafe('a(bc'));
+  Check(not LdapSafe('abc)'));
+  Check(not LdapSafe('*'));
+  Check(not LdapSafe('()'));
   // validate LDAP settings
   l := TLdapClientSettings.Create;
   try
@@ -649,16 +673,6 @@ begin
   finally
     l.Free;
   end;
-  Check(LdapSafe(''));
-  Check(LdapSafe('abc'));
-  Check(LdapSafe('ab cd'));
-  Check(LdapSafe('@abc'));
-  Check(not LdapSafe('\abc'));
-  Check(not LdapSafe('abc*'));
-  Check(not LdapSafe('a(bc'));
-  Check(not LdapSafe('abc)'));
-  Check(not LdapSafe('*'));
-  Check(not LdapSafe('()'));
   l := TLdapClientSettings.Create;
   try
     CheckEqual(l.TargetUri, '');

@@ -394,6 +394,13 @@ function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean; overlo
 // ELdap exception if Text is void or contains any unexpected * or \ character
 function LdapEscapeName(const Text: RawUtf8): RawUtf8; overload;
 
+/// decode \xx or \c from a LDAP string value
+// - following e.g. https://www.rfc-editor.org/rfc/rfc4514#section-2.4
+// specifications about distinguished names encoding
+// - is also the reverse function of LdapEscape()
+function LdapUnescape(const Text: RawUtf8): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { **************** CLDAP Client Functions }
 
@@ -2518,6 +2525,11 @@ function LdapEscapeName(const Text: RawUtf8): RawUtf8;
 begin
   if not LdapEscapeName(Text, result) then
     raise ELdap.CreateUtf8('Invalid input name: %', [Text]);
+end;
+
+function LdapUnescape(const Text: RawUtf8): RawUtf8;
+begin
+  result := UnescapeHex(Text, '\');
 end;
 
 
