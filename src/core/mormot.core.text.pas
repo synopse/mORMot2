@@ -963,6 +963,13 @@ function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
 function EscapeHex(const src: RawUtf8;
   const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
 
+/// un-escape \xx or \c encoded chars from a pre-allocated buffer
+// - dest^ should have at least the same length than src^
+function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar = '\'): PUtf8Char;
+
+/// un-escape \xx or \c encoded chars into a new RawUtf8 string
+function UnescapeHex(const src: RawUtf8; escape: AnsiChar = '\'): RawUtf8;
+
 const
   /// TTextWriter JSON serialization options focusing of sets support
   // - as used e.g. by TJsonWriter.AddRecordJson/AddDynArrayJson and
@@ -5100,6 +5107,46 @@ begin
     FastSetString(result, nil, l * 3); // allocate maximum size
     l := EscapeHexBuffer(pointer(src), pointer(result), l,
       toescape, escape) - pointer(result);
+  end;
+  FakeSetLength(result, l); // return in-place with no realloc
+end;
+
+function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar): PUtf8Char;
+var
+  c: AnsiChar;
+begin
+  result := dest;
+  if src <> nil then
+    while src^ <> #0 do
+    begin
+      if src^ = escape then
+      begin
+        inc(src);
+        if HexToBin(PAnsiChar(src), PByte(@c), 1) then // \xx
+        begin
+          result^ := c;
+          inc(src, 2);
+          inc(result);
+          continue;
+        end;
+        if src^ = #0 then // expect valid \c
+          break;
+      end;
+      result^ := src^;
+      inc(src);
+      inc(result);
+    end;
+end;
+
+function UnescapeHex(const src: RawUtf8; escape: AnsiChar): RawUtf8;
+var
+  l: PtrInt;
+begin
+  l := length(src);
+  if l <> 0 then
+  begin
+    FastSetString(result, nil, l); // allocate maximum size
+    l := UnescapeHexBuffer(pointer(src), pointer(result), escape) - pointer(result);
   end;
   FakeSetLength(result, l); // return in-place with no realloc
 end;
