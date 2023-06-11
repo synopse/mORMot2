@@ -565,12 +565,20 @@ type
   /// unlock function signature for CURLSHOPT_UNLOCKFUNC
   curl_unlock_function = procedure (handle: TCurl; data: curl_lock_data;
     userptr: pointer); cdecl;
+    
+  PTransfer = ^TTransfer;
+  TTransfer= record
+    buf: PAnsiChar;
+    size,
+    uploaded: Integer;
+  end;
 
 {$Z1}
 
 const
   // some aliases
   coWriteData = coFile;
+  coReadData = coFile;
   coXferInfoData = coProgressData;
   coAcceptEncoding = coEncoding;
 
@@ -732,6 +740,8 @@ function CurlIsAvailable: boolean;
 // in practice a RawUtf8 or a RawByteString
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
+function CurlReadRawByteString(buffer: Pointer; size,nitems: integer;
+  opaque: pointer): integer; cdecl;
 
 /// enable libcurl multiple easy handles to share data
 // - is called automatically during libcurl initialization
@@ -874,6 +884,26 @@ begin
     result := size * nitems;
     SetLength(storage^, n + result);
     MoveFast(buffer^, PPAnsiChar(opaque)^[n], result);
+  end;
+end;
+
+function CurlReadRawByteString(buffer: Pointer; size,nitems: integer;
+  opaque: pointer): integer; cdecl;
+var
+  Upload: PTransfer;
+begin
+  Upload:= opaque;
+  if (Upload.size - Upload.uploaded = 0) then
+    result := 0
+  else
+  begin
+    if size*nitems < Upload.size-Upload.uploaded then
+      Result:= size*nitems
+    else
+      Result:= Upload.size - Upload.uploaded;
+
+    StrLCopy(buffer, Upload.buf + Upload.uploaded, Result);
+    Upload.uploaded:= Upload.uploaded + size*nitems;
   end;
 end;
 
