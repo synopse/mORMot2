@@ -534,6 +534,13 @@ type
     {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
   end;
   PCurlWaitFD = ^TCurlWaitFD;
+  
+  PTransfer = ^TTransfer;
+  TTransfer= packed record
+    buf: PAnsiChar;
+    size,
+    uploaded: Integer;
+  end;
 
   /// low-level write callback function signature for libcurl library API
   curl_write_callback = function (buffer: PAnsiChar; size,nitems: integer;
