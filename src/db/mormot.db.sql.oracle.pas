@@ -1101,7 +1101,7 @@ begin
           VDate := POracleDate(V)^.ToDateTime
         else // direct retrieval
           IntervalTextToDateTimeVar(V, VDate); // from SQLT_INTERVAL_* text
-      ftUtf8:
+      ftUtf8: // as varSynUnicode
         begin
           // see TSqlDBStatement.ColumnToVariant() for reference
           VAny := nil;
@@ -1131,7 +1131,7 @@ begin
         {$endif UNICODE}
             Utf8ToSynUnicode(tmp, SynUnicode(VAny));
         end;
-      ftBlob:
+      ftBlob: // as varString
         begin
           VAny := nil;
           if C^.ColumnValueInlined then

@@ -96,10 +96,10 @@ type
   ESqlDataSet = class(EVirtualDataSet);
 
   /// TDataSet able to execute any Sql as mORMot TSqlDbStatement result set
-  // - this class is not meant to be used by itself, but via TSynDBDataSet,
+  // - this class is not meant to be used by itself, but via TSqlDBClientDataSet,
   // defined in mormot.db.rad.ui.cds, as a data provider able to apply updates
   // to the remote mmormot.db.sql connection
-  // - typical usage may be for instance over a SynDBRemote connection:
+  // - typical usage may be for instance over a mormot.db.proxy connection:
   // ! props := TSqlDBWinHTTPConnectionProperties.Create(....);
   // ! ds := TSqlDataSet.Create(MainForm);
   // ! ds.CommandText := 'select * from people';

@@ -2002,9 +2002,11 @@ begin
       0:
         if n <> length(value) then
           exit
-        else // consider null-terminated strings as non-binary, but truncate
+        else
+          // consider null-terminated strings as non-binary, but truncate
           SetLength(Value, n - 1);
-      1..8, 10..31:
+      1..8,
+      10..31:
         exit;
     end;
   result := false;
@@ -2135,7 +2137,7 @@ begin
   end;
 end;
 
-{$ifdef ASNUNSTABLE}
+{$ifdef ASNUNTESTED} // untested code from Lukas Gebauer: use with caution
 
 // not used nor fully tested
 function IntMibToStr(const Value: RawByteString): RawUtf8;
@@ -2202,7 +2204,8 @@ begin
     result[1] := AnsiChar(ord(result[1]) or $80);
 end;
 
-{$endif ASNUNSTABLE}
+{$endif ASNUNTESTED}
+
 
 { **************** LDAP Protocol Definitions }
 

@@ -379,10 +379,10 @@ begin
        (fDbms <> dOracle) then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
-      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner))
+      meta.Restrictions.Values['TABLE_SCHEMA'] := Utf8ToString(UpperCase(Owner))
     else
       meta.Restrictions.Values['SCOPE'] := 'LOCAL';
-    meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(Table));
+    meta.Restrictions.Values['TABLE_NAME'] := Utf8ToString(UpperCase(Table));
 
     meta.Open;
     while not meta.Eof do
@@ -392,7 +392,7 @@ begin
       F.KeyColumns := '';
       indexs.MetaDataKind := 'indexcolumns';
       if Owner <> '' then
-        indexs.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner)) 
+        indexs.Restrictions.Values['TABLE_SCHEMA'] := Utf8ToString(UpperCase(Owner))
       else
         indexs.Restrictions.Values['SCOPE'] := 'LOCAL';
       indexs.Restrictions.Values['TABLE_NAME'] := Utf8ToString(UpperCase(aTableName));
@@ -740,12 +740,12 @@ begin
               begin
                 UnQuoteSQLStringVar(pointer(VArray[i]), tmp);
                 {$ifdef UNICODE}
-                P.Values[i].AsWideString := UTF8ToString(tmp);
+                P.Values[i].AsWideString := Utf8ToString(tmp);
                 {$else}
                 if fForceUseWideString then
-                  P.Values[i].AsWideString := UTF8ToWideString(tmp)
+                  P.Values[i].AsWideString := Utf8ToWideString(tmp)
                 else
-                  P.Values[i].AsString := UTF8ToString(tmp);
+                  P.Values[i].AsString := Utf8ToString(tmp);
                 {$endif UNICODE}
               end
           end
@@ -758,12 +758,12 @@ begin
             begin
               UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]), tmp);
               {$ifdef UNICODE}
-              P.AsWideString := UTF8ToString(tmp);
+              P.AsWideString := Utf8ToString(tmp);
               {$else}
               if fForceUseWideString then
-                P.AsWideString := UTF8ToWideString(tmp)
+                P.AsWideString := Utf8ToWideString(tmp)
               else
-                P.AsString := UTF8ToString(tmp);
+                P.AsString := Utf8ToString(tmp);
               {$endif UNICODE}
           end
           else if (VData = '') and
@@ -771,12 +771,12 @@ begin
             P.Clear
           else
             {$ifdef UNICODE}
-            P.AsWideString := UTF8ToString(VData);
+            P.AsWideString := Utf8ToString(VData);
             {$else}
             if not fForceUseWideString then
-              P.AsString := UTF8ToString(VData)
+              P.AsString := Utf8ToString(VData)
             else
-              P.AsWideString := UTF8ToWideString(VData);
+              P.AsWideString := Utf8ToWideString(VData);
             {$endif UNICODE}
         mormot.db.core.ftBlob:
           if fBatchExecute then

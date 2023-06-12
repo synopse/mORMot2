@@ -1065,7 +1065,7 @@ begin
       ftCurrency,
       ftDate:
         VInt64 := V^.Int64; // copy 64 bit content
-      ftUtf8:
+      ftUtf8: // as varSynUnicode
         begin
           VAny := nil;
           {$ifndef UNICODE}
@@ -1078,7 +1078,7 @@ begin
           {$endif UNICODE}
             SetString(SynUnicode(VAny), PWideChar(ColPtr(C, V)), V^.Length shr 1);
         end;
-      ftBlob:
+      ftBlob: // as varString
         if fForceBlobAsNull then
           VType := varNull
         else

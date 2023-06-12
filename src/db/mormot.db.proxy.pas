@@ -474,7 +474,8 @@ type
     // - if Index<DataRowCount, returns TRUE and you can access to the data
     // via regular Column*() methods
     // - can optionally raise an ESqlDBRemote if Index is not correct
-    function GotoRow(Index: integer; RaiseExceptionOnWrongIndex: boolean = false): boolean;
+    function GotoRow(Index: integer;
+      RaiseExceptionOnWrongIndex: boolean = false): boolean;
     /// search for a value within the internal binary stream
     // - used to implement e.g. TDataSet.Locate
     function ColumnSearch(Col: integer; const Value: variant;

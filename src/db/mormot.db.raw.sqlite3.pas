@@ -8618,7 +8618,7 @@ begin
   case sqlite3.value_type(Value) of
     SQLITE_BLOB:
       if DoNotFetchBlobs then
-        WR.AddShort('null')
+        WR.AddNull
       else
         WR.WrBase64(sqlite3.value_blob(Value), sqlite3.value_bytes(Value),
           {withMagic=}true);

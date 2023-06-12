@@ -628,9 +628,10 @@ begin
   begin
     u := RandomIdentifier(c); // alphanums are never escaped
     CheckEqual(LdapEscape(u), u);
+    CheckEqual(LdapUnescape(u), u);
     if u <> '' then
       CheckEqual(LdapEscapeName(u), u);
-    CheckEqual(LdapUnescape(u), u);
+    CheckEqual(LdapEscapeCN(u), u);
     u := RandomAnsi7(c);
     CheckEqual(LdapUnescape(LdapEscape(u)), u);
   end;

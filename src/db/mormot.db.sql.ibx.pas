@@ -742,7 +742,7 @@ var
             W.Add(oldSQL, DynRawUtf8ArrayToConst(aPar));
             W.Add(';', #10);
           end;
-          W.AddShort('end');
+          W.AddShorter('end');
           PrepareBlockStatement;
         end;
         ExecuteBlockStatement;

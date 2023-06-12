@@ -6132,7 +6132,7 @@ begin
   VarClear(Value);
   with TVarData(Value) do
   begin
-    VType := MAP_FIELDTYPE2VARTYPE[V.VType];
+    VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
       ftNull:
         ; // do nothing
@@ -6144,16 +6144,16 @@ begin
         VDate := V.VDateTime;
       ftCurrency:
         VCurrency := V.VCurrency;
-      ftBlob:
+      ftBlob: // as varString
         begin
-          VAny := nil;
+          VAny := nil; // avoid GPF below
           if V.VBlob <> nil then
             if V.VBlob = pointer(tmp) then
-              RawByteString(VAny) := tmp
+              RawByteString(VAny) := tmp // increment RefCount
             else
               FastSetRawByteString(RawByteString(VAny), V.VBlob, V.VBlobLen);
         end;
-      ftUtf8:
+      ftUtf8: // as varSynUnicode
         begin
           VAny := nil; // avoid GPF below
           if V.VText <> nil then

@@ -2663,7 +2663,7 @@ begin
   WR.AddPropInt64('stacksize', SizeInStack);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
-  WR.AddShort('}', ',');
+  WR.Add('}', ',');
 {$else}
   WR.AddShorter('"},');
 {$endif SOA_DEBUG}

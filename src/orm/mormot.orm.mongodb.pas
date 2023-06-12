@@ -1163,7 +1163,7 @@ begin
         itemfound := itemFind(pointer(item), itemcount, col, extFieldNames[col]);
         if itemfound = nil then
           // this field may not exist (e.g. older schema)
-          W.AddShort('null')
+          W.AddNull
         else
           itemfound^.AddMongoJson(W, modNoMongo);
         W.AddComma;

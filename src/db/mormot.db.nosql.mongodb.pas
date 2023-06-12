@@ -1994,11 +1994,11 @@ begin
   W.AddTypedJson(@fRequestOpCode, TypeInfo(TMongoOperation));
   W.Add(',');
   {$endif MONGO_OLDPROTOCOL}
-  W.AddShort('req:');
+  W.AddShorter('req:');
   W.AddPointer(PtrUInt(fRequestID), '"');
   if fResponseTo <> 0 then
   begin
-    W.AddShort(',resp:');
+    W.AddShorter(',resp:');
     W.AddPointer(PtrUInt(fResponseTo), '"');
   end;
   W.Add('}');
@@ -2103,7 +2103,7 @@ procedure TMongoRequestDelete.ToJson(W: TJsonWriter; Mode: TMongoJsonMode);
 begin
   inherited;
   W.CancelLastChar('}');
-  W.AddShort(',query:');
+  W.AddShorter(',query:');
   AddMongoJson(variant(fQuery), W, modMongoShell);
   W.Add('}');
 end;
@@ -2144,7 +2144,7 @@ procedure TMongoRequestQuery.ToJson(W: TJsonWriter; Mode: TMongoJsonMode);
 begin
   inherited;
   W.CancelLastChar('}');
-  W.AddShort(',query:');
+  W.AddShorter(',query:');
   AddMongoJson(variant(fQuery), W, modMongoShell);
   if fReturnFieldsSelector.VType <> varNull then
   begin
