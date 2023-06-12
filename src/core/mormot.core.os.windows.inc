@@ -3587,11 +3587,6 @@ begin
   result := info.data <> '';
 end;
 
-function GetSmbEfiMem: RawByteString;
-begin
-  result := '';
-end;
-
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
   // not needed - GetRawSmbios() is likely to work with no administrator rights

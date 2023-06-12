@@ -726,14 +726,27 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit = [giAll];
 // catching any exception during the process
 function CurlIsAvailable: boolean;
 
-/// Callback used by libcurl to write data; Usage:
-// curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
-// curl.easy_setopt(curlHandle,coFile,@curlRespBody);
+/// Callback used by libcurl to write data, e.g. when downloading a resource
+// - Usage:
+// ! curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
+// ! curl.easy_setopt(curlHandle, coFile, @curlRespBody);
 // where curlRespBody should be a generic AnsiString/RawByteString, i.e.
 // in practice a RawUtf8 or a RawByteString
-function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
+function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: integer;
   opaque: pointer): integer; cdecl;
-function CurlReadRawByteString(buffer: Pointer; size,nitems: integer;
+
+type
+  /// structure which may be passed to CurlReadRawByteString()
+  // - via curl.easy_setopt(hnd, coReadData, @Upload);
+  TCurlReadState = record
+    buf: PAnsiChar;
+    size,
+    uploaded: integer;
+  end;
+  PCurlReadState = ^TCurlReadState;
+
+/// Callback used by libcurl to read data, e.g. when uploading a resource
+function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: integer;
   opaque: pointer): integer; cdecl;
 
 /// enable libcurl multiple easy handles to share data
@@ -863,8 +876,8 @@ implementation
 
 {$endif LIBCURLSTATIC}
 
-function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
-  opaque: pointer): integer; cdecl;
+function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: integer;
+  opaque: pointer): integer;
 var
   storage: PRawByteString absolute opaque;
   n: integer;
@@ -880,22 +893,22 @@ begin
   end;
 end;
 
-function CurlReadRawByteString(buffer: Pointer; size,nitems: integer;
-  opaque: pointer): integer; cdecl;
+function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: integer;
+  opaque: pointer): integer;
 var
-  Upload: PTransfer;
+  upload: PCurlReadState absolute opaque;
+  available: integer;
 begin
-  Upload:= opaque;
-  if (Upload.size - Upload.uploaded = 0) then
+  available := upload.size - upload.uploaded;
+  if available = 0 then
     result := 0
   else
   begin
-    if size*nitems < Upload.size-Upload.uploaded then
-      Result:= size*nitems
-    else
-      Result:= Upload.size - Upload.uploaded;
-    MoveFast((Upload.buf + Upload.uploaded)^, buffer^, Result);
-    Upload.uploaded:= Upload.uploaded + size*nitems;
+    result := size * nitems;
+    if result > available then
+      result := available;
+    MoveFast(upload.buf[upload.uploaded], buffer^, result);
+    inc(upload.uploaded, result);
   end;
 end;
 
