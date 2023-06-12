@@ -1367,8 +1367,9 @@ var
 
 begin
   expectedstatus := 0; // e.g. executable file exitcode = 0 as success
-  if Split(Param, '=', p, st) then
-    ToInteger(st, expectedstatus);
+  if not Split(Param, '=', p, st) or
+     not ToInteger(st, expectedstatus) then
+    p := Param;
   if p = '' then
     p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
   case Action of
