@@ -3544,15 +3544,20 @@ begin
   end;
 end;
 
-function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
+function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
+  forward; // implemented later in mormot.core.os.pas
 
 const
   _RSMB_ = $52534D42;
+  // potential location of the SMBIOS buffer pointers within a 64KB fixed frame
+  SMB_START  = $000f0000;
+  SMB_STOP   = $00100000;
 
 function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
 var
   siz: DWord;
   tmp: RawByteString;
+  addr: PtrUInt;
   get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI
@@ -3571,7 +3576,15 @@ begin
     end;
   end;
   // on XP, read directly from physical memory via ntdll.dll low-level API
-  result := GetRawSmbiosFromMem(info);
+  result := false;
+  tmp := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);
+  if tmp = '' then
+    exit;
+  addr := SearchSmbios(tmp, info);
+  if addr = 0 then
+    exit;
+  info.data := ReadSystemMemory(addr, info.Length);
+  result := info.data <> '';
 end;
 
 function GetSmbEfiMem: RawByteString;

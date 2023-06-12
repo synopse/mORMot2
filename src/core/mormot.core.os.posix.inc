@@ -1930,7 +1930,6 @@ begin
   end;
 end;
 
-function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
 
 const
   // on POSIX, we store the SMBIOS data in a local cache for non-root users
@@ -1941,11 +1940,62 @@ const
   // note: /var/tmp is cleaned up by systemd after 30 days so we set S_ISVTX
   //   see https://systemd.io/TEMPORARY_DIRECTORIES
 
+{$ifdef CPUINTEL}
+const
+  // potential location of the SMBIOS buffer pointers within a 64KB fixed frame
+  SMB_START  = $000f0000;
+  SMB_STOP   = $00100000;
+
+function GetSmbEfiMem: RawByteString; forward; // Linux/BSD dedicated versions
+function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
+  forward; // implemented later in mormot.core.os.pas
+
+function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
+var
+  mem: RawByteString;
+  addr: PtrUInt;
+  {$ifdef OSLINUX}
+  fromsysfs: boolean;
+  {$endif OSLINUX}
+begin
+  result := false;
+  {$ifdef OSLINUX}
+  // on Linux, first try from sysfs tables
+  fromsysfs := false;
+  mem := StringFromFile('/sys/firmware/dmi/tables/smbios_entry_point', true);
+  if mem <> '' then
+    fromsysfs := true
+  else
+  {$endif OSLINUX}
+    // then try to read system EFI entries
+    mem := GetSmbEfiMem;
+  if mem = '' then
+    // last fallback to raw memory reading (won't work on modern/EFI systems)
+    mem := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);
+  if mem = '' then
+    exit;
+  addr := SearchSmbios(mem, info);
+  if addr = 0 then
+    exit;
+  {$ifdef OSLINUX}
+  if fromsysfs then
+    info.data := StringFromFile('/sys/firmware/dmi/tables/DMI', {nosize=}true)
+  else
+  {$endif OSLINUX}
+    info.data := ReadSystemMemory(addr, info.Length);
+  result := info.data <> '';
+end;
+{$endif CPUINTEL}
+
 function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
 begin
+  {$ifdef CPUINTEL}
   result := GetRawSmbiosFromMem(info);
   if result then
     exit;
+  {$else} // do not mess with low-level RAM buffer scanning on ARM/AARCH64
+  result := false; // untested and reported as clearly faulty on some platforms
+  {$endif CPUINTEL}
   PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
   info.Data := StringFromFile(SMB_CACHE); // cache is better than PosixInject
   if (info.Data <> '') and

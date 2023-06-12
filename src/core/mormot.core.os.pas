@@ -8143,10 +8143,10 @@ notfound:
       end;
 end;
 
+{$ifdef CPUINTEL} // don't mess with raw SMBIOS encoding outside of Intel/AMD
+
 // from DSP0134 3.6.0 System Management BIOS (SMBIOS) Reference Specification
 const
-  SMB_START  = $000f0000;
-  SMB_STOP   = $00100000;
   SMB_ANCHOR = $5f4d535f;  // _SM_
   SMB_INT4   = $494d445f;  // _DMI
   SMB_INT5   = $5f;        // _
@@ -8229,7 +8229,7 @@ begin
 end;
 
 // caller should then try to decode SMB from pointer(result) + info.Len
-function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): QWord;
+function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
 var
   p, pend: PSmbEntryPoint32;
 begin
@@ -8258,47 +8258,6 @@ begin
   until PtrUInt(p) >= PtrUInt(pend);
 end;
 
-{$ifdef CPUINTEL}
-function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
-var
-  mem: RawByteString;
-  addr: QWord;
-  {$ifdef OSLINUX}
-  fromsysfs: boolean;
-  {$endif OSLINUX}
-begin
-  result := false;
-  {$ifdef OSLINUX}
-  // on Linux, first try from sysfs tables
-  fromsysfs := false;
-  mem := StringFromFile('/sys/firmware/dmi/tables/smbios_entry_point', true);
-  if mem <> '' then
-    fromsysfs := true
-  else
-  {$endif OSLINUX}
-    // then try to read system EFI entries
-    mem := GetSmbEfiMem;
-  if mem = '' then
-    // last fallback to raw memory reading (won't work on modern/EFI systems)
-    mem := ReadSystemMemory(SMB_START, SMB_STOP - SMB_START);
-  if mem = '' then
-    exit;
-  addr := SearchSmbios(mem, info);
-  if addr = 0 then
-    exit;
-  {$ifdef OSLINUX}
-  if fromsysfs then
-    info.data := StringFromFile('/sys/firmware/dmi/tables/DMI', {nosize=}true)
-  else
-  {$endif OSLINUX}
-    info.data := ReadSystemMemory(addr, info.Length);
-  result := info.data <> '';
-end;
-{$else}
-function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
-begin
-  result := false; // untested and reported as clearly faulty on some platforms
-end;
 {$endif CPUINTEL}
 
 procedure ComputeGetSmbios;
