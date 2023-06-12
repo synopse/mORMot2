@@ -1,4 +1,4 @@
-/// ORM and JSON Process using TClientDataSet
+/// SQL, ORM and JSON Process using TClientDataSet
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.db.rad.ui.cds;
@@ -6,10 +6,9 @@ unit mormot.db.rad.ui.cds;
 {
   *****************************************************************************
 
-   Efficient Read/Write TClientDataSet for ORM and JSON Process
-   - Fill a TClientDataset from TOrmTable/TOrmTableJson data
-
-   TODO: convert mORMot 1 writable TSynDBDataSet for Delphi
+   Efficient Read/Write TClientDataSet for SQL, ORM and JSON Process
+   - Fill a read/only TClientDataset from TOrmTable/TOrmTableJson data
+   - Delphi writable TSqlDBClientDataSet inheriting from TClientDataSet
 
   *****************************************************************************
 }
@@ -34,17 +33,24 @@ uses
   mormot.orm.core,
   mormot.rest.core,
   mormot.db.core,
+  mormot.db.sql,
   mormot.db.rad,
   mormot.db.rad.ui,
   mormot.db.rad.ui.orm,
+  mormot.db.rad.ui.sql,
   {$ifdef FPC}
-  BufDataSet,  
+  // FPC will use the TBufDataset cross-platform component
+  BufDataSet,
   {$else}
+  // Delphi units (using the so-called MIDAS on Windows)
   {$ifdef OSWINDOWS}
   MidasLib,
-  {$endif OSWINDOWS}  DBClient,
-  {$endif FPC}  {$ifdef ISDELPHIXE2}
-  Data.DB;  
+  {$endif OSWINDOWS}
+  DBClient,
+  Provider,
+  {$endif FPC}
+  {$ifdef ISDELPHIXE2}
+  Data.DB;
   {$else}
   DB;
   {$endif ISDELPHIXE2}
@@ -130,8 +136,125 @@ function JsonToClientDataSet(
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): boolean; overload;
 
 
+
+{************ Delphi writable TSqlDBClientDataSet inheriting from TClientDataSet }
+
+{$ifdef ISDELPHI} // Delphi only implementation
+
+type
+  /// TClientDataSet allowing to apply updates on a mormot.db.sql connection
+  // - typical usage may be for instance over a mormot.db.proxy connection:
+  // ! props := TSqlDBWinHTTPConnectionProperties.Create(....);
+  // ! ds := TSqlDBClientDataSet.Create(MainForm);
+  // ! ds.CommandText := 'select * from people';
+  // ! ds.Open;
+  // ! // ... use ds as usual, including modifications
+  // ! ds.ApplyUpdates(0);
+  TSqlDBClientDataSet = class(TCustomClientDataSet)
+  protected
+    fDataSet: TSqlDataSet; // from mormot.db.rad.ui.sql
+    fProvider: TDataSetProvider;
+    fIgnoreColumnDataSize: boolean;
+    function GetConnection: TSqlDBConnectionProperties; virtual;
+    procedure SetConnection(Value: TSqlDBConnectionProperties); virtual;
+    // from TDataSet
+    procedure OpenCursor(InfoQuery: Boolean); override;
+    {$ifdef ISDELPHI2007ANDUP}
+    // from IProviderSupport
+    function PSGetCommandText: string; override;
+    {$endif ISDELPHI2007ANDUP}
+  public
+    /// initialize the instance
+    constructor Create(AOwner: TComponent); override;
+    /// retrieve the dataset parameters
+    procedure FetchParams;
+    /// initialize the internal TDataSet from a mormot.db.sql.pas
+    // TSqlDBStatement result set
+    // - the supplied TSqlDBStatement can then be freed by the caller, since
+    // a private binary copy will be owned by this instance (in fDataSet.Data)
+    procedure From(Statement: TSqlDBStatement; MaxRowCount: cardinal = 0);
+    /// if field sizes should be left unset, allowing further filling with
+    // any data length
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. mormot.db.rad.ui.sql.pas TBinaryDataSet.InternalInitFieldDefs
+    // define the field as ftDefaultMemo)
+    property IgnoreColumnDataSize: boolean
+      read fIgnoreColumnDataSize write fIgnoreColumnDataSize;
+  published
+    property CommandText;
+    property Active;
+    property Aggregates;
+    property AggregatesActive;
+    property AutoCalcFields;
+    property Constraints;
+    property DisableStringTrim;
+    property FileName;
+    property Filter;
+    property Filtered;
+    property FilterOptions;
+    property FieldDefs;
+    property IndexDefs;
+    property IndexFieldNames;
+    property IndexName;
+    property FetchOnDemand;
+    property MasterFields;
+    property MasterSource;
+    property ObjectView;
+    property PacketRecords;
+    property Params;
+    property ReadOnly;
+    property StoreDefs;
+    property BeforeOpen;
+    property AfterOpen;
+    property BeforeClose;
+    property AfterClose;
+    property BeforeInsert;
+    property AfterInsert;
+    property BeforeEdit;
+    property AfterEdit;
+    property BeforePost;
+    property AfterPost;
+    property BeforeCancel;
+    property AfterCancel;
+    property BeforeDelete;
+    property AfterDelete;
+    property BeforeScroll;
+    property AfterScroll;
+    property BeforeRefresh;
+    property AfterRefresh;
+    property OnCalcFields;
+    property OnDeleteError;
+    property OnEditError;
+    property OnFilterRecord;
+    property OnNewRecord;
+    property OnPostError;
+    property OnReconcileError;
+    property BeforeApplyUpdates;
+    property AfterApplyUpdates;
+    property BeforeGetRecords;
+    property AfterGetRecords;
+    property BeforeRowRequest;
+    property AfterRowRequest;
+    property BeforeExecute;
+    property AfterExecute;
+    property BeforeGetParams;
+    property AfterGetParams;
+    /// the associated mormot.db.sql connection
+    property Connection: TSqlDBConnectionProperties
+      read GetConnection write SetConnection;
+    /// the associated  TDataSet, used to retrieve and update data
+    property DataSet: TSqlDataSet
+      read fDataSet;
+  end;
+
+{$endif ISDELPHI}
+
+
 implementation
 
+
+{************ Fill a TClientDataset from TOrmTable/TOrmTableJson data }
 
 {$ifdef FPC}
 
@@ -143,8 +266,6 @@ end;
 
 {$endif FPC}
 
-
-{************ Fill a TClientDataset from TOrmTable/TOrmTableJson data }
 
 function JsonToClientDataSet(aDataSet: TClientDataSet; const aJson: RawUtf8;
   aClient: TRest; aMode: TClientDataSetMode; aLogChange: boolean
@@ -251,7 +372,7 @@ begin
     {$ifdef ISDELPHI}
     if prev.LogChanges then
       aDataSet.LogChanges := false;
-    aDataSet.EmptyDataSet;  
+    aDataSet.EmptyDataSet;
     {$else}
     aDataSet.MergeChangeLog;
     aDataSet.Close;
@@ -326,5 +447,88 @@ begin
 end;
 
 
+{************ Delphi writable TSqlDBClientDataSet inheriting from TClientDataSet }
+
+{$ifdef ISDELPHI}
+
+{ TSqlDBClientDataSet }
+
+constructor TSqlDBClientDataSet.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  fProvider := TDataSetProvider.Create(Self);
+  fProvider.Name := 'InternalProvider';                 { Do not localize }
+  fProvider.SetSubComponent(true);
+  fProvider.Options := fProvider.Options + [poAllowCommandText];
+  SetProvider(fProvider);
+  fDataSet := TSqlDataSet.Create(self);
+  fDataSet.Name := 'InternalDataSet';                   { Do not localize }
+  fDataSet.SetSubComponent(true);
+  fProvider.DataSet := fDataSet;
+end;
+
+procedure TSqlDBClientDataSet.From(Statement: TSqlDBStatement; MaxRowCount: cardinal);
+begin
+  fDataSet.From(Statement, MaxRowCount, fIgnoreColumnDataSize);
+  fDataSet.CommandText := ''; // ensure no SQL execution
+  Open;
+  fDataSet.CommandText := Utf8ToString(Statement.SQL); // assign it AFTER Open
+end;
+
+procedure TSqlDBClientDataSet.FetchParams;
+begin
+  if not HasAppServer and
+     Assigned(FProvider) then
+    SetProvider(FProvider);
+  inherited FetchParams;
+end;
+
+procedure TSqlDBClientDataSet.OpenCursor(InfoQuery: Boolean);
+begin
+  if Assigned(fProvider) then
+    SetProvider(fProvider);
+  if fProvider.DataSet = self then
+    raise ESQLDBException.CreateUtf8('Circular %.OpenCursor', [self]);
+  inherited OpenCursor(InfoQuery);
+end;
+
+{$ifdef ISDELPHI2007ANDUP}
+{$ifdef ISDELPHIXE3}
+function TSqlDBClientDataSet.PSGetCommandText: string;
+var
+  IP: IProviderSupportNG;
+begin
+  if Supports(fDataSet, IProviderSupportNG, IP) then
+    result := IP.PSGetCommandText
+  else
+    result := CommandText;
+end;
+{$else}
+function TSqlDBClientDataSet.PSGetCommandText: string;
+var
+  IP: IProviderSupport;
+begin
+  if Supports(fDataSet, IProviderSupport, IP) then
+    result := IP.PSGetCommandText
+  else
+    result := CommandText;
+end;
+{$endif ISDELPHIXE3}
+{$endif ISDELPHI2007ANDUP}
+
+function TSqlDBClientDataSet.GetConnection: TSqlDBConnectionProperties;
+begin
+  result := fDataSet.Connection;
+end;
+
+procedure TSqlDBClientDataSet.SetConnection(Value: TSqlDBConnectionProperties);
+begin
+  fDataSet.Connection := Value;
+end;
+
+{$endif ISDELPHI}
+
+
 end.
+
 

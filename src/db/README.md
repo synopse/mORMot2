@@ -91,8 +91,9 @@ Efficient Read/Only `TDataSet` for ORM and JSON Process
 
 ### mormot.db.rad.ui.cds
 
-Efficient Read/Write `TClientDataSet` for ORM and JSON Process
-- Fill a VCL TClientDataset from `TOrmTable`/`TOrmTableJson` data
+Efficient Read/Write `TClientDataSet` for SQL, ORM and JSON Process
+- Fill a read-only `TClientDataset` from `TOrmTable`/`TOrmTableJson` data
+- Delphi writable `TSqlDBClientDataSet` inheriting from `TClientDataSet`
 
 ### mormot.db.nosql.bson
 
