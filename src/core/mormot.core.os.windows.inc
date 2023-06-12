@@ -3549,7 +3549,7 @@ function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean; forward;
 const
   _RSMB_ = $52534D42;
 
-function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
 var
   siz: DWord;
   tmp: RawByteString;

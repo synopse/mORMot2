@@ -1941,7 +1941,7 @@ const
   // note: /var/tmp is cleaned up by systemd after 30 days so we set S_ISVTX
   //   see https://systemd.io/TEMPORARY_DIRECTORIES
 
-function _GetRawSmbios(out info: TRawSmbiosInfo): boolean;
+function _GetRawSmbios(var info: TRawSmbiosInfo): boolean;
 begin
   result := GetRawSmbiosFromMem(info);
   if result then

@@ -8258,6 +8258,7 @@ begin
   until PtrUInt(p) >= PtrUInt(pend);
 end;
 
+{$ifdef CPUINTEL}
 function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
 var
   mem: RawByteString;
@@ -8267,8 +8268,6 @@ var
   {$endif OSLINUX}
 begin
   result := false;
-  Finalize(info.Data);
-  FillCharFast(info, SizeOf(info), 0);
   {$ifdef OSLINUX}
   // on Linux, first try from sysfs tables
   fromsysfs := false;
@@ -8295,6 +8294,12 @@ begin
     info.data := ReadSystemMemory(addr, info.Length);
   result := info.data <> '';
 end;
+{$else}
+function GetRawSmbiosFromMem(var info: TRawSmbiosInfo): boolean;
+begin
+  result := false; // untested and reported as clearly faulty on some platforms
+end;
+{$endif CPUINTEL}
 
 procedure ComputeGetSmbios;
 begin
@@ -8302,7 +8307,9 @@ begin
   try
     if not _SmbiosRetrieved then
     begin
-       _SmbiosRetrieved := true;
+      _SmbiosRetrieved := true;
+      Finalize(RawSmbios.Data);
+      FillCharFast(RawSmbios, SizeOf(RawSmbios), 0);
       if _GetRawSmbios(RawSmbios) then // OS specific call
          if DecodeSmbios(RawSmbios, _Smbios) <> 0 then
          begin
