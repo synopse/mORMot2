@@ -154,7 +154,7 @@ procedure GetDBFieldDef(aTable: TOrmTable; aField: integer;
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif});
 
 /// fill a DB.pas field content
-// - used e.g. by mORMotMidasVCL.ToClientDataSet
+// - used e.g. by mormot.db.rad.ui.cds.pas ToClientDataSet()
 procedure GetDBFieldValue(aTable: TOrmTable; aRow: integer; aField: TField;
   aDataSet: TDataSet; const DBFieldDef: TDBFieldDef);
 

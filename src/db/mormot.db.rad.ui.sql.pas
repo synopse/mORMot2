@@ -97,8 +97,8 @@ type
 
   /// TDataSet able to execute any Sql as mORMot TSqlDbStatement result set
   // - this class is not meant to be used by itself, but via TSynDBDataSet,
-  // defined in SynDBMidasVCL.pas, as a data provider able to apply updates to
-  // the remote mmormot.db.sql connection
+  // defined in mormot.db.rad.ui.cds, as a data provider able to apply updates
+  // to the remote mmormot.db.sql connection
   // - typical usage may be for instance over a SynDBRemote connection:
   // ! props := TSqlDBWinHTTPConnectionProperties.Create(....);
   // ! ds := TSqlDataSet.Create(MainForm);
@@ -160,7 +160,7 @@ type
 // - current implementation will return a TSynSqlStatementDataSet instance, using
 // an optimized internal binary buffer: the supplied statement can be released
 // - if you need a writable TDataSet, you can use the slower ToClientDataSet()
-// function as defined in SynDBMidasVCL.pas
+// function as defined in mormot.db.rad.ui.cds
 function ToDataSet(aOwner: TComponent; aStatement: TSqlDBStatement;
   aMaxRowCount: integer = 0): TBinaryDataSet; overload;
 
@@ -174,7 +174,7 @@ function ToDataSet(aOwner: TComponent; const aStatement: ISqlDBRows;
 /// fetch a mORMot's TSqlDBStatement.FetchAllToBinary buffer into a VCL DataSet
 // - just a wrapper around TBinaryDataSet.Create + Open
 // - if you need a writable TDataSet, you can use the slower ToClientDataSet()
-// function as defined in SynDBMidasVCL.pas
+// function as defined in mormot.db.rad.ui.cds
 function BinaryToDataSet(aOwner: TComponent;
   const aBinaryData: RawByteString): TBinaryDataSet;
 

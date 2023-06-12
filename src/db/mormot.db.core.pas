@@ -4182,6 +4182,8 @@ begin
     end
   else
     W.AddShort('insert into ');
+  // PostgreSQL has no UPSERT but could be emulated with ON CONFLICT syntax
+  // https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-upsert
 end;
 
 procedure InitializeUnit;

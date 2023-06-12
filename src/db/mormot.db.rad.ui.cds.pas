@@ -9,6 +9,8 @@ unit mormot.db.rad.ui.cds;
    Efficient Read/Write TClientDataSet for ORM and JSON Process
    - Fill a TClientDataset from TOrmTable/TOrmTableJson data
 
+   TODO: convert mORMot 1 writable TSynDBDataSet for Delphi
+
   *****************************************************************************
 }
 
