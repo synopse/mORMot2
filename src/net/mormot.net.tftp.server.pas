@@ -273,7 +273,7 @@ begin
             OnFrameReceived(len, remote);
         end;
       end;
-      tix64 := GetTickCount64;
+      tix64 := mormot.core.os.GetTickCount64;
       tix := tix64 shr 9;
       if tix <> lasttix then
       begin
@@ -330,7 +330,7 @@ var
   nr: TNetResult;
   tix: Int64;
 begin
-  tix := GetTickCount64;
+  tix := mormot.core.os.GetTickCount64;
   fLog.Log(sllDebug, 'DoExecute % % %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName], self);
@@ -357,7 +357,7 @@ begin
         fLog.Log(sllTrace, 'DoExecute recvfrom failed: %', [ToText(nr)^], self);
         break;
       end;
-      if GetTickCount64 >= fContext.TimeoutTix then
+      if mormot.core.os.GetTickCount64 < fContext.TimeoutTix then
         // wait for incoming UDP packet within the timeout period
         continue;
       // retry after timeout
@@ -395,7 +395,7 @@ begin
     fContext.RetryCount := fOwner.MaxRetry;
   until Terminated;
   // Destroy will call fContext.Shutdown
-  tix := GetTickCount64 - tix;
+  tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
     fLog.Log(sllTrace, 'DoExecute: % finished at %/s',
       [fContext.FileName, KB((fFileSize * 1000) div tix)], self);
@@ -489,7 +489,7 @@ var
   endtix: Int64;
   t: ^TTftpConnectionThread;
 begin
-  endtix := GetTickCount64 + TimeOutMs;
+  endtix := mormot.core.os.GetTickCount64 + TimeOutMs;
   // first notify all sub threads to terminate
   NotifyShutdown;
   // shutdown and wait for main accept() thread
@@ -500,7 +500,7 @@ begin
   t := pointer(fConnection.List);
   for i := 1 to fConnection.Count do
   begin
-    t^.TerminateAndWaitFinished(endtix - GetTickCount64);
+    t^.TerminateAndWaitFinished(endtix - mormot.core.os.GetTickCount64);
     inc(t);
   end;
 end;
