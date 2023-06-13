@@ -1366,9 +1366,12 @@ var
   end;
 
 begin
-  expectedstatus := 0; // e.g. executable file exitcode = 0 as success
-  if not ToInteger(SplitRight(Param, '=', @p), expectedstatus) then
-    p := Param; // was not a valid "http:...=200"
+  if not ToInteger(SplitRight(Param, '=', @p), expectedstatus) or
+     (p = '') then
+  begin
+    p := Param; // was not a valid "http:...=200" input
+    expectedstatus := 0; // e.g. executable file exitcode = 0 as success
+  end;
   if p = '' then
     p := Service.Run; // "exec" = "exec:%run%" (exename or servicename)
   case Action of

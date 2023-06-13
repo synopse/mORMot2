@@ -104,13 +104,22 @@ type
     fOnWebSocketsClosed: TNotifyEvent;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
   public
-    /// low-level initialization of a client WebSockets connection
+    /// low-level client WebSockets connection for host and port
     // - calls Open() then WebSocketsUpgrade() for a given protocol
     // - with proper error interception and optional logging, returning nil
     class function WebSocketsConnect(const aHost, aPort: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
       const aLogContext: RawUtf8 = ''; const aUri: RawUtf8 = '';
-      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets;
+      const aCustomHeaders: RawUtf8 = '';
+      aTls: boolean = false): THttpClientWebSockets; overload;
+    /// low-level client WebSockets connection for a given URI
+    // - would recognize ws://host:port/uri or wss://host:port/uri over TLS
+    // - calls Open() then WebSocketsUpgrade() for a given protocol
+    // - with proper error interception and optional logging, returning nil
+    class function WebSocketsConnect(const aUri: RawUtf8;
+      aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
+      const aLogContext: RawUtf8 = '';
+      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets; overload;
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
     constructor Create(aTimeOut: PtrInt = 10000); override;
@@ -296,7 +305,8 @@ end;
 
 class function THttpClientWebSockets.WebSocketsConnect(
   const aHost, aPort: RawUtf8; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
-  const aLogContext, aUri, aCustomHeaders: RawUtf8): THttpClientWebSockets;
+  const aLogContext, aUri, aCustomHeaders: RawUtf8;
+  aTls: boolean): THttpClientWebSockets;
 var
   error: RawUtf8;
 begin
@@ -305,7 +315,7 @@ begin
      (aHost = '') then
     raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
   try
-    result := Open(aHost, aPort); // constructor
+    result := Open(aHost, aPort, nlTcp, 10000, aTls); // constructor
     error := result.WebSocketsUpgrade(
       aUri, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
@@ -324,6 +334,19 @@ begin
     else
       aLog.Add.Log(sllWarning, '%: WebSocketsConnect %:% failed - %',
         [aLogContext, aHost, aPort, error]);
+end;
+
+class function THttpClientWebSockets.WebSocketsConnect(const aUri: RawUtf8;
+  aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
+  const aLogContext, aCustomHeaders: RawUtf8): THttpClientWebSockets;
+var
+  uri: TUri;
+begin
+  if (aProtocol = nil) or
+     not uri.From(aUri) then
+    raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
+  result := WebSocketsConnect(uri.Server, uri.Port, aProtocol, aLog,
+    aLogContext, uri.Address, aCustomHeaders, IdemPropNameU(uri.Scheme, 'WSS'));
 end;
 
 destructor THttpClientWebSockets.Destroy;
