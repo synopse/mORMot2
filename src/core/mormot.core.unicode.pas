@@ -7525,13 +7525,7 @@ begin
           P[n] := text[j];
           inc(n);
         end;
-      if n = 0 then
-        result := ''
-      else
-      begin
-        PStrLen(P - _STRLEN)^ := n; // in-place truncation
-        P[n] := #0;
-      end;
+      FakeSetLength(result, n);
       exit;
     end;
   result := text; // no control char found
@@ -7557,13 +7551,7 @@ begin
           P[n] := text[j];
           inc(n);
         end;
-      if n = 0 then
-        result := ''
-      else
-      begin
-        PStrLen(P - _STRLEN)^ := n; // in-place truncation
-        P[n] := #0;
-      end;
+      FakeSetLength(result, n);
       exit;
     end;
   result := text; // no exclude char found

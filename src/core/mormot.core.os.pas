@@ -8147,11 +8147,11 @@ end;
 
 // from DSP0134 3.6.0 System Management BIOS (SMBIOS) Reference Specification
 const
-  SMB_ANCHOR = $5f4d535f;  // _SM_
-  SMB_INT4   = $494d445f;  // _DMI
-  SMB_INT5   = $5f;        // _
-  SMB_ANCHOR4 = $334d535f; // _SM3
-  SMB_ANCHOR5 = $5f;       // _
+  SMB_ANCHOR  = $5f4d535f;  // _SM_
+  SMB_INT4    = $494d445f;  // _DMI
+  SMB_INT5    = $5f;        // _
+  SMB_ANCHOR4 = $334d535f;  // _SM3
+  SMB_ANCHOR5 = $5f;        // _
 
 type
   TSmbEntryPoint32 = packed record
@@ -8198,7 +8198,7 @@ begin
     inc(cs, PByteArray(p)[i]);
   if cs <> 0 then
   begin
-    result := 0;
+    result := 0; // invalid checksum
     exit;
   end;
   result := p^.StructAddr;
