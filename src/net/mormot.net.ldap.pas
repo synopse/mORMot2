@@ -1095,9 +1095,9 @@ type
     function ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
       DeleteOldRdn: boolean): boolean;
     ///  remove an entry from the directory server
-    // - If the object has children and DeleteChildren is False, the deletion
+    // - if the object has children and DeleteChildren is false, the deletion
     // will not work and the result will be LDAP_RES_NOT_ALLOWED_ON_NON_LEAF
-    function Delete(const Obj: RawUtf8; DeleteChildren: Boolean = False): boolean;
+    function Delete(const Obj: RawUtf8; DeleteChildren: boolean = false): boolean;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttributeValue: RawUtf8): boolean;
     /// call any LDAP v3 extended operations
@@ -4083,40 +4083,33 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-delete
 
-function TLdapClient.Delete(const Obj: RawUtf8; DeleteChildren: Boolean
-  ): boolean;
+function TLdapClient.Delete(const Obj: RawUtf8; DeleteChildren: boolean): boolean;
 var
   PreviousSearchScope: TLdapSearchScope;
   Children: TRawUtf8DynArray;
-  i: Integer;
-  Child: RawUtf8;
+  i: PtrInt;
 begin
   result := false;
   if not Connected then
     exit;
-  SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
-  // Object has children and DeleteChildren is True
-  if (fResultCode = LDAP_RES_NOT_ALLOWED_ON_NON_LEAF) and DeleteChildren then
-  begin
+  SendAndReceive(Asn(Obj, LDAP_ASN1_DEL_REQUEST));
+  if (fResultCode = LDAP_RES_NOT_ALLOWED_ON_NON_LEAF) and
+     DeleteChildren then
+    // Obj had children and DeleteChildren is True
     try
       PreviousSearchScope := SearchScope;
       SearchScope := lssSingleLevel;
       Search(Obj, False, '', []);
-      SetLength(Children, fSearchResult.Count);
-      for i := 0 to fSearchResult.Count - 1 do
-        Children[i] := fSearchResult.Items[i].ObjectName;
-      for Child in Children do
-      begin
-        if not Delete(Child, True) then
-          break;
-      end;
-      // Retry to delete this object if the children deletion didn't raise any error
+      Children := fSearchResult.ObjectNames;
+      for i := 0 to high(Children) do
+        if not Delete(Children[i], {DeleteChildren=}true) then
+          break; // stop on error
       if fResultCode = LDAP_RES_SUCCESS then
-        SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
+        // retry Obj deletion after children have been successfully removed
+        SendAndReceive(Asn(Obj, LDAP_ASN1_DEL_REQUEST));
     finally
       SearchScope := PreviousSearchScope;
     end;
-  end;
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
