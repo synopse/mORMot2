@@ -4092,14 +4092,14 @@ begin
   result := false;
   if not Connected then
     exit;
+  PreviousSearchScope := SearchScope;
   SendAndReceive(Asn(Obj, LDAP_ASN1_DEL_REQUEST));
   if (fResultCode = LDAP_RES_NOT_ALLOWED_ON_NON_LEAF) and
      DeleteChildren then
     // Obj had children and DeleteChildren is True
     try
-      PreviousSearchScope := SearchScope;
       SearchScope := lssSingleLevel;
-      Search(Obj, False, '', []);
+      Search(Obj, false, '', []);
       Children := fSearchResult.ObjectNames;
       for i := 0 to high(Children) do
         if not Delete(Children[i], {DeleteChildren=}true) then
