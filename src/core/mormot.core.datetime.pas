@@ -2670,6 +2670,7 @@ begin
   Date.Hour := (V shr (6 + 6)) and 31;
   Date.Minute := (V shr 6) and 63;
   Date.Second := V and 63;
+  Date.MilliSecond := 0;
 end;
 
 procedure TTimeLogBits.From(const S: RawUtf8);
