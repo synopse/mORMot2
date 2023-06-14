@@ -3942,16 +3942,14 @@ begin
   while true do
     case text^ of
       #0 .. ' ':
-        if (b > 255) or
-           (b < 0) or
+        if (b < 0) or
            (n <> 3) then
           exit
         else
           break;
       '.':
         begin
-          if (b > 255) or
-             (b < 0) or
+          if (b < 0) or
              (n = 3) then
             exit;
           if value <> nil then
@@ -3971,7 +3969,11 @@ begin
           if b < 0 then
             b := o
           else
+          begin
             b := b * 10 + o;
+            if b > 255 then
+              exit; // out-of-range number
+          end;
           inc(text);
         end
     else
