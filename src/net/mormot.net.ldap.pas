@@ -1095,7 +1095,9 @@ type
     function ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
       DeleteOldRdn: boolean): boolean;
     ///  remove an entry from the directory server
-    function Delete(const Obj: RawUtf8): boolean;
+    // - If the object has children and DeleteChildren is False, the deletion
+    // will not work and the result will be LDAP_RES_NOT_ALLOWED_ON_NON_LEAF
+    function Delete(const Obj: RawUtf8; DeleteChildren: Boolean = False): boolean;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttributeValue: RawUtf8): boolean;
     /// call any LDAP v3 extended operations
@@ -4081,12 +4083,40 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-delete
 
-function TLdapClient.Delete(const Obj: RawUtf8): boolean;
+function TLdapClient.Delete(const Obj: RawUtf8; DeleteChildren: Boolean
+  ): boolean;
+var
+  PreviousSearchScope: TLdapSearchScope;
+  Children: TRawUtf8DynArray;
+  i: Integer;
+  Child: RawUtf8;
 begin
   result := false;
   if not Connected then
     exit;
   SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
+  // Object has children and DeleteChildren is True
+  if (fResultCode = LDAP_RES_NOT_ALLOWED_ON_NON_LEAF) and DeleteChildren then
+  begin
+    try
+      PreviousSearchScope := SearchScope;
+      SearchScope := lssSingleLevel;
+      Search(Obj, False, '', []);
+      SetLength(Children, fSearchResult.Count);
+      for i := 0 to fSearchResult.Count - 1 do
+        Children[i] := fSearchResult.Items[i].ObjectName;
+      for Child in Children do
+      begin
+        if not Delete(Child, True) then
+          break;
+      end;
+      // Retry to delete this object if the children deletion didn't raise any error
+      if fResultCode = LDAP_RES_SUCCESS then
+        SendAndReceive(Asn(obj, LDAP_ASN1_DEL_REQUEST));
+    finally
+      SearchScope := PreviousSearchScope;
+    end;
+  end;
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
