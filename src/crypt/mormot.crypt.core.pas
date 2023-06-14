@@ -10222,10 +10222,12 @@ function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 //    hash=`echo -n "$user:$realm:$pass" | md5sum | cut -b -32`
 //    echo "$user:$realm:$hash"
 var
-  tmp: RawByteString;
+  tmp: RawUtf8;
 begin
-  tmp := user + ':' + realm + ':';
-  result := tmp + Md5(tmp + pass);
+  FormatUtf8('%:%:', [user, realm], tmp);
+  result := tmp;
+  Append(tmp, pass);
+  Append(result, Md5(tmp));
 end;
 
 function Md4Buf(const Buffer; Len: cardinal): THash128;
