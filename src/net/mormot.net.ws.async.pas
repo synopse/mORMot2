@@ -625,12 +625,14 @@ begin
   closing.content := [];
   closing.tix := 0;
   n := WebSocketBroadcast(closing, nil);
-  log.Log(sllTrace, 'Destroy: WebSocketBroadcast(closing)=%', [n], self);
+  if Assigned(log) then
+    log.Log(sllTrace, 'Destroy: WebSocketBroadcast(closing)=%', [n], self);
   // no more incoming request
   Shutdown;
   // close any pending connection
   inherited Destroy;
-  log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
+  if Assigned(log) then
+    log.Log(sllTrace, 'Destroy: inherited THttpAsyncServer done', self);
   // release internal protocols list
   fProtocols.Free;
 end;
