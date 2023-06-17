@@ -1041,10 +1041,11 @@ const
     'SVG',
     'X-ICO',
     nil);
-  _CONTENTAPP: array[0..3] of PUtf8Char = (
+  _CONTENTAPP: array[0..4] of PUtf8Char = (
     'JSON',
     'XML',
     'JAVASCRIPT',
+    'VND.API+JSON',
     nil);
 
 procedure CompressContent(Accepted: THttpSocketCompressSet;
