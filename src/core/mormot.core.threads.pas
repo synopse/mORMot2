@@ -1083,11 +1083,19 @@ type
   protected
     fSender: TObject;
     fOnExecute, fOnExecuted: TNotifyEvent;
+    fOnExecuteParam: TOnSynBackgroundTimerProcess;
+    fParam: RawUtf8;
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
-      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent); reintroduce;
+      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent);
+        reintroduce; overload;
+    /// this constructor will directly start the thread in background
+    constructor Create(Logger: TSynLogClass; const ProcessName, Msg: RawUtf8;
+      const OnExecute: TOnSynBackgroundTimerProcess;
+      const OnExecuted: TNotifyEvent = nil);
+        reintroduce; overload;
   end;
 
   TSynThreadPool = class;
@@ -3199,9 +3207,13 @@ end;
 
 procedure TLoggedWorkThread.DoExecute;
 begin
-  if Assigned(fOnExecute) then
+  if Assigned(fOnExecute) or
+     Assigned(fOnExecuteParam) then
     try
-      fOnExecute(fSender);
+      if Assigned(fOnExecute) then
+        fOnExecute(fSender)
+      else
+        fOnExecuteParam(nil, fParam);
     finally
       if Assigned(fOnExecuted) then
         fOnExecuted(fSender);
@@ -3215,6 +3227,17 @@ begin
   fSender := Sender;
   fOnExecute := OnExecute;
   fOnExecuted := OnExecuted;
+  FreeOnTerminate := true;
+  inherited Create({suspended=}false, Logger, ProcessName);
+end;
+
+constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
+  const ProcessName, Msg: RawUtf8; const OnExecute: TOnSynBackgroundTimerProcess;
+  const OnExecuted: TNotifyEvent);
+begin
+  fOnExecuteParam := OnExecute;
+  fOnExecuted := OnExecuted;
+  fParam := Msg;
   FreeOnTerminate := true;
   inherited Create({suspended=}false, Logger, ProcessName);
 end;
