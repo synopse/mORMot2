@@ -211,7 +211,7 @@ type
     constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
       const aProcessName: RawUtf8; ServerThreadPoolCount: integer;
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax: boolean; ProcessOptions: THttpServerOptions); reintroduce; overload;
+      aWebSocketsAjax: boolean; ProcessOptions: THttpServerOptions); reintroduce;
     /// defines the WebSockets protocols to be used for this Server
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
