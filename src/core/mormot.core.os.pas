@@ -8378,28 +8378,27 @@ var
   uid: TGuid;
 begin
   uid := src^;
-  if not IsZero(@uid, SizeOf(uid)) and // 0 means not supported
-     ((PCardinalArray(@uid)[0] <> $ffffffff) or // ff means not set
-      (PCardinalArray(@uid)[1] <> $ffffffff) or
-      (PCardinalArray(@uid)[2] <> $ffffffff) or
-      (PCardinalArray(@uid)[3] <> $ffffffff)) then
-  begin
-    // GUIDToString() already displays the first 4 bytes as little-endian
-    // so we don't need to swap those bytes as dmi_system_uuid() in dmidecode.c
-    // - without those 2 lines, result matches "wmic csproduct get uuid"
-    // on Windows XP or 10, and "dmidecode" output on both Delphi and FPC
-    {$ifdef SMB_UUID_SWAP4}
-    if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206 then
-      uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
-    {$endif SMB_UUID_SWAP4}
-    {$ifdef OSDARWIN}
-    // mandatory to match IOPlatformUUID value from ioreg :(
-    uid.D1 := bswap32(uid.D1);
-    uid.D2 := swap(uid.D2);
-    uid.D3 := swap(uid.D3);
-    {$endif OSDARWIN}
-    dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
-  end;
+  if IsZero(@uid, SizeOf(uid)) or // 0 means not supported
+     ((PCardinalArray(@uid)[0] = $ffffffff) and // ff means not set
+      (PCardinalArray(@uid)[1] = $ffffffff) and
+      (PCardinalArray(@uid)[2] = $ffffffff) and
+      (PCardinalArray(@uid)[3] = $ffffffff)) then
+    exit;
+  // GUIDToString() already displays the first 4 bytes as little-endian
+  // so we don't need to swap those bytes as dmi_system_uuid() in dmidecode.c
+  // - without those 2 lines, result matches "wmic csproduct get uuid"
+  // on Windows XP or 10, and "dmidecode" output on both Delphi and FPC
+  {$ifdef SMB_UUID_SWAP4}
+  if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206 then
+    uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
+  {$endif SMB_UUID_SWAP4}
+  {$ifdef OSDARWIN}
+  // mandatory to match IOPlatformUUID value from ioreg :(
+  uid.D1 := bswap32(uid.D1);
+  uid.D2 := swap(uid.D2);
+  uid.D3 := swap(uid.D3);
+  {$endif OSDARWIN}
+  dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
 end;
 
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
