@@ -584,9 +584,9 @@ begin
     fTransmit.Send(frame);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-       not FrameVerify(remote, SizeOf(header)) or
+       not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
        not CompareMem(pointer(remote), @header, SizeOf(header)) then
-      raise ETunnel.CreateUtf8('%.Open handshake failed', [self]);
+      raise ETunnel.CreateUtf8('Open handshake failed on port %', [result]);
     // optional encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then

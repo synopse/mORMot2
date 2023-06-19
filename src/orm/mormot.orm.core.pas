@@ -4833,12 +4833,10 @@ type
     DELETE: TOrmTableBits;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - C=Create, R=Read, U=Update, D=Delete rights
-    procedure Edit(aTableIndex: integer;
-      C, R, U, D: boolean); overload;
+    procedure Edit(aTableIndex: integer; C, R, U, D: boolean); overload;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - use TOrmOccasion set as parameter
-    procedure Edit(aTableIndex: integer;
-      aRights: TOrmOccasions); overload;
+    procedure Edit(aTableIndex: integer; aRights: TOrmOccasions); overload;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - will raise an EModelException if the supplied table is incorrect
     // - C=Create, R=Read, U=Update, D=Delete rights
