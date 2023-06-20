@@ -1736,8 +1736,8 @@ type
     function GetTable: TOrmTable;
       {$ifdef HASINLINE} inline; {$endif}
     procedure ManyFieldsCreate(many: POrmPropInfoRttiMany);
-    procedure InternalCreate;
-      {$ifdef HASINLINE}inline;{$endif}
+    // called from Create* - could be overriden e.g. to setup internal fields
+    procedure InternalCreate; virtual;
     /// register RttiJsonRead/RttiJsonWrite callbacks for custom serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// 'fake' nested TOrm properties would be serialized as integer
@@ -1980,10 +1980,12 @@ type
     procedure ComputeFieldsBeforeWrite(const aRest: IRestOrm;
       aOccasion: TOrmEvent; aServerTimeStamp: TTimeLog = 0); virtual;
 
-    /// this constructor initializes the ORM record
+    /// this constructor initializes a plain ORM record
     // - auto-instanciate any TOrmMany instance defined in published properties
-    // - override this method if you want to use some internal objects (e.g.
-    // TStringList or TCollection as published property)
+    // - you should NOT override this method if you want to use some internal
+    // objects (e.g. TStringList or TCollection as published property), but
+    // override the InternalCreate protected method instead - mainly for
+    // performance reasons since calling an inherited constructor is much slower
     constructor Create; overload; override;
     /// this constructor initializes the ORM record and set the simple fields
     // with the supplied values
@@ -3168,6 +3170,9 @@ type
     // - here we refer to PtrInt = pointer = TOrm properties
     fSourceID: PPtrInt;
     fDestID: PPtrInt;
+    /// initialize this instance, and needed internal fields
+    // - will set protected fSourceID/fDestID fields
+    procedure InternalCreate; override;
     /// retrieve the TOrmMany ID from a given source+dest IDs pair
     function InternalIDFromSourceDest(const aClient: IRestOrm;
       aSourceID, aDestID: TID): TID;
@@ -3175,9 +3180,6 @@ type
       const aAndWhereSql: RawUtf8; isDest: boolean): integer;
     function IsPropClassInstance(Prop: PRttiCustomProp): boolean; override;
   public
-    /// initialize this instance, and needed internal fields
-    // - will set protected fSourceID/fDestID fields
-    constructor Create; override;
     /// retrieve all records associated to a particular source record, which
     // has a TOrmMany property
     // - returns the Count of records corresponding to this aSource record
@@ -6468,7 +6470,8 @@ end;
 procedure TOrm.InternalCreate;
 var
   props: TOrmProperties;
-begin // don't call inherited Create but make TOrmProperties custom setup
+begin
+  // don't call inherited Create but make TOrmProperties custom setup
   props := OrmProps;
   if props.ManyFields <> nil then
     // auto-instanciate any TOrmMany instance
@@ -6477,7 +6480,7 @@ end;
 
 constructor TOrm.Create;
 begin
-  InternalCreate;
+  InternalCreate; // may be overriden
 end;
 
 destructor TOrm.Destroy;
@@ -6509,7 +6512,7 @@ end;
 
 constructor TOrm.Create(const aSimpleFields: array of const; aID: TID);
 begin
-  InternalCreate;
+  InternalCreate; // may be overriden
   fID := aID;
   if not SimplePropertiesFill(aSimpleFields) then
     raise EOrmException.CreateUtf8('Incorrect %.Create(aSimpleFields) call', [self]);
@@ -6556,7 +6559,7 @@ end;
 
 constructor TOrm.Create(const aClient: IRestOrm; aID: TID; ForUpdate: boolean);
 begin
-  InternalCreate;
+  InternalCreate; // may be overriden
   if aClient <> nil then
     aClient.Retrieve(aID, self, ForUpdate);
 end;
@@ -8706,9 +8709,9 @@ end;
 
 { TOrmMany }
 
-constructor TOrmMany.Create;
+procedure TOrmMany.InternalCreate;
 begin
-  InternalCreate;
+  inherited InternalCreate; // default TOrm initialization
   with Orm do
     if (fRecordManySourceProp <> nil) and
        (fRecordManyDestProp <> nil) then
