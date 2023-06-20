@@ -7562,7 +7562,7 @@ begin
             not IsValidUtf8(Call.InBody) then
       ctxt.Error('Expects valid UTF-8 input')
     else
-    // 6. handle security
+    // 5. handle security
     if (rsoSecureConnectionRequired in fOptions) and
        (ctxt.MethodIndex <> fPublishedMethodTimestampIndex) and
        not (llfSecured in Call.LowLevelConnectionFlags) then
@@ -7583,7 +7583,7 @@ begin
              // HTTPS does not authenticate by itself, WebSockets does
              not (llfHttps in Call.LowLevelConnectionFlags)) or
             ctxt.AuthenticationCheck(fJwtForUnauthenticatedRequest) then
-    // 5. call appropriate ORM / SOA commands in fAcquireExecution[] context
+    // 6. call appropriate ORM / SOA commands in fAcquireExecution[] context
     try
       if (not Assigned(OnBeforeUri)) or
          OnBeforeUri(ctxt) then
@@ -7597,7 +7597,7 @@ begin
           else
             ctxt.Error(E, '', [], HTTP_SERVERERROR);
     end;
-    // 6. return expected result to the client
+    // 7. return expected result to the client
     if StatusCodeIsSuccess(Call.OutStatus) then
     begin
       outcomingfile := false;
@@ -7621,7 +7621,7 @@ begin
     else if Call.OutBody = '' then // OutStatus is an error code
         // if no custom error message, compute it now as JSON
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
-    // 7. compute returned ORM InternalState indicator
+    // 8. compute returned ORM InternalState indicator
     if ((rsoNoInternalState in fOptions) or
         (rsoNoTableURI in fOptions)) and
        (ctxt.Method <> mSTATE) then
@@ -7644,12 +7644,12 @@ begin
       ctxt.Error('Unsafe HTTP header rejected [%]',
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
-    // 8. gather statistics and log execution
+    // 9. gather statistics and log execution
     if ctxt.fMicroSecondsStart <> 0 then
       ctxt.ComputeStatsAfterCommand;
     if log <> nil then
       ctxt.LogFromContext;
-    // 9. finalize execution context
+    // 10. finalize execution context
     if Assigned(OnAfterUri) then
       try
         OnAfterUri(ctxt);
@@ -7658,7 +7658,7 @@ begin
     tix := ctxt.TickCount64;
     ctxt.Free;
   end;
-  // 10. trigger post-request periodic process
+  // 11. trigger post-request periodic process
   tix32 := tix shr 10;
   if tix32 <> fSessionsDeprecatedTix then
     // check deprecated sessions every second

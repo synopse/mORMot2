@@ -1077,23 +1077,28 @@ type
       read fProcessName;
   end;
 
+  /// event called in a background thread by TLoggedWorkThread.Create
+  TOnLoggedWorkProcess = procedure(const Context: TDocVariantData) of object;
+
   /// a class able to run some process in a background thread
   // - with proper logging and eventual ending notification
   TLoggedWorkThread = class(TLoggedThread)
   protected
     fSender: TObject;
     fOnExecute, fOnExecuted: TNotifyEvent;
-    fOnExecuteParam: TOnSynBackgroundTimerProcess;
-    fParam: RawUtf8;
+    fOnExecuteParam: TOnLoggedWorkProcess;
+    fContext: TDocVariantData;
     procedure DoExecute; override;
   public
     /// this constructor will directly start the thread in background
+    // - with the context as a regular TNotifyEvent
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
       Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
-    constructor Create(Logger: TSynLogClass; const ProcessName, Msg: RawUtf8;
-      const OnExecute: TOnSynBackgroundTimerProcess;
+    // - with the context as a TDocVariantData object with name/value pairs
+    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+      const NameValuePairs: array of const; const OnExecute: TOnLoggedWorkProcess;
       const OnExecuted: TNotifyEvent = nil);
         reintroduce; overload;
   end;
@@ -3213,7 +3218,7 @@ begin
       if Assigned(fOnExecute) then
         fOnExecute(fSender)
       else
-        fOnExecuteParam(nil, fParam);
+        fOnExecuteParam(fContext);
     finally
       if Assigned(fOnExecuted) then
         fOnExecuted(fSender);
@@ -3232,12 +3237,12 @@ begin
 end;
 
 constructor TLoggedWorkThread.Create(Logger: TSynLogClass;
-  const ProcessName, Msg: RawUtf8; const OnExecute: TOnSynBackgroundTimerProcess;
-  const OnExecuted: TNotifyEvent);
+  const ProcessName: RawUtf8; const NameValuePairs: array of const;
+  const OnExecute: TOnLoggedWorkProcess; const OnExecuted: TNotifyEvent);
 begin
   fOnExecuteParam := OnExecute;
   fOnExecuted := OnExecuted;
-  fParam := Msg;
+  fContext.InitObject(NameValuePairs, mFastFloat);
   FreeOnTerminate := true;
   inherited Create({suspended=}false, Logger, ProcessName);
 end;
