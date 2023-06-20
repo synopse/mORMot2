@@ -1781,6 +1781,7 @@ begin
             Direct('/root/People?select=%2A', $17AE45E3);
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=20',
               $453C7201);
+            Direct('/root?sql=select+%2A+from+people', $17AE45E3);
             Server.UriPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
               $79AFDD53);
