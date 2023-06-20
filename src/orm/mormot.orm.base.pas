@@ -1916,7 +1916,7 @@ type
     fOrderedByName: TByteDynArray;
     fLast: TOrmPropInfo;
     fIDJsonName: RawUtf8;
-    function GetItem(aIndex: PtrInt): TOrmPropInfo;
+    function GetItem(aIndex: PtrInt): TOrmPropInfo; // seldom used
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
     procedure InternalAddParentsFirst(aClassType: TClass;
@@ -1986,7 +1986,7 @@ type
     /// low-level access to the last TOrmPropInfo in the list
     property Last: TOrmPropInfo
       read fLast;
-    /// read-only retrieval of a TOrmPropInfo item
+    /// read-only retrieval of a TOrmPropInfo item (not used from the ORM core)
     // - will raise an exception if out of range
     property Items[aIndex: PtrInt]: TOrmPropInfo
       read GetItem;

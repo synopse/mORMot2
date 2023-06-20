@@ -91,7 +91,8 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      out RemotePort: TNetPort): TNetPort;
     /// the local port used for the tunnel local process
     function LocalPort: RawUtf8;
     /// check if the background processing thread is using encrypted frames
@@ -147,6 +148,8 @@ type
     session: TTunnelSession;
     /// SHA3 checksum/padding of the previous fields with app specific salt
     crc: THash128;
+    /// the local port used for communication - may be an ephemeral bound port
+    port: word;
   end;
   PTunnelLocalHeader = ^TTunnelLocalHeader;
 
@@ -202,7 +205,8 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     function Open(Sess: TTunnelSession; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+      TimeOutMS: integer; AppSecret: RawByteString; const Address: RawUtf8;
+      out RemotePort: TNetPort): TNetPort;
     /// ITunnelLocal method: return the localport needed
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: check if the background thread uses encrypted frames
@@ -523,8 +527,8 @@ begin
 end;
 
 function TTunnelLocal.Open(Sess: TTunnelSession;
-  TransmitOptions: TTunnelOptions; TimeOutMS: integer;
-  AppSecret: RawByteString; const Address: RawUtf8): TNetPort;
+  TransmitOptions: TTunnelOptions; TimeOutMS: integer; AppSecret: RawByteString;
+  const Address: RawUtf8; out RemotePort: TNetPort): TNetPort;
 var
   uri: TUri;
   sock: TNetSocket;
@@ -577,22 +581,25 @@ begin
     header.session := fSession;
     sha3.Init(SHA3_224);
     sha3.Update(AppSecret); // custom symmetric application-specific secret
-    sha3.Update(@header, SizeOf(header) - SizeOf(header.crc));
+    sha3.Update(@header, SizeOf(header) - SizeOf(header.crc) - SizeOf(header.port));
     sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
+    header.port := result;
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
     fTransmit.Send(frame);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
        not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
-       not CompareMem(pointer(remote), @header, SizeOf(header)) then
+       not CompareMem(pointer(remote), @header,
+             SizeOf(header) - SizeOf(header.port)) then
       raise ETunnel.CreateUtf8('Open handshake failed on port %', [result]);
+    RemotePort := PTunnelLocalHeader(remote)^.port;
     // optional encryption
     FillZero(key.b);
     if toEncrypted * fOptions <> [] then
     begin
       sha3.Init(SHA3_256);
-      sha3.Update(@header, SizeOf(header)); // avoid session replay
+      sha3.Update(@header, SizeOf(header) - SizeOf(header.port)); // no replay
       if toEcdhe in fOptions then
       begin
         // optional ECDHE ephemeral encryption

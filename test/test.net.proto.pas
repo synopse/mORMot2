@@ -48,6 +48,7 @@ type
     appsec: RawUtf8;
     options: TTunnelOptions;
     tunnelexecutedone: boolean;
+    tunnelexecuteremote, tunnelexecutelocal: TNetPort;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelExecuted(Sender: TObject);
     procedure TunnelTest(const clientcert, servercert: ICryptCert);
@@ -699,7 +700,10 @@ end;
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
 begin
   // one of the two handshakes should be done in another thread
-  Check((Sender as TTunnelLocal).Open(session, options, 1000, appsec, cLocalhost) <> 0);
+  tunnelexecutelocal := (Sender as TTunnelLocal).Open(
+    session, options, 1000, appsec, cLocalhost, tunnelexecuteremote);
+  Check(tunnelexecutelocal <> 0);
+  Check(tunnelexecuteremote <> 0);
 end;
 
 procedure TNetworkProtocols.TunnelExecuted(Sender: TObject);
@@ -715,6 +719,7 @@ var
   i: integer;
   sent, received, sent2, received2: RawByteString;
   clientsock, serversock: TNetSocket;
+  local, remote: TNetPort;
 begin
   // setup the two instances with the specified options and certificates
   clientinstance := TTunnelLocalClient.Create;
@@ -734,8 +739,12 @@ begin
   appsec := RandomAnsi7(10);
   TLoggedWorkThread.Create(
     TSynLog, 'servertunnel', serverinstance, TunnelExecute, TunnelExecuted);
-  Check(clienttunnel.Open(session, options, 1000, appsec, clocalhost) <> 0);
+  local := clienttunnel.Open(session, options, 1000, appsec, clocalhost, remote);
+  Check(local <> 0);
+  Check(remote <> 0);
   SleepHiRes(1000, tunnelexecutedone);
+  CheckEqual(local, tunnelexecuteremote);
+  CheckEqual(remote, tunnelexecutelocal);
   Check(tunnelexecutedone, 'TunnelExecuted');
   tunnelexecutedone := false; // for the next run
   Check(clienttunnel.LocalPort <> '');
