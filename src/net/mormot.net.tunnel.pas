@@ -547,6 +547,7 @@ begin
     raise ETunnel.CreateUtf8('%.Open invalid call', [self]);
   if not uri.From(Address, '0') then
     raise ETunnel.CreateUtf8('%.Open invalid %', [self, Address]);
+  RemotePort := 0;
   fSession := Sess;
   TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
   TransmitOptions := TransmitOptions + ComputeOptionsFromCert;
@@ -583,7 +584,7 @@ begin
     sha3.Update(AppSecret); // custom symmetric application-specific secret
     sha3.Update(@header, SizeOf(header) - SizeOf(header.crc) - SizeOf(header.port));
     sha3.Final(@header.crc, SizeOf(header.crc) shl 3);
-    header.port := result;
+    header.port := result; // port is asymmetrical so not part of the crc
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
     fTransmit.Send(frame);
