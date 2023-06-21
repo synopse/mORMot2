@@ -523,7 +523,7 @@ procedure TTunnelLocal.SetTransmit(const Transmit: ITunnelTransmit);
 begin
   fTransmit := Transmit;
   if fThread <> nil then
-    fThread.fTransmit := Transmit;
+    fThread.fTransmit := Transmit; // could be refreshed during process
 end;
 
 function TTunnelLocal.Open(Sess: TTunnelSession;
@@ -589,8 +589,9 @@ begin
     FrameSign(frame); // optional digital signature
     fTransmit.Send(frame);
     // server will wait until both sides sent an identical (signed) header
-    if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-       not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
+    if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
+      raise ETunnel.CreateUtf8('Open handshake timeout on port %', [result]);
+    if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
        not CompareMem(pointer(remote), @header,
              SizeOf(header) - SizeOf(header.port)) then
       raise ETunnel.CreateUtf8('Open handshake failed on port %', [result]);
