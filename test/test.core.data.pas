@@ -233,6 +233,13 @@ type
     property Name: RawUtf8
       read FName write FName;
   end;
+  TCollTest2 = class(TCollTest)
+  private
+    FNew: TObject;
+  published
+    property New: TObject
+      read FNew write FNew;
+  end;
 
   TCollTestsI = class(TInterfacedCollection)
   public
@@ -2864,6 +2871,26 @@ begin
   finally
     C2.Free;
     Coll.Free;
+  end;
+  MyItem := TCollTest2.Create(nil);
+  try
+    J := ObjectToJson(MyItem);
+    Check(IsValidJson(J));
+    CheckEqual(J, '{"Color":0,"Length":0,"Name":"","New":null}', 'inherited');
+    MyItem.Length := 10;
+    MyItem.Color := 20;
+    MyItem.Name := 'ABC';
+    J := ObjectToJson(MyItem);
+    Check(IsValidJson(J));
+    CheckEqual(J, '{"Color":20,"Length":10,"Name":"ABC","New":null}');
+    TCollTest2(MyItem).New := TCollTest.Create(nil);
+    J := ObjectToJson(MyItem);
+    Check(IsValidJson(J));
+    CheckEqual(J, '{"Color":20,"Length":10,"Name":"ABC",' +
+      '"New":{"Color":0,"Length":0,"Name":""}}');
+    TCollTest2(MyItem).New.Free; // manual memory management
+  finally
+    MyItem.Free;
   end;
   // test RTTI definition from text
   Parser := TRttiCustom.CreateFromText('Int: double');

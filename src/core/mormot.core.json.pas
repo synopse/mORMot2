@@ -5482,42 +5482,44 @@ procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
   nfo: TRttiJson;
   p: PRttiCustomProp;
+  t: TClass;
   n: integer;
   flags: set of (isNotFirst, noStored, noDefault, noHook, noVoid, isHumanReadable);
-  c: TJsonSaveContext;
+  c: TJsonSaveContext; // dedicated context used for fields/properties
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
   nfo := TRttiJson(Ctxt.Info);
-  if nfo.fJsonWriter.Code <> nil then // TRttiJson.RegisterCustomSerializer()
-  begin
-    if nfo.Kind = rkClass then
-      Data := PPointer(Data)^;
-    TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options); // e.g. TOrm.RttiJsonWrite
-    exit;
-  end;
   if nfo.Kind = rkClass then
   begin
     if Data <> nil then
       Data := PPointer(Data)^; // class instances are accessed by reference
     if Data = nil then
     begin
-      Ctxt.W.AddNull; // append 'null' for nil class instance
+      c.W.AddNull; // append 'null' for nil class instance
       exit;
     end;
+    t := PClass(Data)^; // actual class of this instance
+    if t <> nfo.ValueClass then
+      nfo := TRttiJson(Rtti.RegisterClass(t)); // work on this class
     flags := [];
     if (woStoreStoredFalse in c.Options) or
-       (rcfDisableStored in Ctxt.Info.Flags) then
+       (rcfDisableStored in nfo.Flags) then
       include(flags, noStored);
     if not (woDontStoreDefault in c.Options) then
       include(flags, noDefault);
-    if not (rcfHookWriteProperty in Ctxt.Info.Flags) then
+    if not (rcfHookWriteProperty in nfo.Flags) then
       include(flags, noHook);
   end
   else
   begin
     exclude(c.Options, woFullExpand); // not available for null or records
     flags := [noStored, noDefault, noHook];
+  end;
+  if nfo.fJsonWriter.Code <> nil then // TRttiJson.RegisterCustomSerializer()
+  begin // e.g. TOrm.RttiJsonWrite
+    TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options);
+    exit;
   end;
   if not (rcfHookWrite in nfo.Flags) or
      not TCCHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
@@ -5557,7 +5559,7 @@ begin
       if woStorePointer in c.Options then
       begin
         c.W.WriteObjectPropNameShort('Address', c.Options);
-        if Ctxt.Info.ValueRtlClass = vcESynException then
+        if nfo.ValueRtlClass = vcESynException then
           AppendExceptionLocation(c.W, ESynException(Data))
         else
           c.W.AddPointer(PtrUInt(Data), '"');
@@ -5565,7 +5567,7 @@ begin
           c.W.BlockAfterItem(c.Options);
       end;
       if woDontStoreInherited in c.Options then
-        with Ctxt.Info.Props do
+        with nfo.Props do
         begin
           // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
           n := Count - NotInheritedIndex;
@@ -5609,7 +5611,7 @@ begin
           break;
         inc(c.Prop);
       until false;
-    if rcfHookWrite in Ctxt.Info.Flags then
+    if rcfHookWrite in nfo.Flags then
        TCCHook(Data).RttiAfterWriteObject(c.W, c.Options);
     if isHumanReadable in flags then
       c.W.BlockEnd('}', c.Options)
