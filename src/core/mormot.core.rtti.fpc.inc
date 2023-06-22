@@ -222,34 +222,48 @@ begin
   if (integer(PPropInfo(@self)^.PropProcs) shr 4) and 3 = ptConst then
     result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
   else
-    result := GetIsStored(Instance);
+    result := IsStoredGetter(Instance);
 end;
 
-function TRttiProp.GetIsStored(Instance: TObject): boolean;
+function TRttiProp.IsStoredKind: TRttiPropStored;
+begin
+  if (integer(PPropInfo(@self)^.PropProcs) shr 4) and 3 = ptConst then
+    if boolean(PtrUInt(PPropInfo(@self)^.StoredProc)) then
+      result := rpsTrue
+    else
+      result := rpsFalse
+  else
+    result := rpsGetter;
+end;
+
+function TRttiProp.IsStoredGetter(Instance: TObject): boolean;
 type
   TGetProc = function: boolean of object;
   TGetIndexed = function(Index: integer): boolean of object;
 var
   call: TMethod;
 begin
-  with PPropInfo(@self)^ do
-  begin
-    case (integer(PropProcs) shr 4) and 3 of // bits 4..5 = StoredProc
-      ptConst:
-        exit(boolean(PtrUInt(StoredProc)));
-      ptField:
-        exit(PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc))^);
-      ptVirtual:
-        call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc))^;
-    else
-      call.Code := pointer(StoredProc);
+  if @self = nil then
+    result := true
+  else
+    with PPropInfo(@self)^ do
+    begin
+      case (integer(PropProcs) shr 4) and 3 of // bits 4..5 = StoredProc
+        ptConst:
+          exit(boolean(PtrUInt(StoredProc)));
+        ptField:
+          exit(PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc))^);
+        ptVirtual:
+          call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc))^;
+      else
+        call.Code := pointer(StoredProc);
+      end;
+      call.Data := Instance;
+      if integer(PropProcs) and (1 shl 6) <> 0 then
+        result := TGetIndexed(call)(Index)
+      else
+        result := TGetProc(call);
     end;
-    call.Data := Instance;
-    if integer(PropProcs) and (1 shl 6) <> 0 then
-      result := TGetIndexed(call)(Index)
-    else
-      result := TGetProc(call);
-  end;
 end;
 
 function TRttiProp.Getter(Instance: TObject; Call: PMethod): TRttiPropCall;

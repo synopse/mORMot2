@@ -4353,7 +4353,7 @@ var
   call: TMethod;
 begin
   byte(attrib) := 0;
-  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
+  if aPropInfo^.IsStoredKind = rpsFalse then // = AS_UNIQUE
     Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;
   if (pilAuxiliaryFields in aOptions) and
      (aPropInfo^.Name^[1] = '_') then
@@ -7078,7 +7078,7 @@ var
   attrib: TOrmPropInfoAttributes;
 begin
   byte(attrib) := 0;
-  if aPropInfo^.IsStored(nil) = AS_UNIQUE then
+  if aPropInfo^.IsStoredKind = rpsFalse then // = AS_UNIQUE
     Include(attrib, aIsUnique); // property MyProperty: RawUtf8 stored AS_UNIQUE;ieldWidth=10
   Create(aPropInfo^.TypeInfo, aPropInfo^.NameUtf8, aPropIndex,
     aPropInfo^.GetFieldAddr(nil), attrib, aPropInfo^.Index);

@@ -236,17 +236,32 @@ begin
      (not PtrUInt($ff))) = 0 then
     result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
   else
-    result := GetIsStored(Instance);
+    result := IsStoredGetter(Instance);
 end;
 
-function TRttiProp.GetIsStored(Instance: TObject): boolean;
+function TRttiProp.IsStoredKind: TRttiPropStored;
+begin
+  if (PtrUInt(PPropInfo(@self)^.StoredProc) and
+     (not PtrUInt($ff))) = 0 then
+    if boolean(PtrUInt(PPropInfo(@self)^.StoredProc)) then
+      result := rpsTrue
+    else
+      result := rpsFalse
+  else
+    result := rpsGetter;
+end;
+
+function TRttiProp.IsStoredGetter(Instance: TObject): boolean;
 type
   TGetProc = function: boolean of object;
   TGetIndexed = function(Index: integer): boolean of object;
 var
   call: TMethod;
 begin
-  with PPropInfo(@self)^ do
+  if @self = nil then
+    result := true
+  else
+    with PPropInfo(@self)^ do
     if (PtrUInt(StoredProc) and
        (not PtrUInt($ff))) = 0 then
       result := boolean(PtrUInt(StoredProc))
