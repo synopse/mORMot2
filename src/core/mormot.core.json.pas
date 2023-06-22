@@ -5336,6 +5336,7 @@ begin
   begin
     // direct value write (record field or plain class property)
     c.Info := p^.Value;
+    c.Prop := p;
     TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
   end
   else
@@ -5575,18 +5576,19 @@ begin
         end;
     end;
     if n > 0 then
+    begin
       // this is the main loop serializing Info.Props[]
+      p := c.Prop;
       repeat
-        p := c.Prop;
         if // handle Props.NameChange() set to Name='' to ignore this field
            (p^.Name <> '') and
            // handle woStoreStoredFalse flag and "stored" attribute in code
-           ((noStored in flags) or
-            (p^.Prop = nil) or
-            (p^.Prop.IsStored(pointer(Data)))) and
+           ((p^.Stored = rpsTrue) or // most common case
+            (noStored in flags) or
+            ((p^.Stored = rpsGetter) and
+             (p^.Prop.IsStoredGetter(pointer(Data))))) and
            // handle woDontStoreDefault flag over "default" attribute in code
            ((noDefault in flags) or
-            (p^.Prop = nil) or
             (p^.OrdinalDefault = NO_DEFAULT) or
             not p^.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
@@ -5597,7 +5599,6 @@ begin
           if isNotFirst in flags then
             // append ',' and proper indentation if a field was just appended
             c.W.BlockAfterItem(c.Options);
-          include(flags, isNotFirst);
           if isHumanReadable in flags then
             c.W.WriteObjectPropNameHumanReadable(pointer(p^.Name), length(p^.Name))
           else
@@ -5605,12 +5606,14 @@ begin
           if (noHook in flags) or
              not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, Data);
+          include(flags, isNotFirst);
         end;
         dec(n);
         if n = 0 then
           break;
-        inc(c.Prop);
+        inc(p);
       until false;
+    end;
     if rcfHookWrite in nfo.Flags then
        TCCHook(Data).RttiAfterWriteObject(c.W, c.Options);
     if isHumanReadable in flags then

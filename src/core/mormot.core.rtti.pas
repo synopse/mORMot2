@@ -929,7 +929,10 @@ type
     rpcIndexed);
 
   /// TRttiProp.IsStoredKind response - default is "stored true"
-  TRttiPropStored = (rpsTrue, rpsFalse, rpsGetter);
+  TRttiPropStored = (
+    rpsTrue,
+    rpsFalse,
+    rpsGetter);
 
   /// a wrapper containing a RTTI class property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
@@ -1041,7 +1044,7 @@ type
     // rpsGetter if IsStoredGetter(Instance) is to be called at runtime
     function IsStoredKind: TRttiPropStored;
     /// raw retrieval of the 'stored' flag using getter
-    /// - called by IsStored when inlined, or for TRttiPropStored = rpsGetter
+    /// - called by IsStored or for TRttiPropStored = rpsGetter
     function IsStoredGetter(Instance: TObject): boolean;
     /// return the "stored true/false/method/field" value for a class property
     // - not used internally: for backward compatibility only
@@ -2125,7 +2128,6 @@ type
     // - equals -1 if Prop has a setter
     OffsetSet: PtrInt;
     /// contains Prop^.Name or a customized field/property name
-    // - e.g. 'SubProp'
     // - equals '' if Props.NameChange() was set to New='', meaning this field
     // should not be part of the serialized JSON object
     Name: RawUtf8;
