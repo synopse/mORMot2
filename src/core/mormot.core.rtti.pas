@@ -502,7 +502,6 @@ type
     // - return the first one if Value is invalid (>MaxValue)
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumName(const Value): PShortString;
-      {$ifdef HASINLINE}inline;{$endif}
     /// get the caption text corresponding to a enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -2855,8 +2854,7 @@ type
       var Options: TTextWriterWriteObjectOptions): boolean; virtual;
     // called by TJsonWriter.WriteObject() to serialize one published property value
     // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
-    // - is overriden in TOrm/TOrmMany to detect "fake" instances
-    // or by TSynPersistentWithPassword to hide the password field value
+    // - is e.g. overriden in TOrm/TOrmMany to detect "fake" instances
     // - should return true if a property has been written, false (which is the
     // default) if the property is to be serialized as usual
     function RttiWritePropertyValue(W: TTextWriter; Prop: PRttiCustomProp;
@@ -6989,32 +6987,30 @@ begin
   // direct comparison of ordinal values (rkClass is handled below)
   if (rcfHasRttiOrd in Value.Cache.Flags) and
      (rcfHasRttiOrd in OtherRtti.Value.Cache.Flags) then
-    if (OffsetGet >= 0) and
-       (OtherRtti.OffsetGet >= 0) then
-    begin
+  begin
+    if OffsetGet >= 0 then
       v1.Data.VInt64 := RTTI_FROM_ORD[Value.Cache.RttiOrd](
-                          PAnsiChar(Data) + OffsetGet);
-      v2.Data.VInt64 := RTTI_FROM_ORD[OtherRtti.Value.Cache.RttiOrd](
-                          PAnsiChar(Other) + OtherRtti.OffsetGet);
-    end
+                          PAnsiChar(Data) + OffsetGet)
     else
-    begin
       v1.Data.VInt64 := Prop.GetOrdProp(Data);
+    if OtherRtti.OffsetGet >= 0 then
+      v2.Data.VInt64 := RTTI_FROM_ORD[OtherRtti.Value.Cache.RttiOrd](
+                          PAnsiChar(Other) + OtherRtti.OffsetGet)
+    else
       v2.Data.VInt64 := OtherRtti.Prop.GetOrdProp(Other);
-    end
+  end
   else if (rcfGetInt64Prop in Value.Cache.Flags) and
           (rcfGetInt64Prop in OtherRtti.Value.Cache.Flags) then
-    if (OffsetGet >= 0) and
-       (OtherRtti.OffsetGet >= 0) then
-    begin
-      v1.Data.VInt64 := PInt64(PAnsiChar(Data) + OffsetGet)^;
-      v2.Data.VInt64 := PInt64(PAnsiChar(Other) + OtherRtti.OffsetGet)^;
-    end
+  begin
+    if OffsetGet >= 0 then
+      v1.Data.VInt64 := PInt64(PAnsiChar(Data) + OffsetGet)^
     else
-    begin
       v1.Data.VInt64 := Prop.GetInt64Prop(Data);
+    if OtherRtti.OffsetGet >= 0 then
+      v2.Data.VInt64 := PInt64(PAnsiChar(Other) + OtherRtti.OffsetGet)^
+    else
       v2.Data.VInt64 := OtherRtti.Prop.GetInt64Prop(Other);
-    end
+  end
   else
   // comparison using temporary TRttiVarData (using varByRef if possible)
   begin

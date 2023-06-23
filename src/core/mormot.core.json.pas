@@ -5502,7 +5502,7 @@ begin
     end;
     t := PClass(Data)^; // actual class of this instance
     if t <> nfo.ValueClass then
-      nfo := TRttiJson(Rtti.RegisterClass(t)); // work on this class
+      nfo := TRttiJson(Rtti.RegisterClass(t)); // work on proper inherited class
     flags := [];
     if (woStoreStoredFalse in c.Options) or
        (rcfDisableStored in nfo.Flags) then
@@ -5569,11 +5569,12 @@ begin
       end;
       if woDontStoreInherited in c.Options then
         with nfo.Props do
-        begin
-          // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
-          n := Count - NotInheritedIndex;
-          inc(c.Prop, NotInheritedIndex);
-        end;
+          if NotInheritedIndex <> 0 then
+          begin
+            // List[NotInheritedIndex]..List[Count-1] is the last class level
+            inc(c.Prop, NotInheritedIndex);
+            dec(n, NotInheritedIndex);
+          end;
     end;
     if n > 0 then
     begin

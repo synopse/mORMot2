@@ -11332,7 +11332,7 @@ procedure InitializeUnit;
 var
   k: TRttiKind;
 begin
-  // initialize RTTI binary persistence and comparison
+  // initialize RTTI low-level comparison functions
   RTTI_ORD_COMPARE[roSByte]  := @_BC_SByte;
   RTTI_ORD_COMPARE[roUByte]  := @_BC_UByte;
   RTTI_ORD_COMPARE[roSWord]  := @_BC_SWord;
@@ -11348,6 +11348,7 @@ begin
   RTTI_FLOAT_COMPARE[rfExtended] := @_BC_Extended;
   RTTI_FLOAT_COMPARE[rfComp]     := @_BC_SQWord; // PInt64 is the best
   RTTI_FLOAT_COMPARE[rfCurr]     := @_BC_SQWord;
+  // initialize RTTI binary persistence and high-level comparison functions
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger,
