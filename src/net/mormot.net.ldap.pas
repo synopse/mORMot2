@@ -611,6 +611,7 @@ type
     property Count: integer
       read fCount;
     /// access to the individual rwas
+    // - note that length(List) = capacity - use Count property instead
     property List: TRawByteStringDynArray
       read fList;
     /// name of this LDAP attribute
@@ -657,6 +658,7 @@ type
     // - returns empty string if not found
     function Get(const AttributeName: RawUtf8): RawUtf8;
     /// access to the internal list of TLdapAttribute objects
+    // - note that length(Items) = Count for this class
     property Items: TLdapAttributeDynArray
       read fItems;
   end;
