@@ -2896,25 +2896,37 @@ begin
   case lat of
     latObjectSid:
       if IsValidRawSid(s) then
+      begin
         s := SidToText(pointer(s));
+        exit;
+      end;
     latObjectGuid:
       if length(s) = SizeOf(TGuid) then
+      begin
         s := ToUtf8(PGuid(s)^);
+        exit;
+      end;
     latFileTime:
       begin
         qw := GetQWord(pointer(s), err);
         if (err = 0) and
            (qw <> 0) then
+        begin
           if qw >= $7FFFFFFFFFFFFFFF then
             s := 'Never expires'
           else
             s := UnixMSTimeToString(WindowsFileTime64ToUnixMSTime(qw));
+          exit;
+        end;
       end;
     latIsoTime:
       begin
         ts.From(pointer(s), length(s) - 3);
         if ts.Value <> 0 then
-          s := ts.Text(true); // normalize
+        begin
+          s := ts.Text({expanded=}true); // normalize
+          exit;
+        end;
       end;
   end;
   if IsValidUtf8(s) then
