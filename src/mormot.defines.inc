@@ -752,9 +752,9 @@
 
   {$else}
 
-    {$ifndef ONLYUSEHTTPSOCKET}
-      {$define USELIBCURL}      // try cross-platform libcurl for https on POSIX
-    {$endif ONLYUSEHTTPSOCKET}
+    {$ifndef USE_OPENSSL}       // if OpenSSL is not available on this platform
+      {$define USELIBCURL}      // try cross-platform libcurl for https
+    {$endif USE_OPENSSL}
 
     {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
       {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server

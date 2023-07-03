@@ -3438,7 +3438,7 @@ begin
       result := TWinHttp.Get(
         aUri, inHeaders, {weakCA=}true, outHeaders, outStatus, timeout)
       {$else}
-      {$ifdef USELIBCURL2}
+      {$ifdef USELIBCURL}
       if TCurlHttp.IsAvailable then
         result := TCurlHttp.Get(
           aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
