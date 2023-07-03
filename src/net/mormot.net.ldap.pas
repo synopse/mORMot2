@@ -2858,18 +2858,18 @@ end;
 
 const
   KNOWN_NAMES: array[0..11] of RawUtf8 = (
-    'ObjectSid',                   // 0
-    'ObjectGUID',                  // 1
-    'accountExpires',              // 2
-    'badPasswordTime',             //
+    'ObjectSid',                   // 0 latObjectSid
+    'ObjectGUID',                  // 1 latObjectGuid
+    'accountExpires',              // 2 latFileTime
+    'badPasswordTime',             //      ..
     'lastLogon',                   //
     'lastLogonTimestamp',          //
     'lastLogoff',                  //
     'lockoutTime',                 //
     'pwdLastSet',                  //
-    'ms-MCS-AdmPwdExpirationTime', // 9
-    'whenCreated',                 // 10
-    'whenChanged');                // 11
+    'ms-MCS-AdmPwdExpirationTime', // 9    ..
+    'whenCreated',                 // 10 latIsoTime
+    'whenChanged');                // 11   ..
 
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 begin
@@ -2893,6 +2893,7 @@ var
   ts: TTimeLogBits;
   err: integer;
 begin
+  // handle the most recognized attribute names encoding
   case lat of
     latObjectSid:
       if IsValidRawSid(s) then
@@ -2929,6 +2930,7 @@ begin
         end;
       end;
   end;
+  // fallback to hexa if the input is not valid UTF-8 (as expected LDAP v3)
   if IsValidUtf8(s) then
     EnsureRawUtf8(s)
   else
