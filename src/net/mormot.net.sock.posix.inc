@@ -295,7 +295,7 @@ function getsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: PInteger): integer; cdecl;
   external clib name 'getsockopt';
 
-function ioctlsocket(s: integer; cmd: cardinal; arg: PCardinal): integer; cdecl;
+function ioctlsocket(s: integer; cmd: cardinal): integer; cdecl; varargs;
   external clib name 'ioctl';
 
 function shutdown(s: integer; how: integer): integer; cdecl;
