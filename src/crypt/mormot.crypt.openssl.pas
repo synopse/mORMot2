@@ -6,7 +6,7 @@ unit mormot.crypt.openssl;
 {
   *****************************************************************************
 
-   High-Performance Cryptographic Features using OpenSSL 1.1.1
+   High-Performance Cryptographic Features using OpenSSL 1.1 / 3.x
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
     - Hashers and Signers OpenSSL Wrappers
@@ -55,7 +55,7 @@ type
   /// exception class raised by the AES classes of this unit
   EOpenSslCrypto = class(EOpenSsl);
 
-  /// TAesPrng-compatible class using OpenSSL 1.1.1
+  /// TAesPrng-compatible class using OpenSSL 1.1
   // - we abbreviate OpenSsl as Osl in class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
@@ -67,7 +67,7 @@ type
   // $  mORMot FillRandom in 46us, 2 GB/s
   TAesPrngOsl = class(TAesPrngAbstract)
   public
-    /// initialize the CSPRNG using OpenSSL 1.1.1
+    /// initialize the CSPRNG using OpenSSL 1.1
     // - if the library is not available, will raise an Exception
     constructor Create; override;
     /// wrapper around function OpenSslIsAvailable
@@ -704,7 +704,7 @@ begin
   begin
     // OpenSSL allows to reuse the previous Ctxt[], just setting the (new) IV
     // -> this makes a huge performance benefit
-    // note: the latest API (i.e. EVP_CipherInit_ex on 1.1.1, EVP_CipherInit_ex2
+    // note: the latest API (i.e. EVP_CipherInit_ex on 1.1, EVP_CipherInit_ex2
     // on 3.0) should be called to be able to reuse the context
     EOpenSslCrypto.Check(Owner, method, EVP_CipherInit_ex2(
       c, nil, nil, @Owner.IV, ord(DoEncrypt), nil));

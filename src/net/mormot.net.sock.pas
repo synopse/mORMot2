@@ -4358,7 +4358,7 @@ begin
     fSecure := NewNetTls;
     if fSecure = nil then
       raise ENetSock.Create('%s.DoTlsAfter: TLS is not available on this ' +
-        'system - try installing OpenSSL 1.1.1/3.x', [ClassNameShort(self)^]);
+        'system - try installing OpenSSL 1.1/3.x', [ClassNameShort(self)^]);
     case caller of
       cstaConnect:
         fSecure.AfterConnection(fSock, TLS, fServer);
