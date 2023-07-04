@@ -2466,8 +2466,11 @@ end;
 
 procedure DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin
+  // retrieve OS-dependent information
   _DirectSmbiosInfo(info);
-  // from this very same .inc file
+  // normalize some entries
+  info[sbiUuid] := LowerCase(info[sbiUuid]);
+  // some missing info may have retrieved at startup of this unit
   if info[sbiCpuVersion] = '' then
     info[sbiCpuVersion] := CpuInfoText;
   // e.g. from mormot.core.os.mac

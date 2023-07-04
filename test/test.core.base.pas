@@ -5770,7 +5770,7 @@ begin
   GetSmbiosInfo; // parse using mormot.core.perf
   CheckAgainst(Smbios, _smbios);
   if Smbios.System.Uuid <> '' then
-    CheckEqual(ToUtf8(uid), Smbios.System.Uuid, 'uuid');
+    Check(IdemPropNameU(ToUtf8(uid), Smbios.System.Uuid), 'uuid');
   // validate from reference binary export, decoding into binary or json
   raw.Data := Base64ToBin(_REFSMB);
   if CheckFailed(raw.Data <> '', '_REFSMB') or
