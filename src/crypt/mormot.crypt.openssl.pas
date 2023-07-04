@@ -355,6 +355,10 @@ function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf
   MessageLen, PublicKeyLen, SignatureLen: integer;
   const Engine: RawUtf8 = ''): boolean;
 
+/// check if an OpenSSL given type of public/private pair of keys is supported
+// - some older OpenSSL versions do not support e.g. EVP_PKEY_ED25519
+function OpenSslSupports(EvpType: integer): boolean;
+
 /// generate a public/private pair of keys in raw OpenSSL format
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
 // BitsOrCurve is the number of bits of the key
@@ -1204,6 +1208,29 @@ begin
     finally
       pkey.Free;
     end;
+end;
+
+var
+  EvpOk, EvpKo: TIntegerDynArray; // creating a context has a cost
+
+function OpenSslSupports(EvpType: integer): boolean;
+var
+  ctx: PEVP_PKEY_CTX;
+begin
+  result := IntegerScanExists(pointer(EvpOk), length(EvpOk), EvpType);
+  if result or // most common case
+     not OpenSslIsAvailable or
+     IntegerScanExists(pointer(EvpKo), length(EvpKo), EvpType) then
+    exit;
+  ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
+  if ctx = nil then
+  begin
+    AddInteger(EvpKo, EvpType); // do not search twice
+    exit;
+  end;
+  EVP_PKEY_CTX_free(ctx);
+  AddInteger(EvpOk, EvpType);
+  result := true;
 end;
 
 function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY;
