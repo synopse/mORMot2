@@ -3455,7 +3455,7 @@ const
     'ASN1_TIME_free',
     'ASN1_TIME_set',
     '?ASN1_TIME_set_string_X509',
-    'ASN1_TIME_to_tm',
+    '?ASN1_TIME_to_tm',
     'ASN1_TIME_normalize',
     'OPENSSL_sk_new',
     'OPENSSL_sk_free',
@@ -4672,7 +4672,10 @@ end;
 
 function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer;
 begin
-  result := libcrypto.ASN1_TIME_to_tm(s, tm);
+  if Assigned(libcrypto.ASN1_TIME_to_tm) then
+    result := libcrypto.ASN1_TIME_to_tm(s, tm)
+  else
+    result := 0;
 end;
 
 function ASN1_TIME_normalize(s: PASN1_TIME): integer;
