@@ -3274,8 +3274,8 @@ const
     'EVP_DigestSignFinal',
     'EVP_DigestVerifyInit',
     'EVP_DigestVerifyFinal',
-    '?EVP_DigestSign', // not defined in oldest versions
-    'EVP_DigestVerify',
+    '?EVP_DigestSign',   // not defined in oldest versions
+    '?EVP_DigestVerify',
     'EVP_SealInit',
     'EVP_SealFinal',
     'EVP_OpenInit',
@@ -3511,7 +3511,7 @@ const
     'EVP_MD_get_size EVP_MD_size',
     'EVP_DigestInit_ex',
     'EVP_DigestFinal_ex',
-    'EVP_DigestFinalXOF',
+    '?EVP_DigestFinalXOF', // not defined in oldest versions
     'HMAC_CTX_new',
     'HMAC_CTX_free',
     'HMAC_Init_ex',
@@ -3699,13 +3699,37 @@ end;
 function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
    tbs: PByte; tbslen: PtrUInt): integer;
 begin
-  result := libcrypto.EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen);
+  if Assigned(libcrypto.EVP_DigestSign) then
+    // new 1.1.1/3.x API - as required e.g. by ED25519
+    result := libcrypto.EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen)
+  else
+  begin
+    // fallback for oldest OpenSSL versions
+    if sigret = nil then
+      result := OPENSSLSUCCESS
+    else // = EVP_DigestSignUpdate macro
+      result := libcrypto.EVP_DigestUpdate(ctx, tbs, tbslen);
+    if result = OPENSSLSUCCESS then
+      result := libcrypto.EVP_DigestSignFinal(ctx, sigret, siglen);
+  end;
 end;
 
 function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
    tbs: PByte; tbslen: PtrUInt): integer;
 begin
-  result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen);
+  if Assigned(libcrypto.EVP_DigestVerify) then
+    // new 1.1.1/3.x API - as required e.g. by ED25519
+    result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen)
+  else
+  begin
+    // fallback for oldest OpenSSL versions
+    if sigret = nil then
+      result := OPENSSLSUCCESS
+    else // = EVP_DigestVerifyUpdate macro
+      result := libcrypto.EVP_DigestUpdate(ctx, tbs, tbslen);
+    if result = OPENSSLSUCCESS then
+      result := libcrypto.EVP_DigestVerifyFinal(ctx, sigret, siglen);
+  end;
 end;
 
 function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER;
@@ -4047,7 +4071,10 @@ end;
 
 function X509_NAME_hash(x: PX509_NAME): cardinal;
 begin
-  result := libcrypto.X509_NAME_hash(x);
+  if Assigned(libcrypto.X509_NAME_hash) then
+    result := libcrypto.X509_NAME_hash(x)
+  else
+    result := 0; // unsupported
 end;
 
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer;
@@ -4938,7 +4965,10 @@ end;
 
 function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PEVP_MD_DIG; len: PtrUInt): integer;
 begin
-  result := libcrypto.EVP_DigestFinalXOF(ctx, md, len);
+  if Assigned(libcrypto.EVP_DigestFinalXOF) then
+    result := libcrypto.EVP_DigestFinalXOF(ctx, md, len)
+  else
+    result := 0; // unsupported
 end;
 
 function HMAC_CTX_new: PHMAC_CTX;
@@ -7195,24 +7225,6 @@ begin
   PublicKey := PublicToPem;
 end;
 
-function EVP_DigestSignAny(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
-   tbs: PByte; tbslen: PtrUInt): integer;
-begin
-  if Assigned(@EVP_DigestSign) then
-    // new 1.1.1/3.x API - as required e.g. by ED25519
-    result := EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen)
-  else
-  begin
-    // fallback for oldest OpenSSL versions
-    if sigret = nil then
-      result := OPENSSLSUCCESS
-    else
-      result := EVP_DigestUpdate(ctx, tbs, tbslen);
-    if result = OPENSSLSUCCESS then
-      result := EVP_DigestSignFinal(ctx, sigret, siglen);
-  end;
-end;
-
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
 var
   ctx: PEVP_MD_CTX;
@@ -7226,10 +7238,10 @@ begin
     // note: ED25519 requires single-pass EVP_DigestSign()
     s := 0;
     if (EVP_DigestSignInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
-       (EVP_DigestSignAny(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
+       (EVP_DigestSign(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
     begin
       SetLength(result, s); // here size is maximum s bytes
-      if EVP_DigestSignAny(ctx, pointer(result), s, Msg, Len) = OPENSSLSUCCESS then
+      if EVP_DigestSign(ctx, pointer(result), s, Msg, Len) = OPENSSLSUCCESS then
       begin
         if s <> PtrUInt(length(result)) then
           SetLength(result, s); // result leading zeros may trim the size
@@ -7881,8 +7893,7 @@ end;
 
 function X509_NAME.Hash: cardinal;
 begin
-  if (@self = nil) or
-     not Assigned(@X509_NAME_hash) then
+  if @self = nil then
     result := 0
   else
     result := X509_NAME_hash(@self);
