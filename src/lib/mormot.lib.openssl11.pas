@@ -3274,7 +3274,7 @@ const
     'EVP_DigestSignFinal',
     'EVP_DigestVerifyInit',
     'EVP_DigestVerifyFinal',
-    'EVP_DigestSign',
+    '?EVP_DigestSign', // not defined in oldest versions
     'EVP_DigestVerify',
     'EVP_SealInit',
     'EVP_SealFinal',
@@ -7195,6 +7195,24 @@ begin
   PublicKey := PublicToPem;
 end;
 
+function EVP_DigestSignAny(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
+   tbs: PByte; tbslen: PtrUInt): integer;
+begin
+  if Assigned(@EVP_DigestSign) then
+    // new 1.1.1/3.x API - as required e.g. by ED25519
+    result := EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen)
+  else
+  begin
+    // fallback for oldest OpenSSL versions
+    if sigret = nil then
+      result := OPENSSLSUCCESS
+    else
+      result := EVP_DigestUpdate(ctx, tbs, tbslen);
+    if result = OPENSSLSUCCESS then
+      result := EVP_DigestSignFinal(ctx, sigret, siglen);
+  end;
+end;
+
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
 var
   ctx: PEVP_MD_CTX;
@@ -7208,10 +7226,10 @@ begin
     // note: ED25519 requires single-pass EVP_DigestSign()
     s := 0;
     if (EVP_DigestSignInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
-       (EVP_DigestSign(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
+       (EVP_DigestSignAny(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
     begin
       SetLength(result, s); // here size is maximum s bytes
-      if EVP_DigestSign(ctx, pointer(result), s, Msg, Len) = OPENSSLSUCCESS then
+      if EVP_DigestSignAny(ctx, pointer(result), s, Msg, Len) = OPENSSLSUCCESS then
       begin
         if s <> PtrUInt(length(result)) then
           SetLength(result, s); // result leading zeros may trim the size
