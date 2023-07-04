@@ -943,7 +943,11 @@ type
     actCortexX2,
     actNeoverseN2,
     actNeoverseE1,
-    actCortexA78C);
+    actCortexA78C,
+    actCortexX1C,
+    actCortexA715,
+    actCortexX3,
+    actNeoverseV2);
   /// a set of recognized ARM/AARCH64 CPU types
   TArmCpuTypes = set of TArmCpuType;
 
@@ -967,6 +971,7 @@ type
     aciApple,
     aciFaraday,
     aciIntel,
+    aciPhytium,
     aciAmpere);
   /// a set of recognized ARM/AARCH64 CPU hardware implementers
   TArmCpuImplementers = set of TArmCpuImplementer;
@@ -5967,7 +5972,11 @@ const
     $0d48,  // actCortexX2
     $0d49,  // actNeoverseN2
     $0d4a,  // actNeoverseE1
-    $0d4b); // actCortexA78C
+    $0d4b,  // actCortexA78C
+    $0d4c,  // actCortexX1C
+    $0d4d,  // actCortexA715
+    $0d4e,  // actCortexX3
+    $0d4f); // actNeoverseV2
 
   ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
     0,    // aciUnknown
@@ -5987,6 +5996,7 @@ const
     $61,  // aciApple
     $66,  // aciFaraday
     $69,  // aciIntel
+    $70,  // aciPhytium
     $c0); // aciAmpere
 
   ARMCPU_ID_TXT: array[TArmCpuType] of string[15] = (
@@ -6001,13 +6011,14 @@ const
      'Cortex-A72', 'Cortex-A73', 'Cortex-A75', 'Cortex-A76', 'Neoverse-N1',
      'Cortex-A77', 'Cortex-A76AE', 'Cortex-R52', 'Cortex-M23', 'Cortex-M33',
      'Neoverse-V1', 'Cortex-A78', 'Cortex-A78AE', 'Cortex-X1', 'Cortex-510',
-     'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C');
+     'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
+     'Cortex-X1C', 'Cortex-A715', 'Cortex-X3', 'Neoverse-V2');
 
   ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
       '',
       'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
       'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
-      'Apple', 'Faraday', 'Intel', 'Ampere');
+      'Apple', 'Faraday', 'Intel', 'Phytium', 'Ampere');
 
 function ArmCpuType(id: word): TArmCpuType;
 begin
