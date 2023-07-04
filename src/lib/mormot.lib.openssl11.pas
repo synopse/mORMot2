@@ -3485,7 +3485,7 @@ const
     'RSA_private_encrypt',
     'RSA_public_decrypt',
     'RSA_private_decrypt',
-    'RSA_pkey_ctx_ctrl',
+    '?RSA_pkey_ctx_ctrl',
     'i2d_PrivateKey_bio',
     'd2i_PrivateKey_bio',
     'i2d_PUBKEY_bio',
@@ -4838,7 +4838,10 @@ end;
 function RSA_pkey_ctx_ctrl(ctx: PEVP_PKEY_CTX; optype: integer;
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
 begin
-  result := libcrypto.RSA_pkey_ctx_ctrl(ctx, optype, cmd, p1, p2);
+  if Assigned(libcrypto.RSA_pkey_ctx_ctrl) then
+    result := libcrypto.RSA_pkey_ctx_ctrl(ctx, optype, cmd, p1, p2)
+  else
+    result := 0;
 end;
 
 function i2d_PrivateKey_bio(bp: PBIO; pkey: PEVP_PKEY): integer;
