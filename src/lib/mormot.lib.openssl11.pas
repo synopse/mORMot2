@@ -3296,7 +3296,7 @@ const
     'X509_get_subject_name',
     'X509_get_pubkey',
     'X509_get_signature_nid',
-    'X509_get_signature_info',
+    '?X509_get_signature_info',
     'X509_up_ref',
     'X509_STORE_free',
     'X509_STORE_CTX_free',
@@ -3839,7 +3839,10 @@ end;
 
 function X509_get_signature_info(x: PX509; mdnid, pknid, secbits, flags: PInteger): integer;
 begin
-  result := libcrypto.X509_get_signature_info(x, mdnid, pknid, secbits, flags);
+  if Assigned(libcrypto.X509_get_signature_info) then
+    result := libcrypto.X509_get_signature_info(x, mdnid, pknid, secbits, flags)
+  else
+    result := 0; // unsupported
 end;
 
 function X509_up_ref(x: PX509): integer;

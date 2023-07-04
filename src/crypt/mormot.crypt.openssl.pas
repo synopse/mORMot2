@@ -2817,8 +2817,7 @@ begin
     NID_ecdsa_with_SHA512:
       result := caaES512;
     NID_rsassaPss:
-      begin
-        X509_get_signature_info(x, @md, nil, nil, nil);
+      if X509_get_signature_info(x, @md, nil, nil, nil) = OPENSSLSUCCESS then
         case md of
           NID_sha256:
             result := caaPS256;
@@ -2826,8 +2825,9 @@ begin
             result := caaPS384;
           NID_sha512:
             result := caaPS512;
-        end;
-      end;
+        end
+      else
+        result := caaPS256; // is likely to be unsupported anyway
     NID_ED25519:
       result := caaEdDSA;
   end;
