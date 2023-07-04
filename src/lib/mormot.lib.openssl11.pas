@@ -3456,7 +3456,7 @@ const
     'ASN1_TIME_set',
     '?ASN1_TIME_set_string_X509',
     '?ASN1_TIME_to_tm',
-    'ASN1_TIME_normalize',
+    '?ASN1_TIME_normalize',
     'OPENSSL_sk_new',
     'OPENSSL_sk_free',
     'OPENSSL_sk_pop_free',
@@ -4680,7 +4680,10 @@ end;
 
 function ASN1_TIME_normalize(s: PASN1_TIME): integer;
 begin
-  result := libcrypto.ASN1_TIME_normalize(s);
+  if Assigned(libcrypto.ASN1_TIME_normalize) then
+    result := libcrypto.ASN1_TIME_normalize(s)
+  else
+    result := 0;
 end;
 
 function OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc): POPENSSL_STACK;
