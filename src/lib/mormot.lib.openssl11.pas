@@ -3454,7 +3454,7 @@ const
     'ASN1_TIME_new',
     'ASN1_TIME_free',
     'ASN1_TIME_set',
-    'ASN1_TIME_set_string_X509',
+    '?ASN1_TIME_set_string_X509',
     'ASN1_TIME_to_tm',
     'ASN1_TIME_normalize',
     'OPENSSL_sk_new',
@@ -4664,7 +4664,10 @@ end;
 
 function ASN1_TIME_set_string_X509(s: PASN1_TIME; str: PUtf8Char): integer;
 begin
-  result := libcrypto.ASN1_TIME_set_string_X509(s, str);
+  if Assigned(libcrypto.ASN1_TIME_set_string_X509) then
+    result := libcrypto.ASN1_TIME_set_string_X509(s, str)
+  else
+    result := 0; // unsupported
 end;
 
 function ASN1_TIME_to_tm(s: PASN1_TIME; tm: Ptm): integer;
