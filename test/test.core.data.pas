@@ -1368,32 +1368,34 @@ var
     finally
       CA.Free;
     end;
+    //FileFromString(U, WorkDir + 'testca1.json');
     CA := TCollTstDynArray.Create;
     try
       CA.Str := TStringList.Create;
       Check(JsonToObject(CA, pointer(U), Valid)^ = #0);
-      Check(Valid);
+      Check(Valid, 'cavalue1');
       Check(CA.Str.Count = 10000);
       for i := 1 to CA.Str.Count do
         Check(StrToInt(CA.Str[i - 1]) = i);
-      Check(length(CA.Ints) = 20000);
+      CheckEqual(length(CA.Ints), 20000, 'calen1');
       for i := 0 to high(CA.Ints) do
-        CA.Ints[i] := i;
+        CheckEqual(CA.Ints[i], i, 'caints1');
       SetLength(CA.fTimeLog, CA.Str.Count);
       TLNow := TimeLogNow and (not 63);
       for i := 0 to high(CA.TimeLog) do
         CA.TimeLog[i] := TLNow + i and 31; // and 31 to avoid min:sec rounding
       U := ObjectToJson(CA);
+      //FileFromString(U, WorkDir + 'testca2.json');
       SetLength(CA.fInts, 2);
       SetLength(CA.fTimeLog, 2);
       Check(JsonToObject(CA, pointer(U), Valid)^ = #0);
-      Check(Valid);
-      Check(Length(CA.Ints) = 20000);
-      Check(Length(CA.TimeLog) = CA.Str.Count);
+      Check(Valid, 'cavalue2');
+      CheckEqual(Length(CA.Ints), 20000, 'calen2');
+      CheckEqual(Length(CA.TimeLog), CA.Str.Count, 'cacount');
       for i := 0 to high(CA.Ints) do
-        Check(CA.Ints[i] = i);
+        CheckEqual(CA.Ints[i], i, 'caints2');
       for i := 0 to high(CA.TimeLog) do
-        Check(CA.TimeLog[i] = TLNow + i and 31);
+        CheckEqual(CA.TimeLog[i], TLNow + i and 31, 'catl');
       DA.Init(TypeInfo(TFVs), CA.fFileVersions);
       for i := 1 to 1000 do
       begin
@@ -1406,13 +1408,13 @@ var
         DA.Add(F);
       end;
       U := ObjectToJson(CA);
-      check(IsValidJson(U));
+      check(IsValidJson(U), 'ivj');
       DA.Clear;
-      Check(Length(CA.FileVersion) = 0);
+      CheckEqual(Length(CA.FileVersion), 0, 'fv');
       pu := JsonToObject(CA, pointer(U), Valid);
       Check((pu <> nil) and
             (pu^ = #0));
-      Check(Valid);
+      Check(Valid, 'cavalid');
       Check(Length(CA.Ints) = 20000);
       Check(Length(CA.TimeLog) = CA.Str.Count);
       Check(Length(CA.FileVersion) = 1000);
