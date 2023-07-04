@@ -1224,7 +1224,12 @@ begin
      not OpenSslIsAvailable or
      IntegerScanExists(pointer(EvpKo), length(EvpKo), EvpType) then
     exit;
-  ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
+  if ((EvpType = EVP_PKEY_RSA_PSS) or
+      (EvpType = EVP_PKEY_ED25519)) and
+     (OpenSslVersion < OPENSSL11_VERNUM) then
+    ctx := nil // those curves require at least OpenSSL 1.1.1
+  else
+    ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
   if ctx = nil then
   begin
     AddInteger(EvpKo, EvpType); // do not search twice
