@@ -2705,7 +2705,7 @@ begin
     Check(c1.IsSelfSigned);
     if c1.GetAuthorityKey <> c1.GetSubjectKey then // equal on syn-ecc
       CheckEqual(c1.GetAuthorityKey, '', 'X509 self-sign has no auth');
-    Check(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1');
+    CheckUtf8(c1.Verify(nil) = cvValidSelfSigned, 'cvValidSelfSigned1%', [crt.AlgoName]);
     Check(c1.Verify(c1) = cvValidSelfSigned, 'cvValidSelfSigned2');
     Check(c1.GetSignatureInfo <> '');
     Check(c1.HasPrivateSecret);
