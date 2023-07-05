@@ -1087,7 +1087,8 @@ type
     // - Return false if the operation failed
     function AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
       out ErrorMessage: RawUtf8; const Password: SpiUtf8 = '';
-      DeleteIfPresent : boolean = false): boolean;
+      DeleteIfPresent : boolean = false;
+      UserAccount: TUserAccountControls = [uacWorkstationTrusted]): boolean;
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Value: TLdapAttribute): boolean;
@@ -4030,20 +4031,20 @@ begin
 end;
 
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean): boolean;
+  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean;
+  UserAccount: TUserAccountControls): boolean;
 var
   PwdU8: SpiUtf8;
-  ComputerSafe, ParentSafe, ComputerDN, ComputerSam: RawUtf8;
+  ComputerSafe, ComputerDN, ComputerSam: RawUtf8;
   PwdU16: RawByteString;
   Attributes: TLdapAttributeList;
   ComputerObject: TLdapResult;
 begin
   result := false;
   if not Connected or
-     not LdapEscapeName(ComputerParentDN, ParentSafe) or
      not LdapEscapeName(ComputerName, ComputerSafe) then
     exit;
-  ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ParentSafe]);
+  ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ComputerParentDN]);
   ComputerSam := NetConcat([UpperCase(ComputerSafe), '$']);
   // Search Computer object in the domain
   ComputerObject := SearchFirst(DefaultDN,
@@ -4078,7 +4079,7 @@ begin
     Attributes.Add('objectClass', 'computer');
     Attributes.Add('cn', ComputerSafe);
     Attributes.Add('sAMAccountName', ComputerSam);
-    Attributes.Add('userAccountControl', '4096'); // WORKSTATION_TRUST_ACCOUNT
+    Attributes.Add('userAccountControl', UInt32ToUtf8(cardinal(UserAccount)));
     if Password <> '' then
     begin
       PwdU8 := NetConcat(['"', Password, '"']);
