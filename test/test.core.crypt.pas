@@ -2858,11 +2858,11 @@ begin
     // c2 has [cuDigitalSignature, cuKeyAgreement]
     // c3 has [cuDataEncipherment, cuKeyAgreement]
     cpe.Clear;
-    check(cpe.Usages = []);
-    check(not cpe.GetUsage(cuCA, c4));
-    check(c4 = nil);
-    check(cpe.Add(nil) = []);
-    check(cpe.Usages = []);
+    check(cpe.Usages = [], 'cpeu1');
+    check(not cpe.GetUsage(cuCA, c4), 'cpeu2');
+    check(c4 = nil, 'c4');
+    check(cpe.Add(nil) = [], 'cpeadd');
+    check(cpe.Usages = [], 'cpeu3');
     for u := low(u) to high(u) do
     begin
       check(not cpe.GetUsage(u, c4));

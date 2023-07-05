@@ -1379,9 +1379,10 @@ begin
     ExeDescription := Executable.ProgramName;
     if Arg(0, '#filename to redirect the console output') then
       Utf8ToFileName(Args[0], redirect);
-    DescribeCommandLine;
+    DescribeCommandLine; // may be overriden to define additional parameters
     if Option(['?', 'help'], 'display this message') or
-       (DetectUnknown <> '') then
+       (DetectUnknown <> '') or
+       SameText(redirect, 'help') then
     begin
       ConsoleWrite(FullDescription);
       exit;
