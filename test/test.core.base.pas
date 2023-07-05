@@ -5104,13 +5104,13 @@ begin
       CheckEqual(Utf8ILCompReference(pointer(U), pointer(Up), length(U), length(Up)),
         0, 'Utf8ILCompReference');
     end;
-    Check(LowerCase(U) = LowerCaseAscii7(U));
+    CheckEqual(LowerCase(U), LowerCaseAscii7(U));
     L := Length(U);
     SetString(Up, nil, L);
     SetString(Up2, PAnsiChar(pointer(U)), L);
     L := Utf8UpperCopy(pointer(Up), pointer(U), L) - pointer(Up);
     Check(L <= length(U));
-    Check(ConvertCaseUtf8(Pointer(Up2), NormToUpperByte) = L);
+    CheckEqual(ConvertCaseUtf8(Pointer(Up2), NormToUpperByte), L);
     if Up <> '' then
       Check(CompareMem(Pointer(Up), pointer(Up2), L));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then

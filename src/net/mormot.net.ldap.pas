@@ -2539,7 +2539,7 @@ function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean;
 begin
   result := LdapValidName(Text);
   if result then
-    Safe := LdapEscape(Text);
+    Safe := LdapEscape(Text, {KeepWildChar=}false);
 end;
 
 function LdapEscapeName(const Text: RawUtf8): RawUtf8;

@@ -960,6 +960,7 @@ function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
   const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): PUtf8Char;
 
 /// escape as \xx hexadecimal some chars from a set into a new RawUtf8 string
+// - as used e.g. by LdapEscape()
 function EscapeHex(const src: RawUtf8;
   const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
 
@@ -5133,7 +5134,7 @@ begin
       if src^ = escape then
       begin
         inc(src);
-        if mormot.core.text.HexToBin(PAnsiChar(src), PByte(@c), 1) then // \xx
+        if HexToChar(PAnsiChar(src), @c) then // \xx
         begin
           result^ := c;
           inc(src, 2);

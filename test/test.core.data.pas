@@ -102,6 +102,7 @@ uses
   mormot.rest.client,
   mormot.rest.server,
   mormot.net.client,
+  mormot.net.ldap,
   test.core.base;
 
 type
@@ -5415,10 +5416,18 @@ begin
     s := RandomUtf8(i);
     Check(not NeedsHtmlEscape(pointer(s), hfNone));
     t := UrlEncode(s);
-    Check(UrlDecode(t) = s);
+    Check(t <> '');
+    CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i]), '?' + d);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i], {trimlead=}true), d);
+    t := EscapeHex(s, LDAP_ESC[true]);
+    Check(t <> '');
+    if length(t) = length(s) then
+      CheckEqual(t, s)
+    else
+      Check(PosExChar('\', t) <> 0);
+    CheckEqual(UnescapeHex(t), s, 'UnescapeHex');
   end;
   for hf := low(hf) to high(hf) do
   begin
