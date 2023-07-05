@@ -358,6 +358,8 @@ type
     // by default, but may be overridden to update a real UI or reporting system
     // - method implementation can use fCurrentMethodInfo^ to get run context
     procedure AfterOneRun; virtual;
+    /// could be overriden to add some custom command-line parameters
+    class procedure DescribeCommandLine; virtual;
   public
     /// you can put here some text to be displayed at the end of the messages
     // - some internal versions, e.g.
@@ -1330,6 +1332,11 @@ begin
   Color(ccLightGray);
 end;
 
+class procedure TSynTests.DescribeCommandLine;
+begin
+  // do nothing by default - override with proper Executable.Command calls
+end;
+
 procedure TSynTests.SaveToFile(const DestPath: TFileName;
   const FileName: TFileName);
 var
@@ -1362,9 +1369,25 @@ class procedure TSynTests.RunAsConsole(const CustomIdent: string;
   withLogs: TSynLogInfos; options: TSynTestOptions; const workdir: TFileName);
 var
   tests: TSynTests;
+  redirect: TFileName;
 begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
+  // properly parse command line switches
+  with Executable.Command do
+  begin
+    ExeDescription := Executable.ProgramName;
+    if Arg(0, '#filename to redirect the console output') then
+      Utf8ToFileName(Args[0], redirect);
+    DescribeCommandLine;
+    if Option(['?', 'help'], 'display this message') or
+       (DetectUnknown <> '') then
+    begin
+      ConsoleWrite(FullDescription);
+      exit;
+    end;
+  end;
+  // setup logs and console
   AllocConsole;
   RunFromSynTests := true; // set mormot.core.os.pas global flag
   with TSynLogTestLog.Family do
@@ -1387,9 +1410,9 @@ begin
     if workdir <> '' then
       tests.WorkDir := workdir;
     tests.Options := options;
-    if ParamCount > 0 then
+    if redirect <> '' then
     begin
-      tests.SaveToFile(paramstr(1)); // export to file if named on command line
+      tests.SaveToFile(redirect); // export to file if named on command line
       {$I-} // minimal console output during blind regression tests
       Writeln(tests.Ident, #13#10#13#10' Running tests... please wait');
       {$I+}
