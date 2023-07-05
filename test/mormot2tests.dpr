@@ -64,6 +64,8 @@ uses
 
 type
   TIntegrationTests = class(TSynTestsLogged)
+  protected
+    class procedure DescribeCommandLine; override;
   public
     function Run: boolean; override;
   published
@@ -71,6 +73,20 @@ type
     procedure ORM;
     procedure SOA;
   end;
+
+class procedure TIntegrationTests.DescribeCommandLine;
+begin
+  with Executable.Command do
+  begin
+    ExeDescription := 'mORMot '+ SYNOPSE_FRAMEWORK_VERSION + ' Regression Tests';
+    Param('dns', 'a DNS #server name/IP for LDAP tests via Kerberos ' +
+      {$ifdef OSWINDOWS}
+      'with current logged user');
+      {$else}
+      'after kinit');
+      {$endif OSWINDOWS}
+  end;
+end;
 
 function TIntegrationTests.Run: boolean;
 var
