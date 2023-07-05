@@ -512,7 +512,7 @@ type
       reintroduce;
     /// finalize the instance
     destructor Destroy; override;
-    /// wrapper around function OpenSslIsAvailable
+    /// wrapper around OpenSslIsAvailable() function
     class function IsAvailable: boolean; virtual;
     /// the OpenSSL hash algorithm, as supplied to the constructor
     property HashAlgorithm: RawUtf8
@@ -538,7 +538,8 @@ type
   protected
     fAsym: TCryptAsymAlgo;
     procedure SetAlgorithms; virtual; // set fAsym+fHashAlgo+fHashAlgorithm
-    class function GetAlgorithm: TCryptAsymAlgo; virtual; abstract; // for fAsym
+    // should be properly overriden by non-abstract child - used to set fAsym
+    class function GetAlgorithm: TCryptAsymAlgo; virtual; abstract;
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
     // - the supplied key(s) could be in PEM or raw DER binary format
@@ -558,7 +559,7 @@ type
     class procedure GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
     /// generate a private/public keys pair for this algorithm in raw DER format
     class procedure GenerateBinaryKeys(out PrivateKey, PublicKey: RawByteString);
-    /// wrapper around function OpenSslSupports
+    /// wrapper around OpenSslSupports() function
     class function IsAvailable: boolean; override;
   end;
 
@@ -1587,6 +1588,9 @@ constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
   aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
 begin
   EOpenSsl.CheckAvailable(PClass(self)^, 'Create');
+  if not OpenSslSupports(aGenEvpType) then
+    raise EOpenSsl.CreateFmt('%s.Create: unsupported %s',
+      [ClassNameShort(self)^, aJwtAlgorithm]);
   fAlgoMd := OpenSslGetMd(aHashAlgorithm, 'TJwtOpenSsl.Create');
   fHashAlgorithm := aHashAlgorithm;
   fGenEvpType := aGenEvpType;
@@ -1650,7 +1654,7 @@ end;
 
 procedure TJwtAbstractOsl.SetAlgorithms;
 begin
-  fAsym := GetAlgorithm;
+  fAsym := GetAlgorithm; // virtual method
   fAlgorithm := CAA_JWT[fAsym];
   fHashAlgorithm := CAA_HASH[fAsym];
   fGenEvpType := CAA_EVPTYPE[fAsym];
@@ -2151,11 +2155,13 @@ end;
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
 begin
   result := fX509.NotBefore;
+  // may return 0 if ASN1_TIME_to_tm() is not supported by an oldest OpenSSL
 end;
 
 function TCryptCertOpenSsl.GetNotAfter: TDateTime;
 begin
   result := fX509.NotAfter;
+  // may return 0 if ASN1_TIME_to_tm() is not supported by an oldest OpenSSL
 end;
 
 function TCryptCertOpenSsl.GetUsage: TCryptCertUsages;
@@ -2366,20 +2372,29 @@ end;
 
 function CanVerify(auth: PX509; usage: TX509Usage; selfsigned: boolean;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+var
+  na, nb: TDateTime;
 begin
-  if TimeUtc = 0 then
-    TimeUtc := NowUtc;
   if auth = nil then
     result := cvUnknownAuthority
   else if (not (cvWrongUsage in IgnoreError)) and
           (not (selfsigned or auth.HasUsage(usage))) then
     result := cvWrongUsage
-  else if (not (cvDeprecatedAuthority in IgnoreError)) and
-          ((TimeUtc >= auth.NotAfter) or
-           (TimeUtc < auth.NotBefore)) then
-    result := cvDeprecatedAuthority
   else
+  begin
     result := cvValidSigned;
+    if cvDeprecatedAuthority in IgnoreError then
+      exit;
+    if TimeUtc = 0 then
+      TimeUtc := NowUtc;
+    na := auth.NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
+    nb := auth.NotBefore;
+    if ((na <> 0) and
+        (TimeUtc >= na)) or
+       ((nb <> 0) and
+        (TimeUtc < nb)) then
+      result := cvDeprecatedAuthority;
+  end;
 end;
 
 function TCryptCertOpenSsl.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
