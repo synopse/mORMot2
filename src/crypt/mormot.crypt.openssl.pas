@@ -357,7 +357,10 @@ function OpenSslVerify(const Algorithm: RawUtf8; const PublicKeyPassword: SpiUtf
 
 /// check if an OpenSSL given type of public/private pair of keys is supported
 // - some older OpenSSL versions do not support e.g. EVP_PKEY_ED25519
-function OpenSslSupports(EvpType: integer): boolean;
+function OpenSslSupports(EvpType: integer): boolean; overload;
+
+/// check if a TCryptAsymAlgo of public/private pair of keys is supported
+function OpenSslSupports(Algo: TCryptAsymAlgo): boolean; overload;
 
 /// generate a public/private pair of keys in raw OpenSSL format
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
@@ -1240,6 +1243,11 @@ begin
   result := true;
 end;
 
+function OpenSslSupports(Algo: TCryptAsymAlgo): boolean;
+begin
+  result := OpenSslSupports(CAA_EVPTYPE[Algo]);
+end;
+
 function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY;
 var
   ctx, kctx: PEVP_PKEY_CTX;
@@ -1637,7 +1645,7 @@ end;
 
 class function TJwtAbstractOsl.IsAvailable: boolean;
 begin
-  result := OpenSslSupports(CAA_EVPTYPE[GetAlgorithm]);
+  result := OpenSslSupports(GetAlgorithm);
 end;
 
 procedure TJwtAbstractOsl.SetAlgorithms;
@@ -1800,6 +1808,8 @@ end;
 
 constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
+  if not OpenSslSupports(fOsa) then
+    raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, name]);
   fDefaultHashAlgorithm := CAA_HASH[fOsa];
   fEvpType := CAA_EVPTYPE[fOsa];
   fBitsOrCurve := CAA_BITSORCURVE[fOsa];
@@ -2939,10 +2949,11 @@ begin
   // register OpenSSL methods to our high-level cryptographic catalog
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for osa := low(osa) to high(osa) do
-  begin
-    CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
-    CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
-  end;
+    if OpenSslSupports(osa) then
+    begin
+      CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
+      CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
+    end;
   CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;

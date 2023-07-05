@@ -667,6 +667,8 @@ procedure TTestCoreEcc._OpenSSL;
     msg, sig: RawByteString;
     i: integer;
   begin
+    if not OpenSslSupports(EvpType) then
+      exit; // on oldest OpenSSL
     timer.Start;
     for i := 1 to Count do
       OpenSslGenerateKeys(EvpType, BitsOrCurve, priv, pub);
