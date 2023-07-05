@@ -2836,8 +2836,10 @@ begin
       CheckEqual(c2.GetAuthorityKey, '', 'X509 self-sign has no auth');
     if crt.AlgoName <> 'syn-es256-v1' then
       Check(c2.GetUsage = [cuDigitalSignature, cuKeyAgreement]);
-    Check(c2.Verify(c1) = cvValidSelfSigned, 'self1');
-    Check(c2.Verify(nil) = cvValidSelfSigned, 'self2');
+    cv := c2.Verify(c1);
+    CheckUtf8(cv = cvValidSelfSigned, '%:self1=%', [crt.AlgoName, ToText(cv)^]);
+    cv := c2.Verify(nil);
+    CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
     c2.Sign(c1); // change signature
     CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
     Check(c2.Verify(c1) = cvValidSigned, 'self3');
