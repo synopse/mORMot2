@@ -81,7 +81,7 @@ type
   EOpenSsl = class(ExceptionWithProps)
   protected
     fLastError: integer;
-    function GetOpenSsl: string;
+    class function GetOpenSsl: string;
     class procedure CheckFailed(caller: TObject; const method: shortstring;
       errormsg: PRawUtf8; ssl: pointer);
     class procedure TryNotAvailable(caller: TClass; const method: shortstring);
@@ -8821,7 +8821,7 @@ begin
      (ASN1_TIME_to_tm(@self, @t) = OPENSSLSUCCESS) then
     result := TmToDateTime(t)
   else
-    result := 0;
+    result := 0; // deprecated
 end;
 
 
@@ -9560,10 +9560,10 @@ begin
      not PSSL(ssl).IsVerified then
     msg := msg + ' (' + PSSL(ssl).VerificationErrorMessage + ')';
   if caller = nil then
-    exc := CreateFmt('OpenSSL error %d [%s]', [res, msg])
+    exc := CreateFmt('OpenSSL %s error %d [%s]', [OpenSslVersionHexa, res, msg])
   else
-    exc := CreateFmt('%s.%s: OpenSSL error %d [%s]',
-      [ClassNameShort(caller)^, method, res, msg]);
+    exc := CreateFmt('%s.%s: OpenSSL %s error %d [%s]',
+      [ClassNameShort(caller)^, method, OpenSslVersionHexa, res, msg]);
   exc.fLastError := res;
   raise exc;
 end;
@@ -9588,7 +9588,7 @@ begin
     TryNotAvailable(caller, method);
 end;
 
-function EOpenSsl.GetOpenSsl: string;
+class function EOpenSsl.GetOpenSsl: string;
 begin
   result := OpenSslVersionHexa;
 end;

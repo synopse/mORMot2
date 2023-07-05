@@ -22,6 +22,7 @@ uses
   mormot.core.test,
   mormot.core.variants,
   mormot.lib.pkcs11,
+  mormot.lib.openssl11,
   mormot.crypt.jwt,
   mormot.crypt.ecc;
 
@@ -554,6 +555,7 @@ begin
   Prng(TAesPrng, 'mORMot');
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
+  AddConsole('       using OpenSSL %', [OpenSslVersionHexa]);
   {$endif USE_OPENSSL}
   // same benchmarks as in Prng()
   timer.Start;
@@ -566,7 +568,7 @@ begin
   SetLength(big, 100000);
   timer.Start;
   RandomBytes(pointer(big), length(big));
-  NotifyTestSpeed('Lecuyer RandomBytes', [], 1, length(big), @timer);
+  NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big), @timer);
 end;
 
 procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUTF8);
@@ -685,7 +687,7 @@ begin
   SetLength(big, 100000);
   timer.Start;
   p.FillRandom(pointer(big), length(big));
-  NotifyTestSpeed('% FillRandom', [name], 1, length(big), @timer);
+  NotifyTestSpeed('       % FillRandom', [name], 1, length(big), @timer);
 end;
 
 procedure TTestCoreCrypto.CryptData(dpapi: boolean);
