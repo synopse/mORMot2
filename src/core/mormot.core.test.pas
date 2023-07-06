@@ -1369,6 +1369,7 @@ class procedure TSynTests.RunAsConsole(const CustomIdent: string;
 var
   tests: TSynTests;
   redirect: TFileName;
+  err: RawUtf8;
 begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
@@ -1376,13 +1377,18 @@ begin
   with Executable.Command do
   begin
     ExeDescription := Executable.ProgramName;
+    {$ifndef OSPOSIX}
+    Option('noenter', 'do not wait for ENTER key on exit');
+    {$endif OSPOSIX}
     if Arg(0, '#filename to redirect the console output') then
       Utf8ToFileName(Args[0], redirect);
     DescribeCommandLine; // may be overriden to define additional parameters
-    if Option(['?', 'help'], 'display this message') or
-       (DetectUnknown <> '') or
+    err := DetectUnknown;
+    if (err <> '') or
+       Option(['?', 'help'], 'display this message') or
        SameText(redirect, 'help') then
     begin
+      ConsoleWrite(err);
       ConsoleWrite(FullDescription);
       exit;
     end;
