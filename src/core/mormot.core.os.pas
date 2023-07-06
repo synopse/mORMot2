@@ -2922,7 +2922,7 @@ type
     /// the address where the exception occurred
     EAddr: PtrUInt;
     /// the optional stack trace
-    EStack: PPtrUInt;
+    EStack: PPtrUIntArray;
     /// timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUtc is faster than NowUtc or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime

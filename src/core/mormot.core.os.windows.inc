@@ -1549,7 +1549,7 @@ begin
         ctxt.ELevel := sllExceptionOS;
         ctxt.EAddr := Exc.ExceptionAddress;
       end;
-      ctxt.EStack := stack;
+      ctxt.EStack := pointer(stack);
       ctxt.EStackCount := 0;
       ctxt.ETimestamp := UnixTimeUtc; // fast API call
       backuphandler(ctxt);

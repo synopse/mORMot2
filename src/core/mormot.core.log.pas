@@ -5897,8 +5897,11 @@ type
   TSynLogExceptionInfos = array[0..MAX_EXCEPTHISTORY] of TSynLogExceptionInfo;
 
 var
+  // some static information about the latest exceptions raised
   GlobalLastException: TSynLogExceptionInfos;
   GlobalLastExceptionIndex: integer = -1;
+  GlobalLastExceptionStackCount: integer;
+  GlobalLastExceptionStack: array[0..MAX_EXCEPTHISTORY - 1] of PtrUInt;
 
 function GetHandleExceptionSynLog: TSynLog;
 var
@@ -5971,6 +5974,7 @@ begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     try
+      // retrieve the logging context
       if (log = nil) or
          not log.fFamily.fHandleExceptions then
         log := GetHandleExceptionSynLog;
@@ -5986,6 +5990,7 @@ begin
         if log.fFamily.OnBeforeException(Ctxt, log.fThreadContext^.ThreadName) then
           // intercepted by custom callback
           exit;
+      // memorize for internal last exceptions list into static arrays
       log.LogHeader(Ctxt.ELevel);
       if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
         GlobalLastExceptionIndex := 0
@@ -5993,6 +5998,17 @@ begin
         inc(GlobalLastExceptionIndex);
       info := @GlobalLastException[GlobalLastExceptionIndex];
       info^.Context := Ctxt;
+      if Ctxt.EStack = nil then
+        GlobalLastExceptionStackCount := 0
+      else
+      begin
+        GlobalLastExceptionStackCount := Ctxt.EStackCount;
+        if GlobalLastExceptionStackCount > MAX_EXCEPTHISTORY then
+          GlobalLastExceptionStackCount := MAX_EXCEPTHISTORY;
+        MoveFast(Ctxt.EStack[0], GlobalLastExceptionStack[0],
+          GlobalLastExceptionStackCount * SizeOf(PtrUInt));
+      end;
+      // custom exception log
       if (Ctxt.ELevel = sllException) and
          (Ctxt.EInstance <> nil) then
       begin
@@ -6009,20 +6025,23 @@ begin
         info^.Message := '';
       if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
         goto fin;
-adr:  log.fWriter.Add(' ', '[');
+adr:  // regular exception context log with its stack trace
+      log.fWriter.Add(' ', '[');
       log.fWriter.AddShort(CurrentThreadName); // fThreadContext^.ThreadName may be ''
       log.fWriter.AddShorter('] at ');
       try
         TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
         {$ifdef FPC}
-        // we rely on the stack trace supplied by FPC RTL
+        // we rely on the stack trace supplied by the FPC RTL
         for i := 0 to Ctxt.EStackCount - 1 do
           if (i = 0) or
              (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then
-            TDebugFile.Log(log.fWriter, Ctxt.EStack[i], {notcode=}false, {symbol=}false);
+            TDebugFile.Log(log.fWriter,
+              Ctxt.EStack[i], {notcode=}false, {symbol=}false);
         {$else}
-        {$ifdef CPUX86} // stack frame OK only for RTLUnwindProc by now
-        log.AddStackTrace(Ctxt.ELevel, Ctxt.EStack);
+        {$ifdef CPUX86}
+        // stack frame OK only for RTLUnwindProc by now
+        log.AddStackTrace(Ctxt.ELevel, pointer(Ctxt.EStack));
         {$endif CPUX86}
         {$endif FPC}
       except // paranoid
@@ -6053,7 +6072,8 @@ begin
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
   info.Context.EInstance := nil; // avoid any GPF
-  info.Context.EStack := nil;
+  info.Context.EStack := @GlobalLastExceptionStack;
+  info.Context.EStackCount := GlobalLastExceptionStackCount;
   result := info.Context.ELevel <> sllNone;
 end;
 
@@ -6096,19 +6116,33 @@ begin
       else
       begin
         EInstance := nil; // avoid any GPF
-        EStack := nil;
+        if i = 0 then
+        begin
+          EStack := @GlobalLastExceptionStack; // static copy of last exception
+          EStackCount := GlobalLastExceptionStackCount;
+        end
+        else
+          EStack := nil;
       end;
   end;
 end;
 
 function ToText(var info: TSynLogExceptionInfo): RawUtf8;
+var
+  i: PtrInt;
 begin
   with info.Context do
     if ELevel <> sllNone then
+    begin
       FormatUtf8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass,
         GetInstanceDebugFile.FindLocationShort(EAddr),
         UnixTimeToString(ETimestamp, {expanded=}true, ' '),
-        StringToUtf8(info.Message)], result)
+        StringToUtf8(info.Message)], result);
+      if EStack <> nil then
+        for i := 0 to EStackCount - 1 do
+          result := FormatUtf8('%, %',
+            [result, ExeInstanceDebugFile.FindLocationShort(EStack[i])]);
+    end
     else
       result := '';
 end;
