@@ -65,11 +65,11 @@ type
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients
-    procedure IpDnsLdap;
+    procedure DNSAndLDAP;
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
-    procedure RtspOverHttp;
+    procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
-    procedure RtspOverHttpBufferedWrite;
+    procedure RTSPOverHTTPBufferedWrite;
     /// validate mormot.net.tunnel
     procedure _TTunnelLocal;
   end;
@@ -278,12 +278,12 @@ const
   //ASYNC_OPTION = ASYNC_OPTION_DEBUG;
   ASYNC_OPTION = ASYNC_OPTION_VERBOSE;
 
-procedure TNetworkProtocols.RtspOverHttp;
+procedure TNetworkProtocols.RTSPOverHTTP;
 begin
   DoRtspOverHttp(ASYNC_OPTION);
 end;
 
-procedure TNetworkProtocols.RtspOverHttpBufferedWrite;
+procedure TNetworkProtocols.RTSPOverHTTPBufferedWrite;
 begin
   DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
 end;
@@ -579,7 +579,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.IpDnsLdap;
+procedure TNetworkProtocols.DNSAndLDAP;
 var
   ip, u, v, dn, sid: RawUtf8;
   c: cardinal;
@@ -700,7 +700,7 @@ begin
     l.Free;
   end;
   // optional LDAP client tests
-  if Executable.Command.Get('dns', dns) then
+  if Executable.Command.Get(['dns'], dns) then
     for i := 0 to high(dns) do
     begin
       // syntax is -dns server1 [-dns server2]
