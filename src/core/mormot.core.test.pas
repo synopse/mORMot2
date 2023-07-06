@@ -1215,8 +1215,7 @@ begin
               Text(['! ', fCurrentMethodInfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
-              TextLn([#13#10'! Exception ', E.ClassName,
-                ' raised with messsage:'#13#10'!  ', E.Message]);
+              TextLn([#13#10'! ', GetLastExceptionText]); // with extended info
               Color(ccLightGray);
             end;
           end;
