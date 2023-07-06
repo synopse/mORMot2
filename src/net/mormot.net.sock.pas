@@ -642,6 +642,12 @@ type
     // - on OpenSSL client or server, set SSL_VERIFY_CLIENT_ONCE mode
     // - not used on SChannel
     ClientVerifyOnce: boolean;
+    /// input: allow legacy insecure renegotiation for unpatched/unsafe servers
+    // - on OpenSSL client, set the SSL_OP_LEGACY_SERVER_CONNECT option
+    // - not used on SChannel
+    // - clients that are willing to connect to servers that don't implement RFC
+    // 5746 secure renegotiation are subject to attacks such as CVE-2009-3555
+    ClientAllowUnsafeRenegotation: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
