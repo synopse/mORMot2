@@ -317,7 +317,7 @@ type
     // and generate or renew them in order
     // - follow RenewWaitForSeconds timeout for each certificate
     // - this blocking process could take some time (several seconds per domain)
-    procedure CheckCertificates(Sender: TObject = nil);
+    procedure CheckCertificates(Sender: TObject);
     /// validate the stored certificates in a background thread
     procedure CheckCertificatesBackground;
     /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
@@ -1112,7 +1112,7 @@ begin
     [Plural('domain', length(fClient))], self);
 end;
 
-procedure TAcmeLetsEncrypt.CheckCertificates;
+procedure TAcmeLetsEncrypt.CheckCertificates(Sender: TObject);
 var
   i: PtrInt;
   c: TAcmeLetsEncryptClient;
@@ -1201,7 +1201,7 @@ end;
 
 procedure TAcmeLetsEncrypt.CheckCertificatesBackground;
 begin
-  TLoggedWorkThread.Create(fLog, 'CheckCertificates', self, CheckCertificates, nil)
+  TLoggedWorkThread.Create(fLog, 'CheckCertificates', self, CheckCertificates) ;
 end;
 
 function TAcmeLetsEncrypt.GetClient(

@@ -1093,7 +1093,8 @@ type
     /// this constructor will directly start the thread in background
     // - with the context as a regular TNotifyEvent
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
-      Sender: TObject; const OnExecute, OnExecuted: TNotifyEvent);
+      Sender: TObject; const OnExecute: TNotifyEvent;
+      const OnExecuted: TNotifyEvent = nil);
         reintroduce; overload;
     /// this constructor will directly start the thread in background
     // - with the context as a TDocVariantData object with name/value pairs
