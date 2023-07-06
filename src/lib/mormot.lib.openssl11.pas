@@ -576,6 +576,46 @@ const
   SSL_ERROR_WANT_ASYNC_JOB = 10;
   SSL_ERROR_WANT_CLIENT_HELLO_CB = 11;
   
+  SSL_OP_LEGACY_SERVER_CONNECT = $00000004;
+  SSL_OP_TLSEXT_PADDING = $00000010;
+  SSL_OP_SAFARI_ECDHE_ECDSA_BUG = $00000040;
+  SSL_OP_ALLOW_NO_DHE_KEX = $00000400;
+  SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS = $00000800;
+  SSL_OP_NO_QUERY_MTU = $00001000;
+  SSL_OP_COOKIE_EXCHANGE = $00002000;
+  SSL_OP_NO_TICKET = $00004000;
+  SSL_OP_CISCO_ANYCONNECT = $00008000;
+  SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION = $00010000;
+  SSL_OP_NO_COMPRESSION = $00020000;
+  SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION = $00040000;
+  SSL_OP_NO_ENCRYPT_THEN_MAC = $00080000;
+  SSL_OP_ENABLE_MIDDLEBOX_COMPAT = $00100000;
+  SSL_OP_PRIORITIZE_CHACHA = $00200000;
+  SSL_OP_CIPHER_SERVER_PREFERENCE = $00400000;
+  SSL_OP_TLS_ROLLBACK_BUG = $00800000;
+  SSL_OP_NO_ANTI_REPLAY = $01000000;
+  SSL_OP_NO_SSLv3 = $02000000;
+  SSL_OP_NO_TLSv1 = $04000000;
+  SSL_OP_NO_TLSv1_2 = $08000000;
+  SSL_OP_NO_TLSv1_1 = $10000000;
+  SSL_OP_NO_TLSv1_3 = $20000000;
+  SSL_OP_NO_DTLSv1 = $04000000;
+  SSL_OP_NO_DTLSv1_2 = $08000000;
+  SSL_OP_NO_SSL_MASK = SSL_OP_NO_SSLv3 or
+                       SSL_OP_NO_TLSv1 or
+                       SSL_OP_NO_TLSv1_1 or
+                       SSL_OP_NO_TLSv1_2 or
+                       SSL_OP_NO_TLSv1_3;
+  SSL_OP_NO_DTLS_MASK = SSL_OP_NO_DTLSv1 or
+                        SSL_OP_NO_DTLSv1_2;
+  SSL_OP_NO_RENEGOTIATION = $40000000;
+  SSL_OP_CRYPTOPRO_TLSEXT_BUG = $80000000;
+  SSL_OP_ALL = SSL_OP_CRYPTOPRO_TLSEXT_BUG or
+               SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS or
+               SSL_OP_LEGACY_SERVER_CONNECT or
+               SSL_OP_TLSEXT_PADDING or
+               SSL_OP_SAFARI_ECDHE_ECDSA_BUG;
+
   SSL_CTRL_SET_TMP_DH = 3;
   SSL_CTRL_SET_TMP_ECDH = 4;
   SSL_CTRL_SET_TMP_DH_CB = 6;
@@ -1874,6 +1914,8 @@ function SSL_CTX_use_certificate_chain_file(ctx: PSSL_CTX; _file: PUtf8Char): in
 function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
    protos: PByte; protos_len: cardinal): integer; cdecl;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
+// op/result are cardinal for OpenSSL 1.1, but QWord since OpenSSL 3.0 :(
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
 function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
@@ -2537,6 +2579,7 @@ type
     SSL_CTX_use_certificate_chain_file: function(ctx: PSSL_CTX; _file: PUtf8Char): integer; cdecl;
     SSL_CTX_set_alpn_protos: function(ctx: PSSL_CTX; protos: PByte; protos_len: cardinal): integer; cdecl;
     SSL_CTX_ctrl: function(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
+    SSL_CTX_set_options: pointer; // variable signature between 1.1 vs 3.0 :(
     SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
     SSL_set_SSL_CTX: function(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
@@ -2579,7 +2622,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..53] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..54] of RawUtf8 = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -2596,6 +2639,7 @@ const
     'SSL_CTX_use_certificate_chain_file',
     'SSL_CTX_set_alpn_protos',
     'SSL_CTX_ctrl',
+    'SSL_CTX_set_options',
     'SSL_CTX_callback_ctrl',
     'SSL_new',
     'SSL_set_SSL_CTX',
@@ -2716,6 +2760,20 @@ end;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong;
 begin
   result := libssl.SSL_CTX_ctrl(ctx, cmd, larg, parg);
+end;
+
+type
+  // OpenSSL 3.0 changed the SSL_CTX_set_options() parameter types to 64-bit
+  TSSL_CTX_set_options32 = function(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+  TSSL_CTX_set_options64 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
+
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal;
+begin
+  // we publish a 32-bit 1.1 version anyway - enough for SSL_OP_LEGACY_SERVER_CONNECT
+  if OpenSslVersion < OPENSSL3_VERNUM then
+    result := TSSL_CTX_set_options32(libssl.SSL_CTX_set_options)(ctx, op)
+  else
+    result := TSSL_CTX_set_options64(libssl.SSL_CTX_set_options)(ctx, op);
 end;
 
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer;
@@ -5583,6 +5641,9 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_ctrl';
+
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_options';
 
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_callback_ctrl';
@@ -9860,6 +9921,11 @@ begin
         fCtx, pointer(Context.CACertificatesFile), nil)
     else
       SSL_CTX_set_default_verify_paths(fCtx);
+    if not Bind then
+    begin
+      if Context.ClientAllowUnsafeRenegotation then
+        SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
+    end;
   end;
   if FileExists(TFileName(Context.CertificateFile)) then
      EOpenSslNetTls.Check(self, 'CertificateFile',
