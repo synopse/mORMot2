@@ -588,9 +588,13 @@ begin
     FastSetRawByteString(frame, @header, SizeOf(header));
     FrameSign(frame); // optional digital signature
     fTransmit.Send(frame);
+    if Assigned(log) then
+      log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
       raise ETunnel.CreateUtf8('Open handshake timeout on port %', [result]);
+    if Assigned(log) then
+      log.Log(sllTrace, 'Open: after WaitPop1 len=', [length(remote)], self);
     if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
        not CompareMem(pointer(remote), @header,
              SizeOf(header) - SizeOf(header.port)) then
@@ -612,8 +616,13 @@ begin
             raise ETunnel.CreateUtf8('%.Open: no ECC engine available', [self]);
         PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
         fTransmit.Send(frame);
-        if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-           (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
+        if Assigned(log) then
+          log.Log(sllTrace, 'Open: after Send2 len=', [length(frame)], self);
+        if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
+          exit;
+        if Assigned(log) then
+          log.Log(sllTrace, 'Open: after WaitPop2 len=', [length(remote)], self);
+        if (length(remote) <> SizeOf(TTunnelEcdhFrame)) or
            not Ecc256r1SharedSecret(
              PTunnelEcdhFrame(remote)^.pub, fEcdhe.priv, secret) then
           exit;
