@@ -24765,9 +24765,6 @@ function SSL_CTX_get_options(ctx: PSSL_CTX): cardinal; cdecl;
 function SSL_get_options(s: PSSL): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_get_options';
 
-function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_clear_options';
-
 function SSL_clear_options(s: PSSL; op: cardinal): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_clear_options';
 

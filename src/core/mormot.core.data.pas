@@ -3063,7 +3063,7 @@ type
 
   /// allow to customize TRadixTree process
   // - e.g. if static text matching should be case-insensitive (but <params> are
-  // always case-sensitive, because they are internal labels)
+  // always case-sensitive, because they are user-specific runtime variables)
   // - if <param> values should be only plain integers, never alphabetical text -
   // you may also specify int:xxx for a single parameter, e.g. as <int:id>
   TRadixTreeOptions = set of (
