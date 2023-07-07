@@ -1211,6 +1211,15 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
+function GetExecutableName(aAddress: pointer): TFileName;
+var
+  dlinfo: dl_info;
+begin
+  FillCharFast(dlinfo, sizeof(dlinfo), 0);
+  dladdr(aAddress, @dlinfo);
+  result := string(dlinfo.dli_fname);
+end;
+
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 var

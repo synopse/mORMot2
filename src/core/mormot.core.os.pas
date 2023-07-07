@@ -1487,6 +1487,10 @@ procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 var
   GetExecutableLocation: function(aAddress: pointer): ShortString;
 
+/// try to retrieve the file name of the executable/library holding a function
+// - calls dladdr() on POSIX, or GetModuleFileName() on Windows
+function GetExecutableName(aAddress: pointer): TFileName;
+
 var
   /// retrieve the MAC addresses of all hardware network adapters
   // - mormot.net.sock.pas will inject here its own cross-platform version
@@ -7600,11 +7604,11 @@ begin
   with Executable do
   begin
     {$ifdef OSWINDOWS}
-    ProgramFileName := paramstr(0);
+    ProgramFileName := ParamStr(0); // RTL seems just fine here
     {$else}
-    ProgramFileName := GetModuleName(HInstance);
+    ProgramFileName := GetExecutableName(@InitializeExecutableInformation);
     if ProgramFileName = '' then
-      ProgramFileName := ExpandFileName(paramstr(0));
+      ProgramFileName := ExpandFileName(ParamStr(0));
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then

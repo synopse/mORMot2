@@ -818,6 +818,28 @@ begin
   FileClose(h);
 end;
 
+function GetModuleHandleExA(dwFlags: cardinal; lpModuleName: pointer;
+ var phModule: HMODULE): BOOL; stdcall; external kernel32;
+
+const
+  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = $00000002;
+  GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       = $00000004;
+
+function GetExecutableName(aAddress: pointer): TFileName;
+var
+  tmp: array[byte] of WideChar;
+  hm: HMODULE;
+begin
+  result := '';
+  FillcharFast(tmp, SizeOf(tmp), 0);
+  hm := 0;
+  if not GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
+           GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
+    exit;
+  GetModuleFileNameW(hm, tmp, SizeOf(tmp));
+  result := string(SynUnicode(tmp));
+end;
+
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
