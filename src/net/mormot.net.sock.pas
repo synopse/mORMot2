@@ -13,6 +13,7 @@ unit mormot.net.sock;
    - Efficient Multiple Sockets Polling
    - TUri parsing/generating URL wrapper
    - TCrtSocket Buffered Socket Read/Write Class
+   - NTP / SNTP Protocol Client
 
    The Low-Level Sockets API, which is complex and inconsistent among OS, is
    not made public and shouldn't be used in end-user code. This unit
@@ -1528,6 +1529,45 @@ type
 function SocketOpen(const aServer, aPort: RawUtf8;
   aTLS: boolean = false; aTLSContext: PNetTlsContext = nil;
   aTunnel: PUri = nil): TCrtSocket;
+
+
+{ ********* NTP / SNTP Protocol Client }
+
+const
+  /// Google provides a global NTP/SNTP servers cloud
+  NTP_DEFAULT_SERVER = 'time.google.com';
+  /// the default port for NTP servers
+  NTP_DEFAULT_PORT = '123';
+
+type
+  /// additional information retrieved from a NTP server via GetNtpTime()
+  TNtpInfo = record
+    /// UTC timestamp of the remote NTP server - i.e. the GetNtpTime() result
+    Time: TDateTime;
+    /// delay (in seconds) between your computer and the remote NTP server
+    // - i.e. the transmission time, similar to the network ping to this server
+    Delay: double;
+    /// offset (in seconds) between your computer and the remote NTP server
+    // - i.e. the error between both clocks
+    Offset: double;
+  end;
+  /// used as optional parameter to GetNtpTime()
+  PNtpInfo = ^TNtpInfo;
+
+/// retrieve the UTC time from a given NTP server
+// - returns 0 on failure, or the UTC server timestamp
+// - this function takes into account the transmission delay
+// - could optionally return additional information about the request
+function GetNtpTime(const aServer: RawUtf8 = NTP_DEFAULT_SERVER;
+  const aPort: RawUtf8 = NTP_DEFAULT_PORT; aTimeOutMS: integer = 400;
+  aInfo: PNtpInfo = nil): TDateTime;
+
+/// retrieve the UTC time from a given SNTP server
+// - SNTP is a sub-set of the NTP protocol, with potentially less accuracy
+// - returns 0 on failure, or the UTC server timestamp
+function GetSntpTime(const aServer: RawUtf8 = NTP_DEFAULT_SERVER;
+  const aPort: RawUtf8 = NTP_DEFAULT_PORT; aTimeOutMS: integer = 400): TDateTime;
+
 
 
 
@@ -5276,6 +5316,166 @@ begin
   except
     result := nil;
   end;
+end;
+
+
+
+{ ********* NTP / SNTP Protocol Client }
+
+type
+  {$A-}
+  /// a 64-bit SNTP timestamp, as described in RFC 2030
+  TNtpTimestamp = object
+    Seconds: integer;
+    Fraction: integer;
+    procedure SwapEndian;
+    function ToDateTime: TDateTime;
+    procedure FromDateTime(Value: TDateTime);
+  end;
+
+  /// map a SNTP header, as described in RFC 2030
+  TNtpPacket = object
+    LiVnMode, Stratum, Poll, Precision: byte;
+    RootDelay, RootDispersion, ReferenceIdentifier: cardinal;
+    Reference, Originate, Receive, Transmit: TNtpTimestamp;
+    // optional: KeyID: cardinal; Digest: THash128;
+    procedure Init;
+    procedure SwapEndian;
+  end;
+  {$A+}
+
+const
+  maxFloat = 4294967295.0;
+  maxInt32 = 2147483647;
+
+procedure TNtpTimestamp.SwapEndian;
+begin
+  Seconds := bswap32(Seconds);
+  Fraction := bswap32(Fraction);
+end;
+
+function TNtpTimestamp.ToDateTime: TDateTime;
+var
+  d, d1: Double;
+begin
+  d := Seconds;
+  if d < 0 then
+    d := maxFloat + d + 1;
+  d1 := Fraction;
+  if d1 < 0 then
+    d1 := maxFloat + d1 + 1;
+  d1 := d1 / maxFloat;
+  d1 := Trunc(d1 * 10000) / 10000;
+  result := (d + d1) / SecsPerDay;
+  result := result + 2;
+end;
+
+procedure TNtpTimestamp.FromDateTime(Value: TDateTime);
+var
+  d, d1: Double;
+begin
+  d  := (Value - 2) * SecsPerDay;
+  d1 := Frac(d);
+  if d > maxInt32 then
+     d := d - maxFloat - 1;
+  d  := Trunc(d);
+  d1 := Trunc(d1 * 10000) / 10000;
+  d1 := d1 * maxFloat;
+  if d1 > maxInt32 then
+     d1 := d1 - maxFloat - 1;
+  Seconds := Trunc(d);
+  Fraction := Trunc(d1);
+end;
+
+procedure TNtpPacket.Init;
+begin
+  FillCharFast(self, SizeOf(self), 0);
+  LiVnMode := $1b;
+end;
+
+procedure TNtpPacket.SwapEndian;
+begin
+  RootDelay := bswap32(RootDelay);
+  RootDispersion := bswap32(RootDispersion);
+  ReferenceIdentifier := bswap32(ReferenceIdentifier);
+  Reference.SwapEndian;
+  Originate.SwapEndian;
+  Receive.SwapEndian;
+  Transmit.SwapEndian;
+end;
+
+function NtpCall(const aServer, aPort: RawUtf8; TimeOutMS: integer;
+  var pack: TNtpPacket): boolean;
+var
+  addr, resp: TNetAddr;
+  sock: TNetSocket;
+  len: PtrInt;
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  if addr.SetFrom(aServer, aPort, nlUdp) <> nrOK then
+    exit;
+  sock := addr.NewSocket(nlUdp);
+  if sock <> nil then
+    try
+      sock.SetReceiveTimeout(TimeOutMS);
+      if sock.SendTo(@pack, SizeOf(pack), addr) <> nrOk then
+        exit;
+      len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
+      if (len >= SizeOf(pack)) and
+         addr.IPEqual(resp) then
+      begin
+        MoveFast(tmp, pack, SizeOf(pack));
+        pack.SwapEndian;
+        result := pack.Transmit.Seconds <> 0;
+      end;
+    finally
+      sock.Close;
+    end;
+end;
+
+function GetNtpTime(const aServer, aPort: RawUtf8; aTimeOutMS: integer;
+  aInfo: PNtpInfo): TDateTime;
+var
+  pack: TNtpPacket;
+  t1, t2, t3, t4 : TDateTime;
+  nfo: TNtpInfo;
+begin
+  result := 0;
+  pack.Init;
+  t1 := NowUtc;
+  pack.Originate.FromDateTime(t1);
+  pack.SwapEndian;
+  if NtpCall(aServer, aPort, aTimeOutMS, pack) and
+     (((pack.LiVnMode and $c0) shr 6) < 3) and  // LI
+     ((pack.LiVnMode and $07) = 4) and          // Mode
+     (pack.Stratum in [1..15]) and
+     (pack.Receive.Seconds <> 0) then
+  begin
+    t2 := pack.Receive.ToDateTime;
+    t3 := pack.Transmit.ToDateTime;
+    t4 := NowUtc;
+    nfo.Delay := (t4 - t1) - (t2 - t3); // transmission delay
+    nfo.Time := t3 + nfo.Delay / 2;     // halfway adjustment
+    nfo.Delay := nfo.Delay * SecsPerDay; // as seconds
+    nfo.Offset := (((t2 - t1) + (t3 - t4)) / 2) * SecsPerDay;
+    if aInfo <> nil then
+      aInfo^ := nfo;
+    result := nfo.Time;
+  end;
+end;
+
+function GetSntpTime(const aServer, aPort: RawUtf8; aTimeOutMS: integer): TDateTime;
+var
+  pack: TNtpPacket;
+  start: TDateTime;
+begin
+  pack.Init; // SNTP has no additional client information
+  start := NowUtc;
+  if NtpCall(aServer, aPort, aTimeOutMS, pack) then
+    result := pack.Transmit.ToDateTime + (NowUtc - start) / 2 // simple adjust
+  else
+    result := 0;
 end;
 
 

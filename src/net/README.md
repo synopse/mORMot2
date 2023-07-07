@@ -19,6 +19,7 @@ Cross-Platform Raw Sockets API Definition
 - Efficient Multiple Sockets Polling
 - `TUri` parsing/generating URL wrapper
 - `TCrtSocket` Buffered Socket Read/Write Class
+- NTP / SNTP Protocol Client
 
 The Low-Level Sockets API is encapsultated into a single set of functions, and wrapped around a `TNetSocket` abstract helper, and never made public.
 
