@@ -5496,8 +5496,8 @@ begin
     libssl := TLibSsl.Create;
     try
       // MacOS X and Windows have no system OpenSSL: also try in exe folder
-      libcrypto.TryFromExecutableFolder := OS_KIND in [osOSX, osWindows];
-      libssl.TryFromExecutableFolder := libcrypto.TryFromExecutableFolder;
+      libcrypto.TryFromExecutableFolder := true;
+      libssl.TryFromExecutableFolder := true;
       // attempt to load libcrypto
       if libcryptoname = '' then
       begin
