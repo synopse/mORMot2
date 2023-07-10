@@ -462,7 +462,7 @@ function OpenHttp(const aUri: RawUtf8;
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTcp;
   aTLS: boolean = false; outStatus: PInteger = nil;
-  aTimeout: integer = 0): RawByteString; overload;
+  aTimeout: integer = 0; ignoreTlsCertError: boolean = false): RawByteString; overload;
 
 /// download some potentially huge file, with proper resume
 // - is a wrapper around THttpClientSocket.WGet() method
@@ -1136,15 +1136,16 @@ type
 // - see also OpenHttpGet() for direct THttpClientSock call
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil;
-  timeout: integer = 0; forceSocket: boolean = false): RawByteString; overload;
+  timeout: integer = 0; forceSocket: boolean = false;
+  ignoreTlsCertError: boolean = false): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHttp/TCurlHttp for any https URI
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
-  outStatus: PInteger = nil; timeout: integer = 0;
-  forceSocket: boolean = false): RawByteString; overload;
+  outStatus: PInteger = nil; timeout: integer = 0; forceSocket: boolean = false;
+  ignoreTlsCertError: boolean = false): RawByteString; overload;
 
 
 
@@ -2170,13 +2171,16 @@ end;
 
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean;
-  outStatus: PInteger; aTimeout: integer): RawByteString;
+  outStatus: PInteger; aTimeout: integer; ignoreTlsCertError: boolean): RawByteString;
 var
   Http: THttpClientSocket;
   status: integer;
+  tls: TNetTlsContext;
 begin
   result := '';
-  Http := OpenHttp(server, port, aTLS, aLayer, '', aTimeout);
+  InitNetTlsContext(tls);
+  tls.IgnoreCertificateErrors := ignoreTlsCertError;
+  Http := OpenHttp(server, port, aTLS, aLayer, '', aTimeout, @tls);
   if Http <> nil then
   try
     Http.RedirectMax := 5;
@@ -3418,15 +3422,15 @@ end;
 
 function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8;
   forceNotSocket: boolean; outStatus: PInteger; timeout: integer;
-  forceSocket: boolean): RawByteString;
+  forceSocket, ignoreTlsCertError: boolean): RawByteString;
 begin
   result := HttpGet(aUri, '', outHeaders,
-    forceNotSocket, outStatus, timeout, forceSocket);
+    forceNotSocket, outStatus, timeout, forceSocket, ignoreTlsCertError);
 end;
 
 function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
-  outHeaders: PRawUtf8; forceNotSocket: boolean;
-  outStatus: PInteger; timeout: integer; forceSocket: boolean): RawByteString;
+  outHeaders: PRawUtf8; forceNotSocket: boolean; outStatus: PInteger;
+  timeout: integer; forceSocket, ignoreTlsCertError: boolean): RawByteString;
 var
   uri: TUri;
 begin
@@ -3446,11 +3450,13 @@ begin
       {$endif USELIBCURL}
         // fallback to SChannel/OpenSSL if libcurl is not installed
         result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
-          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus, timeout)
+          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus,
+          timeout, ignoreTlsCertError)
       {$endif USEWININET}
     else
       result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
-        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus, timeout)
+        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus,
+        timeout, ignoreTlsCertError)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
