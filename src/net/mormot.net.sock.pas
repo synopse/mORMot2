@@ -5440,8 +5440,10 @@ var
   pack: TNtpPacket;
   t1, t2, t3, t4 : TDateTime;
   nfo: TNtpInfo;
+  addr: TNetAddr;
 begin
   result := 0;
+  addr.SetFrom(aServer, aPort, nlUdp); // DNS resolution and cache
   pack.Init;
   t1 := NowUtc;
   pack.Originate.FromDateTime(t1);
@@ -5455,8 +5457,8 @@ begin
     t2 := pack.Receive.ToDateTime;
     t3 := pack.Transmit.ToDateTime;
     t4 := NowUtc;
-    nfo.Delay := (t4 - t1) - (t2 - t3); // transmission delay
-    nfo.Time := t3 + nfo.Delay / 2;     // halfway adjustment
+    nfo.Delay := (t4 - t1) - (t3 - t2);  // transmission delay
+    nfo.Time := t3 + nfo.Delay / 2;      // halfway adjustment
     nfo.Delay := nfo.Delay * SecsPerDay; // as seconds
     nfo.Offset := (((t2 - t1) + (t3 - t4)) / 2) * SecsPerDay;
     if aInfo <> nil then
@@ -5469,7 +5471,9 @@ function GetSntpTime(const aServer, aPort: RawUtf8; aTimeOutMS: integer): TDateT
 var
   pack: TNtpPacket;
   start: TDateTime;
+  addr: TNetAddr;
 begin
+  addr.SetFrom(aServer, aPort, nlUdp); // DNS resolution and cache
   pack.Init; // SNTP has no additional client information
   start := NowUtc;
   if NtpCall(aServer, aPort, aTimeOutMS, pack) then
