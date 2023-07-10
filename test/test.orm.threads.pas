@@ -543,6 +543,9 @@ begin
         fHttpServer.Route.Get('/people/<id>', '/root/people/<id>');
       end;
       //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port); readln;
+      {$ifdef CPUARM}
+      SleepHiRes(10); // may be needed on slow RaspPi e.g.
+      {$endif CPUARM}
     end;
   end;
   // 2. Perform the tests
