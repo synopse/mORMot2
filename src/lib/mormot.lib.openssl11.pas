@@ -185,8 +185,10 @@ const
 
 var
   /// optional libcrypto location for OpenSslIsAvailable/OpenSslInitialize
+  // - you could also set OPENSSL_LIBPATH environment variable
   OpenSslDefaultCrypto: TFileName;
   /// optional libssl location for OpenSslIsAvailable/OpenSslInitialize
+  // - you could also set OPENSSL_LIBPATH environment variable
   OpenSslDefaultSsl: TFileName;
 
 
@@ -267,9 +269,10 @@ function OpenSslIsLoaded: boolean;
 
 /// initialize the OpenSSL 1.1 / 3.x API, accessible via the global functions
 // - will raise EOpenSsl exception on any loading issue
-// - you can force the library names to load, but by default OpenSSL 3.x then
-// OpenSSL 1.1 libraries will be searched within the executable folder (on
-// Windows) and then in the system path
+// - you can force the library path names to load as parameters, but by default
+// OpenSSL 3.x / 1.1 libraries will be searched from OpenSslDefaultCrypto and
+// OpenSslDefaultSsl global variables or OPENSSL_LIBPATH environment variable,
+// then within the executable folder, and then in the system path
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
 function OpenSslInitialize(
@@ -5480,7 +5483,7 @@ function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
 var
   P: PPointerArray;
   api: PtrInt;
-  lib1, lib3: TFileName;
+  libenv, libsys1, libsys3, libexe1, libexe3: TFileName;
 begin
   result := true;
   if openssl_initialized = osslAvailable then
@@ -5491,33 +5494,44 @@ begin
     // paranoid thread-safe double check
     if openssl_initialized = osslAvailable then
       exit;
+    // read and validate OPENSSL_LIBPATH environment variable
+    libenv := GetEnvironmentVariable('OPENSSL_LIBPATH');
+    if libenv <> '' then
+      if DirectoryExists(libenv) then
+        libenv := IncludeTrailingPathDelimiter(libenv)
+      else
+        libenv := ''; // search anywhere within system path
     // initialize library loaders
     libcrypto := TLibCrypto.Create;
     libssl := TLibSsl.Create;
     try
-      // MacOS X and Windows have no system OpenSSL: also try in exe folder
-      libcrypto.TryFromExecutableFolder := true;
-      libssl.TryFromExecutableFolder := true;
       // attempt to load libcrypto
       if libcryptoname = '' then
       begin
         {$ifndef NOOPENSSL1}
-        lib1 := LIB_CRYPTO1;
+        libexe1 := Executable.ProgramFilePath + LIB_CRYPTO1;
+        if not FileExists(libexe1) then
+          libexe1 := '';
+        libsys1 := libenv + LIB_CRYPTO1;
         {$endif NOOPENSSL1}
         {$ifndef NOOPENSSL3}
-        lib3 := LIB_CRYPTO3;
+        libexe3 := Executable.ProgramFilePath + LIB_CRYPTO3;
+        if not FileExists(libexe3) then
+          libexe3 := '';
+        libsys3 := libenv + LIB_CRYPTO3;
         {$endif NOOPENSSL3}
-      end
-      else
-        lib1 := libcryptoname;
-      if lib3 = '' then
-        lib3 := lib1; // duplicated names are just ignored by TryLoadLibrary()
+      end;
       libcrypto.TryLoadLibrary([
-        // first try with the global variable
+        // first try the exact supplied crypto library name
+        libcryptoname,
+        // try with the global variable
         OpenSslDefaultCrypto,
-        // try the library somewhere in the system or on specified path
-        lib3,
-        lib1
+        // try from executable folder
+        libexe3,
+        libexe1,
+        // try the library from OPENSSL_LIBPATH or somewhere in the system
+        libsys3,
+        libsys1
       {$ifdef OSPOSIX}
         , 'libcrypto.so' // generic library name on most systems
       {$endif OSPOSIX}
@@ -5528,26 +5542,32 @@ begin
       if not Assigned(libcrypto.X509_print) then // last known entry
         raise EOpenSsl.Create('OpenSslInitialize: incorrect libcrypto API');
       // attempt to load libssl
-      lib3 := '';
       if libsslname = '' then
       begin
         {$ifndef NOOPENSSL1}
-        lib1 := LIB_SSL1;
+        libexe1 := Executable.ProgramFilePath + LIB_SSL1;
+        if not FileExists(libexe1) then
+          libexe1 := '';
+        libsys1 := libenv + LIB_SSL1;
         {$endif NOOPENSSL1}
         {$ifndef NOOPENSSL3}
-        lib3 := LIB_SSL3;
+        libexe3 := Executable.ProgramFilePath + LIB_SSL3;
+        if not FileExists(libexe3) then
+          libexe3 := '';
+        libsys3 := libenv + LIB_SSL3;
         {$endif NOOPENSSL3}
-      end
-      else
-        lib1 := libsslname;
-      if lib3 = '' then
-        lib3 := lib1;
+      end;
       libssl.TryLoadLibrary([
-        // first try with the global variable
+        // first try the exact supplied ssl library name
+        libsslname,
+        // try with the global variable
         OpenSslDefaultSsl,
-        // try the library somewhere in the system or on specified path
-        lib3,
-        lib1
+        // try from executable folder
+        libexe3,
+        libexe1,
+        // try the library from OPENSSL_LIBPATH or somewhere in the system
+        libsys3,
+        libsys1
       {$ifdef OSPOSIX}
         , 'libssl.so'  // generic library name on most UNIX
       {$endif OSPOSIX}
