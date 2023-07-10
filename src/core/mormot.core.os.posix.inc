@@ -1217,7 +1217,7 @@ var
 begin
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
   dladdr(aAddress, @dlinfo);
-  result := string(dlinfo.dli_fname);
+  result := ExpandFileName(string(dlinfo.dli_fname));
 end;
 
 function CopyFile(const Source, Target: TFileName;
