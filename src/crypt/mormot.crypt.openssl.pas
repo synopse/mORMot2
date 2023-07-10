@@ -2390,7 +2390,7 @@ begin
     na := auth.NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
     nb := auth.NotBefore;
     if ((na <> 0) and
-        (TimeUtc >= na)) or
+        (TimeUtc > na)) or
        ((nb <> 0) and
         (TimeUtc < nb)) then
       result := cvDeprecatedAuthority;
