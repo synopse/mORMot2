@@ -3440,12 +3440,12 @@ begin
        not forceSocket then
       {$ifdef USEWININET}
       result := TWinHttp.Get(
-        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus, timeout)
+        aUri, inHeaders, ignoreTlsCertError, outHeaders, outStatus, timeout)
       {$else}
       {$ifdef USELIBCURL}
       if TCurlHttp.IsAvailable then
         result := TCurlHttp.Get(
-          aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
+          aUri, inHeaders, ignoreTlsCertError, outHeaders, outStatus)
       else
       {$endif USELIBCURL}
         // fallback to SChannel/OpenSSL if libcurl is not installed
