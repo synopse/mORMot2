@@ -7607,7 +7607,8 @@ begin
     ProgramFileName := ParamStr(0); // RTL seems just fine here
     {$else}
     ProgramFileName := GetExecutableName(@InitializeExecutableInformation);
-    if ProgramFileName = '' then
+    if (ProgramFileName = '') or
+       not FileExists(ProgramFileName) then
       ProgramFileName := ExpandFileName(ParamStr(0));
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
