@@ -41,6 +41,7 @@ uses
   //mormot.db.rad.unidac,
   //mormot.db.rad.nexusdb,
   {$endif FPC}
+  mormot.lib.openssl11,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.data           in '.\test.core.data.pas',
@@ -86,8 +87,12 @@ begin
       'after kinit');
       {$endif OSWINDOWS}
     Param('ntp', 'the NTP/SNTP #server name/IP to use instead of time.google.com');
-    OpenSslDefaultCrypto := Param('libcrypto', 'the OpenSSL libcrypto #filename');
-    OpenSslDefaultSsl := Param('libssl', 'the OpenSSL libssl #filename');
+    {$ifdef USE_OPENSSL}
+    OpenSslDefaultCrypto := Utf8ToString(
+      Param('libcrypto', 'the OpenSSL libcrypto #filename'));
+    OpenSslDefaultSsl := Utf8ToString(
+      Param('libssl', 'the OpenSSL libssl #filename'));
+    {$endif USE_OPENSSL}
   end;
 end;
 
