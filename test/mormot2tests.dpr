@@ -85,6 +85,7 @@ begin
       {$else}
       'after kinit');
       {$endif OSWINDOWS}
+    Param('ntp', 'the NTP/SNTP #server name/IP to use instead of time.google.com');
   end;
 end;
 
