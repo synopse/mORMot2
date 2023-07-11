@@ -86,6 +86,8 @@ begin
       'after kinit');
       {$endif OSWINDOWS}
     Param('ntp', 'the NTP/SNTP #server name/IP to use instead of time.google.com');
+    OpenSslDefaultCrypto := Param('libcrypto', 'the OpenSSL libcrypto #filename');
+    OpenSslDefaultSsl := Param('libssl', 'the OpenSSL libssl #filename');
   end;
 end;
 
