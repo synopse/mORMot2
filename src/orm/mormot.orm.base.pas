@@ -4621,7 +4621,7 @@ begin
     W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
   else
   begin
-    v := GetValueInt32(Instance);
+    v := fPropInfo.GetOrdProp(Instance);
     if fUnsigned then
       W.AddU(cardinal(v))
     else
