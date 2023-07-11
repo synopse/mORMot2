@@ -1558,6 +1558,7 @@ type
 // - returns 0 on failure, or the UTC server timestamp
 // - this function takes into account the transmission delay
 // - could optionally return additional information about the request
+// - note: most servers don't like to be called several times in a raw
 function GetNtpTime(const aServer: RawUtf8 = NTP_DEFAULT_SERVER;
   const aPort: RawUtf8 = NTP_DEFAULT_PORT; aTimeOutMS: integer = 400;
   aInfo: PNtpInfo = nil): TDateTime;
@@ -1565,6 +1566,7 @@ function GetNtpTime(const aServer: RawUtf8 = NTP_DEFAULT_SERVER;
 /// retrieve the UTC time from a given SNTP server
 // - SNTP is a sub-set of the NTP protocol, with potentially less accuracy
 // - returns 0 on failure, or the UTC server timestamp
+// - note: most servers don't like to be called several times in a raw
 function GetSntpTime(const aServer: RawUtf8 = NTP_DEFAULT_SERVER;
   const aPort: RawUtf8 = NTP_DEFAULT_PORT; aTimeOutMS: integer = 400): TDateTime;
 
@@ -5410,6 +5412,7 @@ var
   addr, resp: TNetAddr;
   sock: TNetSocket;
   len: PtrInt;
+  res: TNetResult;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -5419,7 +5422,8 @@ begin
   if sock <> nil then
     try
       sock.SetReceiveTimeout(TimeOutMS);
-      if sock.SendTo(@pack, SizeOf(pack), addr) <> nrOk then
+      res := sock.SendTo(@pack, SizeOf(pack), addr);
+      if res <> nrOk then
         exit;
       len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
       if (len >= SizeOf(pack)) and

@@ -588,20 +588,17 @@ var
   dns, clients: TRawUtf8DynArray;
   l: TLdapClientSettings;
   one: TLdapClient;
-  utc1, utc2, utc3: TDateTime;
+  utc: TDateTime;
+  ntp: RawUtf8;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
-  utc1 := GetSntpTime;
-  if utc1 <> 0 then
-  begin
-    // first GetSntpTime call was a warmup
-    utc1 := GetSntpTime;
-    utc2 := NowUtc;
-    CheckSame(utc1, utc2, 1, 'NTP system'); // allow 1 day diff
-    // make NTP computation
-    utc3 := GetNtpTime;
-    CheckSame(utc1, utc3, 1 / MinsPerDay, 'NTP twice'); // 1 minute diff
-  end;
+  if not Executable.Command.Get('ntp', ntp) then
+    ntp := NTP_DEFAULT_SERVER;
+  utc := GetSntpTime(ntp);
+  //writeln(DateTimeMSToString(utc), ' = ', DateTimeMSToString(NowUtc));
+  if utc <> 0 then
+    // only make a single GetSntpTime call - most servers refuse to scale
+    CheckSame(utc, NowUtc, 1, 'NTP system'); // allow 1 day diff
   // validate some IP releated process
   Check(not NetIsIP4(nil));
   Check(not NetIsIP4('1'));
