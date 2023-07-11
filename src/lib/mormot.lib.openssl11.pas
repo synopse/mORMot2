@@ -143,8 +143,8 @@ const
       {$endif CPU32}
     {$else}
       {$ifdef OSDARWIN}
-        {$define NOOPENSSL3} // unsupported yet
         {$ifdef CPUINTEL}
+          // from https://github.com/grijjy/DelphiOpenSsl
           {$ifdef CPUX86}
           LIB_CRYPTO1 = 'libssl-merged-osx32.dylib';
           LIB_SSL1 = 'libssl-merged-osx32.dylib';
@@ -153,8 +153,6 @@ const
           {$ifdef CPUX64}
           LIB_CRYPTO1 = 'libssl-merged-osx64.dylib';
           LIB_SSL1 = 'libssl-merged-osx64.dylib';
-          LIB_CRYPTO3 = 'libcrypto.so.3';
-          LIB_SSL3 = 'libssl.so.3';
           _PU = '_';
           {$endif CPUX64}
           {$ifdef CPUX64_static}
@@ -166,10 +164,11 @@ const
         {$else}
           LIB_CRYPTO1 = 'libcrypto.1.1.dylib'; // typically ARM64
           LIB_SSL1 = 'libssl.1.1.dylib';
-          LIB_CRYPTO3 = 'libcrypto.so.3';
-          LIB_SSL3 = 'libssl.so.3';
           _PU = '';
         {$endif CPUINTEL}
+        // most common OpenSSL library names on MacOS
+        LIB_CRYPTO3 = 'libcrypto.dylib';
+        LIB_SSL3 = 'libssl.dylib';
       {$else}
         {$ifdef OSLINUX}
         // specific versions on Linux
@@ -5536,9 +5535,12 @@ begin
         // try the library from OPENSSL_LIBPATH or somewhere in the system
         libsys3,
         libsys1
-      {$ifdef OSPOSIX}
-        , 'libcrypto.so' // generic library name on most systems
-      {$endif OSPOSIX}
+        {$ifdef OSPOSIX}
+        {$ifndef OSDARWIN}
+        // generic library name on most UNIX
+        , 'libcrypto.so'
+        {$endif OSDARWIN}
+        {$endif OSPOSIX}
         ], EOpenSsl);
       P := @@libcrypto.CRYPTO_malloc;
       for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
@@ -5572,9 +5574,12 @@ begin
         // try the library from OPENSSL_LIBPATH or somewhere in the system
         libsys3,
         libsys1
-      {$ifdef OSPOSIX}
-        , 'libssl.so'  // generic library name on most UNIX
-      {$endif OSPOSIX}
+        {$ifndef OSDARWIN}
+        {$ifdef OSPOSIX}
+          // generic library name on most UNIX
+          , 'libssl.so'
+        {$endif OSPOSIX}
+        {$endif OSDARWIN}
         ], EOpenSsl);
       P := @@libssl.SSL_CTX_new;
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
