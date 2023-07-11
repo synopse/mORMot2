@@ -832,7 +832,7 @@ begin
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
     RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
-    Check(length(mus.tests) > 5);
+    Check(length(mus.tests) > 5, 'mustacheJson load');
     for i := 0 to high(mus.tests) do
       with mus.Tests[i] do
       begin
@@ -3067,7 +3067,7 @@ begin
        '', nil, false, nil, 0, false, {ignoreTlsCertError=}true);
     FileFromString(discogsJson, WorkDir + discogsFileName);
   end;
-  Check(IsValidJson(discogsJson));
+  Check(IsValidJson(discogsJson), 'discogsJson');
   zendframeworkJson := StringFromFile(WorkDir + zendframeworkFileName);
   if zendframeworkJson = '' then
   begin
@@ -3076,7 +3076,7 @@ begin
       '', nil, false, nil, 0, false, {ignoreTlsCertError=}true);
     FileFromString(zendframeworkJson, WorkDir + zendframeworkFileName);
   end;
-  Check(IsValidJson(zendframeworkJson));
+  Check(IsValidJson(zendframeworkJson), 'zendJson');
   TestGit([jpoIgnoreUnknownProperty], []);
   TestGit([jpoIgnoreUnknownProperty], [woHumanReadable]);
 
