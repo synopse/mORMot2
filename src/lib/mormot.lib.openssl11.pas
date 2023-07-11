@@ -153,6 +153,8 @@ const
           {$ifdef CPUX64}
           LIB_CRYPTO1 = 'libssl-merged-osx64.dylib';
           LIB_SSL1 = 'libssl-merged-osx64.dylib';
+          LIB_CRYPTO3 = 'libcrypto.so.3';
+          LIB_SSL3 = 'libssl.so.3';
           _PU = '_';
           {$endif CPUX64}
           {$ifdef CPUX64_static}
@@ -164,6 +166,8 @@ const
         {$else}
           LIB_CRYPTO1 = 'libcrypto.1.1.dylib'; // typically ARM64
           LIB_SSL1 = 'libssl.1.1.dylib';
+          LIB_CRYPTO3 = 'libcrypto.so.3';
+          LIB_SSL3 = 'libssl.so.3';
           _PU = '';
         {$endif CPUINTEL}
       {$else}
