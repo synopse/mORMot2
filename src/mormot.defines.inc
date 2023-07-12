@@ -711,10 +711,8 @@
   {.$define USE_OPENSSL}
 {$else}
   {$ifndef OSANDROID}
-    {$ifndef OSDARWINARM}
-      // try OpenSSL on POSIX systems where likely to be unique and maintained
-      {$define USE_OPENSSL}
-    {$endif OSDARWINARM}
+    // try OpenSSL on POSIX systems where likely to be unique and maintained
+    {$define USE_OPENSSL}
   {$endif OSANDROID}
 {$endif OSWINDOWS}
 {$ifdef FORCE_OPENSSL}
