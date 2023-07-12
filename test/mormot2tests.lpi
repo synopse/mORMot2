@@ -17,7 +17,7 @@
     <i18n>
       <EnableI18N LFM="False"/>
     </i18n>
-    <BuildModes Count="15">
+    <BuildModes Count="16">
       <Item1 Name="default" Default="True"/>
       <Item2 Name="win32">
         <CompilerOptions>
@@ -51,8 +51,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -96,7 +97,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -153,7 +156,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <DebugInfoType Value="dsDwarf2Set"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -197,6 +202,7 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
+              <GenerateDebugInfo Value="True"/>
               <DebugInfoType Value="dsDwarf2"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
@@ -260,9 +266,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -314,9 +320,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -360,9 +366,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -406,9 +412,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -417,8 +423,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
--dFPC_CMEM"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -464,9 +468,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -519,9 +523,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -566,9 +570,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -621,9 +625,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -676,9 +680,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -731,9 +735,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
-              <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -754,7 +758,66 @@
           </Other>
         </CompilerOptions>
       </Item15>
-    </BuildModes>
+      <Item16 Name="darwarm64">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Conditionals Value="//if TargetOS=&apos;darwin&apos; then
+//   CustomOptions := &apos; -Cg-&apos;;"/>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <RelocatableUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+            </Checks>
+            <TargetCPU Value="aarch64"/>
+            <TargetOS Value="darwin"/>
+            <Optimizations>
+              <OptimizationLevel Value="2"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <Verbosity>
+              <ShowNotes Value="False"/>
+              <ShowHints Value="False"/>
+            </Verbosity>
+            <OtherDefines Count="10">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+              <Define7 Value="USE_OPENSSL"/>
+              <Define8 Value="USEZEOS"/>
+              <Define9 Value="FPC_LIBCMM"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item16>
+</BuildModes>
     <PublishOptions>
       <Version Value="2"/>
     </PublishOptions>
@@ -1193,11 +1256,11 @@
       </Checks>
     </CodeGeneration>
     <Linking>
-      <Debugging>
-        <DebugInfoType Value="dsDwarf2Set"/>
-        <UseHeaptrc Value="True"/>
-        <UseExternalDbgSyms Value="True"/>
-      </Debugging>
+            <Debugging>
+              <GenerateDebugInfo Value="True"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
+            </Debugging>
     </Linking>
     <Other>
       <Verbosity>
@@ -1207,49 +1270,5 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="14">
-      <Item1>
-        <Name Value="EAbort"/>
-      </Item1>
-      <Item2>
-        <Name Value="ECodetoolError"/>
-      </Item2>
-      <Item3>
-        <Name Value="EFOpenError"/>
-      </Item3>
-      <Item4>
-        <Name Value="EInterfaceFactoryException"/>
-      </Item4>
-      <Item5>
-        <Name Value="EAssertionFailed"/>
-      </Item5>
-      <Item6>
-        <Name Value="ERttiException"/>
-      </Item6>
-      <Item7>
-        <Name Value="EFastReader"/>
-      </Item7>
-      <Item8>
-        <Name Value="RunError(216)"/>
-      </Item8>
-      <Item9>
-        <Name Value="ENetSock"/>
-      </Item9>
-      <Item10>
-        <Name Value="EThreadError"/>
-      </Item10>
-      <Item11>
-        <Name Value="ESynCrypto"/>
-      </Item11>
-      <Item12>
-        <Name Value="ERelayProtocol"/>
-      </Item12>
-      <Item13>
-        <Name Value="EServiceException"/>
-      </Item13>
-      <Item14>
-        <Name Value="EFCreateError"/>
-      </Item14>
-    </Exceptions>
   </Debugging>
 </CONFIG>
