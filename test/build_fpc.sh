@@ -1,5 +1,7 @@
 #!/bin/bash
 
+FPC=/home/ab/fpcup/fpc/bin/x86_64-linux/fpc.sh
+
 # Build a mORMot2 tests
 # Require an FPC3.2 compiler to be installed:
 #   wget -O fpc-laz_3.2.0-1_amd64.deb https://sourceforge.net/projects/lazarus/files/Lazarus%20Linux%20amd64%20DEB/Lazarus%202.0.10/fpc-laz_3.2.0-1_amd64.deb/download
@@ -8,7 +10,7 @@
 # Caller may have defined the following variables:
 # TARGET=linux - compile target (win32, win64 etc. in case cross compiler is installed). Default is `linux`
 # ARCH=x86_64 - compile arch(i386, arm etc.). Default is `x86_64`
-# BIN=/tmp/mormot2 - output folder. Default is `/tmp/mormot2`
+# BIN=/tmp/mormot2 - output folder. Default is `..lib2../test/bin`
 #
 # Call example to cross compile from linux to win64:
 # TARGET=win64 ./build_fpc.sh
@@ -60,40 +62,55 @@ ARCH="${ARCH:-x86_64}"
 ARCH_TG="$ARCH-$TARGET"
 
 LIB2="${LIB2:-$MORMOT2_ROOT}"
-BIN="${BIN:-/tmp/mormot2}"
+BIN="${BIN:-$LIB2/test/bin}"
 STATIC="${STATIC:-$LIB2/static}"
+SRC="$LIB2/src"
+UNITS="$SRC/app;$SRC/core;$SRC/crypt;$SRC/db;$SRC/lib;$SRC/net;$SRC/orm;$SRC/rest;$SRC/soa;$SRC/script;$SRC/misc"
+INCLUDES="$SRC;$SRC/core;$SRC/net"
 
-mkdir -p "$BIN/fpc-$ARCH_TG/.dcu"
-rm -f "$BIN"/fpc-"$ARCH_TG"/.dcu/*
+mkdir -p "$BIN/fpc-$ARCH_TG/lib"
+rm -f "$BIN"/fpc-"$ARCH_TG"/lib/*
 
 if [ -f "$LIB2"/test/mormot2tests.cfg ]; then
   mv -f "$LIB2/test/mormot2tests.cfg"  "$LIB2/test/mormot2tests.cfg.bak"
 fi
 
 dest_fn=mormot2tests
+if [ $ARCH = "x86_64" ]; then
+  # use O3 and mormot.core.fpcx64mm.pas
+  CONDITIONALS="-O3 -dFPC_NO_DEFAULT_MEMORYMANAGER -dFPC_X64MM -dFPCMM_SERVER -dFPCMM_REPORTMEMORYLEAKS"
+else
+  # use O2 and FPC RTL memory manager
+  CONDITIONALS="-O2"
+fi
 if [[ $TARGET == win* ]]; then
+  # specific windows extension for executables
   dest_fn="$dest_fn.exe"
+  CONDITIONALS="$CONDITIONALS -CX -XX"
+fi
+if [ $TARGET = "linux" ]; then
+  CONDITIONALS="$CONDITIONALS -CX -XX"
+fi
+if [ $TARGET = "darwin" ]; then
+  CONDITIONALS="$CONDITIONALS -Cg-"
 fi
 
-# suppress warnings
-# Warning: (5059) Function result variable does not seem to be initialized
-# Warning: (5036) Local variable XXX does not seem to be initialized
-# Warning: (5089) Local variable XXX of a managed type does not seem to be initialized
-# Warning: (5090) Variable XXX of a managed type does not seem to be initialized
-SUPRESS_WARN=-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123,5059,5036,5089,5090
+# suppress some paranoid warnings
+SUPRESS_WARN=-vm11047,6058,6018,5093,5092,5091,5060,5058,5057,5044,5028,5024,5023,4082,4081,4079,4056,4055,3175,3177,3187,3124,3123,5059,5033,5036,5043,5037,5089,5090
 
 set -o pipefail
+echo "compiling for $ARCH_TG as $CONDITIONALS"
 
-fpc -MDelphi -Sci -Ci -O3 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
-  -T$TARGET -P$ARCH \
+# this is the main compilation command
+$FPC -MDelphi -Sci -Ci -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
+  -T$TARGET -P$ARCH $CONDITIONALS \
   -veiq -v-n-h- $SUPRESS_WARN \
-  -Fi"$BIN/fpc-$ARCH_TG/.dcu" -Fi"$LIB2/src/core" -Fi"$LIB2/src/db" -Fi"$LIB2/src/rest" \
+  -Fi$INCLUDES \
+  -Fu$UNITS \
   -Fl"$STATIC/$ARCH-$TARGET" \
-  -Fu"$LIB2/src/core" -Fu"$LIB2/src/db" -Fu"$LIB2/src/rest" -Fu"$LIB2/src/crypt" \
-    -Fu"$LIB2/src/app" -Fu"$LIB2/src/net" -Fu"$LIB2/src/lib" -Fu"$LIB2/src/orm" -Fu"$LIB2/src/soa" \
-  -FU"$BIN/fpc-$ARCH_TG/.dcu" -FE"$BIN/fpc-$ARCH_TG" -o"$BIN/fpc-$ARCH_TG/$dest_fn" \
-  -dFPC_SYNCMEM -dDOPATCHTRTL -dFPCUSEVERSIONINFO1 \
-  -B -Se1 "$LIB2/test/mormot2tests.dpr" | grep "[Warning|Error|Fatal]:"
+  -FU"$BIN/fpc-$ARCH_TG/lib" -FE"$BIN/fpc-$ARCH_TG" -o"$BIN/fpc-$ARCH_TG/$dest_fn" \
+  -B -Se1 "$LIB2/test/mormot2tests.dpr" >"$BIN/fpc-$ARCH_TG.log"
+# |rep "[Warning|Error|Fatal]:"
 
 if [ -f "$LIB2/test/mormot2tests.cfg.bak" ]; then
   mv -f "$LIB2/test/mormot2tests.cfg.bak"  "$LIB2/test/mormot2tests.cfg"
