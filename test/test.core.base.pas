@@ -7188,6 +7188,8 @@ begin
   Check(s = n);{%H-}
   d := DeltaCompress(n, s);
   check(d = '=');
+  check(DeltaExtract(d, n, s) = dsSuccess, 'delta=');
+  Check(s = n);
   for i := 1 to 20 do
   begin
     o := n;
@@ -7201,9 +7203,9 @@ begin
       insert(s, n, i * 50);
     end;
     d := DeltaCompress(n, o);
-    //ConsoleWrite('%<%', [length(d), length(s)]);
+    //ConsoleWrite('d=% s=% o=% n=%', [length(d), length(s), length(o), length(n)]);
     check(d <> '=');
-    check(length(d) < length(s));
+    check(length(d) < length(s), 'delta should be compressed');
     check(DeltaExtract(d, o, s) = dsSuccess, 'delta+');
     Check(s = n);
   end;
