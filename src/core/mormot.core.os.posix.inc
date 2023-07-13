@@ -2187,10 +2187,12 @@ begin
   result := '';
 end;
 
+{$ifdef OSDARWIN}
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 begin
   result := '';
 end;
+{$endif OSDARWIN}
 
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 begin

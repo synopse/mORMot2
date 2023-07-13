@@ -4483,11 +4483,11 @@ function crc32c32sse42(buf: pointer): cardinal;
 asm
         mov     edx, eax
         xor     eax, eax
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, dword ptr [edx]
         {$else}
         db $F2, $0F, $38, $F1, $02
-        {$endif FPC}
+        {$endif HASAESNI}
 end;
 {$else}
 function crc32c32sse42(buf: pointer): cardinal;
