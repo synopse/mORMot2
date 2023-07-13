@@ -2517,8 +2517,8 @@ procedure LockedInc64(int64: PInt64);
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
-// defined here for mormot.core.search and mormot.test.base low-level access
-// - use rather global crc32c() variable
+// defined here for mormot.test.base only
+// - use instead global crc32c() variable
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}

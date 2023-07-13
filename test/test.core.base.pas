@@ -7201,6 +7201,7 @@ begin
       insert(s, n, i * 50);
     end;
     d := DeltaCompress(n, o);
+    //ConsoleWrite('%<%', [length(d), length(s)]);
     check(d <> '=');
     check(length(d) < length(s));
     check(DeltaExtract(d, o, s) = dsSuccess, 'delta+');
