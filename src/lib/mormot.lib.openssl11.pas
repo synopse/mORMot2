@@ -278,6 +278,7 @@ function OpenSslIsLoaded: boolean;
 // then within the executable folder, and then in the system path
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
+// - you would typically call RegisterOpenSsl after this lower level function
 function OpenSslInitialize(
    const libcryptoname: TFileName = '';
    const libsslname: TFileName = '';

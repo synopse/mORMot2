@@ -656,6 +656,7 @@ function ToText(u: TX509Usages): ShortString; overload;
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
 /// call once at program startup to use OpenSSL when its performance matters
+// - to be typically called after function OpenSslInitialize() by your project
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
 // faster than our stand-alone C/pascal version

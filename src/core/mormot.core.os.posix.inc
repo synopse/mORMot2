@@ -91,12 +91,12 @@ begin
       inc(p, length(up));
       while (p^ <= ' ') and
             (p^ <> #0) do
-        inc(p);
+        inc(p); // trim left
       L := 0;
       while p[L] > #13 do
         inc(L);
       while p[L - 1] = ' ' do
-        dec(L);
+        dec(L); // trim right
       FastSetString(res, p, L);
       exit;
     end;
