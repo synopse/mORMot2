@@ -3128,11 +3128,5 @@ end;
 
 
 
-initialization
-  {$ifdef USE_OPENSSL}
-  // warning: OpenSSL on Windows requires to download the right libraries
-  RegisterOpenSsl;
-  {$endif USE_OPENSSL}
-
 end.
 

@@ -88,6 +88,7 @@ begin
       {$endif OSWINDOWS}
     Param('ntp', 'the NTP/SNTP #server name/IP to use instead of time.google.com');
     {$ifdef USE_OPENSSL}
+    // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
     OpenSslDefaultCrypto := Utf8ToString(
       Param('libcrypto', 'the OpenSSL libcrypto #filename'));
     OpenSslDefaultSsl := Utf8ToString(
@@ -100,6 +101,10 @@ function TIntegrationTests.Run: boolean;
 var
   cp: shortstring;
 begin
+  {$ifdef USE_OPENSSL}
+  // warning: OpenSSL on Windows requires to download the right libraries
+  RegisterOpenSsl;
+  {$endif USE_OPENSSL}
   str(Unicode_CodePage, cp);
   if cp = '65001' then
     cp := 'utf8';
