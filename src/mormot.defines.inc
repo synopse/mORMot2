@@ -679,7 +679,6 @@
       {$define OSDARWINARM}
       {$define LIZARD_EXTERNALONLY}
       {$define NOLIBCSTATIC}
-      {$define NOSQLITE3STATIC}
     {$endif OSDWARWIN}
   {$endif CPUARM3264}
 {$else}

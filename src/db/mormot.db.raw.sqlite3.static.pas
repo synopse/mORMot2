@@ -192,11 +192,15 @@ uses
   {$endif OSWINDOWS}
 
   {$ifdef OSDARWIN}
-    {$ifdef CPU64}
-      {$linklib ..\..\static\x86_64-darwin\libsqlite3.a}
-    {$else}
+    {$ifdef CPUAARCH64}
+      {$L ..\..\static\aarch64-darwin\sqlite3.o}
+    {$endif CPUAARCH64}
+    {$ifdef CPUX86}
       {$linklib ..\..\static\i386-darwin\libsqlite3.a}
-    {$endif CPU64}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$linklib ..\..\static\x86_64-darwin\libsqlite3.a}
+    {$endif CPUX64}
   {$endif OSDARWIN}
 
   {$ifdef OSANDROID}
