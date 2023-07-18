@@ -102,19 +102,22 @@ end;
 
 function TIntegrationTests.Run: boolean;
 var
-  cp: shortstring;
+  cp, ssl: shortstring;
 begin
+  ssl[0] := #0;
   {$ifdef USE_OPENSSL}
   // warning: OpenSSL on Windows requires to download the right libraries
   RegisterOpenSsl;
+  if OpenSslIsAvailable then
+    FormatShort(' and OpenSSL %', [OpenSslVersionHexa], ssl);
   {$endif USE_OPENSSL}
   str(Unicode_CodePage, cp);
   if cp = '65001' then
     cp := 'utf8';
   CustomVersions := Format(#13#10#13#10'%s (cp %s)'#13#10 +
-    '    %s'#13#10'    on %s'#13#10'Using mORMot %s'#13#10'    %s',
+    '    %s'#13#10'    on %s'#13#10'Using mORMot %s%s'#13#10'    %s',
     [OSVersionText, cp, CpuInfoText, BiosInfoText,
-     SYNOPSE_FRAMEWORK_FULLVERSION, sqlite3.Version]);
+     SYNOPSE_FRAMEWORK_FULLVERSION, ssl, sqlite3.Version]);
   result := inherited Run;
 end;
 

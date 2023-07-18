@@ -555,7 +555,6 @@ begin
   Prng(TAesPrng, 'mORMot');
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
-  AddConsole('       using OpenSSL %', [OpenSslVersionHexa]);
   {$endif USE_OPENSSL}
   // same benchmarks as in Prng()
   timer.Start;
