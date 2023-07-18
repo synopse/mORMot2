@@ -589,7 +589,7 @@ var
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
-  ntp: RawUtf8;
+  ntp, usr, pwd: RawUtf8;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
@@ -726,30 +726,39 @@ begin
           one.Settings.TargetUri := clients[j];
           one.Settings.KerberosDN := dn;
           try
-            if one.BindSaslKerberos then
+            if Executable.Command.Get('ldapusr', usr) and
+               Executable.Command.Get('ldappwd', pwd) then
             begin
-              AddConsole('% = %', [one.Settings.TargetHost, one.NetbiosDN]);
-              Check(one.NetbiosDN <> '', 'NetbiosDN');
-              Check(one.ConfigDN <> '', 'ConfigDN');
-              Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
-                    '(cn=Domain Controllers)', ['*']), 'Search');
-              Check(one.SearchResult.Count <> 0, 'SeachResult');
-              for k := 0 to one.SearchResult.Count - 1 do
-                with one.SearchResult.Items[k] do
-                begin
-                  sid := '';
-                  Check(CopyObjectSid(sid), 'objectSid');
-                  Check(sid <> '');
-                  FillZero(guid);
-                  Check(CopyObjectGUID(guid), 'objectGUID');
-                  Check(not IsNullGuid(guid));
-                  CheckEqual(Attributes.Get('cn'), 'Domain Controllers', 'cn');
-                  Check(Attributes.Get('name') <> '', 'name');
-                end;
-              //writeln(one.SearchResult.Dump);
+              one.Settings.UserName := usr;
+              one.Settings.Password := pwd;
+              one.Settings.TargetPort := LDAP_TLS_PORT; // needed for safety
+              if not one.Bind then
+              begin
+                CheckUtf8(false, 'ldap:%', [clients[j]]);
+                continue;
+              end;
             end
-            else
-              CheckUtf8(false, clients[i]);
+            else if not one.BindSaslKerberos then
+              continue;
+            AddConsole('% = %', [one.Settings.TargetHost, one.NetbiosDN]);
+            Check(one.NetbiosDN <> '', 'NetbiosDN');
+            Check(one.ConfigDN <> '', 'ConfigDN');
+            Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
+                  '(cn=Domain Controllers)', ['*']), 'Search');
+            Check(one.SearchResult.Count <> 0, 'SeachResult');
+            for k := 0 to one.SearchResult.Count - 1 do
+              with one.SearchResult.Items[k] do
+              begin
+                sid := '';
+                Check(CopyObjectSid(sid), 'objectSid');
+                Check(sid <> '');
+                FillZero(guid);
+                Check(CopyObjectGUID(guid), 'objectGUID');
+                Check(not IsNullGuid(guid));
+                CheckEqual(Attributes.Get('cn'), 'Domain Controllers', 'cn');
+                Check(Attributes.Get('name') <> '', 'name');
+              end;
+              //writeln(one.SearchResult.Dump);
           except
             on E: Exception do
               Check(false, E.Message);
@@ -796,7 +805,7 @@ begin
   serverinstance.VerifyCert := clientcert;
   servertunnel := serverinstance;
   servercb := serverinstance;
-  clienttunnel.SetTransmit(servercb); // set before BindPort()
+  clienttunnel.SetTransmit(servercb); // set before Open()
   servertunnel.SetTransmit(clientcb);
   // validate handshaking
   session := Random64;
