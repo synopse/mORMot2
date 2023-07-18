@@ -4086,8 +4086,8 @@ begin
         {$endif CPUARM}
         {$ifdef HAS_FPREG}
         {$ifdef OSPOSIX}  // Linux x64, armhf, aarch64
-        ((ValueIsInFPR) and (fpreg > FPREG_LAST)) or
-        ((not ValueIsInFPR) and (reg > PARAMREG_LAST))
+        ((ValueIsInFPR) and (fpreg > FPREG_LAST)) or   // too many FP registers
+        ((not ValueIsInFPR) and (reg > PARAMREG_LAST)) // too many int registers
         {$else}
         (reg > PARAMREG_LAST) // Win64: XMMs overlap regular registers
         {$endif OSPOSIX}
@@ -4101,11 +4101,20 @@ begin
         {$endif FPC} then
       begin
         // this parameter will go on the stack
+        {$ifdef OSDARWINARM}
+        // the Mac M1 does NOT follow the ARM ABI standard on stack :(
+        // https://developer.apple.com/documentation/xcode/
+        //    writing-arm64-code-for-apple-platforms#Pass-arguments-to-functions-correctly
+        // "arguments may consume slots on the stack that are not multiples of 8 bytes"
+        if ValueDirection = imdConst then
+          SizeInStack := ArgRtti.Size;
+        {$else}
         {$ifdef CPUARM}
         // parameter must be aligned on a SizeInStack boundary
         if SizeInStack > POINTERBYTES then
           Inc(ArgsSizeInStack, ArgsSizeInStack mod cardinal(SizeInStack));
         {$endif CPUARM}
+        {$endif OSDARWINARM}
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
       end
@@ -4162,6 +4171,11 @@ begin
         end;
       end;
     end;
+    {$ifdef OSDARWINARM}
+    // the Mac M1 does NOT follow the ARM ABI standard on stack :(
+    while ArgsSizeInStack and 7 <> 0 do
+      inc(ArgsSizeInStack); // ensure pointer-aligned
+    {$endif OSDARWINARM}
     if ArgsSizeInStack > MAX_EXECSTACK then
       raise EInterfaceFactory.CreateUtf8(
         '%.Create: Stack size % > % for %.% method parameters',
