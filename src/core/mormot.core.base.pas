@@ -4826,7 +4826,7 @@ begin
     P[1] := tab[c];
     if i = len then
       break;
-    P[2] := ':'; // to please human limited hexadecimal capabilities
+    P[2] := ':'; // to please (most) human limited hexadecimal capabilities
     inc(P, 3);
     inc(i);
   until false;
