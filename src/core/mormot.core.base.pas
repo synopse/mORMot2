@@ -901,6 +901,10 @@ function FindPropName(Values: PRawUtf8Array; const Value: RawUtf8;
   ValuesCount: PtrInt): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// return the index of Value in Values[], -1 if not found
+// - here name search would use fast IdemPropNameU() function
+function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer; overload;
+
 /// use the RTL to return a date/time as ISO-8601 text
 // - slow function, here to avoid linking mormot.core.datetime
 function DateTimeToIsoString(dt: TDateTime): string;
@@ -4795,6 +4799,13 @@ begin
       PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^, ValuesCount)
   else
     result := -1;
+end;
+
+function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer;
+begin
+  result := high(Names);
+  if result >= 0 then
+    result := FindPropName(@Names[0], Name, result + 1);
 end;
 
 function DateTimeToIsoString(dt: TDateTime): string;

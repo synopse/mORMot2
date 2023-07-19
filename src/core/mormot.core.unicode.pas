@@ -1224,11 +1224,6 @@ function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolea
 function IdemPropNameU(const P1, P2: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return the index of Value in Values[], -1 if not found
-// - here name search would use fast IdemPropNameU() function
-// - just a wrapper to the homonymous function in mormot.core.base
-function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer; overload;
-
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
 // - chars are compared as 7-bit Ansi only (no accentuated characters): but when
@@ -5351,13 +5346,6 @@ begin
       result := false
   else
     result := true;
-end;
-
-function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer;
-begin
-  result := high(Names);
-  if result >= 0 then
-    result := FindPropName(@Names[0], Name, result + 1);
 end;
 
 function IdemPChar(p: PUtf8Char; up: PAnsiChar): boolean;
