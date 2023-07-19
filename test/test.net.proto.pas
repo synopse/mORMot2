@@ -725,6 +725,14 @@ begin
         continue;
       end;
       main := CldapGetBestLdapController(clients, dns[i], '');
+      utc1 := GetSntpTime(dns[i]);
+      if utc1 <> 0 then
+      begin
+        utc2 := NowUtc;
+        AddConsole('% : % = %', [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
+        // only make a single GetSntpTime call - most servers refuse to scale
+        CheckSame(utc1, utc2, 1, 'NTP system'); // allow 1 day diff
+      end;
       for j := 0 to high(clients) do
       begin
         one := TLdapClient.Create;
