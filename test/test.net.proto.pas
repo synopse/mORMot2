@@ -581,7 +581,7 @@ end;
 
 procedure TNetworkProtocols.DNSAndLDAP;
 var
-  ip, u, v, dn, sid: RawUtf8;
+  ip, u, v, sid: RawUtf8;
   c: cardinal;
   guid: TGuid;
   i, j, k: PtrInt;
@@ -589,7 +589,7 @@ var
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
-  ntp, usr, pwd: RawUtf8;
+  ntp, usr, pwd, main, txt: RawUtf8;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
@@ -718,21 +718,34 @@ begin
     for i := 0 to high(dns) do
     begin
       // syntax is -dns server1 [-dns server2]
-      clients := DnsLdapControlersSorted(100, 10, dns[i], false, @dn);
+      clients := DnsLdapServices(dns[i]);
+      if clients = nil then
+      begin
+        CheckUtf8(false, 'no Ldap for --dns %', [dns[i]]);
+        continue;
+      end;
+      main := CldapGetBestLdapController(clients, dns[i], '');
       for j := 0 to high(clients) do
       begin
         one := TLdapClient.Create;
         try
           one.Settings.TargetUri := clients[j];
-          one.Settings.KerberosDN := dn;
+          one.Settings.KerberosDN := dns[i];
           try
             if Executable.Command.Get('ldapusr', usr) and
                Executable.Command.Get('ldappwd', pwd) then
             begin
               one.Settings.UserName := usr;
               one.Settings.Password := pwd;
-              one.Settings.TargetPort := LDAP_TLS_PORT; // needed for safety
+              {$ifdef OSPOSIX}
+              // a valid current kinit session seems mandatory on GSSAPI,
+              // which makes Kerberos password authentication pointless
+              one.Settings.TargetPort := LDAP_TLS_PORT; // TLS needed for safety
               if not one.Bind then
+              {$else}
+              //  Windows allow a kerberos connection from an unrolled computer
+              if not one.BindSaslKerberos then
+              {$endif OSPOSIX}
               begin
                 CheckUtf8(false, 'ldap:%', [clients[j]]);
                 continue;
@@ -740,7 +753,10 @@ begin
             end
             else if not one.BindSaslKerberos then
               continue;
-            AddConsole('% = %', [one.Settings.TargetHost, one.NetbiosDN]);
+            txt := '';
+            if clients[j] = main then
+              txt := ' (main)';
+            AddConsole('%% = %', [one.Settings.TargetHost, txt, one.NetbiosDN]);
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
             Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
@@ -767,7 +783,7 @@ begin
           one.Free;
         end;
       end;
-  end;
+    end;
 end;
 
 procedure TNetworkProtocols.TunnelExecute(Sender: TObject);
