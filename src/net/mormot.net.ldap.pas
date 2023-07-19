@@ -1183,6 +1183,9 @@ type
     property FullResult: TAsnObject
       read fFullResult;
     /// optional advanced options for FullTls = true
+    // - by default, IgnoreCertificateErrors is set to true by Create
+    // - but you can change these default settings to validate the server
+    // certificate if needed
     property TlsContext: TNetTlsContext
       read fTlsContext write fTlsContext;
     /// sequence number of the last LDAP command
@@ -2665,7 +2668,7 @@ function CldapGetLdapController(const DomainName, NameServer: RawUtf8;
 var
   ldap: TRawUtf8DynArray;
 begin
-  ldap := DnsServices('_ldap._tcp.' + DomainName, NameServer);
+  ldap := DnsLdapServices(DomainName, NameServer);
   result := CldapGetBestLdapController(ldap, DomainName, NameServer, TimeOutMS);
 end;
 

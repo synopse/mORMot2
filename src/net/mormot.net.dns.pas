@@ -323,7 +323,16 @@ function DnsReverseLookup(const IP4: RawUtf8;
 function DnsServices(const HostName: RawUtf8;
   const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
 
-/// retrieve the LDAP controlers from the current AD domain name
+/// retrieve the LDAP Services of a DNS host name - using DnsQuery(drrSRV)
+// - just a wrapper around DnsServices('_ldap._tcp.' + DomainName, NameServer)
+// - e.g. DnsLdapServices('ad.mycorp.com') returns
+// ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
+// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
+// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+function DnsLdapServices(const DomainName: RawUtf8;
+  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+
+/// retrieve the LDAP controlers from the current system AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
 // - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
 // - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
@@ -841,6 +850,11 @@ begin
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
 end;
 
+function DnsLdapServices(const DomainName, NameServer: RawUtf8): TRawUtf8DynArray;
+begin
+  result := DnsServices('_ldap._tcp.' + DomainName, NameServer);
+end;
+
 function DnsLdapControlers(const NameServer: RawUtf8; UsePosixEnv: boolean;
   DomainName: PRawUtf8): TRawUtf8DynArray;
 var
@@ -851,7 +865,7 @@ begin
   ad := GetDomainNames(UsePosixEnv);
   for i := 0 to high(ad) do
   begin
-    result := DnsServices('_ldap._tcp.' + ad[i], NameServer);
+    result := DnsLdapServices(ad[i], NameServer);
     if result <> nil then
     begin
       if DomainName <> nil then
