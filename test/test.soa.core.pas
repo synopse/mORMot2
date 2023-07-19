@@ -925,7 +925,7 @@ begin
   CheckSame(Inst.I.Subtract(23, 20), 3, DOUBLE_SAME, 'substract');
   Inst.I.ToText(3.14, s);
   CheckEqual(s, '3.14');
-  CheckEqual(Inst.I.ToTextFunc(777), '777');
+  Check(Inst.I.ToTextFunc(777) = '777', '777');
   x := Inst.CT.GetCurrentThreadID;
   if GlobalInterfaceTestMode <> itmHttp then
   begin
