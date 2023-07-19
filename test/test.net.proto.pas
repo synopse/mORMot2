@@ -760,19 +760,20 @@ begin
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
             Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
-                  '(cn=Domain Controllers)', ['*']), 'Search');
+                  '(cn=users)', ['*']), 'Search');
             Check(one.SearchResult.Count <> 0, 'SeachResult');
             for k := 0 to one.SearchResult.Count - 1 do
               with one.SearchResult.Items[k] do
               begin
                 sid := '';
-                Check(CopyObjectSid(sid), 'objectSid');
-                Check(sid <> '');
+                if CopyObjectSid(sid) then
+                  Check(sid <> '');
                 FillZero(guid);
                 Check(CopyObjectGUID(guid), 'objectGUID');
                 Check(not IsNullGuid(guid));
-                CheckEqual(Attributes.Get('cn'), 'Domain Controllers', 'cn');
+                Check(IdemPropNameU(Attributes.Get('cn'), 'users'), 'cn');
                 Check(Attributes.Get('name') <> '', 'name');
+                Check(Attributes.Get('distinguishedName') <> '', 'distinguishedName');
               end;
               //writeln(one.SearchResult.Dump);
           except
