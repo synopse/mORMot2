@@ -321,7 +321,7 @@ type
   protected
     fFolder, fExt, fStateFile: TFileName;
     fHtmlStateFileIdentifier, fSmtp, fSmtpFrom: RawUtf8;
-    fHttpTimeoutMS, fStartTimeoutSec: integer;
+    fHttpTimeoutMS, fStartDelayMS, fStartTimeoutSec: integer;
   public
     /// set the default values
     constructor Create; override;
@@ -350,6 +350,10 @@ type
     // Intranet) to monitor the services state from anywhere in the world
     property HtmlStateFileIdentifier: RawUtf8
       read fHtmlStateFileIdentifier write fHtmlStateFileIdentifier;
+    /// how many milliseconds to wait between each TSynAngelizeService "Level"
+    // - allow each set of services level to actually start its process
+    property StartDelayMS: integer
+      read fStartDelayMS write fStartDelayMS;
     /// how many seconds a "Level" should wait for all its processes to start
     // - default is 30 seconds
     // - you can set to 0 to not wait for starting
@@ -1742,7 +1746,7 @@ end;
 
 procedure TSynAngelize.WaitStarted(log: TSynLog; level: integer);
 var
-  sec: integer;
+  sec, ms: integer;
   endtix: Int64;
   s: TSynAngelizeService;
   i: PtrInt;
@@ -1763,6 +1767,13 @@ begin
         else
           SleepHiRes(10);
     end;
+  end;
+  ms := (fSettings as TSynAngelizeSettings).StartDelayMS;
+  if ms > 0 then
+  begin
+    log.Log(sllTrace, 'StartServices: wait % ms after level #% start',
+      [ms, level], self);
+    SleepHiRes(ms);
   end;
 end;
 
