@@ -597,9 +597,10 @@ procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
   const aRect: TRect);
 
 /// append a EMR_GDICOMMENT message mapping BeginMarkedContent
-// - associated optionally with an unparented CreateOptionalContentGroup()
+// - associate optionally a CreateOptionalContentGroup() instance from the
+// current PDF document
 procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
-  const GroupTitle: RawUtf8 = ''; const GroupVisible: boolean = true);
+  Group: TPdfOptionalContentGroup = nil);
 
 /// append a EMR_GDICOMMENT message mapping EndMarkedContent
 procedure GdiCommentEndMarkContent(MetaHandle: HDC);
@@ -1362,11 +1363,10 @@ type
     fForceNoBitmapReuse: boolean;
     fUseFontFallBack: boolean;
     fFontFallBackIndex: integer;
-    /// a list of Bookmark text keys, associated to a TPdfDest object
+    // a list of Bookmark text keys, associated to a TPdfDest object
     fBookMarks: TRawUtf8List;
     fMissingBookmarks: TRawUtf8List;
-    /// internal temporary variable - used by CreateOutline
-    fLastOutline: TPdfOutlineEntry;
+    fLastOutline: TPdfOutlineEntry; // used by CreateOutline
     fFileFormat: TPdfFileFormat;
     fPdfA: TPdfALevel;
     fSaveToStreamWriter: TPdfWrite;
@@ -3295,7 +3295,6 @@ var
   D: PAnsiChar;
   L: integer;
 begin
-  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aTitle);
   SetLength(tmp, L + 2);
   D := pointer(tmp);
@@ -3312,7 +3311,6 @@ var
   D: PAnsiChar;
   L: integer;
 begin
-  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aBookmarkName);
   SetLength(tmp, L + (1 + sizeof(TRect)));
   D := pointer(tmp);
@@ -3332,7 +3330,6 @@ var
   D: PAnsiChar;
   L: integer;
 begin
-  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aFileName);
   SetLength(tmp, L + (1 + sizeof(TRect)));
   D := pointer(tmp);
@@ -3343,13 +3340,16 @@ begin
 end;
 
 procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
-  const GroupTitle: RawUtf8; const GroupVisible: boolean);
+  Group: TPdfOptionalContentGroup);
 var
-  tmp: RawUtf8;
+  tmp: packed record
+    pgc: TPdfGdiComment;
+    group: TPdfOptionalContentGroup;
+  end;
 begin
-  FormatUtf8('%%%', [AnsiChar(pgcBeginMarkContent),
-    AnsiChar(ord(GroupVisible) + 48), GroupTitle], tmp);
-  SetGdiCommentApi(MetaHandle, length(tmp), pointer(tmp));
+  tmp.pgc := pgcBeginMarkContent;
+  tmp.group := Group;
+  SetGdiCommentApi(MetaHandle, SizeOf(tmp), @tmp);
 end;
 
 procedure GdiCommentEndMarkContent(MetaHandle: HDC);
@@ -7147,6 +7147,9 @@ const
     2500788224, 542792024, 0, 824573952, 789577728, 2629697536);
 begin
   fLastOutline := nil;
+  fRawPages.Clear;
+  fBookMarks.Clear;
+  fMissingBookmarks.Clear;
   FreeDoc;
   fXRef := TPdfXref.Create;
   fTrailer := TPdfTrailer.Create(fXRef);
@@ -11510,7 +11513,6 @@ var
   Img: TPdfImage;
   ImgName: PdfString;
   ImgRect: TPdfRect;
-  Group: TPdfOptionalContentGroup;
 begin
   try
     case Kind of
@@ -11549,14 +11551,8 @@ begin
             ImgRect.Right - ImgRect.Left, ImgRect.Bottom - ImgRect.Top, ImgName);
         end;
       pgcBeginMarkContent:
-        begin
-          Group := nil;
-          dec(Len);
-          if Len > 0 then
-            Group := Canvas.Doc.CreateOptionalContentGroup({parent=}nil,
-              Utf8DecodeToString(P + 1, Len), {visible=}(P[0] = '1'));
-          Canvas.BeginMarkedContent(Group);
-        end;
+        if Len = SizeOf(Pointer) then
+          Canvas.BeginMarkedContent(PPointer(P)^);
       pgcEndMarkContent:
         Canvas.EndMarkedContent;
     end;
