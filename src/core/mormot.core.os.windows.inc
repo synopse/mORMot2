@@ -326,7 +326,7 @@ begin
 end;
 
 var
-  // redirect to a separated slower but more accurate API since Windows 8
+  // redirect to a slower but more accurate API available since Windows 8
   // - points to GetSystemTimeAsFileTime() before Windows 8
   GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
