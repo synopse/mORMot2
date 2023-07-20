@@ -88,9 +88,9 @@ begin
       {$else}
       'after kinit');
       {$endif OSWINDOWS}
-    Param('ldapusr', 'the LDAP user for --dns, e.g. name@ad.company.com');
-    Param('ldappwd', 'the LDAP password for --dns');
-    Param('ntp', 'the NTP/SNTP #server name/IP to use instead of time.google.com');
+    Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
+    Param('ldappwd', 'the LDAP #password for --dns');
+    Param('ntp', 'a NTP/SNTP #server name/IP to use instead of time.google.com');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
     OpenSslDefaultCrypto := Utf8ToString(

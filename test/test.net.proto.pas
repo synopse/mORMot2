@@ -730,7 +730,6 @@ begin
       begin
         utc2 := NowUtc;
         AddConsole('% : % = %', [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
-        // only make a single GetSntpTime call - most servers refuse to scale
         CheckSame(utc1, utc2, 1, 'NTP system'); // allow 1 day diff
       end;
       for j := 0 to high(clients) do
