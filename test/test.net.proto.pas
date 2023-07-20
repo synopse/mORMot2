@@ -764,12 +764,13 @@ begin
             txt := '';
             if clients[j] = main then
               txt := ' (main)';
-            AddConsole('%% = %', [one.Settings.TargetHost, txt, one.NetbiosDN]);
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
             Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
                   '(cn=users)', ['*']), 'Search');
             Check(one.SearchResult.Count <> 0, 'SeachResult');
+            AddConsole('%% = % search=%', [one.Settings.TargetHost, txt,
+              one.NetbiosDN, one.SearchResult.Count]);
             for k := 0 to one.SearchResult.Count - 1 do
               with one.SearchResult.Items[k] do
               begin
