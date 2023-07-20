@@ -383,6 +383,9 @@ type
   // - pgcLink/pgcLinkNoBorder will create a asLink annotation, expecting the data
   // to be filled with TRect inclusive-inclusive bounding rectangle coordinates,
   // followed by the corresponding bookmark name
+  // - pgcJpegDirect will include a JPEG image directly from its file content
+  // - pgcBeginMarkContent/pgcEndMarkContent will map
+  // BeginMarkedContent/EndMarkedContent sections
   // - use the GdiComment*() functions to append the corresponding
   // EMR_GDICOMMENT message to a metafile content
   TPdfGdiComment = (
@@ -390,7 +393,9 @@ type
     pgcBookmark,
     pgcLink,
     pgcLinkNoBorder,
-    pgcJpegDirect);
+    pgcJpegDirect,
+    pgcBeginMarkContent,
+    pgcEndMarkContent);
 
 {$ifdef USE_PDFSECURITY}
 
@@ -580,16 +585,24 @@ procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
 // - used to add an outline at the current position (i.e. the last Y parameter of
 // a Move): the text is the associated title, UTF-8 encoded and the outline tree
 // is created from the specified numerical level (0=root)
-procedure GdiCommentOutline(MetaHandle: HDC; const aTitle: RawUtf8; aLevel: integer);
+procedure GdiCommentOutline(MetaHandle: HDC;
+  const aTitle: RawUtf8; aLevel: integer);
 
 /// append a EMR_GDICOMMENT message for creating a Link into a specified bookmark
-procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8; const
-  aRect: TRect; NoBorder: boolean);
+procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8;
+  const aRect: TRect; NoBorder: boolean);
 
 /// append a EMR_GDICOMMENT message for adding jpeg direct
-procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8; const
-  aRect: TRect);
+procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
+  const aRect: TRect);
 
+/// append a EMR_GDICOMMENT message mapping BeginMarkedContent
+// - associated optionally with an unparented CreateOptionalContentGroup()
+procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
+  const GroupTitle: RawUtf8 = ''; const GroupVisible: boolean = true);
+
+/// append a EMR_GDICOMMENT message mapping EndMarkedContent
+procedure GdiCommentEndMarkContent(MetaHandle: HDC);
 
 
 {************ Internal classes mapping PDF objects }
@@ -3266,7 +3279,8 @@ var
   tmp: RawByteString;
   D: PAnsiChar;
   L: integer;
-begin // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+begin
+  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aBookmarkName);
   SetLength(tmp, L + 1);
   D := pointer(tmp);
@@ -3280,7 +3294,8 @@ var
   tmp: RawByteString;
   D: PAnsiChar;
   L: integer;
-begin // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+begin
+  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aTitle);
   SetLength(tmp, L + 2);
   D := pointer(tmp);
@@ -3296,7 +3311,8 @@ var
   tmp: RawByteString;
   D: PAnsiChar;
   L: integer;
-begin // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+begin
+  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
   L := length(aBookmarkName);
   SetLength(tmp, L + (1 + sizeof(TRect)));
   D := pointer(tmp);
@@ -3324,6 +3340,24 @@ begin
   PRect(D + 1)^ := aRect;
   MoveFast(pointer(aFileName)^, D[1 + sizeof(TRect)], L);
   SetGdiCommentApi(MetaHandle, L + (1 + sizeof(TRect)), D);
+end;
+
+procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
+  const GroupTitle: RawUtf8; const GroupVisible: boolean);
+var
+  tmp: RawUtf8;
+begin
+  FormatUtf8('%%%', [AnsiChar(pgcBeginMarkContent),
+    AnsiChar(ord(GroupVisible) + 48), GroupTitle], tmp);
+  SetGdiCommentApi(MetaHandle, length(tmp), pointer(tmp));
+end;
+
+procedure GdiCommentEndMarkContent(MetaHandle: HDC);
+var
+  pgc: TPdfGdiComment;
+begin
+  pgc := pgcEndMarkContent;
+  SetGdiCommentApi(MetaHandle, 1, @pgc);
 end;
 
 function CombineTransform(xform1, xform2: XFORM): XFORM;
@@ -11473,10 +11507,10 @@ end;
 procedure TPdfEnum.HandleComment(Kind: TPdfGdiComment; P: PAnsiChar; Len: integer);
 var
   Text: RawUtf8;
-  W: integer;
   Img: TPdfImage;
   ImgName: PdfString;
   ImgRect: TPdfRect;
+  Group: TPdfOptionalContentGroup;
 begin
   try
     case Kind of
@@ -11497,11 +11531,8 @@ begin
         if Len > Sizeof(TRect) then
         begin
           FastSetString(Text, P + SizeOf(TRect), Len - SizeOf(TRect));
-          if Kind = pgcLink then
-            W := 1
-          else
-            W := 0;
-          Canvas.Doc.CreateLink(Canvas.RectI(PRect(P)^, true), Text, abSolid, W);
+          Canvas.Doc.CreateLink(
+            Canvas.RectI(PRect(P)^, true), Text, abSolid, ord(Kind = pgcLink));
         end;
       pgcJpegDirect:
         if Len > Sizeof(TRect) then
@@ -11517,9 +11548,20 @@ begin
           Canvas.DrawXObject(ImgRect.Left, ImgRect.Top,
             ImgRect.Right - ImgRect.Left, ImgRect.Bottom - ImgRect.Top, ImgName);
         end;
+      pgcBeginMarkContent:
+        begin
+          Group := nil;
+          dec(Len);
+          if Len > 0 then
+            Group := Canvas.Doc.CreateOptionalContentGroup({parent=}nil,
+              Utf8DecodeToString(P + 1, Len), {visible=}(P[0] = '1'));
+          Canvas.BeginMarkedContent(Group);
+        end;
+      pgcEndMarkContent:
+        Canvas.EndMarkedContent;
     end;
   except
-    on e: Exception do
+    on Exception do
       ; // ignore any error (continue EMF enumeration)
   end;
 end;
