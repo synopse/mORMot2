@@ -1257,6 +1257,7 @@ type
   BIGNUM = object
   public
     function ToDecimal: RawUtf8;
+    function ToHex: RawUtf8;
     function Size: integer;
     procedure ToBin(bin: PByte); overload;
     procedure ToBin(out bin: RawByteString); overload;
@@ -2302,6 +2303,7 @@ function EC_KEY_new(): PEC_KEY; cdecl;
 function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
 function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
 function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
+function BN_dec2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
 function ASN1_bn_print(bp: PBIO; number: PUtf8Char;
   num: PBIGNUM; buf: PByte; off: integer): integer; cdecl; // returns hexa :(
@@ -2415,6 +2417,8 @@ function SSL_get_mode(s: PSSL): integer;
 
 function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
 function BN_num_bytes(bn: PBIGNUM): integer;
+function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
+function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
@@ -3270,6 +3274,7 @@ type
     EC_KEY_set_group: function(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
     BN_bin2bn: function(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
     BN_bn2dec: function(a: PBIGNUM): PUtf8Char; cdecl;
+    BN_dec2bn: function(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
     BN_to_ASN1_INTEGER: function(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
     ASN1_bn_print: function(bp: PBIO; number: PUtf8Char; num: PBIGNUM; buf: PByte; off: integer): integer; cdecl;
     ASN1_INTEGER_to_BN: function(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
@@ -3328,7 +3333,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..329] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..330] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3605,6 +3610,7 @@ const
     'EC_KEY_set_group',
     'BN_bin2bn',
     'BN_bn2dec',
+    'BN_dec2bn',
     'BN_to_ASN1_INTEGER',
     'ASN1_bn_print',
     'ASN1_INTEGER_to_BN',
@@ -5126,6 +5132,11 @@ end;
 function BN_bn2dec(a: PBIGNUM): PUtf8Char;
 begin
   result := libcrypto.BN_bn2dec(a);
+end;
+
+function BN_dec2bn(a: PPBIGNUM; str: PUtf8Char): integer;
+begin
+  result := libcrypto.BN_dec2bn(a, str);
 end;
 
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER;
@@ -6660,6 +6671,9 @@ function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
 function BN_bn2dec(a: PBIGNUM): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'BN_bn2dec';
 
+function BN_dec2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'BN_dec2bn';
+
 function BN_to_ASN1_INTEGER(bn: PBIGNUM; ai: PASN1_INTEGER): PASN1_INTEGER; cdecl;
   external LIB_CRYPTO name _PU + 'BN_to_ASN1_INTEGER';
 
@@ -7035,6 +7049,22 @@ end;
 function BN_num_bytes(bn: PBIGNUM): integer;
 begin
   result := (BN_num_bits(bn) + 7) shr 3;
+end;
+
+function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
+begin
+  result := nil;
+  if libcrypto.BN_dec2bn(@result, pointer(Text)) <> OPENSSLSUCCESS then
+    result := nil;
+end;
+
+function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
+var
+  bn: PBIGNUM;
+begin
+  bn := BigNumFromDecimal(Text);
+  result := bn^.ToHex;
+  bn^.Free;
 end;
 
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
@@ -8759,6 +8789,17 @@ begin
   tmp := BN_bn2dec(@self);
   FastSetString(result, tmp, StrLen(tmp));
   OpenSSL_Free(tmp);
+end;
+
+function BIGNUM.ToHex: RawUtf8;
+var
+  bin: RawByteString;
+begin
+  result := '';
+  if @self = nil then
+    exit;
+  ToBin(bin);
+  result := MacToHex(pointer(bin), length(bin));
 end;
 
 function BIGNUM.Size: integer;

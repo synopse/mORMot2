@@ -12227,9 +12227,6 @@ function BN_bn2hex(a: PBIGNUM): PUtf8Char; cdecl;
 function BN_hex2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_hex2bn';
 
-function BN_dec2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_dec2bn';
-
 function BN_asc2bn(a: PPBIGNUM; str: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_asc2bn';
 
