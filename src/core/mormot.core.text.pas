@@ -710,12 +710,12 @@ type
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(const Text: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append a UTF-8 String excluding any space or control char
+    /// append a #0-terminated UTF-8 buffer excluding any space or control char
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(P: PUtf8Char); overload;
-    /// append some chars, replacing a given character with another
+    /// append some UTF-8 chars, replacing a given character with another
     procedure AddReplace(Text: PUtf8Char; Orig, Replaced: AnsiChar);
-    /// append some chars, quoting all " chars
+    /// append some UTF-8 chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation,
     // and with an optional maximum text length (truncated with ending '...')
     // - this function implements what is specified in the official SQLite3
@@ -724,18 +724,18 @@ type
     // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
-    /// append some chars, escaping all HTML special chars as expected
+    /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
-    /// append some chars, escaping all HTML special chars as expected
+    /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
-    /// append some UTF-16chars, escaping all HTML special chars as expected
+    /// append some UTF-16 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeW(Text: PWideChar;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some VCL/LCL chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
-    /// append some chars, escaping all HTML special chars as expected
+    /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeUtf8(const Text: RawUtf8;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some chars, escaping all XML special chars as expected

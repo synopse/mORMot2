@@ -85,6 +85,7 @@ type
     /// the kind of the tag
     Kind: TSynMustacheTagKind;
     /// if the Value has an included ' ' within, i.e. could be an helper
+    // - equals PosExChar(' ', Value)
     ValueSpace: byte;
     /// the tag content, excluding trailing {{ }} and corresponding symbol
     // - is not set for mtText nor mtSetDelimiter
@@ -241,6 +242,8 @@ type
 
   /// handle {{mustache}} template rendering context from RTTI and variables
   // - the context is given via our RTTI information
+  // - performance is somewhat higher than TSynMustacheContextVariant because
+  // less computation is needed for filling the TDocVariant data
   TSynMustacheContextData = class(TSynMustacheContext)
   protected
     fContext: array of record
@@ -562,10 +565,14 @@ type
       const OnTranslate: TOnStringTranslate = nil;
       EscapeInvert: boolean = false): RawUtf8;
 
-    /// read-only access to the raw {{mustache}} template content
+    /// read-only access to the raw UTF-8 {{mustache}} template content
     property Template: RawUtf8
       read fTemplate;
+    /// read-only access to the internal representation of the template
+    property Tags: TSynMustacheTagDynArray
+      read fTags;
     /// the maximum possible number of nested contexts
+    // - i.e. the depth of nested {{#....}} {{/....}} sections
     property SectionMaxCount: Integer
       read fSectionMaxCount;
   end;
