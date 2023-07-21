@@ -2797,21 +2797,24 @@ var
   status: integer;
   resp: RawUtf8;
 begin
+  result := false;
   if self = nil then
-  begin
-    result := false;
     exit;
-  end;
   fServerTimestamp.Offset := 0.0001; // avoid endless recursive call
-  status := CallBackGet('timestamp', [], resp);
-  result := (status = HTTP_SUCCESS) and
-            (resp <> '');
-  if result then
-    SetServerTimestamp(GetInt64(pointer(resp)))
-  else
-  begin
-    InternalLog('/Timestamp call failed -> Server not available', sllWarning);
-    fLastErrorMessage := 'Server not available  - ' + TrimU(fLastErrorMessage);
+  try
+    status := CallBackGet('timestamp', [], resp);
+    result := (status = HTTP_SUCCESS) and
+              (resp <> '');
+    if result then
+      SetServerTimestamp(GetInt64(pointer(resp)))
+    else
+    begin
+      InternalLog('/Timestamp call failed -> Server not available', sllWarning);
+      fLastErrorMessage := 'Server not available  - ' + TrimU(fLastErrorMessage);
+    end;
+  finally
+    if not result then
+      fServerTimestamp.Offset := 0; // allow retrial
   end;
 end;
 
