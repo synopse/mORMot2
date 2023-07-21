@@ -2898,7 +2898,11 @@ var
   i, c: PtrInt;
   tab: PAnsichar;
 begin
+  if maclen < 0 then
+    maclen := 0;
   FastSetString(result, nil, maclen * 2);
+  if maclen = 0 then
+    exit;
   dec(maclen);
   tab := @HexCharsLower;
   P := pointer(result);
