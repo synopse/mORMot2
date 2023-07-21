@@ -6965,13 +6965,8 @@ end;
 function Digest(md: PEVP_MD; buf: pointer; buflen: integer): RawUtf8;
 var
   dig: THash512;
-  len: integer;
 begin
-  len := Digest(md, buf, buflen, dig);
-  if len > 0 then
-    result := MacToHex(@dig, len)
-  else
-    result := '';
+  result := MacToHex(@dig, Digest(md, buf, buflen, dig));
 end;
 
 function Digest(md: PEVP_MD; const buf: RawByteString): RawUtf8;
@@ -7054,7 +7049,7 @@ end;
 function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
 begin
   result := nil;
-  if libcrypto.BN_dec2bn(@result, pointer(Text)) <> OPENSSLSUCCESS then
+  if libcrypto.BN_dec2bn(@result, pointer(Text)) = 0 then
     result := nil;
 end;
 
@@ -9307,6 +9302,7 @@ begin
   len := 0;
   if (@self = nil) or
      (X509_digest(@self, md, @dig, @len) <> OPENSSLSUCCESS) or
+     (len <= 0) or
      (len > SizeOf(dig)) then
     result := ''
   else

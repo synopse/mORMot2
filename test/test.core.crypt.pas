@@ -1376,6 +1376,15 @@ begin
     if Assigned(AesNiHash128) then
       Check(Hash128Test(P, @AesNiHash128, msg), msg);
   end;
+  {$ifdef USE_OPENSSL}
+  CheckEqual(BigNumHexFromDecimal('0'), '');
+  CheckEqual(BigNumHexFromDecimal('1'), '01');
+  CheckEqual(BigNumHexFromDecimal('15'), '0f');
+  CheckEqual(BigNumHexFromDecimal('255'), 'ff');
+  CheckEqual(BigNumHexFromDecimal('65534'), 'fffe');
+  CheckEqual(BigNumHexFromDecimal('65535'), 'ffff');
+  CheckEqual(BigNumHexFromDecimal('12345678901234567890'), 'ab54a98ceb1f0ad2');
+  {$endif USE_OPENSSL}
 end;
 
 procedure TTestCoreCrypto.Streams;
