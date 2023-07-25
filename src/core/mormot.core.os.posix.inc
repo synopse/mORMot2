@@ -737,10 +737,10 @@ const
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
 function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
-  cdecl external clib name 'clock_gettime';
+  cdecl external clib name 'clock_gettime' + LIBC_SUFFIX;
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl external clib name 'gettimeofday';
+  cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
 
 {$endif OSBSD}
 
@@ -2870,20 +2870,20 @@ type
 
 // retrieve information of a given user by name
 function getpwnam(name: PAnsiChar): PPasswd;
-  cdecl external clib name 'getpwnam';
+  cdecl external clib name 'getpwnam' + LIBC_SUFFIX;
 
 // sets the supplementary group IDs for the calling process
 function setgroups(n: size_t; groups: PGid): integer;
-  cdecl external clib name 'setgroups';
+  cdecl external clib name 'setgroups' + LIBC_SUFFIX;
 
 function setuid(uid: TUid): integer;
-  cdecl external clib name 'setuid';
+  cdecl external clib name 'setuid' + LIBC_SUFFIX;
 function setgid(gid: TGid): integer;
-  cdecl external clib name 'setgid';
+  cdecl external clib name 'setgid' + LIBC_SUFFIX;
 
 // changes the root directory of the calling process
 function chroot(rootpath: PAnsiChar): integer;
-  cdecl external clib name 'chroot';
+  cdecl external clib name 'chroot' + LIBC_SUFFIX;
 
 function DropPriviledges(const UserName: RawUtf8): boolean;
 var
@@ -3301,13 +3301,13 @@ end;
 
 {$else}
 function getpagesize: integer;
-  cdecl external clib name 'getpagesize';
+  cdecl external clib name 'getpagesize' + LIBC_SUFFIX;
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
 
 function get_nprocs: integer;
-  cdecl external clib name 'get_nprocs';
+  cdecl external clib name 'get_nprocs' + LIBC_SUFFIX;
 
 procedure SetLinuxDistrib(const release: RawUtf8);
 var

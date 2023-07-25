@@ -174,7 +174,8 @@ type
 {$ifdef SOCKDIRECTSYSCALL}
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
-  external clib name 'gethostbyname'; // no syscall available from FPC
+  external clib name 'gethostbyname' + LIBC_SUFFIX;
+  // no syscall available from FPC -> use libc wrapper
 
 function socket(af, struct, protocol: integer): integer; inline;
 begin
@@ -210,7 +211,8 @@ end;
 
 function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
    hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
-  external clib name 'getnameinfo'; // no syscall available from FPC
+  external clib name 'getnameinfo' + LIBC_SUFFIX;
+  // no syscall available from FPC
 
 function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; inline;
 begin
@@ -234,7 +236,8 @@ end;
 
 {$ifdef HASACCEPT4}
 function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
-  external clib name 'accept4'; // no syscall available from FPC
+  external clib name 'accept4';
+  // no syscall available from FPC
 {$endif HASACCEPT4}
 
 function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; inline;
@@ -282,72 +285,77 @@ end;
 // like gethostbyname() or accept4() are not available as fp* syscalls
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
-  external clib name 'gethostbyname';
+  external clib name 'gethostbyname' + LIBC_SUFFIX;
 
 function socket(af, struct, protocol: integer): integer; cdecl;
-  external clib name 'socket';
+  external clib name 'socket' + LIBC_SUFFIX;
 
 function setsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: integer): integer; cdecl;
-  external clib name 'setsockopt';
+  external clib name 'setsockopt' + LIBC_SUFFIX;
 
 function getsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: PInteger): integer; cdecl;
-  external clib name 'getsockopt';
+  external clib name 'getsockopt' + LIBC_SUFFIX;
 
 function ioctlsocket(s: integer; cmd: cardinal): integer; cdecl; varargs;
-  external clib name 'ioctl';
+  external clib name 'ioctl' + LIBC_SUFFIX;
 
 function shutdown(s: integer; how: integer): integer; cdecl;
-  external clib name 'shutdown';
+  external clib name 'shutdown' + LIBC_SUFFIX;
 
 function closesocket(s: integer): integer; cdecl;
-  external clib name 'close';
+  external clib name 'close' + LIBC_SUFFIX;
 
 function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
    hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
-  external clib name 'getnameinfo';
+  external clib name 'getnameinfo' + LIBC_SUFFIX;
 
 function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; cdecl;
-  external clib name 'bind';
+  external clib name 'bind' + LIBC_SUFFIX;
 
 function getsockname(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
-  external clib name 'getsockname';
+  external clib name 'getsockname' + LIBC_SUFFIX;
 
 function listen(s: integer; backlog: integer): integer; cdecl;
-  external clib name 'listen';
+  external clib name 'listen' + LIBC_SUFFIX;
 
 function accept(s: integer; addr: PSockAddr; var addrlen: tsocklen): integer; cdecl;
-  external clib name 'accept';
+  external clib name 'accept' + LIBC_SUFFIX;
+
+{$undef ACCEPT4_SYSCALL}
 
 {$ifdef HASACCEPT4}
-function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
-  external clib name 'accept4';
+
+function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer;
+  cdecl; external clib name 'accept4'  // no LIBC_SUFFIX: libc 2.10 is required
+    {$ifdef OSLINUXINTEL} + '@GLIBC_2.10' {$endif} ;
+
 {$endif HASACCEPT4}
 
 function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; cdecl;
-  external clib name 'connect';
+  external clib name 'connect' + LIBC_SUFFIX;
 
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; cdecl;
-  external clib name 'select';
+  external clib name 'select' + LIBC_SUFFIX;
 
 function recv(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
-  external clib name 'recv';
+  external clib name 'recv' + LIBC_SUFFIX;
 
 function recvfrom(s: integer; Buf: Pointer; len: size_t; flags: integer;
    from: PSockAddr; fromlen: Pinteger): ssize_t; cdecl;
-  external clib name 'recvfrom';
+  external clib name 'recvfrom' + LIBC_SUFFIX;
 
 function send(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
-  external clib name 'send';
+  external clib name 'send' + LIBC_SUFFIX;
 
 function sendto(s: integer; Buf: Pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; cdecl;
-  external clib name 'sendto';
+  external clib name 'sendto' + LIBC_SUFFIX;
 
 function getpeername(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
-  external clib name 'getpeername';
+  external clib name 'getpeername' + LIBC_SUFFIX;
 
 {$endif SOCKDIRECTSYSCALL}
 
@@ -359,7 +367,7 @@ begin
 end;
 {$else}
 function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
-  external clib name 'poll';
+  external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
 function sockerrno: integer; inline;

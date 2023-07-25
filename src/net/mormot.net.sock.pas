@@ -493,7 +493,6 @@ function GetIPAddressesText(const Sep: RawUtf8 = ' ';
 // - may be set to force detection after HW configuration change
 procedure MacIPAddressFlush;
 
-
 type
   /// interface name/address pairs as returned by GetMacAddresses
   TMacAddress = record

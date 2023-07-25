@@ -261,6 +261,7 @@
         {$define FPCLINUX}
         {$define OSLINUXANDROID}
         {$ifdef CPUX64}
+          {$define OSLINUXINTEL}
           {$define OSLINUXX64}
         {$endif CPUX64}
       {$else}
@@ -271,6 +272,8 @@
           {$define OSLINUXANDROID}
           {$define NOPATCHRTL}  // don't mess with asm stuff
           {$ifdef CPUX86}
+            {$define OSLINUXINTEL}
+            {$define OSLINUXX86}
             {$define FPC_PIC}
           {$endif CPUX86}
           {$ifdef CPUAARCH64}

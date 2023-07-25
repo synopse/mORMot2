@@ -2618,6 +2618,18 @@ var
 
 {$else}
 
+const
+  /// allow to assign proper signed symbol table name for a libc.so.6 method
+  {$ifdef OSLINUXX64}
+  LIBC_SUFFIX = '@GLIBC_2.2.5';
+  {$else}
+  {$ifdef OSLINUXX86}
+  LIBC_SUFFIX = '@GLIBC_2.0';
+  {$else}
+  LIBC_SUFFIX = ''; // no suffix seems needed outside of Intel/AMD systems
+  {$endif OSLINUXX86}
+  {$endif OSLINUXX64}
+
 type
   /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
   TFileAge = TUnixTime;
