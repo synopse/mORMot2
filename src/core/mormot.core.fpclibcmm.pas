@@ -51,17 +51,29 @@ implementation
 
 // low-level direct calls to the external libc library
 
+const
+  /// allow to assign proper signed symbol table name for a libc.so.6 method
+  {$ifdef OSLINUXX64}
+  LIBC_SUFFIX = '@GLIBC_2.2.5';
+  {$else}
+  {$ifdef OSLINUXX86}
+  LIBC_SUFFIX = '@GLIBC_2.0';
+  {$else}
+  LIBC_SUFFIX = '';
+  {$endif OSLINUXX86}
+  {$endif OSLINUXX64}
+
 function malloc(size: PtrUInt): pointer;
-  cdecl; external 'c' name 'malloc';
+  cdecl; external 'c' name 'malloc' + LIBC_SUFFIX;
 
 function calloc(count, size: PtrUInt): pointer;
-  cdecl; external 'c' name 'calloc';
+  cdecl; external 'c' name 'calloc' + LIBC_SUFFIX;
 
 procedure free(p: pointer);
-  cdecl; external 'c' name 'free';
+  cdecl; external 'c' name 'free' + LIBC_SUFFIX;
 
 function realloc(p: pointer; size: PtrUInt): pointer;
-  cdecl; external 'c' name 'realloc';
+  cdecl; external 'c' name 'realloc' + LIBC_SUFFIX;
 
 
 // TMemoryManager replacement
@@ -112,12 +124,12 @@ end;
 // = MacOS 11.1, FreeBSD 6.0, NetBSD 9.0, OpenBSD 6.7, Minix 3.1.8, AIX 5.1,
 // HP-UX 11.00, IRIX 6.5, Solaris 11.4, mingw, MSVC 14, BeOS, Android 4.1.
 function msize(p: pointer): PtrUInt;
-  cdecl; external 'c' name 'malloc_usable_size';
+  cdecl; external 'c' name 'malloc_usable_size' + LIBC_SUFFIX;
 
 // enable paranoid memory checks - but for SINGLE/MAIN thread only
 // - see http://man7.org/linux/man-pages/man3/mcheck.3.html
 function mcheck(abort: pointer): integer;
-  cdecl external 'c' name 'mcheck';
+  cdecl external 'c' name 'mcheck' + LIBC_SUFFIX;
 
 function _MemSize(p: pointer): PtrUInt;
 begin
