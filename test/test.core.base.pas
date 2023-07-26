@@ -5087,22 +5087,28 @@ begin
     Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
     Check(Utf8ICompReference(pointer(U), pointer(U)) = 0);
     Check(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)) = 0);
-    up4 := UpperCaseUcs4Reference(U);
-    CheckEqual(StrPosIReference(pointer(U), Up4), pointer(U));
-    if U <> '' then
-    begin
-      Up2 := 'abcDE G' + U;
-      CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  7);
-      SetLength(Up2, length(Up2) - 1);
-      Check(StrPosIReference(pointer(Up2), Up4) = nil);
-      Up2 := 'abcDEF' + U + 'PZE';
-      CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  6);
-    end;
-    if WA then
-    begin
-      CheckEqual(Utf8ICompReference(pointer(U), pointer(Up)), 0, 'Utf8ICompReference');
-      CheckEqual(Utf8ILCompReference(pointer(U), pointer(Up), length(U), length(Up)),
-        0, 'Utf8ILCompReference');
+    try
+      up4 := UpperCaseUcs4Reference(U);
+      CheckEqual(StrPosIReference(pointer(U), Up4), pointer(U));
+      if U <> '' then
+      begin
+        Up2 := 'abcDE G' + U;
+        CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  7);
+        SetLength(Up2, length(Up2) - 1);
+        Check(StrPosIReference(pointer(Up2), Up4) = nil);
+        Up2 := 'abcDEF' + U + 'PZE';
+        CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  6);
+      end;
+      if WA then
+      begin
+        CheckEqual(Utf8ICompReference(pointer(U), pointer(Up)), 0, 'Utf8ICompReference');
+        CheckEqual(Utf8ILCompReference(pointer(U), pointer(Up), length(U), length(Up)),
+          0, 'Utf8ILCompReference');
+      end;
+    except
+      on E: Exception do
+        CheckUtf8(false, '% for %[%]%', [E.ClassType, length(U),
+          EscapeToShort(U), length(up4)]);
     end;
     CheckEqual(LowerCase(U), LowerCaseAscii7(U));
     L := Length(U);
