@@ -8119,6 +8119,11 @@ begin
   arr := pointer(Data);
   if arr^ <> nil then
     Ctxt.Info.ValueFinalize(arr); // reset whole array variable
+  if Ctxt.Json = nil then
+  begin
+    Ctxt.Valid := false;
+    exit;
+  end;
   Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
   if (PCardinal(Ctxt.Json)^ <> ord('{') + ord('"') shl 8 + ord('f') shl 16 +
       ord('i') shl 24) or // FIELDCOUNT_PATTERN = '{"fieldCount":...
