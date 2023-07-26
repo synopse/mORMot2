@@ -264,6 +264,10 @@
           {$define OSLINUXINTEL}
           {$define OSLINUXX64}
         {$endif CPUX64}
+        {$ifdef CPUX86}
+          {$define OSLINUXINTEL}
+          {$define OSLINUXX86}
+        {$endif CPUX86}
       {$else}
         {$ifdef ANDROID}
           // conditionals for Android
@@ -272,8 +276,6 @@
           {$define OSLINUXANDROID}
           {$define NOPATCHRTL}  // don't mess with asm stuff
           {$ifdef CPUX86}
-            {$define OSLINUXINTEL}
-            {$define OSLINUXX86}
             {$define FPC_PIC}
           {$endif CPUX86}
           {$ifdef CPUAARCH64}

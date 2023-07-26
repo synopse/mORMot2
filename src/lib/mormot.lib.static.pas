@@ -695,6 +695,37 @@ begin
   setlocale(LC_NUMERIC, 'C');
 end;
 
+{$ifdef OSLINUXX64}
+
+// some definitions dedicated to avoid libc name versioning for sqlite3.o
+
+function __fxstat64(ver: integer; f: integer; st: pointer): integer;
+  cdecl; external 'c' name '__fxstat64' + LIBC_SUFFIX;
+function __xstat64(ver: integer; fn, st: pointer): integer;
+  cdecl; external 'c' name '__xstat64' + LIBC_SUFFIX;
+function __lxstat64(ver: integer; fn, st: pointer): integer;
+  cdecl; external 'c' name '__lxstat64' + LIBC_SUFFIX;
+
+const
+  STAT_VER = {$ifdef CPUX86} 3 {$else} 1 {$endif}; // see xstatver.h
+
+function stat64(f: PChar; st: pointer): integer; cdecl; public name 'stat64';
+begin
+  result := __xstat64(STAT_VER, f, st);
+end;
+
+function fstat64(f: integer; st: pointer): integer; cdecl; public name 'fstat64';
+begin
+  result := __fxstat64(STAT_VER, f, st);
+end;
+
+function lstat64(f: PChar; st: pointer): integer; cdecl; public name 'lstat64';
+begin
+  result := __lxstat64(STAT_VER, f, st);
+end;
+
+{$endif OSLINUXX64}
+
 
 { ****************** GCC Math Functions }
 
