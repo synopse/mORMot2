@@ -1303,7 +1303,11 @@ type
       read fUtf8Length write fUtf8Length;
   end;
 
+{$ifdef ISDELPHI}
 resourcestring
+{$else}
+const
+{$endif ISDELPHI}
   sInvalidIPAddress = '"%s" is an invalid IP v4 address';
   sInvalidEmailAddress = '"%s" is an invalid email address';
   sInvalidPattern = '"%s" does not match the expected pattern';
