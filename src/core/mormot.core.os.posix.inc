@@ -818,17 +818,16 @@ end;
 {$ifdef OSPTHREADSLIB}
   {$define OSPTHREADS}
 var
-  {%H-}pthread: pointer;
   {$ifdef OSLINUX}
   // pthread_setname_np for Linux https://stackoverflow.com/a/7989973/458259
   {$define HAS_PTHREADSETNAMENP}
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
   // pthread_setaffinity_np has been tested on Linux only
   {$define HAS_PTHREADSETAFFINITY}
-  pthread_setaffinity_np: function (thread: pointer;
+  pthread_setaffinity_np: function(thread: pointer;
     cpusetsize: SizeUInt; cpuset: pointer): integer; cdecl;
   {$endif OSLINUX}
-  pthread_cancel: function (thread: pointer): integer; cdecl;
+  pthread_cancel: function(thread: pointer): integer; cdecl;
   pthread_mutex_init: function(mutex, attr: pointer): integer; cdecl;
   pthread_mutex_destroy: function(mutex: pointer): integer; cdecl;
 {$endif OSPTHREADSLIB}

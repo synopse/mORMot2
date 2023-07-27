@@ -2650,6 +2650,7 @@ type
 // some pthread_mutex_*() API defined here for proper inlining
 {$ifdef OSPTHREADSLIB}
 var
+  {%H-}pthread: pointer; // access to pthread.so e.g. for mormot.lib.static
   pthread_mutex_lock:    function(mutex: pointer): integer; cdecl;
   pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
   pthread_mutex_unlock:  function(mutex: pointer): integer; cdecl;
