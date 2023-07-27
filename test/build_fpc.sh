@@ -1,11 +1,16 @@
 #!/bin/bash
 
-FPC=/home/ab/fpcup/fpc/bin/x86_64-linux/fpc.sh
+FPCUP=/home/ab/fpcup
+FPC_SYS="$FPCUP/fpc/bin/x86_64-linux/fpc.sh"
+FPC_OOTB="$FPCUP/fpc-ootb/fpc-ootb-64"
 
 # Build a mORMot2 tests
 # Require an FPC3.2 compiler to be installed:
 #   wget -O fpc-laz_3.2.0-1_amd64.deb https://sourceforge.net/projects/lazarus/files/Lazarus%20Linux%20amd64%20DEB/Lazarus%202.0.10/fpc-laz_3.2.0-1_amd64.deb/download
 #   sudo apt install ./fpc-laz_3.2.0-1_amd64.deb
+#
+# Or you can download a stand-alone fpc-ootb binary from
+#  https://github.com/fredvs/freepascal-ootb/releases/download/3.2.2/fpc-ootb-322-x86_64-linux_glibc225.zip
 #
 # Caller may have defined the following variables:
 # TARGET=linux - compile target (win32, win64 etc. in case cross compiler is installed). Default is `linux`
@@ -100,6 +105,13 @@ SUPRESS_WARN=-vm11047,6058,6018,5093,5092,5091,5060,5058,5057,5044,5028,5024,502
 
 set -o pipefail
 echo "compiling for $ARCH_TG as $CONDITIONALS"
+
+if [ $ARCH_TG = "x86_64-linux" ]; then
+  FPC="$FPC_OOTB"
+  echo "using $FPC"
+else
+  FPC="$FPC_SYS"
+fi
 
 # this is the main compilation command
 $FPC -MDelphi -Sci -Ci -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
