@@ -5,12 +5,6 @@
    POSIX API calls for FPC, as used by mormot.core.os.pas
 }
 
-{$ifdef OSLINUXX64}
-  {.$define OWN_DL}
-{$else}
-  {$undef OWN_DL}
-{$endif OSLINUXX64}
-
 uses
   baseunix,
   unix,
@@ -33,9 +27,7 @@ uses
   {$endif FPCUSEVERSIONINFO}
   errors,
   termio,
-  {$ifndef OWN_DL}
   dl,
-  {$endif OWN_DL}
   initc; // we statically link the libc for some raw calls
 
 {$ifdef UNICODE}
@@ -162,32 +154,6 @@ end;
 
 
 { ****************** Unicode, Time, File process }
-
-{$ifdef OWN_DL} // circumvent missing symbol name suffix
-
-type
-  dl_info = record
-    dli_fname: PAnsiChar;
-    dli_fbase: pointer;
-    dli_sname: PAnsiChar;
-    dli_saddr: pointer;
-  end;
-
-const
-  RTLD_LAZY = $001;
-
-function dlopen(Name: PAnsiChar; flags: integer): pointer;
-  cdecl external 'dl' name 'dlopen' + LIBC_SUFFIX;
-function dlclose(Lib: pointer): integer;
-  cdecl external 'dl' name 'dlclose' + LIBC_SUFFIX;
-function dlsym(Lib: pointer; Name: PAnsiChar): pointer;
-  cdecl external 'dl' name 'dlsym' + LIBC_SUFFIX;
-function dlerror() : PAnsiChar;
-  cdecl external 'dl' name 'dlerror' + LIBC_SUFFIX;
-function dladdr(Lib: pointer; info: pointer): integer;
-  cdecl external 'dl' name 'dladdr' + LIBC_SUFFIX;
-
-{$endif OWN_DL}
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 begin
