@@ -724,6 +724,137 @@ begin
   result := __lxstat64(STAT_VER, f, st);
 end;
 
+
+// on x86_64, we redirect some libc public symbol names with a _ prefix as added
+// by    cp sqlite3.o sqlite3.orig
+//       objconv -np:pthread:_pthread -np:dl:_dl sqlite3.orig sqlite3.o
+
+var
+  // static linking fails: use late binding with lazy initialization
+  // we already have a pthread library loaded by mormot.core.os.posix.inc anyway
+  _pthread_join: function(__th, __thread_return: pointer): integer; cdecl;
+  _pthread_mutex_trylock: function(__mutex:pointer): integer; cdecl;
+  _pthread_mutexattr_settype: function(__attr: pointer; Kind: integer): integer; cdecl;
+  _pthread_mutexattr_init: function(__attr: pointer): integer; cdecl;
+  _pthread_create: function(__thread, __attr, __start_routine, __arg: pointer): integer; cdecl;
+  _pthread_mutexattr_destroy: function(__attr: pointer): integer; cdecl;
+  _pthread_mutex_init: function(__mutexn, __mutex_attr: pointer): integer; cdecl;
+  _pthread_mutex_destroy: function(__mutex: pointer): integer; cdecl;
+  _pthread_mutex_lock: function(__mutex: pointer): integer; cdecl;
+  _pthread_mutex_unlock: function(__mutex: pointer): integer; cdecl;
+
+function _dlopen(Name: PAnsiChar; Flags: integer): pointer;
+  cdecl; external 'dl' name 'dlopen' + LIBC_SUFFIX;
+function _dlsym(Lib: pointer; Name : PAnsiChar): pointer;
+  cdecl; external 'dl' name 'dlsym' + LIBC_SUFFIX;
+function _dlclose(Lib: pointer): integer;
+  cdecl; external 'dl' name 'dlclose' + LIBC_SUFFIX;
+function _dlerror() : PAnsiChar;
+  cdecl; external 'dl' name 'dlerror' + LIBC_SUFFIX;
+
+procedure _pthread_load;
+begin
+  if not Assigned(pthread) then
+    raise ELibStatic.Create('Missing pthread from mormot.core.os');
+  _pthread_join := _dlsym(pthread, 'pthread_join');
+  _pthread_mutex_trylock := _dlsym(pthread, 'pthread_mutex_trylock');
+  _pthread_mutexattr_settype := _dlsym(pthread, 'pthread_mutexattr_settype');
+  _pthread_mutexattr_init := _dlsym(pthread, 'pthread_mutexattr_init');
+  _pthread_create := _dlsym(pthread, 'pthread_create');
+  _pthread_mutexattr_destroy := _dlsym(pthread, 'pthread_mutexattr_destroy');
+  _pthread_mutex_init := _dlsym(pthread, 'pthread_mutex_init');
+  _pthread_mutex_destroy := _dlsym(pthread, 'pthread_mutex_destroy');
+  _pthread_mutex_lock := _dlsym(pthread, 'pthread_mutex_lock');
+  _pthread_mutex_unlock := _dlsym(pthread, 'pthread_mutex_unlock');
+end;
+
+function __pthread_join(__th, __thread_return: pointer): integer;
+  cdecl; public name '_pthread_join';
+begin
+  result := _pthread_join(__th, __thread_return);
+end;
+
+function __pthread_mutex_trylock(__mutex:pointer): integer;
+  cdecl; public name '_pthread_mutex_trylock';
+begin
+  result := _pthread_mutex_trylock(__mutex);
+end;
+
+function __pthread_mutexattr_settype (__attr: pointer; Kind: integer): integer;
+  cdecl; public name '_pthread_mutexattr_settype';
+begin
+  result := _pthread_mutexattr_settype (__attr, Kind);
+end;
+
+function __pthread_mutexattr_init(__attr: pointer): integer;
+  cdecl; public name '_pthread_mutexattr_init';
+begin
+  result := _pthread_mutexattr_init(__attr);
+end;
+
+function __pthread_create(__thread, __attr, __start_routine, __arg: pointer): integer;
+  cdecl; public name '_pthread_create';
+begin
+  result := _pthread_create(__thread, __attr, __start_routine, __arg);
+end;
+
+function __pthread_mutexattr_destroy(__attr: pointer): integer;
+  cdecl; public name '_pthread_mutexattr_destroy';
+begin
+  result := _pthread_mutexattr_destroy(__attr);
+end;
+
+function __pthread_mutex_init(__mutexn, __mutex_attr: pointer): integer;
+  cdecl; public name '_pthread_mutex_init';
+begin
+  result := _pthread_mutex_init(__mutexn, __mutex_attr);
+end;
+
+function __pthread_mutex_destroy(__mutex: pointer): integer;
+  cdecl; public name '_pthread_mutex_destroy';
+begin
+  result := _pthread_mutex_destroy(__mutex);
+end;
+
+// most common methods have low-level asm redirection with no stack frame
+
+function __pthread_mutex_lock(__mutex: pointer): integer;
+  cdecl; public name '_pthread_mutex_lock'; assembler; nostackframe;
+asm
+     jmp        qword ptr [rip + _pthread_mutex_lock]
+end;
+
+function __pthread_mutex_unlock(__mutex: pointer): integer;
+  cdecl; public name '_pthread_mutex_unlock'; assembler; nostackframe;
+asm
+     jmp        qword ptr [rip + _pthread_mutex_unlock]
+end;
+
+
+function __dlopen(Name: PAnsiChar; Flags: integer) : pointer;
+  cdecl; public name '_dlopen';
+begin
+  result := _dlopen(Name, Flags);
+end;
+
+function __dlsym(Lib: pointer; Name: PAnsiChar) : pointer;
+  cdecl; public name '_dlsym';
+begin
+  result := _dlsym(Lib, Name);
+end;
+
+function __dlclose(Lib: pointer): integer;
+  cdecl; public name '_dlclose';
+begin
+  result := _dlclose(Lib);
+end;
+
+function __dlerror(): PAnsiChar;
+  cdecl; public name '_dlerror';
+begin
+  result := _dlerror();
+end;
+
 {$endif OSLINUXX64}
 
 
@@ -1990,6 +2121,9 @@ initialization
   imp_localtime64 := @localtime64;
   {$endif CPU32}
 {$endif OSWINDOWS}
+{$ifdef OSLINUXX64}
+  _pthread_load;
+{$endif OSLINUXX64}
 {$endif FPC}
 
 end.
