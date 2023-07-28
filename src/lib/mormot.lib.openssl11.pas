@@ -8005,7 +8005,7 @@ begin
     if v <> '' then
     begin
       v := 'critical' + v; // heading comma included
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_key_usage, pchar(v));
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_key_usage, pointer(v));
       if ex = nil then
         exit;
       exts.Add(ex);
@@ -8017,7 +8017,7 @@ begin
     if v <> '' then
     begin
       SetLength(v, length(v) - 1); // trailing comma
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_ext_key_usage, pchar(v));
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_ext_key_usage, pointer(v));
       if ex = nil then
         exit;
       exts.Add(ex);
