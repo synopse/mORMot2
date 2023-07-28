@@ -5087,7 +5087,13 @@ begin
     Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
     Check(Utf8ICompReference(pointer(U), pointer(U)) = 0);
     Check(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)) = 0);
+
+    //for j := 1 to 5000 do
     try
+      //W := WinAnsiString(RandomString(len));
+      //U := WinAnsiToUtf8(W);
+      //check(IsValidUtf8(U), 'IsValidUtf8U');
+      //Up := mormot.core.unicode.UpperCase(U);
       up4 := UpperCaseUcs4Reference(U);
       CheckEqual(StrPosIReference(pointer(U), Up4), pointer(U));
       if U <> '' then
@@ -5110,6 +5116,7 @@ begin
         CheckUtf8(false, '% for %[%]%', [E.ClassType, length(U),
           EscapeToShort(U), length(up4)]);
     end;
+
     CheckEqual(LowerCase(U), LowerCaseAscii7(U));
     L := Length(U);
     SetString(Up, nil, L);
