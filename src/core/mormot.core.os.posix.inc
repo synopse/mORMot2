@@ -3612,6 +3612,10 @@ begin
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
   FastSetString(BiosInfoText, beg, StrLen(beg));
+  {$ifdef OSDARWIN}
+  if PosExChar(' ', BiosInfoText) = 0 then
+    BiosInfoText := 'Mac ' + BiosInfoText; // from a Parallels VM
+  {$endif OSDARWIN}
   modname := fpsysctlhwstr(HW_MODEL, temp);
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
@@ -3821,8 +3825,6 @@ begin
   else
     CpuInfoText := _fmt('%d x %s %s (' + CPU_ARCH_TEXT + ')',
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
-  if CpuInfoText = '' then
-    CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef OSDARWIN}
