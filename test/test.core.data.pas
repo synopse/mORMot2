@@ -5414,12 +5414,28 @@ var
   s, t, d: RawUtf8;
   hf: TTextWriterHtmlFormat;
 begin
+  CheckEqual(UrlEncode(''), '');
+  CheckEqual(UrlDecode(''), '');
+  CheckEqual(UrlEncodeName(''), '');
+  CheckEqual(UrlDecodeName(''), '');
   for i := 1 to 100 do
   begin
+    s := RandomIdentifier(i);
+    Check(not NeedsHtmlEscape(pointer(s), hfNone));
+    t := UrlEncode(s);
+    Check(t <> '');
+    CheckEqual(UrlDecode(t), s);
+    CheckEqual(t, s, 'plain');
+    t := UrlEncodeName(s);
+    Check(t <> '');
+    CheckEqual(UrlDecodeName(t), s);
+    CheckEqual(t, s, 'plainname');
     s := RandomUtf8(i);
     Check(not NeedsHtmlEscape(pointer(s), hfNone));
     t := UrlEncode(s);
     Check(t <> '');
+    Check(PosExChar(' ', t) = 0, 'nospace');
+    Check((PosExChar('+', t) <> 0) = (PosExChar(' ', s) <> 0), 'noplus');
     CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i]), '?' + d);
@@ -5431,6 +5447,11 @@ begin
     else
       Check(PosExChar('\', t) <> 0);
     CheckEqual(UnescapeHex(t), s, 'UnescapeHex');
+    t := UrlEncodeName(s);
+    Check(t <> '');
+    Check(PosExChar(' ', t) = 0, 'nospacename');
+    Check(PosExChar('+', t) = 0, 'noplusname');
+    CheckEqual(UrlDecodeName(t), s);
   end;
   for hf := low(hf) to high(hf) do
   begin

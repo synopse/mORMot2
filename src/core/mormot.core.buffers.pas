@@ -1485,12 +1485,19 @@ function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 
 { ***************** URI-Encoded Text Buffer Process }
 
-/// encode a string to be compatible with URI encoding
+/// encode a string as URI parameter encoding, i.e. ' ' as '+'
 function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// encode a string to be compatible with URI encoding
+/// encode a string as URI parameter encoding, i.e. ' ' as '+'
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
+
+/// encode a string as URI network name encoding, i.e. ' ' as %20
+function UrlEncodeName(const svar: RawUtf8): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// encode a string as URI network name encoding, i.e. ' ' as %20
+function UrlEncodeName(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -1498,21 +1505,24 @@ function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 // - parameters names should be plain ASCII-7 RFC compatible identifiers
 // (0..9a..zA..Z_.~), otherwise their values are skipped
 // - parameters values can be either textual, integer or extended, or any TObject
-// - TObject serialization into UTF-8 will be processed by the ObjectToJson()
-// function
+// - TObject serialization into UTF-8 will be processed with ObjectToJson()
 function UrlEncode(const NameValuePairs: array of const;
   TrimLeadingQuestionMark: boolean = false): RawUtf8; overload;
 
-/// decode a string compatible with URI encoding into its original value
-// - you can specify the decoding range (as in copy(s,i,len) function)
-function UrlDecode(const s: RawUtf8; i: PtrInt = 1; len: PtrInt = -1): RawUtf8; overload;
-
-/// decode a string compatible with URI encoding into its original value
+/// decode a UrlEncode() URI encoded parameter into its original value
 function UrlDecode(U: PUtf8Char): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
-/// decode a string compatible with URI encoding into its original value
-procedure UrlDecode(U: PUtf8Char; var result: RawUtf8); overload;
+/// decode a UrlEncode() URI encoded parameter into its original value
+function UrlDecode(const s: RawUtf8): RawUtf8; overload;
+
+/// decode a UrlEncodeName() URI encoded network name into its original value
+function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
+
+/// decode a UrlEncodeName() URI encoded network name into its original value
+function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
+
+/// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
+procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
 
 /// decode a specified parameter compatible with URI encoding into its original
 // textual value
@@ -7840,9 +7850,14 @@ begin
   result := UrlEncode(pointer(svar));
 end;
 
+function UrlEncodeName(const svar: RawUtf8): RawUtf8;
+begin
+  result := UrlEncodeName(pointer(svar));
+end;
+
 // two sub-functions for better code generation of UrlEncode()
 
-procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet);
+procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet; space2plus: cardinal);
 var
   c: cardinal;
   hex: ^TByteToWord;
@@ -7859,7 +7874,7 @@ begin
     end
     else if c = 0 then
       exit
-    else if c = 32 then
+    else if c = space2plus then // space2plus=32 for parameter, =48 for URI
     begin
       p^ := ord('+');
       inc(p);
@@ -7874,7 +7889,7 @@ begin
   until false;
 end;
 
-function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet): PtrInt;
+function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet; space2plus: cardinal): PtrInt;
 var
   c: cardinal;
 begin
@@ -7883,7 +7898,7 @@ begin
     c := s^;
     inc(s);
     if (tcUriUnreserved in tab[c]) or
-       (c = 32) then
+       (c = space2plus) then // =32 for parameter, =48 for URI
     begin
       inc(result);
       continue;
@@ -7899,8 +7914,17 @@ begin
   result := '';
   if Text = nil then
     exit;
-  FastSetString(result, nil, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS));
-  _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES);
+  FastSetString(result, nil, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 32));
+  _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 32);
+end;
+
+function UrlEncodeName(Text: PUtf8Char): RawUtf8;
+begin
+  result := '';
+  if Text = nil then
+    exit;
+  FastSetString(result, nil, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 48));
+  _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 48);
 end;
 
 function UrlEncode(const NameValuePairs: array of const;
@@ -7972,58 +7996,11 @@ begin
     result := URI;
 end;
 
-function UrlDecode(const s: RawUtf8; i, len: PtrInt): RawUtf8;
+procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
 var
-  L: PtrInt;
   P: PUtf8Char;
   tmp: TSynTempBuffer;
 begin
-  result := '';
-  L := PtrInt(s);
-  if L = 0 then
-    exit;
-  L := PStrLen(L - _STRLEN)^;
-  if len < 0 then
-    len := L;
-  if i > L then
-    exit;
-  dec(i);
-  if len = i then
-    exit;
-  P := tmp.Init(len - i);  // reserve enough space for result
-  while i < len do
-  begin
-    case s[i + 1] of
-      #0:
-        break; // reached end of s
-      '%':
-        if not HexToChar(PAnsiChar(pointer(s)) + i + 1, P) then
-          P^ := s[i + 1]
-        else
-          inc(i, 2); // browsers may not follow the RFC (e.g. encode % as % !)
-      '+':
-        P^ := ' ';
-    else
-      P^ := s[i + 1];
-    end; // case s[i] of
-    inc(i);
-    inc(P);
-  end;
-  tmp.Done(P, result);
-end;
-
-function UrlDecode(U: PUtf8Char): RawUtf8;
-begin
-  UrlDecode(U, result);
-end;
-
-procedure UrlDecode(U: PUtf8Char; var result: RawUtf8); overload;
-var
-  P: PUtf8Char;
-  L: integer;
-  tmp: TSynTempBuffer;
-begin
-  L := StrLen(U);
   if L = 0 then
   begin
     result := '';
@@ -8040,7 +8017,10 @@ begin
         else
           inc(U, 2); // browsers may not follow the RFC (e.g. encode % as % !)
       '+':
-        P^ := ' ';
+        if name then
+          P^ := '+'
+        else
+          P^ := ' ';
     else
       P^ := U^;
     end; // case s[i] of
@@ -8048,6 +8028,26 @@ begin
     inc(P);
   until false;
   tmp.Done(P, result);
+end;
+
+function UrlDecode(U: PUtf8Char): RawUtf8;
+begin
+  UrlDecodeVar(U, StrLen(U), result, {name=}false);
+end;
+
+function UrlDecode(const s: RawUtf8): RawUtf8;
+begin
+  UrlDecodeVar(pointer(s), length(s), result, {name=}false);
+end;
+
+function UrlDecodeName(U: PUtf8Char): RawUtf8;
+begin
+  UrlDecodeVar(U, StrLen(U), result, {name=}true);
+end;
+
+function UrlDecodeName(const s: RawUtf8): RawUtf8;
+begin
+  UrlDecodeVar(pointer(s), length(s), result, {name=}true);
 end;
 
 function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;

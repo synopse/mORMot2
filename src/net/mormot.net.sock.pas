@@ -361,7 +361,7 @@ var
   // on Windows, and gethostbyname() on POSIX
   // - if you include mormot.net.dns, its own IPv4 DNS resolution function will
   // be registered here
-  // - this level or DNS resolution has a simple in-memory cache of 32 seconds
+  // - this level of DNS resolution has a simple in-memory cache of 32 seconds
   // - NewSocketAddressCache from mormot.net.client will implement a more
   // tunable cache, for both IPv4 and IPv6 resolutions
   NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: cardinal): boolean;

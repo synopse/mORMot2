@@ -10,7 +10,7 @@ uses
   unix,
   unixcp,
   unixtype,
-  unixutil,
+  unixutil, // for TZSeconds - used by sysutils anyway
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
