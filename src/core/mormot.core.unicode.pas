@@ -9122,8 +9122,9 @@ type
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
     // branchless Unicode 10.0 uppercase folding using our internal tables
+    // (some random GPF occured on arm/aarch64 at -O2 so we disabled inlining)
     function Ucs4Upper(c: PtrUInt): PtrUInt;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef CPUINTEL} {$ifdef HASINLINE} inline; {$endif} {$endif}
   end;
   {$ifndef CPUX86NOTPIC}
   PUnicodeUpperTable = ^TUnicodeUpperTable;
