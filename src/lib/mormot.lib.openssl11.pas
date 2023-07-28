@@ -1078,6 +1078,36 @@ type
 
 { ******************** OpenSSL Library Types and Structures }
 
+type
+  /// X509v3 Key and Extended Key Usage Flags
+  // - kuCA match NID_basic_constraints containing 'CA:TRUE'
+  // - kuEncipherOnly .. kuDecipherOnly match NID_key_usage values
+  // - kuTlsServer .. kuAnyeku match NID_ext_key_usage values
+  // - see https://omvs.de/2019/11/13/key-usage-extensions-at-x-509-certificates
+  TX509Usage = (
+    kuCA,
+    kuEncipherOnly,
+    kuCrlSign,
+    kuKeyCertSign,
+    kuKeyAgreement,
+    kuDataEncipherment,
+    kuKeyEncipherment,
+    kuNonRepudiation,
+    kuDigitalSignature,
+    kuDecipherOnly,
+    kuTlsServer,
+    kuTlsClient,
+    kuSMime,
+    kuCodeSign,
+    kuOcspSign,
+    kuTimestamp);
+
+  /// X509v3 Key and Extended Key Usage Flags
+  // - is a convenient way to get or set a Certificate extensions
+  // - an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
+  // and TWinCertUsages in mormot.lib.sspi
+  TX509Usages = set of TX509Usage;
+
 {$MINENUMSIZE 4}
 
 type
@@ -1433,7 +1463,12 @@ type
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
     procedure AddExtension(nid: integer; const value: RawUtf8);
-    // return the size of the signature in bytes for success and zero for failure
+    /// set key_usage/ext_key_usage extensions
+    // - any previous usage set will be first deleted
+    function SetUsageAndAltNames(usages: TX509Usages;
+      const altnames: RawUtf8 = ''): boolean;
+    /// check if the public key of this certificate matches a given private key
+    // - returns the size of the signature in bytes for success and zero for failure
     function Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1670,34 +1705,6 @@ type
 
   PX509_VAL = type pointer;
 
-  /// X509v3 Key and Extended Key Usage Flags
-  // - kuCA match NID_basic_constraints containing 'CA:TRUE'
-  // - kuEncipherOnly .. kuDecipherOnly match NID_key_usage values
-  // - kuTlsServer .. kuAnyeku match NID_ext_key_usage values
-  // - see https://omvs.de/2019/11/13/key-usage-extensions-at-x-509-certificates
-  TX509Usage = (
-    kuCA,
-    kuEncipherOnly,
-    kuCrlSign,
-    kuKeyCertSign,
-    kuKeyAgreement,
-    kuDataEncipherment,
-    kuKeyEncipherment,
-    kuNonRepudiation,
-    kuDigitalSignature,
-    kuDecipherOnly,
-    kuTlsServer,
-    kuTlsClient,
-    kuSMime,
-    kuCodeSign,
-    kuOcspSign,
-    kuTimestamp);
-
-  /// X509v3 Key and Extended Key Usage Flags
-  // - is a convenient way to get or set a Certificate extensions
-  // - an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
-  // and TWinCertUsages in mormot.lib.sspi
-  TX509Usages = set of TX509Usage;
 
   PX509V3_CTX = ^v3_ext_ctx;
 
@@ -2333,6 +2340,7 @@ function EC_KEY_key2buf(key: PEC_KEY; form: point_conversion_form_t; pbuf: PPByt
 function EVP_PKEY_get0_RSA(pkey: PEVP_PKEY): Prsa_st; cdecl;
 procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
+function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION; cdecl;
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
 function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
@@ -2480,10 +2488,15 @@ procedure PX509DynArrayFree(var X509: PX509DynArray);
 // - caller should make result.Free once done with the result
 function NewCertificate: PX509;
 
-/// unserialize a new X509 Certificate Instance
+/// unserialize as a new X509 Certificate Instance
 // - from DER binary as serialized by X509.ToBinary, or PEM text format
 // - use LoadCertificate(PemToDer()) to load a PEM certificate
 function LoadCertificate(const Der: RawByteString): PX509;
+
+/// unserialize as a new X509 CSR Instance
+// - from DER binary as serialized by X509_REQ.ToBinary, or PEM text format
+// - use LoadCsr(PemToDer()) to load a PEM certificate
+function LoadCsr(const Der: RawByteString): PX509_REQ;
 
 /// unserialize one or several new X509 Certificate Instance(s) from PEM
 // - from PEM concatenated text content
@@ -3302,6 +3315,7 @@ type
     EVP_PKEY_get0_RSA: function(pkey: PEVP_PKEY): Prsa_st; cdecl;
     RSA_get0_key: procedure(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
     X509_REQ_add_extensions: function(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
+    X509_REQ_get_extensions: function(req: PX509_REQ): Pstack_st_X509_EXTENSION; cdecl;
     EC_POINT_point2buf: function(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
     BN_bn2bin: function(a: PBIGNUM; _to: pointer): integer; cdecl;
     ECDSA_size: function(eckey: PEC_KEY): integer; cdecl;
@@ -3333,7 +3347,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..330] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..331] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3638,6 +3652,7 @@ const
     'EVP_PKEY_get0_RSA',
     'RSA_get0_key',
     'X509_REQ_add_extensions',
+    'X509_REQ_get_extensions',
     'EC_POINT_point2buf',
     'BN_bn2bin',
     'ECDSA_size',
@@ -5278,6 +5293,11 @@ begin
   result := libcrypto.X509_REQ_add_extensions(req, exts);
 end;
 
+function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION;
+begin
+  result := libcrypto.X509_REQ_get_extensions(req);
+end;
+
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt;
 begin
@@ -6758,6 +6778,9 @@ procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_add_extensions';
 
+function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION); cdecl;
+  external LIB_CRYPTO name _PU + 'X509_REQ_get_extensions';
+
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
   form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
@@ -7316,6 +7339,11 @@ begin
     result := load(bio, nil);
     bio.Free;
   end;
+end;
+
+function LoadCsr(const Der: RawByteString): PX509_REQ;
+begin
+  result := BioLoad(Der, @d2i_X509_REQ_bio);
 end;
 
 function EVP_PKEY.PrivateToDer(const PassWord: SpiUtf8): RawByteString;
@@ -7915,6 +7943,94 @@ begin
     result := 0
   else
     result := X509_REQ_sign(@self, pkey, md);
+end;
+
+const
+  _CA: array[boolean] of RawUtf8 = (
+    'critical,CA:FALSE',
+    'critical,CA:TRUE');
+
+const
+  KU_: array[kuEncipherOnly .. kuDecipherOnly] of RawUtf8 = (
+    ',encipherOnly',
+    ',cRLSign',
+    ',keyCertSign',
+    ',keyAgreement',
+    ',dataEncipherment',
+    ',keyEncipherment',
+    ',nonRepudiation',
+    ',digitalSignature',
+    ',decipherOnly');
+
+  XU_: array[kuTlsServer .. kuTimestamp] of RawUtf8 = (
+    'serverAuth,',
+    'clientAuth,',
+    'emailProtection,',
+    'codeSigning,',
+    'OCSPSigning,',
+    'timeStamping,');
+
+function X509_REQ.SetUsageAndAltNames(
+  usages: TX509Usages; const altnames: RawUtf8): boolean;
+var
+  ex: PX509_EXTENSION;
+  exts: Pstack_st_X509_EXTENSION;
+  v: RawUtf8;
+  u: TX509Usage;
+  ret: Integer;
+begin
+  result := false;
+  if @self = nil then
+    exit;
+  exts := NewOpenSslStack;
+  try
+    if altnames <> '' then
+    begin
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_subject_alt_name, pointer(altnames));
+      if ex = nil then
+        exit;
+      exts.Add(ex);
+    end;
+    if kuCA in usages then
+    begin
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_basic_constraints, pointer(_CA[true]));
+      if ex = nil then
+        exit;
+      exts.Add(ex);
+    end;
+    v := '';
+    for u := low(KU_) to high(KU_) do
+      if u in usages then
+        v := v + KU_[u];
+    if v <> '' then
+    begin
+      v := 'critical' + v; // heading comma included
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_key_usage, pchar(v));
+      if ex = nil then
+        exit;
+      exts.Add(ex);
+    end;
+    v := '';
+    for u := low(XU_) to high(XU_) do
+      if u in usages then
+        v := v + XU_[u];
+    if v <> '' then
+    begin
+      SetLength(v, length(v) - 1); // trailing comma
+      ex := X509V3_EXT_conf_nid(nil, nil, NID_ext_key_usage, pchar(v));
+      if ex = nil then
+        exit;
+      exts.Add(ex);
+    end;
+    ret := X509_REQ_add_extensions(@self, exts);
+    result := (ret = OPENSSLSUCCESS);
+  finally
+    if exts <> nil then
+    begin
+      OPENSSL_sk_pop_free(exts, @X509_EXTENSION_free);
+      exts.Free;
+    end;
+  end;
 end;
 
 procedure X509_REQ.Free;
@@ -9353,11 +9469,6 @@ begin
   x.Free;
 end;
 
-const
-  _CA: array[boolean] of RawUtf8 = (
-    'critical,CA:FALSE',
-    'critical,CA:TRUE');
-
 function X509.SetBasic(ca: boolean; const altnames: RawUtf8;
   const subjectkey: RawUtf8): boolean;
 begin
@@ -9370,25 +9481,6 @@ begin
      result  := SetExtension(NID_subject_alt_name, altnames);
 end;
 
-const
-  KU_: array[kuEncipherOnly .. kuDecipherOnly] of RawUtf8 = (
-    ',encipherOnly',
-    ',cRLSign',
-    ',keyCertSign',
-    ',keyAgreement',
-    ',dataEncipherment',
-    ',keyEncipherment',
-    ',nonRepudiation',
-    ',digitalSignature',
-    ',decipherOnly');
-
-  XU_: array[kuTlsServer .. kuTimestamp] of RawUtf8 = (
-    'serverAuth,',
-    'clientAuth,',
-    'emailProtection,',
-    'codeSigning,',
-    'OCSPSigning,',
-    'timeStamping,');
 
 function X509.SetUsage(usages: TX509Usages): boolean;
 var
