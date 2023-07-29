@@ -5418,6 +5418,14 @@ begin
   CheckEqual(UrlDecode(''), '');
   CheckEqual(UrlEncodeName(''), '');
   CheckEqual(UrlDecodeName(''), '');
+  CheckEqual(UrlEncode('abc'), 'abc');
+  CheckEqual(UrlEncode('ab0c'), 'ab0c');
+  CheckEqual(UrlEncode('ab c'), 'ab+c');
+  CheckEqual(UrlEncode('ab+c'), 'ab%2Bc');
+  CheckEqual(UrlEncodeName('abc'), 'abc');
+  CheckEqual(UrlEncodeName('ab0c'), 'ab0c');
+  CheckEqual(UrlEncodeName('ab c'), 'ab%20c');
+  CheckEqual(UrlEncodeName('ab+c'), 'ab%2Bc');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);
