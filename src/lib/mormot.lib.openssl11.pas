@@ -7950,7 +7950,6 @@ const
     'critical,CA:FALSE',
     'critical,CA:TRUE');
 
-const
   KU_: array[kuEncipherOnly .. kuDecipherOnly] of RawUtf8 = (
     ',encipherOnly',
     ',cRLSign',
@@ -7970,14 +7969,43 @@ const
     'OCSPSigning,',
     'timeStamping,');
 
+function KuText(usages: TX509Usages): RawUtf8;
+var
+  u: TX509Usage;
+begin
+  result := '';
+  for u := low(KU_) to high(KU_) do
+    if u in usages then
+      result := result + KU_[u];
+end;
+
+function XuText(usages: TX509Usages): RawUtf8;
+var
+  u: TX509Usage;
+begin
+  result := '';
+  for u := low(XU_) to high(XU_) do
+    if u in usages then
+      result := result + XU_[u];
+end;
+
 function X509_REQ.SetUsageAndAltNames(
   usages: TX509Usages; const altnames: RawUtf8): boolean;
 var
-  ex: PX509_EXTENSION;
   exts: Pstack_st_X509_EXTENSION;
   v: RawUtf8;
-  u: TX509Usage;
-  ret: Integer;
+  ret: integer;
+
+  function Add(ext_nid: integer; value: PUtf8Char): boolean;
+  var
+    ex: PX509_EXTENSION;
+  begin
+    ex := X509V3_EXT_conf_nid(nil, nil, ext_nid, value);
+    result := (ex <> nil);
+    if result then
+      exts.Add(ex);
+  end;
+
 begin
   result := false;
   if @self = nil then
@@ -7985,42 +8013,24 @@ begin
   exts := NewOpenSslStack;
   try
     if altnames <> '' then
-    begin
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_subject_alt_name, pointer(altnames));
-      if ex = nil then
+      if not Add(NID_subject_alt_name, pointer(altnames)) then
         exit;
-      exts.Add(ex);
-    end;
     if kuCA in usages then
-    begin
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_basic_constraints, pointer(_CA[true]));
-      if ex = nil then
+      if not Add(NID_basic_constraints, pointer(_CA[true])) then
         exit;
-      exts.Add(ex);
-    end;
-    v := '';
-    for u := low(KU_) to high(KU_) do
-      if u in usages then
-        v := v + KU_[u];
+    v := KuText(usages);
     if v <> '' then
     begin
       v := 'critical' + v; // heading comma included
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_key_usage, pointer(v));
-      if ex = nil then
+      if not Add(NID_key_usage, pointer(v)) then
         exit;
-      exts.Add(ex);
     end;
-    v := '';
-    for u := low(XU_) to high(XU_) do
-      if u in usages then
-        v := v + XU_[u];
+    v := XuText(usages);
     if v <> '' then
     begin
       SetLength(v, length(v) - 1); // trailing comma
-      ex := X509V3_EXT_conf_nid(nil, nil, NID_ext_key_usage, pointer(v));
-      if ex = nil then
+      if not Add(NID_ext_key_usage, pointer(v)) then
         exit;
-      exts.Add(ex);
     end;
     ret := X509_REQ_add_extensions(@self, exts);
     result := (ret = OPENSSLSUCCESS);
@@ -9485,22 +9495,16 @@ end;
 function X509.SetUsage(usages: TX509Usages): boolean;
 var
   v: RawUtf8;
-  u: TX509Usage;
 begin
   result := false;
   if kuCA in usages then
     if not SetExtension(NID_basic_constraints, _CA[true]) then
       exit;
-  for u := low(KU_) to high(KU_) do
-    if u in usages then
-      v := v + KU_[u];
+  v := KuText(usages);
   if v <> '' then
     if not SetExtension(NID_key_usage, 'critical' + v) then
       exit;
-  v := '';
-  for u := low(XU_) to high(XU_) do
-    if u in usages then
-      v := v + XU_[u];
+  v := XuText(usages);
   if v <> '' then
   begin
     SetLength(v, length(v) - 1); // trailing comma
