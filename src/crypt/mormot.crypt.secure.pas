@@ -2001,11 +2001,13 @@ type
     /// factory for a new Certificate Signing Request over a set of (DNS) names
     // - will generate a new public/private key pair, then forge a request with
     // the public key, self-signing the request using the new PrivateKeyPem
+    // - you can optionally specify the expected usages and information fields
     // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
     // a Let's Encrypt compatible way
     function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
-      const PrivateKeyPassword: SpiUtf8;
-      out PrivateKeyPem: RawUtf8): RawByteString; virtual;
+      const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
+      Usages: TCryptCertUsages = [];
+      Fields: PCryptCertFields = nil): RawByteString; virtual;
     /// return the corresponding JWT algorithm name, computed from AsymAlgo
     // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
     function JwtName: RawUtf8;
@@ -5880,7 +5882,8 @@ begin
 end;
 
 function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
-  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8): RawByteString;
+  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawByteString;
 begin
   result := ''; // unsupported by default
 end;
