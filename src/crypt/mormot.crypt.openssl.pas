@@ -1991,7 +1991,8 @@ function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynAr
 
   procedure RaiseError(const msg: shortstring);
   begin
-    raise ECryptCert.CreateUtf8('%.CreateSelfSignedCsr: % error', [self, msg]);
+    raise ECryptCert.CreateUtf8(
+      '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
   end;
 
 var
@@ -2002,7 +2003,7 @@ var
   i: PtrInt;
 begin
   if Subjects = nil then
-    raise EOpenSslCert.Create('CreateSelfSignedCsr: void DnsCsv');
+    RaiseError('no Subjects');
   req := NewCertificateRequest;
   if req = nil then
     RaiseError('NewCertificateRequest');
@@ -2769,7 +2770,7 @@ begin
   r := FromReason(Reason);
   if r = CRL_REASON_NONE then
     raise EOpenSslCert.CreateFmt(
-      'TCryptStoreOpenSsl.Revoke: unsupported Reason=%s', [ToText(Reason)^]);
+      'TCryptStoreOpenSsl.Revoke: unsupported %s', [ToText(Reason)^]);
   if RevocationDate = 0 then
     days := 0 // revoke now
   else
