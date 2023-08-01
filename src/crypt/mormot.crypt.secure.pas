@@ -2002,12 +2002,13 @@ type
     // - will generate a new public/private key pair, then forge a request with
     // the public key, self-signing the request using the new PrivateKeyPem
     // - you can optionally specify the expected usages and information fields
+    // - returns both the private key and the newly generated CSR as PEM
     // - implemented only as PKCS#10 by the X509/OpenSSL engine by now, in
     // a Let's Encrypt compatible way
     function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
       const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
       Usages: TCryptCertUsages = [];
-      Fields: PCryptCertFields = nil): RawByteString; virtual;
+      Fields: PCryptCertFields = nil): RawUtf8; virtual;
     /// return the corresponding JWT algorithm name, computed from AsymAlgo
     // - e.g. 'ES256' for 'x509-es256' or 'syn-es256-v1'
     function JwtName: RawUtf8;
@@ -5883,7 +5884,7 @@ end;
 
 function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
   const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawByteString;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 begin
   result := ''; // unsupported by default
 end;
