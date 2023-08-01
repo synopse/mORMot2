@@ -1214,6 +1214,7 @@ type
     function Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
     function Verify(Algo: PEVP_MD;
       Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
+    function ToAltNames(const Subjects: TRawUtf8DynArray): RawUtf8;
     function CreateSelfSignedCsr(Algo: PEVP_MD;
       const Subjects: TRawUtf8DynArray): RawByteString;
     function Size: integer;
@@ -1902,6 +1903,7 @@ type
   PCRYPTO_EX_new = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
   PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
   PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: integer; argp: pointer): integer; cdecl;
+
 
 
 { ******************** OpenSSL Library Functions }
@@ -7451,38 +7453,44 @@ begin
   end;
 end;
 
+function EVP_PKEY.ToAltNames(const Subjects: TRawUtf8DynArray): RawUtf8;
+var
+  i: PtrInt;
+  s: RawUtf8;
+begin
+  // self instance is not used
+  result := '';
+  for i := 0 to length(Subjects) - 1 do // in-place modified
+  begin
+    s := Subjects[i];
+    if PosExChar(':', s) = 0 then
+      s := 'DNS:' + s; // e.g. DNS: email: IP: URI:
+    if result <> '' then
+      result := result + ',' + s
+    else
+      result := s;
+  end;
+end;
+
 function EVP_PKEY.CreateSelfSignedCsr(Algo: PEVP_MD;
   const Subjects: TRawUtf8DynArray): RawByteString;
 var
-  s, cn, altnames: RawUtf8;
   req: PX509_REQ;
   names: PX509_NAME;
-  i: PtrInt;
 begin
   // same logic as in TCryptCertOpenSsl.Generate
   result := '';
   if (@self = nil) or
      (Subjects = nil) then
     exit;
-  cn := Subjects[0]; // first subject is the X509 Common Name
-  for i := 0 to length(Subjects) - 1 do // in-place modified
-  begin
-    s := Subjects[i];
-    if PosExChar(':', s) = 0 then
-      s := 'DNS:' + s; // e.g. DNS: email: IP: URI:
-    if altnames <> '' then
-      altnames := altnames + ',' + s
-    else
-      altnames := s;
-  end;
   req := NewCertificateRequest;
   try
     names := X509_REQ_get_subject_name(req);
-    names^.AddEntry('CN', cn);
-    req.AddExtension(NID_subject_alt_name, altnames);
-    X509_REQ_set_pubkey(req, @self);
-    req.Sign(@self, Algo);
-    result := req^.ToBinary();
+    names^.AddEntry('CN', Subjects[0]); // first subject is the X509 Common Name
+    req.AddExtension(NID_subject_alt_name, ToAltNames(Subjects));
+    if X509_REQ_set_pubkey(req, @self) = OPENSSLSUCCESS then
+      if req.Sign(@self, Algo) <> 0 then // returns signature size in bytes
+        result := req^.ToBinary;
   finally
     req.Free;
   end;

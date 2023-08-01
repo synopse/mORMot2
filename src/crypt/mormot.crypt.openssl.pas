@@ -1866,7 +1866,7 @@ type
     function FromHandle(Handle: pointer): ICryptCert; override;
     function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
       const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8; 
-      Usages: TCryptCertUsages = []; Fields: PCryptCertFields = nil): RawByteString; override;
+      Usages: TCryptCertUsages = []; Fields: PCryptCertFields = nil): RawUtf8; override;
   end;
 
   /// class implementing ICryptCert using OpenSSL X509
@@ -1985,9 +1985,35 @@ begin
   result := instance;
 end;
 
+function SetupNameAndAltNames(name: PX509_NAME; Usages: TCryptCertUsages;
+  Fields: PCryptCertFields; const Subjects: TRawUtf8DynArray): RawUtf8;
+var
+  cn: RawUtf8;
+begin
+  result := '';
+  if Subjects <> nil then
+    cn := Subjects[0] // first subject is the X509 Common Name
+  else if (Fields = nil) or
+          (Fields^.CommonName = '') then
+    raise ECryptCert.Create('Missing Subject/CommonName');
+  if Fields <> nil then
+    with Fields^ do
+    begin
+      if CommonName <> '' then
+        cn := CommonName;
+      name.AddEntries(Country, State, Locality, Organization, OrgUnit,
+        cn, EmailAddress, SurName, GivenName);
+    end
+    else
+      name.AddEntry('CN', cn);
+  if (length(Subjects) > 1) or
+     (Usages * [cuTlsClient, cuTlsServer] <> []) then
+    result := PEVP_PKEY(nil).ToAltNames(Subjects);
+end;
+
 function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
   const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawByteString;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 
   procedure RaiseError(const msg: shortstring);
   begin
@@ -1996,11 +2022,9 @@ function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynAr
   end;
 
 var
-  s, cn, altnames: RawUtf8;
-  name: PX509_NAME;
+  altnames: RawUtf8;
   req: PX509_REQ;
   key: PEVP_PKEY;
-  i: PtrInt;
 begin
   if Subjects = nil then
     RaiseError('no Subjects');
@@ -2009,38 +2033,17 @@ begin
     RaiseError('NewCertificateRequest');
   key := nil;
   try
-    key := NewPrivateKey;
+    key := NewPrivateKey; // ephemeral key for self-signature
     if key = nil then
-        RaiseError('NewPrivateKey');
-    cn := Subjects[0]; // first subject is the X509 Common Name
-    if Usages * [cuTlsClient, cuTlsServer] <> [] then
-      for i := 0 to length(Subjects) - 1 do // in-place modified
-      begin
-        s := Subjects[i];
-        if PosExChar(':', s) = 0 then
-          s := 'DNS:' + s; // e.g. DNS: email: IP: URI:
-        if altnames <> '' then
-          altnames := altnames + ',' + s
-        else
-          altnames := s;
-      end;
-    name := X509_REQ_get_subject_name(req);
-    if Fields <> nil then
-      with Fields^ do
-      begin
-        if CommonName <> '' then
-          cn := CommonName;
-        name.AddEntries(Country, State, Locality, Organization, OrgUnit,
-          cn, EmailAddress, SurName, GivenName);
-      end
-      else
-        name.AddEntry('CN', cn);
+      RaiseError('NewPrivateKey');
+    altnames := SetupNameAndAltNames(
+      X509_REQ_get_subject_name(req), Usages, Fields, Subjects);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
-    EOpenSslCert.Check(X509_REQ_set_pubkey(req, key));
-    if req.Sign(key, fHash) = 0 then
-      RaiseError('Self Sign');
-    Result := req^.ToPem;
+    EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
+    if req.Sign(key, fHash) = 0 then // returns signature size in bytes
+      RaiseError('SelfSign');
+    result := req^.ToPem;
     if result <> '' then
       PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
   finally
@@ -2077,12 +2080,11 @@ function TCryptCertOpenSsl.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
-  cn: RawUtf8;
+  altnames: RawUtf8;
   dns: TRawUtf8DynArray;
   name: PX509_NAME;
   x: PX509;
   key: PEVP_PKEY;
-  i: PtrInt;
 begin
   if fX509 <> nil then
     RaiseErrorGenerate('duplicated call');
@@ -2098,35 +2100,14 @@ begin
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
     CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
-    if dns <> nil then
-      cn := dns[0]
-    else if (Fields = nil) or
-            (Fields^.CommonName = '') then
-      RaiseErrorGenerate('no Subject/CommonName');
-    if (length(dns) = 1) and
-       (Usages * [cuTlsClient, cuTlsServer] = []) then
-      dns := nil // no DNS: alt sub name if not needed
-    else
-      for i := 0 to length(dns) - 1 do
-        if PosExChar(':', dns[i]) = 0 then
-          dns[i] := 'DNS:' + dns[i]; // e.g. DNS: email: IP: URI:
-    if not x.SetBasic(cuCA in Usages, RawUtf8ArrayToCsv(dns)) then
+    name := X509_get_subject_name(x);
+    altnames := SetupNameAndAltNames(name, Usages, Fields, dns);
+    if not x.SetBasic(cuCA in Usages, altnames) then
       RaiseErrorGenerate('SetBasic');
     if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
       RaiseErrorGenerate('SetUsage');
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');
-    name := X509_get_subject_name(x);
-    if Fields <> nil then
-      with Fields^ do
-      begin
-        if CommonName <> '' then
-          cn := CommonName;
-        name.AddEntries(Country, State, Locality, Organization, OrgUnit,
-          cn, EmailAddress, SurName, GivenName);
-      end
-      else
-        name.AddEntry('CN', cn);
     EOpenSslCert.Check(X509_set_pubkey(x, key));
     if not x.SetExtension(NID_subject_key_identifier, 'hash') then
       RaiseErrorGenerate('SKID');
