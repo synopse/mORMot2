@@ -8044,10 +8044,7 @@ begin
     result := (ret = OPENSSLSUCCESS);
   finally
     if exts <> nil then
-    begin
       OPENSSL_sk_pop_free(exts, @X509_EXTENSION_free);
-      exts.Free;
-    end;
   end;
 end;
 
@@ -9602,7 +9599,7 @@ end;
 
 
 const
-  X509v3 = 2;
+  X509v3 = 2; // X509_VERSION_3 has value 2 and X509_VERSION_1 has value 0 ;)
 
 function NewCertificate: PX509;
 var
@@ -9614,18 +9611,16 @@ begin
   EOpenSsl.CheckAvailable(nil, 'NewCertificate');
   result := nil;
   x := X509_new();
-  if X509_set_version(x, X509v3) = OPENSSLSUCCESS then
-  begin
-    // compute a random serial from OpenSSL PRNG
-    RAND_bytes(@rnd, 20);
-    rnd[0] := rnd[0] and $7f; // ensure > 0
-    bn := BN_bin2bn(@rnd, 20, nil);
-    ai := BN_to_ASN1_INTEGER(bn, nil);
-    if X509_set_serialNumber(x, ai) = OPENSSLSUCCESS then
-      result := x;
-    ai.Free;
-    bn.Free;
-  end;
+  EOpenSsl.Check(X509_set_version(x, X509v3));
+  // compute a random serial from OpenSSL PRNG
+  RAND_bytes(@rnd, 20);
+  rnd[0] := rnd[0] and $7f; // ensure > 0
+  bn := BN_bin2bn(@rnd, 20, nil);
+  ai := BN_to_ASN1_INTEGER(bn, nil);
+  if X509_set_serialNumber(x, ai) = OPENSSLSUCCESS then
+    result := x;
+  ai.Free;
+  bn.Free;
   if result = nil then
     x.Free;
 end;
@@ -9683,7 +9678,7 @@ function NewCertificateCrl: PX509_CRL;
 begin
   EOpenSsl.CheckAvailable(nil, 'NewCertificateCrl');
   result := X509_CRL_new();
-  X509_CRL_set_version(result, X509v3);
+  EOpenSsl.Check(X509_CRL_set_version(result, X509v3));
 end;
 
 function LoadCertificateCrl(const Der: RawByteString): PX509_CRL;
@@ -9706,8 +9701,8 @@ end;
 function NewCertificateRequest: PX509_REQ;
 begin
   EOpenSsl.CheckAvailable(nil, 'NewCertificateRequest');
-  result := X509_REQ_new();
-  X509_REQ_set_version(result, X509v3);
+  result := X509_REQ_new;
+  EOpenSsl.Check(X509_REQ_set_version(result, X509v3), 'X509_REQ_set_version');
 end;
 
 function LoadCertificateRequest(const Der: RawByteString): PX509_REQ;
