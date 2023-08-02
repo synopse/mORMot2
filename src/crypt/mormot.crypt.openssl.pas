@@ -1875,6 +1875,7 @@ type
   protected
     fX509: PX509;
     fPrivKey: PEVP_PKEY;
+    fGenerateCsr: PX509_REQ;
     function GetMD: PEVP_MD;
   public
     destructor Destroy; override;
@@ -1883,6 +1884,9 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields): ICryptCert; override;
+    function GenerateFromCsr(const CsrPem: RawUtf8;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+      UsagesFilter: TCryptCertUsages): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -2099,13 +2103,20 @@ begin
     key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
-    CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
     name := X509_get_subject_name(x);
-    altnames := SetupNameAndAltNames(name, Usages, Fields, dns);
-    if not x.SetBasic(cuCA in Usages, altnames) then
-      RaiseErrorGenerate('SetBasic');
-    if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
-      RaiseErrorGenerate('SetUsage');
+    if fGenerateCsr <> nil then
+    begin
+
+    end
+    else
+    begin
+      CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
+      altnames := SetupNameAndAltNames(name, Usages, Fields, dns);
+      if not x.SetBasic(cuCA in Usages, altnames) then
+        RaiseErrorGenerate('SetBasic');
+      if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
+        RaiseErrorGenerate('SetUsage');
+    end;
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');
     EOpenSslCert.Check(X509_set_pubkey(x, key));
@@ -2137,6 +2148,26 @@ begin
     key.Free;
   end;
   result := self;
+end;
+
+function TCryptCertOpenSsl.GenerateFromCsr(const CsrPem: RawUtf8;
+  const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+  UsagesFilter: TCryptCertUsages): ICryptCert;
+var
+  req: PX509_REQ;
+begin
+  result := nil; // invalid supplied CrsPem
+  if CsrPem = '' then
+    exit;
+  req := LoadCertificateRequest(PemToDer(CsrPem));
+  if req <> nil then
+  try
+    fGenerateCsr := req;
+
+  finally
+    fGenerateCsr := nil;
+    req.Free;
+  end;
 end;
 
 function TCryptCertOpenSsl.GetSerial: RawUtf8;
@@ -2467,7 +2498,7 @@ begin
     auth := nil;
   result := CanVerify(auth, kuKeyCertSign, auth = fX509, IgnoreError, TimeUtc);
   if result = cvValidSigned then
-    if X509_verify(fX509, auth.GetPublicKey) <> 1 then
+    if X509_verify(fX509, auth.GetPublicKey) <> OPENSSLSUCCESS then
       result := cvInvalidSignature
     else if auth = fX509 then
       result := cvValidSelfSigned
