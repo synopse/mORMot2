@@ -779,7 +779,7 @@ end;
 procedure TAesPrngOsl.FillRandom(Buffer: pointer; Len: PtrInt);
 begin
   inc(fTotalBytes, Len);
-  RAND_bytes(Buffer, Len);
+  EOpenSslCrypto.Check(RAND_bytes(Buffer, Len));
 end;
 
 var
