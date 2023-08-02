@@ -1276,9 +1276,10 @@ type
     function ToDynArray: TPointerDynArray;
     /// note: instances should be released explicitely before or call e.g. FreeX509
     procedure Free;
-    /// make PX509/PX509_CRL.Free to all items, then free the stack
+    /// make PX509/_CRL/_EXTENSION.Free to all items, then free the stack
     procedure FreeX509;
     procedure FreeX509_CRL;
+    procedure FreeX509_EXTENSION;
     property Items[index: integer]: pointer
       read GetItem; default;
   end;
@@ -1471,6 +1472,8 @@ type
     /// check if the public key of this certificate matches a given private key
     // - returns the size of the signature in bytes for success and zero for failure
     function Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
+    /// check if the public key of this certificate matches a given public key
+    function Verify(pkey: PEVP_PKEY): boolean;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1569,7 +1572,7 @@ type
   end;
   PX509_EXTENSION = ^X509_EXTENSION;
   PPX509_EXTENSION = ^PX509_EXTENSION;
-  PX509_EXTENSIONS = type pointer;
+  PX509_EXTENSIONS = type POPENSSL_STACK;
   PPX509_EXTENSIONS = ^PX509_EXTENSIONS;
 
   TX509_Extension = object
@@ -1793,6 +1796,10 @@ type
     // (as 'caIssuers;xxurlxx'), or NID_netscape_comment
     function SetExtension(nid: cardinal; const value: RawUtf8;
       issuer: PX509 = nil; subject: PX509 = nil): boolean;
+    /// copy all existing extensions to a X509 Certificate
+    procedure CopyExtensions(exts: PX509_EXTENSIONS);
+    /// copy all existing PX509_REQ CSR extensions to a X509 Certificate
+    procedure CopyCsrExtensions(req: PX509_REQ);
     /// set basic extensions
     // - any previous value with this NID will be first deleted
     function SetBasic(ca: boolean; const altnames: RawUtf8 = '';
@@ -7186,6 +7193,12 @@ begin
     OPENSSL_sk_pop_free(@self, @X509_CRL_free);
 end;
 
+procedure OPENSSL_STACK.FreeX509_EXTENSION;
+begin
+  if @self <> nil then
+    OPENSSL_sk_pop_free(@self, @X509_EXTENSION_free);
+end;
+
 
 { SSL_CIPHER }
 
@@ -7947,10 +7960,20 @@ end;
 
 function X509_REQ.Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
 begin
-  if @self = nil then
+  if (@self = nil) or
+     (pkey = nil) then
     result := 0
   else
     result := X509_REQ_sign(@self, pkey, md);
+end;
+
+function X509_REQ.Verify(pkey: PEVP_PKEY): boolean;
+begin
+  if (@self = nil) or
+     (pkey = nil) then
+    result := false
+  else
+    result := X509_REQ_verify(@self, pkey) = OPENSSLSUCCESS;
 end;
 
 const
@@ -8002,7 +8025,6 @@ function X509_REQ.SetUsageAndAltNames(
 var
   exts: Pstack_st_X509_EXTENSION;
   v: RawUtf8;
-  ret: integer;
 
   function Add(ext_nid: integer; value: PUtf8Char): boolean;
   var
@@ -8040,11 +8062,9 @@ begin
       if not Add(NID_ext_key_usage, pointer(v)) then
         exit;
     end;
-    ret := X509_REQ_add_extensions(@self, exts);
-    result := (ret = OPENSSLSUCCESS);
+    result := (X509_REQ_add_extensions(@self, exts) = OPENSSLSUCCESS);
   finally
-    if exts <> nil then
-      OPENSSL_sk_pop_free(exts, @X509_EXTENSION_free);
+    exts.FreeX509_EXTENSION;
   end;
 end;
 
@@ -9482,6 +9502,34 @@ begin
   until false;
   result := X509_add_ext(@self, x, prev) = OPENSSLSUCCESS;
   x.Free;
+end;
+
+// see copy_extensions() from openssl/apps/lib/apps.c
+procedure X509.CopyExtensions(exts: PX509_EXTENSIONS);
+var
+  i: integer;
+begin
+  if (@self <> nil) and
+     (exts <> nil) then
+    for i := 0 to exts.Count - 1 do
+      // won't try to remove any existing extension
+      X509_add_ext(@self, exts.Items[i], -1);
+end;
+
+procedure X509.CopyCsrExtensions(req: PX509_REQ);
+var
+  exts: PX509_EXTENSIONS;
+begin
+  if (@self = nil) or
+     (req = nil) then
+    exit;
+  exts := X509_REQ_get_extensions(req);
+  if exts <> nil then
+  try
+    CopyExtensions(exts);
+  finally
+    exts.FreeX509_EXTENSION;
+  end;
 end;
 
 function X509.SetBasic(ca: boolean; const altnames: RawUtf8;
