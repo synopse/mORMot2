@@ -2515,7 +2515,7 @@ var
   c32, cprev: cardinal;
   d, dprev: double;
   n, h, nprev, aead, pub, priv, pub2, priv2, jwt, iss, sub, s2, s3: RawUtf8;
-  r, s: RawByteString;
+  r, s, csr: RawByteString;
   aes: TAesAbstract;
   key: THash256;
   rnd: TCryptRandom;
@@ -2963,6 +2963,17 @@ begin
     begin
       check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
       check((c4 <> nil) = (u in cpe.Usages));
+    end;
+    csr := crt.CreateSelfSignedCsr('sub1,sub2', '', priv, [cuCA, cuDigitalSignature]);
+    check(csr <> '', 'csr');
+    check(priv <> '', 'priv');
+    c1 := crt.GenerateFromCsr(csr);
+    if not CheckFailed(c1 <> nil, 'gen csr') then
+    begin
+      if crt.AlgoName <> 'syn-es256-v1' then
+        check(c1.GetUsage = [cuCA, cuDigitalSignature], 'csr usage');
+      CheckEqual(c1.GetSubject, 'sub1', 'csr sub1');
+      CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 'sub1,sub2', 'csr sub2');
     end;
   end;
   // validate Store High-Level Algorithms Factory
