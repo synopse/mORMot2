@@ -4048,15 +4048,15 @@ begin
         imvSet:
           if not (ArgRtti.Size in [1, 2, 4, 8]) then
             raise EInterfaceFactory.CreateUtf8(
-              '%.Create: unexpected RTTI size = % in %.% method % parameter' +
-              ' for % set - we support only byte/word/integer/Int64 sizes',
+              '%.Create: unexpected RTTI size = % in %.% method % parameter ' +
+              'for % set - should match byte/word/integer/Int64 (1,2,4,8) sizes',
               [self, ArgRtti.Size, fInterfaceName, URI, ParamName^, ArgTypeName^]);
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then
             raise EInterfaceFactory.CreateUtf8(
               '%.Create: % record too small in %.% method % parameter: it ' +
-              'should be at least % bytes (i.e. a pointer) to be on stack',
-              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES]);
+              'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
+              [self, ArgTypeName^, fInterfaceName, URI, ParamName^, POINTERBYTES + 1]);
       end;
       OffsetAsValue := ArgsSizeAsValue;
       inc(ArgsSizeAsValue, ArgRtti.Size);
