@@ -5911,11 +5911,15 @@ end;
 function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+var
+  csr: ICryptCert;
 begin
-  // by default, just generate a self-side certificate as CSR
-  result := New.
-    Generate(Usages, Subjects, nil, 365, -1, Fields).
-    Save(cccCertOnly, '', ccfPem);
+  // by default, just generate a self-signed certificate as CSR
+  csr := New;
+  csr.Generate(Usages, Subjects, nil, 365, -1, Fields);
+  PrivateKeyPem := csr.Save(cccPrivateKeyOnly, PrivateKeyPassword);
+  result := csr.Save(cccCertOnly, '', ccfPem);
+  // fields are ignored with our syn-ecc encoding anyway
 end;
 
 function TCryptCertAlgo.GenerateFromCsr(const Csr: RawByteString;
