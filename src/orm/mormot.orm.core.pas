@@ -10684,11 +10684,11 @@ end;
 function TOrmMapping.InternalCsvToExternalCsv(
   const CsvFieldNames, Sep, SepEnd: RawUtf8): RawUtf8;
 var
-  IntFields, ExtFields: TRawUtf8DynArray;
+  int, ext: TRawUtf8DynArray;
 begin
-  CsvToRawUtf8DynArray(CsvFieldNames, Sep, SepEnd, IntFields);
-  InternalToExternalDynArray(IntFields, ExtFields);
-  result := RawUtf8ArrayToCsv(ExtFields, Sep) + SepEnd;
+  CsvToRawUtf8DynArray(CsvFieldNames, Sep, SepEnd, int);
+  InternalToExternalDynArray(int, ext);
+  result := RawUtf8ArrayToCsv(ext, Sep) + SepEnd;
 end;
 
 procedure TOrmMapping.InternalToExternalDynArray(
@@ -11703,6 +11703,7 @@ begin
   tmp.Init(Value);
   try
     JsonDecode(tmp.buf, ['FieldNames'], @V, True);
+    Finalize(fFieldNames);
     CsvToRawUtf8DynArray(V[0].Text, fFieldNames);
   finally
     tmp.Done;

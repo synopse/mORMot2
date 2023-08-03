@@ -5334,9 +5334,8 @@ end;
 
 function TCryptCertInternal.GetSubjects: TRawUtf8DynArray;
 begin
-  if fEcc = nil then
-    result := nil
-  else
+  result := nil;
+  if fEcc <> nil then
     CsvToRawUtf8DynArray(pointer(fEcc.Content.GetSubject), result);
 end;
 
