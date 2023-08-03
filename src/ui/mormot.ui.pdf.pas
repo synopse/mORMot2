@@ -65,10 +65,10 @@ implementation
 {$endif USE_SYNGDIPLUS}
 
 {$define USE_METAFILE}
-// if defined, the PDF engine will support TMetaFile/TMetaFileCanvas
+// if defined, the PDF engine will support TMetaFile / TPdfDocumentGdi
 {$ifdef NO_USE_METAFILE}
-  // this special conditional can be set globaly for an application which doesn't
-  // need the TMetaFile features
+  // this special conditional can be set globaly for an application which
+  // doesn't need the TMetaFile / TPdfDocumentGdi features
   {$undef USE_METAFILE}
 {$endif USE_METAFILE}
 
@@ -575,35 +575,6 @@ function CurrentPrinterPaperSize: TPdfPaperSize;
 
 /// retrieve the current printer resolution
 function CurrentPrinterRes: TPoint;
-
-/// append a EMR_GDICOMMENT message for handling PDF bookmarks
-// - will create a PDF destination at the current position (i.e. the last Y
-// parameter of a Move), with some text supplied as bookmark name
-procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
-
-/// append a EMR_GDICOMMENT message for handling PDF outline
-// - used to add an outline at the current position (i.e. the last Y parameter of
-// a Move): the text is the associated title, UTF-8 encoded and the outline tree
-// is created from the specified numerical level (0=root)
-procedure GdiCommentOutline(MetaHandle: HDC;
-  const aTitle: RawUtf8; aLevel: integer);
-
-/// append a EMR_GDICOMMENT message for creating a Link into a specified bookmark
-procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8;
-  const aRect: TRect; NoBorder: boolean);
-
-/// append a EMR_GDICOMMENT message for adding jpeg direct
-procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
-  const aRect: TRect);
-
-/// append a EMR_GDICOMMENT message mapping BeginMarkedContent
-// - associate optionally a CreateOptionalContentGroup() instance from the
-// current PDF document
-procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
-  Group: TPdfOptionalContentGroup = nil);
-
-/// append a EMR_GDICOMMENT message mapping EndMarkedContent
-procedure GdiCommentEndMarkContent(MetaHandle: HDC);
 
 
 {************ Internal classes mapping PDF objects }
@@ -2813,7 +2784,37 @@ type
 
 {************ TPdfDocumentGdi for GDI/TCanvas rendering support }
 
+
 {$ifdef USE_METAFILE}
+
+/// append a EMR_GDICOMMENT message for handling PDF bookmarks
+// - will create a PDF destination at the current position (i.e. the last Y
+// parameter of a Move), with some text supplied as bookmark name
+procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
+
+/// append a EMR_GDICOMMENT message for handling PDF outline
+// - used to add an outline at the current position (i.e. the last Y parameter of
+// a Move): the text is the associated title, UTF-8 encoded and the outline tree
+// is created from the specified numerical level (0=root)
+procedure GdiCommentOutline(MetaHandle: HDC;
+  const aTitle: RawUtf8; aLevel: integer);
+
+/// append a EMR_GDICOMMENT message for creating a Link into a specified bookmark
+procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8;
+  const aRect: TRect; NoBorder: boolean);
+
+/// append a EMR_GDICOMMENT message for adding jpeg direct
+procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
+  const aRect: TRect);
+
+/// append a EMR_GDICOMMENT message mapping BeginMarkedContent
+// - associate optionally a CreateOptionalContentGroup() instance from the
+// current PDF document
+procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
+  Group: TPdfOptionalContentGroup = nil);
+
+/// append a EMR_GDICOMMENT message mapping EndMarkedContent
+procedure GdiCommentEndMarkContent(MetaHandle: HDC);
 
 type
   /// a PDF page, with its corresponding Meta File and Canvas
@@ -3263,101 +3264,6 @@ begin
     on Exception do // raised e.g. if no Printer is existing
       exit;
   end;
-end;
-
-procedure SetGdiCommentApi(h: HDC; n: integer; p: pointer);
-begin
-  {$ifdef FPC}
-  Windows.GdiComment(h, n, PByte(p)^); 
-  {$else}
-  Windows.GdiComment(h, n, p);
-  {$endif FPC}
-end;
-
-procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
-begin
-  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
-  L := length(aBookmarkName);
-  SetLength(tmp, L + 1);
-  D := pointer(tmp);
-  D^ := AnsiChar(pgcBookmark);
-  MoveFast(pointer(aBookmarkName)^, D[1], L);
-  SetGdiCommentApi(MetaHandle, L + 1, D);
-end;
-
-procedure GdiCommentOutline(MetaHandle: HDC; const aTitle: RawUtf8; aLevel: integer);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
-begin
-  L := length(aTitle);
-  SetLength(tmp, L + 2);
-  D := pointer(tmp);
-  D[0] := AnsiChar(pgcOutline);
-  D[1] := AnsiChar(aLevel);
-  MoveFast(pointer(aTitle)^, D[2], L);
-  SetGdiCommentApi(MetaHandle, L + 2, D);
-end;
-
-procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8; const
-  aRect: TRect; NoBorder: boolean);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
-begin
-  L := length(aBookmarkName);
-  SetLength(tmp, L + (1 + sizeof(TRect)));
-  D := pointer(tmp);
-  if NoBorder then
-    D^ := AnsiChar(pgcLinkNoBorder)
-  else
-    D^ := AnsiChar(pgcLink);
-  PRect(D + 1)^ := aRect;
-  MoveFast(pointer(aBookmarkName)^, D[1 + sizeof(TRect)], L);
-  SetGdiCommentApi(MetaHandle, L + (1 + sizeof(TRect)), D);
-end;
-
-procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
-  const aRect: TRect);
-var
-  tmp: RawByteString;
-  D: PAnsiChar;
-  L: integer;
-begin
-  L := length(aFileName);
-  SetLength(tmp, L + (1 + sizeof(TRect)));
-  D := pointer(tmp);
-  D^ := AnsiChar(pgcJpegDirect);
-  PRect(D + 1)^ := aRect;
-  MoveFast(pointer(aFileName)^, D[1 + sizeof(TRect)], L);
-  SetGdiCommentApi(MetaHandle, L + (1 + sizeof(TRect)), D);
-end;
-
-procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
-  Group: TPdfOptionalContentGroup);
-var
-  tmp: packed record
-    pgc: TPdfGdiComment;
-    group: TPdfOptionalContentGroup;
-  end;
-begin
-  tmp.pgc := pgcBeginMarkContent;
-  tmp.group := Group;
-  SetGdiCommentApi(MetaHandle, SizeOf(tmp), @tmp);
-end;
-
-procedure GdiCommentEndMarkContent(MetaHandle: HDC);
-var
-  pgc: TPdfGdiComment;
-begin
-  pgc := pgcEndMarkContent;
-  SetGdiCommentApi(MetaHandle, 1, @pgc);
 end;
 
 function CombineTransform(xform1, xform2: XFORM): XFORM;
@@ -9992,6 +9898,102 @@ end;
 {************ TPdfDocumentGdi for GDI/TCanvas rendering support }
 
 {$ifdef USE_METAFILE}
+
+procedure SetGdiCommentApi(h: HDC; n: integer; p: pointer);
+begin
+  {$ifdef FPC}
+  Windows.GdiComment(h, n, PByte(p)^);
+  {$else}
+  Windows.GdiComment(h, n, p);
+  {$endif FPC}
+end;
+
+procedure GdiCommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUtf8);
+var
+  tmp: RawByteString;
+  D: PAnsiChar;
+  L: integer;
+begin
+  // high(TPdfGdiComment)<$47 so it will never begin with GDICOMMENT_IDENTIFIER
+  L := length(aBookmarkName);
+  SetLength(tmp, L + 1);
+  D := pointer(tmp);
+  D^ := AnsiChar(pgcBookmark);
+  MoveFast(pointer(aBookmarkName)^, D[1], L);
+  SetGdiCommentApi(MetaHandle, L + 1, D);
+end;
+
+procedure GdiCommentOutline(MetaHandle: HDC; const aTitle: RawUtf8; aLevel: integer);
+var
+  tmp: RawByteString;
+  D: PAnsiChar;
+  L: integer;
+begin
+  L := length(aTitle);
+  SetLength(tmp, L + 2);
+  D := pointer(tmp);
+  D[0] := AnsiChar(pgcOutline);
+  D[1] := AnsiChar(aLevel);
+  MoveFast(pointer(aTitle)^, D[2], L);
+  SetGdiCommentApi(MetaHandle, L + 2, D);
+end;
+
+procedure GdiCommentLink(MetaHandle: HDC; const aBookmarkName: RawUtf8; const
+  aRect: TRect; NoBorder: boolean);
+var
+  tmp: RawByteString;
+  D: PAnsiChar;
+  L: integer;
+begin
+  L := length(aBookmarkName);
+  SetLength(tmp, L + (1 + sizeof(TRect)));
+  D := pointer(tmp);
+  if NoBorder then
+    D^ := AnsiChar(pgcLinkNoBorder)
+  else
+    D^ := AnsiChar(pgcLink);
+  PRect(D + 1)^ := aRect;
+  MoveFast(pointer(aBookmarkName)^, D[1 + sizeof(TRect)], L);
+  SetGdiCommentApi(MetaHandle, L + (1 + sizeof(TRect)), D);
+end;
+
+procedure GdiCommentJpegDirect(MetaHandle: HDC; const aFileName: RawUtf8;
+  const aRect: TRect);
+var
+  tmp: RawByteString;
+  D: PAnsiChar;
+  L: integer;
+begin
+  L := length(aFileName);
+  SetLength(tmp, L + (1 + sizeof(TRect)));
+  D := pointer(tmp);
+  D^ := AnsiChar(pgcJpegDirect);
+  PRect(D + 1)^ := aRect;
+  MoveFast(pointer(aFileName)^, D[1 + sizeof(TRect)], L);
+  SetGdiCommentApi(MetaHandle, L + (1 + sizeof(TRect)), D);
+end;
+
+procedure GdiCommentBeginMarkContent(MetaHandle: HDC;
+  Group: TPdfOptionalContentGroup);
+var
+  tmp: packed record
+    pgc: TPdfGdiComment;
+    group: TPdfOptionalContentGroup;
+  end;
+begin
+  tmp.pgc := pgcBeginMarkContent;
+  tmp.group := Group;
+  SetGdiCommentApi(MetaHandle, SizeOf(tmp), @tmp);
+end;
+
+procedure GdiCommentEndMarkContent(MetaHandle: HDC);
+var
+  pgc: TPdfGdiComment;
+begin
+  pgc := pgcEndMarkContent;
+  SetGdiCommentApi(MetaHandle, 1, @pgc);
+end;
+
 
 { TPdfDocumentGdi }
 
