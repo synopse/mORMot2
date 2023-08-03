@@ -2967,13 +2967,24 @@ begin
     csr := crt.CreateSelfSignedCsr('sub1,sub2', '', priv, [cuCA, cuDigitalSignature]);
     check(csr <> '', 'csr');
     check(priv <> '', 'priv');
-    c1 := crt.GenerateFromCsr(csr);
-    if not CheckFailed(c1 <> nil, 'gen csr') then
+    c2 := crt.GenerateFromCsr(csr);
+    if not CheckFailed(c2 <> nil, 'gen csr') then
     begin
       if crt.AlgoName <> 'syn-es256-v1' then
-        check(c1.GetUsage = [cuCA, cuDigitalSignature], 'csr usage');
-      CheckEqual(c1.GetSubject, 'sub1', 'csr sub1');
-      CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects), 'sub1,sub2', 'csr sub2');
+        check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
+      CheckEqual(c2.GetSubject, 'sub1', 'csr sub1');
+      CheckEqual(RawUtf8ArrayToCsv(c2.GetSubjects), 'sub1,sub2', 'csr sub21');
+      check(c2.IsSelfSigned, 'csr self1');
+    end;
+    c2 := crt.GenerateFromCsr(csr, c1);
+    if not CheckFailed(c2 <> nil, 'gen csr') then
+    begin
+      if crt.AlgoName <> 'syn-es256-v1' then
+        check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage2');
+      CheckEqual(c2.GetSubject, 'sub1', 'csr sub1');
+      CheckEqual(RawUtf8ArrayToCsv(c2.GetSubjects), 'sub1,sub2', 'csr sub22');
+      check(not c2.IsSelfSigned, 'csr self2');
+      CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey, 'csr auth2');
     end;
   end;
   // validate Store High-Level Algorithms Factory
