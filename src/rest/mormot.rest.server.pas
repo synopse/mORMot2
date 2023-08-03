@@ -1789,7 +1789,7 @@ type
     fRootRedirectGet: RawUtf8;
     fRootRedirectForbiddenToAuth: RawUtf8;
     fPublicUri: TRestServerUri;
-    fIPBan, fIPWhiteJWT: TIPBan;
+    fIPBan, fIPWhiteJwt: TIPBan;
     fServicesRouting: TRestServerUriContextClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
     fServer: IRestOrmServer;
@@ -4375,8 +4375,8 @@ begin
   result := inherited AuthenticationCheck(jwt);
   if result and
      (Server <> nil) and
-     (Server.fIPWhiteJWT <> nil) and
-     not Server.fIPWhiteJWT.Exists(fCall^.LowLevelRemoteIP) and
+     (Server.fIPWhiteJwt <> nil) and
+     not Server.fIPWhiteJwt.Exists(fCall^.LowLevelRemoteIP) and
      (fCall^.LowLevelRemoteIP <> '') and
      (fCall^.LowLevelRemoteIP <> '127.0.0.1') then
   begin
@@ -7161,17 +7161,17 @@ begin
   result := false;
   if fJwtForUnauthenticatedRequest = nil then
     exit;
-  if fIPWhiteJWT = nil then
+  if fIPWhiteJwt = nil then
   begin
     if aRemoveWhite then
       exit;
-    fIPWhiteJWT := TIPBan.Create;
-    fPrivateGarbageCollector.Add(fIPWhiteJWT);
+    fIPWhiteJwt := TIPBan.Create;
+    fPrivateGarbageCollector.Add(fIPWhiteJwt);
   end;
   if aRemoveWhite then
-    result := fIPWhiteJWT.Delete(aIP)
+    result := fIPWhiteJwt.Delete(aIP)
   else
-    result := fIPWhiteJWT.Add(aIP);
+    result := fIPWhiteJwt.Add(aIP);
   InternalLog('WhiteIP(%,%)=%', [aIP, BOOL_STR[aRemoveWhite], BOOL_STR[result]]);
 end;
 

@@ -269,7 +269,7 @@ type
   /// implements a Public Relay server, e.g. located on a small Linux/BSD box
   TPublicRelay = class(TAbstractRelay)
   protected
-    fServerJWT: TJwtAbstract;
+    fServerJwt: TJwtAbstract;
     fClients, fServer: TWebSocketServer;
     fServerConnected: TWebSocketProcess;
     fServerConnectedToLocalHost: boolean;
@@ -286,16 +286,16 @@ type
     // - WebSockets clients will connect to aClientsPort as usual
     // - all communication will be encapsulated and relayed to aServerPort,
     // using the optional aServerKey for TWebSocketProtocol.SetEncryptKey(),
-    // and aServerJWT to authenticate the incoming connection (owned by this instance)
+    // and aServerJwt to authenticate the incoming connection (owned by this instance)
     constructor Create(aLog: TSynLogClass;
       const aClientsPort, aServerPort, aServerKey: RawUtf8;
-      aServerJWT: TJwtAbstract; aClientsThreadPoolCount: integer = 2;
+      aServerJwt: TJwtAbstract; aClientsThreadPoolCount: integer = 2;
       aClientsKeepAliveTimeOut: integer = 30000); reintroduce;
     /// finalize the Public Relay server
     destructor Destroy; override;
     /// access to the JWT authentication for TPrivateRelay communication
-    property ServerJWT: TJwtAbstract
-      read fServerJWT;
+    property ServerJwt: TJwtAbstract
+      read fServerJwt;
   published
     /// raw access to the Private Relay server instance
     property Server: TWebSocketServer
@@ -904,18 +904,18 @@ end;
 { TPublicRelay }
 
 constructor TPublicRelay.Create(aLog: TSynLogClass;
-  const aClientsPort, aServerPort, aServerKey: RawUtf8; aServerJWT: TJwtAbstract;
+  const aClientsPort, aServerPort, aServerKey: RawUtf8; aServerJwt: TJwtAbstract;
   aClientsThreadPoolCount, aClientsKeepAliveTimeOut: integer);
 var
   log: ISynLog;
 begin
   inherited Create(aLog);
   log := fLog.Enter('Create: bind clients on %, server on %, encrypted=% %',
-    [aClientsPort, aServerPort, BOOL_STR[aServerKey <> ''], aServerJWT], self);
-  fServerJWT := aServerJWT;
+    [aClientsPort, aServerPort, BOOL_STR[aServerKey <> ''], aServerJwt], self);
+  fServerJwt := aServerJwt;
   fServer := TWebSocketServer.Create(aServerPort, nil, nil, 'relayserver');
   fServer.WaitStarted;
-  if fServerJWT <> nil then
+  if fServerJwt <> nil then
     fServer.OnBeforeBody := OnServerBeforeBody;
   fServer.OnRequest := OnServerRequest;
   fServer.WebSocketProtocols.Add(TRelayServerProtocol.Create(self, aServerKey));
@@ -940,7 +940,7 @@ begin
   fServerConnected := nil;
   fServer.Free;
   inherited Destroy;
-  fServerJWT.Free;
+  fServerJwt.Free;
 end;
 
 function TPublicRelay.OnServerBeforeBody(
@@ -957,7 +957,7 @@ begin
   if aBearerToken = '' then
     res := jwtNoToken
   else
-    res := fServerJWT.Verify(aBearerToken);
+    res := fServerJwt.Verify(aBearerToken);
   if res = jwtValid then
     if fServerConnected <> nil then
     begin

@@ -499,7 +499,7 @@ type
     fPrivKey, fPubKey: PEVP_PKEY;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
-      var JWT: TJwtContent); override;
+      var jwt: TJwtContent); override;
   public
     /// initialize the JWT processing instance using any supported OpenSSL algorithm
     constructor Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
@@ -1634,15 +1634,15 @@ begin
 end;
 
 procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
-  const signature: RawByteString; var JWT: TJwtContent);
+  const signature: RawByteString; var jwt: TJwtContent);
 begin
   if fPubKey = nil then
     fPubKey := LoadPublicKey(fPublicKey, fPublicKeyPassword);
   if fPubKey^.Verify(fAlgoMd, pointer(signature), pointer(headpayload),
       length(signature), length(headpayload)) then
-    JWT.result := jwtValid
+    jwt.result := jwtValid
   else
-    JWT.result := jwtInvalidSignature;
+    jwt.result := jwtInvalidSignature;
 end;
 
 
