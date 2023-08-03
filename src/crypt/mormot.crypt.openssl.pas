@@ -1884,9 +1884,8 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields): ICryptCert; override;
-    function GenerateFromCsr(const CsrPem: RawUtf8;
-      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      UsagesFilter: TCryptCertUsages): ICryptCert; override;
+    function GenerateFromCsr(const Csr: RawByteString;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubject: RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
@@ -2103,13 +2102,18 @@ begin
     key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
     if key = nil then
       RaiseErrorGenerate('NewPrivateKey');
-    name := X509_get_subject_name(x);
     if fGenerateCsr <> nil then
     begin
-
+      // called by GenerateFromCsr: retrieve information from supplied CSR
+      EOpenSslCert.Check(X509_set_subject_name(
+        x, X509_REQ_get_subject_name(fGenerateCsr)));
+      name := X509_get_subject_name(x);
+      x.CopyCsrExtensions(fGenerateCsr);
     end
     else
     begin
+      // add specified subject(s) and needed extensions
+      name := X509_get_subject_name(x);
       CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
       altnames := SetupNameAndAltNames(name, Usages, Fields, dns);
       if not x.SetBasic(cuCA in Usages, altnames) then
@@ -2126,7 +2130,7 @@ begin
     begin
       // self-signed certificate - no AKID
       EOpenSslCert.Check(X509_set_issuer_name(x, name)); // issuer = subject
-      if x.Sign(key, GetMD) = 0 then
+      if x.Sign(key, GetMD) = 0 then // return signature size in bytes
         RaiseErrorGenerate('Self Sign');
     end
     else
@@ -2150,20 +2154,24 @@ begin
   result := self;
 end;
 
-function TCryptCertOpenSsl.GenerateFromCsr(const CsrPem: RawUtf8;
-  const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-  UsagesFilter: TCryptCertUsages): ICryptCert;
+function TCryptCertOpenSsl.GenerateFromCsr(const Csr: RawByteString;
+  const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert;
 var
   req: PX509_REQ;
+  der: RawByteString;
 begin
   result := nil; // invalid supplied CrsPem
-  if CsrPem = '' then
+  if Csr = '' then
     exit;
-  req := LoadCertificateRequest(PemToDer(CsrPem));
+  if IsPem(Csr) then
+    der := PemToDer(Csr)
+  else
+    der := Csr; // support DER input
+  req := LoadCertificateRequest(der);
   if req <> nil then
   try
     fGenerateCsr := req;
-
+    Generate([], '', Authority, ExpireDays, ValidDays, nil);
   finally
     fGenerateCsr := nil;
     req.Free;

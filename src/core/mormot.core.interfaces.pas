@@ -4053,6 +4053,7 @@ begin
               [self, ArgRtti.Size, fInterfaceName, URI, ParamName^, ArgTypeName^]);
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then
+            // handle records only when passed by ref
             raise EInterfaceFactory.CreateUtf8(
               '%.Create: % record too small in %.% method % parameter: it ' +
               'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
