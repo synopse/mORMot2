@@ -1572,7 +1572,7 @@ type
   end;
   PX509_EXTENSION = ^X509_EXTENSION;
   PPX509_EXTENSION = ^PX509_EXTENSION;
-  PX509_EXTENSIONS = type POPENSSL_STACK;
+  PX509_EXTENSIONS = POPENSSL_STACK;
   PPX509_EXTENSIONS = ^PX509_EXTENSIONS;
 
   TX509_Extension = object
@@ -9511,7 +9511,7 @@ var
 begin
   if (@self <> nil) and
      (exts <> nil) then
-    for i := 0 to exts.Count - 1 do
+    for i := 0 to exts^.Count - 1 do
       // won't try to remove any existing extension
       X509_add_ext(@self, exts.Items[i], -1);
 end;

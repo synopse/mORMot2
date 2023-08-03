@@ -161,7 +161,7 @@ type
   protected
     fDirectoryUrl: RawUtf8;
     fContact: RawUtf8;
-    fSubjects: TRawUtf8DynArray;
+    fSubjects: RawUtf8;
     fHttpClient: TJwsHttpClient;
     fChallenges: TAcmeChallengeDynArray;
     fOnChallenges: TOnAcmeChallenge;
@@ -187,7 +187,7 @@ type
     // - aCert is a local private certificate used to identify the client
     // account for the JWK requests - so is not involved in the TLS chain
     constructor Create(aLog: TSynLogClass; const aCert: ICryptCert;
-      const aDirectoryUrl, aContact: RawUtf8; const aSubjects: TRawUtf8DynArray); reintroduce;
+      const aDirectoryUrl, aContact, aSubjects: RawUtf8); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// search for a given Challenge token, and return the associated key
@@ -222,9 +222,9 @@ type
     /// associated contact as mailto: link, e.g. 'mailto:admin@synopse.info'
     property Contact: RawUtf8
       read fContact write fContact;
-    /// associated subjects as array, typically domain names to authenticate
-    // - e.g. ['synopse.info','www.synopse.info']
-    property Subjects: TRawUtf8DynArray
+    /// associated subjects as CSV, typically domain names to authenticate
+    // - e.g. 'synopse.info,www.synopse.info'
+    property Subjects: RawUtf8
       read fSubjects write fSubjects;
     /// low-level direct access to the associated challenges
     // - may be used instead of OnChallenges callback
@@ -614,14 +614,13 @@ end;
 { TAcmeClient }
 
 constructor TAcmeClient.Create(aLog: TSynLogClass; const aCert: ICryptCert;
-  const aDirectoryUrl, aContact: RawUtf8; const aSubjects: TRawUtf8DynArray);
+  const aDirectoryUrl, aContact, aSubjects: RawUtf8);
 begin
   fLog := aLog;
   inherited Create;
   fDirectoryUrl := aDirectoryUrl;
   fContact := aContact;
-//  CsvToRawUtf8DynArray(pointer(aSubjects), fSubjects, ',', {trim=}true);
-  if aSubjects = nil then
+  if aSubjects = '' then
     raise EAcmeClient.Create('Create with aSubjects=nil');
   fSubjects := aSubjects;
   fHttpClient := TJwsHttpClient.Create(fLog, aCert);
@@ -710,7 +709,7 @@ begin
   // The client begins the certificate issuance process by sending a POST
   // request to the server's newOrder resource
   r1 := fHttpClient.Post(fNewOrder,
-    ['identifiers', GetIdentifiersArr(fSubjects)]);
+    ['identifiers', GetIdentifiersArr(CsvToRawUtf8DynArray(fSubjects))]);
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
@@ -812,7 +811,7 @@ procedure TAcmeClient.StartDomainRegistration;
 var
   i, n: PtrInt;
 begin
-  fLog.Add.Log(sllTrace, 'StartDomainRegistration %', [fSubjects[0]], self);
+  fLog.Add.Log(sllTrace, 'StartDomainRegistration %', [fSubjects], self);
   // In order to help clients configure themselves with the right URLs for
   // each ACME operation, ACME servers provide a directory object
   ReadDirectory;
@@ -828,7 +827,7 @@ begin
     if Assigned(fOnChallenges) then
       for i := 0 to length(fChallenges) - 1 do
         if fChallenges[i].Key <> '' then
-          fOnChallenges(Self, fSubjects[0], fChallenges[i].Key, fChallenges[i].Token);
+          fOnChallenges(Self, fSubjects, fChallenges[i].Key, fChallenges[i].Token);
     // Queue challenge testing by sending {} to initiate the server process
     n := RequestAuth('{}');
     fLog.Add.Log(sllTrace, 'StartDomainRegistration pending=%', [n], self);
@@ -909,7 +908,7 @@ begin
     if Assigned(fOnChallenges) then // call with key = '' to notify final state
       for i := 0 to length(fChallenges) - 1 do
         if fChallenges[i].Key <> '' then
-          fOnChallenges(nil, fSubjects[0], {key=}'', fChallenges[i].Token);
+          fOnChallenges(nil, fSubjects, {key=}'', fChallenges[i].Token);
     fChallenges := nil;
   end;
 end;
@@ -1009,7 +1008,7 @@ begin
     cc.Generate([cuDigitalSignature], s[0], nil, 3650);
     cc.SaveToFile(fReferenceCert, cccCertWithPrivateKey); // no password needed
   end;
-  inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, s);
+  inherited Create(fOwner.fLog, cc, fOwner.fDirectoryUrl, c, RawUtf8ArrayToCsv(s));
 end;
 
 destructor TAcmeLetsEncryptClient.Destroy;
@@ -1118,6 +1117,7 @@ var
   c: TAcmeLetsEncryptClient;
   cc: ICryptCert;
   ctx: PSSL_CTX;
+  sub: RawUtf8;
   needed: TRawUtf8DynArray; // no long standing fSafe.Lock
   expired: TDateTime;
   res: TAcmeStatus;
@@ -1138,10 +1138,11 @@ begin
     for i := 0 to length(fClient) - 1 do
     begin
       c := fClient[i];
-      if GetClient(c.Subjects[0]) = c then // avoid duplicated names confusion
+      sub := GetCsvItem(pointer(c.Subjects), 0);
+      if GetClient(sub) = c then // avoid duplicated names confusion
         if not cc.LoadFromFile(c.fSignedCert) or
            (cc.GetNotAfter < expired) then
-          AddRawUtf8(needed, c.Subjects[0]);
+          AddRawUtf8(needed, sub);
     end;
   finally
     fSafe.UnLock;

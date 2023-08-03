@@ -1864,7 +1864,7 @@ type
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
     function FromHandle(Handle: pointer): ICryptCert; override;
-    function CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+    function CreateSelfSignedCsr(const Subjects: RawUtf8;
       const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8; 
       Usages: TCryptCertUsages = []; Fields: PCryptCertFields = nil): RawUtf8; override;
   end;
@@ -2014,7 +2014,7 @@ begin
     result := PEVP_PKEY(nil).ToAltNames(Subjects);
 end;
 
-function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynArray;
+function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 
@@ -2026,10 +2026,11 @@ function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: TRawUtf8DynAr
 
 var
   altnames: RawUtf8;
+  dns: TRawUtf8DynArray;
   req: PX509_REQ;
   key: PEVP_PKEY;
 begin
-  if Subjects = nil then
+  if Subjects = '' then
     RaiseError('no Subjects');
   req := NewCertificateRequest;
   if req = nil then
@@ -2039,8 +2040,9 @@ begin
     key := NewPrivateKey; // ephemeral key for self-signature
     if key = nil then
       RaiseError('NewPrivateKey');
+    CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
     altnames := SetupNameAndAltNames(
-      X509_REQ_get_subject_name(req), Usages, Fields, Subjects);
+      X509_REQ_get_subject_name(req), Usages, Fields, dns);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
@@ -2104,7 +2106,7 @@ begin
       RaiseErrorGenerate('NewPrivateKey');
     if fGenerateCsr <> nil then
     begin
-      // called by GenerateFromCsr: retrieve information from supplied CSR
+      // as called by GenerateFromCsr: retrieve information from supplied CSR
       EOpenSslCert.Check(X509_set_subject_name(
         x, X509_REQ_get_subject_name(fGenerateCsr)));
       name := X509_get_subject_name(x);
@@ -2171,7 +2173,7 @@ begin
   if req <> nil then
   try
     fGenerateCsr := req;
-    Generate([], '', Authority, ExpireDays, ValidDays, nil);
+    result := Generate([], '', Authority, ExpireDays, ValidDays, nil);
   finally
     fGenerateCsr := nil;
     req.Free;
