@@ -2360,7 +2360,8 @@ begin
           (S^ <> Sep) do
       inc(S);
     E := S;
-    while (E > P) and (E[-1] in [#1..' ']) do
+    while (E > P) and
+          (E[-1] in [#1..' ']) do
       dec(E); // trim right
     FastSetString(result, P, E - P);
     if S^ <> #0 then
@@ -2481,7 +2482,8 @@ begin
     PCardinal(D)^ := 0 // Dest='' with trailing #0
   else
   begin
-    while (S^ <= ' ') and (S^ <> #0) do
+    while (S^ <= ' ') and
+          (S^ <> #0) do
       inc(S);
     len := 0;
     repeat
@@ -2520,17 +2522,20 @@ begin
   FillCharFast(Bin^, BinBytes, 0);
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   S := P;
   if Sep = #0 then
     while S^ > ' ' do
       inc(S)
   else
-    while (S^ <> #0) and (S^ <> Sep) do
+    while (S^ <> #0) and
+          (S^ <> Sep) do
       inc(S);
   len := S - P;
-  while (P[len - 1] in [#1..' ']) and (len > 0) do
+  while (P[len - 1] in [#1..' ']) and
+        (len > 0) do
     dec(len); // trim right spaces
   if len <> BinBytes * 2 then
     exit;
@@ -2578,7 +2583,8 @@ begin
     until false;
   end;
   if Sep <> #0 then
-    while (P^ <> #0) and (P^ <> Sep) do
+    while (P^ <> #0) and
+          (P^ <> Sep) do
       inc(P); // go to end of CSV item (ignore any decimal)
   if P^ = #0 then
     P := nil
@@ -2743,7 +2749,8 @@ begin
       inc(P);
     until false;
   end;
-  while (P^ <> #0) and (P^ <> Sep) do // go to end of CSV item (ignore any decimal)
+  while (P^ <> #0) and
+        (P^ <> Sep) do // go to end of CSV item (ignore any decimal)
     inc(P);
   if P^ = #0 then
     P := nil
@@ -2963,7 +2970,8 @@ var
   n: integer;
 begin
   n := length(List);
-  while (Csv <> nil) and (Csv^ <> #0) do
+  while (Csv <> nil) and
+        (Csv^ <> #0) do
   begin
     if TrimItems then
       GetNextItemTrimed(Csv, Sep, s)
@@ -3086,7 +3094,7 @@ begin
   len := seplen * HighValues;
   for i := 0 to HighValues do
     inc(len, length(Values[i]));
-  FastSetString(result, nil, len);
+  FastSetString(result, nil, len); // allocate the result buffer as once
   P := pointer(result);
   i := 0;
   repeat
@@ -3097,7 +3105,7 @@ begin
       inc(P, L);
     end;
     if i = HighValues then
-      Break;
+      break;
     if seplen > 0 then
     begin
       MoveFast(pointer(Sep)^, P^, seplen);
@@ -3125,7 +3133,8 @@ var
   n: integer;
 begin
   n := length(List);
-  while (Csv <> nil) and (Csv^ <> #0) do
+  while (Csv <> nil) and
+        (Csv^ <> #0) do
     AddInteger(List, n, GetNextItemInteger(Csv, Sep));
   if List <> nil then
     DynArrayFakeLength(List, n);
@@ -3137,7 +3146,8 @@ var
   n: integer;
 begin
   n := length(List);
-  while (Csv <> nil) and (Csv^ <> #0) do
+  while (Csv <> nil) and
+        (Csv^ <> #0) do
     AddInt64(List, n, GetNextItemInt64(Csv, Sep));
   if List <> nil then
     DynArrayFakeLength(List, n);
@@ -3148,7 +3158,8 @@ var
   n: integer;
 begin
   n := 0;
-  while (Csv <> nil) and (Csv^ <> #0) do
+  while (Csv <> nil) and
+        (Csv^ <> #0) do
     AddInt64(result, n, GetNextItemInt64(Csv, Sep));
   if result <> nil then
     DynArrayFakeLength(result, n);
@@ -4465,7 +4476,8 @@ var
 begin
   L := length(Text^);
   P := @Text^[1];
-  while (L > 0) and (P^ in ['a'..'z']) do
+  while (L > 0) and
+        (P^ in ['a'..'z']) do
   begin
     inc(P);
     dec(L);
@@ -5400,7 +5412,8 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ = '-' then
   begin
@@ -5651,7 +5664,8 @@ begin
           if c = '9' then
           begin
             S[prec] := '0';
-            if ((prec = 2) and (S[1] = '-')) or
+            if ((prec = 2) and
+                (S[1] = '-')) or
                (prec = 1) then
             begin
               i := result;
@@ -5666,7 +5680,8 @@ begin
               break;
             end;
           end
-          else if (c >= '0') and (c <= '8') then
+          else if (c >= '0') and
+                  (c <= '8') then
           begin
             inc(S[prec]);
             break;
@@ -7258,13 +7273,15 @@ begin
   aValue := 0;
   result := false;
   if (aIP = nil) or
-     (IdemPChar(aIP, '127.0.0.1') and (aIP[9] = #0)) then
+     (IdemPChar(aIP, '127.0.0.1') and
+      (aIP[9] = #0)) then
     exit;
   for i := 0 to 3 do
   begin
     c := GetNextItemCardinal(aIP, '.');
     if (c > 255) or
-       ((aIP = nil) and (i < 3)) then
+       ((aIP = nil) and
+        (i < 3)) then
       exit;
     b[i] := c;
   end;
