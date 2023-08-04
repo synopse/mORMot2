@@ -1641,7 +1641,7 @@ type
 
   /// the Digital Signature results for a given Certificate
   // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
-  // - see CV_VALIDSIGN constant
+  // - see CV_VALIDSIGN constant for verification success
   TCryptCertValidity = (
     cvUnknown,
     cvValidSigned,
@@ -5965,7 +5965,8 @@ begin
   if Csr = '' then
     exit;
   x := (fCryptAlgo as TCryptCertAlgo).Load(Csr);
-  if x <> nil then
+  if (x <> nil) and
+     (x.Verify(x) = cvValidSelfSigned) then
     result := Generate(x.GetUsage, RawUtf8ArrayToCsv(x.GetSubjects),
       Authority, ExpireDays, ValidDays, {Fields=}nil);
     // note: Fields=nil since TCryptCertInternal does not support them

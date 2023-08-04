@@ -1474,6 +1474,7 @@ type
     function Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
     /// check if the public key of this certificate matches a given public key
     function Verify(pkey: PEVP_PKEY): boolean;
+    function VerifySelf: boolean;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -7974,6 +7975,20 @@ begin
     result := false
   else
     result := X509_REQ_verify(@self, pkey) = OPENSSLSUCCESS;
+end;
+
+function X509_REQ.VerifySelf: boolean;
+var
+  pkey: PEVP_PKEY;
+begin
+  result := false;
+  if @self = nil then
+    exit;
+  pkey := X509_REQ_get_pubkey(@self);
+  if pkey = nil then
+    exit;
+  result := Verify(pkey);
+  pkey.Free;
 end;
 
 const
