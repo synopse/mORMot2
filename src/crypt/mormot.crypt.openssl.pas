@@ -2162,7 +2162,7 @@ var
   req: PX509_REQ;
   der: RawByteString;
 begin
-  result := nil; // invalid supplied CrsPem
+  result := nil; // invalid supplied CSR
   if Csr = '' then
     exit;
   if IsPem(Csr) then
@@ -2172,8 +2172,11 @@ begin
   req := LoadCertificateRequest(der);
   if req <> nil then
   try
-    fGenerateCsr := req;
-    result := Generate([], '', Authority, ExpireDays, ValidDays, nil);
+    if req.VerifySelf then
+    begin
+      fGenerateCsr := req;
+      result := Generate([], '', Authority, ExpireDays, ValidDays, nil);
+    end;
   finally
     fGenerateCsr := nil;
     req.Free;
