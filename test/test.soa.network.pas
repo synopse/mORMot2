@@ -532,7 +532,7 @@ begin
   fPublicRelay := TPublicRelay.Create(nil, fPublicRelayClientsPort,
     fPublicRelayPort, RELAYKEY, TJwtHS256.Create('jwtsecret', 100, [], []));
   fPrivateRelay := TPrivateRelay.Create(nil, '127.0.0.1', fPublicRelayPort,
-    RELAYKEY, fPublicRelay.ServerJWT.Compute([]), '127.0.0.1', HTTP_DEFAULTPORT,
+    RELAYKEY, fPublicRelay.ServerJwt.Compute([]), '127.0.0.1', HTTP_DEFAULTPORT,
     'X-Real-IP');
   check(not fPrivateRelay.Connected);
   check(fPrivateRelay.TryConnect);

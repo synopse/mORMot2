@@ -583,6 +583,7 @@ procedure TNetworkProtocols.DNSAndLDAP;
 var
   ip, u, v, sid: RawUtf8;
   c: cardinal;
+  withntp: boolean;
   guid: TGuid;
   i, j, k: PtrInt;
   dns, clients: TRawUtf8DynArray;
@@ -594,6 +595,7 @@ begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
+  withntp := not Executable.Command.Option('nontp');
   utc1 := GetSntpTime(ntp);
   //writeln(DateTimeMSToString(utc), ' = ', DateTimeMSToString(NowUtc));
   if utc1 <> 0 then
@@ -601,7 +603,8 @@ begin
     utc2 := NowUtc;
     AddConsole('% : % = %', [ntp, DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
     // only make a single GetSntpTime call - most servers refuse to scale
-    CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
+    if withntp then
+      CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
   end;
   // validate some IP releated process
   Check(not NetIsIP4(nil));
@@ -730,7 +733,8 @@ begin
       begin
         utc2 := NowUtc;
         AddConsole('% : % = %', [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
-        CheckSame(utc1, utc2, 1, 'NTP system B'); // allow 1 day diff
+        if withntp then
+          CheckSame(utc1, utc2, 1, 'NTP system B'); // allow 1 day diff
       end;
       for j := 0 to high(clients) do
       begin
