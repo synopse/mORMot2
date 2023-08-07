@@ -2968,7 +2968,7 @@ begin
     check(csr <> '', 'csr');
     check(priv <> '', 'priv');
     c2 := crt.GenerateFromCsr(csr);
-    if not CheckFailed(c2 <> nil, 'gen csr') then
+    if not CheckFailed(c2 <> nil, 'gen csr1') then
     begin
       if crt.AlgoName <> 'syn-es256-v1' then
         check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
@@ -2977,7 +2977,7 @@ begin
       check(c2.IsSelfSigned, 'csr self1');
     end;
     c2 := crt.GenerateFromCsr(csr, c1);
-    if not CheckFailed(c2 <> nil, 'gen csr') then
+    if not CheckFailed(c2 <> nil, 'gen csr2') then
     begin
       if crt.AlgoName <> 'syn-es256-v1' then
         check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage2');

@@ -601,7 +601,7 @@ begin
     utc2 := NowUtc;
     AddConsole('% : % = %', [ntp, DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
     // only make a single GetSntpTime call - most servers refuse to scale
-    CheckSame(utc1, utc2, 1, 'NTP system'); // allow 1 day diff
+    CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
   end;
   // validate some IP releated process
   Check(not NetIsIP4(nil));
@@ -730,7 +730,7 @@ begin
       begin
         utc2 := NowUtc;
         AddConsole('% : % = %', [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
-        CheckSame(utc1, utc2, 1, 'NTP system'); // allow 1 day diff
+        CheckSame(utc1, utc2, 1, 'NTP system B'); // allow 1 day diff
       end;
       for j := 0 to high(clients) do
       begin
