@@ -2836,7 +2836,7 @@ begin
     fBatch^.SimpleFieldsCount := FieldBitCount(Fields) + 1;
   end;
   AddID(fBatch^.ID, fBatch^.IDCount, result);
-  ObjArrayAddCount(fBatch^.Simples, pointer(Sent), fBatch^.ValuesCount);
+  PtrArrayAdd(fBatch^.Simples, Sent, fBatch^.ValuesCount);
 end;
 
 
