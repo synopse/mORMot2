@@ -2903,13 +2903,13 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al        // true if OS enabled both XMM and YMM
 end;
 
-procedure GetCpuid(param: cardinal; var regs: TIntelRegisters);
+procedure GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     eax, param
+        mov     eax, cpueax
+        mov     ecx, cpuecx
         mov     r9, regs
         mov     r10, rbx  // preserve rbx
         xor     ebx, ebx
-        xor     ecx, ecx
         xor     edx, edx
         cpuid
         mov     TIntelRegisters(r9).&eax, eax

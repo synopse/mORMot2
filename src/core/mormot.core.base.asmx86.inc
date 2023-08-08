@@ -2397,13 +2397,15 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         sete    al
 end;
 
-procedure GetCpuid(Param: cardinal; var Registers: TIntelRegisters);
+procedure GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    edi
-        mov     esi, edx
-        mov     edi, eax
+        push    ebx
+        mov     edi, cpueax
+        mov     ebx, cpuecx
+        mov     esi, Registers
         pushfd
         pop     eax
         mov     edx, eax
@@ -2412,18 +2414,17 @@ asm
         popfd
         pushfd
         pop     eax
-        xor     eax, edx
+        xor     eax, edx // does this CPU support the cpuid opcode?
         jz      @nocpu
-        push    ebx
         mov     eax, edi
-        xor     ecx, ecx
+        mov     ecx, ebx
         cpuid
         mov     TIntelRegisters(esi).&eax, eax
         mov     TIntelRegisters(esi).&ebx, ebx
         mov     TIntelRegisters(esi).&ecx, ecx
         mov     TIntelRegisters(esi).&edx, edx
-        pop     ebx
-@nocpu: pop     edi
+@nocpu: pop     ebx
+        pop     edi
         pop     esi
 end;
 

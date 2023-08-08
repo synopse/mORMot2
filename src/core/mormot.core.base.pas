@@ -2381,30 +2381,39 @@ type
   // - is defined on all platforms, so that e.g. an ARM desktop may browse
   // Intel-generated logs using TSynLogFile from mormot.core.log.pas
   TIntelCpuFeature = (
-   { CPUID 1 in EDX }
+   { CPUID EAX=1 into EDX, ECX }
    cfFPU,  cfVME,   cfDE,   cfPSE,   cfTSC,  cfMSR, cfPAE,  cfMCE,
    cfCX8,  cfAPIC,  cf_d10, cfSEP,   cfMTRR, cfPGE, cfMCA,  cfCMOV,
    cfPAT,  cfPSE36, cfPSN,  cfCLFSH, cf_d20, cfDS,  cfACPI, cfMMX,
    cfFXSR, cfSSE,   cfSSE2, cfSS,    cfHTT,  cfTM,  cfIA64, cfPBE,
-   { CPUID 1 in ECX }
    cfSSE3, cfCLMUL, cfDS64, cfMON,   cfDSCPL, cfVMX,  cfSMX,   cfEST,
    cfTM2,  cfSSSE3, cfCID,  cfSDBG,  cfFMA,   cfCX16, cfXTPR,  cfPDCM,
    cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
-   { extended features CPUID 7 in EBX, ECX, EDX }
+   { extended features CPUID EAX=7,ECX=0 into EBX, ECX, EDX }
    cfFSGS, cfTSCADJ, cfSGX, cfBMI1, cfHLE, cfAVX2, cfFDPEO, cfSMEP,
-   cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
+   cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cfFPUSEG, cfMPX, cfPQE,
    cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
    cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
    cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
-   cf_c05, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
+   cfWAITPKG, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
    cfAVX512BITALG, cfTMEEN, cfAVX512VPC, cf_c15, cfFLP, cfMPX0, cfMPX1,
-   cfMPX2, cfMPX3, cfMPX4, cfRDPID, cfKL, cf_c24, cfCLDEMOTE, cf_c26,
-   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cf_d1,
-   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cf_d5, cf_d6, cf_d7, cfAVX512VP2I,
+   cfMPX2, cfMPX3, cfMPX4, cfRDPID, cfKL, cfBUSLOCK, cfCLDEMOTE, cf_c26,
+   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cfSGXKEYS,
+   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cfUINTR, cf_d6, cf_d7, cfAVX512VP2I,
    cfSRBDS, cfMDCLR, cfTSXABRT, cf_d12, cfTSXFA, cfSER, cfHYBRID,
    cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cfAVX512FP16,
-   cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD);
+   cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD,
+   { extended features CPUID EAX=7,ECX=1 into EAX, EDX }
+   cfSHA512, cfSM3, cfSM4, cfRAOINT, cfAVXVNNI, cfAVX512BF16, cfLASS,
+   cfCMPCCXADD, cfAPMEL, cf_a9, cfFZLREPM, cfFSREPS, cfFSREPC, cf_a13, cf_a14,
+   cf_a15, cf_a16, cfFRED, cfLKGS, cfWRMSRNS, cf_a20, cfAMXFP16, cfHRESET,
+   cfAVXIFMA, cf_a24, cf_a25, cfLAM, cfMSRLIST, cf_a28, cf_a29, cf_a30, cf_a31,
+   cf__d0, cf_d1, cf_d2, cf_d3, cfAVXVNN8, cfAVXNECVT, cf__d6, cf__d7, cfAMXCPLX,
+   cf_d9, cfAVXVNNI16, cf_d11, cf__d12, cf_d13, cfPREFETCHI, cf_d15, cf_d16,
+   cfUIRETUIF, cfCETSSS, cfAVX10, cf__d20, cf_APXF, cf_d22, cf_d23, cf_d24,
+   cf_d25, cf_d26, cf_d27, cf_d28, cf_d29, cf_d30, cf_d31);
+
 
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -8973,16 +8982,20 @@ var
   c: cardinal;
 begin
   // retrieve CPUID raw flags
-  regs.ebx := 0;
-  regs.edx := 0;
-  regs.ecx := 0;
-  GetCpuid(1, regs);
+  FillChar(regs, SizeOf(regs), 0); // no FillCharFast needed here
+  GetCpuid({eax=}1, {ecx=}0, regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
-  GetCpuid(7, regs);
+  GetCpuid(7, 0, regs);
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
+  if regs.eax in [1..9] then // returned the maximum ecx value for eax=7 in eax
+  begin
+    GetCpuid(7, 1, regs);
+    PIntegerArray(@CpuFeatures)^[5] := regs.eax; // just ignore regs.ebx
+    PIntegerArray(@CpuFeatures)^[6] := regs.edx;
+  end;
   // validate accuracy of most used HW opcodes
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
