@@ -2418,6 +2418,19 @@ type
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
+  /// the supported AVX10 Converged Vector ISA bit sizes
+  TIntelAvx10Vector = set of (
+    av128, av256, av512);
+  /// the AVX10 Converged Vector ISA features
+  TIntelAvx10Features = record
+    /// maximum supported sub-leaf
+    MaxSubLeaf: cardinal;
+    /// the ISA version (>= 1)
+    Version: byte;
+    /// bit vector size support
+    Vector: TIntelAvx10Vector;
+  end;
+
   /// 32-bit ARM Hardware capabilities
   // - merging AT_HWCAP and AT_HWCAP2 flags as reported by
   // github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
@@ -2494,6 +2507,10 @@ var
   // - on LINUX, consider CpuInfoArm or the textual CpuInfoFeatures from
   // mormot.core.os.pas
   CpuFeatures: TIntelCpuFeatures;
+
+  /// the detected AVX10 Converged Vector ISA features
+  // - only set if cfAVX10 is part of CpuFeatures
+  CpuAvx10: TIntelAvx10Features;
 
 /// compute 32-bit random number using Intel hardware
 // - using NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
@@ -8995,6 +9012,13 @@ begin
     GetCpuid(7, 1, regs);
     PIntegerArray(@CpuFeatures)^[5] := regs.eax; // just ignore regs.ebx
     PIntegerArray(@CpuFeatures)^[6] := regs.edx;
+    if cfAVX10 in CpuFeatures then
+    begin
+      GetCpuid($24, 0, regs);
+      CpuAvx10.MaxSubLeaf := regs.eax;
+      CpuAvx10.Version := ToByte(regs.ebx);
+      PByte(@CpuAvx10.Vector)^ := (regs.ebx shr 16) and 7;
+    end;
   end;
   // validate accuracy of most used HW opcodes
   {$ifdef DISABLE_SSE42}
