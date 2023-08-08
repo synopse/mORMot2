@@ -66,6 +66,11 @@
 {.$define DISABLEAPPNOSQL}
 // Mongo DB client won't be linked to the executable by mormot.app
 
+{.$define NOVMTPATCH}
+// disable the vmtAutoTable slot runtime patch, replacing it with a slowest algo
+// - could be used e.g. when in-memory executables can't be patched (e.g. on
+// security constrained systems, or on OS without any mmap support)
+
 {.$define NOSSPIAUTH}
 // disable Windows mormot.lib.sspi support in mormot.rest.client/server units
 

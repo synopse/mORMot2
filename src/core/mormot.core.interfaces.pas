@@ -5427,7 +5427,7 @@ type // to access fAutoCreateInterfaces protected field
 
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
 var
-  rtti: TRttiJson;
+  r: TRttiJson;
   n: integer;
   p: PPRttiCustomProp;
   addr: pointer;
@@ -5437,12 +5437,16 @@ begin
     raise EInterfaceResolver.CreateUtf8(
       '%.AutoResolve with no prior registration', [self]);
   // inlined Rtti.RegisterClass()
-  rtti := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
-  if (rtti = nil) or
-     not (rcfAutoCreateFields in rtti.Flags) then
-    rtti := DoRegisterAutoCreateFields(self);
+  {$ifdef NOVMTPATCH}
+  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^));
+  {$else}
+  r := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
+  if (r = nil) or
+     not (rcfAutoCreateFields in r.Flags) then
+    r := DoRegisterAutoCreateFields(self);
   // resolve all published interface fields
-  p := pointer(TRttiCustomWrapper(rtti).fAutoCreateInterfaces);
+  p := pointer(TRttiCustomWrapper(r).fAutoCreateInterfaces);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)

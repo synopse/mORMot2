@@ -2365,7 +2365,8 @@ type
       aParserComplex: TRttiParserComplexType): TRttiCustom; virtual;
   public
     /// initialize the customizer class from known RTTI
-    constructor Create(aInfo: PRttiInfo); virtual;
+    // - is called just after Create
+    procedure FromRtti(aInfo: PRttiInfo); virtual;
     /// initialize abstract custom serialization for a given record
     // - not registered in the main TRttiCustomList: caller should free it
     // - in practice, is used only by test.core.data.pas regression tests
@@ -2592,7 +2593,7 @@ type
     // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
-    procedure AddToPairs(Instance: TRttiCustom);
+    procedure AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
   public
     /// how many TRttiCustom instances have been registered
@@ -2613,9 +2614,15 @@ type
     function FindType(Info: PRttiInfo): TRttiCustom;
     /// efficient search of TRttiCustom from a given TObject class
     // - returns nil if Info is not known
-    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
+    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup,
+    // or use our "hash table of the poor" (tm) if NOVMTPATCH conditional is set
+    {$ifdef NOVMTPATCH}
+    function Find(ObjectClass: TClass): TRttiCustom; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$else}
     class function Find(ObjectClass: TClass): TRttiCustom; overload;
       {$ifdef HASINLINE}static; inline;{$endif}
+    {$endif NOVMTPATCH}
     /// efficient search of TRttiCustom from a given type name
     // - internally use our "hash table of the poor" (tm) for quick search
     function Find(Name: PUtf8Char; NameLen: PtrInt;
@@ -2659,13 +2666,15 @@ type
     /// register a given class type, using its RTTI
     // - returns existing or new TRttiCustom
     // - please call RegisterCollection for TCollection
-    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
+    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup,
+    // or use our "hash table of the poor" (tm) if NOVMTPATCH conditional is set
     function RegisterClass(ObjectClass: TClass): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a given class type, using its RTTI
     // - returns existing or new TRttiCustom
     // - please call RegisterCollection for TCollection
-    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
+    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup,
+    // or use our "hash table of the poor" (tm) if NOVMTPATCH conditional is set
     function RegisterClass(aObject: TObject): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level registration function called from RegisterClass()
@@ -7545,10 +7554,16 @@ begin
 end;
 
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
+{$ifndef NOVMTPATCH}
 var
   vmt: PPointer;
+{$endif NOVMTPATCH}
 begin
   fValueClass := aClass;
+  // we need to register this class ASAP into RTTI list to avoid infinite calls
+  {$ifdef NOVMTPATCH}
+  Rtti.PerKind^[rkClass].LastInfo := self; // faster FindType()
+  {$else}
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
   vmt := Pointer(PAnsiChar(aClass) + vmtAutoTable);
   if vmt^ = nil then
@@ -7556,6 +7571,7 @@ begin
   if vmt^ <> self then
     raise ERttiException.CreateUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
+  {$endif NOVMTPATCH}
   // identify the most known class types
   if aClass.InheritsFrom(TCollection) then
     fValueRtlClass := vcCollection
@@ -7579,7 +7595,7 @@ begin
     fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
 end;
 
-constructor TRttiCustom.Create(aInfo: PRttiInfo);
+procedure TRttiCustom.FromRtti(aInfo: PRttiInfo);
 var
   dummy: integer;
   pt: TRttiParserType;
@@ -7679,7 +7695,7 @@ constructor TRttiCustom.CreateFromText(const RttiDefinition: RawUtf8);
 var
   P: PUtf8Char;
 begin
-  Create(nil); // no associated RTTI
+  FromRtti(nil); // no associated RTTI
   P := pointer(RttiDefinition);
   SetPropsFromText(P, eeNothing, {NoRegister=}true);
 end;
@@ -7740,7 +7756,7 @@ begin
   // initialize process
   SetParserType(ParserType, pctNone);
   // register to the internal list
-  Rtti.AddToPairs(self);
+  Rtti.AddToPairs(self, fCache.Info);
 end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
@@ -8179,7 +8195,8 @@ begin
          not (pt in [ptRecord, ptDynArray]) then
         raise ERttiException.CreateUtf8(
           'Unexpected nested % %', [c, ToText(pt)^]);
-      nested := Rtti.GlobalClass.Create(nil);
+      nested := Rtti.GlobalClass.Create;
+      nested.FromRtti(nil);
       nested.SetPropsFromText(P, ee, NoRegister);
       nested.NoRttiSetAndRegister(ptRecord, '', nil, NoRegister);
       if NoRegister then
@@ -8197,7 +8214,8 @@ begin
          (pt <> ptDynArray) then // paranoid
         raise ERttiException.CreateUtf8(
           'Unexpected array % %', [c, ToText(pt)^]);
-      c := Rtti.GlobalClass.Create(nil);
+      c := Rtti.GlobalClass.Create;
+      c.FromRtti(nil);
       c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
       if NoRegister then
         ObjArrayAdd(fOwnedRtti, c);
@@ -8355,11 +8373,13 @@ var
   k: PRttiCustomListPairs;
   p: PPointer; // ^TPointerDynArray
 begin
+  {$ifndef NOVMTPATCH}
   if Info^.Kind <> rkClass then
   begin
+  {$endif NOVMTPATCH}
     // our optimized "hash table of the poor" (tm) lookup
     k := @PerKind^[Info^.Kind];
-    // try latest found RTTI
+    // try latest found RTTI for this kind of type definition (naive but works)
     result := k^.LastInfo;
     if (result <> nil) and
        (result.Info = Info) then
@@ -8376,16 +8396,25 @@ begin
       if result <> nil then
         k^.LastInfo := result;
     end;
+  {$ifndef NOVMTPATCH}
   end
   else
     // direct lookup of the vmtAutoTable slot for classes
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
 end;
 
+{$ifdef NOVMTPATCH}
+function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
+begin
+  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+end;
+{$else}
 class function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
 begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
+{$endif NOVMTPATCH}
 
 function LockedFindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
@@ -8544,8 +8573,12 @@ begin
     result := FindType(Info);  // search again (within RegisterSafe context)
     if result <> nil then
       exit; // already registered in the background
-    result := GlobalClass.Create(Info);
-    AddToPairs(result);
+    // initialize a new TRttiCustom/TRttiJson instance for this type
+    result := GlobalClass.Create;
+    // register ASAP to avoid endless recursion in FromRtti
+    AddToPairs(result, Info);
+    // now we can parse and process the RTTI
+    result.FromRtti(Info);
   finally
     RegisterSafe.UnLock;
   end;
@@ -8568,7 +8601,8 @@ begin
       result := Find(ObjectClass); // search again (for thread safety)
       if result <> nil then
         exit; // already registered in the background
-      result := GlobalClass.Create(nil);
+      result := GlobalClass.Create;
+      result.FromRtti(nil);
       result.SetValueClass(ObjectClass, nil);
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
@@ -8616,7 +8650,7 @@ begin
   end;
 end;
 
-procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom);
+procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
 var
   n: PtrInt;
   k: PRttiCustomListPairs;
@@ -8624,14 +8658,14 @@ var
 begin
   // call is made within RegisterSafe but when resizing p^.Pairs,
   // Table^.PairsSafe.WriteLock should be used
-  k := @PerKind^[Instance.Kind];
-  p := @k^.PerHash[(PtrUInt(Instance.Info.RawName[0]) xor
-    PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
+  k := @PerKind^[Info^.Kind];
+  p := @k^.PerHash[(PtrUInt(Info^.RawName[0]) xor PtrUInt(Info^.RawName[1]))
+                   and RTTICUSTOMTYPEINFOHASH];
   k^.Safe.WriteLock;
   try
     n := length(p^);
     SetLength(p^, n + 2);
-    p^[n] := Instance.Info;
+    p^[n] := Info;
     p^[n + 1] := Instance;
     ObjArrayAddCount(Instances, Instance, Count); // to release memory
     inc(Counts[Instance.Kind]);
@@ -8721,7 +8755,11 @@ end;
 
 function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
 begin
+  {$ifdef NOVMTPATCH}
+  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+  {$else}
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
   if result = nil then
     result := DoRegister(ObjectClass);
 end;
@@ -8733,15 +8771,23 @@ end;
 
 function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
 begin
+  {$ifdef NOVMTPATCH}
+  result := FindType(PPointer(PPAnsiChar(aObject)^ + vmtTypeInfo)^);
+  {$else}
   result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
   if result = nil then
     result := DoRegister(PClass(aObject)^);
 end;
 
 function TRttiCustomList.RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
 begin
+  {$ifdef NOVMTPATCH}
+  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+  {$else}
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
-  if (result = nil) or // caller is likely to have checked it - paranoiac we are
+  {$endif NOVMTPATCH}
+  if (result = nil) or // caller should have checked it - paranoiac we are
      not (rcfAutoCreateFields in result.Flags) then
     result := DoRegister(ObjectClass, [rcfAutoCreateFields]);
 end;
@@ -8879,7 +8925,10 @@ begin
     result := Find(pointer(TypeName), length(TypeName));
     new := result = nil;
     if new then
-      result := GlobalClass.Create(nil)
+    begin
+      result := GlobalClass.Create;
+      result.FromRtti(nil);
+    end
     else if not (result.Kind in rkRecordTypes) then
       raise ERttiException.CreateUtf8('Rtti.RegisterFromText: existing % is a %',
         [TypeName, ToText(result.Kind)^]);
@@ -9100,15 +9149,21 @@ end;
 class function TObjectWithCustomCreate.RttiCustom: TRttiCustom;
 begin
   // inlined Rtti.Find(ClassType): we know it is the first slot
+  {$ifdef NOVMTPATCH}
+  result := Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^);
+  {$else}
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
   // assert(result.InheritsFrom(TRttiCustom));
 end;
 
 class function TObjectWithCustomCreate.NewInstance: TObject;
 begin
+  {$ifndef NOVMTPATCH}
   // register the class to the RTTI cache
   if PPointer(PAnsiChar(self) + vmtAutoTable)^ = nil then
     Rtti.DoRegister(self); // ensure TRttiCustom is set
+  {$endif NOVMTPATCH}
   // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
   GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
   FillCharFast(pointer(result)^, InstanceSize, 0);

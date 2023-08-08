@@ -4211,7 +4211,11 @@ begin
   if result <> nil then
   begin
     // inlined Rtti.Find(ClassType)
+    {$ifdef NOVMTPATCH}
+    result := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
+    {$else}
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
+    {$endif NOVMTPATCH}
     if result <> nil then
       // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
       result := TRttiCustom(pointer(result)).PrivateSlot;
@@ -4229,7 +4233,11 @@ begin
   result := pointer(Self);
   if result <> nil then
   begin
+    {$ifdef NOVMTPATCH}
+    P := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
+    {$else}
     P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
+    {$endif NOVMTPATCH}
     if P <> nil then
     begin
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
@@ -4247,19 +4255,23 @@ end;
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var
   rtticustom: TRttiCustom;
+  {$ifndef NOVMTPATCH}
   vmt: TObject;
+  {$endif NOVMTPATCH}
 begin
   // private sub function called from inlined TSynLog.Family / TSynLog.Add
   if (self <> nil) and
      InheritsFrom(TSynLog) then // paranoid
   begin
     rtticustom := Rtti.RegisterClass(self);
+    {$ifndef NOVMTPATCH}
     vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUtf8(
         '%.FamilyCreate: vmtAutoTable=% not %', [self, vmt, rtticustom]);
+    {$endif NOVMTPATCH}
     Rtti.RegisterSafe.Lock;
     try
       result := rtticustom.PrivateSlot;
@@ -4269,7 +4281,7 @@ begin
           exit
         else
           raise ESynLogException.CreateUtf8( // paranoid
-            '%.FamilyCreate: vmtAutoTable=%', [self, result]);
+            '%.FamilyCreate: PrivateSlot=%', [self, result]);
       // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
       rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom

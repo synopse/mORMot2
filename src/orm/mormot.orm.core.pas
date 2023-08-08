@@ -1785,7 +1785,7 @@ type
     // for the class within it is defined, and we need a var for each class:
     // so even Delphi XE syntax is not powerful enough for our purpose, and the
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
-    // including 64-bit target)
+    // including 64-bit target) - unless NOVMTPATCH conditional is defined
     class function OrmProps: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the TOrmProperties info of an existing TOrm instance
@@ -6175,7 +6175,11 @@ end;
 
 class function TOrm.OrmProps: TOrmProperties;
 begin
+  {$ifdef NOVMTPATCH}
+  result := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
+  {$else}
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
   if result <> nil then
     // we expect TRttiCustom is in the slot, and PrivateSlot as TOrmProperties
     result := TRttiCustom(pointer(result)).PrivateSlot;
@@ -6187,7 +6191,11 @@ end;
 function TOrm.Orm: TOrmProperties;
 begin
   // we know TRttiCustom is in the slot, and PrivateSlot is TOrmProperties
+  {$ifdef NOVMTPATCH}
+  result := Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^).PrivateSlot;
+  {$else}
   result := PRttiCustom(PPAnsiChar(self)^ + vmtAutoTable)^.PrivateSlot;
+  {$endif NOVMTPATCH}
 end;
 
 class function TOrm.SqlTableName: RawUtf8;
@@ -7583,7 +7591,11 @@ end;
 function TOrm.ClassProp: TRttiJson;
 begin
   if self <> nil then
+    {$ifdef NOVMTPATCH}
+    result := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^))
+    {$else}
     result := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^
+    {$endif NOVMTPATCH}
   else
     result := nil; // avoid GPF
 end;

@@ -11288,16 +11288,20 @@ end;
 
 procedure AutoCreateFields(ObjectInstance: TObject);
 var
-  rtti: TRttiJson;
+  r: TRttiJson;
   n: integer;
   p: PPRttiCustomProp;
 begin
   // inlined Rtti.RegisterClass()
-  rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-  if (rtti = nil) or
-     not (rcfAutoCreateFields in rtti.Flags) then
-    rtti := DoRegisterAutoCreateFields(ObjectInstance);
-  p := pointer(rtti.fAutoCreateClasses);
+  {$ifdef NOVMTPATCH}
+  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+  {$else}
+  r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
+  if (r = nil) or
+     not (rcfAutoCreateFields in r.Flags) then
+    r := DoRegisterAutoCreateFields(ObjectInstance);
+  p := pointer(r.fAutoCreateClasses);
   if p = nil then
     exit;
   // create all published class fields
@@ -11313,15 +11317,19 @@ end;
 
 procedure AutoDestroyFields(ObjectInstance: TObject);
 var
-  rtti: TRttiJson;
+  r: TRttiJson;
   n: integer;
   p: PPRttiCustomProp;
   arr: pointer;
   o: TObject;
 begin
-  rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  {$ifdef NOVMTPATCH}
+  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+  {$else}
+  r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  {$endif NOVMTPATCH}
   // free all published class fields
-  p := pointer(rtti.fAutoCreateClasses);
+  p := pointer(r.fAutoCreateClasses);
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -11335,7 +11343,7 @@ begin
     until n = 0;
   end;
   // release all published T*ObjArray fields
-  p := pointer(rtti.fAutoCreateObjArrays);
+  p := pointer(r.fAutoCreateObjArrays);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
