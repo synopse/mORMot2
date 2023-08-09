@@ -11293,11 +11293,11 @@ var
   p: PPRttiCustomProp;
 begin
   // inlined Rtti.RegisterClass()
-  {$ifdef NOVMTPATCH}
+  {$ifdef NOPATCHVMT}
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
   {$else}
   r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-  {$endif NOVMTPATCH}
+  {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
     r := DoRegisterAutoCreateFields(ObjectInstance);
@@ -11323,11 +11323,11 @@ var
   arr: pointer;
   o: TObject;
 begin
-  {$ifdef NOVMTPATCH}
+  {$ifdef NOPATCHVMT}
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
   {$else}
   r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-  {$endif NOVMTPATCH}
+  {$endif NOPATCHVMT}
   // free all published class fields
   p := pointer(r.fAutoCreateClasses);
   if p <> nil then

@@ -4211,11 +4211,11 @@ begin
   if result <> nil then
   begin
     // inlined Rtti.Find(ClassType)
-    {$ifdef NOVMTPATCH}
+    {$ifdef NOPATCHVMT}
     result := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
     {$else}
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    {$endif NOVMTPATCH}
+    {$endif NOPATCHVMT}
     if result <> nil then
       // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
       result := TRttiCustom(pointer(result)).PrivateSlot;
@@ -4233,11 +4233,11 @@ begin
   result := pointer(Self);
   if result <> nil then
   begin
-    {$ifdef NOVMTPATCH}
+    {$ifdef NOPATCHVMT}
     P := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
     {$else}
     P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    {$endif NOVMTPATCH}
+    {$endif NOPATCHVMT}
     if P <> nil then
     begin
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
@@ -4255,23 +4255,23 @@ end;
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var
   rtticustom: TRttiCustom;
-  {$ifndef NOVMTPATCH}
+  {$ifndef NOPATCHVMT}
   vmt: TObject;
-  {$endif NOVMTPATCH}
+  {$endif NOPATCHVMT}
 begin
   // private sub function called from inlined TSynLog.Family / TSynLog.Add
   if (self <> nil) and
      InheritsFrom(TSynLog) then // paranoid
   begin
     rtticustom := Rtti.RegisterClass(self);
-    {$ifndef NOVMTPATCH}
+    {$ifndef NOPATCHVMT}
     vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUtf8(
         '%.FamilyCreate: vmtAutoTable=% not %', [self, vmt, rtticustom]);
-    {$endif NOVMTPATCH}
+    {$endif NOPATCHVMT}
     Rtti.RegisterSafe.Lock;
     try
       result := rtticustom.PrivateSlot;

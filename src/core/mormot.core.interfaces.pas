@@ -5437,11 +5437,11 @@ begin
     raise EInterfaceResolver.CreateUtf8(
       '%.AutoResolve with no prior registration', [self]);
   // inlined Rtti.RegisterClass()
-  {$ifdef NOVMTPATCH}
+  {$ifdef NOPATCHVMT}
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^));
   {$else}
   r := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
-  {$endif NOVMTPATCH}
+  {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
     r := DoRegisterAutoCreateFields(self);

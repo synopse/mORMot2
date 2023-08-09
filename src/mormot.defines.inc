@@ -43,8 +43,15 @@
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted nor logged
 
+{.$define NOPATCHVMT}
+// disable the vmtAutoTable slot runtime patch, replacing it with a slowest algo
+// - is likely to be defined with the NOPATCHRTL conditional
+// - could be used e.g. when in-memory executables can't be patched (e.g. on
+// security constrained systems, or on OS without any mmap support)
+
 {.$define NOPATCHRTL}
 // if defined, FPC RTL won't be patched on x86_64 with optimized asm
+// - is likely to be defined with the NOPATCHVMT conditional
 // - you can enable it if you find out some compatibility problem
 
 {$ifdef CPUX86}
@@ -65,11 +72,6 @@
 
 {.$define DISABLEAPPNOSQL}
 // Mongo DB client won't be linked to the executable by mormot.app
-
-{.$define NOVMTPATCH}
-// disable the vmtAutoTable slot runtime patch, replacing it with a slowest algo
-// - could be used e.g. when in-memory executables can't be patched (e.g. on
-// security constrained systems, or on OS without any mmap support)
 
 {.$define NOSSPIAUTH}
 // disable Windows mormot.lib.sspi support in mormot.rest.client/server units
