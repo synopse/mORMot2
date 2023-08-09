@@ -6173,9 +6173,18 @@ end;
 // http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
 // [a slower alternative may have been to use a global TSynDictionary]
 
+{$ifdef NOPATCHVMT}
+var
+  LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache
+{$endif NOPATCHVMT}
+
 class function TOrm.OrmProps: TOrmProperties;
 begin
   {$ifdef NOPATCHVMT}
+  result := LastOrmProps;
+  if (result <> nil) and
+     (result.Table = self) then
+    exit;
   result := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
   {$else}
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
@@ -6185,14 +6194,23 @@ begin
     result := TRttiCustom(pointer(result)).PrivateSlot;
   if result = nil then
     // first time we use this TOrm class: generate information from RTTI
-    result := PropsCreate;
+    result := PropsCreate
+  {$ifdef NOPATCHVMT}
+  else
+    LastOrmProps := result;
+  {$endif NOPATCHVMT}
 end;
 
 function TOrm.Orm: TOrmProperties;
 begin
   // we know TRttiCustom is in the slot, and PrivateSlot is TOrmProperties
-  {$ifdef NOPATCHVMT}
+  {$ifdef NOPATCHVMT} // no need of a TOrmProperties field (LastOrmProps is ok)
+  result := LastOrmProps;
+  if (result <> nil) and
+     (result.Table = PClass(self)^) then
+    exit;
   result := Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^).PrivateSlot;
+  LastOrmProps := result;
   {$else}
   result := PRttiCustom(PPAnsiChar(self)^ + vmtAutoTable)^.PrivateSlot;
   {$endif NOPATCHVMT}
@@ -6427,13 +6445,13 @@ end;
 
 class function TOrm.PropsCreate: TOrmProperties;
 var
-  rtticustom: TRttiCustom;
+  rc: TRttiCustom;
 begin
   // private sub function for proper TOrm.OrmProps method inlining
-  rtticustom := Rtti.RegisterClass(self);
+  rc := Rtti.RegisterClass(self);
   Rtti.RegisterSafe.Lock;
   try
-    result := rtticustom.PrivateSlot; // Private is TOrmProperties
+    result := rc.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
       if result.InheritsFrom(TOrmProperties) then
         // registered by a background thread
@@ -6444,8 +6462,8 @@ begin
           [self, result]);
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
-    rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
-    rtticustom.Flags := rtticustom.Flags +
+    rc.PrivateSlot := result; // will be owned by this TRttiCustom
+    rc.Flags := rc.Flags +
       [rcfDisableStored,  // for AS_UNIQUE
        rcfHookWriteProperty, rcfHookReadProperty, // custom RttiWrite/RttiRead
        rcfClassMayBeID];  // avoid most IsPropClassInstance calls
@@ -7589,7 +7607,7 @@ begin
 end;
 
 function TOrm.ClassProp: TRttiJson;
-begin
+begin // this method is seldom called
   if self <> nil then
     {$ifdef NOPATCHVMT}
     result := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^))
@@ -9862,14 +9880,17 @@ end;
 
 function TOrmModel.GetTableIndex(aTable: TOrmClass): PtrInt;
 var
+  {$ifndef NOPATCHVMT}
   i: PtrInt;
   Props: TOrmProperties;
   m: ^TOrmPropertiesModelEntry;
+  {$endif NOPATCHVMT}
   c: POrmClass;
 begin
   if (self <> nil) and
      (aTable <> nil) then
   begin
+    {$ifndef NOPATCHVMT}
     Props := aTable.OrmProps;
     if (Props <> nil) and
        (Props.fModelMax < fTablesMax) then
@@ -9885,7 +9906,8 @@ begin
         else
           inc(m);
     end;
-    // manual search e.g. if fModel[] is not yet set
+    {$endif NOPATCHVMT}
+    // manual search e.g. if fModel[] is not yet set or OrmProps has no VMT
     c := pointer(Tables);
     for result := 0 to fTablesMax do
       if c^ = aTable then
