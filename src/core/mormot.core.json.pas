@@ -11573,8 +11573,9 @@ begin
   JSON_TOKENS['/']  := jtSlash;
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
-  // now we can register some local type alias to be found by name
-  Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt)]);
+  // now we can register some local type alias to be found by name or ASAP
+  Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt),
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   GetDataFromJson := _GetDataFromJson;
   {$ifdef FPC} // we need to call it once so that it is linked to the executable
   JsonForDebug(nil, dummy, dummy);

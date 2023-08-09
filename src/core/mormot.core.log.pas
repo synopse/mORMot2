@@ -4205,51 +4205,71 @@ end;
 
 { TSynLog }
 
+{$ifdef NOPATCHVMT}
+var
+  LastFamily: TSynLogFamily; // very likely to be a single class involved
+{$endif NOPATCHVMT}
+
 class function TSynLog.Family: TSynLogFamily;
 begin
   result := pointer(Self);
+  if result = nil then
+    exit;
+  // inlined Rtti.Find(ClassType)
+  {$ifdef NOPATCHVMT}
+  result := LastFamily;
+  if (result <> nil) and
+     (result.SynLogClass = self) then
+    exit;
+  result := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
+  {$else}
+  result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
+  {$endif NOPATCHVMT}
   if result <> nil then
-  begin
-    // inlined Rtti.Find(ClassType)
-    {$ifdef NOPATCHVMT}
-    result := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
-    {$else}
-    result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    {$endif NOPATCHVMT}
-    if result <> nil then
-      // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
-      result := TRttiCustom(pointer(result)).PrivateSlot;
-    if result = nil then
-      // register the TSynLogFamily to the TRttiCustom.PrivateSlot field
-      result := FamilyCreate;
-  end;
+    // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
+    result := TRttiCustom(pointer(result)).PrivateSlot;
+  if result = nil then
+    // register the TSynLogFamily to the TRttiCustom.PrivateSlot field
+    result := FamilyCreate
+  {$ifdef NOPATCHVMT}
+  else
+    LastFamily := result;
+  {$endif NOPATCHVMT}
 end;
 
 class function TSynLog.Add: TSynLog;
 var
-  P: pointer;
+  lf: TSynLogFamily;
 begin
-  // inlined TSynLog.Family with direct fGlobalLog check
-  result := pointer(Self);
-  if result <> nil then
+  // inlined TSynLog.Family with direct fGlobalLog check and no FamilyCreate
+  result := nil;
+  if self = nil then
+    exit;
+  {$ifdef NOPATCHVMT}
+  lf := LastFamily;
+  if (lf = nil) or
+     (lf.SynLogClass <> self) then
   begin
-    {$ifdef NOPATCHVMT}
-    P := pointer(Rtti.FindType(PPointer(PAnsiChar(result) + vmtTypeInfo)^));
-    {$else}
-    P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    {$endif NOPATCHVMT}
-    if P <> nil then
+    lf := pointer(Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^));
+  {$else}
+  begin
+    lf := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  {$endif NOPATCHVMT}
+    if lf <> nil then
     begin
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      P := TRttiCustom(P).PrivateSlot;
-      result := TSynLogFamily(P).fGlobalLog;
-      // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
-      if result = nil then
-        result := TSynLogFamily(P).SynLog; // ptOneFilePerThread or at startup
-    end
-    else
-      result := nil; // TSynLog.Family/FamilyCreate should have been called
+      lf := TRttiCustom(pointer(lf)).PrivateSlot;
+      if lf = nil then
+        exit; // FamilyCreate should have been called
+      {$ifdef NOPATCHVMT}
+      LastFamily := lf;
+      {$endif NOPATCHVMT}
+    end;
   end;
+  result := lf.fGlobalLog;
+  // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
+  if result = nil then
+    result := lf.SynLog; // ptOneFilePerThread or at startup
 end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
