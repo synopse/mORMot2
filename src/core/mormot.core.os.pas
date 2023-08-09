@@ -3717,6 +3717,8 @@ type
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
+// - some systems do forbid such live patching: consider setting NOPATCHVMT
+// and NOPATCHRTL conditionals for such projects
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
   LeaveUnprotected: boolean = false);
 

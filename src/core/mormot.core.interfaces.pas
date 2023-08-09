@@ -7750,6 +7750,9 @@ function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero
 var
   rc: TRttiCustom;
 begin
+  {$ifdef NOPATCHVMT}
+  raise EInterfaceFactory.Create('Unsupported SetWeakZero() on this context');
+  {$endif NOPATCHVMT}
   rc := Rtti.RegisterClass(aClass);
   result := rc.GetPrivateSlot(TSetWeakZero);
   if (result = nil) and
