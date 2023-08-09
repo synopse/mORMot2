@@ -44,7 +44,7 @@
 // if defined, exceptions shall not be intercepted nor logged
 
 {.$define NOPATCHVMT}
-// disable the vmtAutoTable slot runtime patch, replacing it with a slowest algo
+// disable the vmtAutoTable slot runtime patch, replacing it with Rtti.FindType
 // - is likely to be defined with the NOPATCHRTL conditional
 // - could be used e.g. when in-memory executables can't be patched (e.g. on
 // security constrained systems, or on OS without any mmap support)
