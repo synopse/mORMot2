@@ -783,7 +783,7 @@ var
 // create a new TStringList), or any existing TStrings instance (may be from VCL
 // - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
 // in aDrivers (somewhat slower)
-function ODBCInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;
+function OdbcInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;
 
 {$endif OSWINDOWS}
 
@@ -793,7 +793,7 @@ implementation
 {$ifdef OSWINDOWS}
 uses
   Windows,
-  Registry; // for ODBCInstalledDriversList
+  Registry; // for OdbcInstalledDriversList
 {$endif OSWINDOWS}
 
 
@@ -961,7 +961,7 @@ const
 
 {$ifdef OSWINDOWS}
 
-function ODBCInstalledDriversList(const aIncludeVersion: boolean;
+function OdbcInstalledDriversList(const aIncludeVersion: boolean;
   var aDrivers: TStrings): boolean;
 
   function GetFullFileVersion(const aFileName: TFileName): string;
@@ -982,7 +982,7 @@ begin
   try
     RootKey := HKEY_LOCAL_MACHINE;
     result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\ODBC Drivers') or
-      OpenKeyReadOnly('Software\ODBC\ODBCINST.INI');
+              OpenKeyReadOnly('Software\ODBC\ODBCINST.INI');
     if result then
     begin
       if not Assigned(aDrivers) then
@@ -1008,7 +1008,7 @@ end;
 
 {$else}
 
-// TODO: ODBCInstalledDriversList for Linux
+// TODO: OdbcInstalledDriversList for Linux
 
 {$endif OSWINDOWS}
 
