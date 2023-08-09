@@ -2569,6 +2569,7 @@ type
     LastInfo: TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name[0][1]
     // - hashing by name allows fast per-TypeInfo() and per-Name lookup
+    // - first slot is the last/previous TRttiCustom found for this hash
     PerHash: array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
@@ -8349,10 +8350,11 @@ begin
   result := P;
   if result <> nil then
   begin
+    P := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1)];
+    inc(PPointer(result)); // first slot is the last TRttiCustom found
     // efficient brute force search within L1 cache
     if PPointer(result)^ <> Info then
     begin
-      P := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1)];
       repeat
         inc(PByte(result), 2 * SizeOf(pointer));  // PRttiInfo/TRttiCustom pairs
         if PAnsiChar(result) <= PAnsiChar(P) then // P = P[high(P)]
@@ -8390,16 +8392,23 @@ begin
     result := p^;
     if result <> nil then
     begin
+      result := PPointer(result)^; // first slot is the last TRttiCustom found
+      if (result <> nil) and
+         (result.Info = Info) then
+        exit; // avoid some ReadLock/ReadUnLock and LockedFind() search
       k^.Safe.ReadLock;
-      result := LockedFind(Info, p^);
+      result := LockedFind(Info, p^); // thread-safe search in CPU L1 cache
       k^.Safe.ReadUnLock;
       if result <> nil then
+      begin
+        PPointer(p^)^ := result;
         k^.LastInfo := result;
+      end;
     end;
   {$ifndef NOVMTPATCH}
   end
   else
-    // direct lookup of the vmtAutoTable slot for classes
+    // direct O(1) lookup of the vmtAutoTable slot for classes
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
   {$endif NOVMTPATCH}
 end;
@@ -8480,7 +8489,7 @@ begin
     k^.Safe.ReadLock;
     result := p^;
     if result <> nil then
-      result := LockedFindNameInPairs(pointer(result),
+      result := LockedFindNameInPairs(@PPointerArray(result)[1],
         @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF],
         Name, NameLen);
     k^.Safe.ReadUnLock;
@@ -8550,7 +8559,7 @@ begin
     result := p^;
     if result <> nil then
     begin
-      result := FindNameInArray(pointer(result),
+      result := FindNameInArray(@PPointerArray(result)[1],
         @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF], ElemInfo);
       if result <> nil then
         break;
@@ -8664,6 +8673,8 @@ begin
   k^.Safe.WriteLock;
   try
     n := length(p^);
+    if n = 0 then
+      inc(n); // reserve the first slot as the last TRttiCustom found
     SetLength(p^, n + 2);
     p^[n] := Info;
     p^[n + 1] := Instance;
