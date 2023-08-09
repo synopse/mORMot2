@@ -6165,14 +6165,6 @@ end;
 
 // some methods defined ahead of time for proper inlining
 
-// since "var class" are not available in Delphi 6-7, and is inherited by
-// the children classes under latest Delphi versions (i.e. the "var class" is
-// shared by all inherited classes, whereas we want one var per class), we
-// reused one of the magic VMT slots (i.e. the one for automated methods,
-// AutoTable, a relic from Delphi 2 that is generally not used anymore) - see
-// http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
-// [a slower alternative may have been to use a global TSynDictionary]
-
 {$ifdef NOPATCHVMT}
 var
   LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache

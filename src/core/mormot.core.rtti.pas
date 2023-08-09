@@ -7554,6 +7554,15 @@ begin
   result := PtrInt(@Message);
 end;
 
+// since "var class" are not available in Delphi 6-7, and is inherited by
+// the children classes under latest Delphi versions (i.e. the "var class" is
+// shared by all inherited classes, whereas we want one var per class), we
+// reused one of the magic VMT slots, i.e. vmtAutoTable as filled for automated
+// methods, a relic from Delphi 2 that is not used  - see
+// http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
+// [you can define the NOPATCHVMT conditional to rely on our Rtti.FindType()
+//  internal hash table instead, for a slower but more conservative approach]
+
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
 {$ifndef NOPATCHVMT}
 var
@@ -7573,7 +7582,7 @@ begin
     raise ERttiException.CreateUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
   {$endif NOPATCHVMT}
-  // identify the most known class types
+  // identify the most known class types - see also overriden mormot.core.json
   if aClass.InheritsFrom(TCollection) then
     fValueRtlClass := vcCollection
   else if aClass.InheritsFrom(TStrings) then
@@ -7588,8 +7597,7 @@ begin
     fValueRtlClass := vcException
   else if aClass.InheritsFrom(TObjectWithID) then
     fValueRtlClass := vcObjectWithID;
-  // vcSynList/vcRawUtf8List are set in overriden TRttiJson.SetValueClass
-  // register the published properties of this class
+  // register the published properties of this class using RTTI
   fProps.AddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then
     // manual registration of the Exception.Message property
