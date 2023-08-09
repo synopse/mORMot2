@@ -1314,6 +1314,11 @@ type
 
   TSynLogDynArray = array of TSynLog;
 
+{$ifdef NOPATCHVMT}
+var
+  LastFamily: TSynLogFamily; // very likely to be a single class involved
+{$endif NOPATCHVMT}
+
 {$ifndef PUREMORMOT2}
 const
   ptIdentifiedInOnFile = ptIdentifiedInOneFile;
@@ -4204,11 +4209,6 @@ end;
 
 
 { TSynLog }
-
-{$ifdef NOPATCHVMT}
-var
-  LastFamily: TSynLogFamily; // very likely to be a single class involved
-{$endif NOPATCHVMT}
 
 class function TSynLog.Family: TSynLogFamily;
 begin

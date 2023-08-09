@@ -4673,6 +4673,11 @@ type
   TRestBatchLockedDynArray = array of TRestBatchLocked;
 
 
+{$ifdef NOPATCHVMT}
+var
+  LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache
+{$endif NOPATCHVMT}
+
 /// compute the SQL field names, used to create a SQLite3 virtual table
 function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
 
@@ -6164,11 +6169,6 @@ end;
 { ------------ TOrm Definition }
 
 // some methods defined ahead of time for proper inlining
-
-{$ifdef NOPATCHVMT}
-var
-  LastOrmProps: TOrmProperties; // naive but efficient thread-safe cache
-{$endif NOPATCHVMT}
 
 class function TOrm.OrmProps: TOrmProperties;
 begin
