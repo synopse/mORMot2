@@ -8344,36 +8344,27 @@ begin
   inherited Destroy;
 end;
 
-function LockedFind(Info: PRttiInfo; P: pointer): TRttiCustom;
+function LockedFind(Pairs, PEnd: PPointerArray; Info: PRttiInfo): TRttiCustom;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := P;
-  if result <> nil then
-  begin
-    P := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + (_DAOFF - 1)];
-    inc(PPointer(result)); // first slot is the last TRttiCustom found
-    // efficient brute force search within L1 cache
-    if PPointer(result)^ <> Info then
+  repeat
+    if Pairs[0] <> Info then
     begin
-      repeat
-        inc(PByte(result), 2 * SizeOf(pointer));  // PRttiInfo/TRttiCustom pairs
-        if PAnsiChar(result) <= PAnsiChar(P) then // P = P[high(P)]
-          if PPointer(result)^ = Info then
-            break
-          else
-            continue;
-        result := nil; // not found
-        exit;
-      until false;
+      Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
+      if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
+        break;
+      continue;
     end;
-    result := PPointerArray(result)[1]; // found
-  end;
+    result := Pairs[1]; // found
+    exit;
+  until false;
+  result := nil; // not found
 end;
 
 function TRttiCustomList.FindType(Info: PRttiInfo): TRttiCustom;
 var
   k: PRttiCustomListPairs;
-  p: PPointer; // ^TPointerDynArray
+  p: PPointerArray; // ^TPointerDynArray
 begin
   {$ifndef NOPATCHVMT}
   if Info^.Kind <> rkClass then
@@ -8387,21 +8378,21 @@ begin
        (result.Info = Info) then
       exit;
     // note: we tried to include RawName[2] and $df, but with no gain
-    p := @k^.PerHash[(PtrUInt(Info.RawName[0]) xor
-      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]; // hash before lock
-    result := p^;
-    if result <> nil then
+    p := pointer(k^.PerHash[(PtrUInt(Info.RawName[0]) xor
+      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]); // hash before lock
+    result := pointer(p);
+    if p <> nil then
     begin
-      result := PPointer(result)^; // first slot is the last TRttiCustom found
+      result := p^[0]; // first slot is the last TRttiCustom found
       if (result <> nil) and
          (result.Info = Info) then
         exit; // avoid some ReadLock/ReadUnLock and LockedFind() search
       k^.Safe.ReadLock;
-      result := LockedFind(Info, p^); // thread-safe search in CPU L1 cache
-      k^.Safe.ReadUnLock;
+      result := LockedFind(@p[1], @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
+      k^.Safe.ReadUnLock; // thread-safe search in CPU L1 cache
       if result <> nil then
       begin
-        PPointer(p^)^ := result;
+        p^[0] := result;
         k^.LastInfo := result;
       end;
     end;
