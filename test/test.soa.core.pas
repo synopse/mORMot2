@@ -2008,7 +2008,10 @@ type
       read GetParent write SetParent;
   end;
 
-  TUseWeakRef = (direct, weakref, zeroing);
+  TUseWeakRef = (
+    direct,
+    weakref
+    {$ifndef NOPATCHVMT} , zeroing {$endif} );
 
 var
   ParentDestroyed, ChildDestroyed: boolean;
@@ -2066,6 +2069,7 @@ begin
   Check(ParentDestroyed = true, 'Manual release');
   Check(ChildDestroyed = true);
   WeakTest(weakref);
+  {$ifndef NOPATCHVMT}
   Init(zeroing);
   Check(ParentDestroyed = false);
   Check(ChildDestroyed = false);
@@ -2098,6 +2102,7 @@ begin
   Parent := nil;
   Check(ParentDestroyed = true);
   Check(ChildDestroyed = false);
+  {$endif NOPATCHVMT}
 end;
 
 
@@ -2128,8 +2133,10 @@ begin
       FChild := Value;
     weakref:
       SetWeak(@FChild, Value);
+    {$ifndef NOPATCHVMT}
     zeroing:
       SetWeakZero(self, @FChild, Value);
+    {$endif NOPATCHVMT}
   end;
 end;
 
@@ -2160,8 +2167,10 @@ begin
       FParent := Value;
     weakref:
       SetWeak(@FParent, Value);
+    {$ifndef NOPATCHVMT}
     zeroing:
       SetWeakZero(self, @FParent, Value);
+    {$endif NOPATCHVMT}
   end;
 end;
 
