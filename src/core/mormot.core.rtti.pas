@@ -7561,7 +7561,7 @@ begin
   fValueClass := aClass;
   // we need to register this class ASAP into RTTI list to avoid infinite calls
   {$ifdef NOPATCHVMT}
-  Rtti.fHashTable^[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
+  Rtti.fHashTable[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
   {$else}
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
   vmt := Pointer(PAnsiChar(aClass) + vmtAutoTable);
