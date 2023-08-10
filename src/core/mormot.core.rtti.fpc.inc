@@ -621,6 +621,40 @@ begin
   CurrentMethod := nil;
 end;
 
+const
+  RK_TOSLOT_MAX = 14;
+  RK_TOSLOT: array[TRttiKind] of byte = (
+    0,   // rkUnknown
+    1,   // rkInteger
+    2,   // rkChar
+    3,   // rkEnumeration
+    4,   // rkFloat
+    5,   // rkSet
+    0,   // rkMethod
+    0,   // rkSString
+    6,   // rkLStringOld
+    6,   // rkLString
+    7,   // rkWString
+    8,   // rkVariant
+    0,   // rkArray
+    9,   // rkRecord
+    8,   // rkInterface
+    10,  // rkClass
+    11,  // rkObject
+    7,   // rkWChar
+    3,   // rkBool
+    12,  // rkInt64
+    13,  // rkQWord
+    14,  // rkDynArray
+    0,   // rkInterfaceRaw
+    0,   // rkProcVar
+    7,   // rkUString
+    7,   // rkUChar
+    0,   // rkHelper
+    0,   // rkFile
+    0,   // rkClassRef
+    0);  // rkPointer
+
 
 { ********* Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly }
 

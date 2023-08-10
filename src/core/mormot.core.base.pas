@@ -3324,6 +3324,7 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 
 /// shuffle a 32-bit value using the last stage of xxHash32 algorithm
 // - is a cascade of binary shifts and multiplications by prime numbers
+// - see also (c * KNUTH_HASH32_MUL) shr (32 - bits) as weaker alternative
 function xxHash32Mixup(crc: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 

@@ -744,3 +744,32 @@ begin
 end;
 
 
+const
+  RK_TOSLOT_MAX = 12;
+  RK_TOSLOT: array[TRttiKind] of byte = (
+    0,  // rkUnknown
+    1,  // rkInteger
+    2,  // rkChar
+    3,  // rkEnumeration
+    4,  // rkFloat
+    0,  // rkSString
+    5,  // rkSet
+    6,  // rkClass
+    0,  // rkMethod
+    7,  // rkWChar
+    8,  // rkLString
+    7,  // rkWString
+    9,  // rkVariant
+    0,  // rkArray
+    10, // rkRecord
+    9,  // rkInterface
+    11, // rkInt64
+    12  // rkDynArray
+    {$ifdef UNICODE} ,
+    7,  // rkUString
+    0,  // rkClassRef
+    0,  // rkPointer
+    0,  // rkProcedure
+    0   // rkMRecord
+    {$endif UNICODE});
+

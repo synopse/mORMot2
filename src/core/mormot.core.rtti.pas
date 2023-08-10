@@ -136,39 +136,6 @@ const
   rkRecordTypes = [rkObject,
                    rkRecord];
 
-  RK_TOSLOT: array[TRttiKind] of byte = (
-    0,   // rkUnknown
-    1,   // rkInteger
-    2,   // rkChar
-    3,   // rkEnumeration
-    4,   // rkFloat
-    5,   // rkSet
-    0,   // rkMethod
-    0,   // rkSString
-    6,   // rkLStringOld
-    6,   // rkLString
-    7,   // rkWString
-    8,   // rkVariant
-    0,   // rkArray
-    9,   // rkRecord
-    8,   // rkInterface
-    10,  // rkClass
-    11,  // rkObject
-    7,   // rkWChar
-    3,   // rkBool
-    12,  // rkInt64
-    13,  // rkQWord
-    14,  // rkDynArray
-    0,   // rkInterfaceRaw
-    0,   // rkProcVar
-    7,   // rkUString
-    7,   // rkUChar
-    0,   // rkHelper
-    0,   // rkFile
-    0,   // rkClassRef
-    0);  // rkPointer
-  RK_TOSLOT_MAX = 14;
-
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
   // - dkUString and following appear only since Delphi 2009
@@ -309,33 +276,6 @@ const
                    rkMRecord
                    {$endif UNICODE}];
 
-  RK_TOSLOT: array[TRttiKind] of byte = (
-    0,  // rkUnknown
-    1,  // rkInteger
-    2,  // rkChar
-    3,  // rkEnumeration
-    4,  // rkFloat
-    0,  // rkSString
-    5,  // rkSet
-    6,  // rkClass
-    0,  // rkMethod
-    7,  // rkWChar
-    8,  // rkLString
-    7,  // rkWString
-    9,  // rkVariant
-    0,  // rkArray
-    10, // rkRecord
-    9,  // rkInterface
-    11, // rkInt64
-    12  // rkDynArray
-    {$ifdef UNICODE} ,
-    7,  // rkUString
-    0,  // rkClassRef
-    0,  // rkPointer
-    0,  // rkProcedure
-    0   // rkMRecord
-  {$endif UNICODE});
-  RK_TOSLOT_MAX = 12;
 {$endif FPC}
 
   /// maps string/text types in TRttiKind RTTI enumerates, excluding shortstring
@@ -2072,10 +2012,10 @@ function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
-  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name
+  /// TRttiCustomList stores its TypeInfo() by Kind + PRttiInfo/Name
   // - optimized "hash table of the poor" (tm) for FindType() and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
-  RTTICUSTOMTYPEINFOHASH = {$ifdef NOPATCHVMT} 63 {$else} 31 {$endif};
+  RTTIHASH_MAX = {$ifdef NOPATCHVMT} 63 {$else} 31 {$endif};
 
 type
   TRttiCustom = class;
@@ -2618,8 +2558,8 @@ type
   TRttiCustomClass = class of TRttiCustom;
 
   /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
-  // - as stored in TRttiCustomListHashTable[RK_TOSLOT[TRttiKind]]
-  // - hashed by TypeInfo() and by case-insensitive name
+  // - as stored in TRttiCustomList.fHashTable[RK_TOSLOT[TRttiKind]]
+  // - contains hash tables by TypeInfo() and by case-insensitive name
   TRttiCustomListPairs = record
     /// efficient HashInfo/HashName[] pairs thread-safety during Find/AddToPairs
     Safe: TRWLightLock;
@@ -2628,26 +2568,21 @@ type
     /// thread-safe speedup search by PRttiInfo e.g. from a loop
     LastInfo: TRttiCustom;
     /// thread-safe speedup search by PRttiInfo e.g. from a loop
-    LastHash: array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustom;
+    LastHash: array[0..RTTIHASH_MAX] of TRttiCustom;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by PRttiInfo
-    HashInfo: array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
+    HashInfo: array[0..RTTIHASH_MAX] of TPointerDynArray;
     /// CPU L1 cache efficient PRttiInfo/TRttiCustom pairs hashed by Name
-    HashName: array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
+    HashName: array[0..RTTIHASH_MAX] of TPointerDynArray;
   end;
   PRttiCustomListPairs = ^TRttiCustomListPairs;
-
-  /// 6-12KB internal structure for TRttiCustomList "hash table of the poor" (tm)
-  // - a per-Kind and per-Info/Name hash table of PRttiInfo/TRttiCustom pairs
-  // - avoid link to mormot.core.data hash table, with a fast access
-  TRttiCustomListHashTable = array[0..RK_TOSLOT_MAX] of TRttiCustomListPairs;
 
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = class
   private
     // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+PRttiInfo/Name
-    PerKind: ^TRttiCustomListHashTable;
+    fHashTable: array of TRttiCustomListPairs;
     // used to release memory used by registered customizations
-    Instances: array of TRttiCustom;
+    fInstances: array of TRttiCustom;
     fGlobalClass: TRttiCustomClass;
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
@@ -7626,7 +7561,7 @@ begin
   fValueClass := aClass;
   // we need to register this class ASAP into RTTI list to avoid infinite calls
   {$ifdef NOPATCHVMT}
-  Rtti.PerKind^[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
+  Rtti.fHashTable^[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
   {$else}
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
   vmt := Pointer(PAnsiChar(aClass) + vmtAutoTable);
@@ -8390,7 +8325,7 @@ end;
 
 constructor TRttiCustomList.Create;
 begin
-  PerKind := AllocMem(SizeOf(PerKind^)); // 6-12KB zeroed hash table allocation
+  SetLength(fHashTable, RK_TOSLOT_MAX + 1); // 6-12KB zeroed allocation
   RegisterSafe.Init;
   fGlobalClass := TRttiCustom;
 end;
@@ -8400,8 +8335,7 @@ var
   i: PtrInt;
 begin
   for i := Count - 1 downto 0 do
-    Instances[i].Free;
-  Dispose(PerKind);
+    fInstances[i].Free;
   RegisterSafe.Done;
   inherited Destroy;
 end;
@@ -8423,19 +8357,6 @@ begin
   result := nil; // not found
 end;
 
-function RttiHashName(Name: PByteArray; Len: PtrUInt): byte;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := Len;
-  repeat
-    dec(Len);
-    if Len = 0 then
-      break;
-    inc(result, Name[Len] and $df); // simple case-insensitive hash
-  until false;
-  result := result and RTTICUSTOMTYPEINFOHASH;
-end;
-
 function TRttiCustomList.FindType(Info: PRttiInfo): TRttiCustom;
 var
   k: PRttiCustomListPairs;
@@ -8447,14 +8368,17 @@ begin
   begin
   {$endif NOPATCHVMT}
     // our dedicated "hash table of the poor" (tm) lookup
-    k := @PerKind^[RK_TOSLOT[Info^.Kind]];
+    k := @fHashTable[RK_TOSLOT[Info^.Kind]];
     // try latest found RTTI for this kind of type definition (naive but works)
     result := k^.LastInfo;
     if (result <> nil) and
        (result.Info = Info) then
       exit;
     // O(1) hash of the PRttiInfo pointer using inlined xxHash32 shuffle stage
-    h := xxHash32Mixup(PtrUInt(Info)) and RTTICUSTOMTYPEINFOHASH;
+    h := xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX;
+    // Knuth's magic number had more collision (even more with KNUTH_HASHPTR_MUL)
+    // h := cardinal(Info * KNUTH_HASH32_MUL) shr (32 - RTTIHASH_BITS);
+    // h := crc32cBy4(0, Info) and RTTICUSTOMTYPEINFOMAX; // slower, not better
     // try latest found RTTI for this hash slot
     result := k^.LastHash[h];
     if (result <> nil) and
@@ -8532,6 +8456,19 @@ no:   Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
   result := nil; // not found
 end;
 
+function RttiHashName(Name: PByteArray; Len: PtrUInt): byte;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := Len;
+  repeat
+    dec(Len);
+    if Len = 0 then
+      break;
+    inc(result, Name[Len] and $df); // simple case-insensitive hash
+  until false;
+  result := result and RTTIHASH_MAX;
+end;
+
 function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
 var
@@ -8542,7 +8479,7 @@ begin
      (Name <> nil) and
      (NameLen > 0) then
   begin
-    k := @PerKind^[RK_TOSLOT[Kind]];
+    k := @fHashTable[RK_TOSLOT[Kind]];
     // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
     result := k^.LastName;
     if (result <> nil) and
@@ -8616,7 +8553,7 @@ begin
     result := nil;
     exit;
   end;
-  k := @PerKind^[RK_TOSLOT[rkDynArray]];
+  k := @fHashTable[RK_TOSLOT[rkDynArray]];
   k^.Safe.ReadLock;
   p := @k^.HashInfo;
   n := length(k^.HashInfo);
@@ -8724,26 +8661,28 @@ begin
   end;
 end;
 
+
 procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
+
+  procedure AddPair(var List: TPointerDynArray);
+  var
+    n: PtrInt;
+  begin
+    n := length(List);
+    SetLength(List, n + 2);
+    List[n] := Info;
+    List[n + 1] := Instance;
+  end;
+
 var
-  n: PtrInt;
   k: PRttiCustomListPairs;
-  pn, pi: ^TPointerDynArray;
 begin
-  k := @PerKind^[RK_TOSLOT[Info^.Kind]];
-  pn := @k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))];
-  pi := @k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTICUSTOMTYPEINFOHASH];
+  k := @fHashTable[RK_TOSLOT[Info^.Kind]];
   k^.Safe.WriteLock; // needed when resizing p^
   try
-    n := length(pn^);
-    SetLength(pn^, n + 2);
-    pn^[n] := Info;
-    pn^[n + 1] := Instance;
-    n := length(pi^);
-    SetLength(pi^, n + 2);
-    pi^[n] := Info;
-    pi^[n + 1] := Instance;
-    ObjArrayAddCount(Instances, Instance, Count); // to release memory
+    AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX]);
+    AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
+    ObjArrayAddCount(fInstances, Instance, Count); // to release memory
     inc(Counts[Instance.Kind]);
   finally
     k^.Safe.WriteUnLock;
@@ -8762,7 +8701,7 @@ begin
   if Count <> 0 then
   begin
     for i := 0 to Count - 1 do
-      regtypes := {%H-}regtypes + Instances[i].Name + ' ';
+      regtypes := {%H-}regtypes + fInstances[i].Name + ' ';
     newunit := _ClassUnit(RttiClass);
     raise ERttiException.CreateUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
       'some types have been registered as % before % has been loaded and ' +
