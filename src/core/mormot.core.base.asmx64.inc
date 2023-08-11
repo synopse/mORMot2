@@ -68,8 +68,9 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     rax, 96 - 16
         {$else}
         jmp     qword ptr [r10 + rdx * 8]
+@neg:   ret
 @up16:  // >16 or <0
-        jng     @z  // <0
+        jng     @neg  // <0
         mov     r8, rdx
         movups  xmm0, oword ptr [src + rax]    // last 16   = xmm0
         movups  xmm1, oword ptr [src]          // first 16  = xmm1
