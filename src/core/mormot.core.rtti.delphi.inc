@@ -745,6 +745,7 @@ end;
 
 
 const
+  // gather rk* to reduce number of TRttiCustomListPairs hash slots in memory
   RK_TOSLOT_MAX = 12;
   RK_TOSLOT: array[TRttiKind] of byte = (
     0,  // rkUnknown

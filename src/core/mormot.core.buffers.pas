@@ -1318,31 +1318,31 @@ function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the length resulting of Base32 encoding of a binary buffer
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 function BinToBase32Length(BinLen: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// conversion from a binary buffer into Base32 encoded text  buffer
-// - default b32enc is RFC4648 upper alphanumeric without misleading 0O I1 8B
+// - default b32enc is RFC4648 upper alphanumeric without misleading 0O 1I 8B
 procedure BinToBase32(Bin: PByteArray; Dest: PAnsiChar; BinLen: PtrInt;
   b32enc: PAnsiChar); overload;
 
 /// conversion from a binary buffer into Base32 encoded text as RawUtf8
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8; overload;
 
 /// conversion from a binary buffer into Base32 encoded text as RawUtf8
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 function BinToBase32(const Bin: RawByteString): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// conversion from Base32 encoded text into a binary string
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 // - returns '' if input was not valid Base32 encoded
 function Base32ToBin(B32: PAnsiChar; B32Len: integer): RawByteString; overload;
 
 /// conversion from Base32 encoded text into a binary string
-// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O I1 8B
+// - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 // - returns '' if input was not valid Base32 encoded
 function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -5883,10 +5883,10 @@ begin
   case process of
     doCompress:
       begin
-        tmp.Init(srcLen - srcLen shr 3); // RLE should reduce at least by 1/8
+        tmp.Init(srcLen - srcLen shr 3); // try to reduce at least by 1/8
         rle := RleCompress(src, tmp.buf, srcLen, tmp.Len);
         if rle < 0 then
-          // RLE was not worth it -> apply only SynLZ
+          // RLE was not worth it (no 1/8 reduction) -> apply only SynLZ
           PByte(dst)^ := 0
         else
         begin
@@ -5958,7 +5958,7 @@ begin
   case process of
     doCompress:
       begin
-        // RLE should reduce at least by 1/8
+        // try to reduce at least by 1/8
         result := RleCompress(src, dst, srcLen, srcLen - srcLen shr 3);
         if result < 0 then
           // RLE was not worth it -> caller would fallback to plain store

@@ -8392,7 +8392,7 @@ begin
     k^.Safe.ReadUnLock;
     if result <> nil then
     begin
-      k^.LastInfo := result; // aligned pointers are atomically accessed
+      k^.LastInfo := result;   // aligned pointers are atomically accessed
       k^.LastHash[h] := result;
     end;
   {$ifndef NOPATCHVMT}
