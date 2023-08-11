@@ -5034,24 +5034,24 @@ constructor TOrmPropInfoRttiTID.Create(aPropInfo: PRttiProp; aPropIndex: integer
   aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
 var
   TypeName: PShortString;
+  L: PtrInt;
   Found: TRttiCustom;
 begin
   inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
   TypeName := fPropType^.Name;
+  L := ord(TypeName^[0]);
   if IdemPropName(TypeName^, 'TID') or
      (ord(TypeName^[1]) and $df <> ord('T')) or // expect T...ID pattern
-     (PWord(@TypeName^[ord(TypeName^[0]) - 1])^ and $dfdf <> ord('I') + ord('D') shl 8) or
+     (PWord(@TypeName^[L - 1])^ and $dfdf <> ord('I') + ord('D') shl 8) or
      (Rtti.Counts[rkClass] = 0) then
     exit;
-  if (ord(TypeName^[0]) > 13) and
-     IdemPropName('ToBeDeletedID', @TypeName^[ord(TypeName^[0]) - 12], 13) then
-  begin
-    // 'TOrmClientToBeDeletedID' -> TOrmClient + CascadeDelete=true
+  if (L > 13) and IdemPropName('ToBeDeletedID', @TypeName^[L - 12], 13) then
+  begin   // 'TOrmClientToBeDeletedID' -> TOrmClient + CascadeDelete=true
     fCascadeDelete := true;
-    Found := Rtti.FindName(@TypeName^[1], ord(TypeName^[0]) - 13, rkClass);
+    Found := Rtti.FindName(@TypeName^[1], L - 13, rkClass);
   end
   else    // 'TOrmClientID' -> TOrmClient
-    Found := Rtti.FindName(@TypeName^[1], ord(TypeName^[0]) - 2, rkClass);
+    Found := Rtti.FindName(@TypeName^[1], L - 2, rkClass);
   if (Found <> nil) and Found.ValueClass.InheritsFrom(TOrm) then
     fRecordClass := pointer(Found.ValueClass);
 end;
