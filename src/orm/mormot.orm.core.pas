@@ -5048,10 +5048,10 @@ begin
   begin
     // 'TOrmClientToBeDeletedID' -> TOrmClient + CascadeDelete=true
     fCascadeDelete := true;
-    Found := Rtti.Find(@TypeName^[1], ord(TypeName^[0]) - 13, rkClass);
+    Found := Rtti.FindName(@TypeName^[1], ord(TypeName^[0]) - 13, rkClass);
   end
   else    // 'TOrmClientID' -> TOrmClient
-    Found := Rtti.Find(@TypeName^[1], ord(TypeName^[0]) - 2, rkClass);
+    Found := Rtti.FindName(@TypeName^[1], ord(TypeName^[0]) - 2, rkClass);
   if (Found <> nil) and Found.ValueClass.InheritsFrom(TOrm) then
     fRecordClass := pointer(Found.ValueClass);
 end;

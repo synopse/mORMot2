@@ -3880,7 +3880,7 @@ begin
   if P = nil then
     exit; // invalid (maybe too complex) Json string value
   Json := P; // Json^ is either } or ,
-  result := Rtti.Find(classname, classnamelen, rkClass);
+  result := Rtti.FindName(classname, classnamelen, rkClass);
   if (result = nil) and
      AndGlobalFindClass then
     result := GlobalFindClass(classname, classnamelen);

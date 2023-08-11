@@ -7719,7 +7719,7 @@ var
   i: PtrInt;
   fields: PPointerArray; // holds a TPointerDynArray but avoid try..finally
 begin
-  inst := Rtti.Find(PClass(self)^).GetPrivateSlot(TSetWeakZero);
+  inst := Rtti.FindClass(PClass(self)^).GetPrivateSlot(TSetWeakZero);
   fields := nil;
   if inst.FindAndExtract(self, fields) and
      (fields <> nil) then

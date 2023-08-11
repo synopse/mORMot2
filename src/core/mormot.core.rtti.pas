@@ -2613,20 +2613,20 @@ type
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup,
     // or use our "hash table of the poor" (tm) if NOPATCHVMT conditional is set
     {$ifdef NOPATCHVMT}
-    function Find(ObjectClass: TClass): TRttiCustom; overload;
+    function FindClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     {$else}
-    class function Find(ObjectClass: TClass): TRttiCustom; overload;
+    class function FindClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}static; inline;{$endif}
     {$endif NOPATCHVMT}
     /// efficient search of TRttiCustom from a given type name
-    function Find(Name: PUtf8Char; NameLen: PtrInt;
+    function FindName(Name: PUtf8Char; NameLen: PtrInt;
       Kind: TRttiKind): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
-    function Find(Name: PUtf8Char; NameLen: PtrInt;
+    function FindName(Name: PUtf8Char; NameLen: PtrInt;
       Kinds: TRttiKinds = []): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
-    function Find(const Name: ShortString; Kinds: TRttiKinds = []): TRttiCustom;
+    function FindName(const Name: ShortString; Kinds: TRttiKinds = []): TRttiCustom;
        overload; {$ifdef HASINLINE}inline;{$endif}
     /// manual search of any matching TRttiCustom.ArrayRtti type
     // - currently not called: IList<T> and IKeyValue<T> just use TypeInfo(T)
@@ -8404,12 +8404,12 @@ begin
 end;
 
 {$ifdef NOPATCHVMT}
-function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
+function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
 end;
 {$else}
-class function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
+class function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
@@ -8469,7 +8469,7 @@ begin
   result := result and RTTIHASH_MAX;
 end;
 
-function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
+function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
 var
   k: PRttiCustomListPairs;
@@ -8502,7 +8502,7 @@ begin
     result := nil;
 end;
 
-function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
+function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
   Kinds: TRttiKinds): TRttiCustom;
 var
   k: TRttiKind;
@@ -8516,7 +8516,7 @@ begin
     for k := succ(low(k)) to high(k) do
       if k in Kinds then
       begin
-        result := Find(Name, NameLen, k);
+        result := FindName(Name, NameLen, k);
         if result <> nil then
           exit;
       end;
@@ -8524,9 +8524,9 @@ begin
   result := nil;
 end;
 
-function TRttiCustomList.Find(const Name: ShortString; Kinds: TRttiKinds): TRttiCustom;
+function TRttiCustomList.FindName(const Name: ShortString; Kinds: TRttiKinds): TRttiCustom;
 begin
-  result := Find(@Name[1], ord(Name[0]), Kinds);
+  result := FindName(@Name[1], ord(Name[0]), Kinds);
 end;
 
 function FindNameInArray(Pairs, PEnd: PPointerArray; ElemInfo: PRttiInfo): TRttiCustom;
@@ -8609,7 +8609,7 @@ begin
     // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
     RegisterSafe.Lock;
     try
-      result := Find(ObjectClass); // search again (for thread safety)
+      result := FindClass(ObjectClass); // search again (for thread safety)
       if result <> nil then
         exit; // already registered in the background
       result := GlobalClass.Create;
@@ -8749,7 +8749,7 @@ begin
     inc(Name, i);
     dec(NameLen, i);
   until false;
-  result := Find(Name, NameLen);
+  result := FindName(Name, NameLen);
   if result = nil then
   begin
     // array/record keywords, integer/cardinal FPC types not available by Find()
@@ -8937,7 +8937,7 @@ var
 begin
   RegisterSafe.Lock;
   try
-    result := Find(pointer(TypeName), length(TypeName));
+    result := FindName(pointer(TypeName), length(TypeName));
     new := result = nil;
     if new then
     begin
