@@ -5955,7 +5955,7 @@ var
   hash: cardinal;
   len, i: Integer;
 begin
-  Check(CRC32string('TestCRC32') = $2CB8CDF3);
+  Check(Crc32String('TestCRC32') = $2CB8CDF3);
   for i := 1 to 10 do
   begin
     tmp := RandomTextParagraph(1000 * i * i * i);

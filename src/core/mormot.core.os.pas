@@ -3968,7 +3968,7 @@ type
   /// the standard rentrant lock supplied by the Operating System
   // - maps TRTLCriticalSection, i.e. calls Win32 API or pthreads library
   // - don't forget to call Init and Done to properly initialize the structure
-  // - if you do require a rentrant/recursive lock, consider TOSLightLock
+  // - if you do require a non-rentrant/recursive lock, consider TOSLightLock
   // - same signature as TLightLock/TOSLightLock, usable as compile time alternatives
   {$ifdef USERECORDWITHMETHODS}
   TOSLock = record

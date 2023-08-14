@@ -1045,7 +1045,7 @@ begin
     [fInterfaceUri, LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
      fInterface.Contract], fContract);
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
-    CardinalToHex(CRC32string(fContract)) + '"'; // 2 hashes to avoid collision
+    CardinalToHex(Crc32String(fContract)) + '"'; // 2 hashes to avoid collision
   if aContractExpected <> '' then // override default contract
     if aContractExpected[1] <> '"' then
       // stored as JSON string
