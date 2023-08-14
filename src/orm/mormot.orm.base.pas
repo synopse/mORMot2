@@ -2903,7 +2903,6 @@ type
   // - is fully implemented in mormot.orm.core by the final TOrmProperties class
   TOrmPropertiesAbstract = class
   protected
-    fSafe: TOSLock;
     fTableRtti: TRttiJson;
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
@@ -2916,9 +2915,13 @@ type
     fBlobCustomFields: TOrmPropInfoCustomDynArray;
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fManyFields: TOrmPropInfoRttiManyObjArray;
+    fSafe: TOSLightLock;
     fRecordManySourceProp: TOrmPropInfoRttiInstance;
     fRecordManyDestProp: TOrmPropInfoRttiInstance;
     fSqlTableNameUpperWithDot: RawUtf8;
+    fLastFieldsSafe: TLightLock;
+    fLastFieldsCsv: RawUtf8;
+    fLastFieldsCsvBits: TFieldBits;
     fSqlFillPrepareMany: RawUtf8;
     fSqlTableSimpleFieldsNoRowID: RawUtf8;
     fSqlTableUpdateBlobFields: RawUtf8;
@@ -11256,6 +11259,17 @@ begin
   result := false;
   if self = nil then
     exit;
+  if fLastFieldsSafe.TryLock then
+  begin
+    if IdemPropNameU(fLastFieldsCsv, aFieldsCsv) then
+    begin
+      result := true;
+      Bits := fLastFieldsCsvBits;
+    end;
+    fLastFieldsSafe.UnLock;
+    if result then
+      exit;
+  end;
   P := pointer(aFieldsCsv);
   while P <> nil do
   begin
@@ -11264,6 +11278,12 @@ begin
     if ndx < 0 then
       exit; // invalid field name
     FieldBitSet(Bits, ndx);
+  end;
+  if fLastFieldsSafe.TryLock then
+  begin
+    fLastFieldsCsv := aFieldsCsv;
+    fLastFieldsCsvBits := Bits;
+    fLastFieldsSafe.UnLock;
   end;
   result := true;
 end;
