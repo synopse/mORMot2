@@ -4255,17 +4255,17 @@ begin
   begin
     lf := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   {$endif NOPATCHVMT}
-    if lf <> nil then
-    begin
-      // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      lf := TRttiCustom(pointer(lf)).PrivateSlot;
-      if lf = nil then
-        exit; // FamilyCreate should have been called
-      {$ifdef NOPATCHVMT}
-      LastFamily := lf;
-      {$endif NOPATCHVMT}
-    end;
+    if lf = nil then
+      exit;
+    // we know TRttiCustom is in the slot, and Private is TSynLogFamily
+    lf := TRttiCustom(pointer(lf)).PrivateSlot;
+    if lf = nil then
+      exit; // FamilyCreate should have been called
+    {$ifdef NOPATCHVMT}
+    LastFamily := lf;
+    {$endif NOPATCHVMT}
   end;
+  // if we reached here, lf points to the expected TSynLogFamily
   result := lf.fGlobalLog;
   // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
   if result = nil then
