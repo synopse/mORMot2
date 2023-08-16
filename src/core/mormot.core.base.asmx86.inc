@@ -2530,7 +2530,11 @@ asm
 @finish:add     eax, edi            // exponent value - number of decimal places
         mov     [edx], ebx          // result code = 0
         jz      @pow                // no call to _pow10 needed
-        mov     edi, ecx            // save decimal sign flag
+        cmp     eax, 308
+        jg      @oor                // limit to < 1.7 x 10^308 double range
+        cmp     eax, -324
+        jl      @oor                // limit to > 5.0 x 10^-324 range
+@oors:  mov     edi, ecx            // save decimal sign flag
         call    System.@Pow10       // raise to power of 10
         mov     ecx, edi            // restore decimal sign flag
 @pow:   test    ch, ch              // decimal sign flag set?
@@ -2543,6 +2547,10 @@ asm
         ret                         // finished
 @negate:fchs                        // negate result in fpu
         jmp     @ok
+@oor:   inc     esi                 // force result code = 1
+        mov     [edx], esi          // set result code
+        xor     eax, eax            // set exponent = 0 (as pure pascal version)
+        jmp     @oors
 @nil:   inc     esi                 // force result code = 1
         fldz                        // result value = 0
 @error: pop     ebx                 // dump local storage
