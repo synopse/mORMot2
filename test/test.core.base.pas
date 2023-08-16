@@ -4081,6 +4081,10 @@ begin
   Check(u = '40640.5028819444', u);
   e := 40640.5028819444;
   CheckSame(d, e, 1e-11);
+  s := '40640e400';
+  d := GetExtended(pointer(s), err);
+  CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
+  Check(err > 0, 'e400');
   Check(IsAnsiCompatible('t'));
   Check(IsAnsiCompatible('te'));
   Check(IsAnsiCompatible('tes'));

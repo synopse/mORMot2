@@ -5802,6 +5802,12 @@ begin
       dec(frac, exp)
     else
       inc(frac, exp);
+    if (frac <= -324) or
+       (frac >= 308) then
+    begin
+      frac := 0;
+      goto e; // limit to 5.0 x 10^-324 .. 1.7 x 10^308 double range
+    end;
   end;
   if (fValid in flags) and
      (c = #0) then
