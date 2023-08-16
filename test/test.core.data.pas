@@ -370,6 +370,8 @@ var
 begin
   TextToVariant('1E629839-D230-4EEE-BA04-BE1258EB3AF6', {allowdouble=}true, v);
   Check(VarIsStr(v));
+  TextToVariant('261E306F', true, v);
+  Check(VarIsStr(v));
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil, 0, oftBoolean, vd, false, t);
   Check(not boolean(v));

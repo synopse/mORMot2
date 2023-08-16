@@ -8670,14 +8670,15 @@ begin
     Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
   end
   else if AllowVarDouble and
-          (frac > -324) and
-          (frac < 308) then // 5.0 x 10^-324 .. 1.7 x 10^308
+          (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
     TRttiVarData(Value).VType := varDouble;
     if (frac >= -31) and
        (frac <= 31) then
       d := POW10[frac]
+    else if (18 - remdigit) + integer(frac) >= 308 then // check final exp
+      d := POW10[0]
     else
       d := HugePower10(frac, @POW10);
     Value.VDouble := d * v64;
@@ -8706,9 +8707,12 @@ end;
 procedure TextToVariant(const aValue: RawUtf8; AllowVarDouble: boolean;
   out aDest: variant);
 begin
-  if not GetVariantFromNotStringJson(
-           pointer(aValue), TVarData(aDest), AllowVarDouble) then
-    RawUtf8ToVariant(aValue, aDest);
+  try
+    if GetVariantFromNotStringJson(pointer(aValue), TVarData(aDest), AllowVarDouble) then
+      exit;
+  except // some obscure floating point exception may occur
+  end;
+  RawUtf8ToVariant(aValue, aDest);
 end;
 
 function GetNextItemToVariant(var P: PUtf8Char; out Value: Variant;
