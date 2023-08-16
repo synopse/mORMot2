@@ -8664,17 +8664,7 @@ begin
   begin
     // currency as ###.0123
     TRttiVarData(Value).VType := varCurrency;
-    inc(frac, 4);
-    if frac <> 0 then // stored as round(CurrValue*10000)
-      repeat
-        {$ifdef CPU64}
-        v64 := v64 * 10;
-        {$else}
-        v64 := v64 shl 3 + v64 + v64;
-        {$endif CPU64}
-        dec(frac);
-      until frac = 0;
-    Value.VInt64 := v64;
+    Value.VInt64 := v64 * ((frac + 4) * 10); // stored as round(CurrValue*10000)
   end
   else if AllowVarDouble and
           (frac > -324) and
