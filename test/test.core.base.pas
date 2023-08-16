@@ -4674,6 +4674,25 @@ const
   CHINESE_TEXT: array[0..8] of byte = (
     $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
 begin
+  CheckEqual(TrimChar('abcd', []), 'abcd');
+  CheckEqual(TrimChar('abcd', ['e']), 'abcd');
+  CheckEqual(TrimChar('abcd', ['a']), 'bcd');
+  CheckEqual(TrimChar('abcd', ['b']), 'acd');
+  CheckEqual(TrimChar('abcd', ['d', 'e']), 'abc');
+  CheckEqual(TrimChar('abcd', ['a', 'b']), 'cd');
+  CheckEqual(TrimChar('abcd', ['a', 'b', 'c', 'd']), '');
+  CheckEqual(TrimChar('aaaa', ['a']), '');
+  CheckEqual(TrimChar('aaaab', ['a', 'z']), 'b');
+  CheckEqual(TrimChar('baaaa', ['a', 'c']), 'b');
+  CheckEqual(OnlyChar('abcd', ['a', 'b', 'c', 'd', 'e']), 'abcd');
+  CheckEqual(OnlyChar('abcd', ['a', 'b', 'd', 'e']), 'abd');
+  CheckEqual(OnlyChar('abcd', []), '');
+  CheckEqual(OnlyChar('abcd', ['e']), '');
+  CheckEqual(OnlyChar('abcd', ['a']), 'a');
+  CheckEqual(OnlyChar('abcd', ['b']), 'b');
+  CheckEqual(OnlyChar('abcd', ['d']), 'd');
+  CheckEqual(OnlyChar('abcdz', ['d', 'z']), 'dz');
+  CheckEqual(OnlyChar('abzcd', ['z']), 'z');
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
   rb1 := rb2 + RawByteString('test');
