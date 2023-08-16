@@ -848,7 +848,7 @@ asm
         jz      @maybe0
 @ok:    mov     rax, qword ptr [s1 - _STRLEN] // len must match
         cmp     rax, qword ptr [s2 - _STRLEN]
-        jne     @q
+        jne     @q                            // returns len diff <> 0
         lea     s1, qword ptr [s1 + rax - 8]
         lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
@@ -863,7 +863,7 @@ asm
         je      @s
         mov     eax, 1
         ret
-@0:     xor     eax, eax
+@0:     xor     eax, eax // returns 0 if s1 equals s2
 @q:     ret
 @maybe0:test    s2, s2
         jz      @1
