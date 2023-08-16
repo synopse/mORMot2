@@ -8548,6 +8548,9 @@ exponent:         inc(Json); // inlined custom GetInteger()
   end;
 end;
 
+const
+  CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
+
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 var
@@ -8664,7 +8667,7 @@ begin
   begin
     // currency as ###.0123
     TRttiVarData(Value).VType := varCurrency;
-    Value.VInt64 := v64 * ((frac + 4) * 10); // stored as round(CurrValue*10000)
+    Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
   end
   else if AllowVarDouble and
           (frac > -324) and

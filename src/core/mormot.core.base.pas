@@ -1218,6 +1218,7 @@ function GetExtended(P: PUtf8Char): TSynExtended; overload;
 type
   TPow10 = array[-31..33] of TSynExtended;
   PPow10 = ^TPow10;
+
 const
   /// most common 10 ^ exponent constants, including 0 and -1 special values
   POW10: TPow10 = (
