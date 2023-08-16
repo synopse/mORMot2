@@ -8673,15 +8673,15 @@ begin
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
-    TRttiVarData(Value).VType := varDouble;
     if (frac >= -31) and
        (frac <= 31) then
       d := POW10[frac]
     else if (18 - remdigit) + integer(frac) >= 308 then // check final exp
-      d := POW10[0]
+      exit
     else
       d := HugePower10(frac, @POW10);
     Value.VDouble := d * v64;
+    TRttiVarData(Value).VType := varDouble;
   end
   else
     exit;

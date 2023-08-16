@@ -372,6 +372,10 @@ begin
   Check(VarIsStr(v));
   TextToVariant('261E306F', true, v);
   Check(VarIsStr(v));
+  TextToVariant('1e-324', true, v);
+  Check(VarIsStr(v));
+  TextToVariant('1e308', true, v);
+  Check(VarIsStr(v));
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil, 0, oftBoolean, vd, false, t);
   Check(not boolean(v));
