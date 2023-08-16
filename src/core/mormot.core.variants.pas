@@ -8676,7 +8676,9 @@ begin
       until frac = 0;
     Value.VInt64 := v64;
   end
-  else if AllowVarDouble then
+  else if AllowVarDouble and
+          (frac > -324) and
+          (frac < 308) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
     TRttiVarData(Value).VType := varDouble;
