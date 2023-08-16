@@ -1724,7 +1724,7 @@ function TrimChar(const text: RawUtf8; const exclude: TSynAnsicharSet): RawUtf8;
 
 /// returns the supplied text content, without any other char than specified
 // - specify a custom char set to be included, e.g. as ['A'..'Z']
-function OnlyChar(const text: RawUtf8; only: TSynAnsicharSet): RawUtf8;
+function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
 
 /// returns the supplied text content, without any control char
 // - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= ' '
@@ -7545,13 +7545,14 @@ begin
   result := text; // no exclude char found
 end;
 
-function OnlyChar(const text: RawUtf8; only: TSynAnsicharSet): RawUtf8;
+function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
 var
   i: PtrInt;
-begin
-  for i := 0 to SizeOf(only) do
-    PByteArray(@only)[i] := not PByteArray(@only)[i]; // reverse bits
-  result := TrimChar(text, only);
+  exclude: array[0..(SizeOf(only) shr POINTERSHR) - 1] of PtrInt;
+begin // reverse bits in local stack copy before calling TrimChar()
+  for i := 0 to (SizeOf(only) shr POINTERSHR) - 1 do
+    exclude[i] := not PPtrIntArray(@only)[i];
+  result := TrimChar(text, TSynAnsicharSet(exclude));
 end;
 
 procedure FillZero(var secret: RawByteString);
