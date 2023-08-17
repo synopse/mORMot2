@@ -4356,9 +4356,11 @@ begin
     str(d, a);
     s := RawUtf8(a);
     e := GetExtended(Pointer(s), err);
+    Check(err = 0, 'GetExt1');
     Check(SameValue(e, d, 0)); // validate str()
     s := ExtendedToStr(d, DOUBLE_PRECISION);
     e := GetExtended(Pointer(s), err);
+    Check(err = 0, 'GetExt2');
     Check(SameValue(e, d, 0));
     e := d;
     if (i < 9000) or

@@ -548,9 +548,18 @@ begin
   v := VariantLoadJson('123.1234');
   Check(vd.VType = varCurrency);
   CheckSame(v, 123.1234);
+  v := VariantLoadJson('1E300', nil, true);
+  Check(vd.VType = varDouble);
+  CheckSame(v, 1e300);
+  v := VariantLoadJson('-1E300', nil, true);
+  Check(vd.VType = varDouble);
+  CheckSame(v, -1e300);
   v := VariantLoadJson('-1E-300', nil, true);
   Check(vd.VType = varDouble);
   CheckSame(v, -1e-300);
+  v := VariantLoadJson('1E-300', nil, true);
+  Check(vd.VType = varDouble);
+  CheckSame(v, 1e-300);
   v := VariantLoadJson('[]', @JSON_[mFast]);
   Check(v._kind = ord(dvArray));
   Check(v._count = 0);

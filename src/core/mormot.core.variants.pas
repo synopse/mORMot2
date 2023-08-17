@@ -8673,13 +8673,16 @@ begin
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin
     // converted into a double value
-    if (frac >= -31) and
-       (frac <= 31) then
-      d := POW10[frac]
-    else if (18 - remdigit) + integer(frac) >= 308 then // check final exp
-      exit
+    exp := PtrUInt(@POW10);
+    if frac >= -31 then
+      if frac <= 31 then
+        d := PPow10(exp)[frac]                 // -31 .. + 31
+      else if (18 - remdigit) + integer(frac) >= 308 then
+        exit                                   // +308 ..
+      else
+        d := HugePower10Pos(frac, PPow10(exp)) // +32 .. +307
     else
-      d := HugePower10(frac, @POW10);
+      d := HugePower10Neg(frac, PPow10(exp));  // .. -32
     Value.VDouble := d * v64;
     TRttiVarData(Value).VType := varDouble;
   end

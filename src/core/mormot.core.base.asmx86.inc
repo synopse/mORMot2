@@ -2531,9 +2531,9 @@ asm
         mov     [edx], ebx          // result code = 0
         jz      @pow                // no call to _pow10 needed
         cmp     eax, 308
-        jg      @oor                // limit to < 1.7 x 10^308 double range
+        jge     @oor                // limit to < 1.7 x 10^308 double range
         cmp     eax, -324
-        jl      @oor                // limit to > 5.0 x 10^-324 range
+        jle     @oor                // limit to > 5.0 x 10^-324 range
 @oors:  mov     edi, ecx            // save decimal sign flag
         call    System.@Pow10       // raise to power of 10
         mov     ecx, edi            // restore decimal sign flag

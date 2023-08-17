@@ -1216,11 +1216,11 @@ function GetExtended(P: PUtf8Char): TSynExtended; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  TPow10 = array[-31..33] of TSynExtended;
+  TPow10 = array[-31..55] of TSynExtended;
   PPow10 = ^TPow10;
 
 const
-  /// most common 10 ^ exponent constants, including 0 and -1 special values
+  /// most common 10 ^ exponent constants, ending with values for HugePower10*()
   POW10: TPow10 = (
     1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
     1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
@@ -1228,10 +1228,16 @@ const
     1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
     1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
     1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
-    1E29,  1E30,  1E31,  0,     -1);
+    1E29,  1E30,  1E31,  0,{32} -1,{33} 1E0,{34} 1E32, 1E64, 1E96, 1E128,
+    1E160, 1E192, 1E224, 1E256, 1E288, 1E320, 1E-0,{45} 1E-32, 1E-64,
+    1E-96, 1E-128, 1E-160, 1E-192, 1E-224, 1E-256, 1E-288, 1E-320);
 
-/// low-level computation of 10 ^ exponent, if POW10[] is not enough
-function HugePower10(exponent: integer; pow10: PPow10): TSynExtended;
+/// low-level computation of 10 ^ positive exponent, if POW10[] is not enough
+function HugePower10Pos(exponent: PtrInt; pow10: PPow10): TSynExtended;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level computation of 10 ^ negative exponent, if POW10[] is not enough
+function HugePower10Neg(exponent: PtrInt; pow10: PPow10): TSynExtended;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in a RawUtf8 string
@@ -5683,27 +5689,15 @@ begin
     result := 0;
 end;
 
-function HugePower10(exponent: integer; pow10: PPow10): TSynExtended;
-var
-  e: TSynExtended;
+function HugePower10Pos(exponent: PtrInt; pow10: PPow10): TSynExtended;
 begin
-  result := pow10[0]; // 1
-  if exponent < 0 then
-  begin
-    e := pow10[-1];  // 0.1
-    exponent := -exponent;
-  end
-  else
-    e := pow10[1];   // 10
-  repeat
-    while exponent and 1 = 0 do
-    begin
-      exponent := exponent shr 1;
-      e := sqr(e);
-    end;
-    result := result * e;
-    dec(exponent);
-  until exponent = 0;
+  result := pow10[(exponent and not 31) shr 5 + 34] * pow10[exponent and 31];
+end;
+
+function HugePower10Neg(exponent: PtrInt; pow10: PPow10): TSynExtended;
+begin
+  exponent := -exponent;
+  result := pow10[(exponent and not 31) shr 5 + 45] / pow10[exponent and 31];
 end;
 
 {$ifndef CPU32DELPHI}
@@ -5816,11 +5810,13 @@ begin
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
   exp := PtrUInt(@POW10);
-  if (frac >= -31) and
-     (frac <= 31) then
-    result := PPow10(exp)[frac]
+  if frac >= -31 then
+    if frac <= 31 then
+      result := PPow10(exp)[frac] // -31 .. + 31
+    else
+      result := HugePower10Pos(frac, PPow10(exp)) // +32 ..
   else
-    result := HugePower10(frac, PPow10(exp));
+    result := HugePower10Neg(frac, PPow10(exp));  // .. -32
   if fNeg in flags then
     result := result * PPow10(exp)[33]; // * -1
   result := result * v64;
