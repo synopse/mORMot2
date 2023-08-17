@@ -2830,7 +2830,11 @@ type
   /// internal header for storing our AES data with salt and CRC
   // - memory size matches an TAesBlock on purpose, for direct encryption
   // - TAesFull uses unsafe direct AES-ECB chain mode, so is considered deprecated
+  {$ifdef USERECORDWITHMETHODS}
+   TAesFullHeader = record
+  {$else}
   TAesFullHeader = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// Len before compression (if any)
     OriginalLen,
@@ -2851,7 +2855,11 @@ type
   // - a TAesFullHeader is encrypted at the begining, allowing fast Key validation,
   // but the resulting stream is not compatible with raw TAes object
   // - will use unsafe direct AES-ECB chain mode, so is considered deprecated
+  {$ifdef USERECORDWITHMETHODS}
+  TAesFull = record
+  {$else}
   TAesFull = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// header, stored at the beginning of struct -> 16-byte aligned
     Head: TAesFullHeader;
