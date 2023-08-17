@@ -679,7 +679,11 @@ type
   // temporary conversion in such case
   // - TTimeLogBits.Value needs up to 40-bit precision, so features exact
   // representation as JavaScript numbers (stored in a 52-bit mantissa)
+  {$ifdef USERECORDWITHMETHODS}
+  TTimeLogBits = record
+  {$else}
   TTimeLogBits = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds

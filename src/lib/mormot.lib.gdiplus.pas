@@ -1178,7 +1178,11 @@ type
   end;
 
   /// internal data used by EnumEmfCallback() callback function
+  {$ifdef USERECORDWITHMETHODS}
+  TGdiplusEnum = record
+  {$else}
   TGdiplusEnum = object
+  {$endif USERECORDWITHMETHODS}
   public
     gdip: TGdiplus;
     gr: THandle;

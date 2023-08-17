@@ -131,7 +131,11 @@ type
   /// main access to the zlib API for compression/uncompression
   // - we encapsulated all low-level C calls into this object-oriented structure
   // - see CompressStream/UncompressStream for actual use of its methods
+  {$ifdef USERECORDWITHMETHODS}
+  TZLib = record
+  {$else}
   TZLib = object
+  {$endif USERECORDWITHMETHODS}
   private
     FlushStream: TStream;
     FlushBuffer: pointer;

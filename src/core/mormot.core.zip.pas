@@ -113,7 +113,11 @@ type
 
 type
   /// simple wrapper class to decompress a .gz file into memory or stream/file
+  {$ifdef USERECORDWITHMETHODS}
+  TGZRead = record
+  {$else}
   TGZRead = object
+  {$endif USERECORDWITHMETHODS}
   private
     comp, zsdest: pointer;
     zscrc: cardinal;
@@ -168,7 +172,11 @@ type
 
   /// generic file information structure, as used in .zip file format
   // - used in any header, contains info about following block
+  {$ifdef USERECORDWITHMETHODS}
+  TFileInfo = record
+  {$else}
   TFileInfo = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
     // - use ToByte() for the format version - high 8-bit may identify the OS
@@ -268,7 +276,11 @@ type
 
   //// directory file information structure, as used in .zip file format
   // - used at the end of the zip file to recap all entries
+  {$ifdef USERECORDWITHMETHODS}
+  TFileHeader = record
+  {$else}
   TFileHeader = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// $02014b50 PK#1#2 = ENTRY_SIGNATURE_INC - 1
     signature: cardinal;
@@ -300,7 +312,11 @@ type
 
   //// internal file information structure, as used in .zip file format
   // - used locally inside the file stream, followed by the name and the data
+  {$ifdef USERECORDWITHMETHODS}
+  TLocalFileHeader = record
+  {$else}
   TLocalFileHeader = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// $04034b50 PK#3#4 = FIRSTHEADER_SIGNATURE_INC - 1
     signature: cardinal;

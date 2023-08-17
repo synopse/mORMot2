@@ -407,7 +407,11 @@ type
   //  as in the TypInfo.GetPropInfos() PPropList usage
   // - for TOrm, you should better use the Properties.Fields[] array,
   // which is faster and contains the properties published in parent classes
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiProps = record
+  {$else}
   TRttiProps = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// number of published properties in this object
     function PropCount: integer;
@@ -435,7 +439,11 @@ type
 
   /// a wrapper to class type information, as defined by the compiler RTTI
   // - get a PRttiClass with PRttiInfo.RttiClass() or GetRttiClass()
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiClass = record
+  {$else}
   TRttiClass = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the class type
     function RttiClass: TClass;
@@ -470,7 +478,11 @@ type
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiEnumType = record
+  {$else}
   TRttiEnumType = object
+  {$endif USERECORDWITHMETHODS}
   private
     // as used by TRttiInfo.EnumBaseType/SetBaseType
     function EnumBaseType: PRttiEnumType;
@@ -619,7 +631,11 @@ type
   TRttiIntfFlags = set of TRttiIntfFlag;
 
   /// a wrapper to interface type information, as defined by the the compiler RTTI
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiInterfaceTypeData = record
+  {$else}
   TRttiInterfaceTypeData = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// ancestor interface type
     function IntfParent: PRttiInfo;
@@ -740,7 +756,11 @@ type
   // ! type
   // !   TNewType = type TOldType;
   // here TypeInfo(TNewType) <> TypeInfo(TOldType)
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiInfo = record
+  {$else}
   TRttiInfo = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the value type family
     // - not defined as an inlined function, since first field is always aligned
@@ -936,7 +956,11 @@ type
   /// a wrapper containing a RTTI class property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
   // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiProp = record
+  {$else}
   TRttiProp = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -2107,8 +2131,12 @@ type
   /// store information about one property/field of a given TypeInfo/PRttIinfo
   // - used by both rkClass for published properties, and rkRecord/rkObject
   // for nested fields
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiCustomProp = record
+  {$else}
   TRttiCustomProp = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     function InitFrom(RttiProp: PRttiProp): PtrInt;
     function ValueIsVoidGetter(Data: pointer): boolean;
     procedure GetValueDirect(Data: PByte; out RVD: TRttiVarData);
@@ -2190,7 +2218,11 @@ type
 
   /// store information about all properties/fields of a given TypeInfo/PRttIinfo
   // - includes parent properties when filled by AddFromClass(IncludeParents=true)
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiCustomProps = record
+  {$else}
   TRttiCustomProps = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// one List[] item per property/field
     List: TRttiCustomPropDynArray;
@@ -2206,6 +2238,8 @@ type
     /// contains List[].Name as a JSON array including a trailing ,
     // - as used by _JS_DynArray() for efficient twoNonExpandedArrays generation
     NamesAsJsonArray: RawUtf8;
+    /// points to List[] items which are managed
+    Managed: PRttiCustomPropDynArray;
     /// locate a property/field by name
     // - just redirect to FindCustomProp() low-level function
     function Find(const PropName: RawUtf8): PRttiCustomProp; overload;
@@ -2234,20 +2268,22 @@ type
     // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
     // TJsonSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
     procedure NameChanges(const Old, New: array of RawUtf8);
-    /// manuall adding of a property/field definition
+    /// reset all properties
+    procedure InternalClear;
+    /// manual adding of a property/field definition
     // - append as last field, unless AddFirst is set to true
-    procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: RawUtf8;
+    procedure InternalAdd(Info: PRttiInfo; Offset: PtrInt; const PropName: RawUtf8;
       AddFirst: boolean = false);
     /// register the published properties of a given class
     // - is called recursively if IncludeParents is true
-    procedure AddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
+    procedure InternalAddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
     /// prepare List[result].Name from TRttiCustom.SetPropsFromText
     function FromTextPrepare(const PropName: RawUtf8): integer;
     /// register the properties specified from extended RTTI (Delphi 2010+ only)
     // - do nothing on FPC or Delphi 2009 and older
     procedure SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
     /// called once List[] and Size have been defined
-    // - compute the fManaged[] internal list and return the matching flags
+    // - compute the Managed[] internal list and return the matching flags
     function AdjustAfterAdded: TRttiCustomFlags;
     /// retrieve all List[] items as text
     procedure AsText(out Result: RawUtf8; IncludePropType: boolean;
@@ -2256,11 +2292,6 @@ type
     // - it will individually fill the properties, not the whole memory
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
-  protected
-    /// points to List[] items which are managed
-    fManaged: PRttiCustomPropDynArray;
-    /// reset all properties
-    procedure InternalClear;
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
@@ -7176,7 +7207,7 @@ begin
   CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
 end;
 
-procedure TRttiCustomProps.Add(Info: PRttiInfo; Offset: PtrInt;
+procedure TRttiCustomProps.InternalAdd(Info: PRttiInfo; Offset: PtrInt;
   const PropName: RawUtf8; AddFirst: boolean);
 var
   n: PtrInt;
@@ -7238,11 +7269,11 @@ begin
   if Count = 0 then
   begin
     result := [];
-    fManaged := nil;
+    Managed := nil;
     exit;
   end;
   result := [rcfHasNestedProperties, rcfHasOffsetSetJsonLoadProperties];
-  SetLength(fManaged, Count);
+  SetLength(Managed, Count);
   n := 0;
   p := pointer(List);
   for i := 1 to Count do
@@ -7253,7 +7284,7 @@ begin
       if not Assigned(p^.Value.fCopy) then
         raise ERttiException.Create('Paranoid managed Value.Copy');
       include(result, rcfHasNestedManagedProperties);
-      fManaged[n] := p;
+      Managed[n] := p;
       inc(n);
     end;
     if (p^.OffsetSet < 0) or
@@ -7261,7 +7292,7 @@ begin
       exclude(result, rcfHasOffsetSetJsonLoadProperties);
     inc(p);
   end;
-  SetLength(fManaged, n);
+  SetLength(Managed, n);
 end;
 
 procedure TRttiCustomProps.AsText(out Result: RawUtf8; IncludePropType: boolean;
@@ -7299,10 +7330,10 @@ begin
   Count := 0;
   Size := 0;
   NotInheritedIndex := 0;
-  fManaged := nil;
+  Managed := nil;
 end;
 
-procedure TRttiCustomProps.AddFromClass(ClassInfo: PRttiInfo;
+procedure TRttiCustomProps.InternalAddFromClass(ClassInfo: PRttiInfo;
   IncludeParents: boolean);
 var
   rc: PRttiClass;
@@ -7317,7 +7348,7 @@ begin
   rc := ClassInfo^.RttiNonVoidClass;
   if IncludeParents then
     // put parent properties first
-    AddFromClass(rc^.ParentInfo, true);
+    InternalAddFromClass(rc^.ParentInfo, true);
   rs := rc^.RttiProps;
   n := rs^.PropCount;
   if n = 0 then
@@ -7401,7 +7432,7 @@ var
   p: PRttiCustomProp;
   n: integer;
 begin
-  pp := pointer(fManaged);
+  pp := pointer(Managed);
   if pp <> nil then
   begin
     n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
@@ -7461,7 +7492,7 @@ var
   offset: PtrInt;
 begin
   offset := 0;
-  pp := pointer(fManaged);
+  pp := pointer(Managed);
   if pp <> nil then
   begin
     n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
@@ -7587,10 +7618,10 @@ begin
   else if aClass.InheritsFrom(TObjectWithID) then
     fValueRtlClass := vcObjectWithID;
   // register the published properties of this class using RTTI
-  fProps.AddFromClass(aInfo, {includeparents=}true);
+  fProps.InternalAddFromClass(aInfo, {includeparents=}true);
   if fValueRtlClass = vcException then
     // manual registration of the Exception.Message property
-    fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+    fProps.InternalAdd(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
 end;
 
 procedure TRttiCustom.FromRtti(aInfo: PRttiInfo);
@@ -9241,7 +9272,7 @@ end;
 
 class procedure TObjectWithID.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
-  Rtti.Props.Add(
+  Rtti.Props.InternalAdd(
     TypeInfo(TID), PtrInt(@TObjectWithID(nil).fID), 'ID', {first=}true);
 end;
 

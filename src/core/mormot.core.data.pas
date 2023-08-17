@@ -8073,7 +8073,11 @@ end;
 
 type
   // internal structure used to make QuickSort faster & with less stack usage
+  {$ifdef USERECORDWITHMETHODS}
+  TDynArrayQuickSort = record
+  {$else}
   TDynArrayQuickSort = object
+  {$endif USERECORDWITHMETHODS}
   public
     Compare: TDynArraySortCompare;
     CompareEvent: TOnDynArraySortCompare;
@@ -9871,7 +9875,11 @@ begin
 end;
 
 type
+  {$ifdef USERECORDWITHMETHODS}
+  TFastReHash = record
+  {$else}
   TFastReHash = object // dedicated object for better register allocation
+  {$endif USERECORDWITHMETHODS}
   public
     hc: cardinal;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}

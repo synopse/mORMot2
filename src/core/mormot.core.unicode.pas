@@ -35,7 +35,11 @@ uses
 // some constants used for UTF-8 conversion, including surrogates
 type
   // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
+  {$ifdef USERECORDWITHMETHODS}
+  TUtf8Table = record
+  {$else}
   TUtf8Table = object
+  {$endif USERECORDWITHMETHODS}
   public
     Lookup: array[byte] of byte;
     Extra: array[0..6] of record
@@ -8968,7 +8972,11 @@ end;
 
 type
   /// used internally for faster quick sort
+  {$ifdef USERECORDWITHMETHODS}
+  TQuickSortRawUtf8 = record
+  {$else}
   TQuickSortRawUtf8 = object
+  {$endif USERECORDWITHMETHODS}
   public
     Compare: TUtf8Compare;
     CoValues: PIntegerArray;
@@ -9117,7 +9125,11 @@ end;
 
 type
   // 20,016 bytes for full Unicode 10.0 case folding branchless conversion
+  {$ifdef USERECORDWITHMETHODS}
+  TUnicodeUpperTable = record
+  {$else}
   TUnicodeUpperTable = object
+  {$endif USERECORDWITHMETHODS}
   public
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;

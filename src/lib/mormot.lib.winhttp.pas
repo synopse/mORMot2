@@ -498,7 +498,11 @@ type
   PHTTP_RESPONSE_INFO = ^HTTP_RESPONSE_INFO;
 
   /// structure as expected by HttpSendHttpResponse() API
+  {$ifdef USERECORDWITHMETHODS}
+  HTTP_RESPONSE = record
+  {$else}
   HTTP_RESPONSE = object
+  {$endif USERECORDWITHMETHODS}
   public
     Flags: cardinal;
     // The raw HTTP protocol version number

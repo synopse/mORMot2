@@ -6236,7 +6236,11 @@ begin
 end;
 
 type
+  {$ifdef USERECORDWITHMETHODS}
+  TQuickSortDocVariant = record
+  {$else}
   TQuickSortDocVariant = object
+  {$endif USERECORDWITHMETHODS}
   public
     names: PPointerArray;
     values: PVariantArray;
@@ -6417,6 +6421,7 @@ end;
 type
   TQuickSortByFieldLookup = array[0..3] of PVariant;
   PQuickSortByFieldLookup = ^TQuickSortByFieldLookup;
+
   {$ifdef USERECORDWITHMETHODS}
   TQuickSortDocVariantValuesByField = record
   {$else}

@@ -1693,7 +1693,11 @@ type
   /// used to store and retrieve Words in a sorted array
   // - this "object" (i.e. record with methods) should be filled with zeros
   // before use - e.g. when defined as a private member of a class
+  {$ifdef USERECORDWITHMETHODS}
+  TSortedWordArray = record
+  {$else}
   TSortedWordArray = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the actual 16-bit word storage
     Values: TWordDynArray;
@@ -1712,7 +1716,11 @@ type
   /// used to store and retrieve Integers in a sorted array
   // - this "object" (i.e. record with methods) should be filled with zeros
   // before use - e.g. when defined as a private member of a class
+  {$ifdef USERECORDWITHMETHODS}
+  TSortedIntegerArray = record
+  {$else}
   TSortedIntegerArray = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the actual 32-bit integers storage
     Values: TIntegerDynArray;
@@ -2861,7 +2869,11 @@ type
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
   // will gather and hash some system entropy
+  {$ifdef USERECORDWITHMETHODS}
+  TLecuyer = record
+  {$else}
   TLecuyer = object
+  {$endif USERECORDWITHMETHODS}
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force a random seed of the generator from current system state
@@ -3061,7 +3073,11 @@ type
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
+  {$ifdef USERECORDWITHMETHODS}
+  TSynTempBuffer = record
+  {$else}
   TSynTempBuffer = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: PtrInt;

@@ -2842,7 +2842,11 @@ type
   // depends on it to store the Table type
   // - since 6 bits are used for the table index, the corresponding table
   // MUST appear in the first 64 items of the associated TOrmModel.Tables[]
+  {$ifdef USERECORDWITHMETHODS}
+  RecordRef = record
+  {$else}
   RecordRef = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the value itself
     // - (value and 63) is the TableIndex in the current database Model
@@ -4815,7 +4819,11 @@ type
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
+  {$ifdef USERECORDWITHMETHODS}
+  TOrmAccessRights = record
+  {$else}
   TOrmAccessRights = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// set of allowed actions on the server side
     AllowRemoteExecute: TOrmAllowRemoteExecute;
@@ -8144,8 +8152,9 @@ begin
     exit; // invalid or {} or null
   i := 0; // for optimistic property name lookup
   repeat
-     name := GetJsonPropName(Context.Json, @namelen);
-     Context.GetJsonFieldOrObjectOrArray;
+     name := GetJsonPropName(
+       Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json, @namelen);
+     Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}GetJsonFieldOrObjectOrArray;
      if (name = nil) or
         (Context.Json = nil) then
      begin

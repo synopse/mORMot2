@@ -315,7 +315,11 @@ type
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..30 map a 16-bit process identifier
   // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
+  {$ifdef USERECORDWITHMETHODS}
+  TSynUniqueIdentifierBits = record
+  {$else}
   TSynUniqueIdentifierBits = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
@@ -529,7 +533,11 @@ type
 
   /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
   // - used e.g. to implement TJwtSynSignerAbstract
+  {$ifdef USERECORDWITHMETHODS}
+  TSynSigner = record
+  {$else}
   TSynSigner = object
+  {$endif USERECORDWITHMETHODS}
   private
     ctxt: packed array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all
   public
@@ -614,7 +622,11 @@ type
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
+  {$ifdef USERECORDWITHMETHODS}
+  TSynHasher = record
+  {$else}
   TSynHasher = object
+  {$endif USERECORDWITHMETHODS}
   private
     fAlgo: THashAlgo;
     ctxt: array[1..SHA3_CONTEXT_SIZE] of byte; // enough space for all algorithms

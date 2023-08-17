@@ -141,7 +141,11 @@ const
 type
   /// map a DNS header binary record
   // - with some easy getter/setter for the bit-oriented flags
+  {$ifdef USERECORDWITHMETHODS}
+  TDnsHeader = record
+  {$else}
   TDnsHeader = object
+  {$endif USERECORDWITHMETHODS}
   private
     function GetAA: boolean;
       {$ifdef FPC} inline; {$endif}

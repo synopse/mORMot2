@@ -104,7 +104,11 @@ type
   TAsnBinary = type RawByteString;
 
   /// used to store an ASN.1 TAG content
+  {$ifdef USERECORDWITHMETHODS}
+  TAsnTag = record
+  {$else}
   TAsnTag = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// mostly acUniversal kind of TAG
     TagClass: TAsnTagClass;
@@ -154,7 +158,11 @@ type
   TAsnTags = array of TAsnTag;
 
   /// decode some ASN.1 encoded binary buffer
+  {$ifdef USERECORDWITHMETHODS}
+  TAsnParser = record
+  {$else}
   TAsnParser = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// safe and efficient binary parsing of the input buffer
     Reader: TFastReader;

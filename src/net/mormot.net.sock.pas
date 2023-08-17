@@ -141,7 +141,11 @@ type
   TNetSocket = ^TNetSocketWrap;
 
   /// internal mapping of an address, in any supported socket layer
+  {$ifdef USERECORDWITHMETHODS}
+  TNetAddr = record
+  {$else}
   TNetAddr = object
+  {$endif USERECORDWITHMETHODS}
   private
     // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
@@ -212,7 +216,11 @@ type
   /// convenient object-oriented wrapper around a socket connection
   // - encapsulate a cross-platform low-level access to the socket API
   // - TNetSocket is a pointer to this, so TSocket(@self) is used for OS calls
+  {$ifdef USERECORDWITHMETHODS}
+  TNetSocketWrap = record
+  {$else}
   TNetSocketWrap = object
+  {$endif USERECORDWITHMETHODS}
   private
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
     function GetOptInt(prot, name: integer): integer;
@@ -1702,7 +1710,11 @@ type
   // implement a thread-safe cache of IPv4 for hostnames
   // - used e.g. by TNetAddr.SetFromIP4 and GetKnownHost
   // - avoid the overhead of TSynDictionary for a few short-living items
+  {$ifdef USERECORDWITHMETHODS}
+  TNetHostCache = record
+  {$else}
   TNetHostCache = object
+  {$endif USERECORDWITHMETHODS}
   public
     Host: TRawUtf8DynArray;
     Safe: TLightLock;
@@ -5330,7 +5342,11 @@ end;
 type
   {$A-}
   /// a 64-bit SNTP timestamp, as described in RFC 2030
+  {$ifdef USERECORDWITHMETHODS}
+  TNtpTimestamp = record
+  {$else}
   TNtpTimestamp = object
+  {$endif USERECORDWITHMETHODS}
     Seconds: integer;
     Fraction: integer;
     procedure SwapEndian;
@@ -5339,7 +5355,11 @@ type
   end;
 
   /// map a SNTP header, as described in RFC 2030
+  {$ifdef USERECORDWITHMETHODS}
+  TNtpPacket = record
+  {$else}
   TNtpPacket = object
+  {$endif USERECORDWITHMETHODS}
     LiVnMode, Stratum, Poll, Precision: byte;
     RootDelay, RootDispersion, ReferenceIdentifier: cardinal;
     Reference, Originate, Receive, Transmit: TNtpTimestamp;

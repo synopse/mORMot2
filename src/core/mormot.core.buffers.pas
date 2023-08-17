@@ -9889,7 +9889,11 @@ type
     twlCode4,
     twlCode3);
 
+  {$ifdef USERECORDWITHMETHODS}
+  TTextWriterEscape = record
+  {$else}
   TTextWriterEscape = object
+  {$endif USERECORDWITHMETHODS}
   public
     P, B, P2, B2: PUtf8Char;
     W: TTextWriter;

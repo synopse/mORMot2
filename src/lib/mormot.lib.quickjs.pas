@@ -116,7 +116,11 @@ type
   // - you can use e.g. JSValue(somejsvaluevariable).IsObject or JSValue.Raw
   // - JSValueRaw is the low-level type mandatory for QuickJS API calls: using
   // JSValue to call the QuickJS library fails to use registers, so trigger GPF
+  {$ifdef USERECORDWITHMETHODS}
+  JSValue = record
+  {$else}
   JSValue = object
+  {$endif USERECORDWITHMETHODS}
   private
     u: record
       case byte of
@@ -268,7 +272,11 @@ type
   /// wrapper object to the QuickJS JSRuntime abstract pointer type
   // - JSRuntime is a pointer to this opaque object
   // - only a single
+  {$ifdef USERECORDWITHMETHODS}
+  TJSRuntime = record
+  {$else}
   TJSRuntime = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// create a new execution context for this Runtime
     function New: JSContext;
@@ -282,7 +290,11 @@ type
 
   /// wrapper object to the QuickJS JSContext abstract pointer type
   // - JSContext is a pointer to this opaque object
+  {$ifdef USERECORDWITHMETHODS}
+  TJSContext = record
+  {$else}
   TJSContext = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// just a wrapper around JS_FreeContext(@self)
     procedure Done;

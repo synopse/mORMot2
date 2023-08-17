@@ -1693,7 +1693,11 @@ type
   // - could be used as alternative to TRegistry, which doesn't behave the same on
   // all Delphi versions, and is enhanced on FPC (e.g. which supports REG_MULTI_SZ)
   // - is also Unicode ready for text, using UTF-8 conversion on all compilers
+  {$ifdef USERECORDWITHMETHODS}
+  TWinRegistry = record
+  {$else}
   TWinRegistry = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the opened HKEY handle
     key: HKEY;
@@ -1781,7 +1785,11 @@ type
   // - not all available privileges are active for all process
   // - for usage of more advanced WinAPI, explicit enabling of privilege is
   // sometimes needed
+  {$ifdef USERECORDWITHMETHODS}
+  TSynWindowsPrivileges = record
+  {$else}
   TSynWindowsPrivileges = object
+  {$endif USERECORDWITHMETHODS}
   private
     fAvailable: TWinSystemPrivileges;
     fEnabled: TWinSystemPrivileges;
@@ -2120,7 +2128,11 @@ type
   end;
 
   /// direct access to the Windows CryptoApi
+  {$ifdef USERECORDWITHMETHODS}
+  TWinCryptoApi = record
+  {$else}
   TWinCryptoApi = object
+  {$endif USERECORDWITHMETHODS}
   private
     /// if the presence of this API has been tested
     Tested: boolean;
@@ -2924,7 +2936,11 @@ var
 type
   /// calling context when intercepting exceptions
   // - used e.g. for TSynLogExceptionToStr or RawExceptionIntercept() handlers
+  {$ifdef USERECORDWITHMETHODS}
+  TSynLogExceptionContext = record
+  {$else}
   TSynLogExceptionContext = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the raised exception class
     EClass: ExceptClass;
@@ -3310,8 +3326,12 @@ function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 type
   /// cross-platform memory mapping of a file content
+  {$ifdef USERECORDWITHMETHODS}
+  TMemoryMap = record
+  {$else}
   TMemoryMap = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
@@ -3376,7 +3396,11 @@ type
 
   /// low-level access to a resource bound to the executable
   // - so that Windows is not required in your unit uses clause
+  {$ifdef USERECORDWITHMETHODS}
+  TExecutableResource = record
+  {$else}
   TExecutableResource = object
+  {$endif USERECORDWITHMETHODS}
   private
     // note: we can't use THandle which is 32-bit on 64-bit POSIX
     HResInfo: TLibHandle;
@@ -3417,7 +3441,11 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
+  {$ifdef USERECORDWITHMETHODS}
+  TProcessInfo = record
+  {$else}
   TProcessInfo = object
+  {$endif USERECORDWITHMETHODS}
   private
     {$ifdef OSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
@@ -4065,8 +4093,12 @@ type
   // - RWUse property could replace the TRTLCriticalSection by a lighter TRWLock
   // - see also TRWLock and TSynPersistentRWLock if the multiple read / exclusive
   // write lock is better (only if the locked process does not take too much time)
+  {$ifdef USERECORDWITHMETHODS}
+  TSynLocker = record
+  {$else}
   TSynLocker = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     fSection: TRTLCriticalSection;
     fRW: TRWLock;
     fPaddingUsedCount: byte;
@@ -4363,7 +4395,11 @@ type
   /// a thread-safe Pierre L'Ecuyer software random generator
   // - just wrap TLecuyer with a TLighLock
   // - should not be used, unless may be slightly faster than a threadvar
+  {$ifdef USERECORDWITHMETHODS}
+  TLecuyerThreadSafe = record
+  {$else}
   TLecuyerThreadSafe = object
+  {$endif USERECORDWITHMETHODS}
   public
     Safe: TLightLock;
     Generator: TLecuyer;
@@ -4656,8 +4692,7 @@ const
 
 type
   PServiceStatus = ^TServiceStatus;
-  TServiceStatus = object
-  public
+  TServiceStatus = record
     dwServiceType: cardinal;
     dwCurrentState: cardinal;
     dwControlsAccepted: cardinal;
@@ -4668,8 +4703,8 @@ type
   end;
 
   PServiceStatusProcess = ^TServiceStatusProcess;
-  TServiceStatusProcess = object(TServiceStatus)
-  public
+  TServiceStatusProcess = record
+    Service: TServiceStatus;
     dwProcessId: cardinal;
     dwServiceFlags: cardinal;
   end;

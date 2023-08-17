@@ -154,7 +154,11 @@ type
   // - PrepareContains() is the most efficient method for '*contained*' search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
   // search for several patterns, or even TExprParserMatch for expression search
+  {$ifdef USERECORDWITHMETHODS}
+  TMatch = record
+  {$else}
   TMatch = object
+  {$endif USERECORDWITHMETHODS}
   private
     Pattern, Text: PUtf8Char;
     P, T, PMax, TMax: PtrInt;
@@ -354,8 +358,12 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
+  {$ifdef USERECORDWITHMETHODS}
+  TSynSoundEx = record
+  {$else}
   TSynSoundEx = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
   public
@@ -873,8 +881,12 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
+  {$ifdef USERECORDWITHMETHODS}
+  TDynArrayLoadFrom = record
+  {$else}
   TDynArrayLoadFrom = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     ArrayLoad: TRttiBinaryLoad;
   public
     /// how many items were saved in the TDynArray.SaveTo binary buffer

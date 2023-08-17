@@ -893,16 +893,20 @@ end;
 { TCollTstDynArray}
 
 class procedure TCollTstDynArray.FVReader(
-    var Context: TJsonParserContext; Data: pointer);
+  var Context: TJsonParserContext; Data: pointer);
+var
+  P: PUtf8Char;
 begin
   // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
   if Context.ParseArray then
     with PFV(Data)^ do
     begin
-      Major := GetNextItemCardinal(Context.Json);
-      Minor := GetNextItemCardinal(Context.Json);
-      Release := GetNextItemCardinal(Context.Json);
-      Build := GetNextItemCardinal(Context.Json);
+      P := Context.Json;
+      Major := GetNextItemCardinal(P);
+      Minor := GetNextItemCardinal(P);
+      Release := GetNextItemCardinal(P);
+      Build := GetNextItemCardinal(P);
+      Context.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := P;
       Main := Context.ParseString;
       Detailed := Context.ParseString;
       Context.ParseEndOfObject;

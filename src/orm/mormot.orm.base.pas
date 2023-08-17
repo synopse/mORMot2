@@ -9319,7 +9319,11 @@ type
   // - code generated is very optimized: stack and memory usage, CPU registers
   // prefered, multiplication avoided to calculate memory position from index,
   // hand tuned assembler...
+  {$ifdef USERECORDWITHMETHODS}
+  TUtf8QuickSort = record
+  {$else}
   TUtf8QuickSort = object
+  {$endif USERECORDWITHMETHODS}
   public
     Data: TOrmTableDataArray;
     {$ifndef NOTORMTABLELEN}
@@ -9618,7 +9622,11 @@ begin
 end;
 
 type
+  {$ifdef USERECORDWITHMETHODS}
+  TUtf8QuickSortMulti = record
+  {$else}
   TUtf8QuickSortMulti = object
+  {$endif USERECORDWITHMETHODS}
   public
     Data: TOrmTableDataArray;
     {$ifndef NOTORMTABLELEN}

@@ -7852,7 +7852,11 @@ end;
 
 type
   // 3KB info on stack - only supported token is %, with any const arguments
+  {$ifdef USERECORDWITHMETHODS}
+  TFormatUtf8 = record
+  {$else}
   TFormatUtf8 = object
+  {$endif USERECORDWITHMETHODS}
   public
     last: PTempUtf8;
     L, argN: PtrInt;

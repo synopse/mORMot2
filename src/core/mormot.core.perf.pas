@@ -118,8 +118,12 @@ type
   PPPrecisionTimer = ^PPrecisionTimer;
 
   /// high resolution timer (for accurate speed statistics)
+  {$ifdef USERECORDWITHMETHODS}
+  TPrecisionTimer = record
+  {$else}
   TPrecisionTimer = object
-  protected
+  {$endif USERECORDWITHMETHODS}
+  private
     fStart, fStop: Int64;
     /// contains the time elapsed in micro seconds between Start and Stop
     fTime: TSynMonitorTotalMicroSec;
