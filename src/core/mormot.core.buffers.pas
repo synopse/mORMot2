@@ -9861,7 +9861,8 @@ begin
   f2 := FileOpenSequentialRead(Another);
   result := false;
   if ValidHandle(f1) and
-     ValidHandle(f2) then
+     ValidHandle(f2) and
+     (FileSize(f1) = FileSize(f2)) then
     repeat
       r1 := FileRead(f1, b1, SizeOf(b1));
       r2 := FileRead(f2, b2, SizeOf(b2));
