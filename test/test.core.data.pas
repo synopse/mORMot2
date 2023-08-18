@@ -6047,7 +6047,8 @@ var
       Check(UnZip(i) = Data, 'unzip6');
       tmpFN := WorkDir + 'mormot2zipformat.tmp';
       Check(UnZip('REP1\one.exe', tmpFN, true), 'unzipa');
-      Check(StringFromFile(tmpFN) = Data, 'unzipb');
+      //Check(StringFromFile(tmpFN) = Data, 'unzipb');
+      Check(SameFileContent(DataFile, tmpFN), 'unzipb');
       Check(DeleteFile(tmpFN), 'unzipc');
     finally
       Free;

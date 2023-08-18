@@ -1982,7 +1982,10 @@ function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteStrin
 
 /// compute the 32-bit default hash of a file content
 // - you can specify your own hashing function if DefaultHasher is not what you expect
-function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal; overload;
+function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
+
+/// compare two files by content, reading them by blocks
+function SameFileContent(const One, Another: TFileName): boolean;
 
 type
   /// prototype of a file hashing function, returning its hexadecimal hash
@@ -9847,6 +9850,34 @@ begin
     FileClose(f);
   end;
 end;
+
+function SameFileContent(const One, Another: TFileName): boolean;
+var
+  b1, b2: array[word] of word; // 256KB of buffers
+  r1, r2: integer;
+  f1, f2: THandle;
+begin
+  f1 := FileOpenSequentialRead(One);
+  f2 := FileOpenSequentialRead(Another);
+  result := false;
+  if ValidHandle(f1) and
+     ValidHandle(f2) then
+    repeat
+      r1 := FileRead(f1, b1, SizeOf(b1));
+      r2 := FileRead(f2, b2, SizeOf(b2));
+      if (r1 <= 0) or (r2 <= 0) then
+      begin
+        result := (r1 <= 0) = (r2 <= 0);
+        break;
+      end;
+    until (r1 <> r2) or
+          not CompareMem(@b1, @b2, r1);
+  if ValidHandle(f2) then
+    FileClose(f2);
+  if ValidHandle(f1) then
+    FileClose(f1);
+end;
+
 
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 begin
