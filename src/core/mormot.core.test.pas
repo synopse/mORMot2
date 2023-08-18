@@ -134,6 +134,10 @@ type
       - these methods must be declared as procedure with no parameter }
   end;
 
+  /// callback signature as used by TSynTestCase.CheckRaised
+  // - passed parameters can be converted e.g. using VarRecToUtf8/VarRecToInt64
+  TOnTestCheck = procedure(const Params: array of const) of object;
+
   TSynTests = class;
 
   /// a class implementing a test case
@@ -232,6 +236,10 @@ type
     // - condition must equals TRUE to pass the test
     procedure CheckUtf8(condition: boolean; const msg: RawUtf8;
       const args: array of const); overload;
+    /// used by the published methods to execute a Method with the given
+    // parameters, and ensure a (optionally specific) exception is raised
+    function CheckRaised(const Method: TOnTestCheck; const Params: array of const;
+      Raised: ExceptionClass = nil): boolean;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -768,6 +776,31 @@ begin
     if not condition then
       TestFailed(str{%H-});
   end;
+end;
+
+function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
+  const Params: array of const; Raised: ExceptionClass): boolean;
+var
+  msg: string;
+begin
+  try
+    Method(Params);
+    result := false;
+    if Raised = nil then
+      Raised := Exception;
+    FormatString('% missing', [Raised], msg);
+  except
+    on E: Exception do
+    begin
+      result := (Raised = nil) or
+                (PClass(E)^ = Raised);
+      if result then
+        FormatString('% [%]', [E, E.Message], msg)
+      else
+        FormatString('% instead of %', [E, Raised], msg);
+    end;
+  end;
+  Check(result, msg);
 end;
 
 procedure TSynTestCase.CheckLogTimeStart;
