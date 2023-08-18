@@ -6308,7 +6308,7 @@ begin
   result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
 end;
 
-function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
+function DirectorySize(const FileName: TFileName; Recursive: boolean): Int64;
 var
   SR: TSearchRec;
   dir: TFileName;

@@ -1982,7 +1982,7 @@ function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteStrin
 
 /// compute the 32-bit default hash of a file content
 // - you can specify your own hashing function if DefaultHasher is not what you expect
-function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
+function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal; overload;
 
 /// compare two files by content, reading them by blocks
 function SameFileContent(const One, Another: TFileName): boolean;
