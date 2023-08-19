@@ -622,6 +622,7 @@ type
     fIncludeUserNameInFileName: boolean;
     fHighResolutionTimestamp: boolean;
     fLocalTimestamp: boolean;
+    fZonedTimestamp: boolean;
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
     fNoFile: boolean;
@@ -860,6 +861,10 @@ type
     // - you may set this property to TRUE to store local time instead
     property LocalTimestamp: boolean
       read fLocalTimestamp write fLocalTimestamp;
+    /// by default, UTC values have no time zone
+    // - you may set this property to TRUE to append a Z after the timestamp
+    property ZonedTimestamp: boolean
+      read fZonedTimestamp write fZonedTimestamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
     // - set to TRUE by default, for better debugging experience
@@ -5355,7 +5360,11 @@ begin
     fWriter.AddBinToHexDisplay(@fCurrentTimestamp, SizeOf(fCurrentTimestamp));
   end
   else
+  begin
     fWriter.AddCurrentLogTime(fFamily.LocalTimestamp);
+    if fFamily.ZonedTimestamp then
+      fWriter.Add('Z');
+  end;
 end;
 
 procedure TSynLog.LogHeader(Level: TSynLogInfo);
