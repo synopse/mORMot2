@@ -7008,8 +7008,10 @@ begin
       exit; // definitively does not sound like a .log content
     if LineBeg[8] = ' ' then
     begin
-      // YYYYMMDD HHMMSS is one char bigger than Timestamp
+      // YYYYMMDD HHMMSSXX[Z] is one/two chars bigger than Timestamp
       fLineLevelOffset := 19;
+      if LineBeg[fLineLevelOffset] = 'Z' then
+        inc(fLineLevelOffset); // did have TSynLogFamily.ZonedTimestamp
       fDayCurrent := PInt64(LineBeg)^;
       AddInteger(fDayChangeIndex, fCount - 1);
     end
