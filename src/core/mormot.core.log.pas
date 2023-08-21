@@ -1526,24 +1526,24 @@ type
   protected
     /// map the events occurring in the .log file content
     fLevels: TSynLogInfoDynArray;
+    fLineLevelOffset: byte;
+    fLineTextOffset: byte;
+    fLineHeaderCountToIgnore: byte;
+    fThreadInfoMax: cardinal;
+    fThreadsCount: integer;
+    fThreadMax: cardinal;
     fThreads: TWordDynArray;
     fThreadInfo: array of record
       Rows: cardinal;
       SetThreadName: TPUtf8CharDynArray;
     end;
-    fThreadInfoMax: cardinal;
-    fThreadsCount: integer;
-    fThreadMax: cardinal;
-    fLineLevelOffset: cardinal;
-    fLineTextOffset: cardinal;
-    fLineHeaderCountToIgnore: integer;
     /// as extracted from the .log header
     fExeName, fExeVersion, fInstanceName: RawUtf8;
     fHost, fUser, fCPU, fOSDetailed, fFramework: RawUtf8;
     fExeDate: TDateTime;
     fOS: TWindowsVersion;
-    fOSServicePack: integer;
     fWow64: boolean;
+    fOSServicePack: integer;
     fStartDateTime: TDateTime;
     fDayCurrent: Int64; // as PInt64('20160607')^
     fDayChangeIndex: TIntegerDynArray;
@@ -6686,7 +6686,7 @@ begin
           mormot.core.text.HexToBin(pointer(feat), @fArm32CPU, SizeOf(fArm32CPU));
         '+': // AARCH64 marker
           mormot.core.text.HexToBin(pointer(feat), @fArm64CPU, SizeOf(fArm64CPU));
-      else
+      else // old/smaller TIntelCpuFeatures members will be left filled with 0
         mormot.core.text.HexToBin(pointer(feat), @fIntelCPU, SizeOf(fIntelCPU));
       end;
     fWow64 := aWow64 = '1';
@@ -6717,7 +6717,9 @@ begin
       fFreqPerDay := fFreq * SecsPerDay;
     P := pointer(fOSDetailed);
     fOS := TWindowsVersion(GetNextItemCardinal(P, '.'));
-    if fOS <> wUnknown then
+    if fOS > high(fOs) then
+     fOS := wUnknown
+    else if fOS <> wUnknown then
       fOSServicePack := GetNextItemCardinal(P);
     P := fLines[fHeaderLinesCount - 2]; // TSqlLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
     i := LineSize(fHeaderLinesCount - 2) - 19; // length('2016-07-17T22:38:03')=19
