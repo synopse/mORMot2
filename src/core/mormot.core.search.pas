@@ -116,8 +116,16 @@ type
 /// ensure all files in Dest folder(s) do match the one in Reference
 // - won't copy all files from Reference folders, but will update files already
 // existing in Dest, which did change since last synchronization
+// - file copy will use in-memory loading, so won't work well with huge files
 // - returns the number of files copied during the process
 function SynchFolders(const Reference, Dest: TFileName;
+  Options: TSynchFoldersOptions = []): integer;
+
+/// copy all files from a source folder to a destination folder
+// - will copy only new or changed files, keeping existing identical files
+// - file copy will use stream loading, so would cope with huge files
+// - returns the number of fields copied during the process, -1 on error
+function CopyFolder(const Source, Dest: TFileName;
   Options: TSynchFoldersOptions = []): integer;
 
 
@@ -1643,7 +1651,6 @@ begin
     result[i] := Files[i].Name;
 end;
 
-{$I-}
 function SynchFolders(const Reference, Dest: TFileName;
   Options: TSynchFoldersOptions): integer;
 var
@@ -1687,7 +1694,7 @@ begin
         FileFromString(s, dstfn, false, reftime);
         inc(result);
         if sfoWriteFileNameToConsole in Options then
-          writeln('synched ', dstfn);
+          ConsoleWrite('synched %', [dstfn]);
       end
       else if (sfoSubFolder in Options) and
               SearchRecValidFolder(fdst) then
@@ -1695,11 +1702,61 @@ begin
     until FindNext(fdst) <> 0;
     FindClose(fdst);
   end;
-  if sfoWriteFileNameToConsole in Options then
-    IOResult;
 end;
-{$I+}
- 
+
+function CopyFolder(const Source, Dest: TFileName;
+  Options: TSynchFoldersOptions): integer;
+var
+  src, dst, reffn, dstfn: TFileName;
+  sr: TSearchRec;
+  dsize: Int64;
+  dtime: TUnixMSTime;
+  nested: integer;
+begin
+  result := 0;
+  src := IncludeTrailingPathDelimiter(Source);
+  if not DirectoryExists(src) then
+    exit;
+  dst := EnsureDirectoryExists(Dest);
+  if FindFirst(src + FILES_ALL, faAnyFile, sr) = 0 then
+  begin
+    repeat
+      reffn := src + sr.Name;
+      dstfn := dst + sr.Name;
+      if SearchRecValidFile(sr) then
+      begin
+        if FileInfoByName(dstfn, dsize, dtime) and // fast single syscall
+           (sr.Size = dsize) then
+          if sfoByContent in Options then
+          begin
+            if SameFileContent(reffn, dstfn) then
+              continue;
+          end
+          else if abs(SearchRecToUnixTimeUtc(sr) * 1000 - dtime) < 1000 then
+            continue; // allow error of 1 second timestamp resolution
+        if not CopyFile(reffn, dstfn, {failsifexists=}false) then
+          result := -1;
+      end
+      else if not SearchRecValidFolder(sr) then
+        continue
+      else if sfoSubFolder in Options then
+      begin
+        nested := CopyFolder(reffn, dstfn, Options);
+        if nested < 0 then
+          result := nested
+        else
+          inc(result, nested);
+      end;
+      if result < 0 then
+        break;
+      inc(result);
+      if sfoWriteFileNameToConsole in Options then
+        ConsoleWrite('copied %', [reffn]);
+    until (FindNext(sr) <> 0);
+    FindClose(sr);
+  end;
+end;
+
 
 { ****************** ScanUtf8, GLOB and SOUNDEX Text Search }
 
