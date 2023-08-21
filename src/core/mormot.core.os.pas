@@ -3146,6 +3146,9 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 // Windows TimeStamps in its headers
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
 
+/// get a file UTC date and time, from a FindFirst/FindNext search, as Unix time
+function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
+
 /// check if a FindFirst/FindNext found instance is actually a file
 function SearchRecValidFile(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}

@@ -775,7 +775,12 @@ end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
 begin
-  result := F.Time;
+  result := F.Time; // already in the expected legacy format
+end;
+
+function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
+begin // return the search record timestamp with no local time conversion
+  result := FileTimeToUnixTime(F.FindData.ftLastWriteTime);
 end;
 
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
