@@ -1285,8 +1285,11 @@ begin
         ftInt64,
         ftDouble,
         ftCurrency:
-          // note: StrLen is slightly faster than PQ.GetLength for small content
-          W.AddNoJsonEscape(P, StrLen(P));
+          if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+            W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
+          else
+            // note: StrLen is slightly faster than PQ.GetLength for small content
+            W.AddNoJsonEscape(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
