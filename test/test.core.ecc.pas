@@ -20,6 +20,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.search,
   mormot.core.test,
   mormot.crypt.secure,
   mormot.crypt.jwt,
@@ -419,6 +420,7 @@ var
     rounds: integer;
   end;
   exectemp: variant;
+  dirsize: Int64;
 
   function Exec(const nv: array of const; cmd: TEccCommand): PDocVariantData;
   var
@@ -551,6 +553,19 @@ begin
   finally
     SetCurrentDir('..');
   end;
+  // use the "synecc" sub-folder to verify folder copy
+  dirsize := DirectorySize('synecc');
+  check(dirsize <> 0, 'dirsize');
+  check(CopyFolder('synecc', 'synecc2', []) > 0, 'copy1a');
+  checkEqual(CopyFolder('synecc', 'synecc2', [sfoWriteFileNameToConsole]), 0, 'copy1b');
+  CheckEqual(DirectorySize('synecc'), dirsize, 'dir1');
+  check(DirectoryDelete('synecc2', FILES_ALL, {filesnotdir=}true), 'del1');
+  CheckEqual(DirectorySize('synecc2'), 0, 'rem1');
+  check(CopyFolder('synecc', 'synecc2', [sfoByContent]) > 0, 'copy2a');
+  checkEqual(CopyFolder('synecc', 'synecc2', [sfoByContent, sfoWriteFileNameToConsole]), 0, 'copy2b');
+  CheckEqual(DirectorySize('synecc'), dirsize, 'dir2');
+  check(DirectoryDelete('synecc2', FILES_ALL, {filesnotdir=}true), 'del2');
+  CheckEqual(DirectorySize('synecc2'), 0, 'rem2');
 end;
 
 procedure TTestCoreEcc.ECDHEStreamProtocol;
