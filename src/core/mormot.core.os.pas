@@ -3262,6 +3262,7 @@ function StringFromFolders(const Folders: array of TFileName;
 
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
+// - can optionaly force writing to disk, and/or set the file local timestamp
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean = false; FileDate: TDateTime = 0): boolean;
 
@@ -6678,7 +6679,7 @@ begin
     FlushFileBuffers(F);
   {$ifdef OSWINDOWS}
   if FileDate <> 0 then
-    FileSetDate(F, DateTimeToFileDate(FileDate));
+    FileSetDate(F, DateTimeToFileDate(FileDate)); // use the existing handle
   FileClose(F);
   {$else}
   FileClose(F); // POSIX expects the file to be closed to set the date
@@ -8409,7 +8410,7 @@ var
     if s = '' then
       exit;
     u.c[n] := crc32c(u.c[n], pointer(s), length(s));
-    n := (n + 1) and 3;
+    n := (n + 1) and 3; // update only 32-bit of UUID per crctext() call
   end;
 
 begin
@@ -8424,15 +8425,17 @@ begin
   s := StringFromFile(fn);
   if length(s) = SizeOf(uuid) then
   begin
-    uuid := PGuid(s)^;
+    uuid := PGuid(s)^; // seems to be a valid UUID binary blob
     exit;
   end;
-  // no known UUID: compute and store a 128-bit hash from hardware information
+  // no known UUID: compute and store a 128-bit hash from HW specs
+  // which should remain identical even between full OS reinstalls
   // note: /etc/machine-id is no viable alternative since it is from SW random
   {$ifdef CPUINTELARM}
   crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b);
   {$else}
-  FillZero(u.b);
+  s := CPU_ARCH_TEXT;
+  crc128c(pointer(s), length(s), u.b); // rough starting point
   {$endif CPUINTELARM}
   if RawSmbios.Data <> '' then // some bios have no uuid but some HW info
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
@@ -8443,16 +8446,19 @@ begin
   crctext(BiosInfoText);
   crctext(CpuInfoText);
   if Assigned(GetSystemMacAddress) then
-  begin
     // from mormot.net.sock or mormot.core.os.posix.inc for Linux only
     mac := GetSystemMacAddress;
+  if mac <> nil then
+  begin
     for i := 0 to high(mac) do
-      crctext(mac[i]);
-    if FileFromBuffer(@u, SizeOf(u), fn) then // only MAC make it HW unique
+      crctext(mac[i]); // MAC should make it unique at least over the network
+    // we have enough unique HW information to store it locally for next startup
+    // note: RawSmbios.Data may not be genuine e.g. between VMs
+    if FileFromBuffer(@u, SizeOf(u), fn) then
       FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
   end
   else
-    // fallback if mormot.net.sock is not included (very unlikely)
+    // unpersisted fallback if mormot.net.sock is not included (very unlikely)
     crctext(Executable.Host);
 end;
 
