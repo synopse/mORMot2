@@ -8450,8 +8450,9 @@ begin
     mac := GetSystemMacAddress;
   if mac <> nil then
   begin
+    // MAC should make it unique at least over the local network
     for i := 0 to high(mac) do
-      crctext(mac[i]); // MAC should make it unique at least over the network
+      crctext(mac[i]);
     // we have enough unique HW information to store it locally for next startup
     // note: RawSmbios.Data may not be genuine e.g. between VMs
     if FileFromBuffer(@u, SizeOf(u), fn) then

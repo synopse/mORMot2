@@ -8858,7 +8858,7 @@ begin
      (Cache[LastPrepared].StatementSql <> GenericSql) then
     LastPrepared := Caches.FindHashedForAdding(GenericSql, added)
   else
-    added := false; // occurs e.g. on multiple insert
+    added := false; // occurs e.g. on multiple inserts or updates
   c := @Cache[LastPrepared];
   if added then
   begin

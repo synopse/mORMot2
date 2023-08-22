@@ -655,9 +655,9 @@ procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileNam
       Test.CheckEqual(Rec1.FillTable.RowCount, Rec2.FillTable.RowCount);
       while Rec1.FillOne do
       begin
-        Test.check(Rec2.FillOne);
-        Test.check(Rec1.SameRecord(Rec2), 'simple fields');
-        Test.CheckEqual(Rec1.Version, Rec2.Version);
+        Test.check(Rec2.FillOne, 'fill');
+        Test.check(Rec1.SameRecord(Rec2), 'fields');
+        Test.CheckEqual(Rec1.Version, Rec2.Version, 'version');
       end;
     finally
       Rec1.Free;
@@ -793,7 +793,7 @@ begin
         if i and 3 = 1 then
           Test.check(Master.Server.Delete(TOrmPeopleVersioned, Rec.IDValue))
         else
-          Test.check(Master.Server.Update(Rec));
+          Test.check(Master.Server.Update(Rec, 'YearOfBirth'));
         if i and 3 = 2 then
         begin
           Rec.YearOfBirth := Rec.YearOfBirth + 4;

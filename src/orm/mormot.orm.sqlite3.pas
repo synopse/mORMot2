@@ -2380,13 +2380,14 @@ var
   f: PtrInt;
   prop: POrmPropInfo;
 begin
+  // decode and bind a JSON array of fields
   info.Json := GotoNextNotSpace(P);
   if info.Json^ <> '[' then
     raise EOrmBatchException.CreateUtf8(
       'Invalid simple batch - start with % instead of [', [info.Json^]);
   inc(info.Json);
   if id <> nil then
-    id^ := GetNextItemInt64(info.Json);
+    id^ := GetNextItemInt64(info.Json); // first field is RowID (if not already)
   result := firstarg;
   prop := pointer(Props.List);
   for f := 0 to Props.Count - 1 do
@@ -2747,33 +2748,37 @@ begin
 end;
 
 function ProcessPutHexID(DB: TRestOrmServerDB; const Fields: TFieldBits;
-  Props: TOrmProperties; Sent: PUtf8Char): TID;
+  Sent: PUtf8Char; TableIndex: PtrInt): TID;
 var
   b: PRestOrmServerDBBatch;
+  p: TOrmProperties;
   arg: integer;
   id: TID;
+  notify: RawUtf8;
 begin
+  p := DB.fModel.TableProps[TableIndex].Props;
+  if DB.InternalUpdateEventNeeded(oeUpdate, TableIndex) then
+    p.SaveFieldsFromJsonArray(Sent, Fields, nil, nil, [sfoExtendedJson], notify);
   b := DB.fBatch;
   if not IsEqual(b^.SimpleFields, Fields) then
   begin
     b^.SimpleFields := Fields;
-    b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
-    Props.CsvFromFieldBits(['update ', Props.SqlTableName, ' set '],
+    b^.UpdateFieldsCount := FieldBitCount(Fields, p.Fields.Count) + 1;
+    p.CsvFromFieldBits(['update ', p.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);
   end;
   DB.DB.LockAndFlushCache;
   try
     DB.PrepareCachedStatement(b^.UpdateSql, b^.UpdateFieldsCount);
     try
-      arg := BindDirect(Props.Fields, Sent, DB.fStatement, Fields, 0, @id);
-      if Sent <> nil then
-        DB.fStatement.Bind(arg + 1, id);
+      arg := BindDirect(p.Fields, Sent, DB.fStatement, Fields, 0, @id);
       if Sent = nil then
       begin
         DB.InternalLog('InternalBatchDirectOne: encPutHexID JSON', sllError);
         result := HTTP_BADREQUEST;
         exit;
       end;
+      DB.fStatement.Bind(arg + 1, id);
       repeat
       until DB.fStatement.Step <> SQLITE_ROW; // Execute
       DB.GetAndPrepareStatementRelease;
@@ -2788,6 +2793,9 @@ begin
   finally
     DB.DB.UnLock;
   end;
+  if (notify <> '') and
+     (result = HTTP_SUCCESS) then
+    DB.InternalUpdateEvent(oeUpdate, TableIndex, id, notify, nil, nil);
 end;
 
 function TRestOrmServerDB.InternalBatchDirectSupport(
@@ -2821,8 +2829,7 @@ begin
     encPutHexID:
       begin
         // efficient execution of UPDATE
-        result := ProcessPutHexID(
-          self, Fields, fModel.TableProps[RunTableIndex].Props, Sent);
+        result := ProcessPutHexID(self, Fields, Sent, RunTableIndex);
         exit;
       end;
   end;
