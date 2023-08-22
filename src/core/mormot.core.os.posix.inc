@@ -1062,7 +1062,7 @@ begin
     result := 0
   else
     // + unixutil.TZSeconds = UTC to local time conversion
-    result := (FileDate + TZSeconds) / SecsPerDay + UnixDelta;
+    result := Int64(FileDate + TZSeconds) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;

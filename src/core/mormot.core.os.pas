@@ -3141,13 +3141,22 @@ procedure DisplayError(const fmt: string; const args: array of const);
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get a file UTC date and time, from a FindFirst/FindNext search
+// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp do return
+// local time, which require a conversion, may appear less useful on server side
+// - is implemented as a wrapper around SearchRecToUnixTimeUtc()
+function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;
+
+/// get a file UTC date and time, from a FindFirst/FindNext search, as Unix time
+// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp do return
+// local time, which require a conversion, may appear less useful on server side
+function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
+  {$ifdef OSPOSIX}inline;{$endif}
+
 /// get a file date and time, from a FindFirst/FindNext search, as Windows time
 // - this cross-system function is used e.g. by mormot.core.zip which expects
 // Windows TimeStamps in its headers
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
-
-/// get a file UTC date and time, from a FindFirst/FindNext search, as Unix time
-function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
 
 /// check if a FindFirst/FindNext found instance is actually a file
 function SearchRecValidFile(const F: TSearchRec): boolean;
@@ -6427,6 +6436,11 @@ begin
   {$else}
   result := FileDateToDateTime(F.Time);
   {$endif ISDELPHIXE}
+end;
+
+function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;
+begin
+  result := SearchRecToUnixTimeUtc(F) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
 
 function SearchRecValidFile(const F: TSearchRec): boolean;
