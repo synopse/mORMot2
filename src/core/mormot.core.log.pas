@@ -4008,12 +4008,12 @@ begin
       try
         if ArchiveAfterDays < 0 then
           ArchiveAfterDays := 0;
-        oldTime := Now - ArchiveAfterDays;
+        oldTime := NowUtc - ArchiveAfterDays;
         repeat
           if (SR.Name[1] = '.') or
              (faDirectory and SR.Attr <> 0) then
             continue;
-          aTime := SearchRecToDateTime(SR);
+          aTime := SearchRecToDateTimeUtc(SR);
           if (aTime = 0) or
              (aTime > oldTime) then
             continue;
