@@ -3142,14 +3142,14 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get a file UTC date and time, from a FindFirst/FindNext search
-// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp do return
-// local time, which require a conversion, may appear less useful on server side
+// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp, which have
+// local time and require a conversion, may appear less useful on server side
 // - is implemented as a wrapper around SearchRecToUnixTimeUtc()
 function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;
 
 /// get a file UTC date and time, from a FindFirst/FindNext search, as Unix time
-// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp do return
-// local time, which require a conversion, may appear less useful on server side
+// - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp, which have
+// local time and require a conversion, may appear less useful on server side
 function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
   {$ifdef OSPOSIX}inline;{$endif}
 
@@ -6884,7 +6884,7 @@ begin
   Dir := IncludeTrailingPathDelimiter(Directory);
   if FindFirst(Dir + Mask, faAnyFile, F) = 0 then
   begin
-    old := Now - TimePeriod;
+    old := NowUtc - TimePeriod;
     repeat
       if SearchRecValidFolder(F) then
       begin
@@ -6893,7 +6893,7 @@ begin
             Dir + F.Name, TimePeriod, Mask, true, TotalSize);
       end
       else if SearchRecValidFile(F) and
-              (SearchRecToDateTime(F) < old) then
+              (SearchRecToDateTimeUtc(F) < old) then
         if not DeleteFile(Dir + F.Name) then
           result := false
         else if TotalSize <> nil then
