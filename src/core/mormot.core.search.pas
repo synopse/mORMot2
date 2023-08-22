@@ -57,7 +57,7 @@ type
     Attr: integer;
     /// the matching file size
     Size: Int64;
-    /// the matching file date/time
+    /// the matching file local date/time
     Timestamp: TDateTime;
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);

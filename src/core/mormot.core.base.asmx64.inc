@@ -1742,6 +1742,7 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
         lea     ebx, [r8 + 24234428H]
         lea     edi, [r8 - 7A143589H]
         lea     eax, [r8 + 61C8864FH]
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @1:     imul    r9d, dword ptr [rcx], -2048144777
         add     rcx, 16
         imul    r11d, dword ptr [rcx - 12], -2048144777
