@@ -2098,6 +2098,8 @@ type
       w: array[0..15] of word);
   8: (
      l, h: THash128Rec);
+  9: (
+     sha1: THash160);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;

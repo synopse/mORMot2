@@ -728,12 +728,16 @@ type
   // - ccaCrc32 and ccaAdler32 require mormot.lib.z.pas to be included
   // - AesNiHash() is not part of it, because it is not cross-platform, and
   // randomly seeded at process startup
+  // - some cryptographic-level hashes are truncated to 32-bit - caSha1 could
+  // leverage Intel SHA HW opcodes to achieve pretty good performance
   TCrc32Algo = (
     caCrc32c,
     caCrc32,
     caAdler32,
     caxxHash32,
-    caFnv32);
+    caFnv32,
+    caMd5,
+    caSha1);
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
@@ -1266,11 +1270,11 @@ type
   {$A-}
   /// efficient thread-safe cookie generation
   // - you can see it as a JWT-Of-The-Poor: faster to parse and validate
-  // its content, and with very efficiently binary-based serialization
+  // its content, and with very efficience binary-based serialization
   // - stores a session ID, cookie name, and encryption and signature keys
   // - can optionally store any associated record as efficient binary
   // - it is NOT cryptographic secure, because cookies are not, but it is strong
-  // enough to avoid most attacks, and uses much less space than a JWT
+  // enough to avoid most attacks, and uses much less space and CPU than a JWT
   {$ifdef USERECORDWITHMETHODS}
   TBinaryCookieGenerator = record
   {$else}
@@ -1281,13 +1285,13 @@ type
     // - is not part of the Generate/Validate content, but could be used
     // when the cookie is actually stored in HTTP headers
     CookieName: RawUtf8;
-    /// an increasing 31-bit counter, to implement unique session ID
+    /// 31-bit increasing counter, to implement unique session ID
     SessionSequence: TBinaryCookieGeneratorSessionID;
     /// the random initial value of the SessionSequence counter
     SessionSequenceStart: TBinaryCookieGeneratorSessionID;
-    /// secret information, used for digital signature of the cookie content
+    /// 32-bit secret information, used for digital signature of the cookie
     Secret: cardinal;
-    /// random IV used as CTR on Crypt[] secret key
+    /// 32-bit random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;
     /// used when Generate() has TimeOutMinutes=0
     // - if equals 0, one month delay is used as "never expire"
@@ -2865,6 +2869,23 @@ begin
   result := hfMD5;
 end;
 
+function md5hash32(crc: cardinal; buffer: pointer; len: cardinal): cardinal;
+var
+  md5: TMd5;
+  dig: THash128Rec;
+begin
+  md5.Full(buffer, len, dig.b);
+  result := dig.c0 xor dig.c1 xor dig.c2 xor dig.c3;
+end;
+
+function sha1hash32(crc: cardinal; buffer: pointer; len: cardinal): cardinal;
+var
+  sha: TSha1;
+  dig: THash256Rec;
+begin
+  sha.Full(buffer, len, dig.sha1);
+  result := dig.c[0] xor dig.c[1] xor dig.c[2] xor dig.c[3] xor dig.c[4];
+end;
 
 function CryptCrc32(algo: TCrc32Algo): THasher;
 begin
@@ -2879,6 +2900,10 @@ begin
       result := @xxHash32;
     caFnv32:
       result := @fnv32;
+    caMd5:
+      result := @md5hash32;
+    caSha1:
+      result := @sha1hash32; // may use Intel SHA HW opcodes
   else
     result := nil;
   end;
@@ -5435,7 +5460,7 @@ type
 
 const
   /// CSV text of TCrc32Algo items
-  CrcAlgosText: PUtf8Char = 'crc32,crc32c,xxhash32,adler32,fnv32';
+  CrcAlgosText: PUtf8Char = 'crc32,crc32c,xxhash32,adler32,fnv32,md5-32,sha1-32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin
