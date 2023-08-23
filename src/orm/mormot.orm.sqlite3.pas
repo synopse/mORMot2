@@ -2748,30 +2748,25 @@ begin
 end;
 
 function ProcessPutHexID(DB: TRestOrmServerDB; const Fields: TFieldBits;
-  Sent: PUtf8Char; TableIndex: PtrInt): TID;
+  Sent: PUtf8Char; Props: TOrmProperties): TID;
 var
   b: PRestOrmServerDBBatch;
-  p: TOrmProperties;
   arg: integer;
   id: TID;
-  notify: RawUtf8;
 begin
-  p := DB.fModel.TableProps[TableIndex].Props;
-  if DB.InternalUpdateEventNeeded(oeUpdate, TableIndex) then
-    p.SaveFieldsFromJsonArray(Sent, Fields, nil, nil, [sfoExtendedJson], notify);
   b := DB.fBatch;
   if not IsEqual(b^.SimpleFields, Fields) then
   begin
     b^.SimpleFields := Fields;
-    b^.UpdateFieldsCount := FieldBitCount(Fields, p.Fields.Count) + 1;
-    p.CsvFromFieldBits(['update ', p.SqlTableName, ' set '],
+    b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
+    Props.CsvFromFieldBits(['update ', Props.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);
   end;
   DB.DB.LockAndFlushCache;
   try
     DB.PrepareCachedStatement(b^.UpdateSql, b^.UpdateFieldsCount);
     try
-      arg := BindDirect(p.Fields, Sent, DB.fStatement, Fields, 0, @id);
+      arg := BindDirect(Props.Fields, Sent, DB.fStatement, Fields, 0, @id);
       if Sent = nil then
       begin
         DB.InternalLog('InternalBatchDirectOne: encPutHexID JSON', sllError);
@@ -2793,9 +2788,6 @@ begin
   finally
     DB.DB.UnLock;
   end;
-  if (notify <> '') and
-     (result = HTTP_SUCCESS) then
-    DB.InternalUpdateEvent(oeUpdate, TableIndex, id, notify, nil, nil);
 end;
 
 function TRestOrmServerDB.InternalBatchDirectSupport(
@@ -2807,7 +2799,8 @@ begin
     if GetStaticTableIndex(RunTableIndex) = nil then
       // supported (plain SQLite3 table in the main database)
       if (Encoding <> encPutHexID) or
-         not InternalUpdateEventNeeded(oeUpdate, RunTableIndex) then
+         ((fModel.TableProps[RunTableIndex].Props.RecordVersionField = nil) and
+          not InternalUpdateEventNeeded(oeUpdate, RunTableIndex)) then
         // update notification requires a full JSON object -> not compatible
         result := dirWriteLock; // fBatch should be protected by the lock
 end;
@@ -2829,7 +2822,8 @@ begin
     encPutHexID:
       begin
         // efficient execution of UPDATE
-        result := ProcessPutHexID(self, Fields, Sent, RunTableIndex);
+        result := ProcessPutHexID(
+          self, Fields, Sent, fModel.TableProps[RunTableIndex].Props);
         exit;
       end;
   end;
