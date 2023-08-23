@@ -5468,7 +5468,7 @@ type
 const
   /// CSV text of TCrc32Algo items
   CrcAlgosText: PUtf8Char =
-      'crc32,crc32c,xxhash32,adler32,fnv32,aesni32,md5-32,sha1-32';
+    'crc32,crc32c,xxhash32,adler32,fnv32,aesni32,md5-32,sha1-32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin

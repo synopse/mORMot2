@@ -1509,7 +1509,7 @@ begin
         CookieRecordToVariant(PRecordData, PRecordTypeInfo, info);
       fApplication.OnSessionCreate(self, result, info);
     end;
-    SetCookie(cookie);
+    SetCookie(cookie); // will be sent back to the client and stored there
   end;
 end;
 
