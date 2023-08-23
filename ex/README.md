@@ -49,13 +49,13 @@ Then you will have a *MongoDB* server instance accessible on `localhost:27017`, 
 
 Contains a [TechEmpower Framework Benchmarks](https://www.techempower.com/benchmarks) compliant implementation using *mORMot*.
 
-It is a good example of what could be done to achieve the best performance with **mORMot**, and to compare with alternatives in some realistic scenarios. And we can be proud of our little rodent for sure - especially in respect to performance and pascal code expressiveness.
+It is a good example of what could be done to achieve the best performance with **mORMot**, and to compare with alternatives in some near-realistic scenarios. And we can be proud of our little rodent for sure - especially in respect to performance and pascal code expressiveness.
 
 ## Integrated and Advanced Samples
 
 ### mvc-blog
 
-[MVC sample web application](./mvc-blog], publishing a simple BLOG.
+[MVC sample web application](./mvc-blog), publishing a simple BLOG.
 
 It is a fully featured sample, with a MVC Web MicroService, hosting its own SQLite3 database, with Full Text search, and some mustache HTML templates.
 
