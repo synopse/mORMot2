@@ -16,10 +16,11 @@ Thanks to all [Contributors](CONTRIBUTORS.md)!
 
 You can find more about *mORMot 2* in:
 - its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress);
-- the [Source Code `src` sub-folder](src);
+- the [Samples Folder](ex);
 - the [Thomas Tutorials](https://github.com/synopse/mORMot2/tree/master/ex/ThirdPartyDemos/tbo);
 - the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
 - the [Synopse Blog](https://blog.synopse.info);
+- the [Source Code `src` sub-folder](src);
 - the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still mostly apply to the new version - especially the design/conceptual parts.
 
 If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/synopse/mORMot2/blob/master/DONATE.md) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
