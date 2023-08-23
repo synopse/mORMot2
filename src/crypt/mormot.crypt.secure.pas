@@ -726,8 +726,8 @@ type
 
   /// the known 32-bit crc algorithms as returned by CryptCrc32()
   // - ccaCrc32 and ccaAdler32 require mormot.lib.z.pas to be included
-  // - AesNiHash() is part of it, but is NOT cross-platform, and not persistable
-  // between executions, since is randomly seeded at process startup
+  // - caDefault may be AesNiHash32(), therefore not persistable between
+  // executions, since is randomly seeded at process startup
   // - some cryptographic-level hashes are truncated to 32-bit - caSha1 could
   // leverage Intel SHA HW opcodes to achieve pretty good performance
   TCrc32Algo = (
@@ -736,13 +736,12 @@ type
     caAdler32,
     caxxHash32,
     caFnv32,
-    caAesNi32,
+    caDefault,
     caMd5,
     caSha1);
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
-// or for caAesNi32 when AES-NI and SSE 4.1 are not available
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
@@ -1306,7 +1305,7 @@ type
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
     // - default crc32c is fast and secure enough on most platforms, but you
-    // may consider caAesNi32 or caSha1 on recent Intel/AMD servers
+    // may consider caDefault or caSha1 on recent Intel/AMD servers
     procedure Init(const Name: RawUtf8 = 'mORMot';
       DefaultSessionTimeOutMinutes: cardinal = 0;
       SignAlgo: TCrc32Algo = caCrc32c);
@@ -1325,7 +1324,7 @@ type
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
       PIssued: PUnixTime = nil): TBinaryCookieGeneratorSessionID;
     /// allow the very same cookie to be recognized after server restart
-    // - note that the seeded caAesNi32 won't be persistable by definition
+    // - note that caDefault won't be persistable, because may map AesNiHash32
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
     function Load(const Saved: RawUtf8): boolean;
@@ -2905,8 +2904,8 @@ begin
       result := @xxHash32;
     caFnv32:
       result := @fnv32;
-    caAesNi32:
-      result := AesNiHash32; // may return nil on non-Intel or oldest CPUs
+    caDefault:
+      result := DefaultHasher; // may use AES-NI with process-specific seed
     caMd5:
       result := @md5hash32;
     caSha1:
@@ -5468,7 +5467,7 @@ type
 const
   /// CSV text of TCrc32Algo items
   CrcAlgosText: PUtf8Char =
-    'crc32,crc32c,xxhash32,adler32,fnv32,aesni32,md5-32,sha1-32';
+    'crc32,crc32c,xxhash32,adler32,fnv32,default32,md5-32,sha1-32';
 
 constructor TCryptCrc32Internal.Create(const name: RawUtf8);
 begin
