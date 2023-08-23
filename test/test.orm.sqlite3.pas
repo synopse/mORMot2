@@ -800,6 +800,15 @@ begin
           Test.check(Master.Server.Update(Rec), 'update twice to increase Version');
         end;
       end;
+      //Test.check(Rec.FillRewind); would fail TestMasterSlave expectations
+      MasterAccess.Client.BatchStart(TOrmPeopleVersioned);
+      for i := 0 to 9 do
+      begin
+        Test.check(Rec.FillOne);
+        Rec.YearOfBirth := Rec.YearOfBirth + 10;
+        Test.check(MasterAccess.Client.BatchUpdate(Rec, 'YearOfBirth') >= 0);
+      end;
+      Test.check(MasterAccess.Client.BatchSend(IDs) = HTTP_SUCCESS);
       TestMasterSlave(Master, Slave1, MasterAccess);
       TestMasterSlave(Master, Slave1, MasterAccess);
       if Test is TTestBidirectionalRemoteConnection then

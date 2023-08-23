@@ -5913,15 +5913,14 @@ begin
   {$endif OSWINDOWS}
 end;
 
+function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
+begin
+  result := IdemPropNameUSameLenNotNull(pointer(s1), pointer(s2), len);
+end;
+
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
 // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestCoreBase._IdemPropName;
-
-  function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
-  begin
-    result := IdemPropNameUSameLenNotNull(pointer(s1), pointer(s2), len);
-  end;
-
 const
   abcde: PUtf8Char = 'ABcdE';
   abcdf: PUtf8Char = 'abCDF';
