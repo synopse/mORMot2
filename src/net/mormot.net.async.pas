@@ -2201,7 +2201,7 @@ begin
     FreeAndNil(result);
 end;
 
-// NOTICE on the acoThreadSmooting algorithm (genuine AFAICT)
+// NOTICE on the acoThreadSmooting scheduling algorithm (genuine AFAICT)
 // - in TAsyncConnectionsThread.Execute, the R0/atpReadPoll main thread calls
 // PollForPendingEvents (e.g. the epoll API on Linux) then ThreadPollingWakeup()
 // to process the socket reads in the R1..Rn/atpReadPending threads of the pool
@@ -2223,6 +2223,8 @@ end;
 // thread is supposed to handle in its loop - default value is computed as
 // (ThreadPoolCount / CpuCount) * 8 so should scale depending on the actual HW
 // - on Linux, waking up threads is done via efficient blocking eventfd()
+// - on Windows, acoThreadSmooting is forced because without it the async
+// server seems unstable and consumes too much CPU in its R0 thread
 
 function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
 var
@@ -3645,6 +3647,9 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
+  {$ifdef OSWINDOWS}
+  include(ProcessOptions, hsoThreadSmooting); // seems unstable without it
+  {$endif OSWINDOWS}
   if hsoThreadSmooting in ProcessOptions then
     include(aco, acoThreadSmooting)
   else // our thread smooting algorithm excludes CPU affinity
