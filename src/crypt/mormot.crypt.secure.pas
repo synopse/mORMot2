@@ -4912,7 +4912,7 @@ begin
     dec(size, SizeOf(cardinal));
     data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
     inc(data);
-    ctr := ((ctr xor (ctr shr 15)) * 2246822519); // prime-number ctr diffusion
+    ctr := ((ctr xor (ctr shr 15)) * 2246822519); // xxHash32Mixup ctr diffusion
     ctr := ((ctr xor (ctr shr 13)) * 3266489917);
     ctr := ctr xor (ctr shr 16);
   end;

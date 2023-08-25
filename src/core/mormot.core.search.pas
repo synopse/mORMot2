@@ -4576,7 +4576,7 @@ end;
 
 function hash32prime(buf: pointer): cardinal;
 begin
-  // xxhash32-inspired - and won't pollute L1 cache with lookup tables
+  // inlined xxHash32Mixup - won't pollute L1 cache with crc lookup tables
   result := PCardinal(buf)^;
   result := result xor (result shr 15);
   result := result * 2246822519;
