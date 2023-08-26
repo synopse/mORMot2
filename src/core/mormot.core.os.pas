@@ -4461,7 +4461,8 @@ function SleepHiRes(ms: cardinal; var terminated: boolean;
 
 /// call SleepHiRes() taking count of the activity, in 0/1/5/50/120-250 ms steps
 // - range is agressively designed burning some CPU in favor of responsiveness
-// - should reset start := 0 when some activity occurred
+// - should reset start := 0 when some activity occurred, or start := -1 on
+// Windows to avoid any SleepHiRes(0) = SwitchToThread call
 // - would optionally return if terminated^ is set, or event is signaled
 // - returns the current GetTickCount64 value
 function SleepStep(var start: Int64; terminated: PBoolean = nil): Int64;
@@ -4472,6 +4473,8 @@ function SleepDelay(elapsed: PtrInt): PtrInt;
 
 /// compute optimal sleep time as SleepStep, in 0/1/5/50/120-250 ms steps
 // - is agressively designed burning some CPU in favor of responsiveness
+// - start=0 would fill its value with tix; start<0 would fill its value with
+// tix-50 so that SleepDelay() would never call SleepHiRes(0)
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// similar to Windows SwitchToThread API call, to be truly cross-platform
@@ -9483,8 +9486,11 @@ end;
 function SleepStepTime(var start, tix: Int64; endtix: PInt64): PtrInt;
 begin
   tix := GetTickCount64;
-  if start = 0 then
-    start := tix;
+  if (start = 0) or
+     (tix < 50) then
+    start := tix
+  else if start < 0 then
+    start := tix - 50; // ensure tix - start = elapsed is not < 50
   result := SleepDelay(tix - start);
   if endtix <> nil then
     endtix^ := tix + result;
