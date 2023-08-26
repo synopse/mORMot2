@@ -1842,7 +1842,11 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            start := 0;
+            {$ifdef OSWINDOWS}
+            start := -1; // ensure never SleepHiRes(0)
+            {$else}
+            start := 0;  // best reactivity
+            {$endif OSWINDOWS}
             while not Terminated do
             begin
               fWaitForReadPending := false;
