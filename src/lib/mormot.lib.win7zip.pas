@@ -692,6 +692,7 @@ type
   T7zCompressionMethod = (
     m7Copy,
     m7Lzma,
+    mzLzma2,
     m7BZip2,
     m7Ppmd,
     m7Deflate,
@@ -2845,7 +2846,7 @@ const
   ZipEncryptionMethod: array[TZipEncryptionMethod] of WideString = (
     'AES128', 'AES192', 'AES256', 'ZIPCRYPTO');
   SevCompressionMethod: array[T7zCompressionMethod] of WideString = (
-    'COPY', 'LZMA', 'BZIP2', 'PPMD', 'DEFLATE', 'DEFLATE64');
+    'COPY', 'LZMA', 'LZMA2', 'BZIP2', 'PPMD', 'DEFLATE', 'DEFLATE64');
   BooleanMethod: array[boolean] of WideString = (
     'OFF', 'ON');
 
