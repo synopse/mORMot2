@@ -8947,7 +8947,7 @@ begin
             ct := DocVariantType; // recognize our TDocVariant
             if t = ct.VarType then
               goto direct;
-            ct := LastDispInvoke; // atomic load
+            ct := LastDispInvoke; // atomic pointer load
             if (ct <> nil) and
                (ct.VarType = t) then
               // most calls are grouped within the same custom variant type
