@@ -2451,7 +2451,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         not     eax
         mov     ecx, len
         shr     len, 3
-        jnz     @by8 // we don't care for read alignment
+        jnz     @by8 // no read alignment care here - but in crypto.core
 @0:     test    cl, 4
         jz      @4
         crc32   eax, dword ptr [buf]

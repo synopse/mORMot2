@@ -586,7 +586,7 @@ begin
     aes^.Encrypt(iv.b); // avoid potential brute force attack
   len := len shr AesBlockShift;
   if page = 1 then
-    // ensure header bytes 16..23 are stored unencrypted
+    // ensure header bytes 16..23 are stored unencrypted in the first page
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
        (data[21] = #64) and
        (data[22] = #32) and
@@ -621,7 +621,7 @@ begin
   else
     // whole page encryption if not the first one
     if ForceSQLite3AesCtr then
-      aes^.DoBlocksCtr(@iv.b, data, data, len) // faster on x86_64 SSE4.1
+      aes^.DoBlocksCtr(@iv.b, data, data, len) // fastest on x86_64 SSE4.1
     else
       aes^.DoBlocksOfb(@iv.b, data, data, len);
 end;
