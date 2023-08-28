@@ -380,8 +380,6 @@ type
     Seq: TIntegerDynArray;
     /// store the UTF-8 Message values
     Msg: TRawUtf8DynArray;
-    /// initialize the Error messages list
-    procedure Init(Capacity: integer);
     /// append a new UTF-8 message to the internal list, returning its ID
     function NewMsg(const text: RawUtf8): TLastErrorID;
     /// get the UTF-8 message associated to a given ID
@@ -1910,25 +1908,22 @@ end;
 
 { TLastError }
 
-procedure TLastError.Init(Capacity: integer);
-begin
-  Safe.Lock;
-  try
-    Seq := nil;
-    Msg := nil;
-    SetLength(Seq, Capacity);
-    SetLength(Msg, Capacity);
-  finally
-    Safe.UnLock;
-  end;
-end;
-
 function TLastError.NewMsg(const text: RawUtf8): TLastErrorID;
 var
   i: PtrInt;
 begin
+  if text = '' then
+  begin
+    result := 0;
+    exit;
+  end;
   Safe.Lock;
   try
+    if Seq = nil then
+    begin // first time this slot is used
+      SetLength(Seq, 128);
+      SetLength(Msg, 128);
+    end;
     inc(CurrentID);
     if CurrentID < 0 then
       CurrentID := 1; // paranoid check after 2^31 messages :)
@@ -1971,20 +1966,8 @@ threadvar
   LastDbErrorID: TLastErrorID; // 32-bit error text identifier for each thread
 
 procedure SetDbError(const text: RawUtf8);
-var
-  err: ^TLastError;
-  id: TLastErrorID;
 begin
-  if text <> '' then
-  begin
-    err := @LastDbError;
-    if err^.Seq = nil then
-      err^.Init(128);
-    id := err^.NewMsg(text);
-  end
-  else
-    id := 0; // reset
-  LastDbErrorID := id;
+  LastDbErrorID := LastDbError.NewMsg(text); // store in current threadvar
 end;
 
 procedure ClearDbError;

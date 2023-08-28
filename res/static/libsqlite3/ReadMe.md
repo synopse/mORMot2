@@ -31,7 +31,7 @@ We supply and validate the proper static `.o` `.obj` files within our https://gi
 
 4. Run `c*.bat` to generate the `sqlite3.o` and `sqlite3.obj` for Delphi Win32/Win64
 
-5. Don't forget to tune the expected *SQLite3* version text in `SynSQLite3Static.pas`
+5. Don't forget to tune the expected *SQLite3* version text in `mormot.db.raw.sqlite3.static.pas`
 
 
 ## Cross-Compile

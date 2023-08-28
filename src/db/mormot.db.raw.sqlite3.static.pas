@@ -124,10 +124,10 @@ const
 // with rounds=1000 or a JSON (extended) serialized TSynSignerParams object like
 // ${algo:"saSha512",secret:"StrongPassword",salt:"FixedSalt",rounds:10000}
 // - please note that this encryption is compatible only with SQlite3 files made
-// with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
+// with this mormot.db.raw.sqlite3.static unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
 // (SEE) file format, not the wxsqlite3 extension, but is (much) faster thanks
-// to our SynCrypto AES-NI enabled unit
+// to our mormot.crypt.core AES-NI enabled unit
 // - if the key is not correct, a ESqlite3Exception will be raised with
 // 'database disk image is malformed' (SQLITE_CORRUPT) at database opening
 // - see also IsSQLite3File/IsSQLite3FileEncrypted functions
@@ -677,7 +677,7 @@ begin
     size := FileSize(F);
     if FileRead(F, head, SizeOf(head)) <> SizeOf(head) then
       exit;
-    if size > 4 shl 20 then // use up to 4MB of R/W buffer
+    if size > 4 shl 20 then // use up to 4MB of R/decrypt/encrypt/W buffer
       bufsize := 4 shl 20
     else
       bufsize := size;
