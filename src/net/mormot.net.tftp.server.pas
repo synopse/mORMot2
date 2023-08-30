@@ -77,8 +77,8 @@ type
 
 type
   /// tune what is TTftpServerThread accepting
-  // - ttoRrq will let the TFTP server processing RRQ/Get requests
-  // - ttoWrq will let the TFTP server processing WRQ/Put requests
+  // - ttoRrq will let the TFTP server process RRQ/Get requests
+  // - ttoWrq will let the TFTP server process WRQ/Put requests
   // - ttoNoBlksize will disable RFC 2348 "blksize" option on TFTP server
   // - ttoNoTimeout will disable RFC 2349 "timeout" option on TFTP server
   // - ttoNoTsize will disable RFC 2349 "tsize" option on TFTP server
@@ -111,6 +111,8 @@ type
     fOwner: TTftpServerThread;
     fFrameMaxSize: integer;
     fFileSize: integer;
+    fLastSent: pointer;
+    fLastSentLen: integer;
     procedure DoExecute; override;
     procedure NotifyShutdown;
   public
@@ -305,8 +307,14 @@ begin
   fOwner := Owner;
   inc(fOwner.fConnectionTotal);
   fFrameMaxSize := Source.BlockSize + 16; // e.g. 512 + 16
+  if Source.FrameLen > fFrameMaxSize then
+    raise EUdpServer.CreateFmt('%s.Create: %d>%d',
+      [ClassNameShort(self)^, Source.FrameLen, fFrameMaxSize]);
   fFileSize := fContext.FileStream.Size;
   GetMem(fContext.Frame, fFrameMaxSize);
+  GetMem(fLastSent, fFrameMaxSize);
+  MoveFast(Source.Frame^, fLastSent^, Source.FrameLen);
+  fLastSentLen := Source.FrameLen;
   FreeOnTerminate := true;
   inherited Create({suspended=}false, fOwner.LogClass, FormatUtf8('%#% % %',
     [TFTP_OPCODE[Source.OpCode], InterlockedIncrement(TTftpConnectionThreadCounter),
@@ -320,6 +328,7 @@ begin
   if fOwner <> nil then
     fOwner.fConnection.Remove(self);
   inherited Destroy;
+  Freemem(fLastSent);
   FreeMem(fContext.Frame);
 end;
 
@@ -365,12 +374,14 @@ begin
         break;
       dec(fContext.RetryCount);
       // will send again the previous ACK/DAT frame
-      fLog.Log(sllTrace, 'DoExecute timeout: retry %/%',
+      fLog.Log(sllTrace, 'DoExecute timeout: resend %/%',
         [fContext.CurrentSize, fFileSize], self);
+      MoveFast(fLastSent^, fContext.Frame^, fLastSentLen); // restore frame
+      fContext.FrameLen := fLastSentLen;
     end
     else
     begin
-      // parse incoming DAT/ACK
+      // parse incoming DAT/ACK and generate the answer
       res := fContext.ParseData(len);
       if Terminated then
         break;
@@ -381,6 +392,8 @@ begin
           fContext.SendErrorAndShutdown(res, fLog, self, 'DoExecute');
         break;
       end;
+      MoveFast(fContext.Frame^, fLastSent^, fContext.FrameLen); // backup
+      fLastSentLen := fContext.FrameLen;
     end;
     // send next ACK or DAT block(s)
     if ttoLowLevelLog in fOwner.fOptions then

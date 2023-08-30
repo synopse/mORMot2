@@ -38,6 +38,7 @@ uses
 type
   /// the TFTP frame content, matching RFC1350/2347 definition
   // - toOck replaces toAck when RFC2347 Option Extensions are negotiated
+  // - the ordinal value of each enumeration matches TFTP_RRQ..TFTP_OACK const
   TTftpOpcode = (
     toUndefined,
     toRrq,
@@ -71,18 +72,17 @@ const
   TFTP_ERR  = 5;
   TFTP_OACK = 6; // RFC2347
 
-  toLast = toErr;
   teLast = teInvalidOptionNegotiation;
 
   /// the TFTP frame content, as text
-  TFTP_OPCODE: array[TTftpOpcode] of string[5] = (
+  TFTP_OPCODE: array[TTftpOpcode] of string[4] = (
     '??? ',
     'RRQ ',
     'WRQ ',
     'DAT ',
     'ACK ',
     'ERR ',
-    'OACK ');
+    'OCK ');
 
   /// RFC1350 default TFTP block size
   TFTP_BLKSIZE_DEFAULT = 512;
@@ -301,7 +301,7 @@ implementation
 function ToOpcode(const frame: TTftpFrame): TTftpOpcode;
 begin
   result := TTftpOpcode(Swap(frame.Opcode));
-  if result > toLast then
+  if result > high(TTftpOpCode) then
     result := toUndefined;
 end;
 
