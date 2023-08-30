@@ -2343,11 +2343,13 @@ begin
   result := false; // caller should release aSocket
   if Terminated then
     exit;
-  if fLastHandle < 0 then // paranoid check
-    raise EAsyncConnections.CreateUtf8(
-      '%.ConnectionNew: %.Handle overflow', [self, aConnection]);
   aConnection.fSocket := aSocket;
   aConnection.fHandle := InterlockedIncrement(fLastHandle);
+  if fLastHandle < 0 then // paranoid (overflow after 4 years at 1000 conn/sec)
+  begin
+    fLastHandle := 0; // reset sequence
+    aConnection.fHandle := InterlockedIncrement(fLastHandle);
+  end;
   if acoNoConnectionTrack in fOptions then
   begin
     include(aConnection.fFlags, fInList);
