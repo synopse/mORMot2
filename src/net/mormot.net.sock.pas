@@ -4696,7 +4696,7 @@ begin
     BufSize := InputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn) + SizeOf(TTextRec));
     OpenFunc := @OpenSock;
-    Handle := {$ifdef FPC}THandle{$endif}(-1);
+    Handle := {$ifdef FPC}THandle{$endif}(0); // some invalid handle
   end;
   SetLineBreakStyle(SockIn^, LineBreak); // http does break lines with #13#10
   Reset(SockIn^);
@@ -4718,7 +4718,7 @@ begin
     BufSize := OutputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn) + SizeOf(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
-    Handle := {$ifdef FPC}THandle{$endif}(-1);
+    Handle := {$ifdef FPC}THandle{$endif}(0);
   end;
   SetLineBreakStyle(SockOut^, tlbsCRLF); // force e.g. for Linux platforms
   Rewrite(SockOut^);
