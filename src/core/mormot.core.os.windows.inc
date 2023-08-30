@@ -958,7 +958,7 @@ begin
    result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3], SHARE[s],
      nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
   else
-    result := THandle(-1);
+    result := INVALID_HANDLE_VALUE;
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
@@ -3267,11 +3267,11 @@ begin
       exit;
     add := address;
     virt := nil;
-    if NtMapViewOfSection(mem, THandle(-1), @virt, 0, size, add, @size,
+    if NtMapViewOfSection(mem, INVALID_HANDLE_VALUE, @virt, 0, size, add, @size,
          1, 0, PAGE_READONLY) = 0 then
     begin
       FastSetRawByteString(result, virt, size);
-      NtUnmapViewOfSection(THandle(-1), virt);
+      NtUnmapViewOfSection(INVALID_HANDLE_VALUE, virt);
     end;
     CloseHandle(mem);
   end;

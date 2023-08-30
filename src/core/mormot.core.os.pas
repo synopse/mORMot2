@@ -2631,6 +2631,9 @@ var
 {$else}
 
 const
+  /// a cross-platform incorrect THandle value, as defined in Windows unit
+  INVALID_HANDLE_VALUE = THandle(-1);
+
   /// allow to assign proper signed symbol table name for a libc.so.6 method
   {$ifdef OSLINUXX64}
   LIBC_SUFFIX = '@GLIBC_2.2.5';
@@ -4338,6 +4341,7 @@ type
   end;
 
   /// our lightweight cross-platform TEvent-like component
+  // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
   // - on Linux, will use eventfd() in blocking and non-semaphore mode
   // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
   // - only limitation is that we don't know if WaitFor is signaled or timeout,
