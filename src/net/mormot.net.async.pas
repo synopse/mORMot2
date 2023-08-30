@@ -1803,7 +1803,6 @@ end;
 procedure TAsyncConnectionsThread.Execute;
 var
   new, ms: integer;
-  start: Int64;
   notif: TPollSocketResult;
 begin
   FormatUtf8('R%:%', [fIndex, fOwner.fProcessName], fName);
@@ -1842,40 +1841,34 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            {$ifdef OSWINDOWS}
-            start := -1; // ensure never SleepHiRes(0)
-            {$else}
-            start := 0;  // best reactivity
-            {$endif OSWINDOWS}
-            while not Terminated do
+            fWaitForReadPending := false;
+            new := fOwner.fClients.fRead.PollForPendingEvents(ms);
+            if Terminated then
+              break;
+            fEvent.ResetEvent;
+            fWaitForReadPending := true; // should be set before wakeup
+            if new <> 0 then
+              fOwner.ThreadPollingWakeup(new);
+            // wait for the sub-threads to wake up this one
+            if Terminated then
+              break;
+            if (fEvent.IsEventFD and
+                (fOwner.fThreadPollingAwakeCount > 2)) or
+               ((fOwner.fClients.fRead.fPending.Count = 0) and
+                (fOwner.fClients.fRead.Count = 0)) then
             begin
-              fWaitForReadPending := false;
-              new := fOwner.fClients.fRead.PollForPendingEvents(ms);
-              if Terminated then
-                break;
-              fEvent.ResetEvent;
-              fWaitForReadPending := true; // should be set before wakeup
-              if new <> 0 then
-                fOwner.ThreadPollingWakeup(new);
-              // wait for the sub-threads to wake up this one
-              if not Terminated then
-                if (fEvent.IsEventFD and
-                    (fOwner.fThreadPollingAwakeCount > 2)) or
-                   ((fOwner.fClients.fRead.fPending.Count = 0) and
-                    (fOwner.fClients.fRead.Count = 0)) then
-                begin
-                  fWaitForReadPending := true; // better safe than sorry
-                  fEvent.WaitForEver;
-                  break;
-                end
-                else if new = 0 then
-                  fEvent.SleepStep(start, @Terminated)
-                else
-                begin
-                  fWaitForReadPending := true;
-                  fEvent.WaitFor(20);
-                  break;
-                end;
+              // 1) avoid poll(eventfd) syscall on heavy loaded server
+              // 2) there is no connection any more: wait for next accept
+              fWaitForReadPending := true; // better safe than sorry
+              fEvent.WaitForEver;
+            end
+            else if fOwner.fClientsEpoll then
+            // not needed by select/poll TPollSocketAbstract.WaitForModified
+            // which actually waits up to the ms period
+            begin
+              // there are some threads working: wait for the first idle
+              fWaitForReadPending := true;
+              fEvent.WaitFor(20);
             end;
           end;
         atpReadPending:
