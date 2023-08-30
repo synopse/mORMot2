@@ -365,6 +365,8 @@ begin
         break;
       dec(fContext.RetryCount);
       // will send again the previous ACK/DAT frame
+      fLog.Log(sllTrace, 'DoExecute timeout: retry %/%',
+        [fContext.CurrentSize, fFileSize], self);
     end
     else
     begin
@@ -394,11 +396,12 @@ begin
     end;
     fContext.RetryCount := fOwner.MaxRetry;
   until Terminated;
-  // Destroy will call fContext.Shutdown
+  // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
-    fLog.Log(sllTrace, 'DoExecute: % finished at %/s',
-      [fContext.FileName, KB((fFileSize * 1000) div tix)], self);
+    fLog.Log(sllTrace, 'DoExecute: % finished at %/s - connections=%/%',
+      [fContext.FileName, KB((fFileSize * 1000) div tix),
+       fOwner.ConnectionCount, fOwner.ConnectionTotal], self);
 end;
 
 procedure TTftpConnectionThread.NotifyShutdown;
@@ -507,7 +510,11 @@ end;
 
 function TTftpServerThread.GetConnectionCount: integer;
 begin
-  result := fConnection.Count;
+  if (self = nil) or
+     (fConnection = nil) then
+    result := 0
+  else
+    result := fConnection.Count;
 end;
 
 procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
