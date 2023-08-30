@@ -1860,7 +1860,7 @@ begin
               // wait for the sub-threads to wake up this one
               if not Terminated then
                 if (fEvent.IsEventFD and
-                    (fOwner.fThreadPollingAwakeCount <> 0)) or
+                    (fOwner.fThreadPollingAwakeCount > 2)) or
                    ((fOwner.fClients.fRead.fPending.Count = 0) and
                     (fOwner.fClients.fRead.Count = 0)) then
                 begin
