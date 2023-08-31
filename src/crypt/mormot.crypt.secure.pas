@@ -3959,7 +3959,7 @@ end;
 
 procedure TDigestAuthServerFile.LoadFromFile;
 var
-  tmp: RawByteString;
+  tmp1, tmp2: RawByteString;
   p, l: PUtf8Char;
   u, r: RawUtf8;
   h: TDigestAuthHash;
@@ -3971,12 +3971,14 @@ begin
     fFileLastTime := FileAgeToUnixTimeUtc(fFileName);
     if fFileLastTime <> 0 then
     begin
-      tmp := StringFromFile(fFileName);
+      tmp1 := StringFromFile(fFileName);
       aes := GetAes;
       try
-        if aes <> nil then
-          tmp := aes.DecryptPkcs7(tmp, {iv=}true, {raise=}true);
-        p := pointer(tmp);
+        if aes = nil then
+          tmp2 := tmp1
+        else
+          tmp2 := aes.DecryptPkcs7(tmp1, {iv=}true, {raise=}true);
+        p := pointer(tmp2);
         while p <> nil do
         begin
           l := pointer(GetNextLine(p, p, {trim=}true));
@@ -3998,6 +4000,9 @@ begin
     end;
   finally
     fUsers.Safe.UnLock;
+    // anti-forensic
+    FillZero(tmp1);
+    FillZero(tmp2);
   end;
 end;
 
