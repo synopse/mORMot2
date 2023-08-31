@@ -1869,8 +1869,8 @@ begin
         atpReadPending:
           // secondary threads wait, then read and process pending events
           begin
-            fWaitForReadPending := true;
             fEvent.ResetEvent;
+            fWaitForReadPending := true; // to be set just before WaitForEver
             fEvent.WaitForEver;
             if Terminated then
               break;
