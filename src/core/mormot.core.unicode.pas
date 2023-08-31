@@ -7565,6 +7565,7 @@ begin
     with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
+  FastAssignNew(secret); // dec refCnt
 end;
 
 procedure FillZero(var secret: RawUtf8);
@@ -7584,6 +7585,7 @@ begin
     with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length * SizeOf(WideChar), 0);
+  Finalize(secret); // dec refCnt
 end;
 {$endif HASVARUSTRING}
 
@@ -7593,6 +7595,7 @@ begin
     with PDynArrayRec(Pointer(PtrInt(secret) - _DARECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
+  Finalize(secret); // dec refCnt
 end;
 
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUtf8;

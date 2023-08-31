@@ -716,7 +716,7 @@ asm
         mov     qword ptr [d], s
         test    rax, rax
         jz      @z
-        lea     d, qword ptr [rax - _STRRECSIZE]
+        lea     d, qword ptr [rax - _STRRECSIZE] // for fpc_freemem() below
         {$ifdef STRCNT32}
         cmp     dword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
         jl      @z
