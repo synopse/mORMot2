@@ -1841,11 +1841,11 @@ begin
               break;
             if (new = 0) and
                (fOwner.fClients.fRead.fPending.Count <> 0) then
-              new := 1;
+              new := 1; // wake up one thread if some reads are still pending
             fEvent.ResetEvent;
             fWaitForReadPending := true; // to be set before wakeup
             if new <> 0 then
-              new := fOwner.ThreadPollingWakeup(new);
+              fOwner.ThreadPollingWakeup(new);
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
@@ -1862,6 +1862,7 @@ begin
             else
             begin
               // always release current thread to avoid CPU burning
+              // (any condition makes stability and performance worse)
               fWaitForReadPending := true;
               fEvent.WaitFor(1);
             end;
