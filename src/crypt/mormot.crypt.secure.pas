@@ -4006,7 +4006,7 @@ var
   i: PtrInt;
   w: TTextWriter;
   tmp: TTextWriterStackBuffer;
-  txt: RawUtf8;
+  middle, txt1, txt2: RawUtf8;
   u: PRawUtf8;
   d: ^TDigestAuthHash;
   aes: TAesAbstract;
@@ -4019,9 +4019,9 @@ begin
         exit;
       fModified := false;
       if aes = nil then
-        txt := ':' + fRealm + ':'
+        middle := ':' + fRealm + ':'
       else
-        txt := ':'; // no need to store the realm in the encrypted file
+        middle := ':'; // no need to store the realm in the encrypted file
       w := TTextWriter.CreateOwnedStream(tmp);
       try
         u := fUsers.Keys.Value^;
@@ -4029,26 +4029,31 @@ begin
         for i := 0 to fUsers.Count - 1 do
         begin
           w.AddNoJsonEscapeUtf8(u^);
-          w.AddNoJsonEscapeUtf8(txt);
+          w.AddNoJsonEscapeUtf8(middle);
           w.AddBinToHex(d, fAlgoSize, true);
           w.Add(#10);
           inc(u);
           inc(d);
         end;
-        w.SetText(txt);
+        w.SetText(txt1);
       finally
         w.Free;
       end;
     finally
       fUsers.Safe.ReadUnLock;
     end;
-    if aes <> nil then
-      txt := aes.EncryptPkcs7(txt, {iv=}true);
+    if aes = nil then
+      txt2 := txt1
+    else
+      txt2 := aes.EncryptPkcs7(txt1, {iv=}true);
+    FileFromString(txt2, fFileName);
+    fFileLastTime := FileAgeToUnixTimeUtc(fFileName);
   finally
     aes.Free;
+    // anti-forensic
+    FillZero(txt1);
+    FillZero(txt2);
   end;
-  FileFromString(txt, fFileName);
-  fFileLastTime := FileAgeToUnixTimeUtc(fFileName);
 end;
 
 function TDigestAuthServerFile.RefreshFile: boolean;
