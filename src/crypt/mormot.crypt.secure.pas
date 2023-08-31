@@ -2032,7 +2032,8 @@ type
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
     /// factory for a new Certificate Signing Request over a set of (DNS) names
     // - will generate a new public/private key pair, then forge a request with
-    // the public key, self-signing the request using the new PrivateKeyPem
+    // the public key, self-signing the request using a new PrivateKeyPem or the
+    // supplied PrivateKeyPem if one non void is supplied (only for OpenSSL yet)
     // - you can optionally specify the expected usages and information fields
     // - returns both the private key and the newly generated CSR as PEM
     // - by default, will return a self-signed certificate as CSR, but is
@@ -2040,7 +2041,7 @@ type
     // in a Let's Encrypt compatible way
     function CreateSelfSignedCsr(const Subjects: RawUtf8;
       const PrivateKeyPassword: SpiUtf8;
-      out PrivateKeyPem: RawUtf8; Usages: TCryptCertUsages = [];
+      var PrivateKeyPem: RawUtf8; Usages: TCryptCertUsages = [];
       Fields: PCryptCertFields = nil): RawUtf8; virtual;
     /// factory to generate a new Certificate instance from a supplied CSR
     // - will first unserialize and verify a self-self CSR PEM content, as
@@ -5953,11 +5954,15 @@ begin
 end;
 
 function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; out PrivateKeyPem: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 var
   csr: ICryptCert;
 begin
+  if PrivateKeyPem <> '' then
+    raise ECryptCert.CreateUtf8(
+      '%.CreateSelfSignedCsr % does not support a custom private key',
+      [self, AlgoName]);
   // by default, just generate a self-signed certificate as CSR
   csr := New;
   csr.Generate(Usages, Subjects, nil, 365, -1, Fields);

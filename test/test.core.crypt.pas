@@ -2964,6 +2964,7 @@ begin
       check(cpe.GetUsage(u, c4) = (u in cpe.Usages));
       check((c4 <> nil) = (u in cpe.Usages));
     end;
+    priv := ''; // force generate a new private key
     csr := crt.CreateSelfSignedCsr('sub1,sub2', '', priv, [cuCA, cuDigitalSignature]);
     check(csr <> '', 'csr');
     check(priv <> '', 'priv');
