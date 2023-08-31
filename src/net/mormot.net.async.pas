@@ -1815,22 +1815,16 @@ begin
           (fOwner.fThreadClients.Count > 0) and
           (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) do
       fOwner.ThreadClientsConnect;
-    ms := 0;
+    ms := 1000;
     case fProcess of
       atpReadSingle:
         if fOwner.fClientsEpoll then
-          ms := 100 // for quick shutdown
-        else
-          ms := 1000;
-      atpReadPoll:
-        if fOwner.fClientsEpoll then
-          ms := 1100; // efficient epoll_wait(ms) API call
+          ms := 100; // for quick shutdown
     end;
     // main TAsyncConnections read/write process
     while not Terminated and
           (fOwner.fClients <> nil) and
           (fOwner.fClients.fRead <> nil) do
-    begin
       case fProcess of
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
@@ -1845,10 +1839,13 @@ begin
             new := fOwner.fClients.fRead.PollForPendingEvents(ms);
             if Terminated then
               break;
+            if (new = 0) and
+               (fOwner.fClients.fRead.fPending.Count <> 0) then
+              new := 1;
             fEvent.ResetEvent;
-            fWaitForReadPending := true; // should be set before wakeup
+            fWaitForReadPending := true; // to be set before wakeup
             if new <> 0 then
-              fOwner.ThreadPollingWakeup(new);
+              new := fOwner.ThreadPollingWakeup(new);
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
@@ -1856,19 +1853,17 @@ begin
                 (fOwner.fThreadPollingAwakeCount > 2)) or
                ((fOwner.fClients.fRead.fPending.Count = 0) and
                 (fOwner.fClients.fRead.Count = 0)) then
-            begin
               // 1) avoid poll(eventfd) syscall on heavy loaded server
               // 2) there is no connection any more: wait for next accept
+            begin
               fWaitForReadPending := true; // better safe than sorry
               fEvent.WaitForEver;
             end
-            else if fOwner.fClientsEpoll then
-            // not needed by select/poll TPollSocketAbstract.WaitForModified
-            // which actually waits up to the ms period
+            else
             begin
-              // there are some threads working: wait for the first idle
+              // always release current thread to avoid CPU burning
               fWaitForReadPending := true;
-              fEvent.WaitFor(20);
+              fEvent.WaitFor(1);
             end;
           end;
         atpReadPending:
@@ -1891,7 +1886,6 @@ begin
         raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
           [self, ord(fProcess)]);
       end;
-    end;
     fOwner.DoLog(sllInfo, 'Execute: done %', [fName], self);
   except
     on E: Exception do
@@ -2220,8 +2214,6 @@ end;
 // thread is supposed to handle in its loop - default value is computed as
 // (ThreadPoolCount / CpuCount) * 8 so should scale depending on the actual HW
 // - on Linux, waking up threads is done via efficient blocking eventfd()
-// - on Windows, acoThreadSmooting is forced because without it the async
-// server seems unstable and consumes too much CPU in its R0 thread
 
 function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
 var
@@ -2253,7 +2245,7 @@ begin
         // exactly wake up one thread per needed event
         if t.fWaitForReadPending then
         begin
-          // this thread is currently idle and can be used
+          // this thread is currently idle and can be activated
           t.fThreadPollingLastWakeUpCount := 0;
           t.fThreadPollingLastWakeUpTix := 0;
           t.fWaitForReadPending := false; // acquire this thread
@@ -2291,7 +2283,7 @@ begin
   end;
   // notify threads outside fThreadPollingWakeupSafe
   for i := 0 to result - 1 do
-    fThreads[ndx[i]].fEvent.SetEvent; // on Linux, will write eventfd()
+    fThreads[ndx[i]].fEvent.SetEvent; // on Linux, uses eventfd()
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -3646,9 +3638,6 @@ begin
   //include(aco, acoWritePollOnly);
   if hsoEnableTls in ProcessOptions then
     include(aco, acoEnableTls);
-  {$ifdef OSWINDOWS}
-  include(ProcessOptions, hsoThreadSmooting); // seems unstable without it
-  {$endif OSWINDOWS}
   if hsoThreadSmooting in ProcessOptions then
     include(aco, acoThreadSmooting)
   else // our thread smooting algorithm excludes CPU affinity
