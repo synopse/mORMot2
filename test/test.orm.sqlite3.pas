@@ -1042,13 +1042,13 @@ begin
       check(MS.DestList.DestGetJoined(aClient, 'ADest.SignatureTime=:(0):', sID[i], res));
       check(length(res) = 0);
       check(MS.DestList.DestGetJoined(aClient,
-        FormatUtf8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i], res));
+        FormatSql('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i], res));
 // 'ADest.SignatureTime=:('+Int64ToUtf8(MD.SignatureTime)+'):',sID[i],res));
       if CheckFailed(length(res) = 1) then
         continue; // avoid GPF
       check(res[0] = dID[i]);
       MD2 := MS.DestList.DestGetJoined(aClient,
-        FormatUtf8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i]) as TOrmADest;
+        FormatSql('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i]) as TOrmADest;
 // 'ADest.SignatureTime=:('+Int64ToUtf8(MD.SignatureTime)+'):',sID[i]) as TOrmADest;
       if CheckFailed(MD2 <> nil) then
         continue;
@@ -1199,13 +1199,13 @@ var
     begin
       k := i shl 5;
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
-        FormatUtf8('IntegerDynArrayContains(Ints,?)', [], [k]), IDs);
+        FormatSql('IntegerDynArrayContains(Ints,?)', [], [k]), IDs);
       l := n + 1 - 32 * i;
       check(length(IDs) = l);
       for j := 0 to high(IDs) do
         check(IDs[j] = k + j);
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
-       FormatUtf8('CardinalDynArrayContains(Ints,?)', [], [k]), IDs);
+       FormatSql('CardinalDynArrayContains(Ints,?)', [], [k]), IDs);
       check(length(IDs) = l);
       for j := 0 to high(IDs) do
         check(IDs[j] = k + j);

@@ -5388,7 +5388,7 @@ end;
 constructor TSynFilterOrValidate.CreateUtf8(const Format: RawUtf8; const Args,
   Params: array of const);
 begin
-  Create(FormatUtf8(Format, Args, Params, true));
+  Create(FormatJson(Format, Args, Params));
 end;
 
 procedure TSynFilterOrValidate.SetParameters(const value: RawUtf8);

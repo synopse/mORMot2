@@ -1862,7 +1862,7 @@ function TSynMustache.RenderJson(const Json: RawUtf8;
 var
   context: variant;
 begin
-  _Json(FormatUtf8(Json, Args, Params, true), context{%H-}, JSON_FAST_FLOAT);
+  _Json(FormatJson(Json, Args, Params), context{%H-}, JSON_FAST_FLOAT);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 

@@ -518,8 +518,8 @@ begin
   if fKid <> '' then
   begin
     // we have the key identifier provided by the server
-    header := FormatUtf8('{"alg":?,"kid":?,"nonce":?,"url":?}', [],
-      [CAA_JWT[fCert.AsymAlgo], fKid, fNonce, aUrl], {json=}true)
+    header := FormatJson('{"alg":?,"kid":?,"nonce":?,"url":?}', [],
+      [CAA_JWT[fCert.AsymAlgo], fKid, fNonce, aUrl])
   end
   else
   begin
@@ -529,29 +529,29 @@ begin
     if fCert.AsymAlgo in CAA_ECC then
     begin
       PEVP_PKEY(fCert.PrivateKeyHandle).EccGetPubKeyUncompressed(x, y);
-      jwk := FormatUtf8('{"crv":?,"kty":"EC","x":?,"y":?}',
-        [], [CAA_CRV[fCert.AsymAlgo], BinToBase64uri(x), BinToBase64uri(y)], true);
+      jwk := FormatJson('{"crv":?,"kty":"EC","x":?,"y":?}',
+        [], [CAA_CRV[fCert.AsymAlgo], BinToBase64uri(x), BinToBase64uri(y)]);
     end
     else
     begin
       PEVP_PKEY(fCert.PrivateKeyHandle).RsaGetPubKey(x, y);
-      jwk := FormatUtf8('{"e":?,"kty":"RSA","n":?}',
-        [], [BinToBase64uri(x), BinToBase64uri(y)], true);
+      jwk := FormatJson('{"e":?,"kty":"RSA","n":?}',
+        [], [BinToBase64uri(x), BinToBase64uri(y)]);
     end;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
     // before or after any syntaxic elements and with the required members
     // ordered lexicographically, using SHA-256 hashing
     thumb := Sha256Digest(jwk);
     fJwkThumbprint := BinToBase64uri(@thumb, sizeof(thumb));
-    header := FormatUtf8('{"alg":?,"jwk":%,"nonce":?,"url":?}',
-      [jwk], [CAA_JWT[fCert.AsymAlgo], fNonce, aUrl], true);
+    header := FormatJson('{"alg":?,"jwk":%,"nonce":?,"url":?}',
+      [jwk], [CAA_JWT[fCert.AsymAlgo], fNonce, aUrl]);
   end;
   header_enc := BinToBase64uri(header);
   json_enc := BinToBase64uri(aJson);
   body_enc := header_enc + '.' + json_enc;
   sign := DerToJwsSign(fCert.AsymAlgo, fCert.Sign(body_enc));
-  data := FormatUtf8('{"protected":?,"payload":?,"signature":?}',
-    [], [header_enc, json_enc, sign], true);
+  data := FormatJson('{"protected":?,"payload":?,"signature":?}',
+    [], [header_enc, json_enc, sign]);
   Request(aUrl, 'POST', '', data, 'application/jose+json');
   result := GetNonceAndBody;
   if fKid = '' then

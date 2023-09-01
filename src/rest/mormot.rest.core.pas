@@ -4221,7 +4221,7 @@ begin
     if msg = '' then
       Error('{"%":%}', [E, exc], Status)
     else
-      Error(FormatUtf8('{"msg":?,"%":%}', [E, exc], [msg], true), Status);
+      Error(FormatJson('{"msg":?,"%":%}', [E, exc], [msg]), Status);
   end;
 end;
 

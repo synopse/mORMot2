@@ -4639,7 +4639,7 @@ end;
 function Bson(const Format: RawUtf8; const Args, Params: array of const;
   kind: PBsonElementType): TBsonDocument;
 var
-  json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
+  json: RawUtf8; // since we use FormatParams(), TSynTempBuffer is useless here
   v: variant;
   k: TBsonElementType;
 begin
@@ -4658,7 +4658,7 @@ begin
       exit;
     end;
   end;
-  json := FormatUtf8(Format, Args, Params, {json=}true);
+  FormatParams(Format, Args, Params, {json=}true, json);
   UniqueRawUtf8(json); // ensure Format is untouched if Args=[]
   k := JsonBufferToBsonDocument(pointer(json), result);
   if kind <> nil then

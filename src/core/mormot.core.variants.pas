@@ -8105,7 +8105,7 @@ procedure _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
 var
   temp: RawUtf8;
 begin
-  temp := FormatUtf8(Format, Args, Params, true);
+  FormatParams(Format, Args, Params, {json=}true, temp);
   if TDocVariantData(Result).InitJsonInPlace(pointer(temp), Options) = nil then
     TDocVariantData(Result).ClearFast;
 end;

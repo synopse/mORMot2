@@ -2018,7 +2018,7 @@ begin
     with Value.Orm do
       if BlobFields <> nil then
       begin
-        sql := FormatUtf8('SELECT % FROM % WHERE ROWID=?',
+        sql := FormatSql('SELECT % FROM % WHERE ROWID=?',
           [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID]);
         DB.Lock(sql);
         try

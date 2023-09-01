@@ -4831,13 +4831,13 @@ begin
   Check(Doc.ToJson = '["one",2,3]');
   Check(Variant(Doc)._Json = '["one",2,3]');
   Doc.ToArrayOfConst(vr);
-  s := FormatUtf8('[?,?,?]', [], vr, true);
+  s := FormatJson('[?,?,?]', [], vr);
   check(s = '["one",2,3]');
-  s := FormatUtf8('[%,%,%]', vr, [], true);
+  s := FormatJson('[%,%,%]', vr, []);
   check(s = '[one,2,3]');
-  s := FormatUtf8('[?,?,?]', [], Doc.ToArrayOfConst, true);
+  s := FormatJson('[?,?,?]', [], Doc.ToArrayOfConst);
   check(s = '["one",2,3]');
-  s := FormatUtf8('[%,%,%]', Doc.ToArrayOfConst, [], true);
+  s := FormatJson('[%,%,%]', Doc.ToArrayOfConst, []);
   check(s = '[one,2,3]');
   V := _Json(' [ "one" ,2,3 ]   ');
   Check(V._count = 3);

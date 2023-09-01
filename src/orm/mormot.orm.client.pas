@@ -624,7 +624,7 @@ function TRestOrmClient.ListFmt(const Tables: array of TOrmClass;
   const SqlSelect, SqlWhereFormat: RawUtf8;
   const Args, Bounds: array of const): TOrmTable;
 begin
-  result := List(Tables, SqlSelect, FormatUtf8(SqlWhereFormat, Args, Bounds));
+  result := List(Tables, SqlSelect, FormatSql(SqlWhereFormat, Args, Bounds));
 end;
 
 function TRestOrmClient.TransactionBeginRetry(aTable: TOrmClass;

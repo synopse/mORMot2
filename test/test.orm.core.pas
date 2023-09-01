@@ -400,7 +400,7 @@ begin
           R.Free;
         end;
         s := Client.Orm.OneFieldValues(TOrmTest, 'Test',
-          FormatUtf8('ValWord=?', [], [110]));
+          FormatSql('ValWord=?', [], [110]));
         Check(s = '110');
         Check(Client.Orm.UpdateField(TOrmTest,
           'Unicode', ['110'],

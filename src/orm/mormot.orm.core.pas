@@ -6611,7 +6611,7 @@ constructor TOrm.Create(const aClient: IRestOrm;
 begin
   InternalCreate;
   if aClient <> nil then
-    aClient.Retrieve(FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere), self);
+    aClient.Retrieve(FormatSql(FormatSqlWhere, [], BoundsSqlWhere), self);
 end;
 
 constructor TOrm.Create(const aClient: IRestOrm;
@@ -6619,7 +6619,7 @@ constructor TOrm.Create(const aClient: IRestOrm;
 begin
   InternalCreate;
   if aClient <> nil then
-    aClient.Retrieve(FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere), self);
+    aClient.Retrieve(FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere), self);
 end;
 
 constructor TOrm.CreateFrom(const JsonRecord: RawUtf8);
@@ -6905,7 +6905,7 @@ function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8
 var
   sqlwhere: RawUtf8;
 begin
-  sqlwhere := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
+  sqlwhere := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
   result := FillPrepare(aClient, sqlwhere, FieldsCsv);
 end;
 
@@ -6915,7 +6915,7 @@ function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8
 var
   sqlwhere: RawUtf8;
 begin
-  sqlwhere := FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
+  sqlwhere := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
   result := FillPrepare(aClient, sqlwhere, FieldsCsv);
 end;
 
@@ -7696,7 +7696,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatUtf8(FormatSqlWhere, [], BoundsSqlWhere);
+  where := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
@@ -7706,7 +7706,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatUtf8(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
+  where := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
@@ -7753,7 +7753,7 @@ begin
     raise EModelException.CreateUtf8('No nested TOrm to JOIN in %', [self]);
   sql := props.Sql.SelectAllJoined;
   if aFormatSQLJoin <> '' then
-    sql := sql + FormatUtf8(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
+    sql := sql + FormatSql(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
   T := aClient.ExecuteList(props.props.JoinedFieldsTable, sql);
   if T = nil then
     exit;
@@ -8035,7 +8035,7 @@ begin
         break;
       aSqlWhere := aSqlWhere + ProcessField(JBeg);
     until JBeg^ = #0;
-    SQL := SQL + ' and (' + FormatUtf8(aSqlWhere, [], aBoundsSQLJoin) + ')';
+    SQL := SQL + ' and (' + FormatSql(aSqlWhere, [], aBoundsSQLJoin) + ')';
   end;
   // execute SQL statement and retrieve the matching data
   result := aClient.ExecuteJson([], SQL);
