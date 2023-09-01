@@ -622,19 +622,36 @@ function GotoFieldCountExpanded(P: PUtf8Char): PUtf8Char;
 function GetFieldCountExpanded(P: PUtf8Char): integer;
 
 /// fast Format() function replacement, handling % and ? parameters
-// - will include Args[] for every % in Format
-// - will inline Params[] for every ? in Format, handling special "inlined"
-// parameters, as exected by our ORM or DB units, i.e. :(1234): for numerical
-// values, and :('quoted '' string'): for textual values
-// - if optional JsonFormat parameter is TRUE, ? parameters will be written
-// as JSON escaped strings, without :(...): tokens, e.g. "quoted \" string"
+// - call rather FormatSql() and FormatJson() wrappers instead
 // - resulting string has no length limit and uses fast concatenation
+// - any supplied TObject instance will be written as their class name
+procedure FormatParams(const Format: RawUtf8; const Args, Params: array of const;
+  JsonFormat: boolean; var Result: RawUtf8);
+
+/// fast Format() function replacement, handling % but also ? inlined parameters
+// - will include Args[] for every % in Format
+// - will include Params[] for every ? in Format, as "inlined" ORM or DB values,
+// e.g. :(1234): for numbers, and  :('quoted '' string'): for text
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
-// - any supplied TObject instance will be written as their class name
-function FormatUtf8(const Format: RawUtf8;
-  const Args, Params: array of const;
+// - is a wrapper around FormatParams(Format, Args, Params, false, result);
+function FormatSql(const Format: RawUtf8;
+  const Args, Params: array of const): RawUtf8;
+
+/// fast Format() function replacement, handling % but also ? parameters as JSON
+// - will include Args[] for every % in Format
+// - will include Params[] for every ? in Format, as their JSON value, with
+// proper JSON double quotes and escaping for strings
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
+// - is a wrapper around FormatParams(Format, Args, Params, true, result);
+function FormatJson(const Format: RawUtf8;
+  const Args, Params: array of const): RawUtf8;
+
+{$ifndef PUREMORMOT2} // rather call FormatSql() and FormatJson() functions
+function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
   JsonFormat: boolean = false): RawUtf8; overload;
+{$endif PUREMORMOT2}
 
 
 { ********** TJsonWriter class with proper JSON escaping and WriteObject() support }
@@ -4817,8 +4834,8 @@ begin
   until false;
 end;
 
-function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
-  JsonFormat: boolean): RawUtf8;
+procedure FormatParams(const Format: RawUtf8; const Args, Params: array of const;
+  JsonFormat: boolean; var Result: RawUtf8);
 var
   A, P: PtrInt;
   F, FDeb: PUtf8Char;
@@ -4832,13 +4849,13 @@ begin
       (high(Params) < 0)) then
     // no formatting to process, but may be a const
     // -> make unique since e.g. _JsonFmt() will parse it in-place
-    FastSetString(result, pointer(Format), length(Format))
+    FastSetString(Result, pointer(Format), length(Format))
   else if high(Params) < 0 then
     // faster function with no ?
-    FormatUtf8(Format, Args, result)
+    FormatUtf8(Format, Args, Result)
   else if Format = '%' then
     // optimize raw conversion
-    VarRecToUtf8(Args[0], result)
+    VarRecToUtf8(Args[0], Result)
   else
     // handle any number of parameters with minimal memory allocations
     with TJsonWriter.CreateOwnedStream(temp) do
@@ -4899,12 +4916,31 @@ begin
           break;
         end;
       end;
-      SetText(result);
+      SetText(Result);
     finally
       Free;
     end;
 end;
 
+function FormatSql(const Format: RawUtf8;
+  const Args, Params: array of const): RawUtf8;
+begin
+  FormatParams(Format, Args, Params, {json=}false, result);
+end;
+
+function FormatJson(const Format: RawUtf8;
+  const Args, Params: array of const): RawUtf8;
+begin
+  FormatParams(Format, Args, Params, {json=}true, result);
+end;
+
+{$ifndef PUREMORMOT2}
+function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
+  JsonFormat: boolean): RawUtf8;
+begin
+  FormatParams(Format, Args, Params, JsonFormat, result);
+end;
+{$endif PUREMORMOT2}
 
 
 { ********** Low-Level JSON Serialization for all TRttiParserType }

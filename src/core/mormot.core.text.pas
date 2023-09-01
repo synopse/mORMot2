@@ -1582,6 +1582,7 @@ function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
+// - see FormatSql() and FormatJson() from mormot.core.json for ? placeholders
 function FormatUtf8(const Format: RawUtf8; const Args: array of const): RawUtf8; overload;
 
 /// fast Format() function replacement, optimized for RawUtf8
