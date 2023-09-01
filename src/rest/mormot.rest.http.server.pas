@@ -1410,7 +1410,8 @@ begin
       [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
     aWSURI, aWSEncryptionKey, aWSAjax, aWSBinaryOptions);
-  if Assigned(aOnWSUpgraded) then
+  if Assigned(aOnWSUpgraded) or
+     Assigned(aOnWSClosed) then
     if fHttpServer is TWebSocketAsyncServer then
     begin
       TWebSocketAsyncServer(fHttpServer).OnWebSocketUpgraded := aOnWSUpgraded;
@@ -1462,7 +1463,7 @@ begin
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
         ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
-        status := fHttpServer.Callback(ctxt, aResult = nil);
+        status := fHttpServer.Callback(ctxt, {nonblocking=}aResult = nil);
         if status = HTTP_SUCCESS then
         begin
           if aResult <> nil then
@@ -1473,7 +1474,7 @@ begin
           result := true;
         end
         else if aErrorMsg <> nil then
-          FormatUtf8('%.Callback(%) received status=% from %',
+          FormatUtf8('%.Callback(%) returned status=% for %',
             [fHttpServer, aConnectionID, status, ctxt.Url], aErrorMsg^);
       finally
         ctxt.Free;
