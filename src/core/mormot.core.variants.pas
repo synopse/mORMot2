@@ -1095,6 +1095,12 @@ type
     // - in expanded mode, the fields order won't be checked, as with TOrmTableJson
     // - warning: the incoming JSON buffer will be modified in-place: so you should
     // make a private copy before running this method, as overloaded procedures do
+    // - some numbers on a Core i5-13500, extracted from our regression tests:
+    // $ TDocVariant InitJsonInPlace in 72.91ms i.e. 2.1M rows/s, 268.8 MB/s
+    // $ TDocVariant InitJsonInPlace no guess in 69.49ms i.e. 2.2M rows/s, 282 MB/s
+    // $ TDocVariant InitJsonInPlace dvoIntern in 68.41ms i.e. 2.2M rows/s, 286.5 MB/s
+    // $ TDocVariant FromResults exp in 31.69ms i.e. 4.9M rows/s, 618.6 MB/s
+    // $ TDocVariant FromResults not exp in 24.48ms i.e. 6.4M rows/s, 352.1 MB/s
     function InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
       aOptions: TDocVariantOptions = JSON_FAST_FLOAT): boolean; overload;
     /// fill a TDocVariant array from standard or non-expanded JSON ORM/DB result
@@ -5167,14 +5173,6 @@ begin
     until n = 0;
   end;
 end;
-
-{ Some numbers on Linux x86_64:
-    TDocVariant exp in 135.36ms i.e. 1.1M/s, 144.8 MB/s
-    TDocVariant exp no guess in 139.10ms i.e. 1.1M/s, 140.9 MB/s
-    TDocVariant exp dvoIntern in 139.19ms i.e. 1.1M/s, 140.8 MB/s
-    TDocVariant FromResults exp in 60.86ms i.e. 2.5M/s, 322 MB/s
-    TDocVariant FromResults not exp in 47ms i.e. 3.3M/s, 183.4 MB/s
-}
 
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
   aOptions: TDocVariantOptions): boolean;

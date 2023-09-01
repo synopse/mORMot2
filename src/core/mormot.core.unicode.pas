@@ -205,7 +205,8 @@ var
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
-// - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
+// - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM, reaching e.g.
+// 21 GB/s parsing speed on a Core i5-13500
 function IsValidUtf8(const source: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -213,6 +214,8 @@ function IsValidUtf8(const source: RawUtf8): boolean; overload;
 // - will stop when the buffer contains #0
 // - just a wrapper around IsValidUtf8Buffer(source, StrLen(source)) so if you
 // know the source length, you would better call IsValidUtf8Buffer() directly
+// - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM, reaching e.g.
+// 15 GB/s parsing speed on a Core i5-13500 - StrLen() itself runs at 37 GB/s
 function IsValidUtf8(source: PUtf8Char): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

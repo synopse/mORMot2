@@ -2055,7 +2055,7 @@ type
   TOrmTableData = PUtf8Char;
   TOrmTableDataArray = PPUtf8CharArray;
   TOrmTableJsonDataArray = TPUtf8CharDynArray;
-  {$else} // reduce memory consumption by half on 64-bit CPUs
+  {$else} // reduce memory consumption and L1 cache miss by half on 64-bit CPUs
   TOrmTableData = integer;
   TOrmTableDataArray = PIntegerArray; // 0 = nil, or offset in fDataStart[]
   TOrmTableJsonDataArray = TIntegerDynArray;

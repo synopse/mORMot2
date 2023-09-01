@@ -3023,13 +3023,14 @@ type
 
   /// store a read-only ORM result table from a JSON message
   // - the JSON data is parsed and unescaped in-place, to enhanced performance
-  // and reduce resource consumption (mainly memory/heap fragmentation)
+  // and reduce resource consumption (mainly memory/heap fragmentation) - both
+  // expanded and non-expanded layouts are supported, the latest the fastest
   // - is used by the ORM for TOrm.FillPrepare/FillOne methods for
   // fast access to individual object values
-  // - some numbers taken from TTestCoreProcess.JSONBenchmark on my laptop:
-  // $   TOrmTableJson expanded in 38.82ms, 505 MB/s
-  // $   TOrmTableJson not expanded in 21.54ms, 400.3 MB/s
-  // $   TOrmTableJson GetJsonValues in 22.94ms, 375.9 MB/s
+  // - some numbers taken from TTestCoreProcess.JSONBenchmark on Core i5-13500:
+  // $ TOrmTableJson save (GetJsonValues) in 11.05ms i.e. 14.1M rows/s, 779.9 MB/s
+  // $ TOrmTableJson parse expanded in 16.28ms i.e. 9.6M rows/s, 1.1 GB/s
+  // $ TOrmTableJson parse not expanded in 9.05ms i.e. 17.3M rows/s, 0.9 GB/s
   TOrmTableJson = class(TOrmTable)
   protected
     /// used if a private copy of the JSON buffer is needed
@@ -3056,7 +3057,7 @@ type
       aUpdateHash: boolean): boolean;
   public
     /// create the result table from a JSON-formated Data message
-    // - the JSON data is parsed and formatted in-place
+    // - the expanded or non-expanded JSON data is parsed and formatted in-place
     // - please note that the supplied JSON buffer content will be changed:
     // if you want to reuse this JSON content, you shall make a private copy
     // before calling this constructor and you shall NOT release the corresponding
@@ -3108,9 +3109,9 @@ type
       PCurrentRow: PInteger): boolean;
 
     /// the private copy of the processed data buffer
-    // - available e.g. for Create constructor using aJson parameter,
+    // - available e.g. for Create constructor using aJson RawUtf8 parameter,
     // or after the UpdateFrom() process
-    // - this buffer is not to be access directly: this won't be a valid JSON
+    // - this buffer is not to be access directly: this won't be any valid JSON
     // content, but a processed buffer, on which Results[] elements point to -
     // it will contain unescaped text and numerical values, ending with #0
     property PrivateInternalCopy: RawUtf8

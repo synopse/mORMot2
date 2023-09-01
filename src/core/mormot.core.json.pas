@@ -388,6 +388,9 @@ function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
 // counted number of items as negative, which could be used as initial allocation
 // before the loop - typical use in this case is e.g.
 // ! cap := abs(JsonArrayCount(P, P + JSON_PREFETCH));
+// - some performance numbers on a Core i5-13400:
+// $     JsonArrayCount(P) in 10.95ms i.e. 14.3M/s, 1.7 GB/s
+// $     JsonArrayCount(P,PMax) in 11.05ms i.e. 14.1M/s, 1.7 GB/s
 function JsonArrayCount(P: PUtf8Char; PMax: PUtf8Char = nil;
   Strict: boolean = false): integer;
 
@@ -2207,17 +2210,18 @@ function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
-// TJsonWriter.AddDynArrayJson
+// TJsonWriter.AddDynArrayJson with or without twoNonExpandedArrays layout
 // - Value shall be set to the target dynamic array field
-// - is just a wrapper around TDynArray.LoadFromJson(), creating a temporary
-// TDynArray wrapper on the stack
 // - return a pointer at the end of the data read from JSON, nil in case
 // of an invalid input buffer
-// - to be used e.g. for custom record JSON unserialization, within a
+// - could be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJsonCustomReader callback
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy if you need to access it later or if the string comes from
 // a constant (refcount=-1) - see e.g. the overloaded DynArrayLoadJson()
+// - some numbers on a Core i5-13500, extracted from our regression tests:
+// $ DynArrayLoadJson exp in 32.86ms i.e. 4.7M rows/s, 596.5 MB/s
+// $ DynArrayLoadJson non exp in 22.46ms i.e. 6.9M rows/s, 383.7 MB/s
 function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
   Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
@@ -5389,7 +5393,7 @@ begin
   c.W.AddShort(',"rowCount":');
   c.W.AddU(n);
   c.W.AddShort(',"values":[');
-  c.W.AddString(item.Props.NamesAsJsonArray); // include trailing ,
+  c.W.AddString(item.Props.NamesAsJsonArray); // pre-computed - with trailing ,
   if n <> 0 then
     repeat
       if item.Kind = rkClass then
