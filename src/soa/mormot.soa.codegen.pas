@@ -903,7 +903,7 @@ end;
 constructor TWrapperContext.CreateFromModel(aServer: TRestServer;
   const aSourcePath, aDescriptions: TFileName);
 var
-  t, f, s, n: PtrInt;
+  t, f, s: PtrInt;
   nfoList: TOrmPropInfoList;
   nfo: TOrmPropInfo;
   nfoOrmFieldRttiTypeName: RawUtf8;
@@ -964,8 +964,8 @@ begin
       fields.AddItem(field);
     end;
     with fServer.Model.TableProps[t] do
-      rec := _JsonFastFmt(
-        '{tableName:?,className:?,classParent:?,fields:?,isInMormotPas:%,unitName:?,comma:%}',
+      rec := _JsonFastFmt('{tableName:?,className:?,classParent:?,' +
+        'fields:?,isInMormotPas:%,unitName:?,comma:%}',
         [NULL_OR_TRUE[(Props.Table = TAuthGroup) or
          (Props.Table = TAuthUser)],
          NULL_OR_COMMA[t < fServer.Model.TablesMax]],
