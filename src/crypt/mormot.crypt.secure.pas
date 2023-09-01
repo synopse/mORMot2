@@ -4003,6 +4003,7 @@ begin
     // anti-forensic
     FillZero(tmp1);
     FillZero(tmp2);
+    FillZero(h);
   end;
 end;
 
@@ -4035,7 +4036,7 @@ begin
         begin
           w.AddNoJsonEscapeUtf8(u^);
           w.AddNoJsonEscapeUtf8(middle);
-          w.AddBinToHex(d, fAlgoSize, true);
+          w.AddBinToHex(d, fAlgoSize, {lowerhex=}true);
           w.Add(#10);
           inc(u);
           inc(d);
