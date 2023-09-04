@@ -2675,6 +2675,8 @@ begin
      (fConnectionCount = 0) or
      (acoNoConnectionTrack in fOptions) then
     exit;
+  // call TAsyncConnection.ReleaseMemoryOnIdle and OnLastOperationIdle events
+  // and update TAsyncConnection.fLastOperation when needed
   notified := 0;
   gced := 0;
   sec := fLastOperationSec; // 32-bit second resolution is fine
@@ -2684,14 +2686,15 @@ begin
   gc := fLastOperationReleaseMemorySeconds;
   if gc <> 0 then
     gc := sec - gc;
-  fConnectionLock.ReadOnlyLock;
+  fConnectionLock.ReadOnlyLock; // non-blocking quick process
   try
     for i := 0 to fConnectionCount - 1 do
     begin
       c := fConnection[i];
       if fWasActive in c.fFlags then
       begin
-        exclude(c.fFlags, fWasActive); // update once per second is good enough
+        // update fLastOperation flag once per second is good enough
+        exclude(c.fFlags, fWasActive);
         c.fLastOperation := sec;
       end
       else
@@ -2712,14 +2715,14 @@ begin
           end;
       end;
     end;
-    if (acoVerboseLog in fOptions) and
-       ((notified <> 0) or
-        (gced <> 0)) then
-      DoLog(sllTrace, 'IdleEverySecond % notif=% GC=%',
-        [fConnectionClass, notified, KBNoSpace(gced)], self);
   finally
     fConnectionLock.ReadOnlyUnLock;
   end;
+  if (acoVerboseLog in fOptions) and
+     ((notified <> 0) or
+      (gced <> 0)) then
+    DoLog(sllTrace, 'IdleEverySecond % notif=% GC=%',
+      [fConnectionClass, notified, KBNoSpace(gced)], self);
 end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
@@ -2730,7 +2733,7 @@ begin
   // called from fClients.fWrite.OnGetOneIdle callback
   if Terminated then
     exit;
-  fLastOperationMS := NowTix;
+  fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
   DoGC;
   if fOnIdle <> nil then
     for i := 0 to length(fOnIdle) - 1 do

@@ -195,6 +195,7 @@ type
 
 /// parse a DNS string entry
 // - return 0 on error, or the next 0-based position in Answer
+// - will actually decompress the input from its repeated patterns
 function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
   var Text: RawUtf8): PtrInt;
 
