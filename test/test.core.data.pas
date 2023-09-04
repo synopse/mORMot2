@@ -310,6 +310,41 @@ type
   PEntry = ^TEntry;
 
 
+const
+  // convention may be to use __ or _ before the type name
+  // put in interface section of the unit to be reused if needed
+  __TTestCustomJsonRecord: RawUtf8 =
+      'A,B,C integer D RawUtf8 E{E1,E2 double} F TDateTime';
+  __TTestCustomJsonArray: RawUtf8 =
+      'A,B,C byte D RawByteString E[E1 double E2 string] F TDateTime';
+  __TTestCustomJsonArraySimple =
+      'A,B Int64 C array of TGuid D RawUtf8 E [F RawUtf8 G array of RawUtf8] H RawUtf8';
+  __TTestCustomJsonArrayVariant =
+      'A,B Int64 C array of variant D RawUtf8';
+  __TTestCustomJsonGitHub =
+      'name RawUtf8 id cardinal description RawUtf8 ' +
+     'fork boolean owner{login RawUtf8 id currency}';
+  __TTestCustomJson2Title =
+      'TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL RawUtf8';
+  __TTestCustomJson2 =
+    'Transactions [TRTYPE RawUtf8 TRDATE TDateTime TRAA RawUtf8 ' +
+    'TRCAT1,TRCAT2,TRCAT3,TRACID TTestCustomJson2Title ' +
+    'TRRMK RawUtf8]';
+  __TTestCustomDiscogs =
+    'pagination{per_page,items,page Integer}' +
+    'releases[status,title,format,label,artist RawUtf8 year,id integer]';
+  __TEntry =
+    'ID: Int64; Timestamp512,Tag: cardinal; Json: RawUtf8';
+  __TSubAB =
+    'a : RawUtf8; b : integer;';
+  __TSubCD =
+    'c : byte; d : RawUtf8;';
+  __TAggregate =
+    'abArr : array of TSubAB; cdArr : array of TSubCD;';
+
+  zendframeworkFileName = 'zendframework.json';
+  discogsFileName = 'discogs.json';
+
 
 implementation
 
@@ -1278,40 +1313,6 @@ type
     end;
   end;
   {$endif HASEXTRECORDRTTI}
-
-const
-  // convention may be to use __ or _ before the type name
-  __TTestCustomJsonRecord: RawUtf8 =
-      'A,B,C integer D RawUtf8 E{E1,E2 double} F TDateTime';
-  __TTestCustomJsonArray: RawUtf8 =
-      'A,B,C byte D RawByteString E[E1 double E2 string] F TDateTime';
-  __TTestCustomJsonArraySimple =
-      'A,B Int64 C array of TGuid D RawUtf8 E [F RawUtf8 G array of RawUtf8] H RawUtf8';
-  __TTestCustomJsonArrayVariant =
-      'A,B Int64 C array of variant D RawUtf8';
-  __TTestCustomJsonGitHub =
-      'name RawUtf8 id cardinal description RawUtf8 ' +
-     'fork boolean owner{login RawUtf8 id currency}';
-  __TTestCustomJson2Title =
-      'TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL RawUtf8';
-  __TTestCustomJson2 =
-    'Transactions [TRTYPE RawUtf8 TRDATE TDateTime TRAA RawUtf8 ' +
-    'TRCAT1,TRCAT2,TRCAT3,TRACID TTestCustomJson2Title ' +
-    'TRRMK RawUtf8]';
-  __TTestCustomDiscogs =
-    'pagination{per_page,items,page Integer}' +
-    'releases[status,title,format,label,artist RawUtf8 year,id integer]';
-  __TEntry =
-    'ID: Int64; Timestamp512,Tag: cardinal; Json: RawUtf8';
-  __TSubAB =
-    'a : RawUtf8; b : integer;';
-  __TSubCD =
-    'c : byte; d : RawUtf8;';
-  __TAggregate =
-    'abArr : array of TSubAB; cdArr : array of TSubCD;';
-
-  zendframeworkFileName = 'zendframework.json';
-  discogsFileName = 'discogs.json';
 
 
 procedure TTestCoreProcess.EncodeDecodeJSON;

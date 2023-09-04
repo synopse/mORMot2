@@ -2457,6 +2457,7 @@ end;
 
 procedure THttpServerGeneric.AppendHttpDate(var Dest: TRawByteStringBuffer);
 begin
+  // overriden in THttpAsyncServer.AppendHttpDate with its own per-second cache
   Dest.AppendShort(HttpDateNowUtc);
 end;
 

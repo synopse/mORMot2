@@ -877,7 +877,7 @@ type
     fConnectionsClass: THttpAsyncConnectionsClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
-    fHttpDateNowUtc: string[39]; // consume 37 chars
+    fHttpDateNowUtc: string[39]; // consume 37 chars, aligned to 40 bytes
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetExecuteState: THttpServerExecuteState; override;
