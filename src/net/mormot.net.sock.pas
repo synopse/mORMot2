@@ -374,9 +374,9 @@ var
   // tunable cache, for both IPv4 and IPv6 resolutions
   NewSocketIP4Lookup: function(const HostName: RawUtf8; out IP4: cardinal): boolean;
 
-  /// the DNS resolver address to be used by NewSocketIP4Lookup() callback
-  // - to override default mormot.net.dns behavior which is to query all DNS
-  // servers known by the OS
+  /// the DNS resolver address(es) to be used by NewSocketIP4Lookup() callback
+  // - default '' would call GetDnsAddresses to ask the server known by the OS
+  // - you can specify an alternate CSV list of DNS servers to be called in order
   NewSocketIP4LookupServer: RawUtf8;
 
   /// interface used by NewSocket() to cache the host names

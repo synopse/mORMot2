@@ -279,11 +279,12 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
 
 /// send a DNS query and parse the answer
 // - if no NameServer is supplied, will use GetDnsAddresses list from OS
-// - NameServer is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4'
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - the TDnsResult output gives access to all returned DNS records
 // - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
-  RR: TDnsResourceRecord = drrA; const NameServer: RawUtf8 = '';
+  RR: TDnsResourceRecord = drrA; const NameServers: RawUtf8 = '';
   TimeOutMS: integer = 2000; QClass: cardinal = QC_INET): boolean;
 
 
@@ -293,56 +294,56 @@ function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
 // DnsLookup('blog.synopse.info') would simply return '62.210.254.173'
 // - will also recognize obvious values like 'localhost' or an IPv4 address
 // - this unit will register this function to mormot.net.sock's NewSocketIP4Lookup
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - warning: executes a raw DNS query, so hosts system file is not used,
 // and no cache is involved: use TNetAddr.SetFrom() instead if you can
 function DnsLookup(const HostName: RawUtf8;
-  const NameServer: RawUtf8 = ''): RawUtf8;
+  const NameServers: RawUtf8 = ''): RawUtf8;
 
 /// retrieve the IPv4 address(es) of a DNS host name - using DnsQuery(drrA)
 // - e.g. DnsLookups('synopse.info') currently returns ['62.210.254.173'] but
 // DnsLookups('yahoo.com') returns an array of several IPv4 addresses
 // - will also recognize obvious values like 'localhost' or an IPv4 address
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsLookups(const HostName: RawUtf8;
-  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+  const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
 
 /// retrieve the DNS host name of an IPv4 address - using DnsQuery(drrPTR)
 // - note that the reversed host name is the one from the hosting company, and
 // unlikely the usual name: e.g. DnsReverseLookup(DnsLookup('synopse.info'))
 // returns the horsey '62-210-254-173.rev.poneytelecom.eu' from online.net
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsReverseLookup(const IP4: RawUtf8;
-  const NameServer: RawUtf8 = ''): RawUtf8;
+  const NameServers: RawUtf8 = ''): RawUtf8;
 
 /// retrieve the Services of a DNS host name - using DnsQuery(drrSRV)
 // - services addresses are returned with their port, e.g.
 // DnsServices('_ldap._tcp.ad.mycorp.com') returns
 // ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsServices(const HostName: RawUtf8;
-  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+  const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
 
 /// retrieve the LDAP Services of a DNS host name - using DnsQuery(drrSRV)
 // - just a wrapper around DnsServices('_ldap._tcp.' + DomainName, NameServer)
 // - e.g. DnsLdapServices('ad.mycorp.com') returns
 // ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 function DnsLdapServices(const DomainName: RawUtf8;
-  const NameServer: RawUtf8 = ''): TRawUtf8DynArray;
+  const NameServers: RawUtf8 = ''): TRawUtf8DynArray;
 
 /// retrieve the LDAP controlers from the current system AD domain name
 // - returns e.g. ['dc-one.mycorp.com:389', 'dc-two.mycorp.com:389']
 // - optionally return the associated AD controler host name, e.g. 'ad.mycorp.com'
-// - if no NameServer is supplied, will use GetDnsAddresses - note that NameServer
-// is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4' to force TCP
+// - default NameServers = '' will call GetDnsAddresses - but NameServers could
+// be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - see also CldapMyController() from mormot.net.ldap for a safer client approach
-function DnsLdapControlers(const NameServer: RawUtf8 = '';
+function DnsLdapControlers(const NameServers: RawUtf8 = '';
   UsePosixEnv: boolean = false; DomainName: PRawUtf8 = nil): TRawUtf8DynArray;
 
 
@@ -722,7 +723,7 @@ begin
 end;
 
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
-  RR: TDnsResourceRecord; const NameServer: RawUtf8;
+  RR: TDnsResourceRecord; const NameServers: RawUtf8;
   TimeOutMS: integer; QClass: cardinal): boolean;
 var
   i, pos: PtrInt;
@@ -733,22 +734,21 @@ begin
   if (QName = '') or
      not IsAnsiCompatible(QName) then
     exit;
+  // send the DNS request to the DNS server(s)
   Finalize(Res);
   FillCharFast(Res, SizeOf(Res), 0);
   request := DnsBuildQuestion(QName, RR, QClass);
-  if NameServer = '' then
-  begin
+  if NameServers = '' then
     // if no NameServer is specified, will ask all OS DNS in order
-    servers := GetDnsAddresses;
-    for i := 0 to high(servers) do
-      if DnsSendQuestion(servers[i], DnsPort,
-           request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
-        break;
-    if Res.RawAnswer = '' then
-      exit;
-  end
-  else if not DnsSendQuestion(NameServer, DnsPort,
-                request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
+    servers := GetDnsAddresses
+  else
+    // the DNS server IP(s) have been specified
+    CsvToRawUtf8DynArray(pointer(NameServers), servers);
+  for i := 0 to high(servers) do
+    if DnsSendQuestion(servers[i], DnsPort,
+         request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
+      break; // we got one non-void response
+  if Res.RawAnswer = '' then
     exit;
   // we received a valid response from a DNS
   Res.Header := PDnsHeader(Res.RawAnswer)^;
@@ -793,13 +793,13 @@ begin
     result := false;
 end;
 
-function DnsLookup(const HostName, NameServer: RawUtf8): RawUtf8;
+function DnsLookup(const HostName, NameServers: RawUtf8): RawUtf8;
 var
   res: TDnsResult;
   i: PtrInt;
 begin
   if not DnsLookupKnown(HostName, result) then
-    if DnsQuery(HostName, res, drrA, NameServer) then
+    if DnsQuery(HostName, res, drrA, NameServers) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
         begin
@@ -808,7 +808,7 @@ begin
         end;
 end;
 
-function DnsLookups(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
+function DnsLookups(const HostName, NameServers: RawUtf8): TRawUtf8DynArray;
 var
   res: TDnsResult;
   known: RawUtf8;
@@ -817,13 +817,13 @@ begin
   result := nil;
   if DnsLookupKnown(HostName, known) then
     AddRawUtf8(result, known)
-  else if DnsQuery(HostName, res, drrA, NameServer) then
+  else if DnsQuery(HostName, res, drrA, NameServers) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrA then
         AddRawUtf8(result, res.Answer[i].Text); // return all A records
 end;
 
-function DnsReverseLookup(const IP4, NameServer: RawUtf8): RawUtf8;
+function DnsReverseLookup(const IP4, NameServers: RawUtf8): RawUtf8;
 var
   b: array[0..3] of byte; // to be asked in inverse byte order
   res: TDnsResult;
@@ -833,7 +833,7 @@ begin
   cardinal(b) := 0;
   if NetIsIP4(pointer(IP4), @b) and
      DnsQuery(FormatUtf8('%.%.%.%.in-addr.arpa', [b[3], b[2], b[1], b[0]]),
-       res, drrPTR, NameServer) then
+       res, drrPTR, NameServers) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrPTR then
       begin
@@ -842,24 +842,24 @@ begin
       end;
 end;
 
-function DnsServices(const HostName, NameServer: RawUtf8): TRawUtf8DynArray;
+function DnsServices(const HostName, NameServers: RawUtf8): TRawUtf8DynArray;
 var
   res: TDnsResult;
   i: PtrInt;
 begin
   result := nil;
-  if DnsQuery(HostName, res, drrSRV, NameServer) then
+  if DnsQuery(HostName, res, drrSRV, NameServers) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrSRV then
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
 end;
 
-function DnsLdapServices(const DomainName, NameServer: RawUtf8): TRawUtf8DynArray;
+function DnsLdapServices(const DomainName, NameServers: RawUtf8): TRawUtf8DynArray;
 begin
-  result := DnsServices('_ldap._tcp.' + DomainName, NameServer);
+  result := DnsServices('_ldap._tcp.' + DomainName, NameServers);
 end;
 
-function DnsLdapControlers(const NameServer: RawUtf8; UsePosixEnv: boolean;
+function DnsLdapControlers(const NameServers: RawUtf8; UsePosixEnv: boolean;
   DomainName: PRawUtf8): TRawUtf8DynArray;
 var
   ad: TRawUtf8DynArray;
@@ -869,7 +869,7 @@ begin
   ad := GetDomainNames(UsePosixEnv);
   for i := 0 to high(ad) do
   begin
-    result := DnsLdapServices(ad[i], NameServer);
+    result := DnsLdapServices(ad[i], NameServers);
     if result <> nil then
     begin
       if DomainName <> nil then
