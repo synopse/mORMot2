@@ -170,7 +170,7 @@ type
     procedure IP(var res: RawUtf8; localasvoid: boolean = false); overload;
     /// convert this address into its IPv4/IPv6 textual representation
     function IP(localasvoid: boolean = false): RawUtf8; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// convert this address into its 32-bit IPv4 value, 0 on IPv6/nlUnix
     function IP4: cardinal;
       {$ifdef FPC}inline;{$endif}
@@ -305,7 +305,7 @@ type
     function Close: TNetResult;
     /// access to the raw socket handle, i.e. @self
     function Socket: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// change the OS sending buffer size of this socket, in bytes
     property SendBufferSize: integer
       read GetSendBufferSize write SetSendBufferSize;

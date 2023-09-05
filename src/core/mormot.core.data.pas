@@ -29,6 +29,9 @@ uses
   contnrs,
   types,
   sysutils,
+  {$ifdef ISDELPHI}
+  typinfo,  // circumvent Delphi inlining issues
+  {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
@@ -3144,12 +3147,6 @@ type
 
 
 implementation
-
-{$ifdef ISDELPHI}
-uses
-  TypInfo; // avoid Delphi compiler to complain about inlining issues
-{$endif ISDELPHI}
-
 
 
 { ************ RTL TPersistent / TInterfacedObject with Custom Constructor }

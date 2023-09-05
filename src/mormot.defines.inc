@@ -150,7 +150,7 @@
 
   {$define HASINLINE}
   {$define HASINLINEWINAPI} // Delphi has troubles inlining Windows API calls
-  {$define HASSAFEINLINE}   // Delphi 2007 has sometimes troubles inlining :(
+  {$define HASSAFEINLINE}   // Delphi 2007-2009 have troubles inlining
   {$define NODELPHIASM}     // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASITERATORS}

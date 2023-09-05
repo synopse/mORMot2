@@ -1956,7 +1956,7 @@ type
     procedure Init;
     /// update the SHA-384 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// update the SHA-384 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1991,7 +1991,7 @@ type
     procedure Init;
     /// update the SHA-512/256 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// update the SHA-512/256 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2035,7 +2035,7 @@ type
     procedure Init;
     /// update the SHA-512 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// update the SHA-512 context with some data
     procedure Update(const Buffer: RawByteString); overload;
       {$ifdef HASINLINE} inline; {$endif}

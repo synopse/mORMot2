@@ -1607,7 +1607,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// will call IdemPropNameU() over the stored text Value
     function Idem(const Value: RawUtf8): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
   end;
   PValuePUtf8Char = ^TValuePUtf8Char;
   /// used e.g. by JsonDecode() overloaded function to returns values

@@ -2896,7 +2896,7 @@ type
     // - will automatically reseed after around 2^32 generated values, which is
     // huge but very conservative since this generator has a period of 2^88
     function Next: cardinal; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute the next 32-bit generated value, in range [0..max-1]
     function Next(max: cardinal): cardinal; overload;
       {$ifdef HASINLINE}inline;{$endif}
