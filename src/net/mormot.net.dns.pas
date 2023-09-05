@@ -641,6 +641,7 @@ begin
   if tcponly then
   begin
     // UDP frame was too small: try with a TCP connection
+    // ensure was not marked in NoTcpServers (avoid unneeded timeout)
     tix16 := GetTickCount64 shr 16;
     NoTcpSafe.Lock;
     if NoTcpTix16 <> tix16 then
@@ -650,6 +651,7 @@ begin
     NoTcpSafe.UnLock;
     if notcp >= 0 then
       exit;
+    // setup the connection
     sock := addr.NewSocket(nlTcp);
     try
       if addr.SocketConnect(sock, TimeOutMS) <> nrOk then
