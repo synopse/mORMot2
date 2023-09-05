@@ -2962,14 +2962,18 @@ var
   end;
 
 var
-  i, j: PtrInt;
+  i, j, l: PtrInt;
   mapcontent: RawUtf8;
 begin
-  fSymbols.Capacity := 8000;
   mapcontent := StringFromFile(fDebugFile);
-  // parse .map/.dbg sections into fSymbol[] and fUnit[]
   P := pointer(mapcontent);
-  PEnd := P + length(mapcontent);
+  l := length(mapcontent);
+  if (P = nil) or
+     (StrLen(P) <> l) then
+    exit; // this is no .map file for sure
+  PEnd := P + l;
+  // parse .map/.dbg sections into fSymbol[] and fUnit[]
+  fSymbols.Capacity := 8000;
   while P < PEnd do
     if MatchPattern(P, PEnd, 'DETAILED MAP OF SEGMENTS', P) then
       ReadSegments
