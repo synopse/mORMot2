@@ -26,3 +26,16 @@ Angelize (`agl`) tool is able to run one or several executables as daemon/servic
 - A WatchDog can check the availibility of a service on regular basis
 - Can redirect the console output, restart on problem, notify issues
 - Command line switches are available for status listing or main actions
+
+### map2mab
+
+Command-Line Tool to Generate `.mab` files from existing `.map` files
+- if some `.map` file name is specified (you can use wild chars), it will
+process all those `.map` files, then create the corresponding `.mab` files
+- if some `.exe`/`.dll` file name is specified (you can use wild chars), will
+process all matching `.exe`/`.dll` files with an associated `.map` file, and will
+create the `.mab` files, then embedd the `.mab` content to the `.exe`/`.dll`
+- if no file name is specified, will process `*.map` into `*.mab` from the
+current directory
+- with FPC, will use DWARF debugging information instead of the `.map` file
+
