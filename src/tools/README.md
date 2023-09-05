@@ -27,9 +27,9 @@ Angelize (`agl`) tool is able to run one or several executables as daemon/servic
 - Can redirect the console output, restart on problem, notify issues
 - Command line switches are available for status listing or main actions
 
-### map2mab
+### mab
 
-Command-Line Tool to Generate `.mab` files from existing `.map` files
+Command-Line Tool to Generate `.mab` files from existing `.map` or `.dbg` files
 - if some `.map` file name is specified (you can use wild chars), it will
 process all those `.map` files, then create the corresponding `.mab` files
 - if some `.exe`/`.dll` file name is specified (you can use wild chars), will

@@ -1,12 +1,12 @@
-/// Command Line .map to .mab Conversion Tool
+/// Command Line .mab Files Generation Tool
 // - this program is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-program map2mab;
+program mab;
 
 {
   *****************************************************************************
 
-  Command-Line Tool to Generate .mab files from existing .map files
+  Command-Line Tool to Generate .mab files from existing .map or .dbg files
   - if some .map file name is specified (you can use wild chars), it will
   process all those .map files, then create the corresponding .mab files
   - if some .exe/.dll file name is specified (you can use wild chars), will
