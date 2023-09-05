@@ -38,7 +38,7 @@ uses
 procedure Process(const FileName: TFileName);
 var
   SR: TSearchRec;
-  Path, FN: TFileName;
+  Path, Map, FN: TFileName;
   Ext, Count: integer;
   AllOk: boolean;
 begin
@@ -49,16 +49,27 @@ begin
   try
     Path := ExtractFilePath(FileName);
     repeat
-      FN := Path + SR.Name;
       if SearchRecValidFile(SR) then
       try
+        // setup the debug source file name
+        FN := Path + SR.Name;
+        {$ifdef ISDELPHI}
+        if Ext = 2 then // search a valid .map newer than the .exe
+        begin
+          Map := ChangeFileExt(FN, '.map');
+          if FileAgeToUnixTimeUtc(Map) < FileAgeToUnixTimeUtc(FN) then
+            Map := FN;
+        end
+        else
+        {$endif ISDELPHI}
+          Map := FN;
         // generate the mab content, maybe into the executable itself
-        with TDebugFile.Create(FN, {MabCreate=}true) do
+        with TDebugFile.Create(Map, {MabCreate=}true) do
         try
           Count := length(Symbols);
           if not HasDebugInfo then
           begin
-            WriteLn('Error: no Debug Info found on ', FN);
+            ConsoleWrite('Error: no Debug Info found on %', [FN]);
             AllOk := False;
           end
           else if Ext > 1 then // has debug info and is not a map/dbg
@@ -71,6 +82,7 @@ begin
         try
           if Count <> length(Symbols) then
             raise ESynLogException.Create('Invalid .mab content');
+          ConsoleWrite('Found % symbols', [Count]);
         finally
           Free;
         end;
@@ -78,7 +90,7 @@ begin
         on E: Exception do
         begin
           // ignore any problem here: just print it and process next file
-          WriteLn('Error: ', E.ClassName, ' ', E.Message);
+          ConsoleWrite('Error: % %', [E, E.Message]);
           AllOk := False;
         end;
       end;
@@ -88,7 +100,7 @@ begin
   end
   else
   begin
-    WriteLn('Error: cant find any file to process matching: ', FileName);
+    ConsoleWrite('Error: cant find any file to process matching: %', [FileName]);
     ExitCode := 2;
   end;
   if not AllOk then
