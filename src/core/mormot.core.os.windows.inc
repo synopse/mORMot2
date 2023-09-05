@@ -3285,11 +3285,12 @@ function InternalGetProcessInfo(aPID: DWord; out aInfo: TWinProcessInfo): boolea
 var
   bytesread: PtrUInt;
   sizeneeded: DWord;
-  pbi: PMS_PROCESS_BASIC_INFORMATION;
+  pbi: MS_PROCESS_BASIC_INFORMATION;
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
   prochandle: THandle;
   buf: TSynTempBuffer;
+  r: integer;
 begin
   result := false;
   Finalize(aInfo);
@@ -3306,27 +3307,21 @@ begin
   buf.InitZero(0); // 0 to initialize the whole buf.tmp[] stack buffer to zero
   try
     sizeneeded := 0;
-    if NtQueryInformationProcess(prochandle,
-         ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
+    r:= NtQueryInformationProcess(prochandle,
+         ProcessBasicInformation, @pbi, Sizeof(pbi), @sizeneeded);
+    if r < 0 then
       exit;
-    if buf.len < integer(sizeneeded) then
-    begin
-      buf.Done;
-      buf.InitZero(sizeneeded);
-      if NtQueryInformationProcess(prochandle,
-           ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
-        exit;
-    end;
+
     Include(aInfo.AvailableInfo, wpaiBasic);
-    pbi := buf.buf;
+
     with aInfo do
     begin
-      PID := pbi^.UniqueProcessId;
-      ParentPID := pbi^.InheritedFromUniqueProcessId;
-      BasePriority := pbi^.BasePriority;
-      ExitStatus := pbi^.ExitStatus;
-      PEBBaseAddress := pbi^.PebBaseAddress;
-      AffinityMask := pbi^.AffinityMask;
+      PID := pbi.UniqueProcessId;
+      ParentPID := pbi.InheritedFromUniqueProcessId;
+      BasePriority := pbi.BasePriority;
+      ExitStatus := pbi.ExitStatus;
+      PEBBaseAddress := pbi.PebBaseAddress;
+      AffinityMask := pbi.AffinityMask;
     end;
     // read PEB (Process Environment Block)
     if not Assigned(pbi.PebBaseAddress) then
