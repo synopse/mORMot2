@@ -3289,8 +3289,6 @@ var
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
   prochandle: THandle;
-  buf: TSynTempBuffer;
-  r: integer;
 begin
   result := false;
   Finalize(aInfo);
@@ -3304,18 +3302,16 @@ begin
     exit;
   Include(aInfo.AvailableInfo, wpaiPID);
   aInfo.PID := aPid;
-  buf.InitZero(0); // 0 to initialize the whole buf.tmp[] stack buffer to zero
   try
+    // read PBI (Process Basic Information)
     sizeneeded := 0;
-    r:= NtQueryInformationProcess(prochandle,
-         ProcessBasicInformation, @pbi, Sizeof(pbi), @sizeneeded);
-    if r < 0 then
+    FillCharFast(pbi, SizeOf(pbi), 0);
+    if NtQueryInformationProcess(prochandle, ProcessBasicInformation,
+         @pbi, Sizeof(pbi), @sizeneeded) < 0 then
       exit;
-
-    Include(aInfo.AvailableInfo, wpaiBasic);
-
     with aInfo do
     begin
+      Include(AvailableInfo, wpaiBasic);
       PID := pbi.UniqueProcessId;
       ParentPID := pbi.InheritedFromUniqueProcessId;
       BasePriority := pbi.BasePriority;
@@ -3327,9 +3323,9 @@ begin
     if not Assigned(pbi.PebBaseAddress) then
       exit;
     bytesread := 0;
-    FillCharFast(peb, SizeOf(MS_PEB), 0);
+    FillCharFast(peb, SizeOf(peb), 0);
     if not ReadProcessMemory(prochandle, pbi.PebBaseAddress,
-             @peb, SizeOf(MS_PEB), bytesread) then
+             @peb, SizeOf(peb), bytesread) then
       exit;
     Include(aInfo.AvailableInfo, wpaiPEB);
     aInfo.SessionID := peb.SessionId;
@@ -3362,7 +3358,6 @@ begin
     result := true;
   finally
     CloseHandle(prochandle);
-    buf.Done;
   end;
 end;
 
