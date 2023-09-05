@@ -3117,7 +3117,7 @@ begin
   else
     // supplied e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
     fDebugFile := aExeName;
-  MabFile := ChangeFileExt(fDebugFile, '.mab');
+  MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
     if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
       // read/only exe folder -> store .mab in local non roaming user folder
