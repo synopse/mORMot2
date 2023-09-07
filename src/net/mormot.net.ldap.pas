@@ -1055,6 +1055,11 @@ type
       KerberosUser: PRawUtf8 = nil): boolean;
     /// close the connection to the LDAP server, sending an Unbind message
     function Close: boolean;
+    /// enable paging for the searches
+    // - you can then loop calling Search() until it returns an empty result,
+    // and eventually SearchEnd when done with this query
+    // - is just a wrapper to set SearchPageSize
+    procedure SearchBegin(PageSize: integer = 100);
     /// retrieve all entries that match a given set of criteria
     // - will generate as many requests/responses as needed to retrieve all
     // the information into the SearchResult property
@@ -1065,6 +1070,9 @@ type
     function SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
       const FilterFmt: RawUtf8; const FilterArgs: array of const;
       const Attributes: array of RawUtf8): boolean;
+    /// finalize paging for the searches
+    // - is just a wrapper to reset SearchPageSize and the SearchCookie
+    procedure SearchEnd;
     /// retrieve all entries that match a given set of criteria and return the
     // first result
     // - Will call Search method, therefore SearchResult will contains all the results
@@ -1211,7 +1219,8 @@ type
     property SearchTimeLimit: integer
       read fSearchTimeLimit write fSearchTimeLimit;
     /// number of results to return per search request
-    // - 0 means no paging
+    // - default 0 means no paging
+    // - you may rather call SearchBegin/SearchEnd wrapper functions
     // - note: if you expect a single result row, settting 1 won't necessary
     // reduce the data stream, because it would include an additional block with
     // a SearchCookie, and is likely to use more server resource for paging
@@ -1223,6 +1232,7 @@ type
     // is eventually empty
     // - you can force to an empty string to reset the pagination or for a new
     // Search()
+    // - you may rather call SearchBegin/SearchEnd wrapper functions
     property SearchCookie: RawUtf8
       read fSearchCookie write fSearchCookie;
     /// result of the search command
@@ -4409,6 +4419,17 @@ begin
   result := Search(BaseDN, TypesOnly, FormatUtf8(FilterFmt, FilterArgs), Attributes);
 end;
 
+procedure TLdapClient.SearchBegin(PageSize: integer);
+begin
+  SearchCookie := '';
+  SearchPageSize := PageSize;
+end;
+
+procedure TLdapClient.SearchEnd;
+begin
+  SearchBegin(0);
+end;
+
 function TLdapClient.SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
   const Attributes: array of RawUtf8): TLdapResult;
 begin
@@ -4464,93 +4485,6 @@ begin
     AsnNext(pos, decoded, @fExtName);
     AsnNext(pos, decoded, @fExtValue);
   end;
-end;
-
-const
-  AT_GROUP = $10000000; // 268435456
-  AT_USER  = $30000000; // 805306368
-  // https://theitbros.com/ldap-query-examples-active-directory/
-  // https://social.technet.microsoft.com/wiki/contents/articles/5392.active-directory-ldap-syntax-filters.aspx
-
-function InfoFilter(AT: cardinal; const AN, DN, UPN, CustomFilter: RawUtf8): RawUtf8;
-begin
-  result := '';
-  if AN <> '' then
-    FormatUtf8('(sAMAccountName=%)', [LdapEscapeName(AN)], result);
-  if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, LdapEscapeName(DN)]);
-  if UPN <> '' then
-    result := FormatUtf8('%(userPrincipalName=%)', [result, LdapEscapeName(UPN)]);
-  if result = '' then
-  begin
-    result := '(cn=)'; // return no answer whatsoever
-    exit;
-  end;
-  if ord(AN <> '') + ord(DN <> '')+ ord(UPN <> '') > 1 then
-    result := FormatUtf8('(|%)', [result]);
-  result := FormatUtf8('(&(sAMAccountType=%)%%)', [AT, result, CustomFilter]);
-end;
-
-function LdapToDate(const Text: RawUtf8): TDateTime;
-begin
-  if Text = 'Never expires' then
-    result := 0
-  else
-    result := Iso8601ToDateTime(Text);
-end;
-
-procedure TLdapObject.Fill(Attributes: TLdapAttributeList;
-  const CustomAttributes: TRawUtf8DynArray);
-var
-  n, c, i: PtrInt;
-  a: TLdapAttribute;
-begin
-  sAMAccountName := Attributes.Get('sAMAccountName');
-  distinguishedName := Attributes.Get('distinguishedName');
-  canonicalName := DNToCN(distinguishedName);
-  name := Attributes.Get('name');
-  CN := Attributes.Get('cn');
-  description := Attributes.Get('description');
-  objectSid := Attributes.Get('objectSid');
-  objectGUID := Attributes.Get('objectGUID');
-  whenCreated := LdapToDate(Attributes.Get('whenCreated'));
-  whenChanged := LdapToDate(Attributes.Get('whenChanged'));
-  n := length(CustomAttributes);
-  if n = 0 then
-    exit;
-  c := 0;
-  for i := 0 to n - 1 do
-  begin
-    a := Attributes.Find(CustomAttributes[i]);
-    if a = nil then
-      continue;
-    if c = 0 then
-    begin
-      dec(n, i);
-      SetLength(customNames, n);
-      SetLength(customValues, n);
-    end;
-    customNames[c] := a.AttributeName; // assign the interned name
-    customValues[c] := a.GetReadable;
-    inc(c);
-  end;
-  if c = 0 then
-    exit;
-  DynArrayFakeLength(customNames, c);
-  DynArrayFakeLength(customValues, c);
-end;
-
-function TLdapObject.Custom(const AttributeName: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
-begin
-  for i := 0 to length(customNames) - 1 do
-    if customNames[i] = AttributeName then
-    begin
-      result := customValues[i];
-      exit;
-    end;
-  result := '';
 end;
 
 const
