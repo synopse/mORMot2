@@ -8415,7 +8415,10 @@ begin
     result := k^.LastHash[h];
     if (result <> nil) and
        (result.Info = Info) then
+    begin
+      k^.LastInfo := result; // for faster lookup next time
       exit; // avoid most ReadLock/ReadUnLock and LockedFind() search
+    end;
     // thread-safe O(n) search in CPU L1 cache
     k^.Safe.ReadLock;
     p := pointer(k^.HashInfo[h]); // read TPointerDynArray within the lock
