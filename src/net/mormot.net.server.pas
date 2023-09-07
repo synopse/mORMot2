@@ -397,11 +397,12 @@ type
     fOnAfterRequest: TOnHttpServerRequest;
     fOnAfterResponse: TOnHttpServerAfterResponse;
     fMaximumAllowedContentLength: cardinal;
+    fCurrentConnectionID: integer;  // 31-bit NextConnectionID sequence
     /// set by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     fCompressAcceptEncoding: RawUtf8;
     fServerName: RawUtf8;
-    fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
+    fRequestHeaders: RawUtf8; // pre-computed headers with ServerName
     fCallbackSendDelay: PCardinal;
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
@@ -409,6 +410,7 @@ type
     fFavIcon: RawByteString;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetServerName(const aName: RawUtf8); virtual;
+    procedure SetOptions(opt: THttpServerOptions);
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
@@ -622,7 +624,7 @@ type
     /// allow to customize this HTTP server instance
     // - some inherited classes may have only partial support of those options
     property Options: THttpServerOptions
-      read fOptions write fOptions;
+      read fOptions write SetOptions;
     /// read access to the URI router, as published property (e.g. for logs)
     // - use the Route function to actually setup the routing
     // - may be nil if Route has never been accessed, i.e. no routing was set
@@ -2274,16 +2276,12 @@ begin
     until P^ = #0;
   end;
   // generic headers
-  h^.AppendShort('Server: ');
-  h^.Append(fServer.ServerName);
-  h^.AppendCRLF;
+  h^.Append(fServer.fRequestHeaders); // Server: and X-Powered-By:
   if hsoIncludeDateHeader in fServer.Options then
     fServer.AppendHttpDate(h^);
-  if not (hsoNoXPoweredHeader in fServer.Options) then
-    h^.AppendShort(XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
-  OutContent := ''; // release body memory ASAP
+  OutContent := ''; // dec RefCnt to release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
   // now TAsyncConnectionsSockets.Write(result) should be called
 end;
@@ -2296,7 +2294,7 @@ end;
 
 procedure THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo);
 begin
-  SaveJson(Value^, TypeInfo, [], RawUtf8(fOutContent), []);
+  SaveJson(Value^, TypeInfo, [twoNoSharedStream], RawUtf8(fOutContent), []);
   fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
@@ -2333,8 +2331,8 @@ end;
 constructor THttpServerGeneric.Create(const OnStart, OnStop: TOnNotifyThread;
   const ProcessName: RawUtf8; ProcessOptions: THttpServerOptions);
 begin
+  fOptions := ProcessOptions; // should be set before SetServerName
   SetServerName('mORMot2 (' + OS_TEXT + ')');
-  fOptions := ProcessOptions;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
@@ -2470,6 +2468,17 @@ end;
 procedure THttpServerGeneric.SetServerName(const aName: RawUtf8);
 begin
   fServerName := aName;
+  FormatUtf8('Server: %'#13#10, [fServerName], fRequestHeaders);
+  if not (hsoNoXPoweredHeader in fOptions) then
+    Append(fRequestHeaders, XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
+end;
+
+procedure THttpServerGeneric.SetOptions(opt: THttpServerOptions);
+begin
+  if fOptions = opt then
+    exit;
+  fOptions := opt;
+  SetServerName(fServerName); // recompute fRequestHeaders
 end;
 
 procedure THttpServerGeneric.SetOnRequest(
@@ -4074,6 +4083,7 @@ begin
   fReceiveBufferSize := From.fReceiveBufferSize;
   if From.fLogData <> nil then
     fLogData := pointer(fLogDataStorage);
+  fOptions := From.fOptions; // needed by SetServerName() below
   SetServerName(From.fServerName); // setters are sometimes needed
   SetRemoteIPHeader(From.fRemoteIPHeader);
   SetRemoteConnIDHeader(From.fRemoteConnIDHeader);
