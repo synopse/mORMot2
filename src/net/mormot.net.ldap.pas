@@ -4538,7 +4538,7 @@ begin
     AddRawUtf8(attr, 'memberOf');
   AddRawUtf8(attr, CustomAttributes);
   result := Search(DefaultDN(BaseDN), false,
-              InfoFilter(AT_USER, AN, DN, '', ''), attr) and
+              InfoFilter(AT_USER, AN, DN, UPN, ''), attr) and
             (SearchResult.Count = 1);
   if result then
     with SearchResult.Items[0] do

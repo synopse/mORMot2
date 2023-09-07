@@ -82,7 +82,7 @@ begin
         try
           if Count <> length(Symbols) then
             raise ESynLogException.Create('Invalid .mab content');
-          ConsoleWrite('Found % symbols', [Count]);
+          ConsoleWrite('Found % symbols in %', [Count, SR.Name]);
         finally
           Free;
         end;
