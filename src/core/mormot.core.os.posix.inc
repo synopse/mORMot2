@@ -1666,23 +1666,47 @@ end;
 var
   TextAttr: integer = 255; // always change the color at startup
 
-procedure TextColor(Color: TConsoleColor);
+procedure TextColorCmd(Color: TConsoleColor; var s: TShort8);
 const
   TERM_CTRL: string[8] = '04261537';
-var
-  s: shortstring;
 begin
+  s[0] := #0;
   if (ord(Color) = TextAttr) or
      not StdOutIsTTY then
     exit;
   TextAttr := ord(Color);
+  s := #27'[0;3#m';
   if ord(Color) >= 8 then
-    s := #27'[1;3'
-  else
-    s := #27'[0;3';
-  AppendShortChar(TERM_CTRL[(ord(Color) and 7) + 1], s);
-  AppendShortChar('m', s);
-  fpwrite(StdOutputHandle, @s[1], ord(s[0])); // single syscall
+    s[3] := '1';
+  s[6] := TERM_CTRL[(ord(Color) and 7) + 1];
+end;
+
+procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
+var
+  n: PtrInt;
+begin
+  if l = 0 then
+    exit;
+  n := length(s);
+  SetLength(s, n + l);
+  MoveFast(p^, PByteArray(s)[n], l);
+end;
+
+procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
+var
+  c: TShort8;
+begin
+  TextColorCmd(Color, c);
+  RawUtf8Append(s, @c[1], ord(c[0]));
+end;
+
+procedure TextColor(Color: TConsoleColor);
+var
+  s: shortstring;
+begin
+  TextColorCmd(Color, s);
+  if s[0] <> #0 then
+    fpwrite(StdOutputHandle, @s[1], ord(s[0])); // single syscall
 end;
 
 procedure TextBackground(Color: TConsoleColor);
@@ -1697,16 +1721,21 @@ const
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
+var
+  s: RawUtf8;
 begin
+  // pre-compute the whole chars to be sent to the console
+  if not NoColor then
+    TextColorAppend(Color, s);
+  RawUtf8Append(s, pointer(Text), length(Text));
+  if not NoLineFeed then
+    RawUtf8Append(s, @PosixLineFeed, 1);
+  if not NoColor then
+    TextColorAppend(ccLightGray, s);
+  // display whole line in a single syscall
   ConsoleCriticalSection.Lock;
   try
-    if not NoColor then
-      TextColor(Color);
-    fpwrite(StdOutputHandle, pointer(Text), length(Text)); // UTF-8 console
-    if not NoLineFeed then
-      fpwrite(StdOutputHandle, @PosixLineFeed, 1);
-    if not NoColor then
-      TextColor(ccLightGray);
+    fpwrite(StdOutputHandle, pointer(s), length(s)); // UTF-8 console
   finally
     ConsoleCriticalSection.UnLock;
   end;
