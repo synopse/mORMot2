@@ -877,43 +877,41 @@ begin
         if GetBit(cpuMask, cpuIdx) then
           dec(k);
       until k = -1;
-      writeln('Pin #', i, ' server to #', cpuIdx, ' CPU');
+      ConsoleWrite(['Pin #', i, ' server to #', cpuIdx, ' CPU']);
     end;
     rawServers[i] := TRawAsyncServer.Create(threads, flags, cpuIdx)
   end;
 
   try
     // display some information and wait for SIGTERM
-    writeln;
-    writeln(rawServers[0].fHttpServer.ClassName,
-     ' running on localhost:', rawServers[0].fHttpServer.SockPort);
-    writeln(' num servers=', servers,
+    ConsoleWrite([CRLF, rawServers[0].fHttpServer.ClassName,
+     ' running on localhost:', rawServers[0].fHttpServer.SockPort], ccWhite);
+    ConsoleWrite([' num servers=',   servers,
             ', threads per server=', threads,
-            ', total threads=', threads * servers,
-            ', total CPU=', SystemInfo.dwNumberOfProcessors,
-            ', accessible CPU=', cpuCount,
-            ', pinned=', pinServers2Cores,
-            ', db=', rawServers[0].fDbPool.DbmsEngineName);
-    writeln(' options=', GetSetName(TypeInfo(THttpServerOptions), flags));
-    writeln('Press [Enter] or Ctrl+C or send SIGTERM to terminate');
+            ', total threads=',      threads * servers,
+            ', total CPU=',          SystemInfo.dwNumberOfProcessors,
+            ', accessible CPU=',     cpuCount,
+            ', pinned=',             pinServers2Cores,
+            ', db=',                 rawServers[0].fDbPool.DbmsEngineName]);
+    ConsoleWrite([' options=', GetSetName(TypeInfo(THttpServerOptions), flags)]);
+    ConsoleWrite('Press [Enter] or Ctrl+C or send SIGTERM to terminate', ccWhite);
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
     if servers = 1 then
-      writeln(ObjectToJsonDebug(rawServers[0].fHttpServer,
-        [woDontStoreVoid, woHumanReadable]))
+      ConsoleObject(rawServers[0].fHttpServer)
     else
     begin
-      writeln('Per-server accepted connections:');
+      ConsoleWrite('Per-server accepted connections:');
       for i := 0 to servers - 1 do
-        write(' ', rawServers[i].fHttpServer.Async.Accepted);
-      writeln(#10'Please wait: Shutdown ', servers, ' servers and ',
-        threads * servers, ' threads');
+        ConsoleWrite([' ', rawServers[i].fHttpServer.Async.Accepted], ccLightGray, true);
+      ConsoleWrite([#10'Please wait: Shutdown ', servers, ' servers and ',
+        threads * servers, ' threads']);
     end;
   finally
     // clear all server instance(s)
     ObjArrayClear(rawServers);
   end;
-  write('Shutdown complete'#10);
+  ConsoleWrite('Shutdown complete'#10);
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
