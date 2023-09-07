@@ -141,6 +141,17 @@ begin
   FastSetString(result, S, P - S);
 end;
 
+procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
+var
+  n: PtrInt;
+begin
+  if l = 0 then
+    exit;
+  n := length(s);
+  SetLength(s, n + l);
+  MoveFast(p^, PByteArray(s)[n], l);
+end;
+
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
@@ -1681,17 +1692,6 @@ begin
   s[6] := TERM_CTRL[(ord(Color) and 7) + 1];
 end;
 
-procedure RawUtf8Append(var s: RawUtf8; p: PUtf8Char; l: PtrInt);
-var
-  n: PtrInt;
-begin
-  if l = 0 then
-    exit;
-  n := length(s);
-  SetLength(s, n + l);
-  MoveFast(p^, PByteArray(s)[n], l);
-end;
-
 procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
 var
   c: TShort8;
@@ -1702,11 +1702,11 @@ end;
 
 procedure TextColor(Color: TConsoleColor);
 var
-  s: shortstring;
+  c: TShort8;
 begin
-  TextColorCmd(Color, s);
-  if s[0] <> #0 then
-    fpwrite(StdOutputHandle, @s[1], ord(s[0])); // single syscall
+  TextColorCmd(Color, c);
+  if c[0] <> #0 then
+    fpwrite(StdOutputHandle, @c[1], ord(c[0])); // single syscall
 end;
 
 procedure TextBackground(Color: TConsoleColor);

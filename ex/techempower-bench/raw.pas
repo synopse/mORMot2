@@ -11,7 +11,7 @@ program raw;
 
 {$I mormot.defines.inc}
 
-{.$define USE_SQLITE3}
+{$define USE_SQLITE3}
 // may be defined to use a SQLite3 database instead of external PostgresSQL DB
 
 {.$define WITH_LOGS}
@@ -885,15 +885,15 @@ begin
   try
     // display some information and wait for SIGTERM
     ConsoleWrite([CRLF, rawServers[0].fHttpServer.ClassName,
-     ' running on localhost:', rawServers[0].fHttpServer.SockPort], ccWhite);
+      ' running on localhost:', rawServers[0].fHttpServer.SockPort], ccWhite);
     ConsoleWrite([' num servers=',   servers,
-            ', threads per server=', threads,
-            ', total threads=',      threads * servers,
-            ', total CPU=',          SystemInfo.dwNumberOfProcessors,
-            ', accessible CPU=',     cpuCount,
-            ', pinned=',             pinServers2Cores,
-            ', db=',                 rawServers[0].fDbPool.DbmsEngineName]);
-    ConsoleWrite([' options=', GetSetName(TypeInfo(THttpServerOptions), flags)]);
+      ', threads per server=', threads,
+      ', total threads=',      threads * servers,
+      ', total CPU=',          SystemInfo.dwNumberOfProcessors,
+      ', accessible CPU=',     cpuCount,
+      ', pinned=',             pinServers2Cores,
+      ', db=',                 rawServers[0].fDbPool.DbmsEngineName, CRLF,
+      ' options=', GetSetName(TypeInfo(THttpServerOptions), flags), CRLF]);
     ConsoleWrite('Press [Enter] or Ctrl+C or send SIGTERM to terminate', ccWhite);
     ConsoleWaitForEnterKey;
     //TSynLog.Family.Level := LOG_VERBOSE; // enable shutdown logs for debug
