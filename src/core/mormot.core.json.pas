@@ -2170,16 +2170,6 @@ function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TOb
 function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
   Options: TTextWriterWriteObjectOptions = [woHumanReadable]): boolean;
 
-/// will serialize any TObject into its expanded UTF-8 JSON representation
-// - includes debugger-friendly information, similar to TSynLog, i.e.
-// class name and sets/enumerates as text
-// - redirect to ObjectToJson() with the proper TTextWriterWriteObjectOptions,
-// since our JSON serialization detects and serialize Exception.Message
-function ObjectToJsonDebug(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
-    woHumanReadable, woStoreClassName, woStorePointer,
-    woHideSensitivePersonalInformation]): RawUtf8;
-
 /// get any (potentially nested) object property by path
 // - complex values (e.g. dynamic array properties) will be returned as
 // TDocVariant after JSON conversion
@@ -11133,13 +11123,6 @@ begin
     result := JsonBufferReformatToFile(pointer(json), JsonFile)
   else
     result := FileFromString(json, JsonFile);
-end;
-
-function ObjectToJsonDebug(Value: TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
-begin
-  // our JSON serialization detects and serialize Exception.Message
-  result := ObjectToJson(Value, Options);
 end;
 
 function GetValueObject(Instance: TObject; const Path: RawUtf8;

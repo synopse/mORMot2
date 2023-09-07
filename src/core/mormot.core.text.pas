@@ -939,6 +939,20 @@ function ObjectToJson(Value: TObject;
 procedure ObjectToJson(Value: TObject; var result: RawUtf8;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); overload;
 
+/// will serialize any TObject into its expanded UTF-8 JSON representation
+// - includes debugger-friendly information, similar to TSynLog, i.e.
+// class name and sets/enumerates as text
+// - redirect to ObjectToJson() with the proper TTextWriterWriteObjectOptions,
+// since our JSON serialization detects and serialize Exception.Message
+function ObjectToJsonDebug(Value: TObject;
+  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
+    woHumanReadable, woStoreClassName, woStorePointer,
+    woHideSensitivePersonalInformation]): RawUtf8;
+
+/// a wrapper around ConsoleWrite(ObjectToJson(Value))
+procedure ConsoleObject(Value: TObject;
+  Options: TTextWriterWriteObjectOptions = [woHumanReadable]);
+
 /// check if some UTF-8 text would need HTML escaping
 function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
 
@@ -1685,6 +1699,10 @@ function StringToConsole(const S: string): RawByteString;
 
 /// write some text to the console using a given color
 procedure ConsoleWrite(const Fmt: RawUtf8; const Args: array of const;
+  Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
+
+/// write some text to the console using a given color
+procedure ConsoleWrite(const Args: array of const;
   Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
 
 /// could be used in the main program block of a console application to
@@ -5100,6 +5118,18 @@ begin
     end;
 end;
 
+function ObjectToJsonDebug(Value: TObject;
+  Options: TTextWriterWriteObjectOptions): RawUtf8;
+begin
+  // our JSON serialization detects and serialize Exception.Message
+  result := ObjectToJson(Value, Options);
+end;
+
+procedure ConsoleObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
+begin
+  ConsoleWrite(ObjectToJson(Value, Options));
+end;
+
 function EscapeHexBuffer(src, dest: PUtf8Char; srclen: integer;
   const toescape: TSynAnsicharSet; escape: AnsiChar): PUtf8Char;
 begin
@@ -8358,6 +8388,15 @@ var
   tmp: RawUtf8;
 begin
   FormatUtf8(Fmt, Args, tmp);
+  ConsoleWrite(tmp, Color, NoLineFeed);
+end;
+
+procedure ConsoleWrite(const Args: array of const;
+  Color: TConsoleColor; NoLineFeed: boolean);
+var
+  tmp: RawUtf8;
+begin
+  Append(tmp, Args);
   ConsoleWrite(tmp, Color, NoLineFeed);
 end;
 
