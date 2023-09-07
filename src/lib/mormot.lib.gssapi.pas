@@ -901,7 +901,7 @@ begin
     aSecContext.CreatedTick64 := GetTickCount64;
     if IdemPChar(pointer(aInData), 'NTLMSSP') then
       raise EGssApi.CreateFmt(
-        'NTLM authentication not supported by GSSAPI library',[]);
+        'NTLM authentication not supported by GSSAPI library', []);
     MajStatus := GssApi.gss_acquire_cred(
       MinStatus, nil, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT,
       aSecContext.CredHandle, nil, nil);

@@ -3009,18 +3009,18 @@ begin
          not DeleteFile(pidfilename) then
         raise EOSException.CreateFmt(
           '%s.CommandLine Fork failed: %s is already forked as pid=%d',
-          [daemon.ClassName, Executable.ProgramName, PtrInt(pid)]);
+          [ClassNameShort(daemon)^, Executable.ProgramName, PtrInt(pid)]);
     pid := fpFork;
     if pid < 0 then
       raise EOSException.CreateFmt(
-        '%s.CommandLine Fork failed', [daemon.ClassName]);
+        '%s.CommandLine Fork failed', [ClassNameShort(daemon)^]);
     if pid > 0 then  // main program - just terminate
       exit;
     // clean forked instance
     sid := fpSetSID;
     if sid < 0 then // new session (process group) created?
       raise EOSException.CreateFmt(
-        '%s.CommandLine SetSID failed', [daemon.ClassName]);
+        '%s.CommandLine SetSID failed', [ClassNameShort(daemon)^]);
     CleanAfterFork;
     // create local .[Executable.ProgramName].pid file
     pid := fpgetpid;

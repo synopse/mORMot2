@@ -1012,7 +1012,7 @@ begin
       fDigestSize := hashSize
     else
       raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect HashSize=' +
-        '%d to a non-XOF hash function "%s"', [HashSize, Algorithm]);
+        '%d to a non-XOF hash function ''%s''', [HashSize, Algorithm]);
 end;
 
 procedure TOpenSslHash.Update(Data: pointer; DataLength: integer);

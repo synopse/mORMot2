@@ -8209,7 +8209,7 @@ var
   StoreVoidStringAsNull: boolean;
 begin
   if length(aValues) <> fParamCount then
-    raise ESqlDBException.CreateFmt('Invalid %.BindArrayRow call', [self]);
+    raise ESqlDBException.CreateUtf8('Invalid %.BindArrayRow call', [self]);
   StoreVoidStringAsNull := (fConnection <> nil) and
                            fConnection.Properties.StoreVoidStringAsNull;
   for i := 0 to high(aValues) do

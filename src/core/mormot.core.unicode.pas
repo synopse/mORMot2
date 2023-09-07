@@ -3754,7 +3754,7 @@ var
 begin
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
-    // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() now
+    // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() here
     raise ESynUnicode.CreateFmt('%s.Create - Invalid code page %d',
       [ClassNameShort(self)^, fCodePage]);
   // create internal look-up tables

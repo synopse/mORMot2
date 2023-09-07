@@ -1336,7 +1336,7 @@ var
 begin
   // caller did protect this method with Lock/UnLock
   if not Assigned(OnFinished) then
-    raise ESqlDBPostgresAsync.CreateFmt(
+    raise ESqlDBPostgresAsync.CreateUtf8(
       '%.ExecuteAsync with OnFinished=nil [%]', [self, fSql]);
   // create a new task
   task.Statement := self;

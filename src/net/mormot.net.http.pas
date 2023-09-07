@@ -731,7 +731,7 @@ type
 
   /// store a list of IPv4 which should be rejected at connection
   // - more tuned than TIPBan for checking just after accept()
-  // - used e.g. for hsoBan40xIP
+  // - used e.g. to implement hsoBan40xIP
   THttpAcceptBan = class(TSynPersistent)
   protected
     fSafe: TOSLightLock; // almost never on contention, no R/W needed
@@ -2455,7 +2455,7 @@ procedure THttpAcceptBan.SetSeconds(const Value: cardinal);
 begin
   if not (Value in [1, 2, 4, 8, 16, 32, 64, 128]) then
     raise EHttpSocket.CreateFmt(
-      'Invalid %.SetSeconds(%): should be a small power of two',
+      'Invalid %s.SetSeconds(%d): should be a small power of two',
       [ClassNameShort(self)^, Value]);
   fSafe.Lock;
   try
