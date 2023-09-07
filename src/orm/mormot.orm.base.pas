@@ -10827,17 +10827,16 @@ end;
 
 function TOrmCacheTable.Get(aID: TID): pointer;
 var
-  e: POrmCacheTableValue;
+  i: PtrInt;
 begin
   result := nil;
   if (@self = nil) or
      not CacheEnable or
      (TimeOutMS <> 0) then // by safety: TimeOutMS may delete the instance
     exit;
-  e := RetrieveEntry(aID);
-  if (e <> nil) and
-     (e <> ORMCACHE_DEPRECATED) then
-    result := e^.Value; // no copy
+  i := SortFind(Value, aID, Count);
+  if i >= 0 then
+    result := Value[i].Value;
 end;
 
 function TOrmCacheTable.CachedEntries: cardinal;
