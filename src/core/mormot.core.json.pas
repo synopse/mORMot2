@@ -10934,7 +10934,7 @@ procedure SaveJson(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions
 var
   temp: TTextWriterStackBuffer;
 begin
-  with TJsonWriter.CreateOwnedStream(temp) do
+  with TJsonWriter.CreateOwnedStream(temp, twoNoSharedStream in Options) do
   try
     CustomOptions := CustomOptions + Options;
     AddTypedJson(@Value, TypeInfo, ObjectOptions);
