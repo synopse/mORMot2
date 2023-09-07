@@ -11,7 +11,7 @@ program raw;
 
 {$I mormot.defines.inc}
 
-{$define USE_SQLITE3}
+{.$define USE_SQLITE3}
 // may be defined to use a SQLite3 database instead of external PostgresSQL DB
 
 {.$define WITH_LOGS}
@@ -53,7 +53,7 @@ uses
 type
   // data structures
   TMessageRec = packed record
-    message: RawUtf8;
+    message: PUtf8Char;
   end;
   TWorldRec = packed record
     id: integer;
@@ -402,7 +402,7 @@ function TRawAsyncServer.json(ctxt: THttpServerRequest): cardinal;
 var
   msgRec: TMessageRec;
 begin
-  msgRec.message := HELLO_WORLD;
+  msgRec.message := pointer(HELLO_WORLD);
   ctxt.SetOutJson(@msgRec, TypeInfo(TMessageRec));
   result := HTTP_SUCCESS;
 end;
@@ -809,7 +809,7 @@ begin
 
   // register some RTTI for records JSON serialization
   Rtti.RegisterFromText([
-    TypeInfo(TMessageRec), 'message:RawUtf8',
+    TypeInfo(TMessageRec), 'message:PUtf8Char',
     TypeInfo(TWorldRec),   'id,randomNumber:integer',
     TypeInfo(TFortune),    'id:integer message:RawUtf8']);
 
