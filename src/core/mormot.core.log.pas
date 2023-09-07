@@ -3914,10 +3914,11 @@ end;
 
 function TSynLogFamily.GetSynLogClassName: string;
 begin
-  if self = nil then
+  if (self = nil) or
+     (fSynLogClass = nil) then
     result := ''
   else
-    result := ClassName;
+    result := fSynLogClass.ClassName;
 end;
 
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
