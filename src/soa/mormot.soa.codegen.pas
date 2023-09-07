@@ -969,8 +969,8 @@ begin
         [NULL_OR_TRUE[(Props.Table = TAuthGroup) or
          (Props.Table = TAuthUser)],
          NULL_OR_COMMA[t < fServer.Model.TablesMax]],
-         [Props.SqlTableName, Props.Table.ClassName,
-          Props.Table.ClassParent.ClassName,
+         [Props.SqlTableName, ClassNameShort(Props.Table)^,
+          ClassNameShort(Props.Table.ClassParent)^,
           Variant(fields),
           Props.TableRtti.Info.RttiClass^.UnitName]);
     if hasRecord then
@@ -1293,7 +1293,7 @@ begin
       if (authClass = TRestServerAuthenticationDefault) or
          (authClass = TRestServerAuthenticationNone) then
       begin
-        _ObjAddProp('authClass', authClass.ClassName, result);
+        _ObjAddProp('authClass', ToText(authClass), result);
         break;
       end;
     end;
@@ -1823,7 +1823,7 @@ begin
         intf := ToUtf8(TInterfaceFactory.Guid2TypeInfo(services[i])^.RawName);
         if _Safe(context.soa.services)^.
             GetDocVariantByProp('interfaceName', intf, false, service) then
-          service^.AddValue('query', queries[i].ClassName)
+          service^.AddValue('query', ClassNameShort(queries[i])^)
         else
           raise EWrapperContext.CreateUtf8('CustomDelays: unknown %', [intf]);
       end;
