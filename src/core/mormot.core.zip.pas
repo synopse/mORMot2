@@ -673,11 +673,12 @@ type
     // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
     // - OnAdd callback could be used to customize the process
     // - IncludeVoidFolders=TRUE would include void folders entries to the zip
+    // - you can specify a ZipFolder to store as parent folder for the files
     // - returns the number of files added
     function AddFolder(const FolderName: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
       CompressLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
-      IncludeVoidFolders: boolean = false): integer;
+      IncludeVoidFolders: boolean = false; ZipFolder: TFileName = ''): integer;
     /// compress (using AddDeflate) the supplied files
     // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
     procedure AddFiles(const aFiles: array of TFileName;
@@ -1956,7 +1957,8 @@ end;
 
 function TZipWrite.AddFolder(const FolderName: TFileName;
   const Mask: TFileName; Recursive: boolean; CompressLevel: integer;
-  const OnAdd: TOnZipWriteAdd; IncludeVoidFolders: boolean): integer;
+  const OnAdd: TOnZipWriteAdd; IncludeVoidFolders: boolean;
+  ZipFolder: TFileName): integer;
 
   function RecursiveAdd(const fileDir, zipDir: TFileName): integer;
   var
@@ -2006,7 +2008,9 @@ function TZipWrite.AddFolder(const FolderName: TFileName;
   end;
 
 begin
-  result := RecursiveAdd(IncludeTrailingPathDelimiter(FolderName), '');
+  if ZipFolder <> '' then
+    ZipFolder:= IncludeTrailingPathDelimiter(ZipFolder);
+  result := RecursiveAdd(IncludeTrailingPathDelimiter(FolderName), ZipFolder);
 end;
 
 procedure TZipWrite.AddFiles(const aFiles: array of TFileName;
