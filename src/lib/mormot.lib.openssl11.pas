@@ -9663,6 +9663,7 @@ end;
 
 const
   X509v3 = 2; // X509_VERSION_3 has value 2 and X509_VERSION_1 has value 0 ;)
+  X509reqv3 = 0; // version number should be 0 as stated by RFC2986
 
 function NewCertificate: PX509;
 var
@@ -9765,7 +9766,7 @@ function NewCertificateRequest: PX509_REQ;
 begin
   EOpenSsl.CheckAvailable(nil, 'NewCertificateRequest');
   result := X509_REQ_new;
-  EOpenSsl.Check(X509_REQ_set_version(result, X509v3), 'X509_REQ_set_version');
+  EOpenSsl.Check(X509_REQ_set_version(result, X509reqv3), 'X509_REQ_set_version');
 end;
 
 function LoadCertificateRequest(const Der: RawByteString): PX509_REQ;
