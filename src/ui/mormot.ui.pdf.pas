@@ -11220,8 +11220,8 @@ begin
     begin
       R := TRect(Rect(xd, yd, wd + xd, hd + yd));
       NormalizeRect(R);
-      Inc(R.Bottom);
-      Inc(R.Right);
+      inc(R.Bottom);
+      inc(R.Right);
       box := BoxI(R, true);
       clp := GetClipRect;
       if (clp.Width > 0) and
@@ -11837,18 +11837,21 @@ begin
 end;
 
 procedure TPdfEnum.ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
-var RGNs: PRgnData;
-    i: Integer;
-    RCT: TRect;
-    ClipRect: TPdfBox;
-begin // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
-  if data^.iMode <> RGN_COPY then exit; // we are handling RGN_COPY (5) only..
+var
+  i: integer;
+  d: PRgnData;
+  pr: PRect;
+  r: TRect;
+begin
+  // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
+  if data^.iMode <> RGN_COPY then
+    exit; // we are handling RGN_COPY (5) only
   if not DC[nDC].ClipRgnNull then // if current clip then finish
   begin
     Canvas.GRestore;
     Canvas.NewPath;
-    Canvas.fNewPath := False;
-    DC[nDC].ClipRgnNull := True;
+    Canvas.fNewPath := false;
+    DC[nDC].ClipRgnNull := true;
     fFillColor := -1;
   end;
   if Data^.cbRgnData > 0 then
@@ -11856,19 +11859,21 @@ begin // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
     Canvas.GSave;
     Canvas.NewPath;
     DC[nDC].ClipRgnNull := False;
-    RGNs := @Data^.RgnData;
-    for i := 0 to RGNs^.rdh.nCount - 1 do
+    d := @Data^.RgnData;
+    pr := @d^.Buffer;
+    for i := 1 to d^.rdh.nCount do
     begin
-      Move(Rgns^.Buffer[i*SizeOf(TRect)], RCT, SizeOf(RCT));
-      Inc(RCT.Bottom);
-      Inc(RCT.Right);
-      ClipRect := Canvas.BoxI(RCT, false);
-      Canvas.Rectangle(ClipRect.Left,ClipRect.Top,ClipRect.Width,ClipRect.Height);
+      r := pr^;
+      inc(r.Bottom);
+      inc(r.Right);
+      with Canvas.BoxI(r, false) do
+        Canvas.Rectangle(Left, Top, Width, Height);
+      inc(pr);
     end;
     Canvas.Closepath;
     Canvas.Clip;
     Canvas.NewPath;
-    Canvas.FNewPath := False;
+    Canvas.FNewPath := false;
   end;
 end;
 
