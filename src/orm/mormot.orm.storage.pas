@@ -2672,11 +2672,14 @@ function TRestStorageInMemory.FindWhereEqual(WhereField: integer;
 var
   i, found: PtrInt;
   v: Int64;
+  b: AnsiChar;
+  w: word;
+  c: cardinal;
   err: integer;
   P: TOrmPropInfo;
   nfo: PRttiProp;
   offs: PtrUInt;
-  vp: PPtrUInt;
+  vp: PPAnsiChar;
 
   function FoundOneAndReachedLimit: boolean;
   begin
@@ -2761,28 +2764,37 @@ begin
           // plain field with no getter
           case TOrmPropInfoRtti(P).PropRtti.Cache.Size of
             SizeOf(Byte):
-              // e.g. boolean property
-              for i := 0 to fCount - 1 do
-                if (PByte(vp^ + offs)^ = PByte(@v)^) and
-                   FoundOneAndReachedLimit then
-                  break
-                else
-                  inc(vp);
+              begin
+                // e.g. boolean property
+                b := PAnsiChar(@v)^;
+                for i := 0 to fCount - 1 do
+                  if (vp^[offs] = b) and
+                     FoundOneAndReachedLimit then
+                    break
+                  else
+                    inc(vp);
+              end;
             SizeOf(Word):
-              for i := 0 to fCount - 1 do
-                if (PWord(vp^ + offs)^ = PWord(@v)^) and
-                   FoundOneAndReachedLimit then
-                  break
-                else
-                  inc(vp);
+              begin
+                w := PWord(@v)^;
+                for i := 0 to fCount - 1 do
+                  if (PWord(@vp^[offs])^ = w) and
+                     FoundOneAndReachedLimit then
+                    break
+                  else
+                    inc(vp);
+              end;
             SizeOf(Cardinal):
-              // handle very common 32-bit integer field
-              for i := 0 to fCount - 1 do
-                if (PCardinal(vp^ + offs)^ = PCardinal(@v)^) and
-                   FoundOneAndReachedLimit then
-                  break
-                else
-                  inc(vp);
+              begin
+                // handle very common 32-bit integer field
+                c := PCardinal(@v)^;
+                for i := 0 to fCount - 1 do
+                  if (PCardinal(@vp^[offs])^ = c) and
+                     FoundOneAndReachedLimit then
+                    break
+                  else
+                    inc(vp);
+              end;
           end
         else
           // has getter -> use GetOrdProp()
@@ -2806,7 +2818,7 @@ begin
           // plain field with no getter
           vp := pointer(fValue);
           for i := 0 to fCount - 1 do
-            if (PInt64(vp^ + offs)^ = v) and
+            if (PInt64(@vp^[offs])^ = v) and
                FoundOneAndReachedLimit then
               break
             else
