@@ -3523,7 +3523,6 @@ begin
   userPrincipalName := Attributes.Get('userPrincipalName');
   displayName := Attributes.Get('displayName');
   mail := Attributes.Get('mail');
-  userPrincipalName := Attributes.Get('userPrincipalName');
   pwdLastSet := LdapToDate(Attributes.Get('pwdLastSet'));
   lastLogon := LdapToDate(Attributes.Get('lastLogon'));
   ToCardinal(Attributes.Get('primaryGroupID'), primaryGroupID);
