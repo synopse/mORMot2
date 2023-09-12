@@ -1309,7 +1309,7 @@ var
   client: TAcmeLetsEncryptClient;
 begin
   result := false;
-  client := GetClientLocked(domain);
+  client := GetClientLocked(Domain);
   if client <> nil then
     try
       if (Redirection <> '') <> (client.fRedirectHttps <> '') then
@@ -1355,7 +1355,7 @@ begin
       client := GetClientLocked(ClientSock.Http.Host);
     if client <> nil then
     begin
-      ClientSock.Http.Upgrade := client.fRedirectHttps;
+      ClientSock.Http.Upgrade := client.fRedirectHttps; // Http.Upgrade as temp
       client.Safe.UnLock;
       if ClientSock.Http.Upgrade = '' then
         client := nil;
