@@ -2447,6 +2447,9 @@ begin
     RaiseError('Sign: not a CA');
 end;
 
+const
+  DEPRECATION_THRESHOLD = 0.5; // allow a half day margin
+
 function CanVerify(auth: PX509; usage: TX509Usage; selfsigned: boolean;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
@@ -2467,9 +2470,9 @@ begin
     na := auth.NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
     nb := auth.NotBefore;
     if ((na <> 0) and
-        (TimeUtc > na)) or
+        (TimeUtc > na + DEPRECATION_THRESHOLD)) or
        ((nb <> 0) and
-        (TimeUtc < nb)) then
+        (TimeUtc < nb - DEPRECATION_THRESHOLD)) then
       result := cvDeprecatedAuthority;
   end;
 end;
