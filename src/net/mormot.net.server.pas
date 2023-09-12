@@ -1065,6 +1065,9 @@ type
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
   // and "proxy_request_buffering on" options for best performance, and
   // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
+  // - consider using THttpAsyncServer from mormot.net.async if a very high
+  // number of concurrent connections is expected, e.g. if using HTTP/1.0 behind
+  // a https reverse proxy is not an option
   // - under Windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:

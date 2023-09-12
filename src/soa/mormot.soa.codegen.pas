@@ -1438,7 +1438,7 @@ begin
     exit;
   end;
   if unitName = '' then
-    result := template
+    result := template // asked for .mustache template
   else
   begin
     _ObjAddProps(['templateName', templateName,
