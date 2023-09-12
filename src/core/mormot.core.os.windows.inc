@@ -4691,15 +4691,16 @@ var
       if redirected <> nil then
       begin
         SetLength(redirected^, l + PtrInt(n));
-        MoveFast(tmp, PByteArray(redirected^)[l], n);
+        MoveFast(tmp, PByteArray(redirected^)[l], n); // append without convert
         inc(l, n);
       end;
       if Assigned(onoutput) then
       begin
         SetString(new, PAnsiChar(@tmp), n);
-        if onoutput(new, processinfo.dwProcessId) then
+        if onoutput(new, processinfo.dwProcessId) then // notify new content
+          // onoutput() callback returned true to stop the execution
           if not flush then
-          begin // onoutput() callback returned true to stop the execution
+          begin
             exitcode := WAIT_OBJECT_0;
             break;
           end;
