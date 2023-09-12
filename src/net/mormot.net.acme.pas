@@ -1213,8 +1213,8 @@ begin
   for i := 0 to length(fClient) - 1 do
   begin
     result := fClient[i];
-    if FindPropName(pointer(result.Subjects), ServerName,
-         length(result.Subjects)) >= 0 then
+    if FindCsvIndex(
+         pointer(result.Subjects), ServerName, ',', {casesens=}false) >= 0 then
       exit;
   end;
   result := nil; // not found
