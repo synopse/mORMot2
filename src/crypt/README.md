@@ -42,8 +42,11 @@ Authentication and Security types shared by all framework units.
 - Client and Server Digest Access Authentication
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
+- `TBinaryCookieGenerator` Simple Cookie Generator
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
+- Basic ASN.1 Support
+- Windows Executable Digital Signature Stuffing
 
 ### mormot.crypt.ecc256r1
 
@@ -51,13 +54,12 @@ High-Performance *secp256r1/NISTP-256/prime256v1* Elliptic-Curve Cryptography
 - Low-Level ECC *secp256r1* ECDSA and ECDH Functions
 - Middle-Level Certificate-based Public Key Cryptography
 
-Pascal and optimized gcc static binaries are included.
 If `mormot.crypt.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library will be used.
 
 ### mormot.crypt.ecc
 
 Certificate-based Public Key Cryptography Classes
-- High-Level Certificate-based Public Key Cryptography
+- High-Level Certificate-based *secp256r1* Public Key Cryptography
 - `IProtocol` Implemented using Public Key Cryptography
 - Registration of our ECC Engine to the `TCryptAsym`/`TCryptCert` Factories
 
@@ -78,7 +80,7 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
 - JWT Implementation using any OpenSSL Algorithm
 - Register *OpenSSL* to our General Cryptography Catalog
 
-TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM`.
+TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
 For `ECC`, our `mormot.crypt.ecc256r1` unit is noticeably slower than *OpenSSL*.
 
 ### mormot.crypt.pkcs11
@@ -86,5 +88,4 @@ For `ECC`, our `mormot.crypt.ecc256r1` unit is noticeably slower than *OpenSSL*.
 Access Hardware Security Modules (HSM) via PKCS#11
 - High-Level *PKCS#11* Integration with the Framework Types
 - Registration of the *PKCS#11* Engine to the `TCryptAsym`/`TCryptCert` Factories
-
 
