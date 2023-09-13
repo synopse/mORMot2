@@ -735,7 +735,7 @@ type
   THttpAcceptBan = class(TSynPersistent)
   protected
     fSafe: TOSLightLock; // almost never on contention, no R/W needed
-    fCount, fCurrent: integer;
+    fCount, fLastSec: integer;
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
@@ -2471,13 +2471,13 @@ var
   i: PtrInt;
 begin
   fCount := 0;
-  fCurrent := 0;
+  fLastSec := 0;
   fIP := nil;
   if fMax = 0 then
     exit;
-  SetLength(fIP, fSeconds);
+  SetLength(fIP, fSeconds); // fIP[secs,0]=count fIP[secs,1..fMax]=ips
   for i := 0 to fSeconds - 1 do
-    SetLength(fIP[i], fMax + 1); // 1st item is the count
+    SetLength(fIP[i], fMax + 1);
 end;
 
 function THttpAcceptBan.BanIP(ip4: cardinal): boolean;
@@ -2497,7 +2497,7 @@ begin
       {$else}
       begin
       {$endif HASFASTTRYFINALLY}
-        P := pointer(fIP[fCurrent]); // 1st item is the count
+        P := pointer(fIP[fLastSec]); // fIP[secs,0]=count fIP[secs,1..fMax]=ips
         if P[0] < fMax then
         begin
           inc(P[0]);
@@ -2543,13 +2543,13 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    s := pointer(fIP);
-    n := fMax;
+    s := pointer(fIP); // fIP[secs,0]=count fIP[secs,1..fMax]=ips
+    n := fSeconds;
     if n <> 0 then
       repeat
         P := s^;
         inc(s);
-        if (P[0] <> 0) and // 1st item is the count
+        if (P[0] <> 0) and // count
            IntegerScanExists(@P[1], P[0], ip4) then // O(n) SSE2 asm on Intel
         begin
           inc(fRejected);
@@ -2585,10 +2585,10 @@ begin
   try
     if fCount <> 0 then
     begin
-      n := fSeconds - 1;         // power of two bitmask
-      n := (fCurrent + 1) and n; // per-second round robin
-      fCurrent := n;
-      p := @fIP[n][0]; // 1st item is the count
+      n := fSeconds - 1; // power of two bitmask
+      n := (fLastSec + 1) and n; // per-second round robin
+      fLastSec := n;
+      p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
       dec(fCount, p^);
       p^ := 0;         // the oldest slot becomes the current (no memory move)
     end;
