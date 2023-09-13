@@ -5255,9 +5255,11 @@ type
   // existing system environment variable
   // - roWinJobCloseChildren will setup a Windows Job to close any child
   // process(es) when the created process quits
+  // - roWinNoProcessDetach will avoid creating a Windows sub-process and group
   TRunOptions = set of (
     roEnvAddExisting,
-    roWinJobCloseChildren);
+    roWinJobCloseChildren,
+    roWinNoProcessDetach);
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
