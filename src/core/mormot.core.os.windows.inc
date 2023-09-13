@@ -4772,7 +4772,7 @@ begin
       startupinfo.hStdInput := GetStdHandle(STD_INPUT_HANDLE);
       startupinfo.hStdOutput := wr;
       startupinfo.hStdError := wr;
-      startupinfo.dwFlags := STARTF_USESTDHANDLES;
+      startupinfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
       if redirected <> nil then
         redirected^ := '';
       exclude(ram, ramCtrlC); // not compatible with redirection
