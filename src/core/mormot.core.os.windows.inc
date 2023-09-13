@@ -4783,7 +4783,7 @@ begin
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE;
   if not (roWinNoProcessDetach in options) then
-    flags := flags or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP;
+    flags := flags or (DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP);
   if roWinJobCloseChildren in options then
     // create the child process in a new job object
     flags := flags or CREATE_BREAKAWAY_FROM_JOB;

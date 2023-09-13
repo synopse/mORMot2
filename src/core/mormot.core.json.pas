@@ -8329,50 +8329,61 @@ var
   v: TRttiVarData;
   tmp: TObject;
 begin
-  if Info.Kind = rkClass then
-  begin
-    // special case of a setter method for a class property: use a temp instance
-    if jpoSetterNoCreate in Options then
-      Valid := false
-    else
-    begin
-      tmp := TRttiJson(Info).fClassNewInstance(Info);
-      try
-        v.Prop := Prop; // JsonLoad() would reset Prop := nil
-        TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
-        if not Valid then
-          FreeAndNil(tmp)
+  // handle special cases of a setter method
+  case Info.Parser of
+    ptClass: // for a class property: use a temp instance for the setter call
+      begin
+        if jpoSetterNoCreate in Options then
+          Valid := false
         else
         begin
-          v.Prop.Prop.SetOrdProp(Data, PtrInt(tmp));
-          if jpoSetterExpectsToFreeTempInstance in Options then
-            FreeAndNil(tmp);
+          tmp := TRttiJson(Info).fClassNewInstance(Info);
+          try
+            v.Prop := Prop; // JsonLoad() would reset Prop := nil
+            TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
+            if not Valid then
+              FreeAndNil(tmp)
+            else
+            begin
+              v.Prop.Prop.SetOrdProp(Data, PtrInt(tmp));
+              if jpoSetterExpectsToFreeTempInstance in Options then
+                FreeAndNil(tmp);
+            end;
+          except
+            on Exception do
+              tmp.Free;
+          end;
         end;
-      except
-        on Exception do
-          tmp.Free;
+      end;
+    ptRawJson: // TRttiProp.SetValue() assume RawUtf8 -> dedicated RawJson code
+      begin
+        v.Data.VAny := nil;
+        try
+          _JL_RawJson(@v.Data.VAny, self);
+          if Valid then
+            Prop^.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
+        finally
+          FastAssignNew(v.Data.VAny);
+        end;
+      end;
+    ptSet: // use a local temp variable before calling the setter
+      begin
+        v.Data.VInt64 := 0;
+        _JL_Set(@v.Data.VInt64, self);
+        if Valid then
+          Prop^.Prop.SetOrdProp(Data, v.Data.VInt64);
+      end;
+  else // call the getter via TRttiProp.SetValue() of a transient TRttiVarData
+    begin
+      v.VType := 0;
+      try
+        _JL_Variant(@v, self); // VariantLoadJson() over Ctxt
+        Valid := Valid and Prop^.Prop.SetValue(Data, variant(v));
+      finally
+        VarClearProc(v.Data);
       end;
     end;
-    exit;
-  end
-  else if Info.Parser = ptRawJson then
-  begin
-    // TRttiProp.SetValue() assume RawUtF8 -> dedicated RawJson code
-    v.VType := varString;
-    v.Data.VAny := nil;
-    _JL_RawJson(@v.Data.VAny, self);
-    if Valid then
-      Prop^.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
-  end
-  else
-  begin
-    // call the getter via TRttiProp.SetValue() of a transient TRttiVarData
-    v.VType := 0;
-    _JL_Variant(@v, self); // VariantLoadJson() over Ctxt
-    if Valid then
-      Valid := Prop^.Prop.SetValue(Data, variant(v));
   end;
-  VarClearProc(v.Data);
 end;
 
 procedure _JL_TObjectList(Data: PObjectList; var Ctxt: TJsonParserContext);

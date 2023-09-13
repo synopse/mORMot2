@@ -1292,7 +1292,7 @@ type
       read fValue write fValue;
   end;
 
-  {$ifdef HASEXTRECORDRTTI}
+{$ifdef HASEXTRECORDRTTI}
   TStaticArrayOfInt = packed array[1..5] of Integer;
 
   TNewRtti = record
@@ -1312,7 +1312,42 @@ type
       last_name: string;
     end;
   end;
-  {$endif HASEXTRECORDRTTI}
+{$endif HASEXTRECORDRTTI}
+
+  TSimpleEnum = (enTest, enTest2);
+  TEnumSet = set of TSimpleEnum;
+
+  TSimpleExample = class(TSynPersistent)
+  private
+    fFullName: string;
+    fEnumSet: TEnumSet;
+    fEnum: TSimpleEnum;
+    procedure SetEnumSet(const Value: TEnumSet);
+    procedure SetFullName(const Value: string);
+    procedure SetEnum(const Value: TSimpleEnum);
+  published
+    property FullName: string
+      read fFullName write SetFullName;
+    property EnumSet: TEnumSet
+      read fEnumSet write SetEnumSet;
+    property Enum: TSimpleEnum
+      read fEnum write SetEnum;
+  end;
+
+procedure TSimpleExample.SetEnumSet(const Value: TEnumSet);
+begin
+  fEnumSet := Value;
+end;
+
+procedure TSimpleExample.SetFullName(const Value: string);
+begin
+  fFullName := Value;
+end;
+
+procedure TSimpleExample.SetEnum(const Value: TSimpleEnum);
+begin
+  fEnum := Value;
+end;
 
 
 procedure TTestCoreProcess.EncodeDecodeJSON;
@@ -1618,6 +1653,46 @@ var
     Check(Trans.Transactions[0].TRTYPE = 'INCOME');
     Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
     Check(Trans.Transactions[0].TRRMK = 'Remark');
+  end;
+
+  procedure TestSimpleEnum;
+  var
+    x1, x2: TSimpleExample;
+    j: RawUtf8;
+    ok: boolean;
+  begin
+    x1 := TSimpleExample.Create;
+    x2 := TSimpleExample.Create;
+    try
+      Check(ObjectEquals(x1, x2));
+      x1.FullName := 'ABC';
+      Check(not ObjectEquals(x1, x2));
+      x1.EnumSet := [enTest2];
+      x1.Enum := enTest2;
+      Check(not ObjectEquals(x1, x2));
+      j := ObjectToJson(x1, [woEnumSetsAsText]);
+      CheckEqual(j, '{"FullName":"ABC","EnumSet":["enTest2"],"Enum":"enTest2"}');
+      ok := false;
+      JsonToObject(x2, pointer(j), ok);
+      Check(ok);
+      Check(x2.FullName = 'ABC', 'FullName');
+      Check(x2.Enum = enTest2, 'Enum');
+      Check(x2.EnumSet = [enTest2], 'EnumSet');
+      Check(ObjectEquals(x1, x2));
+      x2.EnumSet := [enTest, enTest2];
+      Check(not ObjectEquals(x1, x2));
+      ClearObject(x2);
+      Check(not ObjectEquals(x1, x2));
+      j := ObjectToJson(x1, []);
+      CheckEqual(j, '{"FullName":"ABC","EnumSet":2,"Enum":1}');
+      ok := false;
+      JsonToObject(x2, pointer(j), ok);
+      Check(ok);
+      Check(ObjectEquals(x1, x2));
+    finally
+      x2.Free;
+      x1.Free;
+    end;
   end;
 
   function uct(const s: RawUtf8): TOrmFieldType;
@@ -2134,6 +2209,7 @@ var
   end;
 
 begin
+  TestSimpleEnum;
   FillcharFast(F, SizeOf(F), 0); // initialize all fields before DA.Add(F)
   TestGetJsonField('', '', false, true, #0, #0);
   TestGetJsonField('true,false', 'true', false, false, ',', 'f');
