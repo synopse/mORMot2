@@ -2666,8 +2666,9 @@ end;
 
 procedure TAsyncConnections.IdleEverySecond;
 var
-  i: PtrInt;
-  notified, gced: PtrInt;
+  i, notified, gced: PtrInt;
+  idle: array of TAsyncConnection;
+  idles: integer;
   sec, allowed, gc: cardinal;
   c: TAsyncConnection;
 begin
@@ -2677,6 +2678,7 @@ begin
     exit;
   // call TAsyncConnection.ReleaseMemoryOnIdle and OnLastOperationIdle events
   // and update TAsyncConnection.fLastOperation when needed
+  idles := 0;
   notified := 0;
   gced := 0;
   sec := fLastOperationSec; // 32-bit second resolution is fine
@@ -2699,30 +2701,36 @@ begin
       end
       else
       begin
-        // check if some events should be triggerred on this inactive connection
+        // inactive connection: check if some events should be triggerred
         // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
         if (gc <> 0) and
            (c.fLastOperation < gc) then
           inc(gced, c.ReleaseMemoryOnIdle);
         if (allowed <> 0) and
            (c.fLastOperation < allowed) then
-          try
-            if c.OnLastOperationIdle(sec) then
-              inc(notified);
-            if Terminated then
-              break;
-          except
-          end;
+          ObjArrayAddCount(idle, c, idles); // calls below, outside the lock
       end;
     end;
   finally
     fConnectionLock.ReadOnlyUnLock;
   end;
+  // OnLastOperationIdle should be called outside of fConnectionLock because if
+  // Write() fails, it calls ConnectionDelete() and its WriteLock (e.g. WS ping)
+  for i := 0 to idles - 1 do
+    try
+      c := idle[i];
+      if c.OnLastOperationIdle(sec) then
+        inc(notified);
+      if Terminated then
+        break;
+    except
+      // this overriden method should fail silently
+    end;
   if (acoVerboseLog in fOptions) and
      ((notified <> 0) or
       (gced <> 0)) then
-    DoLog(sllTrace, 'IdleEverySecond % notif=% GC=%',
-      [fConnectionClass, notified, KBNoSpace(gced)], self);
+    DoLog(sllTrace, 'IdleEverySecond % idle=% notif=% GC=%',
+      [fConnectionClass, idles, notified, KBNoSpace(gced)], self);
 end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);

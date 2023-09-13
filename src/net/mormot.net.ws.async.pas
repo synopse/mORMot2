@@ -278,8 +278,10 @@ begin
   delaysec := TWebSocketAsyncServer(fServer).fSettings.HeartbeatDelay shr 10;
   if nowsec < delaysec + fLastOperation then
     exit; // nothing to send (most common case)
+  // it is time to notify the other end that we are still alive
   fProcess.SendPing; // Write will change fWasActive, then fLastOperation
-  result := true;
+  // warning: Write calls ConnectionDelete() so fConnectionLock on socket error
+  result := true; // notify TAsyncConnections.IdleEverySecond
 end;
 
 function TWebSocketAsyncConnection.DecodeHeaders: integer;
