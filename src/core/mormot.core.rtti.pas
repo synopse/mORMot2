@@ -887,7 +887,7 @@ type
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
-    // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString/RawBlob as
+    // CP_WINANSI, RawUnicode as CP_UTF16, RawByteString/RawBlob as
     // CP_RAWBYTESTRING, AnsiString as CP_ACP=0, and any other type as RawUtf8
     // - it will also recognize RawBlob as the fake CP_RAWBLOB codepage
     function AnsiStringCodePage: integer;
@@ -3687,7 +3687,7 @@ begin
   if @self = TypeInfo(RawUtf8) then
     result := CP_UTF8
   else if @self = TypeInfo(WinAnsiString) then
-    result := CODEPAGE_US
+    result := CP_WINANSI
   {$ifndef PUREMORMOT2}
   else if @self = TypeInfo(RawUnicode) then
     result := CP_UTF16
@@ -6431,7 +6431,7 @@ begin
         cp := Info^.AnsiStringCodePage;
         if cp = CP_UTF8 then
           result := ptRawUtf8
-        else if cp = CODEPAGE_US then
+        else if cp = CP_WINANSI then
           result := ptWinAnsi
         else if cp >= CP_RAWBLOB then
           result := ptRawByteString

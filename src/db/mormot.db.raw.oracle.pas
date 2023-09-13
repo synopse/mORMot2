@@ -911,7 +911,7 @@ type
     /// retrieve the OCI charset ID from a Windows Code Page
     // - will only handle most known Windows Code Page
     // - if aCodePage=0, will use the NLS_LANG environment variable
-    // - will use 'WE8MSWIN1252' (CODEPAGE_US) if the Code Page is unknown
+    // - will use 'WE8MSWIN1252' (CP_WINANSI) if the Code Page is unknown
     function CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
     /// raise an exception on error
     procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;

@@ -4950,7 +4950,7 @@ begin
         vtUnicodeString:
           begin
             Unicode_WideToShort(VUnicodeString, // assume WinAnsi encoding
-              length(UnicodeString(VUnicodeString)), CODEPAGE_US, tmp);
+              length(UnicodeString(VUnicodeString)), CP_WINANSI, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
         {$endif HASVARUSTRING}

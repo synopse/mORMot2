@@ -736,7 +736,7 @@ type
       CodePage: integer = -1);
     /// append some UTF-8 encoded chars to the buffer, from any Ansi buffer
     // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
-    // CODEPAGE_US, or any version supported by the Operating System
+    // CP_WINANSI, or any version supported by the Operating System
     // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
@@ -5209,7 +5209,7 @@ end;
 procedure _JS_WinAnsi(Data: PWinAnsiString; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
-  Ctxt.W.AddAnyAnsiBuffer(pointer(Data^), length(Data^), twJsonEscape, CODEPAGE_US);
+  Ctxt.W.AddAnyAnsiBuffer(pointer(Data^), length(Data^), twJsonEscape, CP_WINANSI);
   Ctxt.W.Add('"');
 end;
 

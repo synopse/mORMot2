@@ -5621,7 +5621,7 @@ var
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
   if CaseInsensitive then // 255 max chars is enough to avoid hashing collisions
-    if fEngine.CodePage = CODEPAGE_US then
+    if fEngine.CodePage = CP_WINANSI then
       result := DefaultHasher(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
     else
       result := DefaultHasher(0, Up, UpperCopy255Buf(Up, pointer(Value), length(Value)) - Up)
@@ -5671,7 +5671,7 @@ begin
     fPropInfo.GetLongStrProp(Item1, tmp1);
     fPropInfo.GetLongStrProp(Item2, tmp2);
     if CaseInsensitive then
-      if fEngine.CodePage = CODEPAGE_US then
+      if fEngine.CodePage = CP_WINANSI then
         result := AnsiIComp(pointer(tmp1), pointer(tmp2))
       else
         result := StrIComp(pointer(tmp1), pointer(tmp2))

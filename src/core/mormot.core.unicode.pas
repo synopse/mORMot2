@@ -3341,7 +3341,7 @@ function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := ((aCodePage >= 1250) and
              (aCodePage <= 1258)) or
-            (aCodePage = CODEPAGE_LATIN1) or
+            (aCodePage = CP_LATIN1) or
             (aCodePage >= CP_RAWBLOB);
 end;
 
@@ -3738,8 +3738,8 @@ const
   // - this table contains all the Unicode codepoints corresponding to
   // the Ansi Code Page 1252 (i.e. WinAnsi), which Unicode value are > 255
   // - values taken from MultiByteToWideChar(1252,0,@Tmp,256,@WinAnsiTable,256)
-  // so these values are available outside the Windows platforms (e.g. Linux/BSD)
-  // and even if registry has been tweaked as such:
+  // so are available outside the Windows platforms (e.g. Linux/BSD) and even
+  // if the system has been tweaked as such:
   // http://www.fas.harvard.edu/~chgis/data/chgis/downloads/v4/howto/cyrillic.html
   WinAnsiUnicodeChars: packed array[128..159] of word = (
     8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
@@ -3759,14 +3759,14 @@ begin
       [ClassNameShort(self)^, fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide, 256);
-  if (aCodePage = CODEPAGE_US) or
-     (aCodePage = CODEPAGE_LATIN1) or
+  if (aCodePage = CP_WINANSI) or
+     (aCodePage = CP_LATIN1) or
      (aCodePage >= CP_RAWBLOB) then
   begin
     // Win1252 has its own table, LATIN1 and RawByteString map 8-bit Unicode
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
-    if aCodePage = CODEPAGE_US then
+    if aCodePage = CP_WINANSI then
       // do not trust the Windows API for the 1252 code page :(
       for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
         fAnsiToWide[i] := WinAnsiUnicodeChars[i];
@@ -10102,7 +10102,7 @@ begin
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
   CurrentAnsiConvert   := NewEngine(Unicode_CodePage);
-  WinAnsiConvert       := NewEngine(CODEPAGE_US) as TSynAnsiFixedWidth;
+  WinAnsiConvert       := NewEngine(CP_WINANSI) as TSynAnsiFixedWidth;
   Utf8AnsiConvert      := NewEngine(CP_UTF8) as TSynAnsiUtf8;
   RawByteStringConvert := NewEngine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions

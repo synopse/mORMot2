@@ -92,17 +92,23 @@ const
   CP_RAWBLOB = 65534;
 
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
-  CODEPAGE_US = 1252;
+  CP_WINANSI = 1252;
 
   /// Latin-1 ISO/IEC 8859-1 Code Page
   // - map low 8-bit Unicode CodePoints
-  CODEPAGE_LATIN1 = 819;
+  CP_LATIN1 = 819;
 
   /// internal Code Page for System AnsiString encoding
   CP_ACP = 0;
 
   /// internal Code Page for System Console encoding
   CP_OEM = 1;
+
+  /// use rather CP_WINANSI with mORMot 2
+  CODEPAGE_US = CP_WINANSI;
+
+  /// use rather CP_LATIN1 with mORMot 2
+  CODEPAGE_LATIN1 = CP_LATIN1;
 
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
@@ -185,7 +191,7 @@ type
   // Delphi 7/2007, and it will be faster anyway to use our optimized functions
   // from mormot.core.unicode.pas unit like StringToUtf8/Utf8ToString
   {$ifdef HASCODEPAGE}
-  WinAnsiString = type AnsiString(CODEPAGE_US); // WinAnsi Codepage
+  WinAnsiString = type AnsiString(CP_WINANSI); // WinAnsi 1252 Codepage
   {$else}
   WinAnsiString = type AnsiString;
   {$endif HASCODEPAGE}

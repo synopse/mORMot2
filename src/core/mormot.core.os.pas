@@ -6193,7 +6193,7 @@ begin
     BALTIC_CHARSET:
       result := 1257;
   else
-    result := CODEPAGE_US; // default ANSI_CHARSET = iso-8859-1 = windows-1252
+    result := CP_WINANSI; // default ANSI_CHARSET = iso-8859-1 = windows-1252
   end;
 end;
 

@@ -837,7 +837,7 @@ var
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  FastSetStringCP(result, nil, CharCount, CODEPAGE_US);
+  FastSetStringCP(result, nil, CharCount, CP_WINANSI);
   for i := 0 to CharCount - 1 do
     PByteArray(result)[i] := 32 + R[i] and 127;
   tmp.Done;
