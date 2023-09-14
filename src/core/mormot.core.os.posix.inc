@@ -1460,7 +1460,7 @@ begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if LinuxEventFDWait(fFD, TimeoutMS) then
+    if WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
       LinuxEventFDRead(fFD);
   end
   else
