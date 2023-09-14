@@ -1457,7 +1457,7 @@ var
   recved, added, retryms: integer;
   pse: TPollSocketEvents;
   res: TNetResult;
-  start, stop: Int64;
+  start: Int64;
   wf: string[3];
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
@@ -1530,11 +1530,8 @@ begin
           else
             wf[0] := #0;
           if fDebugLog <> nil then
-          begin
-            QueryPerformanceMicroSeconds(stop);
             DoLog('ProcessRead recv(%)=% len=% %in % %', [pointer(connection.Socket),
-              ToText(res)^, recved, wf, MicroSecToString(stop - start), fRead]);
-          end;
+              ToText(res)^, recved, wf, MicroSecFrom(start), fRead]);
           if connection.fSocket = nil then
             exit; // Stop() called
           if res = nrRetry then
@@ -2357,7 +2354,7 @@ function TAsyncConnections.LockedConnectionDelete(aConnection: TAsyncConnection;
   aIndex: integer): boolean;
 var
   n: PtrInt;
-  start, stop: Int64;
+  start: Int64;
 begin
   // caller should have done fConnectionLock.WriteLock
   try
@@ -2369,11 +2366,8 @@ begin
        (length(fConnection) > n shl 1) then
       SetLength(fConnection, n + n shr 3); // reduce 50% free into 12.5%
     if acoVerboseLog in fOptions then
-    begin
-      QueryPerformanceMicroSeconds(stop); // a few us at most
-      DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %us',
-        [aConnection, aIndex, n, stop - start], self);
-    end;
+      DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
+        [aConnection, aIndex, n, MicroSecFrom(start)], self);
     aConnection.fSocket := nil;   // ensure is known as disabled
     AddGC(aConnection); // will be released once processed
     result := true;
@@ -2671,6 +2665,7 @@ var
   idles: integer;
   sec, allowed, gc: cardinal;
   c: TAsyncConnection;
+  start: Int64;
 begin
   if Terminated or
      (fConnectionCount = 0) or
@@ -2678,6 +2673,8 @@ begin
     exit;
   // call TAsyncConnection.ReleaseMemoryOnIdle and OnLastOperationIdle events
   // and update TAsyncConnection.fLastOperation when needed
+  if acoVerboseLog in fOptions then
+    QueryPerformanceMicroSeconds(start);
   idles := 0;
   notified := 0;
   gced := 0;
@@ -2705,22 +2702,24 @@ begin
         // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
         if (gc <> 0) and
            (c.fLastOperation < gc) then
-          inc(gced, c.ReleaseMemoryOnIdle);
+          inc(gced, c.ReleaseMemoryOnIdle); // quick non virtual method
         if (allowed <> 0) and
            (c.fLastOperation < allowed) then
           ObjArrayAddCount(idle, c, idles); // calls below, outside the lock
+        if Terminated then
+          break;
       end;
     end;
   finally
     fConnectionLock.ReadOnlyUnLock;
   end;
   // OnLastOperationIdle should be called outside of fConnectionLock because if
-  // Write() fails, it calls ConnectionDelete() and its WriteLock (e.g. WS ping)
+  // Write() fails, it calls ConnectionDelete() and its WriteLock
   for i := 0 to idles - 1 do
     try
       c := idle[i];
       if c.OnLastOperationIdle(sec) then
-        inc(notified);
+        inc(notified); // e.g. TWebSocketAsyncConnection ping was sent
       if Terminated then
         break;
     except
@@ -2729,8 +2728,9 @@ begin
   if (acoVerboseLog in fOptions) and
      ((notified <> 0) or
       (gced <> 0)) then
-    DoLog(sllTrace, 'IdleEverySecond % idle=% notif=% GC=%',
-      [fConnectionClass, idles, notified, KBNoSpace(gced)], self);
+    DoLog(sllTrace, 'IdleEverySecond % idle=% notif=% gc=% %',
+      [fConnectionClass, idles, notified, KBNoSpace(gced),
+       MicroSecFrom(start)], self);
 end;
 
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);

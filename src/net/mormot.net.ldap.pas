@@ -4379,7 +4379,7 @@ end;
 function TBasicAuthServerExternal.CheckCredential(const aUser: RawUtf8;
   const aPassword: SpiUtf8): TAuthServerResult;
 var
-  start, stop: Int64;
+  start: Int64;
 begin
   result := asrUnknownUser;
   if (aUser = '') or
@@ -4401,12 +4401,10 @@ begin
       SetCredential(aUser, aPassword); // add valid credentials to the cache
       result := asrMatch;
     end;
-  if fLog = nil then
-    exit;
-  QueryPerformanceMicroSeconds(stop);
-  fLog.Add.Log(sllTrace, 'CheckCredential(%)=% in %',
-    [aUser, GetEnumName(TypeInfo(TAuthServerResult), ord(result)),
-     MicroSecToString(stop - start)], self);
+  if fLog <> nil then
+    fLog.Add.Log(sllTrace, 'CheckCredential(%)=% in %',
+      [aUser, GetEnumName(TypeInfo(TAuthServerResult), ord(result)),
+       MicroSecFrom(start)], self);
 end;
 
 

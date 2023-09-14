@@ -3693,7 +3693,7 @@ function Utf8ToWin32PWideChar(const Text: RawUtf8;
 /// internal function to avoid linking mormot.core.buffers.pas
 function PosixParseHex32(p: PAnsiChar): integer;
 
-/// internal function just wrapper fppoll(POLLIN or POLLPRI)
+/// internal function just wrapping fppoll(POLLIN or POLLPRI)
 function WaitReadPending(fd, timeout: integer): boolean;
 
 {$endif OSWINDOWS}
