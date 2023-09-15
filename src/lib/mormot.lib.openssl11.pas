@@ -1677,7 +1677,9 @@ type
     function SetLocations(const CAFile: RawUtf8;
       const CAFolder: RawUtf8 = ''): boolean;
     // returns 0 on success, or an error code (optionally in errstr^/errcert^)
-    // - allow partial chain verification if MaxDepth<>0
+    // - allow partial chain verification if MaxDepth<>0, and optional policy
+    // verification if X509_V_FLAG_POLICY_CHECK is included in Flags - to
+    // fulfill e.g. https://nvd.nist.gov/vuln/detail/CVE-2023-0466
     // - if errcert^ is set, caller should call errcert^.Free
     function Verify(x509: PX509; chain: Pstack_st_X509 = nil;
       errstr: PPUtf8Char = nil; errcert: PPX509 = nil;

@@ -2729,7 +2729,8 @@ begin
     if GetBitPtr(@Bits, i) then
     begin
       j := i;
-      while (j + 1 < BitsCount) and GetBitPtr(@Bits, j + 1) do
+      while (j + 1 < BitsCount) and
+            GetBitPtr(@Bits, j + 1) do
         inc(j);
       result := result + UInt32ToUtf8(i + 1);
       if j = i then
