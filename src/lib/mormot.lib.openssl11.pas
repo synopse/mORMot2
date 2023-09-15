@@ -1681,7 +1681,8 @@ type
     // - if errcert^ is set, caller should call errcert^.Free
     function Verify(x509: PX509; chain: Pstack_st_X509 = nil;
       errstr: PPUtf8Char = nil; errcert: PPX509 = nil;
-      callback: X509_STORE_CTX_verify_cb = nil; MaxDepth: integer = 0): integer;
+      callback: X509_STORE_CTX_verify_cb = nil; MaxDepth: integer = 0;
+      Flags: cardinal = X509_V_FLAG_PARTIAL_CHAIN): integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -8894,7 +8895,7 @@ end;
 
 function X509_STORE.Verify(x509: PX509; chain: Pstack_st_X509;
   errstr: PPUtf8Char; errcert: PPX509; callback: X509_STORE_CTX_verify_cb;
-  MaxDepth: integer): integer;
+  MaxDepth: integer; Flags: cardinal): integer;
 var
   c: PX509_STORE_CTX;
   param: PX509_VERIFY_PARAM;
@@ -8910,7 +8911,7 @@ begin
       if MaxDepth > 0 then
       begin
         param := X509_VERIFY_PARAM_new();
-        X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_PARTIAL_CHAIN);
+        X509_VERIFY_PARAM_set_flags(param, Flags);
         X509_VERIFY_PARAM_set_depth(param, MaxDepth);
         X509_STORE_CTX_set0_param(c, param);
       end;
