@@ -34,33 +34,36 @@ type
   /// exception class raised by this unit
   ERsaException = class(ESynException);
 
-  /// pointer to a single precision 32-bit component value
+  { we use half-registers to store the data in a computing efficient manner }
+
+  /// pointer to a single precision component value
   PBIComponent = ^TBIComponent;
-  /// a single precision 32-bit component value
-  TBIComponent = cardinal;
-  /// pointer to a single precision 32-bit component array
-  PBIComponents = PCardinalArray;
+  /// a single precision component value
+  TBIComponent = {$ifdef CPU32} word {$else} cardinal {$endif};
+  /// pointer to a single precision component array
+  PBIComponents = {$ifdef CPU32} PWordArray {$else} PCardinalArray {$endif};
 
-  /// pointer to an unsigned double precision 64-bit component value
+  /// pointer to an unsigned double precision component value
   PBILongComponent = ^TBILongComponent;
-  /// an unsigned double precision 64-bit component value
-  TBILongComponent = QWord;
+  /// an unsigned double precision component value
+  TBILongComponent = {$ifdef CPU32} cardinal {$else} QWord {$endif};
 
-  /// pointer to a signed double precision 64-bit component value
+  /// pointer to a signed double precision component value
   PBISignedLongComponent = ^TBISignedLongComponent;
-  /// a signed double precision 64-bit component value
-  TBISignedLongComponent = Int64;
+  /// a signed double precision component value
+  TBISignedLongComponent = {$ifdef CPU32} integer {$else} Int64 {$endif};
 
 const
   /// maximum TBIComponent value + 1
-  BIGINT_COMP_RADIX = TBILongComponent($0000000100000000);
+  BIGINT_COMP_RADIX = TBILongComponent(
+    {$ifdef CPU32} $10000 {$else} $100000000 {$endif});
   /// maximum TBILongComponent value - 1
-  BIGINT_COMP_MAX = TBILongComponent($ffffffffffffffff);
-  /// number of bytes in a TBIComponent, i.e. 4
+  BIGINT_COMP_MAX = TBILongComponent(-1);
+  /// number of bytes in a TBIComponent, i.e. 2 on CPU32 and 4 on CPU64
   BIGINT_COMP_BYTE_SIZE = SizeOf(TBIComponent);
-  /// number of power of two bits in a TBIComponent, since 1 shl 5 = 32
-  BIGINT_COMP_BIT_SHR = 5;
-  /// number of bits in a TBIComponent, i.e. 32
+  /// number of power of two bits in a TBIComponent
+  BIGINT_COMP_BIT_SHR = {$ifdef CPU32} 4 {$else} 5 {$endif};
+  /// number of bits in a TBIComponent, i.e. 16 on CPU32 and 32 on CPU64
   BIGINT_COMP_BIT_SIZE = BIGINT_COMP_BYTE_SIZE * 8;
 
 type
@@ -70,8 +73,8 @@ type
   TBigIntContext = class;
 
   /// store one Big Integer value with proper COW support
-  // - each value is owned by an associated TBigIntContext instance
-  // - you should call TBigIntContext.Release() once done with this value
+  // - each value is owned as PBigInt by an associated TBigIntContext instance
+  // - you should call TBigInt.Release() once done with any instance
   TBigInt = record
   private
     /// next bigint in the Owner free instance cache
@@ -95,6 +98,7 @@ type
     /// raw access to the actual component data
     Components: PBIComponents;
     /// comparison with another Big Integer value
+    // - values should have been Trim-med for the size to match
     function Compare(b: PBigInt): integer;
     /// make a COW instance, increasing RefCnt
     function Copy: PBigInt;
@@ -109,7 +113,7 @@ type
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean);
     /// delete any meaningless leading zeros and return self
     function Trim: PBigInt;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// quickly search if contains 0
     function IsZero: boolean;
     /// check if a given bit is set to 1
@@ -191,7 +195,7 @@ type
     /// allocate a new zeroed Big Integer value of the specified precision
     // - n is the number of TBitInt.Components[] items to initialize
     function Allocate(n: integer; nozero: boolean = false): PBigint;
-    /// allocate a new Big Integer vallue from a 32-bit unsigned integer
+    /// allocate a new Big Integer value from a 16/32-bit unsigned integer
     function AllocateFrom(v: TBIComponent): PBigInt;
     /// allocate and import a Big Integer value from a binary buffer
     function Load(data: PByteArray; bytes: integer): PBigInt; overload;
@@ -219,6 +223,10 @@ const
     RefCnt: {%H-}-1;
     Components: {%H-}@BIGINT_ONE_VALUE);
 
+/// branchless comparison of two
+function CompareBI(A, B: TBIComponent): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { **************** RSA Low-Level Cryptography Functions }
 
@@ -244,6 +252,11 @@ begin
     result := a
   else
     result := b;
+end;
+
+function CompareBI(A, B: TBIComponent): integer;
+begin
+  result := ord(A > B) - ord(A < B);
 end;
 
 procedure TBigInt.ResizeComponents(n: integer; nozero: boolean);
@@ -326,7 +339,7 @@ begin
     exit;
   for i := Size - 1 downto 0 do
   begin
-    result := CompareCardinal(Components[i], b^.Components[i]);
+    result := CompareBI(Components[i], b^.Components[i]);
     if result <> 0 then
       exit;
   end;
@@ -457,34 +470,29 @@ begin
     Release;
 end;
 
-
 function TBigInt.Add(b: PBigInt): PBigInt;
 var
   n: integer;
   pa, pb: PBIComponent;
-  sum, tot: TBIComponent;
-  carry: boolean;
+  v: TBILongComponent;
 begin
   if not b^.IsZero then
   begin
     n := Max(Size, b^.Size);
-    ResizeComponents(n + 1);
+    ResizeComponents(n + 1, {nozero=}true);
     b^.ResizeComponents(n);
     pa := pointer(Components);
     pb := pointer(b^.Components);
-    carry := false;
+    v := 0;
     repeat
-      sum := pa^;
-      inc(sum, pb^);
-      tot := sum;
-      inc(tot, ord(carry));
-      carry := (sum < pa^) or (tot < sum);
-      pa^ := tot;
+      inc(v, TBILongComponent(pa^) + pb^);
+      pa^ := v;
+      v := v shr BIGINT_COMP_BIT_SIZE; // branchless carry propagation
       inc(pa);
       inc(pb);
       dec(n);
     until n = 0;
-    pa^ := ord(carry);
+    pa^ := v;
   end;
   b.Release;
   result := Trim;
@@ -494,30 +502,23 @@ function TBigInt.Substract(b: PBigInt; NegativeResult: PBoolean): PBigInt;
 var
   n: integer;
   pa, pb: PBIComponent;
-  carry, sub, tot: TBIComponent;
+  v: TBILongComponent;
 begin
-  carry := 0;
   n := Size;
   b^.ResizeComponents(n);
   pa := pointer(Components);
   pb := pointer(b^.Components);
+  v := 0;
   repeat
-    sub := pa^;
-    dec(sub, pb^);
-    inc(pb);
-    tot := sub;
-    dec(tot, carry);
-    if (sub > pa^) or
-       (tot > sub) then
-      carry := 1
-    else
-      carry := 0;
-    pa^ := tot;
+    v := TBILongComponent(pa^) - pb^ - v;
+    pa^ := v;
+    v := ord((v shr BIGINT_COMP_BIT_SIZE) <> 0); // branchless carry
     inc(pa);
+    inc(pb);
     dec(n);
   until n = 0;
   if NegativeResult <> nil then
-    NegativeResult^ := carry <> 0;
+    NegativeResult^ := v <> 0;
   b.Release;
   result := Trim;
 end;
@@ -748,7 +749,7 @@ begin
         'TBigInt.Allocate(%): % RefCnt=%', [n, result, result^.RefCnt]);
     FreeList := result^.NextFree;
     dec(FreeCount);
-    result.ResizeComponents(n, nozero);
+    result.ResizeComponents(n, {nozero=}true);
   end
   else
   begin
@@ -756,7 +757,7 @@ begin
     result^.Owner := self;
     result^.Size := n;
     result^.Capacity := n * 2; // with some initial over-allocatation
-    result^.Components := GetMem(result^.Capacity * BIGINT_COMP_BYTE_SIZE);
+    GetMem(result^.Components, result^.Capacity * BIGINT_COMP_BYTE_SIZE);
   end;
   result^.RefCnt := 1;
   result^.NextFree := nil;
@@ -844,6 +845,7 @@ begin
   while result.Compare(bim) >= 0 do
     result.Substract(bim);
 end;
+
 
 
 { **************** RSA Low-Level Cryptography Functions }
