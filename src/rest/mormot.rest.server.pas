@@ -902,7 +902,7 @@ type
     property TimeOutTix: cardinal
       read fTimeOutTix;
     /// copy of the associated user access rights
-    // - extracted from User.TAuthGroup.SqlAccessRights
+    // - extracted from User.TAuthGroup.OrmAccessRights
     property AccessRights: TOrmAccessRights
       read fAccessRights;
     /// the hexadecimal private key as returned to the connected client
@@ -4686,7 +4686,7 @@ begin
   // here User.GroupRights and fPrivateKey should have been set
   fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout) * (1000 * 60)) shr 10;
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
-  fAccessRights := User.GroupRights.SqlAccessRights;
+  fAccessRights := User.GroupRights.OrmAccessRights;
   FormatUtf8('%+%', [fID, fPrivateKey], fPrivateSalt);
   fPrivateSaltHash := crc32(crc32(0, pointer(fPrivateSalt), length(fPrivateSalt)),
     pointer(User.PasswordHashHexa), length(User.PasswordHashHexa));

@@ -977,8 +977,21 @@ type
     // - content is converted into/from text format via AccessRight DB property
     // (so it will be not fixed e.g. by the binary TOrmTableBits layout, i.e.
     // the MAX_TABLES constant value)
+    // - if you want to call Edit on the returned value, use a temp variable:
+    // !var
+    // !  oar: TOrmAccessRights;
+    // !begin
+    // !  oar := Group.OrmAccessRights;
+    // !  oar.Edit(....);
+    // !  oar.Edit(....);
+    // !  Group.OrmAccessRights := oar;
+    // !  rest.Update(Group);
+    property OrmAccessRights: TOrmAccessRights
+      read GetOrmAccessRights write SetOrmAccessRights;
+    {$ifndef PUREMORMOT2}
     property SqlAccessRights: TOrmAccessRights
       read GetOrmAccessRights write SetOrmAccessRights;
+    {$endif PUREMORMOT2}
   published
     /// the access right identifier, ready to be displayed
     // - the same identifier can be used only once (this column is marked as
@@ -3548,21 +3561,21 @@ begin
         // Guest        No      No        No     No    No     Yes    No
         A := FULL_ACCESS_RIGHTS;
         G.Ident := 'Admin';
-        G.SqlAccessRights := A;
+        G.OrmAccessRights := A;
         G.SessionTimeout := AuthAdminGroupDefaultTimeout;
         AdminID := Server.Add(G, true);
         G.Ident := 'Supervisor';
         A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
         A.Edit(AuthUserIndex, [ooSelect]); // AuthUser  R/O
         A.Edit(AuthGroupIndex, [ooSelect]); // AuthGroup R/O
-        G.SqlAccessRights := A;
+        G.OrmAccessRights := A;
         G.SessionTimeout := AuthSupervisorGroupDefaultTimeout;
         SupervisorID := Server.Add(G, true);
         G.Ident := 'User';
         Exclude(A.AllowRemoteExecute, reSqlSelectWithoutTable);
         Exclude(A.GET, AuthUserIndex); // no Auth R
         Exclude(A.GET, AuthGroupIndex);
-        G.SqlAccessRights := A;
+        G.OrmAccessRights := A;
         G.SessionTimeout := AuthUserGroupDefaultTimeout;
         UserID := Server.Add(G, true);
         G.Ident := 'Guest';
@@ -3570,7 +3583,7 @@ begin
         FillcharFast(A.POST, SizeOf(TOrmTableBits), 0); // R/O access
         FillcharFast(A.PUT, SizeOf(TOrmTableBits), 0);
         FillcharFast(A.DELETE, SizeOf(TOrmTableBits), 0);
-        G.SqlAccessRights := A;
+        G.OrmAccessRights := A;
         G.SessionTimeout := AuthGuestGroupDefaultTimeout;
         Server.Add(G, true);
       finally
