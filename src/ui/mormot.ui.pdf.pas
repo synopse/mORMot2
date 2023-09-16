@@ -12227,14 +12227,6 @@ begin
       else
         Canvas.ShowText(pointer(tmp));
       Canvas.EndText;
-      case po of
-        tpSetTextJustification:
-          if nspace > 0 then
-            Canvas.SetWordSpace(0);
-        tpKerningFromAveragePosition:
-          if hscale <> 100 then
-            Canvas.SetHorizontalScaling(100); //reset hor. scaling
-      end;
       // handle underline or strike out styles (direct draw PDF lines on canvas)
       if Font.LogFont.lfUnderline <> 0 then
         DrawLine(posi, ss / 8 / Canvas.fWorldFactorX / Canvas.fDevScaleX);
@@ -12245,6 +12237,15 @@ begin
       begin
         Canvas.GRestore;
         fFillColor := -1; // force set drawing color
+      end;
+      // restore previous text justification (after GRestore if clipped)
+      case po of
+        tpSetTextJustification:
+          if nspace > 0 then
+            Canvas.SetWordSpace(0);
+        tpKerningFromAveragePosition:
+          if hscale <> 100 then
+            Canvas.SetHorizontalScaling(100); // reset horizontal scaling
       end;
       if not Canvas.fNewPath then
       begin
