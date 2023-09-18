@@ -202,6 +202,7 @@ var
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. '1010106F'
   OpenSslVersionHexa: string;
+
   /// internal PSSL data reference slot - for SSL_get_ex_data/SSL_set_ex_data
   OpenSslExIndexSsl: integer;
 
@@ -5994,7 +5995,7 @@ function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_pubkey';
 
 function X509_get_signature_nid(x: PX509): integer; cdecl;
-      external LIB_CRYPTO name _PU +
+  external LIB_CRYPTO name _PU + 'X509_get_signature_nid';
 
 function X509_get_signature_info(x: PX509;
     mdnid, pknid, secbits, flags: PInteger): integer; cdecl;
@@ -6791,7 +6792,7 @@ procedure RSA_get0_key(r: PRSA; n: PPBIGNUM; e: PPBIGNUM; d: PPBIGNUM); cdecl;
 function X509_REQ_add_extensions(req: PX509_REQ; exts: Pstack_st_X509_EXTENSION): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_add_extensions';
 
-function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION); cdecl;
+function X509_REQ_get_extensions(req: PX509_REQ): Pstack_st_X509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_get_extensions';
 
 function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
@@ -7085,7 +7086,7 @@ end;
 function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
 begin
   result := nil;
-  if libcrypto.BN_dec2bn(@result, pointer(Text)) = 0 then
+  if BN_dec2bn(@result, pointer(Text)) = 0 then
     result := nil;
 end;
 
@@ -7100,21 +7101,20 @@ end;
 
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 begin
-  result := libcrypto.RSA_pkey_ctx_ctrl(
+  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}RSA_pkey_ctx_ctrl(
     ctx, -1, EVP_PKEY_CTRL_RSA_PADDING, padding, nil);
 end;
 
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 begin
-  result := libcrypto.RSA_pkey_ctx_ctrl(ctx, 
-    EVP_PKEY_OP_TYPE_SIG or
-    EVP_PKEY_OP_TYPE_CRYPT,
+  result := RSA_pkey_ctx_ctrl(ctx,
+    EVP_PKEY_OP_TYPE_SIG or EVP_PKEY_OP_TYPE_CRYPT,
     EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
 end;
 
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 begin
-  result := libcrypto.EVP_PKEY_CTX_ctrl(ctx,
+  result := EVP_PKEY_CTX_ctrl(ctx,
     EVP_PKEY_RSA, EVP_PKEY_OP_TYPE_CRYPT, EVP_PKEY_CTRL_RSA_OAEP_MD, 0, md);
 end;
 
@@ -9879,6 +9879,18 @@ begin
   raise exc;
 end;
 
+{$ifdef OPENSSLSTATIC} // OpenSSL is always available when statically linked
+
+class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: shortstring);
+begin
+end;
+
+class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: shortstring);
+begin
+end;
+
+{$else}
+
 class procedure EOpenSsl.TryNotAvailable(caller: TClass; const method: shortstring);
 var
   name: shortstring;
@@ -9899,11 +9911,12 @@ begin
     TryNotAvailable(caller, method);
 end;
 
+{$endif OPENSSLSTATIC}
+
 class function EOpenSsl.GetOpenSsl: string;
 begin
   result := OpenSslVersionHexa;
 end;
-
 
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }

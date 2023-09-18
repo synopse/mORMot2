@@ -3668,7 +3668,7 @@ begin
   if Algo = daUndefined then
     exit;
   // parse server token
-  dp.Init(Algo);
+  {%H-}dp.Init(Algo);
   p := pointer(FromServer);
   while p <> nil do
     if not dp.Parse(p) then // invalid algorithm
@@ -3750,7 +3750,7 @@ begin
      not Assigned(OnSearchUser) then
     exit;
   // parse the input parameters
-  dp.Init(Algo);
+  {%H-}dp.Init(Algo);
   while FromClient <> nil do
     if not dp.Parse(FromClient) then
       exit; // invalid input (e.g. unexpected algorithm)
@@ -3869,7 +3869,7 @@ var
   user, pass: RawUtf8;
 begin
   result := BasicServerAuth(FromClient, user, pass) and
-            OnBasicAuth(self, user, pass);
+            OnBasicAuth(self, user{%H-}, pass{%H-});
   if not result then
     exit;
   ClientUser := user;
@@ -7280,7 +7280,7 @@ var
     for cu := l to h do
       if cu in c.Usage then
         begin
-        if usage <> '' then
+        if {%H-}usage <> '' then
           usage := usage + ', ';
         usage := usage + CU_FULLTEXT[cu];
       end;
