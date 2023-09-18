@@ -3319,17 +3319,14 @@ begin
   {$endif FPC}
 end;
 
-type
-  THalf = array[byte] of {$ifdef CPU32} word {$else} cardinal {$endif};
-
 // computes Output = Left + Right, returning carry. Can modify in place
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
 const
   HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
 var
-  l: THalf absolute Left; // branchless operation over half registers
-  r: THalf absolute Right;
-  o: THalf absolute Output;
+  l: THalfUIntArray absolute Left; // branchless operation over half registers
+  r: THalfUIntArray absolute Right;
+  o: THalfUIntArray absolute Output;
 begin
   result := PtrUInt(l[0]) + r[0];
   o[0] := result;
@@ -3405,9 +3402,9 @@ function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUI
 const
   HALFSHIFTSUB = SizeOf(pointer) * 8 - 1;  // 63 or 31
 var
-  l: THalf absolute Left; // branchless operation over half registers
-  r: THalf absolute Right;
-  o: THalf absolute Output;
+  l: THalfUIntArray absolute Left; // branchless operation over half registers
+  r: THalfUIntArray absolute Right;
+  o: THalfUIntArray absolute Output;
 begin
   result := PtrUInt(l[0]) - r[0];
   o[0] := result;
@@ -3455,8 +3452,8 @@ procedure _inc64(var Value: THash128Rec; var Added: QWord);
 const
   HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
 var
-  r: THalf absolute Added; // branchless operation over half registers
-  o: THalf absolute Value;
+  r: THalfUIntArray absolute Added; // branchless operation over half registers
+  o: THalfUIntArray absolute Value;
   c: PtrUInt;
 begin
   c := PtrUInt(o[0]) + r[0];
@@ -3483,8 +3480,8 @@ procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
 const
   HALFSHIFTADD = SizeOf(pointer) * 4; // 32 or 16
 var
-  r: THalf absolute Added; // branchless operation over half registers
-  o: THalf absolute Value;
+  r: THalfUIntArray absolute Added; // branchless operation over half registers
+  o: THalfUIntArray absolute Value;
   c: PtrUInt;
 begin
   c := PtrUInt(o[0]) + r[0];
