@@ -25,12 +25,16 @@ uses
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.buffers;
+  mormot.core.buffers,
+  mormot.crypt.core,
+  mormot.crypt.secure;
   
-{ Implementation notes:
+{
+  Implementation notes:
   - loosely based on fpTLSBigInt / fprsa units from the FPC RTL - but the whole
     design and core methods have been rewritten from scratch in modern OOP
   - we use half-registers (HalfUInt) for efficient computation on most systems
+  - TODO: includes proper RSA keypair generation
 }
 
 { **************** RSA Oriented Big-Integer Computation }
@@ -40,11 +44,6 @@ type
   ERsaException = class(ESynException);
 
 const
-  /// maximum HalfUInt value + 1
-  RSA_RADIX = PtrUInt({$ifdef CPU32} $10000 {$else} $100000000 {$endif});
-  /// maximum PtrUInt value - 1
-  RSA_MAX = PtrUInt(-1);
-
   /// number of bytes in a HalfUInt, i.e. 2 on CPU32 and 4 on CPU64
   HALF_BYTES = SizeOf(HalfUInt);
   /// number of bits in a HalfUInt, i.e. 16 on CPU32 and 32 on CPU64
@@ -52,8 +51,12 @@ const
   /// number of power of two bits in a HalfUInt, i.e. 4 on CPU32 and 5 on CPU64
   HALF_SHR = {$ifdef CPU32} 4 {$else} 5 {$endif};
 
+  /// maximum HalfUInt value + 1
+  RSA_RADIX = PtrUInt({$ifdef CPU32} $10000 {$else} $100000000 {$endif});
+  /// maximum PtrUInt value - 1
+  RSA_MAX = PtrUInt(-1);
+
 type
-  PPBigInt = ^PBigInt;
   PBigInt = ^TBigInt;
 
   TRsaContext = class;
@@ -70,7 +73,7 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     procedure Resize(n: integer; nozero: boolean = false);
     function FindMaxExponentIndex: integer;
-    procedure SetPermanent;
+    function SetPermanent: PBigInt;
     procedure ResetPermanent;
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
@@ -135,6 +138,10 @@ type
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt; InnerPartial: PtrInt = 0;
       OuterPartial: PtrInt = 0): PBigInt;
+    /// standard multiplication by itself
+    // - will allocate a new Big Integer value and release self
+    function Square: PBigint;
+      {$ifdef HASINLINE} inline; {$endif}
     /// multiply by an unsigned integer value
     // - returns self := self * b
     // - will eventually release the self instance
@@ -148,7 +155,7 @@ type
 
   /// define Normal, P and Q pre-computed modulos
   TRsaModulo = (
-    rmN,
+    rmM,
     rmP,
     rmQ);
 
@@ -157,7 +164,7 @@ type
 
   /// store one Big Integer computation context for RSA
   // - will maintain its own set of reference-counted Big Integer values
-  TRsaContext = class
+  TRsaContext = class(TObjectWithCustomCreate)
   private
     /// list of released PBigInt instance, ready to be re-used by Allocate()
     fFreeList: PBigInt;
@@ -172,18 +179,16 @@ type
     /// contains the normalized storage
     fNormMod: TRsaModulos;
   public
-    /// used by the sliding-window algorithm
-    G: PPBigInt;
     /// the size of the sliding window
-    Window: Integer;
+    Window: integer;
     /// number of active PBigInt
-    ActiveCount: Integer;
+    ActiveCount: integer;
     /// number of PBigInt instances stored in the internal instances cache
-    FreeCount: Integer;
-    /// the RSA modulo we are using
+    FreeCount: integer;
+    /// as set by SetModulo() and  used by Barret() and ModPower()
     CurrentModulo: TRsaModulo;
     /// initialize this Big Integer context
-    constructor Create(Size: integer); reintroduce;
+    constructor Create; override;
     /// finalize this Big Integer context memory
     destructor Destroy; override;
     /// allocate a new zeroed Big Integer value of the specified precision
@@ -193,12 +198,20 @@ type
     function AllocateFrom(v: HalfUInt): PBigInt;
     /// allocate and import a Big Integer value from a big-endian binary buffer
     function Load(data: PByteArray; bytes: integer): PBigInt; overload;
+    /// allocate and import a Big Integer value from a big-endian binary buffer
+    function Load(const data: RawByteString): PBigInt; overload;
     /// pre-compute some of the internal constant slots for a given modulo
     procedure SetModulo(b: PBigInt; modulo: TRsaModulo);
     /// release the internal constant slots for a given modulo
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the Barret reduction of a Big Integer value
+    // - SetModulo() should have previously called
     function Barret(b: PBigint): PBigInt;
+    /// compute a modular exponentiation
+    // - SetModulo() should have previously be called
+    function ModPower(b, exp: PBigInt): PBigInt;
+    /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
+    function ChineseRemainderTheorem(b, dp, dq, p, q, qinv: PBigInt): PBigInt;
   end;
 
 const
@@ -223,6 +236,99 @@ function CompareBI(A, B: HalfUInt): integer;
 
 
 { **************** RSA Low-Level Cryptography Functions }
+
+type
+  /// store a RSA public key
+  // - e.g. as decoded from an X509 certificate
+  {$ifdef USERECORDWITHMETHODS}
+  TRsaPublicKey = record
+  {$else}
+  TRsaPublicKey = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// RSA key Modulus
+    Modulus: RawByteString;
+    /// RSA key Public exponent
+    Exponent: RawByteString;
+    /// serialize this public key as binary DER format
+    function AsDer: TAsnObject;
+  end;
+
+  {$ifdef USERECORDWITHMETHODS}
+  TRsaPrivateKey = record
+  {$else}
+  TRsaPrivateKey = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// RSA key m or n
+    Modulus: RawByteString;
+    /// RSA key e
+    PublicExponent: RawByteString;
+    /// RSA key d
+    PrivateExponent: RawByteString;
+    /// RSA key p
+    Prime1: RawByteString;
+    /// RSA key q
+    Prime2: RawByteString;
+    /// RSA key dp
+    Exponent1: RawByteString;
+    /// RSA key dq
+    Exponent2: RawByteString;
+    /// RSA key qinv
+    Coefficient: RawByteString;
+    /// serialize this private key as binary DER format
+    function AsDer: TAsnObject;
+  end;
+
+  /// store the information of a RSA key
+  // - holding all its PBigInt values in its parent TRsaContext
+  TRsa = class(TRsaContext)
+  protected
+    fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
+    fModulusLen, fModulusBits: integer;
+  public
+    /// load a public key from raw binary buffers
+    // - fill M and E fields from the supplied binary buffers
+    procedure LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
+      ModulusSize, ExponentSize: PtrInt);
+    /// load a public key from an hexadecimal M and E fields concatenation
+    procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
+    /// load a public key from a decoded TRsaPublicKey record
+    procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
+    /// load a public key from a decoded TRsaPrivateKey record
+    procedure LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
+    /// RSA key Modulus
+    property M: PBigInt
+      read fM;
+    /// RSA key Public exponent
+    property E: PBigInt
+      read fE;
+    /// RSA key Private exponent
+    property D: PBigInt
+      read fD;
+    /// RSA key as p in m = pq
+    property P: PBigInt
+      read fP;
+    /// RSA key as q in m = pq
+    property Q: PBigInt
+      read fQ;
+    /// RSA key as d mod (p-1)
+    property DP: PBigInt
+      read fDP;
+    /// RSA key as d mod (q-1)
+    property DQ: PBigInt
+      read fDQ;
+    /// RSA key as q^-1 mod p
+    property QInv: PBigInt
+      read fQInv;
+    /// RSA modulus size in bytes
+    property ModulusLen: integer
+      read fModulusLen;
+  published
+    /// RSA modulus size in bits
+    property ModulusBits: integer
+      read fModulusBits;
+  end;
 
 
 implementation
@@ -252,6 +358,8 @@ function CompareBI(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
 end;
+
+{ TBigInt }
 
 procedure TBigInt.Resize(n: integer; nozero: boolean);
 begin
@@ -339,12 +447,13 @@ begin
   end;
 end;
 
-procedure TBigInt.SetPermanent;
+function TBigInt.SetPermanent: PBigInt;
 begin
   if RefCnt <> 1 then
     raise ERsaException.CreateUtf8(
       'TBigInt.SetPermanent(%): RefCnt=%', [@self, RefCnt]);
   RefCnt := -1;
+  result := @self;
 end;
 
 procedure TBigInt.ResetPermanent;
@@ -422,7 +531,7 @@ procedure TBigInt.Release;
 begin
   if (@self = nil) or
      (RefCnt < 0) then
-    exit;
+    exit; // void or permanent
   dec(RefCnt);
   if RefCnt > 0 then
     exit;
@@ -704,10 +813,15 @@ begin
   result := r.Trim;
 end;
 
+function TBigInt.Square: PBigint;
+begin
+  result := Multiply(Copy);
+end;
+
 
 { TRsaContext }
 
-constructor TRsaContext.Create(Size: integer);
+constructor TRsaContext.Create;
 begin
   fRadix := Allocate(2, {nozero=}true);
   fRadix^.Value[0] := 0;
@@ -789,21 +903,22 @@ begin
   end;
 end;
 
+function TRsaContext.Load(const data: RawByteString): PBigInt;
+begin
+  result := Load(pointer(data), length(data));
+end;
+
 procedure TRsaContext.SetModulo(b: PBigInt; modulo: TRsaModulo);
 var
   d: HalfUInt;
   k: integer;
 begin
   k := b^.Size;
-  fMod[modulo] := b;
-  fMod[modulo].SetPermanent;
+  fMod[modulo] := b.SetPermanent;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
-  fNormMod[modulo] := b.IntMultiply(d);
-  fNormMod[modulo].SetPermanent;
-  fMu[modulo] := fRadix.Clone.LeftShift(k * 2 - 1).Divide(fMod[modulo]);
-  fMu[modulo].SetPermanent;
-  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1);
-  fBk1[modulo].SetPermanent;
+  fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
+  fMu[modulo] := fRadix.Clone.LeftShift(k * 2 - 1).Divide(fMod[modulo]).SetPermanent;
+  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent;
 end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
@@ -814,7 +929,7 @@ begin
   fBk1[modulo].ResetPermanentAndRelease;
 end;
 
-function TRsaContext.Barret(b: PBigInt): PBigInt;
+function TRsaContext.Barret(b: PBigint): PBigInt;
 var
   q1, q2, q3, r1, r2, bim: PBigInt;
   k: integer;
@@ -849,8 +964,172 @@ begin
     result.Substract(bim);
 end;
 
+function TRsaContext.ModPower(b, exp: PBigInt): PBigInt;
+var
+  r, g2: PBigInt;
+  i, j, k, l, partial, windowsize: integer;
+  g: array of PBigInt;
+begin
+  i := exp.FindMaxExponentIndex;
+  r := AllocateFrom(1);
+  // compute optimum window size
+  windowsize := 1;
+  j := i;
+  while j > HALF_BITS do
+  begin
+    inc(windowsize);
+    j := j div HALF_SHR;
+  end;
+  // pre-compute all g[i] items
+  k := 1 shl (windowsize - 1);
+  SetLength(g, k);
+  g[0] := b^.Clone.SetPermanent;
+  g2 := Barret(g[0].Square); // g2 := residue of g^2
+  for j := 1 to k - 1 do
+    g[j] := Barret(g[j - 1].Multiply(g2.Copy)).SetPermanent;
+  g2.Release;
+  // reduce to left-to-right exponentiation, one exponent bit at a time
+  repeat
+    if exp.BitIsSet(i) then
+    begin
+      l := i - windowsize + 1;
+      partial := 0;
+      if l < 0 then // LSB of exponent will always be 1
+        l := 0
+      else
+        while not exp.BitIsSet(l) do
+          inc(l); // go back up
+      // build up the section of the exponent
+      j := i;
+      while j >= l do
+      begin
+        r := Barret(r.Square);
+        if exp.BitIsSet(j) then
+          inc(partial);
+        if j <> l then
+          partial := partial shl 1;
+        dec(j);
+      end;
+      partial := (partial - 1) shr 1; // Adjust for array
+      r := Barret(r.Multiply(g[partial]));
+      i := l - 1;
+    end
+    else
+    begin
+      // bit not set: just process the next bit
+      r := Barret(r.Square);
+      dec(i);
+    end;
+  until i < 0;
+  // memory cleanup
+  for i := 0 to k - 1 do
+    g[i].ResetPermanentAndRelease;
+  b.Release;
+  exp.Release;
+  result := r;
+end;
+
+function TRsaContext.ChineseRemainderTheorem(
+  b, dp, dq, p, q, qinv : PBigInt): PBigInt;
+var
+  h, m1, m2: PBigInt;
+begin
+  CurrentModulo := rmP;
+  m1 := ModPower(b.Copy, dp);
+  CurrentModulo := rmQ;
+  m2 := ModPower(b, dq);
+  h := m1.Add(p).Substract(m2.Copy).Multiply(qinv);
+  CurrentModulo := rmP;
+  h := Barret(h);
+  result := m2.Add(q.Multiply(h));
+end;
 
 
 { **************** RSA Low-Level Cryptography Functions }
+
+{ TRsaPublicKey }
+
+function TRsaPublicKey.AsDer: RawByteString;
+begin
+  result := Asn(ASN1_SEQ, [
+              Asn(ASN1_SEQ, [
+                Asn('1.2.840.113549.1.1.1')
+
+              ])
+            ]);
+end;
+
+{ TRsaPrivateKey }
+
+function TRsaPrivateKey.AsDer: RawByteString;
+begin
+
+end;
+
+
+{ TRsa }
+
+procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
+  ModulusSize, ExponentSize: PtrInt);
+begin
+  if not fM.IsZero then
+    raise ERsaException.CreateUtf8(
+      '%.LoadFromPublicKey on existing data', [self]);
+  if (ModulusSize < 3) or
+     (ExponentSize < 10) then
+    raise ERsaException.CreateUtf8(
+      '%.LoadFromPublicKey: unexpected ModulusSize=% ExponentSize=%',
+      [self, ModulusSize, ExponentSize]);
+  fModulusLen := ModulusSize;
+  fM := Load(Modulus, ModulusSize);
+  fModulusBits := fM.BitCount;
+  SetModulo(fM, rmM);
+  fE := Load(Exponent, ExponentSize).SetPermanent;
+end;
+
+procedure TRsa.LoadFromPublicKeyHexa(const Hexa: RawUtf8);
+var
+  bin: RawByteString;
+  b: PAnsiChar absolute bin;
+begin
+  if not HexToBin(pointer(Hexa), length(Hexa), bin) or
+     (length(bin) < 13) then
+    raise ERsaException.CreateUtf8('Invalid %.LoadFromPublicKeyHexa', [self]);
+  LoadFromPublicKeyBinary(b, b + 3, 3, length(bin) - 3);
+end;
+
+procedure TRsa.LoadFromPublicKey(const PublicKey: TRsaPublicKey);
+begin
+  LoadFromPublicKeyBinary(pointer(PublicKey.Modulus), pointer(PublicKey.Exponent),
+    length(PublicKey.Modulus), length(PublicKey.Exponent));
+end;
+
+procedure TRsa.LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
+begin
+  if not fM.IsZero then
+    raise ERsaException.CreateUtf8('%.LoadFromPrivateKey on existing data', [self]);
+  with PrivateKey do
+    if (PrivateExponent = '') or
+       (Prime1 = '') or
+       (Prime2 = '') or
+       (Exponent1 = '') or
+       (Exponent2 = '') or
+       (Coefficient = '') or
+       (length(Modulus) < 3) or
+       (length(PublicExponent) < 10) then
+    raise ERsaException.CreateUtf8('Incorrect %.LoadFromPrivateKey call', [self]);
+  LoadFromPublicKeyBinary(
+    pointer(PrivateKey.Modulus), pointer(PrivateKey.PublicExponent),
+    length(PrivateKey.Modulus),  length(PrivateKey.PublicExponent));
+  fD := Load(PrivateKey.PrivateExponent).SetPermanent;
+  fP := Load(PrivateKey.Prime1).SetPermanent;
+  fQ := Load(PrivateKey.Prime2).SetPermanent;
+  fDP := Load(PrivateKey.Exponent1).SetPermanent;
+  fDQ := Load(PrivateKey.Exponent2).SetPermanent;
+  fQInv := Load(PrivateKey.Coefficient).SetPermanent;
+  SetModulo(fP, rmP);
+  SetModulo(fQ, rmQ);
+end;
+
 
 end.
