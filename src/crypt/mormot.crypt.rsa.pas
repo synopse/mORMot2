@@ -608,8 +608,7 @@ begin
   for j := 0 to m do
   begin
     // Get a temporary short version of u
-    MoveFast(u^.Value[u^.Size - n - j], tmp^.Value[0],
-               n * HALF_BYTES);
+    MoveFast(u^.Value[u^.Size - n - j], tmp^.Value[0], n * HALF_BYTES);
     // Calculate q'
     if tmp^.Value[tmp^.Size - 1] = v^.Value[v^.Size - 1] then
       dash := RSA_RADIX - 1
@@ -649,8 +648,7 @@ begin
     else
       p^ := 0;
     // Copy back to u
-    MoveFast(tmp^.Value[0], u^.Value[u^.Size - n - j],
-      n * HALF_BYTES);
+    MoveFast(tmp^.Value[0], u^.Value[u^.Size - n - j], n * HALF_BYTES);
   end;
   tmp.Release;
   v.Release;
@@ -761,7 +759,7 @@ begin
     New(result);
     result^.Owner := self;
     result^.Size := n;
-    result^.Capacity := n * 2; // with some initial over-allocatation
+    result^.Capacity := NextGrow(n); // with some initial over-allocatation
     GetMem(result^.Value, result^.Capacity * HALF_BYTES);
   end;
   result^.RefCnt := 1;
