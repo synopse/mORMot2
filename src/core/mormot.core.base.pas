@@ -279,6 +279,20 @@ type
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
   Ucs4CodePoint = cardinal;
 
+  {$ifdef CPU64}
+  HalfInt = integer;
+  HalfUInt = cardinal;
+  {$else}
+  /// a CPU-dependent signed integer type cast of half a pointer
+  HalfInt = smallint;
+  /// a CPU-dependent unsigned integer type cast of half a pointer
+  HalfUInt = word;
+  {$endif CPU64}
+  /// a CPU-dependent signed integer type cast of a pointer to half a pointer
+  PHalfInt = ^HalfInt;
+  /// a CPU-dependent unsigned integer type cast of a pointer to half a pointer
+  PHalfUInt = ^HalfUInt;
+
   PRawJson = ^RawJson;
   PPRawJson = ^PRawJson;
   PRawUtf8 = ^RawUtf8;
@@ -334,6 +348,7 @@ type
   PQwordDynArray = ^TQwordDynArray;
   TQwordDynArray = array of Qword;
   TPtrUIntDynArray = array of PtrUInt;
+  THalfUIntDynArray = array of HalfUInt;
   PDoubleDynArray = ^TDoubleDynArray;
   TDoubleDynArray = array of double;
   PCurrencyDynArray = ^TCurrencyDynArray;
@@ -430,6 +445,8 @@ type
   PQWordArray = ^TQWordArray;
   TPtrUIntArray = array[ 0 .. MaxInt div SizeOf(PtrUInt) - 1 ] of PtrUInt;
   PPtrUIntArray = ^TPtrUIntArray;
+  THalfUIntArray = array[ 0 .. MaxInt div SizeOf(HalfUInt) - 1 ] of HalfUInt;
+  PHalfUIntArray = ^THalfUIntArray;
   TSmallIntArray = array[ 0 .. MaxInt div SizeOf(SmallInt) - 1 ] of SmallInt;
   PSmallIntArray = ^TSmallIntArray;
   TSingleArray = array[ 0 .. MaxInt div SizeOf(Single) - 1 ] of Single;

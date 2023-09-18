@@ -7535,7 +7535,7 @@ begin
           P2 := P1 + n * 16;
           while P1 < P2 do
           begin
-            {$ifdef CPU64}Exchg16{$else}ExchgVariant{$endif}(Pointer(P1),Pointer(P2));
+            {$ifdef CPU64}Exchg16{$else}ExchgVariant{$endif}(pointer(P1), pointer(P2));
             inc(P1, 16);
             dec(P2, 16);
           end;
