@@ -1872,7 +1872,7 @@ begin
               Asn(ord(Aliases), ASN1_ENUM),
               Asn(Sizelimit),
               Asn(TimeLimit),
-              ASN1_BOOLEAN[TypesOnly],
+              ASN1_BOOLEAN_VALUE[TypesOnly],
               filt,
               AsnSeq(AsnArr(Attributes))]);
 end;
@@ -3671,7 +3671,7 @@ begin
   if not Connected then
     exit;
   query := Asn(obj);
-  Append(query, [Asn(newRdn), ASN1_BOOLEAN[DeleteOldRdn]]);
+  Append(query, [Asn(newRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]]);
   if newSuperior <> '' then
     AsnAdd(query, Asn(newSuperior, ASN1_CTX0));
   SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
@@ -3718,7 +3718,7 @@ begin
     Append(s, Asn(
         Asn(ASN1_SEQ, [
            Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
-           ASN1_BOOLEAN[false], // criticality: false
+           ASN1_BOOLEAN_VALUE[false], // criticality: false
            Asn(Asn(ASN1_SEQ, [
              Asn(fSearchPageSize),
              Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));

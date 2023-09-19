@@ -2673,9 +2673,12 @@ const
   ASN1_CTC9  = $a9;
 
   /// encode a boolean value into ASN.1 binary
-  ASN1_BOOLEAN: array[boolean] of TAsnObject = (
+  ASN1_BOOLEAN_VALUE: array[boolean] of TAsnObject = (
     RawByteString(#$01#$01#$00),
     RawByteString(#$01#$01#$ff));
+
+  /// encode a null value into ASN.1 binary
+  ASN1_NULL_VALUE: TAsnObject = RawByteString(#$05#$00);
 
 /// encode a 64-bit signed integer value into ASN.1 binary
 function AsnEncInt(Value: Int64): TAsnObject;
@@ -2703,6 +2706,9 @@ function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
 
 /// create an ASN.1 SEQuence from some raw data
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
+
+/// create an ASN.1 ObjectID from '1.x.x.x.x' text
+function AsnOid(OidText: PUtf8Char): TAsnObject;
 
 /// raw append some binary to an ASN.1 object buffer
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
@@ -7554,6 +7560,22 @@ end;
 function AsnSeq(const Data: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [Data]);
+end;
+
+function AsnOid(OidText: PUtf8Char): TAsnObject;
+var
+  x: QWord;
+  tmp: RawByteString;
+begin
+  // first byte = two first numbers modulo 40
+  x := GetNextItemQWord(OidText, '.') * 40;
+  while OidText <> nil do
+  begin
+    inc(x, GetNextItemQWord(OidText, '.'));
+    Append(tmp, AsnEncOidItem(x));
+    x := 0;
+  end;
+  result := Asn(ASN1_OBJID, [tmp]);
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
