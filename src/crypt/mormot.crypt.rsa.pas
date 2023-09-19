@@ -251,7 +251,9 @@ type
     /// RSA key Public exponent
     Exponent: RawByteString;
     /// serialize this public key as binary DER format
-    function AsDer: TAsnObject;
+    function ToDer: TCertDer;
+    /// unserialize a public key from binary DER format
+    function FromDer(const der: TCertDer): boolean;
   end;
 
   {$ifdef USERECORDWITHMETHODS}
@@ -260,6 +262,8 @@ type
   TRsaPrivateKey = object
   {$endif USERECORDWITHMETHODS}
   public
+    /// field layout is typically 0
+    Version: integer;
     /// RSA key m or n
     Modulus: RawByteString;
     /// RSA key e
@@ -277,7 +281,11 @@ type
     /// RSA key qinv
     Coefficient: RawByteString;
     /// serialize this private key as binary DER format
-    function AsDer: TAsnObject;
+    function ToDer: TCertDer;
+    /// unserialize a private key from binary DER format
+    function FromDer(const der: TCertDer): boolean;
+    /// check if this private key match a given public key
+    function Match(const Pub: TRsaPublicKey): boolean;
   end;
 
   /// store the information of a RSA key
@@ -1049,21 +1057,100 @@ end;
 
 { TRsaPublicKey }
 
-function TRsaPublicKey.AsDer: RawByteString;
-begin
-  result := Asn(ASN1_SEQ, [
-              Asn(ASN1_SEQ, [
-                Asn('1.2.840.113549.1.1.1')
+const
+  ANS1_OID_RSAPUB = '1.2.840.113549.1.1.1';
 
-              ])
-            ]);
+function TRsaPublicKey.ToDer: TCertDer;
+begin
+  if (Modulus = '') or
+     (Exponent = '') then
+    result := ''
+  else
+    result := Asn(ASN1_SEQ, [
+                Asn(ASN1_SEQ, [
+                  AsnOid(ANS1_OID_RSAPUB),
+                  ASN1_NULL_VALUE // optional
+                ]),
+                Asn(ASN1_BITSTR, [
+                  Asn(ASN1_SEQ, [
+                    AsnBigInt(Modulus),
+                    AsnBigInt(Exponent)
+                  ])
+                ])
+              ]);
 end;
+
+function TRsaPublicKey.FromDer(const der: TCertDer): boolean;
+var
+  pos: TIntegerDynArray;
+  seq, oid, str: TAsnObject;
+begin
+  if (Modulus <> '') or
+     (Exponent <> '') then
+    raise ERsaException.Create('TRsaPublicKey.FromDer over an existing key');
+  AsnNextInit(pos, 3);
+  result := (der <> '') and
+            (AsnNext(pos[0], der) = ASN1_SEQ) and
+              (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
+                (AsnNextRaw(pos[1], seq, oid) = ASN1_OBJID) and
+                  (oid = AsnEncOid(ANS1_OID_RSAPUB)) and
+              (AsnNextRaw(pos[0], der, str) = ASN1_BITSTR) and
+                (AsnNext(pos[2], str) = ASN1_SEQ) and
+                  (AsnNextRaw(pos[2], str, Modulus) = ASN1_INT) and
+                  (AsnNextRaw(pos[2], str, Exponent) = ASN1_INT);
+end;
+
 
 { TRsaPrivateKey }
 
-function TRsaPrivateKey.AsDer: RawByteString;
+function TRsaPrivateKey.ToDer: TCertDer;
 begin
+  if (Modulus = '') or
+     (PublicExponent = '') then
+    result := ''
+  else
+    result := Asn(ASN1_SEQ, [
+                Asn(Version),
+                AsnBigInt(Modulus),
+                AsnBigInt(PublicExponent),
+                AsnBigInt(PrivateExponent),
+                AsnBigInt(Prime1),
+                AsnBigInt(Prime2),
+                AsnBigInt(Exponent1),
+                AsnBigInt(Exponent2),
+                AsnBigInt(Coefficient)
+              ]);
+end;
 
+function TRsaPrivateKey.FromDer(const der: TCertDer): boolean;
+var
+  n, vt: integer;
+begin
+  if (Modulus <> '') or
+     (PublicExponent <> '') then
+    raise ERsaException.Create('TRsaPrivateKey.FromDer over an existing key');
+  n := 1;
+  result := false;
+  if (der = '') or
+     (AsnNext(n, der) <> ASN1_SEQ) then
+    exit;
+  Version := AsnNextInteger(n, der, vt);
+  result := (AsnNextRaw(n, der, Modulus) = ASN1_INT)and
+            (AsnNextRaw(n, der, PublicExponent) = ASN1_INT) and
+            (AsnNextRaw(n, der, PrivateExponent) = ASN1_INT) and
+            (AsnNextRaw(n, der, Prime1) = ASN1_INT) and
+            (AsnNextRaw(n, der, Prime2) = ASN1_INT) and
+            (AsnNextRaw(n, der, Exponent1) = ASN1_INT) and
+            (AsnNextRaw(n, der, Exponent2) = ASN1_INT) and
+            (AsnNextRaw(n, der, Coefficient) = ASN1_INT);
+end;
+
+function TRsaPrivateKey.Match(const Pub: TRsaPublicKey): boolean;
+begin
+  result := (Modulus <> '') and
+            (PublicExponent <> '') and
+            (Modulus = Pub.Modulus) and
+            (PublicExponent = Pub.Exponent);
 end;
 
 
@@ -1130,6 +1217,7 @@ begin
   SetModulo(fP, rmP);
   SetModulo(fQ, rmQ);
 end;
+
 
 
 end.
