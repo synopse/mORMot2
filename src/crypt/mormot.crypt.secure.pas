@@ -2756,6 +2756,10 @@ function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
   out Value: RawByteString): integer;
 
+/// parse the next ASN1_INT value as raw Big Integer binary
+function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString): boolean;
+
 /// initialize a set of AsnNext() Pos[] with its 1 default position
 procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 
@@ -7392,20 +7396,19 @@ end;
 
 function AsnEncOidItem(Value: Int64): TAsnObject;
 var
+  tmp: array[0..15] of byte;
   r: PByte;
 begin
-  FastSetRawByteString(result, nil, 16);
-  r := pointer(result);
+  r := @tmp[14];
   r^ := byte(Value) and $7f;
-  inc(r);
   Value := Value shr 7;
   while Value <> 0 do
   begin
+    dec(r);
     r^ := byte(Value) or $80;
-    inc(r);
     Value := Value shr 7;
   end;
-  FakeLength(result, PAnsiChar(r) - pointer(result));
+  FastSetRawByteString(result, r, PAnsiChar(@tmp[15]) - pointer(r));
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
@@ -7553,7 +7556,7 @@ var
   i, len, al: PtrInt;
   p: PByte;
 begin
-  len := 0;
+  len := ord(AsnType = ASN1_BITSTR);
   for i := 0 to high(Content) do
     inc(len, length(Content[i]));
   al := AsnEncLen(len, @tmp);
@@ -7563,6 +7566,11 @@ begin
   inc(p);
   MoveFast(tmp, p^, al); // encoded length
   inc(p, al);
+  if AsnType = ASN1_BITSTR then
+  begin
+    p^ := 0; // trailing bit length
+    inc(p);
+  end;
   for i := 0 to high(Content) do
   begin
     len := length(Content[i]);
@@ -7595,17 +7603,23 @@ var
   i, l: PtrInt;
   v: TAsnObject;
 begin
-  i := 1;
   l := length(BigInt);
+  i := 1;
   while (i < l) and
         (BigInt[i] = #0) do
     inc(i); // trim leading zeros
   if i = l then
     v := ASN1_ZERO_VALUE
-  else if i = 1 then
-    v := BigInt
   else
-    v := copy(BigInt, i, l);
+  begin
+    if i = 1 then
+      v := BigInt
+    else
+      v := copy(BigInt, i, l);
+    if (v <> '') and
+       (ord(v[1]) and $80 <> 0) then
+      insert(#0, v, 1); // prepend 0 for negative number
+  end;
   result := Asn(AsnType, [v]);
 end;
 
@@ -7688,9 +7702,24 @@ begin
   result := ASN1_NULL;
   if AsnDecHeader(Pos, Buffer, result, asnsize) then
   begin
+    if result = ASN1_BITSTR then
+    begin
+      inc(Pos); // ignore bit length
+      dec(asnsize);
+    end;
     Value := copy(Buffer, Pos, asnsize);
     inc(Pos, asnsize);
   end;
+end;
+
+function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
+  out Value: RawByteString): boolean;
+begin
+  result := AsnNextRaw(Pos, Buffer, Value) = ASN1_INT;
+  if result then
+    while (Value <> '') and
+          (Value[1] = #0) do
+      delete(Value, 1, 1);
 end;
 
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
