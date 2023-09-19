@@ -222,7 +222,7 @@ function IsValidUtf8(source: PUtf8Char): boolean; overload;
 /// detect UTF-8 content and mark the variable with the CP_UTF8 codepage
 // - to circumvent FPC concatenation bug with CP_UTF8 and CP_RAWBYTESTRING
 procedure DetectRawUtf8(var source: RawByteString);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef HASCODEPAGE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters

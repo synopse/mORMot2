@@ -3718,7 +3718,7 @@ begin
     Append(s, Asn(
         Asn(ASN1_SEQ, [
            Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
-           ASN1_BOOLEAN_VALUE[false], // criticality: false
+           ASN1_BOOLEAN_VALUE[false],     // criticality: false
            Asn(Asn(ASN1_SEQ, [
              Asn(fSearchPageSize),
              Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));
