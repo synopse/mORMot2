@@ -58,6 +58,7 @@ const
 
 type
   PBigInt = ^TBigInt;
+  PPBigInt = ^PBigInt;
 
   TRsaContext = class;
 
@@ -185,6 +186,7 @@ type
     fBk1: TRsaModulos;
     /// contains the normalized storage
     fNormMod: TRsaModulos;
+    procedure ForceRelease(p: PPBigInt; n: integer = 1);
   public
     /// the size of the sliding window
     Window: integer;
@@ -311,6 +313,8 @@ type
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
   public
+    /// finalize the internal memory
+    destructor Destroy; override;
     /// load a public key from raw binary buffers
     // - fill M and E fields from the supplied binary buffers
     procedure LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
@@ -593,6 +597,8 @@ end;
 
 procedure TBigInt.ResetPermanentAndRelease;
 begin
+  if @self = nil then
+    exit;
   ResetPermanent;
   Release;
 end;
@@ -926,6 +932,20 @@ begin
   fRadix^.SetPermanent;
 end;
 
+procedure TRsaContext.ForceRelease(p: PPBigInt; n: integer);
+begin
+  while n > 0 do
+  begin
+    if p^ <> nil then
+    begin
+      p^^.RefCnt := 1;
+      p^^.Release;
+    end;
+    inc(p);
+    dec(n);
+  end;
+end;
+
 destructor TRsaContext.Destroy;
 var
   b, next : PBigInt;
@@ -1000,7 +1020,9 @@ begin
   fMod[modulo] := b.SetPermanent;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
-  fMu[modulo] := fRadix.Clone.LeftShift(k * 2 - 1).Divide(fMod[modulo]).SetPermanent;
+  b := fRadix.Clone.LeftShift(k * 2 - 1);
+  fMu[modulo] := b.Divide(fMod[modulo]).SetPermanent;
+  b.Release;
   fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent;
 end;
 
@@ -1277,6 +1299,13 @@ end;
 
 
 { TRsa }
+
+destructor TRsa.Destroy;
+begin
+  ResetModulo(rmM);
+  ForceRelease(@fE, 7); // fM is already finalized
+  inherited Destroy;
+end;
 
 procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
   ModulusSize, ExponentSize: PtrInt);
