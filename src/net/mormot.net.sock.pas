@@ -667,7 +667,7 @@ type
     CertificateFile: RawUtf8;
     /// input: opaque pointer containing a certificate to be used
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate() API
-    // expecting the pointer to be of PEVP_PKEY type
+    // expecting the pointer to be of PX509 type
     // - not used on SChannel client
     CertificateRaw: pointer;
     /// input: PEM file name containing a private key to be loaded
@@ -677,12 +677,13 @@ type
     PrivateKeyFile: RawUtf8;
     /// input: optional password to load the PrivateKey file
     // - see also OnPrivatePassword callback
-    // - on OpenSSL client or server, calls SSL_CTX_set_default_passwd_cb_userdata() API
+    // - on OpenSSL client or server, calls
+    // SSL_CTX_set_default_passwd_cb_userdata() API
     // - not used on SChannel
     PrivatePassword: RawUtf8;
     /// input: opaque pointer containing a private key to be used
     // - on OpenSSL client or server, calls SSL_CTX_use_PrivateKey() API
-    // expecting the pointer to be of PX509 type
+    // expecting the pointer to be of PEVP_PKEY type
     // - not used on SChannel
     PrivateKeyRaw: pointer;
     /// input: file containing a specific set of CA certificates chain
