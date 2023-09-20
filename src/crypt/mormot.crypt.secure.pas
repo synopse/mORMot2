@@ -7648,10 +7648,11 @@ var
   x, y: integer;
 begin
   result := '';
+  y := 0;
   while Pos < EndPos do
   begin
     x := AsnDecOidItem(Pos, Buffer);
-    if Pos = 2 then
+    if y = 0 then
     begin
       y := x div 40; // first byte = two first numbers modulo 40
       x := x mod 40;
