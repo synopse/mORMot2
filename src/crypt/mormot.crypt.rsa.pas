@@ -315,6 +315,8 @@ type
   public
     /// finalize the internal memory
     destructor Destroy; override;
+    /// load a public key from a decoded TRsaPublicKey record
+    procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
     // - fill M and E fields from the supplied binary buffers
     procedure LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
@@ -325,10 +327,12 @@ type
     function LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
     /// load a public key from an hexadecimal M and E fields concatenation
     procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
-    /// load a public key from a decoded TRsaPublicKey record
-    procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
-    /// load a public key from a decoded TRsaPrivateKey record
+    /// load a private key from a decoded TRsaPrivateKey record
     procedure LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
+    /// load a private key from PKCS#1 or PKCS#8 DER format
+    function LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
+    /// load a private key from PKCS#1 or PKCS#8 PEM format
+    function LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
     /// RSA key Modulus
     property M: PBigInt
       read fM;
@@ -1307,7 +1311,14 @@ end;
 destructor TRsa.Destroy;
 begin
   ResetModulo(rmM);
-  ForceRelease(@fE, 7); // fM is already finalized
+  ResetModulo(rmP);
+  ResetModulo(rmQ);
+  fE.ResetPermanentAndRelease;
+  fD.ResetPermanentAndRelease;
+  fDP.ResetPermanentAndRelease;
+  fDQ.ResetPermanentAndRelease;
+  fQInv.ResetPermanentAndRelease;
+  // fM fP fQ are already finalized
   inherited Destroy;
 end;
 
@@ -1371,15 +1382,15 @@ begin
        (Exponent1 = '') or
        (Exponent2 = '') or
        (Coefficient = '') or
-       (length(Modulus) < 3) or
-       (length(PublicExponent) < 10) then
+       (length(Modulus) < 10) or
+       (length(PublicExponent) < 3) then
     raise ERsaException.CreateUtf8('Incorrect %.LoadFromPrivateKey call', [self]);
   LoadFromPublicKeyBinary(
     pointer(PrivateKey.Modulus), pointer(PrivateKey.PublicExponent),
     length(PrivateKey.Modulus),  length(PrivateKey.PublicExponent));
   fD := Load(PrivateKey.PrivateExponent).SetPermanent;
-  fP := Load(PrivateKey.Prime1).SetPermanent;
-  fQ := Load(PrivateKey.Prime2).SetPermanent;
+  fP := Load(PrivateKey.Prime1);
+  fQ := Load(PrivateKey.Prime2);
   fDP := Load(PrivateKey.Exponent1).SetPermanent;
   fDQ := Load(PrivateKey.Exponent2).SetPermanent;
   fQInv := Load(PrivateKey.Coefficient).SetPermanent;
@@ -1387,6 +1398,19 @@ begin
   SetModulo(fQ, rmQ);
 end;
 
+function TRsa.LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
+var
+  key: TRsaPrivateKey;
+begin
+  result := key.FromDer(Der);
+  if result then
+    LoadFromPrivateKey(key);
+end;
+
+function TRsa.LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
+begin
+  result := LoadFromPrivateKeyDer(PemToDer(Pem));
+end;
 
 
 end.
