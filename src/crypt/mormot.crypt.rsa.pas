@@ -319,6 +319,10 @@ type
     // - fill M and E fields from the supplied binary buffers
     procedure LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
       ModulusSize, ExponentSize: PtrInt);
+    /// load a public key from PKCS#1 DER format
+    function LoadFromPublicKeyDer(const Der: TCertDer): boolean;
+    /// load a public key from PKCS#1 PEM format
+    function LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
     /// load a public key from an hexadecimal M and E fields concatenation
     procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
     /// load a public key from a decoded TRsaPublicKey record
@@ -1323,6 +1327,20 @@ begin
   fModulusBits := fM.BitCount;
   SetModulo(fM, rmM);
   fE := Load(Exponent, ExponentSize).SetPermanent;
+end;
+
+function TRsa.LoadFromPublicKeyDer(const Der: TCertDer): boolean;
+var
+  key: TRsaPublicKey;
+begin
+  result := key.FromDer(Der);
+  if result then
+    LoadFromPublicKey(key);
+end;
+
+function TRsa.LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
+begin
+  result := LoadFromPublicKeyDer(PemToDer(Pem));
 end;
 
 procedure TRsa.LoadFromPublicKeyHexa(const Hexa: RawUtf8);
