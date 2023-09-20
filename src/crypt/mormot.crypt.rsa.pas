@@ -239,6 +239,7 @@ function CompareBI(A, B: HalfUInt): integer;
 
 type
   /// store a RSA public key
+  // - with DER (therefore PEM) serialization support
   // - e.g. as decoded from an X509 certificate
   {$ifdef USERECORDWITHMETHODS}
   TRsaPublicKey = record
@@ -256,6 +257,10 @@ type
     function FromDer(const der: TCertDer): boolean;
   end;
 
+  /// store a RSA private key
+  // - with DER (therefore PEM) serialization support
+  // - we don't support any PKCS encryption yet - ensure the private key
+  // PEM file is safely stored with proper access restrictions
   {$ifdef USERECORDWITHMETHODS}
   TRsaPrivateKey = record
   {$else}
@@ -281,12 +286,12 @@ type
     /// RSA key CRT coefficient q^(-1) mod p
     Coefficient: RawByteString;
     /// serialize this private key as binary DER format
-    // - note that the layout follows "openssl genrsa -out priv.pem 2048" ASN.1
-    // layout, but not "A.1.2. RSA Private Key Syntax" of RFC 8017
+    // - note that the layout follows PKCS#8 "openssl genrsa -out priv.pem 2048"
+    // layout, but not "A.1.2. RSA Private Key Syntax" PKCS#1 as of RFC 8017
     function ToDer: TCertDer;
     /// unserialize a private key from binary DER format
-    // - will recognize both the "openssl genrsa -out priv.pem 2048" ASN.1
-    // layout and "A.1.2. RSA Private Key Syntax" of RFC 8017
+    // - will recognize both PCKS#8 "openssl genrsa -out priv.pem 2048" ASN.1
+    // layout and "A.1.2. RSA Private Key Syntax" PKCS#1 as of RFC 8017
     function FromDer(const der: TCertDer): boolean;
     /// check if this private key match a given public key
     function Match(const Pub: TRsaPublicKey): boolean;
@@ -1136,7 +1141,7 @@ begin
      (PublicExponent = '') then
     result := ''
   else
-    // openssl output does NOT follow "A.1.2. RSA Private Key Syntax" of RFC8017
+    // PKCS#8 format (default as with openssl)
     result := Asn(ASN1_SEQ, [
                 Asn(Version),
                 Asn(ASN1_SEQ, [
@@ -1166,7 +1171,7 @@ begin
   if (Modulus <> '') or
      (PublicExponent <> '') then
     raise ERsaException.Create('TRsaPrivateKey.FromDer over an existing key');
-  // first try the openssl layout
+  // first try the openssl PKCS#8 layout
   result := DerToRsa(der, ASN1_OCTSTR, @Version, [
               @PublicExponent,
               @Modulus,
@@ -1179,7 +1184,7 @@ begin
             ]);
   if result then
     exit;
-  // also try "A.1.2. RSA Private Key Syntax" of RFC 8017
+  // also try PKCS#1 from RFC 8017
   n := 1;
   if (der = '') or
      (AsnNext(n, der) <> ASN1_SEQ) then
