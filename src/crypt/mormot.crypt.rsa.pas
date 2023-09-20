@@ -93,7 +93,7 @@ type
     /// comparison with another Big Integer value
     // - values should have been Trim-med for the size to match
     function Compare(b: PBigInt): integer;
-    /// make a COW instance, increasing RefCnt
+    /// make a COW instance, increasing RefCnt and returning self
     function Copy: PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
@@ -148,9 +148,16 @@ type
     function IntMultiply(b: HalfUInt): PBigInt;
     /// divide by an unsigned integer value
     // - returns self := self div b
-    function IntDivide(b: HalfUInt): PBigInt;
-    /// return the Big integer value as hexadecimal
-    function ToText: RawUtf8;
+    // - optionally return self mod b
+    function IntDivide(b: HalfUInt; modulo: PHalfUInt = nil): PBigInt;
+    /// modulo by 10 computation
+    // - computes self := self div 10 and return self mod 10
+    function IntMod10: PtrUInt;
+    /// return the Big Integer value as hexadecimal
+    function ToHexa: RawUtf8;
+    /// return the Big Integer value as text with base-10 digits
+    // - self will remain untouched unless noclone is set
+    function ToText(noclone: boolean = false): RawUtf8;
   end;
 
   /// define Normal, P and Q pre-computed modulos
@@ -375,6 +382,32 @@ function CompareBI(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
 end;
+
+function ValuesSize(bytes: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (bytes + (HALF_BYTES - 1)) div HALF_BYTES;
+end;
+
+procedure ValuesLoad(value: PHalfUIntArray; data: PByteArray; bytes: integer);
+var
+  i, o: PtrInt;
+  j: byte;
+begin
+  j := 0;
+  o := 0;
+  for i := bytes - 1 downto 0 do
+  begin
+    inc(Value[o], HalfUInt(data[i]) shl j);
+    inc(j, 8);
+    if j = HALF_BITS then
+    begin
+      j := 0;
+      inc(o);
+    end;
+  end;
+end;
+
 
 { TBigInt }
 
@@ -675,7 +708,7 @@ begin
   result^.Trim;
 end;
 
-function TBigInt.IntDivide(b: HalfUInt): PBigInt;
+function TBigInt.IntDivide(b: HalfUInt; modulo: PHalfUInt): PBigInt;
 var
   r, d: PtrUInt;
   i: PtrInt;
@@ -688,12 +721,58 @@ begin
     Value[i] := d;
     dec(r, d * b); // fast r := r mod b
   end;
+  if modulo <> nil then
+    modulo^ := r;
   result := Trim;
 end;
 
-function TBigInt.ToText: RawUtf8;
+function TBigInt.IntMod10: PtrUInt;
+var
+  d: PtrUInt;
+  i: PtrInt;
+begin
+  result := 0;
+  for i := Size - 1 downto 0 do
+  begin
+    result := (result shl HALF_BITS) + Value[i];
+    d := result div 10;  // fast multiplication by reciprocal on FPC
+    Value[i] := d;
+    dec(result, d * 10);
+  end;
+end;
+
+function TBigInt.ToHexa: RawUtf8;
 begin
   result := BinToHexDisplay(pointer(Value), Size * HALF_BYTES);
+end;
+
+function TBigInt.ToText(noclone: boolean): RawUtf8;
+var
+  v: PBigInt;
+  tmp: TTextWriterStackBuffer;
+  p: PByte;
+begin
+  case Size of
+    0:
+      result := '0';
+    1:
+      UInt32ToUtf8(Value[0], result);
+  else
+    begin
+      if noclone then
+        v := Copy // inc RefCnt
+      else
+        v := Clone;
+      p := @tmp[high(tmp)];
+      repeat
+        dec(p);
+        p^ := v.IntMod10 + ord('0'); // maybe faster if mod 10000
+      until v.IsZero or
+            (p = @tmp); // truncate after 8190 digits
+      v.Release;
+      FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
+    end;
+  end;
 end;
 
 function TBigInt.Divide(v: PBigInt; ComputeMod: boolean): PBigInt;
@@ -792,7 +871,8 @@ begin
   end
 end;
 
-function TBigInt.Multiply(b: PBigInt; InnerPartial, OuterPartial: PtrInt): PBigInt;
+function TBigInt.Multiply(b: PBigInt; InnerPartial: PtrInt; OuterPartial: PtrInt
+  ): PBigInt;
 var
   r: PBigInt;
   i, j, k, n: PtrInt;
@@ -901,23 +981,9 @@ begin
 end;
 
 function TRsaContext.Load(data: PByteArray; bytes: integer): PBigInt;
-var
-  i, o: PtrInt;
-  j: byte;
 begin
-  result := Allocate((bytes + HALF_BYTES - 1) div HALF_BYTES);
-  j := 0;
-  o := 0;
-  for i := bytes - 1 downto 0 do
-  begin
-    inc(result^.Value[o], HalfUInt(data[i]) shl j);
-    inc(j, 8);
-    if j = HALF_BITS then
-    begin
-      j := 0;
-      inc(o);
-    end;
-  end;
+  result := Allocate(ValuesSize(bytes));
+  ValuesLoad(result.Value, data, bytes);
 end;
 
 function TRsaContext.Load(const data: RawByteString): PBigInt;
