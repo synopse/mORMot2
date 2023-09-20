@@ -258,11 +258,11 @@ type
   public
     /// RSA key Modulus m or n
     Modulus: RawByteString;
-    /// RSA key Public exponent e
+    /// RSA key Public exponent e (typically 65537)
     Exponent: RawByteString;
-    /// serialize this public key as binary DER format
+    /// serialize this public key as binary PKCS#1 DER format
     function ToDer: TCertDer;
-    /// unserialize a public key from binary DER format
+    /// unserialize a public key from binary PKCS#1 DER format
     function FromDer(const der: TCertDer): boolean;
   end;
 
@@ -280,7 +280,7 @@ type
     Version: integer;
     /// RSA key m or n
     Modulus: RawByteString;
-    /// RSA key Public exponent e
+    /// RSA key Public exponent e (typically 65537)
     PublicExponent: RawByteString;
     /// RSA key Private exponent d
     PrivateExponent: RawByteString;
@@ -328,7 +328,7 @@ type
     /// RSA key Modulus
     property M: PBigInt
       read fM;
-    /// RSA key Public exponent
+    /// RSA key Public exponent (typically 65537)
     property E: PBigInt
       read fE;
     /// RSA key Private exponent
@@ -1204,7 +1204,7 @@ begin
                 Asn(ASN1_BITSTR, [
                   Asn(ASN1_SEQ, [
                     AsnBigInt(Modulus),
-                    AsnBigInt(Exponent)
+                    AsnBigInt(Exponent) // typically 65537
                   ])
                 ])
               ]);
@@ -1239,8 +1239,8 @@ begin
                 Asn(ASN1_OCTSTR, [
                   Asn(ASN1_SEQ, [
                     Asn(Version),
-                    AsnBigInt(PublicExponent),
                     AsnBigInt(Modulus),
+                    AsnBigInt(PublicExponent), // typically 65537
                     AsnBigInt(PrivateExponent),
                     AsnBigInt(Prime1),
                     AsnBigInt(Prime2),
@@ -1261,8 +1261,8 @@ begin
     raise ERsaException.Create('TRsaPrivateKey.FromDer over an existing key');
   // first try the openssl PKCS#8 layout
   result := DerToRsa(der, ASN1_OCTSTR, @Version, [
-              @PublicExponent,
               @Modulus,
+              @PublicExponent,
               @PrivateExponent,
               @Prime1,
               @Prime2,
@@ -1313,8 +1313,8 @@ begin
   if not fM.IsZero then
     raise ERsaException.CreateUtf8(
       '%.LoadFromPublicKey on existing data', [self]);
-  if (ModulusSize < 3) or
-     (ExponentSize < 10) then
+  if (ModulusSize < 10) or
+     (ExponentSize < 3) then
     raise ERsaException.CreateUtf8(
       '%.LoadFromPublicKey: unexpected ModulusSize=% ExponentSize=%',
       [self, ModulusSize, ExponentSize]);
