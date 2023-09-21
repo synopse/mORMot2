@@ -851,43 +851,38 @@ function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         mov    r11, Factor
         mov    rax, qword ptr [rdi]
         mul    r11         // rax:rdx = [Src] * Factor
-        add    rax, qword ptr [rsi]
-        adc    rdx, r10
         add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi], rax
+        adc    rdx, r10   // rax:rdx = [Src] * Factor + Carry
+        add    qword ptr [rsi], rax
+        adc    rdx, r10   // [Dst]:rdx = [Src] * Factor + [Dst] + Carry
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 1]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 1]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 1], rax
+        add    qword ptr [rsi + 8 * 1], rax
+        adc    rdx, r10
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 2]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 2]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 2], rax
+        add    qword ptr [rsi + 8 * 2], rax
+        adc    rdx, r10
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 3]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 3]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 3], rax
+        add    qword ptr [rsi + 8 * 3], rax
+        adc    rdx, r10
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 4]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 4]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 4], rax
+        add    qword ptr [rsi + 8 * 4], rax
+        adc    rdx, r10
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 5]
         mul    r11
@@ -899,19 +894,17 @@ function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 6]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 6]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 6], rax
+        add    qword ptr [rsi + 8 * 6], rax
+        adc    rdx, r10
         mov    rcx, rdx
         mov    rax, qword ptr [rdi + 8 * 7]
         mul    r11
-        add    rax, qword ptr [rsi + 8 * 7]
-        adc    rdx, r10
         add    rax, rcx
         adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 7], rax
+        add    qword ptr [rsi + 8 * 7], rax
+        adc    rdx, r10
         mov    rax, rdx
         {$ifdef WIN64ABI}
         pop    rdi
@@ -1053,7 +1046,7 @@ begin
       p := @tmp[high(tmp)];
       repeat
         dec(p);
-        p^ := v.IntMod10 + ord('0'); // maybe faster if mod 10000
+        p^ := v.IntMod10 + ord('0'); // could be faster with mod 10000
       until v.IsZero or
             (p = @tmp); // truncate after 8190 digits
       v.Release;
