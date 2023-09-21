@@ -320,8 +320,8 @@ type
     /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
     // two virtual methods implementing default PKCS#1.5 RSA padding
-    function DoPad(p: PByteArray; verify: boolean): RawByteString; virtual;
-    function DoUnPad(p: pointer; n: integer; sign: boolean): RawByteString; virtual;
+    function DoUnPad(p: PByteArray; verify: boolean): RawByteString; virtual;
+    function DoPad(p: pointer; n: integer; sign: boolean): RawByteString; virtual;
   public
     /// finalize the internal memory
     destructor Destroy; override;
@@ -1482,7 +1482,7 @@ begin
   result := m2.Add(q.Multiply(h));
 end;
 
-function TRsa.DoPad(p: PByteArray; verify: boolean): RawByteString;
+function TRsa.DoUnPad(p: PByteArray; verify: boolean): RawByteString;
 var
   count, padding: integer;
 begin
@@ -1524,7 +1524,7 @@ begin
   FastSetRawByteString(result, @p[count], fModulusLen - count);
 end;
 
-function TRsa.DoUnPad(p: pointer; n: integer; sign: boolean): RawByteString;
+function TRsa.DoPad(p: pointer; n: integer; sign: boolean): RawByteString;
 var
   padding: integer;
   i: PtrInt;
@@ -1568,7 +1568,7 @@ begin
     exit;
   enc := Load(Input, fModulusLen);
   // perform the RSA calculation
-  if verify then
+  if Verify then
   begin
     // verify with Public Key
     CurrentModulo := rmM; // for ModPower()
@@ -1579,9 +1579,9 @@ begin
     dec := ChineseRemainderTheorem(enc);
   if dec = nil then
     exit;
-  // parse result using proper padding (PKCS#1.5 with TRsa class)
+  // decode result following proper padding (PKCS#1.5 with TRsa class)
   exp := dec.Save({andrelease=}true);
-  result := DoPad(pointer(exp), Verify);
+  result := DoUnPad(pointer(exp), Verify);
 end;
 
 function TRsa.BufferEncryptSign(Input: pointer; InputLen: integer;
@@ -1591,9 +1591,10 @@ var
   exp: RawByteString;
 begin
   result := '';
-  // parse result using proper padding (PKCS#1.5 with TRsa class)
-  exp := DoUnpad(Input, InputLen, Sign);
+  // encode input using proper padding (PKCS#1.5 with TRsa class)
+  exp := DoPad(Input, InputLen, Sign);
   dec := Load(pointer(exp), fModulusLen);
+  // perform the RSA calculation
   if Sign then
     // sign with private key
     enc := ChineseRemainderTheorem(dec)
