@@ -808,6 +808,7 @@ end;
 function TBigInt.Divide(v: PBigInt; ComputeMod: boolean): PBigInt;
 var
   d, inner, dash: HalfUInt;
+  lastt, lastt2, lastv, lastv2: PtrUInt;
   neg: boolean;
   j, m, n, orgsiz: integer;
   p: PHalfUInt;
@@ -817,14 +818,14 @@ begin
      (Compare(v) < 0) then
   begin
     v.Release;
-    result := @self; // just return u if u < v
+    result := Copy; // just return self if self < v
     exit;
   end;
   m := Size - v^.Size;
   n := v^.Size + 1;
   orgsiz := Size;
   quo := Owner.Allocate(m + 1);
-  tmp := Owner.Allocate(n);
+  tmp := Owner.Allocate(n, true);
   v.Trim;
   d := RSA_RADIX div (PtrUInt(v^.Value[v^.Size - 1]) + 1);
   u := Clone;
@@ -845,22 +846,25 @@ begin
     // Get a temporary short version of u
     MoveFast(u^.Value[u^.Size - n - j], tmp^.Value[0], n * HALF_BYTES);
     // Calculate q'
-    if tmp^.Value[tmp^.Size - 1] = v^.Value[v^.Size - 1] then
+    lastt := tmp^.Value[tmp^.Size - 1];
+    lastv := v^.Value[v^.Size - 1];
+    if lastt = lastv then
       dash := RSA_RADIX - 1
     else
     begin
-      dash := (PtrUInt(tmp^.Value[tmp^.Size - 1]) * RSA_RADIX +
-              tmp^.Value[tmp^.Size - 2]) div v^.Value[v^.Size - 1];
-      if (v^.Size > 1) and
-         (v^.Value[v^.Size - 2] > 0) then
+      lastt2 := tmp^.Value[tmp^.Size - 2];
+      dash := (PtrUInt(lastt) * RSA_RADIX + lastt2) div lastv;
+      if v^.Size > 1 then
       begin
-        inner := (RSA_RADIX * tmp^.Value[tmp^.Size - 1] +
-            tmp^.Value[tmp^.Size - 2] -
-            PtrUInt(dash) * v^.Value[v^.Size - 1]) and $ffffffff;
-        if (PtrUInt(v^.Value[v^.Size - 2]) * dash) >
-            (PtrUInt(inner) * RSA_RADIX +
-             tmp^.Value[tmp^.Size - 3]) then
-          dec(dash);
+        lastv2 := v^.Value[v^.Size - 2];
+        if lastv2 > 0 then
+        begin
+          inner := (RSA_RADIX * lastt + lastt2 - PtrUInt(dash) * lastv);
+          if (v^.Size > 2) and
+             (PtrUInt(lastv2 * dash) >
+               (PtrUInt(inner) * RSA_RADIX + tmp^.Value[tmp^.Size - 3])) then
+            dec(dash);
+        end;
       end;
     end;
     p := @quo^.Value[quo^.Size - j - 1];
@@ -872,10 +876,10 @@ begin
       p^ := dash;
       if neg then
       begin
-        // Add back
+        // add back
         dec(p^);
         tmp := tmp.Add(v.Copy);
-        // Lop off the carry
+        // trim the carry
         dec(tmp^.Size);
         dec(v^.Size);
       end;
