@@ -37,6 +37,10 @@ uses
   - TODO: includes proper RSA keypair generation
 }
 
+{.$define USEBARRET}
+// could be defined to enable Barret reduction (not working yet)
+
+
 { **************** RSA Oriented Big-Integer Computation }
 
 type
@@ -180,13 +184,14 @@ type
     fRadix: PBigInt;
     /// contains Modulus
     fMod: TRsaModulos;
+    {$ifdef USEBARRET}
     /// contains mu
     fMu: TRsaModulos;
     /// contains b(k+1)
     fBk1: TRsaModulos;
+    {$endif USEBARRET}
     /// contains the normalized storage
     fNormMod: TRsaModulos;
-    procedure ForceRelease(p: PPBigInt; n: integer = 1);
   public
     /// the size of the sliding window
     Window: integer;
@@ -325,7 +330,7 @@ type
     function LoadFromPublicKeyDer(const Der: TCertDer): boolean;
     /// load a public key from PKCS#1 PEM format
     function LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
-    /// load a public key from an hexadecimal M and E fields concatenation
+    /// load a public key from an hexadecimal E and M fields concatenation
     procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
     /// load a private key from a decoded TRsaPrivateKey record
     procedure LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
@@ -1012,20 +1017,25 @@ begin
   fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
+  {$ifdef USEBARRET}
   b := fRadix.Clone.LeftShift(k * 2 - 1);
   fMu[modulo] := b.Divide(fMod[modulo]).SetPermanent;
   b.Release;
-  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent;
+  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent; // = b(k+1)
+  {$endif USEBARRET}
 end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
   fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
+  {$ifdef USEBARRET}
   fMu[modulo].ResetPermanentAndRelease;
   fBk1[modulo].ResetPermanentAndRelease;
+  {$endif USEBARRET}
 end;
 
+{$ifdef USEBARRET}
 function TRsaContext.Barret(b: PBigint): PBigInt;
 var
   q1, q2, q3, r1, r2, m: PBigInt;
@@ -1066,6 +1076,13 @@ begin
   while result.Compare(m) >= 0 do
     result.Substract(m);
 end;
+{$else}
+function TRsaContext.Barret(b: PBigint): PBigInt;
+begin
+  result := b^.Divide(fMod[CurrentModulo], {mod=}true);
+  b^.Release;
+end;
+{$endif USEBARRET}
 
 function TRsaContext.ModPower(b, exp: PBigInt): PBigInt;
 var
