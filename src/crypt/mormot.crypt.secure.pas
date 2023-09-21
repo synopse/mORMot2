@@ -799,6 +799,18 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
+const
+  /// map the size in bytes of any THashAlgo digest
+  HASH_SIZE: array[THashAlgo] of integer = (
+    SizeOf(TMd5Digest),    // hfMD5
+    SizeOf(TSHA1Digest),   // hfSHA1
+    SizeOf(TSHA256Digest), // hfSHA256
+    SizeOf(TSHA384Digest), // hfSHA384
+    SizeOf(TSHA512Digest), // hfSHA512
+    SizeOf(THash256),      // hfSHA512_256
+    SizeOf(THash256),      // hfSHA3_256
+    SizeOf(THash512));     // hfSHA3_512
+
 
 { **************** Client and Server HTTP Access Authentication }
 
@@ -2717,7 +2729,7 @@ function AsnBigInt(const BigInt: RawByteString; AsnType: integer = ASN1_INT): TA
 /// create an ASN.1 SEQuence from some raw data
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
 
-/// create an ASN.1 ObjectID from '1.x.x.x.x' text
+/// create an ASN.1 ObjectID from 'x.x.x.x.x' text
 function AsnOid(OidText: PUtf8Char): TAsnObject;
 
 /// raw append some binary to an ASN.1 object buffer
@@ -2882,17 +2894,6 @@ begin
   BinToHexLower(@dig, Final(dig), aResult);
   FillZero(dig.b);
 end;
-
-const
-  HASH_SIZE: array[THashAlgo] of integer = (
-    SizeOf(TMd5Digest),    // hfMD5
-    SizeOf(TSHA1Digest),   // hfSHA1
-    SizeOf(TSHA256Digest), // hfSHA256
-    SizeOf(TSHA384Digest), // hfSHA384
-    SizeOf(TSHA512Digest), // hfSHA512
-    SizeOf(THash256),      // hfSHA512_256
-    SizeOf(THash256),      // hfSHA3_256
-    SizeOf(THash512));     // hfSHA3_512
 
 function TSynHasher.HashSize: integer;
 begin
