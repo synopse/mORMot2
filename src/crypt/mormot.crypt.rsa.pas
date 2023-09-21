@@ -81,8 +81,10 @@ type
     function FindMaxExponentIndex: integer;
     function SetPermanent: PBigInt;
     procedure ResetPermanent;
+    {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
+    {$endif USEBARRET}
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -142,8 +144,11 @@ type
     function Divide(v: PBigInt; ComputeMod: boolean = false): PBigInt;
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
-    function Multiply(b: PBigInt; InnerPartial: PtrInt = 0;
-      OuterPartial: PtrInt = 0): PBigInt;
+    function Multiply(b: PBigInt): PBigInt;
+    /// partial multiplication between two Big Integer values
+    // - will eventually release both self and b instances
+    function MultiplyPartial(b: PBigInt; InnerPartial: PtrInt;
+      OuterPartial: PtrInt): PBigInt;
     /// standard multiplication by itself
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
@@ -600,12 +605,14 @@ begin
   result := @self;
 end;
 
+{$ifdef USEBARRET}
 function TBigInt.TruncateMod(modulus: integer): PBigInt;
 begin
   if Size > modulus then
     Size := modulus;
   result := @self;
 end;
+{$endif USEBARRET}
 
 function TBigInt.Copy: PBigInt;
 begin
@@ -631,7 +638,6 @@ begin
   until false;
   inc(result, (Size - 1) * HALF_BITS);
 end;
-
 
 procedure TBigInt.Release;
 begin
@@ -691,7 +697,7 @@ begin
   Save(pointer(result), length(result), andrelease);
 end;
 
-{ profiling 10 sign + 100 verify: added=1610 subbed=34068810 multed=33149184 }
+{ profiling 10 sign + 100 verify: add=1610 sub=34068810 multint=33149184 }
 
 function TBigInt.Add(b: PBigInt): PBigInt;
 var
@@ -831,9 +837,92 @@ function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif WIN64ABI}
 end;
 
+function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
+        {$ifdef WIN64ABI}
+        push   rsi
+        push   rdi
+        mov    rsi, Dst
+        mov    rdi, Src
+        mov    rcx, Carry
+        {$endif WIN64ABI}
+        xor    r10, r10
+        mov    r11, Factor
+        mov    rax, qword ptr [rdi]
+        mul    r11         // rax:rdx = [Src] * Factor
+        add    rax, qword ptr [rsi]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 1]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 1]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 1], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 2]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 2]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 2], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 3]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 3]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 3], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 4]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 4]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 4], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 5]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 5]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 5], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 6]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 6]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 6], rax
+        mov    rcx, rdx
+        mov    rax, qword ptr [rdi + 8 * 7]
+        mul    r11
+        add    rax, qword ptr [rsi + 8 * 7]
+        adc    rdx, r10
+        add    rax, rcx
+        adc    rdx, r10
+        mov    qword ptr [rsi + 8 * 7], rax
+        mov    rax, rdx
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
 const
-  x64subn = 128; // handle 1024 bits per _x64sub() call
-  x64muln = 64;  // handle  512 bits per _x64mul() call
+  x64subn  = 128; // handle 1024 bits per _x64sub() call
+  x64muln  = 64;  // handle  512 bits per _x64mul() call
+  x64multn = 64;  // handle  512 bits per _x64mult() call
 
 {$endif CPUX64}
 
@@ -1073,7 +1162,48 @@ begin
   end
 end;
 
-function TBigInt.Multiply(b: PBigInt; InnerPartial, OuterPartial: PtrInt): PBigInt;
+function TBigInt.Multiply(b: PBigInt): PBigInt;
+var
+  r: PBigInt;
+  i, n: PtrInt;
+  v, vi: PtrUInt;
+  p, u: PHalfUInt;
+begin
+  r := Owner.Allocate(Size + b^.Size);
+  for i := 0 to b^.Size - 1 do // O(n2) brute force algorithm
+  begin
+    v := 0; // initial carry value
+    vi := b^.Value[i];
+    p := @r^.Value[i];
+    u := pointer(Value);
+    n := Size;
+    {$ifdef CPUX64}
+    while n >= x64multn div HALF_BYTES do
+    begin
+      v := _x64mult(u, p, vi, v);
+      inc(PByte(p), x64multn);
+      inc(PByte(u), x64multn);
+      dec(n, x64multn div HALF_BYTES);
+    end;
+    if n > 0 then
+    {$endif CPUX64}
+    repeat
+      inc(v, PtrUInt(p^) + PtrUInt(u^) * vi);
+      p^ := v;
+      inc(p);
+      inc(u);
+      v := v shr HALF_BITS; // carry
+      dec(n);
+    until n = 0;
+    p^ := v;
+  end;
+  Release;
+  b.Release;
+  result := r.Trim;
+end;
+
+function TBigInt.MultiplyPartial(b: PBigInt;
+  InnerPartial, OuterPartial: PtrInt): PBigInt;
 var
   r: PBigInt;
   i, j, k, n: PtrInt;
@@ -1086,19 +1216,18 @@ begin
     v := 0; // initial carry value
     k := i;
     j := 0;
-    if (OuterPartial <> 0) and
+    if (OuterPartial > 0) and
        (OuterPartial > i) and
        (OuterPartial < n) then
     begin
       k := OuterPartial - 1;
-      j := k - 1;
+      j := k - i;
     end;
     repeat
       if (InnerPartial > 0) and
          (k >= InnerPartial) then
         break;
-      inc(v, PtrUInt(r^.Value[k]) +
-             PtrUInt(Value[j]) * b^.Value[i]);
+      inc(v, PtrUInt(r^.Value[k]) + PtrUInt(Value[j]) * b^.Value[i]);
       r^.Value[k] := v;
       inc(k);
       v := v shr HALF_BITS; // carry
@@ -1232,7 +1361,7 @@ begin
     exit;
   end;
   k := m^.Size;
-  if b^.Size >= k * 2 then
+  if b^.Size > k * 2 then
   begin
     // use regular divide/modulo method - Barrett cannot help
     result := b^.Divide(m, {mod=}true);
@@ -1241,21 +1370,28 @@ begin
   end;
   // q1 = [x / b**(k-1)]
   q1 := b^.Clone.RightShift(k - 1);
+  //writeln(#10'q1=',q1.ToHexa);
+  //writeln(#10'mu=',fMu[CurrentModulo].ToHexa);
   // Do outer partial multiply
   // q2 = q1 * mu
   q2 := q1.Multiply(fMu[CurrentModulo], 0, k - 1);
+  //writeln(#10'q2=',q2.tohexa);
   // q3 = [q2 / b**(k+1)]
   q3 := q2.RightShift(k + 1);
+  //writeln(#10'q3=',q3.tohexa);
   // r1 = x mod b**(k+1)
   r1 := b^.TruncateMod(k + 1);
+  //writeln(#10'r1=',r1.tohexa);
   // Do inner partial multiply
   // r2 = q3 * m mod b**(k+1)
   r2 := q3.Multiply(m, k + 1, 0).TruncateMod(k + 1);
+  //writeln(#10'r2=',r2.tohexa);
   // if (r1 < r2) r1 = r1 + b**(k+1)
   if r1.Compare(r2) < 0 then
     r1 := r1.Add(fBk1[CurrentModulo]);
   // r = r1-r2
   result := r1.Substract(r2);
+  //writeln(#10'r=',result.tohexa);
   // while (r >= m) do r = r-m
   while result.Compare(m) >= 0 do
     result.Substract(m);
