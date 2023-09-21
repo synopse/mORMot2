@@ -112,7 +112,7 @@ type
       {$ifdef HASSAFEINLINE} inline; {$endif}
     /// quickly search if contains 0
     function IsZero: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// check if a given bit is set to 1
     function BitIsSet(bit: PtrUInt): boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -499,14 +499,13 @@ var
   i: PtrInt;
 begin
   result := CompareInteger(Size, b^.Size);
-  if result <> 0 then
-    exit;
-  for i := Size - 1 downto 0 do
-  begin
-    result := CompareBI(Value[i], b^.Value[i]);
-    if result <> 0 then
-      exit;
-  end;
+  if result = 0 then
+    for i := Size - 1 downto 0 do
+    begin
+      result := CompareBI(Value[i], b^.Value[i]);
+      if result <> 0 then
+        exit;
+    end;
 end;
 
 function TBigInt.SetPermanent: PBigInt;
@@ -885,8 +884,7 @@ begin
   end
 end;
 
-function TBigInt.Multiply(b: PBigInt; InnerPartial: PtrInt; OuterPartial: PtrInt
-  ): PBigInt;
+function TBigInt.Multiply(b: PBigInt; InnerPartial, OuterPartial: PtrInt): PBigInt;
 var
   r: PBigInt;
   i, j, k, n: PtrInt;
@@ -940,20 +938,6 @@ begin
   fRadix^.SetPermanent;
 end;
 
-procedure TRsaContext.ForceRelease(p: PPBigInt; n: integer);
-begin
-  while n > 0 do
-  begin
-    if p^ <> nil then
-    begin
-      p^^.RefCnt := 1;
-      p^^.Release;
-    end;
-    inc(p);
-    dec(n);
-  end;
-end;
-
 destructor TRsaContext.Destroy;
 var
   b, next : PBigInt;
@@ -963,7 +947,7 @@ begin
   while b <> nil do
   begin
     next := b^.fNextFree;
-    if b^.Value<>nil then
+    if b^.Value <> nil then
       FreeMem(b^.Value);
     FreeMem(b);
     b := next;
@@ -1025,7 +1009,7 @@ var
   k: integer;
 begin
   k := b^.Size;
-  fMod[modulo] := b.SetPermanent;
+  fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
   b := fRadix.Clone.LeftShift(k * 2 - 1);
@@ -1044,15 +1028,21 @@ end;
 
 function TRsaContext.Barret(b: PBigint): PBigInt;
 var
-  q1, q2, q3, r1, r2, bim: PBigInt;
+  q1, q2, q3, r1, r2, m: PBigInt;
   k: integer;
 begin
-  bim := fMod[CurrentModulo];
-  k := bim^.Size;
-  if b^.Size > k * 2 then
+  m := fMod[CurrentModulo];
+  if b^.Compare(m) < 0 then
   begin
-    // use regular divide/modulo method instead  - Barrett cannot help
-    result := b^.Divide(bim, {mod=}true);
+    result := b; // just return b if b < m
+    exit;
+  end;
+  k := m^.Size;
+  if b^.Size >= k * 2 then
+  begin
+    // use regular divide/modulo method - Barrett cannot help
+    result := b^.Divide(m, {mod=}true);
+    b^.Release;
     exit;
   end;
   // q1 = [x / b**(k-1)]
@@ -1066,15 +1056,15 @@ begin
   r1 := b^.TruncateMod(k + 1);
   // Do inner partial multiply
   // r2 = q3 * m mod b**(k+1)
-  r2 := q3.Multiply(bim, k + 1, 0).TruncateMod(k + 1);
+  r2 := q3.Multiply(m, k + 1, 0).TruncateMod(k + 1);
   // if (r1 < r2) r1 = r1 + b**(k+1)
   if r1.Compare(r2) < 0 then
     r1 := r1.Add(fBk1[CurrentModulo]);
   // r = r1-r2
   result := r1.Substract(r2);
   // while (r >= m) do r = r-m
-  while result.Compare(bim) >= 0 do
-    result.Substract(bim);
+  while result.Compare(m) >= 0 do
+    result.Substract(m);
 end;
 
 function TRsaContext.ModPower(b, exp: PBigInt): PBigInt;
@@ -1161,7 +1151,7 @@ end;
 { **************** RSA Low-Level Cryptography Functions }
 
 const
-  ANS1_OID_RSAPUB = '1.2.840.113549.1.1.1';
+  ASN1_OID_RSAPUB = '1.2.840.113549.1.1.1';
 
 function DerToRsa(const der: TCertDer; seqtype: integer; version: PInteger;
   const values: array of PRawByteString): boolean;
@@ -1183,7 +1173,7 @@ begin
   result := result and
             (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
               (AsnNextRaw(pos[1], seq, oid) = ASN1_OBJID) and
-                (oid = AsnEncOid(ANS1_OID_RSAPUB)) and
+                (oid = AsnEncOid(ASN1_OID_RSAPUB)) and
             (AsnNextRaw(pos[0], der, str) = seqtype) and
               (AsnNext(pos[2], str) = ASN1_SEQ);
   if result and
@@ -1206,7 +1196,7 @@ begin
     // see "A.1.1. RSA Public Key Syntax" of RFC 8017
     result := Asn(ASN1_SEQ, [
                 Asn(ASN1_SEQ, [
-                  AsnOid(ANS1_OID_RSAPUB),
+                  AsnOid(ASN1_OID_RSAPUB),
                   ASN1_NULL_VALUE // optional
                 ]),
                 Asn(ASN1_BITSTR, [
@@ -1241,7 +1231,7 @@ begin
     result := Asn(ASN1_SEQ, [
                 Asn(Version),
                 Asn(ASN1_SEQ, [
-                  AsnOid(ANS1_OID_RSAPUB),
+                  AsnOid(ASN1_OID_RSAPUB),
                   ASN1_NULL_VALUE // optional
                 ]),
                 Asn(ASN1_OCTSTR, [
@@ -1318,7 +1308,7 @@ begin
   fDP.ResetPermanentAndRelease;
   fDQ.ResetPermanentAndRelease;
   fQInv.ResetPermanentAndRelease;
-  // fM fP fQ are already finalized
+  // fM fP fQ are already finalized by ResetModulo()
   inherited Destroy;
 end;
 
@@ -1329,12 +1319,12 @@ begin
     raise ERsaException.CreateUtf8(
       '%.LoadFromPublicKey on existing data', [self]);
   if (ModulusSize < 10) or
-     (ExponentSize < 3) then
+     (ExponentSize < 2) then
     raise ERsaException.CreateUtf8(
       '%.LoadFromPublicKey: unexpected ModulusSize=% ExponentSize=%',
       [self, ModulusSize, ExponentSize]);
   fModulusLen := ModulusSize;
-  fM := Load(Modulus, ModulusSize);
+  fM := Load(Modulus, ModulusSize).SetPermanent;
   fModulusBits := fM.BitCount;
   SetModulo(fM, rmM);
   fE := Load(Exponent, ExponentSize).SetPermanent;
@@ -1362,7 +1352,7 @@ begin
   if not HexToBin(pointer(Hexa), length(Hexa), bin) or
      (length(bin) < 13) then
     raise ERsaException.CreateUtf8('Invalid %.LoadFromPublicKeyHexa', [self]);
-  LoadFromPublicKeyBinary(b, b + 3, 3, length(bin) - 3);
+  LoadFromPublicKeyBinary(b + 3, b, length(bin) - 3, 3);
 end;
 
 procedure TRsa.LoadFromPublicKey(const PublicKey: TRsaPublicKey);
@@ -1383,14 +1373,14 @@ begin
        (Exponent2 = '') or
        (Coefficient = '') or
        (length(Modulus) < 10) or
-       (length(PublicExponent) < 3) then
+       (length(PublicExponent) < 2) then
     raise ERsaException.CreateUtf8('Incorrect %.LoadFromPrivateKey call', [self]);
   LoadFromPublicKeyBinary(
     pointer(PrivateKey.Modulus), pointer(PrivateKey.PublicExponent),
     length(PrivateKey.Modulus),  length(PrivateKey.PublicExponent));
   fD := Load(PrivateKey.PrivateExponent).SetPermanent;
-  fP := Load(PrivateKey.Prime1);
-  fQ := Load(PrivateKey.Prime2);
+  fP := Load(PrivateKey.Prime1).SetPermanent;
+  fQ := Load(PrivateKey.Prime2).SetPermanent;
   fDP := Load(PrivateKey.Exponent1).SetPermanent;
   fDQ := Load(PrivateKey.Exponent2).SetPermanent;
   fQInv := Load(PrivateKey.Coefficient).SetPermanent;
