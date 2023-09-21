@@ -225,8 +225,6 @@ type
     /// compute a modular exponentiation
     // - SetModulo() should have previously be called
     function ModPower(b, exp: PBigInt): PBigInt;
-    /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
-    function ChineseRemainderTheorem(b, dp, dq, p, q, qinv: PBigInt): PBigInt;
   end;
 
 const
@@ -318,6 +316,8 @@ type
   protected
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
+    /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
+    function ChineseRemainderTheorem(b: PBigInt): PBigInt;
   public
     /// finalize the internal memory
     destructor Destroy; override;
@@ -1166,21 +1166,6 @@ begin
   result := r;
 end;
 
-function TRsaContext.ChineseRemainderTheorem(
-  b, dp, dq, p, q, qinv : PBigInt): PBigInt;
-var
-  h, m1, m2: PBigInt;
-begin
-  CurrentModulo := rmP;
-  m1 := ModPower(b.Copy, dp);
-  CurrentModulo := rmQ;
-  m2 := ModPower(b, dq);
-  h := m1.Add(p).Substract(m2.Copy).Multiply(qinv);
-  CurrentModulo := rmP;
-  h := Barret(h);
-  result := m2.Add(q.Multiply(h));
-end;
-
 
 { **************** RSA Low-Level Cryptography Functions }
 
@@ -1454,6 +1439,23 @@ begin
   result := LoadFromPrivateKeyDer(PemToDer(Pem));
 end;
 
+function TRsa.ChineseRemainderTheorem(b: PBigInt): PBigInt;
+var
+  h, m1, m2: PBigInt;
+begin
+  result := nil;
+  if not HasPrivateKey then
+    exit;
+  CurrentModulo := rmP;
+  m1 := ModPower(b.Copy, fDp);
+  CurrentModulo := rmQ;
+  m2 := ModPower(b, fDq);
+  h := m1.Add(fP).Substract(m2.Copy).Multiply(fQInv);
+  CurrentModulo := rmP;
+  h := Reduce(h);
+  result := m2.Add(q.Multiply(h));
+end;
+
 function TRsa.BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
 var
   count, padding: integer;
@@ -1462,8 +1464,8 @@ var
   e: PByteArray absolute exp;
 begin
   result := '';
-  if fM.IsZero or
-     (Input = nil) then
+  if (Input = nil) or
+     not HasPublicKey then
     exit;
   enc := Load(Input, fModulusLen);
   // perform the RSA calculation
@@ -1475,7 +1477,9 @@ begin
   end
   else
     // decrypt with Private Key
-    dec := ChineseRemainderTheorem(enc, fDP, fDQ, fP, fQ, fQInv);
+    dec := ChineseRemainderTheorem(enc);
+  if dec = nil then
+    exit;
   // parse result using PKCS#1.5 padding
   exp := dec.Save({andrelease=}true);
   count := 0;
@@ -1544,7 +1548,5 @@ end;
 initialization
 
 finalization
-  writeln('added=',added);
-  writeln('subbed=',subbed);
-  writeln('multed=',multed);
+
 end.
