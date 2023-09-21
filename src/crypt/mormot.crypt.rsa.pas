@@ -320,6 +320,10 @@ type
   public
     /// finalize the internal memory
     destructor Destroy; override;
+    /// check if M and E fields are set
+    function HasPublicKey: boolean;
+    /// check if all fields are set, i.e. if a private key has been loaded
+    function HasPrivateKey: boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -1327,6 +1331,24 @@ begin
   fQInv.ResetPermanentAndRelease;
   // fM fP fQ are already finalized by ResetModulo()
   inherited Destroy;
+end;
+
+function TRsa.HasPublicKey: boolean;
+begin
+  result := (self <> nil) and
+            not fM.IsZero and
+            not fE.IsZero;
+end;
+
+function TRsa.HasPrivateKey: boolean;
+begin
+  result := HasPublicKey and
+            not fD.IsZero and
+            not fP.IsZero and
+            not fQ.IsZero and
+            not fDP.IsZero and
+            not fDQ.IsZero and
+            not fQInv.IsZero;
 end;
 
 procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
