@@ -199,7 +199,7 @@ type
     ActiveCount: integer;
     /// number of PBigInt instances stored in the internal instances cache
     FreeCount: integer;
-    /// as set by SetModulo() and  used by Barret() and ModPower()
+    /// as set by SetModulo() and  used by Reduce() and ModPower()
     CurrentModulo: TRsaModulo;
     /// initialize this Big Integer context
     constructor Create; override;
@@ -218,9 +218,10 @@ type
     procedure SetModulo(b: PBigInt; modulo: TRsaModulo);
     /// release the internal constant slots for a given modulo
     procedure ResetModulo(modulo: TRsaModulo);
-    /// compute the Barret reduction of a Big Integer value
+    /// compute the reduction of a Big Integer value in a given modulo
     // - SetModulo() should have previously called
-    function Barret(b: PBigint): PBigInt;
+    // - redirect to Divide() or use the Barret algorithm
+    function Reduce(b: PBigint): PBigInt;
     /// compute a modular exponentiation
     // - SetModulo() should have previously be called
     function ModPower(b, exp: PBigInt): PBigInt;
@@ -1052,7 +1053,7 @@ begin
 end;
 
 {$ifdef USEBARRET}
-function TRsaContext.Barret(b: PBigint): PBigInt;
+function TRsaContext.Reduce(b: PBigint): PBigInt;
 var
   q1, q2, q3, r1, r2, m: PBigInt;
   k: integer;
@@ -1093,7 +1094,7 @@ begin
     result.Substract(m);
 end;
 {$else}
-function TRsaContext.Barret(b: PBigint): PBigInt;
+function TRsaContext.Reduce(b: PBigint): PBigInt;
 begin
   result := b^.Divide(fMod[CurrentModulo], {mod=}true);
   b^.Release;
@@ -1120,9 +1121,9 @@ begin
   k := 1 shl (windowsize - 1);
   SetLength(g, k);
   g[0] := b^.Clone.SetPermanent;
-  g2 := Barret(g[0].Square); // g2 := residue of g^2
+  g2 := Reduce(g[0].Square); // g2 := residue of g^2
   for j := 1 to k - 1 do
-    g[j] := Barret(g[j - 1].Multiply(g2.Copy)).SetPermanent;
+    g[j] := Reduce(g[j - 1].Multiply(g2.Copy)).SetPermanent;
   g2.Release;
   // reduce to left-to-right exponentiation, one exponent bit at a time
   repeat
@@ -1139,7 +1140,7 @@ begin
       j := i;
       while j >= l do
       begin
-        r := Barret(r.Square);
+        r := Reduce(r.Square);
         if exp.BitIsSet(j) then
           inc(partial);
         if j <> l then
@@ -1147,13 +1148,13 @@ begin
         dec(j);
       end;
       partial := (partial - 1) shr 1; // Adjust for array
-      r := Barret(r.Multiply(g[partial]));
+      r := Reduce(r.Multiply(g[partial]));
       i := l - 1;
     end
     else
     begin
       // bit not set: just process the next bit
-      r := Barret(r.Square);
+      r := Reduce(r.Square);
       dec(i);
     end;
   until i < 0;
@@ -1531,7 +1532,7 @@ begin
      (AsnNext(p, verif) = ASN1_SEQ) and  // AlgorithmIdentifier
      (AsnNext(p, verif, pointer(AlgorithmOid)) = ASN1_OBJID) then
     case AsnNextRaw(p, verif, digest) of
-      ASN1_NULL:
+      ASN1_NULL: // optional Algorithm Parameters
         if AsnNextRaw(p, verif, digest) = ASN1_OCTSTR then
           result := digest;
       ASN1_OCTSTR:
