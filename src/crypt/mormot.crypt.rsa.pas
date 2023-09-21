@@ -32,7 +32,8 @@ uses
 {
   Implementation notes:
   - loosely based on fpTLSBigInt / fprsa units from the FPC RTL - but the whole
-    design and core methods have been rewritten from scratch in modern OOP
+    design and core methods have been rewritten from scratch in modern OOP and
+    fixing memory leaks and performance bottlenecks
   - we use half-registers (HalfUInt) for efficient computation on most systems
   - TODO: includes proper RSA keypair generation
 }
@@ -318,6 +319,9 @@ type
     fModulusLen, fModulusBits: integer;
     /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
+    // two virtual methods implementing default PKCS#1.5 RSA padding
+    function DoPad(p: PByteArray; verify: boolean): RawByteString; virtual;
+    function DoUnPad(p: pointer; n: integer; sign: boolean): RawByteString; virtual;
   public
     /// finalize the internal memory
     destructor Destroy; override;
@@ -1478,12 +1482,85 @@ begin
   result := m2.Add(q.Multiply(h));
 end;
 
-function TRsa.BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+function TRsa.DoPad(p: PByteArray; verify: boolean): RawByteString;
 var
   count, padding: integer;
+begin
+  result := '';
+  count := 0;
+  if p[count] <> 0 then
+    exit; // leading zero
+  inc(count);
+  padding := 0;
+  if Verify then
+  begin
+    if p[count] <> 1 then
+      exit; // block type 1
+    inc(count);
+    while (count < fModulusLen) and
+          (p[count] = $ff) do
+    begin
+      inc(count);
+      inc(padding); // ignore FF padding
+    end;
+  end
+  else
+  begin
+    if p[count] <> 2 then
+      exit; // block type 2
+    inc(count);
+    while (count < fModulusLen) and
+          (p[count] <> 0) do
+    begin
+      inc(count);
+      inc(padding); // ignore non-zero random padding
+    end;
+  end;
+  if (count = fModulusLen) or
+     (padding = 8) or
+     (p[count] <> 0) then
+    exit; // invalid padding with ending zero
+  inc(count);
+  FastSetRawByteString(result, @p[count], fModulusLen - count);
+end;
+
+function TRsa.DoUnPad(p: pointer; n: integer; sign: boolean): RawByteString;
+var
+  padding: integer;
+  i: PtrInt;
+  r: PByteArray absolute result;
+begin
+  result := '';
+  padding := fModulusLen - n - 3;
+  if (p = nil) or
+     (padding < 8) or
+     not HasPublicKey then
+    exit;
+  SetLength(result, fModulusLen);
+  r[0] := 0; // leading zero
+  if sign then
+  begin
+    r[1] := 1; // block type 1
+    FillCharFast(r[2], padding, $ff);
+    inc(padding, 2);
+  end
+  else
+  begin
+    r[1] := 2; // block type 2
+    RandomBytes(@r[2], padding); // Lecuyer is enough
+    inc(padding, 2);
+    for i := 2 to padding - 1 do
+      if r[i] = 0 then
+        dec(r[i]); // should be non zero random padding
+  end;
+  r[padding] := 0; // padding ends with zero
+  MoveFast(p^, r[padding + 1], n);
+end;
+
+function TRsa.BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+var
   enc, dec: PBigInt;
   exp: RawByteString;
-  e: PByteArray absolute exp;
 begin
   result := '';
   if (Input = nil) or
@@ -1502,75 +1579,21 @@ begin
     dec := ChineseRemainderTheorem(enc);
   if dec = nil then
     exit;
-  // parse result using PKCS#1.5 padding
+  // parse result using proper padding (PKCS#1.5 with TRsa class)
   exp := dec.Save({andrelease=}true);
-  count := 0;
-  if e[count] <> 0 then
-    exit; // expects leading zero
-  inc(count);
-  padding := 0;
-  if verify then
-  begin
-    if e[count] <> 1 then
-      exit; // expects block type 1
-    inc(count);
-    while (count < fModulusLen) and
-          (e[count] = $ff) do
-    begin
-      inc(count);
-      inc(padding); // just ignore FF padding
-    end;
-  end
-  else
-  begin
-    if e[count] <> 2 then
-      exit; // expects block type 2
-    inc(count);
-    while (count < fModulusLen) and
-          (e[count] <> 0) do
-    begin
-      inc(count);
-      inc(padding); // just ignore non-zero random padding
-    end;
-  end;
-  if (count = fModulusLen) or
-     (padding = 8) or
-     (e[count] <> 0) then
-    exit; // invalid padding with ending zero
-  inc(count);
-  FastSetRawByteString(result, @e[count], fModulusLen - count);
+  result := DoPad(pointer(exp), Verify);
 end;
 
 function TRsa.BufferEncryptSign(Input: pointer; InputLen: integer;
   Sign: boolean): RawByteString;
 var
-  padding: integer;
   enc, dec: PBigInt;
   exp: RawByteString;
-  e: PByteArray absolute exp;
 begin
   result := '';
-  padding := fModulusLen - InputLen - 3;
-  if (Input = nil) or
-     (padding < 8) or
-     not HasPublicKey then
-    exit;
-  SetLength(exp, fModulusLen);
-  e[0] := 0; // leading zero
-  if Sign then
-  begin
-    e[1] := 1; // block type 1
-    FillCharFast(e[2], padding, $ff);
-  end
-  else
-  begin
-    e[1] := 2; // block type 2
-    RandomBytes(@e[2], padding); // Lecuyer is enough
-  end;
-  inc(padding, 2);
-  e[padding] := 0; // padding ends with zero
-  MoveFast(Input^, e[padding + 1], InputLen);
-  dec := Load(e, fModulusLen);
+  // parse result using proper padding (PKCS#1.5 with TRsa class)
+  exp := DoUnpad(Input, InputLen, Sign);
+  dec := Load(pointer(exp), fModulusLen);
   if Sign then
     // sign with private key
     enc := ChineseRemainderTheorem(dec)
