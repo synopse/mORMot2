@@ -342,6 +342,14 @@ type
     function LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
     /// load a private key from PKCS#1 or PKCS#8 PEM format
     function LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
+    /// low-level PKCS#1.5 buffer Decryption or Verification
+    // - Input should have ModulusLen bytes of data
+    // - returns decrypted buffer without PKCS#1.5 padding, '' on error
+    function BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+    /// verification of a RSA binary signature
+    // - returns the decoded binary OCTSTR Digest or '' if signature failed
+    function Verify(const Signature: RawByteString;
+      AlgorithmOid: PRawUtf8 = nil): RawByteString;
     /// RSA key Modulus
     property M: PBigInt
       read fM;
@@ -1441,5 +1449,97 @@ begin
   result := LoadFromPrivateKeyDer(PemToDer(Pem));
 end;
 
+function TRsa.BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+var
+  count, padding: integer;
+  enc, dec: PBigInt;
+  exp: RawByteString;
+  e: PByteArray absolute exp;
+begin
+  result := '';
+  if fM.IsZero or
+     (Input = nil) then
+    exit;
+  enc := Load(Input, fModulusLen);
+  // perform the RSA calculation
+  if verify then
+  begin
+    // verify with Public Key
+    CurrentModulo := rmM; // for ModPower()
+    dec := ModPower(enc, fE); // calls enc.Release
+  end
+  else
+    // decrypt with Private Key
+    dec := ChineseRemainderTheorem(enc, fDP, fDQ, fP, fQ, fQInv);
+  // parse result using PKCS#1.5 padding
+  exp := dec.Save({andrelease=}true);
+  count := 0;
+  if e[count] <> 0 then
+    exit; // expects leading zero
+  inc(count);
+  padding := 0;
+  if verify then
+  begin
+    if e[count] <> 1 then
+      exit; // expects block type 1
+    inc(count);
+    while (count < fModulusLen) and
+          (e[count] = $ff) do
+    begin
+      inc(count);
+      inc(padding); // just ignore FF padding
+    end;
+  end
+  else
+  begin
+    if e[count] <> 2 then
+      exit; // expects block type 2
+    inc(count);
+    while (count < fModulusLen) and
+          (e[count] <> 0) do
+    begin
+      inc(count);
+      inc(padding); // just ignore non-zero random padding
+    end;
+  end;
+  if (count = fModulusLen) or
+     (padding = 8) or
+     (e[count] <> 0) then
+    exit; // invalid padding with ending zero
+  inc(count);
+  FastSetRawByteString(result, @e[count], fModulusLen - count);
+end;
 
+function TRsa.Verify(const Signature: RawByteString;
+  AlgorithmOid: PRawUtf8): RawByteString;
+var
+  verif, digest: RawByteString;
+  p: integer;
+begin
+  result := '';
+  if length(Signature) <> fModulusLen then
+    exit; // the signature is a RSA BigInt by definition
+  verif := BufferDecryptVerify(pointer(Signature), {verify=}true);
+  if verif = '' then
+    exit; // invalid signature
+  p := 1;
+  if (AsnNext(p, verif) = ASN1_SEQ) and  // DigestInfo
+     (AsnNext(p, verif) = ASN1_SEQ) and  // AlgorithmIdentifier
+     (AsnNext(p, verif, pointer(AlgorithmOid)) = ASN1_OBJID) then
+    case AsnNextRaw(p, verif, digest) of
+      ASN1_NULL:
+        if AsnNextRaw(p, verif, digest) = ASN1_OCTSTR then
+          result := digest;
+      ASN1_OCTSTR:
+        result := digest;
+    end;
+end;
+
+
+initialization
+
+finalization
+  writeln('added=',added);
+  writeln('subbed=',subbed);
+  writeln('multed=',multed);
 end.
