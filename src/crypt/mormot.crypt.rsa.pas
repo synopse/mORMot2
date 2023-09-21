@@ -347,10 +347,18 @@ type
     // - Input should have ModulusLen bytes of data
     // - returns decrypted buffer without PKCS#1.5 padding, '' on error
     function BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+    /// low-level PKCS#1.5 buffer Encryption or Signature
+    // - Input should have up to ModulusLen-11 bytes of data
+    // - returns encrypted buffer with PKCS#1.5 padding, '' on error
+    function BufferEncryptSign(Input: pointer; InputLen: integer;
+      Sign: boolean): RawByteString;
     /// verification of a RSA binary signature
     // - returns the decoded binary OCTSTR Digest or '' if signature failed
     function Verify(const Signature: RawByteString;
       AlgorithmOid: PRawUtf8 = nil): RawByteString;
+    /// compute a RSA binary signature of a given hash
+    // - returns the encoded signature
+    function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
     /// RSA key Modulus
     property M: PBigInt
       read fM;
@@ -383,6 +391,21 @@ type
     property ModulusBits: integer
       read fModulusBits;
   end;
+
+const
+  /// the OID of a RSA encryption public key (PKCS#1)
+  ASN1_OID_RSAPUB = '1.2.840.113549.1.1.1';
+
+  /// the OID of the supported hash algorithms
+  ASN1_OID_HASH: array[THashAlgo] of RawUtf8 = (
+    '1.2.840.113549.2.5',       // hfMD5
+    '1.3.14.3.2.26',            // hfSHA1
+    '2.16.840.1.101.3.4.2.1',   // hfSHA256
+    '2.16.840.1.101.3.4.2.2',   // hfSHA384
+    '2.16.840.1.101.3.4.2.3',   // hfSHA512
+    '2.16.840.1.101.3.4.2.6',   // hfSHA512_256
+    '2.16.840.1.101.3.4.2.8',   // hfSHA3_256
+    '2.16.840.1.101.3.4.2.10'); // hfSHA3_512
 
 
 implementation
@@ -663,6 +686,8 @@ begin
   FastSetRawByteString(result, nil, Size * HALF_BYTES);
   Save(pointer(result), length(result), andrelease);
 end;
+
+{ profile 10 sign + 100 verify: added=1610 subbed=34068810 multed=33149184 }
 
 function TBigInt.Add(b: PBigInt): PBigInt;
 var
@@ -1169,9 +1194,6 @@ end;
 
 { **************** RSA Low-Level Cryptography Functions }
 
-const
-  ASN1_OID_RSAPUB = '1.2.840.113549.1.1.1';
-
 function DerToRsa(const der: TCertDer; seqtype: integer; version: PInteger;
   const values: array of PRawByteString): boolean;
 var
@@ -1519,6 +1541,49 @@ begin
   FastSetRawByteString(result, @e[count], fModulusLen - count);
 end;
 
+function TRsa.BufferEncryptSign(Input: pointer; InputLen: integer;
+  Sign: boolean): RawByteString;
+var
+  padding: integer;
+  enc, dec: PBigInt;
+  exp: RawByteString;
+  e: PByteArray absolute exp;
+begin
+  result := '';
+  padding := fModulusLen - InputLen - 3;
+  if (Input = nil) or
+     (padding < 8) or
+     not HasPublicKey then
+    exit;
+  SetLength(exp, fModulusLen);
+  e[0] := 0; // leading zero
+  if Sign then
+  begin
+    e[1] := 1; // block type 1
+    FillCharFast(e[2], padding, $ff);
+  end
+  else
+  begin
+    e[1] := 2; // block type 2
+    RandomBytes(@e[2], padding); // Lecuyer is enough
+  end;
+  inc(padding, 2);
+  e[padding] := 0; // padding ends with zero
+  MoveFast(Input^, e[padding + 1], InputLen);
+  dec := Load(e, fModulusLen);
+  if Sign then
+    // sign with private key
+    enc := ChineseRemainderTheorem(dec)
+  else
+  begin
+    // encrypt with public key
+    CurrentModulo := rmM; // for ModPower()
+    enc := ModPower(dec, fE); // calls dec.Release
+  end;
+  if enc <> nil then
+    result := enc.Save({andrelease=}true);
+end;
+
 function TRsa.Verify(const Signature: RawByteString;
   AlgorithmOid: PRawUtf8): RawByteString;
 var
@@ -1542,6 +1607,22 @@ begin
       ASN1_OCTSTR:
         result := digest;
     end;
+end;
+
+function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
+var
+  seq: TAsnObject;
+  h: RawByteString;
+begin
+  FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
+  seq := Asn(ASN1_SEQ, [
+           Asn(ASN1_SEQ, [
+             AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
+             ASN1_NULL_VALUE
+           ]),
+           Asn(h)
+         ]);
+  result := BufferEncryptSign(pointer(seq), length(seq), {sign=}true);
 end;
 
 
