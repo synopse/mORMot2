@@ -2386,17 +2386,17 @@ procedure bswap160(s, d: PIntegerArray);
         mov     r8d, dword ptr [s + 4]
         mov     r9d, dword ptr [s + 8]
         mov     r10d, dword ptr [s + 12]
+        mov     r11d, dword ptr [s + 16]
         bswap   eax
         bswap   r8d
         bswap   r9d
         bswap   r10d
+        bswap   r11d
         mov     dword ptr [d], eax
         mov     dword ptr [d + 4], r8d
         mov     dword ptr [d + 8], r9d
         mov     dword ptr [d + 12], r10d
-        mov     eax, dword ptr [s + 16]
-        bswap   eax
-        mov     dword ptr [d + 16], eax
+        mov     dword ptr [d + 16], r11d
 end;
 
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
