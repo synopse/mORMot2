@@ -974,8 +974,6 @@ begin
   Save(pointer(result), length(result), andrelease);
 end;
 
-{ profiling 10 sign + 100 verify: add=1610 sub=34068810 multint=33149184 }
-
 function TBigInt.Add(b: PBigInt): PBigInt;
 var
   n: integer;
@@ -1004,198 +1002,6 @@ begin
   result := Trim;
 end;
 
-{$ifdef CPUX64}
-
-// use CF flag to propagate 64-bit substractions carry
-function _x64sub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        // rcx/rdi=Value rdx/rsi=Subs r8/rdx=Carry
-        xor    eax, eax
-        mov    r9,  qword ptr [Subs]
-        add    r9, Carry
-        mov    r8 , qword ptr [Subs + 8]
-        mov    r10, qword ptr [Subs + 8 * 2]
-        mov    r11, qword ptr [Subs + 8 * 3]
-        sub    qword ptr [Value], r9
-        sbb    qword ptr [Value + 8], r8
-        sbb    qword ptr [Value + 8 * 2], r10
-        sbb    qword ptr [Value + 8 * 3], r11
-        mov    r9,  qword ptr [Subs + 8 * 4]
-        mov    r8 , qword ptr [Subs + 8 * 5]
-        mov    r10, qword ptr [Subs + 8 * 6]
-        mov    r11, qword ptr [Subs + 8 * 7]
-        sbb    qword ptr [Value + 8 * 4], r9
-        sbb    qword ptr [Value + 8 * 5], r8
-        sbb    qword ptr [Value + 8 * 6], r10
-        sbb    qword ptr [Value + 8 * 7], r11
-        mov    r9,  qword ptr [Subs + 8 * 8]
-        mov    r8 , qword ptr [Subs + 8 * 9]
-        mov    r10, qword ptr [Subs + 8 * 10]
-        mov    r11, qword ptr [Subs + 8 * 11]
-        sbb    qword ptr [Value + 8 * 8], r9
-        sbb    qword ptr [Value + 8 * 9], r8
-        sbb    qword ptr [Value + 8 * 10], r10
-        sbb    qword ptr [Value + 8 * 11], r11
-        mov    r9,  qword ptr [Subs + 8 * 12]
-        mov    r8 , qword ptr [Subs + 8 * 13]
-        mov    r10, qword ptr [Subs + 8 * 14]
-        mov    r11, qword ptr [Subs + 8 * 15]
-        sbb    qword ptr [Value + 8 * 12], r9
-        sbb    qword ptr [Value + 8 * 13], r8
-        sbb    qword ptr [Value + 8 * 14], r10
-        sbb    qword ptr [Value + 8 * 15], r11
-        adc    eax, eax // return current carry as 0/1
-end;
-
-// use "mul" opcode to compute 64-bit * 64-bit into 128-bit
-function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
-        {$ifdef WIN64ABI}
-        push   rsi
-        push   rdi
-        mov    rsi, Dst
-        mov    rdi, Src
-        mov    rcx, Carry
-        {$endif WIN64ABI}
-        xor    r10, r10
-        mov    r11, Factor
-        mov    rax,  qword ptr [rdi]
-        mul    r11         // rax:rdx = [Src] * Factor
-        add    rax, rcx
-        adc    rdx, r10    // rax:rdx = ([Src] * Factor) + Carry
-        mov    qword ptr [rsi], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 1]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 1], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 2]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 2], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 3]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 3], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 4]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 4], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 5]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 5], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 6]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 6], rax
-        mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 7]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 7], rax
-        mov    rax, rdx
-        {$ifdef WIN64ABI}
-        pop    rdi
-        pop    rsi
-        {$endif WIN64ABI}
-end;
-
-function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
-        {$ifdef WIN64ABI}
-        push   rsi
-        push   rdi
-        mov    rsi, Dst
-        mov    rdi, Src
-        mov    rcx, Carry
-        {$endif WIN64ABI}
-        xor    r10, r10
-        mov    r11, Factor
-        mov    rax, qword ptr [rdi]
-        mul    r11         // rax:rdx = [Src] * Factor
-        add    rax, rcx
-        adc    rdx, r10   // rax:rdx = [Src] * Factor + Carry
-        add    qword ptr [rsi], rax
-        adc    rdx, r10   // [Dst]:rdx = [Src] * Factor + [Dst] + Carry
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 1]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 1], rax
-        adc    rdx, r10
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 2]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 2], rax
-        adc    rdx, r10
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 3]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 3], rax
-        adc    rdx, r10
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 4]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 4], rax
-        adc    rdx, r10
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 5]
-        mul    r11
-        add    rax, qword ptr [rsi + 8 * 5]
-        adc    rdx, r10
-        add    rax, rcx
-        adc    rdx, r10
-        mov    qword ptr [rsi + 8 * 5], rax
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 6]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 6], rax
-        adc    rdx, r10
-        mov    rcx, rdx
-        mov    rax, qword ptr [rdi + 8 * 7]
-        mul    r11
-        add    rax, rcx
-        adc    rdx, r10
-        add    qword ptr [rsi + 8 * 7], rax
-        adc    rdx, r10
-        mov    rax, rdx
-        {$ifdef WIN64ABI}
-        pop    rdi
-        pop    rsi
-        {$endif WIN64ABI}
-end;
-
-const
-  x64subn  = 128; // handle 1024 bits per _x64sub() call
-  x64muln  = 64;  // handle  512 bits per _x64mul() call
-  x64multn = 64;  // handle  512 bits per _x64mult() call
-
-{$endif CPUX64}
-
 function TBigInt.Substract(b: PBigInt; NegativeResult: PBoolean): PBigInt;
 var
   n: integer;
@@ -1208,12 +1014,12 @@ begin
   pb := pointer(b^.Value);
   v := 0;
   {$ifdef CPUX64}
-  while n >= x64subn div HALF_BYTES do
+  while n >= _x64subn div HALF_BYTES do // substract 1024-bit per loop
   begin
     v := _x64sub(pa, pb, v);
-    inc(PByte(pa), x64subn);
-    inc(PByte(pb), x64subn);
-    dec(n, x64subn div HALF_BYTES);
+    inc(PByte(pa), _x64subn);
+    inc(PByte(pb), _x64subn);
+    dec(n, _x64subn div HALF_BYTES);
   end;
   if n > 0 then
   {$endif CPUX64}
@@ -1243,12 +1049,12 @@ begin
   v := 0;
   n := Size;
   {$ifdef CPUX64}
-  while n >= x64muln div HALF_BYTES do
+  while n >= _x64muln div HALF_BYTES do // multiply 512-bit per loop
   begin
     v := _x64mul(a, r, b, v);
-    inc(PByte(a), x64muln);
-    inc(PByte(r), x64muln);
-    dec(n, x64muln div HALF_BYTES);
+    inc(PByte(a), _x64muln);
+    inc(PByte(r), _x64muln);
+    dec(n, _x64muln div HALF_BYTES);
   end;
   if n > 0 then
   {$endif CPUX64}
@@ -1482,23 +1288,23 @@ begin
     u := pointer(Value);
     n := Size;
     {$ifdef CPUX64}
-    while n >= x64multn div HALF_BYTES do
+    while n >= _x64multn div HALF_BYTES do // multiply 512-bit per loop
     begin
       v := _x64mult(u, p, vi, v);
-      inc(PByte(p), x64multn);
-      inc(PByte(u), x64multn);
-      dec(n, x64multn div HALF_BYTES);
+      inc(PByte(p), _x64multn);
+      inc(PByte(u), _x64multn);
+      dec(n, _x64multn div HALF_BYTES);
     end;
     if n > 0 then
     {$endif CPUX64}
-    repeat
-      inc(v, PtrUInt(p^) + PtrUInt(u^) * vi);
-      p^ := v;
-      inc(p);
-      inc(u);
-      v := v shr HALF_BITS; // carry
-      dec(n);
-    until n = 0;
+      repeat
+        inc(v, PtrUInt(p^) + PtrUInt(u^) * vi);
+        p^ := v;
+        inc(p);
+        inc(u);
+        v := v shr HALF_BITS; // carry
+        dec(n);
+      until n = 0;
     p^ := v;
   end;
   Release;
@@ -1733,6 +1539,7 @@ begin
     g[j] := Reduce(g[j - 1].Multiply(g2.Copy)).SetPermanent;
   g2.Release;
   // reduce to left-to-right exponentiation, one exponent bit at a time
+  // e.g. 65537 = 2^16 + 2^1
   repeat
     if exp.BitIsSet(i) then
     begin

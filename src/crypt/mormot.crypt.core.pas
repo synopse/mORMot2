@@ -277,6 +277,24 @@ function _lshift(var Output: THash256Rec; const Input: THash256Rec; Shift: integ
 function _numbits256(const V: THash256Rec): integer;
   {$ifdef FPC}inline;{$endif}
 
+{$ifdef CPUX64} { dedicated x86_64 asm sub-routines for mormot.crypt.rsa }
+
+/// sub of two TBigInt 1024-bit buffers - as used by mormot.crypt.rsa
+function _x64sub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+
+/// mul-by-integer of a TBigInt 512-bit buffer - as used by mormot.crypt.rsa
+function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+
+/// matrix mul of two TBigInt 512-bit buffers - as used by mormot.crypt.rsa
+function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+
+const
+  _x64subn  = 128; // handle 1024 bits per _x64sub() call
+  _x64muln  = 64;  // handle  512 bits per _x64mul() call
+  _x64multn = 64;  // handle  512 bits per _x64mult() call
+
+{$endif CPUX64}
+
 
 { *************** AES Encoding/Decoding with optimized asm and AES-NI support }
 
