@@ -34,7 +34,9 @@ uses
   - loosely based on fpTLSBigInt / fprsa units from the FPC RTL - but the whole
     design and core methods have been rewritten from scratch in modern OOP and
     fixing memory leaks and performance bottlenecks
-  - we use half-registers (HalfUInt) for efficient computation on most systems
+  - use half-registers (HalfUInt) for efficient computation on all CPUs
+  - use dedicated x86_64 asm for core computation routines (2x speedup)
+  - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - TODO: includes proper RSA keypair generation
 }
 
@@ -629,6 +631,18 @@ type
     function LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
     /// load a private key from PKCS#1 or PKCS#8 PEM format
     function LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
+    /// save the stored public key as a TRsaPublicKey record
+    function SavePublicKey: TRsaPublicKey;
+    /// save the stored public key in PKCS#1 DER format
+    function SavePublicKeyDer: TCertDer;
+    /// save the stored public key in PKCS#1 PEM format
+    function SavePublicKeyPem: TCertPem;
+    /// save the stored private key as a TRsaPrivateKey record
+    function SavePrivateKey: TRsaPrivateKey;
+    /// save the stored private key in PKCS#1 DER format
+    function SavePrivateKeyDer: TCertDer;
+    /// save the stored private key in PKCS#1 PEM format
+    function SavePrivateKeyPem: TCertPem;
     /// low-level PKCS#1.5 buffer Decryption or Verification
     // - Input should have ModulusLen bytes of data
     // - returns decrypted buffer without PKCS#1.5 padding, '' on error
@@ -660,13 +674,13 @@ type
     /// RSA key as q in m = pq
     property Q: PBigInt
       read fQ;
-    /// RSA key as d mod (p-1)
+    /// RSA key CRT exponent satisfying e * DP == 1 (mod (p-1))
     property DP: PBigInt
       read fDP;
-    /// RSA key as d mod (q-1)
+    /// RSA key CRT exponent satisfying e * DQ == 1 (mod (q-1))
     property DQ: PBigInt
       read fDQ;
-    /// RSA key as q^-1 mod p
+    /// RSA key coefficient satisfying q * qInv == 1 (mod p)
     property QInv: PBigInt
       read fQInv;
     /// RSA modulus size in bytes
@@ -728,7 +742,7 @@ begin
   result := (bytes + (HALF_BYTES - 1)) div HALF_BYTES;
 end;
 
-procedure ValuesLoad(value: PHalfUIntArray; data: PByteArray; bytes: integer);
+procedure ValuesSwap(value: PHalfUIntArray; data: PByteArray; bytes: integer);
 var
   i, o: PtrInt;
   j: byte;
@@ -1091,7 +1105,7 @@ begin
   {$endif CPUX64}
     repeat
       dec(a);
-      v := (v shl HALF_BITS) + a^; // carry
+      v := (v shl HALF_BITS) + a^; // inject carry as high bits
       d := v div b;
       a^ := d;
       dec(v, d * b); // fast v := v mod b
@@ -1180,7 +1194,7 @@ var
 begin
   case Size of
     0:
-      result := '0';
+      result := SmallUInt32Utf8[0];
     1:
       UInt32ToUtf8(Value[0], result);
   else
@@ -1194,7 +1208,7 @@ begin
         dec(p);
         p^ := v.IntDivMod10 + ord('0'); // fast enough (used for display only)
       until (v.Size = 0) or
-            (p = @tmp); // truncate after 8190 digits
+            (p = @tmp); // truncate after 8190 digits (unlikely)
       v.Release;
       FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
     end;
@@ -1239,9 +1253,9 @@ begin
     u.Resize(orgsiz + 1); // allocate additional digit
   for j := 0 to m do
   begin
-    // Get a temporary short version of u
+    // work on a temporary short version of u
     MoveFast(u^.Value[u^.Size - n - j], tmp^.Value[0], n * HALF_BYTES);
-    // Calculate q'
+    // compute q'
     lastt := tmp^.Value[tmp^.Size - 1];
     lastv := v^.Value[v^.Size - 1];
     if lastt = lastv then
@@ -1452,7 +1466,7 @@ end;
 function TRsaContext.Load(data: PByteArray; bytes: integer): PBigInt;
 begin
   result := Allocate(ValuesSize(bytes));
-  ValuesLoad(result.Value, data, bytes);
+  ValuesSwap(result.Value, data, bytes);
 end;
 
 function TRsaContext.Load(const data: RawByteString): PBigInt;
@@ -1877,6 +1891,51 @@ end;
 function TRsa.LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
 begin
   result := LoadFromPrivateKeyDer(PemToDer(Pem));
+end;
+
+function TRsa.SavePublicKey: TRsaPublicKey;
+begin
+  result.Modulus := fM.Save;
+  result.Exponent := fE.Save;
+end;
+
+function TRsa.SavePublicKeyDer: TCertDer;
+begin
+  if HasPublicKey then
+    result := SavePublicKey.ToDer
+  else
+    result := '';
+end;
+
+function TRsa.SavePublicKeyPem: TCertPem;
+begin
+  result := DerToPem(SavePublicKeyDer, pemRsaPublicKey);
+end;
+
+function TRsa.SavePrivateKey: TRsaPrivateKey;
+begin
+  result.Version := 0;
+  result.Modulus := fM.Save;
+  result.PublicExponent := fE.Save;
+  result.PrivateExponent := fD.Save;
+  result.Prime1 := fP.Save;
+  result.Prime2 := fQ.Save;
+  result.Exponent1 := fDP.Save;
+  result.Exponent2 := fDQ.Save;
+  result.Coefficient := fQInv.Save;
+end;
+
+function TRsa.SavePrivateKeyDer: TCertDer;
+begin
+  if HasPrivateKey then
+    result := SavePrivateKey.ToDer
+  else
+    result := '';
+end;
+
+function TRsa.SavePrivateKeyPem: TCertPem;
+begin
+  result := DerToPem(SavePrivateKeyDer, pemRsaPrivateKey);
 end;
 
 function TRsa.ChineseRemainderTheorem(b: PBigInt): PBigInt;
