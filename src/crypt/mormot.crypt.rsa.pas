@@ -141,6 +141,8 @@ type
     function RightShift(n: integer): PBigInt;
     /// shift left the internal data HalfUInt by a number of slots
     function LeftShift(n: integer): PBigInt;
+    /// compute the Greatest Common Divisor of two numbers using Euclidean algorithm
+    function Gcd(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
     // - returns self := self + b as result
     // - will eventually release the b instance
@@ -946,6 +948,24 @@ begin
     v := v and 1;
     dec(n);
   until n = 0;
+end;
+
+function TBigInt.Gcd(b: PBigInt): PBigInt;
+var
+  x, y: PBigInt;
+begin
+  x := Clone;
+  y := b.Clone;
+  result := nil;
+  while not y.IsZero do
+  begin
+    result := y.Copy;
+    y := x.Divide(y, {computemod=}true);
+    x.Release;
+    x := result;
+  end;
+  y.Release;
+  //writeln('x=',ToTExt,' y=',b.ToText,' result=',result.ToText);
 end;
 
 procedure TBigInt.Release;
