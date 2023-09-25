@@ -90,6 +90,7 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     procedure Resize(n: integer; nozero: boolean = false);
     function FindMaxExponentIndex: integer;
+    procedure ShrBit;
     function SetPermanent: PBigInt;
     procedure ResetPermanent;
     {$ifdef USEBARRET}
@@ -266,7 +267,6 @@ const
     RefCnt: {%H-}-1;
     Value: {%H-}@BIGINT_ONE_VALUE);
 
-const
   /// 4KB table of all known prime numbers < 18,000 for TBigInt.MatchKnownPrime
   BIGINT_PRIMES: array[0 .. 258 * 8 - 1] of word = (
     2    , 3    , 5    , 7    , 11   , 13   , 17   , 19   ,
@@ -928,6 +928,24 @@ begin
       exit;
   until false;
   inc(result, (Size - 1) * HALF_BITS);
+end;
+
+procedure TBigInt.ShrBit;
+var
+  n: integer;
+  a: PHalfInt;
+  v: PtrUInt;
+begin
+  n := Size;
+  a := @Value[n];
+  v := 0;
+  repeat
+    dec(a);
+    v := (v shl HALF_BITS) + a^;
+    a^ := v shr 1;
+    v := v and 1;
+    dec(n);
+  until n = 0;
 end;
 
 procedure TBigInt.Release;
