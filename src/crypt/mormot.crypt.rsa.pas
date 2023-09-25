@@ -171,7 +171,7 @@ type
     // - optionally return self mod b
     function IntDivide(b: HalfUInt; modulo: PHalfUInt = nil): PBigInt;
     /// compute the modulo by an unsigned integer value
-    // - returns self mod b
+    // - returns self mod b, keeping self untouched
     function IntMod(b: HalfUInt): PtrUInt;
     /// division and modulo by 10 computation
     // - computes self := self div 10 and return self mod 10
