@@ -1650,12 +1650,22 @@ var
   _Smbios: TSmbiosBasicInfos;
   _SmbiosRetrieved: boolean;
 
+  /// customize how DecodeSmbiosUuid() handle endianess of its first bytes
+  // - sduDirect will directly use GUIDToString() layout (seems expected on
+  // Windows to match "wmic csproduct get uuid" value)
+  // - sduInvert will force first values inversion (mandatory on MacOS)
+  // - sduVersion will invert for SMBios version < 2.6 (set outside Windows)
+  _SmbiosDecodeUuid: (sduDirect, sduInvert, sduVersion)
+    {$ifdef OSDARWIN}  = sduInvert  {$else}
+      {$ifdef OSPOSIX} = sduVersion {$endif} {$endif};
+
 /// retrieve SMBIOS information as text
 // - only the main values are decoded - see GetSmbiosInfo in mormot.core.perf
 // for a more complete DMI/SMBIOS decoder
 // - on POSIX, requires root to access full SMBIOS information - will fallback
 // reading /sys/class/dmi/id/* on Linux or kenv() on FreeBSD for most entries
 // if we found no previous root-retrieved cache in local /var/tmp/.synopse.smb
+// - see _SmbiosDecodeUuid global flag for UUID decoding
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -8480,26 +8490,27 @@ var
   uid: TGuid;
 begin
   uid := src^;
-  if IsZero(@uid, SizeOf(uid)) or // 0 means not supported
-     ((PCardinalArray(@uid)[0] = $ffffffff) and // ff means not set
+  // reject full $00 = unsupported or full $ff = not set
+  if IsZero(@uid, SizeOf(uid)) or
+     ((PCardinalArray(@uid)[0] = $ffffffff) and
       (PCardinalArray(@uid)[1] = $ffffffff) and
       (PCardinalArray(@uid)[2] = $ffffffff) and
       (PCardinalArray(@uid)[3] = $ffffffff)) then
     exit;
   // GUIDToString() already displays the first 4 bytes as little-endian
-  // so we don't need to swap those bytes as dmi_system_uuid() in dmidecode.c
-  // - without those 2 lines, result matches "wmic csproduct get uuid"
-  // on Windows XP or 10, and "dmidecode" output on both Delphi and FPC
-  {$ifdef SMB_UUID_SWAP4}
-  if raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206 then
-    uid.D1 := bswap32(uid.D1); // swap endian as of version 2.6
-  {$endif SMB_UUID_SWAP4}
-  {$ifdef OSDARWIN}
-  // mandatory to match IOPlatformUUID value from ioreg :(
-  uid.D1 := bswap32(uid.D1);
-  uid.D2 := swap(uid.D2);
-  uid.D3 := swap(uid.D3);
-  {$endif OSDARWIN}
+  // - we don't need to swap those bytes as dmi_system_uuid() in dmidecode.c
+  // on Windows, to match "wmic csproduct get uuid" official value
+  // - on MacOs, sduInvert is set to match IOPlatformUUID value from ioreg :(
+  if (_SmbiosDecodeUuid = sduInvert) or
+  // - dmi_save_uuid() from the Linux kernel do check for SMBIOS 2.6 version
+  // https://elixir.bootlin.com/linux/latest/source/drivers/firmware/dmi_scan.c
+     ((_SmbiosDecodeUuid = sduVersion) and
+      (raw.SmbMajorVersion shl 8 + raw.SmbMinorVersion < $0206)) then
+  begin
+    uid.D1 := bswap32(uid.D1);
+    uid.D2 := swap(uid.D2);
+    uid.D3 := swap(uid.D3);
+  end;
   dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
 end;
 
