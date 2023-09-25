@@ -288,6 +288,9 @@ function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 /// div-by-integer of a TBigInt 1024-bit buffer - as used by mormot.crypt.rsa
 function _x64div(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
+/// mod-by-integer of a TBigInt 1024-bit buffer - as used by mormot.crypt.rsa
+function _x64mod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+
 /// matrix mul of two TBigInt 512-bit buffers - as used by mormot.crypt.rsa
 function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
@@ -295,6 +298,7 @@ const
   _x64subn  = 128; // handle 1024 bits per _x64sub() call
   _x64muln  = 64;  // handle  512 bits per _x64mul() call
   _x64divn = 128;  // handle 1024 bits per _x64div() call
+  _x64modn = 128;  // handle 1024 bits per _x64mod() call
   _x64multn = 64;  // handle  512 bits per _x64mult() call
 
 {$endif CPUX64}

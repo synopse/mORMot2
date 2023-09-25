@@ -2845,6 +2845,56 @@ function _x64div(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif WIN64ABI}
 end;
 
+// use "div" opcode to divide 128-bit into 64-bit * 64-bit result
+function _x64mod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Value rdx/rsi=Factor r8/rdx=Carry
+        {$ifdef WIN64ABI}
+        push   rsi
+        push   rdi
+        mov    rdi, Value
+        mov    rsi, Factor
+        mov    rdx, Carry
+        {$endif WIN64ABI}
+        mov    rax, qword ptr [rdi + 8 * 15]
+        div    rsi // rax = rdx:rax div rsi (rdx = modulo for next div)
+        mov    rax, qword ptr [rdi + 8 * 14]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 13]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 12]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 11]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 10]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 9]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 8]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 7]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 6]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 5]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 4]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 3]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 2]
+        div    rsi
+        mov    rax, qword ptr [rdi + 8 * 1]
+        div    rsi
+        mov    rax, qword ptr [rdi]
+        div    rsi
+        mov    rax, rdx // return carry/modulo
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
 // use "mul" opcode to compute 64-bit * 64-bit into 128-bit
 function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}

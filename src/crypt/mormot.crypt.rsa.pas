@@ -1112,11 +1112,20 @@ begin
   n := Size;
   v := @Value[n];
   result := 0;
-  repeat
-    dec(v);
-    result := ((result shl HALF_BITS) + v^) mod bb;
-    dec(n);
-  until n = 0;
+  {$ifdef CPUX64}
+  while n >= _x64modn div HALF_BYTES do // mod 1024-bit per loop
+  begin
+    dec(PByte(v), _x64modn);
+    result := _x64mod(v, bb, result);
+    dec(n, _x64modn div HALF_BYTES);
+  end;
+  if n > 0 then
+  {$endif CPUX64}
+    repeat
+      dec(v);
+      result := ((result shl HALF_BITS) + v^) mod bb;
+      dec(n);
+    until n = 0;
 end;
 
 function TBigInt.IntDivMod10: PtrUInt;
