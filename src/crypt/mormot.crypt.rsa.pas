@@ -173,9 +173,9 @@ type
     /// compute the modulo by an unsigned integer value
     // - returns self mod b
     function IntMod(b: HalfUInt): PtrUInt;
-    /// modulo by 10 computation
+    /// division and modulo by 10 computation
     // - computes self := self div 10 and return self mod 10
-    function IntMod10: PtrUInt;
+    function IntDivMod10: PtrUInt;
     /// check if this value is divisable by a small prime
     // - detection coverage can be customized from default primes < 2000
     function MatchKnownPrime(Extend: TBigIntSimplePrime = bspMost): boolean;
@@ -1097,23 +1097,30 @@ var
 begin
   bb := b;
   n := Size;
-  v := @Value[n - 1];
+  v := @Value[n];
   result := 0;
   repeat
-    result := ((result shl HALF_BITS) + v^) mod bb;
     dec(v);
+    result := ((result shl HALF_BITS) + v^) mod bb;
     dec(n);
   until n = 0;
 end;
 
-function TBigInt.IntMod10: PtrUInt;
+function TBigInt.IntDivMod10: PtrUInt;
 var
   d: PtrUInt;
   i: PtrInt;
 begin
-  result := 0;
-  for i := Size - 1 downto 0 do
+  i := Size - 1;
+  result := Value[i];
+  d := result div 10;
+  if d = 0 then
+    dec(Size); // auto trim
+  Value[i] := d;
+  dec(result, d * 10);
+  while i <> 0 do
   begin
+    dec(i);
     result := (result shl HALF_BITS) + Value[i];
     d := result div 10;  // fast multiplication by reciprocal on FPC
     Value[i] := d;
@@ -1163,8 +1170,8 @@ begin
       p := @tmp[high(tmp)];
       repeat
         dec(p);
-        p^ := v.IntMod10 + ord('0'); // could be faster with mod 10000
-      until v.IsZero or
+        p^ := v.IntDivMod10 + ord('0'); // fast enough (used for display only)
+      until (v.Size = 0) or
             (p = @tmp); // truncate after 8190 digits
       v.Release;
       FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
