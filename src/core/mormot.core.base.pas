@@ -1759,7 +1759,7 @@ type
   end;
   PSortedIntegerArray = ^TSortedIntegerArray;
 
-/// compute GCD of two integers using substraction-based Euclidean algorithm
+/// compute GCD of two integers using modulo-based Euclidean algorithm
 function gcd(a, b: PtrUInt): PtrUInt;
 
 
@@ -7110,12 +7110,14 @@ end;
 
 function gcd(a, b: PtrUInt): PtrUInt;
 begin
-  while a <> b do
-    if a > b then
-      dec(a, b)
-    else
-      dec(b, a);
-  result := a;
+  result := 0;
+  if a <> 0 then
+    while b <> 0 do
+    begin
+      result := b;
+      b := a mod b;
+      a := result;
+    end;
 end;
 
 
