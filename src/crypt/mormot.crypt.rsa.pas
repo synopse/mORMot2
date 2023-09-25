@@ -1073,19 +1073,32 @@ end;
 
 function TBigInt.IntDivide(b: HalfUInt; modulo: PHalfUInt): PBigInt;
 var
-  r, d: PtrUInt;
-  i: PtrInt;
+  n: integer;
+  a: PHalfUInt;
+  v, d: PtrUInt;
 begin
-  r := 0;
-  for i := Size - 1 downto 0 do
+  n := Size;
+  a := @Value[n];
+  v := 0;
+  {$ifdef CPUX64}
+  while n >= _x64divn div HALF_BYTES do // divide 1024-bit per loop
   begin
-    r := (r shl HALF_BITS) + Value[i];
-    d := r div b;
-    Value[i] := d;
-    dec(r, d * b); // fast r := r mod b
+    dec(PByte(a), _x64divn);
+    v := _x64div(a, b, v);
+    dec(n, _x64divn div HALF_BYTES);
   end;
+  if n > 0 then
+  {$endif CPUX64}
+    repeat
+      dec(a);
+      v := (v shl HALF_BITS) + a^; // carry
+      d := v div b;
+      a^ := d;
+      dec(v, d * b); // fast v := v mod b
+      dec(n);
+    until n = 0;
   if modulo <> nil then
-    modulo^ := r;
+    modulo^ := v;
   result := Trim;
 end;
 
