@@ -96,7 +96,6 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     procedure Resize(n: integer; nozero: boolean = false);
     function FindMaxExponentIndex: integer;
-    procedure ShrBit;
     function SetPermanent: PBigInt;
     procedure ResetPermanent;
     {$ifdef USEBARRET}
@@ -150,8 +149,12 @@ type
     function RightShift(n: integer): PBigInt;
     /// shift left the internal data HalfUInt by a number of slots
     function LeftShift(n: integer): PBigInt;
-    /// compute the Greatest Common Divisor of two numbers using Euclidean algorithm
-    function Gcd(b: PBigInt): PBigInt;
+    /// shift right the internal data by one bit = div per 2
+    procedure ShrBit;
+    /// shift left the internal data by one bit = mul per 2
+    procedure ShlBit;
+    /// compute the GCD of two numbers using Euclidean algorithm
+    function GreatestCommonDivisor(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
     // - returns self := self + b as result
     // - will eventually release the b instance
@@ -263,21 +266,6 @@ type
   end;
 
 const
-  BIGINT_ZERO_VALUE: HalfUInt = 0;
-  BIGINT_ONE_VALUE:  HalfUInt = 1;
-
-  /// constant 0 as Big Integer value
-  BIGINT_ZERO: TBigInt = (
-    Size: {%H-}1;
-    RefCnt: {%H-}-1;
-    Value: {%H-}@BIGINT_ZERO_VALUE);
-
-  /// constant 1 as Big Integer value
-  BIGINT_ONE: TBigInt = (
-    Size: {%H-}1;
-    RefCnt: {%H-}-1;
-    Value: {%H-}@BIGINT_ONE_VALUE);
-
   /// 4KB table of all known prime numbers < 18,000 for TBigInt.MatchKnownPrime
   BIGINT_PRIMES: array[0 .. 258 * 8 - 1] of word = (
     2    , 3    , 5    , 7    , 11   , 13   , 17   , 19   ,
@@ -953,7 +941,7 @@ end;
 procedure TBigInt.ShrBit;
 var
   n: integer;
-  a: PHalfInt;
+  a: PHalfUInt;
   v: PtrUInt;
 begin
   n := Size;
@@ -968,7 +956,30 @@ begin
   until n = 0;
 end;
 
-function TBigInt.Gcd(b: PBigInt): PBigInt;
+procedure TBigInt.ShlBit;
+var
+  n: integer;
+  a: PHalfUInt;
+  v: PtrUInt;
+begin
+  a := pointer(Value);
+  v := 0;
+  n := Size;
+  repeat
+    inc(v, PtrUInt(a^) shl 1);
+    a^ := v;
+    v := v shr HALF_BITS;
+    inc(a);
+    dec(n);
+  until n = 0;
+  if v = 0 then
+    exit;
+  n := Size;
+  Resize(n + 1, {nozero=}true);
+  Value[n] := v;
+end;
+
+function TBigInt.GreatestCommonDivisor(b: PBigInt): PBigInt;
 var
   x, y: PBigInt;
 begin
@@ -976,13 +987,11 @@ begin
   y := b.Copy;
   repeat
     result := y.Copy;
-    y := x.Divide(y, {computemod=}true);
+    y := x.Divide(y, bidMod);
     x.Release;
     x := result;
-  until y.IsZero or
-        ((y.Size = 1) and (y.Value[0] = 1));
+  until y.IsZero;
   y.Release;
-  //writeln('x=',ToTExt,' y=',b.ToText,' result=',result.ToText);
 end;
 
 procedure TBigInt.Release;
@@ -1112,7 +1121,7 @@ var
   v: PtrUInt;
   n: integer;
 begin
-  result := Owner.Allocate(Size + 1, true);
+  result := Owner.Allocate(Size + 1, {nozero=}true);
   a := pointer(Value);
   r := pointer(result^.Value);
   v := 0;
@@ -1230,9 +1239,10 @@ var
   i: PtrInt;
 begin
   result := true;
-  for i := 0 to BIGINT_PRIMES_LAST[Extend] do
-    if IntMod(BIGINT_PRIMES[i]) = 0 then
-      exit;
+  if not IsZero then
+    for i := 0 to BIGINT_PRIMES_LAST[Extend] do
+      if IntMod(BIGINT_PRIMES[i]) = 0 then
+        exit;
   result := false;
 end;
 
@@ -1290,7 +1300,7 @@ begin
   n := v^.Size + 1;
   orgsiz := Size;
   quo := Owner.Allocate(m + 1);
-  tmp := Owner.Allocate(n, true);
+  tmp := Owner.Allocate(n, {nozero=}true);
   v.Trim;
   d := RSA_RADIX div (PtrUInt(v^.Value[v^.Size - 1]) + 1);
   u := Clone;
@@ -1298,7 +1308,8 @@ begin
   begin
     // Normalize
     u := u.IntMultiply(d);
-    if Compute = bidModNorm then
+    if (Compute = bidModNorm) and
+       (Owner.fNormMod[Owner.CurrentModulo] <> nil) then
       v := Owner.fNormMod[Owner.CurrentModulo]
     else
       v := v.IntMultiply(d);
@@ -1489,14 +1500,14 @@ end;
 function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
 begin
   if self = nil then
-    raise ERsaException.CreateUtf8('TBigInt.Allocate(%): Owner=nil', [n]);
+    raise ERsaException.CreateUtf8('TRsa.Allocate(%): Owner=nil', [n]);
   result := fFreeList;
   if result <> nil then
   begin
     // we can recycle a pre-allocated buffer
     if result^.RefCnt <> 0 then
       raise ERsaException.CreateUtf8(
-        'TBigInt.Allocate(%): % RefCnt=%', [n, result, result^.RefCnt]);
+        '%.Allocate(%): % RefCnt=%', [self, n, result, result^.RefCnt]);
     fFreeList := result^.fNextFree;
     dec(FreeCount);
     result.Resize(n, {nozero=}true);
