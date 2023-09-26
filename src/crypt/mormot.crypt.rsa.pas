@@ -118,7 +118,10 @@ type
     Value: PHalfUIntArray;
     /// comparison with another Big Integer value
     // - values should have been Trim-med for the size to match
-    function Compare(b: PBigInt): integer;
+    function Compare(b: PBigInt): integer; overload;
+    /// comparison with another Unsigned Integer value
+    // - values should have been Trim-med for the size to match
+    function Compare(u: HalfUInt; andrelease: boolean = false): integer; overload;
     /// make a COW instance, increasing RefCnt and returning self
     function Copy: PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
@@ -855,6 +858,15 @@ begin
       if result <> 0 then
         exit;
     end;
+end;
+
+function TBigInt.Compare(u: HalfUInt; andrelease: boolean): integer;
+begin
+  result := CompareInteger(Size, 1);
+  if result = 0 then
+    result := CompareBI(Value[0], u);
+  if andrelease then
+    Release;
 end;
 
 function TBigInt.SetPermanent: PBigInt;
