@@ -137,8 +137,11 @@ type
     /// delete any meaningless leading zeros and return self
     function Trim: PBigInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
-    /// quickly search if contains 0
+    /// quickly check if contains 0
     function IsZero: boolean;
+      {$ifdef HASSAFEINLINE} inline; {$endif}
+    /// quickly check if contains an even number
+    function IsEven: boolean;
       {$ifdef HASSAFEINLINE} inline; {$endif}
     /// check if a given bit is set to 1
     function BitIsSet(bit: PtrUInt): boolean;
@@ -257,11 +260,11 @@ type
     /// release the internal constant slots for a given modulo
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
-    // - SetModulo() should have previously called
+    // - SetModulo() could have previously called
     // - redirect to Divide() or use the Barret algorithm
     function Reduce(b: PBigint): PBigInt;
     /// compute a modular exponentiation
-    // - SetModulo() should have previously be called
+    // - SetModulo() could have previously be called
     function ModPower(b, exp: PBigInt): PBigInt;
   end;
 
@@ -805,6 +808,11 @@ begin
     end;
   end;
   result := true;
+end;
+
+function TBigInt.IsEven: boolean;
+begin
+  result := (Value[0] and 1) = 0;
 end;
 
 function TBigInt.BitIsSet(bit: PtrUInt): boolean;
@@ -1491,10 +1499,26 @@ begin
   inherited Destroy;
 end;
 
+procedure TRsaContext.Release(var b: PBigInt);
+begin
+  b^.Release;
+  b := nil;
+end;
+
 function TRsaContext.AllocateFrom(v: HalfUInt): PBigInt;
 begin
   result := Allocate(1, {nozero=}true);
   result^.Value[0] := v;
+end;
+
+function TRsaContext.AllocateFromHex(const hex: RawUtf8): PBigInt;
+var
+  n: cardinal;
+begin
+  n := length(hex) shr 1;
+  result := Allocate(n div HALF_BYTES, {nozero=}true);
+  if not HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
+    Release(result);
 end;
 
 function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
