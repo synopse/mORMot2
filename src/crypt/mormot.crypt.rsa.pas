@@ -78,6 +78,12 @@ type
     bspMost,
     bspAll);
 
+  /// define how TBigInt.Divide computes its result
+  TBigIntDivide = (
+    bidDivide,
+    bidMod,
+    bidModNorm);
+
   /// store one Big Integer value with proper COW support
   // - each value is owned as PBigInt by an associated TRsaContext instance
   // - you should call TBigInt.Release() once done with any instance
@@ -153,9 +159,9 @@ type
     function Substract(b: PBigInt; NegativeResult: PBoolean = nil): PBigInt;
     /// division or modulo computation
     // - self is the numerator
-    // - if ComputeMod is false, v is the denominator; otherwise, is the modulus
+    // - if Compute is bidDivide, v is the denominator; otherwise, is the modulus
     // - will eventually release the v instance
-    function Divide(v: PBigInt; ComputeMod: boolean = false): PBigInt;
+    function Divide(v: PBigInt; Compute: TBigIntDivide = bidDivide): PBigInt;
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;
@@ -954,16 +960,15 @@ function TBigInt.Gcd(b: PBigInt): PBigInt;
 var
   x, y: PBigInt;
 begin
-  x := Clone;
-  y := b.Clone;
-  result := nil;
-  while not y.IsZero do
-  begin
+  x := Copy;
+  y := b.Copy;
+  repeat
     result := y.Copy;
     y := x.Divide(y, {computemod=}true);
     x.Release;
     x := result;
-  end;
+  until y.IsZero or
+        ((y.Size = 1) and (y.Value[0] = 1));
   y.Release;
   //writeln('x=',ToTExt,' y=',b.ToText,' result=',result.ToText);
 end;
@@ -1253,7 +1258,7 @@ begin
   end;
 end;
 
-function TBigInt.Divide(v: PBigInt; ComputeMod: boolean): PBigInt;
+function TBigInt.Divide(v: PBigInt; Compute: TBigIntDivide): PBigInt;
 var
   d, inner, dash: HalfUInt;
   lastt, lastt2, lastv, lastv2: PtrUInt;
@@ -1262,7 +1267,7 @@ var
   p: PHalfUInt;
   u, quo, tmp: PBigInt;
 begin
-  if ComputeMod and
+  if (Compute in [bidMod, bidModNorm]) and
      (Compare(v) < 0) then
   begin
     v.Release;
@@ -1281,8 +1286,7 @@ begin
   begin
     // Normalize
     u := u.IntMultiply(d);
-    if ComputeMod and
-       not Owner.fNormMod[Owner.CurrentModulo].IsZero then
+    if Compute = bidModNorm then
       v := Owner.fNormMod[Owner.CurrentModulo]
     else
       v := v.IntMultiply(d);
@@ -1339,7 +1343,7 @@ begin
   end;
   tmp.Release;
   v.Release;
-  if ComputeMod then
+  if Compute in [bidMod, bidModNorm] then
   begin
     // return the remainder
     quo.Release;
@@ -1590,7 +1594,7 @@ end;
 {$else}
 function TRsaContext.Reduce(b: PBigint): PBigInt;
 begin
-  result := b^.Divide(fMod[CurrentModulo], {mod=}true);
+  result := b^.Divide(fMod[CurrentModulo], bidModNorm);
   b^.Release;
 end;
 {$endif USEBARRET}
