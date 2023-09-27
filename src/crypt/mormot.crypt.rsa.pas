@@ -1215,17 +1215,53 @@ begin
   end;
 end;
 
+const
+  // ensure generated number is at least (nbits - 1) + 0.5 bits
+  FIPS_MIN = $b504f334;
+
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
+var
+  n, min: integer;
 begin
-  result := Size > 2;
+  n := Size;
+  result := n > 2;
   if not result then
     exit;
   if EndTix <= 0 then
     EndTix := GetTickCount64 + 60000; // never wait forever - 1 min seems enough
-  TAesPrng.Fill(Value, Size * HALF_BYTES); // our cryptographic PRNG
-  Value[0] := Value[0] or 1; // set lower bit to ensure is an odd number
-  Value[Size - 1] := Value[Size - 1] or (RSA_RADIX shr 1); // exact bit size
+  // FIPS 4.48: 2^-100 error probability, number of rounds computed based on HAC
+  if n >= 1450 shr HALF_SHR then
+    min := 4
+  else if n >= 1150 shr HALF_SHR then
+    min := 5
+  else if n >= 1000 shr HALF_SHR then
+    min := 6
+  else if n >= 850 shr HALF_SHR then
+    min := 7
+  else if n >= 750 shr HALF_SHR then
+    min := 8
+  else if n >= 500 shr HALF_SHR then
+    min := 13
+  else if n >= 250 shr HALF_SHR then
+    min := 28
+  else if n >= 150 shr HALF_SHR then
+    min := 40
+  else
+    min := 51;
+  if Iterations < min then
+    Iterations := min;
+  // compute a random number following FIPS 186-4 §B.3.3 steps 4.4, 5.5
+  min := 1024;
+  repeat
+    TAesPrng.Fill(Value, n * HALF_BYTES); // our cryptographic PRNG
+    Value[0] := Value[0] or 1; // set lower bit to ensure is an odd number
+    Value[n - 1] := Value[n - 1] or (RSA_RADIX shr 1); // exact bit size
+    dec(min);
+    if min = 0 then
+      exit; // too weak PNRG for sure
+  until PCardinal(@Value[n - 1 {$ifdef CPU32} - 1 {$endif}])^ >= FIPS_MIN;
+  // search for the next prime starting at this point
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
