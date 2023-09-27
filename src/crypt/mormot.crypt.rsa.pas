@@ -117,7 +117,7 @@ type
     Value: PHalfUIntArray;
     /// comparison with another Big Integer value
     // - values should have been Trim-med for the size to match
-    function Compare(b: PBigInt): integer; overload;
+    function Compare(b: PBigInt; andrelease: boolean = false): integer; overload;
     /// comparison with another Unsigned Integer value
     // - values should have been Trim-med for the size to match
     function Compare(u: HalfUInt; andrelease: boolean = false): integer; overload;
@@ -254,6 +254,11 @@ type
     function Allocate(n: integer; nozero: boolean = false): PBigint;
     /// allocate a new Big Integer value from a 16/32-bit unsigned integer
     function AllocateFrom(v: HalfUInt): PBigInt;
+    /// allocate a new Big Integer value from a ToHexa dump
+    function AllocateFromHex(const hex: RawUtf8): PBigInt;
+    /// call b^.Release and set b := nil
+    procedure Release(var b: PBigInt);
+      {$ifdef HASINLINE} inline; {$endif}
     /// allocate and import a Big Integer value from a big-endian binary buffer
     function Load(data: PByteArray; bytes: integer): PBigInt; overload;
     /// allocate and import a Big Integer value from a big-endian binary buffer
@@ -263,12 +268,12 @@ type
     /// release the internal constant slots for a given modulo
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
-    // - SetModulo() could have previously called
+    // - if m is nil, SetModulo() should have previously be called
     // - redirect to Divide() or use the Barret algorithm
-    function Reduce(b: PBigint): PBigInt;
+    function Reduce(b, m: PBigint): PBigInt;
     /// compute a modular exponentiation
-    // - SetModulo() could have previously be called
-    function ModPower(b, exp: PBigInt): PBigInt;
+    // - if m is nil, SetModulo() should have previously be called
+    function ModPower(b, exp, m: PBigInt): PBigInt;
   end;
 
 const
@@ -848,7 +853,7 @@ begin
   until c = 0;
 end;
 
-function TBigInt.Compare(b: PBigInt): integer;
+function TBigInt.Compare(b: PBigInt; andrelease: boolean): integer;
 var
   i: PtrInt;
 begin
@@ -858,8 +863,10 @@ begin
     begin
       result := CompareBI(Value[i], b^.Value[i]);
       if result <> 0 then
-        exit;
+        break;
     end;
+  if andrelease then
+    Release;
 end;
 
 function TBigInt.Compare(u: HalfUInt; andrelease: boolean): integer;
@@ -1662,14 +1669,17 @@ begin
     result.Substract(m);
 end;
 {$else}
-function TRsaContext.Reduce(b: PBigint): PBigInt;
+function TRsaContext.Reduce(b, m: PBigint): PBigInt;
 begin
-  result := b^.Divide(fMod[CurrentModulo], bidModNorm);
+  if m = nil then
+    result := b^.Divide(fMod[CurrentModulo], bidModNorm)
+  else
+    result := b^.Divide(m, bidMod);
   b^.Release;
 end;
 {$endif USEBARRET}
 
-function TRsaContext.ModPower(b, exp: PBigInt): PBigInt;
+function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
 var
   r, g2: PBigInt;
   i, j, k, l, partial, windowsize: integer;
@@ -1689,9 +1699,9 @@ begin
   k := 1 shl (windowsize - 1);
   SetLength(g, k);
   g[0] := b^.Clone.SetPermanent;
-  g2 := Reduce(g[0].Square); // g2 := residue of g^2
+  g2 := Reduce(g[0].Square, m); // g2 := residue of g^2
   for j := 1 to k - 1 do
-    g[j] := Reduce(g[j - 1].Multiply(g2.Copy)).SetPermanent;
+    g[j] := Reduce(g[j - 1].Multiply(g2.Copy), m).SetPermanent;
   g2.Done.Release;
   // reduce to left-to-right exponentiation, one exponent bit at a time
   // e.g. 65537 = 2^16 + 2^1
@@ -1709,7 +1719,7 @@ begin
       j := i;
       while j >= l do
       begin
-        r := Reduce(r.Square);
+        r := Reduce(r.Square, m);
         if exp.BitIsSet(j) then
           inc(partial);
         if j <> l then
@@ -1717,13 +1727,13 @@ begin
         dec(j);
       end;
       partial := (partial - 1) shr 1; // Adjust for array
-      r := Reduce(r.Multiply(g[partial]));
+      r := Reduce(r.Multiply(g[partial]), m);
       i := l - 1;
     end
     else
     begin
       // bit not set: just process the next bit
-      r := Reduce(r.Square);
+      r := Reduce(r.Square, m);
       dec(i);
     end;
   until i < 0;
@@ -2098,12 +2108,12 @@ begin
   if not HasPrivateKey then
     exit;
   CurrentModulo := rmP;
-  m1 := ModPower(b.Copy, fDp);
+  m1 := ModPower(b.Copy, fDp, nil);
   CurrentModulo := rmQ;
-  m2 := ModPower(b, fDq);
+  m2 := ModPower(b, fDq, nil);
   h := m1.Add(fP).Substract(m2.Copy).Multiply(fQInv);
   CurrentModulo := rmP;
-  h := Reduce(h);
+  h := Reduce(h, nil);
   result := m2.Add(q.Multiply(h));
 end;
 
@@ -2197,7 +2207,7 @@ begin
   begin
     // verify with Public Key
     CurrentModulo := rmM; // for ModPower()
-    dec := ModPower(enc, fE); // calls enc.Release
+    dec := ModPower(enc, fE, nil); // calls enc.Release
   end
   else
     // decrypt with Private Key
@@ -2227,7 +2237,7 @@ begin
   begin
     // encrypt with public key
     CurrentModulo := rmM; // for ModPower()
-    enc := ModPower(dec, fE); // calls dec.Release
+    enc := ModPower(dec, fE, nil); // calls dec.Release
   end;
   if enc <> nil then
     result := enc.Save({andrelease=}true);
