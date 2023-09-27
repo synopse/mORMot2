@@ -1503,6 +1503,9 @@ begin
     Release(result);
 end;
 
+const
+  RSA_DEFAULT_ALLOCATE = 2048 shr HALF_SHR; // seems fair enough
+
 function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
 begin
   if self = nil then
@@ -1524,7 +1527,7 @@ begin
     New(result);
     result^.Owner := self;
     result^.Size := n;
-    result^.Capacity := NextGrow(n); // with some initial over-allocatation
+    result^.Capacity := NextGrow(Max(RSA_DEFAULT_ALLOCATE, n)); // over-alloc
     GetMem(result^.Value, result^.Capacity * HALF_BYTES);
   end;
   result^.RefCnt := 1;
@@ -1633,12 +1636,12 @@ end;
 
 function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
 var
-  r, g2: PBigInt;
+  g2: PBigInt;
   i, j, k, l, partial, windowsize: integer;
   g: array of PBigInt;
 begin
   i := exp.FindMaxExponentIndex;
-  r := AllocateFrom(1);
+  result := AllocateFrom(1);
   // compute optimum window size
   windowsize := 1;
   j := i;
@@ -1671,7 +1674,7 @@ begin
       j := i;
       while j >= l do
       begin
-        r := Reduce(r.Square, m);
+        result := Reduce(result.Square, m);
         if exp.BitIsSet(j) then
           inc(partial);
         if j <> l then
@@ -1679,13 +1682,13 @@ begin
         dec(j);
       end;
       partial := (partial - 1) shr 1; // Adjust for array
-      r := Reduce(r.Multiply(g[partial]), m);
+      result := Reduce(result.Multiply(g[partial]), m);
       i := l - 1;
     end
     else
     begin
       // bit not set: just process the next bit
-      r := Reduce(r.Square, m);
+      result := Reduce(result.Square, m);
       dec(i);
     end;
   until i < 0;
@@ -1694,7 +1697,6 @@ begin
     g[i].ResetPermanentAndRelease;
   b.Release;
   exp.Release;
-  result := r;
 end;
 
 
