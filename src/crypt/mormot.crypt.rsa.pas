@@ -143,7 +143,7 @@ type
     /// quickly check if contains 0
     function IsZero: boolean;
       {$ifdef HASSAFEINLINE} inline; {$endif}
-    /// quickly check if contains an even number
+    /// quickly check if contains an even number, i.e. last bit is 0
     function IsEven: boolean;
       {$ifdef HASSAFEINLINE} inline; {$endif}
     /// check if a given bit is set to 1
@@ -202,6 +202,14 @@ type
     /// check if this value is divisable by a small prime
     // - detection coverage can be customized from default primes < 2000
     function MatchKnownPrime(Extend: TBigIntSimplePrime = bspMost): boolean;
+    /// check if the number is (likely to be) a prime
+    // - can set a known simple primes Extend and Miller-Rabin tests Iterations
+    function IsPrime(Extend: TBigIntSimplePrime = bspMost;
+      Iterations: integer = 20): boolean;
+    /// guess a random prime number of the exact current size
+    // - loop over TAesPrng.Fill and IsPrime method within a timeout period
+    function FillPrime(Extend: TBigIntSimplePrime = bspMost;
+      Iterations: integer = 20; EndTix: Int64 = 0): boolean;
     /// return the Big Integer value as hexadecimal
     function ToHexa: RawUtf8;
     /// return the Big Integer value as text with base-10 digits
@@ -273,6 +281,7 @@ type
     function Reduce(b, m: PBigint): PBigInt;
     /// compute a modular exponentiation
     // - if m is nil, SetModulo() should have previously be called
+    // - will eventually release the b and exp instances
     function ModPower(b, exp, m: PBigInt): PBigInt;
   end;
 
@@ -782,11 +791,9 @@ begin
   repeat
     if (v and mask) <> 0 then
       break;
-    mask := mask shr 1;
     dec(result);
-    if result < 0 then
-      exit;
-  until false;
+    mask := mask shr 1;
+  until mask = 0;
   inc(result, (Size - 1) * HALF_BITS);
 end;
 
@@ -1110,7 +1117,7 @@ begin
   if not IsZero then
   begin
     result := true;
-    if IsEven then // faster than IntMod(2)
+    if IsEven then // faster than IntMod(2) = 0
       exit;
     v := 2; // start after 2, i.e. at 3
     for i := 1 to BIGINT_PRIMES_LAST[Extend] do
@@ -1121,6 +1128,112 @@ begin
     end;
   end;
   result := false;
+end;
+
+function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer): boolean;
+var
+  r, a, w: PBigInt;
+  s, n, attempt, bak: integer;
+  v: PtrUInt;
+  gen: PLecuyer;
+begin
+  result := false;
+  // first check if not a factor of a well-known small prime
+  if IsZero or
+     (Iterations <= 0) or
+     MatchKnownPrime(Extend) then
+    exit;
+  // validate is a prime number using Miller-Rabin tests
+  bak := RefCnt;
+  RefCnt := -1; // make permanent for use as modulo below
+  w := Clone.Substract(Owner.AllocateFrom(1)); // w = value-1
+  r := w.Clone;
+  a := Owner.Allocate(Size, {nozero=}true);
+  try
+    // compute s = lsb(w) and r = w shr s
+    s := 0;
+    while r.IsEven do
+    begin
+      inc(s);
+      r.ShrBits(1);
+      if r.IsZero then
+        exit; // paranoid
+    end;
+    gen := Lecuyer;
+    while Iterations > 0 do
+    begin
+      dec(Iterations);
+      // generate random 1 < a < value - 1
+      attempt := 0;
+      repeat
+        inc(attempt);
+        if attempt = 30 then
+          exit; // random generator seems pretty weak
+        if Size > 2 then
+        begin
+          repeat
+            n := gen.Next(Size);
+          until n > 1;
+          gen.Fill(@a^.Value[0], n * HALF_BYTES);
+          a^.Value[0] := a^.Value[0] or 1; // odd
+          a^.Size := n;
+          a^.Trim;
+        end
+        else
+        begin
+          if Size = 1 then
+            v := gen.Next(Value[0])
+          else
+            v := gen.Next;
+          a^.Value[0] := v or 1; // odd
+          a^.Size := 1;
+        end;
+      until (a.Compare(1) > 0) and
+            (a.Compare(w) < 0);
+      // search if a is composite
+      a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
+      if (a.Compare(1) = 0) or
+         (a.Compare(w) = 0) then
+        continue; // this random is related: try another random
+      for n := 1 to s - 1 do
+      begin
+        a := Owner.Reduce(a.Square, @self); // a = (a*a) mod value
+        if (a.Compare(w) = 0) or
+           (a.Compare(1) = 0) then
+          break;
+      end;
+      if (a.Compare(w) <> 0) or
+         (a.Compare(1) = 0) then
+        exit; // not a prime
+    end;
+    result := true;
+  finally
+    a.Release;
+    r.Release;
+    w.Release;
+    RefCnt := bak;
+  end;
+end;
+
+function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
+  EndTix: Int64): boolean;
+begin
+  result := Size > 2;
+  if not result then
+    exit;
+  if EndTix <= 0 then
+    EndTix := GetTickCount64 + 60000; // never wait forever - 1 min seems enough
+  TAesPrng.Fill(Value, Size * HALF_BYTES); // our cryptographic PRNG
+  Value[0] := Value[0] or 1; // set lower bit to ensure is an odd number
+  Value[Size - 1] := Value[Size - 1] or (RSA_RADIX shr 1); // exact bit size
+  repeat
+    if IsPrime(Extend, Iterations) then
+      exit; // we got lucky
+    inc(Value[0], 2);
+    if Value[0] = 0 then
+      inc(Value[1]);
+  until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
+  result := false; // timed out
 end;
 
 function TBigInt.ToHexa: RawUtf8;
