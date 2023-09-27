@@ -97,7 +97,7 @@ type
     procedure Resize(n: integer; nozero: boolean = false);
     function FindMaxExponentIndex: integer;
     function SetPermanent: PBigInt;
-    procedure ResetPermanent;
+    function ResetPermanent: PBigInt;
     {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
@@ -126,9 +126,12 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
     function Clone: PBigInt;
+    /// fill the internal memory buffer with zeros, for anti-forensic measure
+    function Done: PBigInt;
     /// decreases the value RefCnt, saving it in the internal FreeList once done
     procedure Release;
     /// a wrapper to ResetPermanent then Release
+    // - before release, fill the buffer with zeros to avoid forensic leaking
     procedure ResetPermanentAndRelease;
     /// export a Big Integer value into a binary buffer
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean); overload;
@@ -595,6 +598,8 @@ type
     function FromDer(const der: TCertDer): boolean;
     /// check if this private key match a given public key
     function Match(const Pub: TRsaPublicKey): boolean;
+    /// you should better call this function to avoid forensic leaks
+    procedure Done;
   end;
 
   /// store the information of a RSA key
@@ -640,7 +645,8 @@ type
     /// save the stored public key in PKCS#1 PEM format
     function SavePublicKeyPem: TCertPem;
     /// save the stored private key as a TRsaPrivateKey record
-    function SavePrivateKey: TRsaPrivateKey;
+    // - caller should make Dest.Done once finished with the values
+    procedure SavePrivateKey(out Dest: TRsaPrivateKey);
     /// save the stored private key in PKCS#1 DER format
     function SavePrivateKeyDer: TCertDer;
     /// save the stored private key in PKCS#1 PEM format
@@ -874,12 +880,13 @@ begin
   result := @self;
 end;
 
-procedure TBigInt.ResetPermanent;
+function TBigInt.ResetPermanent: PBigInt;
 begin
   if RefCnt >= 0 then
     raise ERsaException.CreateUtf8(
       'TBigInt.ResetPermanent(%): RefCnt=%', [@self, RefCnt]);
   RefCnt := 1;
+  result := @self;
 end;
 
 function TBigInt.RightShift(n: integer): PBigInt;
@@ -1018,16 +1025,21 @@ end;
 
 procedure TBigInt.ResetPermanentAndRelease;
 begin
-  if @self = nil then
-    exit;
-  ResetPermanent;
-  Release;
+  if @self <> nil then
+    Done.ResetPermanent.Release;
 end;
 
 function TBigInt.Clone: PBigInt;
 begin
   result := Owner.Allocate(Size, {nozero=}true);
   MoveFast(Value[0], result^.Value[0], Size * HALF_BYTES);
+end;
+
+function TBigInt.Done: PBigInt;
+begin
+  result := @self;
+  if result <> nil then
+    FillCharFast(Value^[0], Capacity * HALF_BYTES, 0); // anti-forensic
 end;
 
 procedure TBigInt.Save(data: PByteArray; bytes: integer; andrelease: boolean);
@@ -1582,7 +1594,7 @@ end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
-  fMod[modulo].ResetPermanentAndRelease;
+  fMod[modulo].ResetPermanentAndRelease; // also zeroed
   fNormMod[modulo].ResetPermanentAndRelease;
   {$ifdef USEBARRET}
   fMu[modulo].ResetPermanentAndRelease;
@@ -1669,7 +1681,7 @@ begin
   g2 := Reduce(g[0].Square); // g2 := residue of g^2
   for j := 1 to k - 1 do
     g[j] := Reduce(g[j - 1].Multiply(g2.Copy)).SetPermanent;
-  g2.Release;
+  g2.Done.Release;
   // reduce to left-to-right exponentiation, one exponent bit at a time
   // e.g. 65537 = 2^16 + 2^1
   repeat
@@ -1857,11 +1869,24 @@ begin
             (PublicExponent = Pub.Exponent);
 end;
 
+procedure TRsaPrivateKey.Done;
+begin
+  FillZero(Modulus);
+  FillZero(PublicExponent);
+  FillZero(PrivateExponent);
+  FillZero(Prime1);
+  FillZero(Prime2);
+  FillZero(Exponent1);
+  FillZero(Exponent2);
+  FillZero(Coefficient);
+end;
+
 
 { TRsa }
 
 destructor TRsa.Destroy;
 begin
+  // free key variables with anti-forensic buffer zeroing
   ResetModulo(rmM);
   ResetModulo(rmP);
   ResetModulo(rmQ);
@@ -1972,14 +1997,25 @@ function TRsa.LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
 var
   key: TRsaPrivateKey;
 begin
-  result := key.FromDer(Der);
-  if result then
-    LoadFromPrivateKey(key);
+  try
+    result := key.FromDer(Der);
+    if result then
+      LoadFromPrivateKey(key);
+  finally
+    key.Done;
+  end;
 end;
 
 function TRsa.LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
+var
+  der: TCertDer;
 begin
-  result := LoadFromPrivateKeyDer(PemToDer(Pem));
+  try
+    der := PemToDer(Pem);
+    result := LoadFromPrivateKeyDer(der);
+  finally
+    FillZero(der);
+  end;
 end;
 
 function TRsa.SavePublicKey: TRsaPublicKey;
@@ -2001,30 +2037,46 @@ begin
   result := DerToPem(SavePublicKeyDer, pemRsaPublicKey);
 end;
 
-function TRsa.SavePrivateKey: TRsaPrivateKey;
+procedure TRsa.SavePrivateKey(out Dest: TRsaPrivateKey);
 begin
-  result.Version := 0;
-  result.Modulus := fM.Save;
-  result.PublicExponent := fE.Save;
-  result.PrivateExponent := fD.Save;
-  result.Prime1 := fP.Save;
-  result.Prime2 := fQ.Save;
-  result.Exponent1 := fDP.Save;
-  result.Exponent2 := fDQ.Save;
-  result.Coefficient := fQInv.Save;
+  Dest.Version := 0;
+  Dest.Modulus := fM.Save;
+  Dest.PublicExponent := fE.Save;
+  Dest.PrivateExponent := fD.Save;
+  Dest.Prime1 := fP.Save;
+  Dest.Prime2 := fQ.Save;
+  Dest.Exponent1 := fDP.Save;
+  Dest.Exponent2 := fDQ.Save;
+  Dest.Coefficient := fQInv.Save;
 end;
 
 function TRsa.SavePrivateKeyDer: TCertDer;
+var
+  key: TRsaPrivateKey;
 begin
   if HasPrivateKey then
-    result := SavePrivateKey.ToDer
+  begin
+    SavePrivateKey(key);
+    try
+      result := key.ToDer
+    finally
+      key.Done;
+    end;
+  end
   else
     result := '';
 end;
 
 function TRsa.SavePrivateKeyPem: TCertPem;
+var
+  der: TCertDer;
 begin
-  result := DerToPem(SavePrivateKeyDer, pemRsaPrivateKey);
+  try
+    der := SavePrivateKeyDer;
+    result := DerToPem(der, pemRsaPrivateKey);
+  finally
+    FillZero(der);
+  end;
 end;
 
 function TRsa.ChineseRemainderTheorem(b: PBigInt): PBigInt;
