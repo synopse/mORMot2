@@ -4526,7 +4526,7 @@ function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
 /// retrieve the current CPU cores masks available of the system
 // - the current process may have been tuned to use only a sub-set of the cores
 // e.g. via "taskset -c" on Linux
-// - return the number of accessible CPU cores - i.e. GetBitCount(CpuSet) or
+// - return the number of accessible CPU cores - i.e. GetBitsCount(CpuSet) or
 // 0 if the function failed
 function CurrentCpuSet(out CpuSet: TCpuSet): integer;
 

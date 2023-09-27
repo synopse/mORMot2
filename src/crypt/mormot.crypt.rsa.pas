@@ -96,6 +96,7 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     procedure Resize(n: integer; nozero: boolean = false);
     function FindMaxExponentIndex: integer;
+    function FindMinExponentIndex: integer;
     function SetPermanent: PBigInt;
     function ResetPermanent: PBigInt;
     {$ifdef USEBARRET}
@@ -151,6 +152,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// search the position of the first bit set
     function BitCount: integer;
+    /// return the number of bits set in this value
+    function BitSetCount: integer;
     /// shift right the internal data HalfUInt by a number of slots
     function RightShift(n: integer): PBigInt;
     /// shift left the internal data HalfUInt by a number of slots
@@ -185,6 +188,10 @@ type
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
       {$ifdef HASINLINE} inline; {$endif}
+    /// add an unsigned integer value
+    function IntAdd(b: HalfUInt): PBigInt;
+    /// substract an unsigned integer value
+    function IntSub(b: HalfUInt): PBigInt;
     /// multiply by an unsigned integer value
     // - returns self := self * b
     // - will eventually release the self instance
@@ -618,6 +625,8 @@ end;
 
 procedure TBigInt.Resize(n: integer; nozero: boolean);
 begin
+  if n = Size then
+    exit;
   if n > Capacity then
   begin
     Capacity := NextGrow(n); // reserve a bit more for faster size-up
@@ -690,6 +699,15 @@ begin
     inc(result);
     c := c shr 1;
   until c = 0;
+end;
+
+function TBigInt.BitSetCount: integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  for i := 0 to Size - 1 do
+    inc(result, GetBitsCountPtrInt(Value[i]));
 end;
 
 function TBigInt.Compare(b: PBigInt; andrelease: boolean): integer;
@@ -797,12 +815,22 @@ begin
   inc(result, (Size - 1) * HALF_BITS);
 end;
 
+function TBigInt.FindMinExponentIndex: integer;
+begin
+  for result := 1 to Size * HALF_BITS do
+    if BitIsSet(result - 1) then // fast enough
+      exit;
+  result := 0;
+end;
+
 procedure TBigInt.ShrBits(bits: integer);
 var
   n: integer;
   a: PHalfUInt;
   v: PtrUInt;
 begin
+  if bits = 0 then
+    exit;
   n := bits shr HALF_SHR;
   if n <> 0 then
     RightShift(n);
@@ -826,6 +854,8 @@ var
   a: PHalfUInt;
   v: PtrUInt;
 begin
+  if bits = 0 then
+    exit;
   n := bits shr HALF_SHR;
   if n <> 0 then
     LeftShift(n);
@@ -1146,7 +1176,7 @@ begin
   // validate is a prime number using Miller-Rabin tests
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
-  w := Clone.Substract(Owner.AllocateFrom(1)); // w = value-1
+  w := Clone.IntSub(1); // w = value-1
   r := w.Clone;
   a := Owner.Allocate(Size, {nozero=}true);
   try
@@ -1265,9 +1295,7 @@ begin
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
-    inc(Value[0], 2);
-    if Value[0] = 0 then
-      inc(Value[1]);
+    IntAdd(2);
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
   result := false; // timed out
 end;
@@ -1283,27 +1311,30 @@ var
   tmp: TTextWriterStackBuffer;
   p: PByte;
 begin
-  case Size of
-    0:
-      result := SmallUInt32Utf8[0];
-    1:
-      UInt32ToUtf8(Value[0], result);
+  if @self = nil then
+    result := ''
   else
-    begin
-      if noclone then
-        v := Copy // inc RefCnt
-      else
-        v := Clone;
-      p := @tmp[high(tmp)];
-      repeat
-        dec(p);
-        p^ := v.IntDivMod10 + ord('0'); // fast enough (used for display only)
-      until (v.Size = 0) or
-            (p = @tmp); // truncate after 8190 digits (unlikely)
-      v.Release;
-      FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
+    case Size of
+      0:
+        result := SmallUInt32Utf8[0];
+      1:
+        UInt32ToUtf8(Value[0], result);
+    else
+      begin
+        if noclone then
+          v := Copy // inc RefCnt
+        else
+          v := Clone;
+        p := @tmp[high(tmp)];
+        repeat
+          dec(p);
+          p^ := v.IntDivMod10 + ord('0'); // fast enough (used for display only)
+        until (v.Size = 0) or
+              (p = @tmp); // truncate after 8190 digits (unlikely)
+        v.Release;
+        FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
+      end;
     end;
-  end;
 end;
 
 function TBigInt.Divide(v: PBigInt; Compute: TBigIntDivide): PBigInt;
@@ -1487,6 +1518,34 @@ end;
 function TBigInt.Square: PBigint;
 begin
   result := Multiply(Copy);
+end;
+
+function TBigInt.IntAdd(b: HalfUInt): PBigInt;
+var
+  tmp: PBigInt;
+begin
+  if b <> 0 then
+  begin
+    tmp := Owner.Allocate(Size);
+    tmp^.Value[0] := b;
+    result := Add(tmp);
+  end
+  else
+    result := @self;
+end;
+
+function TBigInt.IntSub(b: HalfUInt): PBigInt;
+var
+  tmp: PBigInt;
+begin
+  if b <> 0 then
+  begin
+    tmp := Owner.Allocate(Size);
+    tmp^.Value[0] := b;
+    result := Substract(tmp);
+  end
+  else
+    result := @self;
 end;
 
 
