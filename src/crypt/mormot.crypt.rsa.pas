@@ -159,9 +159,9 @@ type
     /// shift left the internal data HalfUInt by a number of slots
     function LeftShift(n: integer): PBigInt;
     /// shift right the internal data by some bits = div per 2/4/8...
-    procedure ShrBits(bits: integer);
+    function ShrBits(bits: integer): PBigInt;
     /// shift left the internal data by some bits = mul per 2/4/8...
-    procedure ShlBits(bits: integer);
+    function ShlBits(bits: integer): PBigInt;
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
@@ -817,19 +817,20 @@ end;
 
 function TBigInt.FindMinExponentIndex: integer;
 begin
-  for result := 1 to Size * HALF_BITS do
-    if BitIsSet(result - 1) then // fast enough
+  for result := 0 to Size * HALF_BITS - 1 do
+    if BitIsSet(result) then // fast enough
       exit;
   result := 0;
 end;
 
-procedure TBigInt.ShrBits(bits: integer);
+function TBigInt.ShrBits(bits: integer): PBigInt;
 var
   n: integer;
   a: PHalfUInt;
   v: PtrUInt;
 begin
-  if bits = 0 then
+  result := @self;
+  if bits <= 0 then
     exit;
   n := bits shr HALF_SHR;
   if n <> 0 then
@@ -848,13 +849,14 @@ begin
   until n = 0;
 end;
 
-procedure TBigInt.ShlBits(bits: integer);
+function TBigInt.ShlBits(bits: integer): PBigInt;
 var
   n: integer;
   a: PHalfUInt;
   v: PtrUInt;
 begin
-  if bits = 0 then
+  result := @self;
+  if bits <= 0 then
     exit;
   n := bits shr HALF_SHR;
   if n <> 0 then
@@ -881,17 +883,28 @@ end;
 
 function TBigInt.GreatestCommonDivisor(b: PBigInt): PBigInt;
 var
-  x, y: PBigInt;
+  ta, tb: PBigInt;
+  lz: integer;
 begin
-  x := Copy;
-  y := b.Copy;
-  repeat
-    result := y.Copy;
-    y := x.Divide(y, bidMod);
-    x.Release;
-    x := result;
-  until y.IsZero;
-  y.Release;
+  if IsZero or
+     b^.IsZero then
+    raise ERsaException.Create('Unexpected TBigInt.GreatestCommonDivisor(0)');
+  ta := Clone;
+  tb := b.Clone;
+  lz := Min(ta.FindMinExponentIndex, tb.FindMinExponentIndex);
+  while not ta.IsZero do
+  begin
+    // divisions by 2 preserve the invariant
+    ta.ShrBits(ta.FindMinExponentIndex).Trim;
+    tb.ShrBits(tb.FindMinExponentIndex).Trim;
+    // set either TA or TB to |TA-TB|/2
+    if ta.Compare(tb) >= 0 then
+      ta.Substract(tb.Copy).ShrBits(1).Trim
+    else
+      tb.Substract(ta.Copy).ShrBits(1).Trim;
+  end;
+  ta.Release;
+  result := tb.ShlBits(lz).Trim;
 end;
 
 procedure TBigInt.Release;
