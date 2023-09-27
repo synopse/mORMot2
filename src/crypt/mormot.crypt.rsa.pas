@@ -155,10 +155,10 @@ type
     function RightShift(n: integer): PBigInt;
     /// shift left the internal data HalfUInt by a number of slots
     function LeftShift(n: integer): PBigInt;
-    /// shift right the internal data by one bit = div per 2
-    procedure ShrBit;
-    /// shift left the internal data by one bit = mul per 2
-    procedure ShlBit;
+    /// shift right the internal data by some bits = div per 2/4/8...
+    procedure ShrBits(bits: integer);
+    /// shift left the internal data by some bits = mul per 2/4/8...
+    procedure ShlBits(bits: integer);
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
@@ -953,35 +953,46 @@ begin
   inc(result, (Size - 1) * HALF_BITS);
 end;
 
-procedure TBigInt.ShrBit;
+procedure TBigInt.ShrBits(bits: integer);
 var
   n: integer;
   a: PHalfUInt;
   v: PtrUInt;
 begin
+  n := bits shr HALF_SHR;
+  if n <> 0 then
+    RightShift(n);
+  bits := bits and pred(HALF_BITS);
+  if bits = 0 then
+    exit;
   n := Size;
   a := @Value[n];
   v := 0;
   repeat
     dec(a);
     v := (v shl HALF_BITS) + a^;
-    a^ := v shr 1;
-    v := v and 1;
+    a^ := v shr bits;
     dec(n);
   until n = 0;
 end;
 
-procedure TBigInt.ShlBit;
+procedure TBigInt.ShlBits(bits: integer);
 var
   n: integer;
   a: PHalfUInt;
   v: PtrUInt;
 begin
+  n := bits shr HALF_SHR;
+  if n <> 0 then
+    LeftShift(n);
+  bits := bits and pred(HALF_BITS);
+  if bits = 0 then
+    exit;
   a := pointer(Value);
   v := 0;
   n := Size;
   repeat
-    inc(v, PtrUInt(a^) shl 1);
+    inc(v, PtrUInt(a^) shl bits);
     a^ := v;
     v := v shr HALF_BITS;
     inc(a);
