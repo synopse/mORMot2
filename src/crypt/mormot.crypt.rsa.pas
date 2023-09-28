@@ -1832,69 +1832,21 @@ end;
 
 function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
 var
-  g2: PBigInt;
-  i, j, k, l, partial, windowsize: integer;
-  g: array of PBigInt;
+  base, exponent: PBigInt;
 begin
-  i := exp.FindMaxExponentIndex;
-  if i < 0 then
-    raise ERsaException.CreateUtf8('%.ModPower with exp=0', [self]);
   result := AllocateFrom(1);
-  // compute optimum window size
-  windowsize := 1;
-  j := i;
-  while j > HALF_BITS do
-  begin
-    inc(windowsize);
-    j := j div HALF_SHR;
-  end;
-  // pre-compute all g[i] items
-  k := 1 shl (windowsize - 1);
-  SetLength(g, k);
-  g[0] := b^.Clone.SetPermanent;
-  g2 := Reduce(g[0].Square, m); // g2 := residue of g^2
-  for j := 1 to k - 1 do
-    g[j] := Reduce(g[j - 1].Multiply(g2.Copy), m).SetPermanent;
-  g2.Done.Release;
-  // reduce to left-to-right exponentiation, one exponent bit at a time
-  // e.g. 65537 = 2^16 + 2^1
-  repeat
-    if exp.BitIsSet(i) then
-    begin
-      l := i - windowsize + 1;
-      partial := 0;
-      if l < 0 then // LSB of exponent will always be 1
-        l := 0
-      else
-        while not exp.BitIsSet(l) do
-          inc(l); // go back up
-      // build up the section of the exponent
-      j := i;
-      while j >= l do
-      begin
-        result := Reduce(result.Square, m);
-        if exp.BitIsSet(j) then
-          inc(partial);
-        if j <> l then
-          partial := partial shl 1;
-        dec(j);
-      end;
-      partial := (partial - 1) shr 1; // Adjust for array
-      result := Reduce(result.Multiply(g[partial]), m);
-      i := l - 1;
-    end
-    else
-    begin
-      // bit not set: just process the next bit
-      result := Reduce(result.Square, m);
-      dec(i);
-    end;
-  until i < 0;
-  // memory cleanup
-  for i := 0 to k - 1 do
-    g[i].ResetPermanentAndRelease;
-  b.Release;
+  exponent := exp.Clone;
   exp.Release;
+  base := Reduce(b, m);
+  while not exponent.IsZero do
+  begin
+    if exponent.IsOdd then
+      result := Reduce(result.Multiply(base.Copy), m);
+    exponent.ShrBits;
+    base := Reduce(base.Square, m);
+  end;
+  base.Release;
+  exponent.Release;
 end;
 
 
