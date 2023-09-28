@@ -94,11 +94,8 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
+    function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
-    function FindMaxExponentIndex: integer;
-    function FindMinExponentIndex: integer;
-    function SetPermanent: PBigInt;
-    function ResetPermanent: PBigInt;
     {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
@@ -127,6 +124,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
     function Clone: PBigInt;
+    /// mark the value with a RefCnt < 0
+    function SetPermanent: PBigInt;
+    /// mark the value with a RefCnt = 1
+    function ResetPermanent: PBigInt;
     /// fill the internal memory buffer with zeros, for anti-forensic measure
     function Done: PBigInt;
     /// decreases the value RefCnt, saving it in the internal FreeList once done
@@ -147,6 +148,9 @@ type
     /// quickly check if contains an even number, i.e. last bit is 0
     function IsEven: boolean;
       {$ifdef HASSAFEINLINE} inline; {$endif}
+    /// quickly check if contains an odd number, i.e. last bit is 1
+    function IsOdd: boolean;
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// check if a given bit is set to 1
     function BitIsSet(bit: PtrUInt): boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -154,14 +158,18 @@ type
     function BitCount: integer;
     /// return the number of bits set in this value
     function BitSetCount: integer;
-    /// shift right the internal data HalfUInt by a number of slots
-    function RightShift(n: integer): PBigInt;
-    /// shift left the internal data HalfUInt by a number of slots
-    function LeftShift(n: integer): PBigInt;
+    /// return the index of the highest bit set
+    function FindMaxBit: integer;
+    /// return the index of the lowest bit set
+    function FindMinBit: integer;
     /// shift right the internal data by some bits = div per 2/4/8...
     function ShrBits(bits: integer = 1): PBigInt;
     /// shift left the internal data by some bits = mul per 2/4/8...
     function ShlBits(bits: integer = 1): PBigInt;
+    /// shift right the internal data HalfUInt by a number of slots
+    function RightShift(n: integer): PBigInt;
+    /// shift left the internal data HalfUInt by a number of slots
+    function LeftShift(n: integer): PBigInt;
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
@@ -176,7 +184,13 @@ type
     // - self is the numerator
     // - if Compute is bidDivide, v is the denominator; otherwise, is the modulus
     // - will eventually release the v instance
-    function Divide(v: PBigInt; Compute: TBigIntDivide = bidDivide): PBigInt;
+    function Divide(v: PBigInt; Compute: TBigIntDivide = bidDivide;
+      Remainder: PPBigInt = nil): PBigInt;
+    /// modulo computation
+    // - just redirect to Divide(v.Copy, bidMod)
+    // - won't eventually release the v instance thanks to v.Copy
+    function Modulo(v: PBigInt): PBigInt;
+      {$ifdef HASINLINE} inline; {$endif}
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;
@@ -199,7 +213,7 @@ type
     /// divide by an unsigned integer value
     // - returns self := self div b
     // - optionally return self mod b
-    function IntDivide(b: HalfUInt; modulo: PHalfUInt = nil): PBigInt;
+    function IntDivide(b: HalfUInt; optmod: PHalfUInt = nil): PBigInt;
     /// compute the modulo by an unsigned integer value
     // - returns self mod b, keeping self untouched
     function IntMod(b: HalfUInt): PtrUInt;
@@ -275,9 +289,8 @@ type
     function AllocateFrom(v: HalfUInt): PBigInt;
     /// allocate a new Big Integer value from a ToHexa dump
     function AllocateFromHex(const hex: RawUtf8): PBigInt;
-    /// call b^.Release and set b := nil
-    procedure Release(var b: PBigInt);
-      {$ifdef HASINLINE} inline; {$endif}
+    /// call b^^.Release and set b^ := nil
+    procedure Release(const b: array of PPBigInt);
     /// allocate and import a Big Integer value from a big-endian binary buffer
     function Load(data: PByteArray; bytes: integer): PBigInt; overload;
     /// allocate and import a Big Integer value from a big-endian binary buffer
@@ -289,8 +302,9 @@ type
     /// compute the reduction of a Big Integer value in a given modulo
     // - if m is nil, SetModulo() should have previously be called
     // - redirect to Divide() or use the Barret algorithm
+    // - will eventually release the b instance
     function Reduce(b, m: PBigint): PBigInt;
-    /// compute a modular exponentiation
+    /// compute a modular exponentiation, i.e. b^exp mod m
     // - if m is nil, SetModulo() should have previously be called
     // - will eventually release the b and exp instances
     function ModPower(b, exp, m: PBigInt): PBigInt;
@@ -473,7 +487,7 @@ type
     destructor Destroy; override;
     /// check if M and E fields are set
     function HasPublicKey: boolean;
-    /// check if all fields are set, i.e. if a private key has been loaded
+    /// check if all fields are set, i.e. if a private key is stored
     function HasPrivateKey: boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
@@ -678,6 +692,11 @@ begin
   result := (Value[0] and 1) = 0;
 end;
 
+function TBigInt.IsOdd: boolean;
+begin
+  result := (Value[0] and 1) <> 0;
+end;
+
 function TBigInt.BitIsSet(bit: PtrUInt): boolean;
 begin
   result := Value[bit shr HALF_SHR] and
@@ -803,7 +822,7 @@ begin
   result := @self;
 end;
 
-function TBigInt.FindMaxExponentIndex: integer;
+function TBigInt.FindMaxBit: integer;
 begin
   for result := Size * HALF_BITS - 1 downto 0 do
     if BitIsSet(result) then // fast enough
@@ -811,7 +830,7 @@ begin
   result := -1;
 end;
 
-function TBigInt.FindMinExponentIndex: integer;
+function TBigInt.FindMinBit: integer;
 begin
   for result := 0 to Size * HALF_BITS - 1 do
     if BitIsSet(result) then // fast enough
@@ -826,24 +845,23 @@ var
   v: PtrUInt;
 begin
   result := @self;
-  if bits > 0 then
-  begin
-    n := bits shr HALF_SHR;
-    if n <> 0 then
-      RightShift(n);
-    bits := bits and pred(HALF_BITS);
-    if bits = 0 then
-      exit;
-    n := Size;
-    a := @Value[n];
-    v := 0;
-    repeat
-      dec(a);
-      v := (v shl HALF_BITS) + a^;
-      a^ := v shr bits;
-      dec(n);
-    until n = 0;
-  end;
+  if bits <= 0 then
+    exit;
+  n := bits shr HALF_SHR;
+  if n <> 0 then
+    RightShift(n);
+  bits := bits and pred(HALF_BITS);
+  if bits = 0 then
+    exit;
+  n := Size;
+  a := @Value[n];
+  v := 0;
+  repeat
+    dec(a);
+    v := (v shl HALF_BITS) + a^;
+    a^ := v shr bits;
+    dec(n);
+  until n = 0;
   Trim;
 end;
 
@@ -884,17 +902,18 @@ var
   ta, tb: PBigInt;
   z: integer;
 begin
+  // see https://www.di-mgt.com.au/euclidean.html#code-binarygcd
   if IsZero or
      b^.IsZero then
     raise ERsaException.Create('Unexpected TBigInt.GreatestCommonDivisor(0)');
   ta := Clone;
   tb := b.Clone;
-  z := Min(ta.FindMinExponentIndex, tb.FindMinExponentIndex);
+  z := Min(ta.FindMinBit, tb.FindMinBit);
   while not ta.IsZero do
   begin
     // divisions by 2 preserve the invariant
-    ta.ShrBits(ta.FindMinExponentIndex);
-    tb.ShrBits(tb.FindMinExponentIndex);
+    ta.ShrBits(ta.FindMinBit);
+    tb.ShrBits(tb.FindMinBit);
     // set either ta or tb to abs(ta-tb)/2
     if ta.Compare(tb) >= 0 then
       ta.Substract(tb.Copy).ShrBits
@@ -998,11 +1017,12 @@ end;
 
 function TBigInt.Substract(b: PBigInt; NegativeResult: PBoolean): PBigInt;
 var
-  n: integer;
+  n, bs: integer;
   pa, pb: PHalfUInt;
   v: PtrUInt;
 begin
   n := Size;
+  bs := b^.Size;
   b^.Resize(n);
   pa := pointer(Value);
   pb := pointer(b^.Value);
@@ -1027,6 +1047,8 @@ begin
     until n = 0;
   if NegativeResult <> nil then
     NegativeResult^ := v <> 0;
+  if b^.Size > bs then
+    b^.Size := bs;
   b.Release;
   result := Trim;
 end;
@@ -1065,7 +1087,7 @@ begin
   result^.Trim;
 end;
 
-function TBigInt.IntDivide(b: HalfUInt; modulo: PHalfUInt): PBigInt;
+function TBigInt.IntDivide(b: HalfUInt; optmod: PHalfUInt): PBigInt;
 var
   n: integer;
   a: PHalfUInt;
@@ -1091,8 +1113,8 @@ begin
       dec(v, d * b); // fast v := v mod b
       dec(n);
     until n = 0;
-  if modulo <> nil then
-    modulo^ := v;
+  if optmod <> nil then
+    optmod^ := v;
   result := Trim;
 end;
 
@@ -1192,7 +1214,7 @@ begin
   a := Owner.Allocate(Size, {nozero=}true);
   try
     // compute s = lsb(w) and r = w shr s
-    s := r.FindMinExponentIndex;
+    s := r.FindMinBit;
     r.ShrBits(s);
     gen := Lecuyer;
     while Iterations > 0 do
@@ -1372,22 +1394,48 @@ begin
     end;
 end;
 
-function TBigInt.Divide(v: PBigInt; Compute: TBigIntDivide): PBigInt;
+function TBigInt.Divide(v: PBigInt; Compute: TBigIntDivide;
+  Remainder: PPBigInt): PBigInt;
 var
-  d, inner, dash: HalfUInt;
+  d, inner, dash, halfmod: HalfUInt;
   lastt, lastt2, lastv, lastv2: PtrUInt;
   neg: boolean;
   j, m, n, orgsiz: integer;
   p: PHalfUInt;
   u, quo, tmp: PBigInt;
 begin
-  if (Compute in [bidMod, bidModNorm]) and
-     (Compare(v) < 0) then
+  if Compare(v) < 0 then
   begin
+    if Compute = bidDivide then
+    begin
+      result := Owner.AllocateFrom(0);
+      if Remainder <> nil then
+        Remainder^ := Clone;
+    end
+    else
+      result := Clone;
     v.Release;
-    result := Copy; // just return self if self < v
+    exit;
+  end
+  else if v.Size = 1 then
+  begin
+    quo := Clone.IntDivide(v.Value[0], @halfmod);
+    if Compute = bidDivide then
+    begin
+      result := quo;
+      if Remainder <> nil then
+        Remainder^ := Owner.AllocateFrom(halfmod)
+    end
+    else
+    begin
+      quo.Release;
+      result := Owner.AllocateFrom(halfmod);
+    end;
+    v.Release;
     exit;
   end;
+  if Remainder <> nil then
+    Remainder^ := nil;
   m := Size - v^.Size;
   n := v^.Size + 1;
   orgsiz := Size;
@@ -1427,8 +1475,7 @@ begin
         if lastv2 > 0 then
         begin
           inner := (RSA_RADIX * lastt + lastt2 - PtrUInt(dash) * lastv);
-          if (v^.Size > 2) and
-             (PtrUInt(lastv2 * dash) >
+          if (PtrUInt(lastv2 * dash) >
                (PtrUInt(inner) * RSA_RADIX + tmp^.Value[tmp^.Size - 3])) then
             dec(dash);
         end;
@@ -1466,10 +1513,18 @@ begin
   end
   else
   begin
-    // return the quotient
-    u.Release;
+    // return the quotient and optionally the remainder
     result := quo.Trim;
+    if Remainder <> nil then
+      Remainder^ := u.Trim.IntDivide(d)
+    else
+      u.Release;
   end
+end;
+
+function TBigInt.Modulo(v: PBigInt): PBigInt;
+begin
+  result := Divide(v.Copy, bidMod);
 end;
 
 function TBigInt.Multiply(b: PBigInt): PBigInt;
@@ -1711,11 +1766,17 @@ begin
 end;
 
 {$ifdef USEBARRET}
-function TRsaContext.Reduce(b: PBigint): PBigInt;
+function TRsaContext.Reduce(b, m: PBigint): PBigInt;
 var
-  q1, q2, q3, r1, r2, m: PBigInt;
+  q1, q2, q3, r1, r2: PBigInt;
   k: integer;
 begin
+  if m <> nil then
+  begin
+    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
+    b^.Release;
+    exit;
+  end;
   m := fMod[CurrentModulo];
   if b^.Compare(m) < 0 then
   begin
@@ -1726,7 +1787,7 @@ begin
   if b^.Size > k * 2 then
   begin
     // use regular divide/modulo method - Barrett cannot help
-    result := b^.Divide(m, {mod=}true);
+    result := b^.Divide(m, bidModNorm);
     b^.Release;
     exit;
   end;
@@ -1736,7 +1797,7 @@ begin
   //writeln(#10'mu=',fMu[CurrentModulo].ToHexa);
   // Do outer partial multiply
   // q2 = q1 * mu
-  q2 := q1.Multiply(fMu[CurrentModulo], 0, k - 1);
+  q2 := q1.MultiplyPartial(fMu[CurrentModulo], 0, k - 1);
   //writeln(#10'q2=',q2.tohexa);
   // q3 = [q2 / b**(k+1)]
   q3 := q2.RightShift(k + 1);
@@ -1746,7 +1807,7 @@ begin
   //writeln(#10'r1=',r1.tohexa);
   // Do inner partial multiply
   // r2 = q3 * m mod b**(k+1)
-  r2 := q3.Multiply(m, k + 1, 0).TruncateMod(k + 1);
+  r2 := q3.MultiplyPartial(m, k + 1, 0).TruncateMod(k + 1);
   //writeln(#10'r2=',r2.tohexa);
   // if (r1 < r2) r1 = r1 + b**(k+1)
   if r1.Compare(r2) < 0 then
