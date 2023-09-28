@@ -220,6 +220,9 @@ type
     /// division and modulo by 10 computation
     // - computes self := self div 10 and return self mod 10
     function IntDivMod10: PtrUInt;
+    /// compute the modular inverse, i.e. self^-1 mod m
+    // - will eventually release the m instance
+    function ModInverse(m: PBigInt): PBigInt;
     /// check if this value is divisable by a small prime
     // - detection coverage can be customized from default primes < 2000
     function MatchKnownPrime(Extend: TBigIntSimplePrime = bspMost): boolean;
@@ -1164,6 +1167,44 @@ begin
     Value[i] := d;
     dec(result, d * 10);
   end;
+end;
+
+function TBigInt.ModInverse(m: PBigInt): PBigInt;
+var
+  u1, u3, v1, v3, t1, t3, q, tmp: PBigInt;
+  iter: integer;
+begin
+  // see https://www.di-mgt.com.au/euclidean.html#code-modinv
+  if m.Compare(1) <= 0 then
+    raise ERsaException.Create('Unexpected TBigInt.ModInverse(0,1)');
+  u1 := Owner.AllocateFrom(1);
+  u3 := Clone;
+  v1 := Owner.AllocateFrom(0);
+  v3 := m.Clone;
+  iter := 0;
+  while not v3.IsZero do
+  begin
+    inc(iter);
+    q := u3.Trim.Divide(v3.Copy.Trim, bidDivide, @t3);
+    tmp := q.Multiply(v1.Copy);
+    t1 := u1.Add(tmp);
+    u3.Release;
+    u1 := v1;
+    v1 := t1;
+    u3 := v3;
+    v3 := t3;
+  end;
+  if u3.Compare(1) <> 0 then
+    result := Owner.AllocateFrom(0)
+  else if iter and 1 = 0 then
+    result := u1.Copy
+  else
+    result := m.Clone.Substract(u1.Copy);
+  u1.Release;
+  u3.Release;
+  v1.Release;
+  v3.Release;
+  m.Release;
 end;
 
 const
