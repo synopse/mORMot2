@@ -217,11 +217,15 @@ type
     // - loop over TAesPrng.Fill and IsPrime method within a timeout period
     function FillPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 20; EndTix: Int64 = 0): boolean;
+    /// return crc32c of the Big Integer value binary
+    function ToHash: cardinal;
     /// return the Big Integer value as hexadecimal
     function ToHexa: RawUtf8;
     /// return the Big Integer value as text with base-10 digits
     // - self will remain untouched unless noclone is set
     function ToText(noclone: boolean = false): RawUtf8;
+    /// could be used for low-level console debugging of a raw value
+    procedure Debug(const name: shortstring; full: boolean = false);
   end;
 
   /// define Normal, P and Q pre-computed modulos
@@ -1154,7 +1158,7 @@ begin
   if not IsZero then
   begin
     result := true;
-    if IsEven then // faster than IntMod(2) = 0
+    if IsEven then // same as IntMod(2) = 0
       exit;
     v := 2; // start after 2, i.e. at 3
     for i := 1 to BIGINT_PRIMES_LAST[Extend] do
@@ -1301,9 +1305,39 @@ begin
   result := false; // timed out
 end;
 
+procedure TBigInt.Debug(const name: shortstring; full: boolean);
+var
+  tmp: RawUtf8;
+begin
+  if full or
+     (Size < 10) then
+    tmp := ToText;
+  ConsoleWrite('%: size=% used=% refcnt=% hash=%  %',
+    [name, Size, UsedBytes, RefCnt, CardinalToHexShort(ToHash), tmp]);
+end;
+
+function TBigInt.UsedBytes: integer;
+begin
+  result := Size * HALF_BYTES;
+  while (result > 1) and
+        (PByteArray(Value)^[result - 1] = 0) do
+    dec(result); // trim left 00
+end;
+
+function TBigInt.ToHash: cardinal;
+begin
+  if @self = nil then
+    result := 0
+  else
+    result := crc32c(0, pointer(Value), UsedBytes);
+end;
+
 function TBigInt.ToHexa: RawUtf8;
 begin
-  result := BinToHexDisplay(pointer(Value), Size * HALF_BYTES);
+  if @self = nil then
+    result := ''
+  else
+    result := BinToHexDisplay(pointer(Value), UsedBytes);
 end;
 
 function TBigInt.ToText(noclone: boolean): RawUtf8;
@@ -1577,10 +1611,15 @@ begin
   inherited Destroy;
 end;
 
-procedure TRsaContext.Release(var b: PBigInt);
+procedure TRsaContext.Release(const b: array of PPBigInt);
+var
+  i: PtrInt;
 begin
-  b^.Release;
-  b := nil;
+  for i := 0 to high(b) do
+  begin
+    b[i]^^.Release;
+    b[i]^ := nil;
+  end;
 end;
 
 function TRsaContext.AllocateFrom(v: HalfUInt): PBigInt;
@@ -1596,7 +1635,7 @@ begin
   n := length(hex) shr 1;
   result := Allocate(n div HALF_BYTES, {nozero=}true);
   if not HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
-    Release(result);
+    Release([@result]);
 end;
 
 const
@@ -1725,7 +1764,7 @@ begin
   if m = nil then
     result := b^.Divide(fMod[CurrentModulo], bidModNorm)
   else
-    result := b^.Divide(m, bidMod);
+    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
   b^.Release;
 end;
 {$endif USEBARRET}
