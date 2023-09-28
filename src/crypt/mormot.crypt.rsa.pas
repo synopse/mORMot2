@@ -973,7 +973,7 @@ begin
   if not b^.IsZero then
   begin
     n := Max(Size, b^.Size);
-    Resize(n + 1, {nozero=}true);
+    Resize(n + 1);
     b^.Resize(n);
     pa := pointer(Value);
     pb := pointer(b^.Value);
