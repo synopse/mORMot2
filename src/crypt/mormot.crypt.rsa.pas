@@ -159,9 +159,9 @@ type
     /// shift left the internal data HalfUInt by a number of slots
     function LeftShift(n: integer): PBigInt;
     /// shift right the internal data by some bits = div per 2/4/8...
-    function ShrBits(bits: integer): PBigInt;
+    function ShrBits(bits: integer = 1): PBigInt;
     /// shift left the internal data by some bits = mul per 2/4/8...
-    function ShlBits(bits: integer): PBigInt;
+    function ShlBits(bits: integer = 1): PBigInt;
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
     /// compute the sum of two Big Integer values
@@ -800,19 +800,11 @@ begin
 end;
 
 function TBigInt.FindMaxExponentIndex: integer;
-var
-  mask, v: HalfUInt;
 begin
-  result := HALF_BITS - 1;
-  mask := RSA_RADIX shr 1;
-  v := Value[Size - 1];
-  repeat
-    if (v and mask) <> 0 then
-      break;
-    dec(result);
-    mask := mask shr 1;
-  until mask = 0;
-  inc(result, (Size - 1) * HALF_BITS);
+  for result := Size * HALF_BITS - 1 downto 0 do
+    if BitIsSet(result) then // fast enough
+      exit;
+  result := -1;
 end;
 
 function TBigInt.FindMinExponentIndex: integer;
@@ -830,23 +822,25 @@ var
   v: PtrUInt;
 begin
   result := @self;
-  if bits <= 0 then
-    exit;
-  n := bits shr HALF_SHR;
-  if n <> 0 then
-    RightShift(n);
-  bits := bits and pred(HALF_BITS);
-  if bits = 0 then
-    exit;
-  n := Size;
-  a := @Value[n];
-  v := 0;
-  repeat
-    dec(a);
-    v := (v shl HALF_BITS) + a^;
-    a^ := v shr bits;
-    dec(n);
-  until n = 0;
+  if bits > 0 then
+  begin
+    n := bits shr HALF_SHR;
+    if n <> 0 then
+      RightShift(n);
+    bits := bits and pred(HALF_BITS);
+    if bits = 0 then
+      exit;
+    n := Size;
+    a := @Value[n];
+    v := 0;
+    repeat
+      dec(a);
+      v := (v shl HALF_BITS) + a^;
+      a^ := v shr bits;
+      dec(n);
+    until n = 0;
+  end;
+  Trim;
 end;
 
 function TBigInt.ShlBits(bits: integer): PBigInt;
@@ -884,27 +878,27 @@ end;
 function TBigInt.GreatestCommonDivisor(b: PBigInt): PBigInt;
 var
   ta, tb: PBigInt;
-  lz: integer;
+  z: integer;
 begin
   if IsZero or
      b^.IsZero then
     raise ERsaException.Create('Unexpected TBigInt.GreatestCommonDivisor(0)');
   ta := Clone;
   tb := b.Clone;
-  lz := Min(ta.FindMinExponentIndex, tb.FindMinExponentIndex);
+  z := Min(ta.FindMinExponentIndex, tb.FindMinExponentIndex);
   while not ta.IsZero do
   begin
     // divisions by 2 preserve the invariant
-    ta.ShrBits(ta.FindMinExponentIndex).Trim;
-    tb.ShrBits(tb.FindMinExponentIndex).Trim;
-    // set either TA or TB to |TA-TB|/2
+    ta.ShrBits(ta.FindMinExponentIndex);
+    tb.ShrBits(tb.FindMinExponentIndex);
+    // set either ta or tb to abs(ta-tb)/2
     if ta.Compare(tb) >= 0 then
-      ta.Substract(tb.Copy).ShrBits(1).Trim
+      ta.Substract(tb.Copy).ShrBits
     else
-      tb.Substract(ta.Copy).ShrBits(1).Trim;
+      tb.Substract(ta.Copy).ShrBits;
   end;
   ta.Release;
-  result := tb.ShlBits(lz).Trim;
+  result := tb.ShlBits(z);
 end;
 
 procedure TBigInt.Release;
@@ -1194,14 +1188,8 @@ begin
   a := Owner.Allocate(Size, {nozero=}true);
   try
     // compute s = lsb(w) and r = w shr s
-    s := 0;
-    while r.IsEven do
-    begin
-      inc(s);
-      r.ShrBits(1);
-      if r.IsZero then
-        exit; // paranoid
-    end;
+    s := r.FindMinExponentIndex;
+    r.ShrBits(s);
     gen := Lecuyer;
     while Iterations > 0 do
     begin
@@ -1749,6 +1737,8 @@ var
   g: array of PBigInt;
 begin
   i := exp.FindMaxExponentIndex;
+  if i < 0 then
+    raise ERsaException.CreateUtf8('%.ModPower with exp=0', [self]);
   result := AllocateFrom(1);
   // compute optimum window size
   windowsize := 1;
