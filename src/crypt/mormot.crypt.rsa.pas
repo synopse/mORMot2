@@ -31,13 +31,12 @@ uses
   
 {
   Implementation notes:
-  - loosely based on fpTLSBigInt / fprsa units from the FPC RTL - but the whole
-    design and core methods have been rewritten from scratch in modern OOP and
-    fixing memory leaks and performance bottlenecks
+  - new pure pascal OOP design of BigInt computation optimized for RSA process
   - use half-registers (HalfUInt) for efficient computation on all CPUs
-  - use dedicated x86_64 asm for core computation routines (2x speedup)
+  - dedicated x86_64 asm for core computation routines (2x speedup)
   - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
-  - TODO: includes proper RSA keypair generation
+  - includes FIPS-level RSA keypair validation and generation
+  - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
 }
 
 {.$define USEBARRET}
@@ -494,6 +493,12 @@ type
     function HasPrivateKey: boolean;
     /// ensure that a CRT-coherent private key is stored
     function CheckPrivateKey: boolean;
+    /// compute a genuine RSA public/private key pair of a given bit size
+    // - valid bit sizes are 512, 1024, 2048, 3072 and 4096
+    // - searching for proper random primes may take a lot of time on low-end
+    // CPU so a timeout period can be supplied (default 10 secs)
+    function Generate(Bits: integer; Extend: TBigIntSimplePrime = bspMost;
+       Iterations: integer = 20; TimeOutMS: integer = 10000): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -2087,7 +2092,7 @@ end;
 
 function TRsa.CheckPrivateKey: boolean;
 var
-  p1, q1, h, g, l: PBigInt;
+  p1, q1, h: PBigInt;
 begin
   result := false;
   if not HasPrivateKey or
@@ -2100,17 +2105,112 @@ begin
   result := (fD.Modulo(p1).Compare(fDP, true) = 0) and
             (fD.Modulo(q1).Compare(fDQ, true) = 0);
   h := p1.Copy.Multiply(q1.Copy).SetPermanent; // h = (p-1)*(q-1)
-  result := result and (fE.GreatestCommonDivisor(h).Compare(1, true) = 0);
-  if result then
-  begin
-    g := p1.GreatestCommonDivisor(q1);
-    l := h.Divide(g);
-    l := fE.ModInverse(l);
-    result := l.Compare(fD, true) = 0;
-  end;
+  result := result and
+    (fE.GreatestCommonDivisor(h).Compare(1, true) = 0) and
+    (fE.ModInverse(h.Divide(p1.GreatestCommonDivisor(q1))).Compare(fD, true) = 0);
   h.ResetPermanentAndRelease;
   p1.Release;
   q1.Release;
+end;
+
+const
+  BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
+
+// see https://www.di-mgt.com.au/rsa_alg.html as reference
+
+function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
+  Iterations, TimeOutMS: integer): boolean;
+var
+  _e, _p, _q, _d, _h, _g, _l, _tmp: PBigInt;
+  comp: integer;
+  endtix: Int64;
+begin
+  result := false;
+  // ensure we can actually generate such a RSA key
+  if HasPublicKey or
+     HasPrivateKey or
+     ((Bits <> 512) and
+      (Bits <> 1024) and
+      (Bits <> 2048) and
+      (Bits <> 3072) and
+      (Bits <> 4096)) then
+    exit;
+  // setup the timeout period
+  if TimeOutMS <= 0 then
+    TimeOutMS := 60000; // blocking 1 minute seems fair enough
+  endtix := GetTickCount64 + TimeOutMS;
+  // setup local variables
+  fModulusBits := Bits;
+  fModulusLen := Bits shr 3;
+  _e := Load(BIGINT_65537_BIN).SetPermanent; // most common exponent = 65537
+  _p := Allocate(ValuesSize(ModulusLen shr 1));
+  _q := Allocate(_p.Size);
+  _d := nil;
+  try
+    // compute two p and q random primes
+    repeat
+      // FIPS 186-4 §B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      repeat
+        if not _p.FillPrime(Extend, Iterations, endtix) then
+          exit; // timed out
+      until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      repeat
+        if not _q.FillPrime(Extend, Iterations, endtix) then
+          exit;
+      until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      comp := _p.Compare(_q);
+      if comp = 0 then
+        exit // random generator is clearly wrong
+      else if comp < 0 then
+        ExchgPointer(@_p, @_q); // ensure p>q for ChineseRemainderTheorem
+      // FIPS 186-4 §B.3.3 step 5.4: ensure enough bits are set in difference
+      _tmp := _p.Clone.Substract(_q.Copy);
+      comp := _tmp.BitCount;
+      _tmp.Release;
+      if comp <= (Bits shr 1) - 99 then
+        continue;
+      // FIPS 186-4 §B.3.1 criterion 2: ensure gcd( e, (p-1)*(q-1) ) = 1
+      _p.IntSub(1);
+      _q.IntSub(1);
+      _h := _p.Copy.Multiply(_q.Copy); // h = (p-1)*(q-1)
+      if _e.GreatestCommonDivisor(_h).Compare(1, {release=}true) <> 0 then
+      begin
+        _h.Release;
+        continue;
+      end;
+      // compute smallest possible d = e^-1 mod LCM(p-1,q-1)
+      _g := _p.GreatestCommonDivisor(_q);
+      _l := _h.Divide(_g);
+      _d := _e.ModInverse(_l);
+      _h.Release;
+      // FIPS 186-4 §B.3.1 criterion 3: ensure enough bits in d
+      comp := _d.BitCount;
+      if comp > (Bits + 1) shr 1 then
+        break;
+      _d.Release;
+    until false;
+    // setup the RSA keys parameters
+    fD := _d.SetPermanent;
+    fDP := fD.Modulo(_p).SetPermanent; // e * DP == 1 (mod (p-1))
+    fDQ := fD.Modulo(_q).SetPermanent; // e * DQ == 1 (mod (q-1))
+    fP := _p.IntAdd(1).SetPermanent;
+    fQ := _q.IntAdd(1).SetPermanent;
+    fE := _e;
+    fM := _p.Multiply(_q).SetPermanent;
+    fQInv := _q.ModInverse(_p).SetPermanent; // q * qInv == 1 (mod p)
+    SetModulo(fM, rmM);
+    SetModulo(fP, rmP);
+    SetModulo(fQ, rmQ);
+    dec(Bits, fM.BitCount);
+    result := (Bits = 0) or (Bits = 1); // allow e.g. pq=1023 for 1024-bit
+  finally
+    // finalize local variables if were not assigned
+    _q.Release;
+    _p.Release;
+    if fE = nil then
+      _e.ResetPermanentAndRelease;
+    _d.Release;
+  end;
 end;
 
 procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
@@ -2297,16 +2397,14 @@ var
   count, padding: integer;
 begin
   result := '';
-  count := 0;
-  if p[count] <> 0 then
+  if p[0] <> 0 then
     exit; // leading zero
-  inc(count);
+  count := 2;
   padding := 0;
   if Verify then
   begin
-    if p[count] <> 1 then
+    if p[1] <> 1 then
       exit; // block type 1
-    inc(count);
     while (count < fModulusLen) and
           (p[count] = $ff) do
     begin
@@ -2316,9 +2414,8 @@ begin
   end
   else
   begin
-    if p[count] <> 2 then
+    if p[1] <> 2 then
       exit; // block type 2
-    inc(count);
     while (count < fModulusLen) and
           (p[count] <> 0) do
     begin
