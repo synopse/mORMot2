@@ -492,6 +492,8 @@ type
     function HasPublicKey: boolean;
     /// check if all fields are set, i.e. if a private key is stored
     function HasPrivateKey: boolean;
+    /// ensure that a CRT-coherent private key is stored
+    function CheckPrivateKey: boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -2081,6 +2083,34 @@ begin
             not fDP.IsZero and
             not fDQ.IsZero and
             not fQInv.IsZero;
+end;
+
+function TRsa.CheckPrivateKey: boolean;
+var
+  p1, q1, h, g, l: PBigInt;
+begin
+  result := false;
+  if not HasPrivateKey or
+     (fP.Multiply(fQ).Compare(fM, {andrelease=}true) <> 0) or
+     (fQ.ModInverse(fP).Compare(fQInv, true) <> 0) or
+     not fE.IsPrime then
+    exit;
+  p1 := fP.Clone.IntSub(1);
+  q1 := fQ.Clone.IntSub(1);
+  result := (fD.Modulo(p1).Compare(fDP, true) = 0) and
+            (fD.Modulo(q1).Compare(fDQ, true) = 0);
+  h := p1.Copy.Multiply(q1.Copy).SetPermanent; // h = (p-1)*(q-1)
+  result := result and (fE.GreatestCommonDivisor(h).Compare(1, true) = 0);
+  if result then
+  begin
+    g := p1.GreatestCommonDivisor(q1);
+    l := h.Divide(g);
+    l := fE.ModInverse(l);
+    result := l.Compare(fD, true) = 0;
+  end;
+  h.ResetPermanentAndRelease;
+  p1.Release;
+  q1.Release;
 end;
 
 procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
