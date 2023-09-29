@@ -124,7 +124,7 @@ type
     function Compare(u: HalfUInt; andrelease: boolean = false): integer; overload;
     /// make a COW instance, increasing RefCnt and returning self
     function Copy: PBigInt;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// allocate a new Big Integer value with the same data as an existing one
     function Clone: PBigInt;
     /// mark the value with a RefCnt < 0
@@ -193,7 +193,7 @@ type
     // - just redirect to Divide(v.Copy, bidMod)
     // - won't eventually release the v instance thanks to v.Copy
     function Modulo(v: PBigInt): PBigInt;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;

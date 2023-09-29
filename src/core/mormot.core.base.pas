@@ -2922,7 +2922,7 @@ type
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute the next 32-bit generated value, in range [0..max-1]
     function Next(max: cardinal): cardinal; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute a 64-bit integer value
     function NextQWord: QWord;
     /// compute a 64-bit floating point value
