@@ -1716,11 +1716,8 @@ begin
   while b <> nil do
   begin
     next := b^.fNextFree;
-    if b^.Value <> nil then
-    begin
-      FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // = WipeReleased
-      FreeMem(b^.Value);
-    end;
+    FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // = WipeReleased
+    FreeMem(b^.Value);
     FreeMem(b);
     b := next;
   end;
@@ -1734,8 +1731,7 @@ begin
   b := fFreeList;
   while b <> nil do
   begin
-    if b^.Value <> nil then
-      FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // anti-forensic
+    FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // anti-forensic
     b := b^.fNextFree;
   end;
 end;
@@ -1768,7 +1764,7 @@ begin
 end;
 
 const
-  RSA_DEFAULT_ALLOCATE = 2048 shr HALF_SHR; // seems fair enough
+  RSA_DEFAULT_ALLOCATE = 2048 shr HALF_SHR; // fair enough overallocation
 
 function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
 begin
@@ -1777,20 +1773,28 @@ begin
   result := fFreeList;
   if result <> nil then
   begin
-    // we can recycle a pre-allocated buffer
+    // we can recycle a pre-allocated instance
     if result^.RefCnt <> 0 then
       raise ERsaException.CreateUtf8(
         '%.Allocate(%): % RefCnt=%', [self, n, result, result^.RefCnt]);
     fFreeList := result^.fNextFree;
     dec(FreeCount);
-    result.Resize(n, {nozero=}true);
+    if n > result^.Capacity then // need a bigger buffer (dedicated Resize)
+    begin
+      FreeMem(result^.Value); // Resize = ReallocMem = would move pointless data
+      result^.Value := nil;
+    end;
   end
   else
   begin
     // we need to allocate a new buffer
     New(result);
     result^.Owner := self;
-    result^.Size := n;
+    result^.Value := nil;
+  end;
+  result^.Size := n;
+  if result^.Value = nil then
+  begin
     result^.Capacity := NextGrow(Max(RSA_DEFAULT_ALLOCATE, n)); // over-alloc
     GetMem(result^.Value, result^.Capacity * HALF_BYTES);
   end;
