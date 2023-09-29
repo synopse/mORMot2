@@ -40,7 +40,7 @@ uses
 }
 
 {.$define USEBARRET}
-// could be defined to enable Barret reduction (not working yet)
+// could be defined to enable Barret reduction (slower with wrong results)
 
 
 { **************** RSA Oriented Big-Integer Computation }
@@ -98,6 +98,10 @@ type
     {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
+    /// partial multiplication between two Big Integer values
+    // - will eventually release both self and b instances
+    function MultiplyPartial(b: PBigInt; InnerPartial: PtrInt;
+      OuterPartial: PtrInt): PBigInt;
     {$endif USEBARRET}
   public
     /// the associated Big Integer RSA context
@@ -193,10 +197,6 @@ type
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;
-    /// partial multiplication between two Big Integer values
-    // - will eventually release both self and b instances
-    function MultiplyPartial(b: PBigInt; InnerPartial: PtrInt;
-      OuterPartial: PtrInt): PBigInt;
     /// standard multiplication by itself
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
@@ -1031,34 +1031,37 @@ var
   pa, pb: PHalfUInt;
   v: PtrUInt;
 begin
-  n := Size;
-  bs := b^.Size;
-  b^.Resize(n);
-  pa := pointer(Value);
-  pb := pointer(b^.Value);
-  v := 0;
-  {$ifdef CPUX64}
-  while n >= _x64subn div HALF_BYTES do // substract 1024-bit per loop
+  if not b^.IsZero then
   begin
-    v := _x64sub(pa, pb, v);
-    inc(PByte(pa), _x64subn);
-    inc(PByte(pb), _x64subn);
-    dec(n, _x64subn div HALF_BYTES);
+    n := Size;
+    bs := b^.Size;
+    b^.Resize(n);
+    pa := pointer(Value);
+    pb := pointer(b^.Value);
+    v := 0;
+    {$ifdef CPUX64}
+    while n >= _x64subn div HALF_BYTES do // substract 1024-bit per loop
+    begin
+      v := _x64sub(pa, pb, v);
+      inc(PByte(pa), _x64subn);
+      inc(PByte(pb), _x64subn);
+      dec(n, _x64subn div HALF_BYTES);
+    end;
+    if n > 0 then
+    {$endif CPUX64}
+      repeat
+        v := PtrUInt(pa^) - pb^ - v;
+        pa^ := v;
+        v := ord((v shr HALF_BITS) <> 0); // branchless carry
+        inc(pa);
+        inc(pb);
+        dec(n);
+      until n = 0;
+    if NegativeResult <> nil then
+      NegativeResult^ := v <> 0;
+    if b^.Size > bs then
+      b^.Size := bs;
   end;
-  if n > 0 then
-  {$endif CPUX64}
-    repeat
-      v := PtrUInt(pa^) - pb^ - v;
-      pa^ := v;
-      v := ord((v shr HALF_BITS) <> 0); // branchless carry
-      inc(pa);
-      inc(pb);
-      dec(n);
-    until n = 0;
-  if NegativeResult <> nil then
-    NegativeResult^ := v <> 0;
-  if b^.Size > bs then
-    b^.Size := bs;
   b.Release;
   result := Trim;
 end;
@@ -1299,7 +1302,7 @@ begin
       a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
       if (a.Compare(1) = 0) or
          (a.Compare(w) = 0) then
-        continue; // this random is related: try another random
+        continue; // this random is related: try outside the family
       for n := 1 to s - 1 do
       begin
         a := Owner.Reduce(a.Square, @self); // a = (a*a) mod value
@@ -1615,6 +1618,7 @@ begin
   result := r.Trim;
 end;
 
+{$ifdef USEBARRET}
 function TBigInt.MultiplyPartial(b: PBigInt;
   InnerPartial, OuterPartial: PtrInt): PBigInt;
 var
@@ -1652,6 +1656,7 @@ begin
   b.Release;
   result := r.Trim;
 end;
+{$endif USEBARRET}
 
 function TBigInt.Square: PBigint;
 begin
@@ -2121,7 +2126,7 @@ const
 function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
   Iterations, TimeOutMS: integer): boolean;
 var
-  _e, _p, _q, _d, _h, _g, _l, _tmp: PBigInt;
+  _e, _p, _q, _d, _h, _tmp: PBigInt;
   comp: integer;
   endtix: Int64;
 begin
@@ -2179,9 +2184,7 @@ begin
         continue;
       end;
       // compute smallest possible d = e^-1 mod LCM(p-1,q-1)
-      _g := _p.GreatestCommonDivisor(_q);
-      _l := _h.Divide(_g);
-      _d := _e.ModInverse(_l);
+      _d := _e.ModInverse(_h.Divide(_p.GreatestCommonDivisor(_q)));
       _h.Release;
       // FIPS 186-4 §B.3.1 criterion 3: ensure enough bits in d
       comp := _d.BitCount;
