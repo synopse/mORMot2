@@ -33,14 +33,16 @@ uses
   Implementation notes:
   - new pure pascal OOP design of BigInt computation optimized for RSA process
   - use half-registers (HalfUInt) for efficient computation on all CPUs
-  - dedicated x86_64 asm for core computation routines (2x speedup)
+  - dedicated x86_64 asm for core computation routines (noticeable speedup)
   - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - includes FIPS-level RSA keypair validation and generation
   - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
+  - references: https://github.com/Mbed-TLS/mbedtls and the Handbook of Applied
+    Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
 }
 
 {.$define USEBARRET}
-// could be defined to enable Barret reduction (slower with wrong results)
+// could be defined to enable Barret reduction (slower and with wrong results)
 
 
 { **************** RSA Oriented Big-Integer Computation }
@@ -69,9 +71,10 @@ type
   TRsaContext = class;
 
   /// refine the extend of TBigInt.MatchKnownPrime() detection
-  // - bspFast will search for known primes < 256 - e.g. RS256 at 250K/s rate
-  // - bspMost will search for known primes < 2000 - e.g. RS256 at 45K/s rate
-  // - bspAll will search for known primes < 18000 - e.g. RS256 at 6.5K/s rate
+  // - bspFast will search for known primes < 256 - e.g. 2048-bit at 250K/s
+  // - bspMost will search for known primes < 2000 - e.g. 2048-bit at 45K/s and
+  // is in practice sufficient to detect most primes (Mbed TLS check < 1000)
+  // - bspAll will search for known primes < 18000 - e.g. 2048-bit at 6.5K/s
   TBigIntSimplePrime = (
     bspFast,
     bspMost,
@@ -224,12 +227,13 @@ type
     /// check if this value is divisable by a small prime
     // - detection coverage can be customized from default primes < 2000
     function MatchKnownPrime(Extend: TBigIntSimplePrime = bspMost): boolean;
-    /// check if the number is (likely to be) a prime
+    /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 20): boolean;
     /// guess a random prime number of the exact current size
     // - loop over TAesPrng.Fill and IsPrime method within a timeout period
+    // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 20; EndTix: Int64 = 0): boolean;
     /// return crc32c of the Big Integer value binary
@@ -311,7 +315,7 @@ type
   end;
 
 const
-  /// 2KB table of iterative difference of all known prime numbers < 18,000
+  /// 2KB table of iterative differences of all known prime numbers < 18,000
   // - as used by TBigInt.MatchKnownPrime
   // - published in interface section for TTestCoreCrypto._RSA validation
   BIGINT_PRIMES_DELTA: array[0 .. 258 * 8 - 1] of byte = (
@@ -477,10 +481,10 @@ type
   // - note that only Verify() and Sign() methods are thread-safe
   TRsa = class(TRsaContext)
   protected
-    fSafe: TOSLightLock;
+    fSafe: TOSLightLock; // for Verify() and Sign()
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
-    /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
+    /// compute the Chinese Remainder Theorem (CRT) for RSA sign/decrypt
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
     // two virtual methods implementing default PKCS#1.5 RSA padding
     function DoUnPad(p: PByteArray; verify: boolean): RawByteString; virtual;
@@ -494,13 +498,19 @@ type
     function HasPublicKey: boolean;
     /// check if all fields are set, i.e. if a private key is stored
     function HasPrivateKey: boolean;
-    /// ensure that a CRT-coherent private key is stored
+    /// ensure that private key stored CRT constants are mathematically coherent
+    // - i.e. that they are properly derived for Chinese Remainder Theorem (CRT)
     function CheckPrivateKey: boolean;
     /// compute a genuine RSA public/private key pair of a given bit size
-    // - valid bit sizes are 512, 1024, 2048, 3072 and 4096
+    // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
+    // today's norm is 2048-bit, but you may consider 3072-bit for security
+    // beyond 2030, and 4096-bit have a much higher computational cost and
+    // 7680-bit is highly impractical (and generation can be more than 30 secs)
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
-    function Generate(Bits: integer; Extend: TBigIntSimplePrime = bspMost;
+    // - if Iterations value is too low, the FIPS recommendation will be forced
+    // - on a very slow CPU or with huge Bits, you can increase TimeOutMS
+    function Generate(Bits: integer = 2048; Extend: TBigIntSimplePrime = bspMost;
        Iterations: integer = 20; TimeOutMS: integer = 10000): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
@@ -542,42 +552,42 @@ type
     // - returns encrypted buffer with PKCS#1.5 padding, '' on error
     function BufferEncryptSign(Input: pointer; InputLen: integer;
       Sign: boolean): RawByteString;
-    /// verification of a RSA binary signature
+    /// verification of a RSA binary signature with the current Public Key
     // - returns the decoded binary OCTSTR Digest or '' if signature failed
     // - this method is thread-safe but blocking from several threads
     function Verify(const Signature: RawByteString;
       AlgorithmOid: PRawUtf8 = nil): RawByteString;
-    /// compute a RSA binary signature of a given hash
+    /// compute a RSA binary signature with the current Private Key
     // - returns the encoded signature
     // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
-    /// RSA key Modulus
+    /// RSA modulus size in bytes
+    property ModulusLen: integer
+      read fModulusLen;
+    /// RSA Public key Modulus as m = p*q
     property M: PBigInt
       read fM;
-    /// RSA key Public exponent (typically 65537)
+    /// RSA Public key exponent (typically 65537)
     property E: PBigInt
       read fE;
     /// RSA key Private exponent
     property D: PBigInt
       read fD;
-    /// RSA key as p in m = pq
+    /// RSA Private key first prime as p in m = p*q
     property P: PBigInt
       read fP;
-    /// RSA key as q in m = pq
+    /// RSA Private key second prime as q in m = p*q
     property Q: PBigInt
       read fQ;
-    /// RSA key CRT exponent satisfying e * DP == 1 (mod (p-1))
+    /// RSA Private key CRT exponent satisfying e * DP == 1 (mod (p-1))
     property DP: PBigInt
       read fDP;
-    /// RSA key CRT exponent satisfying e * DQ == 1 (mod (q-1))
+    /// RSA Private key CRT exponent satisfying e * DQ == 1 (mod (q-1))
     property DQ: PBigInt
       read fDQ;
-    /// RSA key coefficient satisfying q * qInv == 1 (mod p)
+    /// RSA Private key CRT coefficient satisfying q * qInv == 1 (mod p)
     property QInv: PBigInt
       read fQInv;
-    /// RSA modulus size in bytes
-    property ModulusLen: integer
-      read fModulusLen;
   published
     /// RSA modulus size in bits
     property ModulusBits: integer
@@ -1010,7 +1020,7 @@ begin
     pb := pointer(b^.Value);
     v := 0;
     repeat
-      inc(v, PtrUInt(pa^) + pb^);
+      inc(v, PtrUInt(pa^) + pb^); // 16-bit or 32-bit per iteration
       pa^ := v;
       v := v shr HALF_BITS; // branchless carry propagation
       inc(pa);
@@ -1038,7 +1048,7 @@ begin
     pb := pointer(b^.Value);
     v := 0;
     {$ifdef CPUX64}
-    while n >= _x64subn div HALF_BYTES do // substract 1024-bit per loop
+    while n >= _x64subn div HALF_BYTES do // substract 1024-bit per iteration
     begin
       v := _x64sub(pa, pb, v);
       inc(PByte(pa), _x64subn);
@@ -1047,7 +1057,7 @@ begin
     end;
     if n > 0 then
     {$endif CPUX64}
-      repeat
+      repeat // 16-bit or 32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
         v := ord((v shr HALF_BITS) <> 0); // branchless carry
@@ -1076,7 +1086,7 @@ begin
   v := 0;
   n := Size;
   {$ifdef CPUX64}
-  while n >= _x64muln div HALF_BYTES do // multiply 512-bit per loop
+  while n >= _x64muln div HALF_BYTES do // multiply 512-bit per iteration
   begin
     v := _x64mul(a, r, b, v);
     inc(PByte(a), _x64muln);
@@ -1085,7 +1095,7 @@ begin
   end;
   if n > 0 then
   {$endif CPUX64}
-    repeat
+    repeat // 16-bit or 32-bit per iteration
       inc(v, PtrUInt(a^) * b);
       r^ := v;
       v := v shr HALF_BITS; // carry
@@ -1108,7 +1118,7 @@ begin
   a := @Value[n];
   v := 0;
   {$ifdef CPUX64}
-  while n >= _x64divn div HALF_BYTES do // divide 1024-bit per loop
+  while n >= _x64divn div HALF_BYTES do // divide 1024-bit per iteration
   begin
     dec(PByte(a), _x64divn);
     v := _x64div(a, b, v);
@@ -1116,7 +1126,7 @@ begin
   end;
   if n > 0 then
   {$endif CPUX64}
-    repeat
+    repeat // 16-bit or 32-bit per iteration
       dec(a);
       v := (v shl HALF_BITS) + a^; // inject carry as high bits
       d := v div b;
@@ -1140,7 +1150,7 @@ begin
   v := @Value[n];
   result := 0;
   {$ifdef CPUX64}
-  while n >= _x64modn div HALF_BYTES do // mod 1024-bit per loop
+  while n >= _x64modn div HALF_BYTES do // mod 1024-bit per iteration
   begin
     dec(PByte(v), _x64modn);
     result := _x64mod(v, bb, result);
@@ -1148,7 +1158,7 @@ begin
   end;
   if n > 0 then
   {$endif CPUX64}
-    repeat
+    repeat // 16-bit or 32-bit per iteration
       dec(v);
       result := ((result shl HALF_BITS) + v^) mod bb;
       dec(n);
@@ -1167,7 +1177,7 @@ begin
     dec(Size); // auto trim
   Value[i] := d;
   dec(result, d * 10);
-  while i <> 0 do
+  while i <> 0 do // 16-bit or 32-bit per iteration
   begin
     dec(i);
     result := (result shl HALF_BITS) + Value[i];
@@ -1245,15 +1255,15 @@ var
   r, a, w: PBigInt;
   s, n, attempt, bak: integer;
   v: PtrUInt;
-  gen: PLecuyer;
+  gen: PLecuyer; // a generator with a period of 2^88 is strong enough
 begin
   result := false;
   // first check if not a factor of a well-known small prime
   if IsZero or
      (Iterations <= 0) or
-     MatchKnownPrime(Extend) then
+     MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
-  // validate is a prime number using Miller-Rabin tests
+  // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value-1
@@ -1276,9 +1286,9 @@ begin
         if Size > 2 then
         begin
           repeat
-            n := gen.Next(Size);
+            n := gen^.Next(Size);
           until n > 1;
-          gen.Fill(@a^.Value[0], n * HALF_BYTES);
+          gen^.Fill(@a^.Value[0], n * HALF_BYTES);
           a^.Value[0] := a^.Value[0] or 1; // odd
           a^.Size := n;
           a^.Trim;
@@ -1286,9 +1296,9 @@ begin
         else
         begin
           if Size = 1 then
-            v := gen.Next(Value[0])
+            v := gen^.Next(Value[0]) // ensure a<w
           else
-            v := gen.Next;
+            v := gen^.Next; // only lower HalfUInt is enough for a<w
           a^.Value[0] := v or 1; // odd
           a^.Size := 1;
         end;
@@ -1353,7 +1363,7 @@ begin
     min := 40
   else
     min := 51;
-  if Iterations < min then
+  if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 §B.3.3 steps 4.4, 5.5
   min := 1024;
@@ -1369,7 +1379,7 @@ begin
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
-    IntAdd(2);
+    IntAdd(2); // incremental search - see HAC 4.51
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
   result := false; // timed out
 end;
@@ -1453,20 +1463,22 @@ var
 begin
   if Compare(v) < 0 then
   begin
+    // simple case of value < divisor
     if Compute = bidDivide then
     begin
-      result := Owner.AllocateFrom(0);
+      result := Owner.AllocateFrom(0); // div = 0, mod = value
       if Remainder <> nil then
         Remainder^ := Clone;
     end
     else
-      result := Clone;
+      result := Clone; // mod = value
     v.Release;
     exit;
   end
   else if v.Size = 1 then
   begin
-    quo := Clone.IntDivide(v.Value[0], @halfmod);
+    // division by one HalfUInt
+    quo := Clone.IntDivide(v.Value[0], @halfmod); // single call
     if Compute = bidDivide then
     begin
       result := quo;
@@ -1481,6 +1493,7 @@ begin
     v.Release;
     exit;
   end;
+  // regular division per another PBigInt
   if Remainder <> nil then
     Remainder^ := nil;
   m := Size - v^.Size;
@@ -1493,7 +1506,7 @@ begin
   u := Clone;
   if d > 1 then
   begin
-    // Normalize
+    // normalize
     u := u.IntMultiply(d);
     if (Compute = bidModNorm) and
        (Owner.fNormMod[Owner.CurrentModulo] <> nil) then
@@ -1667,7 +1680,7 @@ begin
   begin
     tmp := Owner.Allocate(Size);
     tmp^.Value[0] := b;
-    result := Add(tmp);
+    result := Add(tmp); // seldom called
   end
   else
     result := @self;
@@ -1681,7 +1694,7 @@ begin
   begin
     tmp := Owner.Allocate(Size);
     tmp^.Value[0] := b;
-    result := Substract(tmp);
+    result := Substract(tmp); // seldom called
   end
   else
     result := @self;
@@ -2113,10 +2126,13 @@ var
   p1, q1, h: PBigInt;
 begin
   result := false;
+  // ensure the privake key primes do match the public key
   if not HasPrivateKey or
      (fP.Multiply(fQ).Compare(fM, {andrelease=}true) <> 0) or
-     (fQ.ModInverse(fP).Compare(fQInv, true) <> 0) or
      not fE.IsPrime then
+    exit;
+  // ensure Chinese Remainder Theorem constants are consistent
+  if (fQ.ModInverse(fP).Compare(fQInv, true) <> 0) then
     exit;
   p1 := fP.Clone.IntSub(1);
   q1 := fQ.Clone.IntSub(1);
@@ -2126,6 +2142,7 @@ begin
   result := result and
     (fE.GreatestCommonDivisor(h).Compare(1, true) = 0) and
     (fE.ModInverse(h.Divide(p1.GreatestCommonDivisor(q1))).Compare(fD, true) = 0);
+  // release and wipe memory
   h.ResetPermanentAndRelease;
   p1.Release;
   q1.Release;
@@ -2206,7 +2223,7 @@ begin
         break;
       _d.Release;
     until false;
-    // setup the RSA keys parameters
+    // setup the RSA keys parameters with ChineseRemainderTheorem constants
     fD := _d.SetPermanent;
     fDP := fD.Modulo(_p).SetPermanent; // e * DP == 1 (mod (p-1))
     fDQ := fD.Modulo(_q).SetPermanent; // e * DQ == 1 (mod (q-1))
@@ -2400,6 +2417,7 @@ begin
   result := nil;
   if not HasPrivateKey then
     exit;
+  // https://en.wikipedia.org/wiki/RSA_(cryptosystem)#Using_the_Chinese_remainder_algorithm
   CurrentModulo := rmP;
   m1 := ModPower(b.Copy, fDp, nil);
   CurrentModulo := rmQ;
@@ -2408,13 +2426,15 @@ begin
   CurrentModulo := rmP;
   h := Reduce(h, nil);
   result := m2.Add(q.Multiply(h));
+  WipeReleased; // anti-forensic measure
 end;
 
 function TRsa.DoUnPad(p: PByteArray; verify: boolean): RawByteString;
 var
   count, padding: integer;
 begin
-  result := '';
+  // virtual method following PKCS#1.5 RSA padding
+  result := ''; // error
   if p[0] <> 0 then
     exit; // leading zero
   count := 2;
@@ -2455,6 +2475,7 @@ var
   i: PtrInt;
   r: PByteArray absolute result;
 begin
+  // virtual method following PKCS#1.5 RSA padding
   result := '';
   padding := fModulusLen - n - 3;
   if (p = nil) or
@@ -2476,7 +2497,7 @@ begin
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
-        dec(r[i]); // should be non zero random padding
+        dec(r[i]); // non zero random padding
   end;
   r[padding] := 0; // padding ends with zero
   MoveFast(p^, r[padding + 1], n);
@@ -2536,7 +2557,7 @@ begin
       CurrentModulo := rmM; // for ModPower()
       enc := ModPower(dec, fE, nil); // calls dec.Release
     end;
-    if enc <> nil then
+    if enc <> nil then // missing key ?
       result := enc.Save({andrelease=}true);
   finally
     fSafe.UnLock;
@@ -2549,12 +2570,14 @@ var
   verif, digest: RawByteString;
   p: integer;
 begin
+  // decode the supplied value using the stored public key
   result := '';
   if length(Signature) <> fModulusLen then
     exit; // the signature is a RSA BigInt by definition
   verif := BufferDecryptVerify(pointer(Signature), {verify=}true);
   if verif = '' then
-    exit; // invalid signature
+    exit; // invalid signature or no public key
+  // parse the ASN.1 sequence to extract the stored hash and its algo oid
   p := 1;
   if (AsnNext(p, verif) = ASN1_SEQ) and  // DigestInfo
      (AsnNext(p, verif) = ASN1_SEQ) and  // AlgorithmIdentifier
@@ -2573,6 +2596,7 @@ var
   seq: TAsnObject;
   h: RawByteString;
 begin
+  // create the ASN.1 sequence of the hash to be encoded
   FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
   seq := Asn(ASN1_SEQ, [
            Asn(ASN1_SEQ, [
@@ -2581,13 +2605,9 @@ begin
            ]),
            Asn(h)
          ]);
+  // sign it using the stored private key
   result := BufferEncryptSign(pointer(seq), length(seq), {sign=}true);
 end;
 
-
-
-initialization
-
-finalization
 
 end.
