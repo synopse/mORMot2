@@ -139,7 +139,7 @@ type
     /// a wrapper to ResetPermanent then Release
     // - before release, fill the buffer with zeros to avoid forensic leaking
     procedure ResetPermanentAndRelease;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// export a Big Integer value into a binary buffer
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean); overload;
     /// export a Big Integer value into a binary RawByteString
@@ -501,6 +501,8 @@ type
     /// ensure that private key stored CRT constants are mathematically coherent
     // - i.e. that they are properly derived for Chinese Remainder Theorem (CRT)
     function CheckPrivateKey: boolean;
+    /// check that the stored key match the public key stored in another TRsa
+    function MatchKey(RsaPublicKey: TRsa): boolean;
     /// compute a genuine RSA public/private key pair of a given bit size
     // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
     // today's norm is 2048-bit, but you may consider 3072-bit for security
@@ -2147,6 +2149,14 @@ begin
   p1.Release;
   q1.Release;
   WipeReleased; // anti-forensic pass
+end;
+
+function TRsa.MatchKey(RsaPublicKey: TRsa): boolean;
+begin
+  result := RsaPublicKey.HasPublicKey and
+            HasPublicKey and
+            (RsaPublicKey.E.Compare(E) = 0) and
+            (RsaPublicKey.M.Compare(M) = 0);
 end;
 
 const
