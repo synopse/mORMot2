@@ -8682,9 +8682,9 @@ begin
   e.r[0].L := e.r[0].L xor _EntropyGlobal.L;
   e.r[0].H := e.r[0].H xor _EntropyGlobal.H;
   lec := @_Lecuyer; // lec^.rs#=0 at thread startup, but won't hurt
-  e.r[1].c0 := e.r[1].c0 xor lec^.rs1; // perfect forward security
-  e.r[1].c1 := e.r[1].c1 xor lec^.rs2;
-  e.r[1].c2 := e.r[1].c2 xor lec^.rs3;
+  e.r[1].c0 := e.r[1].c0 xor lec^.RawNext; // perfect forward security
+  e.r[1].c1 := e.r[1].c1 xor lec^.RawNext; // but don't expose rs1,rs2,rs3
+  e.r[1].c2 := e.r[1].c2 xor lec^.RawNext;
   // any threadvar is thread-specific, so PtrUInt(lec) identifies this thread
   {$ifdef CPUINTELARM}
   e.r[1].c3 := e.r[1].c3 xor crc32c(PtrUInt(lec), @CpuFeatures, SizeOf(CpuFeatures));

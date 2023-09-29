@@ -7866,7 +7866,7 @@ begin
       inc(PAesBlock(Buffer));
       dec(main);
     end;
-    if remain <> 0 then
+    if remain <> 0 then // trailing bytes from one TAesBlock
     begin
       TAesContext(fAes.Context).DoBlock(
         TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, {%H-}aes.iv);
@@ -7878,7 +7878,7 @@ begin
     fSafe.UnLock;
     exit;
   end;
-  // big buffers will release the lock before processing
+  // big buffers will update the CTR IV and release the lock before processing
   MoveFast(fAes, aes, SizeOf(aes));
   H := bswap64(aes.iv.H);
   inc(H, main);
@@ -7888,7 +7888,7 @@ begin
     TAesContext(fAes.Context).iv.L := bswap64(bswap64(aes.iv.L) + 1);
   TAesContext(fAes.Context).iv.H := bswap64(H);
   fSafe.UnLock;
-  // unlocked AES computation
+  // unlocked AES-CTR computation
   if main <> 0 then
     {$ifdef USEAESNI64}
     if aesNiSse41 in aes.Flags then
@@ -7908,7 +7908,7 @@ begin
       inc(PAesBlock(Buffer));
       dec(main)
     until main = 0;
-  if remain <> 0 then
+  if remain <> 0 then // trailing bytes from one last TAesBlock
   begin
     aes.DoBlock(aes, aes.iv, aes.iv);
     MoveFast(aes.iv, Buffer^, remain);

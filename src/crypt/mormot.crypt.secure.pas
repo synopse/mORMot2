@@ -7745,11 +7745,12 @@ begin
       inc(Pos, asnsize);
     exit;
   end;
-  // we need to return the Value^
+  // we need to decode and return the Value^
   if (result and ASN1_CL_CTR) <> 0 then
     // constructed (e.g. ASN1_SEQ): return whole data, but keep Pos after header
     Value^ := copy(Buffer, Pos, asnsize)
   else
+    // decode Value^ as text - use AsnNextRaw() to avoid the decoding
     case result of
       ASN1_INT,
       ASN1_ENUM,

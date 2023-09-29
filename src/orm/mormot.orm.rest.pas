@@ -1657,7 +1657,7 @@ begin
   end;
 end;
 
-function TRestOrm.NewEngineRetrieveAsync(
+function TRestOrm.{%H-}NewEngineRetrieveAsync(
   Context: TObject; Table: TOrmClass): TRestOrmEngineRetrieveAsync;
 begin
   raise EOrmAsyncException.CreateUtf8(
