@@ -131,13 +131,12 @@ type
     function SetPermanent: PBigInt;
     /// mark the value with a RefCnt = 1
     function ResetPermanent: PBigInt;
-    /// fill the internal memory buffer with zeros, for anti-forensic measure
-    function Done: PBigInt;
     /// decreases the value RefCnt, saving it in the internal FreeList once done
     procedure Release;
     /// a wrapper to ResetPermanent then Release
     // - before release, fill the buffer with zeros to avoid forensic leaking
     procedure ResetPermanentAndRelease;
+      {$ifdef HASINLINE} inline; {$endif}
     /// export a Big Integer value into a binary buffer
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean); overload;
     /// export a Big Integer value into a binary RawByteString
@@ -259,18 +258,16 @@ type
   private
     /// list of released PBigInt instance, ready to be re-used by Allocate()
     fFreeList: PBigInt;
-    /// the radix used
-    fRadix: PBigInt;
     /// contains Modulus
     fMod: TRsaModulos;
+    /// contains the normalized storage
+    fNormMod: TRsaModulos;
     {$ifdef USEBARRET}
     /// contains mu
     fMu: TRsaModulos;
     /// contains b(k+1)
     fBk1: TRsaModulos;
     {$endif USEBARRET}
-    /// contains the normalized storage
-    fNormMod: TRsaModulos;
   public
     /// the size of the sliding window
     Window: integer;
@@ -280,8 +277,6 @@ type
     FreeCount: integer;
     /// as set by SetModulo() and  used by Reduce() and ModPower()
     CurrentModulo: TRsaModulo;
-    /// initialize this Big Integer context
-    constructor Create; override;
     /// finalize this Big Integer context memory
     destructor Destroy; override;
     /// allocate a new zeroed Big Integer value of the specified precision
@@ -293,6 +288,8 @@ type
     function AllocateFromHex(const hex: RawUtf8): PBigInt;
     /// call b^^.Release and set b^ := nil
     procedure Release(const b: array of PPBigInt);
+    /// fill all released values with zero as anti-forensic safety measure
+    procedure WipeReleased;
     /// allocate and import a Big Integer value from a big-endian binary buffer
     function Load(data: PByteArray; bytes: integer): PBigInt; overload;
     /// allocate and import a Big Integer value from a big-endian binary buffer
@@ -937,8 +934,8 @@ end;
 procedure TBigInt.Release;
 begin
   if (@self = nil) or
-     (RefCnt < 0) then
-    exit; // void or permanent
+     (RefCnt <= 0) then
+    exit; // void, alreadly released (RefCnt=0) or permanent (RefCnt=-1)
   dec(RefCnt);
   if RefCnt > 0 then
     exit;
@@ -951,20 +948,13 @@ end;
 procedure TBigInt.ResetPermanentAndRelease;
 begin
   if @self <> nil then
-    Done.ResetPermanent.Release;
+    ResetPermanent.Release;
 end;
 
 function TBigInt.Clone: PBigInt;
 begin
   result := Owner.Allocate(Size, {nozero=}true);
   MoveFast(Value[0], result^.Value[0], Size * HALF_BYTES);
-end;
-
-function TBigInt.Done: PBigInt;
-begin
-  result := @self;
-  if result <> nil then
-    FillCharFast(Value^[0], Capacity * HALF_BYTES, 0); // anti-forensic
 end;
 
 procedure TBigInt.Save(data: PByteArray; bytes: integer; andrelease: boolean);
@@ -1181,7 +1171,7 @@ end;
 
 function TBigInt.ModInverse(m: PBigInt): PBigInt;
 var
-  u1, u3, v1, v3, t1, t3, q, tmp: PBigInt;
+  u1, u3, v1, v3, t1, t3: PBigInt;
   iter: integer;
 begin
   // see https://www.di-mgt.com.au/euclidean.html#code-modinv
@@ -1195,9 +1185,7 @@ begin
   while not v3.IsZero do
   begin
     inc(iter);
-    q := u3.Trim.Divide(v3.Copy.Trim, bidDivide, @t3);
-    tmp := q.Multiply(v1.Copy);
-    t1 := u1.Add(tmp);
+    t1 := u1.Add(u3.Trim.Divide(v3.Copy.Trim, bidDivide, @t3).Multiply(v1.Copy));
     u3.Release;
     u1 := v1;
     v1 := t1;
@@ -1694,29 +1682,39 @@ end;
 
 { TRsaContext }
 
-constructor TRsaContext.Create;
-begin
-  fRadix := Allocate(2, {nozero=}true);
-  fRadix^.Value[0] := 0;
-  fRadix^.Value[1] := 1;
-  fRadix^.SetPermanent;
-end;
-
 destructor TRsaContext.Destroy;
 var
   b, next : PBigInt;
 begin
-  fRadix.ResetPermanentAndRelease;
+  if ActiveCount <> 0 then
+    raise ERsaException.CreateUtf8('%.Destroy: memory leak - ActiveCount=%',
+      [self, ActiveCount]);
   b := fFreeList;
   while b <> nil do
   begin
     next := b^.fNextFree;
     if b^.Value <> nil then
+    begin
+      FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // = WipeReleased
       FreeMem(b^.Value);
+    end;
     FreeMem(b);
     b := next;
   end;
   inherited Destroy;
+end;
+
+procedure TRsaContext.WipeReleased;
+var
+  b : PBigInt;
+begin
+  b := fFreeList;
+  while b <> nil do
+  begin
+    if b^.Value <> nil then
+      FillCharFast(b^.Value^, b^.Capacity * HALF_BYTES, 0); // anti-forensic
+    b := b^.fNextFree;
+  end;
 end;
 
 procedure TRsaContext.Release(const b: array of PPBigInt);
@@ -1801,7 +1799,7 @@ begin
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
   {$ifdef USEBARRET}
-  b := fRadix.Clone.LeftShift(k * 2 - 1);
+  b := AllocateFrom(1).LeftShift(k * 2);
   fMu[modulo] := b.Divide(fMod[modulo]).SetPermanent;
   b.Release;
   fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent; // = b(k+1)
@@ -1810,7 +1808,7 @@ end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
-  fMod[modulo].ResetPermanentAndRelease; // also zeroed
+  fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
   {$ifdef USEBARRET}
   fMu[modulo].ResetPermanentAndRelease;
@@ -2116,6 +2114,7 @@ begin
   h.ResetPermanentAndRelease;
   p1.Release;
   q1.Release;
+  WipeReleased; // anti-forensic pass
 end;
 
 const
@@ -2213,6 +2212,7 @@ begin
     if fE = nil then
       _e.ResetPermanentAndRelease;
     _d.Release;
+    WipeReleased; // eventual anti-forensic pass of all temp values
   end;
 end;
 
