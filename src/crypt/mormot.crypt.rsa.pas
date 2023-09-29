@@ -2179,12 +2179,13 @@ begin
   // ensure we can actually generate such a RSA key
   if HasPublicKey or
      HasPrivateKey or
-     ((Bits <> 512) and
-      (Bits <> 1024) and
-      (Bits <> 2048) and
-      (Bits <> 3072) and
-      (Bits <> 4096)) then
-    exit;
+     ((Bits <> 512) and    // broken with average CPU power
+      (Bits <> 1024) and   // considered weak, and rejected by browsers
+      (Bits <> 2048) and   // 112-bit of security: actual norm
+      (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
+      (Bits <> 4096) and   // not worth it
+      (Bits <> 7680)) then // REALLY slow for only 192-bit of security
+    exit;                  // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
   if TimeOutMS <= 0 then
     TimeOutMS := 60000; // blocking 1 minute seems fair enough
