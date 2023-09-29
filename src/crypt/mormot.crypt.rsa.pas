@@ -253,7 +253,8 @@ type
   TRsaModulos = array[TRsaModulo] of PBigInt;
 
   /// store one Big Integer computation context for RSA
-  // - will maintain its own set of reference-counted Big Integer values
+  // - will maintain its own set of reference-counted Big Integer values,
+  // for fast thread-local reuse and automated safe anti-forensic wipe
   TRsaContext = class(TObjectWithCustomCreate)
   private
     /// list of released PBigInt instance, ready to be re-used by Allocate()
@@ -470,10 +471,13 @@ type
     procedure Done;
   end;
 
-  /// store the information of a RSA key
-  // - holding all its PBigInt values in its parent TRsaContext
+  /// main RSA processing class for both public or private key
+  // - supports PEM/DER persistence, and can Generate a new key pair
+  // - holds all its PBigInt values in its parent TRsaContext
+  // - note that only Verify() and Sign() methods are thread-safe
   TRsa = class(TRsaContext)
   protected
+    fSafe: TOSLightLock;
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
     /// compute the Chinese Remainder Theorem as needed by quick RSA decrypts
@@ -482,7 +486,9 @@ type
     function DoUnPad(p: PByteArray; verify: boolean): RawByteString; virtual;
     function DoPad(p: pointer; n: integer; sign: boolean): RawByteString; virtual;
   public
-    /// finalize the internal memory
+    /// intitialize the RSA key context
+    constructor Create; override;
+    /// finalize the RSA key context
     destructor Destroy; override;
     /// check if M and E fields are set
     function HasPublicKey: boolean;
@@ -527,21 +533,23 @@ type
     function SavePrivateKeyDer: TCertDer;
     /// save the stored private key in PKCS#1 PEM format
     function SavePrivateKeyPem: TCertPem;
-    /// low-level PKCS#1.5 buffer Decryption or Verification
+    /// low-level thread-safe PKCS#1.5 buffer Decryption or Verification
     // - Input should have ModulusLen bytes of data
     // - returns decrypted buffer without PKCS#1.5 padding, '' on error
     function BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
-    /// low-level PKCS#1.5 buffer Encryption or Signature
+    /// low-level thread-safe PKCS#1.5 buffer Encryption or Signature
     // - Input should have up to ModulusLen-11 bytes of data
     // - returns encrypted buffer with PKCS#1.5 padding, '' on error
     function BufferEncryptSign(Input: pointer; InputLen: integer;
       Sign: boolean): RawByteString;
     /// verification of a RSA binary signature
     // - returns the decoded binary OCTSTR Digest or '' if signature failed
+    // - this method is thread-safe but blocking from several threads
     function Verify(const Signature: RawByteString;
       AlgorithmOid: PRawUtf8 = nil): RawByteString;
     /// compute a RSA binary signature of a given hash
     // - returns the encoded signature
+    // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
     /// RSA key Modulus
     property M: PBigInt
@@ -2060,6 +2068,12 @@ end;
 
 { TRsa }
 
+constructor TRsa.Create;
+begin
+  inherited Create;
+  fSafe.Init;
+end;
+
 destructor TRsa.Destroy;
 begin
   // free key variables with anti-forensic buffer zeroing
@@ -2073,6 +2087,7 @@ begin
   fQInv.ResetPermanentAndRelease;
   // fM fP fQ are already finalized by ResetModulo()
   inherited Destroy;
+  fSafe.Done;
 end;
 
 function TRsa.HasPublicKey: boolean;
@@ -2476,21 +2491,26 @@ begin
   if (Input = nil) or
      not HasPublicKey then
     exit;
-  enc := Load(Input, fModulusLen);
-  // perform the RSA calculation
-  if Verify then
-  begin
-    // verify with Public Key
-    CurrentModulo := rmM; // for ModPower()
-    dec := ModPower(enc, fE, nil); // calls enc.Release
-  end
-  else
-    // decrypt with Private Key
-    dec := ChineseRemainderTheorem(enc);
-  if dec = nil then
-    exit;
-  // decode result following proper padding (PKCS#1.5 with TRsa class)
-  exp := dec.Save({andrelease=}true);
+  fSafe.Lock;
+  try
+    enc := Load(Input, fModulusLen);
+    // perform the RSA calculation
+    if Verify then
+    begin
+      // verify with Public Key
+      CurrentModulo := rmM; // for ModPower()
+      dec := ModPower(enc, fE, nil); // calls enc.Release
+    end
+    else
+      // decrypt with Private Key
+      dec := ChineseRemainderTheorem(enc);
+    if dec = nil then
+      exit;
+    // decode result following proper padding (PKCS#1.5 with TRsa class)
+    exp := dec.Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
+  end;
   result := DoUnPad(pointer(exp), Verify);
 end;
 
@@ -2503,19 +2523,24 @@ begin
   result := '';
   // encode input using proper padding (PKCS#1.5 with TRsa class)
   exp := DoPad(Input, InputLen, Sign);
-  dec := Load(pointer(exp), fModulusLen);
-  // perform the RSA calculation
-  if Sign then
-    // sign with private key
-    enc := ChineseRemainderTheorem(dec)
-  else
-  begin
-    // encrypt with public key
-    CurrentModulo := rmM; // for ModPower()
-    enc := ModPower(dec, fE, nil); // calls dec.Release
+  fSafe.Lock;
+  try
+    dec := Load(pointer(exp), fModulusLen);
+    // perform the RSA calculation
+    if Sign then
+      // sign with private key
+      enc := ChineseRemainderTheorem(dec)
+    else
+    begin
+      // encrypt with public key
+      CurrentModulo := rmM; // for ModPower()
+      enc := ModPower(dec, fE, nil); // calls dec.Release
+    end;
+    if enc <> nil then
+      result := enc.Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
   end;
-  if enc <> nil then
-    result := enc.Save({andrelease=}true);
 end;
 
 function TRsa.Verify(const Signature: RawByteString;
