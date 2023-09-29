@@ -87,8 +87,8 @@ function TSimpleHttpAsyncServer.DoOnRequest(Ctxt: THttpServerRequestAbstract): c
 begin
   if fHttpServer is THttpAsyncServer then
     with THttpAsyncServer(fHttpServer) do
-    if Assigned(Async.Log) then
-      Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
+      if Assigned(Async.Log) then
+        Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
   if IsGet(Ctxt.Method) then
     Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
       [Ctxt.Url, CardinalToHexShort(InterlockedIncrement(RequestID)),
