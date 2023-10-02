@@ -508,6 +508,8 @@ type
     // today's norm is 2048-bit, but you may consider 3072-bit for security
     // beyond 2030, and 4096-bit have a much higher computational cost and
     // 7680-bit is highly impractical (and generation can be more than 30 secs)
+    // - since our generator is not yet officially validated by any agency,
+    // anything above default 2048 would not make much sense
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
@@ -1589,41 +1591,43 @@ begin
   result := Divide(v.Copy, bidMod);
 end;
 
+// compute dst[] := src[] * factor in O(n2) brute force algorithm
+// with modern CPU and their mul opcode in a few cycles, Karatsuba is not better
+// as a sub-function for better code generation on oldest Delphi
+procedure RawMultiply(src, dst: PHalfUInt; n: integer; factor: PtrUInt);
+var
+  carry: PtrUInt;
+begin
+  carry := 0; // initial carry value
+  {$ifdef CPUX64}
+  while n >= _x64multn div HALF_BYTES do // multiply 512-bit per loop
+  begin
+    carry := _x64mult(src, dst, factor, carry);
+    inc(PByte(dst), _x64multn);
+    inc(PByte(src), _x64multn);
+    dec(n, _x64multn div HALF_BYTES);
+  end;
+  if n > 0 then
+  {$endif CPUX64}
+    repeat
+      inc(carry, PtrUInt(dst^) + PtrUInt(src^) * factor);
+      dst^ := carry;
+      inc(dst);
+      inc(src);
+      carry := carry shr HALF_BITS; // carry
+      dec(n);
+    until n = 0;
+  dst^ := carry;
+end;
+
 function TBigInt.Multiply(b: PBigInt): PBigInt;
 var
   r: PBigInt;
-  i, n: PtrInt;
-  v, vi: PtrUInt;
-  p, u: PHalfUInt;
+  i: PtrInt;
 begin
   r := Owner.Allocate(Size + b^.Size);
-  for i := 0 to b^.Size - 1 do // O(n2) brute force algorithm
-  begin
-    v := 0; // initial carry value
-    vi := b^.Value[i];
-    p := @r^.Value[i];
-    u := pointer(Value);
-    n := Size;
-    {$ifdef CPUX64}
-    while n >= _x64multn div HALF_BYTES do // multiply 512-bit per loop
-    begin
-      v := _x64mult(u, p, vi, v);
-      inc(PByte(p), _x64multn);
-      inc(PByte(u), _x64multn);
-      dec(n, _x64multn div HALF_BYTES);
-    end;
-    if n > 0 then
-    {$endif CPUX64}
-      repeat
-        inc(v, PtrUInt(p^) + PtrUInt(u^) * vi);
-        p^ := v;
-        inc(p);
-        inc(u);
-        v := v shr HALF_BITS; // carry
-        dec(n);
-      until n = 0;
-    p^ := v;
-  end;
+  for i := 0 to b^.Size - 1 do
+    RawMultiply(pointer(Value), @r^.Value[i], Size, b^.Value[i]);
   Release;
   b.Release;
   result := r.Trim;
@@ -2211,7 +2215,7 @@ begin
       until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
       comp := _p.Compare(_q);
       if comp = 0 then
-        exit // random generator is clearly wrong
+        exit // random generator is clearly wrong if p=q
       else if comp < 0 then
         ExchgPointer(@_p, @_q); // ensure p>q for ChineseRemainderTheorem
       // FIPS 186-4 §B.3.3 step 5.4: ensure enough bits are set in difference
