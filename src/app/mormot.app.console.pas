@@ -274,20 +274,10 @@ var
   msg: RawUtf8;
 begin
   FormatUtf8(Fmt, Args, msg);
-  {$I-}
   if msg <> '' then
-  begin
-    TextColor(Color);
     AddRawUtf8(fLines, msg);
-    if not fNoConsole then
-      write(Utf8ToConsole(msg));
-  end;
   if not fNoConsole then
-  begin
-    writeln;
-    ioresult;
-  end;
-  {$I+}
+    ConsoleWrite(msg, Color);
 end;
 
 function TCommandLine.AsUtf8(const Switch, Default: RawUtf8;

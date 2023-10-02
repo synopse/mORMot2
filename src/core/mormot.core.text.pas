@@ -8403,27 +8403,22 @@ begin
   ConsoleWrite(tmp, Color, NoLineFeed);
 end;
 
-{$I-}
-
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
-  ConsoleWrite(#13#10'Fatal exception ', cclightRed, true);
+  ConsoleWrite(#13#10'Fatal exception ', ccLightRed, true);
   ConsoleWrite('%', [E.ClassType], ccWhite, true);
   ConsoleWrite(' raised with message ', ccLightRed);
   ConsoleWrite('  %', [E.Message], ccLightMagenta);
   TextColor(ccLightGray);
   if WaitForEnterKey then
   begin
-    writeln(#13#10'Program will now abort');
+    ConsoleWrite(#13#10'Program will now abort');
     {$ifndef OSPOSIX}
-    writeln('Press [Enter] to quit');
+    ConsoleWrite('Press [Enter] to quit');
     ConsoleWaitForEnterKey;
     {$endif OSPOSIX}
   end;
-  ioresult;
 end;
-
-{$I+}
 
 
 { ************ Resource and Time Functions }
