@@ -1564,6 +1564,8 @@ type
 
   /// asymmetric public-key cryptography parent class, as returned by Asym()
   TCryptAsym = class(TCryptAlgo)
+  protected
+    fPemPublic, fPemPrivate: byte; // TPemKind as defined below
   public
     /// generate a public/private pair of keys in the PEM text format
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); virtual;
@@ -2488,6 +2490,7 @@ type
     pemPublicKey,
     pemRsaPrivateKey,
     pemRsaPublicKey,
+    pemEcPublicKey,
     pemEcPrivateKey,
     pemEncryptedPrivateKey,
     pemCertificateRequest,
@@ -2513,6 +2516,7 @@ const
     '-----BEGIN PUBLIC KEY-----'#13#10,
     '-----BEGIN RSA PRIVATE KEY-----'#13#10,
     '-----BEGIN RSA PUBLIC KEY-----'#13#10,
+    '-----BEGIN EC PUBLIC KEY-----'#13#10,
     '-----BEGIN EC PRIVATE KEY-----'#13#10,
     '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN CERTIFICATE REQUEST-----'#13#10,
@@ -2535,6 +2539,7 @@ const
     '-----END PUBLIC KEY-----'#13#10,
     '-----END RSA PRIVATE KEY-----'#13#10,
     '-----END RSA PUBLIC KEY-----'#13#10,
+    '-----END EC PUBLIC KEY-----'#13#10,
     '-----END EC PRIVATE KEY-----'#13#10,
     '-----END ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END CERTIFICATE REQUEST-----'#13#10,
@@ -6081,10 +6086,17 @@ procedure TCryptAsym.GeneratePem(out pub, priv: RawUtf8;
   const privpwd: RawUtf8);
 var
   derpub, derpriv: RawByteString;
+  pempub, pempriv: TPemKind;
 begin // inherited classes should override at least one of those Generate*()
   GenerateDer(derpub, derpriv, privpwd);
-  pub := DerToPem(pointer(derpub), length(derpub), pemPublicKey);
-  priv := DerToPem(pointer(derpriv), length(derpriv), pemPrivateKey);
+  pempub := TPemKind(fPemPublic);
+  if pempub = pemUnspecified then
+    pempub := pemPublicKey;
+  pempriv := TPemKind(fPemPrivate);
+  if pempriv = pemUnspecified then
+    pempriv := pemPrivateKey;
+  pub := DerToPem(pointer(derpub), length(derpub), pempub);
+  priv := DerToPem(pointer(derpriv), length(derpriv), pempriv);
 end;
 
 procedure TCryptAsym.GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8);
@@ -6884,6 +6896,8 @@ function ParsePem(var P: PUtf8Char; Kind: PPemKind; var Len: PtrInt;
 var
   start: PUtf8Char;
 begin
+  if kind <> nil then
+    kind^ := pemUnspecified;
   result := nil;
   start := GotoMarker(P);
   if start = nil then
@@ -6927,7 +6941,7 @@ begin
   P := pointer(pem);
   result := NextPemToDer(P, kind);
   if result = '' then
-    result := pem;
+    result := pem; // if content is not PEM, assume its a DER binary
 end;
 
 function NextPemToDer(var P: PUtf8Char; Kind: PPemKind): TCertDer;
