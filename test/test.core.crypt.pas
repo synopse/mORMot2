@@ -746,9 +746,40 @@ begin
 end;
 {$endif OSWINDOWS}
 
+const
+  _rsapriv = // from "openssl genrsa -out priv.pem 2048"
+    '-----BEGIN PRIVATE KEY-----'#13#10 +
+    'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC1Dj92HMReUOmP'#13#10 +
+    'vV3AXdO3VLH8I693pjxHiTGBwtuWZ23cEKYYBiA1LbJ/Q5FwYqx77Bgsb4FXyshP'#13#10 +
+    'bNE9ushd8QmaeOWexDrfmf1syl+EUjKv2kTjDnLllQDMlK3Bia53KQUB8Dv/UFao'#13#10 +
+    'P64TfPk+p+eZkcRtg0d4Ea3S8hFJ9BBdfGP7CelpD78ZNhCvk4fKfIlLx6wP12kp'#13#10 +
+    '+wTFzusHHhUfW0LHVIf3JUAwe2zTrvgeOefIXK96hc5qM3WDGfj+I3WV9ZnPOhar'#13#10 +
+    'JW8pZnleK0IP8UR2FuMVtYqJuuS71z8/sc3PuiozHZCSEZr5qx59A2fAW/42ppz2'#13#10 +
+    'tMI/uV17AgMBAAECggEACSI/ClbY2Ic4GSkXndjokYLuIwcBLEXlxu1sDXHxQPer'#13#10 +
+    'yk0etpnh2GebQyH7UtJE2vrl8faYGFU3C2a1HD+cKb0QsSBwjl9eNvczmorlDFhX'#13#10 +
+    'N+7eHcmV+0YBOdDgU8yofANvk2b1Uo57fgEPEkBHlKUaIRxXmUy6TMYw4NzsXrDM'#13#10 +
+    'XyBDL3sGnjiKZ7IX6Wsx32SLyrFsHMYI5QWIb24nGi7/jeq4q8GZf/0gaL7WoSK6'#13#10 +
+    'DDqGI9l2QiK6LThuOsNNaEC9fBndjsh3RW4yWLRsQZ6QDVXhlMxRxG8uuU4bsuYc'#13#10 +
+    'XFoNCAYMIF+iWrAV/0g2GayAe5rzgB+z2DRyWLWlHQKBgQDoklA/vrBx8LxOkDVo'#13#10 +
+    'IOl4Yskx6pRWNa8SIz6JMI387Hy7Uz3abiEBx0KjQPWv9I5fIySPTsHWsuNAdYKs'#13#10 +
+    'v4b3DGS0QUlJRyGuVLx055E7uwcpk1I742t0lFgNZi7AOYT/cUO0jcDwkkRJZ+3k'#13#10 +
+    'xqRhZv+GVJOUbm61byZRuyiApwKBgQDHS2noTFXlr9uHIHHn67ccTbCkjArDfgdu'#13#10 +
+    'fxh2Fphst2ue+cPTc0L9lDND8EPAGZK3ffmcEbkjykF/Dey+3RXXCxELx7VjNPIJ'#13#10 +
+    'STk0+7ysHX7/1ThuTa+vb/xdeHNglQXRTV9K5e1+3ucHuT/oeacyop8/Kzku8Qwr'#13#10 +
+    '1LTx0MwjDQKBgDYjmTq9kSV0/ODtAQG0Z6T2mg9cpBtNc+us+KnG+8ac5oxU3Fk0'#13#10 +
+    'ucpIMGMAhDDppRrQe3pAwy7PhcdDk5/TFf/8ipTLfdvpCxYh85zjKxPUfd5XxRTb'#13#10 +
+    '4+/HeJfl6Ywl16f/HduyA+/8nJjZ8K8I7ssdxu3mUlSDQJJLxYfRIaSRAoGBAJmV'#13#10 +
+    'Q2uykCuup2XuGfnZjEZylKNqDM107TM5HNe8OADoJTbhUgk89S5ILG251exPiOKB'#13#10 +
+    'YX/lpKCxOGI6j+zSogcTzzId2Go4niGL3Vs4eMDHBl0PqypOEgsIKRq7PWb70Pzo'#13#10 +
+    'PHySzsCL9Mzd9SMpxTDfZAuhOrMzLecFR+BmwTptAoGAN3g6MjW6nThBvrWtaQ6j'#13#10 +
+    '2xE7gNaCgu0UVfTnMVmXD1Cbji3zW4+1lhQCGTnwrBhv54t1S1v6ilFCOtsZfLEC'#13#10 +
+    'ZHhnT2RzGDGHrq115yC+T8SwTo7/h5p/2AuO4fXWP6MWXMJcXUGs6MshY5vgH4QY'#13#10 +
+    'BPyNxBYuEhvuYUZ3nJXJZZ0='#13#10 +
+    '-----END PRIVATE KEY-----'#13#10;
+
 procedure TTestCoreCrypto._JWT;
 
-  procedure test(one: TJwtAbstract);
+  procedure test(one: TJwtAbstract; nofree: boolean = false);
   var
     t, sub, iss, hp: RawUtf8;
     jwt: TJwtContent;
@@ -818,7 +849,8 @@ procedure TTestCoreCrypto._JWT;
       one.Verify(t, jwt);
       check(jwt.result <> jwtValid);
     end;
-    one.Free;
+    if not nofree then
+      one.Free;
   end;
 
   procedure Benchmark(J: TJwtAbstract; N: integer = 1000);
@@ -828,6 +860,7 @@ procedure TTestCoreCrypto._JWT;
     jwt: TJwtContent;
     tim: TPrecisionTimer;
   begin
+    J.CacheTimeoutSeconds := 0;
     try
       tok := J.Compute([], 'myself');
       tim.Start;
@@ -848,8 +881,12 @@ procedure TTestCoreCrypto._JWT;
     end;
   end;
 
-{$ifdef USE_OPENSSL}
 const
+  OSSL_RSA: array[0..2] of TJwtRsaClass = (
+    TJwtRS256,
+    TJwtRS384,
+    TJwtRS512);
+{$ifdef USE_OPENSSL}
   OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
     TJwtRS256Osl,
     TJwtRS384Osl,
@@ -930,6 +967,16 @@ begin
       secret, [jrcIssuer, jrcExpirationTime], [], 60), 100);
   finally
     secret.Free;
+  end;
+  for i := 0 to high(OSSL_RSA) do
+  begin
+    j := OSSL_RSA[i].Create(_rsapriv, '', [jrcIssuer, jrcExpirationTime], [], 60);
+    {$ifdef USE_OPENSSL}
+    test(j, {nofree=}false);
+    {$else}
+    test(j, {nofree=}true);
+    Benchmark(j, 100);
+    {$endif USE_OPENSSL}
   end;
   {$ifdef USE_OPENSSL}
   for i := 0 to high(OSSL_JWT) do
@@ -3162,36 +3209,8 @@ begin
 end;
 
 const
-  _rsapriv = // from "openssl genrsa -out priv.pem 2048"
-    '-----BEGIN PRIVATE KEY-----'#13#10 +
-    'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC1Dj92HMReUOmP'#13#10 +
-    'vV3AXdO3VLH8I693pjxHiTGBwtuWZ23cEKYYBiA1LbJ/Q5FwYqx77Bgsb4FXyshP'#13#10 +
-    'bNE9ushd8QmaeOWexDrfmf1syl+EUjKv2kTjDnLllQDMlK3Bia53KQUB8Dv/UFao'#13#10 +
-    'P64TfPk+p+eZkcRtg0d4Ea3S8hFJ9BBdfGP7CelpD78ZNhCvk4fKfIlLx6wP12kp'#13#10 +
-    '+wTFzusHHhUfW0LHVIf3JUAwe2zTrvgeOefIXK96hc5qM3WDGfj+I3WV9ZnPOhar'#13#10 +
-    'JW8pZnleK0IP8UR2FuMVtYqJuuS71z8/sc3PuiozHZCSEZr5qx59A2fAW/42ppz2'#13#10 +
-    'tMI/uV17AgMBAAECggEACSI/ClbY2Ic4GSkXndjokYLuIwcBLEXlxu1sDXHxQPer'#13#10 +
-    'yk0etpnh2GebQyH7UtJE2vrl8faYGFU3C2a1HD+cKb0QsSBwjl9eNvczmorlDFhX'#13#10 +
-    'N+7eHcmV+0YBOdDgU8yofANvk2b1Uo57fgEPEkBHlKUaIRxXmUy6TMYw4NzsXrDM'#13#10 +
-    'XyBDL3sGnjiKZ7IX6Wsx32SLyrFsHMYI5QWIb24nGi7/jeq4q8GZf/0gaL7WoSK6'#13#10 +
-    'DDqGI9l2QiK6LThuOsNNaEC9fBndjsh3RW4yWLRsQZ6QDVXhlMxRxG8uuU4bsuYc'#13#10 +
-    'XFoNCAYMIF+iWrAV/0g2GayAe5rzgB+z2DRyWLWlHQKBgQDoklA/vrBx8LxOkDVo'#13#10 +
-    'IOl4Yskx6pRWNa8SIz6JMI387Hy7Uz3abiEBx0KjQPWv9I5fIySPTsHWsuNAdYKs'#13#10 +
-    'v4b3DGS0QUlJRyGuVLx055E7uwcpk1I742t0lFgNZi7AOYT/cUO0jcDwkkRJZ+3k'#13#10 +
-    'xqRhZv+GVJOUbm61byZRuyiApwKBgQDHS2noTFXlr9uHIHHn67ccTbCkjArDfgdu'#13#10 +
-    'fxh2Fphst2ue+cPTc0L9lDND8EPAGZK3ffmcEbkjykF/Dey+3RXXCxELx7VjNPIJ'#13#10 +
-    'STk0+7ysHX7/1ThuTa+vb/xdeHNglQXRTV9K5e1+3ucHuT/oeacyop8/Kzku8Qwr'#13#10 +
-    '1LTx0MwjDQKBgDYjmTq9kSV0/ODtAQG0Z6T2mg9cpBtNc+us+KnG+8ac5oxU3Fk0'#13#10 +
-    'ucpIMGMAhDDppRrQe3pAwy7PhcdDk5/TFf/8ipTLfdvpCxYh85zjKxPUfd5XxRTb'#13#10 +
-    '4+/HeJfl6Ywl16f/HduyA+/8nJjZ8K8I7ssdxu3mUlSDQJJLxYfRIaSRAoGBAJmV'#13#10 +
-    'Q2uykCuup2XuGfnZjEZylKNqDM107TM5HNe8OADoJTbhUgk89S5ILG251exPiOKB'#13#10 +
-    'YX/lpKCxOGI6j+zSogcTzzId2Go4niGL3Vs4eMDHBl0PqypOEgsIKRq7PWb70Pzo'#13#10 +
-    'PHySzsCL9Mzd9SMpxTDfZAuhOrMzLecFR+BmwTptAoGAN3g6MjW6nThBvrWtaQ6j'#13#10 +
-    '2xE7gNaCgu0UVfTnMVmXD1Cbji3zW4+1lhQCGTnwrBhv54t1S1v6ilFCOtsZfLEC'#13#10 +
-    'ZHhnT2RzGDGHrq115yC+T8SwTo7/h5p/2AuO4fXWP6MWXMJcXUGs6MshY5vgH4QY'#13#10 +
-    'BPyNxBYuEhvuYUZ3nJXJZZ0='#13#10 +
-    '-----END PRIVATE KEY-----'#13#10;
   _rsapub = // "openssl rsa -in priv.pem -outform PEM -pubout -out pub.pem"
+    // see _rsapriv defined above (used for TJwtRs* validation)
     '-----BEGIN PUBLIC KEY-----'#13#10 +
     'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQ4/dhzEXlDpj71dwF3T'#13#10 +
     't1Sx/COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0ORcGKse+wYLG+BV8rIT2zRPbrI'#13#10 +
