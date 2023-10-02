@@ -33,7 +33,7 @@ uses
   Implementation notes:
   - new pure pascal OOP design of BigInt computation optimized for RSA process
   - use half-registers (HalfUInt) for efficient computation on all CPUs
-  - dedicated x86_64 asm for core computation routines (noticeable speedup)
+  - dedicated x86_64/i386 asm for core computation routines (noticeable speedup)
   - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - includes FIPS-level RSA keypair validation and generation
   - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
@@ -1024,7 +1024,7 @@ begin
     pb := pointer(b^.Value);
     v := 0;
     repeat
-      inc(v, PtrUInt(pa^) + pb^); // 16-bit or 32-bit per iteration
+      inc(v, PtrUInt(pa^) + pb^); // 16/32-bit per iteration
       pa^ := v;
       v := v shr HALF_BITS; // branchless carry propagation
       inc(pa);
@@ -1051,17 +1051,17 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    {$ifdef CPUX64}
-    while n >= _x64subn div HALF_BYTES do // substract 1024-bit per iteration
+    {$ifdef CPUINTEL}
+    while n >= _xasmsubn div HALF_BYTES do // 512/1024-bit per iteration
     begin
-      v := _x64sub(pa, pb, v);
-      inc(PByte(pa), _x64subn);
-      inc(PByte(pb), _x64subn);
-      dec(n, _x64subn div HALF_BYTES);
+      v := _xasmsub(pa, pb, v);
+      inc(PByte(pa), _xasmsubn);
+      inc(PByte(pb), _xasmsubn);
+      dec(n, _xasmsubn div HALF_BYTES);
     end;
     if n > 0 then
-    {$endif CPUX64}
-      repeat // 16-bit or 32-bit per iteration
+    {$endif CPUINTEL}
+      repeat // 16/32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
         v := ord((v shr HALF_BITS) <> 0); // branchless carry
@@ -1089,17 +1089,17 @@ begin
   r := pointer(result^.Value);
   v := 0;
   n := Size;
-  {$ifdef CPUX64}
-  while n >= _x64muln div HALF_BYTES do // multiply 512-bit per iteration
+  {$ifdef CPUINTEL}
+  while n >= _xasmmuln div HALF_BYTES do // 256/512-bit per iteration
   begin
-    v := _x64mul(a, r, b, v);
-    inc(PByte(a), _x64muln);
-    inc(PByte(r), _x64muln);
-    dec(n, _x64muln div HALF_BYTES);
+    v := _xasmmul(a, r, b, v);
+    inc(PByte(a), _xasmmuln);
+    inc(PByte(r), _xasmmuln);
+    dec(n, _xasmmuln div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUX64}
-    repeat // 16-bit or 32-bit per iteration
+  {$endif CPUINTEL}
+    repeat // 16/32-bit per iteration
       inc(v, PtrUInt(a^) * b);
       r^ := v;
       v := v shr HALF_BITS; // carry
@@ -1121,16 +1121,16 @@ begin
   n := Size;
   a := @Value[n];
   v := 0;
-  {$ifdef CPUX64}
-  while n >= _x64divn div HALF_BYTES do // divide 1024-bit per iteration
+  {$ifdef CPUINTEL}
+  while n >= _xasmdivn div HALF_BYTES do // 512/1024-bit per iteration
   begin
-    dec(PByte(a), _x64divn);
-    v := _x64div(a, b, v);
-    dec(n, _x64divn div HALF_BYTES);
+    dec(PByte(a), _xasmdivn);
+    v := _xasmdiv(a, b, v);
+    dec(n, _xasmdivn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUX64}
-    repeat // 16-bit or 32-bit per iteration
+  {$endif CPUINTEL}
+    repeat // 16/32-bit per iteration
       dec(a);
       v := (v shl HALF_BITS) + a^; // inject carry as high bits
       d := v div b;
@@ -1153,16 +1153,16 @@ begin
   n := Size;
   v := @Value[n];
   result := 0;
-  {$ifdef CPUX64}
-  while n >= _x64modn div HALF_BYTES do // mod 1024-bit per iteration
+  {$ifdef CPUINTEL}
+  while n >= _xasmmodn div HALF_BYTES do // 512/1024-bit per iteration
   begin
-    dec(PByte(v), _x64modn);
-    result := _x64mod(v, bb, result);
-    dec(n, _x64modn div HALF_BYTES);
+    dec(PByte(v), _xasmmodn);
+    result := _xasmmod(v, bb, result);
+    dec(n, _xasmmodn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUX64}
-    repeat // 16-bit or 32-bit per iteration
+  {$endif CPUINTEL}
+    repeat // 16/32-bit per iteration
       dec(v);
       result := ((result shl HALF_BITS) + v^) mod bb;
       dec(n);
@@ -1235,8 +1235,7 @@ const
 
 function TBigInt.MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
 var
-  i: PtrInt;
-  v: HalfUInt;
+  i, v: PtrInt;
 begin
   if not IsZero then
   begin
@@ -1593,23 +1592,22 @@ end;
 
 // compute dst[] := src[] * factor in O(n2) brute force algorithm
 // with modern CPU and their mul opcode in a few cycles, Karatsuba is not better
-// as a sub-function for better code generation on oldest Delphi
 procedure RawMultiply(src, dst: PHalfUInt; n: integer; factor: PtrUInt);
 var
   carry: PtrUInt;
 begin
   carry := 0; // initial carry value
-  {$ifdef CPUX64}
-  while n >= _x64multn div HALF_BYTES do // multiply 512-bit per loop
+  {$ifdef CPUINTEL}
+  while n >= _xasmmultn div HALF_BYTES do // 256/512-bit per loop
   begin
-    carry := _x64mult(src, dst, factor, carry);
-    inc(PByte(dst), _x64multn);
-    inc(PByte(src), _x64multn);
-    dec(n, _x64multn div HALF_BYTES);
+    carry := _xasmmult(src, dst, factor, carry);
+    inc(PByte(dst), _xasmmultn);
+    inc(PByte(src), _xasmmultn);
+    dec(n, _xasmmultn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUX64}
-    repeat
+  {$endif CPUINTEL}
+    repeat // 16/32-bit per iteration
       inc(carry, PtrUInt(dst^) + PtrUInt(src^) * factor);
       dst^ := carry;
       inc(dst);
@@ -1627,6 +1625,7 @@ var
 begin
   r := Owner.Allocate(Size + b^.Size);
   for i := 0 to b^.Size - 1 do
+    // call a sub-function for better code generation on oldest Delphi
     RawMultiply(pointer(Value), @r^.Value[i], Size, b^.Value[i]);
   Release;
   b.Release;

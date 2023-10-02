@@ -277,31 +277,31 @@ function _lshift(var Output: THash256Rec; const Input: THash256Rec; Shift: integ
 function _numbits256(const V: THash256Rec): integer;
   {$ifdef FPC}inline;{$endif}
 
-{$ifdef CPUX64} { dedicated x86_64 asm sub-routines for mormot.crypt.rsa }
+{$ifdef CPUINTEL} { x86_64/i386 asm sub-routines for mormot.crypt.rsa }
 
 /// sub of two TBigInt 1024-bit buffers - as used by mormot.crypt.rsa
-function _x64sub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
 
 /// mul-by-integer of a TBigInt 512-bit buffer - as used by mormot.crypt.rsa
-function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
 /// div-by-integer of a TBigInt 1024-bit buffer - as used by mormot.crypt.rsa
-function _x64div(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
 /// mod-by-integer of a TBigInt 1024-bit buffer - as used by mormot.crypt.rsa
-function _x64mod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
 /// matrix mul of two TBigInt 512-bit buffers - as used by mormot.crypt.rsa
-function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
 const
-  _x64subn  = 128; // handle 1024 bits per _x64sub() call
-  _x64muln  = 64;  // handle  512 bits per _x64mul() call
-  _x64divn = 128;  // handle 1024 bits per _x64div() call
-  _x64modn = 128;  // handle 1024 bits per _x64mod() call
-  _x64multn = 64;  // handle  512 bits per _x64mult() call
+  _xasmsubn  = SizeOf(pointer) * 16; // 512/1024 bits per call
+  _xasmmuln  = SizeOf(pointer) * 8;  // 256/512  bits per call
+  _xasmdivn  = SizeOf(pointer) * 16; // 512/1024 bits per call
+  _xasmmodn  = SizeOf(pointer) * 16; // 512/1024 bits per call
+  _xasmmultn = SizeOf(pointer) * 8;  // 256/512  bits per call
 
-{$endif CPUX64}
+{$endif CPUINTEL}
 
 
 { *************** AES Encoding/Decoding with optimized asm and AES-NI support }

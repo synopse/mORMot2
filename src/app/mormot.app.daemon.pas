@@ -161,7 +161,7 @@ type
   TSynDaemon = class(TSynPersistent)
   protected
     fConsoleMode: boolean;
-    fShowExceptionWaitEnter: boolean;
+    fShowExceptionWaitEnter: boolean; // ignored on POSIX
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
     procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
@@ -318,7 +318,7 @@ begin
         {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := NormalizeDirectoryExists(aLogFolder);
-  fShowExceptionWaitEnter := true; // default/legacy behavior
+  fShowExceptionWaitEnter := true; // default/legacy behavior - ignored on POSIX
   AfterCreate;
 end;
 
@@ -629,7 +629,7 @@ begin
     begin
       if cmd <> cSilentKill then
         ConsoleShowFatalException(E, fShowExceptionWaitEnter);
-      ExitCode := 1; // indicates error
+      ExitCode := 1; // notify failure on executing process
     end;
   end;
   if cmd <> cSilentKill then

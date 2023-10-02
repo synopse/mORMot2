@@ -1052,6 +1052,297 @@ asm
         pop    ebx
 end;
 
+// use CF flag to propagate 32-bit substractions carry
+function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // Value=eax Subs=edx Carry=ecx
+        push   ebx
+        push   esi
+        push   edi
+        mov    ebx,  dword ptr [edx]
+        add    ebx, ecx
+        mov    esi, dword ptr [edx + 4]
+        mov    edi, dword ptr [edx + 4 * 2]
+        mov    ecx, dword ptr [edx + 4 * 3]
+        sub    dword ptr [eax], ebx
+        sbb    dword ptr [eax + 4], esi
+        sbb    dword ptr [eax + 4 * 2], edi
+        sbb    dword ptr [eax + 4 * 3], ecx
+        mov    ebx,  dword ptr [edx + 4 * 4]
+        mov    esi, dword ptr [edx + 4 * 5]
+        mov    edi, dword ptr [edx + 4 * 6]
+        mov    ecx, dword ptr [edx + 4 * 7]
+        sbb    dword ptr [eax + 4 * 4], ebx
+        sbb    dword ptr [eax + 4 * 5], esi
+        sbb    dword ptr [eax + 4 * 6], edi
+        sbb    dword ptr [eax + 4 * 7], ecx
+        mov    ebx,  dword ptr [edx + 4 * 8]
+        mov    esi, dword ptr [edx + 4 * 9]
+        mov    edi, dword ptr [edx + 4 * 10]
+        mov    ecx, dword ptr [edx + 4 * 11]
+        sbb    dword ptr [eax + 4 * 8], ebx
+        sbb    dword ptr [eax + 4 * 9], esi
+        sbb    dword ptr [eax + 4 * 10], edi
+        sbb    dword ptr [eax + 4 * 11], ecx
+        mov    ebx,  dword ptr [edx + 4 * 12]
+        mov    esi, dword ptr [edx + 4 * 13]
+        mov    edi, dword ptr [edx + 4 * 14]
+        mov    ecx, dword ptr [edx + 4 * 15]
+        sbb    dword ptr [eax + 4 * 12], ebx
+        sbb    dword ptr [eax + 4 * 13], esi
+        sbb    dword ptr [eax + 4 * 14], edi
+        sbb    dword ptr [eax + 4 * 15], ecx
+        mov    eax, 0   // keep the carry flag
+        adc    eax, eax // return current carry as 0/1
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+// use "mul" opcode to compute 32-bit * 32-bit into 64-bit
+function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        xor    ebx, ebx
+        mov    esi, Src
+        mov    edi, Dst
+        mov    ebp, Carry
+        mov    eax, dword ptr [esi]
+        mul    ecx // eax:edx = [Src] * Factor
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 1]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 1], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 2]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 2], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 3]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 3], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 4]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 4], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 5]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 5], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 6]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 6], eax
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 7]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        mov    dword ptr [edi + 4 * 7], eax
+        mov    eax, edx // return carry
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
+// use "div" opcode to divide 64-bit into 32-bit * 32-bit result
+function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+asm     // Value=eax Factor=edx Carry=ecx
+        push   ebx
+        push   ebp
+        mov    ebx, Value
+        mov    ebp, Factor
+        mov    edx, Carry
+        mov    eax, dword ptr [ebx + 4 * 15]
+        div    ebp  // eax = edx:eax div ebp (edx = modulo)
+        mov    dword ptr [ebx + 4 * 15], eax
+        mov    eax, dword ptr [ebx + 4 * 14]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 14], eax
+        mov    eax, dword ptr [ebx + 4 * 13]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 13], eax
+        mov    eax, dword ptr [ebx + 4 * 12]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 12], eax
+        mov    eax, dword ptr [ebx + 4 * 11]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 11], eax
+        mov    eax, dword ptr [ebx + 4 * 10]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 10], eax
+        mov    eax, dword ptr [ebx + 4 * 9]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 9], eax
+        mov    eax, dword ptr [ebx + 4 * 8]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 8], eax
+        mov    eax, dword ptr [ebx + 4 * 7]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 7], eax
+        mov    eax, dword ptr [ebx + 4 * 6]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 6], eax
+        mov    eax, dword ptr [ebx + 4 * 5]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 5], eax
+        mov    eax, dword ptr [ebx + 4 * 4]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 4], eax
+        mov    eax, dword ptr [ebx + 4 * 3]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 3], eax
+        mov    eax, dword ptr [ebx + 4 * 2]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 2], eax
+        mov    eax, dword ptr [ebx + 4 * 1]
+        div    ebp
+        mov    dword ptr [ebx + 4 * 1], eax
+        mov    eax, dword ptr [ebx]
+        div    ebp
+        mov    dword ptr [ebx], eax
+        mov    eax, edx // return carry
+        pop    ebp
+        pop    ebx
+end;
+
+// use "div" opcode to divide 64-bit into 32-bit * 32-bit result
+function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+asm     // Value=eax Factor=edx Carry=ecx
+        push   ebx
+        push   ebp
+        mov    ebx, Value
+        mov    ebp, Factor
+        mov    edx, Carry
+        mov    eax, dword ptr [ebx + 4 * 15]
+        div    ebp  // eax = edx:eax div ebp (edx = modulo)
+        mov    eax, dword ptr [ebx + 4 * 14]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 13]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 12]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 11]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 10]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 9]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 8]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 7]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 6]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 5]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 4]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 3]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 2]
+        div    ebp
+        mov    eax, dword ptr [ebx + 4 * 1]
+        div    ebp
+        mov    eax, dword ptr [ebx]
+        div    ebp
+        mov    eax, edx // return carry
+        pop    ebp
+        pop    ebx
+end;
+
+// use "mul" opcode to compute 32-bit * 32-bit into 64-bit
+function _xasmmult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
+        push   ebx
+        push   esi
+        push   edi
+        push   ebp
+        xor    ebx, ebx
+        mov    esi, Src
+        mov    edi, Dst
+        mov    ebp, Carry
+        mov    eax, dword ptr [esi]
+        mul    ecx // eax:edx = [Src] * Factor
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 1]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 1], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 2]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 2], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 3]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 3], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 4]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 4], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 5]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 5], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 6]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 6], eax
+        adc    edx, ebx
+        mov    ebp, edx
+        mov    eax, dword ptr [esi + 4 * 7]
+        mul    ecx
+        add    eax, ebp
+        adc    edx, ebx
+        add    dword ptr [edi + 4 * 7], eax
+        adc    edx, ebx
+        mov    eax, edx // return carry
+        pop    ebp
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // W=eax Buf=edx

@@ -2672,7 +2672,7 @@ end;
 
 
 // use CF flag to propagate 64-bit substractions carry
-function _x64sub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Subs r8/rdx=Carry
         xor    eax, eax
@@ -2713,7 +2713,7 @@ function _x64sub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
 end;
 
 // use "mul" opcode to compute 64-bit * 64-bit into 128-bit
-function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
         {$ifdef WIN64ABI}
@@ -2780,7 +2780,7 @@ function _x64mul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 end;
 
 // use "div" opcode to divide 128-bit into 64-bit * 64-bit result
-function _x64div(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Factor r8/rdx=Carry
         {$ifdef WIN64ABI}
@@ -2846,7 +2846,7 @@ function _x64div(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 end;
 
 // use "div" opcode to divide 128-bit into 64-bit * 64-bit result
-function _x64mod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Factor r8/rdx=Carry
         {$ifdef WIN64ABI}
@@ -2896,7 +2896,7 @@ function _x64mod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 end;
 
 // use "mul" opcode to compute 64-bit * 64-bit into 128-bit
-function _x64mult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
         {$ifdef WIN64ABI}
