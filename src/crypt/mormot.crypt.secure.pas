@@ -6956,7 +6956,7 @@ var
 begin
   pos := 0;
   while buf[pos] = 0 do
-    // ignore trailing zeros
+    // ignore leading zeros
     inc(pos);
   dec(buflen, pos);
   prefix := buf[pos] shr 7; // two's complement?
@@ -7569,7 +7569,7 @@ begin
   inc(p, al);
   if AsnType = ASN1_BITSTR then
   begin
-    p^ := 0; // trailing bit length
+    p^ := 0; // leading bit length
     inc(p);
   end;
   for i := 0 to high(Content) do
@@ -7728,7 +7728,7 @@ function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString; CtrEndPos: PInteger): integer;
 var
   asnsize: integer;
-  y: int64;
+  y: Int64;
 begin
   if Value <> nil then
     Value^ := '';
@@ -7755,7 +7755,7 @@ begin
       ASN1_INT,
       ASN1_ENUM,
       ASN1_BOOL:
-        Value^ := ToUtf8(AsnDecInt(Pos, Buffer, asnsize));
+        Int64ToUtf8(AsnDecInt(Pos, Buffer, asnsize), RawUtf8(Value^));
       ASN1_COUNTER,
       ASN1_GAUGE,
       ASN1_TIMETICKS,
@@ -7768,7 +7768,7 @@ begin
             inc(Pos);
             dec(asnsize);
           end;
-          Value^ := ToUtf8(y);
+          Int64ToUtf8(y, RawUtf8(Value^));
         end;
       ASN1_OBJID:
         begin
