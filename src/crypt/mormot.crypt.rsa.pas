@@ -9,6 +9,7 @@ unit mormot.crypt.rsa;
    Rivest-Shamir-Adleman (RSA) Public-Key Cryptography
     - RSA Oriented Big-Integer Computation
     - RSA Low-Level Cryptography Functions
+    - Registration of our RSA Engine to the TCryptAsym Factory
 
   *****************************************************************************
 }
@@ -39,6 +40,8 @@ uses
   - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
   - references: https://github.com/Mbed-TLS/mbedtls and the Handbook of Applied
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
+  - will register as Asym 'RS256','RS384','RS512' algorithms (if not overriden
+    by mormot.crypt.openssl), keeping simple and efficient 'RSA2048SHA256'
 }
 
 {.$define USEBARRET}
@@ -2646,5 +2649,134 @@ begin
   result := BufferEncryptSign(pointer(seq), length(seq), {sign=}true);
 end;
 
+
+{ *********** Registration of our RSA Engine to the TCryptAsym Factory }
+
+type
+  TCryptAsymRsa = class(TCryptAsym)
+  protected
+    fDefaultHasher: TCryptHasher;
+  public
+    constructor Create(const name: RawUtf8); overload; override;
+    constructor Create(const name, hasher: RawUtf8); reintroduce; overload;
+    procedure GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8); override;
+    function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const priv: RawByteString; out sig: RawByteString;
+      const privpwd: RawUtf8 = ''): boolean; override;
+    function Verify(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
+      const pub, sig: RawByteString): boolean; override;
+  end;
+
+{ TCryptAsymRsa }
+
+constructor TCryptAsymRsa.Create(const name: RawUtf8);
+begin
+  inherited Create(name);
+  if fDefaultHasher = nil then
+    fDefaultHasher := Hasher('sha256');
+  fPemPrivate := ord(pemRsaPrivateKey);
+  fPemPublic := ord(pemRsaPublicKey);
+end;
+
+constructor TCryptAsymRsa.Create(const name, hasher: RawUtf8);
+begin
+  fDefaultHasher := mormot.crypt.secure.Hasher(hasher);
+  if fDefaultHasher = nil then
+    raise ECrypt.CreateUtf8('%.Create: unknown hasher=%', [self, hasher]);
+  Create(name);
+end;
+
+procedure TCryptAsymRsa.GenerateDer(out pub, priv: RawByteString;
+  const privpwd: RawUtf8);
+var
+  rsa: TRsa;
+begin
+  if privpwd <> '' then
+    raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
+  rsa := TRsa.Create;
+  try
+    if not rsa.Generate(2048, bspMost, 4, 10000) then
+      exit; // timed out
+    pub := rsa.SavePublicKeyDer;
+    priv := rsa.SavePrivateKeyDer;
+  finally
+    rsa.Free;
+  end;
+end;
+
+function TCryptAsymRsa.Sign(hasher: TCryptHasher; msg: pointer;
+  msglen: PtrInt; const priv: RawByteString; out sig: RawByteString;
+  const privpwd: RawUtf8): boolean;
+var
+  digest: THash512Rec;
+  algo: THashAlgo;
+  rsa: TRsa;
+begin
+  result := false;
+  if hasher = nil then
+    hasher := fDefaultHasher;
+  if (hasher = nil) or
+     (priv = '') or
+     (privpwd <> '') or
+     not hasher.HashAlgo(algo) then
+    exit; // invalid or unsupported
+  rsa := TRsa.Create;
+  try
+    if not rsa.LoadFromPrivateKeyDer(PemToDer(priv)) then
+      exit;
+    FillZero(digest.b);
+    hasher.Full(msg, msglen, digest);
+    sig := rsa.Sign(@digest.b, algo);
+    result := sig <> '';
+  finally
+    rsa.Free;
+    FillZero(digest.b);
+  end;
+end;
+
+function TCryptAsymRsa.Verify(hasher: TCryptHasher; msg: pointer;
+  msglen: PtrInt; const pub, sig: RawByteString): boolean;
+var
+  digest: THash512Rec;
+  diglen: PtrInt;
+  algo: THashAlgo;
+  oid: RawUtf8;
+  hash: RawByteString;
+  rsa: TRsa;
+begin
+  result := false;
+  if hasher = nil then
+    hasher := fDefaultHasher;
+  if (hasher = nil) or
+     (pub = '') or
+     not hasher.HashAlgo(algo) then
+    exit; // invalid or unsupported
+  rsa := TRsa.Create;
+  try
+    if not rsa.LoadFromPublicKeyDer(PemToDer(pub)) then
+      exit;
+    FillZero(digest.b);
+    diglen := hasher.Full(msg, msglen, digest);
+    hash := rsa.Verify(sig, @oid);
+    result := (length(hash) = diglen) and
+              CompareMem(pointer(hash), @digest, diglen);
+  finally
+    rsa.Free;
+    FillZero(digest.b);
+  end;
+end;
+
+procedure InitializeUnit;
+begin
+  // register this unit methods to our high-level cryptographic catalog
+  TCryptAsymRsa.Implements('RS256,RSA2048SHA256');
+  TCryptAsymRsa.Create('RS384', 'sha384');
+  TCryptAsymRsa.Create('RS512', 'sha384');
+  // RS256 RS384 RS512 may be overriden by faster mormot.crypt.openssl
+  // but RSA2048SHA256 will stil be available to use this unit if needed
+end;
+
+initialization
+  InitializeUnit;
 
 end.

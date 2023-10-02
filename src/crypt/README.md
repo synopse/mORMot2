@@ -63,6 +63,13 @@ Certificate-based Public Key Cryptography Classes
 - `IProtocol` Implemented using Public Key Cryptography
 - Registration of our ECC Engine to the `TCryptAsym`/`TCryptCert` Factories
 
+### mormot.crypt.rsa
+
+Rivest-Shamir-Adleman (RSA) Public-Key Cryptography
+- RSA Oriented Big-Integer Computation
+- RSA Low-Level Cryptography Functions
+- Registration of our RSA Engine to the `TCryptAsym` Factory
+
 ### mormot.crypt.jwt
 
 JSON Web Tokens (JWT) Implementation - see RFC 7797

@@ -2664,6 +2664,7 @@ begin
   for a := 0 to high(alg) do
   begin
     asy := alg[a] as TCryptAsym;
+    AddAlgName;
     Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
     asy.GeneratePem(pub, priv, '');
     Check(pub <> '');

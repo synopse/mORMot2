@@ -43,7 +43,8 @@ uses
   mormot.core.buffers,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
-  mormot.crypt.ecc,
+  mormot.crypt.ecc, // included here to replace ES256 algorithm
+  mormot.crypt.rsa, // included here to replace RS256/RS384/RS512 algorithms
   mormot.crypt.secure,
   mormot.crypt.jwt,
   mormot.lib.openssl11;
