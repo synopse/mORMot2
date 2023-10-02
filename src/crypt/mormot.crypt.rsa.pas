@@ -236,7 +236,7 @@ type
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime = bspMost;
       Iterations: integer = 20; EndTix: Int64 = 0): boolean;
-    /// return crc32c of the Big Integer value binary
+    /// return the crc32c hash of this Big Integer value binary
     function ToHash: cardinal;
     /// return the Big Integer value as hexadecimal
     function ToHexa: RawUtf8;
@@ -1023,14 +1023,24 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    repeat
-      inc(v, PtrUInt(pa^) + pb^); // 16/32-bit per iteration
-      pa^ := v;
-      v := v shr HALF_BITS; // branchless carry propagation
-      inc(pa);
-      inc(pb);
-      dec(n);
-    until n = 0;
+    {$ifdef CPUINTEL}
+    while n >= _xasmaddn div HALF_BYTES do // 512/1024-bit per iteration
+    begin
+      v := _xasmadd(pa, pb, v);
+      inc(PByte(pa), _xasmaddn);
+      inc(PByte(pb), _xasmaddn);
+      dec(n, _xasmaddn div HALF_BYTES);
+    end;
+    if n > 0 then
+    {$endif CPUINTEL}
+      repeat
+        inc(v, PtrUInt(pa^) + pb^); // 16/32-bit per iteration
+        pa^ := v;
+        v := v shr HALF_BITS; // branchless carry propagation
+        inc(pa);
+        inc(pb);
+        dec(n);
+      until n = 0;
     pa^ := v;
   end;
   b.Release;
@@ -1598,12 +1608,12 @@ var
 begin
   carry := 0; // initial carry value
   {$ifdef CPUINTEL}
-  while n >= _xasmmultn div HALF_BYTES do // 256/512-bit per loop
+  while n >= _xasmmuladdn div HALF_BYTES do // 256/512-bit per loop
   begin
-    carry := _xasmmult(src, dst, factor, carry);
-    inc(PByte(dst), _xasmmultn);
-    inc(PByte(src), _xasmmultn);
-    dec(n, _xasmmultn div HALF_BYTES);
+    carry := _xasmmuladd(src, dst, factor, carry);
+    inc(PByte(dst), _xasmmuladdn);
+    inc(PByte(src), _xasmmuladdn);
+    dec(n, _xasmmuladdn div HALF_BYTES);
   end;
   if n > 0 then
   {$endif CPUINTEL}

@@ -1052,6 +1052,53 @@ asm
         pop    ebx
 end;
 
+// use CF flag to propagate 32-bit additions carry
+function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // Value=eax Adds=edx Carry=ecx
+        push   ebx
+        push   esi
+        push   edi
+        mov    ebx,  dword ptr [edx]
+        add    ebx, ecx
+        mov    esi, dword ptr [edx + 4]
+        mov    edi, dword ptr [edx + 4 * 2]
+        mov    ecx, dword ptr [edx + 4 * 3]
+        add    dword ptr [eax], ebx
+        adc    dword ptr [eax + 4], esi
+        adc    dword ptr [eax + 4 * 2], edi
+        adc    dword ptr [eax + 4 * 3], ecx
+        mov    ebx,  dword ptr [edx + 4 * 4]
+        mov    esi, dword ptr [edx + 4 * 5]
+        mov    edi, dword ptr [edx + 4 * 6]
+        mov    ecx, dword ptr [edx + 4 * 7]
+        adc    dword ptr [eax + 4 * 4], ebx
+        adc    dword ptr [eax + 4 * 5], esi
+        adc    dword ptr [eax + 4 * 6], edi
+        adc    dword ptr [eax + 4 * 7], ecx
+        mov    ebx,  dword ptr [edx + 4 * 8]
+        mov    esi, dword ptr [edx + 4 * 9]
+        mov    edi, dword ptr [edx + 4 * 10]
+        mov    ecx, dword ptr [edx + 4 * 11]
+        adc    dword ptr [eax + 4 * 8], ebx
+        adc    dword ptr [eax + 4 * 9], esi
+        adc    dword ptr [eax + 4 * 10], edi
+        adc    dword ptr [eax + 4 * 11], ecx
+        mov    ebx,  dword ptr [edx + 4 * 12]
+        mov    esi, dword ptr [edx + 4 * 13]
+        mov    edi, dword ptr [edx + 4 * 14]
+        mov    ecx, dword ptr [edx + 4 * 15]
+        adc    dword ptr [eax + 4 * 12], ebx
+        adc    dword ptr [eax + 4 * 13], esi
+        adc    dword ptr [eax + 4 * 14], edi
+        adc    dword ptr [eax + 4 * 15], ecx
+        mov    eax, 0   // keep the carry flag
+        adc    eax, eax // return current carry as 0/1
+        pop    edi
+        pop    esi
+        pop    ebx
+end;
+
 // use CF flag to propagate 32-bit substractions carry
 function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
   {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1271,7 +1318,7 @@ asm     // Value=eax Factor=edx Carry=ecx
 end;
 
 // use "mul" opcode to compute 32-bit * 32-bit into 64-bit
-function _xasmmult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         push   ebx
         push   esi

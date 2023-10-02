@@ -2670,6 +2670,46 @@ procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
         adc    qword ptr [Value + 24], r8
 end;
 
+// use CF flag to propagate 64-bit additions carry
+function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=Value rdx/rsi=Adds r8/rdx=Carry
+        xor    eax, eax
+        mov    r9,  qword ptr [Adds]
+        add    r9, Carry
+        mov    r8 , qword ptr [Adds + 8]
+        mov    r10, qword ptr [Adds + 8 * 2]
+        mov    r11, qword ptr [Adds + 8 * 3]
+        add    qword ptr [Value], r9
+        adc    qword ptr [Value + 8], r8
+        adc    qword ptr [Value + 8 * 2], r10
+        adc    qword ptr [Value + 8 * 3], r11
+        mov    r9,  qword ptr [Adds + 8 * 4]
+        mov    r8 , qword ptr [Adds + 8 * 5]
+        mov    r10, qword ptr [Adds + 8 * 6]
+        mov    r11, qword ptr [Adds + 8 * 7]
+        adc    qword ptr [Value + 8 * 4], r9
+        adc    qword ptr [Value + 8 * 5], r8
+        adc    qword ptr [Value + 8 * 6], r10
+        adc    qword ptr [Value + 8 * 7], r11
+        mov    r9,  qword ptr [Adds + 8 * 8]
+        mov    r8 , qword ptr [Adds + 8 * 9]
+        mov    r10, qword ptr [Adds + 8 * 10]
+        mov    r11, qword ptr [Adds + 8 * 11]
+        adc    qword ptr [Value + 8 * 8], r9
+        adc    qword ptr [Value + 8 * 9], r8
+        adc    qword ptr [Value + 8 * 10], r10
+        adc    qword ptr [Value + 8 * 11], r11
+        mov    r9,  qword ptr [Adds + 8 * 12]
+        mov    r8 , qword ptr [Adds + 8 * 13]
+        mov    r10, qword ptr [Adds + 8 * 14]
+        mov    r11, qword ptr [Adds + 8 * 15]
+        adc    qword ptr [Value + 8 * 12], r9
+        adc    qword ptr [Value + 8 * 13], r8
+        adc    qword ptr [Value + 8 * 14], r10
+        adc    qword ptr [Value + 8 * 15], r11
+        adc    eax, eax // return current carry as 0/1
+end;
 
 // use CF flag to propagate 64-bit substractions carry
 function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
@@ -2896,7 +2936,7 @@ function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 end;
 
 // use "mul" opcode to compute 64-bit * 64-bit into 128-bit
-function _xasmmult(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
         {$ifdef WIN64ABI}
