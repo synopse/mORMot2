@@ -1713,9 +1713,7 @@ destructor TRsaContext.Destroy;
 var
   b, next : PBigInt;
 begin
-  if ActiveCount <> 0 then
-    raise ERsaException.CreateUtf8('%.Destroy: memory leak - ActiveCount=%',
-      [self, ActiveCount]);
+  // wipe and free all released blocks
   b := fFreeList;
   while b <> nil do
   begin
@@ -1726,6 +1724,17 @@ begin
     b := next;
   end;
   inherited Destroy;
+  if ActiveCount <> 0 then
+  try
+    // warns for memory leaks after memory buffers are wiped and freed
+    raise ERsaException.CreateUtf8('%.Destroy: memory leak - ActiveCount=%',
+      [self, ActiveCount]);
+  except
+    // just notify the debugger, console and mormot log that it was plain wrong
+    on E: Exception do
+      ConsoleShowFatalException(E, {waitforkey=}false);
+    // but keep the program running and any other Destroy to be called
+  end;
 end;
 
 procedure TRsaContext.WipeReleased;
@@ -2109,8 +2118,8 @@ begin
   fDQ.ResetPermanentAndRelease;
   fQInv.ResetPermanentAndRelease;
   // fM fP fQ are already finalized by ResetModulo()
-  inherited Destroy;
   fSafe.Done;
+  inherited Destroy;
 end;
 
 function TRsa.HasPublicKey: boolean;
