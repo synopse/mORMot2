@@ -5502,7 +5502,7 @@ end;
 procedure TSynLog.LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
   Instance: TObject; TextTruncateAtLength: integer);
 var
-  lasterror: cardinal;
+  lasterror, textlen: integer;
 begin
   if Level = sllLastError then
     lasterror := GetLastError
@@ -5527,11 +5527,13 @@ begin
       if Instance <> nil then
         fWriter.AddInstancePointer(Instance, ' ', fFamily.WithUnitName,
           fFamily.WithInstancePointer);
-      if length(Text) > TextTruncateAtLength then
+      textlen := length(Text);
+      if textlen > TextTruncateAtLength then
       begin
-        fWriter.AddOnSameLine(pointer(Text), TextTruncateAtLength);
+        fWriter.AddOnSameLine(pointer(Text),
+          Utf8TruncatedLength(pointer(Text), textlen, TextTruncateAtLength));
         fWriter.AddShort('... (truncated) length=');
-        fWriter.AddU(length(Text));
+        fWriter.AddU(textlen);
       end
       else
         fWriter.AddOnSameLine(pointer(Text));
