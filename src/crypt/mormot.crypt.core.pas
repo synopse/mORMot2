@@ -288,22 +288,22 @@ function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
 /// mul-by-integer of a TBigInt 256/512-bit buffer - as used by mormot.crypt.rsa
 function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
+/// mul-and-add of a TBigInt 256/512-bit buffer - as used by mormot.crypt.rsa
+function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+
 /// div-by-integer of a TBigInt 512/1024-bit buffer - as used by mormot.crypt.rsa
 function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
 /// mod-by-integer of a TBigInt 512/1024-bit buffer - as used by mormot.crypt.rsa
 function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
-/// matrix mul + add of two TBigInt 256/512-bit buffers - as used by mormot.crypt.rsa
-function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
-
 const
   _xasmaddn    = SizeOf(pointer) * 16; // 512/1024 bits per call
   _xasmsubn    = SizeOf(pointer) * 16; // 512/1024 bits per call
   _xasmmuln    = SizeOf(pointer) * 8;  // 256/512  bits per call
+  _xasmmuladdn = SizeOf(pointer) * 8;  // 256/512  bits per call
   _xasmdivn    = SizeOf(pointer) * 16; // 512/1024 bits per call
   _xasmmodn    = SizeOf(pointer) * 16; // 512/1024 bits per call
-  _xasmmuladdn = SizeOf(pointer) * 8;  // 256/512  bits per call
 
 {$endif CPUINTEL}
 

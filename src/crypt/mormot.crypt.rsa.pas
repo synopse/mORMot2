@@ -562,7 +562,7 @@ type
     function Verify(const Signature: RawByteString;
       AlgorithmOid: PRawUtf8 = nil): RawByteString;
     /// compute a RSA binary signature with the current Private Key
-    // - returns the encoded signature
+    // - returns the encoded signature or '' on error
     // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
     /// RSA modulus size in bytes
@@ -1600,8 +1600,9 @@ begin
   result := Divide(v.Copy, bidMod);
 end;
 
-// compute dst[] := src[] * factor in O(n2) brute force algorithm
-// with modern CPU and their mul opcode in a few cycles, Karatsuba is not better
+// compute dst[] := dst[] + src[] * factor using O(n2) brute force algorithm
+// - on modern CPU with mul opcode in a few cycles, Karatsuba is not faster
+// - call a sub-function for better code generation on oldest Delphi
 procedure RawMultiply(src, dst: PHalfUInt; n: integer; factor: PtrUInt);
 var
   carry: PtrUInt;
@@ -1635,7 +1636,6 @@ var
 begin
   r := Owner.Allocate(Size + b^.Size);
   for i := 0 to b^.Size - 1 do
-    // call a sub-function for better code generation on oldest Delphi
     RawMultiply(pointer(Value), @r^.Value[i], Size, b^.Value[i]);
   Release;
   b.Release;
