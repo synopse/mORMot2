@@ -1736,7 +1736,7 @@ begin
         else
           inc(p);
     end
-    else if not (p^ in ['/', '_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z']) then
+    else if not (p^ in ['/', '_', '-', '.', '$', '0'..'9', 'a'..'z', 'A'..'Z']) then
       exit; // not a valid plain URI character
     inc(p);
   until p^ = #0;
