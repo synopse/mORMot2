@@ -10,6 +10,7 @@ unit mormot.crypt.jwt;
     - Abstract JWT Parsing and Computation
     - JWT Implementation of HS* and S3* Symmetric Algorithms
     - JWT Implementation of ES256 Asymmetric Algorithm
+    - JWT Implementation of RS256/RS384/RS512 Asymmetric Algorithms
 
    Uses optimized mormot.crypt.core.pas and mormot.crypt.ecc for its process.
    See mormot.crypt.openssl.pas to support all other JWT algorithms.
@@ -37,7 +38,8 @@ uses
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.ecc256r1,
-  mormot.crypt.ecc;
+  mormot.crypt.ecc,
+  mormot.crypt.rsa;
 
 
 { **************** Abstract JWT Parsing and Computation }
@@ -536,7 +538,7 @@ const
     TJwtS3S256);
 
 
-{ **************  JWT Implementation of ES256 Algorithm }
+{ ************** JWT Implementation of ES256 Algorithm }
 
 type
   /// implements JSON Web Tokens using 'ES256' algorithm
@@ -583,6 +585,66 @@ type
     /// if the associated TEccCertificate is to be owned by this instance
     property OwnCertificate: boolean
       read fOwnCertificate write fOwnCertificate;
+  end;
+
+
+{ ************** JWT Implementation of RS256/RS384/RS512 Algorithms }
+
+type
+  /// abstract parent for JSON Web Tokens using our mormot.crypt.rsa unit
+  // - inherited TJwtRS256/TJwtRS384/TJwtRS512 classes implement proper
+  // RS256/RS384/RS512 algorithms as defined in https://jwt.io
+  TJwtRsa = class(TJwtAbstract)
+  protected
+    fRsa: TRsa;
+    fHash: THashAlgo;
+    fHashOid: RawUtf8;
+    procedure SetAlgorithm; virtual; abstract;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
+      var jwt: TJwtContent); override;
+  public
+    /// initialize the JWT processing instance calling SetAlgorithm abstract method
+    // - the supplied RSA key(s) could be in PEM or raw DER binary format
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(const aPrivateKey, aPublicKey: RawByteString;
+      aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
+      reintroduce;
+    /// finalize this JWT instance and its stored key
+    destructor Destroy; override;
+    /// access to the low-level associated TRsa instance
+    property Rsa: TRsa
+      read fRsa;
+  end;
+
+  /// meta-class of TJwtRsa classes
+  TJwtRsaClass = class of TJwtRsa;
+
+  /// implements 'RS256' RSA 2048-bit algorithm over SHA-256
+  // - you may consider faster TJwtRS256Osl from mormot.crypt.openssl instead
+  TJwtRS256 = class(TJwtRsa)
+  protected
+    procedure SetAlgorithm; override;
+  end;
+
+  /// implements 'RS384' RSA 2048-bit algorithm over SHA-384
+  // - you may consider faster TJwtRS384Osl from mormot.crypt.openssl instead
+  TJwtRS384 = class(TJwtRsa)
+  protected
+    procedure SetAlgorithm; override;
+  end;
+
+  /// implements 'RS512' RSA 2048-bit algorithm over SHA-512
+  // - you may consider faster TJwtRS512Osl from mormot.crypt.openssl instead
+  TJwtRS512 = class(TJwtRsa)
+  protected
+    procedure SetAlgorithm; override;
   end;
 
 
@@ -1345,7 +1407,7 @@ end;
 
 
 
-{ **************  JWT Implementation of ES256 Algorithm }
+{ ************** JWT Implementation of ES256 Algorithm }
 
 { TJwtES256 }
 
@@ -1399,6 +1461,110 @@ begin
     raise EEccException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64Uri(@sign, SizeOf(sign));
 end;
+
+
+{ ************** JWT Implementation of RS256/RS384/RS512 Algorithms }
+
+{ TJwtRsa }
+
+constructor TJwtRsa.Create(const aPrivateKey, aPublicKey: RawByteString;
+  aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
+  aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
+begin
+  SetAlgorithm;
+  fHashOid := ASN1_OID_HASH[fHash];
+  fRsa := TRsa.Create;
+  try
+    if aPrivateKey <> '' then
+    begin
+      if not fRsa.LoadFromPrivateKeyDer(PemToDer(aPrivateKey)) then
+        raise ERsaException.CreateUtf8(
+          '%.Create: invalid supplied private key', [self]);
+    end
+    else if (aPublicKey <> '') and
+            not fRsa.LoadFromPublicKeyDer(PemToDer(aPublicKey)) then
+      raise ERsaException.CreateUtf8(
+        '%.Create: invalid supplied public key', [self]);
+
+  except
+    FreeAndNil(fRsa);
+    raise;
+  end;
+  inherited Create(fAlgorithm, aClaims, aAudience, aExpirationMinutes,
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
+end;
+
+destructor TJwtRsa.Destroy;
+begin
+  inherited Destroy;
+  fRsa.Free;
+end;
+
+function TJwtRsa.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+var
+  h: TSynHasher;
+  dig: THash512Rec;
+  sig: RawByteString;
+begin
+  if not fRsa.HasPrivateKey then
+    raise ERsaException.CreateUtf8(
+      '%.ComputeSignature expects to hold a private key', [self]);
+  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  sig := fRsa.Sign(@dig.b, fHash);
+  if sig = '' then
+    raise ERsaException.CreateUtf8('%.ComputeSignature: Sign failed', [self]);
+  result := BinToBase64Uri(pointer(sig), length(sig));
+end;
+
+procedure TJwtRsa.CheckSignature(const headpayload: RawUtf8;
+  const signature: RawByteString; var jwt: TJwtContent);
+var
+  h: TSynHasher;
+  dig: THash512Rec;
+  hash: RawByteString;
+  oid: RawUtf8;
+begin
+  if not fRsa.HasPublicKey then
+    raise ERsaException.CreateUtf8(
+      '%.CheckSignature expects to hold a public key', [self]);
+  jwt.result := jwtInvalidSignature;
+  if length(signature) <> fRsa.ModulusLen then
+    exit;
+  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  hash := fRsa.Verify(signature, @oid);
+  if (hash <> '') and
+     (oid = fHashOid) then
+    jwt.result := jwtValid;
+end;
+
+
+{ TJwtRs256 }
+
+procedure TJwtRS256.SetAlgorithm;
+begin
+  fHash := hfSHA256;
+  fAlgorithm := 'RS256';
+end;
+
+
+{ TJwtRs384 }
+
+procedure TJwtRS384.SetAlgorithm;
+begin
+  fHash := hfSHA384;
+  fAlgorithm := 'RS384';
+end;
+
+
+{ TJwtRs512 }
+
+procedure TJwtRS512.SetAlgorithm;
+begin
+  fHash := hfSHA512;
+  fAlgorithm := 'RS512';
+end;
+
 
 
 procedure InitializeUnit;

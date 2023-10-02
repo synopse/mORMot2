@@ -18,7 +18,8 @@ unit mormot.crypt.openssl;
 
   TL;DR: On x86_64, our mormot.crypt.core.pas asm is stand-alone and faster
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
-         For ECC, our mormot.crypt.ecc256r1 is noticeably slower than OpenSSL.
+         For ECC/RSA, mormot.crypt.ecc256r1/rsa are slower than OpenSSL so this
+         unit will override their implementation during its initialization.
 
    Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
    to any restriction about the use of cryptographic software in your country.
@@ -43,8 +44,7 @@ uses
   mormot.core.buffers,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
-  mormot.crypt.ecc, // included here to replace ES256 algorithm
-  mormot.crypt.rsa, // included here to replace RS256/RS384/RS512 algorithms
+  mormot.crypt.ecc,
   mormot.crypt.secure,
   mormot.crypt.jwt,
   mormot.lib.openssl11;
@@ -488,7 +488,7 @@ const
 { ************** JWT Implementation using any OpenSSL Algorithm }
 
 type
-  /// implements JSON Web Tokens using OpenSSL Algorithms
+  /// abstract parent for OpenSSL JWT algorithms - never use this plain class!
   TJwtOpenSsl = class(TJwtAbstract)
   protected
     fPrivateKey, fPublicKey: RawByteString;
@@ -3043,6 +3043,7 @@ begin
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   // register OpenSSL methods to our high-level cryptographic catalog
+  // may override existing mormot.crypt.ecc256r1/rsa implementations
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for osa := low(osa) to high(osa) do
     if OpenSslSupports(osa) then
