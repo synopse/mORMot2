@@ -1001,7 +1001,7 @@ const
     'LIST',
     'SETTINGS',
     'NEW',
-    'RETRY',
+    'RETRY', // Windows Services API only
     'RESUME',
     nil);
 

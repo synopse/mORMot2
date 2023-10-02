@@ -1466,6 +1466,9 @@ type
     function FullFile(const filename: TFileName): RawUtf8;
     /// main factory to create a new hasher instance with this algorithm
     function New: ICryptHash; virtual; abstract;
+    /// return the THashAlgo equivalency of this hasher
+    // - this default implementation returns false meaning that it is unknown
+    function HashAlgo(out hasher: THashAlgo): boolean; virtual;
   end;
 
   /// signing parent class, as resolved by Signer()
@@ -5265,8 +5268,8 @@ constructor TCryptAlgo.Create(const name: RawUtf8);
 begin
   if name = '' then
     raise ECrypt.CreateUtf8('Unexpected %.Create('''')', [self]);
-  fName := name;
-  GlobalCryptAlgo.AddOrReplaceObject(name, self);
+  fName := LowerCase(name);
+  GlobalCryptAlgo.AddOrReplaceObject(fName, self);
 end;
 
 class function TCryptAlgo.InternalFind(
@@ -5623,7 +5626,10 @@ begin
   result := h.Final;
 end;
 
-
+function TCryptHasher.HashAlgo(out hasher: THashAlgo): boolean;
+begin
+  result := false; // unspecified
+end;
 
 type
   TCryptCrc32Internal = class(TCryptHasher)
@@ -5697,6 +5703,7 @@ type
   public
     constructor Create(const name: RawUtf8); override;
     function New: ICryptHash; override;
+    function HashAlgo(out hasher: THashAlgo): boolean; override;
   end;
 
   TCryptHashInternal = class(TCryptHash)
@@ -5709,7 +5716,7 @@ type
   end;
 
 const
-  /// CSV text of THashAlgo items, as recognized by Hasher/Hash factories
+  // CSV text of THashAlgo items, as recognized by Hasher/Hash factories
   HashAlgosText: PUtf8Char = 'md5,sha1,sha256,sha384,sha512,sha3_256,sha3_512';
 
 constructor TCryptHasherInternal.Create(const name: RawUtf8);
@@ -5725,6 +5732,12 @@ begin
   h := TCryptHashInternal.Create(self);
   h.fAlgo.Init(fAlgo);
   result := h;
+end;
+
+function TCryptHasherInternal.HashAlgo(out hasher: THashAlgo): boolean;
+begin
+  hasher := fAlgo;
+  result := true;
 end;
 
 

@@ -5096,6 +5096,8 @@ constructor TCryptAsymInternal.Create(const name: RawUtf8);
 begin
   inherited Create(name);
   fDefaultHasher := Hasher('sha256');
+  fPemPrivate := ord(pemEcPrivateKey);
+  fPemPublic := ord(pemEcPublicKey);
 end;
 
 procedure TCryptAsymInternal.GenerateDer(out pub, priv: RawByteString;
