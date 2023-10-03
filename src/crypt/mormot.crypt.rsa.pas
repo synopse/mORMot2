@@ -536,6 +536,7 @@ type
     /// load a private key from PKCS#1 or PKCS#8 DER format
     function LoadFromPrivateKeyDer(const Der: TCertDer): boolean;
     /// load a private key from PKCS#1 or PKCS#8 PEM format
+    // - will also accept and try to load from the DER format if PEM failed
     function LoadFromPrivateKeyPem(const Pem: TCertPem): boolean;
     /// save the stored public key as a TRsaPublicKey record
     function SavePublicKey: TRsaPublicKey;
@@ -605,7 +606,7 @@ const
   /// the OID of a RSA encryption public key (PKCS#1)
   ASN1_OID_RSAPUB = '1.2.840.113549.1.1.1';
 
-  /// the OID of the supported hash algorithms
+  /// the OID of the supported hash algorithms, decoded as text
   ASN1_OID_HASH: array[THashAlgo] of RawUtf8 = (
     '1.2.840.113549.2.5',       // hfMD5
     '1.3.14.3.2.26',            // hfSHA1
@@ -2722,7 +2723,7 @@ begin
     exit; // invalid or unsupported
   rsa := TRsa.Create;
   try
-    if not rsa.LoadFromPrivateKeyDer(PemToDer(priv)) then
+    if not rsa.LoadFromPrivateKeyPem(priv) then // handle PEM or DER
       exit;
     FillZero(digest.b);
     hasher.Full(msg, msglen, digest);

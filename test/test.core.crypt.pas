@@ -970,7 +970,7 @@ begin
   end;
   for i := 0 to high(OSSL_RSA) do
   begin
-    j := OSSL_RSA[i].Create(_rsapriv, '', [jrcIssuer, jrcExpirationTime], [], 60);
+    j := OSSL_RSA[i].Create(_rsapriv, [jrcIssuer, jrcExpirationTime], [], 60);
     {$ifdef USE_OPENSSL}
     test(j, {nofree=}false);
     {$else}

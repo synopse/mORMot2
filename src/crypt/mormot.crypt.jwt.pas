@@ -605,15 +605,16 @@ type
       var jwt: TJwtContent); override;
   public
     /// initialize the JWT processing instance calling SetAlgorithm abstract method
-    // - the supplied RSA key(s) could be in PEM or raw DER binary format
+    // - should supply one RSA key, eigher private or public, in PEM or raw DER
+    // binary format, of at least 1024 bits
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
     // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
     // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
-    constructor Create(const aPrivateKey, aPublicKey: RawByteString;
-      aClaims: TJwtClaims; const aAudience: array of RawUtf8;
-      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+    constructor Create(const aKey: RawByteString; aClaims: TJwtClaims;
+      const aAudience: array of RawUtf8; aExpirationMinutes: integer = 0;
+      aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
       reintroduce;
     /// finalize this JWT instance and its stored key
@@ -1467,29 +1468,40 @@ end;
 
 { TJwtRsa }
 
-constructor TJwtRsa.Create(const aPrivateKey, aPublicKey: RawByteString;
-  aClaims: TJwtClaims; const aAudience: array of RawUtf8;
-  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
-  aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
+constructor TJwtRsa.Create(const aKey: RawByteString; aClaims: TJwtClaims;
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
+var
+  der: TCertDer;
 begin
   SetAlgorithm;
   fHashOid := ASN1_OID_HASH[fHash];
-  fRsa := TRsa.Create;
   try
-    if aPrivateKey <> '' then
-    begin
-      if not fRsa.LoadFromPrivateKeyDer(PemToDer(aPrivateKey)) then
-        raise ERsaException.CreateUtf8(
-          '%.Create: invalid supplied private key', [self]);
-    end
-    else if (aPublicKey <> '') and
-            not fRsa.LoadFromPublicKeyDer(PemToDer(aPublicKey)) then
-      raise ERsaException.CreateUtf8(
-        '%.Create: invalid supplied public key', [self]);
-
-  except
-    FreeAndNil(fRsa);
-    raise;
+    fRsa := TRsa.Create;
+    try
+      der := PemToDer(aKey);
+      if der <> '' then
+        // try as private key, then as public key
+        if fRsa.LoadFromPrivateKeyDer(der) then
+        begin
+          if (fRsa.ModulusBits < 1024) or
+             not fRsa.CheckPrivateKey then
+          raise ERsaException.CreateUtf8('%.Create: invalid %-bit private key',
+            [self, fRsa.ModulusBits]);
+        end
+        else if fRsa.LoadFromPublicKeyDer(der) then
+          if fRsa.ModulusBits < 1024 then
+            raise ERsaException.CreateUtf8(
+              '%.Create: invalid %-bit public key', [self, fRsa.ModulusBits]);
+      if not fRsa.HasPublicKey then
+        raise ERsaException.CreateUtf8('%.Create: invalid key', [self]);
+    except
+      FreeAndNil(fRsa);
+      raise;
+    end;
+  finally
+    FillZero(RawByteString(der));
   end;
   inherited Create(fAlgorithm, aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
@@ -1511,9 +1523,10 @@ begin
     raise ERsaException.CreateUtf8(
       '%.ComputeSignature expects to hold a private key', [self]);
   h.Full(fHash, pointer(headpayload), length(headpayload), dig);
-  sig := fRsa.Sign(@dig.b, fHash);
+  sig := fRsa.Sign(@dig.b, fHash); // sign = encrypt with private key
   if sig = '' then
-    raise ERsaException.CreateUtf8('%.ComputeSignature: Sign failed', [self]);
+    raise ERsaException.CreateUtf8(
+      '%.ComputeSignature: %.Sign failed', [self, fRsa]);
   result := BinToBase64Uri(pointer(sig), length(sig));
 end;
 
@@ -1524,16 +1537,18 @@ var
   dig: THash512Rec;
   hash: RawByteString;
   oid: RawUtf8;
+  diglen: PtrInt;
 begin
-  if not fRsa.HasPublicKey then
+  if fRsa = nil then
     raise ERsaException.CreateUtf8(
       '%.CheckSignature expects to hold a public key', [self]);
   jwt.result := jwtInvalidSignature;
   if length(signature) <> fRsa.ModulusLen then
     exit;
-  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
-  hash := fRsa.Verify(signature, @oid);
-  if (hash <> '') and
+  diglen := h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  hash := fRsa.Verify(signature, @oid); // verify = decrypt with public key
+  if (length(hash) = diglen) and
+     CompareMem(pointer(hash), @dig, diglen) and
      (oid = fHashOid) then
     jwt.result := jwtValid;
 end;
