@@ -7,9 +7,9 @@ unit mormot.crypt.x509;
   *****************************************************************************
 
    ASN.1 Encoding and X.509 Certificates Implementation 
-    - ASN.1 Encoding Decoding
     - X.509 Encoding Decoding
     - X.509 Certificates
+    - Registration of our X.509 Engine to the TCryptCert Factory
 
   *****************************************************************************
 }
@@ -32,295 +32,42 @@ uses
   mormot.core.variants,
   mormot.core.json,
   mormot.crypt.core,
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.ecc256r1,
+  mormot.crypt.ecc,
+  mormot.crypt.rsa;
 
 
-{ **************** ASN.1 Encoding Decoding }
-
-// note: all ASN.1 types start with TAsn
-
-type
-  /// exception which may be raised during ASN.1 processing
-  EAsn = class(ESynException);
-
-  /// the recognized ASN.1 TAG NUMBER
-  // - only most simple kind of tags are actually supported by this unit
-  TAsnTagKind = (
-    atEoc,              // ASN1_TAG_EOC
-    atBoolean,          // ASN1_TAG_BOOLEAN
-    atInteger,          // ASN1_TAG_INTEGER
-    atBitString,        // ASN1_TAG_BITSTRING
-    atOctetString,      // ASN1_TAG_OCTETSTRING
-    atNull,             // ASN1_TAG_NULL
-    atOid,              // ASN1_TAG_OID
-    atObjectDesc,       // ASN1_TAG_OBJECT_DESCRIPTOR
-    atExternal,         // ASN1_TAG_EXTERNAL
-    atReal,             // ASN1_TAG_REAL
-    atEnumerated,       // ASN1_TAG_ENUMERATED
-    atEmbeddedPdv,      // ASN1_TAG_EMBEDDED_PDV
-    atUtf8String,       // ASN1_TAG_UTF8STRING
-    atRelativeOid,      // ASN1_TAG_RELATIVE_OID
-    atUnusedE,
-    atUnusedF,
-    atSequence,         // ASN1_TAG_SEQUENCE
-    atSet,              // ASN1_TAG_SET
-    atNumericString,    // ASN1_TAG_NUMERICSTRING
-    atPrintableString,  // ASN1_TAG_PRINTABLESTRING
-    atTG1String,        // ASN1_TAG_TG1STRING
-    atVideoTextString,  // ASN1_TAG_VIDEOTEXSTRING
-    atIA5String,        // ASN1_TAG_IA5STRING
-    atUtcTime,          // ASN1_TAG_UTCTIME
-    atGenerizedTime,    // ASN1_TAG_GENERALIZEDTIME
-    atGraphicString,    // ASN1_TAG_GRAPHICSTRING
-    atVisibleString,    // ASN1_TAG_VISIBLESTRING
-    atGeneralString,    // ASN1_TAG_GENERALSTRING
-    atUniversalString,  // ASN1_TAG_UNIVERSALSTRING
-    atCharacterString,  // ASN1_TAG_CHARACTERSTRING
-    atBmpString,        // ASN1_TAG_BMPSTRING
-    atLongForm,         // ASN1_TAG_LONGFORM
-    atUnknown);
-
-  /// defines the ASN.1 TAG CLASS
-  TAsnTagClass = (
-    acUniversal,        // ASN1_CLASS_UNIVERSAL
-    acApplication,      // ASN1_CLASS_APPLICATION
-    acContextSpecific,  // ASN1_CLASS_CONTEXT_SPECIFIC
-    acPrivate);         // ASN1_CLASS_PRIVATE
-
-  TAsnFlags = set of (
-    afConstructed);
-
-  /// used to store an ASN.1 OID content as integers
-  TAsnOid = type TCardinalDynArray;
-
-  /// used to store an ASN.1 OID content as text
-  TAsnOidText = type RawUtf8;
-
-  /// used to store an ASN.1 atInteger / atBitString content
-  // - note that Delphi doesn't allow "type TBytes" so TByteDynArray alias
-  TAsnInt = type TByteDynArray;
-
-  /// used to store a binary buffer
-  TAsnBinary = type RawByteString;
-
-  /// used to store an ASN.1 TAG content
-  {$ifdef USERECORDWITHMETHODS}
-  TAsnTag = record
-  {$else}
-  TAsnTag = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// mostly acUniversal kind of TAG
-    TagClass: TAsnTagClass;
-    /// defines this TAG content
-    TagKind: TAsnTagKind;
-    /// additional information about this tag
-    Flags: TAsnFlags;
-    /// low-level TAG-specific information
-    // - either the TagKind ordinal value, or the 32-bit custom identifier for
-    // atLongForm kind of TAG
-    TagNumber: cardinal;
-    /// the actual data of this TAG
-    Data: PAnsiChar;
-    /// how many bytes are stored in this TAG
-    Len: PtrUInt;
-    /// reset all fields of this tag
-    // - if TAsnTag is allocated on stack, should be called before Parse()
-    procedure Clear;
-    /// low-level unserialization from DER encoded binary
-    procedure Parse(var reader: TFastReader);
-    /// convert an atOid tag into an array of unsigned integers
-    function ToOid: TAsnOid; overload;
-    /// convert an atOid tag into a text array of unsigned integers
-    procedure ToOid(out text: shortstring); overload;
-    /// convert an atOid tag into a text array of unsigned integers
-    procedure ToOid(out text: TAsnOidText); overload;
-    /// convert an atBoolean tag into its true/false value
-    function ToBoolean: boolean;
-    /// convert an atInteger/atBitString tag into its 32-bit unsigned value
-    // - atBitString is converted from big-endian to a little-endian cardinal
-    function ToUInt32: cardinal;
-    /// retrieve an atInteger/atBitString tag in its native binary form
-    // - endianess is not changed, so atBitString is still big-endian encoded
-    function ToInteger: TAsnInt;
-    /// convert a string tag into its UTF-8 text
-    // - UTF-16 atBmpString is decoded into UTF-8 as expected
-    function ToUtf8: RawUtf8;
-    /// retrieve a tag in its native binary form
-    // - the leading 0 of unused bits in atBitString will be trimmed
-    // - other kind of tag will return Data/Len as raw binary
-    function ToBuffer: TAsnBinary;
-  end;
-
-  PAsnTag = ^TAsnTag;
-
-  /// stores an array of ASN.1 TAGs
-  TAsnTags = array of TAsnTag;
-
-  /// decode some ASN.1 encoded binary buffer
-  {$ifdef USERECORDWITHMETHODS}
-  TAsnParser = record
-  {$else}
-  TAsnParser = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// safe and efficient binary parsing of the input buffer
-    Reader: TFastReader;
-    /// internal ASN.1 Tag value used during parsing
-    Tag: TAsnTag;
-    /// initialize the parser
-    procedure Init(buf: pointer; buflen: PtrInt); overload;
-    /// initialize the parser and decode the first tags
-    function Init(const buf: RawByteString;
-      const kinds: array of TAsnTagKind): boolean; overload;
-    /// quickly check the upcoming Tag type
-    // - return atUnknown if TAsnTagClass does not match isclass
-    function PeekTag(isclass: TAsnTagClass = acUniversal): TAsnTagKind;
-    /// fill the Tag member with the next tag and check its type
-    function NextTag(iskind: TAsnTagKind; isclass: TAsnTagClass = acUniversal): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// expect the next tag to be an atOid, and returns its decoded value
-    procedure NextNull;
-    /// expect the next tag to be an atOid, and returns its decoded value
-    function NextOid: TAsnOid;
-    /// expect the next tag to be an atBoolean, and returns its decoded value
-    function NextBoolean: boolean;
-    /// expect the next tag to be a 32-bit atInteger/atBitString
-    function NextUInt32: cardinal;
-    /// expect the next tag to be a atInteger/atBitString of any size
-    function NextInteger: TAsnInt; overload;
-    /// expect the next tag to be a atInteger of any size
-    function NextInteger(out value: TAsnInt): boolean; overload;
-    /// expect the next tag to be a atBitString of any size
-    function NextBigInt(out value: TAsnInt): boolean;
-    /// expect the next tag to be a string, and returns its UTF-8 content
-    function NextUtf8: RawUtf8;
-    /// return most used tag contentin its raw binary format
-    function NextBuffer: RawByteString;
-   end;
-
-const
-  ASN1_MAX_OID_LEN = 20;
-
-  ASN1_TAG: array[TAsnTagKind] of PUtf8Char = (
-    'EOC',               // atEoc
-    'BOOLEAN',           // atBoolean
-    'INTEGER',           // atInteger
-    'BITSTRING',         // atBitString
-    'OCTETSTRING',       // atOctetString
-    'NULL',              // atNull
-    'OID',               // atOid
-    'OBJECT_DESCRIPTOR', // atObjectDesc
-    'EXTERNAL',          // atExternal
-    'REAL',              // atReal
-    'ENUMERATED',        // atEnumerated
-    'EMBEDDED_PDV',      // atEmbeddedPdv
-    'UTF8STRING',        // atUtf8String
-    'RELATIVE_OID',      // atRelativeOid
-    '',
-    '',
-    'SEQUENCE',          // atSequence
-    'SET',               // atSet
-    'NUMERICSTRING',     // atNumericString
-    'PRINTABLESTRING',   // atPrintableString
-    'TG1STRING',         // atTG1String
-    'VIDEOTEXSTRING',    // atVideoTextString
-    'IA5STRING',         // atIA5String
-    'UTCTIME',           // atUtcTime
-    'GENERALIZEDTIME',   // atGenerizedTime
-    'GRAPHICSTRING',     // atGraphicString
-    'VISIBLESTRING',     // atVisibleString
-    'GENERALSTRING',     // atGeneralString
-    'UNIVERSALSTRING',   // atUniversalString
-    'CHARACTERSTRING',   // atCharacterString
-    'BMPSTRING',         // atBmpString
-    'LONGFORM',          // atLongForm
-    '');
-
-  ASN1_TOKEN: array[TAsnTagKind] of AnsiChar = (
-    'x', // atEoc
-    'b', // atBoolean
-    'i', // atInteger
-    'B', // atBitString
-    'O', // atOctetString with potential (...)
-    'n', // atNull
-    'I', // atOid
-    'D', // atObjectDesc
-    'X', // atExternal
-    'R', // atReal
-    'e', // atEnumerated always with (...)
-    'p', // atEmbeddedPdv
-    'u', // atUtf8String
-    'r', // atRelativeOid
-    #0,
-    #0,
-    'S', // atSequence   always with (...)
-    'E', // atSet        always with (...)
-    'N', // atNumericString
-    'P', // atPrintableString
-    'T', // atTG1String
-    'V', // atVideoTextString
-    'A', // atIA5String
-    't', // atUtcTime
-    'z', // atGenerizedTime
-    'G', // atGraphicString
-    'V', // atVisibleString
-    'L', // atGeneralString
-    'U', // atUniversalString
-    'C', // atCharacterString
-    'M', // atBmpString
-    'l', // atLongForm
-    #0);
-
-  ASN1_CLASS: array[TAsnTagClass] of PUtf8Char = (
-    'UNIVERSAL',         // acUniversal
-    'APPLICATION',       // acApplication
-    'CONTEXT_SPECIFIC',  // acContextSpecific
-    'PRIVATE');          // acPrivate
-
-
-function ToText(k: TAsnTagKind): PShortString; overload; // see ASN1_TAG[]
-function ToText(c: TAsnTagClass): PShortString; overload;
-
-function IsEqual(const A, B: TAsnOid): boolean; overload;
-function StartWith(const A, Prefix: TAsnOid): boolean; overload;
-function StartWith(const A: TAsnOid; Prefix: PUtf8Char): boolean; overload;
-function ToText(const O: TAsnOid): RawUtf8; overload;
-
-/// create a list of ASN.1 nodes
-// - all TAGs will be unserialized in-order into the returned array
-function AsnParse(buf: pointer; buflen: PtrInt): TAsnTags;
-
-
-{ **************** X.509 Encoding Decoding}
+{ **************** X.509 Encoding Decoding }
 
 // note: all X.509 types start with TX
 
 type
-
+  /// exception raised by this unit
   EX509 = class(ESynException);
 
-  /// X509 Certificates attributes
+  /// known X509 Certificates attributes
+  // - as available via TX501Name.Names[]
   TXAttr = (
-    xaNone, // X509_NAME_ATTR_NONE
-    xaDC,   // X509_NAME_ATTR_DC  = domainComponent
-    xaCN,   // X509_NAME_ATTR_CN  = commonName
-    xaC,    // X509_NAME_ATTR_C   = countryName
-    xaL,    // X509_NAME_ATTR_L   = localityName
-    xaST,   // X509_NAME_ATTR_ST  = stateOrProvinceName
-    xaO,    // X509_NAME_ATTR_O   = organizationName
-    xaOU);  // X509_NAME_ATTR_OU  = organizationalUnitName
+    xaNone,
+    xaDC,   // domainComponent
+    xaCN,   // commonName (3)
+    xaSN,   // serialNumber (5)
+    xaC,    // countryName (6)
+    xaL,    // localityName (7)
+    xaST,   // stateOrProvinceName (8)
+    xaO,    // organizationName (10)
+    xaOU,   // organizationalUnitName (11)
+    xaT,    // title (12)
+    xaN,    // name (41)
+    xaS,    // surname (4)
+    xaG,    // givenName (42)
+    xaI,    // initials (43)
+    xaQ,    // qualifier (46)
+    xaP,    // pseudonym (65)
+    xaE);   // email
 
   /// Possible certificate validation results
-  TXValidate = (
-    xvOk,                     // X509_VALIDATE_OK
-    xvBadCertificate,         // X509_VALIDATE_BAD_CERTIFICATE
-    xvUnsupportedCertificate, // X509_VALIDATE_UNSUPPORTED_CERTIFICATE
-    xvCertificateRevoked,     // X509_VALIDATE_CERTIFICATE_REVOKED
-    xvCertificateExpired,     // X509_VALIDATE_CERTIFICATE_EXPIRED
-    xvCertificateUnknown,     // X509_VALIDATE_CERTIFICATE_UNKNOWN
-    xvUnknownCA);             // X509_VALIDATE_UNKNOWN_CA
-
   /// Certificate extensions
   TXExtensions = set of (
     xeBasicConstraints,   // X509_EXT_BASIC_CONSTRAINTS
@@ -349,98 +96,67 @@ type
     xkuClientAuth, // X509_EXT_KEY_USAGE_CLIENT_AUTH
     xkuOCSP);      // X509_EXT_KEY_USAGE_OCSP
 
-  /// Certificate File Types
-  TXFileType = (
-    ftPem,
-    fTAsn);
+  /// supported TX509.SignatureAlgorithm values
+  // - we support RSA and ECC-256 asymmetric algorithms using our own units
+  // - for safety, any unsafe algorithms (e.g. MD5 or SHA-1) are not defined
+  TX509SignatureAlgorithm = (
+    xsaNone,
+    xsaSha256Rsa,
+    xsaSha384Rsa,
+    xsaSha512Rsa,
+    xsaSha256Ecc256);
 
-  /// X.509 Binary Serial Number - up to X509_MAX_SERIAL_NUM_LEN bytes
-  TXSerialNumber = RawByteString;
-
-  TXNameAttribute = record
-    Attr: TXAttr;
-    Value: RawUtf8;
+  /// a X.501 Type Name
+  {$ifdef USERECORDWITHMETHODS}
+  TX501Name = record
+  {$else}
+  TX501Name = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fCachedAsn: RawByteString;
+    procedure ComputeAsn;
+  public
+    /// CSV of the values of each kind of known attributes
+    Names: array[TXAttr] of RawUtf8;
+    /// values which are not part of the known attributes
+    Others: array of record
+      RawOid: RawByteString;
+      Value: RawUtf8;
+    end;
+    /// the raw ASN1_SEQ encoded value of this name
+    function Binary: RawByteString;
+    /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
+    function FromAsn(const seq: TAsnObject): boolean;
+    /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
+    function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
+    /// to be called once any field has been changed to refresh the Binary cache
+    procedure AfterUpdate;
+    /// return the hash of the normalized Binary of this field
+    function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
   end;
-  TXNameAttributes = array of TXNameAttribute;
-
-  TXAlgorithmIdentifier = TAsnOidText;
-
-  TXValue = record
-    Algo: TXAlgorithmIdentifier;
-    Value: TAsnBinary;
-  end;
-
-  TXPublicKey = type TXValue;
-  TXPrivateKey = type TXValue;
-  TXSignature = type TXValue;
-
-  TXRsaPublicKey = record
-    PubMod, PubExp: TAsnInt;
-  end;
-  TXRsaPrivateKey = record
-    PubMod, PubExp, D, P, Q, DP, DQ, U: TAsnInt;
-  end;
-
-  TXDsaPublicKey = record
-    P, Q, G: TAsnInt;
-  end;
-  TXDsaPrivateKey = record
-    P, Q, G, X: TAsnInt;
-  end;
-
-  TXEccPublicKey = record
-    P: TAsnInt; // match TEccPublicKey compressed form (33 bytes)
-  end;
-  TXEccPrivateKey = record
-    Q: TAsnInt; // match TEccPrivateKey compressed form (32 bytes)
-    P: TAsnInt; // match TEccPublicKey compressed form (33 bytes)
-  end;
-
-  /// the record types as recognized by XRegister()
-  TXKeyKind = (
-    xkRsaPublicKey,
-    xkRsaPrivateKey,
-    xkDsaPublicKey,
-    xkDsaPrivateKey,
-    xkEccPublicKey,
-    xkEccPrivateKey);
-
-/// register a packed record type into the X.509 parsing
-// - follow ASN1_TOKEN[] markup, with (...) nested structures for E e S O
-// - constant (dotted) numbers wil be processed as expected OID/integers
-procedure XRegister(Kind: TXKeyKind; RecordInfo: PRttiInfo;
-  const Def: array of RawUtf8);
-
 
 const
-  X509_MAX_NAME_ATTRIBUTES = 20;
-  X509_MAX_SERIAL_NUM_LEN = 20;
-
-  X509_NAME_ATTR: array[TXAttr] of string[2] = (
-    '--',   // xaNone
-    'DC',   // xaDC
-    'CN',   // xaCN
-    'C',    // xaC
-    'L',    // xaL
-    'ST',   // xaST
-    'O',    // xaO
-    'OU');  // xaOU
-
-
-// constants to be used with StartWith(TAsnOid,PUtf8Char) or ToOid(shortstring)
+  /// the OID of all known attributes, as defined in RFC 3780 Appendix A.1
+  XA_OID: array[TXAttr] of PUtf8Char = (
+    '',                           // xaNone
+    '0.9.2342.19200300.100.1.25', // xaDC  domainComponent
+    '2.5.4.3',                    // xaCN  commonName (3)
+    '2.5.4.5',                    // xaSN  serialNumber (5)
+    '2.5.4.6',                    // xaC   countryName (6)
+    '2.5.4.7',                    // xaL   localityName (7)
+    '2.5.4.8',                    // xaST  stateOrProvinceName (8)
+    '2.5.4.10',                   // xaO   organizationName (10)
+    '2.5.4.11',                   // xaOU  organizationalUnitName (11)
+    '2.5.4.12',                   // xaT   title (12)
+    '2.5.4.41',                   // xaN   name (41)
+    '2.5.4.4',                    // xaS   surname (4)
+    '2.5.4.42',                   // xaG   givenName (42)
+    '2.5.4.43',                   // xaI   initials (43)
+    '2.5.4.46',                   // xaQ   qualifier (46)
+    '2.5.4.65',                   // xaP   pseudonym (65)
+    '1.2.840.113549.1.9.1');      // xaE   email
 
 const
-  OID_ATTRIBUTE_TYPES   = '2.5.4';
-  OID_ATTRIBUTE_TYPE_CN = '2.5.4.3';
-  OID_ATTRIBUTE_TYPE_C  = '2.5.4.6';
-  OID_ATTRIBUTE_TYPE_L  = '2.5.4.7';
-  OID_ATTRIBUTE_TYPE_ST = '2.5.4.8';
-  OID_ATTRIBUTE_TYPE_O  = '2.5.4.10';
-  OID_ATTRIBUTE_TYPE_OU = '2.5.4.11';
-
-  OID_EMAIL_ADDRESS     = '1.2.840.113549.1.9.1';
-  OID_ATTRIBUTE_TYPE_DC = '0.9.2342.19200300.100.1.25';
-
   OID_ID_CE                          = '2.5.29';
   OID_ID_CE_SUBJECT_KEY_IDENTIFIER   = '2.5.29.14';
   OID_ID_CE_KEY_USAGE                = '2.5.29.15';
@@ -492,473 +208,400 @@ const
 { **************** X.509 Certificates }
 
 type
-  TXName = class(TSynPersistent)
-  published
-
-  end;
-
-  TXCertificate = class(TSynPersistentStoreJson)
+  /// a X509 Certificate, as defined in RFC 5280 #4.1.2
+  // - contains information associated with the subject of the certificate
+  // and the CA that issued it
+  {$ifdef USERECORDWITHMETHODS}
+  TX509Content = record
+  {$else}
+  TX509Content = object
+  {$endif USERECORDWITHMETHODS}
   private
-    fIssuer: TXName;
-  protected
-    fVersion: integer;
-    fSerial: TXSerialNumber;
-    fSignatureAlgorithm: TXAlgorithmIdentifier;
+    fCachedDer: RawByteString; // for ToDer
+    procedure ComputeCachedDer;
   public
-
-  published
-    property Version: integer
-      read fVersion;
-    property Serial: TXSerialNumber
-      read fSerial;
-    property SignatureAlgorithm: TXAlgorithmIdentifier
-      read fSignatureAlgorithm;
-    property Issuer: TXName
-      read fIssuer;
+    /// describes the version of the encoded certificate
+    // - equals usually 3, once extensions are used
+    Version: integer;
+    /// raw binary of a positive integer assigned by the CA to each certificate
+    // - maps PBigInt.Save binary serialization
+    SerialNumber: RawByteString;
+    /// the cryptographic algorithm used by the CA over the TX509.Signed field
+    Signature: TX509SignatureAlgorithm;
+    /// identifies the entity that has signed and issued the certificate
+    Issuer: TX501Name;
+    ///
+    NotBefore: TUnixTime;
+    /// hexadecimal of a positive integer assigned by the CA to each certificate
+    // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
+    function SerialNumberHex: RawUtf8;
+    /// decimal text of a positive integer assigned by the CA to each certificate
+    // - e.g. '330929475774275458452528262248458246563660'
+    function SerialNumberText: RawUtf8;
+    /// serialize those fields into ASN.1 DER binary
+    function ToDer: TAsnObject;
+    /// unserialize those fields from ASN.1 DER binary
+    // - following RFC 5280 #4.1.2 encoding
+    function FromDer(const der: TCertDer): boolean;
+    /// to be called once any field has been changed to refresh ToDer cache
+    // - following RFC 5280 #4.1.2 encoding
+    procedure AfterUpdate;
   end;
 
+  /// a X509 signed Certificate, as defined in RFC 5280
+  {$ifdef USERECORDWITHMETHODS}
+  TX509 = record
+  {$else}
+  TX509 = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// actual to-be-signed Certificate content
+    Signed: TX509Content;
+    /// the cryptographic algorithm used by the CA over the Signed field
+    SignatureAlgorithm: TX509SignatureAlgorithm;
+    /// raw binary digital signature computed upon Signed.ToDer
+    SignatureValue: RawByteString;
+    /// rest all internal context
+    procedure Clear;
+    /// generate the SignatureAlgorithm/SignatureValue using a RSA private key
+    procedure Sign(RsaAuthority: TRsa); overload;
+    /// generate the SignatureAlgorithm/SignatureValue using a ECC256 private key
+    procedure Sign(const EccKey: TEccPrivateKey); overload;
+    /// generate the SignatureAlgorithm/SignatureValue using a RSA public key
+    function Verify(RsaAuthority: TRsa): boolean; overload;
+    /// generate the SignatureAlgorithm/SignatureValue using a ECC256 public key
+    function Verify(const EccKey: TEccPublicKey): boolean; overload;
+    /// serialize those fields into ASN.1 DER binary
+    // - following RFC 5280 #4.1.1 encoding
+    function ToDer: TCertDer;
+    /// unserialize those fields from ASN.1 DER binary
+    // - following RFC 5280 #4.1.1 encoding
+    function FromDer(const der: TCertDer): boolean;
+  end;
+
+const
+  ASN1_OID_SIGNATURE: array[TX509SignatureAlgorithm] of RawUtf8 = (
+     '',
+     '1.2.840.113549.1.1.11', // xsaSha256Rsa
+     '1.2.840.113549.1.1.12', // xsaSha384Rsa
+     '1.2.840.113549.1.1.13', // xsaSha512Rsa
+     '1.2.840.10045.4.3.2');  // xsaSha256Ecc256
 
 implementation
 
 
-{ **************** ASN.1 Encoding Decoding }
-
-function ToText(k: TAsnTagKind): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TAsnTagKind), ord(k));
-end;
-
-function ToText(c: TAsnTagClass): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TAsnTagClass), ord(c));
-end;
-
-function IsEqual(const A, B: TAsnOid): boolean;
-begin
-  result := (length(A) = length(B)) and
-            CompareMem(pointer(A), pointer(B), length(A) * SizeOf(A[0]));
-end;
-
-function StartWith(const A, Prefix: TAsnOid): boolean;
-begin
-  result := (length(A) >= length(Prefix)) and
-            CompareMem(pointer(A), pointer(Prefix), length(Prefix) * SizeOf(A[0]));
-end;
-
-function StartWith(const A: TAsnOid; Prefix: PUtf8Char): boolean;
-var
-  i: PtrInt;
-begin
-  result := false;
-  for i := 0 to length(A) - 1 do
-    if Prefix = nil then
-      break
-    else if GetNextItemCardinal(Prefix) <> A[i] then
-      exit;
-  result := true;
-end;
-
-function ToText(const O: TAsnOid): RawUtf8;
-begin
-  result := IntegerDynArrayToCsv(pointer(O), length(O), '', '', false, '.');
-end;
-
-
-{ TAsnTag }
-
-procedure TAsnTag.Clear;
-begin
-  FillCharFast(self, SizeOf(self), 0);
-end;
-
-procedure TAsnTag.Parse(var reader: TFastReader);
-var
-  v, n: cardinal;
-begin
-  v := reader.NextByte;
-  TagClass := TAsnTagClass(v shr 6); // 2 highest bits are the class
-  if v and (1 shl 5) <> 0 then
-    include(Flags, afConstructed);
-  TagKind := TAsnTagKind(v and $1f);
-  if TagKind = atLongForm then
-    TagNumber := reader.VarUInt32
-  else
-    TagNumber := ord(TagKind);
-  v := reader.NextByte;
-  if v and $80 <> 0 then
-  begin
-    n := v and $7f; // first byte is number of following bytes + $80
-    if (n = 0) or
-       (n > 4) then
-      raise EAsn.CreateUtf8('Unexpected Len=%', [n]);
-    v := 0;
-    repeat
-      v := (v shl 8) + reader.NextByte; // encoded as big endian
-      dec(n);
-    until n = 0;
-  end;
-  Len := v;
-  Data := reader.Next(v);
-end;
-
-function TAsnTag.ToOid: TAsnOid;
-var
-  v, f: cardinal;
-  r: TFastReader;
-  n: PtrInt;
-begin
-  if (Len = 0) or
-     (TagClass <> acUniversal) or
-     (TagKind <> atOid) then
-    raise EAsn.CreateUtf8('ToOID with len=% class=% kind=%',
-      [Len, ToText(TagClass)^, ASN1_TAG[TagKind]]);
-  SetLength(result, ASN1_MAX_OID_LEN);
-  {%H-}r.Init(Data, Len);
-  v := r.VarUInt32;
-  f := v div 40; // first 2 nodes are encoded in the first integer
-  if f > 2 then
-    f := 2;
-  result[0] := f;
-  result[1] := v - f * 40;
-  n := 2;
-  while not r.EOF do // process the remaining integers
-  begin
-    if n = ASN1_MAX_OID_LEN then
-      r.ErrorOverflow;
-    result[n] := r.VarUInt32;
-    inc(n);
-  end;
-  DynArrayFakeLength(result, n);
-end;
-
-procedure TAsnTag.ToOid(out text: shortstring);
-var
-  v, f: cardinal;
-  p, pmax: PByte;
-begin
-  p := pointer(Data);
-  pmax := pointer(Data + Len);
-  p := FromVarUInt32Safe(p, pmax, v);
-  f := v div 40; // first 2 nodes are encoded in the first integer
-  if f > 2 then
-    f := 2;
-  text[0] := #2;
-  text[1] := AnsiChar(f + ord('0')); // first integer is 0,1,2
-  text[2] := '.';
-  AppendShortCardinal(v - f * 40, text);
-  inc(text[0]);
-  text[ord(text[0])] := '.';
-  while p <> nil do // process the remaining integers
-  begin
-    p := FromVarUInt32Safe(p, pmax, v);
-    AppendShortCardinal(v, text);
-    inc(text[0]);
-    text[ord(text[0])] := '.';
-  end;
-  dec(text[0]);
-end;
-
-procedure TAsnTag.ToOid(out text: TAsnOidText);
-var
-  tmp: ShortString;
-begin
-  ToOid(tmp);
-  FastSetString(RawUtf8(text), @tmp[1], ord(tmp[0]));
-end;
-
-function TAsnTag.ToBoolean: boolean;
-begin
-  if (TagClass <> acUniversal) or
-     (TagKind <> atBoolean) then
-    raise EAsn.Create('ToBoolean');
-  result := Data[0] <> #0;
-end;
-
-function TAsnTag.ToUInt32: cardinal;
-begin
-  if (TagClass <> acUniversal) or
-     (Len = 0) or
-     (Len > SizeOf(integer)) then
-    raise EAsn.Create('ToUInt32');
-  result := 0;
-  case TagKind of
-    atInteger:
-      begin
-        if Data[0] = #0 then
-        begin
-          inc(Data); // a leading zero indicates a positive value -> ignore
-          dec(Len);
-          if Len = 0 then
-            exit; // was a plain and simple 0 value
-        end;
-        MoveByOne(Data, @result, Len); // was stored as little-endian
-      end;
-    atBitString:
-      begin
-        if (Len <= 1) or
-           (Data[0] <> #0) then
-          raise EAsn.CreateUtf8('ToUInt32 BitString unused=%', [ord(Data[0])]);
-        inc(Data); // just ignore the unused number of bits = 0 (as in BER)
-        dec(Len);
-        MoveByOne(Data, PAnsiChar(@result) + 4 - Len, Len);
-        result := bswap32(result); // was stored as big-endian
-      end
-  else
-    raise EAsn.CreateUtf8('ToUInt32 with %', [ASN1_TAG[TagKind]]);
-  end;
-end;
-
-function TAsnTag.ToInteger: TAsnInt;
-begin
-  if (TagClass <> acUniversal) or
-     not(TagKind in [atInteger, atBitString]) or
-     (Len = 0) then
-    raise EAsn.Create('ToInteger');
-  result := nil;
-  if (Data[0] = #0) and
-     (Len <> 0) then
-  begin
-    inc(Data); // a leading zero indicates a positive value for atInteger
-    dec(Len);                           // or 0 unused bits for atBitString
-  end;
-  SetLength(result, Len);
-  MoveFast(Data^, pointer(result)^, Len);
-end;
-
-function TAsnTag.ToUtf8: RawUtf8;
-begin
-  if TagClass <> acUniversal then
-    raise EAsn.Create('ToUtf8');
-  case TagKind of
-    atUtf8String,
-    atIA5String, // ASCII is a sub-part of UTF-8
-    atPrintableString:
-      FastSetString(result, Data, Len);
-    atBmpString:
-      RawUnicodeToUtf8(pointer(Data), Len shr 1, result);
-  else
-    raise EAsn.CreateUtf8('ToUtf8 with %', [ASN1_TAG[TagKind]]);
-  end;
-end;
-
-function TAsnTag.ToBuffer: TAsnBinary;
-begin
-  if TagClass <> acUniversal then
-    raise EAsn.Create('ToBuffer');
-  case TagKind of
-    atBitString:
-      begin
-        if (Len = 0) or
-           (Data[0] <> #0) then
-          raise EAsn.CreateUtf8('ToBuffer BitString unused=%', [ord(Data[0])]);
-        inc(Data); // just ignore the unused number of bits = 0 (as in BER)
-        dec(Len);
-      end;
-    atInteger,
-    atOctetString,
-    atUtf8String,
-    atIA5String,
-    atPrintableString,
-    atBmpString:
-      ; // return the raw binary buffer
-  else
-    raise EAsn.CreateUtf8('ToBuffer with %', [ASN1_TAG[TagKind]]);
-  end;
-  SetString(result, Data, Len);
-end;
-
-
-{ TAsnParser }
-
-procedure TAsnParser.Init(buf: pointer; buflen: PtrInt);
-begin
-  Reader.Init(buf, buflen);
-  if Reader.EOF then
-    Reader.ErrorOverflow;
-end;
-
-function TAsnParser.NextTag(iskind: TAsnTagKind; isclass: TAsnTagClass): boolean;
-begin
-  result := false;
-  if Reader.Eof then
-    exit;
-  Tag.Parse(Reader);
-  result := (Tag.TagClass = isclass) and
-            (Tag.TagKind = iskind);
-end;
-
-function TAsnParser.Init(const buf: RawByteString;
-  const kinds: array of TAsnTagKind): boolean;
-var
-  k: PtrInt;
-begin
-  result := false;
-  if buf = '' then
-    exit;
-  Reader.Init(pointer(buf), length(buf));
-  for k := 0 to high(kinds) do
-    if not NextTag(kinds[k]) then
-      exit;
-  result := true;
-end;
-
-function TAsnParser.PeekTag(isclass: TAsnTagClass): TAsnTagKind;
-var
-  v: cardinal;
-begin
-  if Reader.EOF then
-    Reader.ErrorOverflow;
-  v := ord(Reader.P^);
-  if TAsnTagClass(v shr 6) = isClass then
-    result := TAsnTagKind(v and $1f)
-  else
-    result := atUnknown;
-end;
-
-function TAsnParser.NextOid: TAsnOid;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToOid;
-end;
-
-procedure TAsnParser.NextNull;
-begin
-  Tag.Parse(Reader);
-  if (Tag.TagClass <> acUniversal) or
-     (Tag.TagKind <> atNull) then
-    raise EAsn.Create('NextNull');
-end;
-
-function TAsnParser.NextBoolean: boolean;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToBoolean;
-end;
-
-function TAsnParser.NextUInt32: cardinal;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToUInt32;
-end;
-
-function TAsnParser.NextInteger: TAsnInt;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToInteger;
-end;
-
-function TAsnParser.NextInteger(out value: TAsnInt): boolean;
-begin
-  result := NextTag(atInteger);
-  if result then
-    value := Tag.ToInteger;
-end;
-
-function TAsnParser.NextBigInt(out value: TAsnInt): boolean;
-begin
-  result := NextTag(atBitString);
-  if result then
-    value := Tag.ToInteger;
-end;
-
-function TAsnParser.NextUtf8: RawUtf8;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToUtf8;
-end;
-
-function TAsnParser.NextBuffer: RawByteString;
-begin
-  Tag.Parse(Reader);
-  result := Tag.ToBuffer;
-end;
-
-
-function AsnParse(buf: pointer; buflen: PtrInt): TAsnTags;
-var
-  reader: TFastReader;
-  n: PtrInt;
-begin
-  result := nil;
-  {%H-}reader.Init(buf, buflen);
-  SetLength(result, 16); // initial capacity should be enough in most cases
-  n := 0;
-  repeat
-    if n = length(result) then
-      SetLength(result, NextGrow(n));
-    result[n].Parse(reader);
-    inc(n);
-  until reader.EOF;
-  DynArrayFakeLength(result, n);
-end;
-
 
 { **************** X.509 Encoding Decoding}
 
-type
-  TXRegisteredDef = record
-    Definition: RawUtf8;
-    Start: RawUtf8;
-  end;
-
-  TXRegistered = record
-    RecordInfo: PRttiInfo;
-    Definition: array of TXRegisteredDef;
-  end;
-
-var
-  XRegistered: array[TXKeyKind] of TXRegistered;
-  {%H-}ASN1_KIND: array[AnsiChar] of TAsnTagKind;
-
-procedure XRegister(Kind: TXKeyKind; RecordInfo: PRttiInfo; const Def: array of RawUtf8);
-var
-  reg: ^TXRegistered;
-  i, n: PtrInt;
+function XsaToSeq(xsa: TX509SignatureAlgorithm): TAsnObject;
 begin
-  reg := @XRegistered[Kind];
-  reg.RecordInfo := RecordInfo;
-  SetLength(reg.Definition, length(Def));
-  for i := 0 to high(Def) do
-  begin
-    reg.Definition[i].Definition := Def[i];
-    n := PosExChar('%', Def[i]);
-    if (n = 0) or
-       (n > 255) then
-      raise EX509.CreateUtf8('XRegister: invalid %', [Def[i]]);
-    FastSetString(reg.Definition[i].Start, pointer(Def[i]), n - 1);
-
+  case xsa of
+    xsaSha256Rsa .. xsaSha512Rsa:
+      result := Asn(ASN1_SEQ, [
+                  AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
+                  ASN1_NULL_VALUE // optional
+                ]);
+    xsaSha256Ecc256:
+      result := Asn(ASN1_SEQ, [
+                  AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
+                ]);
+  else
+    raise EX509.CreateUtf8('Unexpected Asn1OidSignatureSeq(%)', [ord(xsa)]);
   end;
+end;
+
+function AsnNextSeqToXsa(var pos: integer; const der: TAsnObject;
+  out xsa: TX509SignatureAlgorithm): boolean;
+var
+  seq, oid: RawByteString;
+  p: integer;
+  x: TX509SignatureAlgorithm;
+begin
+  p := 1;
+  if (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
+     (AsnNext(p, seq, @oid) = ASN1_OBJID) and
+     (oid <> '') then
+    for x := succ(low(x)) to high(x) do
+      if IdemPropNameU(ASN1_OID_SIGNATURE[x], oid) then
+      begin
+        xsa := x;
+        result := true;
+        exit;
+      end;
+  result := false;
+end;
+
+
+{ TX509Name }
+
+var
+  XA_OID_ASN: array[TXAttr] of TAsnObject; // filled from XA_OID[]
+
+procedure TX501Name.ComputeAsn;
+var
+  a: TXAttr;
+  p: PUtf8Char;
+  o: PtrInt;
+  v: RawUtf8;
+  tmp, one: RawByteString;
+begin
+  for a := succ(low(a)) to high(a) do
+  begin
+    p := pointer(Names[a]);
+    if p <> nil then
+    begin
+      one := '';
+      repeat
+        GetNextItemTrimed(p, ',', v);
+        Append(one, Asn(ASN1_SEQ, [
+                      XA_OID_ASN[a],
+                      AsnText(v)
+                    ]));
+      until p = nil;
+      Append(tmp, Asn(ASN1_SETOF, [one]));
+    end;
+  end;
+  for o := 0 to high(Others) do
+    with Others[o] do
+      Append(tmp, Asn(ASN1_SETOF, [
+                    Asn(ASN1_SEQ, [
+                      AsnOid(pointer(RawOid)),
+                      AsnText(Value)
+                    ])
+                  ]));
+  fCachedAsn := Asn(ASN1_SEQ, [tmp]);
+end;
+
+function TX501Name.Binary: RawByteString;
+begin
+  if fCachedAsn = '' then
+    ComputeAsn;
+  result := fCachedAsn;
+end;
+
+function TX501Name.FromAsn(const seq: TAsnObject): boolean;
+var
+  posseq, posone, o: integer;
+  a, xa: TXAttr;
+  one, oid, v: RawByteString;
+begin
+  result := false;
+  AfterUpdate;
+  o := 0;
+  posseq := 1;
+  while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
+  begin
+    posone := 1;
+    while AsnNext(posone, one) = ASN1_SEQ do
+      if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
+         not (AsnNext(posone, one, @v) in ASN1_TEXT) then
+        exit
+      else
+      begin
+        xa := xaNone;
+        for a := succ(low(a)) to high(a) do
+          if oid = XA_OID_ASN[a] then
+          begin
+            xa := a;
+            break;
+          end;
+        if xa = xaNone then
+        begin
+          // unsupported OID
+          SetLength(Others, o + 1);
+          with Others[o] do
+          begin
+            RawOid := oid;
+            Value := v;
+          end;
+        end
+        else if IsValidUtf8(v) then
+          // known attribute
+          AddToCsv(v, Names[xa])
+        else
+          exit; // incorrect encoding or corrupted input
+      end;
+  end;
+  result := true;
+end;
+
+function TX501Name.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
+var
+  seq: RawByteString;
+begin
+  result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
+            FromAsn(seq);
+end;
+
+procedure TX501Name.AfterUpdate;
+begin
+  fCachedAsn := '';
+end;
+
+function TX501Name.ToDigest(algo: THashAlgo): RawUtf8;
+begin
+  result := HashFull(algo, Binary);
 end;
 
 
 { **************** X.509 Certificates }
 
+{ TX509Content }
+
+procedure TX509Content.ComputeCachedDer;
+begin
+  fCachedDer := Asn(ASN1_SEQ, [
+                  Asn(Version),
+                  Asn(ASN1_INT, SerialNumber),
+                  XsaToSeq(Signature)
+                ]);
+end;
+
+function TX509Content.SerialNumberHex: RawUtf8;
+begin
+  ToHumanHex(result, pointer(SerialNumber), length(SerialNumber));
+end;
+
+function TX509Content.SerialNumberText: RawUtf8;
+begin
+  result := BigIntToText(SerialNumber);
+end;
+
+function TX509Content.ToDer: TAsnObject;
+begin
+  if fCachedDer = '' then
+    ComputeCachedDer;
+  result := fCachedDer;
+end;
+
+function TX509Content.FromDer(const der: TCertDer): boolean;
+var
+  pos, vt: integer;
+begin
+  result := false;
+  fCachedDer := der;
+  pos := 1;
+  Version := AsnNextInteger(pos, der, vt);
+  if (vt <> ASN1_INT) or
+     not (vt in [2..3]) or
+     (AsnNextRaw(pos, der, SerialNumber) <> ASN1_INT) or
+     not AsnNextSeqToXsa(pos, der, Signature) or
+     not Issuer.FromAsnNext(pos, der) then
+    exit;
+
+  result := true;
+end;
+
+procedure TX509Content.AfterUpdate;
+begin
+  fCachedDer := ''; // just reset the cache
+end;
+
+
+{ TX509 }
+
+procedure TX509.Clear;
+begin
+  Finalize(self);
+  FillCharFast(self, SizeOf(self), 0);
+end;
+
+procedure TX509.Sign(RsaAuthority: TRsa);
+var
+  dig: THash256;
+begin
+  if not RsaAuthority.HasPrivateKey then
+    raise EX509.Create('TX509.Sign with no RsaAuthority');
+  SignatureAlgorithm := xsaSha256Rsa;
+  dig := Sha256Digest(Signed.ToDer);
+  SignatureValue := RsaAuthority.Sign(@dig, hfSHA256);
+end;
+
+procedure TX509.Sign(const EccKey: TEccPrivateKey);
+var
+  sig: TEccSignature;
+begin
+  SignatureAlgorithm := xsaSha256Ecc256;
+  if Ecc256r1Sign(EccKey, Sha256Digest(Signed.ToDer), sig) then
+    SignatureValue := EccToDer(sig)
+  else
+    raise EX509.Create('TX509.SignEcc failed');
+end;
+
+const
+  XSA_TO_HF: array[xsaSha256Rsa .. xsaSha512Rsa] of THashAlgo = (
+    hfSha256,
+    hfSha384,
+    hfSha512);
+
+function TX509.Verify(RsaAuthority: TRsa): boolean;
+var
+  hash: THashAlgo;
+  hasher: TSynHasher;
+  dig: THash512Rec;
+  diglen: PtrInt;
+  oid: RawUtf8;
+  bin: RawByteString;
+begin
+  result := (SignatureAlgorithm in [low(XSA_TO_HF) .. high(XSA_TO_HF)]) and
+            (SignatureValue <> '') and
+            RsaAuthority.HasPublicKey;
+  if not result then
+    exit;
+  bin := Signed.ToDer;
+  hash := XSA_TO_HF[SignatureAlgorithm];
+  diglen := hasher.Full(hash, pointer(bin), length(bin), dig);
+  bin := RsaAuthority.Verify(SignatureValue, @oid);
+  result := (oid = ASN1_OID_HASH[hash]) and
+            (length(bin) = diglen) and
+            CompareMem(pointer(bin), @dig, diglen);
+end;
+
+function TX509.Verify(const EccKey: TEccPublicKey): boolean;
+var
+  sig: TEccSignature;
+begin
+  result := (SignatureAlgorithm = xsaSha256Ecc256) and
+            not IsZero(EccKey) and
+            DerToEcc(pointer(SignatureValue), length(SignatureValue), sig) and
+            Ecc256r1Verify(EccKey, Sha256Digest(Signed.ToDer), sig);
+end;
+
+function TX509.ToDer: TCertDer;
+begin
+  if (SignatureAlgorithm = xsaNone) or
+     (SignatureValue = '') then
+    raise EX509.Create('TX509.ToDer with no previous Sign() call');
+  result := Asn(ASN1_SEQ, [
+              Signed.ToDer,
+              XsaToSeq(SignatureAlgorithm),
+              Asn(ASN1_BITSTR, SignatureValue)
+            ]);
+end;
+
+function TX509.FromDer(const der: TCertDer): boolean;
+var
+  p: integer;
+  tbs: RawByteString;
+begin
+  Clear;
+  p := 1;
+  result := (der <> '') and
+            (AsnNext(p, der) = ASN1_SEQ) and
+            (AsnNextRaw(p, der, tbs) = ASN1_SEQ) and
+            Signed.FromDer(tbs) and
+            AsnNextSeqToXsa(p, der, SignatureAlgorithm) and
+            (AsnNextRaw(p, der, SignatureValue) = ASN1_BITSTR);
+end;
+
 
 procedure InitializeUnit;
 var
-  k: TAsnTagKind;
+  a: TXAttr;
 begin
-  assert(ord(atLongForm) = $1f);
-  for k := low(k) to high(k) do
-    ASN1_KIND[ASN1_TOKEN[k]] := k;
-  XRegister(xkEccPublicKey, TypeInfo(TXEccPublicKey),
-     ['S(S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_ECDSA_P256 + ' )%B )',
-      'S(S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_PRIME256V1 + ' )%B )']);
-  XRegister(xkEccPrivateKey, TypeInfo(TXEccPrivateKey),
-     ['S(0 S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_ECDSA_P256 + ')O(S(1 %O e(%B ))))',
-      'S(0 S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_ECDSA_P256 + ')O(S(0 %O )))',
-      'S(0 S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_PRIME256V1 + ')O(S(1 %O e(%B ))))',
-      'S(0 S(' + OID_X962_PUBLICKEY + ' ' + OID_X962_PRIME256V1 + ')O(S(0 %O )))']);
-  XRegister(xkRsaPublicKey, TypeInfo(TXRsaPublicKey),
-     ['S(S(' + OID_PKCS1_RSA + ' N )B(S(%I %I )))',
-      'S(S(' + OID_PKCS1_RSA + ' N )O(S(0 %I %I )))',
-      'S(S(' + OID_PKCS1_RSA + ' N )B(S(%I %I )))']);
-  XRegister(xkRsaPrivateKey, TypeInfo(TXRsaPrivateKey),
-     ['S(0 S(' + OID_PKCS1_RSA + ' N )O(S(0 %I %I %I %I %I %I %I %I )))']);
-
-
+  for a := succ(low(a)) to high(a) do
+    XA_OID_ASN[a] := AsnOid(XA_OID[a]);
 end;
-
 
 initialization
   InitializeUnit;
