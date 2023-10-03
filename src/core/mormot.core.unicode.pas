@@ -9141,9 +9141,9 @@ type
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
     // branchless Unicode 10.0 uppercase folding using our internal tables
-    // (some random GPF occured on arm/aarch64 at -O2 so we disabled inlining)
+    // caller should have checked that c <= UU_MAX
     function Ucs4Upper(c: PtrUInt): PtrUInt;
-      {$ifdef CPUINTEL} {$ifdef HASINLINE} inline; {$endif} {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   {$ifndef CPUX86NOTPIC}
   PUnicodeUpperTable = ^TUnicodeUpperTable;
@@ -9690,7 +9690,7 @@ c2low:          if c2 = 0 then
             end
             else
               result := UTF8_TABLE.GetHighUtf8Ucs4(u1);
-            if result <= UU_MAX then
+            if PtrUInt(result) <= UU_MAX then
               result := tab.Ucs4Upper(result);
           end;
           if c2 <= 127 then
@@ -9702,7 +9702,7 @@ c2low:          if c2 = 0 then
           end
           else
             c2 := UTF8_TABLE.GetHighUtf8Ucs4(u2);
-          if c2 <= UU_MAX then
+          if PtrUInt(c2) <= UU_MAX then
             c2 := tab.Ucs4Upper(c2);
           dec(result, c2);
           if result <> 0 then
@@ -9790,7 +9790,7 @@ begin
             until i = extra;
             inc(u1, extra);
             dec(result, utf8.Extra[extra].offset);
-            if result <= UU_MAX then
+            if PtrUInt(result) <= UU_MAX then
               result := tab.Ucs4Upper(result);
           end;
           // here result=NormToUpper[u1^]
@@ -9820,7 +9820,7 @@ begin
             until i = extra;
             inc(u2, extra);
             dec(c2, utf8.Extra[extra].offset);
-            if c2 <= UU_MAX then
+            if PtrUInt(c2) <= UU_MAX then
               c2 := tab.Ucs4Upper(c2);
             dec(result, c2);
             if result <> 0 then
@@ -9901,7 +9901,7 @@ nxt:u0 := U;
       until i = extra;
       inc(U, extra);
       dec(c, utf8.Extra[extra].offset);
-      if c <= UU_MAX then
+      if PtrUInt(c) <= UU_MAX then
         c := tab.Ucs4Upper(c);
       if c <> Up[0] then
         continue;
@@ -9939,7 +9939,7 @@ nxt:u0 := U;
         until i = extra;
         inc(u2, extra);
         dec(c, utf8.Extra[extra].offset);
-        if c <= UU_MAX then
+        if PtrUInt(c) <= UU_MAX then
           c := tab.Ucs4Upper(c);
         if c <> up2^ then
           goto nxt;
