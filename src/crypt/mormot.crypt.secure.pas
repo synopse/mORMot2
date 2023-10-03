@@ -2648,6 +2648,8 @@ const
   ASN1_OBJID       = $06;
   ASN1_ENUM        = $0a;
   ASN1_UTF8STRING  = $0c;
+  ASN1_PRINTSTRING = $13;
+  ASN1_IA5STRING   = $16;
   // base ASN1_CL_CTR types
   ASN1_SEQ         = $30;
   ASN1_SETOF       = $31;
@@ -2658,6 +2660,11 @@ const
   ASN1_TIMETICKS   = $43;
   ASN1_OPAQUE      = $44;
   ASN1_COUNTER64   = $46;
+
+  ASN1_TEXT = [
+    ASN1_UTF8STRING,
+    ASN1_PRINTSTRING,
+    ASN1_IA5STRING];
 
   ASN1_NUMBERS = [
     ASN1_INT,
@@ -2741,6 +2748,9 @@ function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
 
 /// create an ASN.1 ObjectID from 'x.x.x.x.x' text
 function AsnOid(OidText: PUtf8Char): TAsnObject;
+
+/// create an ASN.1 PrintableString or UTF8String from some UTF-8 text
+function AsnText(const Text: RawUtf8): TAsnObject;
 
 /// raw append some binary to an ASN.1 object buffer
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
@@ -7665,6 +7675,31 @@ begin
   result := Asn(ASN1_OBJID, [AsnEncOid(OidText)]);
 end;
 
+function AsnTypeText(p: PUtf8Char): integer;
+begin
+  // allow A..Z, a..z, 0..9, ' = ( ) + , - . / : ? but excluding @ & _
+  result := ASN1_PRINTSTRING;
+  if p <> nil then
+    while true do
+      case p^ of
+        #0:
+          exit; // whole string was printable
+        'A'..'Z',
+        'a'..'z',
+        '0'..'9',
+        '''', '=', '(', ')', '+', ',', '-', '.', '/', ':', '?':
+          inc(p);
+      else
+        break;
+      end;
+  result := ASN1_UTF8STRING;
+end;
+
+function AsnText(const Text: RawUtf8): TAsnObject;
+begin
+  result := Asn(AsnTypeText(pointer(Text)), [Text]);
+end;
+
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
 begin
   Append(Data, Buffer);
@@ -7772,13 +7807,13 @@ begin
   begin
     // no need to allocate and return the whole Value^: just compute position
     if (result and ASN1_CL_CTR) = 0 then
-      // constructed (e.g. ASN1_SEQ): keep Pos after header
+      // constructed (e.g. SEQ/SETOF): keep Pos after header
       inc(Pos, asnsize);
     exit;
   end;
   // we need to decode and return the Value^
   if (result and ASN1_CL_CTR) <> 0 then
-    // constructed (e.g. ASN1_SEQ): return whole data, but keep Pos after header
+    // constructed (e.g. SEQ/SETOF): return whole data, but keep Pos after header
     Value^ := copy(Buffer, Pos, asnsize)
   else
     // decode Value^ as text - use AsnNextRaw() to avoid the decoding
@@ -7824,8 +7859,8 @@ begin
       // ASN1_UTF8STRING, ASN1_OCTSTR, ASN1_OPAQUE or unknown
       begin
         Value^ := copy(Buffer, Pos, asnsize); // return as raw binary
-        inc(Pos, asnsize);
         DetectRawUtf8(Value^); // detect and mark as CP_UTF8 for FPC RTL bug
+        inc(Pos, asnsize);
       end;
     end;
 end;
