@@ -3649,6 +3649,7 @@ begin
     Check(c.HasPublicKey);
     Check(not c.HasPrivateKey);
     CheckEqual(c.E.ToText, '65537');
+    CheckEqual(BigIntToText(c.E.Save), '65537');
     CheckEqual(c.M.ToText, txt);
     Check(c.SavePublicKeyDer = PemToDer(_rsapub));
     Check(c.SavePrivateKeyDer = '');

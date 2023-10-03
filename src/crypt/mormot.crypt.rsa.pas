@@ -412,6 +412,10 @@ const
    20,12,18, 4, 6, 2,16, 2,10,14, 4,30, 2,10,12, 2,24, 6,16, 8,10, 2,12,22,
     6, 2,16,20,10, 2,12,12,18,10,12, 6, 2,10, 2, 6,10,18, 2,12, 6, 4, 6, 2);
 
+/// compute the base-10 decimal text from a Big Integer binary buffer
+// - wrap PBigInt.ToText from Load(der) in a temporary TRsaContext
+function BigIntToText(const der: TCertDer): RawUtf8;
+
 /// branchless comparison of two Big Integer values
 function CompareBI(A, B: HalfUInt): integer;
   {$ifdef HASINLINE} inline; {$endif}
@@ -442,7 +446,7 @@ type
   /// store a RSA private key
   // - with DER (therefore PEM) serialization support
   // - we don't support any PKCS encryption yet - ensure the private key
-  // PEM file is safely stored with proper access restrictions
+  // PEM file is safely stored with proper user access restrictions
   {$ifdef USERECORDWITHMETHODS}
   TRsaPrivateKey = record
   {$else}
@@ -521,7 +525,7 @@ type
     // - if Iterations value is too low, the FIPS recommendation will be forced
     // - on a very slow CPU or with huge Bits, you can increase TimeOutMS
     function Generate(Bits: integer = 2048; Extend: TBigIntSimplePrime = bspMost;
-       Iterations: integer = 20; TimeOutMS: integer = 10000): boolean;
+      Iterations: integer = 20; TimeOutMS: integer = 10000): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -648,6 +652,20 @@ end;
 function CompareBI(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
+end;
+
+function BigIntToText(const der: TCertDer): RawUtf8;
+var
+  b: PBigInt;
+begin
+  with TRsaContext.Create do
+    try
+      b := Load(der);
+      result := b.ToText({noclone=}true);
+      b.Release;
+    finally
+      Free;
+    end;
 end;
 
 function ValuesSize(bytes: integer): integer;
