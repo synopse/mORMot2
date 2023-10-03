@@ -1669,6 +1669,9 @@ procedure Append(var Text: RawByteString; const Added: RawByteString); overload;
 /// append one text buffer to a RawByteString variable with no code page conversion
 procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt); overload;
 
+/// prepend some text to a RawByteString variable with no code page conversion
+procedure Prepend(var Text: RawByteString; const Added: RawByteString); overload;
+
 /// prepend some text items at the beginning of a RawUtf8 variable
 procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
 
@@ -8326,6 +8329,25 @@ var
   f: TFormatUtf8;
 begin
   {%H-}f.DoPrepend(Text, @Args[0], length(Args));
+end;
+
+procedure Prepend(var Text: RawByteString; const Added: RawByteString);
+var
+  t, a: PtrInt;
+  new: PAnsiChar;
+begin
+  t := length(Text);
+  a := length(Added);
+  if a <> 0 then
+    if t = 0 then
+      Text := Added
+    else
+    begin
+      new := FastNewString(t + a, CP_RAWBYTESTRING);
+      MoveFast(PByteArray(Text)[0], new[a], t);
+      MoveFast(PByteArray(Added)[0], new[0], a);
+      FastAssignNew(Text, new);
+    end;
 end;
 
 procedure Prepend(var Text: RawByteString; const Args: array of const);

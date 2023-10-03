@@ -2730,9 +2730,11 @@ function AsnArr(const Data: array of RawUtf8;
 /// create an ASN.1 binary from 64-bit signed integer, calling AsnEncInt()
 function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
 
-/// create an ASN.1 binary from a Big Integer raw buffer
-// - will trim unneeded leading zeros
-function AsnBigInt(const BigInt: RawByteString; AsnType: integer = ASN1_INT): TAsnObject;
+/// create an ASN.1 binary from an unsigned Big Integer raw buffer
+// - will trim unneeded leading zeros, and ensure will be stored as unsigned
+// even if starts with a $80 byte
+function AsnBigInt(const BigInt: RawByteString;
+  AsnType: integer = ASN1_INT): TAsnObject;
 
 /// create an ASN.1 SEQuence from some raw data
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
@@ -6988,10 +6990,10 @@ begin
     // ignore leading zeros
     inc(pos);
   dec(buflen, pos);
-  prefix := buf[pos] shr 7; // two's complement?
+  prefix := buf[pos] shr 7; // detect if need to avoid two's complement storage
   P[0] := DER_INTEGER;
   P[1] := AnsiChar(buflen + prefix);
-  P[2] := #$00; // prepend 0 for negative number (if prefix=1)
+  P[2] := #$00; // prepend 0 to prevent stored as negative number (if prefix=1)
   inc(P, 2 + prefix);
   MoveFast(buf[pos], P^, buflen);
   result := P + buflen;
@@ -7648,7 +7650,7 @@ begin
       v := copy(BigInt, i, l);
     if (v <> '') and
        (ord(v[1]) and $80 <> 0) then
-      insert(#0, v, 1); // prepend 0 for negative number
+      Prepend(v, #0); // prepend 0 to ensure not parsed as negative number
   end;
   result := Asn(AsnType, [v]);
 end;
