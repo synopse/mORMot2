@@ -2259,6 +2259,9 @@ end;
 
 function TCryptCertOpenSsl.Save(Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
+var
+  der: RawByteString;
+  pem: RawUtf8;
 begin
   result := '';
   if not (Format in [ccfBinary, ccfPem]) then
@@ -2272,16 +2275,24 @@ begin
         // include the X509 certificate (but not any private key) as DER or PEM
         result := fX509.ToBinary;
         if Format = ccfPem then
-          result := DerToPem(result, pemCertificate);
+        begin
+          der := result;
+          result := DerToPem(der, pemCertificate);
+          FillZero(der);
+        end;
       end;
     cccCertWithPrivateKey:
       if fX509 <> nil then
         if fPrivKey = nil then
           RaiseError('Save(cccCertWithPrivateKey) with no Private Key')
         else if Format = ccfPem then
+        begin
           // concatenate the certificate and its private key as PEM
-          result := DerToPem(fX509.ToBinary, pemCertificate) + RawUtf8(#13#10) +
-                    fPrivKey.PrivateToPem(PrivatePassword)
+          pem := fPrivKey.PrivateToPem(PrivatePassword);
+          result := DerToPem(fX509.ToBinary, pemCertificate) +
+                    RawUtf8(#13#10) + pem;
+          FillZero(pem);
+        end
         else
           // ccfBinary will use the PKCS12 binary encoding
           result := fX509.ToPkcs12(fPrivKey, PrivatePassword);

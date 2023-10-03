@@ -12,6 +12,9 @@ unit mormot.crypt.rsa;
     - Registration of our RSA Engine to the TCryptAsym Factory
 
   *****************************************************************************
+
+  Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+  to any restriction about the use of cryptographic software in your country.
 }
 
 interface

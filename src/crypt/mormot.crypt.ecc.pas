@@ -26,8 +26,6 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
-  mormot.crypt.core,
-  mormot.crypt.secure,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
@@ -37,6 +35,8 @@ uses
   mormot.core.json,
   mormot.core.rtti,
   mormot.core.search,
+  mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.crypt.ecc256r1;
 
 
@@ -5472,6 +5472,7 @@ function TCryptCertInternal.Save(Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 var
   pk: PEccPrivateKey;
+  der: RawByteString;
 begin
   result := '';
   if not (Format in [ccfBinary, ccfPem]) then
@@ -5493,7 +5494,11 @@ begin
           RaiseError('Save(cccCertWithPrivateKey) with no Private Key');
         result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword);
         if Format = ccfPem then
-          result := DerToPem(result, pemSynopsePrivateKeyAndCertificate);
+        begin
+          der := result;
+          result := DerToPem(der, pemSynopsePrivateKeyAndCertificate);
+          FillZero(der);
+        end;
       end;
     cccPrivateKeyOnly:
       begin
@@ -5502,14 +5507,22 @@ begin
           RaiseError('Save(cccPrivateKeyOnly) with no Private Key');
         if (Format = ccfPem) and
            (PrivatePassword = '') then
+        begin
           // -----BEGIN SYNECC PRIVATE KEY----- has a real DER encoding
-          result := DerToPem(EccToDer(pk^), pemSynopseUnencryptedPrivateKey)
+          der := EccToDer(pk^);
+          result := DerToPem(der, pemSynopseUnencryptedPrivateKey);
+          FillZero(der);
+        end
         else
         begin
           // other formats use our encrypted TEccPrivateKey binary
           result := EccPrivateKeyEncrypt(pk^, PrivatePassword);
          if Format = ccfPem then
-           result := DerToPem(result, pemSynopseEncryptedPrivateKey);
+         begin
+           der := result;
+           result := DerToPem(der, pemSynopseEncryptedPrivateKey);
+           FillZero(der);
+         end;
         end;
       end;
   end;
